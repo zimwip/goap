@@ -985,6 +985,14 @@ starts on a suspended version, no run reads it, the lists leave it out, until a 
 published or the domains come back. The graph and the domain are never blocked. Migrating the data of a domain is a
 separate matter.
 
+A domain also declares the **sources** its graph can be loaded from (`importers:`, ADR 0148), each implemented by a
+separate service the way a connector implements an MCP: the service, built on `lib/importerkit` (`importer.v1.ImporterService`),
+registers with the **import registry** the graph serves (`graph/importsvc`, `importer.v1.ImportService`, shared token
+`GOAP_IMPORTER_TOKEN`), which lists the declared sources with whether one is live, checks the parameters of a run
+against the declaration and the permission `import:run`, and starts it on the service; the run writes through the
+graph's change operations as `system:<service>` for the person. The first is `importer-git` (`platform/cmd/importer-git`,
+the `git` source of `code`, ADR 0147); the Baseline explorer opens the *Import from a source* tab.
+
 The engine is tested without the graph: the scenarios that run it on a real graph are the platform's integration tests
 (`platform/e2e/engine`), reaching the engine's unexported workings through `engine.Internals` only. So are the other
 tests that need two components (`platform/e2e/<name>`: the hub, the connectors and the access over a seeded graph).
@@ -1911,7 +1919,9 @@ lib/def/              domain definition model (ADR 0060): Domain, Schema, node /
 engine/methodology/             methodology model only (a methodology is a domain-typed definition): validation (localized anomalies), compilation, YAML import/export
 contracts/authz/                   ABAC: identity, requests, Casbin model and enforcer, default policies
 contracts/llm/                     completion and embedding contracts (implemented by platform/modelgw)
-platform/gitimport/            git importer into the `code` domain: one change per commit, directories and files as nodes (ADR 0147; command `platform/cmd/goap-gitimport`)
+platform/gitimport/            git importer into the `code` domain: one change per commit, directories and files as nodes (ADR 0147; command `platform/cmd/goap-gitimport`, service `platform/cmd/importer-git`, ADR 0148)
+graph/importsvc/               import registry: the importer services register, the declared sources are listed and run (ADR 0148)
+lib/importerkit/               kit of an importer service: protocol, jobs, registration (ADR 0148)
 graph/index/                   document index (nodes and changes): hybrid search, facets, similar_to, stores (memory, SQLite FTS5, PostgreSQL pgvector)
 proto/                       connect-rpc contracts (buf)
 contracts/gen/                         generated code (committed)

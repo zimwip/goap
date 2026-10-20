@@ -1,6 +1,6 @@
 // Editing model of a domain (node types and link types). It reuses the
 // row models of the methodology form.
-import type { Domain, ItemTypeDef } from './api';
+import type { Domain, ImporterDecl, ItemTypeDef } from './api';
 import { algorithmFromForm, algorithmToForm, instanceFromForm, instanceToForm, type AlgorithmForm, type InstanceForm } from './algorithmForm';
 import {
   attributeFromForm,
@@ -33,6 +33,8 @@ export interface DomainForm {
   instances: InstanceForm[];
   /** the types of change item the domain declares (ADR 0128) */
   itemTypes: ItemTypeForm[];
+  /** the sources the domain declares (ADR 0148): no editor yet, kept as they are */
+  importers: ImporterDecl[];
 }
 
 export interface ItemTypeForm {
@@ -58,7 +60,7 @@ export function itemTypeFromForm(f: ItemTypeForm): ItemTypeDef {
 }
 
 export function emptyDomainForm(): DomainForm {
-  return { name: '', version: '0.1.0', description: '', nodeTypes: [], linkTypes: [], enums: [], lifecycles: [], algorithms: [], instances: [], itemTypes: [] };
+  return { name: '', version: '0.1.0', description: '', nodeTypes: [], linkTypes: [], enums: [], lifecycles: [], algorithms: [], instances: [], itemTypes: [], importers: [] };
 }
 
 export function toDomainForm(d: Domain): DomainForm {
@@ -73,6 +75,7 @@ export function toDomainForm(d: Domain): DomainForm {
     algorithms: (d.algorithms ?? []).map(algorithmToForm),
     instances: (d.algorithmInstances ?? []).map(instanceToForm),
     itemTypes: (d.itemTypes ?? []).map(itemTypeToForm),
+    importers: d.importers ?? [],
   };
 }
 
@@ -86,6 +89,7 @@ export function fromDomainForm(f: DomainForm): Domain {
   if (f.algorithms.length) d.algorithms = f.algorithms.map(algorithmFromForm);
   if (f.instances.length) d.algorithmInstances = f.instances.map(instanceFromForm);
   if (f.itemTypes.length) d.itemTypes = f.itemTypes.map(itemTypeFromForm);
+  if (f.importers.length) d.importers = f.importers;
   return d;
 }
 

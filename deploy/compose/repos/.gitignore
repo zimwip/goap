@@ -1,0 +1,3 @@
+# git repositories the importer-git service of the compose stack reads (GOAP_IMPORT_REPOS)
+*
+!.gitignore

@@ -1,11 +1,26 @@
 name: code
-version: 1.0.0
+version: 1.1.0
 description: >
   Source code held in git repositories (ADR 0147): a repository, its directories and its files as of the last commit
-  imported. The git importer (platform/gitimport, goap-gitimport) makes one change per commit; a directory or a file is a
+  imported. The git importer (platform/gitimport: the importer `git` below, served by importer-git, ADR 0148; the
+  command goap-gitimport) makes one change per commit; a directory or a file is a
   node, a directory holds its entries by `contains` links, and a version of a directory is a git tree (its links follow
   the versions of its entries, as a tree names the objects it holds). With the symbols read (Tree-sitter), a source file
   defines its declarations (functions, types, imports, variables...) by `defines` links, read back as "defined in".
+importers:
+  - name: git
+    label: Git repository
+    description: >
+      Loads a git repository: one change per commit of the first-parent history of the revision followed, a node per
+      directory and per file, and with the symbols a node per declaration of the source files. A run resumes after the
+      last commit imported.
+    params:
+      - {name: repository, label: Repository, description: "A path the importer service reads, or a URL it clones (https://, ssh://, git@)", order: 1}
+      - {name: name, label: Name, description: "Name of the repository in the graph, the prefix of its keys (default: the last element of the repository)", order: 2}
+      - {name: rev, label: Revision, default: HEAD, description: The revision whose first-parent history is imported, order: 3}
+      - {name: base, label: Start at, description: "First import only: start at this revision, its tree as the first change (default: the root commit)", order: 4}
+      - {name: max, label: At most, type: number, description: "Import at most this many commits in this run (0: all)", order: 5}
+      - {name: symbols, label: Symbols, type: boolean, description: "Read the declarations of the source files with Tree-sitter (functions, types, imports, variables...)", order: 6}
 enums:
   - name: symbol-kind
     description: What a declaration of a source file is

@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/contracts/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/events/v1/eventsv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/contracts/gen/goap/importer/v1/importerv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/index/v1/indexv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/mcp/v1/mcpv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/model/v1/modelv1connect"
@@ -26,6 +27,7 @@ import (
 	"github.com/zimwip/goap/gateway/gateway"
 	"github.com/zimwip/goap/graph/domainsvc"
 	"github.com/zimwip/goap/graph/graphsvc"
+	"github.com/zimwip/goap/graph/importsvc"
 	"github.com/zimwip/goap/graph/indexersvc"
 	"github.com/zimwip/goap/graph/smarttagsvc"
 	"github.com/zimwip/goap/lib/access"
@@ -75,6 +77,8 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	// the smart tags (ADR 0143 §7): shared selections of node versions, in a store of their own
 	smartTags := &smarttagsvc.Service{Store: st.smartTags, Exists: smarttagsvc.VersionsExist(gp.g.Node)}
 	mount(smarttagv1connect.NewSmartTagServiceHandler(&smarttagsvc.Handler{Service: smartTags, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
+	// the import registry (ADR 0148), with the git importer in process
+	mount(importerv1connect.NewImportServiceHandler(&importsvc.Handler{Service: importRegistry(e, rp, gp), Identity: ident}, telemetry.HandlerOptions()...))
 	whoami := func(ctx context.Context, p authz.Principal) (any, error) { return authorizer.Session(ctx, p) }
 	if authMW != nil {
 		srv.Echo.GET("/api/whoami", identity.WhoAmI(identity.Extractor{}, whoami), authMW)

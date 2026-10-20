@@ -54,6 +54,7 @@ import RunTab from './editors/RunTab.svelte';
 import ChangeTab from './editors/ChangeTab.svelte';
 import PoliciesTab from './editors/PoliciesTab.svelte';
 import ImportTab from './editors/ImportTab.svelte';
+import SourceImportTab from './editors/SourceImportTab.svelte';
 import BaselineTab from './editors/BaselineTab.svelte';
 import { importKind, IMPORT_KINDS } from './editors/importKinds';
 
@@ -631,4 +632,15 @@ registerView({
   component: ImportTab,
   key: (p) => importKind(p.what),
   tabTitle: (t) => IMPORT_KINDS[importKind(t.params.what)].title,
+});
+
+// the sources a domain declares (ADR 0148), run by their importer services
+registerView({
+  id: 'sources',
+  zone: 'editor',
+  title: 'Import from a source',
+  icon: 'database',
+  component: SourceImportTab,
+  key: (p) => p.ns ?? '',
+  tabTitle: (t) => (t.params.ns ? `Import into ${t.params.ns}` : 'Import from a source'),
 });

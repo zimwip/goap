@@ -699,6 +699,76 @@ func (x *ItemType) GetAttributes() []*Attribute {
 	return nil
 }
 
+// ImporterDecl is a source a domain declares its graph can be loaded from (ADR 0148): its name, unique in the domain,
+// and the parameters a run takes, as attributes; a service registered with the import registry implements it.
+type ImporterDecl struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Params        []*Attribute           `protobuf:"bytes,4,rep,name=params,proto3" json:"params,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImporterDecl) Reset() {
+	*x = ImporterDecl{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImporterDecl) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImporterDecl) ProtoMessage() {}
+
+func (x *ImporterDecl) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImporterDecl.ProtoReflect.Descriptor instead.
+func (*ImporterDecl) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ImporterDecl) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ImporterDecl) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *ImporterDecl) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ImporterDecl) GetParams() []*Attribute {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
 // AttributeInfo is a resolved attribute of a node type or link type.
 type AttributeInfo struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
@@ -713,7 +783,7 @@ type AttributeInfo struct {
 
 func (x *AttributeInfo) Reset() {
 	*x = AttributeInfo{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[8]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -725,7 +795,7 @@ func (x *AttributeInfo) String() string {
 func (*AttributeInfo) ProtoMessage() {}
 
 func (x *AttributeInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[8]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -738,7 +808,7 @@ func (x *AttributeInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttributeInfo.ProtoReflect.Descriptor instead.
 func (*AttributeInfo) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{8}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *AttributeInfo) GetAttribute() *Attribute {
@@ -779,7 +849,7 @@ type AlgorithmParam struct {
 
 func (x *AlgorithmParam) Reset() {
 	*x = AlgorithmParam{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[9]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +861,7 @@ func (x *AlgorithmParam) String() string {
 func (*AlgorithmParam) ProtoMessage() {}
 
 func (x *AlgorithmParam) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[9]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +874,7 @@ func (x *AlgorithmParam) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AlgorithmParam.ProtoReflect.Descriptor instead.
 func (*AlgorithmParam) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{9}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *AlgorithmParam) GetName() string {
@@ -866,7 +936,7 @@ type Algorithm struct {
 
 func (x *Algorithm) Reset() {
 	*x = Algorithm{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[10]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -878,7 +948,7 @@ func (x *Algorithm) String() string {
 func (*Algorithm) ProtoMessage() {}
 
 func (x *Algorithm) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[10]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -891,7 +961,7 @@ func (x *Algorithm) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Algorithm.ProtoReflect.Descriptor instead.
 func (*Algorithm) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{10}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Algorithm) GetName() string {
@@ -949,7 +1019,7 @@ type AlgorithmInstance struct {
 
 func (x *AlgorithmInstance) Reset() {
 	*x = AlgorithmInstance{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[11]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -961,7 +1031,7 @@ func (x *AlgorithmInstance) String() string {
 func (*AlgorithmInstance) ProtoMessage() {}
 
 func (x *AlgorithmInstance) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[11]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -974,7 +1044,7 @@ func (x *AlgorithmInstance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AlgorithmInstance.ProtoReflect.Descriptor instead.
 func (*AlgorithmInstance) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{11}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *AlgorithmInstance) GetName() string {
@@ -1018,7 +1088,7 @@ type Lifecycle struct {
 
 func (x *Lifecycle) Reset() {
 	*x = Lifecycle{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[12]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1030,7 +1100,7 @@ func (x *Lifecycle) String() string {
 func (*Lifecycle) ProtoMessage() {}
 
 func (x *Lifecycle) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[12]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1043,7 +1113,7 @@ func (x *Lifecycle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Lifecycle.ProtoReflect.Descriptor instead.
 func (*Lifecycle) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{12}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Lifecycle) GetName() string {
@@ -1094,7 +1164,7 @@ type LifecycleState struct {
 
 func (x *LifecycleState) Reset() {
 	*x = LifecycleState{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[13]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1106,7 +1176,7 @@ func (x *LifecycleState) String() string {
 func (*LifecycleState) ProtoMessage() {}
 
 func (x *LifecycleState) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[13]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1119,7 +1189,7 @@ func (x *LifecycleState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LifecycleState.ProtoReflect.Descriptor instead.
 func (*LifecycleState) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{13}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *LifecycleState) GetName() string {
@@ -1177,7 +1247,7 @@ type LifecycleTransition struct {
 
 func (x *LifecycleTransition) Reset() {
 	*x = LifecycleTransition{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[14]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1189,7 +1259,7 @@ func (x *LifecycleTransition) String() string {
 func (*LifecycleTransition) ProtoMessage() {}
 
 func (x *LifecycleTransition) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[14]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1202,7 +1272,7 @@ func (x *LifecycleTransition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LifecycleTransition.ProtoReflect.Descriptor instead.
 func (*LifecycleTransition) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{14}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *LifecycleTransition) GetName() string {
@@ -1308,7 +1378,7 @@ type Criterion struct {
 
 func (x *Criterion) Reset() {
 	*x = Criterion{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[15]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1320,7 +1390,7 @@ func (x *Criterion) String() string {
 func (*Criterion) ProtoMessage() {}
 
 func (x *Criterion) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[15]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1333,7 +1403,7 @@ func (x *Criterion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Criterion.ProtoReflect.Descriptor instead.
 func (*Criterion) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{15}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Criterion) GetName() string {
@@ -1366,7 +1436,7 @@ type DocumentSpec struct {
 
 func (x *DocumentSpec) Reset() {
 	*x = DocumentSpec{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[16]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1378,7 +1448,7 @@ func (x *DocumentSpec) String() string {
 func (*DocumentSpec) ProtoMessage() {}
 
 func (x *DocumentSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[16]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1391,7 +1461,7 @@ func (x *DocumentSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DocumentSpec.ProtoReflect.Descriptor instead.
 func (*DocumentSpec) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{16}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DocumentSpec) GetContains() []string {
@@ -1423,7 +1493,7 @@ type LinkType struct {
 
 func (x *LinkType) Reset() {
 	*x = LinkType{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[17]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1435,7 +1505,7 @@ func (x *LinkType) String() string {
 func (*LinkType) ProtoMessage() {}
 
 func (x *LinkType) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[17]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1448,7 +1518,7 @@ func (x *LinkType) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LinkType.ProtoReflect.Descriptor instead.
 func (*LinkType) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{17}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *LinkType) GetName() string {
@@ -1536,7 +1606,7 @@ type Condition struct {
 
 func (x *Condition) Reset() {
 	*x = Condition{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[18]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1548,7 +1618,7 @@ func (x *Condition) String() string {
 func (*Condition) ProtoMessage() {}
 
 func (x *Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[18]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1561,7 +1631,7 @@ func (x *Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Condition.ProtoReflect.Descriptor instead.
 func (*Condition) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{18}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *Condition) GetName() string {
@@ -1638,7 +1708,7 @@ type ProduceSpec struct {
 
 func (x *ProduceSpec) Reset() {
 	*x = ProduceSpec{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[19]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1650,7 +1720,7 @@ func (x *ProduceSpec) String() string {
 func (*ProduceSpec) ProtoMessage() {}
 
 func (x *ProduceSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[19]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1663,7 +1733,7 @@ func (x *ProduceSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProduceSpec.ProtoReflect.Descriptor instead.
 func (*ProduceSpec) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{19}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ProduceSpec) GetOp() string {
@@ -1691,7 +1761,7 @@ type LinkSpec struct {
 
 func (x *LinkSpec) Reset() {
 	*x = LinkSpec{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[20]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1703,7 +1773,7 @@ func (x *LinkSpec) String() string {
 func (*LinkSpec) ProtoMessage() {}
 
 func (x *LinkSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[20]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1716,7 +1786,7 @@ func (x *LinkSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LinkSpec.ProtoReflect.Descriptor instead.
 func (*LinkSpec) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{20}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *LinkSpec) GetType() string {
@@ -1746,7 +1816,7 @@ type Expectation struct {
 
 func (x *Expectation) Reset() {
 	*x = Expectation{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[21]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1758,7 +1828,7 @@ func (x *Expectation) String() string {
 func (*Expectation) ProtoMessage() {}
 
 func (x *Expectation) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[21]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1771,7 +1841,7 @@ func (x *Expectation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Expectation.ProtoReflect.Descriptor instead.
 func (*Expectation) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{21}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *Expectation) GetForEach() string {
@@ -1859,7 +1929,7 @@ type Action struct {
 
 func (x *Action) Reset() {
 	*x = Action{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[22]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1871,7 +1941,7 @@ func (x *Action) String() string {
 func (*Action) ProtoMessage() {}
 
 func (x *Action) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[22]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1884,7 +1954,7 @@ func (x *Action) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Action.ProtoReflect.Descriptor instead.
 func (*Action) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{22}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *Action) GetName() string {
@@ -2126,7 +2196,7 @@ type ActionLoop struct {
 
 func (x *ActionLoop) Reset() {
 	*x = ActionLoop{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[23]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2138,7 +2208,7 @@ func (x *ActionLoop) String() string {
 func (*ActionLoop) ProtoMessage() {}
 
 func (x *ActionLoop) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[23]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2151,7 +2221,7 @@ func (x *ActionLoop) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActionLoop.ProtoReflect.Descriptor instead.
 func (*ActionLoop) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{23}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ActionLoop) GetMaxRounds() int32 {
@@ -2202,7 +2272,7 @@ type Verify struct {
 
 func (x *Verify) Reset() {
 	*x = Verify{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[24]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2214,7 +2284,7 @@ func (x *Verify) String() string {
 func (*Verify) ProtoMessage() {}
 
 func (x *Verify) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[24]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2227,7 +2297,7 @@ func (x *Verify) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Verify.ProtoReflect.Descriptor instead.
 func (*Verify) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{24}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Verify) GetOracle() string {
@@ -2276,7 +2346,7 @@ type Agent struct {
 
 func (x *Agent) Reset() {
 	*x = Agent{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[25]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2288,7 +2358,7 @@ func (x *Agent) String() string {
 func (*Agent) ProtoMessage() {}
 
 func (x *Agent) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[25]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2301,7 +2371,7 @@ func (x *Agent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Agent.ProtoReflect.Descriptor instead.
 func (*Agent) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{25}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *Agent) GetName() string {
@@ -2404,7 +2474,7 @@ type Persistence struct {
 
 func (x *Persistence) Reset() {
 	*x = Persistence{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[26]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2416,7 +2486,7 @@ func (x *Persistence) String() string {
 func (*Persistence) ProtoMessage() {}
 
 func (x *Persistence) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[26]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2429,7 +2499,7 @@ func (x *Persistence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Persistence.ProtoReflect.Descriptor instead.
 func (*Persistence) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{26}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *Persistence) GetScope() string {
@@ -2486,7 +2556,7 @@ type Trigger struct {
 
 func (x *Trigger) Reset() {
 	*x = Trigger{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[27]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2498,7 +2568,7 @@ func (x *Trigger) String() string {
 func (*Trigger) ProtoMessage() {}
 
 func (x *Trigger) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[27]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2511,7 +2581,7 @@ func (x *Trigger) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Trigger.ProtoReflect.Descriptor instead.
 func (*Trigger) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{27}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *Trigger) GetName() string {
@@ -2611,7 +2681,7 @@ type Goal struct {
 
 func (x *Goal) Reset() {
 	*x = Goal{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[28]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2623,7 +2693,7 @@ func (x *Goal) String() string {
 func (*Goal) ProtoMessage() {}
 
 func (x *Goal) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[28]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2636,7 +2706,7 @@ func (x *Goal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Goal.ProtoReflect.Descriptor instead.
 func (*Goal) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{28}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *Goal) GetName() string {
@@ -2729,7 +2799,7 @@ type Methodology struct {
 
 func (x *Methodology) Reset() {
 	*x = Methodology{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[29]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2741,7 +2811,7 @@ func (x *Methodology) String() string {
 func (*Methodology) ProtoMessage() {}
 
 func (x *Methodology) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[29]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2754,7 +2824,7 @@ func (x *Methodology) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Methodology.ProtoReflect.Descriptor instead.
 func (*Methodology) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{29}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *Methodology) GetName() string {
@@ -2965,7 +3035,7 @@ type AssessmentView struct {
 
 func (x *AssessmentView) Reset() {
 	*x = AssessmentView{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[30]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2977,7 +3047,7 @@ func (x *AssessmentView) String() string {
 func (*AssessmentView) ProtoMessage() {}
 
 func (x *AssessmentView) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[30]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2990,7 +3060,7 @@ func (x *AssessmentView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssessmentView.ProtoReflect.Descriptor instead.
 func (*AssessmentView) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{30}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *AssessmentView) GetSubject() string {
@@ -3023,7 +3093,7 @@ type AssessmentState struct {
 
 func (x *AssessmentState) Reset() {
 	*x = AssessmentState{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[31]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3035,7 +3105,7 @@ func (x *AssessmentState) String() string {
 func (*AssessmentState) ProtoMessage() {}
 
 func (x *AssessmentState) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[31]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3048,7 +3118,7 @@ func (x *AssessmentState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssessmentState.ProtoReflect.Descriptor instead.
 func (*AssessmentState) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{31}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *AssessmentState) GetWhen() string {
@@ -3097,7 +3167,7 @@ type EventDef struct {
 
 func (x *EventDef) Reset() {
 	*x = EventDef{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[32]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3109,7 +3179,7 @@ func (x *EventDef) String() string {
 func (*EventDef) ProtoMessage() {}
 
 func (x *EventDef) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[32]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3122,7 +3192,7 @@ func (x *EventDef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventDef.ProtoReflect.Descriptor instead.
 func (*EventDef) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{32}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *EventDef) GetName() string {
@@ -3153,7 +3223,7 @@ type Integration struct {
 
 func (x *Integration) Reset() {
 	*x = Integration{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[33]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3165,7 +3235,7 @@ func (x *Integration) String() string {
 func (*Integration) ProtoMessage() {}
 
 func (x *Integration) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[33]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3178,7 +3248,7 @@ func (x *Integration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Integration.ProtoReflect.Descriptor instead.
 func (*Integration) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{33}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *Integration) GetMethodologies() []string {
@@ -3215,7 +3285,7 @@ type Guardian struct {
 
 func (x *Guardian) Reset() {
 	*x = Guardian{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[34]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3227,7 +3297,7 @@ func (x *Guardian) String() string {
 func (*Guardian) ProtoMessage() {}
 
 func (x *Guardian) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[34]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3240,7 +3310,7 @@ func (x *Guardian) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Guardian.ProtoReflect.Descriptor instead.
 func (*Guardian) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{34}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *Guardian) GetCommit() string {
@@ -3272,7 +3342,7 @@ type Subscription struct {
 
 func (x *Subscription) Reset() {
 	*x = Subscription{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[35]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3284,7 +3354,7 @@ func (x *Subscription) String() string {
 func (*Subscription) ProtoMessage() {}
 
 func (x *Subscription) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[35]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3297,7 +3367,7 @@ func (x *Subscription) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Subscription.ProtoReflect.Descriptor instead.
 func (*Subscription) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{35}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *Subscription) GetEvent() string {
@@ -3341,7 +3411,7 @@ type Role struct {
 
 func (x *Role) Reset() {
 	*x = Role{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[36]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3353,7 +3423,7 @@ func (x *Role) String() string {
 func (*Role) ProtoMessage() {}
 
 func (x *Role) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[36]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3366,7 +3436,7 @@ func (x *Role) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Role.ProtoReflect.Descriptor instead.
 func (*Role) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{36}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *Role) GetName() string {
@@ -3403,7 +3473,7 @@ type Responsibilities struct {
 
 func (x *Responsibilities) Reset() {
 	*x = Responsibilities{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[37]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3415,7 +3485,7 @@ func (x *Responsibilities) String() string {
 func (*Responsibilities) ProtoMessage() {}
 
 func (x *Responsibilities) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[37]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3428,7 +3498,7 @@ func (x *Responsibilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Responsibilities.ProtoReflect.Descriptor instead.
 func (*Responsibilities) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{37}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *Responsibilities) GetResponsible() string {
@@ -3496,7 +3566,7 @@ type Method struct {
 
 func (x *Method) Reset() {
 	*x = Method{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[38]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3508,7 +3578,7 @@ func (x *Method) String() string {
 func (*Method) ProtoMessage() {}
 
 func (x *Method) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[38]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3521,7 +3591,7 @@ func (x *Method) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Method.ProtoReflect.Descriptor instead.
 func (*Method) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{38}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *Method) GetName() string {
@@ -3669,7 +3739,7 @@ type Process struct {
 
 func (x *Process) Reset() {
 	*x = Process{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[39]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3681,7 +3751,7 @@ func (x *Process) String() string {
 func (*Process) ProtoMessage() {}
 
 func (x *Process) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[39]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3694,7 +3764,7 @@ func (x *Process) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Process.ProtoReflect.Descriptor instead.
 func (*Process) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{39}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *Process) GetName() string {
@@ -3758,7 +3828,7 @@ type Reference struct {
 
 func (x *Reference) Reset() {
 	*x = Reference{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[40]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3770,7 +3840,7 @@ func (x *Reference) String() string {
 func (*Reference) ProtoMessage() {}
 
 func (x *Reference) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[40]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3783,7 +3853,7 @@ func (x *Reference) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Reference.ProtoReflect.Descriptor instead.
 func (*Reference) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{40}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *Reference) GetTitle() string {
@@ -3854,7 +3924,7 @@ type Step struct {
 
 func (x *Step) Reset() {
 	*x = Step{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[41]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3866,7 +3936,7 @@ func (x *Step) String() string {
 func (*Step) ProtoMessage() {}
 
 func (x *Step) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[41]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3879,7 +3949,7 @@ func (x *Step) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Step.ProtoReflect.Descriptor instead.
 func (*Step) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{41}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *Step) GetName() string {
@@ -4044,7 +4114,7 @@ type StepGate struct {
 
 func (x *StepGate) Reset() {
 	*x = StepGate{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[42]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4056,7 +4126,7 @@ func (x *StepGate) String() string {
 func (*StepGate) ProtoMessage() {}
 
 func (x *StepGate) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[42]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4069,7 +4139,7 @@ func (x *StepGate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StepGate.ProtoReflect.Descriptor instead.
 func (*StepGate) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{42}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *StepGate) GetTransition() string {
@@ -4119,7 +4189,7 @@ type GateItem struct {
 
 func (x *GateItem) Reset() {
 	*x = GateItem{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[43]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4131,7 +4201,7 @@ func (x *GateItem) String() string {
 func (*GateItem) ProtoMessage() {}
 
 func (x *GateItem) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[43]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4144,7 +4214,7 @@ func (x *GateItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GateItem.ProtoReflect.Descriptor instead.
 func (*GateItem) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{43}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *GateItem) GetName() string {
@@ -4207,7 +4277,7 @@ type GateDecision struct {
 
 func (x *GateDecision) Reset() {
 	*x = GateDecision{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[44]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4219,7 +4289,7 @@ func (x *GateDecision) String() string {
 func (*GateDecision) ProtoMessage() {}
 
 func (x *GateDecision) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[44]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4232,7 +4302,7 @@ func (x *GateDecision) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GateDecision.ProtoReflect.Descriptor instead.
 func (*GateDecision) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{44}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *GateDecision) GetQuestion() string {
@@ -4287,7 +4357,7 @@ type GateFreezes struct {
 
 func (x *GateFreezes) Reset() {
 	*x = GateFreezes{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[45]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4299,7 +4369,7 @@ func (x *GateFreezes) String() string {
 func (*GateFreezes) ProtoMessage() {}
 
 func (x *GateFreezes) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[45]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4312,7 +4382,7 @@ func (x *GateFreezes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GateFreezes.ProtoReflect.Descriptor instead.
 func (*GateFreezes) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{45}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *GateFreezes) GetFields() []string {
@@ -4356,7 +4426,7 @@ type StepReview struct {
 
 func (x *StepReview) Reset() {
 	*x = StepReview{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[46]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4368,7 +4438,7 @@ func (x *StepReview) String() string {
 func (*StepReview) ProtoMessage() {}
 
 func (x *StepReview) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[46]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4381,7 +4451,7 @@ func (x *StepReview) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StepReview.ProtoReflect.Descriptor instead.
 func (*StepReview) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{46}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *StepReview) GetSubject() string {
@@ -4408,7 +4478,7 @@ type GoalSummary struct {
 
 func (x *GoalSummary) Reset() {
 	*x = GoalSummary{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[47]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4420,7 +4490,7 @@ func (x *GoalSummary) String() string {
 func (*GoalSummary) ProtoMessage() {}
 
 func (x *GoalSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[47]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4433,7 +4503,7 @@ func (x *GoalSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GoalSummary.ProtoReflect.Descriptor instead.
 func (*GoalSummary) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{47}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *GoalSummary) GetName() string {
@@ -4461,7 +4531,7 @@ type AgentSummary struct {
 
 func (x *AgentSummary) Reset() {
 	*x = AgentSummary{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[48]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4473,7 +4543,7 @@ func (x *AgentSummary) String() string {
 func (*AgentSummary) ProtoMessage() {}
 
 func (x *AgentSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[48]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4486,7 +4556,7 @@ func (x *AgentSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentSummary.ProtoReflect.Descriptor instead.
 func (*AgentSummary) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{48}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *AgentSummary) GetName() string {
@@ -4530,7 +4600,7 @@ type MethodologySummary struct {
 
 func (x *MethodologySummary) Reset() {
 	*x = MethodologySummary{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[49]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4542,7 +4612,7 @@ func (x *MethodologySummary) String() string {
 func (*MethodologySummary) ProtoMessage() {}
 
 func (x *MethodologySummary) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[49]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4555,7 +4625,7 @@ func (x *MethodologySummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MethodologySummary.ProtoReflect.Descriptor instead.
 func (*MethodologySummary) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{49}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *MethodologySummary) GetName() string {
@@ -4645,7 +4715,7 @@ type Issue struct {
 
 func (x *Issue) Reset() {
 	*x = Issue{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[50]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4657,7 +4727,7 @@ func (x *Issue) String() string {
 func (*Issue) ProtoMessage() {}
 
 func (x *Issue) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[50]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4670,7 +4740,7 @@ func (x *Issue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Issue.ProtoReflect.Descriptor instead.
 func (*Issue) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{50}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *Issue) GetPath() string {
@@ -4718,7 +4788,7 @@ type ListMethodologiesRequest struct {
 
 func (x *ListMethodologiesRequest) Reset() {
 	*x = ListMethodologiesRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[51]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4730,7 +4800,7 @@ func (x *ListMethodologiesRequest) String() string {
 func (*ListMethodologiesRequest) ProtoMessage() {}
 
 func (x *ListMethodologiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[51]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4743,7 +4813,7 @@ func (x *ListMethodologiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMethodologiesRequest.ProtoReflect.Descriptor instead.
 func (*ListMethodologiesRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{51}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ListMethodologiesRequest) GetAllVersions() bool {
@@ -4762,7 +4832,7 @@ type ListMethodologiesResponse struct {
 
 func (x *ListMethodologiesResponse) Reset() {
 	*x = ListMethodologiesResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[52]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4774,7 +4844,7 @@ func (x *ListMethodologiesResponse) String() string {
 func (*ListMethodologiesResponse) ProtoMessage() {}
 
 func (x *ListMethodologiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[52]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4787,7 +4857,7 @@ func (x *ListMethodologiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMethodologiesResponse.ProtoReflect.Descriptor instead.
 func (*ListMethodologiesResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{52}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ListMethodologiesResponse) GetMethodologies() []*MethodologySummary {
@@ -4810,7 +4880,7 @@ type GetMethodologyRequest struct {
 
 func (x *GetMethodologyRequest) Reset() {
 	*x = GetMethodologyRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[53]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4822,7 +4892,7 @@ func (x *GetMethodologyRequest) String() string {
 func (*GetMethodologyRequest) ProtoMessage() {}
 
 func (x *GetMethodologyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[53]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4835,7 +4905,7 @@ func (x *GetMethodologyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMethodologyRequest.ProtoReflect.Descriptor instead.
 func (*GetMethodologyRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{53}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *GetMethodologyRequest) GetName() string {
@@ -4871,7 +4941,7 @@ type GetMethodologyResponse struct {
 
 func (x *GetMethodologyResponse) Reset() {
 	*x = GetMethodologyResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[54]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4883,7 +4953,7 @@ func (x *GetMethodologyResponse) String() string {
 func (*GetMethodologyResponse) ProtoMessage() {}
 
 func (x *GetMethodologyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[54]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4896,7 +4966,7 @@ func (x *GetMethodologyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMethodologyResponse.ProtoReflect.Descriptor instead.
 func (*GetMethodologyResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{54}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *GetMethodologyResponse) GetMethodology() *Methodology {
@@ -4922,7 +4992,7 @@ type SaveMethodologyRequest struct {
 
 func (x *SaveMethodologyRequest) Reset() {
 	*x = SaveMethodologyRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[55]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4934,7 +5004,7 @@ func (x *SaveMethodologyRequest) String() string {
 func (*SaveMethodologyRequest) ProtoMessage() {}
 
 func (x *SaveMethodologyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[55]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4947,7 +5017,7 @@ func (x *SaveMethodologyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveMethodologyRequest.ProtoReflect.Descriptor instead.
 func (*SaveMethodologyRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{55}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *SaveMethodologyRequest) GetMethodology() *Methodology {
@@ -4967,7 +5037,7 @@ type SaveMethodologyResponse struct {
 
 func (x *SaveMethodologyResponse) Reset() {
 	*x = SaveMethodologyResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[56]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4979,7 +5049,7 @@ func (x *SaveMethodologyResponse) String() string {
 func (*SaveMethodologyResponse) ProtoMessage() {}
 
 func (x *SaveMethodologyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[56]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4992,7 +5062,7 @@ func (x *SaveMethodologyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveMethodologyResponse.ProtoReflect.Descriptor instead.
 func (*SaveMethodologyResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{56}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *SaveMethodologyResponse) GetMethodology() *Methodology {
@@ -5018,7 +5088,7 @@ type ValidateMethodologyRequest struct {
 
 func (x *ValidateMethodologyRequest) Reset() {
 	*x = ValidateMethodologyRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[57]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5030,7 +5100,7 @@ func (x *ValidateMethodologyRequest) String() string {
 func (*ValidateMethodologyRequest) ProtoMessage() {}
 
 func (x *ValidateMethodologyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[57]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5043,7 +5113,7 @@ func (x *ValidateMethodologyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateMethodologyRequest.ProtoReflect.Descriptor instead.
 func (*ValidateMethodologyRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{57}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ValidateMethodologyRequest) GetMethodology() *Methodology {
@@ -5062,7 +5132,7 @@ type ValidateMethodologyResponse struct {
 
 func (x *ValidateMethodologyResponse) Reset() {
 	*x = ValidateMethodologyResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[58]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5074,7 +5144,7 @@ func (x *ValidateMethodologyResponse) String() string {
 func (*ValidateMethodologyResponse) ProtoMessage() {}
 
 func (x *ValidateMethodologyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[58]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5087,7 +5157,7 @@ func (x *ValidateMethodologyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateMethodologyResponse.ProtoReflect.Descriptor instead.
 func (*ValidateMethodologyResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{58}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *ValidateMethodologyResponse) GetIssues() []*Issue {
@@ -5107,7 +5177,7 @@ type PublishMethodologyRequest struct {
 
 func (x *PublishMethodologyRequest) Reset() {
 	*x = PublishMethodologyRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[59]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5119,7 +5189,7 @@ func (x *PublishMethodologyRequest) String() string {
 func (*PublishMethodologyRequest) ProtoMessage() {}
 
 func (x *PublishMethodologyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[59]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5132,7 +5202,7 @@ func (x *PublishMethodologyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishMethodologyRequest.ProtoReflect.Descriptor instead.
 func (*PublishMethodologyRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{59}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *PublishMethodologyRequest) GetName() string {
@@ -5158,7 +5228,7 @@ type PublishMethodologyResponse struct {
 
 func (x *PublishMethodologyResponse) Reset() {
 	*x = PublishMethodologyResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[60]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5170,7 +5240,7 @@ func (x *PublishMethodologyResponse) String() string {
 func (*PublishMethodologyResponse) ProtoMessage() {}
 
 func (x *PublishMethodologyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[60]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5183,7 +5253,7 @@ func (x *PublishMethodologyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishMethodologyResponse.ProtoReflect.Descriptor instead.
 func (*PublishMethodologyResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{60}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *PublishMethodologyResponse) GetMethodology() *Methodology {
@@ -5204,7 +5274,7 @@ type CreateVersionRequest struct {
 
 func (x *CreateVersionRequest) Reset() {
 	*x = CreateVersionRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[61]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5216,7 +5286,7 @@ func (x *CreateVersionRequest) String() string {
 func (*CreateVersionRequest) ProtoMessage() {}
 
 func (x *CreateVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[61]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5229,7 +5299,7 @@ func (x *CreateVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateVersionRequest.ProtoReflect.Descriptor instead.
 func (*CreateVersionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{61}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *CreateVersionRequest) GetName() string {
@@ -5262,7 +5332,7 @@ type CreateVersionResponse struct {
 
 func (x *CreateVersionResponse) Reset() {
 	*x = CreateVersionResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[62]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5274,7 +5344,7 @@ func (x *CreateVersionResponse) String() string {
 func (*CreateVersionResponse) ProtoMessage() {}
 
 func (x *CreateVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[62]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5287,7 +5357,7 @@ func (x *CreateVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateVersionResponse.ProtoReflect.Descriptor instead.
 func (*CreateVersionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{62}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *CreateVersionResponse) GetMethodology() *Methodology {
@@ -5307,7 +5377,7 @@ type DeleteMethodologyRequest struct {
 
 func (x *DeleteMethodologyRequest) Reset() {
 	*x = DeleteMethodologyRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[63]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5319,7 +5389,7 @@ func (x *DeleteMethodologyRequest) String() string {
 func (*DeleteMethodologyRequest) ProtoMessage() {}
 
 func (x *DeleteMethodologyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[63]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5332,7 +5402,7 @@ func (x *DeleteMethodologyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMethodologyRequest.ProtoReflect.Descriptor instead.
 func (*DeleteMethodologyRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{63}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *DeleteMethodologyRequest) GetName() string {
@@ -5357,7 +5427,7 @@ type DeleteMethodologyResponse struct {
 
 func (x *DeleteMethodologyResponse) Reset() {
 	*x = DeleteMethodologyResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[64]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5369,7 +5439,7 @@ func (x *DeleteMethodologyResponse) String() string {
 func (*DeleteMethodologyResponse) ProtoMessage() {}
 
 func (x *DeleteMethodologyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[64]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5382,7 +5452,7 @@ func (x *DeleteMethodologyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMethodologyResponse.ProtoReflect.Descriptor instead.
 func (*DeleteMethodologyResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{64}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{65}
 }
 
 type ImportMethodologyRequest struct {
@@ -5396,7 +5466,7 @@ type ImportMethodologyRequest struct {
 
 func (x *ImportMethodologyRequest) Reset() {
 	*x = ImportMethodologyRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[65]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5408,7 +5478,7 @@ func (x *ImportMethodologyRequest) String() string {
 func (*ImportMethodologyRequest) ProtoMessage() {}
 
 func (x *ImportMethodologyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[65]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5421,7 +5491,7 @@ func (x *ImportMethodologyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportMethodologyRequest.ProtoReflect.Descriptor instead.
 func (*ImportMethodologyRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{65}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *ImportMethodologyRequest) GetYaml() string {
@@ -5448,7 +5518,7 @@ type ImportMethodologyResponse struct {
 
 func (x *ImportMethodologyResponse) Reset() {
 	*x = ImportMethodologyResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[66]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5460,7 +5530,7 @@ func (x *ImportMethodologyResponse) String() string {
 func (*ImportMethodologyResponse) ProtoMessage() {}
 
 func (x *ImportMethodologyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[66]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5473,7 +5543,7 @@ func (x *ImportMethodologyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportMethodologyResponse.ProtoReflect.Descriptor instead.
 func (*ImportMethodologyResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{66}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *ImportMethodologyResponse) GetMethodology() *Methodology {
@@ -5500,7 +5570,7 @@ type ExportMethodologyRequest struct {
 
 func (x *ExportMethodologyRequest) Reset() {
 	*x = ExportMethodologyRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[67]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5512,7 +5582,7 @@ func (x *ExportMethodologyRequest) String() string {
 func (*ExportMethodologyRequest) ProtoMessage() {}
 
 func (x *ExportMethodologyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[67]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5525,7 +5595,7 @@ func (x *ExportMethodologyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportMethodologyRequest.ProtoReflect.Descriptor instead.
 func (*ExportMethodologyRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{67}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *ExportMethodologyRequest) GetName() string {
@@ -5552,7 +5622,7 @@ type ExportMethodologyResponse struct {
 
 func (x *ExportMethodologyResponse) Reset() {
 	*x = ExportMethodologyResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[68]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5564,7 +5634,7 @@ func (x *ExportMethodologyResponse) String() string {
 func (*ExportMethodologyResponse) ProtoMessage() {}
 
 func (x *ExportMethodologyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[68]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5577,7 +5647,7 @@ func (x *ExportMethodologyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportMethodologyResponse.ProtoReflect.Descriptor instead.
 func (*ExportMethodologyResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{68}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *ExportMethodologyResponse) GetYaml() string {
@@ -5610,6 +5680,7 @@ type Domain struct {
 	Algorithms         []*Algorithm           `protobuf:"bytes,12,rep,name=algorithms,proto3" json:"algorithms,omitempty"`
 	AlgorithmInstances []*AlgorithmInstance   `protobuf:"bytes,13,rep,name=algorithm_instances,json=algorithmInstances,proto3" json:"algorithm_instances,omitempty"`
 	ItemTypes          []*ItemType            `protobuf:"bytes,17,rep,name=item_types,json=itemTypes,proto3" json:"item_types,omitempty"`
+	Importers          []*ImporterDecl        `protobuf:"bytes,18,rep,name=importers,proto3" json:"importers,omitempty"`
 	CreatedAt          *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt          *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	PublishedAt        *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
@@ -5622,7 +5693,7 @@ type Domain struct {
 
 func (x *Domain) Reset() {
 	*x = Domain{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[69]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5634,7 +5705,7 @@ func (x *Domain) String() string {
 func (*Domain) ProtoMessage() {}
 
 func (x *Domain) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[69]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5647,7 +5718,7 @@ func (x *Domain) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Domain.ProtoReflect.Descriptor instead.
 func (*Domain) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{69}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *Domain) GetName() string {
@@ -5727,6 +5798,13 @@ func (x *Domain) GetItemTypes() []*ItemType {
 	return nil
 }
 
+func (x *Domain) GetImporters() []*ImporterDecl {
+	if x != nil {
+		return x.Importers
+	}
+	return nil
+}
+
 func (x *Domain) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
@@ -5781,7 +5859,7 @@ type DomainSummary struct {
 
 func (x *DomainSummary) Reset() {
 	*x = DomainSummary{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[70]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5793,7 +5871,7 @@ func (x *DomainSummary) String() string {
 func (*DomainSummary) ProtoMessage() {}
 
 func (x *DomainSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[70]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5806,7 +5884,7 @@ func (x *DomainSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainSummary.ProtoReflect.Descriptor instead.
 func (*DomainSummary) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{70}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *DomainSummary) GetName() string {
@@ -5889,7 +5967,7 @@ type ListDomainsRequest struct {
 
 func (x *ListDomainsRequest) Reset() {
 	*x = ListDomainsRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[71]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5901,7 +5979,7 @@ func (x *ListDomainsRequest) String() string {
 func (*ListDomainsRequest) ProtoMessage() {}
 
 func (x *ListDomainsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[71]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5914,7 +5992,7 @@ func (x *ListDomainsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDomainsRequest.ProtoReflect.Descriptor instead.
 func (*ListDomainsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{71}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *ListDomainsRequest) GetAllVersions() bool {
@@ -5933,7 +6011,7 @@ type ListDomainsResponse struct {
 
 func (x *ListDomainsResponse) Reset() {
 	*x = ListDomainsResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[72]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5945,7 +6023,7 @@ func (x *ListDomainsResponse) String() string {
 func (*ListDomainsResponse) ProtoMessage() {}
 
 func (x *ListDomainsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[72]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5958,7 +6036,7 @@ func (x *ListDomainsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDomainsResponse.ProtoReflect.Descriptor instead.
 func (*ListDomainsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{72}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *ListDomainsResponse) GetDomains() []*DomainSummary {
@@ -5978,7 +6056,7 @@ type GetDomainRequest struct {
 
 func (x *GetDomainRequest) Reset() {
 	*x = GetDomainRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[73]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5990,7 +6068,7 @@ func (x *GetDomainRequest) String() string {
 func (*GetDomainRequest) ProtoMessage() {}
 
 func (x *GetDomainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[73]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6003,7 +6081,7 @@ func (x *GetDomainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDomainRequest.ProtoReflect.Descriptor instead.
 func (*GetDomainRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{73}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *GetDomainRequest) GetName() string {
@@ -6029,7 +6107,7 @@ type GetDomainResponse struct {
 
 func (x *GetDomainResponse) Reset() {
 	*x = GetDomainResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[74]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6041,7 +6119,7 @@ func (x *GetDomainResponse) String() string {
 func (*GetDomainResponse) ProtoMessage() {}
 
 func (x *GetDomainResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[74]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6054,7 +6132,7 @@ func (x *GetDomainResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDomainResponse.ProtoReflect.Descriptor instead.
 func (*GetDomainResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{74}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *GetDomainResponse) GetDomain() *Domain {
@@ -6073,7 +6151,7 @@ type SaveDomainRequest struct {
 
 func (x *SaveDomainRequest) Reset() {
 	*x = SaveDomainRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[75]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6085,7 +6163,7 @@ func (x *SaveDomainRequest) String() string {
 func (*SaveDomainRequest) ProtoMessage() {}
 
 func (x *SaveDomainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[75]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6098,7 +6176,7 @@ func (x *SaveDomainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveDomainRequest.ProtoReflect.Descriptor instead.
 func (*SaveDomainRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{75}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *SaveDomainRequest) GetDomain() *Domain {
@@ -6118,7 +6196,7 @@ type SaveDomainResponse struct {
 
 func (x *SaveDomainResponse) Reset() {
 	*x = SaveDomainResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[76]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6130,7 +6208,7 @@ func (x *SaveDomainResponse) String() string {
 func (*SaveDomainResponse) ProtoMessage() {}
 
 func (x *SaveDomainResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[76]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6143,7 +6221,7 @@ func (x *SaveDomainResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveDomainResponse.ProtoReflect.Descriptor instead.
 func (*SaveDomainResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{76}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *SaveDomainResponse) GetDomain() *Domain {
@@ -6169,7 +6247,7 @@ type ValidateDomainRequest struct {
 
 func (x *ValidateDomainRequest) Reset() {
 	*x = ValidateDomainRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[77]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6181,7 +6259,7 @@ func (x *ValidateDomainRequest) String() string {
 func (*ValidateDomainRequest) ProtoMessage() {}
 
 func (x *ValidateDomainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[77]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6194,7 +6272,7 @@ func (x *ValidateDomainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateDomainRequest.ProtoReflect.Descriptor instead.
 func (*ValidateDomainRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{77}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *ValidateDomainRequest) GetDomain() *Domain {
@@ -6213,7 +6291,7 @@ type ValidateDomainResponse struct {
 
 func (x *ValidateDomainResponse) Reset() {
 	*x = ValidateDomainResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[78]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6225,7 +6303,7 @@ func (x *ValidateDomainResponse) String() string {
 func (*ValidateDomainResponse) ProtoMessage() {}
 
 func (x *ValidateDomainResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[78]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6238,7 +6316,7 @@ func (x *ValidateDomainResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateDomainResponse.ProtoReflect.Descriptor instead.
 func (*ValidateDomainResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{78}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *ValidateDomainResponse) GetIssues() []*Issue {
@@ -6258,7 +6336,7 @@ type PublishDomainRequest struct {
 
 func (x *PublishDomainRequest) Reset() {
 	*x = PublishDomainRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[79]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6270,7 +6348,7 @@ func (x *PublishDomainRequest) String() string {
 func (*PublishDomainRequest) ProtoMessage() {}
 
 func (x *PublishDomainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[79]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6283,7 +6361,7 @@ func (x *PublishDomainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishDomainRequest.ProtoReflect.Descriptor instead.
 func (*PublishDomainRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{79}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *PublishDomainRequest) GetName() string {
@@ -6309,7 +6387,7 @@ type PublishDomainResponse struct {
 
 func (x *PublishDomainResponse) Reset() {
 	*x = PublishDomainResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[80]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6321,7 +6399,7 @@ func (x *PublishDomainResponse) String() string {
 func (*PublishDomainResponse) ProtoMessage() {}
 
 func (x *PublishDomainResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[80]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6334,7 +6412,7 @@ func (x *PublishDomainResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishDomainResponse.ProtoReflect.Descriptor instead.
 func (*PublishDomainResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{80}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *PublishDomainResponse) GetDomain() *Domain {
@@ -6355,7 +6433,7 @@ type CreateDomainVersionRequest struct {
 
 func (x *CreateDomainVersionRequest) Reset() {
 	*x = CreateDomainVersionRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[81]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6367,7 +6445,7 @@ func (x *CreateDomainVersionRequest) String() string {
 func (*CreateDomainVersionRequest) ProtoMessage() {}
 
 func (x *CreateDomainVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[81]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6380,7 +6458,7 @@ func (x *CreateDomainVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDomainVersionRequest.ProtoReflect.Descriptor instead.
 func (*CreateDomainVersionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{81}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *CreateDomainVersionRequest) GetName() string {
@@ -6413,7 +6491,7 @@ type CreateDomainVersionResponse struct {
 
 func (x *CreateDomainVersionResponse) Reset() {
 	*x = CreateDomainVersionResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[82]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6425,7 +6503,7 @@ func (x *CreateDomainVersionResponse) String() string {
 func (*CreateDomainVersionResponse) ProtoMessage() {}
 
 func (x *CreateDomainVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[82]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6438,7 +6516,7 @@ func (x *CreateDomainVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDomainVersionResponse.ProtoReflect.Descriptor instead.
 func (*CreateDomainVersionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{82}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *CreateDomainVersionResponse) GetDomain() *Domain {
@@ -6458,7 +6536,7 @@ type DeleteDomainRequest struct {
 
 func (x *DeleteDomainRequest) Reset() {
 	*x = DeleteDomainRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[83]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6470,7 +6548,7 @@ func (x *DeleteDomainRequest) String() string {
 func (*DeleteDomainRequest) ProtoMessage() {}
 
 func (x *DeleteDomainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[83]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6483,7 +6561,7 @@ func (x *DeleteDomainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDomainRequest.ProtoReflect.Descriptor instead.
 func (*DeleteDomainRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{83}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *DeleteDomainRequest) GetName() string {
@@ -6508,7 +6586,7 @@ type DeleteDomainResponse struct {
 
 func (x *DeleteDomainResponse) Reset() {
 	*x = DeleteDomainResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[84]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6520,7 +6598,7 @@ func (x *DeleteDomainResponse) String() string {
 func (*DeleteDomainResponse) ProtoMessage() {}
 
 func (x *DeleteDomainResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[84]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6533,7 +6611,7 @@ func (x *DeleteDomainResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDomainResponse.ProtoReflect.Descriptor instead.
 func (*DeleteDomainResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{84}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{85}
 }
 
 type ImportDomainRequest struct {
@@ -6547,7 +6625,7 @@ type ImportDomainRequest struct {
 
 func (x *ImportDomainRequest) Reset() {
 	*x = ImportDomainRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[85]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6559,7 +6637,7 @@ func (x *ImportDomainRequest) String() string {
 func (*ImportDomainRequest) ProtoMessage() {}
 
 func (x *ImportDomainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[85]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6572,7 +6650,7 @@ func (x *ImportDomainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportDomainRequest.ProtoReflect.Descriptor instead.
 func (*ImportDomainRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{85}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *ImportDomainRequest) GetYaml() string {
@@ -6599,7 +6677,7 @@ type ImportDomainResponse struct {
 
 func (x *ImportDomainResponse) Reset() {
 	*x = ImportDomainResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[86]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6611,7 +6689,7 @@ func (x *ImportDomainResponse) String() string {
 func (*ImportDomainResponse) ProtoMessage() {}
 
 func (x *ImportDomainResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[86]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6624,7 +6702,7 @@ func (x *ImportDomainResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportDomainResponse.ProtoReflect.Descriptor instead.
 func (*ImportDomainResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{86}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *ImportDomainResponse) GetDomain() *Domain {
@@ -6653,7 +6731,7 @@ type ExportDomainRequest struct {
 
 func (x *ExportDomainRequest) Reset() {
 	*x = ExportDomainRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[87]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6665,7 +6743,7 @@ func (x *ExportDomainRequest) String() string {
 func (*ExportDomainRequest) ProtoMessage() {}
 
 func (x *ExportDomainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[87]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6678,7 +6756,7 @@ func (x *ExportDomainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportDomainRequest.ProtoReflect.Descriptor instead.
 func (*ExportDomainRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{87}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *ExportDomainRequest) GetName() string {
@@ -6714,7 +6792,7 @@ type ExportDomainResponse struct {
 
 func (x *ExportDomainResponse) Reset() {
 	*x = ExportDomainResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[88]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6726,7 +6804,7 @@ func (x *ExportDomainResponse) String() string {
 func (*ExportDomainResponse) ProtoMessage() {}
 
 func (x *ExportDomainResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[88]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6739,7 +6817,7 @@ func (x *ExportDomainResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportDomainResponse.ProtoReflect.Descriptor instead.
 func (*ExportDomainResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{88}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *ExportDomainResponse) GetYaml() string {
@@ -6773,7 +6851,7 @@ type GetDomainUsageRequest struct {
 
 func (x *GetDomainUsageRequest) Reset() {
 	*x = GetDomainUsageRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[89]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6785,7 +6863,7 @@ func (x *GetDomainUsageRequest) String() string {
 func (*GetDomainUsageRequest) ProtoMessage() {}
 
 func (x *GetDomainUsageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[89]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6798,7 +6876,7 @@ func (x *GetDomainUsageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDomainUsageRequest.ProtoReflect.Descriptor instead.
 func (*GetDomainUsageRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{89}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *GetDomainUsageRequest) GetName() string {
@@ -6826,7 +6904,7 @@ type DomainUser struct {
 
 func (x *DomainUser) Reset() {
 	*x = DomainUser{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[90]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6838,7 +6916,7 @@ func (x *DomainUser) String() string {
 func (*DomainUser) ProtoMessage() {}
 
 func (x *DomainUser) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[90]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6851,7 +6929,7 @@ func (x *DomainUser) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainUser.ProtoReflect.Descriptor instead.
 func (*DomainUser) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{90}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *DomainUser) GetName() string {
@@ -6885,7 +6963,7 @@ type GetDomainUsageResponse struct {
 
 func (x *GetDomainUsageResponse) Reset() {
 	*x = GetDomainUsageResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[91]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6897,7 +6975,7 @@ func (x *GetDomainUsageResponse) String() string {
 func (*GetDomainUsageResponse) ProtoMessage() {}
 
 func (x *GetDomainUsageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[91]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6910,7 +6988,7 @@ func (x *GetDomainUsageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDomainUsageResponse.ProtoReflect.Descriptor instead.
 func (*GetDomainUsageResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{91}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *GetDomainUsageResponse) GetMethodologies() []*DomainUser {
@@ -6934,7 +7012,7 @@ type RunAlgorithmRequest struct {
 
 func (x *RunAlgorithmRequest) Reset() {
 	*x = RunAlgorithmRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[92]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6946,7 +7024,7 @@ func (x *RunAlgorithmRequest) String() string {
 func (*RunAlgorithmRequest) ProtoMessage() {}
 
 func (x *RunAlgorithmRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[92]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6959,7 +7037,7 @@ func (x *RunAlgorithmRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunAlgorithmRequest.ProtoReflect.Descriptor instead.
 func (*RunAlgorithmRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{92}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *RunAlgorithmRequest) GetAlgorithm() *Algorithm {
@@ -7001,7 +7079,7 @@ type RunAlgorithmResponse struct {
 
 func (x *RunAlgorithmResponse) Reset() {
 	*x = RunAlgorithmResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[93]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7013,7 +7091,7 @@ func (x *RunAlgorithmResponse) String() string {
 func (*RunAlgorithmResponse) ProtoMessage() {}
 
 func (x *RunAlgorithmResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[93]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7026,7 +7104,7 @@ func (x *RunAlgorithmResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunAlgorithmResponse.ProtoReflect.Descriptor instead.
 func (*RunAlgorithmResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{93}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *RunAlgorithmResponse) GetOk() bool {
@@ -7079,7 +7157,7 @@ type ListTypesRequest struct {
 
 func (x *ListTypesRequest) Reset() {
 	*x = ListTypesRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[94]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7091,7 +7169,7 @@ func (x *ListTypesRequest) String() string {
 func (*ListTypesRequest) ProtoMessage() {}
 
 func (x *ListTypesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[94]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7104,7 +7182,7 @@ func (x *ListTypesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTypesRequest.ProtoReflect.Descriptor instead.
 func (*ListTypesRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{94}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{95}
 }
 
 type ListTypesResponse struct {
@@ -7119,7 +7197,7 @@ type ListTypesResponse struct {
 
 func (x *ListTypesResponse) Reset() {
 	*x = ListTypesResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[95]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7131,7 +7209,7 @@ func (x *ListTypesResponse) String() string {
 func (*ListTypesResponse) ProtoMessage() {}
 
 func (x *ListTypesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[95]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7144,7 +7222,7 @@ func (x *ListTypesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTypesResponse.ProtoReflect.Descriptor instead.
 func (*ListTypesResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{95}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *ListTypesResponse) GetTypes() []*TypeInfo {
@@ -7196,7 +7274,7 @@ type TypeInfo struct {
 
 func (x *TypeInfo) Reset() {
 	*x = TypeInfo{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[96]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7208,7 +7286,7 @@ func (x *TypeInfo) String() string {
 func (*TypeInfo) ProtoMessage() {}
 
 func (x *TypeInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[96]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7221,7 +7299,7 @@ func (x *TypeInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TypeInfo.ProtoReflect.Descriptor instead.
 func (*TypeInfo) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{96}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *TypeInfo) GetRef() string {
@@ -7318,7 +7396,7 @@ type LinkTypeInfo struct {
 
 func (x *LinkTypeInfo) Reset() {
 	*x = LinkTypeInfo{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[97]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7330,7 +7408,7 @@ func (x *LinkTypeInfo) String() string {
 func (*LinkTypeInfo) ProtoMessage() {}
 
 func (x *LinkTypeInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[97]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7343,7 +7421,7 @@ func (x *LinkTypeInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LinkTypeInfo.ProtoReflect.Descriptor instead.
 func (*LinkTypeInfo) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{97}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *LinkTypeInfo) GetRef() string {
@@ -7408,7 +7486,7 @@ type GetProcessGraphRequest struct {
 
 func (x *GetProcessGraphRequest) Reset() {
 	*x = GetProcessGraphRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[98]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7420,7 +7498,7 @@ func (x *GetProcessGraphRequest) String() string {
 func (*GetProcessGraphRequest) ProtoMessage() {}
 
 func (x *GetProcessGraphRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[98]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7433,7 +7511,7 @@ func (x *GetProcessGraphRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProcessGraphRequest.ProtoReflect.Descriptor instead.
 func (*GetProcessGraphRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{98}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *GetProcessGraphRequest) GetMethodology() *Methodology {
@@ -7475,7 +7553,7 @@ type GetProcessGraphResponse struct {
 
 func (x *GetProcessGraphResponse) Reset() {
 	*x = GetProcessGraphResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[99]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7487,7 +7565,7 @@ func (x *GetProcessGraphResponse) String() string {
 func (*GetProcessGraphResponse) ProtoMessage() {}
 
 func (x *GetProcessGraphResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[99]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7500,7 +7578,7 @@ func (x *GetProcessGraphResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProcessGraphResponse.ProtoReflect.Descriptor instead.
 func (*GetProcessGraphResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{99}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *GetProcessGraphResponse) GetGraph() *ProcessGraph {
@@ -7529,7 +7607,7 @@ type GetMethodologyViewRequest struct {
 
 func (x *GetMethodologyViewRequest) Reset() {
 	*x = GetMethodologyViewRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[100]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7541,7 +7619,7 @@ func (x *GetMethodologyViewRequest) String() string {
 func (*GetMethodologyViewRequest) ProtoMessage() {}
 
 func (x *GetMethodologyViewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[100]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7554,7 +7632,7 @@ func (x *GetMethodologyViewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMethodologyViewRequest.ProtoReflect.Descriptor instead.
 func (*GetMethodologyViewRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{100}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *GetMethodologyViewRequest) GetMethodology() *Methodology {
@@ -7589,7 +7667,7 @@ type GetMethodologyViewResponse struct {
 
 func (x *GetMethodologyViewResponse) Reset() {
 	*x = GetMethodologyViewResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[101]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7601,7 +7679,7 @@ func (x *GetMethodologyViewResponse) String() string {
 func (*GetMethodologyViewResponse) ProtoMessage() {}
 
 func (x *GetMethodologyViewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[101]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7614,7 +7692,7 @@ func (x *GetMethodologyViewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMethodologyViewResponse.ProtoReflect.Descriptor instead.
 func (*GetMethodologyViewResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{101}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *GetMethodologyViewResponse) GetView() *MethodologyView {
@@ -7649,7 +7727,7 @@ type MethodologyView struct {
 
 func (x *MethodologyView) Reset() {
 	*x = MethodologyView{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[102]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7661,7 +7739,7 @@ func (x *MethodologyView) String() string {
 func (*MethodologyView) ProtoMessage() {}
 
 func (x *MethodologyView) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[102]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7674,7 +7752,7 @@ func (x *MethodologyView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MethodologyView.ProtoReflect.Descriptor instead.
 func (*MethodologyView) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{102}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *MethodologyView) GetMethodology() string {
@@ -7744,7 +7822,7 @@ type ViewActivity struct {
 
 func (x *ViewActivity) Reset() {
 	*x = ViewActivity{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[103]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7756,7 +7834,7 @@ func (x *ViewActivity) String() string {
 func (*ViewActivity) ProtoMessage() {}
 
 func (x *ViewActivity) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[103]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7769,7 +7847,7 @@ func (x *ViewActivity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ViewActivity.ProtoReflect.Descriptor instead.
 func (*ViewActivity) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{103}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *ViewActivity) GetName() string {
@@ -7883,7 +7961,7 @@ type ViewStep struct {
 
 func (x *ViewStep) Reset() {
 	*x = ViewStep{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[104]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7895,7 +7973,7 @@ func (x *ViewStep) String() string {
 func (*ViewStep) ProtoMessage() {}
 
 func (x *ViewStep) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[104]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7908,7 +7986,7 @@ func (x *ViewStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ViewStep.ProtoReflect.Descriptor instead.
 func (*ViewStep) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{104}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *ViewStep) GetPath() string {
@@ -8056,7 +8134,7 @@ type ViewCondition struct {
 
 func (x *ViewCondition) Reset() {
 	*x = ViewCondition{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[105]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8068,7 +8146,7 @@ func (x *ViewCondition) String() string {
 func (*ViewCondition) ProtoMessage() {}
 
 func (x *ViewCondition) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[105]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8081,7 +8159,7 @@ func (x *ViewCondition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ViewCondition.ProtoReflect.Descriptor instead.
 func (*ViewCondition) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{105}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{106}
 }
 
 func (x *ViewCondition) GetDescription() string {
@@ -8119,7 +8197,7 @@ type CheckLevelsRequest struct {
 
 func (x *CheckLevelsRequest) Reset() {
 	*x = CheckLevelsRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[106]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8131,7 +8209,7 @@ func (x *CheckLevelsRequest) String() string {
 func (*CheckLevelsRequest) ProtoMessage() {}
 
 func (x *CheckLevelsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[106]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8144,7 +8222,7 @@ func (x *CheckLevelsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckLevelsRequest.ProtoReflect.Descriptor instead.
 func (*CheckLevelsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{106}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *CheckLevelsRequest) GetMethodology() *Methodology {
@@ -8189,7 +8267,7 @@ type CheckLevelsResponse struct {
 
 func (x *CheckLevelsResponse) Reset() {
 	*x = CheckLevelsResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[107]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8201,7 +8279,7 @@ func (x *CheckLevelsResponse) String() string {
 func (*CheckLevelsResponse) ProtoMessage() {}
 
 func (x *CheckLevelsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[107]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8214,7 +8292,7 @@ func (x *CheckLevelsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckLevelsResponse.ProtoReflect.Descriptor instead.
 func (*CheckLevelsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{107}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *CheckLevelsResponse) GetLevels() []*LevelCheck {
@@ -8264,7 +8342,7 @@ type LevelCheck struct {
 
 func (x *LevelCheck) Reset() {
 	*x = LevelCheck{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[108]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8276,7 +8354,7 @@ func (x *LevelCheck) String() string {
 func (*LevelCheck) ProtoMessage() {}
 
 func (x *LevelCheck) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[108]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8289,7 +8367,7 @@ func (x *LevelCheck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LevelCheck.ProtoReflect.Descriptor instead.
 func (*LevelCheck) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{108}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *LevelCheck) GetPath() string {
@@ -8396,7 +8474,7 @@ type LevelNode struct {
 
 func (x *LevelNode) Reset() {
 	*x = LevelNode{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[109]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8408,7 +8486,7 @@ func (x *LevelNode) String() string {
 func (*LevelNode) ProtoMessage() {}
 
 func (x *LevelNode) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[109]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8421,7 +8499,7 @@ func (x *LevelNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LevelNode.ProtoReflect.Descriptor instead.
 func (*LevelNode) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{109}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *LevelNode) GetName() string {
@@ -8533,7 +8611,7 @@ type LevelStep struct {
 
 func (x *LevelStep) Reset() {
 	*x = LevelStep{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[110]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8545,7 +8623,7 @@ func (x *LevelStep) String() string {
 func (*LevelStep) ProtoMessage() {}
 
 func (x *LevelStep) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[110]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8558,7 +8636,7 @@ func (x *LevelStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LevelStep.ProtoReflect.Descriptor instead.
 func (*LevelStep) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{110}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *LevelStep) GetName() string {
@@ -8589,7 +8667,7 @@ type LevelGap struct {
 
 func (x *LevelGap) Reset() {
 	*x = LevelGap{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[111]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8601,7 +8679,7 @@ func (x *LevelGap) String() string {
 func (*LevelGap) ProtoMessage() {}
 
 func (x *LevelGap) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[111]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8614,7 +8692,7 @@ func (x *LevelGap) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LevelGap.ProtoReflect.Descriptor instead.
 func (*LevelGap) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{111}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *LevelGap) GetStep() string {
@@ -8662,7 +8740,7 @@ type ProcessGraph struct {
 
 func (x *ProcessGraph) Reset() {
 	*x = ProcessGraph{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[112]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8674,7 +8752,7 @@ func (x *ProcessGraph) String() string {
 func (*ProcessGraph) ProtoMessage() {}
 
 func (x *ProcessGraph) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[112]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8687,7 +8765,7 @@ func (x *ProcessGraph) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessGraph.ProtoReflect.Descriptor instead.
 func (*ProcessGraph) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{112}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *ProcessGraph) GetProcess() string {
@@ -8779,7 +8857,7 @@ type GraphStep struct {
 
 func (x *GraphStep) Reset() {
 	*x = GraphStep{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[113]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8791,7 +8869,7 @@ func (x *GraphStep) String() string {
 func (*GraphStep) ProtoMessage() {}
 
 func (x *GraphStep) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[113]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8804,7 +8882,7 @@ func (x *GraphStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphStep.ProtoReflect.Descriptor instead.
 func (*GraphStep) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{113}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *GraphStep) GetPath() string {
@@ -8952,7 +9030,7 @@ type GraphEdge struct {
 
 func (x *GraphEdge) Reset() {
 	*x = GraphEdge{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[114]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8964,7 +9042,7 @@ func (x *GraphEdge) String() string {
 func (*GraphEdge) ProtoMessage() {}
 
 func (x *GraphEdge) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[114]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8977,7 +9055,7 @@ func (x *GraphEdge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphEdge.ProtoReflect.Descriptor instead.
 func (*GraphEdge) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{114}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *GraphEdge) GetFrom() string {
@@ -9014,7 +9092,7 @@ type GraphAgent struct {
 
 func (x *GraphAgent) Reset() {
 	*x = GraphAgent{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[115]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9026,7 +9104,7 @@ func (x *GraphAgent) String() string {
 func (*GraphAgent) ProtoMessage() {}
 
 func (x *GraphAgent) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[115]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9039,7 +9117,7 @@ func (x *GraphAgent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphAgent.ProtoReflect.Descriptor instead.
 func (*GraphAgent) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{115}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *GraphAgent) GetName() string {
@@ -9090,7 +9168,7 @@ type GraphAction struct {
 
 func (x *GraphAction) Reset() {
 	*x = GraphAction{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[116]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9102,7 +9180,7 @@ func (x *GraphAction) String() string {
 func (*GraphAction) ProtoMessage() {}
 
 func (x *GraphAction) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[116]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9115,7 +9193,7 @@ func (x *GraphAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphAction.ProtoReflect.Descriptor instead.
 func (*GraphAction) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{116}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *GraphAction) GetName() string {
@@ -9166,7 +9244,7 @@ type PreviewPlanRequest struct {
 
 func (x *PreviewPlanRequest) Reset() {
 	*x = PreviewPlanRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[117]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9178,7 +9256,7 @@ func (x *PreviewPlanRequest) String() string {
 func (*PreviewPlanRequest) ProtoMessage() {}
 
 func (x *PreviewPlanRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[117]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9191,7 +9269,7 @@ func (x *PreviewPlanRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewPlanRequest.ProtoReflect.Descriptor instead.
 func (*PreviewPlanRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{117}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *PreviewPlanRequest) GetMethodology() *Methodology {
@@ -9233,7 +9311,7 @@ type PreviewPlanResponse struct {
 
 func (x *PreviewPlanResponse) Reset() {
 	*x = PreviewPlanResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[118]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9245,7 +9323,7 @@ func (x *PreviewPlanResponse) String() string {
 func (*PreviewPlanResponse) ProtoMessage() {}
 
 func (x *PreviewPlanResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[118]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9258,7 +9336,7 @@ func (x *PreviewPlanResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewPlanResponse.ProtoReflect.Descriptor instead.
 func (*PreviewPlanResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{118}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *PreviewPlanResponse) GetPreview() *PlanPreview {
@@ -9293,7 +9371,7 @@ type PlanPreview struct {
 
 func (x *PlanPreview) Reset() {
 	*x = PlanPreview{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[119]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9305,7 +9383,7 @@ func (x *PlanPreview) String() string {
 func (*PlanPreview) ProtoMessage() {}
 
 func (x *PlanPreview) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[119]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9318,7 +9396,7 @@ func (x *PlanPreview) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanPreview.ProtoReflect.Descriptor instead.
 func (*PlanPreview) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{119}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *PlanPreview) GetAgent() string {
@@ -9383,7 +9461,7 @@ type PlanStep struct {
 
 func (x *PlanStep) Reset() {
 	*x = PlanStep{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[120]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9395,7 +9473,7 @@ func (x *PlanStep) String() string {
 func (*PlanStep) ProtoMessage() {}
 
 func (x *PlanStep) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[120]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9408,7 +9486,7 @@ func (x *PlanStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanStep.ProtoReflect.Descriptor instead.
 func (*PlanStep) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{120}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *PlanStep) GetName() string {
@@ -9508,7 +9586,12 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12;\n" +
 	"\n" +
 	"attributes\x18\x03 \x03(\v2\x1b.goap.registry.v1.AttributeR\n" +
-	"attributes\"\x93\x01\n" +
+	"attributes\"\x8f\x01\n" +
+	"\fImporterDecl\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x123\n" +
+	"\x06params\x18\x04 \x03(\v2\x1b.goap.registry.v1.AttributeR\x06params\"\x93\x01\n" +
 	"\rAttributeInfo\x129\n" +
 	"\tattribute\x18\x01 \x01(\v2\x1b.goap.registry.v1.AttributeR\tattribute\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x123\n" +
@@ -9963,7 +10046,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\tR\aversion\"K\n" +
 	"\x19ExportMethodologyResponse\x12\x12\n" +
 	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\"\x8d\x06\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\"\xcb\x06\n" +
 	"\x06Domain\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -9982,7 +10065,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"algorithms\x12T\n" +
 	"\x13algorithm_instances\x18\r \x03(\v2#.goap.registry.v1.AlgorithmInstanceR\x12algorithmInstances\x129\n" +
 	"\n" +
-	"item_types\x18\x11 \x03(\v2\x1a.goap.registry.v1.ItemTypeR\titemTypes\x129\n" +
+	"item_types\x18\x11 \x03(\v2\x1a.goap.registry.v1.ItemTypeR\titemTypes\x12<\n" +
+	"\timporters\x18\x12 \x03(\v2\x1e.goap.registry.v1.ImporterDeclR\timporters\x129\n" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
@@ -10393,7 +10477,7 @@ func file_goap_registry_v1_registry_proto_rawDescGZIP() []byte {
 	return file_goap_registry_v1_registry_proto_rawDescData
 }
 
-var file_goap_registry_v1_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 147)
+var file_goap_registry_v1_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 148)
 var file_goap_registry_v1_registry_proto_goTypes = []any{
 	(*NodeType)(nil),                    // 0: goap.registry.v1.NodeType
 	(*RequiredLink)(nil),                // 1: goap.registry.v1.RequiredLink
@@ -10403,382 +10487,385 @@ var file_goap_registry_v1_registry_proto_goTypes = []any{
 	(*EnumValue)(nil),                   // 5: goap.registry.v1.EnumValue
 	(*Enum)(nil),                        // 6: goap.registry.v1.Enum
 	(*ItemType)(nil),                    // 7: goap.registry.v1.ItemType
-	(*AttributeInfo)(nil),               // 8: goap.registry.v1.AttributeInfo
-	(*AlgorithmParam)(nil),              // 9: goap.registry.v1.AlgorithmParam
-	(*Algorithm)(nil),                   // 10: goap.registry.v1.Algorithm
-	(*AlgorithmInstance)(nil),           // 11: goap.registry.v1.AlgorithmInstance
-	(*Lifecycle)(nil),                   // 12: goap.registry.v1.Lifecycle
-	(*LifecycleState)(nil),              // 13: goap.registry.v1.LifecycleState
-	(*LifecycleTransition)(nil),         // 14: goap.registry.v1.LifecycleTransition
-	(*Criterion)(nil),                   // 15: goap.registry.v1.Criterion
-	(*DocumentSpec)(nil),                // 16: goap.registry.v1.DocumentSpec
-	(*LinkType)(nil),                    // 17: goap.registry.v1.LinkType
-	(*Condition)(nil),                   // 18: goap.registry.v1.Condition
-	(*ProduceSpec)(nil),                 // 19: goap.registry.v1.ProduceSpec
-	(*LinkSpec)(nil),                    // 20: goap.registry.v1.LinkSpec
-	(*Expectation)(nil),                 // 21: goap.registry.v1.Expectation
-	(*Action)(nil),                      // 22: goap.registry.v1.Action
-	(*ActionLoop)(nil),                  // 23: goap.registry.v1.ActionLoop
-	(*Verify)(nil),                      // 24: goap.registry.v1.Verify
-	(*Agent)(nil),                       // 25: goap.registry.v1.Agent
-	(*Persistence)(nil),                 // 26: goap.registry.v1.Persistence
-	(*Trigger)(nil),                     // 27: goap.registry.v1.Trigger
-	(*Goal)(nil),                        // 28: goap.registry.v1.Goal
-	(*Methodology)(nil),                 // 29: goap.registry.v1.Methodology
-	(*AssessmentView)(nil),              // 30: goap.registry.v1.AssessmentView
-	(*AssessmentState)(nil),             // 31: goap.registry.v1.AssessmentState
-	(*EventDef)(nil),                    // 32: goap.registry.v1.EventDef
-	(*Integration)(nil),                 // 33: goap.registry.v1.Integration
-	(*Guardian)(nil),                    // 34: goap.registry.v1.Guardian
-	(*Subscription)(nil),                // 35: goap.registry.v1.Subscription
-	(*Role)(nil),                        // 36: goap.registry.v1.Role
-	(*Responsibilities)(nil),            // 37: goap.registry.v1.Responsibilities
-	(*Method)(nil),                      // 38: goap.registry.v1.Method
-	(*Process)(nil),                     // 39: goap.registry.v1.Process
-	(*Reference)(nil),                   // 40: goap.registry.v1.Reference
-	(*Step)(nil),                        // 41: goap.registry.v1.Step
-	(*StepGate)(nil),                    // 42: goap.registry.v1.StepGate
-	(*GateItem)(nil),                    // 43: goap.registry.v1.GateItem
-	(*GateDecision)(nil),                // 44: goap.registry.v1.GateDecision
-	(*GateFreezes)(nil),                 // 45: goap.registry.v1.GateFreezes
-	(*StepReview)(nil),                  // 46: goap.registry.v1.StepReview
-	(*GoalSummary)(nil),                 // 47: goap.registry.v1.GoalSummary
-	(*AgentSummary)(nil),                // 48: goap.registry.v1.AgentSummary
-	(*MethodologySummary)(nil),          // 49: goap.registry.v1.MethodologySummary
-	(*Issue)(nil),                       // 50: goap.registry.v1.Issue
-	(*ListMethodologiesRequest)(nil),    // 51: goap.registry.v1.ListMethodologiesRequest
-	(*ListMethodologiesResponse)(nil),   // 52: goap.registry.v1.ListMethodologiesResponse
-	(*GetMethodologyRequest)(nil),       // 53: goap.registry.v1.GetMethodologyRequest
-	(*GetMethodologyResponse)(nil),      // 54: goap.registry.v1.GetMethodologyResponse
-	(*SaveMethodologyRequest)(nil),      // 55: goap.registry.v1.SaveMethodologyRequest
-	(*SaveMethodologyResponse)(nil),     // 56: goap.registry.v1.SaveMethodologyResponse
-	(*ValidateMethodologyRequest)(nil),  // 57: goap.registry.v1.ValidateMethodologyRequest
-	(*ValidateMethodologyResponse)(nil), // 58: goap.registry.v1.ValidateMethodologyResponse
-	(*PublishMethodologyRequest)(nil),   // 59: goap.registry.v1.PublishMethodologyRequest
-	(*PublishMethodologyResponse)(nil),  // 60: goap.registry.v1.PublishMethodologyResponse
-	(*CreateVersionRequest)(nil),        // 61: goap.registry.v1.CreateVersionRequest
-	(*CreateVersionResponse)(nil),       // 62: goap.registry.v1.CreateVersionResponse
-	(*DeleteMethodologyRequest)(nil),    // 63: goap.registry.v1.DeleteMethodologyRequest
-	(*DeleteMethodologyResponse)(nil),   // 64: goap.registry.v1.DeleteMethodologyResponse
-	(*ImportMethodologyRequest)(nil),    // 65: goap.registry.v1.ImportMethodologyRequest
-	(*ImportMethodologyResponse)(nil),   // 66: goap.registry.v1.ImportMethodologyResponse
-	(*ExportMethodologyRequest)(nil),    // 67: goap.registry.v1.ExportMethodologyRequest
-	(*ExportMethodologyResponse)(nil),   // 68: goap.registry.v1.ExportMethodologyResponse
-	(*Domain)(nil),                      // 69: goap.registry.v1.Domain
-	(*DomainSummary)(nil),               // 70: goap.registry.v1.DomainSummary
-	(*ListDomainsRequest)(nil),          // 71: goap.registry.v1.ListDomainsRequest
-	(*ListDomainsResponse)(nil),         // 72: goap.registry.v1.ListDomainsResponse
-	(*GetDomainRequest)(nil),            // 73: goap.registry.v1.GetDomainRequest
-	(*GetDomainResponse)(nil),           // 74: goap.registry.v1.GetDomainResponse
-	(*SaveDomainRequest)(nil),           // 75: goap.registry.v1.SaveDomainRequest
-	(*SaveDomainResponse)(nil),          // 76: goap.registry.v1.SaveDomainResponse
-	(*ValidateDomainRequest)(nil),       // 77: goap.registry.v1.ValidateDomainRequest
-	(*ValidateDomainResponse)(nil),      // 78: goap.registry.v1.ValidateDomainResponse
-	(*PublishDomainRequest)(nil),        // 79: goap.registry.v1.PublishDomainRequest
-	(*PublishDomainResponse)(nil),       // 80: goap.registry.v1.PublishDomainResponse
-	(*CreateDomainVersionRequest)(nil),  // 81: goap.registry.v1.CreateDomainVersionRequest
-	(*CreateDomainVersionResponse)(nil), // 82: goap.registry.v1.CreateDomainVersionResponse
-	(*DeleteDomainRequest)(nil),         // 83: goap.registry.v1.DeleteDomainRequest
-	(*DeleteDomainResponse)(nil),        // 84: goap.registry.v1.DeleteDomainResponse
-	(*ImportDomainRequest)(nil),         // 85: goap.registry.v1.ImportDomainRequest
-	(*ImportDomainResponse)(nil),        // 86: goap.registry.v1.ImportDomainResponse
-	(*ExportDomainRequest)(nil),         // 87: goap.registry.v1.ExportDomainRequest
-	(*ExportDomainResponse)(nil),        // 88: goap.registry.v1.ExportDomainResponse
-	(*GetDomainUsageRequest)(nil),       // 89: goap.registry.v1.GetDomainUsageRequest
-	(*DomainUser)(nil),                  // 90: goap.registry.v1.DomainUser
-	(*GetDomainUsageResponse)(nil),      // 91: goap.registry.v1.GetDomainUsageResponse
-	(*RunAlgorithmRequest)(nil),         // 92: goap.registry.v1.RunAlgorithmRequest
-	(*RunAlgorithmResponse)(nil),        // 93: goap.registry.v1.RunAlgorithmResponse
-	(*ListTypesRequest)(nil),            // 94: goap.registry.v1.ListTypesRequest
-	(*ListTypesResponse)(nil),           // 95: goap.registry.v1.ListTypesResponse
-	(*TypeInfo)(nil),                    // 96: goap.registry.v1.TypeInfo
-	(*LinkTypeInfo)(nil),                // 97: goap.registry.v1.LinkTypeInfo
-	(*GetProcessGraphRequest)(nil),      // 98: goap.registry.v1.GetProcessGraphRequest
-	(*GetProcessGraphResponse)(nil),     // 99: goap.registry.v1.GetProcessGraphResponse
-	(*GetMethodologyViewRequest)(nil),   // 100: goap.registry.v1.GetMethodologyViewRequest
-	(*GetMethodologyViewResponse)(nil),  // 101: goap.registry.v1.GetMethodologyViewResponse
-	(*MethodologyView)(nil),             // 102: goap.registry.v1.MethodologyView
-	(*ViewActivity)(nil),                // 103: goap.registry.v1.ViewActivity
-	(*ViewStep)(nil),                    // 104: goap.registry.v1.ViewStep
-	(*ViewCondition)(nil),               // 105: goap.registry.v1.ViewCondition
-	(*CheckLevelsRequest)(nil),          // 106: goap.registry.v1.CheckLevelsRequest
-	(*CheckLevelsResponse)(nil),         // 107: goap.registry.v1.CheckLevelsResponse
-	(*LevelCheck)(nil),                  // 108: goap.registry.v1.LevelCheck
-	(*LevelNode)(nil),                   // 109: goap.registry.v1.LevelNode
-	(*LevelStep)(nil),                   // 110: goap.registry.v1.LevelStep
-	(*LevelGap)(nil),                    // 111: goap.registry.v1.LevelGap
-	(*ProcessGraph)(nil),                // 112: goap.registry.v1.ProcessGraph
-	(*GraphStep)(nil),                   // 113: goap.registry.v1.GraphStep
-	(*GraphEdge)(nil),                   // 114: goap.registry.v1.GraphEdge
-	(*GraphAgent)(nil),                  // 115: goap.registry.v1.GraphAgent
-	(*GraphAction)(nil),                 // 116: goap.registry.v1.GraphAction
-	(*PreviewPlanRequest)(nil),          // 117: goap.registry.v1.PreviewPlanRequest
-	(*PreviewPlanResponse)(nil),         // 118: goap.registry.v1.PreviewPlanResponse
-	(*PlanPreview)(nil),                 // 119: goap.registry.v1.PlanPreview
-	(*PlanStep)(nil),                    // 120: goap.registry.v1.PlanStep
-	nil,                                 // 121: goap.registry.v1.Action.PreEntry
-	nil,                                 // 122: goap.registry.v1.Action.EffectsEntry
-	nil,                                 // 123: goap.registry.v1.Persistence.UntilEntry
-	nil,                                 // 124: goap.registry.v1.Goal.PreEntry
-	nil,                                 // 125: goap.registry.v1.Methodology.DomainsEntry
-	nil,                                 // 126: goap.registry.v1.AssessmentState.ConditionsEntry
-	nil,                                 // 127: goap.registry.v1.Guardian.TransitionsEntry
-	nil,                                 // 128: goap.registry.v1.Method.DoneEntry
-	nil,                                 // 129: goap.registry.v1.Step.PreEntry
-	nil,                                 // 130: goap.registry.v1.Step.DoneEntry
-	nil,                                 // 131: goap.registry.v1.ListTypesResponse.DomainsEntry
-	nil,                                 // 132: goap.registry.v1.MethodologyView.ConditionsEntry
-	nil,                                 // 133: goap.registry.v1.ViewActivity.DoneEntry
-	nil,                                 // 134: goap.registry.v1.ViewStep.EntryEntry
-	nil,                                 // 135: goap.registry.v1.ViewStep.ExitEntry
-	nil,                                 // 136: goap.registry.v1.CheckLevelsResponse.ConditionsEntry
-	nil,                                 // 137: goap.registry.v1.LevelCheck.InputsEntry
-	nil,                                 // 138: goap.registry.v1.LevelCheck.OutputsEntry
-	nil,                                 // 139: goap.registry.v1.LevelNode.EntryEntry
-	nil,                                 // 140: goap.registry.v1.LevelNode.ExitEntry
-	nil,                                 // 141: goap.registry.v1.ProcessGraph.MethodGoalsEntry
-	nil,                                 // 142: goap.registry.v1.GraphStep.EntryEntry
-	nil,                                 // 143: goap.registry.v1.GraphStep.ExitEntry
-	nil,                                 // 144: goap.registry.v1.GraphAction.PreEntry
-	nil,                                 // 145: goap.registry.v1.GraphAction.EffectsEntry
-	nil,                                 // 146: goap.registry.v1.PreviewPlanRequest.OverridesEntry
-	(*structpb.Struct)(nil),             // 147: google.protobuf.Struct
-	(*structpb.Value)(nil),              // 148: google.protobuf.Value
-	(*timestamppb.Timestamp)(nil),       // 149: google.protobuf.Timestamp
+	(*ImporterDecl)(nil),                // 8: goap.registry.v1.ImporterDecl
+	(*AttributeInfo)(nil),               // 9: goap.registry.v1.AttributeInfo
+	(*AlgorithmParam)(nil),              // 10: goap.registry.v1.AlgorithmParam
+	(*Algorithm)(nil),                   // 11: goap.registry.v1.Algorithm
+	(*AlgorithmInstance)(nil),           // 12: goap.registry.v1.AlgorithmInstance
+	(*Lifecycle)(nil),                   // 13: goap.registry.v1.Lifecycle
+	(*LifecycleState)(nil),              // 14: goap.registry.v1.LifecycleState
+	(*LifecycleTransition)(nil),         // 15: goap.registry.v1.LifecycleTransition
+	(*Criterion)(nil),                   // 16: goap.registry.v1.Criterion
+	(*DocumentSpec)(nil),                // 17: goap.registry.v1.DocumentSpec
+	(*LinkType)(nil),                    // 18: goap.registry.v1.LinkType
+	(*Condition)(nil),                   // 19: goap.registry.v1.Condition
+	(*ProduceSpec)(nil),                 // 20: goap.registry.v1.ProduceSpec
+	(*LinkSpec)(nil),                    // 21: goap.registry.v1.LinkSpec
+	(*Expectation)(nil),                 // 22: goap.registry.v1.Expectation
+	(*Action)(nil),                      // 23: goap.registry.v1.Action
+	(*ActionLoop)(nil),                  // 24: goap.registry.v1.ActionLoop
+	(*Verify)(nil),                      // 25: goap.registry.v1.Verify
+	(*Agent)(nil),                       // 26: goap.registry.v1.Agent
+	(*Persistence)(nil),                 // 27: goap.registry.v1.Persistence
+	(*Trigger)(nil),                     // 28: goap.registry.v1.Trigger
+	(*Goal)(nil),                        // 29: goap.registry.v1.Goal
+	(*Methodology)(nil),                 // 30: goap.registry.v1.Methodology
+	(*AssessmentView)(nil),              // 31: goap.registry.v1.AssessmentView
+	(*AssessmentState)(nil),             // 32: goap.registry.v1.AssessmentState
+	(*EventDef)(nil),                    // 33: goap.registry.v1.EventDef
+	(*Integration)(nil),                 // 34: goap.registry.v1.Integration
+	(*Guardian)(nil),                    // 35: goap.registry.v1.Guardian
+	(*Subscription)(nil),                // 36: goap.registry.v1.Subscription
+	(*Role)(nil),                        // 37: goap.registry.v1.Role
+	(*Responsibilities)(nil),            // 38: goap.registry.v1.Responsibilities
+	(*Method)(nil),                      // 39: goap.registry.v1.Method
+	(*Process)(nil),                     // 40: goap.registry.v1.Process
+	(*Reference)(nil),                   // 41: goap.registry.v1.Reference
+	(*Step)(nil),                        // 42: goap.registry.v1.Step
+	(*StepGate)(nil),                    // 43: goap.registry.v1.StepGate
+	(*GateItem)(nil),                    // 44: goap.registry.v1.GateItem
+	(*GateDecision)(nil),                // 45: goap.registry.v1.GateDecision
+	(*GateFreezes)(nil),                 // 46: goap.registry.v1.GateFreezes
+	(*StepReview)(nil),                  // 47: goap.registry.v1.StepReview
+	(*GoalSummary)(nil),                 // 48: goap.registry.v1.GoalSummary
+	(*AgentSummary)(nil),                // 49: goap.registry.v1.AgentSummary
+	(*MethodologySummary)(nil),          // 50: goap.registry.v1.MethodologySummary
+	(*Issue)(nil),                       // 51: goap.registry.v1.Issue
+	(*ListMethodologiesRequest)(nil),    // 52: goap.registry.v1.ListMethodologiesRequest
+	(*ListMethodologiesResponse)(nil),   // 53: goap.registry.v1.ListMethodologiesResponse
+	(*GetMethodologyRequest)(nil),       // 54: goap.registry.v1.GetMethodologyRequest
+	(*GetMethodologyResponse)(nil),      // 55: goap.registry.v1.GetMethodologyResponse
+	(*SaveMethodologyRequest)(nil),      // 56: goap.registry.v1.SaveMethodologyRequest
+	(*SaveMethodologyResponse)(nil),     // 57: goap.registry.v1.SaveMethodologyResponse
+	(*ValidateMethodologyRequest)(nil),  // 58: goap.registry.v1.ValidateMethodologyRequest
+	(*ValidateMethodologyResponse)(nil), // 59: goap.registry.v1.ValidateMethodologyResponse
+	(*PublishMethodologyRequest)(nil),   // 60: goap.registry.v1.PublishMethodologyRequest
+	(*PublishMethodologyResponse)(nil),  // 61: goap.registry.v1.PublishMethodologyResponse
+	(*CreateVersionRequest)(nil),        // 62: goap.registry.v1.CreateVersionRequest
+	(*CreateVersionResponse)(nil),       // 63: goap.registry.v1.CreateVersionResponse
+	(*DeleteMethodologyRequest)(nil),    // 64: goap.registry.v1.DeleteMethodologyRequest
+	(*DeleteMethodologyResponse)(nil),   // 65: goap.registry.v1.DeleteMethodologyResponse
+	(*ImportMethodologyRequest)(nil),    // 66: goap.registry.v1.ImportMethodologyRequest
+	(*ImportMethodologyResponse)(nil),   // 67: goap.registry.v1.ImportMethodologyResponse
+	(*ExportMethodologyRequest)(nil),    // 68: goap.registry.v1.ExportMethodologyRequest
+	(*ExportMethodologyResponse)(nil),   // 69: goap.registry.v1.ExportMethodologyResponse
+	(*Domain)(nil),                      // 70: goap.registry.v1.Domain
+	(*DomainSummary)(nil),               // 71: goap.registry.v1.DomainSummary
+	(*ListDomainsRequest)(nil),          // 72: goap.registry.v1.ListDomainsRequest
+	(*ListDomainsResponse)(nil),         // 73: goap.registry.v1.ListDomainsResponse
+	(*GetDomainRequest)(nil),            // 74: goap.registry.v1.GetDomainRequest
+	(*GetDomainResponse)(nil),           // 75: goap.registry.v1.GetDomainResponse
+	(*SaveDomainRequest)(nil),           // 76: goap.registry.v1.SaveDomainRequest
+	(*SaveDomainResponse)(nil),          // 77: goap.registry.v1.SaveDomainResponse
+	(*ValidateDomainRequest)(nil),       // 78: goap.registry.v1.ValidateDomainRequest
+	(*ValidateDomainResponse)(nil),      // 79: goap.registry.v1.ValidateDomainResponse
+	(*PublishDomainRequest)(nil),        // 80: goap.registry.v1.PublishDomainRequest
+	(*PublishDomainResponse)(nil),       // 81: goap.registry.v1.PublishDomainResponse
+	(*CreateDomainVersionRequest)(nil),  // 82: goap.registry.v1.CreateDomainVersionRequest
+	(*CreateDomainVersionResponse)(nil), // 83: goap.registry.v1.CreateDomainVersionResponse
+	(*DeleteDomainRequest)(nil),         // 84: goap.registry.v1.DeleteDomainRequest
+	(*DeleteDomainResponse)(nil),        // 85: goap.registry.v1.DeleteDomainResponse
+	(*ImportDomainRequest)(nil),         // 86: goap.registry.v1.ImportDomainRequest
+	(*ImportDomainResponse)(nil),        // 87: goap.registry.v1.ImportDomainResponse
+	(*ExportDomainRequest)(nil),         // 88: goap.registry.v1.ExportDomainRequest
+	(*ExportDomainResponse)(nil),        // 89: goap.registry.v1.ExportDomainResponse
+	(*GetDomainUsageRequest)(nil),       // 90: goap.registry.v1.GetDomainUsageRequest
+	(*DomainUser)(nil),                  // 91: goap.registry.v1.DomainUser
+	(*GetDomainUsageResponse)(nil),      // 92: goap.registry.v1.GetDomainUsageResponse
+	(*RunAlgorithmRequest)(nil),         // 93: goap.registry.v1.RunAlgorithmRequest
+	(*RunAlgorithmResponse)(nil),        // 94: goap.registry.v1.RunAlgorithmResponse
+	(*ListTypesRequest)(nil),            // 95: goap.registry.v1.ListTypesRequest
+	(*ListTypesResponse)(nil),           // 96: goap.registry.v1.ListTypesResponse
+	(*TypeInfo)(nil),                    // 97: goap.registry.v1.TypeInfo
+	(*LinkTypeInfo)(nil),                // 98: goap.registry.v1.LinkTypeInfo
+	(*GetProcessGraphRequest)(nil),      // 99: goap.registry.v1.GetProcessGraphRequest
+	(*GetProcessGraphResponse)(nil),     // 100: goap.registry.v1.GetProcessGraphResponse
+	(*GetMethodologyViewRequest)(nil),   // 101: goap.registry.v1.GetMethodologyViewRequest
+	(*GetMethodologyViewResponse)(nil),  // 102: goap.registry.v1.GetMethodologyViewResponse
+	(*MethodologyView)(nil),             // 103: goap.registry.v1.MethodologyView
+	(*ViewActivity)(nil),                // 104: goap.registry.v1.ViewActivity
+	(*ViewStep)(nil),                    // 105: goap.registry.v1.ViewStep
+	(*ViewCondition)(nil),               // 106: goap.registry.v1.ViewCondition
+	(*CheckLevelsRequest)(nil),          // 107: goap.registry.v1.CheckLevelsRequest
+	(*CheckLevelsResponse)(nil),         // 108: goap.registry.v1.CheckLevelsResponse
+	(*LevelCheck)(nil),                  // 109: goap.registry.v1.LevelCheck
+	(*LevelNode)(nil),                   // 110: goap.registry.v1.LevelNode
+	(*LevelStep)(nil),                   // 111: goap.registry.v1.LevelStep
+	(*LevelGap)(nil),                    // 112: goap.registry.v1.LevelGap
+	(*ProcessGraph)(nil),                // 113: goap.registry.v1.ProcessGraph
+	(*GraphStep)(nil),                   // 114: goap.registry.v1.GraphStep
+	(*GraphEdge)(nil),                   // 115: goap.registry.v1.GraphEdge
+	(*GraphAgent)(nil),                  // 116: goap.registry.v1.GraphAgent
+	(*GraphAction)(nil),                 // 117: goap.registry.v1.GraphAction
+	(*PreviewPlanRequest)(nil),          // 118: goap.registry.v1.PreviewPlanRequest
+	(*PreviewPlanResponse)(nil),         // 119: goap.registry.v1.PreviewPlanResponse
+	(*PlanPreview)(nil),                 // 120: goap.registry.v1.PlanPreview
+	(*PlanStep)(nil),                    // 121: goap.registry.v1.PlanStep
+	nil,                                 // 122: goap.registry.v1.Action.PreEntry
+	nil,                                 // 123: goap.registry.v1.Action.EffectsEntry
+	nil,                                 // 124: goap.registry.v1.Persistence.UntilEntry
+	nil,                                 // 125: goap.registry.v1.Goal.PreEntry
+	nil,                                 // 126: goap.registry.v1.Methodology.DomainsEntry
+	nil,                                 // 127: goap.registry.v1.AssessmentState.ConditionsEntry
+	nil,                                 // 128: goap.registry.v1.Guardian.TransitionsEntry
+	nil,                                 // 129: goap.registry.v1.Method.DoneEntry
+	nil,                                 // 130: goap.registry.v1.Step.PreEntry
+	nil,                                 // 131: goap.registry.v1.Step.DoneEntry
+	nil,                                 // 132: goap.registry.v1.ListTypesResponse.DomainsEntry
+	nil,                                 // 133: goap.registry.v1.MethodologyView.ConditionsEntry
+	nil,                                 // 134: goap.registry.v1.ViewActivity.DoneEntry
+	nil,                                 // 135: goap.registry.v1.ViewStep.EntryEntry
+	nil,                                 // 136: goap.registry.v1.ViewStep.ExitEntry
+	nil,                                 // 137: goap.registry.v1.CheckLevelsResponse.ConditionsEntry
+	nil,                                 // 138: goap.registry.v1.LevelCheck.InputsEntry
+	nil,                                 // 139: goap.registry.v1.LevelCheck.OutputsEntry
+	nil,                                 // 140: goap.registry.v1.LevelNode.EntryEntry
+	nil,                                 // 141: goap.registry.v1.LevelNode.ExitEntry
+	nil,                                 // 142: goap.registry.v1.ProcessGraph.MethodGoalsEntry
+	nil,                                 // 143: goap.registry.v1.GraphStep.EntryEntry
+	nil,                                 // 144: goap.registry.v1.GraphStep.ExitEntry
+	nil,                                 // 145: goap.registry.v1.GraphAction.PreEntry
+	nil,                                 // 146: goap.registry.v1.GraphAction.EffectsEntry
+	nil,                                 // 147: goap.registry.v1.PreviewPlanRequest.OverridesEntry
+	(*structpb.Struct)(nil),             // 148: google.protobuf.Struct
+	(*structpb.Value)(nil),              // 149: google.protobuf.Value
+	(*timestamppb.Timestamp)(nil),       // 150: google.protobuf.Timestamp
 }
 var file_goap_registry_v1_registry_proto_depIdxs = []int32{
 	4,   // 0: goap.registry.v1.NodeType.attributes:type_name -> goap.registry.v1.Attribute
-	16,  // 1: goap.registry.v1.NodeType.document:type_name -> goap.registry.v1.DocumentSpec
+	17,  // 1: goap.registry.v1.NodeType.document:type_name -> goap.registry.v1.DocumentSpec
 	3,   // 2: goap.registry.v1.NodeType.search:type_name -> goap.registry.v1.SearchProperty
 	2,   // 3: goap.registry.v1.NodeType.structure:type_name -> goap.registry.v1.StructureTag
 	1,   // 4: goap.registry.v1.NodeType.requires:type_name -> goap.registry.v1.RequiredLink
-	147, // 5: goap.registry.v1.NodeType.form:type_name -> google.protobuf.Struct
+	148, // 5: goap.registry.v1.NodeType.form:type_name -> google.protobuf.Struct
 	5,   // 6: goap.registry.v1.Enum.values:type_name -> goap.registry.v1.EnumValue
 	4,   // 7: goap.registry.v1.ItemType.attributes:type_name -> goap.registry.v1.Attribute
-	4,   // 8: goap.registry.v1.AttributeInfo.attribute:type_name -> goap.registry.v1.Attribute
-	5,   // 9: goap.registry.v1.AttributeInfo.values:type_name -> goap.registry.v1.EnumValue
-	148, // 10: goap.registry.v1.AlgorithmParam.default_value:type_name -> google.protobuf.Value
-	9,   // 11: goap.registry.v1.Algorithm.params:type_name -> goap.registry.v1.AlgorithmParam
-	147, // 12: goap.registry.v1.AlgorithmInstance.values:type_name -> google.protobuf.Struct
-	13,  // 13: goap.registry.v1.Lifecycle.states:type_name -> goap.registry.v1.LifecycleState
-	14,  // 14: goap.registry.v1.Lifecycle.transitions:type_name -> goap.registry.v1.LifecycleTransition
-	15,  // 15: goap.registry.v1.LifecycleTransition.vetos:type_name -> goap.registry.v1.Criterion
-	15,  // 16: goap.registry.v1.LifecycleTransition.objectives:type_name -> goap.registry.v1.Criterion
-	4,   // 17: goap.registry.v1.LinkType.attributes:type_name -> goap.registry.v1.Attribute
-	19,  // 18: goap.registry.v1.Expectation.produce:type_name -> goap.registry.v1.ProduceSpec
-	20,  // 19: goap.registry.v1.Expectation.link:type_name -> goap.registry.v1.LinkSpec
-	121, // 20: goap.registry.v1.Action.pre:type_name -> goap.registry.v1.Action.PreEntry
-	122, // 21: goap.registry.v1.Action.effects:type_name -> goap.registry.v1.Action.EffectsEntry
-	21,  // 22: goap.registry.v1.Action.expects:type_name -> goap.registry.v1.Expectation
-	147, // 23: goap.registry.v1.Action.params:type_name -> google.protobuf.Struct
-	24,  // 24: goap.registry.v1.Action.verify:type_name -> goap.registry.v1.Verify
-	35,  // 25: goap.registry.v1.Action.on:type_name -> goap.registry.v1.Subscription
-	147, // 26: goap.registry.v1.Action.form:type_name -> google.protobuf.Struct
-	23,  // 27: goap.registry.v1.Action.loop:type_name -> goap.registry.v1.ActionLoop
-	27,  // 28: goap.registry.v1.Agent.triggers:type_name -> goap.registry.v1.Trigger
-	26,  // 29: goap.registry.v1.Agent.persistent:type_name -> goap.registry.v1.Persistence
-	123, // 30: goap.registry.v1.Persistence.until:type_name -> goap.registry.v1.Persistence.UntilEntry
-	124, // 31: goap.registry.v1.Goal.pre:type_name -> goap.registry.v1.Goal.PreEntry
-	18,  // 32: goap.registry.v1.Methodology.conditions:type_name -> goap.registry.v1.Condition
-	22,  // 33: goap.registry.v1.Methodology.actions:type_name -> goap.registry.v1.Action
-	28,  // 34: goap.registry.v1.Methodology.goals:type_name -> goap.registry.v1.Goal
-	149, // 35: goap.registry.v1.Methodology.created_at:type_name -> google.protobuf.Timestamp
-	149, // 36: goap.registry.v1.Methodology.updated_at:type_name -> google.protobuf.Timestamp
-	149, // 37: goap.registry.v1.Methodology.published_at:type_name -> google.protobuf.Timestamp
-	25,  // 38: goap.registry.v1.Methodology.agents:type_name -> goap.registry.v1.Agent
-	39,  // 39: goap.registry.v1.Methodology.processes:type_name -> goap.registry.v1.Process
-	38,  // 40: goap.registry.v1.Methodology.methods:type_name -> goap.registry.v1.Method
-	36,  // 41: goap.registry.v1.Methodology.roles:type_name -> goap.registry.v1.Role
-	35,  // 42: goap.registry.v1.Methodology.on:type_name -> goap.registry.v1.Subscription
-	33,  // 43: goap.registry.v1.Methodology.integrates:type_name -> goap.registry.v1.Integration
-	34,  // 44: goap.registry.v1.Methodology.guardian:type_name -> goap.registry.v1.Guardian
-	32,  // 45: goap.registry.v1.Methodology.events:type_name -> goap.registry.v1.EventDef
-	125, // 46: goap.registry.v1.Methodology.domains:type_name -> goap.registry.v1.Methodology.DomainsEntry
-	30,  // 47: goap.registry.v1.Methodology.assessments:type_name -> goap.registry.v1.AssessmentView
-	31,  // 48: goap.registry.v1.AssessmentView.states:type_name -> goap.registry.v1.AssessmentState
-	126, // 49: goap.registry.v1.AssessmentState.conditions:type_name -> goap.registry.v1.AssessmentState.ConditionsEntry
-	127, // 50: goap.registry.v1.Guardian.transitions:type_name -> goap.registry.v1.Guardian.TransitionsEntry
-	40,  // 51: goap.registry.v1.Method.references:type_name -> goap.registry.v1.Reference
-	37,  // 52: goap.registry.v1.Method.roles:type_name -> goap.registry.v1.Responsibilities
-	41,  // 53: goap.registry.v1.Method.steps:type_name -> goap.registry.v1.Step
-	128, // 54: goap.registry.v1.Method.done:type_name -> goap.registry.v1.Method.DoneEntry
-	35,  // 55: goap.registry.v1.Method.on:type_name -> goap.registry.v1.Subscription
-	26,  // 56: goap.registry.v1.Method.persistent:type_name -> goap.registry.v1.Persistence
-	41,  // 57: goap.registry.v1.Process.steps:type_name -> goap.registry.v1.Step
-	40,  // 58: goap.registry.v1.Process.references:type_name -> goap.registry.v1.Reference
-	35,  // 59: goap.registry.v1.Process.on:type_name -> goap.registry.v1.Subscription
-	37,  // 60: goap.registry.v1.Process.roles:type_name -> goap.registry.v1.Responsibilities
-	129, // 61: goap.registry.v1.Step.pre:type_name -> goap.registry.v1.Step.PreEntry
-	130, // 62: goap.registry.v1.Step.done:type_name -> goap.registry.v1.Step.DoneEntry
-	41,  // 63: goap.registry.v1.Step.steps:type_name -> goap.registry.v1.Step
-	40,  // 64: goap.registry.v1.Step.references:type_name -> goap.registry.v1.Reference
-	37,  // 65: goap.registry.v1.Step.roles:type_name -> goap.registry.v1.Responsibilities
-	35,  // 66: goap.registry.v1.Step.on:type_name -> goap.registry.v1.Subscription
-	46,  // 67: goap.registry.v1.Step.review:type_name -> goap.registry.v1.StepReview
-	42,  // 68: goap.registry.v1.Step.gate:type_name -> goap.registry.v1.StepGate
-	43,  // 69: goap.registry.v1.StepGate.checklist:type_name -> goap.registry.v1.GateItem
-	44,  // 70: goap.registry.v1.StepGate.decision:type_name -> goap.registry.v1.GateDecision
-	45,  // 71: goap.registry.v1.StepGate.freezes:type_name -> goap.registry.v1.GateFreezes
-	47,  // 72: goap.registry.v1.MethodologySummary.goals:type_name -> goap.registry.v1.GoalSummary
-	48,  // 73: goap.registry.v1.MethodologySummary.agents:type_name -> goap.registry.v1.AgentSummary
-	149, // 74: goap.registry.v1.MethodologySummary.updated_at:type_name -> google.protobuf.Timestamp
-	149, // 75: goap.registry.v1.MethodologySummary.published_at:type_name -> google.protobuf.Timestamp
-	49,  // 76: goap.registry.v1.ListMethodologiesResponse.methodologies:type_name -> goap.registry.v1.MethodologySummary
-	29,  // 77: goap.registry.v1.GetMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
-	69,  // 78: goap.registry.v1.GetMethodologyResponse.domains:type_name -> goap.registry.v1.Domain
-	29,  // 79: goap.registry.v1.SaveMethodologyRequest.methodology:type_name -> goap.registry.v1.Methodology
-	29,  // 80: goap.registry.v1.SaveMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
-	50,  // 81: goap.registry.v1.SaveMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
-	29,  // 82: goap.registry.v1.ValidateMethodologyRequest.methodology:type_name -> goap.registry.v1.Methodology
-	50,  // 83: goap.registry.v1.ValidateMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
-	29,  // 84: goap.registry.v1.PublishMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
-	29,  // 85: goap.registry.v1.CreateVersionResponse.methodology:type_name -> goap.registry.v1.Methodology
-	29,  // 86: goap.registry.v1.ImportMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
-	50,  // 87: goap.registry.v1.ImportMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
-	0,   // 88: goap.registry.v1.Domain.node_types:type_name -> goap.registry.v1.NodeType
-	17,  // 89: goap.registry.v1.Domain.link_types:type_name -> goap.registry.v1.LinkType
-	12,  // 90: goap.registry.v1.Domain.lifecycles:type_name -> goap.registry.v1.Lifecycle
-	6,   // 91: goap.registry.v1.Domain.enums:type_name -> goap.registry.v1.Enum
-	10,  // 92: goap.registry.v1.Domain.algorithms:type_name -> goap.registry.v1.Algorithm
-	11,  // 93: goap.registry.v1.Domain.algorithm_instances:type_name -> goap.registry.v1.AlgorithmInstance
-	7,   // 94: goap.registry.v1.Domain.item_types:type_name -> goap.registry.v1.ItemType
-	149, // 95: goap.registry.v1.Domain.created_at:type_name -> google.protobuf.Timestamp
-	149, // 96: goap.registry.v1.Domain.updated_at:type_name -> google.protobuf.Timestamp
-	149, // 97: goap.registry.v1.Domain.published_at:type_name -> google.protobuf.Timestamp
-	149, // 98: goap.registry.v1.DomainSummary.updated_at:type_name -> google.protobuf.Timestamp
-	149, // 99: goap.registry.v1.DomainSummary.published_at:type_name -> google.protobuf.Timestamp
-	70,  // 100: goap.registry.v1.ListDomainsResponse.domains:type_name -> goap.registry.v1.DomainSummary
-	69,  // 101: goap.registry.v1.GetDomainResponse.domain:type_name -> goap.registry.v1.Domain
-	69,  // 102: goap.registry.v1.SaveDomainRequest.domain:type_name -> goap.registry.v1.Domain
-	69,  // 103: goap.registry.v1.SaveDomainResponse.domain:type_name -> goap.registry.v1.Domain
-	50,  // 104: goap.registry.v1.SaveDomainResponse.issues:type_name -> goap.registry.v1.Issue
-	69,  // 105: goap.registry.v1.ValidateDomainRequest.domain:type_name -> goap.registry.v1.Domain
-	50,  // 106: goap.registry.v1.ValidateDomainResponse.issues:type_name -> goap.registry.v1.Issue
-	69,  // 107: goap.registry.v1.PublishDomainResponse.domain:type_name -> goap.registry.v1.Domain
-	69,  // 108: goap.registry.v1.CreateDomainVersionResponse.domain:type_name -> goap.registry.v1.Domain
-	69,  // 109: goap.registry.v1.ImportDomainResponse.domain:type_name -> goap.registry.v1.Domain
-	50,  // 110: goap.registry.v1.ImportDomainResponse.issues:type_name -> goap.registry.v1.Issue
-	90,  // 111: goap.registry.v1.GetDomainUsageResponse.methodologies:type_name -> goap.registry.v1.DomainUser
-	10,  // 112: goap.registry.v1.RunAlgorithmRequest.algorithm:type_name -> goap.registry.v1.Algorithm
-	147, // 113: goap.registry.v1.RunAlgorithmRequest.values:type_name -> google.protobuf.Struct
-	147, // 114: goap.registry.v1.RunAlgorithmRequest.input:type_name -> google.protobuf.Struct
-	147, // 115: goap.registry.v1.RunAlgorithmResponse.set:type_name -> google.protobuf.Struct
-	96,  // 116: goap.registry.v1.ListTypesResponse.types:type_name -> goap.registry.v1.TypeInfo
-	97,  // 117: goap.registry.v1.ListTypesResponse.link_types:type_name -> goap.registry.v1.LinkTypeInfo
-	131, // 118: goap.registry.v1.ListTypesResponse.domains:type_name -> goap.registry.v1.ListTypesResponse.DomainsEntry
-	8,   // 119: goap.registry.v1.TypeInfo.attributes:type_name -> goap.registry.v1.AttributeInfo
-	12,  // 120: goap.registry.v1.TypeInfo.lifecycle:type_name -> goap.registry.v1.Lifecycle
-	147, // 121: goap.registry.v1.TypeInfo.form:type_name -> google.protobuf.Struct
-	8,   // 122: goap.registry.v1.LinkTypeInfo.attributes:type_name -> goap.registry.v1.AttributeInfo
-	29,  // 123: goap.registry.v1.GetProcessGraphRequest.methodology:type_name -> goap.registry.v1.Methodology
-	112, // 124: goap.registry.v1.GetProcessGraphResponse.graph:type_name -> goap.registry.v1.ProcessGraph
-	50,  // 125: goap.registry.v1.GetProcessGraphResponse.issues:type_name -> goap.registry.v1.Issue
-	29,  // 126: goap.registry.v1.GetMethodologyViewRequest.methodology:type_name -> goap.registry.v1.Methodology
-	102, // 127: goap.registry.v1.GetMethodologyViewResponse.view:type_name -> goap.registry.v1.MethodologyView
-	50,  // 128: goap.registry.v1.GetMethodologyViewResponse.issues:type_name -> goap.registry.v1.Issue
-	103, // 129: goap.registry.v1.MethodologyView.processes:type_name -> goap.registry.v1.ViewActivity
-	103, // 130: goap.registry.v1.MethodologyView.methods:type_name -> goap.registry.v1.ViewActivity
-	132, // 131: goap.registry.v1.MethodologyView.conditions:type_name -> goap.registry.v1.MethodologyView.ConditionsEntry
-	133, // 132: goap.registry.v1.ViewActivity.done:type_name -> goap.registry.v1.ViewActivity.DoneEntry
-	37,  // 133: goap.registry.v1.ViewActivity.roles:type_name -> goap.registry.v1.Responsibilities
-	104, // 134: goap.registry.v1.ViewActivity.steps:type_name -> goap.registry.v1.ViewStep
-	40,  // 135: goap.registry.v1.ViewStep.references:type_name -> goap.registry.v1.Reference
-	37,  // 136: goap.registry.v1.ViewStep.roles:type_name -> goap.registry.v1.Responsibilities
-	134, // 137: goap.registry.v1.ViewStep.entry:type_name -> goap.registry.v1.ViewStep.EntryEntry
-	135, // 138: goap.registry.v1.ViewStep.exit:type_name -> goap.registry.v1.ViewStep.ExitEntry
-	104, // 139: goap.registry.v1.ViewStep.steps:type_name -> goap.registry.v1.ViewStep
-	46,  // 140: goap.registry.v1.ViewStep.review:type_name -> goap.registry.v1.StepReview
-	42,  // 141: goap.registry.v1.ViewStep.gate:type_name -> goap.registry.v1.StepGate
-	29,  // 142: goap.registry.v1.CheckLevelsRequest.methodology:type_name -> goap.registry.v1.Methodology
-	108, // 143: goap.registry.v1.CheckLevelsResponse.levels:type_name -> goap.registry.v1.LevelCheck
-	50,  // 144: goap.registry.v1.CheckLevelsResponse.issues:type_name -> goap.registry.v1.Issue
-	136, // 145: goap.registry.v1.CheckLevelsResponse.conditions:type_name -> goap.registry.v1.CheckLevelsResponse.ConditionsEntry
-	137, // 146: goap.registry.v1.LevelCheck.inputs:type_name -> goap.registry.v1.LevelCheck.InputsEntry
-	138, // 147: goap.registry.v1.LevelCheck.outputs:type_name -> goap.registry.v1.LevelCheck.OutputsEntry
-	110, // 148: goap.registry.v1.LevelCheck.order:type_name -> goap.registry.v1.LevelStep
-	111, // 149: goap.registry.v1.LevelCheck.gaps:type_name -> goap.registry.v1.LevelGap
-	109, // 150: goap.registry.v1.LevelCheck.steps:type_name -> goap.registry.v1.LevelNode
-	114, // 151: goap.registry.v1.LevelCheck.edges:type_name -> goap.registry.v1.GraphEdge
-	139, // 152: goap.registry.v1.LevelNode.entry:type_name -> goap.registry.v1.LevelNode.EntryEntry
-	140, // 153: goap.registry.v1.LevelNode.exit:type_name -> goap.registry.v1.LevelNode.ExitEntry
-	46,  // 154: goap.registry.v1.LevelNode.review:type_name -> goap.registry.v1.StepReview
-	42,  // 155: goap.registry.v1.LevelNode.gate:type_name -> goap.registry.v1.StepGate
-	113, // 156: goap.registry.v1.ProcessGraph.steps:type_name -> goap.registry.v1.GraphStep
-	114, // 157: goap.registry.v1.ProcessGraph.edges:type_name -> goap.registry.v1.GraphEdge
-	38,  // 158: goap.registry.v1.ProcessGraph.methods:type_name -> goap.registry.v1.Method
-	141, // 159: goap.registry.v1.ProcessGraph.method_goals:type_name -> goap.registry.v1.ProcessGraph.MethodGoalsEntry
-	115, // 160: goap.registry.v1.ProcessGraph.agents:type_name -> goap.registry.v1.GraphAgent
-	40,  // 161: goap.registry.v1.ProcessGraph.references:type_name -> goap.registry.v1.Reference
-	142, // 162: goap.registry.v1.GraphStep.entry:type_name -> goap.registry.v1.GraphStep.EntryEntry
-	143, // 163: goap.registry.v1.GraphStep.exit:type_name -> goap.registry.v1.GraphStep.ExitEntry
-	37,  // 164: goap.registry.v1.GraphStep.roles:type_name -> goap.registry.v1.Responsibilities
-	40,  // 165: goap.registry.v1.GraphStep.references:type_name -> goap.registry.v1.Reference
-	46,  // 166: goap.registry.v1.GraphStep.review:type_name -> goap.registry.v1.StepReview
-	42,  // 167: goap.registry.v1.GraphStep.gate:type_name -> goap.registry.v1.StepGate
-	116, // 168: goap.registry.v1.GraphAgent.actions:type_name -> goap.registry.v1.GraphAction
-	144, // 169: goap.registry.v1.GraphAction.pre:type_name -> goap.registry.v1.GraphAction.PreEntry
-	145, // 170: goap.registry.v1.GraphAction.effects:type_name -> goap.registry.v1.GraphAction.EffectsEntry
-	29,  // 171: goap.registry.v1.PreviewPlanRequest.methodology:type_name -> goap.registry.v1.Methodology
-	146, // 172: goap.registry.v1.PreviewPlanRequest.overrides:type_name -> goap.registry.v1.PreviewPlanRequest.OverridesEntry
-	119, // 173: goap.registry.v1.PreviewPlanResponse.preview:type_name -> goap.registry.v1.PlanPreview
-	50,  // 174: goap.registry.v1.PreviewPlanResponse.issues:type_name -> goap.registry.v1.Issue
-	120, // 175: goap.registry.v1.PlanPreview.actions:type_name -> goap.registry.v1.PlanStep
-	105, // 176: goap.registry.v1.MethodologyView.ConditionsEntry.value:type_name -> goap.registry.v1.ViewCondition
-	51,  // 177: goap.registry.v1.RegistryService.ListMethodologies:input_type -> goap.registry.v1.ListMethodologiesRequest
-	53,  // 178: goap.registry.v1.RegistryService.GetMethodology:input_type -> goap.registry.v1.GetMethodologyRequest
-	55,  // 179: goap.registry.v1.RegistryService.SaveMethodology:input_type -> goap.registry.v1.SaveMethodologyRequest
-	57,  // 180: goap.registry.v1.RegistryService.ValidateMethodology:input_type -> goap.registry.v1.ValidateMethodologyRequest
-	98,  // 181: goap.registry.v1.RegistryService.GetProcessGraph:input_type -> goap.registry.v1.GetProcessGraphRequest
-	100, // 182: goap.registry.v1.RegistryService.GetMethodologyView:input_type -> goap.registry.v1.GetMethodologyViewRequest
-	106, // 183: goap.registry.v1.RegistryService.CheckLevels:input_type -> goap.registry.v1.CheckLevelsRequest
-	117, // 184: goap.registry.v1.RegistryService.PreviewPlan:input_type -> goap.registry.v1.PreviewPlanRequest
-	59,  // 185: goap.registry.v1.RegistryService.PublishMethodology:input_type -> goap.registry.v1.PublishMethodologyRequest
-	61,  // 186: goap.registry.v1.RegistryService.CreateVersion:input_type -> goap.registry.v1.CreateVersionRequest
-	63,  // 187: goap.registry.v1.RegistryService.DeleteMethodology:input_type -> goap.registry.v1.DeleteMethodologyRequest
-	65,  // 188: goap.registry.v1.RegistryService.ImportMethodology:input_type -> goap.registry.v1.ImportMethodologyRequest
-	67,  // 189: goap.registry.v1.RegistryService.ExportMethodology:input_type -> goap.registry.v1.ExportMethodologyRequest
-	89,  // 190: goap.registry.v1.RegistryService.GetDomainUsage:input_type -> goap.registry.v1.GetDomainUsageRequest
-	71,  // 191: goap.registry.v1.DomainService.ListDomains:input_type -> goap.registry.v1.ListDomainsRequest
-	73,  // 192: goap.registry.v1.DomainService.GetDomain:input_type -> goap.registry.v1.GetDomainRequest
-	75,  // 193: goap.registry.v1.DomainService.SaveDomain:input_type -> goap.registry.v1.SaveDomainRequest
-	77,  // 194: goap.registry.v1.DomainService.ValidateDomain:input_type -> goap.registry.v1.ValidateDomainRequest
-	79,  // 195: goap.registry.v1.DomainService.PublishDomain:input_type -> goap.registry.v1.PublishDomainRequest
-	81,  // 196: goap.registry.v1.DomainService.CreateDomainVersion:input_type -> goap.registry.v1.CreateDomainVersionRequest
-	83,  // 197: goap.registry.v1.DomainService.DeleteDomain:input_type -> goap.registry.v1.DeleteDomainRequest
-	85,  // 198: goap.registry.v1.DomainService.ImportDomain:input_type -> goap.registry.v1.ImportDomainRequest
-	87,  // 199: goap.registry.v1.DomainService.ExportDomain:input_type -> goap.registry.v1.ExportDomainRequest
-	94,  // 200: goap.registry.v1.DomainService.ListTypes:input_type -> goap.registry.v1.ListTypesRequest
-	92,  // 201: goap.registry.v1.DomainService.RunAlgorithm:input_type -> goap.registry.v1.RunAlgorithmRequest
-	52,  // 202: goap.registry.v1.RegistryService.ListMethodologies:output_type -> goap.registry.v1.ListMethodologiesResponse
-	54,  // 203: goap.registry.v1.RegistryService.GetMethodology:output_type -> goap.registry.v1.GetMethodologyResponse
-	56,  // 204: goap.registry.v1.RegistryService.SaveMethodology:output_type -> goap.registry.v1.SaveMethodologyResponse
-	58,  // 205: goap.registry.v1.RegistryService.ValidateMethodology:output_type -> goap.registry.v1.ValidateMethodologyResponse
-	99,  // 206: goap.registry.v1.RegistryService.GetProcessGraph:output_type -> goap.registry.v1.GetProcessGraphResponse
-	101, // 207: goap.registry.v1.RegistryService.GetMethodologyView:output_type -> goap.registry.v1.GetMethodologyViewResponse
-	107, // 208: goap.registry.v1.RegistryService.CheckLevels:output_type -> goap.registry.v1.CheckLevelsResponse
-	118, // 209: goap.registry.v1.RegistryService.PreviewPlan:output_type -> goap.registry.v1.PreviewPlanResponse
-	60,  // 210: goap.registry.v1.RegistryService.PublishMethodology:output_type -> goap.registry.v1.PublishMethodologyResponse
-	62,  // 211: goap.registry.v1.RegistryService.CreateVersion:output_type -> goap.registry.v1.CreateVersionResponse
-	64,  // 212: goap.registry.v1.RegistryService.DeleteMethodology:output_type -> goap.registry.v1.DeleteMethodologyResponse
-	66,  // 213: goap.registry.v1.RegistryService.ImportMethodology:output_type -> goap.registry.v1.ImportMethodologyResponse
-	68,  // 214: goap.registry.v1.RegistryService.ExportMethodology:output_type -> goap.registry.v1.ExportMethodologyResponse
-	91,  // 215: goap.registry.v1.RegistryService.GetDomainUsage:output_type -> goap.registry.v1.GetDomainUsageResponse
-	72,  // 216: goap.registry.v1.DomainService.ListDomains:output_type -> goap.registry.v1.ListDomainsResponse
-	74,  // 217: goap.registry.v1.DomainService.GetDomain:output_type -> goap.registry.v1.GetDomainResponse
-	76,  // 218: goap.registry.v1.DomainService.SaveDomain:output_type -> goap.registry.v1.SaveDomainResponse
-	78,  // 219: goap.registry.v1.DomainService.ValidateDomain:output_type -> goap.registry.v1.ValidateDomainResponse
-	80,  // 220: goap.registry.v1.DomainService.PublishDomain:output_type -> goap.registry.v1.PublishDomainResponse
-	82,  // 221: goap.registry.v1.DomainService.CreateDomainVersion:output_type -> goap.registry.v1.CreateDomainVersionResponse
-	84,  // 222: goap.registry.v1.DomainService.DeleteDomain:output_type -> goap.registry.v1.DeleteDomainResponse
-	86,  // 223: goap.registry.v1.DomainService.ImportDomain:output_type -> goap.registry.v1.ImportDomainResponse
-	88,  // 224: goap.registry.v1.DomainService.ExportDomain:output_type -> goap.registry.v1.ExportDomainResponse
-	95,  // 225: goap.registry.v1.DomainService.ListTypes:output_type -> goap.registry.v1.ListTypesResponse
-	93,  // 226: goap.registry.v1.DomainService.RunAlgorithm:output_type -> goap.registry.v1.RunAlgorithmResponse
-	202, // [202:227] is the sub-list for method output_type
-	177, // [177:202] is the sub-list for method input_type
-	177, // [177:177] is the sub-list for extension type_name
-	177, // [177:177] is the sub-list for extension extendee
-	0,   // [0:177] is the sub-list for field type_name
+	4,   // 8: goap.registry.v1.ImporterDecl.params:type_name -> goap.registry.v1.Attribute
+	4,   // 9: goap.registry.v1.AttributeInfo.attribute:type_name -> goap.registry.v1.Attribute
+	5,   // 10: goap.registry.v1.AttributeInfo.values:type_name -> goap.registry.v1.EnumValue
+	149, // 11: goap.registry.v1.AlgorithmParam.default_value:type_name -> google.protobuf.Value
+	10,  // 12: goap.registry.v1.Algorithm.params:type_name -> goap.registry.v1.AlgorithmParam
+	148, // 13: goap.registry.v1.AlgorithmInstance.values:type_name -> google.protobuf.Struct
+	14,  // 14: goap.registry.v1.Lifecycle.states:type_name -> goap.registry.v1.LifecycleState
+	15,  // 15: goap.registry.v1.Lifecycle.transitions:type_name -> goap.registry.v1.LifecycleTransition
+	16,  // 16: goap.registry.v1.LifecycleTransition.vetos:type_name -> goap.registry.v1.Criterion
+	16,  // 17: goap.registry.v1.LifecycleTransition.objectives:type_name -> goap.registry.v1.Criterion
+	4,   // 18: goap.registry.v1.LinkType.attributes:type_name -> goap.registry.v1.Attribute
+	20,  // 19: goap.registry.v1.Expectation.produce:type_name -> goap.registry.v1.ProduceSpec
+	21,  // 20: goap.registry.v1.Expectation.link:type_name -> goap.registry.v1.LinkSpec
+	122, // 21: goap.registry.v1.Action.pre:type_name -> goap.registry.v1.Action.PreEntry
+	123, // 22: goap.registry.v1.Action.effects:type_name -> goap.registry.v1.Action.EffectsEntry
+	22,  // 23: goap.registry.v1.Action.expects:type_name -> goap.registry.v1.Expectation
+	148, // 24: goap.registry.v1.Action.params:type_name -> google.protobuf.Struct
+	25,  // 25: goap.registry.v1.Action.verify:type_name -> goap.registry.v1.Verify
+	36,  // 26: goap.registry.v1.Action.on:type_name -> goap.registry.v1.Subscription
+	148, // 27: goap.registry.v1.Action.form:type_name -> google.protobuf.Struct
+	24,  // 28: goap.registry.v1.Action.loop:type_name -> goap.registry.v1.ActionLoop
+	28,  // 29: goap.registry.v1.Agent.triggers:type_name -> goap.registry.v1.Trigger
+	27,  // 30: goap.registry.v1.Agent.persistent:type_name -> goap.registry.v1.Persistence
+	124, // 31: goap.registry.v1.Persistence.until:type_name -> goap.registry.v1.Persistence.UntilEntry
+	125, // 32: goap.registry.v1.Goal.pre:type_name -> goap.registry.v1.Goal.PreEntry
+	19,  // 33: goap.registry.v1.Methodology.conditions:type_name -> goap.registry.v1.Condition
+	23,  // 34: goap.registry.v1.Methodology.actions:type_name -> goap.registry.v1.Action
+	29,  // 35: goap.registry.v1.Methodology.goals:type_name -> goap.registry.v1.Goal
+	150, // 36: goap.registry.v1.Methodology.created_at:type_name -> google.protobuf.Timestamp
+	150, // 37: goap.registry.v1.Methodology.updated_at:type_name -> google.protobuf.Timestamp
+	150, // 38: goap.registry.v1.Methodology.published_at:type_name -> google.protobuf.Timestamp
+	26,  // 39: goap.registry.v1.Methodology.agents:type_name -> goap.registry.v1.Agent
+	40,  // 40: goap.registry.v1.Methodology.processes:type_name -> goap.registry.v1.Process
+	39,  // 41: goap.registry.v1.Methodology.methods:type_name -> goap.registry.v1.Method
+	37,  // 42: goap.registry.v1.Methodology.roles:type_name -> goap.registry.v1.Role
+	36,  // 43: goap.registry.v1.Methodology.on:type_name -> goap.registry.v1.Subscription
+	34,  // 44: goap.registry.v1.Methodology.integrates:type_name -> goap.registry.v1.Integration
+	35,  // 45: goap.registry.v1.Methodology.guardian:type_name -> goap.registry.v1.Guardian
+	33,  // 46: goap.registry.v1.Methodology.events:type_name -> goap.registry.v1.EventDef
+	126, // 47: goap.registry.v1.Methodology.domains:type_name -> goap.registry.v1.Methodology.DomainsEntry
+	31,  // 48: goap.registry.v1.Methodology.assessments:type_name -> goap.registry.v1.AssessmentView
+	32,  // 49: goap.registry.v1.AssessmentView.states:type_name -> goap.registry.v1.AssessmentState
+	127, // 50: goap.registry.v1.AssessmentState.conditions:type_name -> goap.registry.v1.AssessmentState.ConditionsEntry
+	128, // 51: goap.registry.v1.Guardian.transitions:type_name -> goap.registry.v1.Guardian.TransitionsEntry
+	41,  // 52: goap.registry.v1.Method.references:type_name -> goap.registry.v1.Reference
+	38,  // 53: goap.registry.v1.Method.roles:type_name -> goap.registry.v1.Responsibilities
+	42,  // 54: goap.registry.v1.Method.steps:type_name -> goap.registry.v1.Step
+	129, // 55: goap.registry.v1.Method.done:type_name -> goap.registry.v1.Method.DoneEntry
+	36,  // 56: goap.registry.v1.Method.on:type_name -> goap.registry.v1.Subscription
+	27,  // 57: goap.registry.v1.Method.persistent:type_name -> goap.registry.v1.Persistence
+	42,  // 58: goap.registry.v1.Process.steps:type_name -> goap.registry.v1.Step
+	41,  // 59: goap.registry.v1.Process.references:type_name -> goap.registry.v1.Reference
+	36,  // 60: goap.registry.v1.Process.on:type_name -> goap.registry.v1.Subscription
+	38,  // 61: goap.registry.v1.Process.roles:type_name -> goap.registry.v1.Responsibilities
+	130, // 62: goap.registry.v1.Step.pre:type_name -> goap.registry.v1.Step.PreEntry
+	131, // 63: goap.registry.v1.Step.done:type_name -> goap.registry.v1.Step.DoneEntry
+	42,  // 64: goap.registry.v1.Step.steps:type_name -> goap.registry.v1.Step
+	41,  // 65: goap.registry.v1.Step.references:type_name -> goap.registry.v1.Reference
+	38,  // 66: goap.registry.v1.Step.roles:type_name -> goap.registry.v1.Responsibilities
+	36,  // 67: goap.registry.v1.Step.on:type_name -> goap.registry.v1.Subscription
+	47,  // 68: goap.registry.v1.Step.review:type_name -> goap.registry.v1.StepReview
+	43,  // 69: goap.registry.v1.Step.gate:type_name -> goap.registry.v1.StepGate
+	44,  // 70: goap.registry.v1.StepGate.checklist:type_name -> goap.registry.v1.GateItem
+	45,  // 71: goap.registry.v1.StepGate.decision:type_name -> goap.registry.v1.GateDecision
+	46,  // 72: goap.registry.v1.StepGate.freezes:type_name -> goap.registry.v1.GateFreezes
+	48,  // 73: goap.registry.v1.MethodologySummary.goals:type_name -> goap.registry.v1.GoalSummary
+	49,  // 74: goap.registry.v1.MethodologySummary.agents:type_name -> goap.registry.v1.AgentSummary
+	150, // 75: goap.registry.v1.MethodologySummary.updated_at:type_name -> google.protobuf.Timestamp
+	150, // 76: goap.registry.v1.MethodologySummary.published_at:type_name -> google.protobuf.Timestamp
+	50,  // 77: goap.registry.v1.ListMethodologiesResponse.methodologies:type_name -> goap.registry.v1.MethodologySummary
+	30,  // 78: goap.registry.v1.GetMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
+	70,  // 79: goap.registry.v1.GetMethodologyResponse.domains:type_name -> goap.registry.v1.Domain
+	30,  // 80: goap.registry.v1.SaveMethodologyRequest.methodology:type_name -> goap.registry.v1.Methodology
+	30,  // 81: goap.registry.v1.SaveMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
+	51,  // 82: goap.registry.v1.SaveMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
+	30,  // 83: goap.registry.v1.ValidateMethodologyRequest.methodology:type_name -> goap.registry.v1.Methodology
+	51,  // 84: goap.registry.v1.ValidateMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
+	30,  // 85: goap.registry.v1.PublishMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
+	30,  // 86: goap.registry.v1.CreateVersionResponse.methodology:type_name -> goap.registry.v1.Methodology
+	30,  // 87: goap.registry.v1.ImportMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
+	51,  // 88: goap.registry.v1.ImportMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
+	0,   // 89: goap.registry.v1.Domain.node_types:type_name -> goap.registry.v1.NodeType
+	18,  // 90: goap.registry.v1.Domain.link_types:type_name -> goap.registry.v1.LinkType
+	13,  // 91: goap.registry.v1.Domain.lifecycles:type_name -> goap.registry.v1.Lifecycle
+	6,   // 92: goap.registry.v1.Domain.enums:type_name -> goap.registry.v1.Enum
+	11,  // 93: goap.registry.v1.Domain.algorithms:type_name -> goap.registry.v1.Algorithm
+	12,  // 94: goap.registry.v1.Domain.algorithm_instances:type_name -> goap.registry.v1.AlgorithmInstance
+	7,   // 95: goap.registry.v1.Domain.item_types:type_name -> goap.registry.v1.ItemType
+	8,   // 96: goap.registry.v1.Domain.importers:type_name -> goap.registry.v1.ImporterDecl
+	150, // 97: goap.registry.v1.Domain.created_at:type_name -> google.protobuf.Timestamp
+	150, // 98: goap.registry.v1.Domain.updated_at:type_name -> google.protobuf.Timestamp
+	150, // 99: goap.registry.v1.Domain.published_at:type_name -> google.protobuf.Timestamp
+	150, // 100: goap.registry.v1.DomainSummary.updated_at:type_name -> google.protobuf.Timestamp
+	150, // 101: goap.registry.v1.DomainSummary.published_at:type_name -> google.protobuf.Timestamp
+	71,  // 102: goap.registry.v1.ListDomainsResponse.domains:type_name -> goap.registry.v1.DomainSummary
+	70,  // 103: goap.registry.v1.GetDomainResponse.domain:type_name -> goap.registry.v1.Domain
+	70,  // 104: goap.registry.v1.SaveDomainRequest.domain:type_name -> goap.registry.v1.Domain
+	70,  // 105: goap.registry.v1.SaveDomainResponse.domain:type_name -> goap.registry.v1.Domain
+	51,  // 106: goap.registry.v1.SaveDomainResponse.issues:type_name -> goap.registry.v1.Issue
+	70,  // 107: goap.registry.v1.ValidateDomainRequest.domain:type_name -> goap.registry.v1.Domain
+	51,  // 108: goap.registry.v1.ValidateDomainResponse.issues:type_name -> goap.registry.v1.Issue
+	70,  // 109: goap.registry.v1.PublishDomainResponse.domain:type_name -> goap.registry.v1.Domain
+	70,  // 110: goap.registry.v1.CreateDomainVersionResponse.domain:type_name -> goap.registry.v1.Domain
+	70,  // 111: goap.registry.v1.ImportDomainResponse.domain:type_name -> goap.registry.v1.Domain
+	51,  // 112: goap.registry.v1.ImportDomainResponse.issues:type_name -> goap.registry.v1.Issue
+	91,  // 113: goap.registry.v1.GetDomainUsageResponse.methodologies:type_name -> goap.registry.v1.DomainUser
+	11,  // 114: goap.registry.v1.RunAlgorithmRequest.algorithm:type_name -> goap.registry.v1.Algorithm
+	148, // 115: goap.registry.v1.RunAlgorithmRequest.values:type_name -> google.protobuf.Struct
+	148, // 116: goap.registry.v1.RunAlgorithmRequest.input:type_name -> google.protobuf.Struct
+	148, // 117: goap.registry.v1.RunAlgorithmResponse.set:type_name -> google.protobuf.Struct
+	97,  // 118: goap.registry.v1.ListTypesResponse.types:type_name -> goap.registry.v1.TypeInfo
+	98,  // 119: goap.registry.v1.ListTypesResponse.link_types:type_name -> goap.registry.v1.LinkTypeInfo
+	132, // 120: goap.registry.v1.ListTypesResponse.domains:type_name -> goap.registry.v1.ListTypesResponse.DomainsEntry
+	9,   // 121: goap.registry.v1.TypeInfo.attributes:type_name -> goap.registry.v1.AttributeInfo
+	13,  // 122: goap.registry.v1.TypeInfo.lifecycle:type_name -> goap.registry.v1.Lifecycle
+	148, // 123: goap.registry.v1.TypeInfo.form:type_name -> google.protobuf.Struct
+	9,   // 124: goap.registry.v1.LinkTypeInfo.attributes:type_name -> goap.registry.v1.AttributeInfo
+	30,  // 125: goap.registry.v1.GetProcessGraphRequest.methodology:type_name -> goap.registry.v1.Methodology
+	113, // 126: goap.registry.v1.GetProcessGraphResponse.graph:type_name -> goap.registry.v1.ProcessGraph
+	51,  // 127: goap.registry.v1.GetProcessGraphResponse.issues:type_name -> goap.registry.v1.Issue
+	30,  // 128: goap.registry.v1.GetMethodologyViewRequest.methodology:type_name -> goap.registry.v1.Methodology
+	103, // 129: goap.registry.v1.GetMethodologyViewResponse.view:type_name -> goap.registry.v1.MethodologyView
+	51,  // 130: goap.registry.v1.GetMethodologyViewResponse.issues:type_name -> goap.registry.v1.Issue
+	104, // 131: goap.registry.v1.MethodologyView.processes:type_name -> goap.registry.v1.ViewActivity
+	104, // 132: goap.registry.v1.MethodologyView.methods:type_name -> goap.registry.v1.ViewActivity
+	133, // 133: goap.registry.v1.MethodologyView.conditions:type_name -> goap.registry.v1.MethodologyView.ConditionsEntry
+	134, // 134: goap.registry.v1.ViewActivity.done:type_name -> goap.registry.v1.ViewActivity.DoneEntry
+	38,  // 135: goap.registry.v1.ViewActivity.roles:type_name -> goap.registry.v1.Responsibilities
+	105, // 136: goap.registry.v1.ViewActivity.steps:type_name -> goap.registry.v1.ViewStep
+	41,  // 137: goap.registry.v1.ViewStep.references:type_name -> goap.registry.v1.Reference
+	38,  // 138: goap.registry.v1.ViewStep.roles:type_name -> goap.registry.v1.Responsibilities
+	135, // 139: goap.registry.v1.ViewStep.entry:type_name -> goap.registry.v1.ViewStep.EntryEntry
+	136, // 140: goap.registry.v1.ViewStep.exit:type_name -> goap.registry.v1.ViewStep.ExitEntry
+	105, // 141: goap.registry.v1.ViewStep.steps:type_name -> goap.registry.v1.ViewStep
+	47,  // 142: goap.registry.v1.ViewStep.review:type_name -> goap.registry.v1.StepReview
+	43,  // 143: goap.registry.v1.ViewStep.gate:type_name -> goap.registry.v1.StepGate
+	30,  // 144: goap.registry.v1.CheckLevelsRequest.methodology:type_name -> goap.registry.v1.Methodology
+	109, // 145: goap.registry.v1.CheckLevelsResponse.levels:type_name -> goap.registry.v1.LevelCheck
+	51,  // 146: goap.registry.v1.CheckLevelsResponse.issues:type_name -> goap.registry.v1.Issue
+	137, // 147: goap.registry.v1.CheckLevelsResponse.conditions:type_name -> goap.registry.v1.CheckLevelsResponse.ConditionsEntry
+	138, // 148: goap.registry.v1.LevelCheck.inputs:type_name -> goap.registry.v1.LevelCheck.InputsEntry
+	139, // 149: goap.registry.v1.LevelCheck.outputs:type_name -> goap.registry.v1.LevelCheck.OutputsEntry
+	111, // 150: goap.registry.v1.LevelCheck.order:type_name -> goap.registry.v1.LevelStep
+	112, // 151: goap.registry.v1.LevelCheck.gaps:type_name -> goap.registry.v1.LevelGap
+	110, // 152: goap.registry.v1.LevelCheck.steps:type_name -> goap.registry.v1.LevelNode
+	115, // 153: goap.registry.v1.LevelCheck.edges:type_name -> goap.registry.v1.GraphEdge
+	140, // 154: goap.registry.v1.LevelNode.entry:type_name -> goap.registry.v1.LevelNode.EntryEntry
+	141, // 155: goap.registry.v1.LevelNode.exit:type_name -> goap.registry.v1.LevelNode.ExitEntry
+	47,  // 156: goap.registry.v1.LevelNode.review:type_name -> goap.registry.v1.StepReview
+	43,  // 157: goap.registry.v1.LevelNode.gate:type_name -> goap.registry.v1.StepGate
+	114, // 158: goap.registry.v1.ProcessGraph.steps:type_name -> goap.registry.v1.GraphStep
+	115, // 159: goap.registry.v1.ProcessGraph.edges:type_name -> goap.registry.v1.GraphEdge
+	39,  // 160: goap.registry.v1.ProcessGraph.methods:type_name -> goap.registry.v1.Method
+	142, // 161: goap.registry.v1.ProcessGraph.method_goals:type_name -> goap.registry.v1.ProcessGraph.MethodGoalsEntry
+	116, // 162: goap.registry.v1.ProcessGraph.agents:type_name -> goap.registry.v1.GraphAgent
+	41,  // 163: goap.registry.v1.ProcessGraph.references:type_name -> goap.registry.v1.Reference
+	143, // 164: goap.registry.v1.GraphStep.entry:type_name -> goap.registry.v1.GraphStep.EntryEntry
+	144, // 165: goap.registry.v1.GraphStep.exit:type_name -> goap.registry.v1.GraphStep.ExitEntry
+	38,  // 166: goap.registry.v1.GraphStep.roles:type_name -> goap.registry.v1.Responsibilities
+	41,  // 167: goap.registry.v1.GraphStep.references:type_name -> goap.registry.v1.Reference
+	47,  // 168: goap.registry.v1.GraphStep.review:type_name -> goap.registry.v1.StepReview
+	43,  // 169: goap.registry.v1.GraphStep.gate:type_name -> goap.registry.v1.StepGate
+	117, // 170: goap.registry.v1.GraphAgent.actions:type_name -> goap.registry.v1.GraphAction
+	145, // 171: goap.registry.v1.GraphAction.pre:type_name -> goap.registry.v1.GraphAction.PreEntry
+	146, // 172: goap.registry.v1.GraphAction.effects:type_name -> goap.registry.v1.GraphAction.EffectsEntry
+	30,  // 173: goap.registry.v1.PreviewPlanRequest.methodology:type_name -> goap.registry.v1.Methodology
+	147, // 174: goap.registry.v1.PreviewPlanRequest.overrides:type_name -> goap.registry.v1.PreviewPlanRequest.OverridesEntry
+	120, // 175: goap.registry.v1.PreviewPlanResponse.preview:type_name -> goap.registry.v1.PlanPreview
+	51,  // 176: goap.registry.v1.PreviewPlanResponse.issues:type_name -> goap.registry.v1.Issue
+	121, // 177: goap.registry.v1.PlanPreview.actions:type_name -> goap.registry.v1.PlanStep
+	106, // 178: goap.registry.v1.MethodologyView.ConditionsEntry.value:type_name -> goap.registry.v1.ViewCondition
+	52,  // 179: goap.registry.v1.RegistryService.ListMethodologies:input_type -> goap.registry.v1.ListMethodologiesRequest
+	54,  // 180: goap.registry.v1.RegistryService.GetMethodology:input_type -> goap.registry.v1.GetMethodologyRequest
+	56,  // 181: goap.registry.v1.RegistryService.SaveMethodology:input_type -> goap.registry.v1.SaveMethodologyRequest
+	58,  // 182: goap.registry.v1.RegistryService.ValidateMethodology:input_type -> goap.registry.v1.ValidateMethodologyRequest
+	99,  // 183: goap.registry.v1.RegistryService.GetProcessGraph:input_type -> goap.registry.v1.GetProcessGraphRequest
+	101, // 184: goap.registry.v1.RegistryService.GetMethodologyView:input_type -> goap.registry.v1.GetMethodologyViewRequest
+	107, // 185: goap.registry.v1.RegistryService.CheckLevels:input_type -> goap.registry.v1.CheckLevelsRequest
+	118, // 186: goap.registry.v1.RegistryService.PreviewPlan:input_type -> goap.registry.v1.PreviewPlanRequest
+	60,  // 187: goap.registry.v1.RegistryService.PublishMethodology:input_type -> goap.registry.v1.PublishMethodologyRequest
+	62,  // 188: goap.registry.v1.RegistryService.CreateVersion:input_type -> goap.registry.v1.CreateVersionRequest
+	64,  // 189: goap.registry.v1.RegistryService.DeleteMethodology:input_type -> goap.registry.v1.DeleteMethodologyRequest
+	66,  // 190: goap.registry.v1.RegistryService.ImportMethodology:input_type -> goap.registry.v1.ImportMethodologyRequest
+	68,  // 191: goap.registry.v1.RegistryService.ExportMethodology:input_type -> goap.registry.v1.ExportMethodologyRequest
+	90,  // 192: goap.registry.v1.RegistryService.GetDomainUsage:input_type -> goap.registry.v1.GetDomainUsageRequest
+	72,  // 193: goap.registry.v1.DomainService.ListDomains:input_type -> goap.registry.v1.ListDomainsRequest
+	74,  // 194: goap.registry.v1.DomainService.GetDomain:input_type -> goap.registry.v1.GetDomainRequest
+	76,  // 195: goap.registry.v1.DomainService.SaveDomain:input_type -> goap.registry.v1.SaveDomainRequest
+	78,  // 196: goap.registry.v1.DomainService.ValidateDomain:input_type -> goap.registry.v1.ValidateDomainRequest
+	80,  // 197: goap.registry.v1.DomainService.PublishDomain:input_type -> goap.registry.v1.PublishDomainRequest
+	82,  // 198: goap.registry.v1.DomainService.CreateDomainVersion:input_type -> goap.registry.v1.CreateDomainVersionRequest
+	84,  // 199: goap.registry.v1.DomainService.DeleteDomain:input_type -> goap.registry.v1.DeleteDomainRequest
+	86,  // 200: goap.registry.v1.DomainService.ImportDomain:input_type -> goap.registry.v1.ImportDomainRequest
+	88,  // 201: goap.registry.v1.DomainService.ExportDomain:input_type -> goap.registry.v1.ExportDomainRequest
+	95,  // 202: goap.registry.v1.DomainService.ListTypes:input_type -> goap.registry.v1.ListTypesRequest
+	93,  // 203: goap.registry.v1.DomainService.RunAlgorithm:input_type -> goap.registry.v1.RunAlgorithmRequest
+	53,  // 204: goap.registry.v1.RegistryService.ListMethodologies:output_type -> goap.registry.v1.ListMethodologiesResponse
+	55,  // 205: goap.registry.v1.RegistryService.GetMethodology:output_type -> goap.registry.v1.GetMethodologyResponse
+	57,  // 206: goap.registry.v1.RegistryService.SaveMethodology:output_type -> goap.registry.v1.SaveMethodologyResponse
+	59,  // 207: goap.registry.v1.RegistryService.ValidateMethodology:output_type -> goap.registry.v1.ValidateMethodologyResponse
+	100, // 208: goap.registry.v1.RegistryService.GetProcessGraph:output_type -> goap.registry.v1.GetProcessGraphResponse
+	102, // 209: goap.registry.v1.RegistryService.GetMethodologyView:output_type -> goap.registry.v1.GetMethodologyViewResponse
+	108, // 210: goap.registry.v1.RegistryService.CheckLevels:output_type -> goap.registry.v1.CheckLevelsResponse
+	119, // 211: goap.registry.v1.RegistryService.PreviewPlan:output_type -> goap.registry.v1.PreviewPlanResponse
+	61,  // 212: goap.registry.v1.RegistryService.PublishMethodology:output_type -> goap.registry.v1.PublishMethodologyResponse
+	63,  // 213: goap.registry.v1.RegistryService.CreateVersion:output_type -> goap.registry.v1.CreateVersionResponse
+	65,  // 214: goap.registry.v1.RegistryService.DeleteMethodology:output_type -> goap.registry.v1.DeleteMethodologyResponse
+	67,  // 215: goap.registry.v1.RegistryService.ImportMethodology:output_type -> goap.registry.v1.ImportMethodologyResponse
+	69,  // 216: goap.registry.v1.RegistryService.ExportMethodology:output_type -> goap.registry.v1.ExportMethodologyResponse
+	92,  // 217: goap.registry.v1.RegistryService.GetDomainUsage:output_type -> goap.registry.v1.GetDomainUsageResponse
+	73,  // 218: goap.registry.v1.DomainService.ListDomains:output_type -> goap.registry.v1.ListDomainsResponse
+	75,  // 219: goap.registry.v1.DomainService.GetDomain:output_type -> goap.registry.v1.GetDomainResponse
+	77,  // 220: goap.registry.v1.DomainService.SaveDomain:output_type -> goap.registry.v1.SaveDomainResponse
+	79,  // 221: goap.registry.v1.DomainService.ValidateDomain:output_type -> goap.registry.v1.ValidateDomainResponse
+	81,  // 222: goap.registry.v1.DomainService.PublishDomain:output_type -> goap.registry.v1.PublishDomainResponse
+	83,  // 223: goap.registry.v1.DomainService.CreateDomainVersion:output_type -> goap.registry.v1.CreateDomainVersionResponse
+	85,  // 224: goap.registry.v1.DomainService.DeleteDomain:output_type -> goap.registry.v1.DeleteDomainResponse
+	87,  // 225: goap.registry.v1.DomainService.ImportDomain:output_type -> goap.registry.v1.ImportDomainResponse
+	89,  // 226: goap.registry.v1.DomainService.ExportDomain:output_type -> goap.registry.v1.ExportDomainResponse
+	96,  // 227: goap.registry.v1.DomainService.ListTypes:output_type -> goap.registry.v1.ListTypesResponse
+	94,  // 228: goap.registry.v1.DomainService.RunAlgorithm:output_type -> goap.registry.v1.RunAlgorithmResponse
+	204, // [204:229] is the sub-list for method output_type
+	179, // [179:204] is the sub-list for method input_type
+	179, // [179:179] is the sub-list for extension type_name
+	179, // [179:179] is the sub-list for extension extendee
+	0,   // [0:179] is the sub-list for field type_name
 }
 
 func init() { file_goap_registry_v1_registry_proto_init() }
@@ -10787,14 +10874,14 @@ func file_goap_registry_v1_registry_proto_init() {
 		return
 	}
 	file_goap_registry_v1_registry_proto_msgTypes[0].OneofWrappers = []any{}
-	file_goap_registry_v1_registry_proto_msgTypes[24].OneofWrappers = []any{}
+	file_goap_registry_v1_registry_proto_msgTypes[25].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_registry_v1_registry_proto_rawDesc), len(file_goap_registry_v1_registry_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   147,
+			NumMessages:   148,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

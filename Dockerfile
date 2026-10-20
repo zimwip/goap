@@ -27,6 +27,15 @@ COPY domains /domains
 EXPOSE 8080
 USER nonroot
 
+# the git importer (ADR 0148) runs git itself: alpine with git rather than distroless (built without cgo, it reads no
+# symbols): docker build --target importer-git -t goap/importer-git:dev .
+FROM alpine:3.22 AS importer-git
+RUN apk add --no-cache git openssh-client ca-certificates && adduser -D -u 65532 nonroot
+COPY --from=build /out/importer-git /goap/importer-git
+EXPOSE 8080
+USER nonroot
+ENTRYPOINT ["/goap/importer-git"]
+
 # one service (the default target): docker build --build-arg SERVICE=graph .
 FROM gcr.io/distroless/static-debian12:nonroot
 ARG SERVICE

@@ -83,6 +83,8 @@ func main() {
 			{Prefix: "/goap.registry.v1.DomainService/", Upstream: platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")},
 			// the smart tags select versions of the graph and are kept next to it (ADR 0143 §7)
 			{Prefix: "/goap.smarttag.v1.SmartTagService/", Upstream: platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")},
+			// the import registry is the graph's, next to the domains declaring the importers (ADR 0148)
+			{Prefix: "/goap.importer.v1.ImportService/", Upstream: platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")},
 			{Prefix: "/goap.engine.v1.EngineService/", Upstream: platform.Env("GOAP_ENGINE_URL", "http://localhost:8083")},
 			{Prefix: "/goap.model.v1.ModelService/", Upstream: platform.Env("GOAP_MODELGW_URL", "http://localhost:8084")},
 			{Prefix: "/goap.preferences.v1.PreferencesService/", Upstream: platform.Env("GOAP_PREFERENCES_URL", "http://localhost:8087")},

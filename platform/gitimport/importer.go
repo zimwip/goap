@@ -79,6 +79,8 @@ type Importer struct {
 	// Progress, when set, receives a line every ProgressEvery commits (default 100) and at the end.
 	Progress      io.Writer
 	ProgressEvery int
+	// OnCommit, when set, is called after each commit imported with what the run did so far.
+	OnCommit func(Stats)
 
 	ix    index
 	head  domain.BaselineID
@@ -330,6 +332,9 @@ func (im *Importer) commit(ctx context.Context, c Commit) error {
 	im.stats.Commits++
 	im.stats.Last = c.Hash
 	im.report(false)
+	if im.OnCommit != nil {
+		im.OnCommit(im.stats)
+	}
 	return nil
 }
 

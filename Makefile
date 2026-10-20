@@ -1,4 +1,4 @@
-SERVICES := graph registry engine modelgw preferences conversations credentials indexer events gateway mcp connector-localfs connector-workspace connector-claude-coding-agent goap-dev goap-runner goap-eval goap-bench
+SERVICES := graph registry engine modelgw preferences conversations credentials indexer events gateway mcp connector-localfs connector-workspace connector-claude-coding-agent importer-git goap-dev goap-runner goap-eval goap-bench
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 # the modules of the go.work (ADR 0125): `./...` at the root matches none, every Go command names them
 MODULES  := contracts lib graph engine mcp gateway platform

@@ -26,6 +26,8 @@ type Schema struct {
 	Instances  []algo.Instance  `yaml:"algorithmInstances,omitempty" json:"algorithmInstances,omitempty"`
 	// ItemTypes are the types of change item the domain declares (ADR 0128).
 	ItemTypes []ItemType `yaml:"itemTypes,omitempty" json:"itemTypes,omitempty"`
+	// Importers are the sources the graph of the domain can be loaded from (ADR 0148).
+	Importers []Importer `yaml:"importers,omitempty" json:"importers,omitempty"`
 }
 
 // algorithms returns the algorithm set of the schema.
@@ -128,6 +130,7 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 	s.checkRequires(prefix, add)
 	s.checkForms(prefix, add)
 	s.checkItemTypes(prefix, add)
+	s.checkImporters(prefix, add)
 	return nodeTypes, linkTypes
 }
 
@@ -415,10 +418,14 @@ func (s Schema) checkAttributes(prefix string, add func(path, format string, arg
 		}
 	}
 	check := func(path string, as []Attribute, node bool) {
+		field := ".attributes"
+		if p, ok := strings.CutSuffix(path, ".params"); ok {
+			path, field = p, ".params"
+		}
 		names := map[string]bool{}
 		asName := 0
 		for i, a := range as {
-			p := fmt.Sprintf(path+".attributes[%d]", i)
+			p := fmt.Sprintf(path+field+"[%d]", i)
 			switch {
 			case a.Name == "":
 				add(p+".name", "name required")
@@ -458,6 +465,9 @@ func (s Schema) checkAttributes(prefix string, add func(path, format string, arg
 	}
 	for i, t := range s.ItemTypes {
 		check(fmt.Sprintf(prefix+"itemTypes[%d]", i), t.Attributes, false)
+	}
+	for i, im := range s.Importers {
+		check(fmt.Sprintf(prefix+"importers[%d].params", i), im.Params, false)
 	}
 }
 

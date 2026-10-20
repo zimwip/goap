@@ -1,0 +1,180 @@
+syntax = "proto3";
+
+package goap.importer.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "goap/registry/v1/registry.proto";
+
+// Importers (ADR 0148): a domain declares the sources its graph can be loaded from (`importers:` of the domain, with
+// their parameters); a separately deployed service implements one or more of them, registers itself with the import
+// registry and runs the imports it is asked to, writing through the graph's change operations like any producer.
+// Adding a source is publishing its declaration in the domain and deploying the service: nothing else of the platform
+// changes.
+
+// ImporterService is the protocol every importer service implements. It is called by the import registry only.
+service ImporterService {
+  // Describe returns the identity of the service and the importers it implements.
+  rpc Describe(DescribeRequest) returns (DescribeResponse);
+  // Start starts an import in the background and returns its job at once.
+  rpc Start(StartRequest) returns (StartResponse);
+  // Jobs lists the jobs the service holds (running and finished, newest first).
+  rpc Jobs(JobsRequest) returns (JobsResponse);
+  // Cancel stops a running job; the importer stops between two units of work (a commit for the git importer).
+  rpc Cancel(CancelRequest) returns (CancelResponse);
+}
+
+// ImportService is the import registry, served by the graph service next to the domain registry: the importer services
+// register with it, the people list the sources of a namespace and run them through it.
+service ImportService {
+  // RegisterImporter announces an importer service and renews its lease (a heartbeat). It needs the shared token of the
+  // importers (GOAP_IMPORTER_TOKEN, header X-Goap-Importer-Token).
+  rpc RegisterImporter(RegisterImporterRequest) returns (RegisterImporterResponse);
+  // ListImporters lists the importers the domains in force declare, each with whether a live service implements it.
+  rpc ListImporters(ListImportersRequest) returns (ListImportersResponse);
+  // StartImport runs an importer for the caller (permission import:run on the namespace and the project).
+  rpc StartImport(StartImportRequest) returns (StartImportResponse);
+  // ListImportJobs lists the jobs of the live importer services, newest first.
+  rpc ListImportJobs(ListImportJobsRequest) returns (ListImportJobsResponse);
+  // CancelImportJob stops a running job (who started it, or an administrator).
+  rpc CancelImportJob(CancelImportJobRequest) returns (CancelImportJobResponse);
+}
+
+// Implements names one importer a domain declares.
+message Implements {
+  string domain = 1;
+  string importer = 2;
+}
+
+message ImporterInfo {
+  // stable identifier of the service, e.g. "importer-git"
+  string id = 1;
+  string version = 2;
+  string description = 3;
+  repeated Implements implements = 4;
+}
+
+message DescribeRequest {}
+
+message DescribeResponse {
+  ImporterInfo info = 1;
+}
+
+message StartRequest {
+  // the importer, as the domain declares it
+  string domain = 1;
+  string importer = 2;
+  // the values of the parameters the domain declares for it, checked by the registry
+  google.protobuf.Struct params = 3;
+  // the project the changes act in, the unit holding them (empty: the root unit)
+  string project_id = 4;
+  string owner_org = 5;
+  // the subject the import acts for (the person who started it)
+  string by = 6;
+}
+
+message StartResponse {
+  Job job = 1;
+}
+
+message JobsRequest {}
+
+message JobsResponse {
+  repeated Job jobs = 1;
+}
+
+message CancelRequest {
+  string id = 1;
+}
+
+message CancelResponse {
+  Job job = 1;
+}
+
+// Job is one run of an importer.
+message Job {
+  string id = 1;
+  string domain = 2;
+  string importer = 3;
+  // running | done | failed | cancelled
+  string status = 4;
+  google.protobuf.Struct params = 5;
+  string project_id = 6;
+  string by = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp ended_at = 9;
+  // the last progress line the importer reported
+  string progress = 10;
+  // counters the importer keeps (commits, created, ...)
+  map<string, int64> stats = 11;
+  string error = 12;
+  // the service running it (filled by the registry)
+  string service = 13;
+}
+
+message RegisterImporterRequest {
+  ImporterInfo info = 1;
+  // URL the registry reaches the service at
+  string endpoint = 2;
+}
+
+message RegisterImporterResponse {
+  int32 lease_seconds = 1;
+  // implemented importers no domain in force declares: they are not offered (published later, they are)
+  repeated Implements undeclared = 2;
+}
+
+message ListImportersRequest {
+  // only the importers of the domain of this namespace
+  string namespace = 1;
+}
+
+// Importer is an importer a domain declares, as the registry knows it.
+message Importer {
+  string domain = 1;
+  string domain_version = 2;
+  string name = 3;
+  string label = 4;
+  string description = 5;
+  // the parameters a run takes, an enum one with its values
+  repeated goap.registry.v1.AttributeInfo params = 6;
+  // a live service implements it
+  bool available = 7;
+  // the service implementing it, when there is one
+  string service = 8;
+}
+
+message ListImportersResponse {
+  repeated Importer importers = 1;
+}
+
+message StartImportRequest {
+  string domain = 1;
+  string importer = 2;
+  google.protobuf.Struct params = 3;
+  // empty: the caller's active project
+  string project_id = 4;
+  string owner_org = 5;
+}
+
+message StartImportResponse {
+  Job job = 1;
+}
+
+message ListImportJobsRequest {
+  // only the jobs of the domain of this namespace
+  string namespace = 1;
+}
+
+message ListImportJobsResponse {
+  repeated Job jobs = 1;
+}
+
+message CancelImportJobRequest {
+  string service = 1;
+  string id = 2;
+}
+
+message CancelImportJobResponse {
+  Job job = 1;
+}

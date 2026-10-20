@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"slices"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/zimwip/goap/contracts/decision"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/contracts/gen/goap/importer/v1/importerv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/smarttag/v1/smarttagv1connect"
 	"github.com/zimwip/goap/contracts/risk"
@@ -26,6 +28,7 @@ import (
 	"github.com/zimwip/goap/graph/domainsvc"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/graph/graphsvc"
+	"github.com/zimwip/goap/graph/importsvc"
 	"github.com/zimwip/goap/graph/smarttagsvc"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/def"
@@ -196,6 +199,10 @@ func main() {
 	srv.Mount(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: domains}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	smartTags := &smarttagsvc.Service{Store: smartTagStore, Exists: smarttagsvc.VersionsExist(g.Node)}
 	srv.Mount(smarttagv1connect.NewSmartTagServiceHandler(&smarttagsvc.Handler{Service: smartTags}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
+	// the import registry (ADR 0148): the importer services register with GOAP_IMPORTER_TOKEN (none: registration
+	// closed) and are reached with it
+	imports := &importsvc.Service{Domains: domains, Authz: authorizer, Token: os.Getenv("GOAP_IMPORTER_TOKEN"), HTTPClient: platform.H2CClient()}
+	srv.Mount(importerv1connect.NewImportServiceHandler(&importsvc.Handler{Service: imports}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

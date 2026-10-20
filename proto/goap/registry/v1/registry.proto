@@ -169,6 +169,15 @@ message ItemType {
   repeated Attribute attributes = 3;
 }
 
+// ImporterDecl is a source a domain declares its graph can be loaded from (ADR 0148): its name, unique in the domain,
+// and the parameters a run takes, as attributes; a service registered with the import registry implements it.
+message ImporterDecl {
+  string name = 1;
+  string label = 2;
+  string description = 3;
+  repeated Attribute params = 4;
+}
+
 // AttributeInfo is a resolved attribute of a node type or link type.
 message AttributeInfo {
   Attribute attribute = 1;
@@ -867,6 +876,7 @@ message Domain {
   repeated Algorithm algorithms = 12;
   repeated AlgorithmInstance algorithm_instances = 13;
   repeated ItemType item_types = 17;
+  repeated ImporterDecl importers = 18;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
   google.protobuf.Timestamp published_at = 9;

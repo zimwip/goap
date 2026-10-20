@@ -74,6 +74,8 @@ services:
       GOAP_GRAPH_SEED: dev
       # the domain registry is the graph's (ADR 0125 §3): it publishes the shipped domains at start
       GOAP_DOMAINS_DIR: /domains
+      # the importer services register with it (ADR 0148)
+      GOAP_IMPORTER_TOKEN: ${GOAP_IMPORTER_TOKEN:-dev-importer-token}
     ports: ["8081:8080"]
 
   registry:
@@ -244,6 +246,23 @@ services:
     volumes: ["localfs:/data"]
     depends_on: [mcp]
 
+  # An importer is a service of its own that registers itself with the import registry of the graph (ADR 0148) for the
+  # importers the domains declare; adding a source is adding a service like this one. The git importer runs git, so it
+  # has an image of its own (Dockerfile, target importer-git), built by compose.
+  importer-git:
+    build: {context: ../.., target: importer-git}
+    image: goap/importer-git:dev
+    restart: unless-stopped
+    environment:
+      <<: *env
+      GOAP_GRAPH_URL: http://graph:8080
+      GOAP_IMPORTER_URL: http://importer-git:8080
+      GOAP_IMPORTER_TOKEN: ${GOAP_IMPORTER_TOKEN:-dev-importer-token}
+      GOAP_IMPORT_GIT_ROOTS: /repos
+      GOAP_IMPORT_GIT_CLONES: /clones
+    volumes: ["${GOAP_IMPORT_REPOS:-./repos}:/repos:ro,z", "gitclones:/clones"]
+    depends_on: [graph]
+
   gateway:
     <<: *service
     entrypoint: ["/goap/gateway"]
@@ -284,6 +303,7 @@ networks:
     internal: true
 
 volumes:
+  gitclones:
   pgdata:
   natsdata:
   webmodules:

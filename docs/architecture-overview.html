@@ -122,8 +122,8 @@ footer { font-size: 13px; color: var(--muted); }
       <div class="arrowrow">↓ may use any module below</div>
       <div class="tier" style="--n:4">
         <div class="mod m-graph" data-module="graph"><h3>graph <span>what</span></h3>
-          <p>The versioned graph, changes, drafts, baselines; the domain registry; search index.</p>
-          <div class="pk">graph · graphsvc · domainsvc · index · indexersvc · okf · prov</div></div>
+          <p>The versioned graph, changes, drafts, baselines; the domain registry and the import registry; search index.</p>
+          <div class="pk">graph · graphsvc · domainsvc · importsvc · index · indexersvc · okf · prov</div></div>
         <div class="mod m-engine" data-module="engine"><h3>engine <span>how</span></h3>
           <p>Methodology compiler, planners, conditions, the run loop; sandboxes for scripts.</p>
           <div class="pk">engine · methodology · goap · condition · enginesvc · sandbox · enginetel</div></div>
@@ -137,8 +137,8 @@ footer { font-size: 13px; color: var(--muted); }
       <div class="arrowrow">↓ never each other: they meet through contracts and the generated clients</div>
       <div class="tier">
         <div class="mod m-lib" data-module="lib"><h3>lib <span>shared libraries</span></h3>
-          <p>Domain model, type catalogue, CEL guards, the DSL (JavaScript: goja, or QuickJS in WebAssembly on wazero), access, adapters, built-in MCP definitions, service plumbing and the clients of the graph and domain registry.</p>
-          <div class="pk">def · typecat · guard · dsl · access · adapter · mcpbuiltin · llmcfg · platform · identity · telemetry · graphclient · domainclient</div></div>
+          <p>Domain model, type catalogue, CEL guards, the DSL (JavaScript: goja, or QuickJS in WebAssembly on wazero), access, adapters, built-in MCP definitions, service plumbing, the importer kit and the clients of the graph and domain registry.</p>
+          <div class="pk">def · typecat · guard · dsl · access · adapter · mcpbuiltin · llmcfg · platform · identity · telemetry · graphclient · domainclient · importerkit</div></div>
       </div>
       <div class="arrowrow">↓</div>
       <div class="tier">
@@ -156,7 +156,7 @@ footer { font-size: 13px; color: var(--muted); }
     <div class="fig">
       <svg viewBox="0 0 940 600" role="img" aria-labelledby="rt-t rt-d">
         <title id="rt-t">Runtime services and flows</title>
-        <desc id="rt-d">The browser calls the gateway, which routes to graph, registry, engine, MCP hub and model gateway. The engine calls graph, registry, model gateway, MCP hub and its sandbox. The MCP hub calls connectors. Every service publishes its events on NATS through its outbox: the graph its changes, nodes and baselines (and the methodology registry's, carried by its commits), the engine its processes, the conversations, the hub, the model gateway, the preferences and the credentials theirs; the event stream, the indexer and the engine read them, and the event stream pushes them to the browser.</desc>
+        <desc id="rt-d">The browser calls the gateway, which routes to graph, registry, engine, MCP hub and model gateway. The engine calls graph, registry, model gateway, MCP hub and its sandbox. The MCP hub calls connectors. Every service publishes its events on NATS through its outbox: the graph its changes, nodes and baselines (and the methodology registry's, carried by its commits), the engine its processes, the conversations, the hub, the model gateway, the preferences and the credentials theirs; the event stream, the indexer and the engine read them, and the event stream pushes them to the browser. An importer service registers with the import registry of the graph, which starts its runs; a run writes changes through the graph.</desc>
         <defs>
           <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
         </defs>
@@ -198,7 +198,7 @@ footer { font-size: 13px; color: var(--muted); }
         <path class="w" d="M400 245H374" marker-end="url(#a)"/>
         <path class="w" d="M560 245H586" marker-end="url(#a)"/>
         <path class="w" d="M440 276V300H100V280" marker-end="url(#a)"/>
-        <text class="lbl" x="250" y="294">methodology</text>
+        <text class="lbl" x="130" y="294">methodology</text>
         <path class="w" d="M520 276V300H845V280" marker-end="url(#a)"/>
         <text class="lbl" x="700" y="294">llm actions</text>
         <!-- registry stores its nodes through the graph, reads domains -->
@@ -224,14 +224,19 @@ footer { font-size: 13px; color: var(--muted); }
         <!-- a connector calling a model by itself: the Claude coding agent's sessions, with a token the hub minted (ADR 0123 §6) -->
         <path class="w" d="M750 376H762V290H805V280" marker-end="url(#a)"/>
         <text class="lbl" x="766" y="312">/anthropic</text>
-        <path class="w" d="M180 358H260V280" marker-end="url(#a)"/>
-        <text class="lbl" x="186" y="350">as the caller</text>
+        <path class="w" d="M180 344H222V280" marker-end="url(#a)"/>
+        <text class="lbl" x="186" y="320">as the caller</text>
+        <!-- an importer service registers with the graph's import registry, which starts its runs; a run writes changes (ADR 0148) -->
+        <g class="m-platform"><rect class="box" x="234" y="330" width="108" height="56" rx="6"/>
+          <text class="t" x="288" y="352" text-anchor="middle">importer-git</text>
+          <text class="s" x="288" y="370" text-anchor="middle">a source · ADR 0148</text></g>
+        <path class="w" d="M288 284V326" marker-start="url(#a)" marker-end="url(#a)"/>
 
         <!-- bus -->
         <rect class="bus" x="20" y="430" width="900" height="36" rx="18"/>
         <text class="t" x="470" y="453" text-anchor="middle">NATS JetStream · each service's events, through its outbox</text>
-        <path class="w ev" d="M320 276V426" marker-end="url(#a)"/>
-        <text class="lbl" x="326" y="410">publishes</text>
+        <path class="w ev" d="M356 276V426" marker-end="url(#a)"/>
+        <text class="lbl" x="300" y="410">publishes</text>
         <!-- the engine's process events, the conversations' (ADR 0136); the hub's and the gateway's go the same way -->
         <path class="w ev" d="M400 268H388V426" marker-end="url(#a)"/>
         <path class="w ev" d="M60 386V426" marker-end="url(#a)"/>
@@ -252,17 +257,17 @@ footer { font-size: 13px; color: var(--muted); }
           <text class="s" x="740" y="548" text-anchor="middle">a schema per service · secrets by reference · traces</text></g>
       </svg>
     </div>
-    <div class="legend"><span><i></i>connect-rpc call</span><span><i class="d"></i>event over NATS</span><span>not drawn: preferences and credentials (called by the gateway only), the MCP hub calling the graph and engine for the built-in MCPs, the events the hub, the gateway, the preferences and the credentials publish through their outboxes</span></div>
+    <div class="legend"><span><i></i>connect-rpc call</span><span><i class="d"></i>event over NATS</span><span>not drawn: preferences and credentials (called by the gateway only), the MCP hub calling the graph and engine for the built-in MCPs, the events the hub, the gateway, the preferences and the credentials publish through their outboxes; the importer: registers with the graph, is called by it to start a run, writes its changes through it</span></div>
   </section>
 
   <section>
     <h2>Deployment units</h2>
-    <p>Every binary of <code>platform/cmd</code>. The first twelve are the containers of <code>deploy/compose/docker-compose.yml</code>; the module named is the one whose service the binary runs, and every binary also embeds <code>lib</code> and <code>contracts</code>.</p>
+    <p>Every binary of <code>platform/cmd</code>. The first thirteen are the containers of <code>deploy/compose/docker-compose.yml</code>; the module named is the one whose service the binary runs, and every binary also embeds <code>lib</code> and <code>contracts</code>.</p>
     <div class="tbl"><table>
       <thead><tr><th>Binary</th><th>Module</th><th>Port</th><th>What it runs</th></tr></thead>
       <tbody>
         <tr data-binary="gateway" data-service="gateway"><td><code>gateway</code></td><td><span class="chip m-gateway">gateway</span></td><td class="num">:8080</td><td>HTTP entry: sign-in, sessions, routing by service</td></tr>
-        <tr data-binary="graph" data-service="graph"><td><code>graph</code></td><td><span class="chip m-graph">graph</span></td><td class="num">:8081</td><td>the graph, changes, the domain registry; PostgreSQL</td></tr>
+        <tr data-binary="graph" data-service="graph"><td><code>graph</code></td><td><span class="chip m-graph">graph</span></td><td class="num">:8081</td><td>the graph, changes, the domain registry, the import registry; PostgreSQL</td></tr>
         <tr data-binary="registry" data-service="registry"><td><code>registry</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8082</td><td>the methodology registry; reads the graph and its domains, no database</td></tr>
         <tr data-binary="engine" data-service="engine"><td><code>engine</code></td><td><span class="chip m-engine">engine</span></td><td class="num">:8083</td><td>runs and plans processes; PostgreSQL; starts the sandboxes</td></tr>
         <tr data-binary="modelgw" data-service="modelgw"><td><code>modelgw</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8084</td><td>every LLM call and its ledger; PostgreSQL</td></tr>
@@ -273,6 +278,7 @@ footer { font-size: 13px; color: var(--muted); }
         <tr data-binary="events" data-service="events"><td><code>events</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8089</td><td>the one event stream and presence; NATS</td></tr>
         <tr data-binary="conversations" data-service="conversations"><td><code>conversations</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8090</td><td>conversations and the assistant; PostgreSQL</td></tr>
         <tr data-binary="connector-localfs" data-service="connector-localfs"><td><code>connector-localfs</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>file connector; registers with the hub</td></tr>
+        <tr data-binary="importer-git" data-service="importer-git"><td><code>importer-git</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>importer of the <code>code</code> domain's <code>git</code> source: registers with the graph's import registry, runs an import as one change per commit (ADR 0148)</td></tr>
         <tr data-binary="connector-workspace"><td><code>connector-workspace</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>workspace of a change (git, commands); standalone, not in compose</td></tr>
         <tr data-binary="connector-claude-coding-agent"><td><code>connector-claude-coding-agent</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>Claude Code sessions; their model calls go to modelgw <code>/anthropic</code> with a token the hub mints; standalone, not in compose</td></tr>
         <tr data-binary="goap-runner"><td><code>goap-runner</code></td><td><span class="chip m-engine">engine</span></td><td class="num">—</td><td>sandbox image the engine runs scripts in (make runner-image)</td></tr>

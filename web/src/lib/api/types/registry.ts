@@ -2,7 +2,7 @@
 
 import type { Struct } from './common';
 import type { FormDef } from '../../forms/types';
-import type { MethodologyViewJson, RequiredLinkJson, StructureTagJson } from '../../../gen/goap/registry/v1/registry_pb';
+import type { ImporterDeclJson, MethodologyViewJson, RequiredLinkJson, StructureTagJson } from '../../../gen/goap/registry/v1/registry_pb';
 
 // --- registry ---------------------------------------------------------------
 
@@ -825,6 +825,9 @@ export interface ItemTypeDef {
   attributes?: Attribute[];
 }
 
+/** A source a domain declares its graph can be loaded from (ADR 0148), with the parameters of a run. */
+export type ImporterDecl = ImporterDeclJson;
+
 /** Shared object part of the model: node types and link types, versioned on its own. */
 export interface Domain {
   name?: string;
@@ -838,6 +841,8 @@ export interface Domain {
   algorithms?: Algorithm[];
   algorithmInstances?: AlgorithmInstance[];
   itemTypes?: ItemTypeDef[];
+  /** the sources its graph can be loaded from (ADR 0148), run from the Import from a source tab */
+  importers?: ImporterDecl[];
   createdAt?: string;
   updatedAt?: string;
   publishedAt?: string;

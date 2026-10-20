@@ -7,8 +7,10 @@
 package domain
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"time"
 )
 
@@ -285,4 +287,52 @@ type AttributeCheck struct {
 	Type   string
 	Enum   string
 	Values []string
+}
+
+// Check checks a value against the type of its attribute (the attribute types of lib/def: number, boolean, date, enum,
+// string). A missing or empty value is accepted (requiring one is the job of a validator), and so is any value of an
+// attribute that names no type.
+func (a AttributeCheck) Check(v any) error {
+	if v == nil || v == "" {
+		return nil
+	}
+	switch a.Type {
+	case "number":
+		switch x := v.(type) {
+		case float64, float32, int, int32, int64, uint, uint32, uint64, json.Number:
+			return nil
+		case string:
+			if _, err := strconv.ParseFloat(x, 64); err == nil {
+				return nil
+			}
+		}
+		return fmt.Errorf("a number is expected, got %v", v)
+	case "boolean":
+		if _, ok := v.(bool); !ok {
+			return fmt.Errorf("a boolean is expected, got %v", v)
+		}
+	case "date":
+		s, ok := v.(string)
+		if ok {
+			for _, layout := range []string{"2006-01-02", time.RFC3339, "2006-01-02T15:04:05"} {
+				if _, err := time.Parse(layout, s); err == nil {
+					return nil
+				}
+			}
+		}
+		return fmt.Errorf("a date (YYYY-MM-DD or RFC 3339) is expected, got %v", v)
+	case "enum":
+		s, ok := v.(string)
+		if ok {
+			if slices.Contains(a.Values, s) {
+				return nil
+			}
+		}
+		return fmt.Errorf("%v is not a value of the enum %s", v, a.Enum)
+	case "string":
+		if _, ok := v.(string); !ok {
+			return fmt.Errorf("a string is expected, got %v", v)
+		}
+	}
+	return nil
 }

@@ -55,7 +55,7 @@ func DomainToPB(r def.Record) *registryv1.Domain {
 	d := r.Domain
 	return &registryv1.Domain{Name: d.Name, Version: d.Version, Description: d.Description, Status: string(r.Status),
 		NodeTypes: nodeTypesToPB(d.NodeTypes), LinkTypes: linkTypesToPB(d.LinkTypes), Enums: enumsToPB(d.Enums), Lifecycles: LifecyclesToPB(d.Lifecycles),
-		Algorithms: algorithmsToPB(d.Algorithms), AlgorithmInstances: instancesToPB(d.Instances), ItemTypes: itemTypesToPB(d.ItemTypes),
+		Algorithms: algorithmsToPB(d.Algorithms), AlgorithmInstances: instancesToPB(d.Instances), ItemTypes: itemTypesToPB(d.ItemTypes), Importers: ImportersToPB(d.Importers),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy, Builtin: r.Builtin}
 }
 
@@ -84,6 +84,7 @@ func DomainFromPB(p *registryv1.Domain) def.Domain {
 	d.Lifecycles = lifecyclesFromPB(p.Lifecycles)
 	d.Algorithms, d.Instances = AlgorithmsFromPB(p.Algorithms), instancesFromPB(p.AlgorithmInstances)
 	d.ItemTypes = itemTypesFromPB(p.ItemTypes)
+	d.Importers = importersFromPB(p.Importers)
 	return d
 }
 
@@ -99,6 +100,23 @@ func itemTypesFromPB(ts []*registryv1.ItemType) []def.ItemType {
 	var out []def.ItemType
 	for _, t := range ts {
 		out = append(out, def.ItemType{Name: t.Name, Description: t.Description, Attributes: attributesFromPB(t.Attributes)})
+	}
+	return out
+}
+
+// ImportersToPB converts the importers a domain declares (ADR 0148).
+func ImportersToPB(ims []def.Importer) []*registryv1.ImporterDecl {
+	out := make([]*registryv1.ImporterDecl, 0, len(ims))
+	for _, im := range ims {
+		out = append(out, &registryv1.ImporterDecl{Name: im.Name, Label: im.Label, Description: im.Description, Params: attributesToPB(im.Params)})
+	}
+	return out
+}
+
+func importersFromPB(ims []*registryv1.ImporterDecl) []def.Importer {
+	var out []def.Importer
+	for _, im := range ims {
+		out = append(out, def.Importer{Name: im.Name, Label: im.Label, Description: im.Description, Params: attributesFromPB(im.Params)})
 	}
 	return out
 }
@@ -323,3 +341,6 @@ func nilIfNone(s []string) []string {
 	}
 	return s
 }
+
+// AttributesToPB converts attributes (the parameters of an importer, ADR 0148).
+func AttributesToPB(as []def.Attribute) []*registryv1.Attribute { return attributesToPB(as) }

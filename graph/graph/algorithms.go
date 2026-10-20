@@ -2,16 +2,12 @@ package graph
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
-	"time"
 
 	"github.com/zimwip/goap/contracts/algo"
 	"github.com/zimwip/goap/contracts/domain"
-	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/dsl"
 )
 
@@ -153,52 +149,8 @@ func (g *Graph) runLinkValidators(ctx context.Context, ix *typeIndex, n domain.N
 	return nil
 }
 
-// checkAttributeValue checks a value against the type of its attribute. A missing or empty value is accepted
-// (requiring one is the job of a validator), and so is any value of an attribute that names no type.
-func checkAttributeValue(a domain.AttributeCheck, v any) error {
-	if v == nil || v == "" {
-		return nil
-	}
-	switch a.Type {
-	case def.AttrNumber:
-		switch x := v.(type) {
-		case float64, float32, int, int32, int64, uint, uint32, uint64, json.Number:
-			return nil
-		case string:
-			if _, err := strconv.ParseFloat(x, 64); err == nil {
-				return nil
-			}
-		}
-		return fmt.Errorf("a number is expected, got %v", v)
-	case def.AttrBoolean:
-		if _, ok := v.(bool); !ok {
-			return fmt.Errorf("a boolean is expected, got %v", v)
-		}
-	case def.AttrDate:
-		s, ok := v.(string)
-		if ok {
-			for _, layout := range []string{"2006-01-02", time.RFC3339, "2006-01-02T15:04:05"} {
-				if _, err := time.Parse(layout, s); err == nil {
-					return nil
-				}
-			}
-		}
-		return fmt.Errorf("a date (YYYY-MM-DD or RFC 3339) is expected, got %v", v)
-	case def.AttrEnum:
-		s, ok := v.(string)
-		if ok {
-			if slices.Contains(a.Values, s) {
-				return nil
-			}
-		}
-		return fmt.Errorf("%v is not a value of the enum %s", v, a.Enum)
-	case def.AttrString:
-		if _, ok := v.(string); !ok {
-			return fmt.Errorf("a string is expected, got %v", v)
-		}
-	}
-	return nil
-}
+// checkAttributeValue checks a value against the type of its attribute (domain.AttributeCheck.Check).
+func checkAttributeValue(a domain.AttributeCheck, v any) error { return a.Check(v) }
 
 func (a *applier) changeInfo() dsl.ChangeInfo {
 	return dsl.ChangeInfo{ID: string(a.change.ID), Title: a.change.Title, Intent: a.change.Intent, Methodology: a.change.Methodology, Goal: a.change.Goal}

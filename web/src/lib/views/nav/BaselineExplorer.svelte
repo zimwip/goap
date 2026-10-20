@@ -210,6 +210,14 @@
       aria-label="Import graph"
       onclick={() => openTab({ kind: 'import', params: { what: 'graph' } }, { pin: true })}><Icon name="upload" size={14} /></button
     >
+    <button
+      type="button"
+      class="ghost small"
+      title="Import from a source the domain of {baselineTool.namespace || 'the namespace'} declares (a git repository for code)"
+      aria-label="Import from a source"
+      disabled={!baselineTool.namespace}
+      onclick={() => openTab({ kind: 'sources', params: { ns: baselineTool.namespace } }, { pin: true })}><Icon name="database" size={14} /></button
+    >
     <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={loading} onclick={() => reload++}
       ><Icon name="refresh" size={14} /></button
     >
