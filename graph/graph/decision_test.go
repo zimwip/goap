@@ -38,7 +38,7 @@ func testDecisionLoop(t *testing.T, repo Repo) {
 	if d.Status != domain.PointOpen || len(d.Options) != 2 || decision.Threshold(d) != decision.DefaultThreshold || decision.MaxRounds(d) != decision.DefaultRounds {
 		t.Fatalf("opened: %+v", d)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("apply with a pending decision: %v", err)
 	}
 	if _, err := g.RuleDecision(ctx, c.ID, RuleRequest{Point: d.ID, Outcome: domain.OutcomeDecided, Option: "other", Confidence: 1, Justification: "x"}); !errors.Is(err, ErrInvalid) {
@@ -79,7 +79,7 @@ func testDecisionLoop(t *testing.T, repo Repo) {
 	if opts[0].OptionStatus() != domain.OptionSelected || opts[1].OptionStatus() != domain.OptionRejected {
 		t.Fatalf("options after the decision: %+v", opts)
 	}
-	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	res := g.withState(t, ctx, must[domain.Baseline](t)(g.apply(ctx, c.ID, "")))
 	if res.Nodes[va.ID] != 2 || must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: va.ID})).Properties["title"] != "Use Stripe" {
 		t.Fatalf("the chosen option commits: %v", res.Nodes)
 	}

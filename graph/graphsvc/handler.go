@@ -1155,17 +1155,11 @@ func (h *Handler) GetBlackboard(ctx context.Context, r *connect.Request[graphv1.
 	return connect.NewResponse(out), nil
 }
 
-func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.ApplyChangeRequest]) (*connect.Response[graphv1.ApplyChangeResponse], error) {
-	ctx = h.Identity.Context(ctx, r.Header()) // lifecycle transitions are authorized for the caller
-	b, err := h.Graph.Apply(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName)
-	return res(&graphv1.ApplyChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
-}
-
-// CommitChange is the first step of ApplyChange: the versions are written on the change's own branch, its integration
-// (MergeChange) is a later, separate act. The change header write publishes change.updated by itself.
+// CommitChange is the first of the two acts of a change: the versions are written on the change's own branch, its
+// integration (MergeChange) is a later, separate act; it answers the header of the commit, never its state. The change header write publishes change.updated by itself.
 func (h *Handler) CommitChange(ctx context.Context, r *connect.Request[graphv1.CommitChangeRequest]) (*connect.Response[graphv1.CommitChangeResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header()) // lifecycle transitions are authorized for the caller
-	b, err := h.Graph.CommitChangeHeader(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName)
+	b, err := h.Graph.CommitChange(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName)
 	return res(&graphv1.CommitChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
 }
 

@@ -211,9 +211,6 @@ const (
 	// GraphServiceGetBlackboardProcedure is the fully-qualified name of the GraphService's
 	// GetBlackboard RPC.
 	GraphServiceGetBlackboardProcedure = "/goap.graph.v1.GraphService/GetBlackboard"
-	// GraphServiceApplyChangeProcedure is the fully-qualified name of the GraphService's ApplyChange
-	// RPC.
-	GraphServiceApplyChangeProcedure = "/goap.graph.v1.GraphService/ApplyChange"
 	// GraphServiceCommitChangeProcedure is the fully-qualified name of the GraphService's CommitChange
 	// RPC.
 	GraphServiceCommitChangeProcedure = "/goap.graph.v1.GraphService/CommitChange"
@@ -437,7 +434,7 @@ type GraphServiceClient interface {
 	WithdrawImpacts(context.Context, *connect.Request[v1.WithdrawImpactsRequest]) (*connect.Response[v1.WithdrawImpactsResponse], error)
 	// Sub-changes (ADR 0081, 0082): a sub-change commits in its parent's log, by a fast-forward. RebaseChange brings the drafts
 	// the parent changed since the sub-change took them up to date (a three-way merge; the fields changed on both sides are
-	// conflicts, the sub-change's value kept; a changed impact is to be reviewed again); ApplyChange rebases first.
+	// conflicts, the sub-change's value kept; a changed impact is to be reviewed again); MergeChange rebases first.
 	// ImpactNodeResolve keeps the sub-change's values for the conflicts left on an impact (an edit of a field settles its
 	// own); GetRebaseState tells the impacts behind the parent and the conflicts to settle.
 	RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error)
@@ -462,8 +459,8 @@ type GraphServiceClient interface {
 	// Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
-	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
-	// First step of ApplyChange (ADR 0056): validates the change and writes its versions on its own branch. A root change
+	// First act of a change (ADR 0056): validates the change and writes its versions on its own branch, answering the
+	// header of the commit (no state: a caller reading nodes asks for them). A root change
 	// stays open (ADR 0102): edited and committed again; MergeChange merges that branch into the one the change was forked
 	// from (rebased first), once it holds a commit.
 	CommitChange(context.Context, *connect.Request[v1.CommitChangeRequest]) (*connect.Response[v1.CommitChangeResponse], error)
@@ -933,12 +930,6 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("GetBlackboard")),
 			connect.WithClientOptions(opts...),
 		),
-		applyChange: connect.NewClient[v1.ApplyChangeRequest, v1.ApplyChangeResponse](
-			httpClient,
-			baseURL+GraphServiceApplyChangeProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("ApplyChange")),
-			connect.WithClientOptions(opts...),
-		),
 		commitChange: connect.NewClient[v1.CommitChangeRequest, v1.CommitChangeResponse](
 			httpClient,
 			baseURL+GraphServiceCommitChangeProcedure,
@@ -1276,7 +1267,6 @@ type graphServiceClient struct {
 	reopenChangeImpacts    *connect.Client[v1.ReopenChangeImpactsRequest, v1.ReopenChangeImpactsResponse]
 	commitEdits            *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
 	getBlackboard          *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
-	applyChange            *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
 	commitChange           *connect.Client[v1.CommitChangeRequest, v1.CommitChangeResponse]
 	transitionChange       *connect.Client[v1.TransitionChangeRequest, v1.TransitionChangeResponse]
 	deleteChange           *connect.Client[v1.DeleteChangeRequest, v1.DeleteChangeResponse]
@@ -1634,11 +1624,6 @@ func (c *graphServiceClient) GetBlackboard(ctx context.Context, req *connect.Req
 	return c.getBlackboard.CallUnary(ctx, req)
 }
 
-// ApplyChange calls goap.graph.v1.GraphService.ApplyChange.
-func (c *graphServiceClient) ApplyChange(ctx context.Context, req *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error) {
-	return c.applyChange.CallUnary(ctx, req)
-}
-
 // CommitChange calls goap.graph.v1.GraphService.CommitChange.
 func (c *graphServiceClient) CommitChange(ctx context.Context, req *connect.Request[v1.CommitChangeRequest]) (*connect.Response[v1.CommitChangeResponse], error) {
 	return c.commitChange.CallUnary(ctx, req)
@@ -1958,7 +1943,7 @@ type GraphServiceHandler interface {
 	WithdrawImpacts(context.Context, *connect.Request[v1.WithdrawImpactsRequest]) (*connect.Response[v1.WithdrawImpactsResponse], error)
 	// Sub-changes (ADR 0081, 0082): a sub-change commits in its parent's log, by a fast-forward. RebaseChange brings the drafts
 	// the parent changed since the sub-change took them up to date (a three-way merge; the fields changed on both sides are
-	// conflicts, the sub-change's value kept; a changed impact is to be reviewed again); ApplyChange rebases first.
+	// conflicts, the sub-change's value kept; a changed impact is to be reviewed again); MergeChange rebases first.
 	// ImpactNodeResolve keeps the sub-change's values for the conflicts left on an impact (an edit of a field settles its
 	// own); GetRebaseState tells the impacts behind the parent and the conflicts to settle.
 	RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error)
@@ -1983,8 +1968,8 @@ type GraphServiceHandler interface {
 	// Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
-	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
-	// First step of ApplyChange (ADR 0056): validates the change and writes its versions on its own branch. A root change
+	// First act of a change (ADR 0056): validates the change and writes its versions on its own branch, answering the
+	// header of the commit (no state: a caller reading nodes asks for them). A root change
 	// stays open (ADR 0102): edited and committed again; MergeChange merges that branch into the one the change was forked
 	// from (rebased first), once it holds a commit.
 	CommitChange(context.Context, *connect.Request[v1.CommitChangeRequest]) (*connect.Response[v1.CommitChangeResponse], error)
@@ -2450,12 +2435,6 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("GetBlackboard")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceApplyChangeHandler := connect.NewUnaryHandler(
-		GraphServiceApplyChangeProcedure,
-		svc.ApplyChange,
-		connect.WithSchema(graphServiceMethods.ByName("ApplyChange")),
-		connect.WithHandlerOptions(opts...),
-	)
 	graphServiceCommitChangeHandler := connect.NewUnaryHandler(
 		GraphServiceCommitChangeProcedure,
 		svc.CommitChange,
@@ -2852,8 +2831,6 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceCommitEditsHandler.ServeHTTP(w, r)
 		case GraphServiceGetBlackboardProcedure:
 			graphServiceGetBlackboardHandler.ServeHTTP(w, r)
-		case GraphServiceApplyChangeProcedure:
-			graphServiceApplyChangeHandler.ServeHTTP(w, r)
 		case GraphServiceCommitChangeProcedure:
 			graphServiceCommitChangeHandler.ServeHTTP(w, r)
 		case GraphServiceTransitionChangeProcedure:
@@ -3199,10 +3176,6 @@ func (UnimplementedGraphServiceHandler) CommitEdits(context.Context, *connect.Re
 
 func (UnimplementedGraphServiceHandler) GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetBlackboard is not implemented"))
-}
-
-func (UnimplementedGraphServiceHandler) ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ApplyChange is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) CommitChange(context.Context, *connect.Request[v1.CommitChangeRequest]) (*connect.Response[v1.CommitChangeResponse], error) {

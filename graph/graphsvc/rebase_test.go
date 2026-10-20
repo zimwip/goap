@@ -72,7 +72,8 @@ func TestRebaseThroughTheService(t *testing.T) {
 		t.Fatalf("nothing left to settle: %v", err)
 	}
 	ok(g.ImpactNodeReview(ctx, sub.ID, scn.ID, domain.ReviewAccepted, "r", "ours"))
-	ok(cl.Apply(ctx, sub.ID, ""))
+	ok(cl.CommitChange(ctx, sub.ID, ""))
+	ok(cl.IntegrateChange(ctx, sub.ID, nil))
 	if v, err := g.ChangeNodeViewByKey(ctx, parent.ID, "", "", "N-1"); err != nil || v.Properties["title"] != "sub" {
 		t.Fatalf("parent = %v, %v", v.Properties, err)
 	}

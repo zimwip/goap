@@ -50,7 +50,7 @@ func testFlowRelaunchAdopt(t *testing.T, repo Repo) {
 		}
 	}
 	// no apply while a flow is open
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("apply with an open flow: %v", err)
 	}
 
@@ -94,7 +94,7 @@ func testFlowRelaunchAdopt(t *testing.T, repo Repo) {
 		}
 	}
 	// the flow is adopted: nothing holds the change any more, but its items modify no node (ADR 0102)
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrNothingToCommit) {
+	if _, err := g.apply(ctx, c.ID, ""); !errors.Is(err, ErrNothingToCommit) {
 		t.Fatalf("a change of items only has nothing to commit: %v", err)
 	}
 	fs, _ := g.Flows(ctx, c.ID)
@@ -134,7 +134,7 @@ func testFlowDiscard(t *testing.T, repo Repo) {
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{cand}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("adding to a discarded flow: %v", err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrNothingToCommit) {
+	if _, err := g.apply(ctx, c.ID, ""); !errors.Is(err, ErrNothingToCommit) {
 		t.Fatalf("the flow is decided, the items modify no node: %v", err)
 	}
 	// a new relaunch is possible once the flow is decided
@@ -224,7 +224,7 @@ func testParallelFlowsCompete(t *testing.T, repo Repo) {
 	if _, err := g.AdoptFlow(ctx, c.ID, f3.ID, "alice"); err != nil {
 		t.Fatalf("independent flow: %v", err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrNothingToCommit) {
+	if _, err := g.apply(ctx, c.ID, ""); !errors.Is(err, ErrNothingToCommit) {
 		t.Fatalf("every flow is decided, the items modify no node: %v", err)
 	}
 }

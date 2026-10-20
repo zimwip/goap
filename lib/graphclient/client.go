@@ -607,8 +607,9 @@ func (c *Client) ChangeGraph(ctx context.Context, id domain.ChangeID, flow strin
 	return pbconv.NodesFromPB(r.Msg.Nodes), pbconv.LinksFromPB(r.Msg.Links), nil
 }
 
-func (c *Client) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
-	r, err := c.rpc.ApplyChange(ctx, connect.NewRequest(&graphv1.ApplyChangeRequest{ChangeId: string(id), BaselineName: baselineName}))
+// CommitChange implements engine.GraphPort: the header of the commit.
+func (c *Client) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+	r, err := c.rpc.CommitChange(ctx, connect.NewRequest(&graphv1.CommitChangeRequest{ChangeId: string(id), BaselineName: baselineName}))
 	if err != nil {
 		return domain.Baseline{}, rpcerr.FromConnect(err)
 	}
@@ -631,15 +632,6 @@ func (c *Client) PlanMerge(ctx context.Context, namespace, from, into string) (g
 		return graphapi.MergePlan{}, rpcerr.FromConnect(err)
 	}
 	return pbconv.MergePlanFromPB(r.Msg.Plan), nil
-}
-
-// CommitChangeHeader commits a change (CommitChange over RPC), answering the header of its baseline.
-func (c *Client) CommitChangeHeader(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
-	r, err := c.rpc.CommitChange(ctx, connect.NewRequest(&graphv1.CommitChangeRequest{ChangeId: string(id), BaselineName: baselineName}))
-	if err != nil {
-		return domain.Baseline{}, rpcerr.FromConnect(err)
-	}
-	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
 }
 
 // IntegrateChange implements engine.GraphPort (MergeChange over RPC).

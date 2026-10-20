@@ -5,6 +5,7 @@ package graphtest
 
 import (
 	"context"
+	"errors"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/graph/graph"
@@ -58,7 +59,7 @@ func Import(ctx context.Context, g *graph.Graph, in Node) (domain.Node, error) {
 	if err := Accept(ctx, g, c.ID, cn.ID); err != nil {
 		return domain.Node{}, err
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := CommitMerge(ctx, g, c.ID, ""); err != nil {
 		return domain.Node{}, err
 	}
 	return g.NodeByKey(ctx, ns, in.Key)
@@ -92,7 +93,7 @@ func Edit(ctx context.Context, g *graph.Graph, node domain.NodeID, props map[str
 	if err := Accept(ctx, g, c.ID, cn.ID); err != nil {
 		return cur, err
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := CommitMerge(ctx, g, c.ID, ""); err != nil {
 		return cur, err
 	}
 	return g.Node(ctx, domain.NodeRef{ID: node})
@@ -101,6 +102,20 @@ func Edit(ctx context.Context, g *graph.Graph, node domain.NodeID, props map[str
 // Link commits an outgoing link of the latest version of a node on main (Edit): the source gets a new version.
 func Link(ctx context.Context, g *graph.Graph, typ string, from, to domain.NodeRef) (domain.Node, error) {
 	return Edit(ctx, g, from.ID, nil, graph.LinkWrite{Type: typ, To: to})
+}
+
+// CommitMerge commits what a change has pending (nothing left to commit is no error), then merges it: the two acts of a
+// change (ADR 0102). It returns the header of the baseline the merge left, none for a sub-change or a merge waiting for
+// its resolutions.
+func CommitMerge(ctx context.Context, g *graph.Graph, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+	if _, err := g.CommitChange(ctx, id, baselineName); err != nil && !errors.Is(err, graph.ErrNothingToCommit) {
+		return domain.Baseline{}, err
+	}
+	c, err := g.IntegrateChange(ctx, id, nil)
+	if err != nil || c.ResultBaselineID == "" {
+		return domain.Baseline{}, err
+	}
+	return g.BaselineHeader(ctx, c.ResultBaselineID)
 }
 
 // Accept accepts a change impact of the main flow when it is proposed: a fixture accepts its own drafts.

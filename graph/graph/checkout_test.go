@@ -62,7 +62,7 @@ func testCheckoutEditAccept(t *testing.T, repo Repo) {
 	if out := must[domain.NodeView](t)(g.ChangeNodeView(ctx, c.ID, "", work)).Out; len(out) != 1 {
 		t.Fatalf("a link removed from the draft: %+v", out)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a change with a review pending is not applied: %v", err)
 	}
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, cn.ID, domain.ReviewAccepted, "bob", "fine"))
@@ -81,7 +81,7 @@ func testCheckoutEditAccept(t *testing.T, repo Repo) {
 	if n := g.versionCount(ctx, f.req.ID); n != int(f.req.Version) {
 		t.Fatalf("no version for the whole edit: %d versions", n)
 	}
-	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	res := g.withState(t, ctx, must[domain.Baseline](t)(g.apply(ctx, c.ID, "")))
 	committed := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Nodes[f.req.ID]}))
 	if committed.Properties["title"] != "Use PSP v3" || committed.Version != f.req.Version+1 || committed.Comment != "fine again" || len(committed.Parents) != 1 || committed.Parents[0] != f.req.Version {
 		t.Fatalf("commit writes the version from the draft: %+v", committed)
@@ -190,7 +190,7 @@ func testDraftLinksFollowNewVersions(t *testing.T, repo Repo) {
 	}
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, note.ID, "u", "ok"))
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, req2, "u", "ok"))
-	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	res := g.withState(t, ctx, must[domain.Baseline](t)(g.apply(ctx, c.ID, "")))
 	committed := must[[]domain.Link](t)(g.OutLinksOf(ctx, domain.NodeRef{ID: note.Post.ID, Version: res.Nodes[note.Post.ID]}))
 	if len(committed) != 1 || committed[0].To != (domain.NodeRef{ID: w.req2.ID, Version: res.Nodes[w.req2.ID]}) || res.Nodes[w.req2.ID] != w.req2.Version+1 {
 		t.Fatalf("commit resolves the link to the version it writes for REQ-2 (%v): %+v", res.Nodes[w.req2.ID], committed)

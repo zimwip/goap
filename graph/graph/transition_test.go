@@ -239,7 +239,7 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	w.accept(t, c)
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := g.apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 }

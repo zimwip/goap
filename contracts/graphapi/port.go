@@ -79,8 +79,10 @@ type Port interface {
 	// TransitionChange moves the lifecycle of a change along a transition (ADR 0058): a gate of a methodology takes its
 	// transition once its decision says go (ADR 0132 §3).
 	TransitionChange(ctx context.Context, id domain.ChangeID, in TransitionRequest) (domain.Change, error)
-	Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
-	// Branch, PlanMerge and IntegrateChange are the second step of Apply: the merge of a committed change into the
+	// CommitChange is the first act of a change: its accepted modifications written on its own branch (ADR 0102); it
+	// answers the header of the commit, never its state.
+	CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
+	// Branch, PlanMerge and IntegrateChange are the second act: the merge of a committed change into the
 	// branch it was forked from, with the resolutions of the conflicts a person settled (ADR 0056).
 	Branch(ctx context.Context, namespace, name string) (domain.Branch, error)
 	PlanMerge(ctx context.Context, namespace, from, into string) (MergePlan, error)

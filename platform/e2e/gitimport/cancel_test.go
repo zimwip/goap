@@ -77,9 +77,9 @@ func (c *cancelling) ImpactNodeReviewBatch(ctx context.Context, id domain.Change
 	return c.Port.ImpactNodeReviewBatch(c.at(ctx), id, b)
 }
 
-func (c *cancelling) CommitChangeHeader(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+func (c *cancelling) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	defer c.done()
-	return c.Port.CommitChangeHeader(c.at(ctx), id, baselineName)
+	return c.Port.CommitChange(c.at(ctx), id, baselineName)
 }
 
 func (c *cancelling) IntegrateChange(ctx context.Context, id domain.ChangeID, r map[domain.NodeID]graphapi.Resolution) (domain.Change, error) {

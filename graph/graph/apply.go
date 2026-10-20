@@ -29,20 +29,16 @@ import (
 //     as its own (recordInParent). Only a root change's target moving in between falls back to the three-way merge,
 //     which leaves the change committed until it is resolved.
 //
-// Apply is both: it commits what is pending, then merges.
+// The two acts are the only way in: a caller commits (CommitChange), then merges (IntegrateChange). Graph.Commit, the
+// producer path, does both at once (apply).
 
 // ErrNothingToCommit refuses a commit that would write nothing: no accepted modification, nothing to revert (ADR 0102).
 var ErrNothingToCommit = graphapi.ErrNothingToCommit
 
-// Apply commits what the change has pending, then merges it (IntegrateChange). It returns the baseline the change left
-// on the branch it was forked from, or its last commit when the merge waits for a resolution.
-func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
-	return g.apply(ctx, id, baselineName, true)
-}
-
-// apply is Apply; without whole the baseline is returned without its state (Commit: reading it costs the size of the
-// namespace, ADR 0137).
-func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName string, whole bool) (domain.Baseline, error) {
+// apply commits what the change has pending, then merges it (IntegrateChange): Graph.Commit's landing. It returns the
+// header of the baseline the change left on the branch it was forked from (reading its state costs the size of the
+// namespace, ADR 0137), none when the merge waits for a resolution.
+func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
 	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
 		return result, err
@@ -68,53 +64,24 @@ func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName stri
 			if err != nil {
 				return err
 			}
-			result, err = changeBranchHead(ctx, tx, p, whole)
+			result, err = changeBranchHead(ctx, tx, p, false)
 			return err
 		})
 		return result, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		read := tx.BaselineHeader
-		if whole {
-			read = tx.Baseline
-		}
-		result, err = read(ctx, c.ResultBaselineID)
+		result, err = tx.BaselineHeader(ctx, c.ResultBaselineID)
 		return err
 	})
 	return result, err
 }
 
 // CommitChange writes the accepted modifications of a change on its own branch and reverts there the nodes it no
-// longer changes; it returns the commit baseline. The change stays open (ADR 0102).
+// longer changes; it returns the header of the commit baseline, without its state (ADR 0137): a caller that reads the
+// nodes asks for them (ChangeNodeView, BranchHead, the versions of the change). The change stays open (ADR 0102).
 //
 //goap:operation change.commit doer
 func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
-	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
-		return domain.Baseline{}, err
-	}
-	result, err := g.commitChange(ctx, id, baselineName)
-	if err != nil {
-		return result, err
-	}
-	// the state the commit leaves on the branch of the change, which no baseline holds (ADR 0140)
-	err = g.repo.InTx(ctx, func(tx Tx) error {
-		c, err := tx.Change(ctx, id)
-		if err != nil {
-			return err
-		}
-		own, _, err := ownBranch(ctx, tx, c)
-		if err != nil {
-			return err
-		}
-		result.Nodes, err = branchVersions(ctx, tx, own, nil)
-		return err
-	})
-	return result, err
-}
-
-// CommitChangeHeader is CommitChange answering the header of the baseline it records, without its state: what a caller
-// that does not read the nodes asks (the graph service), at a cost that does not grow with the namespace.
-func (g *Graph) CommitChangeHeader(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
 		return domain.Baseline{}, err
 	}

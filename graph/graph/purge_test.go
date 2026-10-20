@@ -32,7 +32,7 @@ func testPurgeChange(t *testing.T, repo Repo) {
 	}
 	// the node is still writable: the next version follows v1
 	d := setProp(t, g, f, f.base.ID, "B", map[string]any{"title": "B title"})
-	if _, err := g.Apply(ctx, d.ID, ""); err != nil {
+	if _, err := g.apply(ctx, d.ID, ""); err != nil {
 		t.Fatalf("apply after purge: %v", err)
 	}
 

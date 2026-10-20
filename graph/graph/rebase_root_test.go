@@ -102,8 +102,8 @@ func testRebaseRootDifferentNodes(t *testing.T, repo Repo) {
 	g := f.g
 	t1, _ := propChange(t, g, f.base.ID, "test1", f.req.Ref(), map[string]any{"title": "T1"})
 	t2, _ := propChange(t, g, f.base.ID, "test2", f.need.Ref(), map[string]any{"title": "T2"})
-	b1 := must[domain.Baseline](t)(g.Apply(ctx, t1.ID, ""))
-	b2 := must[domain.Baseline](t)(g.Apply(ctx, t2.ID, ""))
+	b1 := must[domain.Baseline](t)(g.apply(ctx, t1.ID, ""))
+	b2 := must[domain.Baseline](t)(g.apply(ctx, t2.ID, ""))
 
 	if b1.Kind != domain.BaselineFastForward || b1.ParentID != f.base.ID || b2.Kind != domain.BaselineFastForward || b2.ParentID != b1.ID {
 		t.Fatalf("main must read T1 then T2: %+v %+v", b1, b2)
@@ -148,7 +148,7 @@ func testRebaseRootSameNodeLinear(t *testing.T, repo Repo) {
 	g := f.g
 	t1, _ := propChange(t, g, f.base.ID, "test1", f.req.Ref(), map[string]any{"a": 1})
 	t2, i2 := propChange(t, g, f.base.ID, "test2", f.req.Ref(), map[string]any{"b": 2})
-	b1 := must[domain.Baseline](t)(g.Apply(ctx, t1.ID, ""))
+	b1 := must[domain.Baseline](t)(g.apply(ctx, t1.ID, ""))
 	v1 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID}))
 
 	// before its commit there is nothing to rebase (ADR 0102); committed, test2 is behind main
@@ -160,7 +160,7 @@ func testRebaseRootSameNodeLinear(t *testing.T, repo Repo) {
 	if st.Branch != domain.MainBranch || st.Onto != b1.ID || !slices.Equal(st.Behind, []domain.ChangeImpactID{i2}) {
 		t.Fatalf("test2 is behind main: %+v", st)
 	}
-	b2 := must[domain.Baseline](t)(g.Apply(ctx, t2.ID, ""))
+	b2 := must[domain.Baseline](t)(g.apply(ctx, t2.ID, ""))
 	if b2.Kind != domain.BaselineFastForward || b2.ParentID != b1.ID || b2.MergedFrom != "" {
 		t.Fatalf("T2 must fast-forward from T1: %+v", b2)
 	}
@@ -212,9 +212,9 @@ func testRebaseRootConflict(t *testing.T, repo Repo) {
 	t1, _ := propChange(t, g, f.base.ID, "test1", f.req.Ref(), map[string]any{"x": 1})
 	t2, i2 := propChange(t, g, f.base.ID, "test2", f.req.Ref(), map[string]any{"x": 2})
 	t3, i3 := propChange(t, g, f.base.ID, "test3", f.req.Ref(), map[string]any{"x": 3})
-	must[domain.Baseline](t)(g.Apply(ctx, t1.ID, ""))
+	must[domain.Baseline](t)(g.apply(ctx, t1.ID, ""))
 
-	_, err := g.Apply(ctx, t2.ID, "")
+	_, err := g.apply(ctx, t2.ID, "")
 	if !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "props.x") {
 		t.Fatalf("apply must stop on the conflict: %v", err)
 	}
@@ -235,17 +235,17 @@ func testRebaseRootConflict(t *testing.T, repo Repo) {
 	// keeping its values settles it
 	must[domain.ChangeImpact](t)(g.ImpactNodeResolve(ctx, t2.ID, i2, ""))
 	must[domain.ChangeImpact](t)(g.accept(ctx, t2.ID, i2, "u", "ok"))
-	b2 := must[domain.Baseline](t)(g.Apply(ctx, t2.ID, ""))
+	b2 := must[domain.Baseline](t)(g.apply(ctx, t2.ID, ""))
 	if n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID})); n.Properties["x"] != float64(2) && n.Properties["x"] != 2 {
 		t.Fatalf("test2 keeps its value: %+v", n.Properties)
 	}
 	// editing the field settles it as well; the second apply rebases onto test2
-	if _, err := g.Apply(ctx, t3.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, t3.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("test3: %v", err)
 	}
 	must[domain.ChangeImpact](t)(g.edit(ctx, t3.ID, i3, edit{Properties: map[string]any{"x": 4}}))
 	must[domain.ChangeImpact](t)(g.accept(ctx, t3.ID, i3, "u", "ok"))
-	b3 := must[domain.Baseline](t)(g.Apply(ctx, t3.ID, ""))
+	b3 := must[domain.Baseline](t)(g.apply(ctx, t3.ID, ""))
 	if b3.ParentID != b2.ID || b3.Kind != domain.BaselineFastForward {
 		t.Fatalf("test3 commits on test2: %+v", b3)
 	}
@@ -267,15 +267,15 @@ func testRebaseRootCreationCollision(t *testing.T, repo Repo) {
 	}
 	t1, _ := create("test1")
 	t2, i2 := create("test2")
-	must[domain.Baseline](t)(g.Apply(ctx, t1.ID, ""))
+	must[domain.Baseline](t)(g.apply(ctx, t1.ID, ""))
 	// the commit of test2 writes its REQ-9: the key is test1's now
-	if _, err := g.Apply(ctx, t2.ID, ""); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "REQ-9 (Requirement): the key is taken") {
+	if _, err := g.apply(ctx, t2.ID, ""); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "REQ-9 (Requirement): the key is taken") {
 		t.Fatalf("the collision stops the apply: %v", err)
 	}
 	if err := g.WithdrawImpact(ctx, t2.ID, i2, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, t2.ID, ""); !errors.Is(err, ErrNothingToCommit) {
+	if _, err := g.apply(ctx, t2.ID, ""); !errors.Is(err, ErrNothingToCommit) {
 		t.Fatalf("test2 is left with nothing to commit (ADR 0102): %v", err)
 	}
 	if n := must[domain.Node](t)(g.NodeByKey(ctx, "", "REQ-9")); n.Properties["title"] != "test1" || n.ChangeID != t1.ID {
@@ -299,7 +299,7 @@ func testRebaseRootCommittedRebasedAtMerge(t *testing.T, repo Repo) {
 	if ch := must[domain.Change](t)(g.Change(ctx, t2.ID)); ch.Status != domain.ChangeActive || ch.ResultBaselineID != c2.ID {
 		t.Fatalf("a committed change stays open: %+v", ch)
 	}
-	b1 := must[domain.Baseline](t)(g.Apply(ctx, t1.ID, ""))
+	b1 := must[domain.Baseline](t)(g.apply(ctx, t1.ID, ""))
 
 	st := must[RebaseState](t)(g.RebaseState(ctx, t2.ID))
 	if st.Onto != b1.ID || len(st.Behind) != 1 {
@@ -335,12 +335,12 @@ func testRebaseRootRaceFallsBackToMerge(t *testing.T, repo Repo) {
 	t1, _ := propChange(t, g, f.base.ID, "test1", f.req.Ref(), map[string]any{"x": 1})
 	t2, _ := propChange(t, g, f.base.ID, "test2", f.req.Ref(), map[string]any{"x": 2})
 	t0, _ := propChange(t, g, f.base.ID, "test0", f.need.Ref(), map[string]any{"title": "N"})
-	must[domain.Baseline](t)(g.Apply(ctx, t0.ID, ""))
+	must[domain.Baseline](t)(g.apply(ctx, t0.ID, ""))
 	must[domain.Baseline](t)(g.CommitChange(ctx, t2.ID, ""))
 	if _, err := g.RebaseChange(ctx, t2.ID); err != nil { // test2 brought up to date with test0...
 		t.Fatal(err)
 	}
-	b1 := must[domain.Baseline](t)(g.Apply(ctx, t1.ID, "")) // ...then the target moves before test2 commits
+	b1 := must[domain.Baseline](t)(g.apply(ctx, t1.ID, "")) // ...then the target moves before test2 commits
 	if err := g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, t2.ID)
 		if err != nil {
@@ -402,7 +402,7 @@ func testCreationTakesAbandonedKey(t *testing.T, repo Repo) {
 	abandoned := domain.ChangeAbandoned
 	must[domain.Change](t)(g.UpdateChange(ctx, t1.ID, ChangePatch{Status: &abandoned}))
 	cn := must[domain.ChangeImpact](t)(create(t2))
-	must[domain.Baseline](t)(g.Apply(ctx, t2.ID, ""))
+	must[domain.Baseline](t)(g.apply(ctx, t2.ID, ""))
 	n := must[domain.Node](t)(g.NodeByKey(ctx, "", "REQ-9"))
 	if n.Properties["title"] != "test2" || n.ChangeID != t2.ID || n.ID != nodeOf(cn) || n.Version != 2 || n.Reason != domain.ReasonCreate || len(n.Parents) != 0 {
 		t.Fatalf("test2 takes the node over with a creation: %+v", n)

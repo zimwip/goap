@@ -47,7 +47,7 @@ func testProvenanceExport(t *testing.T, repo Repo) {
 	if _, err := g.accept(ctx, c.ID, added[0].ID, "alice", "ok"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := g.apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	if c, err = g.Change(ctx, c.ID); err != nil {

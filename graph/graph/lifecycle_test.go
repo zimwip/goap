@@ -117,7 +117,7 @@ func testActivityGoalsGateReplacesCommittableFloor(t *testing.T, repo Repo) {
 	w.accept(t, c)
 
 	// no hook registered: the committable-state floor still applies, exactly as for a change the gate does not decide
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot commit") {
+	if _, err := w.g.apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot commit") {
 		t.Fatalf("no hook: committable floor must still apply: %v", err)
 	}
 
@@ -134,7 +134,7 @@ func testActivityGoalsGateReplacesCommittableFloor(t *testing.T, repo Repo) {
 	})
 
 	// the hook says no: refused, by the activity's own message, not the committable-state one
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
+	if _, err := w.g.apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
 		t.Fatalf("hook unmet: %v", err)
 	}
 	if gotRef != "deliver/draft-requirement" || len(gotBB.Change.Nodes) != 1 || gotBB.Change.Nodes[0].ID != id {
@@ -151,7 +151,7 @@ func testActivityGoalsGateReplacesCommittableFloor(t *testing.T, repo Repo) {
 
 	// the hook says yes: applies even though REQ-2 is left in the not committable "draft" state
 	met = true
-	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := w.g.apply(ctx, c.ID, ""); err != nil {
 		t.Fatalf("hook met: the activity goal replaces the committable floor: %v", err)
 	}
 	if n, err := stateOf(t, w.g, w.req2.ID); err != nil || n.State != "draft" {
@@ -192,7 +192,7 @@ func testLifecycleReopenEditAndApprove(t *testing.T, repo Repo) {
 		t.Fatalf("node changes: %+v", cs)
 	}
 	// leaving the node in draft (not committable) is refused at Apply, the node listed with its state
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "move them to a committable state first") || !strings.Contains(err.Error(), "REQ-1 (Requirement) in draft") {
+	if _, err := w.g.apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "move them to a committable state first") || !strings.Contains(err.Error(), "REQ-1 (Requirement) in draft") {
 		t.Fatalf("apply must refuse a node left in a state that cannot commit, naming it: %v", err)
 	}
 	// the refusal leaves the change as it was: the node is still edited in its not committable state, then moved
@@ -203,7 +203,7 @@ func testLifecycleReopenEditAndApprove(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	w.accept(t, c) // the edit sent the review back to proposed (ADR 0077)
-	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := w.g.apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	n, err := stateOf(t, w.g, w.req1.ID)
@@ -255,7 +255,7 @@ func testLifecycleTransitionRules(t *testing.T, repo Repo) {
 		}
 	}
 	w.accept(t, c)
-	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := w.g.apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	// REQ-2 is approved now
@@ -286,11 +286,11 @@ func testLifecycleParallelChangesConflict(t *testing.T, repo Repo) {
 	if att, _, _ := w.g.NodeChanges(ctx, w.req1.ID, 0, 0); len(att) != 2 {
 		t.Fatalf("both changes act on the node: %+v", att)
 	}
-	if _, err := w.g.Apply(ctx, cs[0].ID, ""); err != nil {
+	if _, err := w.g.apply(ctx, cs[0].ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	// the second one changes the same property: rebased onto the first, it waits for its conflict to be settled
-	if _, err := w.g.Apply(ctx, cs[1].ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := w.g.apply(ctx, cs[1].ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("the second change must stop on the conflict: %v", err)
 	}
 	if got, _ := w.g.Change(ctx, cs[1].ID); got.Status != domain.ChangeActive {
@@ -319,7 +319,7 @@ func testLifecycleImpactNodeCreate(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	w.accept(t, c)
-	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := w.g.apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	if n, err := w.g.NodeByKey(ctx, "", "REQ-9"); err != nil || n.State != "proposed" {
@@ -331,7 +331,7 @@ func testLifecycleImpactNodeCreate(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	w.accept(t, c)
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "REQ-10 (Requirement) in draft") {
+	if _, err := w.g.apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "REQ-10 (Requirement) in draft") {
 		t.Fatalf("a created node in draft must be refused: %v", err)
 	}
 }
@@ -367,7 +367,7 @@ func testLifecycleDocumentValidatesChildren(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	w.accept(t, c)
-	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := w.g.apply(ctx, c.ID, ""); err != nil {
 		t.Fatalf("spec release with approved children: %v", err)
 	}
 	// no version of the spec; REQ-2 commits
@@ -460,7 +460,7 @@ func testLifecycleGuard(t *testing.T, repo Repo) {
 		}
 		if tc.ok {
 			w.accept(t, c)
-			if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
+			if _, err := w.g.apply(ctx, c.ID, ""); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -499,7 +499,7 @@ func testLifecycleGuardRequiresAReview(t *testing.T, repo Repo) {
 		t.Fatalf("the transition moves the draft: %+v", n)
 	}
 	// back in the state it was checked out in: not a modification, to withdraw (ADR 0102)
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "modifies nothing") {
+	if _, err := w.g.apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "modifies nothing") {
 		t.Fatalf("a node back where it was is not a modification: %v", err)
 	}
 }

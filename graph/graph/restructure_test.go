@@ -171,7 +171,7 @@ func testMergeFromTheParent(t *testing.T, repo Repo) {
 	if err := g.acceptImpact(ctx, c.ID, res.Successors[0].ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	base := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	base := must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
 
 	// the lineage, on the first version of the successor written at commit
 	committedC := must[domain.Node](t)(g.NodeByKey(ctx, "docs", "C"))
@@ -302,7 +302,7 @@ func testSplit(t *testing.T, repo Repo) {
 	for _, s := range res.Successors {
 		must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, s.ID, "tester", "ok"))
 	}
-	must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
 	if got := must[[]domain.Node](t)(g.DerivedNodes(ctx, a.Ref())); len(got) != 2 {
 		t.Errorf("A derives into C and D: %v", got)
 	}
@@ -418,7 +418,7 @@ func testOriginsGateAtCommit(t *testing.T, repo Repo) {
 		t.Fatalf("commit with an origin awaiting its review: %v", err)
 	}
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, res.Parents[0].ID, domain.ReviewAccepted, "tester", "ok again"))
-	must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
 }
 
 // The export names what a successor derives from (ADR 0077).

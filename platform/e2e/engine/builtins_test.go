@@ -32,7 +32,7 @@ func TestBuiltinRegister(t *testing.T) {
 	b.Register(builtins.GraphApply, engine.ApplyChange)
 }
 
-// applyStub is a GraphPort whose Apply left the change in the status given, and whose merge into main has one
+// applyStub is a GraphPort whose merge (without resolutions) leaves the change in the status given, and whose merge into main has one
 // conflict: both branches changed the title.
 type applyStub struct {
 	engine.GraphPort
@@ -42,8 +42,8 @@ type applyStub struct {
 
 func (s *applyStub) AppendLog(context.Context, []domain.LogEntry) error { return nil }
 
-func (s *applyStub) Apply(context.Context, domain.ChangeID, string) (domain.Baseline, error) {
-	return domain.Baseline{ID: "b1", Name: "n"}, nil
+func (s *applyStub) CommitChange(context.Context, domain.ChangeID, string) (domain.Baseline, error) {
+	return domain.Baseline{ID: "b0"}, nil
 }
 
 func (s *applyStub) Change(_ context.Context, id domain.ChangeID) (domain.Change, error) {
@@ -63,6 +63,13 @@ func (s *applyStub) PlanMerge(_ context.Context, _, from, into string) (graph.Me
 }
 
 func (s *applyStub) IntegrateChange(_ context.Context, id domain.ChangeID, rs map[domain.NodeID]graph.Resolution) (domain.Change, error) {
+	if rs == nil { // the merge of graph.apply: the status given
+		c, _ := s.Change(context.Background(), id)
+		if c.Status == domain.ChangeApplied {
+			c.ResultBaselineID = "b1"
+		}
+		return c, nil
+	}
 	s.integrated = rs
 	s.status = domain.ChangeApplied
 	return domain.Change{ID: id, Status: domain.ChangeApplied}, nil
@@ -116,7 +123,7 @@ func TestResolveMergeCompletesTheMergeAndResumes(t *testing.T) {
 	}
 }
 
-// rebaseStub is a GraphPort whose Apply stops on the rebase: conflicts left to settle, impacts still to review.
+// rebaseStub is a GraphPort whose commit stops on the rebase: conflicts left to settle, impacts still to review.
 type rebaseStub struct {
 	engine.GraphPort
 	applyErr  error
@@ -126,7 +133,7 @@ type rebaseStub struct {
 
 func (s *rebaseStub) AppendLog(context.Context, []domain.LogEntry) error { return nil }
 
-func (s *rebaseStub) Apply(context.Context, domain.ChangeID, string) (domain.Baseline, error) {
+func (s *rebaseStub) CommitChange(context.Context, domain.ChangeID, string) (domain.Baseline, error) {
 	return domain.Baseline{}, s.applyErr
 }
 

@@ -416,9 +416,4 @@ export const graph = {
       changeId,
       baselineName,
     }),
-  applyChange: (changeId: string, baselineName: string) =>
-    rpc<{ changeId: string; baselineName: string }, { baseline?: Baseline }>(GRAPH, 'ApplyChange', {
-      changeId,
-      baselineName,
-    }),
 };

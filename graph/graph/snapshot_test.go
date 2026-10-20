@@ -62,7 +62,7 @@ func testSnapshotExportImport(t *testing.T, repo Repo) {
 	if err := g.acceptAll(ctx, res.Change); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, res.Change, ""); err != nil {
+	if _, err := g.apply(ctx, res.Change, ""); err != nil {
 		t.Fatal(err)
 	}
 	after := must[Snapshot](t)(g.ExportSnapshot(ctx, "", "", ""))
@@ -98,7 +98,7 @@ func testSnapshotImportIntoEmptyGraph(t *testing.T, repo Repo) {
 	if err := g.acceptAll(ctx, res.Change); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, res.Change, ""); err != nil {
+	if _, err := g.apply(ctx, res.Change, ""); err != nil {
 		t.Fatal(err)
 	}
 	got := must[Snapshot](t)(g.ExportSnapshot(ctx, "", "", ""))

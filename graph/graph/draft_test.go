@@ -95,7 +95,7 @@ func testCommitWritesOneVersionPerDraft(t *testing.T, repo Repo) {
 	for _, cn := range []domain.ChangeImpact{mod, a, b} {
 		must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, cn.ID, "bob", "ok"))
 	}
-	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	res := g.withState(t, ctx, must[domain.Baseline](t)(g.apply(ctx, c.ID, "")))
 
 	req2 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Nodes[f.req.ID]}))
 	if req2.Version != pre.Version+1 || !slices.Equal(req2.Parents, []domain.Version{pre.Version}) || req2.Owner != f.req.Owner || req2.ChangeID != c.ID || req2.ChangeImpact != mod.ID {

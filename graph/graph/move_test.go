@@ -98,12 +98,12 @@ func testMoveChange(t *testing.T, repo Repo) {
 		must[domain.ChangeImpact](t)(g.ImpactNodeReviewOn(ctx, c.ID, "", "", cn.ID, domain.ReviewAccepted, "reviewer", "ok"))
 	}
 	// the sub-change, which wrote nothing, is closed first: it has nothing to merge into its parent (ADR 0102)
-	if _, err := g.Apply(ctx, sub.ID, ""); !errors.Is(err, ErrNothingToCommit) {
+	if _, err := g.apply(ctx, sub.ID, ""); !errors.Is(err, ErrNothingToCommit) {
 		t.Fatalf("an empty sub-change: %v", err)
 	}
 	gone := domain.ChangeAbandoned
 	must[domain.Change](t)(g.UpdateChange(ctx, sub.ID, ChangePatch{Status: &gone}))
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := g.apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	b := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, "PROJ-B"))

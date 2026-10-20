@@ -85,7 +85,7 @@ func TestGraphEmitsTheEventsOfAChange(t *testing.T) {
 		if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+		if _, err := g.apply(ctx, c.ID, ""); err != nil {
 			t.Fatal(err)
 		}
 		want := []string{events.ChangeCreated, events.ChangeEdited, events.ChangeItemAdded, events.ChangeSignal, events.ChangeCommitted, events.ChangeApplied}

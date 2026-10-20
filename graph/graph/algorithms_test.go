@@ -128,7 +128,7 @@ func testPropertyValidators(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	w.acceptAll(t, c)
-	if _, err := w.g.Apply(ctx, c.ID, "ok"); err != nil {
+	if _, err := w.g.apply(ctx, c.ID, "ok"); err != nil {
 		t.Fatal(err)
 	}
 	n, err := stateOf(t, w.g, w.req.ID)
@@ -158,7 +158,7 @@ func testTransitionGuardAndAction(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	w.acceptAll(t, c2)
-	if _, err := w.g.Apply(ctx, c2.ID, "y"); err != nil {
+	if _, err := w.g.apply(ctx, c2.ID, "y"); err != nil {
 		t.Fatal(err)
 	}
 	n, err := stateOf(t, w.g, w.req.ID)

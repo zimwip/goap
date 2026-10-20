@@ -54,13 +54,13 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 		t.Fatalf("written view after the rejection: %v", w.Nodes)
 	}
 	// rejected: reworked or withdrawn before the change merges (ADR 0102)
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a rejected impact holds the merge: %v", err)
 	}
 	if err := g.WithdrawImpact(ctx, c.ID, needW.ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	res := must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
 	l := view(ViewCommitted)
 	if l.ID != res.ID || l.Nodes[f.req.ID] != f.req.Version+1 || !l.Contains(need) {
 		t.Fatalf("committed view: %+v", l)

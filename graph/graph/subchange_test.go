@@ -111,7 +111,7 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 	}
 
 	// the parent cannot apply while its sub-changes are open
-	if _, err := g.Apply(ctx, parent.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, parent.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("apply with open sub-changes: %v", err)
 	}
 	// each change writes its node through its change impact and accepts it
@@ -139,7 +139,7 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 	edit(orgs["ORG-T2"], w.cmp2, "two v2")
 	edit(parent, w.cmp3, "three v2")
 	for _, s := range orgs {
-		if _, err := g.Apply(ctx, s.ID, ""); err != nil {
+		if _, err := g.apply(ctx, s.ID, ""); err != nil {
 			t.Fatal(err)
 		}
 		if got, _ := g.Change(ctx, s.ID); got.Status != domain.ChangeApplied {
@@ -168,7 +168,7 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 		t.Fatalf("the parent holds the work of its sub-changes: %+v", pc.Nodes)
 	}
 	// the parent applies with what its sub-changes brought in, then merges into main
-	if _, err := g.Apply(ctx, parent.ID, ""); err != nil {
+	if _, err := g.apply(ctx, parent.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := g.Change(ctx, parent.ID); got.Status != domain.ChangeApplied {
@@ -448,7 +448,7 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 		return title
 	}
 	// A merges first: a fast-forward of the parent's branch
-	if _, err := g.Apply(ctx, a.ID, ""); err != nil {
+	if _, err := g.apply(ctx, a.ID, ""); err != nil {
 		t.Fatalf("sub A applies first: %v", err)
 	}
 	if got := inParent(); got != "from A" {
@@ -456,7 +456,7 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 	}
 
 	// B, taken from the same version as A, is rebased onto it: a conflict on the title, not a silent clobber
-	if _, err := g.Apply(ctx, b.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, b.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("sub B apply: %v", err)
 	}
 	if got := inParent(); got != "from A" {
@@ -470,14 +470,14 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 	if _, err := g.accept(ctx, b.ID, bcn.ID, "u", "settled"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, b.ID, ""); err != nil {
+	if _, err := g.apply(ctx, b.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := inParent(); got != "from A and B" {
 		t.Fatalf("parent after B's integration: %q", got)
 	}
 	// the parent commits what both brought in
-	if _, err := g.Apply(ctx, parent.ID, ""); err != nil {
+	if _, err := g.apply(ctx, parent.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3"); err != nil || n.Properties["title"] != "from A and B" || n.Version != w.cmp3.Version+3 ||
@@ -540,7 +540,7 @@ func testNestedSubChanges(t *testing.T, repo Repo) {
 	}
 
 	// each level merges into the one above, then the root commits on main
-	if _, err := g.Apply(ctx, mid.ID, ""); err != nil {
+	if _, err := g.apply(ctx, mid.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	if v := must[domain.NodeView](t)(g.ChangeNodeViewByKey(ctx, root.ID, "", domain.DefaultNamespace, "CMP-3")); v.Properties["title"] != "from the leaf" {
@@ -549,7 +549,7 @@ func testNestedSubChanges(t *testing.T, repo Repo) {
 	if n := must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3")); n.Properties["title"] == "from the leaf" {
 		t.Fatalf("main moved before the root merged: %+v", n)
 	}
-	if _, err := g.Apply(ctx, root.ID, ""); err != nil {
+	if _, err := g.apply(ctx, root.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	if n := must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3")); n.Properties["title"] != "from the leaf" || n.Version != w.cmp3.Version+1 {

@@ -60,7 +60,7 @@ func testCommitted(t *testing.T, repo Repo) {
 	if _, err := g.accept(ctx, sub.ID, added[0].ID, "test", "ok"); err != nil {
 		t.Fatal(err)
 	}
-	b, err := g.Apply(ctx, sub.ID, "")
+	b, err := g.apply(ctx, sub.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func testCommitted(t *testing.T, repo Repo) {
 	if pl := commits(parent.ID); len(pl) != 1 || *pl[0].Committed != *ev[1].Committed {
 		t.Fatalf("the parent holds what its sub-change committed: %+v", pl)
 	}
-	if _, err := g.Apply(ctx, parent.ID, ""); err != nil {
+	if _, err := g.apply(ctx, parent.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	ev = commits(parent.ID)
@@ -109,6 +109,7 @@ func testCommitThenIntegrate(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	commit = g.withState(t, ctx, commit)
 	got := must[domain.Change](t)(g.Change(ctx, c.ID))
 	if got.Status != domain.ChangeActive || got.ResultBaselineID != commit.ID || commit.Kind != domain.BaselineCommit ||
 		commit.Branch != got.Branch || commit.Branch == domain.MainBranch || commit.ChangeID != c.ID {

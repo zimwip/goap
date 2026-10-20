@@ -80,10 +80,11 @@ func testApplyUpdateCreatesSuspectLinks(t *testing.T, repo Repo) {
 		t.Fatalf("unexpected hydration: %+v", v)
 	}
 
-	b2, err := g.Apply(ctx, c.ID, "")
+	b2, err := g.apply(ctx, c.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	b2 = g.withState(t, ctx, b2)
 	if b2.Nodes[f.req.ID] != 2 {
 		t.Fatalf("REQ-1 should be at v2 in the target baseline, got %v", b2.Nodes[f.req.ID])
 	}
@@ -143,10 +144,11 @@ func testApplyRemoveLinkBumpsSource(t *testing.T, repo Repo) {
 	if _, err := g.accept(ctx, c.ID, ns[0].ID, "u", "ok"); err != nil {
 		t.Fatal(err)
 	}
-	b2, err := g.Apply(ctx, c.ID, "B2")
+	b2, err := g.apply(ctx, c.ID, "B2")
 	if err != nil {
 		t.Fatal(err)
 	}
+	b2 = g.withState(t, ctx, b2)
 	if b2.Nodes[f.test.ID] != 2 {
 		t.Fatalf("TST-1 should be bumped")
 	}
@@ -187,15 +189,15 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 	}
 	c1, c2 := change("c1", 1, false), change("c2", 1, true)
 	// the only change impact of c1 is rejected: reworked or withdrawn before anything merges (ADR 0102)
-	if _, err := g.Apply(ctx, c1.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, c1.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("rejected change impact applied: %v", err)
 	}
-	if _, err := g.Apply(ctx, c2.ID, ""); err != nil {
+	if _, err := g.apply(ctx, c2.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	// a third change from B1 writes another value of the same property: the apply rebases it and stops on the conflict
 	c3 := change("c3", 2, true)
-	if _, err := g.Apply(ctx, c3.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, c3.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("expected a conflict, got %v", err)
 	}
 	if c3b, _ := g.Change(ctx, c3.ID); c3b.Status != domain.ChangeActive {

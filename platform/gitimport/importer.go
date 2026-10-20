@@ -63,7 +63,7 @@ type Port interface {
 	ImpactLinkDelete(ctx context.Context, id domain.ChangeID, link domain.LinkID, flow, execution string) error
 	ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in graphapi.NodeTransition) (domain.ChangeImpact, error)
 	ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b domain.ReviewBatch) ([]domain.ChangeImpact, error)
-	CommitChangeHeader(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
+	CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
 	IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]graphapi.Resolution) (domain.Change, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
@@ -1056,7 +1056,7 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 // land commits a change and merges it into the branch it was forked from (main, or the branch of the change of its
 // commit for a sub-change): the baseline it leaves on main, by its header (empty for a sub-change).
 func (im *Importer) land(ctx context.Context, id domain.ChangeID) (domain.Baseline, error) {
-	if _, err := im.Graph.CommitChangeHeader(ctx, id, ""); err != nil && !errors.Is(err, graphapi.ErrNothingToCommit) {
+	if _, err := im.Graph.CommitChange(ctx, id, ""); err != nil && !errors.Is(err, graphapi.ErrNothingToCommit) {
 		return domain.Baseline{}, err
 	}
 	if err := ctx.Err(); err != nil {

@@ -81,7 +81,7 @@ func TestImpactValidationNotStoredAndAbsentWithoutDraft(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := lc.g.Apply(lc.ctx, lc.c.ID, ""); err != nil {
+	if _, err := lc.g.apply(lc.ctx, lc.c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	for _, cn := range must[domain.Change](t)(lc.g.ChangeChecked(lc.ctx, lc.c.ID)).Nodes {

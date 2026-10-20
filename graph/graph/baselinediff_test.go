@@ -27,7 +27,7 @@ func testDiffBaselines(t *testing.T, repo Repo) {
 			t.Fatal(err)
 		}
 	}
-	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	res := must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
 	diff := must[[]BaselineDiff](t)(g.DiffBaselines(ctx, f.base.ID, res.ID))
 	got := map[string]string{}
 	for _, d := range diff {

@@ -10,6 +10,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/engine/methodology"
 	"github.com/zimwip/goap/graph/graph"
+	"github.com/zimwip/goap/graph/graph/graphtest"
 )
 
 // End-to-end: a change scoped to a real Activity (a methodology@Process node) is gated at Apply by that
@@ -44,7 +45,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	}
 
 	// an empty change has nothing to commit (ADR 0102)
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrNothingToCommit) {
+	if _, err := graphtest.CommitMerge(ctx, g, c.ID, ""); !errors.Is(err, graph.ErrNothingToCommit) {
 		t.Fatalf("empty change: %v", err)
 	}
 	// it ships a node: committed, its merge is what the goal of the activity holds
@@ -55,7 +56,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	if _, err := g.ImpactNodeReview(ctx, c.ID, cn.ID, domain.ReviewAccepted, "reviewer", "ok"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
+	if _, err := graphtest.CommitMerge(ctx, g, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
 		t.Fatalf("goal unmet: %v", err)
 	}
 
@@ -63,7 +64,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: domain.TypeArtifact, Target: "note", Status: domain.ItemAccepted}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
+	if _, err := graphtest.CommitMerge(ctx, g, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
 		t.Fatalf("unrelated artifact: %v", err)
 	}
 
@@ -71,7 +72,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: domain.TypeArtifact, Target: "signoff", Status: domain.ItemAccepted}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := graphtest.CommitMerge(ctx, g, c.ID, ""); err != nil {
 		t.Fatalf("goal met: %v", err)
 	}
 }
@@ -93,7 +94,7 @@ func TestActivityGoalsMetRefusesAnUnresolvableRef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); err == nil {
+	if _, err := graphtest.CommitMerge(ctx, g, c.ID, ""); err == nil {
 		t.Fatal("an unresolvable activity ref must refuse, not silently pass")
 	}
 }

@@ -34,9 +34,9 @@ func testChangeStack(t *testing.T, repo Repo) {
 	}
 	write(a, map[string]any{"title": "from A"})
 	write(b, map[string]any{"title": "three", "version": "2.0"})
-	must[domain.Baseline](t)(g.Apply(ctx, a.ID, ""))
-	must[domain.Baseline](t)(g.Apply(ctx, b.ID, "")) // rebased onto A: different properties, no conflict
-	head := must[domain.Baseline](t)(g.Apply(ctx, parent.ID, ""))
+	must[domain.Baseline](t)(g.apply(ctx, a.ID, ""))
+	must[domain.Baseline](t)(g.apply(ctx, b.ID, "")) // rebased onto A: different properties, no conflict
+	head := must[domain.Baseline](t)(g.apply(ctx, parent.ID, ""))
 
 	n := must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3"))
 	if n.Reason != domain.ReasonRebase || len(n.Parents) != 2 || n.ChangeID != b.ID {

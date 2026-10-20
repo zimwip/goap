@@ -89,7 +89,7 @@ for (const n of ctx.changeImpacts()) if (n.review === "proposed") { ctx.impactNo
 	if _, err := engine.InternalsOf(e).ApplyNodeOps(ctx, p, res2.Nodes, "check", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := graphtest.CommitMerge(ctx, g, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	newReq, _ := g.NodeByKey(ctx, "alm", "REQ-1")
@@ -155,7 +155,7 @@ func TestScriptChangeImpactsOnAFlow(t *testing.T) {
 	if _, err := g.AdoptFlow(ctx, c.ID, flow.ID, "alice"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := graphtest.CommitMerge(ctx, g, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	req, _ := g.NodeByKey(ctx, "alm", "REQ-1")

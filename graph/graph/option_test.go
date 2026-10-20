@@ -75,7 +75,7 @@ func testOptions(t *testing.T, repo Repo) {
 	if acc := must[OptionComparison](t)(g.CompareOptions(ctx, c.ID, ViewAccepted, false)); len(acc.Nodes) != 0 {
 		t.Fatalf("accepted comparison: %+v", acc.Nodes)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("apply with open options: %v", err)
 	}
 	// the decision: A is evaluated, accepted on its own flow and selected
@@ -98,7 +98,7 @@ func testOptions(t *testing.T, repo Repo) {
 	if n := g.versionCount(ctx, pre.ID); n != int(pre.Version) {
 		t.Fatalf("no option wrote a version: %d", n)
 	}
-	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	res := g.withState(t, ctx, must[domain.Baseline](t)(g.apply(ctx, c.ID, "")))
 	head := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: pre.ID}))
 	if res.Nodes[pre.ID] != head.Version || head.Version != pre.Version+1 || head.Properties["title"] != "Use Stripe" {
 		t.Fatalf("the selected option commits as one version: %v, main %+v", res.Nodes, head)

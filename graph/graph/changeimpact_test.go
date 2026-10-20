@@ -82,7 +82,7 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	if cn = must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, got[0].ID, NodeUpdate{Properties: map[string]any{"title": "Use PSP v2"}})); cn.Review != domain.ReviewProposed {
 		t.Fatalf("a rejected impact edited is proposed again: %+v", cn)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("commit needs an accepted review, got %v", err)
 	}
 	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); err != nil {
@@ -132,7 +132,7 @@ func testApplyChangeImpacts(t *testing.T, repo Repo) {
 	}
 
 	// still proposed: the change cannot be applied
-	if _, err := g.Apply(ctx, c1.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, c1.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a change impact awaiting review blocks Apply, got %v", err)
 	}
 	if _, err := g.edit(ctx, c1.ID, nodes[0].ID, edit{Properties: map[string]any{"title": "Use PSP v2"}}); err != nil {
@@ -157,10 +157,11 @@ func testApplyChangeImpacts(t *testing.T, repo Repo) {
 	if _, err := g.accept(ctx, c1.ID, nodes[1].ID, "alice", "needed"); err != nil {
 		t.Fatal(err)
 	}
-	b, err := g.Apply(ctx, c1.ID, "")
+	b, err := g.apply(ctx, c1.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	b = g.withState(t, ctx, b)
 	head, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID})
 	if head.Properties["title"] != "Use PSP v2" || head.Properties["owner"] != "alice" {
 		t.Fatalf("both writes must commit: %v", head.Properties)
@@ -244,7 +245,7 @@ func testChangeImpactsLifecycle(t *testing.T, repo Repo) {
 	}
 	review(nodes[0].ID)
 	review(nodes[1].ID)
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot commit") {
+	if _, err := g.apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot commit") {
 		t.Fatalf("apply must refuse a node left in a state that cannot commit: %v", err)
 	}
 	if _, err := g.edit(ctx, c.ID, nodes[0].ID, edit{State: "approved"}); err != nil {
@@ -259,7 +260,7 @@ func testChangeImpactsLifecycle(t *testing.T, repo Repo) {
 	// the commit of the first apply wrote the versions on the change's branch, the merge refused them; the edit since
 	// sends the review back to proposed (ADR 0102), the moves do not
 	review(nodes[1].ID)
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := g.apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	n1, err := stateOf(t, g, w.req1.ID)
@@ -304,11 +305,11 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 	if sh, err := g.SharedNodes(ctx, a.ID); err != nil || len(sh) != 1 || len(sh[0].Changes) != 2 {
 		t.Fatalf("the three changes share the node: %+v %v", sh, err)
 	}
-	if _, err := g.Apply(ctx, a.ID, ""); err != nil {
+	if _, err := g.apply(ctx, a.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	// c changes another property: merged automatically on top of a
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := g.apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	head, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID})
@@ -316,7 +317,7 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 		t.Fatalf("disjoint changes must merge: %+v", head)
 	}
 	// b changes the same property as a: the apply commits it, rebases its branch and stops on the conflict (ADR 0102)
-	if _, err := g.Apply(ctx, b.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, b.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("conflicting change must stop: %v", err)
 	}
 	if ch, _ := g.Change(ctx, b.ID); ch.Status != domain.ChangeActive {
@@ -324,7 +325,7 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 	}
 	before := head.Ref()
 	settle(t, g, b.ID)
-	if _, err := g.Apply(ctx, b.ID, ""); err != nil {
+	if _, err := g.apply(ctx, b.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	head, _ = g.Node(ctx, domain.NodeRef{ID: f.req.ID})

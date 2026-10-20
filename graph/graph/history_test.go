@@ -30,8 +30,8 @@ func testBaselineHistory(t *testing.T, repo Repo) {
 		changes = append(changes, c)
 		if i%2 == 1 {
 			// two changes started from the same baseline, the second over other nodes than the first
-			must[domain.Baseline](t)(g.Apply(ctx, changes[i-1].ID, ""))
-			base = must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+			must[domain.Baseline](t)(g.apply(ctx, changes[i-1].ID, ""))
+			base = must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
 		}
 	}
 	main := baselinesOf(t, g, domain.MainBranch)

@@ -157,10 +157,10 @@ func testSubSubChangeBranches(t *testing.T, repo Repo) {
 			}
 		}
 	}
-	if _, err := g.Apply(ctx, mid.ID, ""); err != nil {
+	if _, err := g.apply(ctx, mid.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, root.ID, ""); err != nil {
+	if _, err := g.apply(ctx, root.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	for key, want := range map[string]string{"CMP-1": "root's", "CMP-2": "mid's draft", "CMP-3": "leaf's"} {

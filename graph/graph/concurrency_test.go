@@ -106,7 +106,7 @@ func testConcurrentMergesIntoABranch(t *testing.T, repo Repo) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, errs[i] = g.Apply(ctx, ids[i], "")
+			_, errs[i] = g.apply(ctx, ids[i], "")
 		}()
 	}
 	wg.Wait()

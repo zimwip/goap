@@ -832,17 +832,23 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	return ActionResult{Items: items, Nodes: ops, Output: fmt.Sprintf("%d propagated impacts", len(ops))}, nil
 }
 
-// ApplyChange materializes the change into a new baseline (graph.apply). The
-// change is then "applied": conditions observe it through change.status and
-// change.resultBaseline. Param baselineName defaults to the change title.
-// Every impact must be accepted: applying writes the versions from the drafts (ADR 0079);
-// one still proposed keeps the change from applying.
+// ApplyChange commits what the change has pending, then merges it into what it was forked from (graph.apply): the two
+// acts of a change (ADR 0102). The change is then "applied": conditions observe it through change.status and
+// change.resultBaseline. Param baselineName defaults to the change title. Every impact must be accepted: the commit
+// writes the versions from the drafts (ADR 0079); one still proposed keeps the change from merging.
 func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	name, _ := ac.Action.Params["baselineName"].(string)
 	c := ac.Blackboard.Change
-	b, err := ac.Graph.Apply(ctx, c.ID, name)
+	_, err := ac.Graph.CommitChange(ctx, c.ID, name)
+	if errors.Is(err, graphapi.ErrNothingToCommit) {
+		err = nil // committed already: the merge is what is left
+	}
+	var merged domain.Change
+	if err == nil {
+		merged, err = ac.Graph.IntegrateChange(ctx, c.ID, nil)
+	}
 	if err != nil {
-		// the rebase before commit left conflicts: a person settles them (TaskRebase); any other refusal is an error
+		// the rebase before the merge left conflicts: a person settles them (TaskRebase); any other refusal is an error
 		if errors.Is(err, graphapi.ErrConflict) {
 			if task := rebaseTaskOf(ctx, ac.Graph, c.ID); task != nil {
 				return ActionResult{Rebase: task, Output: fmt.Sprintf("rebase found conflicts on %d impact(s) to settle", len(task.Impacts))}, nil
@@ -850,12 +856,10 @@ func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 		}
 		return ActionResult{}, err
 	}
-	// Apply commits and merges; a merge that finds nodes both sides changed apart leaves the change committed: the
-	// action has not done what its effects promise, a person settles the conflicts (TaskMerge)
-	if cur, err := ac.Graph.Change(ctx, c.ID); err != nil {
-		return ActionResult{}, err
-	} else if cur.Status == domain.ChangeCommitted {
-		task, err := mergeTaskOf(ctx, ac.Graph, cur)
+	// a merge that finds nodes both sides changed apart leaves the change committed: the action has not done what its
+	// effects promise, a person settles the conflicts (TaskMerge)
+	if merged.Status == domain.ChangeCommitted {
+		task, err := mergeTaskOf(ctx, ac.Graph, merged)
 		if err != nil {
 			return ActionResult{}, err
 		}
@@ -866,5 +870,5 @@ func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 		// into it, its work recorded on the parent's impacts (ADR 0103)
 		return ActionResult{Output: fmt.Sprintf("integrated into parent change %s", c.ParentID)}, nil
 	}
-	return ActionResult{Output: fmt.Sprintf("baseline %s (%s) created", b.Name, b.ID)}, nil
+	return ActionResult{Output: fmt.Sprintf("baseline %s created", merged.ResultBaselineID)}, nil
 }

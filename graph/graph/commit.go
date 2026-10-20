@@ -226,7 +226,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		return res, fmt.Errorf("commit %q: %w", in.Title, err)
 	}
 	// the writer's events ride on the commit (ADR 0136): raised with change.applied, in its transaction
-	if res.Baseline, err = g.apply(withCarried(ctx, in.Events), c.ID, in.BaselineName, false); err != nil {
+	if res.Baseline, err = g.apply(withCarried(ctx, in.Events), c.ID, in.BaselineName); err != nil {
 		return res, err
 	}
 	if done, err := g.Change(ctx, c.ID); err != nil {

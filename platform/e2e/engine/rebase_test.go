@@ -9,6 +9,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/engine/methodology"
 	"github.com/zimwip/goap/graph/graph"
+	"github.com/zimwip/goap/graph/graph/graphtest"
 )
 
 const applyOnly = `
@@ -76,7 +77,7 @@ func TestRunWaitsOnTheConflictsOfTheRebase(t *testing.T) {
 		return c
 	}
 	first, second := edited("first", "One"), edited("second", "Two")
-	if _, err := g.Apply(ctx, first.ID, ""); err != nil {
+	if _, err := graphtest.CommitMerge(ctx, g, first.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 

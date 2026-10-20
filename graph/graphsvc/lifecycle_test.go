@@ -165,9 +165,14 @@ nodeTypes:
 	if err := move("admin", "released"); err != nil {
 		t.Fatalf("admin may release: %v", err)
 	}
-	r := connect.NewRequest(&graphv1.ApplyChangeRequest{ChangeId: string(c.ID)})
+	r := connect.NewRequest(&graphv1.CommitChangeRequest{ChangeId: string(c.ID)})
 	withRoles(r.Header(), "contributor")
-	if _, err := h.ApplyChange(ctx, r); err != nil {
+	if _, err := h.CommitChange(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	m := connect.NewRequest(&graphv1.MergeChangeRequest{ChangeId: string(c.ID)})
+	withRoles(m.Header(), "contributor")
+	if _, err := h.MergeChange(ctx, m); err != nil {
 		t.Fatal(err)
 	}
 	if n, err := g.NodeByKey(ctx, "docs", "REQ-1"); err != nil || n.State != "released" || n.Version != 2 || n.Properties["title"] != "b" {

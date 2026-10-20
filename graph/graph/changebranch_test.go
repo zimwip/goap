@@ -48,7 +48,7 @@ func testChangeBranch(t *testing.T, repo Repo) {
 	}
 
 	// A applies: merged into main (no conflict)
-	ba, err := g.Apply(ctx, a.ID, "")
+	ba, err := g.apply(ctx, a.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func testChangeBranch(t *testing.T, repo Repo) {
 
 	// B changes the same property from the same base: the apply commits it, rebases its branch onto A and stops on the
 	// conflict (ADR 0102)
-	if _, err := g.Apply(ctx, b.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, b.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("apply with a conflict: %v", err)
 	}
 	bc, _ := g.Change(ctx, b.ID)
@@ -81,7 +81,7 @@ func testChangeBranch(t *testing.T, repo Repo) {
 	// the author settles it (B keeps its values) and applies: its merge version (B's commit and A's version as parents)
 	// is committed, then a fast-forward on top of A
 	settle(t, g, b.ID)
-	bb, err := g.Apply(ctx, b.ID, "")
+	bb, err := g.apply(ctx, b.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func testChangeBranchDisjoint(t *testing.T, repo Repo) {
 	a := setProp(t, g, f, f.base.ID, "A", map[string]any{"title": "Use PSP v1", "a": 1})
 	b := setProp(t, g, f, f.base.ID, "B", map[string]any{"title": "Use PSP v1", "b": 2})
 	for _, c := range []domain.Change{a, b} {
-		if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+		if _, err := g.apply(ctx, c.ID, ""); err != nil {
 			t.Fatal(err)
 		}
 		if got, _ := g.Change(ctx, c.ID); got.Status != domain.ChangeApplied {

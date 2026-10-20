@@ -86,7 +86,7 @@ func testValidateBoardOutdatedAndFlowView(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, a.ID, ""); err != nil {
+	if _, err := g.apply(ctx, a.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	// REQ-1 moved on main since the impact of b was written: it is outdated

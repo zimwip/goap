@@ -125,7 +125,7 @@ func TestValidatorsOfEachLevelAcceptValid(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := lc.g.Apply(lc.ctx, lc.c.ID, ""); err != nil {
+	if _, err := lc.g.apply(lc.ctx, lc.c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -146,7 +146,7 @@ func TestLinkValidatorRunsAtCommit(t *testing.T) {
 	if err := lc.accept(lc.b); err != nil {
 		t.Fatal(err)
 	}
-	_, err := lc.g.Apply(lc.ctx, lc.c.ID, "")
+	_, err := lc.g.apply(lc.ctx, lc.c.ID, "")
 	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "colours differ") {
 		t.Fatalf("commit: %v", err)
 	}

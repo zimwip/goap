@@ -13,6 +13,7 @@ import (
 	rsk "github.com/zimwip/goap/contracts/risk"
 	"github.com/zimwip/goap/engine/methodology"
 	"github.com/zimwip/goap/graph/graph"
+	"github.com/zimwip/goap/graph/graph/graphtest"
 )
 
 // riskyYAML is a transverse methodology (ADR 0036 §3): it applies to staged, so its process runs alongside the
@@ -314,7 +315,7 @@ func TestRunWaitsForTheChangesItDependsOn(t *testing.T) {
 	if _, err := g.ImpactNodeReview(ctx, dep.ID, cn.ID, domain.ReviewAccepted, "u", "ok"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, dep.ID, ""); err != nil {
+	if _, err := graphtest.CommitMerge(ctx, g, dep.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	applied, err := g.Change(ctx, dep.ID)

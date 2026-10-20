@@ -234,7 +234,7 @@ func TestPrepareChangeWithClarificationAndReview(t *testing.T) {
 	if p.Status != engine.StatusCompleted {
 		t.Fatalf("status %s %s world=%v", p.Status, p.Error, p.World)
 	}
-	b2, err := g.Apply(ctx, p.ChangeID, "B2")
+	b2, err := graphtest.CommitMerge(ctx, g, p.ChangeID, "B2")
 	if err != nil {
 		t.Fatal(err)
 	}

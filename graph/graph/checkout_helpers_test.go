@@ -55,7 +55,7 @@ func importNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) 
 	if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
 		return domain.Node{}, err
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := g.apply(ctx, c.ID, ""); err != nil {
 		return domain.Node{}, err
 	}
 	return g.NodeByKey(ctx, ns, in.Key)
@@ -89,7 +89,7 @@ func importLink(ctx context.Context, g *Graph, typ string, from, to domain.NodeR
 	if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
 		return l, err
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := g.apply(ctx, c.ID, ""); err != nil {
 		return l, err
 	}
 	return l, nil
@@ -121,7 +121,7 @@ func importProps(ctx context.Context, g *Graph, ref domain.NodeRef, props map[st
 	if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
 		return src, err
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := g.apply(ctx, c.ID, ""); err != nil {
 		return src, err
 	}
 	return g.Node(ctx, domain.NodeRef{ID: ref.ID})

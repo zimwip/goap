@@ -54,7 +54,7 @@ func testRebaseMergesLinkSets(t *testing.T, repo Repo) {
 	c, _ := propChange(t, g, head(), "props", req(), map[string]any{"title": "PSP v2"})
 	must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
 	must[domain.Link](t)(importLink(ctx, g, "satisfies", req(), needs["NEED-2"].Ref(), nil))
-	must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
 	if n := must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, "REQ-1")); n.Properties["title"] != "PSP v2" {
 		t.Fatalf("the change's property: %v", n.Properties)
 	}
@@ -71,7 +71,7 @@ func testRebaseMergesLinkSets(t *testing.T, repo Repo) {
 	}
 	must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
 	must[domain.Link](t)(importLink(ctx, g, "satisfies", req(), needs["NEED-4"].Ref(), nil))
-	must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
 	if got := targets(); !slices.Equal(got, want("NEED-2", "NEED-3", "NEED-4")) {
 		t.Fatalf("both sides' links stand: %v", got)
 	}

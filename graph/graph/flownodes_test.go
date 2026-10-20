@@ -120,7 +120,7 @@ func testFlowChangeImpactsView(t *testing.T, repo Repo) {
 		t.Fatalf("checked out from the released version: %+v", d)
 	}
 	// a change with an open flow is not applied
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("Apply must refuse an open flow, got %v", err)
 	}
 }
@@ -177,7 +177,7 @@ func testFlowChangeImpactsAdopt(t *testing.T, repo Repo) {
 	if m := viewOf(t, g, c.ID, ""); len(m) != 1 || m["REQ-1"].ID != added[0].ID {
 		t.Fatalf("main view: %+v", m)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := g.apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	final, _ := g.Node(ctx, domain.NodeRef{ID: w.f.req.ID})
@@ -223,7 +223,7 @@ func testFlowChangeImpactsDiscard(t *testing.T, repo Repo) {
 	if _, err := g.acceptOn(ctx, c.ID, "", "e4", w.tst.ID, "bot", "needed"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
+	if _, err := g.apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	final, _ := g.Node(ctx, domain.NodeRef{ID: w.f.req.ID})

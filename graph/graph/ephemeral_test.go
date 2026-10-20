@@ -107,7 +107,7 @@ func testBaselineNodesOfAChange(t *testing.T, repo Repo) {
 	if _, err := g.ImpactNodeReviewBatch(ctx, c.ID, batch); err != nil {
 		t.Fatal(err)
 	}
-	b, err := g.Apply(ctx, c.ID, "")
+	b, err := g.apply(ctx, c.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}

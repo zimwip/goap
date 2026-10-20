@@ -42,7 +42,7 @@ func testOnlyModificationsAreAcceptedAndCommitted(t *testing.T, repo Repo) {
 			must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, cn.ID, domain.ReviewAccepted, "bob", "ok"))
 		}
 	}
-	b := must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
+	b := g.withState(t, ctx, must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, "")))
 	if b.Nodes[f.req.ID] != f.req.Version {
 		t.Fatalf("REQ-1 was not modified: no version of it is written: %+v", b.Nodes)
 	}
@@ -68,7 +68,7 @@ func testIterateOnTheBranchOfAChange(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, req.ID, domain.ReviewAccepted, "bob", "ok"))
 	created := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "D-1", Type: "Design", Rationale: "new"}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, created.ID, domain.ReviewAccepted, "bob", "ok"))
-	first := must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
+	first := g.withState(t, ctx, must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, "")))
 	v1 := first.Nodes[f.req.ID]
 
 	// edited again after the commit: checked out from the version the commit wrote
@@ -86,7 +86,7 @@ func testIterateOnTheBranchOfAChange(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, req.ID, domain.ReviewAccepted, "bob", "ok"))
 	// a node it created is checked out again too, then left as it was
 	must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: created.ID}))
-	second := must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
+	second := g.withState(t, ctx, must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, "")))
 	v2 := second.Nodes[f.req.ID]
 	if second.Seq <= first.Seq || second.ParentID != first.ParentID || v2 == v1 {
 		t.Fatalf("the second commit follows the first: %+v", second)
@@ -126,7 +126,7 @@ func testWithdrawACommittedImpact(t *testing.T, repo Repo) {
 	if st := must[CommitState](t)(g.CommitState(ctx, c.ID)); !st.CanCommit || st.CanMerge || len(st.ToCommit) != 2 || len(st.Unsettled) != 2 {
 		t.Fatalf("two modifications to commit, nothing to merge: %+v", st)
 	}
-	first := must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
+	first := g.withState(t, ctx, must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, "")))
 	if first.Nodes[f.req.ID] == f.req.Version {
 		t.Fatalf("REQ-1 committed: %+v", first.Nodes)
 	}
@@ -140,7 +140,7 @@ func testWithdrawACommittedImpact(t *testing.T, repo Repo) {
 	if st := must[CommitState](t)(g.CommitState(ctx, c.ID)); !st.CanCommit || st.CanMerge || st.Reverts != 1 || !st.Commits || len(st.ToCommit) != 0 {
 		t.Fatalf("a revert to commit, nothing else: %+v", st)
 	}
-	second := must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
+	second := g.withState(t, ctx, must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, "")))
 	if st := must[CommitState](t)(g.CommitState(ctx, c.ID)); st.CanCommit || !st.CanMerge || len(st.Unsettled) != 0 {
 		t.Fatalf("committed, ready to merge: %+v", st)
 	}

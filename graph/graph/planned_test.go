@@ -70,14 +70,14 @@ func testPlannedCreation(t *testing.T, repo Repo) {
 	must[[]domain.ChangeImpact](t)(plan("REQ-LATER", "Requirement"))
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, req.ID, "bob", "fine"))
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, tst.ID, "bob", "fine"))
-	if _, err := g.Apply(ctx, c.ID, ""); err == nil || !strings.Contains(err.Error(), "REQ-LATER is planned") {
+	if _, err := g.apply(ctx, c.ID, ""); err == nil || !strings.Contains(err.Error(), "REQ-LATER is planned") {
 		t.Fatalf("a planned creation holds the merge: %v", err)
 	}
 	later := impactsOn(t, g, c.ID, "REQ-LATER")
 	if err := g.WithdrawImpact(ctx, c.ID, later[0].ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
 	for _, key := range []string{"REQ-NEW", "TST-NEW"} {
 		if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, key); err != nil || n.Version != 1 {
 			t.Fatalf("%s commits as a new node: %+v %v", key, n, err)

@@ -73,7 +73,7 @@ func testNamespaces(t *testing.T, repo Repo) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := g.Apply(ctx, c.ID, "B2"); err != nil {
+	if _, err := g.apply(ctx, c.ID, "B2"); err != nil {
 		t.Fatal(err)
 	}
 	if n, err := g.NodeByKey(ctx, "", "Y"); err != nil || n.Namespace != domain.DefaultNamespace {
