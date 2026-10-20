@@ -1,6 +1,6 @@
 # ADR 0143 — The state of a node is a selection; baselines keep no entries, tags name versions
 
-**Status**: proposed · **Date**: 2026-10 · Builds on ADR 0032 (versions and branches), 0056 (baselines and tags), 0137
+**Status**: accepted · **Date**: 2026-10 · Builds on ADR 0032 (versions and branches), 0056 (baselines and tags), 0137
 (a commit reads the nodes it touches, and its addendum *The version of a node in a baseline is a selection*), 0140 (a
 baseline is computed from the versions that landed) · Supersedes the checkpoints of ADR 0140 and the change tags of
 ADR 0056
@@ -66,7 +66,9 @@ configuration, a document set, whose version links to the exact versions of what
    versions a review, a release or an investigation is about). Its owner shares it with other users (read or edit, the
    way other shared things are granted); the selection is data of its own, never a state of the graph, and adding or
    removing a version is an edit of the smart tag, not a change of the nodes. Reading it is the versions it lists and,
-   from each, its links.
+   from each, its links. Smart tags are kept in a store of their own, like the preferences (ADR 0038): a table with its
+   migrations in both dialects and its RPCs, no change, no journal; the owner shares a smart tag with users by subject,
+   to read or to edit.
 8. RPCs, `goap-change` and the web (the tags of the Baseline explorer) move to `TagVersion` / `Tags(node)` and the
    smart tag calls (create, edit the selection, share, list the ones shared with the caller).
 
@@ -82,8 +84,3 @@ configuration, a document set, whose version links to the exact versions of what
   releases, or a smart tag selecting the versions. The demo data and the docs that tag changes move to these.
 - The database starts from zero (no migration of `baseline_entry` or of the stored tags); the suites drop their runs
   with `GOAP_MATERIALIZE_EVERY`.
-
-## Still to settle
-
-- Where smart tags are kept (graph data of the `organisation` namespace, changed through a change and versioned, or a
-  store of their own like the preferences) and how sharing is granted.
