@@ -189,7 +189,7 @@ REQ-1  v1(main) ── v2(change-A, derive) ═══ joins main (fast-forward o
   and, for one that took a change in, the sub-changes merged into it (`BaselineStep.merged`: a change branch holds no
   baseline, ADR 0140). A sub-change names its parent. Nothing is stored: the stack is composed from what every version and
   baseline records. `DiffBaselines` also answers the changes that explain the difference (`changes_added` /
-  `changes_removed`). Web: `ChangeStackView.svelte` in the node history, the Baseline workspace and the comparison.
+  `changes_removed`). Web: `ChangeStackView.svelte` in the node history, the Baseline tab and the comparison.
 - **Views of a change** (`ChangeView`): the head of the change branch with the change impacts of a flow counted at a
   level — `written` (the drafts proposed or accepted, not rejected: what the change or an option would look like),
   `accepted` (what would land), `landed` (the version it landed: on its own branch when committed, then on the branch it is merged into; the last one counts). Only `landed` is stored.

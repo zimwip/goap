@@ -83,20 +83,22 @@ export function activate(id: string): void {
 }
 
 /**
- * Opens (or activates) an object's tab. Without `pin`, the tab is a preview
- * that replaces the current preview, unless it has unsaved changes.
+ * Opens (or activates) an object's tab. Without `pin` (and for a kind not
+ * `pinned` by default), the tab is a preview that replaces the current
+ * preview, unless it has unsaved changes.
  */
 export function openTab(spec: TabSpec, opts: { pin?: boolean; background?: boolean } = {}): Tab {
   const id = tabId(spec);
+  const pin = opts.pin ?? !!editorView(spec.kind)?.pinned;
   const existing = findTab(id);
   if (existing) {
-    if (opts.pin) existing.pinned = true;
+    if (pin) existing.pinned = true;
     // Params may carry more recent information (name…).
     Object.assign(existing.params, spec.params);
     if (!opts.background) activate(id);
     return existing;
   }
-  const tab: Tab = { id, kind: spec.kind, params: { ...spec.params }, pinned: !!opts.pin };
+  const tab: Tab = { id, kind: spec.kind, params: { ...spec.params }, pinned: pin };
   const previewIdx = tabsState.tabs.findIndex((t) => !t.pinned);
   if (previewIdx >= 0 && isDirty(tabsState.tabs[previewIdx])) tabsState.tabs[previewIdx].pinned = true;
   const reuse = tabsState.tabs.findIndex((t) => !t.pinned);

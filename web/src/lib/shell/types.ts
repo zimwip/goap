@@ -54,8 +54,6 @@ export interface PanelView extends BaseView {
   component: Component;
   /** badge (counter) shown on the icon or tab */
   badge?: () => string | number | undefined;
-  /** while this is the active tool of its zone, it replaces the editor area's tabbed view; unset: EditorArea shows tabs as usual */
-  editorArea?: Component;
 }
 
 /** Editor type: a component that receives the tab, plus hooks. */
@@ -64,6 +62,8 @@ export interface EditorView extends BaseView {
   component: Component<{ tab: Tab }>;
   /** unique key of the edited object (the tab id is `kind:key`) */
   key: (params: TabParams) => string;
+  /** its tabs open pinned, never as a preview the next selection replaces */
+  pinned?: boolean;
   tabTitle: (tab: Tab) => string;
   tabIcon?: (tab: Tab) => IconName;
   /** tab tooltip */

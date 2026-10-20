@@ -16,7 +16,6 @@ import './nodeEditors';
 import MethodologyExplorer from './nav/MethodologyExplorer.svelte';
 import DomainExplorer from './nav/DomainExplorer.svelte';
 import BaselineExplorer from './nav/BaselineExplorer.svelte';
-import BaselineWorkspace from './nav/BaselineWorkspace.svelte';
 import ChangesExplorer from './nav/ChangesExplorer.svelte';
 import AccessExplorer from './nav/AccessExplorer.svelte';
 import PeopleOrgExplorer from './nav/PeopleOrgExplorer.svelte';
@@ -55,6 +54,7 @@ import RunTab from './editors/RunTab.svelte';
 import ChangeTab from './editors/ChangeTab.svelte';
 import PoliciesTab from './editors/PoliciesTab.svelte';
 import ImportTab from './editors/ImportTab.svelte';
+import BaselineTab from './editors/BaselineTab.svelte';
 import { importKind, IMPORT_KINDS } from './editors/importKinds';
 
 import EventsConsole from './bottom/EventsConsole.svelte';
@@ -74,7 +74,7 @@ registerView({ id: 'methodologies', zone: 'left', title: 'Methodologies', icon: 
 registerView({ id: 'domains', zone: 'left', title: 'Domains', icon: 'graph', component: DomainExplorer, order: 1.5 });
 registerView({ id: 'processes', zone: 'left', title: 'My processes', icon: 'runs', component: ProcessesExplorer, order: 2.2 });
 registerView({ id: 'triggers', zone: 'left', title: 'Triggers', icon: 'clock', component: TriggersExplorer, order: 2.5 });
-registerView({ id: 'baselines', zone: 'left', title: 'Baseline', icon: 'database', component: BaselineExplorer, editorArea: BaselineWorkspace, order: 3 });
+registerView({ id: 'baselines', zone: 'left', title: 'Baseline', icon: 'database', component: BaselineExplorer, order: 3 });
 registerView({
   id: 'changes',
   zone: 'left',
@@ -469,6 +469,20 @@ registerView({
   groupDirty,
   group: draftGroup,
   discard: discardGroup,
+});
+
+registerView({
+  id: 'baseline',
+  zone: 'editor',
+  title: 'Baseline',
+  icon: 'database',
+  component: BaselineTab,
+  // one tab per branch; the baseline it shows is the tab's own state
+  key: (p) => `${p.namespace ?? ''}/${p.branch || 'main'}`,
+  pinned: true,
+  tabTitle: (t) => `${t.params.namespace} · ${t.params.branch || 'main'}`,
+  tabIcon: () => 'database',
+  tooltip: (t) => `Baseline of ${t.params.namespace}, branch ${t.params.branch || 'main'}${t.params.baseline ? ` at ${shortId(t.params.baseline)}` : ' (head)'}`,
 });
 
 registerView({
