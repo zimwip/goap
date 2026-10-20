@@ -73,3 +73,17 @@ its merge). What a version is never changes once written (ADR 0079, 0141), so:
 
 A commit of 50 nodes is 277 statements (80 ms), its merge 152 (45 ms), the review batch 161: what remains is per-node
 writes (the version, the latest, the link set, the log entry, the projection of the impact).
+
+### The version of a node in a baseline is a selection
+
+Every version is complete (ADR 0079), so the version of a node in a baseline of a branch is the version of that node with
+the greatest order of landing up to the baseline's (`node_version.landed`, `node_branch.landed`): a selection, not a
+replay. `guardTx.stateAt` answers a read of some nodes in a derived baseline (`domain.DerivedKind`) with one statement
+for all of them (`Tx.LandedVersions`, on PostgreSQL `sqlFoldVersions`: one lookup per node of the indexes
+`node_version_fold` / `node_branch_fold` on `(node_id, branch, landed)`), down to the last baseline of the branch that
+does not follow from the landings (`Tx.LatestUnderived`, index `baseline_underived`: the bootstrap snapshot) else to the
+baseline the branch was forked from (`guardTx.foldStop`). Checkpoints and `baseline_entry` are no longer read for some
+nodes; they still serve the reads of a whole state (browsing, export, the access snapshots), whose removal is to come.
+A transaction keeps what it read of a baseline it did not write (`guardTx.baselineReads`). Baseline differences walk at
+most `MaxDiffChanges` (1000) changes between the two baselines. On the lifecycle bench (18 minutes, 3057 changes, 46k
+nodes), the merge stays at a p50 of 75 to 80 ms from start to end (it rose from 64 to 171 ms reading checkpoints).

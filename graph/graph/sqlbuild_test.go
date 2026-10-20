@@ -164,7 +164,21 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = pg.sqlLandedVersions("", "main", 3, 9, nil)
 	check("pg LandedVersions", pg, q, a, landed("node_id::text", "", "", "$4"), []any{"main", int64(3), int64(9), "default"})
 	q, a = pg.sqlLandedVersions("", "main", 3, 9, ids)
-	check("pg LandedVersions ids", pg, q, a, landed("node_id::text", " AND v.node_id = ANY($5::uuid[])", " AND j.node_id = ANY($5::uuid[])", "$4"), []any{"main", int64(3), int64(9), "default", []string{"n1", "n2"}})
+	check("pg LandedVersions ids", pg, q, a, `SELECT q.id::text, x.version, x.deleted, x.reason
+		FROM unnest($5::uuid[]) AS q(id) JOIN node n ON n.id = q.id AND n.namespace = $4
+		CROSS JOIN LATERAL (
+			SELECT u.version, u.deleted, u.reason FROM (
+				(SELECT v.version, v.deleted, v.reason, v.landed FROM node_version v
+				WHERE v.node_id = q.id AND v.branch = $1 AND v.landed > $2 AND v.landed <= $3 ORDER BY v.landed DESC, v.version DESC LIMIT 1)
+				UNION ALL
+				(SELECT j.version, v.deleted, v.reason, j.landed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
+				WHERE j.node_id = q.id AND j.branch = $1 AND j.landed > $2 AND j.landed <= $3 ORDER BY j.landed DESC, j.version DESC LIMIT 1)
+			) u ORDER BY u.landed DESC, u.version DESC LIMIT 1
+		) x`, []any{"main", int64(3), int64(9), "default", []string{"n1", "n2"}})
+	q, a = pg.sqlLatestUnderived("", "main", 9)
+	check("pg LatestUnderived", pg, q, a, `SELECT id::text, seq FROM baseline WHERE namespace = $1 AND branch = $2 AND kind NOT IN ('commit', 'merge', 'fast-forward') AND seq < $3 ORDER BY seq DESC LIMIT 1`, []any{"default", "main", int64(9)})
+	q, a = lite.sqlLatestUnderived("", "main", 9)
+	check("sqlite LatestUnderived", lite, q, a, `SELECT id, seq FROM baseline WHERE namespace = ? AND branch = ? AND kind NOT IN ('commit', 'merge', 'fast-forward') AND seq < ? ORDER BY seq DESC LIMIT 1`, []any{"default", "main", int64(9)})
 	q, a = lite.sqlLandedVersions("", "main", 3, 9, ids)
 	check("sqlite LandedVersions ids", lite, q, a, strings.NewReplacer("$1", "?", "$2", "?", "$3", "?").Replace(landed("node_id",
 		" AND v.node_id IN (SELECT value FROM json_each(?))", " AND j.node_id IN (SELECT value FROM json_each(?))", "?")), []any{"main", int64(3), int64(9), "default", `["n1","n2"]`})

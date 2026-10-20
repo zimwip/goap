@@ -712,6 +712,16 @@ func (t *memTx) LatestStored(_ context.Context, namespace, branch string, after,
 	return best.ID, nil
 }
 
+func (t *memTx) LatestUnderived(_ context.Context, namespace, branch string, before int64) (domain.BaselineID, int64, error) {
+	var best domain.Baseline
+	for _, b := range t.st.baselines {
+		if !domain.DerivedKind(b.Kind) && b.Namespace == domain.NamespaceOf(namespace) && domain.BranchOf(b.Branch) == domain.BranchOf(branch) && b.Seq < before && b.Seq > best.Seq {
+			best = b
+		}
+	}
+	return best.ID, best.Seq, nil
+}
+
 func (t *memTx) NextLanding(context.Context) (int64, error) {
 	t.st.seq++
 	return t.st.seq, nil

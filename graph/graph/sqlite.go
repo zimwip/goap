@@ -520,6 +520,18 @@ func (t *sqliteTx) LatestStored(ctx context.Context, namespace, branch string, a
 	return domain.BaselineID(id), nil
 }
 
+func (t *sqliteTx) LatestUnderived(ctx context.Context, namespace, branch string, before int64) (domain.BaselineID, int64, error) {
+	q, args := dialectSQLite.sqlLatestUnderived(namespace, branch, before)
+	var id string
+	var seq int64
+	if err := t.tx.QueryRowContext(ctx, q, args...).Scan(&id, &seq); errors.Is(err, sql.ErrNoRows) {
+		return "", 0, nil
+	} else if err != nil {
+		return "", 0, err
+	}
+	return domain.BaselineID(id), seq, nil
+}
+
 func (t *sqliteTx) NextLanding(ctx context.Context) (int64, error) {
 	r := t.repo
 	r.mu.Lock()

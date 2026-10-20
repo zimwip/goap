@@ -20,6 +20,7 @@ const (
 	stateFromCache    = "cache"    // a state computed before (the state cache)
 	stateFromStored   = "stored"   // a baseline storing its entries: a checkpoint, or a snapshot, a rebase, a revert
 	stateFromLandings = "landings" // the versions landed, down to the empty state: no stored baseline on the way
+	stateFromFold     = "fold"     // some nodes: their landings folded down to a baseline the landings do not give
 )
 
 type stateMetrics struct {

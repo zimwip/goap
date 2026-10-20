@@ -101,6 +101,10 @@ type Tx interface {
 	// LatestStored returns the last baseline of a branch of a namespace storing its state (Gap 0) whose order is after
 	// `after`, up to upTo: the checkpoint a header is stored over (empty: none, ADR 0140).
 	LatestStored(ctx context.Context, namespace, branch string, after, upTo int64) (domain.BaselineID, error)
+	// LatestUnderived returns the last baseline of a branch of a namespace before the order `before` whose state does
+	// not follow from the landings (not domain.DerivedKind), with its order (empty: none): where the fold of the
+	// landings of a node on the branch stops.
+	LatestUnderived(ctx context.Context, namespace, branch string, before int64) (domain.BaselineID, int64, error)
 	// NextLanding allocates the order of a new baseline (Baseline.Seq): greater than every order allocated before.
 	NextLanding(ctx context.Context) (int64, error)
 	// BranchNodeIDs lists the nodes a branch holds a version of: written on it or joined to it (ADR 0137).

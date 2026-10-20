@@ -187,10 +187,7 @@ func (d dialect) sqlNodesAt(refs []domain.NodeRef, nodeType string) (string, []a
 // nodeIDList tests col against a list of node ids given as the n-th argument: an array for PostgreSQL, a JSON list for
 // SQLite.
 func (d dialect) nodeIDList(col string, n int, ids []domain.NodeID) (string, any) {
-	list := make([]string, len(ids))
-	for i, id := range ids {
-		list[i] = string(id)
-	}
+	list := nodeIDStrings(ids)
 	if d.pg {
 		return col + ` = ANY(` + d.ph(n) + `::uuid[])`, list
 	}
@@ -246,6 +243,9 @@ func (d dialect) sqlStoredTail(id domain.BaselineID) (string, []any) {
 // of a change).
 func (d dialect) sqlLandedVersions(namespace, branch string, after, upTo int64, ids []domain.NodeID) (string, []any) {
 	args := []any{domain.BranchOf(branch), after, upTo, domain.NamespaceOf(namespace)}
+	if ids != nil && d.pg {
+		return d.sqlFoldVersions(args, ids)
+	}
 	inV, inJ := "", ""
 	if ids != nil {
 		in, arg := d.nodeIDList("v.node_id", 5, ids)
@@ -262,6 +262,40 @@ func (d dialect) sqlLandedVersions(namespace, branch string, after, upTo int64, 
 			WHERE j.branch = ` + d.ph(1) + ` AND j.landed > ` + d.ph(2) + ` AND j.landed <= ` + d.ph(3) + inJ + `
 		) x JOIN node n ON n.id = x.node_id WHERE n.namespace = ` + d.ph(4) + `
 	) y WHERE rn = 1`, args
+}
+
+// sqlFoldVersions is sqlLandedVersions for some nodes on PostgreSQL: for each node its last landing on the branch in the
+// range, one lookup of the indexes node_version_fold / node_branch_fold whatever the length of its history (the planner
+// of a generic plan cannot estimate the range, a join over the list could walk every landing of the branch).
+func (d dialect) sqlFoldVersions(args []any, ids []domain.NodeID) (string, []any) {
+	return `SELECT q.id::text, x.version, x.deleted, x.reason
+		FROM unnest($5::uuid[]) AS q(id) JOIN node n ON n.id = q.id AND n.namespace = $4
+		CROSS JOIN LATERAL (
+			SELECT u.version, u.deleted, u.reason FROM (
+				(SELECT v.version, v.deleted, v.reason, v.landed FROM node_version v
+				WHERE v.node_id = q.id AND v.branch = $1 AND v.landed > $2 AND v.landed <= $3 ORDER BY v.landed DESC, v.version DESC LIMIT 1)
+				UNION ALL
+				(SELECT j.version, v.deleted, v.reason, j.landed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
+				WHERE j.node_id = q.id AND j.branch = $1 AND j.landed > $2 AND j.landed <= $3 ORDER BY j.landed DESC, j.version DESC LIMIT 1)
+			) u ORDER BY u.landed DESC, u.version DESC LIMIT 1
+		) x`, append(args, nodeIDStrings(ids))
+}
+
+func nodeIDStrings(ids []domain.NodeID) []string {
+	list := make([]string, len(ids))
+	for i, id := range ids {
+		list[i] = string(id)
+	}
+	return list
+}
+
+// sqlLatestUnderived reads the last baseline of a branch before an order whose state does not follow from the landings
+// (a snapshot, a rebase, a revert: not domain.DerivedKind): where the fold of the landings of a node stops (index
+// baseline_underived, whose predicate this one repeats).
+func (d dialect) sqlLatestUnderived(namespace, branch string, before int64) (string, []any) {
+	return `SELECT ` + d.id("id") + `, seq FROM baseline WHERE namespace = ` + d.ph(1) + ` AND branch = ` + d.ph(2) +
+			` AND kind NOT IN ('commit', 'merge', 'fast-forward') AND seq < ` + d.ph(3) + ` ORDER BY seq DESC LIMIT 1`,
+		[]any{domain.NamespaceOf(namespace), domain.BranchOf(branch), before}
 }
 
 // sqlLatestStored reads the last baseline of a branch storing its state between two orders (index baseline_stored).

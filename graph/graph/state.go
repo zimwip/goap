@@ -198,7 +198,20 @@ func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domai
 			return nil, err
 		}
 		var got map[domain.NodeID]domain.Version
-		if b.Gap == 0 {
+		if pending != nil && domain.DerivedKind(b.Kind) {
+			// some nodes in a state that follows from the landings: the history of each node on the branch folded in one
+			// statement, down to the last baseline that does not follow from them, else to where the branch starts; the
+			// checkpoints on the way are what a whole state is read from, not needed here
+			stop, after, err := t.foldStop(ctx, b)
+			if err != nil {
+				return nil, err
+			}
+			if got, err = t.Tx.LandedVersions(ctx, b.Namespace, b.Branch, after, b.Seq, want); err != nil {
+				return nil, err
+			}
+			read.source, read.landed = stateFromFold, read.landed+len(got)
+			id = stop
+		} else if b.Gap == 0 {
 			if got, id, err = t.Tx.StoredVersions(ctx, b.ID, want); err != nil {
 				return nil, err
 			}
@@ -231,6 +244,30 @@ func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domai
 		}
 	}
 	return out, nil
+}
+
+// foldStop is where the fold of the landings on the branch of a derived baseline stops (ADR 0140): the last baseline of
+// the branch before it that does not follow from the landings, with its order, else the baseline the branch was forked
+// from (none for main), under every landing of the branch.
+func (t *guardTx) foldStop(ctx context.Context, b domain.Baseline) (domain.BaselineID, int64, error) {
+	id, seq, err := t.Tx.LatestUnderived(ctx, b.Namespace, b.Branch, b.Seq)
+	if err != nil || id != "" {
+		return id, seq, err
+	}
+	key := domain.NamespaceOf(b.Namespace) + "\x00" + domain.BranchOf(b.Branch)
+	fork, ok := t.forks[key]
+	if !ok {
+		br, err := t.Tx.Branch(ctx, domain.NamespaceOf(b.Namespace), domain.BranchOf(b.Branch))
+		if err != nil {
+			return "", 0, err
+		}
+		if t.forks == nil {
+			t.forks = map[string]domain.BaselineID{}
+		}
+		fork = br.ForkBaseline
+		t.forks[key] = fork
+	}
+	return fork, 0, nil
 }
 
 // nodesOf returns the whole state of a baseline.

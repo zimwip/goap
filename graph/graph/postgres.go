@@ -643,6 +643,18 @@ func (t *pgTx) LatestStored(ctx context.Context, namespace, branch string, after
 	return domain.BaselineID(id), nil
 }
 
+func (t *pgTx) LatestUnderived(ctx context.Context, namespace, branch string, before int64) (domain.BaselineID, int64, error) {
+	q, args := dialectPG.sqlLatestUnderived(namespace, branch, before)
+	var id string
+	var seq int64
+	if err := t.tx.QueryRow(ctx, q, args...).Scan(&id, &seq); errors.Is(err, pgx.ErrNoRows) {
+		return "", 0, nil
+	} else if err != nil {
+		return "", 0, err
+	}
+	return domain.BaselineID(id), seq, nil
+}
+
 func (t *pgTx) NextLanding(ctx context.Context) (int64, error) {
 	var seq int64
 	err := t.tx.QueryRow(ctx, `SELECT nextval('landing_seq')`).Scan(&seq)

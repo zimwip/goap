@@ -71,6 +71,8 @@ type guardTx struct {
 	newBaselines map[domain.BaselineID]bool
 	// baselineReads are the versions the transaction read of some nodes in baselines it did not write (0: not held)
 	baselineReads map[domain.BaselineID]map[domain.NodeID]domain.Version
+	// forks are the baselines the lasting branches read by the transaction were forked from, by namespace and branch
+	forks map[string]domain.BaselineID
 	// landing is, per branch, the order of the baseline the versions the transaction writes or joins there land in
 	// (ADR 0140): taken by the first of them, given to the baseline written after them
 	landing map[string]int64

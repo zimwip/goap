@@ -82,6 +82,10 @@ type gap struct {
 	added, removed, changes []domain.ChangeID
 }
 
+// MaxDiffChanges bounds the changes between two baselines a difference walks: further apart, a difference of their
+// histories means nothing to read, and it is refused.
+const MaxDiffChanges = 1000
+
 // lineageGap walks the lineages of two baselines (the edges of domain.BaselineLineage: parent, merged head and, for
 // one taking a change in, the baselines of that change's own branch written before it) newest first by order, each
 // baseline painted with the side(s) reaching it, and stops once every baseline left to walk is reached from both: a
@@ -128,6 +132,9 @@ func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, 
 	}
 	var seen []walked
 	for len(todo) > 0 && slices.ContainsFunc(todo, func(id domain.BaselineID) bool { return paint[id] != both }) {
+		if len(seen) >= MaxDiffChanges {
+			return g, invalidf("baselines %s and %s are more than %d changes apart: compare closer baselines", from, to, MaxDiffChanges)
+		}
 		id := todo[len(todo)-1]
 		todo = todo[:len(todo)-1]
 		b, side := headers[id], paint[id]
