@@ -7,7 +7,7 @@
   import NewChangeForm from '../../components/NewChangeForm.svelte';
   import { toggle, isOpen } from './expanded.svelte';
   import { project, inActiveProject } from '../../stores/project.svelte';
-  import { changes, refreshChanges } from '../../stores/catalog.svelte';
+  import { changes, refreshChanges, closedChanges, loadMoreChanges, setChangesScope, CLOSED_STATUSES, type ClosedStatus } from '../../stores/catalog.svelte';
   import { live, processes, refreshProcesses } from '../../stores/live.svelte';
   import { select as select } from '../../shell/workbench.svelte';
   import { openTab, tabsState } from '../../shell/tabs.svelte';
@@ -110,6 +110,14 @@
   ];
 
   const q = $derived(filter.trim().toLowerCase());
+  // the changes that are over are read by pages, of the project shown and matching the search (a short pause first)
+  $effect(() => {
+    const scope = q || allProjects ? '' : project.current;
+    const query = q;
+    const t = setTimeout(() => void setChangesScope(scope, query), query ? 250 : 0);
+    return () => clearTimeout(t);
+  });
+  const paged = (s: string): s is ClosedStatus => (CLOSED_STATUSES as readonly string[]).includes(s);
   const shown = $derived(
     changes.items.filter(
       (c) =>
@@ -275,9 +283,28 @@
       {@const list = shown.filter((c) => c.status === s.id)}
       {@const k = `c:${s.id}`}
       {#if list.length}
-        <TreeRow icon="folder" label={s.label} detail={String(list.length)} expanded={isOpen(k, s.id !== 'abandoned')} ontoggle={() => toggle(k, s.id !== 'abandoned')} />
+        {@const pages = paged(s.id) ? closedChanges[s.id] : undefined}
+        <TreeRow
+          icon="folder"
+          label={s.label}
+          detail={pages?.next ? `${list.length} of ${pages.total}` : String(list.length)}
+          expanded={isOpen(k, s.id !== 'abandoned')}
+          ontoggle={() => toggle(k, s.id !== 'abandoned')}
+        />
         {#if isOpen(k, s.id !== 'abandoned')}
           {#each list.filter(isRoot) as c (c.id)}{@render change(c, 1)}{/each}
+          {#if pages?.next && paged(s.id)}
+            {@const st = s.id}
+            <TreeRow
+              depth={1}
+              icon="chevronDown"
+              label={pages.loading ? 'Loading…' : 'Load more'}
+              detail={`${Math.max(0, pages.total - pages.items.length)} older`}
+              muted
+              title={`Load the next ${s.label.toLowerCase()} changes`}
+              onselect={() => void loadMoreChanges(st)}
+            />
+          {/if}
         {/if}
       {/if}
     {/each}

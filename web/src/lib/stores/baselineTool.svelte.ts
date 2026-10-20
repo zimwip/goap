@@ -1,51 +1,42 @@
-// Selection shared between the Baseline tool's nav panel (BaselineExplorer) and its editor-area workspace
-// (BaselineWorkspace): siblings in the shell, so the selection lives here rather than as props.
+// The Baseline tool: its nav panel (BaselineExplorer) picks a namespace and opens a branch's history in a baseline
+// tab of the editor area (views/editors/BaselineTab.svelte), pinned by default.
 import { MAIN_BRANCH } from '../namespace';
 import { graph } from '../api';
-import { showTool } from '../shell/layout.svelte';
+import { openTab } from '../shell/tabs.svelte';
 
 interface BaselineToolState {
+  /** the namespace the explorer lists */
   namespace: string;
-  branch: string;
-  /** '' : the branch's head */
-  baseline: string;
   /** bumped after a branch/baseline mutation (create, merge, abandon, describe…) so both the nav panel and the
-   * workspace, siblings with no props between them, know to refetch */
+   * baseline tabs, with no props between them, know to refetch */
   reload: number;
 }
 
-export const baselineTool: BaselineToolState = $state({ namespace: '', branch: MAIN_BRANCH, baseline: '', reload: 0 });
+export const baselineTool: BaselineToolState = $state({ namespace: '', reload: 0 });
 
 export function selectNamespace(ns: string): void {
   baselineTool.namespace = ns;
-  baselineTool.branch = MAIN_BRANCH;
-  baselineTool.baseline = '';
-}
-
-export function selectBranch(name: string): void {
-  baselineTool.branch = name;
-  baselineTool.baseline = '';
-}
-
-export function selectBaseline(id: string): void {
-  baselineTool.baseline = id;
 }
 
 export function refreshBranches(): void {
   baselineTool.reload++;
 }
 
-/** Switches to the Baseline tool and shows this baseline (its namespace, branch, and itself specifically) —
- * for links elsewhere in the app (search, a change's starting/resulting baseline, a run's baseline). */
+/** Opens the baseline tab of a branch (one per branch), showing a baseline of it ('' : its head). */
+export function openBaseline(namespace: string, branch: string, baseline = ''): void {
+  openTab({ kind: 'baseline', params: { namespace, branch: branch || MAIN_BRANCH, baseline } }, { pin: true });
+}
+
+/** Shows this baseline in the tab of its branch — for links elsewhere in the app (search, a change's starting /
+ * resulting baseline, a run's baseline). */
 export async function viewBaseline(id: string, namespace: string): Promise<void> {
-  selectNamespace(namespace);
+  let branch = MAIN_BRANCH;
   try {
     const r = await graph.listBaselines(namespace, undefined, { ids: [id] });
-    const b = r.baselines?.find((x) => x.id === id);
-    if (b?.branch) baselineTool.branch = b.branch;
+    branch = r.baselines?.find((x) => x.id === id)?.branch || MAIN_BRANCH;
   } catch {
-    // best effort: leaves the selection on main
+    // best effort: shows it on main
   }
-  baselineTool.baseline = id;
-  showTool('left', 'baselines');
+  if (!baselineTool.namespace) selectNamespace(namespace);
+  openBaseline(namespace, branch, id);
 }

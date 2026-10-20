@@ -1,11 +1,9 @@
 <script lang="ts">
-  // Baseline tool's workspace: replaces the editor area's tabbed view while the Baseline tool is selected
-  // (registered as its `editorArea`, shell/EditorArea.svelte), driven by BaselineExplorer's nav (the store
-  // baselineTool.svelte). History (git-log-style, BaselineBranchGraph) on the left; node types, a filtered/paged
-  // node list, the neighbours graph and BaselineCompare — ported from the retired BaselineTab.svelte — on the
-  // right, all for whichever baseline is shown: the selected branch's head, or a specific row clicked in the
-  // history graph (own-branch or a fork/merge-source ghost). Branch management (open/merge/abandon/describe) is a
-  // right-click on the branch's row in BaselineExplorer, not shown here.
+  // Baseline tab: the history of one branch of a namespace (git-log-style, BaselineBranchGraph) on the left; node
+  // types, a filtered/paged node list, the neighbours graph and BaselineCompare on the right, all for whichever
+  // baseline is shown: the branch's head, or a specific row clicked in the history graph (`baseline` param). One tab
+  // per branch, opened pinned from BaselineExplorer (stores/baselineTool.svelte) or a link elsewhere. Branch
+  // management (open/merge/abandon/describe) is a right-click on the branch's row in BaselineExplorer, not shown here.
   import {
     graph,
     errorMessage,
@@ -34,14 +32,18 @@
   import { indexOf } from '../../graphIndex';
   import { splitType, typeCatalog } from '../../stores/types.svelte';
   import { MAIN_BRANCH } from '../../namespace';
-  import { baselineTool, selectBranch, selectBaseline } from '../../stores/baselineTool.svelte';
+  import { baselineTool, openBaseline } from '../../stores/baselineTool.svelte';
+  import type { Tab } from '../../shell/types';
   import { loadRaw, save } from '../../shell/storage';
 
   const SIZES = [25, 50, 100, 200];
   const HW_KEY = 'goap.ide.baseline.historyWidth';
   const CH_KEY = 'goap.ide.baseline.compareHeight';
 
-  const namespace = $derived(baselineTool.namespace);
+  let { tab }: { tab: Tab } = $props();
+
+  const namespace = $derived(tab.params.namespace ?? '');
+  const branchName = $derived(tab.params.branch || MAIN_BRANCH);
 
   /** the node version whose change-stack is open (ADR 0133) */
   let stackOf = $state('');
@@ -81,7 +83,7 @@
   // (possibly later-arriving) response can't overwrite the current namespace's data.
   $effect(() => {
     const ns = namespace;
-    const branch = baselineTool.branch;
+    const branch = branchName;
     void reload;
     void baselineTool.reload;
     // a commit, a merge, a branch opened by a change (its first edit, ADR 0102): the lanes follow
@@ -120,7 +122,7 @@
     if (!ns || !next || older) return;
     older = true;
     try {
-      const r = await graph.listBaselines(ns, undefined, { branch: baselineTool.branch, before: next, limit: PAGE });
+      const r = await graph.listBaselines(ns, undefined, { branch: branchName, before: next, limit: PAGE });
       history = [...(r.baselines ?? []), ...history];
       related = [...related, ...(r.related ?? [])];
       next = r.next && r.next !== '0' ? r.next : '';
@@ -132,24 +134,24 @@
   }
 
   const branchOf = (b: Baseline) => b.branch || MAIN_BRANCH;
-  const own = $derived(baselines.filter((b) => branchOf(b) === baselineTool.branch));
+  const own = $derived(baselines.filter((b) => branchOf(b) === branchName));
   const headId = $derived([...own].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))[0]?.id ?? '');
   /** the baseline shown in the panels below: whichever row was clicked in the history graph, or the branch's head */
-  const shownId = $derived(baselineTool.baseline || headId);
+  const shownId = $derived(tab.params.baseline || headId);
   /** the branch's fork point: anchors the graph even before it has a baseline of its own */
-  const forkBaseline = $derived(branches.find((b) => b.name === baselineTool.branch)?.forkBaseline);
+  const forkBaseline = $derived(branches.find((b) => b.name === branchName)?.forkBaseline);
 
-  /** a baseline of the selected branch is just shown (the graph already is the browsing view: no tab); one from
-   * another branch (a fork point or merge source) switches to that branch, and shows it too */
+  /** a baseline of this branch is shown in this tab (the graph already is the browsing view); one from another
+   * branch (a fork point or merge source) opens the tab of that branch, showing it */
   function selectHistory(id: string) {
-    // the open head of a branch with no commit yet (ADR 0102): shows that branch
+    // the open head of a branch with no commit yet (ADR 0102): opens that branch
     if (isOpenHead(id)) {
-      selectBranch(id.slice('open:'.length));
+      openBaseline(namespace, id.slice('open:'.length));
       return;
     }
     const br = branchOf(baselines.find((b) => b.id === id) ?? {});
-    if (br !== baselineTool.branch) selectBranch(br);
-    selectBaseline(id);
+    if (br !== branchName) openBaseline(namespace, br, id);
+    else tab.params.baseline = id;
   }
 
   /** Downloads the state of the shown baseline, without history: a JSON snapshot (ADR 0104) or an OKF zip, one
@@ -503,8 +505,8 @@
 
   <div class="workspace">
     <nav class="card history" style:width="{historyWidth}px" aria-label="History">
-      <h3>History <span class="hint">{baselineTool.branch}</span></h3>
-      <BaselineBranchGraph {baselines} {branches} branch={baselineTool.branch} {forkBaseline} selected={shownId} onselect={selectHistory} onopen={selectHistory} />
+      <h3>History <span class="hint">{branchName}</span></h3>
+      <BaselineBranchGraph {baselines} {branches} branch={branchName} {forkBaseline} selected={shownId} onselect={selectHistory} onopen={selectHistory} />
       {#if next}<button type="button" class="link small older" disabled={older} onclick={loadOlder}>{older ? 'Loading…' : 'Older baselines'}</button>{/if}
     </nav>
 

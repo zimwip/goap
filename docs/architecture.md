@@ -189,7 +189,7 @@ REQ-1  v1(main) ── v2(change-A, derive) ═══ joins main (fast-forward o
   and, for one that took a change in, the sub-changes merged into it (`BaselineStep.merged`: a change branch holds no
   baseline, ADR 0140). A sub-change names its parent. Nothing is stored: the stack is composed from what every version and
   baseline records. `DiffBaselines` also answers the changes that explain the difference (`changes_added` /
-  `changes_removed`). Web: `ChangeStackView.svelte` in the node history, the Baseline workspace and the comparison.
+  `changes_removed`). Web: `ChangeStackView.svelte` in the node history, the Baseline tab and the comparison.
 - **Views of a change** (`ChangeView`): the head of the change branch with the change impacts of a flow counted at a
   level — `written` (the drafts proposed or accepted, not rejected: what the change or an option would look like),
   `accepted` (what would land), `landed` (the version it landed: on its own branch when committed, then on the branch it is merged into; the last one counts). Only `landed` is stored.
@@ -281,6 +281,7 @@ makes for the person.
 | Merge in a run | The `graph.apply` action commits and merges; when the three-way merge cannot settle a property (both branches changed it apart) the run waits on a `merge` human task listing the value of each side and proposing the change's; *Merge and go on* completes the merge and resumes the run. Before that, when the rebase of the change onto its target (or parent) left conflicts, the apply stops and the run waits on a `rebase` task listing them per impact; once settled and reviewed again in the change tab, *Settled, continue* applies again (ADR 0101) | `ResolveMerge`, `ResolveRebase` (engine), `Engine.ResolveMerge`, `Engine.ResolveRebase` |
 | Branches | Baseline explorer → Branches: open one from a baseline, merge it into another (same resolver), abandon or reopen it | `ListBranches`, `CreateBranch`, `MergeBranch`, `SetBranchStatus` |
 | Compare baselines | Baseline tab → *Compare*: the nodes added, removed or changed from another baseline (its parent by default), with the properties that differ | `DiffBaselines` |
+| Browse the changes | Changes explorer, grouped by status: the open changes listed whole; the applied and abandoned ones by pages of 50, newest first, of the active project (every project with the toggle or a search, the search matched by the server), *Load more* under each group | `ListChanges` (`limit`, `cursor` → `next_cursor`, `total`; `project`, `query`) |
 | A node's history | Node editor → History: the changes that acted on it, its versions and the branches each joined | `ListNodeChanges`, `ListNodeVersions` |
 
 The lifecycle transitions a change makes are authorized when it is applied (ADR 0014) before its transaction:

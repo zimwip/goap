@@ -1,16 +1,17 @@
 <script lang="ts">
-  // Baseline explorer: namespace → branches, open ones first. Selecting a branch drives the Baseline tool's
-  // workspace (BaselineWorkspace.svelte) directly, in the editor area. Branch management (open/merge/abandon/
-  // describe) is a right-click on the row, not shown inline here or in the workspace.
+  // Baseline explorer: namespace → branches, open ones first. Selecting a branch opens its baseline tab
+  // (BaselineTab.svelte), pinned. Branch management (open/merge/abandon/describe) is a right-click on the row, not
+  // shown inline here or in the tab.
   import { isMeta } from '../../stores/session.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { loadRaw, save } from '../../shell/storage';
   import { graph, errorMessage, formatDate, type Baseline, type Branch } from '../../api';
   import { changeOfBranch, isChangeBranch, shownBranches } from '../../branchFilter';
-  import { openTab } from '../../shell/tabs.svelte';
+  import { activeTab, openTab } from '../../shell/tabs.svelte';
+  import { MAIN_BRANCH } from '../../namespace';
   import { loadTypes as loadCatalog, typeCatalog } from '../../stores/types.svelte';
-  import { baselineTool, selectNamespace, selectBranch, refreshBranches } from '../../stores/baselineTool.svelte';
+  import { baselineTool, selectNamespace, openBaseline, refreshBranches } from '../../stores/baselineTool.svelte';
   import { openContextMenu, type ContextMenuItem } from '../../shell/contextMenuState.svelte';
   import { openFieldDialog } from '../../shell/fieldDialogState.svelte';
   import { openMergeDialog } from '../../shell/mergeDialogState.svelte';
@@ -49,6 +50,17 @@
       })
       .catch((e) => (error = errorMessage(e)));
   });
+
+  /** the baseline tab shown, if any: the explorer follows its namespace and marks its branch */
+  const shownTab = $derived.by(() => {
+    const t = activeTab();
+    return t?.kind === 'baseline' ? t : undefined;
+  });
+  $effect(() => {
+    const ns = shownTab?.params.namespace;
+    if (ns && ns !== baselineTool.namespace) selectNamespace(ns);
+  });
+  const activeBranch = $derived(shownTab && shownTab.params.namespace === baselineTool.namespace ? shownTab.params.branch || MAIN_BRANCH : '');
 
   const shown = $derived(shownBranches(branches, showClosed, baselinesById.values()));
 
@@ -186,10 +198,10 @@
     <button
       type="button"
       class="ghost small"
-      title="Export the head of {baselineTool.branch || 'main'} as a JSON snapshot (no history)"
+      title="Export the head of {activeBranch || 'main'} as a JSON snapshot (no history)"
       aria-label="Export graph"
       disabled={!baselineTool.namespace}
-      onclick={() => exportSnapshot(baselineTool.branch || 'main')}><Icon name="download" size={14} /></button
+      onclick={() => exportSnapshot(activeBranch || 'main')}><Icon name="download" size={14} /></button
     >
     <button
       type="button"
@@ -219,8 +231,8 @@
         icon="branch"
         label={b.name || ''}
         detail={head ? formatDate(head.createdAt) : '—'}
-        active={baselineTool.branch === (b.name ?? '')}
-        onselect={() => selectBranch(b.name ?? '')}
+        active={activeBranch === (b.name ?? '')}
+        onselect={() => openBaseline(baselineTool.namespace, b.name ?? '')}
         oncontextmenu={(e) => menu(e, b)}
       >
         {#snippet trail()}

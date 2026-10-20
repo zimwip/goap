@@ -2,6 +2,7 @@ package graphapi
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
 )
@@ -61,6 +62,11 @@ type ChangesFilter struct {
 	Status []domain.ChangeStatus
 	// HeadersOnly answers the heads of the changes, without their impacts and items: what a list shows.
 	HeadersOnly bool
+	// Project is the key of the project the changes act in (empty: every project).
+	Project string
+	// Query is a text the id, title, intent, methodology or namespace of a change contains, case ignored (empty:
+	// every change).
+	Query string
 }
 
 // ChangePatch updates mutable fields of a change header. Nil fields are kept. Title and Intent are
@@ -84,6 +90,15 @@ func (f ChangesFilter) Match(c domain.Change) bool {
 	}
 	if len(f.Status) > 0 && !slices.Contains(f.Status, c.Status) {
 		return false
+	}
+	if f.Project != "" && c.ProjectID != f.Project {
+		return false
+	}
+	if q := strings.ToLower(strings.TrimSpace(f.Query)); q != "" {
+		text := strings.ToLower(strings.Join([]string{string(c.ID), c.Title, c.Intent, c.Methodology, c.Namespace}, " "))
+		if !strings.Contains(text, q) {
+			return false
+		}
 	}
 	return true
 }
