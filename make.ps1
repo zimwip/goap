@@ -174,8 +174,42 @@ function Reset {
 # Performance stack (deploy/compose/perf.yml): the graph service on PostgreSQL, goap-bench, Prometheus and Grafana
 $Perf = @('compose', '-f', 'deploy/compose/perf.yml')
 function PerfArgs { if ($env:PERF_ARGS) { -split $env:PERF_ARGS } else { @('-versions', '100000') } }
+# goap-bench stays up once its run ends, so its series stay in Grafana, until interrupted; $env:PERF_AUTOSTOP = '30m'
+# stops it after that long, '0' with the run
+function PerfHold { if ($env:PERF_AUTOSTOP) { "-hold=$env:PERF_AUTOSTOP" } else { '-hold=-1s' } }
 function PerfUp { Run docker build --target services -t goap/goap:dev .; Run docker @Perf up -d }
-function PerfRun { $a = PerfArgs; Run docker @Perf run --rm bench @a }
+function PerfRun { $a = PerfArgs; $h = PerfHold; Run docker @Perf run --rm bench $h @a }
+# captures of the performance stack's Prometheus (perf-capture), replayed by perf-analysis
+$PerfCaptures = '.goap/perf/captures'
+$PerfAnalysis = @('compose', '-f', 'deploy/compose/perf-analysis.yml')
+function PerfCapture {
+    $name = if ($env:PERF_CAPTURE) { $env:PERF_CAPTURE } else { Get-Date -Format 'yyyyMMdd-HHmmss' }
+    $dir = Join-Path $PerfCaptures $name
+    if (Test-Path $dir) { throw "perf-capture: $dir exists" }
+    $metrics = & docker @Perf exec -T prometheus wget -qO- http://localhost:9090/metrics
+    $line = $metrics | Where-Object { $_ -match '^prometheus_tsdb_lowest_timestamp_seconds ' } | Select-Object -First 1
+    $from = if ($line) { [int64][double]($line -split ' ')[1] * 1000 } else { 0 }
+    $answer = & docker @Perf exec -T prometheus wget -qO- --post-data= http://localhost:9090/api/v1/admin/tsdb/snapshot
+    $snap = if ($answer) { ($answer | ConvertFrom-Json).data.name } else { $null }
+    if (-not $snap) { throw 'perf-capture: Prometheus took no snapshot (perf-up first)' }
+    New-Item -ItemType Directory -Force -Path $PerfCaptures | Out-Null
+    Run docker @Perf cp "prometheus:/prometheus/snapshots/$snap" $dir
+    Run docker @Perf exec -T prometheus rm -rf "/prometheus/snapshots/$snap"
+    $to = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    Set-Content -Path (Join-Path $dir 'range') -Value "$from $to" -NoNewline
+    Write-Host "captured ${dir}: `$env:PERF_CAPTURE = '$name'; .\make.ps1 perf-analysis"
+}
+function PerfAnalysis {
+    $name = $env:PERF_CAPTURE
+    if (-not $name -and (Test-Path $PerfCaptures)) { $name = (Get-ChildItem -Directory $PerfCaptures | Sort-Object Name | Select-Object -Last 1).Name }
+    if (-not $name -or -not (Test-Path (Join-Path $PerfCaptures $name))) { throw "perf-analysis: no capture $name in $PerfCaptures (perf-capture)" }
+    $dir = Join-Path $PerfCaptures $name
+    $env:GOAP_PERF_CAPTURE = (Resolve-Path $dir).Path
+    try { Run docker @PerfAnalysis up -d --force-recreate } finally { Remove-Item Env:GOAP_PERF_CAPTURE }
+    $from, $to = (Get-Content (Join-Path $dir 'range') -Raw).Trim() -split ' '
+    Write-Host "Grafana: http://localhost:3301/d/goap-perf?from=$from&to=$to - Prometheus: http://localhost:9391 - .\make.ps1 perf-analysis-down to stop"
+}
+function PerfAnalysisDown { $env:GOAP_PERF_CAPTURE = '.'; try { Run docker @PerfAnalysis down } finally { Remove-Item Env:GOAP_PERF_CAPTURE } }
 function Perf {
     PerfUp
     PerfRun
@@ -217,9 +251,14 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   reset             stop the stack and drop its containers, volumes (database, NATS, web modules) and images
   urls              the URLs of the compose stack: IDE, gateway, each service, tools, database
   perf              performance test in docker: the graph service on PostgreSQL loaded by goap-bench
-                    ($env:PERF_ARGS, goap-bench -h), measured in Grafana http://localhost:3300
+                    ($env:PERF_ARGS, goap-bench -h), measured in Grafana http://localhost:3300; goap-bench holds
+                    once its run ends until interrupted, or for $env:PERF_AUTOSTOP (e.g. 30m; 0: exits with the run)
   perf-up | perf-run | perf-down | perf-reset
                     start the performance stack, one more run of goap-bench, stop it (keeping its data), drop its data
+  perf-capture      save what the performance stack's Prometheus holds in .goap\perf\captures\<$env:PERF_CAPTURE>
+  perf-analysis | perf-analysis-down
+                    replay a capture ($env:PERF_CAPTURE, default the latest) in a Grafana of its own,
+                    http://localhost:3301, with no graph nor bench; stop it
 '@ | Write-Host
 }
 
@@ -253,6 +292,9 @@ switch ($Target) {
     'perf-run'         { PerfRun }
     'perf-down'        { PerfDown }
     'perf-reset'       { PerfReset }
+    'perf-capture'     { PerfCapture }
+    'perf-analysis'    { PerfAnalysis }
+    'perf-analysis-down' { PerfAnalysisDown }
     { $_ -in 'help', '-h', '--help' } { Help }
     default            { Help; throw "unknown target: $Target" }
 }

@@ -4,7 +4,7 @@
 // every call (OpenTelemetry metrics when OTEL_EXPORTER_OTLP_ENDPOINT is set, drawn by the Grafana dashboard "GOAP
 // performance", and a CSV report).
 //
-//	goap-bench [-graph http://localhost:8080] [-versions 100000] [-workers 4] [-edits 50] [-csv bench.csv] ...
+//	goap-bench [-graph http://localhost:8080] [-versions 100000] [-workers 4] [-edits 50] [-csv bench.csv] [-hold 30m] ...
 //
 // It talks to the services behind the gateway with the platform's identity headers (a system principal holding the
 // admin role), or through the gateway with -token.
@@ -42,6 +42,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	token := fs.String("token", os.Getenv("GOAP_TOKEN"), "bearer token, to go through the gateway (default: identity headers of a system principal)")
 	csvPath := fs.String("csv", "", "write the report (one row per operation and window) to this CSV file; a directory (ending with /): <run>.csv in it")
 	wait := fs.Duration("wait", 0, "wait up to this long for the graph service to answer before starting")
+	hold := fs.Duration("hold", 0, "once the run ends, keep the process up for that long so its metrics stay reported (Grafana keeps drawing them; negative: until interrupted; 0: exit)")
 	fs.StringVar(&cfg.Run, "run", "", "prefix of the keys created by this run (default: generated)")
 	fs.IntVar(&cfg.Domain.Types, "types", 10, "node types of the generated domain (domain axis)")
 	fs.IntVar(&cfg.Domain.Attributes, "attributes", 4, "extra attributes per node type")
@@ -122,5 +123,25 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "goap-bench:", err)
 		return 1
 	}
+	holdOn(ctx, *hold, stdout)
 	return 0
+}
+
+// holdOn keeps the process up after the run, its metrics still exported, for d (negative: until interrupted).
+func holdOn(ctx context.Context, d time.Duration, stdout io.Writer) {
+	if d == 0 || ctx.Err() != nil {
+		return
+	}
+	if d < 0 {
+		fmt.Fprintln(stdout, "run done: holding so its metrics stay in Grafana, interrupt (Ctrl+C) to stop")
+		<-ctx.Done()
+		return
+	}
+	fmt.Fprintf(stdout, "run done: holding %s so its metrics stay in Grafana, interrupt (Ctrl+C) to stop sooner\n", d)
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
+	}
 }

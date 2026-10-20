@@ -1,0 +1,4 @@
+# Prometheus of the replay of a capture (make perf-analysis): the captured data only, nothing scraped.
+global:
+  scrape_interval: 5s
+scrape_configs: []

@@ -7,6 +7,8 @@
 # graph's RPCs, its database calls and Go runtime, goap-bench's calls, PostgreSQL's tables) and is drawn by the Grafana
 # dashboard "GOAP performance"; goap-bench also writes a CSV per run in .goap/perf (GOAP_PERF_RESULTS).
 # Grafana: http://localhost:3300/d/goap-perf · Prometheus: http://localhost:9390 · graph: http://localhost:8380
+# goap-bench holds once its run ends (make perf: until interrupted, PERF_AUTOSTOP=30m for that long, 0 to exit); make
+# perf-capture saves what Prometheus holds in .goap/perf/captures, make perf-analysis replays it (perf-analysis.yml).
 # The web on the data of the bench: http://localhost:5174 (the gateway on :8381 signs nobody in, a fixed administrator,
 # and reaches the graph only: the Baseline explorer, the nodes and the changes work, what needs another service fails).
 # pprof of the graph service: go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
@@ -109,7 +111,8 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.6.0
-    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=30d"]
+    # the admin API takes the snapshots of make perf-capture
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=30d", "--web.enable-admin-api"]
     volumes:
       - ../prometheus/prometheus-perf.yml:/etc/prometheus/prometheus.yml:ro,z
       - perf-prometheus:/prometheus
