@@ -67,6 +67,10 @@ type ChangesFilter struct {
 	// Query is a text the id, title, intent, methodology or namespace of a change contains, case ignored (empty:
 	// every change).
 	Query string
+	// Parent is the id of the change whose sub-changes are wanted (empty: any change).
+	Parent domain.ChangeID
+	// DependsOn is the id of a change the changes depend on (empty: any change).
+	DependsOn domain.ChangeID
 }
 
 // ChangePatch updates mutable fields of a change header. Nil fields are kept. Title and Intent are
@@ -92,6 +96,12 @@ func (f ChangesFilter) Match(c domain.Change) bool {
 		return false
 	}
 	if f.Project != "" && c.ProjectID != f.Project {
+		return false
+	}
+	if f.Parent != "" && c.ParentID != f.Parent {
+		return false
+	}
+	if f.DependsOn != "" && !slices.Contains(c.DependsOn, f.DependsOn) {
 		return false
 	}
 	if q := strings.ToLower(strings.TrimSpace(f.Query)); q != "" {

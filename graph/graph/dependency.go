@@ -73,7 +73,7 @@ func (g *Graph) checkDependency(ctx context.Context, tx Tx, c domain.Change, anc
 	if slices.Contains(ancestors, d) {
 		return fmt.Errorf("change %s is an ancestor of %s: it merges after it anyway: %w", d, c.ID, ErrInvalid)
 	}
-	dc, err := tx.Change(ctx, d)
+	dc, err := tx.ChangeHead(ctx, d)
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func (g *Graph) checkDependency(ctx context.Context, tx Tx, c domain.Change, anc
 			continue
 		}
 		seen[x] = true
-		xc, err := tx.Change(ctx, x)
+		xc, err := tx.ChangeHead(ctx, x)
 		if err != nil {
 			return err
 		}
@@ -114,7 +114,7 @@ func ancestorIDs(ctx context.Context, tx Tx, c domain.Change) ([]domain.ChangeID
 	var out []domain.ChangeID
 	for a := c.ParentID; a != "" && !slices.Contains(out, a); {
 		out = append(out, a)
-		ac, err := tx.Change(ctx, a)
+		ac, err := tx.ChangeHead(ctx, a)
 		if err != nil {
 			return nil, err
 		}
@@ -127,7 +127,7 @@ func ancestorIDs(ctx context.Context, tx Tx, c domain.Change) ([]domain.ChangeID
 // work of an applied change is on the branch of its parent, that of an applied parent on its own parent's, and so on:
 // it is satisfied when it reached main (every change of its chain applied) or c's parent.
 func dependencyOf(ctx context.Context, tx Tx, c domain.Change, d domain.ChangeID) (domain.Dependency, error) {
-	dc, err := tx.Change(ctx, d)
+	dc, err := tx.ChangeHead(ctx, d)
 	if err != nil {
 		return domain.Dependency{ID: d, Reason: "unknown change"}, err
 	}
@@ -147,7 +147,7 @@ func dependencyOf(ctx context.Context, tx Tx, c domain.Change, d domain.ChangeID
 			out.Satisfied = true // merged into the change c merges into
 			return out, nil
 		}
-		if x, err = tx.Change(ctx, x.ParentID); err != nil {
+		if x, err = tx.ChangeHead(ctx, x.ParentID); err != nil {
 			return out, err
 		}
 	}
@@ -188,37 +188,32 @@ func checkDependencies(c domain.Change, deps []domain.Dependency) error {
 }
 
 // ChangeDependencies reads the dependencies of a change, the open changes depending on it and the merge order of its
-// open sub-changes.
+// open sub-changes. It reads the heads of the changes only, and only those related to it.
 func (g *Graph) ChangeDependencies(ctx context.Context, id domain.ChangeID) (out ChangeDependencies, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		c, err := tx.Change(ctx, id)
+		c, err := tx.ChangeHead(ctx, id)
 		if err != nil {
 			return err
 		}
 		if out.DependsOn, err = dependenciesOf(ctx, tx, c); err != nil {
 			return err
 		}
-		all, err := tx.Changes(ctx)
+		open := []domain.ChangeStatus{domain.ChangeDraft, domain.ChangeActive, domain.ChangeCommitted}
+		dependents, err := tx.ChangeHeads(ctx, ChangesFilter{DependsOn: id, Status: open})
 		if err != nil {
 			return err
 		}
-		var subs []domain.Change
-		for _, x := range all {
-			open := x.Status == domain.ChangeDraft || x.Status == domain.ChangeActive || x.Status == domain.ChangeCommitted
-			if !open {
-				continue
+		for _, x := range dependents {
+			dep, err := dependencyOf(ctx, tx, x, id)
+			if err != nil {
+				return err
 			}
-			if slices.Contains(x.DependsOn, id) {
-				dep, err := dependencyOf(ctx, tx, x, id)
-				if err != nil {
-					return err
-				}
-				dep.ID, dep.Title, dep.Methodology, dep.Status, dep.State, dep.ParentID = x.ID, x.Title, x.Methodology, x.Status, x.State, x.ParentID
-				out.Dependents = append(out.Dependents, dep)
-			}
-			if x.ParentID == id {
-				subs = append(subs, x)
-			}
+			dep.ID, dep.Title, dep.Methodology, dep.Status, dep.State, dep.ParentID = x.ID, x.Title, x.Methodology, x.Status, x.State, x.ParentID
+			out.Dependents = append(out.Dependents, dep)
+		}
+		subs, err := tx.ChangeHeads(ctx, ChangesFilter{Parent: id, Status: open})
+		if err != nil {
+			return err
 		}
 		for _, s := range domain.DependencyOrder(subs) {
 			deps, err := dependenciesOf(ctx, tx, s)
