@@ -354,7 +354,7 @@ func (d dialect) sqlLatestVersions(ids []domain.NodeID) (string, []any) {
 
 // sqlLatestVersionsOn reads the version sqlLatestOn reads for several nodes: node, version.
 func (d dialect) sqlLatestVersionsOn(ids []domain.NodeID, branch string) (string, []any) {
-	list, arg := `unnest(` + d.ph(1) + `::uuid[]) AS q(id)`, any(nodeIDStrings(ids))
+	list, arg := `unnest(`+d.ph(1)+`::uuid[]) AS q(id)`, any(nodeIDStrings(ids))
 	if !d.pg {
 		b, _ := json.Marshal(nodeIDStrings(ids))
 		list, arg = `(SELECT value AS id FROM json_each(`+d.ph(1)+`)) q`, string(b)
