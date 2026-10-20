@@ -4,6 +4,7 @@ package gitimporte2e
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -80,7 +81,7 @@ func TestImportReadsTheSymbols(t *testing.T) {
 	run()
 	const file = "demo:src/main.c"
 	got := symbols(t, g, file)
-	if keys(got) != "function:add function:main import:stdio.h struct:point" {
+	if keys(got) != "function:add function:main struct:point" {
 		t.Fatalf("symbols: %s", keys(got))
 	}
 	// main changes, add is removed, sub is new: point and the include keep their version
@@ -91,7 +92,7 @@ func TestImportReadsTheSymbols(t *testing.T) {
 		t.Fatalf("%+v", st)
 	}
 	got = symbols(t, g, file)
-	if keys(got) != "function:main function:sub import:stdio.h struct:point" || got["struct:point"] != 1 || got["function:main"] != 2 {
+	if keys(got) != "function:main function:sub struct:point" || got["struct:point"] != 1 || got["function:main"] != 2 {
 		t.Fatalf("symbols: %v", got)
 	}
 	add, err := g.NodeByKey(ctx, gitimport.Namespace, file+"#function:add")
@@ -119,4 +120,260 @@ func TestImportReadsTheSymbols(t *testing.T) {
 	}
 	tree, _ := graphTree(t, g, "demo")
 	same(t, r.tree(), tree)
+}
+
+// codeGraph is the head of the namespace: the nodes by key, and the links (suspect ones included) as
+// "<from key> <type> <to key>".
+func codeGraph(t *testing.T, g *graph.Graph) (map[string]domain.Node, map[string]bool) {
+	t.Helper()
+	ctx := context.Background()
+	head, err := g.BranchHead(ctx, gitimport.Namespace, domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes, links, err := g.BaselineGraph(ctx, head.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	suspect, err := g.SuspectLinks(ctx, head.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byKey, byID := map[string]domain.Node{}, map[domain.NodeID]domain.Node{}
+	for _, n := range nodes {
+		byKey[n.Key], byID[n.ID] = n, n
+	}
+	out := map[string]bool{}
+	for _, l := range append(links, suspect...) {
+		out[byID[l.From.ID].Key+" "+strings.TrimPrefix(l.Type, "code@")+" "+byID[l.To.ID].Key] = true
+	}
+	return byKey, out
+}
+
+// suspect tells whether the link of a type from a node to another is suspect at the head.
+func suspect(t *testing.T, g *graph.Graph, from, to string) bool {
+	t.Helper()
+	ctx := context.Background()
+	head, err := g.BranchHead(ctx, gitimport.Namespace, domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	links, err := g.SuspectLinks(ctx, head.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, _ := g.NodeByKey(ctx, gitimport.Namespace, from)
+	d, _ := g.NodeByKey(ctx, gitimport.Namespace, to)
+	for _, l := range links {
+		if l.From.ID == f.ID && l.To.ID == d.ID {
+			return true
+		}
+	}
+	return false
+}
+
+func changeCount(t *testing.T, g *graph.Graph) int {
+	t.Helper()
+	cs, err := g.ListChanges(context.Background(), graph.ChangesFilter{Namespace: gitimport.Namespace})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(cs)
+}
+
+// TestImportTheCodeModel imports a Go module: a node per declaration of its type, the members of a struct, the calls
+// and uses between declarations (across packages through the imports), the packages and their imports; the symbols
+// keep their node and their version while their text and links do not change, a call to a removed function goes with
+// it, and running again imports nothing.
+func TestImportTheCodeModel(t *testing.T) {
+	ctx := context.Background()
+	g := newGraph(t)
+	ts, err := gitimport.NewTreeSitter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Close()
+	r := newRepo(t)
+	run := func() gitimport.Stats {
+		t.Helper()
+		st, err := (&gitimport.Importer{Graph: g, Dir: r.dir, Name: "demo", ProjectID: project, Symbols: ts, Code: true, Parallel: 3}).Run(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st
+	}
+	point := `package shapes
+
+import "fmt"
+
+const Max = 10
+
+type Point struct {
+	X, Y int
+}
+
+func NewPoint(x, y int) *Point { return &Point{X: x, Y: y} }
+
+func (p *Point) Scale(k int) { p.X *= k; p.check() }
+
+func (p *Point) check() {
+	if p.X > Max {
+		fmt.Println("big")
+	}
+}
+`
+	r.write("go.mod", "module example.com/demo\n\ngo 1.22\n")
+	r.write("shapes/point.go", point)
+	r.write("main.go", "package main\n\nimport \"example.com/demo/shapes\"\n\nfunc main() { p := shapes.NewPoint(1, 2); p.Scale(2) }\n")
+	r.commit("Initial")
+	run()
+	const (
+		pt       = "demo:shapes/point.go"
+		main     = "demo:main.go#function:main"
+		shapes   = "demo@go:example.com/demo/shapes"
+		root     = "demo@go:example.com/demo"
+		fmtPkg   = "demo@go:fmt"
+		newPoint = pt + "#function:NewPoint"
+	)
+	nodes, links := codeGraph(t, g)
+	for k, typ := range map[string]string{pt + "#struct:Point": gitimport.TypeStruct, pt + "#method:Point.Scale": gitimport.TypeMethod,
+		pt + "#field:Point.X": gitimport.TypeField, pt + "#constant:Max": gitimport.TypeConstant, newPoint: gitimport.TypeFunction,
+		main: gitimport.TypeFunction, shapes: gitimport.TypePackage, root: gitimport.TypePackage, fmtPkg: gitimport.TypePackage} {
+		if nodes[k].Type != typ {
+			t.Errorf("%s: type %q, want %s", k, nodes[k].Type, typ)
+		}
+	}
+	if code, _ := nodes[newPoint].Properties["code"].(string); code != "func NewPoint(x, y int) *Point { return &Point{X: x, Y: y} }" {
+		t.Errorf("code of NewPoint: %q", code)
+	}
+	if n := nodes[shapes].Properties["name"]; n != "shapes" {
+		t.Errorf("package name %v", n)
+	}
+	if n := nodes[root].Properties["name"]; n != "main" {
+		t.Errorf("package name %v", n)
+	}
+	want := []string{
+		pt + "#method:Point.Scale member_of " + pt + "#struct:Point",
+		pt + "#method:Point.check member_of " + pt + "#struct:Point",
+		pt + "#field:Point.X member_of " + pt + "#struct:Point",
+		pt + "#method:Point.Scale calls " + pt + "#method:Point.check",
+		pt + "#method:Point.check uses " + pt + "#constant:Max",
+		newPoint + " uses " + pt + "#struct:Point",
+		main + " calls " + newPoint,
+		pt + " in_package " + shapes,
+		pt + " imports " + fmtPkg,
+		"demo:main.go in_package " + root,
+		"demo:main.go imports " + shapes,
+		root + " depends_on " + shapes,
+		shapes + " depends_on " + fmtPkg,
+	}
+	if testing.Verbose() {
+		for _, l := range slices.Sorted(maps.Keys(links)) {
+			t.Log(l)
+		}
+	}
+	for _, w := range want {
+		if !links[w] {
+			t.Errorf("no link %s", w)
+		}
+	}
+	// NewPoint becomes Make, main.go does not change: its call to NewPoint stays, suspect (NewPoint has another
+	// version, removed), until main changes
+	r.write("shapes/point.go", strings.Replace(point, "func NewPoint(", "func Make(", 1))
+	r.commit("Rename NewPoint")
+	st := run()
+	nodes, links = codeGraph(t, g)
+	if nodes[newPoint].State != gitimport.StateRemoved || nodes[pt+"#function:Make"].State != gitimport.StatePresent {
+		t.Fatalf("NewPoint %s, Make %s", nodes[newPoint].State, nodes[pt+"#function:Make"].State)
+	}
+	if !links[main+" calls "+newPoint] || !suspect(t, g, main, newPoint) {
+		t.Error("main's call to NewPoint is not suspect")
+	}
+	for _, k := range []string{pt + "#struct:Point", pt + "#method:Point.Scale", pt + "#constant:Max", shapes} {
+		if nodes[k].Version != 1 {
+			t.Errorf("%s: v%d, it did not change", k, nodes[k].Version)
+		}
+	}
+	if nodes[main].Version != 1 || st.Symbols != 2 { // NewPoint removed, Make created
+		t.Errorf("main v%d, %+v", nodes[main].Version, st)
+	}
+	// main calls Make
+	r.write("main.go", "package main\n\nimport \"example.com/demo/shapes\"\n\nfunc main() { p := shapes.Make(1, 2); p.Scale(2) }\n")
+	r.write("README", "demo\n")
+	r.commit("Call Make")
+	run()
+	nodes, links = codeGraph(t, g)
+	if !links[main+" calls "+pt+"#function:Make"] || links[main+" calls "+newPoint] || nodes[main].Version != 2 {
+		t.Errorf("main v%d does not call Make alone", nodes[main].Version)
+	}
+	// a commit of a file that is no source changes no symbol and no package
+	r.write("README", "demo, again\n")
+	r.commit("Readme")
+	if st := run(); st.Symbols != 0 || st.Packages != 0 || st.Created != 0 {
+		t.Errorf("%+v", st)
+	}
+	// running again imports nothing: no change, no node
+	before, beforeNodes := changeCount(t, g), len(nodes)
+	if st := run(); st.Commits != 0 || st.Created+st.Modified+st.Removed != 0 {
+		t.Errorf("%+v", st)
+	}
+	if nodes, _ = codeGraph(t, g); changeCount(t, g) != before || len(nodes) != beforeNodes {
+		t.Errorf("a run with nothing new made a change or a node")
+	}
+	tree, _ := graphTree(t, g, "demo")
+	same(t, r.tree(), tree)
+}
+
+// TestImportLinksAcrossFiles resolves the names of Python, TypeScript and C files through their imports.
+func TestImportLinksAcrossFiles(t *testing.T) {
+	ctx := context.Background()
+	g := newGraph(t)
+	ts, err := gitimport.NewTreeSitter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Close()
+	r := newRepo(t)
+	r.write("pkg/__init__.py", "")
+	r.write("pkg/base.py", "class Base:\n    pass\n")
+	r.write("pkg/util.py", "LIMIT = 3\n\ndef helper(x):\n    return x\n")
+	r.write("pkg/shape.py", "from pkg.base import Base\nfrom .util import helper as h\nimport pkg.util\n\nclass Shape(Base):\n    def area(self):\n        return h(self.side()) + pkg.util.LIMIT\n\n    def side(self):\n        return 1\n")
+	r.write("web/lib/a.ts", "export function a(): number { return 1; }\nexport class Box {}\n")
+	r.write("web/main.ts", "import { a, Box as B } from './lib/a';\nimport * as React from 'react';\nexport function main() { a(); new B(); React.render(); }\n")
+	r.write("c/util.h", "int helper(int x);\n")
+	r.write("c/util.c", "#include \"util.h\"\nint helper(int x) { return x; }\n")
+	r.write("c/main.c", "#include <stdio.h>\n#include \"util.h\"\nint main(void) { printf(\"%d\", helper(1)); return 0; }\n")
+	r.commit("Initial")
+	if _, err := (&gitimport.Importer{Graph: g, Dir: r.dir, Name: "demo", ProjectID: project, Symbols: ts}).Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	nodes, links := codeGraph(t, g)
+	for _, w := range []string{
+		"demo:pkg/shape.py#class:Shape uses demo:pkg/base.py#class:Base",
+		"demo:pkg/shape.py#method:Shape.area calls demo:pkg/util.py#function:helper",
+		"demo:pkg/shape.py#method:Shape.area calls demo:pkg/shape.py#method:Shape.side",
+		"demo:pkg/shape.py#method:Shape.area uses demo:pkg/util.py#variable:LIMIT",
+		"demo:pkg/shape.py in_package demo@python:pkg",
+		"demo@python:pkg depends_on demo@python:pkg",
+		"demo:web/main.ts#function:main calls demo:web/lib/a.ts#function:a",
+		"demo:web/main.ts#function:main calls demo:web/lib/a.ts#class:Box",
+		"demo:web/main.ts imports demo@js:web/lib",
+		"demo:web/main.ts imports demo@js:react",
+		"demo@js:web depends_on demo@js:web/lib",
+		"demo:c/main.c#function:main calls demo:c/util.h#prototype:helper",
+		"demo:c/main.c imports demo@c:stdio.h",
+	} {
+		if strings.Contains(w, "depends_on demo@python:pkg") {
+			if links[w] {
+				t.Errorf("a package depends on itself: %s", w)
+			}
+			continue
+		}
+		if !links[w] {
+			t.Errorf("no link %s", w)
+		}
+	}
+	if code, _ := nodes["demo:pkg/util.py#function:helper"].Properties["code"]; code != nil {
+		t.Errorf("code kept without Code: %v", code)
+	}
 }

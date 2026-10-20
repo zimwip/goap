@@ -3,6 +3,7 @@
 package gitimport
 
 import (
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -53,7 +54,7 @@ type ID string
 func New() *Point { var local int; _ = local; return nil }
 
 func (p *Point) Move(dx int) { fmt.Println(dx) }
-`, []string{"import:fmt", "import:io", "constant:Max", "variable:count", "struct:Point", "interface:Shape", "type:ID", "function:New", "method:Move"}},
+`, []string{"import:fmt", "import:io", "constant:Max", "variable:count", "struct:Point", "field:Point.X", "interface:Shape", "method:Shape.Area", "type:ID", "function:New", "method:Point.Move"}},
 		{"x.py", `import os
 from collections import OrderedDict
 LIMIT = 4
@@ -111,15 +112,18 @@ public:
 double Shape::area() const { return 0; }
 }
 int main() { return 0; }
-`, []string{"import:vector", "namespace:geo", "class:geo.Shape", "prototype:geo.Shape.area", "method:geo.Shape::area", "function:main"}},
+`, []string{"import:vector", "namespace:geo", "class:geo.Shape", "prototype:geo.Shape.area", "method:geo.Shape.area", "function:main"}},
 	} {
 		lang := ts.Language(c.file)
-		syms, err := ts.Symbols(lang, []byte(c.src))
+		src, err := ts.Parse(lang, []byte(c.src))
 		if err != nil {
 			t.Fatalf("%s: %v", c.file, err)
 		}
 		var got []string
-		for _, s := range syms {
+		for _, i := range src.Imports {
+			got = append(got, "import:"+i.Path)
+		}
+		for _, s := range src.Symbols {
 			q := s.Name
 			if s.Container != "" {
 				q = s.Container + "." + q
@@ -131,6 +135,122 @@ int main() { return 0; }
 		}
 		if !slices.Equal(got, c.want) {
 			t.Errorf("%s:\nwant %s\ngot  %s", c.file, strings.Join(c.want, " "), strings.Join(got, " "))
+		}
+	}
+}
+
+// TestTreeSitterRefs reads the imports of a file and the names its declarations call and use.
+func TestTreeSitterRefs(t *testing.T) {
+	ts, err := NewTreeSitter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Close()
+	refs := func(s Symbol) []string {
+		var out []string
+		for _, r := range s.Refs {
+			q := r.Name
+			if r.Qualifier != "" {
+				q = r.Qualifier + "." + q
+			}
+			out = append(out, r.Kind+":"+q)
+		}
+		slices.Sort(out)
+		return out
+	}
+	for _, c := range []struct {
+		file, src string
+		pkg       string
+		imports   []Import
+		want      map[string][]string // qualified symbol → the references it holds (a subset)
+		self      map[string]string
+	}{
+		{file: "x.go", src: `package shapes
+
+import (
+	"fmt"
+	str "strings"
+)
+
+const Max = 3
+
+type Point struct{ X int }
+
+func New() *Point { return &Point{X: Max} }
+
+func (p *Point) Move() { p.check(); fmt.Println(str.ToUpper("a")); New() }
+`, pkg: "shapes", imports: []Import{{Path: "fmt"}, {Path: "strings", Alias: "str"}},
+			want: map[string][]string{"New": {"name:Max", "type:Point"}, "Point.Move": {"call:New", "call:fmt.Println", "call:p.check", "call:str.ToUpper", "type:Point"}},
+			self: map[string]string{"Point.Move": "p"}},
+		{file: "m.py", src: `import os.path
+import numpy as np
+from .util import helper, other as alias
+from pkg import *
+
+class Base: pass
+
+class Shape(Base):
+    def area(self):
+        self.check()
+        return helper(np.zeros(1))
+`, imports: []Import{{Path: "os.path", Alias: "os.path"}, {Path: "numpy", Alias: "np"}, {Path: ".util", Names: map[string]string{"helper": "helper", "alias": "other"}}, {Path: "pkg", Alias: "*"}},
+			want: map[string][]string{"Shape": {"type:Base"}, "Shape.area": {"call:helper", "call:np.zeros", "call:self.check"}}},
+		{file: "A.java", src: `package com.acme;
+import java.util.List;
+import static java.lang.Math.*;
+public class A extends B {
+    void run() { helper(); List.of(); new C(); }
+}
+`, pkg: "com.acme", imports: []Import{{Path: "java.util.List"}, {Path: "java.lang.Math.*"}},
+			want: map[string][]string{"A": {"type:B"}, "A.run": {"call:C", "call:List.of", "call:helper"}}},
+		{file: "x.ts", src: `import def, { a, b as c } from "./lib";
+import * as ns from "pkg";
+class S extends Base { run(): T { a(); ns.f(); return this.g(); } }
+`, imports: []Import{{Path: "./lib", Names: map[string]string{"def": "default", "a": "a", "c": "b"}}, {Path: "pkg", Alias: "ns"}},
+			want: map[string][]string{"S": {"type:Base"}, "S.run": {"call:a", "call:ns.f", "call:this.g", "type:T"}}},
+		{file: "x.c", src: `#include <stdio.h>
+#include "util.h"
+struct point { int x; };
+int add(int a, int b) { struct point p; printf("%d", helper(a)); return MAX; }
+`, imports: []Import{{Path: "stdio.h", System: true}, {Path: "util.h"}},
+			want: map[string][]string{"add": {"call:helper", "call:printf", "name:MAX", "type:point"}}},
+		{file: "x.rs", src: `use std::io;
+use crate::util::{help, Thing as T};
+use super::model::*;
+fn main() { help(); io::stdin(); T::new(); println!("x"); }
+`, imports: []Import{{Path: "std::io", Names: map[string]string{"io": "io"}}, {Path: "crate::util::help", Names: map[string]string{"help": "help"}},
+			{Path: "crate::util::Thing", Names: map[string]string{"T": "Thing"}}, {Path: "super::model", Alias: "*"}},
+			want: map[string][]string{"main": {"call:T.new", "call:help", "call:io.stdin", "call:println"}}},
+	} {
+		src, err := ts.Parse(ts.Language(c.file), []byte(c.src))
+		if err != nil {
+			t.Fatalf("%s: %v", c.file, err)
+		}
+		if src.Package != c.pkg {
+			t.Errorf("%s: package %q, want %q", c.file, src.Package, c.pkg)
+		}
+		if !reflect.DeepEqual(src.Imports, c.imports) {
+			t.Errorf("%s: imports\nwant %+v\ngot  %+v", c.file, c.imports, src.Imports)
+		}
+		by := map[string]Symbol{}
+		for _, s := range src.Symbols {
+			by[qualified(s.Container, s.Name)] = s
+			if s.Code == "" || !strings.Contains(c.src, s.Code) {
+				t.Errorf("%s: %s: code %q", c.file, s.Name, s.Code)
+			}
+		}
+		for q, want := range c.want {
+			got := refs(by[q])
+			for _, w := range want {
+				if !slices.Contains(got, w) {
+					t.Errorf("%s: %s: no %s in %v", c.file, q, w, got)
+				}
+			}
+		}
+		for q, self := range c.self {
+			if by[q].Self != self {
+				t.Errorf("%s: %s: self %q, want %q", c.file, q, by[q].Self, self)
+			}
 		}
 	}
 }

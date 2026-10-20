@@ -50,8 +50,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&im.ProjectID, "project", "PROJ-ROOT", "project the changes act in")
 	fs.StringVar(&im.OwnerOrg, "org", "", "unit holding the changes (default: the root unit)")
 	fs.IntVar(&im.ProgressEvery, "progress", 100, "print a progress line every that many commits")
-	symbols := fs.Bool("symbols", false, "read the declarations of the source files with Tree-sitter (functions, types, imports, variables...): a Symbol node each, defined in its file")
+	symbols := fs.Bool("symbols", false, "read the source files with Tree-sitter: a node per declaration (function, method, class, struct, variable...) defined in its file, the calls and uses between them, the packages and their imports")
 	fs.Int64Var(&im.MaxSymbolBytes, "symbols-max", 1<<20, "leave the source files larger than this many bytes out of -symbols")
+	fs.BoolVar(&im.Code, "code", true, "with -symbols, keep the source text of each declaration on its node")
+	fs.IntVar(&im.Parallel, "parallel", 0, "with -symbols, how many files are parsed at once (default: the processors, at most 8)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

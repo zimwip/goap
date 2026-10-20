@@ -104,7 +104,7 @@ func (p *Plugin) Run(ctx context.Context, job *importerkit.Job) error {
 		if c, ok := x.(interface{ Close() }); ok {
 			defer c.Close()
 		}
-		im.Symbols = x
+		im.Symbols, im.Code = x, job.Bool("code")
 	}
 	st, err := im.Run(ctx)
 	record(job, st)
@@ -147,6 +147,7 @@ func record(job *importerkit.Job, st Stats) {
 	job.Set("modified", int64(st.Modified))
 	job.Set("removed", int64(st.Removed))
 	job.Set("symbols", int64(st.Symbols))
+	job.Set("packages", int64(st.Packages))
 }
 
 func (p *Plugin) lock(ctx context.Context, name string) (func(), error) {

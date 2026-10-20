@@ -1,5 +1,5 @@
 name: code
-version: 1.2.1
+version: 1.3.0
 description: >
   Source code held in git repositories (ADR 0147): a repository, its directories and its files as of the last commit
   imported. The git importer (platform/gitimport: the importer `git` below, served by importer-git, ADR 0148; the
@@ -21,7 +21,8 @@ importers:
       - {name: rev, label: Revision, default: HEAD, description: The revision whose first-parent history is imported, order: 4}
       - {name: base, label: Start at, description: "First import only: start at this revision, its tree as the first change (default: the root commit)", order: 5}
       - {name: max, label: At most, type: number, description: "Import at most this many commits in this run (0: all)", order: 6}
-      - {name: symbols, label: Symbols, type: boolean, description: "Read the declarations of the source files with Tree-sitter (functions, types, imports, variables...)", order: 7}
+      - {name: symbols, label: Symbols, type: boolean, description: "Read the declarations of the source files with Tree-sitter (functions, methods, classes, structs, variables...), the calls and uses between them, and the packages and their imports", order: 7}
+      - {name: code, label: Source text, type: boolean, default: true, description: "With the symbols, keep the source text of each declaration on its node (the code attribute, cut at 64 KiB)", order: 8}
 enums:
   - name: symbol-kind
     description: What a declaration of a source file is
@@ -37,7 +38,6 @@ enums:
       - {value: type, label: Type, description: A type definition or alias}
       - {value: namespace, label: Namespace}
       - {value: module, label: Module}
-      - {value: import, label: Import, description: "A dependency the file names (#include, import, use)"}
       - {value: variable, label: Variable, description: A variable of the top level}
       - {value: constant, label: Constant}
       - {value: field, label: Field}
@@ -93,8 +93,75 @@ nodeTypes:
       - {name: language, label: Language, description: Language of its file, type: string, section: Source, order: 4}
       - {name: signature, label: Signature, description: First line of its text, type: string, section: Source, order: 5}
       - {name: digest, label: Digest, description: Digest of its text, type: string, section: Source, order: 6}
+      - {name: code, label: Code, description: "Source text of the declaration (cut at 64 KiB; the digest is of the whole text)", type: string, widget: textarea, section: Source, order: 7}
     lifecycle: presence
     search: [{property: name, text: true}, {property: signature, text: true}, {property: kind, facet: true}, {property: language, facet: true}]
+  # the declarations by what they are; a namespace, a module or a macro stays a Symbol
+  - name: Function
+    icon: code
+    color: "#7c3aed"
+    description: A function (kind function), or a function declared without its body (kind prototype)
+    extends: Symbol
+  - name: Method
+    icon: code
+    color: "#8b5cf6"
+    description: A method, member of its class, struct or interface (a Go method of its receiver type)
+    extends: Symbol
+  - name: Class
+    icon: app
+    color: "#0891b2"
+    description: A class (a Java record too)
+    extends: Symbol
+  - name: Struct
+    icon: app
+    color: "#0e7490"
+    description: A struct (kind struct) or a union (kind union)
+    extends: Symbol
+  - name: Interface
+    icon: app
+    color: "#0d9488"
+    description: An interface, a trait
+    extends: Symbol
+  - name: Enum
+    icon: list
+    color: "#059669"
+    description: An enumeration
+    extends: Symbol
+  - name: Type
+    icon: node
+    color: "#16a34a"
+    description: A type definition or alias
+    extends: Symbol
+  - name: Variable
+    icon: tag
+    color: "#d97706"
+    description: A variable of the top level
+    extends: Symbol
+  - name: Constant
+    icon: tag
+    color: "#b45309"
+    description: A constant
+    extends: Symbol
+  - name: Field
+    icon: tag
+    color: "#a16207"
+    description: A field of a class or a struct
+    extends: Symbol
+  # a package of the code: what the files of a directory (Go, C, JavaScript...) or a declared package (Java) make up,
+  # or a package the repository imports from outside
+  - name: Package
+    icon: book
+    color: "#db2777"
+    description: >
+      A package: the files of a directory (Go: its import path from go.mod; Python: the dotted path of the directory),
+      the declared package of Java files, or a package imported from outside the repository (a module, an npm package,
+      a system header). Present while a file is in it or imports it.
+    attributes:
+      - {name: name, label: Name, description: Name of the package (the Go package clause, the last element of its path), type: string, section: Identity, order: 1, asName: true}
+      - {name: path, label: Path, description: "Import path of the package (a Go import path, a Python module, a Java package, an npm package, a directory)", type: string, section: Identity, order: 2}
+      - {name: language, label: Language, description: "Language family of the package (go, python, java, js, c, rust)", type: string, section: Identity, order: 3}
+    lifecycle: presence
+    search: [{property: name, text: true}, {property: path, text: true}, {property: language, facet: true}]
 lifecycles:
   # a node is never deleted: an entry the commit removes leaves its directory and is moved to removed; added again at
   # the same path, it is the same node, present again
@@ -122,3 +189,39 @@ linkTypes:
     compose: true
     label: "defines"
     inverseLabel: "defined in"
+  - name: member_of
+    description: "A declaration is a member of a class, a struct, an interface, a namespace (a Go method of its receiver type)"
+    from: Symbol
+    to: Symbol
+    label: "member of"
+    inverseLabel: "has member"
+  - name: calls
+    description: "A declaration calls a function, a method, a macro, or makes a class (resolved by name: the imports, the members of its class, its file, its package)"
+    from: Symbol
+    to: Symbol
+    label: "calls"
+    inverseLabel: "called by"
+  - name: uses
+    description: "A declaration names a type, a variable or a constant (resolved by name like the calls)"
+    from: Symbol
+    to: Symbol
+    label: "uses"
+    inverseLabel: "used by"
+  - name: in_package
+    description: "A source file is in a package"
+    from: File
+    to: Package
+    label: "in package"
+    inverseLabel: "holds"
+  - name: imports
+    description: "A source file imports a package (import, #include, use)"
+    from: File
+    to: Package
+    label: "imports"
+    inverseLabel: "imported by"
+  - name: depends_on
+    description: "A package imports another: one of its files imports it"
+    from: Package
+    to: Package
+    label: "imports"
+    inverseLabel: "imported by"

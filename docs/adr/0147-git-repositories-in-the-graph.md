@@ -61,6 +61,7 @@ history, about 90 000 files today), so the import must stream the history and mu
   each. The importer is a ready load for that work.
 - With the symbols, a commit writes as many nodes as declarations it changes: jq's first 300 commits ran at about
   4.5 commits/s with them (5 500 symbol versions), against 20 without.
-- Not done: references between symbols (calls, uses of a type, the file an import names), renames are an addition and a removal (no rename detection, a file's history does not follow it), the
+- The declarations by type, their links and the packages: ADR 0150.
+- Not done: renames are an addition and a removal (no rename detection, a file's history does not follow it), the
   contents of the files are not read (only their object ids and sizes), branches other than the one followed and tags
   are not imported.

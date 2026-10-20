@@ -22,7 +22,7 @@ func (t *TreeSitter) Close() {}
 // Language names the language of a file by its extension.
 func (t *TreeSitter) Language(name string) string { return languageOf(name) }
 
-// Symbols refuses.
-func (t *TreeSitter) Symbols(string, []byte) ([]Symbol, error) {
-	return nil, errors.New("tree-sitter: not in this build")
+// Parse refuses.
+func (t *TreeSitter) Parse(string, []byte) (Source, error) {
+	return Source{}, errors.New("tree-sitter: not in this build")
 }

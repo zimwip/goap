@@ -1944,7 +1944,7 @@ engine/methodology/             methodology model only (a methodology is a domai
 contracts/authz/                   ABAC: identity, requests, Casbin model and enforcer, default policies
 contracts/llm/                     completion and embedding contracts (implemented by platform/modelgw)
 platform/jobsvc/               the job service: long runs claimed by workers, followed over SSE (ADR 0149; kit `lib/jobkit`, command `platform/cmd/jobs`)
-platform/gitimport/            git importer into the `code` domain: one change per commit, directories and files as nodes (ADR 0147; command `platform/cmd/goap-gitimport`, service `platform/cmd/importer-git`, ADR 0148)
+platform/gitimport/            git importer into the `code` domain: one change per commit, directories and files as nodes, with the symbols the declarations, their calls and uses, the packages and their imports (ADR 0147, ADR 0150; command `platform/cmd/goap-gitimport`, service `platform/cmd/importer-git`, ADR 0148)
 graph/importsvc/               import registry: the declared sources are listed, a run checked and created as a job (ADR 0148, 0149)
 lib/importerkit/               kit of an importer service: a worker of the job service for the importers it implements (ADR 0148, 0149)
 lib/jobkit/                    kit of the long runs: the job queue (in process or over RPC), the worker, the job of a runner (ADR 0149)

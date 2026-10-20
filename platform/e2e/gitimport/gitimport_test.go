@@ -133,8 +133,8 @@ func graphTree(t *testing.T, g *graph.Graph, name string) (map[string]string, do
 	}
 	out := map[string][]domain.NodeID{}
 	for _, l := range links {
-		if l.Type == gitimport.LinkDefines {
-			continue // the symbols of a file: symbols_test.go
+		if l.Type != gitimport.LinkContains && byID[l.From.ID].Type != gitimport.TypeRepo && byID[l.From.ID].Type != gitimport.TypeDirectory {
+			continue // the symbols and the packages of a file: symbols_test.go
 		}
 		if l.Type != gitimport.LinkContains {
 			t.Fatalf("unexpected link %s", l.Type)
@@ -332,7 +332,7 @@ func TestImportRepository(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer ts.Close()
-		im.Symbols = ts
+		im.Symbols, im.Code = ts, true
 	}
 	start := time.Now()
 	st, err := im.Run(ctx)
@@ -340,6 +340,15 @@ func TestImportRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("%+v in %s", st, time.Since(start))
+	// imported again: nothing to do
+	again := *im
+	again.Max = 0
+	if max > 0 {
+		again.Rev = st.Last
+	}
+	if st, err := again.Run(ctx); err != nil || st.Commits != 0 {
+		t.Fatalf("imported again: %+v %v", st, err)
+	}
 }
 
 type testWriter struct{ t *testing.T }
