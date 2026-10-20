@@ -15,14 +15,15 @@ service implementing it registers itself.
 
 1. **A domain declares its sources.** `importers: [{name, label, description, params}]` on a domain (`def.Importer`,
    `lib/def/importer.go`; proto `registry.v1.Domain.importers`, `ImporterDecl`); `params` are attributes, checked like
-   any (types, enums of the domain, defaults). `code` 1.1.0 declares `git` (`repository`, `name`, `rev`, `base`, `max`,
+   any (types, enums of the domain, defaults). `code` 1.2.0 declares `git` (`url` or `directory`, `name`, `rev`, `base`, `max`,
    `symbols`). The declaration is versioned with the domain and published like it.
 2. **A service implements them.** An importer service implements `importer.v1.ImporterService` (`Describe`, `Start`,
    `Jobs`, `Cancel`) and says which `(domain, importer)` pairs it implements. `lib/importerkit` is the whole kit: a
    service implements `importerkit.Importer` (`Info`, `Run(ctx, *Job)`) and calls `importerkit.Run(name, im)`, which
    serves the protocol, keeps the jobs (in memory, the last `KeepFinished` finished ones), registers with the registry
    and renews its lease. The first one is `importer-git` (`platform/cmd/importer-git`, `gitimport.Plugin`): a local
-   path under `GOAP_IMPORT_GIT_ROOTS`, or a remote URL cloned bare under `GOAP_IMPORT_GIT_CLONES` and fetched again on
+   `directory` read in place (a working tree or a bare repository, `~` expanded; it must be a git repository under
+   `GOAP_IMPORT_GIT_ROOTS`, the home directory in `goap-dev`), or a `url` cloned bare under `GOAP_IMPORT_GIT_CLONES` and fetched again on
    the next run (`file://` refused).
 3. **The import registry** (`graph/importsvc`, `importer.v1.ImportService`, served by the graph next to the domain
    registry, routed by the gateway): `RegisterImporter` (the shared token `GOAP_IMPORTER_TOKEN`, header

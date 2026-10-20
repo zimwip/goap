@@ -75,6 +75,6 @@ export function statsLine(j: ImportJob): string {
 /** What a run imported from, for the list of runs (its first text parameter, the repository for git). */
 export function jobSubject(j: ImportJob): string {
   const p = (j.params ?? {}) as Record<string, JsonValue>;
-  for (const k of ['repository', 'source', 'url', 'path', 'name']) if (typeof p[k] === 'string' && p[k]) return p[k] as string;
+  for (const k of ['repository', 'directory', 'url', 'source', 'path', 'name']) if (typeof p[k] === 'string' && p[k]) return p[k] as string;
   return '';
 }

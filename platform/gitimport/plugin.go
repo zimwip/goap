@@ -28,7 +28,7 @@ const ImporterName = "git"
 type Plugin struct {
 	// Graph is the graph the runs write to; the principal of a run is in its context.
 	Graph Port
-	// Roots are the local directories a repository parameter may name a path under (a URL is cloned); none: only URLs.
+	// Roots are the directories the local directory of a run must be under; none: only URLs.
 	Roots []string
 	// CloneDir keeps the clones of the repositories given by URL, fetched again at each run (default:
 	// <user cache>/goap/git).
@@ -54,9 +54,15 @@ var remoteRE = regexp.MustCompile(`^(https?://|ssh://|git://)[^\s]+$|^[A-Za-z0-9
 
 // Run implements importerkit.Importer.
 func (p *Plugin) Run(ctx context.Context, job *importerkit.Job) error {
-	repo := strings.TrimSpace(job.String("repository"))
-	if repo == "" {
-		return errors.New("repository required")
+	url, local := strings.TrimSpace(job.String("url")), strings.TrimSpace(job.String("directory"))
+	repo := url
+	switch {
+	case url != "" && local != "":
+		return errors.New("give the URL of the repository or its local directory, not both")
+	case url == "" && local == "":
+		return errors.New("the URL of the repository or its local directory is required")
+	case url == "":
+		repo = local
 	}
 	name := job.String("name")
 	if name == "" {
@@ -65,7 +71,13 @@ func (p *Plugin) Run(ctx context.Context, job *importerkit.Job) error {
 	// one run at a time per repository of the graph: two would race on the same nodes
 	unlock := p.lock(name)
 	defer unlock()
-	dir, err := p.checkout(ctx, job, repo)
+	var dir string
+	var err error
+	if url != "" {
+		dir, err = p.remote(ctx, job, url)
+	} else {
+		dir, err = p.local(ctx, local)
+	}
 	if err != nil {
 		return err
 	}
@@ -113,35 +125,59 @@ func (p *Plugin) lock(name string) func() {
 	return m.Unlock
 }
 
-// checkout is the local repository of a run: a path under a root, or the clone of a URL brought up to date.
-func (p *Plugin) checkout(ctx context.Context, job *importerkit.Job, repo string) (string, error) {
-	if remoteRE.MatchString(repo) {
-		return p.clone(ctx, job, repo)
+// remote is the clone of a URL, brought up to date.
+func (p *Plugin) remote(ctx context.Context, job *importerkit.Job, url string) (string, error) {
+	if !remoteRE.MatchString(url) {
+		return "", fmt.Errorf("URL %q: only https, http, ssh and git URLs are cloned (a path goes in the local directory)", url)
 	}
+	return p.clone(ctx, job, url)
+}
+
+// local is a repository of a directory under a root, read in place.
+func (p *Plugin) local(ctx context.Context, repo string) (string, error) {
 	if strings.Contains(repo, "://") {
-		return "", fmt.Errorf("repository %q: only https, http, ssh and git URLs are cloned", repo)
+		return "", fmt.Errorf("directory %q: a URL goes in the URL", repo)
 	}
-	abs, err := filepath.Abs(repo)
+	path := repo
+	if path == "~" || strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		path = filepath.Join(home, path[1:])
+	}
+	abs, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
 	}
 	abs, err = filepath.EvalSymlinks(abs)
 	if err != nil {
-		return "", fmt.Errorf("repository %s: %w", repo, err)
+		return "", fmt.Errorf("directory %s: %w", repo, err)
 	}
+	if !p.under(abs) {
+		if len(p.Roots) == 0 {
+			return "", fmt.Errorf("directory %s: this importer service reads no local directory, give a URL", repo)
+		}
+		return "", fmt.Errorf("directory %s: not under the directories this importer service reads (%s)", repo, strings.Join(p.Roots, ", "))
+	}
+	if err := git(ctx, "-C", abs, "rev-parse", "--git-dir"); err != nil {
+		return "", fmt.Errorf("directory %s: not a git repository", repo)
+	}
+	return abs, nil
+}
+
+// under tells a path is under one of the roots.
+func (p *Plugin) under(abs string) bool {
 	for _, root := range p.Roots {
 		r, err := filepath.EvalSymlinks(root)
 		if err != nil {
 			continue
 		}
 		if rel, err := filepath.Rel(r, abs); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return abs, nil
+			return true
 		}
 	}
-	if len(p.Roots) == 0 {
-		return "", fmt.Errorf("repository %s: this importer service reads no local path, give a URL", repo)
-	}
-	return "", fmt.Errorf("repository %s: not under the directories this importer service reads (%s)", repo, strings.Join(p.Roots, ", "))
+	return false
 }
 
 func (p *Plugin) clone(ctx context.Context, job *importerkit.Job, url string) (string, error) {

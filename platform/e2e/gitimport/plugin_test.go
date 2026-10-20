@@ -40,7 +40,8 @@ func TestImportThroughTheRegistry(t *testing.T) {
 	if issues := code.Validate(); issues.HasErrors() {
 		t.Fatalf("code domain: %v", issues)
 	}
-	svc := importerkit.New(&gitimport.Plugin{Graph: g, Roots: []string{r.dir}}, "")
+	plain := t.TempDir() // a directory the service reads that holds no repository
+	svc := importerkit.New(&gitimport.Plugin{Graph: g, Roots: []string{r.dir, plain}}, "")
 	reg := &importsvc.Service{Domains: domains{code}, Authz: authz.AllowAll{}}
 	reg.AddLocal(svc)
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "ann", Project: project})
@@ -62,11 +63,11 @@ func TestImportThroughTheRegistry(t *testing.T) {
 		return done
 	}
 
-	j := run(map[string]any{"repository": r.dir, "name": "demo", "max": 1})
+	j := run(map[string]any{"directory": r.dir, "name": "demo", "max": 1})
 	if j.Status != importerkit.StatusDone || j.Stats["commits"] != 1 {
 		t.Fatalf("first run: %+v", j)
 	}
-	j = run(map[string]any{"repository": r.dir, "name": "demo"})
+	j = run(map[string]any{"directory": r.dir, "name": "demo"})
 	if j.Status != importerkit.StatusDone || j.Stats["commits"] != 1 || !strings.Contains(j.Progress, "demo: 1 commits") {
 		t.Fatalf("second run (resumed): %+v", j)
 	}
@@ -76,10 +77,13 @@ func TestImportThroughTheRegistry(t *testing.T) {
 		t.Fatalf("repository node at %v", root.Properties["commit"])
 	}
 
-	// a path outside the roots of the service, a URL of another scheme: refused
-	for _, repo := range []string{t.TempDir(), "file:///etc"} {
-		if j := run(map[string]any{"repository": repo, "name": "other"}); j.Status != importerkit.StatusFailed {
-			t.Errorf("%s: %+v, want failed", repo, j)
+	// a directory outside the roots of the service, a directory under one that holds no repository, a URL of another
+	// scheme, a path given as the URL, both or neither: refused
+	for _, params := range []map[string]any{{"directory": t.TempDir()}, {"directory": plain}, {"url": "file:///etc"},
+		{"url": r.dir}, {"url": "https://example.com/r.git", "directory": r.dir}, {}} {
+		params["name"] = "other"
+		if j := run(params); j.Status != importerkit.StatusFailed {
+			t.Errorf("%v: %+v, want failed", params, j)
 		}
 	}
 }
