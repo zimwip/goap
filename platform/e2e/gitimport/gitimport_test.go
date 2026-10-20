@@ -133,6 +133,9 @@ func graphTree(t *testing.T, g *graph.Graph, name string) (map[string]string, do
 	}
 	out := map[string][]domain.NodeID{}
 	for _, l := range links {
+		if l.Type == gitimport.LinkDefines {
+			continue // the symbols of a file: symbols_test.go
+		}
 		if l.Type != gitimport.LinkContains {
 			t.Fatalf("unexpected link %s", l.Type)
 		}
@@ -303,7 +306,8 @@ func TestImportFromABase(t *testing.T) {
 }
 
 // TestImportRepository imports a real repository into a SQLite graph and reports the throughput: run it by hand with
-// GOAP_GITIMPORT_REPO=<path> (GOAP_GITIMPORT_MAX bounds the commits, GOAP_GITIMPORT_BASE starts at a revision).
+// GOAP_GITIMPORT_REPO=<path> (GOAP_GITIMPORT_MAX bounds the commits, GOAP_GITIMPORT_BASE starts at a revision, GOAP_GITIMPORT_SYMBOLS=1 reads the
+// symbols).
 func TestImportRepository(t *testing.T) {
 	dir := os.Getenv("GOAP_GITIMPORT_REPO")
 	if dir == "" {
@@ -320,9 +324,18 @@ func TestImportRepository(t *testing.T) {
 	}
 	g := newGraphOn(t, graph.NewSQLite(db))
 	max, _ := strconv.Atoi(os.Getenv("GOAP_GITIMPORT_MAX"))
+	im := &gitimport.Importer{Graph: g, Dir: dir, Name: filepath.Base(dir), ProjectID: project, Max: max,
+		Base: os.Getenv("GOAP_GITIMPORT_BASE"), Progress: testWriter{t}, ProgressEvery: 50}
+	if os.Getenv("GOAP_GITIMPORT_SYMBOLS") == "1" {
+		ts, err := gitimport.NewTreeSitter()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ts.Close()
+		im.Symbols = ts
+	}
 	start := time.Now()
-	st, err := (&gitimport.Importer{Graph: g, Dir: dir, Name: filepath.Base(dir), ProjectID: project, Max: max,
-		Base: os.Getenv("GOAP_GITIMPORT_BASE"), Progress: testWriter{t}, ProgressEvery: 50}).Run(ctx)
+	st, err := im.Run(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,4 +344,7 @@ func TestImportRepository(t *testing.T) {
 
 type testWriter struct{ t *testing.T }
 
-func (w testWriter) Write(p []byte) (int, error) { w.t.Log(strings.TrimSpace(string(p))); return len(p), nil }
+func (w testWriter) Write(p []byte) (int, error) {
+	w.t.Log(strings.TrimSpace(string(p)))
+	return len(p), nil
+}

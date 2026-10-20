@@ -27,7 +27,9 @@ const (
 	TypeRepo      = "code@Repository"
 	TypeDirectory = "code@Directory"
 	TypeFile      = "code@File"
+	TypeSymbol    = "code@Symbol"
 	LinkContains  = "code@contains"
+	LinkDefines   = "code@defines"
 	StatePresent  = "present"
 	StateRemoved  = "removed"
 )
@@ -70,6 +72,10 @@ type Importer struct {
 	ProjectID, OwnerOrg string
 	// By is who accepts the changes (default "gitimport").
 	By string
+	// Symbols, when set, reads the declarations of the source files a commit adds or changes (NewTreeSitter): each a
+	// Symbol node its file defines. MaxSymbolBytes leaves the larger files out (default 1 MiB).
+	Symbols        Extractor
+	MaxSymbolBytes int64
 	// Progress, when set, receives a line every ProgressEvery commits (default 100) and at the end.
 	Progress      io.Writer
 	ProgressEvery int
@@ -77,6 +83,7 @@ type Importer struct {
 	ix    index
 	head  domain.BaselineID
 	sizes *Sizes
+	blobs *Blobs
 	stats Stats
 	start time.Time
 }
@@ -85,6 +92,8 @@ type Importer struct {
 type Stats struct {
 	Commits                    int
 	Created, Modified, Removed int
+	// Symbols counts the symbols created, modified or removed (among the nodes counted above).
+	Symbols int
 	// Last is the last commit imported.
 	Last string
 }
@@ -123,6 +132,17 @@ func (im *Importer) Run(ctx context.Context) (Stats, error) {
 	}
 	im.sizes = sizes
 	defer sizes.Close()
+	if im.Symbols != nil {
+		if im.MaxSymbolBytes <= 0 {
+			im.MaxSymbolBytes = 1 << 20
+		}
+		blobs, err := NewBlobs(ctx, im.Dir)
+		if err != nil {
+			return im.stats, err
+		}
+		im.blobs = blobs
+		defer blobs.Close()
+	}
 	from := im.ix.commit
 	if from == "" && im.Base != "" {
 		c, err := Tree(ctx, im.Dir, im.Base)
@@ -156,8 +176,8 @@ func (im *Importer) report(final bool) {
 	}
 	el := time.Since(im.start)
 	rate := float64(im.stats.Commits) / el.Seconds()
-	fmt.Fprintf(im.Progress, "%s: %d commits (%.1f/s), %d nodes created, %d modified, %d removed, at %s\n",
-		im.Name, im.stats.Commits, rate, im.stats.Created, im.stats.Modified, im.stats.Removed, short(im.stats.Last))
+	fmt.Fprintf(im.Progress, "%s: %d commits (%.1f/s), %d nodes created, %d modified, %d removed (%d symbols), at %s\n",
+		im.Name, im.stats.Commits, rate, im.stats.Created, im.stats.Modified, im.stats.Removed, im.stats.Symbols, short(im.stats.Last))
 }
 
 // ---- the repository as the graph holds it ----
@@ -166,8 +186,10 @@ func (im *Importer) report(final bool) {
 type entry struct {
 	id      domain.NodeID
 	removed bool
-	// links are the entries a directory holds: entry node → link.
+	// links are the entries a directory holds, the symbols a file defines: node → link.
 	links map[domain.NodeID]domain.LinkID
+	// sum is the fingerprint of a symbol's attributes (git says when a directory or a file changed, not of a symbol).
+	sum string
 }
 
 // index is the repository at the head of the namespace, by key: read once whole, then followed commit by commit by the
@@ -230,14 +252,17 @@ func (ix *index) apply(repo string, nodes []domain.Node, links []domain.Link) {
 			e = &entry{}
 			ix.byKey[n.Key] = e
 		}
-		e.id, e.removed, e.links = n.ID, n.State == StateRemoved, nil
+		e.id, e.removed, e.links, e.sum = n.ID, n.State == StateRemoved, nil, ""
+		if n.Type == TypeSymbol {
+			e.sum = fingerprint(n.Properties)
+		}
 		ix.keyOf[n.ID] = n.Key
 		if n.Key == repo {
 			ix.commit, _ = n.Properties["commit"].(string)
 		}
 	}
 	for _, l := range links {
-		if l.Type != LinkContains {
+		if l.Type != LinkContains && l.Type != LinkDefines {
 			continue
 		}
 		k, ok := ix.keyOf[l.From.ID]
@@ -257,14 +282,16 @@ func (ix *index) apply(repo string, nodes []domain.Node, links []domain.Link) {
 // op is what a commit does to one node.
 type op struct {
 	key, typ string
-	depth    int
-	props    map[string]any // nil: only its entries change
-	remove   bool
-	cur      *entry // the node held, nil for a creation
-	add      []string
-	drop     []domain.LinkID
-	impact   domain.ChangeImpactID
-	ref      domain.NodeRef // its draft, once its operation ran
+	// parent is the key of the file defining a symbol (a directory's entries find theirs by their path).
+	parent string
+	depth  int
+	props  map[string]any // nil: only its entries change
+	remove bool
+	cur    *entry // the node held, nil for a creation
+	add    []string
+	drop   []domain.LinkID
+	impact domain.ChangeImpactID
+	ref    domain.NodeRef // its draft, once its operation ran
 }
 
 // Key gives the key of an entry of a repository: the repository's name for its root, <repo>:<path>/ for a directory
@@ -349,8 +376,20 @@ func (im *Importer) plan(c Commit) ([]*op, error) {
 			o.props, o.remove = props, false
 		}
 	}
-	// the directories gain the entries they did not hold and lose the ones removed
+	if im.Symbols != nil {
+		for _, o := range slices.Collect(maps.Values(ops)) {
+			if o.typ == TypeFile {
+				if err := im.planSymbols(ops, o); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	// the directories gain the entries they did not hold and lose the ones removed, the files their symbols
 	parentOf := func(o *op) *op {
+		if o.parent != "" {
+			return ops[o.parent]
+		}
 		if o.key == im.Name {
 			return nil
 		}
@@ -402,6 +441,81 @@ func (im *Importer) plan(c Commit) ([]*op, error) {
 	return out, nil
 }
 
+// planSymbols adds to the operations of a commit those on the symbols of a file it adds, changes or removes: the
+// declarations Tree-sitter reads in its new content against the symbols the file defines at the head.
+func (im *Importer) planSymbols(ops map[string]*op, f *op) error {
+	held := map[string]bool{} // the symbols the file defines at the head
+	if f.cur != nil && !f.cur.removed {
+		for id := range f.cur.links {
+			if k, ok := im.ix.keyOf[id]; ok && !im.ix.byKey[k].removed {
+				held[k] = true
+			}
+		}
+	}
+	sym := func(k string) *op {
+		o := &op{key: k, typ: TypeSymbol, parent: f.key, depth: f.depth + 1, cur: im.ix.byKey[k]}
+		ops[k] = o
+		return o
+	}
+	removeHeld := func() {
+		for k := range held {
+			sym(k).remove = true
+		}
+	}
+	if f.remove {
+		removeHeld()
+		return nil
+	}
+	if f.props == nil {
+		return nil
+	}
+	name, _ := f.props["name"].(string)
+	mode, _ := f.props["mode"].(string)
+	size, _ := f.props["size"].(int64)
+	lang := im.Symbols.Language(name)
+	if lang == "" || (mode != "100644" && mode != "100755") || size > im.MaxSymbolBytes {
+		removeHeld()
+		return nil
+	}
+	blob, _ := f.props["blob"].(string)
+	src, err := im.blobs.Read(blob)
+	if err != nil {
+		return err
+	}
+	syms, err := im.Symbols.Symbols(lang, src)
+	if err != nil {
+		return fmt.Errorf("%s: %w", f.key, err)
+	}
+	for i, k := range symbolKeys(f.key, syms) {
+		s := syms[i]
+		props := map[string]any{"name": s.Name, "kind": s.Kind, "container": s.Container, "language": lang, "signature": s.Signature, "digest": s.Digest}
+		delete(held, k)
+		o := sym(k)
+		if o.cur != nil && !o.cur.removed && o.cur.sum == fingerprint(props) {
+			delete(ops, k) // unchanged: the file's new version keeps its link
+			continue
+		}
+		o.props = props
+	}
+	removeHeld()
+	return nil
+}
+
+func (im *Importer) countSymbol(o *op) {
+	if o.typ == TypeSymbol {
+		im.stats.Symbols++
+	}
+}
+
+// fingerprint is the attributes of a symbol, compared to tell a changed one.
+func fingerprint(p map[string]any) string {
+	var b strings.Builder
+	for _, k := range []string{"name", "kind", "container", "language", "signature", "digest"} {
+		fmt.Fprintf(&b, "%v\x00", p[k])
+	}
+	return b.String()
+}
+
 func (im *Importer) props(e Entry, dir bool) (map[string]any, error) {
 	name := path.Base(e.Path)
 	if dir {
@@ -431,7 +545,11 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 	linksTo := func(o *op) []graphapi.LinkWrite {
 		out := make([]graphapi.LinkWrite, 0, len(o.add))
 		for _, k := range o.add {
-			out = append(out, graphapi.LinkWrite{Type: LinkContains, To: byKey[k].ref})
+			typ := LinkContains
+			if o.typ == TypeFile {
+				typ = LinkDefines
+			}
+			out = append(out, graphapi.LinkWrite{Type: typ, To: byKey[k].ref})
 		}
 		return out
 	}
@@ -447,6 +565,7 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 			}
 			o.impact, o.ref = cn.ID, *cn.Post
 			im.stats.Created++
+			im.countSymbol(o)
 			continue
 		case o.remove:
 			cn, err := im.Graph.ImpactNodeTransition(ctx, id, graphapi.NodeTransition{NodeCheckout: graphapi.NodeCheckout{Node: o.cur.id, Rationale: why, ProducedBy: im.By}, To: StateRemoved})
@@ -455,6 +574,7 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 			}
 			o.impact = cn.ID
 			im.stats.Removed++
+			im.countSymbol(o)
 		default:
 			cn, err := im.Graph.ImpactNodeCheckout(ctx, id, graphapi.NodeCheckout{Node: o.cur.id, Rationale: why, ProducedBy: im.By})
 			if err != nil {
@@ -472,6 +592,7 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 				}
 			}
 			im.stats.Modified++
+			im.countSymbol(o)
 		}
 		o.ref = domain.DraftRef(o.cur.id)
 		for _, l := range o.drop {

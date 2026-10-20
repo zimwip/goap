@@ -304,3 +304,61 @@ func (s *Sizes) Close() error {
 	_ = s.in.Close()
 	return s.cmd.Wait()
 }
+
+// Blobs reads the content of objects through one git cat-file --batch process, one request at a time.
+type Blobs struct {
+	mu  sync.Mutex
+	cmd *exec.Cmd
+	in  io.WriteCloser
+	out *bufio.Reader
+}
+
+// NewBlobs starts the process; Close ends it.
+func NewBlobs(ctx context.Context, dir string) (*Blobs, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "cat-file", "--batch")
+	in, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return &Blobs{cmd: cmd, in: in, out: bufio.NewReaderSize(out, 1<<20)}, nil
+}
+
+// Read gives the content of an object.
+func (b *Blobs) Read(id string) ([]byte, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if _, err := io.WriteString(b.in, id+"\n"); err != nil {
+		return nil, err
+	}
+	// "<id> <type> <size>\n<content>\n", or "<id> missing\n"
+	head, err := b.out.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+	f := strings.Fields(head)
+	if len(f) != 3 {
+		return nil, fmt.Errorf("git cat-file %s: %s", id, strings.TrimSpace(head))
+	}
+	n, err := strconv.ParseInt(f[2], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("git cat-file %s: %s", id, strings.TrimSpace(head))
+	}
+	buf := make([]byte, n+1)
+	if _, err := io.ReadFull(b.out, buf); err != nil {
+		return nil, err
+	}
+	return buf[:n], nil
+}
+
+// Close ends the process.
+func (b *Blobs) Close() error {
+	_ = b.in.Close()
+	return b.cmd.Wait()
+}

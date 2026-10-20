@@ -55,6 +55,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/klauspost/compress v1.20.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/nats-io/nkeys v0.4.16 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
@@ -87,6 +88,15 @@ require (
 )
 
 require (
+	github.com/tree-sitter/go-tree-sitter v0.25.0
+	github.com/tree-sitter/tree-sitter-c v0.24.2
+	github.com/tree-sitter/tree-sitter-cpp v0.23.4
+	github.com/tree-sitter/tree-sitter-go v0.25.0
+	github.com/tree-sitter/tree-sitter-java v0.23.5
+	github.com/tree-sitter/tree-sitter-javascript v0.25.0
+	github.com/tree-sitter/tree-sitter-python v0.25.0
+	github.com/tree-sitter/tree-sitter-rust v0.24.2
+	github.com/tree-sitter/tree-sitter-typescript v0.23.2
 	github.com/zimwip/goap/contracts v0.0.0
 	github.com/zimwip/goap/engine v0.0.0
 	github.com/zimwip/goap/gateway v0.0.0

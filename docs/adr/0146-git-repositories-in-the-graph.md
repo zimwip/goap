@@ -33,20 +33,34 @@ history, about 90 000 files today), so the import must stream the history and mu
    node, links), read whole once and followed by `BaselineDelta` after each landing (the whole head past
    `MaxDeltaNodes`). The repository node names the last commit imported: a run resumes there (`-max` bounds a run). A
    first import may start at a revision (`-base v6.12`): its tree is the first change, then the commits after it.
-6. **Through the graph's API** (`gitimport.Port`, implemented by `*graph.Graph` and `graphclient.Client`): the command
+6. **Symbols, read by Tree-sitter** (`-symbols`, `gitimport.TreeSitter`, C, C++, Go, Python, Java, JavaScript,
+   TypeScript, Rust): each declaration of a source file a commit adds or changes (function, method, prototype, struct,
+   union, class, interface, enum, type, namespace, module, import, top-level variable, constant, field, macro; the
+   declarations local to a function are left out) is a `Symbol` node (`name`, `kind`, `container`, `language`,
+   `signature`, `digest`) the file `defines` (inverse label "defined in"), keyed `<file key>#<kind>:<qualified name>`
+   (`~2`, `~3` for a repeated one). The link goes from the file: a version of a file carries its links forward, so an
+   unchanged symbol keeps its version and its link stays valid, while a `defined_in` link on each symbol would have to
+   version every symbol of a file at each of its commits. A symbol has no line numbers: its versions are the changes of
+   its own text (`digest`), not of the lines around it. The queries follow the tags convention of Tree-sitter
+   (`@definition.<kind>`, `@name`), one per language in `platform/gitimport/treesitter.go`. Tree-sitter is C: it builds
+   with cgo only (`treesitter_nocgo.go` refuses `-symbols` in the images, built with `CGO_ENABLED=0`).
+7. **Through the graph's API** (`gitimport.Port`, implemented by `*graph.Graph` and `graphclient.Client`): the command
    `goap-gitimport` talks to the graph service or `goap-dev` as a system principal (or with a token, through the
    gateway); the importer is a producer like any other and needs no access to the graph's storage.
 
 ## Consequences
 
 - Any git repository loads with `goap-gitimport -repo <dir> -name <name>`; the tests write repositories covering
-  additions, modifications, removals, a file becoming a directory, a merge, an empty commit, a resume and a base.
+  additions, modifications, removals, a file becoming a directory, a merge, an empty commit, a resume, a base and the
+  symbols of a file across its commits.
 - The cost of an import is the cost of the graph's change operations, one transaction each. Measured on SQLite (in
   process, `TestImportRepository` with `GOAP_GITIMPORT_REPO`): a first commit of 1 600 files takes about 10 s, and the
   cost per operation grows with the size of the change (the operations fold the change's impacts, `ImpactsSeenBy`,
   `resolve`, and the review checks each accepted draft), so a large first change (the 17 000 files of Linux 2.6.12, or
   a recent kernel tree as a base) is where the graph's change path has to scale; the commits after it touch a few files
   each. The importer is a ready load for that work.
-- Not done: renames are an addition and a removal (no rename detection, a file's history does not follow it), the
+- With the symbols, a commit writes as many nodes as declarations it changes: jq's first 300 commits ran at about
+  4.5 commits/s with them (5 500 symbol versions), against 20 without.
+- Not done: references between symbols (calls, uses of a type, the file an import names), renames are an addition and a removal (no rename detection, a file's history does not follow it), the
   contents of the files are not read (only their object ids and sizes), branches other than the one followed and tags
   are not imported.

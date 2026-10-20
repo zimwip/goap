@@ -4,7 +4,28 @@ description: >
   Source code held in git repositories (ADR 0146): a repository, its directories and its files as of the last commit
   imported. The git importer (platform/gitimport, goap-gitimport) makes one change per commit; a directory or a file is a
   node, a directory holds its entries by `contains` links, and a version of a directory is a git tree (its links follow
-  the versions of its entries, as a tree names the objects it holds).
+  the versions of its entries, as a tree names the objects it holds). With the symbols read (Tree-sitter), a source file
+  defines its declarations (functions, types, imports, variables...) by `defines` links, read back as "defined in".
+enums:
+  - name: symbol-kind
+    description: What a declaration of a source file is
+    values:
+      - {value: function, label: Function}
+      - {value: method, label: Method}
+      - {value: prototype, label: Prototype, description: A function declared without its body (a C prototype, an abstract method)}
+      - {value: struct, label: Struct}
+      - {value: union, label: Union}
+      - {value: class, label: Class}
+      - {value: interface, label: Interface, description: An interface, a trait}
+      - {value: enum, label: Enum}
+      - {value: type, label: Type, description: A type definition or alias}
+      - {value: namespace, label: Namespace}
+      - {value: module, label: Module}
+      - {value: import, label: Import, description: "A dependency the file names (#include, import, use)"}
+      - {value: variable, label: Variable, description: A variable of the top level}
+      - {value: constant, label: Constant}
+      - {value: field, label: Field}
+      - {value: macro, label: Macro}
 nodeTypes:
   # an entry of a repository: what a directory holds
   - name: Entry
@@ -36,6 +57,18 @@ nodeTypes:
       - {name: url, label: Source, description: Where the repository was imported from (a URL or a path), type: string, section: Origin, order: 20}
       - {name: ref, label: Followed, description: "Revision followed by the import (HEAD, a branch, a tag)", type: string, section: Origin, order: 21}
       - {name: commit, label: Commit, description: Object id of the last commit imported, type: string, section: Origin, order: 22}
+  # a declaration of a source file, read by Tree-sitter: a new version when its own text changes
+  - name: Symbol
+    description: A declaration of a source file (a function, a type, an import, a variable...)
+    attributes:
+      - {name: name, label: Name, description: Name of the declaration (the path of an import), type: string, section: Identity, order: 1, asName: true}
+      - {name: kind, label: Kind, description: What the declaration is, type: enum, enum: symbol-kind, section: Identity, order: 2}
+      - {name: container, label: Declared in, description: "Qualified name of the declaration holding it (a class for a method), empty at the top level", type: string, section: Identity, order: 3}
+      - {name: language, label: Language, description: Language of its file, type: string, section: Source, order: 4}
+      - {name: signature, label: Signature, description: First line of its text, type: string, section: Source, order: 5}
+      - {name: digest, label: Digest, description: Digest of its text, type: string, section: Source, order: 6}
+    lifecycle: presence
+    search: [{property: name, text: true}, {property: signature, text: true}, {property: kind, facet: true}, {property: language, facet: true}]
 lifecycles:
   # a node is never deleted: an entry the commit removes leaves its directory and is moved to removed; added again at
   # the same path, it is the same node, present again
@@ -56,3 +89,10 @@ linkTypes:
     compose: true
     label: "contains"
     inverseLabel: "contained in"
+  - name: defines
+    description: "A source file defines a declaration (the symbol is defined in the file)"
+    from: File
+    to: Symbol
+    compose: true
+    label: "defines"
+    inverseLabel: "defined in"

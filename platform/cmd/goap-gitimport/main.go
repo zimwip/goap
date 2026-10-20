@@ -1,8 +1,9 @@
 // Command goap-gitimport loads a git repository into the graph, in the code domain (ADR 0146): one change per commit of
 // the first-parent history, a node per directory and per file. It talks to the graph service (or goap-dev) and resumes
-// where the last run stopped, so a long history (the Linux kernel) is imported in as many runs as wanted.
+// where the last run stopped, so a long history (the Linux kernel) is imported in as many runs as wanted. With -symbols
+// it reads the declarations of the source files with Tree-sitter, which needs a build with cgo.
 //
-//	goap-gitimport -repo ~/src/linux -name linux [-graph http://localhost:8080] [-project PROJ-ROOT] [-rev master] [-base v6.12] [-max 1000]
+//	goap-gitimport -repo ~/src/linux -name linux [-graph http://localhost:8080] [-project PROJ-ROOT] [-rev master] [-base v6.12] [-max 1000] [-symbols]
 //
 // It acts with the platform's identity headers (a system principal holding the admin role, the services behind the
 // gateway), or through the gateway with -token.
@@ -49,6 +50,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&im.ProjectID, "project", "PROJ-ROOT", "project the changes act in")
 	fs.StringVar(&im.OwnerOrg, "org", "", "unit holding the changes (default: the root unit)")
 	fs.IntVar(&im.ProgressEvery, "progress", 100, "print a progress line every that many commits")
+	symbols := fs.Bool("symbols", false, "read the declarations of the source files with Tree-sitter (functions, types, imports, variables...): a Symbol node each, defined in its file")
+	fs.Int64Var(&im.MaxSymbolBytes, "symbols-max", 1<<20, "leave the source files larger than this many bytes out of -symbols")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -63,6 +66,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		im.Name = strings.TrimSuffix(filepath.Base(abs), ".git")
+	}
+	if *symbols {
+		ts, err := gitimport.NewTreeSitter()
+		if err != nil {
+			fmt.Fprintln(stderr, "goap-gitimport:", err)
+			return 2
+		}
+		defer ts.Close()
+		im.Symbols = ts
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
