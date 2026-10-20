@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -41,6 +42,33 @@ func OpenSQLite(ctx context.Context, path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("sqlite %s: %w", path, err)
 	}
 	return db, nil
+}
+
+// OpenSQLiteReader opens a pool of read-only connections (query_only) on the database file OpenSQLite opened: in
+// WAL mode a reader sees the last commit and never waits for the writer, so the reads of a store given it (the graph's,
+// the engine's) go on while a long write runs on the single writing connection.
+func OpenSQLiteReader(ctx context.Context, path string, conns int) (*sql.DB, error) {
+	q := url.Values{}
+	for _, p := range []string{"query_only(1)", "busy_timeout(30000)"} {
+		q.Add("_pragma", p)
+	}
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?"+q.Encode())
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(conns)
+	db.SetMaxIdleConns(conns)
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("sqlite %s: %w", path, err)
+	}
+	return db, nil
+}
+
+// IsSQLiteReadOnly tells the error of a write on a read-only connection (SQLITE_READONLY).
+func IsSQLiteReadOnly(err error) bool {
+	var c interface{ Code() int }
+	return errors.As(err, &c) && c.Code()&0xff == 8
 }
 
 // MigrateSQLite applies the *.sql files of dir in name order, once. Several

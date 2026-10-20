@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/lib/outbox"
+	"github.com/zimwip/goap/lib/platform"
 )
 
 // SQLiteMigrations holds the SQLite schema of the graph (local development mode).
@@ -25,6 +27,11 @@ var SQLiteMigrations embed.FS
 // SQLiteMigrations). The driver is registered by the caller.
 type SQLite struct {
 	db *sql.DB
+	// read, when set, serves the transactions of a read-only context (platform.ReadOnly) on read-only connections:
+	// they never wait behind the writer of the single connection of db (WithReader)
+	read *sql.DB
+	// readAll takes every context as read-only (the tests of the readers)
+	readAll bool
 	// commit is the greatest order of commit allocated (ADR 0140), read from the database at the first allocation:
 	// the order is global and the local mode has one process writing
 	mu     sync.Mutex
@@ -34,8 +41,25 @@ type SQLite struct {
 // NewSQLite returns a repository on db.
 func NewSQLite(db *sql.DB) *SQLite { return &SQLite{db: db} }
 
+// WithReader gives the repository a pool of read-only connections on its file (platform.OpenSQLiteReader) for the
+// transactions of a read-only context.
+func (s *SQLite) WithReader(read *sql.DB) *SQLite {
+	s.read = read
+	return s
+}
+
+// errWrites stops a read-only transaction that writes: it runs again on the writer.
+var errWrites = errors.New("graph: a read-only transaction writes")
+
 // InTx implements Repo.
 func (s *SQLite) InTx(ctx context.Context, fn func(tx Tx) error) error {
+	if s.read != nil && (s.readAll || platform.IsReadOnly(ctx)) {
+		err := s.readTx(ctx, fn)
+		if !errors.Is(err, errWrites) {
+			return err
+		}
+		slog.WarnContext(ctx, "graph: a read-only request writes; running its transaction on the writer")
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -47,9 +71,25 @@ func (s *SQLite) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	return tx.Commit()
 }
 
+// readTx runs fn in a read-only transaction on the readers; a write it tries ends it with errWrites.
+func (s *SQLite) readTx(ctx context.Context, fn func(tx Tx) error) error {
+	tx, err := s.read.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	err = fn(&sqliteTx{tx: tx, repo: s, readOnly: true})
+	if err != nil && platform.IsSQLiteReadOnly(err) {
+		return errWrites
+	}
+	return err
+}
+
 type sqliteTx struct {
 	tx   *sql.Tx
 	repo *SQLite
+	// readOnly is a transaction on the readers (readTx)
+	readOnly bool
 }
 
 // AppendOutbox implements Tx.
@@ -212,10 +252,18 @@ func sqliteScanBranch(row scanner) (domain.Branch, error) {
 
 // LockChange implements Tx: SQLite runs one transaction at a time (one connection, internal/platform), so the writers
 // of a change are serialized already.
-func (t *sqliteTx) LockChange(context.Context, domain.ChangeID) error { return nil }
+// A lock announces a write: a read-only transaction stops there, before it reads what the write checks.
+func (t *sqliteTx) LockChange(context.Context, domain.ChangeID) error { return t.writes() }
 
 // LockBranch implements Tx (see LockChange).
-func (t *sqliteTx) LockBranch(context.Context, string, string) error { return nil }
+func (t *sqliteTx) LockBranch(context.Context, string, string) error { return t.writes() }
+
+func (t *sqliteTx) writes() error {
+	if t.readOnly {
+		return errWrites
+	}
+	return nil
+}
 
 func (t *sqliteTx) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {
 	q, args := dialectSQLite.sqlBranch(namespace, name)

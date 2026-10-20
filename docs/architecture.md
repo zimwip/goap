@@ -1179,7 +1179,11 @@ each start (nodes, baselines and changes). The compose image is `pgvector/pgvect
   `goap-dev` (all services in one process, in-memory event bus) on a **SQLite** file
   (`.goap/goap.db`, pure Go driver), rebuilt by air on a code change, and the IDE from vite on
   http://localhost:5173. `GOAP_STORE=memory` (the default of a bare `go run ./platform/cmd/goap-dev`) keeps the
-  ephemeral mode.
+  ephemeral mode. The file has one writing connection (`platform.OpenSQLite`: SQLite has one writer) and a pool of
+  read-only ones (`platform.OpenSQLiteReader`, WAL): the plain reads of the engine, job and domain stores go there,
+  and so do the graph's transactions in a read-only context (`platform.ReadOnly`, set by `platform.ReadOnlyRequests`
+  on a GET or a Connect procedure named `Get…`, `List…`, `Export…`, `Diff…`, `Search…`, `Compare…`, `Is…`,
+  `Watch…`; a write they try runs again on the writer). A long write, an import, then holds no reader of the IDE.
 - A single multi-target image (`Dockerfile`, `ARG SERVICE`), static binary on `distroless`; its `services` target holds every binary (`/goap/<service>`), the one image `goap/goap:dev` the compose stack runs with an entrypoint per service (`make images`, done by `make up`), so it compiles once.
 - Kubernetes 🟡: one Helm chart per service (or kustomize); engine as a scalable `Deployment` (HPA on
   the work-queue stream depth), NATS via the official chart, Vault Agent Injector.

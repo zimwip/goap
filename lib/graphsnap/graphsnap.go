@@ -96,40 +96,54 @@ type View[T any] struct {
 	// Build makes the view of the states of the namespaces, in the order of Namespaces.
 	Build func(states []State) T
 
-	mu   sync.Mutex
-	have bool
-	cur  T
-	ids  []domain.BaselineID
+	// building serializes the Gets, which read the graph; mu guards only the view built, so that Peek never waits for
+	// a read of the graph: Peek is called inside a transaction of the graph (a facet of the blackboard), and the
+	// local mode's single connection would otherwise deadlock it with a Get waiting for that connection
+	building sync.Mutex
+	mu       sync.Mutex
+	have     bool
+	cur      T
+	ids      []domain.BaselineID
 }
 
 // Get returns the view of the heads and the commits it was built from, in the order of Namespaces.
 func (v *View[T]) Get(ctx context.Context) (T, []domain.BaselineID, error) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	v.building.Lock()
+	defer v.building.Unlock()
+	cur, have, built := v.last()
 	ids := make([]domain.BaselineID, len(v.Namespaces))
 	for i, ns := range v.Namespaces {
 		id, err := v.Reader.Head(ctx, ns)
 		if err != nil {
-			return v.cur, v.ids, err
+			return cur, built, err
 		}
 		ids[i] = id
 	}
-	if v.have && slices.Equal(ids, v.ids) {
-		return v.cur, v.ids, nil
+	if have && slices.Equal(ids, built) {
+		return cur, built, nil
 	}
 	states := make([]State, len(v.Namespaces))
 	for i, ns := range v.Namespaces {
 		st, err := v.Reader.At(ctx, ns, ids[i], v.Suspects)
 		if err != nil {
-			return v.cur, v.ids, err
+			return cur, built, err
 		}
 		states[i] = st
 	}
-	v.cur, v.ids, v.have = v.Build(states), ids, true
-	return v.cur, v.ids, nil
+	cur = v.Build(states)
+	v.mu.Lock()
+	v.cur, v.ids, v.have = cur, ids, true
+	v.mu.Unlock()
+	return cur, ids, nil
 }
 
-// Peek returns the view last built, without asking the graph: false before the first Get.
+func (v *View[T]) last() (T, bool, []domain.BaselineID) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.cur, v.have, v.ids
+}
+
+// Peek returns the view last built, without asking the graph nor waiting for a Get: false before the first Get.
 func (v *View[T]) Peek() (T, bool) {
 	v.mu.Lock()
 	defer v.mu.Unlock()

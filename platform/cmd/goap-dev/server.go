@@ -64,6 +64,9 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 		return nil, err
 	}
 	mount := func(path string, h http.Handler) {
+		// the requests that only read take the readers of the local database (ADR 0010): an import writing does
+		// not hold them
+		h = platform.ReadOnlyRequests(h)
 		if authMW != nil {
 			srv.Echo.Any(path+"*", echo.WrapHandler(h), authMW)
 			return

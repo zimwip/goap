@@ -27,6 +27,9 @@ var SQLiteMigrations embed.FS
 // its data; it is not graph data itself.
 type SQLStore struct {
 	DB *sql.DB
+	// Read, when set, serves the plain reads (a pool of read-only connections in the local mode,
+	// platform.OpenSQLiteReader): they never wait behind a write on DB.
+	Read *sql.DB
 	// Dollar rewrites "?" placeholders as $1, $2… (PostgreSQL).
 	Dollar bool
 }
@@ -153,13 +156,13 @@ func (s SQLStore) PurgePublished(ctx context.Context, before time.Time) error {
 
 func (s SQLStore) GetDomain(ctx context.Context, name, version string) (def.Record, error) {
 	if version != "" {
-		r, err := scanDomain(s.DB.QueryRowContext(ctx, s.q(`SELECT `+domainColumns+` FROM domain_version WHERE name = ? AND version = ?`), name, version))
+		r, err := scanDomain(s.reader().QueryRowContext(ctx, s.q(`SELECT `+domainColumns+` FROM domain_version WHERE name = ? AND version = ?`), name, version))
 		if errors.Is(err, sql.ErrNoRows) {
 			return def.Record{}, fmt.Errorf("%s: %w", key(name, version), ErrNotFound)
 		}
 		return r, err
 	}
-	rows, err := s.DB.QueryContext(ctx, s.q(`SELECT `+domainColumns+` FROM domain_version WHERE name = ? AND status = ?`), name, string(def.StatusPublished))
+	rows, err := s.reader().QueryContext(ctx, s.q(`SELECT `+domainColumns+` FROM domain_version WHERE name = ? AND status = ?`), name, string(def.StatusPublished))
 	if err != nil {
 		return def.Record{}, err
 	}
@@ -185,7 +188,7 @@ func (s SQLStore) GetDomain(ctx context.Context, name, version string) (def.Reco
 }
 
 func (s SQLStore) ListDomains(ctx context.Context) ([]def.Record, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+domainColumns+` FROM domain_version`)
+	rows, err := s.reader().QueryContext(ctx, `SELECT `+domainColumns+` FROM domain_version`)
 	if err != nil {
 		return nil, err
 	}
@@ -250,4 +253,12 @@ func (s SQLStore) DeleteDomain(ctx context.Context, name, version string, events
 		return err
 	}
 	return tx.Commit()
+}
+
+// reader is the database the plain reads go to.
+func (s SQLStore) reader() *sql.DB {
+	if s.Read != nil {
+		return s.Read
+	}
+	return s.DB
 }

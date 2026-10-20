@@ -17,6 +17,7 @@ import (
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/pbconv"
+	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/lib/rpcerr"
 )
 
@@ -91,6 +92,8 @@ func EnsureUser(ctx context.Context, g *graph.Graph, subject string) error {
 	// and two commits creating the same key must not race
 	ensureMu.Lock()
 	defer ensureMu.Unlock()
+	// the creation writes, whatever the request that met the caller
+	ctx = platform.Writing(ctx)
 	var err error
 	for attempt := 0; attempt < 3; attempt++ {
 		if ok, xerr := exists(); ok || xerr != nil {

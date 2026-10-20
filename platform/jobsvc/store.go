@@ -276,6 +276,9 @@ func (s *MemoryStore) PurgePublished(ctx context.Context, before time.Time) erro
 // Dollar set).
 type SQLStore struct {
 	DB *sql.DB
+	// Read, when set, serves the plain reads (a pool of read-only connections in the local mode,
+	// platform.OpenSQLiteReader): they never wait behind a write on DB.
+	Read *sql.DB
 	// Dollar rewrites "?" placeholders as $1, $2… (PostgreSQL).
 	Dollar bool
 }
@@ -445,7 +448,7 @@ func (s SQLStore) Create(ctx context.Context, r Record, input []byte, msgs []out
 }
 
 func (s SQLStore) Get(ctx context.Context, id string) (Record, error) {
-	r, err := scanRecord(s.DB.QueryRowContext(ctx, s.q(`SELECT `+columns+` FROM job WHERE id = ?`), id))
+	r, err := scanRecord(s.reader().QueryRowContext(ctx, s.q(`SELECT `+columns+` FROM job WHERE id = ?`), id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Record{}, fmt.Errorf("job %s: %w", id, jobkit.ErrNotFound)
 	}
@@ -467,7 +470,7 @@ func (s SQLStore) List(ctx context.Context, f Filter) ([]Record, error) {
 	if limit <= 0 {
 		limit = 1000
 	}
-	rows, err := s.DB.QueryContext(ctx, s.q(`SELECT `+columns+` FROM job WHERE `+strings.Join(where, " AND ")+
+	rows, err := s.reader().QueryContext(ctx, s.q(`SELECT `+columns+` FROM job WHERE `+strings.Join(where, " AND ")+
 		` ORDER BY created_at DESC, id DESC LIMIT `+fmt.Sprint(limit)), args...)
 	if err != nil {
 		return nil, err
@@ -580,7 +583,7 @@ func (s SQLStore) Expired(ctx context.Context, now time.Time) ([]string, error) 
 }
 
 func (s SQLStore) ReadBlob(ctx context.Context, id, role string, offset int64, max int) ([]byte, bool, error) {
-	rows, err := s.DB.QueryContext(ctx, s.q(`SELECT data FROM job_blob WHERE job_id = ? AND role = ? ORDER BY seq`), id, role)
+	rows, err := s.reader().QueryContext(ctx, s.q(`SELECT data FROM job_blob WHERE job_id = ? AND role = ? ORDER BY seq`), id, role)
 	if err != nil {
 		return nil, false, err
 	}
@@ -653,4 +656,12 @@ func (s SQLStore) Purge(ctx context.Context, before time.Time) (int, error) {
 		return 0, err
 	}
 	return int(n), tx.Commit()
+}
+
+// reader is the database the plain reads go to.
+func (s SQLStore) reader() *sql.DB {
+	if s.Read != nil {
+		return s.Read
+	}
+	return s.DB
 }

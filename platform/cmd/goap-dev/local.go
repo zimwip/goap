@@ -52,6 +52,9 @@ type stores struct {
 	close func()
 }
 
+// sqliteReaders is the size of the pool of read-only connections of the local mode.
+const sqliteReaders = 4
+
 // openStores selects the storage (GOAP_STORE): memory, or sqlite for the
 // local mode (one SQLite file, GOAP_SQLITE_PATH, default .goap/goap.db).
 func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
@@ -89,10 +92,17 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 			db.Close()
 			return stores{}, err
 		}
+		// the reads go to their own connections (WAL): a long write, an import, does not hold them
+		read, err := platform.OpenSQLiteReader(ctx, path, sqliteReaders)
+		if err != nil {
+			db.Close()
+			return stores{}, err
+		}
+		processes.Read = read
 		abs, _ := filepath.Abs(path)
 		log.Info("local storage", "sqlite", abs)
-		return stores{graph: graph.NewSQLite(db),
-			processes: processes, models: modelgw.SQLStore{DB: db}, prefs: prefssvc.SQLStore{DB: db}, convs: convsvc.SQLStore{DB: db}, creds: credsvc.SQLStore{DB: db}, mcp: mcpsvc.SQLStore{DB: db}, index: index.NewSQLite(db), domains: domainsvc.SQLStore{DB: db}, smartTags: smarttagsvc.SQLStore{DB: db}, jobs: jobsvc.SQLStore{DB: db}, dir: filepath.Dir(path), close: func() { closeDB(log, db) }}, nil
+		return stores{graph: graph.NewSQLite(db).WithReader(read),
+			processes: processes, models: modelgw.SQLStore{DB: db}, prefs: prefssvc.SQLStore{DB: db}, convs: convsvc.SQLStore{DB: db}, creds: credsvc.SQLStore{DB: db}, mcp: mcpsvc.SQLStore{DB: db}, index: index.NewSQLite(db), domains: domainsvc.SQLStore{DB: db, Read: read}, smartTags: smarttagsvc.SQLStore{DB: db}, jobs: jobsvc.SQLStore{DB: db, Read: read}, dir: filepath.Dir(path), close: func() { closeDB(log, read); closeDB(log, db) }}, nil
 	default:
 		return stores{}, fmt.Errorf("GOAP_STORE must be memory or sqlite, got %q", kind)
 	}

@@ -35,6 +35,9 @@ var SQLiteMigrations embed.FS
 // (engine.OrphanFinder).
 type SQLStore struct {
 	DB *sql.DB
+	// Read, when set, serves the plain reads (a pool of read-only connections in the local mode,
+	// platform.OpenSQLiteReader): they never wait behind a write on DB.
+	Read *sql.DB
 	// Dollar rewrites "?" placeholders as $1, $2… (PostgreSQL).
 	Dollar bool
 	// Holder names this replica in the locks it takes (NewHolder); its writes to a process whose lock another
@@ -76,7 +79,7 @@ func millis(t time.Time) int64 { return t.UnixMilli() }
 // Get implements engine.Store.
 func (s SQLStore) Get(ctx context.Context, id string) (*engine.Process, error) {
 	var body string
-	err := s.DB.QueryRowContext(ctx, s.q(`SELECT body FROM process WHERE id = ?`), id).Scan(&body)
+	err := s.reader().QueryRowContext(ctx, s.q(`SELECT body FROM process WHERE id = ?`), id).Scan(&body)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%s: %w", id, engine.ErrNotFound)
 	}
@@ -227,7 +230,7 @@ func (s SQLStore) Orphans(ctx context.Context, before time.Time) ([]string, erro
 
 // List implements engine.Store (newest first).
 func (s SQLStore) List(ctx context.Context) ([]*engine.Process, error) {
-	rows, err := s.DB.QueryContext(ctx, s.q(`SELECT body FROM process`))
+	rows, err := s.reader().QueryContext(ctx, s.q(`SELECT body FROM process`))
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +299,7 @@ func (s SQLStore) AppendProcessLog(ctx context.Context, processID string, entrie
 
 // ListProcessLog implements engine.Store (oldest first).
 func (s SQLStore) ListProcessLog(ctx context.Context, processID string) ([]engine.ProcessLogEntry, error) {
-	rows, err := s.DB.QueryContext(ctx, s.q(`SELECT seq, type, payload, at FROM process_log WHERE process_id = ? ORDER BY seq`), processID)
+	rows, err := s.reader().QueryContext(ctx, s.q(`SELECT seq, type, payload, at FROM process_log WHERE process_id = ? ORDER BY seq`), processID)
 	if err != nil {
 		return nil, err
 	}
@@ -327,4 +330,12 @@ func (s SQLStore) ListProcessLog(ctx context.Context, processID string) ([]engin
 
 func sortNewest(ps []*engine.Process) {
 	slices.SortStableFunc(ps, func(a, b *engine.Process) int { return b.CreatedAt.Compare(a.CreatedAt) })
+}
+
+// reader is the database the plain reads go to.
+func (s SQLStore) reader() *sql.DB {
+	if s.Read != nil {
+		return s.Read
+	}
+	return s.DB
 }

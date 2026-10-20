@@ -107,6 +107,31 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 		checkCommits(t, repo)
 		checkStates(t, repo)
 	})
+	// every transaction starts as a read-only one on the readers, the writes running again on the writer: what a
+	// read-only request does when it writes (platform.ReadOnlyRequests)
+	t.Run("sqlite-readers", func(t *testing.T) {
+		ctx := context.Background()
+		path := filepath.Join(t.TempDir(), "goap.db")
+		db, err := platform.OpenSQLite(ctx, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		if err := platform.MigrateSQLite(ctx, db, "graph", SQLiteMigrations, "migrations_sqlite"); err != nil {
+			t.Fatal(err)
+		}
+		read, err := platform.OpenSQLiteReader(ctx, path, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer read.Close()
+		repo := NewSQLite(db).WithReader(read)
+		repo.readAll = true
+		f(t, repo)
+		checkImpactLogs(t, repo)
+		checkCommits(t, repo)
+		checkStates(t, repo)
+	})
 	dsn := os.Getenv("GOAP_TEST_PG_DSN")
 	if dsn == "" {
 		return
