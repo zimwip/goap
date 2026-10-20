@@ -102,6 +102,27 @@ func symbolOf(kind, name, container string, text []byte) Symbol {
 		Code: capCode(string(text), MaxCodeBytes)}
 }
 
+// ownText is the text of a declaration, src[start:end], without the declarations it holds (held: their spans in src,
+// in order, the outermost only), the lines they leave blank dropped: a container (a class, a struct) gets a new
+// version when its own text changes, not when a member's does, the member having its own version.
+func ownText(src []byte, start, end uint, held [][2]uint) []byte {
+	var b []byte
+	at := start
+	for _, h := range held {
+		b = append(b, src[at:h[0]]...)
+		at = h[1]
+	}
+	b = append(b, src[at:end]...)
+	lines := strings.Split(string(b), "\n")
+	kept := lines[:0]
+	for _, l := range lines {
+		if strings.TrimSpace(l) != "" {
+			kept = append(kept, l)
+		}
+	}
+	return []byte(strings.Join(kept, "\n"))
+}
+
 // capCode cuts a text to at most n bytes on a rune boundary, its spaces kept.
 func capCode(s string, n int) string {
 	if len(s) <= n {

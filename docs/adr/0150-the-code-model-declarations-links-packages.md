@@ -18,7 +18,11 @@ commit after commit like the files.
    a namespace, a module and a macro stay a `Symbol`. The kind is still an attribute and still in the key
    (`<file>#<kind>:<qualified name>`), so a key always has the same type. Imports are no longer declarations: they
    become links to packages. A declaration keeps its source text in `code` (cut at 64 KiB; `Importer.Code`, param
-   `code`, default on; not in the fingerprint, the digest is of the whole text).
+   `code`, default on; not in the fingerprint, the digest is of the whole text). The text of a declaration holding
+   others (a class, a struct, a namespace) is its own: the spans of the declarations it holds are left out of its
+   signature, digest and code, with the lines they leave blank (`ownText`, `ownTexts` in `treesitter.go`). A method
+   edited, added or removed gives a new version to that method alone, never to its class, whose members say they
+   are its own through `member_of`; the class changes with its own text (a base, a decorator, a class attribute).
 2. **Links between declarations**, held by the declaration (a version carries its links, ADR 0003): `member_of` its
    class, struct, interface or namespace (a Go method its receiver type, a C++ member defined out of its class `A::f`
    its class `A`), `calls` a function, a method, a macro or a class it makes, `uses` a type, a variable or a constant

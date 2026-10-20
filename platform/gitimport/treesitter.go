@@ -446,8 +446,32 @@ func (t *TreeSitter) Parse(lang string, src []byte) (Source, error) {
 		s.Self, s.Start, s.End = d.self, d.start, d.end
 		out.Symbols = append(out.Symbols, s)
 	}
+	ownTexts(out.Symbols, src)
 	assignRefs(out.Symbols, refs)
 	return out, nil
+}
+
+// ownTexts gives the symbols holding others (in order, the outer first) their own text (ownText): their signature,
+// digest and code leave their members out.
+func ownTexts(syms []Symbol, src []byte) {
+	held := map[int][][2]uint{}
+	var stack []int // the symbols enclosing the current one
+	for i, s := range syms {
+		for len(stack) > 0 && syms[stack[len(stack)-1]].End <= s.Start {
+			stack = stack[:len(stack)-1]
+		}
+		if len(stack) > 0 {
+			if p := stack[len(stack)-1]; syms[p].Start != s.Start || syms[p].End != s.End {
+				held[p] = append(held[p], [2]uint{s.Start, s.End})
+			}
+		}
+		stack = append(stack, i)
+	}
+	for i, h := range held {
+		s := &syms[i]
+		o := symbolOf(s.Kind, s.Name, s.Container, ownText(src, s.Start, s.End, h))
+		s.Signature, s.Digest, s.Code = o.Signature, o.Digest, o.Code
+	}
 }
 
 // assignRefs gives each name to the innermost declaration holding it, once per declaration.

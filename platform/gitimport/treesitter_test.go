@@ -235,7 +235,7 @@ fn main() { help(); io::stdin(); T::new(); println!("x"); }
 		by := map[string]Symbol{}
 		for _, s := range src.Symbols {
 			by[qualified(s.Container, s.Name)] = s
-			if s.Code == "" || !strings.Contains(c.src, s.Code) {
+			if s.Code == "" || !within(s.Code, c.src) {
 				t.Errorf("%s: %s: code %q", c.file, s.Name, s.Code)
 			}
 		}
@@ -253,4 +253,69 @@ fn main() { help(); io::stdin(); T::new(); println!("x"); }
 			}
 		}
 	}
+}
+
+// TestContainerOwnText keeps a class's digest when only a member changes, and changes it with its own text.
+func TestContainerOwnText(t *testing.T) {
+	ts, err := NewTreeSitter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Close()
+	digests := func(file, src string) map[string]string {
+		t.Helper()
+		s, err := ts.Parse(languageOf(file), []byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]string{}
+		for _, x := range s.Symbols {
+			out[x.Kind+":"+qualified(x.Container, x.Name)] = x.Digest
+		}
+		return out
+	}
+	for _, c := range []struct {
+		file, before, member, own, drop string
+		class, method                   string
+	}{
+		{"a.py", "class A:\n    x = 1\n\n    def f(self):\n        return 1\n\n    def g(self):\n        return 2\n",
+			"return 1", "x = 1", "\n    def g(self):\n        return 2\n", "class:A", "method:A.f"},
+		{"a.ts", "class A {\n  x = 1;\n  f() { return 1; }\n  g() { return 2; }\n}\n",
+			"return 1", "x = 1", "  g() { return 2; }\n", "class:A", "method:A.f"},
+		{"a.go", "package a\n\n// T is a type.\ntype T struct {\n\tX int\n\tY string\n}\n",
+			"X int", "", "\tY string\n", "struct:T", "field:T.X"},
+	} {
+		before := digests(c.file, c.before)
+		if before[c.class] == "" || before[c.method] == "" {
+			t.Fatalf("%s: %v", c.file, before)
+		}
+		member := digests(c.file, strings.Replace(c.before, c.member, c.member+"0", 1))
+		if member[c.class] != before[c.class] || member[c.method] == before[c.method] {
+			t.Errorf("%s: a member changed, the class's digest %v, the member's changed %v", c.file,
+				member[c.class] != before[c.class], member[c.method] != before[c.method])
+		}
+		// a member removed changes no container either
+		if removed := digests(c.file, strings.Replace(c.before, c.drop, "", 1)); removed[c.class] != before[c.class] {
+			t.Errorf("%s: a member removed changed the class's digest", c.file)
+		}
+		if c.own == "" {
+			continue // a Go struct has no text of its own but its fields
+		}
+		own := digests(c.file, strings.Replace(c.before, c.own, c.own+"0", 1))
+		if own[c.class] == before[c.class] {
+			t.Errorf("%s: the class's own text changed, its digest did not", c.file)
+		}
+	}
+}
+
+// within tells whether the bytes of code appear in src in their order (a container's code leaves its members out).
+func within(code, src string) bool {
+	for i := 0; i < len(code); i++ {
+		j := strings.IndexByte(src, code[i])
+		if j < 0 {
+			return false
+		}
+		src = src[j+1:]
+	}
+	return true
 }

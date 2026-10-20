@@ -377,3 +377,71 @@ func TestImportLinksAcrossFiles(t *testing.T) {
 		t.Errorf("code kept without Code: %v", code)
 	}
 }
+
+// TestImportVersionsWhatChanged gives a new version only to the declarations whose own text changed: a method edited
+// leaves its class alone, the class's own text edited leaves its methods alone.
+func TestImportVersionsWhatChanged(t *testing.T) {
+	ctx := context.Background()
+	g := newGraph(t)
+	ts, err := gitimport.NewTreeSitter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Close()
+	r := newRepo(t)
+	run := func() gitimport.Stats {
+		t.Helper()
+		st, err := (&gitimport.Importer{Graph: g, Dir: r.dir, Name: "demo", ProjectID: project, Symbols: ts, Code: true}).Run(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st
+	}
+	src := "class Shape:\n    sides = 3\n\n    def area(self):\n        return 1\n\n    def name(self):\n        return 'shape'\n"
+	const (
+		shape = "demo:shape.py#class:Shape"
+		area  = "demo:shape.py#method:Shape.area"
+		name  = "demo:shape.py#method:Shape.name"
+	)
+	versions := func() (v map[string]domain.Version) {
+		t.Helper()
+		nodes, _ := codeGraph(t, g)
+		return map[string]domain.Version{shape: nodes[shape].Version, area: nodes[area].Version, name: nodes[name].Version}
+	}
+	r.write("shape.py", src)
+	r.commit("Initial")
+	run()
+	if v := versions(); v[shape] != 1 || v[area] != 1 || v[name] != 1 {
+		t.Fatalf("%v", v)
+	}
+	nodes, _ := codeGraph(t, g)
+	if code, _ := nodes[shape].Properties["code"].(string); strings.Contains(code, "def area") {
+		t.Errorf("the code of the class holds its methods: %q", code)
+	}
+	// a method's body
+	src = strings.Replace(src, "return 1", "return 2", 1)
+	r.write("shape.py", src)
+	r.commit("Area")
+	if st := run(); st.Symbols != 1 {
+		t.Errorf("%+v", st)
+	}
+	if v := versions(); v[shape] != 1 || v[area] != 2 || v[name] != 1 {
+		t.Errorf("a method edited: %v", v)
+	}
+	// a method removed, the class's own text kept
+	src = strings.Replace(src, "\n    def name(self):\n        return 'shape'\n", "", 1)
+	r.write("shape.py", src)
+	r.commit("No name")
+	run()
+	if v := versions(); v[shape] != 1 || v[area] != 2 || v[name] != 2 {
+		t.Errorf("a method removed: %v", v)
+	}
+	// the class's own text
+	src = strings.Replace(src, "sides = 3", "sides = 4", 1)
+	r.write("shape.py", src)
+	r.commit("Sides")
+	run()
+	if v := versions(); v[shape] != 2 || v[area] != 2 {
+		t.Errorf("the class edited: %v", v)
+	}
+}
