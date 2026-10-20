@@ -83,8 +83,8 @@ func testConcurrentWritersOfAChange(t *testing.T, repo Repo) {
 	}
 }
 
-// Changes merged into one branch at once all land (ADR 0127): a merge reads the head of the target under the branch's
-// lock, so the later one sees the earlier one landed and merges after it, and the head moves only from the baseline a
+// Changes merged into one branch at once all commit (ADR 0127): a merge reads the head of the target under the branch's
+// lock, so the later one sees the earlier one committed and merges after it, and the head moves only from the baseline a
 // merge built on: no merge leaves the work of another out of the branch.
 func TestConcurrentMergesIntoABranch(t *testing.T) { forEachRepo(t, testConcurrentMergesIntoABranch) }
 

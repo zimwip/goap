@@ -191,7 +191,7 @@ func TestBootSeedsTerseBehaviorOnce(t *testing.T) {
 	}
 }
 
-// The domain refuses an alias with no usable target when its draft is accepted or lands (validator alias-needs-target of
+// The domain refuses an alias with no usable target when its draft is accepted or commits (validator alias-needs-target of
 // platform@LlmAlias); a protected one may stay unconfigured.
 func TestAliasNeedsTarget(t *testing.T) {
 	ctx := graphsvc.System(context.Background())
@@ -199,20 +199,20 @@ func TestAliasNeedsTarget(t *testing.T) {
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	land := func(a llmcfg.Alias) error {
+	commit := func(a llmcfg.Alias) error {
 		return graphsvc.SeedChange(ctx, g, domain.NamespacePlatform, "alias "+a.Alias, []graph.NodeEdit{
 			graphsvc.SeedNode(llmcfg.AliasKey(a.Alias), llmcfg.NodeTypeAlias, a.Props())})
 	}
 	for _, target := range []string{"", "nomodel", "/m", "p/"} {
-		err := land(llmcfg.Alias{Alias: "bad", Target: target})
+		err := commit(llmcfg.Alias{Alias: "bad", Target: target})
 		if !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "alias bad needs a target (provider/model)") {
 			t.Errorf("target %q: err = %v", target, err)
 		}
 	}
-	if err := land(llmcfg.Alias{Alias: "unset", Protected: true}); err != nil {
+	if err := commit(llmcfg.Alias{Alias: "unset", Protected: true}); err != nil {
 		t.Errorf("protected without target: %v", err)
 	}
-	if err := land(llmcfg.Alias{Alias: "good", Target: "p/m"}); err != nil {
+	if err := commit(llmcfg.Alias{Alias: "good", Target: "p/m"}); err != nil {
 		t.Errorf("valid target: %v", err)
 	}
 }

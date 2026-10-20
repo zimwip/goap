@@ -116,7 +116,7 @@ func TestValidatorsOfEachLevelRefuseAtReview(t *testing.T) {
 	}
 }
 
-// valid drafts are accepted and land; a link validator also judges the version written at landing.
+// valid drafts are accepted and commit; a link validator also judges the version written at commit.
 func TestValidatorsOfEachLevelAcceptValid(t *testing.T) {
 	ok := map[string]any{"title": "t", "colour": "red", "tag": "x"}
 	lc := newLevelsChange(t, ok, ok, map[string]any{"weight": 2})
@@ -130,8 +130,8 @@ func TestValidatorsOfEachLevelAcceptValid(t *testing.T) {
 	}
 }
 
-// A target changed after the source was accepted is caught when the version lands.
-func TestLinkValidatorRunsAtLanding(t *testing.T) {
+// A target changed after the source was accepted is caught when the version commits.
+func TestLinkValidatorRunsAtCommit(t *testing.T) {
 	ok := map[string]any{"title": "t", "colour": "red"}
 	lc := newLevelsChange(t, ok, ok, nil)
 	for _, cn := range []domain.ChangeImpact{lc.b, lc.a} {
@@ -148,7 +148,7 @@ func TestLinkValidatorRunsAtLanding(t *testing.T) {
 	}
 	_, err := lc.g.Apply(lc.ctx, lc.c.ID, "")
 	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "colours differ") {
-		t.Fatalf("landing: %v", err)
+		t.Fatalf("commit: %v", err)
 	}
 }
 

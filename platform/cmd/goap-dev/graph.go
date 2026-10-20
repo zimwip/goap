@@ -21,7 +21,7 @@ type graphPart struct {
 	authorizer *access.Authorizer
 }
 
-// buildGraph opens the graph on its repository and wires the access hooks. The registry hooks (types, landing gate, lifecycles) come with buildRegistry.
+// buildGraph opens the graph on its repository and wires the access hooks. The registry hooks (types, commit gate, lifecycles) come with buildRegistry.
 func buildGraph(e *env, st stores) (*graphPart, error) {
 	g := graph.New(st.graph)
 	g.Caller = graphsvc.Caller           // the principal behind each event of the impact logs (ADR 0029)

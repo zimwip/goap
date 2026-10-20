@@ -143,10 +143,10 @@ type joinKey struct {
 	branch string
 }
 
-// memJoin is a version joining a branch: the change whose merge made it join, the order of the baseline it landed in.
+// memJoin is a version joining a branch: the change whose merge made it join, the order of the baseline it committed in.
 type memJoin struct {
-	change domain.ChangeID
-	landed int64
+	change    domain.ChangeID
+	committed int64
 }
 
 // on reports whether a version is part of a branch: written there, or joined.
@@ -586,7 +586,7 @@ func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {
 		return fmt.Errorf("baseline %s: %w", b.ID, ErrConflict)
 	}
 	b.Namespace = domain.NamespaceOf(b.Namespace)
-	b.Nodes = nil // only the header is kept: the state is the selection of the versions landed (ADR 0143)
+	b.Nodes = nil // only the header is kept: the state is the selection of the versions committed (ADR 0143)
 	t.st.baselines[b.ID] = b
 	return nil
 }
@@ -600,22 +600,22 @@ func (t *memTx) BaselineHeader(_ context.Context, id domain.BaselineID) (domain.
 	return b, nil
 }
 
-func (t *memTx) LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
-	ls, err := t.landings(namespace, branch, after, upTo, ids)
-	return landedVersions(ls), err
+func (t *memTx) CommittedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	ls, err := t.commits(namespace, branch, after, upTo, ids)
+	return committedVersions(ls), err
 }
 
-func (t *memTx) BranchLandings(_ context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error) {
-	return t.landings(namespace, branch, 0, upTo, ids)
+func (t *memTx) BranchCommits(_ context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error) {
+	return t.commits(namespace, branch, 0, upTo, ids)
 }
 
-func (t *memTx) landings(namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error) {
+func (t *memTx) commits(namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error) {
 	namespace, branch = domain.NamespaceOf(namespace), domain.BranchOf(branch)
-	type landing struct {
-		landed int64
-		v      domain.Node
+	type commit struct {
+		committed int64
+		v         domain.Node
 	}
-	last := map[domain.NodeID]landing{}
+	last := map[domain.NodeID]commit{}
 	var want map[domain.NodeID]bool
 	if ids != nil {
 		want = make(map[domain.NodeID]bool, len(ids))
@@ -623,34 +623,34 @@ func (t *memTx) landings(namespace, branch string, after, upTo int64, ids []doma
 			want[id] = true
 		}
 	}
-	put := func(landed int64, v domain.Node) {
-		if landed <= after || landed > upTo || domain.NamespaceOf(v.Namespace) != namespace || want != nil && !want[v.ID] {
+	put := func(committed int64, v domain.Node) {
+		if committed <= after || committed > upTo || domain.NamespaceOf(v.Namespace) != namespace || want != nil && !want[v.ID] {
 			return
 		}
-		if l, ok := last[v.ID]; !ok || landed > l.landed || landed == l.landed && v.Version > l.v.Version {
-			last[v.ID] = landing{landed, v}
+		if l, ok := last[v.ID]; !ok || committed > l.committed || committed == l.committed && v.Version > l.v.Version {
+			last[v.ID] = commit{committed, v}
 		}
 	}
 	for _, vs := range t.st.versions {
 		for _, v := range vs {
 			if domain.BranchOf(v.Branch) == branch {
-				put(v.Landed, v)
+				put(v.Committed, v)
 			}
 		}
 	}
 	for k, j := range t.st.joins {
 		if k.branch == branch {
-			put(j.landed, t.st.versions[k.ref.ID][k.ref.Version-1])
+			put(j.committed, t.st.versions[k.ref.ID][k.ref.Version-1])
 		}
 	}
-	out := make(map[domain.NodeID]Landing, len(last))
+	out := make(map[domain.NodeID]CommittedVersion, len(last))
 	for id, l := range last {
-		out[id] = Landing{Version: l.v.Version, Deleted: l.v.Deleted, Revert: l.v.Reason == domain.ReasonRevert}
+		out[id] = CommittedVersion{Version: l.v.Version, Deleted: l.v.Deleted, Revert: l.v.Reason == domain.ReasonRevert}
 	}
 	return out, nil
 }
 
-func (t *memTx) NextLanding(context.Context) (int64, error) {
+func (t *memTx) NextCommit(context.Context) (int64, error) {
 	t.st.seq++
 	return t.st.seq, nil
 }
@@ -866,14 +866,14 @@ func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change doma
 	return nil
 }
 
-func (t *memTx) JoinBranch(_ context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, landed int64) error {
+func (t *memTx) JoinBranch(_ context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, committed int64) error {
 	vs := t.st.versions[ref.ID]
 	if ref.Version < 1 || int(ref.Version) > len(vs) {
 		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
 	}
 	if branch = domain.BranchOf(branch); domain.BranchOf(vs[ref.Version-1].Branch) != branch {
 		if _, ok := t.st.joins[joinKey{ref, branch}]; !ok {
-			t.st.joins[joinKey{ref, branch}] = memJoin{change: change, landed: landed}
+			t.st.joins[joinKey{ref, branch}] = memJoin{change: change, committed: committed}
 		}
 	}
 	return nil
@@ -1082,19 +1082,19 @@ func (t *memTx) BaselineCounts(ctx context.Context, namespace string) (map[strin
 	return out, err
 }
 
-func (t *memTx) LastLanding(_ context.Context, branch string) (int64, error) {
+func (t *memTx) LastCommit(_ context.Context, branch string) (int64, error) {
 	branch = domain.BranchOf(branch)
 	var last int64
 	for _, vs := range t.st.versions {
 		for _, v := range vs {
 			if domain.BranchOf(v.Branch) == branch {
-				last = max(last, v.Landed)
+				last = max(last, v.Committed)
 			}
 		}
 	}
 	for k, j := range t.st.joins {
 		if k.branch == branch {
-			last = max(last, j.landed)
+			last = max(last, j.committed)
 		}
 	}
 	return last, nil

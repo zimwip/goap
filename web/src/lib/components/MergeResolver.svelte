@@ -38,7 +38,7 @@
   }
   $effect(() => {
     if (!(namespace && from && into)) return;
-    // either branch moved (a baseline landed on it): the plan and its conflicts are not the same any more
+    // either branch moved (a baseline committed on it): the plan and its conflicts are not the same any more
     void stamp(keyOf.branch(from));
     void stamp(keyOf.branch(into));
     void load();

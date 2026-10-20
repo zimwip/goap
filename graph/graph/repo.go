@@ -76,22 +76,22 @@ type Tx interface {
 	NodePage(ctx context.Context, refs []domain.NodeRef, q NodeQuery) (NodePage, error)
 	LinkPage(ctx context.Context, refs []domain.NodeRef, q LinkQuery) (LinkPage, error)
 	// Baseline reads a baseline with its state and Baselines the baselines of a namespace, oldest first, with theirs:
-	// the selection of the versions landed (ADR 0143), cached by the guard of the graph.
+	// the selection of the versions committed (ADR 0143), cached by the guard of the graph.
 	Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
 	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
 	// BaselineHeader reads a baseline without its state (Nodes nil), with its order (Seq).
 	BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
-	// LandedVersions reads the last version of each node (nil ids: every node of the namespace) that landed on a branch
+	// CommittedVersions reads the last version of each node (nil ids: every node of the namespace) that committed on a branch
 	// in a baseline whose order is after `after`, up to upTo (Baseline.Seq, ADR 0140): written there or joined; 0 for a
 	// version that deletes its node.
-	LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error)
-	// BranchLandings reads the last landing of each node (nil ids: every node of the namespace) on a branch up to the
+	CommittedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error)
+	// BranchCommits reads the last commit of each node (nil ids: every node of the namespace) on a branch up to the
 	// order upTo (ADR 0140): what the branch of a change holds over its fork, a revert meaning the fork's version.
-	BranchLandings(ctx context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error)
-	// LastLanding returns the order of the last landing on a branch (0: none, ADR 0140).
-	LastLanding(ctx context.Context, branch string) (int64, error)
-	// NextLanding allocates the order of a new baseline (Baseline.Seq): greater than every order allocated before.
-	NextLanding(ctx context.Context) (int64, error)
+	BranchCommits(ctx context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error)
+	// LastCommit returns the order of the last commit on a branch (0: none, ADR 0140).
+	LastCommit(ctx context.Context, branch string) (int64, error)
+	// NextCommit allocates the order of a new baseline (Baseline.Seq): greater than every order allocated before.
+	NextCommit(ctx context.Context) (int64, error)
 	// BranchNodeIDs lists the nodes a branch holds a version of: written on it or joined to it (ADR 0137).
 	BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error)
 	// NamespaceNodeIDs lists the nodes of a namespace (its node rows, ADR 0143 §4): what a whole state is selected over.
@@ -100,7 +100,7 @@ type Tx interface {
 	BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error)
 	// BranchBaselineHeaders returns the header of every baseline of a branch of a namespace, oldest first.
 	BranchBaselineHeaders(ctx context.Context, namespace, branch string) ([]domain.Baseline, error)
-	// BaselinePage returns the headers of the baselines of a branch landed before the order before (0: the newest),
+	// BaselinePage returns the headers of the baselines of a branch committed before the order before (0: the newest),
 	// newest first, at most limit; BaselineHeadersOf the headers of baselines by id and ChangeBaselineHeaders the ones
 	// the changes left, oldest first; BaselineCounts the number of baselines of each branch of a namespace.
 	BaselinePage(ctx context.Context, namespace, branch string, before int64, limit int) ([]domain.Baseline, error)
@@ -122,7 +122,7 @@ type Tx interface {
 	SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain.Change, error)
 
 	// PutNode writes a node version. A version is written once and never changes (ADR 0079): the working state of a
-	// node in a change is a draft, the version is written when the change lands.
+	// node in a change is a draft, the version is written when the change commits.
 	PutNode(ctx context.Context, n domain.Node) error
 	// PutLink writes a link of the set of a version written in the same transaction (ADR 0141); Link reads one, as
 	// leaving the version that wrote it.
@@ -173,13 +173,13 @@ type Tx interface {
 	// SetNodeOrigin records on a node version the change and change impact that produced it and its comment.
 	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error
 
-	// JoinBranch makes a node version part of a branch it was not written on (a merge that lands it as is,
+	// JoinBranch makes a node version part of a branch it was not written on (a merge that commits it as is,
 	// ADR 0032): the version is not copied and keeps the branch it was written on. change is the change whose merge
-	// makes it join (ADR 0054: no membership without a change), landed the order of the baseline it lands in (the guard
+	// makes it join (ADR 0054: no membership without a change), committed the order of the baseline it commits in (the guard
 	// of the graph sets it, ADR 0140).
-	JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, landed int64) error
+	JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, committed int64) error
 
-	// DeleteChange removes a change that landed nothing (ADR 0037): its log, impacts, node versions and links,
+	// DeleteChange removes a change that committed nothing (ADR 0037): its log, impacts, node versions and links,
 	// the nodes it alone created, and its branch when it has one of its own (empty: none). It refuses (ErrConflict) when
 	// what the change wrote is used: a baseline holds one of its versions, a later version or a link of another
 	// change builds on one, or it produced a baseline.
@@ -208,16 +208,16 @@ type LinkSet struct {
 	Depth int
 }
 
-// Landing is the last version of a node landed on a branch (Tx.BranchLandings): Deleted when that version deletes the
+// CommittedVersion is the last version of a node committed on a branch (Tx.BranchCommits): Deleted when that version deletes the
 // node, Revert when it puts back the version the branch of a change was forked from (ADR 0140).
-type Landing struct {
+type CommittedVersion struct {
 	Version domain.Version
 	Deleted bool
 	Revert  bool
 }
 
-// landedVersions is the state landings give: a version, 0 for a node a version deletes.
-func landedVersions(ls map[domain.NodeID]Landing) map[domain.NodeID]domain.Version {
+// committedVersions is the state commits give: a version, 0 for a node a version deletes.
+func committedVersions(ls map[domain.NodeID]CommittedVersion) map[domain.NodeID]domain.Version {
 	out := make(map[domain.NodeID]domain.Version, len(ls))
 	for id, l := range ls {
 		if l.Deleted {

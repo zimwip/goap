@@ -1,6 +1,6 @@
 // Command goap-bench is the load generator of the performance stack (make perf): it writes nodes and versions through
 // the graph service's API on the two axes, the domain (a generated domain published, then grown, by the domain
-// registry) and the change (changes landing versions of its nodes), probes the reads as the graph grows, and measures
+// registry) and the change (changes commit versions of its nodes), probes the reads as the graph grows, and measures
 // every call (OpenTelemetry metrics when OTEL_EXPORTER_OTLP_ENDPOINT is set, drawn by the Grafana dashboard "GOAP
 // performance", and a CSV report).
 //

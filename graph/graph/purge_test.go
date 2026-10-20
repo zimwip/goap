@@ -36,7 +36,7 @@ func testPurgeChange(t *testing.T, repo Repo) {
 		t.Fatalf("apply after purge: %v", err)
 	}
 
-	// an applied change landed in the graph: it stays
+	// an applied change committed in the graph: it stays
 	if _, err := g.PurgeChange(ctx, d.ID); !errors.Is(err, ErrConflict) {
 		t.Fatalf("purge of an applied change: %v", err)
 	}

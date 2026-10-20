@@ -23,7 +23,7 @@ type EventSink interface {
 const OutboxOrigin = "graph"
 
 // Observe makes the graph emit its events (ADR 0136): the changes (change.created, change.applied...), the technical
-// change.updated and change documents of the index, a NodeEvent for every node version written (at landing, ADR 0079:
+// change.updated and change documents of the index, a NodeEvent for every node version written (at commit, ADR 0079:
 // a node in a change is a draft, no version) and a BaselineEvent for every baseline created. They are written in the
 // outbox of the graph in the transaction that writes their fact, whatever the write path, and delivered to sink once
 // it commits; the relay returned delivers again what could not be (Run it). It is called once, before serving.
@@ -98,7 +98,7 @@ func (g *Graph) raiseItems(ctx context.Context, tx Tx, c domain.Change, items []
 	}
 }
 
-// raiseApplied emits change.applied: the change landed in what it was forked from, leaving b (its header: the state
+// raiseApplied emits change.applied: the change committed in what it was forked from, leaving b (its header: the state
 // is not carried).
 func (g *Graph) raiseApplied(ctx context.Context, tx Tx, c domain.Change, b domain.Baseline) {
 	b.Nodes = nil
@@ -113,7 +113,7 @@ func (g *Graph) raiseApplied(ctx context.Context, tx Tx, c domain.Change, b doma
 
 type carriedKey struct{}
 
-// withCarried is ctx carrying the writer's events of a Commit to the transaction that lands it.
+// withCarried is ctx carrying the writer's events of a Commit to the transaction that commits it.
 func withCarried(ctx context.Context, evs []graphapi.CarriedEvent) context.Context {
 	if len(evs) == 0 {
 		return ctx

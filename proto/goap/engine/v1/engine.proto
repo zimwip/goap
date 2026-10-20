@@ -192,7 +192,7 @@ message HumanTask {
   google.protobuf.Struct form = 16;
 }
 
-// The conflicts a rebase left on a change before it lands (ADR 0101).
+// The conflicts a rebase left on a change before it commits (ADR 0101).
 message RebaseTask {
   // the branch the change was rebased onto (a sub-change: its parent change), and the head baseline or parent id
   string branch = 1;

@@ -540,21 +540,21 @@ func (t *pgTx) BaselineHeader(ctx context.Context, id domain.BaselineID) (domain
 	return b, mapErr(err, "baseline "+string(id))
 }
 
-func (t *pgTx) LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
-	ls, err := t.landings(ctx, namespace, branch, after, upTo, ids)
-	return landedVersions(ls), err
+func (t *pgTx) CommittedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	ls, err := t.commits(ctx, namespace, branch, after, upTo, ids)
+	return committedVersions(ls), err
 }
 
-func (t *pgTx) BranchLandings(ctx context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error) {
-	return t.landings(ctx, namespace, branch, 0, upTo, ids)
+func (t *pgTx) BranchCommits(ctx context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error) {
+	return t.commits(ctx, namespace, branch, 0, upTo, ids)
 }
 
-func (t *pgTx) landings(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error) {
-	out := map[domain.NodeID]Landing{}
+func (t *pgTx) commits(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error) {
+	out := map[domain.NodeID]CommittedVersion{}
 	if ids != nil && len(ids) == 0 {
 		return out, nil
 	}
-	q, args := dialectPG.sqlLandedVersions(namespace, branch, after, upTo, ids)
+	q, args := dialectPG.sqlCommittedVersions(namespace, branch, after, upTo, ids)
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -563,7 +563,7 @@ func (t *pgTx) landings(ctx context.Context, namespace, branch string, after, up
 	for rows.Next() {
 		var nid, reason string
 		var v int
-		var l Landing
+		var l CommittedVersion
 		if err := rows.Scan(&nid, &v, &l.Deleted, &reason); err != nil {
 			return nil, err
 		}
@@ -573,12 +573,12 @@ func (t *pgTx) landings(ctx context.Context, namespace, branch string, after, up
 	return out, rows.Err()
 }
 
-// NextLanding allocates the greatest order stored or allocated plus one: two transactions landing on one branch from
+// NextCommit allocates the greatest order stored or allocated plus one: two transactions commit on one branch from
 // the same head may take the same, one of them fails to move the head (advanceBranch); a baseline built on another is
 // written once that one is committed, and sees it.
-func (t *pgTx) NextLanding(ctx context.Context) (int64, error) {
+func (t *pgTx) NextCommit(ctx context.Context) (int64, error) {
 	var seq int64
-	err := t.tx.QueryRow(ctx, `SELECT nextval('landing_seq')`).Scan(&seq)
+	err := t.tx.QueryRow(ctx, `SELECT nextval('commit_seq')`).Scan(&seq)
 	return seq, err
 }
 
@@ -808,7 +808,7 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 		parents[i] = int32(pv)
 	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node_version", nodeVersionColumns, ""),
-		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), originsJSON(n.Origins), n.Landed)
+		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), originsJSON(n.Origins), n.Committed)
 	return mapErr(err, "node "+n.Ref().String())
 }
 
@@ -983,11 +983,11 @@ func (t *pgTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn d
 	if err != nil {
 		return err
 	}
-	_, err = t.tx.Exec(ctx, `INSERT INTO change_impact (id, change_id, node_id, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded)
+	_, err = t.tx.Exec(ctx, `INSERT INTO change_impact (id, change_id, node_id, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-		ON CONFLICT (id) DO UPDATE SET node_id = $3, key = $4, type = $5, intent = $6, rationale = $7, pre_version = $8, post_version = $9, landed_version = $10,
+		ON CONFLICT (id) DO UPDATE SET node_id = $3, key = $4, type = $5, intent = $6, rationale = $7, pre_version = $8, post_version = $9, committed_version = $10,
 			review = $11, reviews = $12, via = $13, recheck = $14, produced_by = $15, derived_from = $16, items = $17, execution = $18, flow = $20, superseded = $21`,
-		r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Landed, r.Review, r.Reviews, nullUUID(r.Via), r.Recheck, r.ProducedBy, r.DerivedFrom, r.Items, r.Execution, cn.CreatedAt, r.Flow, r.Superseded)
+		r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Committed, r.Review, r.Reviews, nullUUID(r.Via), r.Recheck, r.ProducedBy, r.DerivedFrom, r.Items, r.Execution, cn.CreatedAt, r.Flow, r.Superseded)
 	return mapErr(err, "change impact "+cn.Key)
 }
 
@@ -1002,7 +1002,7 @@ func (t *pgTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]dom
 	for rows.Next() {
 		var r cnRow
 		var created time.Time
-		if err := rows.Scan(&r.ID, &r.NodeID, &r.Key, &r.Type, &r.Intent, &r.Rationale, &r.Pre, &r.Post, &r.Landed, &r.Review, &r.Reviews, &r.Via, &r.Recheck, &r.ProducedBy, &r.DerivedFrom, &r.Items, &r.Execution, &created, &r.Flow, &r.Superseded); err != nil {
+		if err := rows.Scan(&r.ID, &r.NodeID, &r.Key, &r.Type, &r.Intent, &r.Rationale, &r.Pre, &r.Post, &r.Committed, &r.Review, &r.Reviews, &r.Via, &r.Recheck, &r.ProducedBy, &r.DerivedFrom, &r.Items, &r.Execution, &created, &r.Flow, &r.Superseded); err != nil {
 			return nil, err
 		}
 		cn, err := r.node()
@@ -1044,8 +1044,8 @@ func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change dom
 	return nil
 }
 
-func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, landed int64) error {
-	_, err := t.tx.Exec(ctx, dialectPG.sqlJoinBranch(), string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)), landed)
+func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, committed int64) error {
+	_, err := t.tx.Exec(ctx, dialectPG.sqlJoinBranch(), string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)), committed)
 	return mapErr(err, "node "+ref.String())
 }
 
@@ -1223,8 +1223,8 @@ func (t *pgTx) BaselineCounts(ctx context.Context, namespace string) (map[string
 	return t.typeCounts(ctx, q, args)
 }
 
-func (t *pgTx) LastLanding(ctx context.Context, branch string) (int64, error) {
-	q, args := dialectPG.sqlLastLanding(branch)
+func (t *pgTx) LastCommit(ctx context.Context, branch string) (int64, error) {
+	q, args := dialectPG.sqlLastCommit(branch)
 	var seq int64
 	err := t.tx.QueryRow(ctx, q, args...).Scan(&seq)
 	return seq, err

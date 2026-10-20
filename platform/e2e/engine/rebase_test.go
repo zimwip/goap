@@ -41,7 +41,7 @@ goals:
 `
 
 // Two changes forked from the same baseline edit the same property: the run applying the second waits on the
-// conflicts of the rebase (ADR 0101), a person settles them, and the run goes on and lands the change.
+// conflicts of the rebase (ADR 0101), a person settles them, and the run goes on and commits the change.
 func TestRunWaitsOnTheConflictsOfTheRebase(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)

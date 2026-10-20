@@ -41,7 +41,7 @@ const AnyMethodology = "*"
 // Integration names methodologies whose changes the changes of this one integrate as sub-changes.
 type Integration struct {
 	Methodologies []string `yaml:"methodologies" json:"methodologies"`
-	// Exclusive: in a project where this methodology is in force, those changes land only through one of its changes
+	// Exclusive: in a project where this methodology is in force, those changes commit only through one of its changes
 	// (shorthand for a guardian.merge requiring an attached integrator).
 	Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive,omitempty"`
 	// Attach is how a candidate becomes a sub-change: AttachDecision (default) or AttachAuto.

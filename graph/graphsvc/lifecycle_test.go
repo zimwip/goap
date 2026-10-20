@@ -89,7 +89,7 @@ version: 1.0.0
 lifecycles:
   - name: req
     initial: released
-    states: [{name: draft, notLandable: true}, {name: released}]
+    states: [{name: draft, notCommittable: true}, {name: released}]
     transitions:
       - {name: reopen, from: released, to: draft}
       - {name: release, from: draft, to: released, permission: "requirement:release"}
@@ -161,7 +161,7 @@ nodeTypes:
 	if err := move("contributor", "released"); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("a contributor lacks requirement:release: %v", err)
 	}
-	// the release is taken on the draft: one version for the checkout, the edit and the moves, written at landing
+	// the release is taken on the draft: one version for the checkout, the edit and the moves, written at commit
 	if err := move("admin", "released"); err != nil {
 		t.Fatalf("admin may release: %v", err)
 	}

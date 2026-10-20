@@ -66,3 +66,17 @@ func TestMigrationsApplyInOrder(t *testing.T) {
 		t.Fatalf("tables = %v", keys(s.Tables))
 	}
 }
+
+// A renamed column keeps its place in the keys and the indexes on it.
+func TestRenameColumn(t *testing.T) {
+	s := load(t, map[string]string{
+		"d/0001.sql": `CREATE TABLE t (id text PRIMARY KEY, landed integer NOT NULL DEFAULT 0); CREATE INDEX t_landed ON t (id, landed);`,
+		"d/0002.sql": `ALTER TABLE t RENAME COLUMN landed TO committed; ALTER SEQUENCE s RENAME TO s2;`,
+	}, "d")
+	if c := s.Tables["t"].Columns[1]; c.Name != "committed" || !c.NotNull {
+		t.Fatalf("column = %+v", c)
+	}
+	if ix := s.Indexes["t_landed"]; ix.Cols != "id, committed" {
+		t.Fatalf("index columns = %q", ix.Cols)
+	}
+}

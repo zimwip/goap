@@ -268,7 +268,7 @@ imports: [dependencies]
 processes:
   - name: flow
     steps:
-      - {name: deliver, instructions: Deliver once the changes it depends on have landed, pre: {dependencies_met: true}}
+      - {name: deliver, instructions: Deliver once the changes it depends on have committed, pre: {dependencies_met: true}}
 `
 
 func TestRunWaitsForTheChangesItDependsOn(t *testing.T) {
@@ -303,7 +303,7 @@ func TestRunWaitsForTheChangesItDependsOn(t *testing.T) {
 	if p, _ = e.Run(ctx, p.ID); !p.WaitsForConditions() || !slices.Equal(p.Pending.Conditions, []string{"dependencies_met"}) {
 		t.Fatalf("the run waits for its dependency: %s %+v", p.Status, p.Pending)
 	}
-	// the first change lands: it modifies a component
+	// the first change commits: it modifies a component
 	cn, err := g.ImpactNodeCheckout(ctx, dep.ID, graph.NodeCheckout{Key: "CMP-1", Rationale: "rename"})
 	if err != nil {
 		t.Fatal(err)
@@ -324,6 +324,6 @@ func TestRunWaitsForTheChangesItDependsOn(t *testing.T) {
 	e.Accompany(ctx, engine.TriggerEvent{Type: "change.applied", Change: &applied})
 	e.Drain()
 	if p, _ = e.Store.Get(ctx, p.ID); p.Pending == nil || p.Pending.Action != "flow/deliver" {
-		t.Fatalf("the dependency landed: the run resumes: %s %+v", p.Status, p.Pending)
+		t.Fatalf("the dependency committed: the run resumes: %s %+v", p.Status, p.Pending)
 	}
 }

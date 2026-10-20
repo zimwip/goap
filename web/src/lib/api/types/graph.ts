@@ -37,7 +37,7 @@ export interface GraphNode {
   /** id of the organisational unit owning the version, and of the project the node was created in (ADR 0054) */
   owner?: string;
   project?: string;
-  /** this view is the draft a change holds of the node (version 0): the node has no version until the change lands (ADR 0079) */
+  /** this view is the draft a change holds of the node (version 0): the node has no version until the change commits (ADR 0079) */
   draft?: boolean;
   /** the nodes this one derives from (ADR 0077): set on the first version of the successor of a merge or a split */
   origins?: NodeRef[];
@@ -154,7 +154,7 @@ export interface ImpactEvent {
   /** empty for a change-level event (adopted) */
   impactId?: string;
   /** proposed: the impact of an existing node; created: a new node, its impact and draft in one event; checkedOut: the draft of an existing node (ADR 0079) */
-  op?: 'proposed' | 'created' | 'checkedOut' | 'transitioned' | 'updated' | 'reviewed' | 'discarded' | 'cancelled' | 'withdrawn' | 'adopted' | 'landed' | 'rebased' | string;
+  op?: 'proposed' | 'created' | 'checkedOut' | 'transitioned' | 'updated' | 'reviewed' | 'discarded' | 'cancelled' | 'withdrawn' | 'adopted' | 'committed' | 'rebased' | string;
   /** the caller: flow branch ('' = main flow), journal record of the action run, principal or component */
   flow?: string;
   execution?: string;
@@ -163,10 +163,10 @@ export interface ImpactEvent {
   state?: ChangeImpact;
   post?: NodeRef;
   pre?: NodeRef;
-  landed?: NodeRef;
+  committed?: NodeRef;
   review?: NodeReview;
   stale?: string[];
-  /** landed: the branch the version landed on (the change's own at commit, the target at integration) */
+  /** committed: the branch the version committed on (the change's own at commit, the target at integration) */
   branch?: string;
   /** updated: what changed in place ({props, owner, addLink, ...}); created: {origins: [{id, version, key}]} for the successor of a merge or a split (ADR 0077) */
   patch?: Record<string, unknown>;
@@ -434,7 +434,7 @@ export interface ChangeImpact {
   /** the draft the change holds of the node: a draft reference `{id, version: 0}` (ADR 0079; see isDraft); none while the impact of an existing node is only proposed */
   post?: NodeRef;
   /** version on the target branch once applied */
-  landed?: NodeRef;
+  committed?: NodeRef;
   review?: 'proposed' | 'accepted' | 'rejected' | string;
   reviews?: NodeReview[];
   /** whether the draft, as it stands, passes the gate of an accepted review (derived by the graph, not stored): `valid: false` blocks the Accept, `message` is the rule that failed; absent: not checked */

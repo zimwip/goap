@@ -1,7 +1,7 @@
 // Package bench is the load generator of the performance stack (make perf, deploy/compose/perf.yml): it writes nodes and
 // versions through the graph service's API only (Connect RPCs, as a client of the platform would), on the two axes of
 // the platform, the domain (what is changed: the types of a published domain, its versions, how many nodes) and the
-// change (why: changes landing versions of those nodes), and measures every call. The measures are OpenTelemetry
+// change (why: changes commit versions of those nodes), and measures every call. The measures are OpenTelemetry
 // metrics (pushed to the collector, scraped by Prometheus, drawn by the Grafana dashboard of deploy/grafana) and a CSV
 // of the progress (one row per window: totals and latencies), so a run can be charted without the stack too.
 package bench

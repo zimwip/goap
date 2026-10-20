@@ -36,7 +36,7 @@ describe('historyEntries', () => {
     expect(own.map((r) => r.lane)).toEqual(['change-bbbb2222', 'main']);
   });
 
-  it('keeps a change that did not land out of the history of the branch', () => {
+  it('keeps a change that did not commit out of the history of the branch', () => {
     expect(historyEntries(baselines.filter((b) => b.id !== 'm2'), 'main').map((r) => r.id)).not.toContain('c2');
   });
 });

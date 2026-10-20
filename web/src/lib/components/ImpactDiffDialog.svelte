@@ -1,6 +1,6 @@
 <script lang="ts">
   // The Diff of one change impact (the Diff button of the Impacts pane): what the change modifies of the node, its
-  // draft (or the version its landing wrote) against the version it was checked out from. Logic in `impactDiff.ts`.
+  // draft (or the version its commit wrote) against the version it was checked out from. Logic in `impactDiff.ts`.
   import { untrack } from 'svelte';
   import { errorMessage, isDraft, type ChangeImpact } from '../api';
   import { clip, describeChange } from '../flowDiff';
@@ -43,7 +43,7 @@
   });
 
   const side = (n: { version?: number } | undefined, draft: boolean) => (!n ? '—' : draft ? 'draft' : `v${n.version ?? 0}`);
-  const afterLabel = $derived(impact.landed?.id ? `landed v${impact.landed.version}` : side(view?.after, isDraft(impact.post)));
+  const afterLabel = $derived(impact.committed?.id ? `committed v${impact.committed.version}` : side(view?.after, isDraft(impact.post)));
 
   function toggle(i: number) {
     const next = new Set(expanded);

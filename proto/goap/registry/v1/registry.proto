@@ -221,8 +221,8 @@ message Lifecycle {
 message LifecycleState {
   string name = 1;
   string description = 2;
-  // a node in a not landable state blocks the landing of its change (ADR 0078)
-  bool not_landable = 3;
+  // a node in a not committable state blocks the commit of its change (ADR 0078)
+  bool not_committable = 3;
   bool final = 4;
 }
 
@@ -534,7 +534,7 @@ message EventDef {
 // Methodologies whose changes the changes of a methodology integrate (ADR 0106).
 message Integration {
   repeated string methodologies = 1;
-  // those changes land only through a change of the integrator
+  // those changes commit only through a change of the integrator
   bool exclusive = 2;
   // decision (default) | auto
   string attach = 3;

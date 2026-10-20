@@ -1085,11 +1085,11 @@ type LifecycleState struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	// a node in a not landable state blocks the landing of its change (ADR 0078)
-	NotLandable   bool `protobuf:"varint,3,opt,name=not_landable,json=notLandable,proto3" json:"not_landable,omitempty"`
-	Final         bool `protobuf:"varint,4,opt,name=final,proto3" json:"final,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// a node in a not committable state blocks the commit of its change (ADR 0078)
+	NotCommittable bool `protobuf:"varint,3,opt,name=not_committable,json=notCommittable,proto3" json:"not_committable,omitempty"`
+	Final          bool `protobuf:"varint,4,opt,name=final,proto3" json:"final,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *LifecycleState) Reset() {
@@ -1136,9 +1136,9 @@ func (x *LifecycleState) GetDescription() string {
 	return ""
 }
 
-func (x *LifecycleState) GetNotLandable() bool {
+func (x *LifecycleState) GetNotCommittable() bool {
 	if x != nil {
-		return x.NotLandable
+		return x.NotCommittable
 	}
 	return false
 }
@@ -3143,7 +3143,7 @@ func (x *EventDef) GetDescription() string {
 type Integration struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Methodologies []string               `protobuf:"bytes,1,rep,name=methodologies,proto3" json:"methodologies,omitempty"`
-	// those changes land only through a change of the integrator
+	// those changes commit only through a change of the integrator
 	Exclusive bool `protobuf:"varint,2,opt,name=exclusive,proto3" json:"exclusive,omitempty"`
 	// decision (default) | auto
 	Attach        string `protobuf:"bytes,3,opt,name=attach,proto3" json:"attach,omitempty"`
@@ -9536,11 +9536,11 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\vdescription\x18\x05 \x01(\tR\vdescription\x12\x18\n" +
 	"\ainitial\x18\x01 \x01(\tR\ainitial\x128\n" +
 	"\x06states\x18\x02 \x03(\v2 .goap.registry.v1.LifecycleStateR\x06states\x12G\n" +
-	"\vtransitions\x18\x03 \x03(\v2%.goap.registry.v1.LifecycleTransitionR\vtransitions\"\x7f\n" +
+	"\vtransitions\x18\x03 \x03(\v2%.goap.registry.v1.LifecycleTransitionR\vtransitions\"\x85\x01\n" +
 	"\x0eLifecycleState\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x02 \x01(\tR\vdescription\x12!\n" +
-	"\fnot_landable\x18\x03 \x01(\bR\vnotLandable\x12\x14\n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12'\n" +
+	"\x0fnot_committable\x18\x03 \x01(\bR\x0enotCommittable\x12\x14\n" +
 	"\x05final\x18\x04 \x01(\bR\x05final\"\xd9\x03\n" +
 	"\x13LifecycleTransition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +

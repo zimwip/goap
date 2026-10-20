@@ -9,23 +9,23 @@ import (
 )
 
 // View levels of a change (ADR 0032): the same change impacts, filtered one step of their life earlier or later.
-// A branch that is not validated yet (an option, a flow) is seen at written or accepted; only landed is a baseline.
+// A branch that is not validated yet (an option, a flow) is seen at written or accepted; only committed is a baseline.
 const (
 	// ViewWritten: every version written and not rejected, proposed or accepted: what the change would look like.
 	ViewWritten = "written"
-	// ViewAccepted: the accepted versions only: what the change would land if it were applied now.
+	// ViewAccepted: the accepted versions only: what the change would commit if it were applied now.
 	ViewAccepted = "accepted"
-	// ViewLanded: what the change landed: its result baseline once applied, its starting point before.
-	ViewLanded = "landed"
+	// ViewCommitted: what the change committed: its result baseline once applied, its starting point before.
+	ViewCommitted = "committed"
 )
 
 // ChangeView returns the graph a change sees at a level, on one of its flows ("" = the main flow): the head of the
 // branch the change works on, with the posts of the change impacts the level counts laid over it: the version a
-// landed change wrote, or Version 0 for a node the change holds a draft of (ADR 0079; read it with ChangeNodeView). Nothing is stored: the result is a baseline without an id, computed from the change
-// impact projection (ADR 0029). At landed it is a stored baseline: the result of the change, or its start.
+// committed change wrote, or Version 0 for a node the change holds a draft of (ADR 0079; read it with ChangeNodeView). Nothing is stored: the result is a baseline without an id, computed from the change
+// impact projection (ADR 0029). At committed it is a stored baseline: the result of the change, or its start.
 func (g *Graph) ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (b domain.Baseline, err error) {
 	switch level {
-	case ViewWritten, ViewAccepted, ViewLanded:
+	case ViewWritten, ViewAccepted, ViewCommitted:
 	case "":
 		level = ViewWritten
 	default:
@@ -50,7 +50,7 @@ func (g *Graph) ChangeView(ctx context.Context, id domain.ChangeID, flow, level 
 
 func changeViewTx(ctx context.Context, g *Graph, tx Tx, c domain.Change, flow, level string) (domain.Baseline, error) {
 	from := c.BaselineID
-	if level == ViewLanded {
+	if level == ViewCommitted {
 		if c.Status == domain.ChangeApplied && c.ResultBaselineID != "" {
 			from = c.ResultBaselineID
 		}

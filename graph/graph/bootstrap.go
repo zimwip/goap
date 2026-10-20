@@ -69,7 +69,7 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 			continue
 		}
 		namespaces = append(namespaces, st.Namespace)
-		// the state the change starts from: the head of main, the empty state when no change landed yet (ADR 0056)
+		// the state the change starts from: the head of main, the empty state when no change committed yet (ADR 0056)
 		base, err := branchHead(ctx, tx, st.Namespace, domain.MainBranch)
 		if err != nil {
 			return err

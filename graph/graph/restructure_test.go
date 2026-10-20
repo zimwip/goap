@@ -173,14 +173,14 @@ func testMergeFromTheParent(t *testing.T, repo Repo) {
 	}
 	base := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
 
-	// the lineage, on the first version of the successor written at landing
-	landedC := must[domain.Node](t)(g.NodeByKey(ctx, "docs", "C"))
-	if landedC.Version != 1 || !slices.Equal(landedC.Origins, []domain.NodeRef{a1.Ref(), b1.Ref()}) {
-		t.Fatalf("origins of the landed C: v%d %v", landedC.Version, landedC.Origins)
+	// the lineage, on the first version of the successor written at commit
+	committedC := must[domain.Node](t)(g.NodeByKey(ctx, "docs", "C"))
+	if committedC.Version != 1 || !slices.Equal(committedC.Origins, []domain.NodeRef{a1.Ref(), b1.Ref()}) {
+		t.Fatalf("origins of the committed C: v%d %v", committedC.Version, committedC.Origins)
 	}
 	for _, o := range []domain.Node{a1, b1} {
 		got := must[[]domain.Node](t)(g.DerivedNodes(ctx, o.Ref()))
-		if len(got) != 1 || got[0].ID != landedC.ID {
+		if len(got) != 1 || got[0].ID != committedC.ID {
 			t.Errorf("DerivedNodes(%s) = %v", o.Key, got)
 		}
 		if got := must[[]domain.Node](t)(g.DerivedNodes(ctx, domain.NodeRef{ID: o.ID})); len(got) != 1 {
@@ -206,15 +206,15 @@ func testMergeFromTheParent(t *testing.T, repo Repo) {
 		}
 	}
 	if got := d.outKeys(t, "F"); !slices.Equal(got, []string{"docs@contains:C", "docs@contains:X"}) {
-		t.Errorf("F after the landing: %v", got)
+		t.Errorf("F after the commit: %v", got)
 	}
 	if after := must[domain.Node](t)(g.NodeByKey(ctx, "docs", "A")); after.Version != a1.Version {
 		t.Errorf("A was written: v%d", after.Version)
 	}
 	done := must[domain.Change](t)(g.Change(ctx, c.ID))
 	for _, cn := range done.Nodes {
-		if cn.Review == domain.ReviewAccepted && cn.Post != nil && cn.Landed == nil {
-			t.Errorf("%s did not land", cn.Key)
+		if cn.Review == domain.ReviewAccepted && cn.Post != nil && cn.Committed == nil {
+			t.Errorf("%s did not commit", cn.Key)
 		}
 	}
 }
@@ -396,9 +396,9 @@ func TestRestructureRefusesCreatedSources(t *testing.T) {
 }
 
 // The gate holds again at the commit, when an origin goes back to proposed after the review of the successor.
-func TestOriginsGateAtLanding(t *testing.T) { forEachRepo(t, testOriginsGateAtLanding) }
+func TestOriginsGateAtCommit(t *testing.T) { forEachRepo(t, testOriginsGateAtCommit) }
 
-func testOriginsGateAtLanding(t *testing.T, repo Repo) {
+func testOriginsGateAtCommit(t *testing.T, repo Repo) {
 	d := newDocs(t, repo)
 	ctx, g := d.ctx, d.g
 	f, a, b := d.node(t, "F", "Folder"), d.node(t, "A", "Item"), d.node(t, "B", "Item")
@@ -412,10 +412,10 @@ func testOriginsGateAtLanding(t *testing.T, repo Repo) {
 	if err := g.acceptImpact(ctx, c.ID, res.Successors[0].ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	// the merge goes back to proposed (its parent's impact, which decides the origins): the successor no longer lands
+	// the merge goes back to proposed (its parent's impact, which decides the origins): the successor no longer commits
 	must[[]domain.ChangeImpactID](t)(g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{res.Parents[0].ID}, "rethink"))
 	if _, err := g.CommitChange(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
-		t.Fatalf("landing with an origin awaiting its review: %v", err)
+		t.Fatalf("commit with an origin awaiting its review: %v", err)
 	}
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, res.Parents[0].ID, domain.ReviewAccepted, "tester", "ok again"))
 	must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))

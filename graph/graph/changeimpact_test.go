@@ -83,13 +83,13 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 		t.Fatalf("a rejected impact edited is proposed again: %+v", cn)
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
-		t.Fatalf("landing needs an accepted review, got %v", err)
+		t.Fatalf("commit needs an accepted review, got %v", err)
 	}
 	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); err != nil {
 		t.Fatal(err)
 	}
 	if d, err = g.draftOf(ctx, c.ID, "", got[0].ID); err != nil || d == nil || g.versionCount(ctx, f.req.ID) != 1 {
-		t.Fatalf("accepting writes nothing, the draft stays until the change lands: %+v %v", d, err)
+		t.Fatalf("accepting writes nothing, the draft stays until the change commits: %+v %v", d, err)
 	}
 
 	list, err := g.ListChangeImpacts(ctx, c.ID)
@@ -143,7 +143,7 @@ func testApplyChangeImpacts(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	if !req2.Post.IsDraft() || g.versionCount(ctx, f.req.ID) != 1 {
-		t.Fatalf("two edits of the draft, no version before the change lands (ADR 0079), got %s", req2.Post)
+		t.Fatalf("two edits of the draft, no version before the change commits (ADR 0079), got %s", req2.Post)
 	}
 	tst, err := g.edit(ctx, c1.ID, nodes[1].ID, edit{Properties: map[string]any{"title": "PSP v2 test"},
 		AddLinks: []LinkWrite{{Type: "verifies", To: *req2.Post}}})
@@ -163,20 +163,20 @@ func testApplyChangeImpacts(t *testing.T, repo Repo) {
 	}
 	head, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID})
 	if head.Properties["title"] != "Use PSP v2" || head.Properties["owner"] != "alice" {
-		t.Fatalf("both writes must land: %v", head.Properties)
+		t.Fatalf("both writes must commit: %v", head.Properties)
 	}
 	if b.Nodes[f.req.ID] != head.Version || b.Nodes[tst.Post.ID] == 0 {
-		t.Fatalf("baseline %v does not hold the landed versions", b.Nodes)
+		t.Fatalf("baseline %v does not hold the committed versions", b.Nodes)
 	}
 	if head.ChangeID != c1.ID || head.ChangeImpact != nodes[0].ID || head.Comment != "as designed" {
-		t.Fatalf("landed version must record its origin: %+v", head)
+		t.Fatalf("committed version must record its origin: %+v", head)
 	}
 	list, err := g.ListChangeImpacts(ctx, c1.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if list[0].Landed == nil || *list[0].Landed != head.Ref() || list[1].Landed == nil {
-		t.Fatalf("landed not recorded: %+v", list)
+	if list[0].Committed == nil || *list[0].Committed != head.Ref() || list[1].Committed == nil {
+		t.Fatalf("committed not recorded: %+v", list)
 	}
 	if ch, _ := g.Change(ctx, c1.ID); ch.Status != domain.ChangeApplied {
 		t.Fatalf("change should be applied, is %s", ch.Status)
@@ -244,8 +244,8 @@ func testChangeImpactsLifecycle(t *testing.T, repo Repo) {
 	}
 	review(nodes[0].ID)
 	review(nodes[1].ID)
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot land") {
-		t.Fatalf("apply must refuse a node left in a state that cannot land: %v", err)
+	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot commit") {
+		t.Fatalf("apply must refuse a node left in a state that cannot commit: %v", err)
 	}
 	if _, err := g.edit(ctx, c.ID, nodes[0].ID, edit{State: "approved"}); err != nil {
 		t.Fatal(err)
@@ -329,8 +329,8 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 	}
 	head, _ = g.Node(ctx, domain.NodeRef{ID: f.req.ID})
 	list, _ := g.ListChangeImpacts(ctx, b.ID)
-	if head.Properties["title"] != "B" || head.Properties["owner"] != "carol" || head.ChangeID != b.ID || list[0].Landed == nil || *list[0].Landed != head.Ref() {
-		t.Fatalf("the rebased change must land as the version of b: %+v %+v", head, list)
+	if head.Properties["title"] != "B" || head.Properties["owner"] != "carol" || head.ChangeID != b.ID || list[0].Committed == nil || *list[0].Committed != head.Ref() {
+		t.Fatalf("the rebased change must commit as the version of b: %+v %+v", head, list)
 	}
 	// b committed on its branch, then its rebase merged its version with main's: both are parents (ADR 0102)
 	if len(head.Parents) != 2 || head.Parents[1] != before.Version {

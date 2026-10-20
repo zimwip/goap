@@ -126,13 +126,13 @@
 </fieldset>
       <section class="card">
         <h3>Attributes</h3>
-        <p class="hint">What a link of this type carries. Their property validators run when the draft is accepted and at landing.</p>
+        <p class="hint">What a link of this type carries. Their property validators run when the draft is accepted and at commit.</p>
         <AttributeEditor bind:attrs={f.linkTypes[index].attributes} enums={enumNames} validatorInstances={instancesOf('property_validator')} node={false} bad={(p) => d.bad(p)} readonly={d.readonly} {path} />
       </section>
 
       <section class="card" data-path="{path}.validators">
         <h3>Validators</h3>
-        <p class="hint">Link validators check a link as a whole, with the node it leaves and the node it reaches, when the draft is accepted and at landing, after the attribute validators. Run in this order.</p>
+        <p class="hint">Link validators check a link as a whole, with the node it leaves and the node it reaches, when the draft is accepted and at commit, after the attribute validators. Run in this order.</p>
         <ValidatorList bind:list={f.linkTypes[index].validators} instances={linkValidators} usage="link_validator" noun="link validator" bad={(p) => d.bad(p)} readonly={d.readonly} path="{path}.validators" />
       </section>
       <section class="card">

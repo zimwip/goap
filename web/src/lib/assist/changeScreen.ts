@@ -12,7 +12,7 @@ export interface ImpactFacts {
   review?: string;
   /** lifecycle state after the change's writes */
   state?: string;
-  landable?: boolean;
+  committable?: boolean;
   /** the node was created by the change */
   created?: boolean;
   /** false: the impact modifies nothing (a candidate, a draft equal to its base), never accepted (ADR 0102) */
@@ -30,7 +30,7 @@ export function impactEntities(impacts: ImpactFacts[]): AssistantEntity[] {
     if (i.type) props.type = i.type;
     if (i.intent) props.intent = i.intent;
     if (i.state) props.nodeState = i.state;
-    if (i.landable === false) props.landable = 'no';
+    if (i.committable === false) props.committable = 'no';
     if (i.modifies === false) props.modifies = 'no';
     return { type: 'impact', id: i.id, label: i.key, state: i.review || 'proposed', ...(Object.keys(props).length ? { props } : {}) };
   });

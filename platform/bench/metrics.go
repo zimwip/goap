@@ -74,7 +74,7 @@ func NewMetrics() (*Metrics, error) {
 		{"bench.versions", "Node versions written by the bench (created and modified nodes)", &m.Totals.Versions},
 		{"bench.nodes", "Nodes created by the bench", &m.Totals.Nodes},
 		{"bench.links", "Links written by the bench", &m.Totals.Links},
-		{"bench.changes", "Changes landed by the bench", &m.Totals.Changes},
+		{"bench.changes", "Changes committed by the bench", &m.Totals.Changes},
 		{"bench.domain.versions", "Versions of the bench domain published", &m.Totals.DomainVersions},
 		{"bench.domain.types", "Node types of the latest bench domain published", &m.Totals.DomainTypes},
 		{"bench.errors", "Calls that failed", &m.Totals.Errors},

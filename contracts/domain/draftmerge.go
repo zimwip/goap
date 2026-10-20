@@ -208,7 +208,7 @@ func ApplyConflictEvent(pending []string, e ImpactEvent) []string {
 		pending = slices.DeleteFunc(slices.Clone(pending), func(c string) bool { return c == name })
 	}
 	switch e.Op {
-	case ImpactCreated, ImpactCheckedOut, ImpactCancelled, ImpactWithdrawn, ImpactLanded:
+	case ImpactCreated, ImpactCheckedOut, ImpactCancelled, ImpactWithdrawn, ImpactCommitted:
 		return nil
 	case ImpactTransitioned:
 		if r, ok := e.Patch["rebased"]; ok && r != nil {

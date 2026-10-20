@@ -132,7 +132,7 @@ func (s *draftState) apply(e domain.ImpactEvent) {
 		} else {
 			s.drafts[e.Impact] = rows
 		}
-	case domain.ImpactWithdrawn, domain.ImpactLanded:
+	case domain.ImpactWithdrawn, domain.ImpactCommitted:
 		delete(s.drafts, e.Impact)
 	case domain.ImpactAdopted:
 		// the adopted flow's drafts were installed on the main flow by the events that follow (see the adoption)

@@ -950,7 +950,7 @@ export const HumanTaskSchema: GenMessage<HumanTask, {jsonType: HumanTaskJson}> =
   messageDesc(file_goap_engine_v1_engine, 12);
 
 /**
- * The conflicts a rebase left on a change before it lands (ADR 0101).
+ * The conflicts a rebase left on a change before it commits (ADR 0101).
  *
  * @generated from message goap.engine.v1.RebaseTask
  */
@@ -974,7 +974,7 @@ export type RebaseTask = Message<"goap.engine.v1.RebaseTask"> & {
 };
 
 /**
- * The conflicts a rebase left on a change before it lands (ADR 0101).
+ * The conflicts a rebase left on a change before it commits (ADR 0101).
  *
  * @generated from message goap.engine.v1.RebaseTask
  */

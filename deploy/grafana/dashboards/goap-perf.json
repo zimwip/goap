@@ -150,7 +150,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Changes landed",
+      "description": "Changes committed",
       "gridPos": {
         "h": 4,
         "w": 4,
@@ -440,7 +440,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Versions and changes landed per second (slope over 2 minutes)",
+      "description": "Versions and changes committed per second (slope over 2 minutes)",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -633,7 +633,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "The landing call of a change, with the versions already written on the right axis: how the cost grows with the graph",
+      "description": "The commit call of a change, with the versions already written on the right axis: how the cost grows with the graph",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -647,7 +647,7 @@
             "uid": "prometheus"
           },
           "expr": "histogram_quantile(0.95, sum by (le) (rate(goap_bench_op_duration_seconds_bucket{service_name=\"goap-bench\", outcome=\"ok\", op=~\"CommitEdits|MergeChange\"}[$__rate_interval])))",
-          "legendFormat": "landing p95 (CommitEdits / MergeChange)",
+          "legendFormat": "commit p95 (CommitEdits / MergeChange)",
           "refId": "A",
           "range": true
         },
@@ -657,7 +657,7 @@
             "uid": "prometheus"
           },
           "expr": "histogram_quantile(0.5, sum by (le) (rate(goap_bench_op_duration_seconds_bucket{service_name=\"goap-bench\", outcome=\"ok\", op=~\"CommitEdits|MergeChange\"}[$__rate_interval])))",
-          "legendFormat": "landing p50",
+          "legendFormat": "commit p50",
           "refId": "B",
           "range": true
         },
@@ -1610,7 +1610,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Reads of the state of a baseline (ADR 0143), by source: cache (a state computed before) or landings (the selection of the versions landed on the branch and the branches it was forked from). whole: the whole state, nodes: some nodes (commit, merge).",
+      "description": "Reads of the state of a baseline (ADR 0143), by source: cache (a state computed before) or commits (the selection of the versions committed on the branch and the branches it was forked from). whole: the whole state, nodes: some nodes (commit, merge).",
       "gridPos": {
         "h": 8,
         "w": 8,

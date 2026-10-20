@@ -149,7 +149,7 @@ func TestToolActionOnlyWhereTheOrganizationBindsTheMCP(t *testing.T) {
 	hub := &fakeHub{bound: map[string][]string{"acme": {"document-repository"}}}
 	e, base := mcpEngine(t, hub, nil)
 
-	// acme binds the MCP: the cheap tool action is planned and its result lands on the blackboard
+	// acme binds the MCP: the cheap tool action is planned and its result commits on the blackboard
 	p := runDocs(t, e, base, "acme")
 	if p.Status != engine.StatusCompleted || len(p.Steps) != 1 || p.Steps[0].Action != "fetch_doc" {
 		t.Fatalf("acme: %s %s steps=%+v", p.Status, p.Error, p.Steps)

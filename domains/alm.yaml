@@ -142,7 +142,7 @@ lifecycles:
       - {name: designing, description: "Its solution is designed"}
       - {name: building, description: "Its components are built"}
       - {name: releasing, description: "Its releases are planned, reviewed and rolled out"}
-      - {name: delivered, final: true, description: "Delivered: the change lands"}
+      - {name: delivered, final: true, description: "Delivered: the change commits"}
       - {name: abandoned, final: true, description: "Given up"}
     transitions:
       - {name: analyse, description: Go from the framing to the analysis, from: framing, to: analysing}
@@ -159,7 +159,7 @@ lifecycles:
       - {name: abandon, description: Give the change up, from: building, to: abandoned}
       - {name: abandon, description: Give the change up, from: releasing, to: abandoned}
   # The lifecycle of a release change (ADR 0106, methodologies/release-based.yaml): the parent of the changes it
-  # integrates. The integrated changes merge into it while it integrates; it lands once delivered.
+  # integrates. The integrated changes merge into it while it integrates; it commits once delivered.
   - name: delivery
     description: How a release is planned, screens its candidates, integrates them and is delivered
     initial: planning
@@ -167,7 +167,7 @@ lifecycles:
       - {name: planning, description: "Scope and target of the release being set"}
       - {name: screening, description: "Open changes screened for candidates, the selected ones attached"}
       - {name: integrating, description: "The attached changes merge into the release"}
-      - {name: delivered, final: true, description: "Delivered: the release lands"}
+      - {name: delivered, final: true, description: "Delivered: the release commits"}
       - {name: cancelled, final: true, description: "Given up: its changes are detached"}
     transitions:
       - {name: screen, description: Screen the open changes for candidates, from: planning, to: screening}
@@ -176,15 +176,15 @@ lifecycles:
       - {name: deliver, description: Deliver the release once its changes are integrated, from: integrating, to: delivered}
       - {name: cancel_planning, description: Give the release up, from: planning, to: cancelled}
       - {name: cancel_screening, description: Give the release up, from: screening, to: cancelled}
-  # A node is edited in any state while it is in a change; a state flagged notLandable (a draft) keeps the change
-  # from landing until the node is moved to a landable one (ADR 0078).
+  # A node is edited in any state while it is in a change; a state flagged notCommittable (a draft) keeps the change
+  # from commit until the node is moved to a committable one (ADR 0078).
   - name: requirement
     description: How a requirement is written, approved once reviewed in its change, and retired
-    # a node is created in its initial state and filled in its first version: it is born not landable
+    # a node is created in its initial state and filled in its first version: it is born not committable
     initial: draft
     states:
       - {name: proposed, description: "Raised, not worked on yet"}
-      - {name: draft, notLandable: true, description: "Being written or reworked in a change"}
+      - {name: draft, notCommittable: true, description: "Being written or reworked in a change"}
       - {name: approved, description: Reviewed and accepted}
       - {name: obsolete, final: true, description: No longer applicable}
     transitions:
@@ -200,7 +200,7 @@ lifecycles:
     initial: draft
     states:
       - {name: candidate, description: "Planned, contents may still change"}
-      - {name: draft, notLandable: true, description: Contents being reworked in a change}
+      - {name: draft, notCommittable: true, description: Contents being reworked in a change}
       - {name: released, description: Frozen deliverable}
       - {name: withdrawn, final: true, description: Taken out of service}
     transitions:
@@ -217,7 +217,7 @@ lifecycles:
     initial: draft
     states:
       - {name: proposed, description: "Put forward, awaiting a decision"}
-      - {name: draft, notLandable: true, description: "Being written or reworked in a change"}
+      - {name: draft, notCommittable: true, description: "Being written or reworked in a change"}
       - {name: accepted, description: "Decision taken, not delivered yet"}
       - {name: released, description: "Delivered and frozen"}
       - {name: withdrawn, final: true, description: Taken out of service}

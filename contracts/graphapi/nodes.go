@@ -50,7 +50,7 @@ type NodeUpdate struct {
 }
 
 // LinkWrite is an outgoing link of a draft: to an exact node version, or, with Version 0, to the draft of a node the
-// change holds (resolved to the version landing writes for it).
+// change holds (resolved to the version commit writes for it).
 type LinkWrite struct {
 	Type       string
 	To         domain.NodeRef
@@ -112,7 +112,7 @@ type Restructured struct {
 }
 
 // BaselineDelta is what going from a baseline to a later one of the same branch changed (ADR 0143 §4): the nodes
-// landed in between, at their version in the later baseline, every link leaving those versions (a reader keeps the
+// committed in between, at their version in the later baseline, every link leaving those versions (a reader keeps the
 // ones whose target its state holds), and the nodes the later baseline no longer holds.
 type BaselineDelta struct {
 	From, To domain.Baseline

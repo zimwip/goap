@@ -60,7 +60,7 @@ func (h *pocHub) Tools(context.Context, string) ([]mcp.ToolInfo, []string, error
 // mitigated by a poc action; a person opens it as a sub-change of the poc methodology, which states the risk as its
 // hypothesis, probes it, builds the probe in its workspace, runs its check, judges it and is concluded by a person;
 // the event of its conclusion reaches the parent, which takes the verdict back (the risk closed), marks the action
-// done and closes the sub-change, landing nothing.
+// done and closes the sub-change, commit nothing.
 func TestSDLCDerisksByAProofOfConcept(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")
@@ -199,7 +199,7 @@ func TestSDLCDerisksByAProofOfConcept(t *testing.T) {
 		t.Fatalf("the delivery gets the findings of the POC once: %d", findings)
 	}
 	if sub, _ = g.Change(ctx, sub.ID); sub.Status != domain.ChangeAbandoned {
-		t.Fatalf("the sub-change is closed, landing nothing: %s", sub.Status)
+		t.Fatalf("the sub-change is closed, commit nothing: %s", sub.Status)
 	}
 }
 

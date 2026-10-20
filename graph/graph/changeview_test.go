@@ -8,7 +8,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// A change is seen at three levels of its change impacts (ADR 0032): written, accepted, landed.
+// A change is seen at three levels of its change impacts (ADR 0032): written, accepted, committed.
 func TestChangeViewLevels(t *testing.T) { forEachRepo(t, testChangeViewLevels) }
 
 func testChangeViewLevels(t *testing.T, repo Repo) {
@@ -44,9 +44,9 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 	if !a.Contains(*reqW.Post) || !a.Contains(need) {
 		t.Fatalf("accepted view: %v", a.Nodes)
 	}
-	// landed: nothing yet
-	if l := view(ViewLanded); l.ID != f.base.ID {
-		t.Fatalf("landed view before apply: %s", l.ID)
+	// committed: nothing yet
+	if l := view(ViewCommitted); l.ID != f.base.ID {
+		t.Fatalf("committed view before apply: %s", l.ID)
 	}
 	// a rejected version leaves the written view
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, needW.ID, domain.ReviewRejected, "u", "no"))
@@ -61,16 +61,16 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
-	l := view(ViewLanded)
+	l := view(ViewCommitted)
 	if l.ID != res.ID || l.Nodes[f.req.ID] != f.req.Version+1 || !l.Contains(need) {
-		t.Fatalf("landed view: %+v", l)
+		t.Fatalf("committed view: %+v", l)
 	}
 	if _, err := g.ChangeView(ctx, c.ID, "", "someday"); err == nil {
 		t.Fatal("unknown level")
 	}
 }
 
-// A flow sees its own versions, the main flow its own (ADR 0032: an option is a branch seen before it lands).
+// A flow sees its own versions, the main flow its own (ADR 0032: an option is a branch seen before it commits).
 func TestChangeViewOfAFlow(t *testing.T) { forEachRepo(t, testChangeViewOfAFlow) }
 
 func testChangeViewOfAFlow(t *testing.T, repo Repo) {

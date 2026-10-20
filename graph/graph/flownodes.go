@@ -256,7 +256,7 @@ func (g *Graph) discardNodes(ctx context.Context, tx Tx, c domain.Change, f doma
 }
 
 // acceptedOnFlow reports whether the last review of a node of the change made on a flow accepts it (ADR 0079: a draft
-// is not written until the change lands, so adopting a flow asks its acceptance).
+// is not written until the change commits, so adopting a flow asks its acceptance).
 func acceptedOnFlow(c domain.Change, node domain.NodeID, flow string) bool {
 	accepted := false
 	for _, cn := range c.Nodes {

@@ -174,8 +174,8 @@ func (s *carriedSink) Deliver(_ context.Context, m outbox.Message) error {
 	return nil
 }
 
-// A writer's own events ride on the landing of its commit (ADR 0136): after change.applied, in its transaction; none
-// when nothing lands (a refused commit); a subject of the graph refused.
+// A writer's own events ride on the commit of its commit (ADR 0136): after change.applied, in its transaction; none
+// when nothing commits (a refused commit); a subject of the graph refused.
 func TestCommitCarriesTheWritersEvents(t *testing.T) {
 	forEachRepo(t, func(t *testing.T, repo Repo) {
 		ctx := context.Background()
@@ -196,7 +196,7 @@ func TestCommitCarriesTheWritersEvents(t *testing.T) {
 			t.Fatal("creating N-1 again is refused")
 		}
 		if slices.Contains(sink.subs[n:], ev.Subject) {
-			t.Fatal("an event carried by a commit that landed nothing")
+			t.Fatal("an event carried by a commit that committed nothing")
 		}
 		bad := graphapi.CarriedEvent{Subject: "goap.change.x.applied", Payload: json.RawMessage(`{}`)}
 		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: "carry", Title: "Bad", Edits: []NodeEdit{{Key: "N-2", Type: "Thing"}}, Events: []graphapi.CarriedEvent{bad}}); !errors.Is(err, ErrInvalid) {

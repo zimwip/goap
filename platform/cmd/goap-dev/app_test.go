@@ -177,7 +177,7 @@ func TestSignOnFromEnvironment(t *testing.T) {
 
 // A provider signed on from the environment serves the models picked for it, and an alias retargeted to one is available
 // at once: the gateway answers what is available from the head of the graph, not from a snapshot up to a second old,
-// so the assistant is offered right after the change lands.
+// so the assistant is offered right after the change commits.
 func TestSignedOnProviderServesTheAssistantAlias(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the whole platform; skipped with -short")

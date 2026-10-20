@@ -107,7 +107,7 @@ nodeTypes:
 		t.Fatal("status counts the changes")
 	}
 
-	// a change that landed nothing is purged with its document
+	// a change that committed nothing is purged with its document
 	other, err := g.CreateChange(ctx, graph.NewChange{Namespace: "docs", Title: "Scratch", Intent: "scratch", BaselineID: head.ID, ProjectID: root})
 	if err != nil {
 		t.Fatal(err)

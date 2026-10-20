@@ -10,7 +10,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// moveWorld holds two sibling projects under the root one, and a node landed in the first.
+// moveWorld holds two sibling projects under the root one, and a node committed in the first.
 type moveWorld struct {
 	g    *Graph
 	a, b domain.Node
@@ -64,7 +64,7 @@ func projectMoves(t *testing.T, g *Graph, id domain.ChangeID) (moves []domain.He
 }
 
 // A move changes the project of the root change and of its open sub-changes, in the log of each; the nodes keep their
-// project, and the node the change creates afterwards takes the new one when it lands (ADR 0091).
+// project, and the node the change creates afterwards takes the new one when it commits (ADR 0091).
 func TestMoveChange(t *testing.T) { forEachRepo(t, testMoveChange) }
 
 func testMoveChange(t *testing.T, repo Repo) {
@@ -92,7 +92,7 @@ func testMoveChange(t *testing.T, repo Repo) {
 			t.Fatalf("log of %s: %+v %+v", id, moves, entries)
 		}
 	}
-	// the draft made before the move and the one made after take the project of the change at landing
+	// the draft made before the move and the one made after take the project of the change at commit
 	post := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "POST-1", Type: "Design", Rationale: "after"}))
 	for _, cn := range []domain.ChangeImpact{pre, post} {
 		must[domain.ChangeImpact](t)(g.ImpactNodeReviewOn(ctx, c.ID, "", "", cn.ID, domain.ReviewAccepted, "reviewer", "ok"))
@@ -110,13 +110,13 @@ func testMoveChange(t *testing.T, repo Repo) {
 	a := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, "PROJ-A"))
 	for _, key := range []string{"PRE-1", "POST-1"} {
 		if n := must[domain.Node](t)(g.NodeByKey(ctx, "", key)); n.Project != b.ID {
-			t.Fatalf("%s lands in the project of the change: %s", key, n.Project)
+			t.Fatalf("%s commits in the project of the change: %s", key, n.Project)
 		}
 	}
 	if n := must[domain.Node](t)(g.NodeByKey(ctx, "", "OLD-1")); n.Project != a.ID {
 		t.Fatalf("a node keeps its project: %s", n.Project)
 	}
-	// a landed change moves no more
+	// a committed change moves no more
 	if _, err := g.MoveChange(ctx, c.ID, "PROJ-A"); !errors.Is(err, ErrConflict) {
 		t.Fatalf("an applied change: %v", err)
 	}

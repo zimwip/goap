@@ -50,9 +50,9 @@ func testNoVersionExistsDuringAChange(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// only the change reads the drafts: main still has the last landed version
+	// only the change reads the drafts: main still has the last committed version
 	if n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID})); n.Properties["title"] != "Use PSP v1" {
-		t.Fatalf("main reads the landed version: %+v", n)
+		t.Fatalf("main reads the committed version: %+v", n)
 	}
 	if v := must[domain.NodeView](t)(g.ChangeNodeView(ctx, c.ID, "", *edited.Post)); v.Properties["title"] != "tc" || !v.IsDraft() {
 		t.Fatalf("the change reads its draft: %+v", v.Node)
@@ -68,19 +68,19 @@ func testNoVersionExistsDuringAChange(t *testing.T, repo Repo) {
 	}
 }
 
-// Landing writes one version per node from its draft (ADR 0079): the next number of the node, the version it was checked
+// Commit writes one version per node from its draft (ADR 0079): the next number of the node, the version it was checked
 // out from as its parent, the owner and the origins of the draft, the links of the draft with their targets resolved to
-// the versions this landing writes for the nodes of the change (a draft reference, or the version a draft was checked
+// the versions this commit writes for the nodes of the change (a draft reference, or the version a draft was checked
 // out from).
-func TestLandingWritesOneVersionPerDraft(t *testing.T) {
-	forEachRepo(t, testLandingWritesOneVersionPerDraft)
+func TestCommitWritesOneVersionPerDraft(t *testing.T) {
+	forEachRepo(t, testCommitWritesOneVersionPerDraft)
 }
 
-func testLandingWritesOneVersionPerDraft(t *testing.T, repo Repo) {
+func testCommitWritesOneVersionPerDraft(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "land", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "commit", BaselineID: f.base.ID, OwnBranch: true}))
 	pre := f.req.Ref()
 	mod := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "edit"}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, mod.ID, NodeUpdate{Properties: map[string]any{"title": "Use PSP v2"}}))
@@ -117,7 +117,7 @@ func testLandingWritesOneVersionPerDraft(t *testing.T, repo Repo) {
 			if l.Type == "verifies" {
 				verifies++
 				if l.To != req2.Ref() {
-					t.Fatalf("%s verifies %s, the version this landing wrote is %s", d.key, l.To, req2.Ref())
+					t.Fatalf("%s verifies %s, the version this commit wrote is %s", d.key, l.To, req2.Ref())
 				}
 			}
 		}
@@ -140,9 +140,9 @@ func testLandingWritesOneVersionPerDraft(t *testing.T, repo Repo) {
 	if out := must[[]domain.Link](t)(g.OutLinksOf(ctx, req2.Ref())); len(out) != 1 || out[0].Type != "satisfies" {
 		t.Fatalf("carried links: %+v", out)
 	}
-	// every landed event of the change names the version written
+	// every committed event of the change names the version written
 	for _, cn := range must[[]domain.ChangeImpact](t)(g.ListChangeImpacts(ctx, c.ID)) {
-		if cn.Landed == nil || cn.Post == nil || *cn.Post != *cn.Landed || cn.Post.IsDraft() {
+		if cn.Committed == nil || cn.Post == nil || *cn.Post != *cn.Committed || cn.Post.IsDraft() {
 			t.Fatalf("post is rewritten to the version written: %+v", cn)
 		}
 	}

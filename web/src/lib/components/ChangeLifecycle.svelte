@@ -1,6 +1,6 @@
 <script lang="ts">
   // Nodes a change works on: edit them in any state, move them through their
-  // lifecycle, and see which ones must still reach a landable state before the
+  // lifecycle, and see which ones must still reach a committable state before the
   // change can be applied (ADR 0078). With `impacts`,
   // each row is also the change impact of its node (ADR 0024): why, the versions
   // it starts from and writes, its review — one list, no second table.
@@ -92,10 +92,10 @@
   const decided = (r: LifecycleRow) => r.impact?.review === 'accepted' || r.impact?.review === 'rejected';
 
   const onOption = $derived(impacts && !!scope && scope !== 'main');
-  // a draft reference has no version (ADR 0079): the node gets one when the change lands
+  // a draft reference has no version (ADR 0079): the node gets one when the change commits
   const version = (r?: { id?: string; version?: number }) => (r?.id ? (isDraft(r) ? 'draft' : `v${r.version}`) : '—');
   let rationale = $state('');
-  // Reviews are never automatic (ADR 0079): an edit leaves its impact proposed, and the graph refuses to land the change
+  // Reviews are never automatic (ADR 0079): an edit leaves its impact proposed, and the graph refuses to commit the change
   // while one awaits its review.
   const awaiting = $derived(impacts ? rows.filter((r) => r.impact && !r.impact.superseded && r.impact.post?.id && (r.impact.review === 'proposed' || !r.impact.review)) : []);
   const openable = (r: LifecycleRow) => !r.created || !!r.impact?.post?.id;
@@ -212,7 +212,7 @@
   const shown = $derived(
     candidates.filter((n) => !filter || `${n.key} ${n.type}`.toLowerCase().includes(filter.toLowerCase())).slice(0, 200),
   );
-  const stuck = $derived(rows.filter((r) => r.lifecycle && !r.landable));
+  const stuck = $derived(rows.filter((r) => r.lifecycle && !r.committable));
 
   const text = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
 
@@ -275,21 +275,21 @@
   <details class="rules">
     <summary class="hint">How nodes are edited</summary>
     <p class="hint">
-      A node is edited in any state while it is in a change. A state flagged not landable keeps the change from landing: move the
-      node to a landable state before applying.
+      A node is edited in any state while it is in a change. A state flagged not committable keeps the change from commit: move the
+      node to a committable state before applying.
     </p>
   </details>
   {#if stuck.length}
     <div class="alert" role="status">
-      {stuck.map((r) => `${r.node.key} (${r.effective})`).join(', ')} {stuck.length > 1 ? 'are' : 'is'} in a state that cannot land: move
-      {stuck.length > 1 ? 'them' : 'it'} to a landable state before applying the change.
+      {stuck.map((r) => `${r.node.key} (${r.effective})`).join(', ')} {stuck.length > 1 ? 'are' : 'is'} in a state that cannot commit: move
+      {stuck.length > 1 ? 'them' : 'it'} to a committable state before applying the change.
     </div>
   {/if}
 
   {#if awaiting.length}
     <div class="alert" role="status" id="awaiting-review">
       <strong>Awaiting review: {awaiting.map((r) => r.node.key).join(', ')}.</strong>
-      The change cannot land while an impact awaits its review.
+      The change cannot commit while an impact awaits its review.
       {#if onopenreviews}<button type="button" class="link" onclick={onopenreviews}>Review them in the Reviews tab</button>{/if}
     </div>
   {/if}
@@ -327,24 +327,24 @@
                 <AssessmentBubble {change} subject={impactSubject(r.node.key)} label="the impact on {r.node.key}" compact processed={decided(r)} {closed} onchange={onchanged} />
               {/if}
               {#if r.created}<span class="tag ok" title="Created by this change; stored when it is applied">new</span>{/if}
-              {#if r.draft && !r.created}<span class="tag ok" title="The change holds a draft of the node: it gets its next version when the change lands (ADR 0079)">draft</span>{/if}
+              {#if r.draft && !r.created}<span class="tag ok" title="The change holds a draft of the node: it gets its next version when the change commits (ADR 0079)">draft</span>{/if}
               {#if onOption && r.impact}
-                {#if r.impact.flow === scope}<span class="origin own" title="declared by this option: it lands only if the option is selected">this option</span>{:else}<span class="origin" title="declared on the main flow: every option sees it">main flow</span>{/if}
+                {#if r.impact.flow === scope}<span class="origin own" title="declared by this option: it commits only if the option is selected">this option</span>{:else}<span class="origin" title="declared on the main flow: every option sees it">main flow</span>{/if}
               {/if}
             </td>
             {#if impacts}
               <td class="why">{r.impact?.rationale ?? ''}{#if r.impact && !r.impact.post}<span class="hint planned" title="declared, no draft yet">planned</span>{/if}</td>
               <td class="mono">
-                {#if r.impact}{version(r.impact.pre)} → {version(r.impact.post)}{#if r.impact.landed?.id}<span class="hint"> · landed {version(r.impact.landed)}</span>{/if}{:else}—{/if}
+                {#if r.impact}{version(r.impact.pre)} → {version(r.impact.post)}{#if r.impact.committed?.id}<span class="hint"> · committed {version(r.impact.committed)}</span>{/if}{:else}—{/if}
               </td>
             {/if}
             <td>
               {#if r.lifecycle}
-                <span class="state" class:notLandable={!r.landable}>{r.effective}</span>
+                <span class="state" class:notCommittable={!r.committable}>{r.effective}</span>
                 {#if r.moves.length}
                   <span class="hint" title="Proposed in this change">from {r.base || 'no state'} → {r.moves.join(' → ')}</span>
                 {/if}
-                {#if !r.landable}<span class="tag" title="A change cannot land with the node in this state">{r.created ? 'born not landable: choose another state' : 'not landable'}</span>{/if}
+                {#if !r.committable}<span class="tag" title="A change cannot commit with the node in this state">{r.created ? 'born not committable: choose another state' : 'not committable'}</span>{/if}
               {:else}
                 <span class="hint">no lifecycle</span>
               {/if}
@@ -541,7 +541,7 @@
     font-size: 0.85rem;
     font-family: var(--mono);
   }
-  .state.notLandable {
+  .state.notCommittable {
     border-color: var(--warn);
     color: var(--warn);
   }

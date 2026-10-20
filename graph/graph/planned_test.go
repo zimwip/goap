@@ -80,7 +80,7 @@ func testPlannedCreation(t *testing.T, repo Repo) {
 	must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
 	for _, key := range []string{"REQ-NEW", "TST-NEW"} {
 		if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, key); err != nil || n.Version != 1 {
-			t.Fatalf("%s lands as a new node: %+v %v", key, n, err)
+			t.Fatalf("%s commits as a new node: %+v %v", key, n, err)
 		}
 	}
 	checkImpactLogs(t, repo)

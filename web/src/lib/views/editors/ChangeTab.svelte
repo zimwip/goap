@@ -620,9 +620,9 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     ...candidateNodes.map((n) => n.key ?? ''),
     ...(view?.nodes ?? []).filter((n) => n.intent === 'created' && !n.superseded && n.review !== 'rejected').map((n) => n.key ?? ''),
   ]);
-  // the graph refuses to land a change with an impact awaiting its review (ADR 0079: edits never review)
+  // the graph refuses to commit a change with an impact awaiting its review (ADR 0079: edits never review)
   const awaiting = $derived(awaitingReview(view?.nodes ?? [], true));
-  const stuckNotLandable = $derived(lcRows.some((r) => r.lifecycle && !r.landable));
+  const stuckNotCommittable = $derived(lcRows.some((r) => r.lifecycle && !r.committable));
   // ADR 0102: a commit writes the accepted modifications on the change's branch and leaves it open; the merge takes the
   // branch into the one it was forked from once it holds a commit, and closes the change
   // the server judges what the change can commit and merge (graph.getCommitState): read again with the change
@@ -646,7 +646,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   const commits = $derived(commitButtons(commitInfo, closed));
   const committedOnBranch = $derived(!!commitInfo?.commits);
   const panes = $derived<Pane[]>([
-    { id: 'overview', label: 'Overview', badge: stuckNotLandable ? '!' : undefined },
+    { id: 'overview', label: 'Overview', badge: stuckNotCommittable ? '!' : undefined },
     { id: 'impacts', label: 'Impacts', tint: scopeTint, title: scopeTabTitle(options, scope), badge: awaiting.length ? `${awaiting.length} to review` : view?.nodes?.length || undefined },
     { id: 'reviews', label: 'Reviews', tint: scopeTint, title: scopeTabTitle(options, scope), badge: foldReviews(change?.items ?? []).filter((r) => r.status === 'open' && (r.flow ?? '') === (scope === MAIN_SCOPE ? '' : scope)).length || undefined },
     { id: 'artifacts', label: 'Artifacts', tint: scopeTint, title: scopeTabTitle(options, scope), badge: artifacts.length || undefined },
@@ -807,7 +807,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   }
 
   /** Merges the branch of the change into the branch it was forked from (ADR 0102): rebased first when that branch
-   * moved (conflicts stop it: settle them, commit, merge again), held by the methodology (final state, landing gate). */
+   * moved (conflicts stop it: settle them, commit, merge again), held by the methodology (final state, commit gate). */
   async function mergeBranch(): Promise<string | undefined> {
     if (!change?.id) return 'No change is open.';
     applying = true;
@@ -861,7 +861,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   const abandon = async () => {
     if (
       await confirmDialog({
-        message: `Abandon “${change?.title}”? Its sub-changes are abandoned too and its branch is closed; nothing it wrote lands.`,
+        message: `Abandon “${change?.title}”? Its sub-changes are abandoned too and its branch is closed; nothing it wrote commits.`,
         danger: true,
       })
     )
@@ -924,7 +924,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   const impactFacts = $derived<ImpactFacts[]>(
     lcRows.flatMap((r) =>
       r.impact?.id && !r.impact.superseded
-        ? [{ id: r.impact.id, key: r.node.key ?? '', type: r.node.type, intent: r.impact.intent, review: r.impact.review, state: r.effective || undefined, landable: r.landable, created: !!r.created, modifies: modifies(r.impact) }]
+        ? [{ id: r.impact.id, key: r.node.key ?? '', type: r.node.type, intent: r.impact.intent, review: r.impact.review, state: r.effective || undefined, committable: r.committable, created: !!r.created, modifies: modifies(r.impact) }]
         : [],
     ),
   );

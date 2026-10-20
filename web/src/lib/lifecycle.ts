@@ -11,7 +11,7 @@ export function lifecycleResolver(cat: TypeCatalog): (type: string | undefined) 
 
 export interface LifecycleRow {
   node: GraphNode;
-  /** undefined: the node type has no lifecycle (always landable) */
+  /** undefined: the node type has no lifecycle (always committable) */
   lifecycle?: Lifecycle;
   /** stored state ('' : the node has none yet) */
   base: string;
@@ -19,13 +19,13 @@ export interface LifecycleRow {
   effective: string;
   /** states the change moves the node through */
   moves: string[];
-  /** the effective state can land: a node of a type without lifecycle, or in a state not flagged notLandable (ADR 0078) */
-  landable: boolean;
+  /** the effective state can commit: a node of a type without lifecycle, or in a state not flagged notCommittable (ADR 0078) */
+  committable: boolean;
   /** transitions available from the effective state */
   transitions: LifecycleTransition[];
   /** properties after the change's writes */
   props: Record<string, unknown>;
-  /** the change holds a draft of the node (ADR 0079): it has no version of its own until the change lands */
+  /** the change holds a draft of the node (ADR 0079): it has no version of its own until the change commits */
   draft: boolean;
   /** properties declared by the node type (inherited ones included) */
   declared: string[];
@@ -38,7 +38,7 @@ export interface LifecycleRow {
 }
 
 /** What the change impacts hold of their nodes, by `postKey`: the DRAFT view of a node the change works on (ADR 0079:
- * no version while the change works on it, the impact's post is a draft reference), the version a landed impact wrote
+ * no version while the change works on it, the impact's post is a draft reference), the version a committed impact wrote
  * otherwise. The change impacts carry references only. */
 export type PostVersions = Map<string, GraphNode>;
 
@@ -46,15 +46,15 @@ export type PostVersions = Map<string, GraphNode>;
 export const postKey = (ref: { id?: string; version?: number }): string => `${ref.id}@${isDraft(ref) ? 'draft' : ref.version}`;
 
 /** Loads what the impacts' posts name. A draft is read through the change (`getNode` with the change and flow, ADR
- * 0079), never by a version; a landed post is one of the versions of its node. `scope.flow`: the flow the impacts are the view of. */
+ * 0079), never by a version; a committed post is one of the versions of its node. `scope.flow`: the flow the impacts are the view of. */
 export async function loadPosts(cns: ChangeImpact[], scoped = false, scope?: { changeId: string; flow?: string }): Promise<PostVersions> {
   const out: PostVersions = new Map();
   const posts = cns.filter((c) => c.post?.id && live(c, scoped)).map((c) => c.post!);
   const drafts = posts.filter((p) => isDraft(p));
-  // each landed post is read by its version: a node's whole history is never needed here (ADR 0140)
-  const landed = [...new Map(posts.filter((p) => !isDraft(p)).map((p) => [postKey(p), p])).values()];
+  // each committed post is read by its version: a node's whole history is never needed here (ADR 0140)
+  const committed = [...new Map(posts.filter((p) => !isDraft(p)).map((p) => [postKey(p), p])).values()];
   await Promise.all([
-    ...landed.map(async (p) => {
+    ...committed.map(async (p) => {
       const n = (await graph.getNode({ id: p.id, version: p.version })).view?.node;
       if (n) out.set(postKey(p), n);
     }),
@@ -86,7 +86,7 @@ export function holdsOwnDraft(cn: ChangeImpact | undefined, flow: string): boole
 
 const alreadyCheckedOut = (e: unknown) => /already checked out/i.test(e instanceof Error ? e.message : String(e));
 
-/** Impacts of the flow shown that wait for their review (the graph refuses to land the change until each one is
+/** Impacts of the flow shown that wait for their review (the graph refuses to commit the change until each one is
  * reviewed: 'change impact X awaits its review'). */
 export const awaitingReview = (cns: ChangeImpact[], scoped = false): ChangeImpact[] =>
   // a draft left as it was checked out modifies nothing: it is not committed, so it holds nothing (ADR 0102)
@@ -96,7 +96,7 @@ export const awaitingReview = (cns: ChangeImpact[], scoped = false): ChangeImpac
  * properties and links edited in place on the DRAFT; a state is a transition (on the draft: a node with none is checked
  * out first). Nothing here reviews: an edit leaves the impact `proposed` (an edit sends an accepted one back to
  * proposed) and the review is a separate explicit action (the Reviews tab). The version is written
- * when the change lands. A node is never deleted: a node the change created is taken out of it (removeFromChange), one
+ * when the change commits. A node is never deleted: a node the change created is taken out of it (removeFromChange), one
  * no parent holds is retired by its lifecycle. */
 export async function writeNodeInChange(
   changeId: string,
@@ -171,9 +171,9 @@ export function birthStates(lifecycle: Lifecycle | undefined): string[] {
   );
 }
 
-/** The birth states a node created and landed at once (a change applied on main) may take: those it can land in. */
-export function landableBirthStates(lifecycle: Lifecycle | undefined): string[] {
-  const blocked = new Set((lifecycle?.states ?? []).filter((s) => s.notLandable).map((s) => s.name));
+/** The birth states a node created and committed at once (a change applied on main) may take: those it can commit in. */
+export function committableBirthStates(lifecycle: Lifecycle | undefined): string[] {
+  const blocked = new Set((lifecycle?.states ?? []).filter((s) => s.notCommittable).map((s) => s.name));
   return birthStates(lifecycle).filter((s) => !blocked.has(s));
 }
 
@@ -192,7 +192,7 @@ export function createdRows(cat: TypeCatalog, cns: ChangeImpact[], posts: PostVe
       base: '',
       effective: state,
       moves: [],
-      landable: lifecycle ? landableState(lifecycle, state) : true,
+      committable: lifecycle ? committableState(lifecycle, state) : true,
       transitions: [],
       props: { ...((post?.props ?? {}) as Record<string, unknown>) },
       draft: true,
@@ -205,7 +205,7 @@ export function createdRows(cat: TypeCatalog, cns: ChangeImpact[], posts: PostVe
   return rows;
 }
 
-const landableState = (l: Lifecycle, s: string) => !s || !l.states?.find((x) => x.name === s)?.notLandable;
+const committableState = (l: Lifecycle, s: string) => !s || !l.states?.find((x) => x.name === s)?.notCommittable;
 
 /** Properties declared by a node type, its ancestors' first. */
 export function declaredProperties(cat: TypeCatalog, type: string | undefined): string[] {
@@ -248,7 +248,7 @@ export function lifecycleRows(
       base,
       effective: cur,
       moves,
-      landable: lifecycle ? landableState(lifecycle, cur) : true,
+      committable: lifecycle ? committableState(lifecycle, cur) : true,
       transitions: lifecycle ? (lifecycle.transitions ?? []).filter((t) => t.from === cur) : [],
       props,
       draft: !!cn && isDraft(cn.post),

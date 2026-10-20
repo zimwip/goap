@@ -333,12 +333,12 @@ function fromEvent(
     case "adopted":
       summary = `flow ${shortId(e.flow)} adopted${e.stale?.length ? `, replaces ${e.stale.length} run${e.stale.length > 1 ? "s" : ""}` : ""}`;
       break;
-    case "landed":
+    case "committed":
       // first on the change's own branch (commit), then on the branch it was forked from (merge)
       summary =
         e.branch && isEphemeralBranch(e.branch)
-          ? `draft committed as ${v(e.landed)} on branch ${e.branch}`
-          : `draft merged as ${v(e.landed)}${e.branch ? ` into ${e.branch}` : ""}`;
+          ? `draft committed as ${v(e.committed)} on branch ${e.branch}`
+          : `draft merged as ${v(e.committed)}${e.branch ? ` into ${e.branch}` : ""}`;
       break;
     case "rebased":
       summary = `pre moved to ${v(e.pre)}, to re-check`;
@@ -363,7 +363,7 @@ function fromEvent(
       e.review?.status === "rejected" ||
       ((e.patch?.["conflicts"] as unknown[] | undefined)?.length ?? 0) > 0
         ? "warn"
-        : e.op === "landed"
+        : e.op === "committed"
           ? "ok"
           : "neutral",
     event: e,

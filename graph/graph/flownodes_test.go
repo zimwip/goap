@@ -182,7 +182,7 @@ func testFlowChangeImpactsAdopt(t *testing.T, repo Repo) {
 	}
 	final, _ := g.Node(ctx, domain.NodeRef{ID: w.f.req.ID})
 	if final.Properties["title"] != "B" || final.ChangeImpact != added[0].ID || final.Comment != "second look is right" {
-		t.Fatalf("landed: %+v", final)
+		t.Fatalf("committed: %+v", final)
 	}
 	if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, "TST-2"); err == nil && !n.Deleted {
 		t.Fatalf("TST-2 must not be live on main: %+v", n)
@@ -228,7 +228,7 @@ func testFlowChangeImpactsDiscard(t *testing.T, repo Repo) {
 	}
 	final, _ := g.Node(ctx, domain.NodeRef{ID: w.f.req.ID})
 	if final.Properties["title"] != "A" {
-		t.Fatalf("the main flow's write must land: %+v", final)
+		t.Fatalf("the main flow's write must commit: %+v", final)
 	}
 }
 

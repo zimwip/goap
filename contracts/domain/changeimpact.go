@@ -46,7 +46,7 @@ type Review struct {
 
 // ChangeImpact is the link from a change to a node: the node version the change
 // reads (Pre), the version it produces on the change branch (Post, empty until
-// realized) and the one that landed on the target branch (Landed), with the
+// realized) and the one that committed on the target branch (Committed), with the
 // reason why (Rationale).
 type ChangeImpact struct {
 	ID        ChangeImpactID `json:"id"`
@@ -59,10 +59,10 @@ type ChangeImpact struct {
 	// Post is the draft of the node while the change works (a draft reference: the node, Version 0, ADR 0079), the
 	// version written once the change is committed; nil while the change impact is only planned.
 	Post *NodeRef `json:"post,omitempty"`
-	// Landed is the version on the target branch once the change is applied.
-	Landed  *NodeRef   `json:"landed,omitempty"`
-	Review  NodeReview `json:"review"`
-	Reviews []Review   `json:"reviews,omitempty"`
+	// Committed is the version on the target branch once the change is applied.
+	Committed *NodeRef   `json:"committed,omitempty"`
+	Review    NodeReview `json:"review"`
+	Reviews   []Review   `json:"reviews,omitempty"`
 	// Via is the change impact of the parent that realizes the removal of this node.
 	Via ChangeImpactID `json:"via,omitempty"`
 	// Recheck marks a rationale written against a version that is no longer the head.
@@ -97,7 +97,7 @@ type ImpactValidation struct {
 func (c ChangeImpact) Planned() bool { return c.Post == nil }
 
 // Drafted reports whether the node of the change impact has a draft: Post is then the draft reference (Version 0, ADR
-// 0079); once the change landed it is the version written.
+// 0079); once the change committed it is the version written.
 func (c ChangeImpact) Drafted() bool { return c.Post != nil && c.Post.IsDraft() }
 
 // Validate checks the shape of a change impact.
@@ -123,8 +123,8 @@ func (c ChangeImpact) Validate() error {
 	default:
 		return fmt.Errorf("change impact %s: unknown intent %q", c.Key, c.Intent)
 	}
-	if c.Landed != nil && c.Post == nil {
-		return fmt.Errorf("change impact %s: landed without post", c.Key)
+	if c.Committed != nil && c.Post == nil {
+		return fmt.Errorf("change impact %s: committed without post", c.Key)
 	}
 	switch c.Review {
 	case ReviewProposed, ReviewAccepted, ReviewRejected:

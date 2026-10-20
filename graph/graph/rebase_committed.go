@@ -18,13 +18,13 @@ import (
 // into its parent the same way: settled, rebased onto its parent, asked to the merge guards, then integrated.
 
 // hasCommits reports whether a change committed versions on its own branch it has not merged yet: an impact of it
-// landed there (its own commit, or the merge of a sub-change, ADR 0103).
+// committed there (its own commit, or the merge of a sub-change, ADR 0103).
 func hasCommits(c domain.Change) bool {
 	if c.Status != domain.ChangeDraft && c.Status != domain.ChangeActive {
 		return false
 	}
 	for _, cn := range mainImpactsOf(c) {
-		if cn.Landed != nil {
+		if cn.Committed != nil {
 			return true
 		}
 	}
@@ -126,7 +126,7 @@ func (g *Graph) unsettled(ctx context.Context, tx Tx, c domain.Change) ([]string
 			out = append(out, cn.Key+" is rejected (rework or withdraw it)")
 		case plannedCreation(cn):
 			out = append(out, cn.Key+" is planned, not created yet (create or withdraw it)")
-		case !modifies && cn.Landed == nil:
+		case !modifies && cn.Committed == nil:
 			out = append(out, cn.Key+" modifies nothing (modify or withdraw it)")
 		case modifies && cn.Review != domain.ReviewAccepted:
 			out = append(out, cn.Key+" awaits its review")
@@ -180,7 +180,7 @@ func (g *Graph) mergeIn(ctx context.Context, id domain.ChangeID, resolutions map
 	var res RebaseResult
 	err = g.changeTx(ctx, id, func(tx Tx) error {
 		// the target is locked before the rebase reads its head (ADR 0127, 0140): the merge runs in one transaction, so no
-		// other merge lands between the rebase and the fast-forward, which would turn it into a three-way merge
+		// other merge commits between the rebase and the fast-forward, which would turn it into a three-way merge
 		if own, ok, err := ownBranch(ctx, tx, c); err != nil {
 			return err
 		} else if ok {
@@ -211,7 +211,7 @@ func (g *Graph) mergeIn(ctx context.Context, id domain.ChangeID, resolutions map
 		if !ok {
 			return fmt.Errorf("change %s has no branch of its own: %w", id, ErrInvalid)
 		}
-		// the head of the target is read under its lock: a merge landing meanwhile is seen, and this one merges after it
+		// the head of the target is read under its lock: a merge commit meanwhile is seen, and this one merges after it
 		// (ADR 0127)
 		if err := tx.LockBranch(ctx, c.Namespace, domain.BranchOf(own.Parent)); err != nil {
 			return err
@@ -269,8 +269,8 @@ func (g *Graph) checkParentDrafts(ctx context.Context, tx Tx, c domain.Change) e
 	return nil
 }
 
-// recordInParent gives the parent of a merged sub-change an impact for each node the sub-change landed on the parent's
-// branch (ADR 0103): its own impact of the node, else a new one, accepted with the sub-change's review and landed as the
+// recordInParent gives the parent of a merged sub-change an impact for each node the sub-change committed on the parent's
+// branch (ADR 0103): its own impact of the node, else a new one, accepted with the sub-change's review and committed as the
 // version the sub-change committed. The parent then holds the work as its own, committed.
 func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) error {
 	parent, err := tx.Change(ctx, c.ParentID)
@@ -278,19 +278,19 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 		return err
 	}
 	// the parent's acceptances are one review, recorded before them (ADR 0105)
-	type landedIn struct {
+	type committedIn struct {
 		events []domain.ImpactEvent
 		id     domain.ChangeImpactID
 		ref    domain.NodeRef
 		review domain.Review
 	}
-	var todo []landedIn
+	var todo []committedIn
 	var entries []domain.ReviewEntry
 	for _, cn := range mainImpactsOf(c) {
-		if cn.Landed == nil {
+		if cn.Committed == nil {
 			continue
 		}
-		ref := *cn.Landed
+		ref := *cn.Committed
 		var events []domain.ImpactEvent
 		id := domain.ChangeImpactID("")
 		for _, p := range mainImpactsOf(parent) {
@@ -318,7 +318,7 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 		}
 		r := domain.Review{Status: domain.ReviewAccepted, By: last.By, At: g.now(),
 			Comment: strings.TrimSpace(fmt.Sprintf("merged from sub-change %s (%s): %s", c.Title, c.ID, last.Comment))}
-		todo = append(todo, landedIn{events: events, id: id, ref: ref, review: r})
+		todo = append(todo, committedIn{events: events, id: id, ref: ref, review: r})
 		entries = append(entries, domain.ReviewEntry{Impact: string(id), Comment: r.Comment, Outcome: domain.ReviewOutcomeAccept})
 	}
 	if len(todo) > 0 {
@@ -326,7 +326,7 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 		if err != nil {
 			return err
 		}
-		// by phase, so that the verdicts of the review and the versions of the landing are one entry each (ADR 0144)
+		// by phase, so that the verdicts of the review and the versions of the commit are one entry each (ADR 0144)
 		var phases [3][]domain.ImpactEvent
 		for _, t := range todo {
 			r := t.review
@@ -334,7 +334,7 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 			ref := t.ref
 			phases[0] = append(phases[0], t.events...)
 			phases[1] = append(phases[1], domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactReviewed, By: r.By, Review: &r, Causation: cause})
-			phases[2] = append(phases[2], domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactLanded, Landed: &ref, Branch: domain.BranchOf(parent.Branch)})
+			phases[2] = append(phases[2], domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactCommitted, Committed: &ref, Branch: domain.BranchOf(parent.Branch)})
 		}
 		for _, events := range phases {
 			if err := g.emit(ctx, tx, events...); err != nil {
@@ -342,7 +342,7 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 			}
 		}
 	}
-	// the parent's branch now holds the sub-change's commits, landed impacts of the parent: it has committed work to
+	// the parent's branch now holds the sub-change's commits, committed impacts of the parent: it has committed work to
 	// merge (hasCommits)
 	return nil
 }
@@ -464,7 +464,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 	// the impacts that committed nothing start from the target's version of their node too (to check again, ADR 0101)
 	var repre []domain.ImpactEvent
 	for _, cn := range mainImpactsOf(c) {
-		if cn.Landed != nil || cn.Pre == nil {
+		if cn.Committed != nil || cn.Pre == nil {
 			continue
 		}
 		if v, ok := headNodes[cn.Pre.ID]; ok && v != cn.Pre.Version {
@@ -473,7 +473,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 		}
 	}
 	if merging && len(merges) == 0 && len(repre) == 0 {
-		// no node changed on both sides: the merge lands what the branch committed over the target as it is, the fork
+		// no node changed on both sides: the merge commits what the branch committed over the target as it is, the fork
 		// moved by the fast-forward (ADR 0140)
 		return res, nil
 	}

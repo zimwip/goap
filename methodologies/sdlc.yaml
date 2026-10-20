@@ -13,7 +13,7 @@ description: >
 namespace: alm
 goal: deliver
 # the phases of a change (ADR 0132): the gates of the delivery process take its transitions, framing → analysing →
-# designing → building → releasing → delivered; the change lands delivered
+# designing → building → releasing → delivered; the change commits delivered
 lifecycle: maturity_of_change
 
 # the proofs of concept and prototypes it opens as its sub-changes (ADR 0131): the poc methodology, whose conclusion it
@@ -1074,7 +1074,7 @@ actions:
     language: javascript
     description: >
       Approve the requirements the review accepted: move them to approved, in place on their working version (it is
-      frozen when the change lands); the approval guard reads the accepted review (ADR 0076, 0077). The releases planned in the
+      frozen when the change commits); the approval guard reads the accepted review (ADR 0076, 0077). The releases planned in the
       change, created in draft, are put forward as candidates the same way
     pre: {reviewed: true}
     effects: {requirements_approved: true}
@@ -1171,7 +1171,7 @@ actions:
     kind: builtin
     builtin: graph.apply
     description: Apply the change to the ALM repository (new baseline, including releases and deployments)
-    # the change lands delivered (ADR 0132): the gate of the delivery took it there
+    # the change commits delivered (ADR 0132): the gate of the delivery took it there
     pre: {reviewed: true, requirements_approved: true, rolled_out: true, "gate:software_delivery/delivery_gate": true}
     effects: {applied: true}
     cost: 1
@@ -1190,7 +1190,7 @@ actions:
     instructions: >
       A proof of concept (or a prototype, during the framing) is proposed on the risk register. Say what it starts
       from and how long it may take: it opens a sub-change of the poc methodology that builds the least that shows
-      whether its hypotheses hold, without the quality rules of the delivery, and lands nothing. Cancel the action on
+      whether its hypotheses hold, without the quality rules of the delivery, and commits nothing. Cancel the action on
       the register instead if it is not worth it.
     form:
       title: Open the proof of concept
@@ -1275,7 +1275,7 @@ actions:
         }
         const result = verdicts.map(v => v.hypothesis + " " + v.verdict + ": " + v.statement).join("; ");
         ctx.addItem("action", { key: a.key, title: a.title, status: "done", result: result });
-        ctx.callTool("goap-change/close", { change: a.change, reason: "proof of concept concluded, nothing to land" });
+        ctx.callTool("goap-change/close", { change: a.change, reason: "proof of concept concluded, nothing to commit" });
         return a.key + " concluded: " + result;
       }
 
@@ -1601,7 +1601,7 @@ processes:
         guidance: >
           A proof of concept is a mitigation action of kind poc on the risk register (purpose derisk, the risks it
           checks), a prototype one proposed during the framing (purpose explore, the statements about the need it
-          checks). A person opens it: a sub-change of the poc methodology builds it under relaxed rules and lands
+          checks). A person opens it: a sub-change of the poc methodology builds it under relaxed rules and commits
           nothing; its verdicts come back here (a refuted risk closed, a confirmed one needing another mitigation).
         steps:
           - name: open
@@ -1650,7 +1650,7 @@ processes:
       - name: application
         description: Apply the change to the ALM repository once delivered, after the changes it depends on
         roles: {responsible: release_manager, accountable: change_approver, informed: [product_owner, service_owner]}
-        # the changes it depends on (ADR 0108) have landed where it merges: the run waits for them, and is tried again
+        # the changes it depends on (ADR 0108) have committed where it merges: the run waits for them, and is tried again
         # when one of them moves
         pre: {"gate:software_delivery/delivery_gate": true, dependencies_met: true}
         action: apply_change

@@ -102,7 +102,7 @@ nodeTypes:
       - {name: description, label: Description, description: "What the role allows", type: string, widget: textarea, section: Identity, order: 2}
 lifecycles:
   # An entry of the platform configuration (an MCP, an adapter definition, an entry of the model gateway) is never
-  # deleted (ADR 0076): it is retired, and its readers leave it out; every state is landable
+  # deleted (ADR 0076): it is retired, and its readers leave it out; every state is committable
   # (ADR 0078), the way configuration always was.
   - name: config
     description: Whether an entry of the platform configuration is in force
@@ -113,7 +113,7 @@ lifecycles:
     transitions:
       - {name: retire, description: Take the entry out of the configuration, from: active, to: retired}
       - {name: restore, description: Put a retired entry back in force, from: retired, to: active}
-# Algorithms (ADR 0018): the rule an alias must satisfy to be accepted and to land.
+# Algorithms (ADR 0018): the rule an alias must satisfy to be accepted and to commit.
 algorithms:
   - name: alias-target
     description: An alias names a model as provider/model, except a protected one (assistant, helper), which may stay unconfigured

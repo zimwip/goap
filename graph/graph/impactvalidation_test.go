@@ -62,7 +62,7 @@ func TestImpactValidationInViews(t *testing.T) {
 	}
 }
 
-// The validation is a read model: nothing stored carries it, and an impact with no draft (a landed change) has none.
+// The validation is a read model: nothing stored carries it, and an impact with no draft (a committed change) has none.
 func TestImpactValidationNotStoredAndAbsentWithoutDraft(t *testing.T) {
 	lc := newLevelsChange(t, map[string]any{"title": "t", "colour": "red"}, map[string]any{"title": "t", "colour": "red"}, nil)
 	viewed := must[domain.Change](t)(lc.g.ChangeChecked(lc.ctx, lc.c.ID))
@@ -86,7 +86,7 @@ func TestImpactValidationNotStoredAndAbsentWithoutDraft(t *testing.T) {
 	}
 	for _, cn := range must[domain.Change](t)(lc.g.ChangeChecked(lc.ctx, lc.c.ID)).Nodes {
 		if cn.Validation != nil {
-			t.Errorf("landed impact %s has a validation %+v", cn.Key, cn.Validation)
+			t.Errorf("committed impact %s has a validation %+v", cn.Key, cn.Validation)
 		}
 	}
 }

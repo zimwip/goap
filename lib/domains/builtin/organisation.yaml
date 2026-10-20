@@ -66,7 +66,7 @@ nodeTypes:
   # home unit.
   # The user lifecycle (ADR 0048) tracks whether the account is usable, not a review workflow: proposed is a
   # transient bootstrap state (a sign-in immediately activates it in the same change), active and deactivated
-  # are both ordinary long-lived statuses a User rests in indefinitely — all of them landable.
+  # are both ordinary long-lived statuses a User rests in indefinitely — all of them committable.
   - name: User
     description: "Person or service account, with its profile and roles"
     extends: OrgUnit
@@ -168,7 +168,7 @@ lifecycles:
       - {name: retire, description: Take the entry out of force, from: active, to: retired}
       - {name: restore, description: Put a retired entry back in force, from: retired, to: active}
   # ADR 0048: active and deactivated are both ordinary resting statuses, not a review draft — every state of
-  # this lifecycle is landable (ADR 0078). proposed exists only to carry a brand-new account
+  # this lifecycle is committable (ADR 0078). proposed exists only to carry a brand-new account
   # from creation to its first activation within the same bootstrap change (ADR 0040/0042).
   - name: user
     description: Whether a user account is usable (not a review workflow)

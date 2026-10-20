@@ -78,7 +78,7 @@
       <div class="row">
         <span>{behindLine(sync?.branch ?? '', onto, behind.map(keyOfImpact))}</span>
         {#if !closed}
-          <button type="button" onclick={rebase} disabled={busy !== ''} title="Merge what landed on the branch into this change's drafts; the fields changed on both sides become conflicts">
+          <button type="button" onclick={rebase} disabled={busy !== ''} title="Merge what committed on the branch into this change's drafts; the fields changed on both sides become conflicts">
             {busy === 'rebase' ? 'Rebasing…' : 'Rebase'}
           </button>
         {/if}

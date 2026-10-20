@@ -1,6 +1,6 @@
 <script lang="ts">
   // The validators plugged on an attribute, a node type or a link type: instances of the algorithms of the domain,
-  // checked when a draft is accepted and when the change lands, in this order. One component for the three levels.
+  // checked when a draft is accepted and when the change commits, in this order. One component for the three levels.
   import { moveItem } from '../methodologyForm';
   import RowTools from './RowTools.svelte';
 

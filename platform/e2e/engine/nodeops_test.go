@@ -99,7 +99,7 @@ for (const n of ctx.changeImpacts()) if (n.review === "proposed") { ctx.impactNo
 	}
 	v, err := g.View(ctx, newTst.Ref())
 	if err != nil || len(v.Out) != 1 || v.Out[0].To != newReq.Ref() || newReq.Properties["title"] != "Use PSP v2" || newReq.ChangeImpact != req.ID {
-		t.Fatalf("the change must land with the link on the version it wrote: %+v %+v %v", v.Out, newReq, err)
+		t.Fatalf("the change must commit with the link on the version it wrote: %+v %+v %v", v.Out, newReq, err)
 	}
 
 	// a review without a comment and an unknown key are refused
@@ -160,7 +160,7 @@ func TestScriptChangeImpactsOnAFlow(t *testing.T) {
 	}
 	req, _ := g.NodeByKey(ctx, "alm", "REQ-1")
 	if req.Properties["title"] != "B" || req.Comment != "better" {
-		t.Fatalf("the adopted flow lands: %+v", req)
+		t.Fatalf("the adopted flow commits: %+v", req)
 	}
 }
 

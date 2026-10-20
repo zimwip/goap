@@ -1,26 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { awaitingReview, holdsOwnDraft, landableBirthStates, lifecycleRows, loadPosts, postKey, writeNodeInChange } from './lifecycle';
+import { awaitingReview, holdsOwnDraft, committableBirthStates, lifecycleRows, loadPosts, postKey, writeNodeInChange } from './lifecycle';
 import { graph, isDraft, type ChangeImpact, type Lifecycle } from './api';
 import type { TypeCatalog } from './stores/types.svelte';
 
-// A state is landable unless flagged notLandable (ADR 0078): the row of a node says whether it can land as it stands.
+// A state is committable unless flagged notCommittable (ADR 0078): the row of a node says whether it can commit as it stands.
 const lc: Lifecycle = {
   initial: 'draft',
-  states: [{ name: 'draft', notLandable: true }, { name: 'approved' }],
+  states: [{ name: 'draft', notCommittable: true }, { name: 'approved' }],
   transitions: [{ name: 'approve', from: 'draft', to: 'approved' }],
 };
 const cat = { lifecycle: (t?: string) => (t === 'Req' ? lc : undefined), properties: () => [], open: (t?: string) => t === 'Free' } as unknown as TypeCatalog;
 
 describe('lifecycleRows', () => {
-  it('marks a node in a notLandable state, and only that one', () => {
+  it('marks a node in a notCommittable state, and only that one', () => {
     const nodes = [
       { id: 'a', key: 'REQ-A', type: 'Req', version: 1, state: 'draft' },
       { id: 'b', key: 'REQ-B', type: 'Req', version: 1, state: 'approved' },
       { id: 'c', key: 'NOTE-C', type: 'Note', version: 1, state: '' },
     ];
     const rows = lifecycleRows(cat, nodes, nodes.map((n) => ({ id: n.id })), [], new Map(), []);
-    const landable = Object.fromEntries(rows.map((r) => [r.node.key, r.landable]));
-    expect(landable).toEqual({ 'REQ-A': false, 'REQ-B': true, 'NOTE-C': true });
+    const committable = Object.fromEntries(rows.map((r) => [r.node.key, r.committable]));
+    expect(committable).toEqual({ 'REQ-A': false, 'REQ-B': true, 'NOTE-C': true });
   });
 
   // Strict attributes: a row tells whether its type is free-form, the only case where a property that is no attribute may be set.
@@ -128,13 +128,13 @@ describe('the edit flow never reviews (ADR 0079)', () => {
   });
 });
 
-describe('landableBirthStates', () => {
-  it('leaves out the birth states a change cannot land in', () => {
+describe('committableBirthStates', () => {
+  it('leaves out the birth states a change cannot commit in', () => {
     const lc: Lifecycle = {
       initial: 'draft',
-      states: [{ name: 'draft', notLandable: true }, { name: 'proposed' }, { name: 'done', final: true }],
+      states: [{ name: 'draft', notCommittable: true }, { name: 'proposed' }, { name: 'done', final: true }],
       transitions: [{ from: 'draft', to: 'proposed' }, { from: 'proposed', to: 'done' }],
     };
-    expect(landableBirthStates(lc)).toEqual(['proposed']);
+    expect(committableBirthStates(lc)).toEqual(['proposed']);
   });
 });

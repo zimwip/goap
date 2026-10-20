@@ -1,9 +1,9 @@
 <script lang="ts">
   import { stamp, keyOf } from '../flux/signals.svelte';
   // Creating a change by hand (ADR 0024): what it is for (title, intent), how it is performed (its methodology, one of
-  // those of the project, ADR 0096), what it acts on (namespace, the branch it lands on, the baseline it starts from)
+  // those of the project, ADR 0096), what it acts on (namespace, the branch it commits on, the baseline it starts from)
   // and how it is held (its own branch, a parent change). The methodology gives the namespace and the goal the change
-  // starts with; a sub-change keeps its parent's. A namespace no change landed in has no baseline: its first change
+  // starts with; a sub-change keeps its parent's. A namespace no change committed in has no baseline: its first change
   // starts from the empty state (ADR 0056).
   import { graph, errorMessage, shortId, type Baseline, type Branch } from '../api';
   import { changes, refreshChanges, loadMethodology, published } from '../stores/catalog.svelte';
@@ -97,7 +97,7 @@
     void stamp(keyOf.baselines); // a baseline created meanwhile is a base for the change
   });
 
-  /** the change starts from the head of the branch it lands on, unless another baseline is picked */
+  /** the change starts from the head of the branch it commits on, unless another baseline is picked */
   async function pickBranch(name: string) {
     branch = name;
     try {
@@ -254,7 +254,7 @@
       {#each project.options as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
       {#if !projectKey}<option value="" disabled>Choose a project…</option>{:else if !project.options.some((o) => o.key === projectKey)}<option value={projectKey}>{projectKey}</option>{/if}
     </select>
-    <label for="nc-branch">Lands on</label>
+    <label for="nc-branch">Commits on</label>
     <select id="nc-branch" value={branch} onchange={(e) => pickBranch(e.currentTarget.value)}>
       {#each branches as b (b.name)}<option value={b.name}>{b.name}</option>{/each}
     </select>

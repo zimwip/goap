@@ -93,20 +93,20 @@ func testChangeDependencies(t *testing.T, repo Repo) {
 		t.Fatalf("the dependencies of a merged change no longer change: %v", err)
 	}
 
-	// a root change depending on A waits for the release to land: A's work is on the release's branch only
+	// a root change depending on A waits for the release to commit: A's work is on the release's branch only
 	x := create("X", "")
 	if _, err := g.SetChangeDependencies(ctx, x.ID, []domain.ChangeID{a.ID}); err != nil {
 		t.Fatal(err)
 	}
 	modify(x, w.cmp3, "three by X")
-	if _, err := g.IntegrateChange(ctx, x.ID, nil); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "has not landed") {
-		t.Fatalf("X merges before the release landed: %v", err)
+	if _, err := g.IntegrateChange(ctx, x.ID, nil); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "has not committed") {
+		t.Fatalf("X merges before the release committed: %v", err)
 	}
 	if _, err := g.IntegrateChange(ctx, release.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.IntegrateChange(ctx, x.ID, nil); err != nil {
-		t.Fatalf("X merges once the release landed: %v", err)
+		t.Fatalf("X merges once the release committed: %v", err)
 	}
 
 	// the edits are journaled; an abandoned change is no dependency

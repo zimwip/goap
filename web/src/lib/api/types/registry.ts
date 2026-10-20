@@ -13,8 +13,8 @@ export interface LifecycleState {
   name?: string;
   description?: string;
   /** working state: only held through a change */
-  /** a change cannot land while a node rests in this state (ADR 0078) */
-  notLandable?: boolean;
+  /** a change cannot commit while a node rests in this state (ADR 0078) */
+  notCommittable?: boolean;
   final?: boolean;
 }
 
@@ -804,7 +804,7 @@ export interface Methodology {
 /** Methodologies whose changes the changes of a methodology integrate (ADR 0106). */
 export interface MethodologyIntegration {
   methodologies?: string[];
-  /** those changes land only through a change of the integrator */
+  /** those changes commit only through a change of the integrator */
   exclusive?: boolean;
   /** decision (default) | auto */
   attach?: string;

@@ -13,7 +13,7 @@ import (
 // Reading the drafts of a change (ADR 0079). A draft is the working state of a node in a change, per change impact and
 // flow, the fold of the impact log (Graph.drafts). What a flow sees of a node of the change is the draft of the
 // innermost flow of its chain that holds one (the flow, its ancestors, the main flow); a draft is its flow's to edit, a
-// child flow checks the node out to write its own. Outside the change a node is still its last landed version.
+// child flow checks the node out to write its own. Outside the change a node is still its last committed version.
 
 // draftNode is the draft seen as a node: no version (Version 0), the namespace of the change, the branch of its flow.
 func draftNode(c domain.Change, d domain.Draft) domain.Node {
@@ -425,10 +425,10 @@ func (g *Graph) ChangeNodeViewByKey(ctx context.Context, id domain.ChangeID, flo
 			}
 		}
 		if ref.ID == "" && domain.NamespaceOf(c.Namespace) == domain.NamespaceOf(namespace) {
-			// a node the change committed, or a sub-change merged into it (ADR 0103): the version it landed
+			// a node the change committed, or a sub-change merged into it (ADR 0103): the version it committed
 			for _, cn := range seen {
-				if cn.Key == key && cn.Landed != nil {
-					ref = *cn.Landed
+				if cn.Key == key && cn.Committed != nil {
+					ref = *cn.Committed
 				} else if cn.Key == key && cn.Post != nil && !cn.Post.IsDraft() {
 					ref = *cn.Post
 				}

@@ -12,7 +12,7 @@ import (
 func TestEphemeralBranchHoldsNoBaseline(t *testing.T) { forEachRepo(t, testEphemeralBranch) }
 
 // testEphemeralBranch: the branch of a change is ephemeral, it holds no baseline however many commits it has, and its
-// state (its fork and its landings) still reads right (ADR 0140).
+// state (its fork and its commits) still reads right (ADR 0140).
 func testEphemeralBranch(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
@@ -190,11 +190,11 @@ func testNodeHistoryPages(t *testing.T, repo Repo) {
 	}
 }
 
-func TestDiffBaselinesByLandings(t *testing.T) { forEachRepo(t, testDiffBaselinesByLandings) }
+func TestDiffBaselinesByCommits(t *testing.T) { forEachRepo(t, testDiffBaselinesByCommits) }
 
-// testDiffBaselinesByLandings: the difference of two baselines of a branch read from what landed between them is the
+// testDiffBaselinesByCommits: the difference of two baselines of a branch read from what committed between them is the
 // one of their whole states, whatever pair is asked (ADR 0140).
-func testDiffBaselinesByLandings(t *testing.T, repo Repo) {
+func testDiffBaselinesByCommits(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
 	var heads []domain.BaselineID

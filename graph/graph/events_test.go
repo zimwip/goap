@@ -68,7 +68,7 @@ func TestObserveNodeAndBaselineEvents(t *testing.T) {
 		}
 		sink := &recSink{}
 		g.Observe(sink)
-		// a creation now lands as a change of its own (ADR 0049): besides the node's own NodeEvent, its
+		// a creation now commits as a change of its own (ADR 0049): besides the node's own NodeEvent, its
 		// Apply (and the merge of its own branch into main) advance one or more baselines, each a
 		// BaselineEvent — so the node's event is looked up among them, not assumed to be the only one.
 		n := mk("ITEM-1", "SubItem", map[string]any{"title": "hello", "prio": "high", "notes": "long text", "other": 1})

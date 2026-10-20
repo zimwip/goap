@@ -48,7 +48,7 @@ func refs(v any) map[string]bool {
 	return out
 }
 
-// A version merged on landing derives from the one written; an adopted flow replaces the runs it makes stale; a
+// A version merged on commit derives from the one written; an adopted flow replaces the runs it makes stale; a
 // rebased impact names the newer head it is checked against.
 func TestImpactEvents(t *testing.T) {
 	c := domain.Change{ID: "c1", Title: "t", CreatedAt: time.Unix(0, 0)}
@@ -62,7 +62,7 @@ func TestImpactEvents(t *testing.T) {
 		domain.ImpactEvent{ID: "v2", Change: "c1", Impact: "i1", Op: domain.ImpactRebased, Pre: &head},
 		domain.ImpactEvent{ID: "v3", Change: "c1", Impact: "i1", Op: domain.ImpactTransitioned, Post: &post, Execution: "e1"},
 		domain.ImpactEvent{ID: "v4", Change: "c1", Op: domain.ImpactAdopted, Flow: "f1", Stale: []string{"e0"}, By: "bob"},
-		domain.ImpactEvent{ID: "v5", Change: "c1", Impact: "i1", Op: domain.ImpactLanded, Landed: &merged, Baseline: "b9"},
+		domain.ImpactEvent{ID: "v5", Change: "c1", Impact: "i1", Op: domain.ImpactCommitted, Committed: &merged, Baseline: "b9"},
 	))
 	if err != nil {
 		t.Fatal(err)

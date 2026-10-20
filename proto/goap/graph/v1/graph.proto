@@ -17,7 +17,7 @@ service GraphService {
   rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
   rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
   rpc GetBaselineGraph(GetBaselineGraphRequest) returns (GetBaselineGraphResponse);
-  // GetBaselineDelta reads what moved from a baseline to a later one of its branch (ADR 0143 §4): the nodes landed in
+  // GetBaselineDelta reads what moved from a baseline to a later one of its branch (ADR 0143 §4): the nodes committed in
   // between at their version in the later one, the links leaving them, the nodes it no longer holds. INVALID_ARGUMENT
   // when the baselines do not follow each other or too much moved: read the later baseline whole.
   rpc GetBaselineDelta(GetBaselineDeltaRequest) returns (GetBaselineDeltaResponse);
@@ -79,7 +79,7 @@ service GraphService {
   // reference, version 0); ImpactNodeUpdate and the link operations edit it; an edit never reviews, an accepted review runs
   // the checks of a version on the draft and writes nothing; ImpactNodeTransition moves a node along its lifecycle (the
   // state of its draft, the node checked out first when it has none); ImpactNodeCancel drops the draft (a creation cancelled
-  // removes its impact). The versions are written when the change lands.
+  // removes its impact). The versions are written when the change commits.
   rpc ImpactNodeCreate(ImpactNodeCreateRequest) returns (ImpactNodeCreateResponse);
   rpc ImpactNodeCheckout(ImpactNodeCheckoutRequest) returns (ImpactNodeCheckoutResponse);
   rpc ImpactNodeUpdate(ImpactNodeUpdateRequest) returns (ImpactNodeUpdateResponse);
@@ -97,7 +97,7 @@ service GraphService {
   rpc WithdrawImpact(WithdrawImpactRequest) returns (WithdrawImpactResponse);
   // Take several change impacts out of the change at once, in one transaction: all of them or none.
   rpc WithdrawImpacts(WithdrawImpactsRequest) returns (WithdrawImpactsResponse);
-  // Sub-changes (ADR 0081, 0082): a sub-change lands in its parent's log, by a fast-forward. RebaseChange brings the drafts
+  // Sub-changes (ADR 0081, 0082): a sub-change commits in its parent's log, by a fast-forward. RebaseChange brings the drafts
   // the parent changed since the sub-change took them up to date (a three-way merge; the fields changed on both sides are
   // conflicts, the sub-change's value kept; a changed impact is to be reviewed again); ApplyChange rebases first.
   // ImpactNodeResolve keeps the sub-change's values for the conflicts left on an impact (an edit of a field settles its
@@ -132,7 +132,7 @@ service GraphService {
   // Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
   // the expected world state) must hold, and it is journaled.
   rpc TransitionChange(TransitionChangeRequest) returns (TransitionChangeResponse);
-  // Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
+  // Remove a change that committed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
   rpc DeleteChange(DeleteChangeRequest) returns (DeleteChangeResponse);
 
   // Staged settings (ADR 0037, ADR 0122): the edits of the settings dialog, held by the personal changes of the caller
@@ -194,7 +194,7 @@ service GraphService {
   // The impacts two flows of a change see, compared (ADR 0083): added, removed or modified, with the attribute-level
   // changes of a modified one; the identical ones are counted, not listed.
   rpc DiffFlows(DiffFlowsRequest) returns (DiffFlowsResponse);
-  // The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
+  // The graph a change sees at a level (written, accepted, committed) on a flow (ADR 0032 §5), and the graph a call on
   // the change reads (the active option's, else the reference baseline).
   rpc GetChangeView(GetChangeViewRequest) returns (GetChangeViewResponse);
   // Decision points of a change (ADR 0009 §4): opened, ruled (decided or undecidable with questions), their questions
@@ -257,7 +257,7 @@ message Node {
   string owner = 18;
   string project = 19;
   // the draft of a node in a change (ADR 0079): the node has no version while the change works, version is 0; the version
-  // is written when the change lands
+  // is written when the change commits
   bool draft = 20;
   // the nodes this one derives from (ADR 0077, merge and split): set on the first version of a successor
   repeated NodeRef origins = 21;
@@ -277,8 +277,8 @@ message NodeView {
   int32 latest = 2;
   repeated Link out = 3;
   repeated Link in = 4;
-  // the node has a lifecycle and its state is flagged notLandable (ADR 0078)
-  bool not_landable = 5;
+  // the node has a lifecycle and its state is flagged notCommittable (ADR 0078)
+  bool not_committable = 5;
 }
 
 message Baseline {
@@ -395,7 +395,7 @@ message ChangeImpact {
   // the change is committed (empty while the impact of an existing node is only proposed)
   NodeRef post = 7;
   // version on the target branch once applied
-  NodeRef landed = 8;
+  NodeRef committed = 8;
   // proposed | accepted | rejected
   string review = 9;
   repeated Review reviews = 10;
@@ -484,7 +484,7 @@ message DeleteTagResponse {}
 
 message ListBaselinesRequest {
   string namespace = 1;
-  // a page of the history of this branch (ADR 0140): its baselines landed before `before` (0: the newest), at most
+  // a page of the history of this branch (ADR 0140): its baselines committed before `before` (0: the newest), at most
   // `limit` (default 100, at most 500), with what draws them in `related`. Neither branch nor ids: every baseline of
   // the namespace.
   string branch = 2;
@@ -601,7 +601,7 @@ message ImpactEvent {
   // empty for a change-level event (adopted)
   string impact_id = 4;
   // proposed (an existing node) | created (a new node: its impact and its draft) | checkedOut | transitioned | updated |
-  // cancelled | withdrawn | reviewed | discarded | adopted | landed | rebased
+  // cancelled | withdrawn | reviewed | discarded | adopted | committed | rebased
   string op = 5;
   // the caller: the flow branch ("" = the main flow), the journal record of the action run, the principal or component
   string flow = 6;
@@ -614,7 +614,7 @@ message ImpactEvent {
   NodeRef post = 11;
   // rebased
   NodeRef pre = 12;
-  NodeRef landed = 13;
+  NodeRef committed = 13;
   // reviewed, discarded
   Review review = 14;
   // adopted: the action runs the flow replaces
@@ -1429,7 +1429,7 @@ message CommitEditsRequest {
   // caller's active project, else the default project), ADR 0054
   string owner_org = 9;
   string project_id = 10;
-  // the writer's own events, stored in the graph's outbox with the landing of the commit and delivered with the graph's
+  // the writer's own events, stored in the graph's outbox in the transaction of the commit and delivered with the graph's
   // (ADR 0136): what a registry keeping its versions in the graph emits; system callers only, never a subject of the graph
   repeated CarriedEvent events = 11;
 }
@@ -2162,12 +2162,12 @@ message GetChangeViewRequest {
   string change_id = 1;
   // flow or option (empty: the active option, else the main flow; "main": the main flow)
   string flow = 2;
-  // written (default) | accepted | landed
+  // written (default) | accepted | committed
   string level = 3;
 }
 
 message GetChangeViewResponse {
-  // a baseline without an id below landed: computed, not stored
+  // a baseline without an id below committed: computed, not stored
   Baseline baseline = 1;
 }
 

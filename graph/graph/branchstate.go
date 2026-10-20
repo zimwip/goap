@@ -10,11 +10,11 @@ import (
 )
 
 // The branch of a change holds no baseline (ADR 0140): only the lasting branches (main, the named ones) do. Its state
-// is its fork, the lasting baseline it was forked from (Branch.ForkBaseline), with the versions landed on it, the last
-// landing of each node winning (Tx.BranchLandings); a revert (domain.ReasonRevert) gives the node back the version of
+// is its fork, the lasting baseline it was forked from (Branch.ForkBaseline), with the versions committed on it, the last
+// commit of each node winning (Tx.BranchCommits); a revert (domain.ReasonRevert) gives the node back the version of
 // the fork. A sub-change's branch is forked from its parent's (ADR 0103): its fork is the lasting baseline under the
-// chain with the landings of the branches of the chain up to the order it was forked at (Branch.ForkSeq), the order of
-// landing being global.
+// chain with the commits of the branches of the chain up to the order it was forked at (Branch.ForkSeq), the order of
+// commit being global.
 
 // branchVersions reads the versions some nodes (nil: every node) have on the branch of a change, the nodes it does not
 // hold left out.
@@ -66,7 +66,7 @@ func chainVersions(ctx context.Context, tx Tx, b domain.Branch, ids []domain.Nod
 		}
 	}
 	for i := len(layers) - 1; i >= 0; i-- {
-		ls, err := tx.BranchLandings(ctx, b.Namespace, layers[i].name, layers[i].upTo, ids)
+		ls, err := tx.BranchCommits(ctx, b.Namespace, layers[i].name, layers[i].upTo, ids)
 		if err != nil {
 			return nil, err
 		}
@@ -84,28 +84,28 @@ func chainVersions(ctx context.Context, tx Tx, b domain.Branch, ids []domain.Nod
 	return out, nil
 }
 
-// endLanding ends the landing of the transaction on the branch of a change, which no baseline takes up (ADR 0140), and
-// returns its order (0: nothing landed there).
-func endLanding(tx Tx, branch string) int64 {
+// endCommit ends the commit of the transaction on the branch of a change, which no baseline takes up (ADR 0140), and
+// returns its order (0: nothing committed there).
+func endCommit(tx Tx, branch string) int64 {
 	gt, ok := unwrapGuard(tx)
 	if !ok {
 		return 0
 	}
 	branch = domain.BranchOf(branch)
-	s := gt.landing[branch]
-	delete(gt.landing, branch)
+	s := gt.commit[branch]
+	delete(gt.commit, branch)
 	return s
 }
 
 // forkPoint is where a branch forked from the branch of a change starts (ADR 0103, 0140): the lasting baseline under
-// the chain, and the order of landing up to which the landings of the chain are in its fork, allocated now: every
-// landing of the chain committed before is under it, the tree of the change being locked.
+// the chain, and the order of commit up to which the commits of the chain are in its fork, allocated now: every
+// commit of the chain committed before is under it, the tree of the change being locked.
 func forkPoint(ctx context.Context, tx Tx, parent domain.Branch) (domain.BaselineID, int64, error) {
 	if !parent.Ephemeral {
 		h, err := branchHeadHeader(ctx, tx, parent.Namespace, parent.Name)
 		return h.ID, 0, err
 	}
-	seq, err := tx.NextLanding(ctx)
+	seq, err := tx.NextCommit(ctx)
 	return parent.ForkBaseline, seq, err
 }
 
@@ -143,7 +143,7 @@ func (o onto) versions(ctx context.Context, tx Tx, ids []domain.NodeID) (map[dom
 }
 
 // moved reports whether what the branch own is forked from moved since its fork: the head of a lasting parent, else
-// the fork of the parent's branch or a landing on it since (a move of the parent's own fork shows as one of those).
+// the fork of the parent's branch or a commit on it since (a move of the parent's own fork shows as one of those).
 func (o onto) moved(ctx context.Context, tx Tx, own domain.Branch) (bool, error) {
 	if !o.parent.Ephemeral {
 		return o.head != own.ForkBaseline, nil
@@ -151,7 +151,7 @@ func (o onto) moved(ctx context.Context, tx Tx, own domain.Branch) (bool, error)
 	if o.head != own.ForkBaseline {
 		return true, nil
 	}
-	last, err := tx.LastLanding(ctx, o.parent.Name)
+	last, err := tx.LastCommit(ctx, o.parent.Name)
 	return last > own.ForkSeq, err
 }
 
@@ -186,15 +186,15 @@ func (o onto) forkOnHead(ctx context.Context, tx Tx, own *domain.Branch) error {
 // errEphemeral refuses to read the head baseline of the branch of a change, which holds none (ADR 0140): its state is
 // read with branchVersions.
 func errEphemeral(b domain.Branch) error {
-	return fmt.Errorf("branch %s is the branch of a change: it holds no baseline, its state is its fork with what landed on it: %w", b.Name, ErrInvalid)
+	return fmt.Errorf("branch %s is the branch of a change: it holds no baseline, its state is its fork with what committed on it: %w", b.Name, ErrInvalid)
 }
 
 // changeBranchHead is the state of the branch of a change as a baseline no one stores (ADR 0140): no id, its fork as
-// parent, the order of its last landing, its nodes when whole.
+// parent, the order of its last commit, its nodes when whole.
 func changeBranchHead(ctx context.Context, tx Tx, br domain.Branch, whole bool) (domain.Baseline, error) {
 	b := domain.Baseline{Namespace: br.Namespace, Branch: br.Name, ParentID: br.ForkBaseline}
 	var err error
-	if b.Seq, err = tx.LastLanding(ctx, br.Name); err != nil || !whole {
+	if b.Seq, err = tx.LastCommit(ctx, br.Name); err != nil || !whole {
 		return b, err
 	}
 	b.Nodes, err = branchVersions(ctx, tx, br, nil)

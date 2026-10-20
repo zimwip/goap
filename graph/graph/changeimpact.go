@@ -136,8 +136,8 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 			known[batch[i].ID] = true
 		}
 		for _, cn := range batch {
-			if cn.Post != nil || cn.Landed != nil || len(cn.Reviews) > 0 || cn.Recheck {
-				return fmt.Errorf("change impact %s: post, landed and reviews are set by ImpactNodeCreate / ImpactNodeCheckout, ImpactNodeReview and Apply: %w", cn.ID, ErrInvalid)
+			if cn.Post != nil || cn.Committed != nil || len(cn.Reviews) > 0 || cn.Recheck {
+				return fmt.Errorf("change impact %s: post, committed and reviews are set by ImpactNodeCreate / ImpactNodeCheckout, ImpactNodeReview and Apply: %w", cn.ID, ErrInvalid)
 			}
 			if cn.Review == "" {
 				cn.Review = domain.ReviewProposed
@@ -257,8 +257,8 @@ func (g *Graph) ImpactsOf(ctx context.Context, id domain.ChangeID, execution str
 }
 
 // ImpactNodeReview accepts or rejects a proposed change impact; accepting checks its draft, if any, as the version
-// written from it will be (ADR 0079) and writes nothing: landing does. The comment is mandatory: it is kept in the review
-// history and, once the change lands, on the version itself, so the origin of a version can be read from the node. The
+// written from it will be (ADR 0079) and writes nothing: commit does. The comment is mandatory: it is kept in the review
+// history and, once the change commits, on the version itself, so the origin of a version can be read from the node. The
 // verdict is made by a review of one entry, submitted at once (ADR 0105).
 func (g *Graph) ImpactNodeReview(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (domain.ChangeImpact, error) {
 	return g.ImpactNodeReviewOn(ctx, id, "", "", node, status, by, comment)
@@ -332,7 +332,7 @@ func (g *Graph) reviewTx(ctx context.Context, tx Tx, stage *impactStage, id doma
 	}
 	// an accepted review is gated by what a version must satisfy (ADR 0079): validators, required links, link
 	// attributes, the origins gate, checked on the draft; a refusal leaves the review proposed. Nothing is
-	// written: the version is written when the change lands
+	// written: the version is written when the change commits
 	if status == domain.ReviewAccepted {
 		if err := g.checkSettled(ctx, tx, c, node); err != nil {
 			return cn, err
@@ -469,7 +469,7 @@ func (g *Graph) reviewBatch(ctx context.Context, id domain.ChangeID, b domain.Re
 	return out, err
 }
 
-// putReviewRecord writes the record of a review the graph submits on its own (a merge accepting what it lands, ADR
+// putReviewRecord writes the record of a review the graph submits on its own (a merge accepting what it commits, ADR
 // 0105) on the main flow of a change: by the component, its entries decided. It returns the key of the review and the
 // log entry of the record, the cause of the reviewed events that follow.
 func (g *Graph) putReviewRecord(ctx context.Context, tx Tx, change domain.ChangeID, by, comment string, entries []domain.ReviewEntry) (key, cause string, err error) {

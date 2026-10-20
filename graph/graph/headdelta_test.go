@@ -57,7 +57,7 @@ func testBaselineDelta(t *testing.T, repo Repo) {
 		setEdit(f.test.Ref(), map[string]any{"title": "Pay by card"}))
 	check(b3)
 
-	// one delta over several landings names each node once, at its last version
+	// one delta over several commits names each node once, at its last version
 	d := must[BaselineDelta](t)(g.BaselineDelta(ctx, f.base.ID, b3.ID))
 	if len(d.Nodes) != 4 || len(d.Removed) != 0 {
 		t.Fatalf("delta from the fixture: %d nodes %v, removed %v", len(d.Nodes), d.Nodes, d.Removed)
@@ -91,9 +91,9 @@ func (c *countingGraph) BaselineDelta(ctx context.Context, from, to domain.Basel
 	return c.Graph.BaselineDelta(ctx, from, to)
 }
 
-// Views of the head share one reader (ADR 0145): the namespace is read whole once and moved once per landing whatever
+// Views of the head share one reader (ADR 0145): the namespace is read whole once and moved once per commit whatever
 // the number of views, and each view holds what a whole read holds, with or without the suspect links; a view asks for
-// the head at every read, so it follows a landing at once.
+// the head at every read, so it follows a commit at once.
 func TestSharedReader(t *testing.T) { forEachRepo(t, testSharedReader) }
 
 func testSharedReader(t *testing.T, repo Repo) {

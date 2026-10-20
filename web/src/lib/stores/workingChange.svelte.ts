@@ -23,7 +23,7 @@ export interface WorkingChange {
 
 export const working = $state({ change: undefined as WorkingChange | undefined });
 
-/** A change is worked in until it lands or is abandoned. */
+/** A change is worked in until it commits or is abandoned. */
 export const workable = (c?: Pick<Change, 'status'>): boolean => !!c && c.status !== 'applied' && c.status !== 'abandoned';
 
 const asWorking = (c: Change): WorkingChange => ({

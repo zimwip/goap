@@ -12,11 +12,11 @@ import (
 )
 
 // The state of a namespace at a baseline is a selection (ADR 0143): a version is complete (its properties, owner, state
-// and link set, ADR 0141) and lands on a branch at a point of one global order (Node.Landed, Baseline.Seq), so the
-// version of a node at a baseline is the last one that landed on the baseline's branch up to its order, else, past the
+// and link set, ADR 0141) and commits on a branch at a point of one global order (Node.Committed, Baseline.Seq), so the
+// version of a node at a baseline is the last one that committed on the baseline's branch up to its order, else, past the
 // fork of the branch, the one selected on the branch it was forked from at the fork. Nothing is folded and no baseline
 // stores entries: a baseline is a header, and reading the state of some nodes is one indexed read per branch of the
-// chain of forks (LandedVersions), whatever the length of the branches.
+// chain of forks (CommittedVersions), whatever the length of the branches.
 
 // stateCache keeps the whole states computed for baselines: a state never changes once its baseline exists, so an
 // entry is never stale (an id written in a transaction that rolled back is never asked again). It is bounded.
@@ -123,7 +123,7 @@ func (t *guardTx) header(ctx context.Context, id domain.BaselineID) (domain.Base
 // out: the selection on its branch up to its order, then, for the nodes not decided, on the branch it was forked from
 // at the fork, and so on.
 func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (_ map[domain.NodeID]domain.Version, err error) {
-	read := stateRead{start: time.Now(), whole: ids == nil, source: stateFromLandings}
+	read := stateRead{start: time.Now(), whole: ids == nil, source: stateFromCommits}
 	defer func() {
 		if err == nil {
 			read.record(ctx)
@@ -183,8 +183,8 @@ func branchFork(ctx context.Context, tx Tx, namespace, branch string) (domain.Ba
 }
 
 // selectState is the selection of ADR 0143 from the header of a baseline: for each node (nil ids: every node), its last
-// landing on the branch up to the order of the baseline, then the nodes not decided on the branch it was forked from
-// at the fork; a version deleting its node leaves it out. A whole state reads the landings of the branches forked off
+// commit on the branch up to the order of the baseline, then the nodes not decided on the branch it was forked from
+// at the fork; a version deleting its node leaves it out. A whole state reads the commits of the branches forked off
 // as they are (their history is theirs alone, short), and the branch at the root of the chain, whose history is the
 // namespace's, as its node list then one selection per node, in batches (§4): its cost is the number of nodes, never
 // the length of the history.
@@ -229,13 +229,13 @@ func selectState(ctx context.Context, tx Tx, b domain.Baseline, ids []domain.Nod
 			if want != nil {
 				batch = want[start:min(start+selectBatch, len(want))]
 			}
-			got, err := tx.LandedVersions(ctx, b.Namespace, b.Branch, 0, b.Seq, batch)
+			got, err := tx.CommittedVersions(ctx, b.Namespace, b.Branch, 0, b.Seq, batch)
 			if err != nil {
 				return nil, err
 			}
 			if read != nil {
 				read.chain++
-				read.landed += len(got)
+				read.committed += len(got)
 			}
 			for n, v := range got {
 				if pending == nil {
@@ -377,49 +377,49 @@ func refsOf(nodes map[domain.NodeID]domain.Version) []domain.NodeRef {
 	return refs
 }
 
-// landingOn returns the order of the baseline the transaction is landing versions in on a branch, allocated by the
-// first version, join or baseline of that branch: the versions of a landing and its baseline share it (ADR 0140).
-func (t *guardTx) landingOn(ctx context.Context, branch string) (int64, error) {
+// commitOn returns the order of the baseline the transaction is commit versions in on a branch, allocated by the
+// first version, join or baseline of that branch: the versions of a commit and its baseline share it (ADR 0140).
+func (t *guardTx) commitOn(ctx context.Context, branch string) (int64, error) {
 	branch = domain.BranchOf(branch)
-	if s, ok := t.landing[branch]; ok {
+	if s, ok := t.commit[branch]; ok {
 		return s, nil
 	}
-	s, err := t.Tx.NextLanding(ctx)
+	s, err := t.Tx.NextCommit(ctx)
 	if err != nil {
 		return 0, err
 	}
-	if t.landing == nil {
-		t.landing = map[string]int64{}
+	if t.commit == nil {
+		t.commit = map[string]int64{}
 	}
-	t.landing[branch] = s
+	t.commit[branch] = s
 	return s, nil
 }
 
-// landed gives a baseline about to be written the order of its landing, which ends.
-func (t *guardTx) landed(ctx context.Context, b *domain.Baseline) error {
+// committed gives a baseline about to be written the order of its commit, which ends.
+func (t *guardTx) committed(ctx context.Context, b *domain.Baseline) error {
 	if err := t.needChange(b.ChangeID, "baseline "+b.Name); err != nil {
 		return err
 	}
-	seq, err := t.landingOn(ctx, b.Branch)
+	seq, err := t.commitOn(ctx, b.Branch)
 	if err != nil {
 		return err
 	}
-	delete(t.landing, domain.BranchOf(b.Branch))
+	delete(t.commit, domain.BranchOf(b.Branch))
 	b.Seq, b.Nodes = seq, maps.Clone(b.Nodes)
 	t.markNew(b.ID)
 	return nil
 }
 
 // putBaselineOver writes a baseline whose state is the state of over with delta put in: a header (ADR 0143), the
-// versions of its landing selecting its state.
+// versions of its commit selecting its state.
 func (t *guardTx) putBaselineOver(ctx context.Context, b domain.Baseline, _ domain.BaselineID, _ map[domain.NodeID]domain.Version) error {
 	return t.PutBaseline(ctx, b)
 }
 
 // PutBaseline writes the header of a baseline (ADR 0143): its state is the selection at its order, the versions of its
-// landing taking it.
+// commit taking it.
 func (t *guardTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
-	if err := t.landed(ctx, &b); err != nil {
+	if err := t.committed(ctx, &b); err != nil {
 		return err
 	}
 	b.Nodes = nil

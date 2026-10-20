@@ -5,11 +5,11 @@ description: >
   something works as expected before the change invests in it. Its requirements are hypotheses: the risks of the
   parent it checks (a POC, to derisk) or statements about the need (a prototype, during the framing). Each hypothesis
   gets a probe (what to build, what to observe, the check that shows it), built and run in the workspace of the change
-  without the quality rules of the delivery, then a verdict (confirmed or refuted) a person confirms. It lands nothing:
+  without the quality rules of the delivery, then a verdict (confirmed or refuted) a person confirms. It commits nothing:
   its parent takes the verdicts back and closes it; its code stays on its branch, for reference only.
 
 namespace: alm
-# ADR 0075: the lowest level, the oracles accept a tool or a model; a POC lands nothing
+# ADR 0075: the lowest level, the oracles accept a tool or a model; a POC commits nothing
 criticality: C1
 goal: conclude
 

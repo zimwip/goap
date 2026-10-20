@@ -20,7 +20,7 @@ import (
 // branch of its own; a created node is a ImpactNodeCreate, a modified one a ImpactNodeCheckout with its ImpactNodeUpdate and link edits;
 // the state edits are transitions (ImpactNodeTransition, on the draft), each impact that modifies its node is accepted by
 // the producer and one that modifies nothing withdrawn (ADR 0102), and the change is applied. Each step is the
-// operation a change takes, in its own transaction, as a person or an agent would take it: a commit that lands nothing
+// operation a change takes, in its own transaction, as a person or an agent would take it: a commit that commits nothing
 // (ErrNothingToCommit) or fails leaves no change behind (purged); when the branch cannot be merged without conflict
 // (another change moved a node meanwhile) the change is abandoned and ErrConflict returned: the producer reads again and
 // rebuilds its edits.
@@ -48,7 +48,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		if err == nil {
 			return
 		}
-		// a commit is all or nothing: a change that landed nothing leaves no trace (purged with its drafts and its log,
+		// a commit is all or nothing: a change that committed nothing leaves no trace (purged with its drafts and its log,
 		// no key is held, ADR 0079), else it is abandoned
 		if _, perr := g.PurgeChange(ctx, c.ID); perr == nil {
 			return
@@ -170,7 +170,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 	// The producer's edits go through the rules of every change (ADR 0102): a state edit is a move of the node's draft (a
 	// node with none is checked out by the move); then each impact that modifies its node is accepted by the producer
 	// (the rationale is the comment) and one that modifies nothing (an edit restating what the node holds) is withdrawn.
-	// A commit left with nothing to land is ErrNothingToCommit.
+	// A commit left with nothing to commit is ErrNothingToCommit.
 	move := func(i int, e NodeEdit) error {
 		var node domain.NodeID
 		var cur string
@@ -225,7 +225,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 	if _, err := g.ImpactNodeReviewBatch(ctx, c.ID, accept); err != nil {
 		return res, fmt.Errorf("commit %q: %w", in.Title, err)
 	}
-	// the writer's events ride on the landing (ADR 0136): raised with change.applied, in its transaction
+	// the writer's events ride on the commit (ADR 0136): raised with change.applied, in its transaction
 	if res.Baseline, err = g.apply(withCarried(ctx, in.Events), c.ID, in.BaselineName, false); err != nil {
 		return res, err
 	}

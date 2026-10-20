@@ -42,12 +42,12 @@ func testChange(t *testing.T, g *Graph, namespace string) domain.ChangeID {
 
 // seedNode writes a node version and its outgoing links directly, the way CreateNode did before ADR 0049 made it go
 // through Commit:
-// test fixtures use it to arrange a world already sitting in a given lifecycle state (including one that cannot land,
+// test fixtures use it to arrange a world already sitting in a given lifecycle state (including one that cannot commit,
 // one, or one not reachable from the lifecycle's initial state by a single transition) without walking every
 // transition to get there — something no real caller needs, since every production write is change-shaped.
 func seedNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) {
 	n := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate,
-		Namespace: domain.NamespaceOf(in.Namespace), Key: in.Key, Type: in.Type, Properties: in.Properties, CreatedAt: g.now(), State: in.State, Landed: -1}
+		Namespace: domain.NamespaceOf(in.Namespace), Key: in.Key, Type: in.Type, Properties: in.Properties, CreatedAt: g.now(), State: in.State, Committed: -1}
 	if n.Key == "" {
 		n.Key = string(n.ID)
 	}
@@ -88,7 +88,7 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 		repo := NewMemory()
 		f(t, repo)
 		checkImpactLogs(t, repo)
-		checkLandings(t, repo)
+		checkCommits(t, repo)
 		checkStates(t, repo)
 	})
 	t.Run("sqlite", func(t *testing.T) {
@@ -104,7 +104,7 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 		repo := NewSQLite(db)
 		f(t, repo)
 		checkImpactLogs(t, repo)
-		checkLandings(t, repo)
+		checkCommits(t, repo)
 		checkStates(t, repo)
 	})
 	dsn := os.Getenv("GOAP_TEST_PG_DSN")
@@ -139,7 +139,7 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 		repo := NewPostgres(pool)
 		f(t, repo)
 		checkImpactLogs(t, repo)
-		checkLandings(t, repo)
+		checkCommits(t, repo)
 		checkStates(t, repo)
 	})
 }
@@ -248,7 +248,7 @@ func pinBaseline(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRe
 		if !ok {
 			return fmt.Errorf("the transaction of the graph is not guarded: %w", ErrInvalid)
 		}
-		seq, err := gt.landingOn(ctx, domain.MainBranch)
+		seq, err := gt.commitOn(ctx, domain.MainBranch)
 		if err != nil {
 			return err
 		}
@@ -263,8 +263,8 @@ func pinBaseline(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRe
 			if !n.Deleted {
 				nodes[n.ID] = n.Version
 			}
-			// the state is the selection of the versions landed (ADR 0143): the version lands in the pin
-			if err := landForTest(ctx, gt.Tx, r, seq); err != nil {
+			// the state is the selection of the versions committed (ADR 0143): the version commits in the pin
+			if err := commitForTest(ctx, gt.Tx, r, seq); err != nil {
 				return err
 			}
 		}
@@ -330,25 +330,25 @@ func checkVerdictCauses(ctx context.Context, tx Tx, id domain.ChangeID) error {
 	return nil
 }
 
-// landForTest makes a version written by a fixture outside a landing (seedNode) land on its branch at an order: what a
+// commitForTest makes a version written by a fixture outside a commit (seedNode) commit on its branch at an order: what a
 // pin needs for its state to select it (ADR 0143). Production code never moves the order of a version.
-func landForTest(ctx context.Context, tx Tx, r domain.NodeRef, seq int64) error {
+func commitForTest(ctx context.Context, tx Tx, r domain.NodeRef, seq int64) error {
 	switch t := tx.(type) {
 	case *memTx:
 		vs := t.st.versions[r.ID]
 		if int(r.Version) > len(vs) {
 			return fmt.Errorf("node %s: %w", r, ErrNotFound)
 		}
-		vs[r.Version-1].Landed = seq
+		vs[r.Version-1].Committed = seq
 		return nil
 	case *sqliteTx:
-		_, err := t.tx.ExecContext(ctx, `UPDATE node_version SET landed = ? WHERE node_id = ? AND version = ?`, seq, string(r.ID), int(r.Version))
+		_, err := t.tx.ExecContext(ctx, `UPDATE node_version SET committed = ? WHERE node_id = ? AND version = ?`, seq, string(r.ID), int(r.Version))
 		return err
 	case *pgTx:
-		_, err := t.tx.Exec(ctx, `UPDATE node_version SET landed = $1 WHERE node_id = $2 AND version = $3`, seq, string(r.ID), int(r.Version))
+		_, err := t.tx.Exec(ctx, `UPDATE node_version SET committed = $1 WHERE node_id = $2 AND version = $3`, seq, string(r.ID), int(r.Version))
 		return err
 	case interface{ unwrap() Tx }:
-		return landForTest(ctx, t.unwrap(), r, seq)
+		return commitForTest(ctx, t.unwrap(), r, seq)
 	}
-	return fmt.Errorf("landing a fixture version: unknown transaction %T", tx)
+	return fmt.Errorf("commit a fixture version: unknown transaction %T", tx)
 }

@@ -97,7 +97,7 @@ func SeedAccess(ctx context.Context, g *graph.Graph) (bool, error) {
 // member_of is exactly one link, ADR 0040, never left unset).
 func SeedUser(ctx context.Context, g *graph.Graph, u access.User) error {
 	user := SeedNode(access.UserKey(u.Subject), access.NodeTypeUser, u.Props())
-	// land it active (ADR 0048's user lifecycle): a User seeded this way (tools, tests) must be usable right
+	// commit it active (ADR 0048's user lifecycle): a User seeded this way (tools, tests) must be usable right
 	// away, the same as one created by createUser's sign-in flow — left "proposed" it would silently never
 	// count toward the admin floor until some unrelated later commit happened to touch User/Assignment.
 	user.State = "active"

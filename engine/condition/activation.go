@@ -318,13 +318,13 @@ func (h hydrator) item(it domain.ChangeItem) map[string]any {
 
 func (h hydrator) ref(r domain.NodeRef) map[string]any {
 	m := map[string]any{"id": string(r.ID), "version": int64(r.Version), "key": "", "type": "", "types": []any{}, "props": map[string]any{},
-		"deleted": false, "latest": int64(r.Version), "out": []any{}, "in": []any{}, "state": "", "landable": true}
+		"deleted": false, "latest": int64(r.Version), "out": []any{}, "in": []any{}, "state": "", "committable": true}
 	v, ok := h.bb.Nodes[r]
 	if !ok {
 		return m
 	}
 	m["key"], m["type"], m["props"], m["deleted"], m["latest"] = v.Key, v.Type, orEmpty(v.Properties), v.Deleted, int64(v.Latest)
-	m["state"], m["landable"] = v.State, !v.NotLandable
+	m["state"], m["committable"] = v.State, !v.NotCommittable
 	m["types"] = h.bb.TypesOf(v.Type)
 	out := make([]any, 0, len(v.Out))
 	for _, l := range v.Out {
@@ -364,7 +364,7 @@ func orEmptyList(l []any) []any {
 }
 
 // changeImpacts lists the change impacts of the change (ADR 0024): the stored ones
-// and the ones derived from its items. pre, post and landed are node views, or
+// and the ones derived from its items. pre, post and committed are node views, or
 // null while absent; a planned change impact has no post yet.
 func (h hydrator) changeImpacts() []any {
 	out := make([]any, 0, len(h.bb.Change.Nodes))
@@ -388,7 +388,7 @@ func (h hydrator) changeImpacts() []any {
 		out = append(out, map[string]any{
 			"id": string(cn.ID), "key": cn.Key, "type": cn.Type, "types": h.bb.TypesOf(cn.Type),
 			"intent": string(cn.Intent), "rationale": cn.Rationale, "review": string(cn.Review), "reviews": reviews, "comment": comment,
-			"pre": ref(cn.Pre), "post": ref(cn.Post), "landed": ref(cn.Landed),
+			"pre": ref(cn.Pre), "post": ref(cn.Post), "committed": ref(cn.Committed),
 			"planned": cn.Post == nil, "hasPost": cn.Post != nil, "drafted": cn.Drafted(), "recheck": cn.Recheck, "props": h.currentProps(cn),
 			"via": string(cn.Via), "producedBy": cn.ProducedBy, "items": items,
 		})

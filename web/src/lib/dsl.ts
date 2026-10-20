@@ -43,7 +43,7 @@ export const DSL_FUNCTIONS: DslFunction[] = [
     name: 'writeNode',
     args: ['node', '{props, links, removeLinks}'],
     returns: '',
-    doc: 'Edit a node of the change: the first write checks it out (a draft: the node has no version until the change lands), the next ones edit it in place (node: key or #nN; links: [{type, to}]). A state is a transition (impactNodeTransition).',
+    doc: 'Edit a node of the change: the first write checks it out (a draft: the node has no version until the change commits), the next ones edit it in place (node: key or #nN; links: [{type, to}]). A state is a transition (impactNodeTransition).',
     group: 'write',
   },
   { name: 'impactNodeReview', args: ['node', 'accept', 'comment'], returns: '', doc: 'Accept or reject a change impact; the comment is mandatory. An acceptance runs the validations on the draft; it is always a separate, explicit action (an edit never reviews).', group: 'write' },
@@ -95,8 +95,8 @@ export const DSL_SHAPES: Record<string, DslShape> = {
   Link: { name: 'Link', summary: 'A link between two nodes; from / to are {id, version, key, type}.', fields: ['id', 'type', 'from', 'to'] },
   ChangeImpact: {
     name: 'ChangeImpact',
-    summary: 'A node the change reads, modifies or creates. pre / post / landed are Nodes or null; post is the draft (version 0) while the change holds one.',
-    fields: ['id', 'key', 'type', 'intent', 'rationale', 'review', 'planned', 'drafted', 'pre', 'post', 'landed', 'links'],
+    summary: 'A node the change reads, modifies or creates. pre / post / committed are Nodes or null; post is the draft (version 0) while the change holds one.',
+    fields: ['id', 'key', 'type', 'intent', 'rationale', 'review', 'planned', 'drafted', 'pre', 'post', 'committed', 'links'],
   },
   Option: {
     name: 'Option',
@@ -186,7 +186,7 @@ export const ALGORITHM_USAGES: AlgorithmUsageInfo[] = [
   {
     usage: 'link_validator',
     title: 'Link validator',
-    description: 'Checks a link as a whole, with the node it leaves and the node it reaches, when the draft is accepted and at landing, after the validators of the link attributes.',
+    description: 'Checks a link as a whole, with the node it leaves and the node it reaches, when the draft is accepted and at commit, after the validators of the link attributes.',
     contract: 'Rejects with ctx.fail(msg), a throw, or by returning false / a message.',
     functions: [
       paramFn,

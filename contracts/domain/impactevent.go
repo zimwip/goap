@@ -44,11 +44,11 @@ const (
 	ImpactDiscarded ImpactOp = "discarded"
 	// ImpactAdopted is change level: Flow is adopted, Stale are the runs it replaces (ADR 0025 §5).
 	ImpactAdopted ImpactOp = "adopted"
-	// ImpactLanded records the version a change applied (Landed) in the baseline it produced (Baseline): on its own
+	// ImpactCommitted records the version a change applied (Committed) in the baseline it produced (Baseline): on its own
 	// branch when it is committed (the version is written from the draft then, which goes: Post becomes that version,
 	// ADR 0079), and again on the branch it is integrated into. The last one is the version on the target branch. A
 	// merge change records the same for the versions it writes.
-	ImpactLanded ImpactOp = "landed"
+	ImpactCommitted ImpactOp = "committed"
 	// ImpactRebased moves the pre version of a planned change impact to a newer head, to re-check (Pre).
 	ImpactRebased ImpactOp = "rebased"
 )
@@ -90,12 +90,12 @@ type ImpactEvent struct {
 	// its initial state, so the log alone rebuilds the drafts (ADR 0079).
 	Draft *Draft `json:"draft,omitempty"`
 	// FromBase marks, on checkedOut, a draft that copies its base version as is: the log stores the base only (ADR 0142).
-	FromBase *BaseCopy `json:"fromBase,omitempty"`
-	Pre      *NodeRef  `json:"pre,omitempty"` // rebased; checkedOut, transitioned: a rebase moved the pre (ADR 0101, 0144)
-	Landed   *NodeRef  `json:"landed,omitempty"`
-	// Baseline is, on landed, the baseline of the branch the version landed in (ADR 0032).
+	FromBase  *BaseCopy `json:"fromBase,omitempty"`
+	Pre       *NodeRef  `json:"pre,omitempty"` // rebased; checkedOut, transitioned: a rebase moved the pre (ADR 0101, 0144)
+	Committed *NodeRef  `json:"committed,omitempty"`
+	// Baseline is, on committed, the baseline of the branch the version committed in (ADR 0032).
 	Baseline BaselineID `json:"baseline,omitempty"`
-	// Branch is, on landed, the branch the version landed on: the change's own branch at commit, the branch it is
+	// Branch is, on committed, the branch the version committed on: the change's own branch at commit, the branch it is
 	// integrated into after (the main flow's: BranchOf).
 	Branch string   `json:"branch,omitempty"`
 	Review *Review  `json:"review,omitempty"` // reviewed, discarded
@@ -132,8 +132,8 @@ func (e ImpactEvent) Validate() error {
 		return need(e.Impact != "" && e.Review != nil, "a change impact and a review")
 	case ImpactAdopted:
 		return need(e.Impact == "" && e.Flow != "", "a flow and no change impact")
-	case ImpactLanded:
-		return need(e.Impact != "" && e.Landed != nil, "a change impact and a landed version")
+	case ImpactCommitted:
+		return need(e.Impact != "" && e.Committed != nil, "a change impact and a committed version")
 	case ImpactRebased:
 		return need(e.Impact != "" && e.Pre != nil, "a change impact and a pre version")
 	case ImpactUpdated:
@@ -207,9 +207,9 @@ func ApplyImpactEventAt(out []ChangeImpact, at int, e ImpactEvent) []ChangeImpac
 	case ImpactDiscarded:
 		cn.Reviews = append(cn.Reviews, *e.Review)
 		cn.Review = ReviewRejected
-	case ImpactLanded:
-		l := *e.Landed
-		cn.Landed = &l
+	case ImpactCommitted:
+		l := *e.Committed
+		cn.Committed = &l
 		if cn.Post == nil || cn.Post.IsDraft() {
 			p := l // the draft is written as this version (ADR 0079)
 			cn.Post = &p
@@ -238,7 +238,7 @@ func cloneImpact(cn ChangeImpact) ChangeImpact {
 	cn.Reviews = slices.Clone(cn.Reviews)
 	cn.DerivedFrom = slices.Clone(cn.DerivedFrom)
 	cn.Items = slices.Clone(cn.Items)
-	for _, r := range []**NodeRef{&cn.Pre, &cn.Post, &cn.Landed} {
+	for _, r := range []**NodeRef{&cn.Pre, &cn.Post, &cn.Committed} {
 		if *r != nil {
 			v := **r
 			*r = &v

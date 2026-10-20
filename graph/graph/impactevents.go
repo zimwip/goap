@@ -21,7 +21,7 @@ func (g *Graph) caller(ctx context.Context) string {
 }
 
 // emit appends events to the impact logs and applies each one to the projection. The events of one batched operation
-// that follow each other with one envelope (domain.SameEntry: the verdicts of a review, the versions of a landing) are
+// that follow each other with one envelope (domain.SameEntry: the verdicts of a review, the versions of a commit) are
 // one log entry (ADR 0144).
 func (g *Graph) emit(ctx context.Context, tx Tx, events ...domain.ImpactEvent) error {
 	for i := range events {
@@ -52,7 +52,7 @@ func (g *Graph) envelope(ctx context.Context, e *domain.ImpactEvent) {
 
 // impactStage is the events of an operation applied to the change before they are logged, as one entry when the
 // operation is over (flush): the verdicts of a review, which judge each other (the origins of an acceptance settled by
-// the same review) and land as one entry (ADR 0144).
+// the same review) and commit as one entry (ADR 0144).
 type impactStage struct {
 	change domain.ChangeID
 	entry  string

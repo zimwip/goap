@@ -70,7 +70,7 @@ func headOf(t *testing.T, g *Graph, c domain.Change) domain.BaselineID {
 	if b.ID != "" {
 		return b.ID
 	}
-	// a change branch holds no baseline: its state is its fork and its landings
+	// a change branch holds no baseline: its state is its fork and its commits
 	return domain.BaselineID(fmt.Sprintf("%s@%d", b.ParentID, b.Seq))
 }
 
@@ -80,7 +80,7 @@ func forkOf(t *testing.T, g *Graph, c domain.Change) domain.Branch {
 }
 
 // A sub-sub-change forks from the branch of its parent as that branch is when it is created: it sees what its parent
-// committed, never its parent's drafts; its merge lands on its parent's branch only, and climbs one level per merge.
+// committed, never its parent's drafts; its merge commits on its parent's branch only, and climbs one level per merge.
 func TestSubSubChangeBranches(t *testing.T) { forEachRepo(t, testSubSubChangeBranches) }
 
 func testSubSubChangeBranches(t *testing.T, repo Repo) {
@@ -128,7 +128,7 @@ func testSubSubChangeBranches(t *testing.T, repo Repo) {
 	if must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)).ID != mainHead {
 		t.Fatal("the leaf's merge reached main")
 	}
-	// the middle change records the leaf's work as its own: accepted, landed
+	// the middle change records the leaf's work as its own: accepted, committed
 	var recorded *domain.ChangeImpact
 	for _, cn := range must[domain.Change](t)(g.Change(ctx, mid.ID)).Nodes {
 		if cn.Key == "CMP-3" {
@@ -136,8 +136,8 @@ func testSubSubChangeBranches(t *testing.T, repo Repo) {
 			recorded = &cn
 		}
 	}
-	if recorded == nil || recorded.Review != domain.ReviewAccepted || recorded.Landed == nil {
-		t.Fatalf("the middle change records the merged node, accepted and landed: %+v", recorded)
+	if recorded == nil || recorded.Review != domain.ReviewAccepted || recorded.Committed == nil {
+		t.Fatalf("the middle change records the merged node, accepted and committed: %+v", recorded)
 	}
 	if c := must[domain.Change](t)(g.Change(ctx, leaf.ID)); c.Status != domain.ChangeApplied {
 		t.Fatalf("the merged leaf is %s", c.Status)
@@ -147,7 +147,7 @@ func testSubSubChangeBranches(t *testing.T, repo Repo) {
 		t.Fatal("a sub-change of a merged change was created")
 	}
 
-	// the middle change commits its own draft, merges into the root, the root lands everything on main
+	// the middle change commits its own draft, merges into the root, the root commits everything on main
 	mcn := must[domain.Change](t)(g.Change(ctx, mid.ID))
 	for _, cn := range mcn.Nodes {
 		if cn.Key == "CMP-2" {
@@ -170,7 +170,7 @@ func testSubSubChangeBranches(t *testing.T, repo Repo) {
 }
 
 // The guardian of a change holds its merge into its parent like a root change's into main (ADR 0102): it is asked for
-// the change being merged, with the versions it lands; a refusal leaves the parent's branch as it was.
+// the change being merged, with the versions it commits; a refusal leaves the parent's branch as it was.
 func TestSubChangeMergeGuardian(t *testing.T) { forEachRepo(t, testSubChangeMergeGuardian) }
 
 func testSubChangeMergeGuardian(t *testing.T, repo Repo) {
@@ -204,7 +204,7 @@ func testSubChangeMergeGuardian(t *testing.T, repo Repo) {
 		hasLeaf = hasLeaf || s == "leaf's"
 	}
 	if !hasLeaf {
-		t.Fatalf("the guardian judges the version the leaf lands: %v", judged)
+		t.Fatalf("the guardian judges the version the leaf commits: %v", judged)
 	}
 	if headOf(t, g, n.mid) != midHead || seen(t, g, n.mid, "CMP-3", "title") != "three" {
 		t.Fatal("a refused merge moved the parent's branch")

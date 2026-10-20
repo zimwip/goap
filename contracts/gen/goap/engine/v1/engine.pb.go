@@ -1024,7 +1024,7 @@ func (x *HumanTask) GetForm() *structpb.Struct {
 	return nil
 }
 
-// The conflicts a rebase left on a change before it lands (ADR 0101).
+// The conflicts a rebase left on a change before it commits (ADR 0101).
 type RebaseTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// the branch the change was rebased onto (a sub-change: its parent change), and the head baseline or parent id

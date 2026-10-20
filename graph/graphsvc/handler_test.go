@@ -275,7 +275,7 @@ func TestChangeImpactRPCs(t *testing.T) {
 	}
 	vs, verr := g.Versions(ctx, req1.ID)
 	if n, err := g.ChangeNode(ctx, c.ID, "", domain.NodeRef{ID: req1.ID}); err != nil || !n.IsDraft() || verr != nil || len(vs) != 1 {
-		t.Fatalf("the accepted review leaves a draft, no version, until the change lands: %+v %v %v", n, err, verr)
+		t.Fatalf("the accepted review leaves a draft, no version, until the change commits: %+v %v %v", n, err, verr)
 	}
 	log, err = h.ListChangeEvents(ctx, connect.NewRequest(&graphv1.ListChangeEventsRequest{ChangeId: string(c.ID)}))
 	if err != nil {
@@ -401,7 +401,7 @@ linkTypes:
 			}
 		}
 	}
-	// nothing derives from E1 until the change lands: the successor is a draft (ADR 0079)
+	// nothing derives from E1 until the change commits: the successor is a draft (ADR 0079)
 	r, err := h.DerivedNodes(ctx, connect.NewRequest(&graphv1.DerivedNodesRequest{Ref: &graphv1.NodeRef{Id: string(must(t, g, "E1").ID)}}))
 	if err != nil || len(r.Msg.Nodes) != 0 {
 		t.Errorf("DerivedNodes: %v, %v", r, err)

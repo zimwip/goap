@@ -101,7 +101,7 @@ func testOptions(t *testing.T, repo Repo) {
 	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
 	head := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: pre.ID}))
 	if res.Nodes[pre.ID] != head.Version || head.Version != pre.Version+1 || head.Properties["title"] != "Use Stripe" {
-		t.Fatalf("the selected option lands as one version: %v, main %+v", res.Nodes, head)
+		t.Fatalf("the selected option commits as one version: %v, main %+v", res.Nodes, head)
 	}
 }
 

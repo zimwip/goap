@@ -102,7 +102,7 @@ Decision points of the change (a question to settle, usually which option) are i
 {"type":"decisionPoint","decisionPoint":{"op":"rule","point":"<point id or #d1>","outcome":"decided","option":"<option name>","confidence":0.8,"justification":"why"}}
 {"type":"decisionPoint","decisionPoint":{"op":"rule","point":"<point id>","outcome":"undecidable","justification":"why it cannot be decided","questions":["what must be known first"]}}
 {"type":"decisionPoint","decisionPoint":{"op":"answer","questionId":"<question id>","answer":"..."}}
-A write edits the draft of the node: the first write checks it out, the next ones edit it (no version exists until the change lands). A write never reviews: a review is an operation of its own, and a write after an accepted review sends the review back to proposed. A lifecycle state is a transition of the draft. A node is written in any state of its lifecycle; a change lands only when its nodes rest in landable states (a state flagged notLandable blocks it): move a node to a landable state with a transition once its review is accepted. A node is never deleted: removing a child is a write of its parent without the link.
+A write edits the draft of the node: the first write checks it out, the next ones edit it (no version exists until the change commits). A write never reviews: a review is an operation of its own, and a write after an accepted review sends the review back to proposed. A lifecycle state is a transition of the draft. A node is written in any state of its lifecycle; a change commits only when its nodes rest in committable states (a state flagged notCommittable blocks it): move a node to a committable state with a transition once its review is accepted. A node is never deleted: removing a child is a write of its parent without the link.
 Reference nodes by their key. Reference items and change impacts created in the same answer by "#<ref>".`
 
 // ActionSystem is the system text every LLM action starts from (the item protocol), and the note added when the action
@@ -842,7 +842,7 @@ func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	c := ac.Blackboard.Change
 	b, err := ac.Graph.Apply(ctx, c.ID, name)
 	if err != nil {
-		// the rebase before landing left conflicts: a person settles them (TaskRebase); any other refusal is an error
+		// the rebase before commit left conflicts: a person settles them (TaskRebase); any other refusal is an error
 		if errors.Is(err, graphapi.ErrConflict) {
 			if task := rebaseTaskOf(ctx, ac.Graph, c.ID); task != nil {
 				return ActionResult{Rebase: task, Output: fmt.Sprintf("rebase found conflicts on %d impact(s) to settle", len(task.Impacts))}, nil

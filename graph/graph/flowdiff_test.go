@@ -117,7 +117,7 @@ func testDiffFlows(t *testing.T, repo Repo) {
 	if _, err := g.DiffFlows(ctx, c.ID, "", "no-such-flow", ""); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown flow: %v", err)
 	}
-	if _, err := g.DiffFlows(ctx, c.ID, "", a.ID, "landed"); !errors.Is(err, ErrInvalid) {
+	if _, err := g.DiffFlows(ctx, c.ID, "", a.ID, "committed"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("unknown level: %v", err)
 	}
 	_ = m2

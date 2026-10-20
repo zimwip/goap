@@ -4,7 +4,7 @@ description: >
   Release-based delivery of a project (ADR 0106): a release is a change of this methodology, the parent of the sdlc
   changes it integrates. It screens the open changes of its project for candidates, attaches the selected ones as its
   sub-changes, lets them merge into it while it integrates (each under its own guardian first), then is delivered:
-  the release lands on main, tagged with its name. In a project where it is in force an sdlc change lands only through
+  the release commits on main, tagged with its name. In a project where it is in force an sdlc change commits only through
   a release (exclusive).
 
 namespace: alm
@@ -44,7 +44,7 @@ conditions:
     description: The selected changes merged into the release
     expr: artifacts.exists(a, a.target == "integration")
   - name: delivered
-    description: The release landed
+    description: The release committed
     expr: change.status == "applied"
   - name: candidates_followed
     description: The last move of an integrated change was taken into account
@@ -99,7 +99,7 @@ actions:
   - name: deliver_release
     kind: builtin
     builtin: graph.apply
-    description: Land the release (new baseline, tagged with its name)
+    description: Commit the release (new baseline, tagged with its name)
     pre: {integrated: true}
     effects: {delivered: true}
     cost: 1
@@ -139,7 +139,7 @@ processes:
         roles: {responsible: integrator, accountable: release_manager}
         action: integrate_changes
       - name: delivery
-        description: Land the release
+        description: Commit the release
         roles: {responsible: release_manager}
         action: deliver_release
 

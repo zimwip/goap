@@ -73,7 +73,7 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 	}
 	c.Status = domain.ChangeApplied
 	c.ResultBaselineID = res.Baseline.ID
-	if err := g.land(ctx, tx, c, own, res.Change.ID, res.Baseline.ID); err != nil {
+	if err := g.commit(ctx, tx, c, own, res.Change.ID, res.Baseline.ID); err != nil {
 		return c, err
 	}
 	g.raiseApplied(ctx, tx, c, res.Baseline)
@@ -217,9 +217,9 @@ func (g *Graph) NodeByKeyOn(ctx context.Context, namespace, branch, key string) 
 	return
 }
 
-// fastForward lands a change whose target has not moved, for the nodes its branch changed, since its branch was
+// fastForward commits a change whose target has not moved, for the nodes its branch changed, since its branch was
 // forked: the versions of the branch join the target (ADR 0032), no merge version is made, and each change impact
-// lands as the version it wrote. The target is a lasting branch, which records the landing in a baseline, or the branch
+// commits as the version it wrote. The target is a lasting branch, which records the commit in a baseline, or the branch
 // of the parent change of a sub-change (ADR 0103), which holds no baseline (ADR 0140).
 func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch) (bool, error) {
 	to, err := ontoOf(ctx, tx, own)
@@ -295,9 +295,9 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	}
 	c.Status = domain.ChangeApplied
 	if to.parent.Ephemeral {
-		// the branch of the parent holds what the sub-change landed, its impacts landed there (recordInParent)
-		endLanding(tx, target)
-		if err := g.land(ctx, tx, c, own, c.ID, ""); err != nil {
+		// the branch of the parent holds what the sub-change committed, its impacts committed there (recordInParent)
+		endCommit(tx, target)
+		if err := g.commit(ctx, tx, c, own, c.ID, ""); err != nil {
 			return false, err
 		}
 		return true, tx.PutChange(ctx, c)
@@ -312,7 +312,7 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		return false, err
 	}
 	c.ResultBaselineID = res.ID
-	if err := g.land(ctx, tx, c, own, c.ID, res.ID); err != nil {
+	if err := g.commit(ctx, tx, c, own, c.ID, res.ID); err != nil {
 		return false, err
 	}
 	g.raiseApplied(ctx, tx, c, res)

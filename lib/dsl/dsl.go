@@ -66,11 +66,11 @@ type ChangeImpact struct {
 	// Planned is set while the change impact has no post version yet.
 	Planned bool `json:"planned"`
 	// Drafted is set while the change holds a draft of the node: post is then the draft (Version 0: the node has no
-	// version until the change lands, ADR 0079).
-	Drafted bool  `json:"drafted"`
-	Pre     *Node `json:"pre"`
-	Post    *Node `json:"post"`
-	Landed  *Node `json:"landed"`
+	// version until the change commits, ADR 0079).
+	Drafted   bool  `json:"drafted"`
+	Pre       *Node `json:"pre"`
+	Post      *Node `json:"post"`
+	Committed *Node `json:"committed"`
 	// Links are the outgoing links of the draft (post): from this node to the linked ones.
 	Links []Link `json:"links"`
 	// Items are the items the change impact is derived from (none when written directly).
@@ -373,7 +373,7 @@ func (c *Ctx) ImpactNodeSplit(source string, into []map[string]any) []string {
 }
 
 // WriteNode edits the draft of a declared node (ADR 0076, 0079): the first write checks the node out (a draft: no
-// version is written until the change lands), the next ones edit it. A write never reviews. node is a key of a change impact or the reference
+// version is written until the change commits), the next ones edit it. A write never reviews. node is a key of a change impact or the reference
 // returned by ImpactNode / ImpactNodeCreate; w may hold props (merged over the current ones), links ([{type, to}] with to a
 // node key or a reference of a node written earlier) and removeLinks (link ids). A lifecycle state is a transition
 // (ImpactNodeTransition); a node is removed by its parent losing the link to it.

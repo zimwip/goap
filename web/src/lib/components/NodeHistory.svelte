@@ -162,7 +162,7 @@
             <tr class:deleted={e.v.deleted}>
               <td>
                 <strong>v{e.v.version}</strong>{#if e.v.branch && e.v.branch !== 'main'} <span class="hint">{e.v.branch}</span>{/if}
-                {#if e.v.joined?.length}<span class="hint" title="also part of these branches: landed there as is (ADR 0032)">→ {e.v.joined.join(', ')}</span>{/if}
+                {#if e.v.joined?.length}<span class="hint" title="also part of these branches: committed there as is (ADR 0032)">→ {e.v.joined.join(', ')}</span>{/if}
               </td>
               <td>
                 {#if e.v.state}

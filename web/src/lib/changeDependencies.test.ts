@@ -9,7 +9,7 @@ describe('changeDependencies', () => {
     { id: 'S', title: 'Sub of B', status: 'draft', parentId: 'B' },
     { id: 'X', title: 'X', status: 'active' },
     { id: 'Z', title: 'Zed', status: 'abandoned' },
-    { id: 'L', title: 'Landed', status: 'applied' },
+    { id: 'L', title: 'Committed', status: 'applied' },
   ];
 
   it('offers the open changes that are not itself, its ancestors, its sub-changes or already depended on', () => {
@@ -22,7 +22,7 @@ describe('changeDependencies', () => {
     expect(withDependency(['A'], 'A')).toEqual(['A']);
     expect(withDependency(undefined, 'A')).toEqual(['A']);
     expect(withoutDependency(['A', 'B'], 'A')).toEqual(['B']);
-    expect(dependencyNote({ satisfied: true })).toBe('landed where this change merges');
+    expect(dependencyNote({ satisfied: true })).toBe('committed where this change merges');
     expect(dependencyNote({ reason: 'not merged yet' })).toBe('not merged yet');
     expect(dependenciesEditable({ status: 'active' })).toBe(true);
     expect(dependenciesEditable({ status: 'committed' })).toBe(false);

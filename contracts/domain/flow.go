@@ -40,7 +40,7 @@ const (
 const MainFlow = "main"
 
 // OptionIntent names why an option exists relative to its parent flow (derive: a new alternative, forked from
-// main; revise: a correction/adjustment to an already-active option or landed state; refine: a sub-branch of
+// main; revise: a correction/adjustment to an already-active option or committed state; refine: a sub-branch of
 // another option, isolating narrower work within it).
 type OptionIntent string
 

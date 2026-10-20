@@ -37,8 +37,8 @@ const (
 	goldSQLiteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution, v.owner_id, n.project_id, v.origins`
 	goldPGOnBranch     = `(v.branch = $2 OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = $2))`
 	goldSQLiteOnBranch = `(v.branch = ? OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = ?))`
-	goldPGImpactCols   = `id::text, node_id::text, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, COALESCE(via::text, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded`
-	goldSQLiteImpact   = `id, node_id, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, COALESCE(via, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded`
+	goldPGImpactCols   = `id::text, node_id::text, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, COALESCE(via::text, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded`
+	goldSQLiteImpact   = `id, node_id, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, COALESCE(via, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded`
 )
 
 func TestSQLBuildersGolden(t *testing.T) {
@@ -112,47 +112,47 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite NodesAt", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id JOIN json_each(?) r ON json_extract(r.value, '$[0]') = v.node_id AND json_extract(r.value, '$[1]') = v.version
 		      WHERE (? = '' OR n.type = ?) ORDER BY n.key`, []any{`[["n1",2],["n2",1]]`, "t"})
 
-	// The state of a baseline (ADR 0143): the versions landed on its branch
+	// The state of a baseline (ADR 0143): the versions committed on its branch
 	ids := []domain.NodeID{"n1", "n2"}
-	landed := func(id, inV, inJ, ns string) string {
+	committed := func(id, inV, inJ, ns string) string {
 		return `SELECT ` + id + `, version, deleted, reason FROM (
-		SELECT x.node_id, x.version, x.deleted, x.reason, row_number() OVER (PARTITION BY x.node_id ORDER BY x.landed DESC, x.version DESC) AS rn
+		SELECT x.node_id, x.version, x.deleted, x.reason, row_number() OVER (PARTITION BY x.node_id ORDER BY x.committed DESC, x.version DESC) AS rn
 		FROM (
-			SELECT v.node_id, v.version, v.deleted, v.reason, v.landed FROM node_version v
-			WHERE v.branch = $1 AND v.landed > $2 AND v.landed <= $3` + inV + `
+			SELECT v.node_id, v.version, v.deleted, v.reason, v.committed FROM node_version v
+			WHERE v.branch = $1 AND v.committed > $2 AND v.committed <= $3` + inV + `
 			UNION ALL
-			SELECT j.node_id, j.version, v.deleted, v.reason, j.landed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
-			WHERE j.branch = $1 AND j.landed > $2 AND j.landed <= $3` + inJ + `
+			SELECT j.node_id, j.version, v.deleted, v.reason, j.committed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
+			WHERE j.branch = $1 AND j.committed > $2 AND j.committed <= $3` + inJ + `
 		) x JOIN node n ON n.id = x.node_id WHERE n.namespace = ` + ns + `
 	) y WHERE rn = 1`
 	}
-	q, a = pg.sqlLandedVersions("", "main", 3, 9, nil)
-	check("pg LandedVersions", pg, q, a, landed("node_id::text", "", "", "$4"), []any{"main", int64(3), int64(9), "default"})
-	q, a = pg.sqlLandedVersions("", "main", 3, 9, ids)
-	check("pg LandedVersions ids", pg, q, a, `SELECT q.id::text, x.version,
+	q, a = pg.sqlCommittedVersions("", "main", 3, 9, nil)
+	check("pg CommittedVersions", pg, q, a, committed("node_id::text", "", "", "$4"), []any{"main", int64(3), int64(9), "default"})
+	q, a = pg.sqlCommittedVersions("", "main", 3, 9, ids)
+	check("pg CommittedVersions ids", pg, q, a, `SELECT q.id::text, x.version,
 			(SELECT w.deleted FROM node_version w WHERE w.node_id = q.id AND w.version = x.version),
 			(SELECT w.reason FROM node_version w WHERE w.node_id = q.id AND w.version = x.version)
 		FROM unnest($5::uuid[]) AS q(id) JOIN node n ON n.id = q.id AND n.namespace = $4
 		CROSS JOIN LATERAL (
 			SELECT u.version FROM (
-				(SELECT v.version, v.landed FROM node_version v
-				WHERE v.node_id = q.id AND v.branch = $1 AND v.landed > $2 AND v.landed <= $3 ORDER BY v.landed DESC, v.version DESC LIMIT 1)
+				(SELECT v.version, v.committed FROM node_version v
+				WHERE v.node_id = q.id AND v.branch = $1 AND v.committed > $2 AND v.committed <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
 				UNION ALL
-				(SELECT j.version, j.landed FROM node_branch j
-				WHERE j.node_id = q.id AND j.branch = $1 AND j.landed > $2 AND j.landed <= $3 ORDER BY j.landed DESC, j.version DESC LIMIT 1)
-			) u ORDER BY u.landed DESC, u.version DESC LIMIT 1
+				(SELECT j.version, j.committed FROM node_branch j
+				WHERE j.node_id = q.id AND j.branch = $1 AND j.committed > $2 AND j.committed <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
+			) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
 		) x`, []any{"main", int64(3), int64(9), "default", []string{"n1", "n2"}})
-	q, a = lite.sqlLandedVersions("", "main", 3, 9, ids)
-	check("sqlite LandedVersions ids", lite, q, a, strings.NewReplacer("$1", "?", "$2", "?", "$3", "?").Replace(landed("node_id",
+	q, a = lite.sqlCommittedVersions("", "main", 3, 9, ids)
+	check("sqlite CommittedVersions ids", lite, q, a, strings.NewReplacer("$1", "?", "$2", "?", "$3", "?").Replace(committed("node_id",
 		" AND v.node_id IN (SELECT value FROM json_each(?))", " AND j.node_id IN (SELECT value FROM json_each(?))", "?")), []any{"main", int64(3), int64(9), "default", `["n1","n2"]`})
 	q, a = pg.sqlBaselineHeader("b1")
 	check("pg BaselineHeader", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, namespace, kind, coalesce(rebased_from::text, ''), seq FROM baseline WHERE id = $1`, []any{"b1"})
 	q, a = lite.sqlBaselineHeader("b1")
 	check("sqlite BaselineHeader", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, namespace, kind, coalesce(rebased_from, ''), seq FROM baseline WHERE id = ?`, []any{"b1"})
-	q, a = pg.sqlLastLanding("change-1")
-	check("pg LastLanding", pg, q, a, `SELECT coalesce(max(landed), 0) FROM (SELECT max(landed) AS landed FROM node_version WHERE branch = $1 UNION ALL SELECT max(landed) FROM node_branch WHERE branch = $1) l`, []any{"change-1"})
-	q, a = lite.sqlLastLanding("change-1")
-	check("sqlite LastLanding", lite, q, a, `SELECT coalesce(max(landed), 0) FROM (SELECT max(landed) AS landed FROM node_version WHERE branch = ? UNION ALL SELECT max(landed) FROM node_branch WHERE branch = ?) l`, []any{"change-1"})
+	q, a = pg.sqlLastCommit("change-1")
+	check("pg LastCommit", pg, q, a, `SELECT coalesce(max(committed), 0) FROM (SELECT max(committed) AS committed FROM node_version WHERE branch = $1 UNION ALL SELECT max(committed) FROM node_branch WHERE branch = $1) l`, []any{"change-1"})
+	q, a = lite.sqlLastCommit("change-1")
+	check("sqlite LastCommit", lite, q, a, `SELECT coalesce(max(committed), 0) FROM (SELECT max(committed) AS committed FROM node_version WHERE branch = ? UNION ALL SELECT max(committed) FROM node_branch WHERE branch = ?) l`, []any{"change-1"})
 	q, a = pg.sqlBranchNodeIDs("change-1")
 	check("pg BranchNodeIDs", pg, q, a, `SELECT node_id::text FROM node_version WHERE branch = $1 UNION SELECT node_id::text FROM node_branch WHERE branch = $1`, []any{"change-1"})
 	q, a = lite.sqlBranchNodeIDs("change-1")
@@ -342,9 +342,9 @@ func TestSQLBuildersGolden(t *testing.T) {
 	checkSQL(t, "sqlite DeleteChangeImpact", lite, lite.sqlDeleteChangeImpact(), `DELETE FROM change_impact WHERE change_id = ? AND id = ?`)
 	checkSQL(t, "pg SetNodeOrigin", pg, pg.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = $3, change_impact = $4, comment = $5 WHERE node_id = $1 AND version = $2`)
 	checkSQL(t, "sqlite SetNodeOrigin", lite, lite.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = ?, change_impact = ?, comment = ? WHERE node_id = ? AND version = ?`)
-	checkSQL(t, "pg JoinBranch", pg, pg.sqlJoinBranch(), `INSERT INTO node_branch (node_id, version, branch, change_id, landed) SELECT node_id, version, $3, $4, $5 FROM node_version
+	checkSQL(t, "pg JoinBranch", pg, pg.sqlJoinBranch(), `INSERT INTO node_branch (node_id, version, branch, change_id, committed) SELECT node_id, version, $3, $4, $5 FROM node_version
 		WHERE node_id = $1 AND version = $2 AND branch <> $3 ON CONFLICT DO NOTHING`)
-	checkSQL(t, "sqlite JoinBranch", lite, lite.sqlJoinBranch(), `INSERT INTO node_branch (node_id, version, branch, change_id, landed) SELECT node_id, version, ?, ?, ? FROM node_version
+	checkSQL(t, "sqlite JoinBranch", lite, lite.sqlJoinBranch(), `INSERT INTO node_branch (node_id, version, branch, change_id, committed) SELECT node_id, version, ?, ?, ? FROM node_version
 		WHERE node_id = ? AND version = ? AND branch <> ? ON CONFLICT DO NOTHING`)
 
 	// Inserts

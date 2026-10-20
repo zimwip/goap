@@ -13,7 +13,7 @@ export function dependenciesEditable(c: Pick<Change, 'status'>): boolean {
 
 /** What a dependency says of itself: satisfied, or what it waits for. */
 export function dependencyNote(d: Dependency): string {
-  if (d.satisfied) return 'landed where this change merges';
+  if (d.satisfied) return 'committed where this change merges';
   return d.reason || 'not merged yet';
 }
 

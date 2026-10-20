@@ -85,7 +85,7 @@
       <section class="card" data-path={path}>
         <p class="hint">
           A lifecycle gives the nodes of a type a state. A node is edited in any state while it is in a change; a state flagged
-          <em>not landable</em> keeps the change from landing until the node is moved to a landable state. Node types name
+          <em>not committable</em> keeps the change from commit until the node is moved to a committable state. Node types name
           their lifecycle; a subtype inherits it. Used by {users} type(s).
         </p>
         <div class="field">

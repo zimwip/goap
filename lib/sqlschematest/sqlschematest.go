@@ -1,6 +1,6 @@
 // Package sqlschematest checks that the PostgreSQL and the SQLite migrations of a service describe the same schema
 // (ADR 0074). Both dialects are kept by hand; this guard reads the migrations of each (CREATE TABLE, CREATE INDEX,
-// ALTER TABLE ... ADD FOREIGN KEY / RENAME, DROP TABLE, in file order), reduces them to a schema in a common
+// ALTER TABLE ... ADD FOREIGN KEY / RENAME / RENAME COLUMN, DROP TABLE, in file order), reduces them to a schema in a common
 // vocabulary and reports every difference in tables, columns, nullability, defaults, keys, constraints and indexes.
 // It is test-only: no package outside _test files imports it.
 //
@@ -117,18 +117,60 @@ var (
 	reDropTable   = regexp.MustCompile(`(?is)^DROP TABLE (?:IF EXISTS )?(\w+)$`)
 	reDropIndex   = regexp.MustCompile(`(?is)^DROP INDEX (?:IF EXISTS )?(\w+)$`)
 	reRename      = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) RENAME TO (\w+)$`)
+	reRenameCol   = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) RENAME (?:COLUMN )?(\w+) TO (\w+)$`)
 	reAddFK       = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) ADD (FOREIGN KEY .*)$`)
 	reAddColumn   = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) ADD (?:COLUMN )?(\w+ .*)$`)
 	reDropColumn  = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) DROP (?:COLUMN )?(\w+)$`)
 	reStorage     = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) (?:RE)?SET \(.*\)$`)
 )
 
+// renameColumn renames a column of t, in its keys, its constraints and the indexes on it too.
+func (s *Schema) renameColumn(t *Table, from, to string) error {
+	var col *Column
+	for _, c := range t.Columns {
+		if c.Name == from {
+			col = c
+		}
+	}
+	if col == nil {
+		return fmt.Errorf("unknown column %s.%s", t.Name, from)
+	}
+	col.Name = to
+	word := regexp.MustCompile(`\b` + regexp.QuoteMeta(from) + `\b`)
+	rename := func(list []string) {
+		for i, c := range list {
+			if c == from {
+				list[i] = to
+			}
+		}
+	}
+	rename(t.PK)
+	for _, u := range t.Unique {
+		rename(u)
+	}
+	for i, fk := range t.FKs {
+		// the columns of this table only: the part before the arrow
+		if l, r, ok := strings.Cut(fk, "->"); ok {
+			t.FKs[i] = word.ReplaceAllString(l, to) + "->" + r
+		}
+	}
+	for i, c := range t.Checks {
+		t.Checks[i] = word.ReplaceAllString(c, to)
+	}
+	for _, ix := range s.Indexes {
+		if ix.Table == t.Name {
+			ix.Cols, ix.Where = word.ReplaceAllString(ix.Cols, to), word.ReplaceAllString(ix.Where, to)
+		}
+	}
+	return nil
+}
+
 func (s *Schema) apply(stmt string) error {
 	up := strings.ToUpper(stmt)
 	switch {
 	case strings.HasPrefix(up, "INSERT "), strings.HasPrefix(up, "UPDATE "), strings.HasPrefix(up, "DELETE "), strings.HasPrefix(up, "SELECT "):
 		return nil // data, not schema
-	case strings.HasPrefix(up, "CREATE SEQUENCE "):
+	case strings.HasPrefix(up, "CREATE SEQUENCE "), strings.HasPrefix(up, "ALTER SEQUENCE "):
 		return nil // a counter of one dialect (the other keeps it otherwise), not a table
 	}
 	if reStorage.MatchString(stmt) {
@@ -173,6 +215,13 @@ func (s *Schema) apply(stmt string) error {
 			}
 		}
 		return nil
+	}
+	if m := reRenameCol.FindStringSubmatch(stmt); m != nil {
+		t := s.Tables[m[1]]
+		if t == nil {
+			return fmt.Errorf("rename of a column of an unknown table %s", m[1])
+		}
+		return s.renameColumn(t, m[2], m[3])
 	}
 	if m := reAddFK.FindStringSubmatch(stmt); m != nil {
 		t := s.Tables[m[1]]

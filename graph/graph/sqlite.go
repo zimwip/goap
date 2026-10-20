@@ -25,10 +25,10 @@ var SQLiteMigrations embed.FS
 // SQLiteMigrations). The driver is registered by the caller.
 type SQLite struct {
 	db *sql.DB
-	// landing is the greatest order of landing allocated (ADR 0140), read from the database at the first allocation:
+	// commit is the greatest order of commit allocated (ADR 0140), read from the database at the first allocation:
 	// the order is global and the local mode has one process writing
-	mu      sync.Mutex
-	landing int64
+	mu     sync.Mutex
+	commit int64
 }
 
 // NewSQLite returns a repository on db.
@@ -420,21 +420,21 @@ func (t *sqliteTx) BaselineHeader(ctx context.Context, id domain.BaselineID) (do
 	return b, nil
 }
 
-func (t *sqliteTx) LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
-	ls, err := t.landings(ctx, namespace, branch, after, upTo, ids)
-	return landedVersions(ls), err
+func (t *sqliteTx) CommittedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	ls, err := t.commits(ctx, namespace, branch, after, upTo, ids)
+	return committedVersions(ls), err
 }
 
-func (t *sqliteTx) BranchLandings(ctx context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error) {
-	return t.landings(ctx, namespace, branch, 0, upTo, ids)
+func (t *sqliteTx) BranchCommits(ctx context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error) {
+	return t.commits(ctx, namespace, branch, 0, upTo, ids)
 }
 
-func (t *sqliteTx) landings(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error) {
-	out := map[domain.NodeID]Landing{}
+func (t *sqliteTx) commits(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error) {
+	out := map[domain.NodeID]CommittedVersion{}
 	if ids != nil && len(ids) == 0 {
 		return out, nil
 	}
-	q, args := dialectSQLite.sqlLandedVersions(namespace, branch, after, upTo, ids)
+	q, args := dialectSQLite.sqlCommittedVersions(namespace, branch, after, upTo, ids)
 	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -443,7 +443,7 @@ func (t *sqliteTx) landings(ctx context.Context, namespace, branch string, after
 	for rows.Next() {
 		var nid, reason string
 		var v int
-		var l Landing
+		var l CommittedVersion
 		if err := rows.Scan(&nid, &v, &l.Deleted, &reason); err != nil {
 			return nil, err
 		}
@@ -453,18 +453,18 @@ func (t *sqliteTx) landings(ctx context.Context, namespace, branch string, after
 	return out, rows.Err()
 }
 
-func (t *sqliteTx) NextLanding(ctx context.Context) (int64, error) {
+func (t *sqliteTx) NextCommit(ctx context.Context) (int64, error) {
 	r := t.repo
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.landing == 0 {
-		if err := t.tx.QueryRowContext(ctx, `SELECT max((SELECT coalesce(max(seq), 0) FROM baseline), (SELECT coalesce(max(landed), 0) FROM node_version),
-			(SELECT coalesce(max(landed), 0) FROM node_branch))`).Scan(&r.landing); err != nil {
+	if r.commit == 0 {
+		if err := t.tx.QueryRowContext(ctx, `SELECT max((SELECT coalesce(max(seq), 0) FROM baseline), (SELECT coalesce(max(committed), 0) FROM node_version),
+			(SELECT coalesce(max(committed), 0) FROM node_branch))`).Scan(&r.commit); err != nil {
 			return 0, err
 		}
 	}
-	r.landing++
-	return r.landing, nil
+	r.commit++
+	return r.commit, nil
 }
 
 func (t *sqliteTx) BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error) {
@@ -679,7 +679,7 @@ func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 	pj, _ := json.Marshal(parents)
 	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("node_version", nodeVersionColumns, ""),
 		string(n.ID), int(n.Version), string(jsonb(n.Properties)), n.Deleted, nullUUID(string(n.ChangeID)), tsText(n.CreatedAt),
-		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), string(originsJSON(n.Origins)), n.Landed)
+		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), string(originsJSON(n.Origins)), n.Committed)
 	return sqliteErr(err, "node "+n.Ref().String())
 }
 
@@ -858,12 +858,12 @@ func (t *sqliteTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, 
 	if err != nil {
 		return err
 	}
-	_, err = t.tx.ExecContext(ctx, `INSERT INTO change_impact (id, seq, change_id, node_id, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded)
+	_, err = t.tx.ExecContext(ctx, `INSERT INTO change_impact (id, seq, change_id, node_id, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded)
 		VALUES (?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM change_impact), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET node_id = excluded.node_id, key = excluded.key, type = excluded.type, intent = excluded.intent, rationale = excluded.rationale,
-			pre_version = excluded.pre_version, post_version = excluded.post_version, landed_version = excluded.landed_version, review = excluded.review,
+			pre_version = excluded.pre_version, post_version = excluded.post_version, committed_version = excluded.committed_version, review = excluded.review,
 			reviews = excluded.reviews, via = excluded.via, recheck = excluded.recheck, produced_by = excluded.produced_by, derived_from = excluded.derived_from, items = excluded.items, execution = excluded.execution, flow = excluded.flow, superseded = excluded.superseded`,
-		r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Landed, r.Review, string(r.Reviews), nullUUID(r.Via), r.Recheck, r.ProducedBy, string(r.DerivedFrom), string(r.Items), r.Execution, tsText(cn.CreatedAt), r.Flow, r.Superseded)
+		r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Committed, r.Review, string(r.Reviews), nullUUID(r.Via), r.Recheck, r.ProducedBy, string(r.DerivedFrom), string(r.Items), r.Execution, tsText(cn.CreatedAt), r.Flow, r.Superseded)
 	return sqliteErr(err, "change impact "+cn.Key)
 }
 
@@ -879,8 +879,8 @@ func (t *sqliteTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([
 		var r cnRow
 		var reviews, derived, items, created string
 		var node sql.NullString
-		var pre, post, landed sql.NullInt64
-		if err := rows.Scan(&r.ID, &node, &r.Key, &r.Type, &r.Intent, &r.Rationale, &pre, &post, &landed, &r.Review, &reviews, &r.Via, &r.Recheck, &r.ProducedBy, &derived, &items, &r.Execution, &created, &r.Flow, &r.Superseded); err != nil {
+		var pre, post, committed sql.NullInt64
+		if err := rows.Scan(&r.ID, &node, &r.Key, &r.Type, &r.Intent, &r.Rationale, &pre, &post, &committed, &r.Review, &reviews, &r.Via, &r.Recheck, &r.ProducedBy, &derived, &items, &r.Execution, &created, &r.Flow, &r.Superseded); err != nil {
 			return nil, err
 		}
 		if node.Valid {
@@ -889,7 +889,7 @@ func (t *sqliteTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([
 		for _, x := range []struct {
 			src sql.NullInt64
 			dst **int
-		}{{pre, &r.Pre}, {post, &r.Post}, {landed, &r.Landed}} {
+		}{{pre, &r.Pre}, {post, &r.Post}, {committed, &r.Committed}} {
 			if x.src.Valid {
 				v := int(x.src.Int64)
 				*x.dst = &v
@@ -935,8 +935,8 @@ func (t *sqliteTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change
 	return nil
 }
 
-func (t *sqliteTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, landed int64) error {
-	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlJoinBranch(), string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)), landed)
+func (t *sqliteTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, committed int64) error {
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlJoinBranch(), string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)), committed)
 	return sqliteErr(err, "node "+ref.String())
 }
 
@@ -1112,8 +1112,8 @@ func (t *sqliteTx) BaselineCounts(ctx context.Context, namespace string) (map[st
 	return t.typeCounts(ctx, q, args)
 }
 
-func (t *sqliteTx) LastLanding(ctx context.Context, branch string) (int64, error) {
-	q, args := dialectSQLite.sqlLastLanding(branch)
+func (t *sqliteTx) LastCommit(ctx context.Context, branch string) (int64, error) {
+	q, args := dialectSQLite.sqlLastCommit(branch)
 	var seq int64
 	err := t.tx.QueryRowContext(ctx, q, args...).Scan(&seq)
 	return seq, err

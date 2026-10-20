@@ -347,7 +347,7 @@ func (g *Graph) SuspectLinks(ctx context.Context, id domain.BaselineID) (out []d
 
 // CreateChange opens a change on a reference baseline. A sub-change
 // (ParentID) belongs to the namespace of its parent (which must have a branch of
-// its own), sees its parent's drafts and lands in its parent's log (ADR 0081).
+// its own), sees its parent's drafts and commits in its parent's log (ADR 0081).
 func (g *Graph) CreateChange(ctx context.Context, in NewChange) (c domain.Change, err error) {
 	if err := g.Bootstrap(ctx); err != nil {
 		return domain.Change{}, fmt.Errorf("bootstrap: %w", err)
@@ -816,7 +816,7 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 				return err
 			}
 			if lc := ix.lifecycleOf(v.Type); lc != nil && v.State != "" {
-				v.NotLandable = !lc.Landable(v.State)
+				v.NotCommittable = !lc.Committable(v.State)
 			}
 			bb.Nodes[r] = v
 			for _, l := range v.Out {
@@ -950,7 +950,7 @@ type BaselineHistory struct {
 	Next int64
 }
 
-// BaselineHistory returns the page of the history of a branch landed before the order before (0: the newest), at most
+// BaselineHistory returns the page of the history of a branch committed before the order before (0: the newest), at most
 // limit baselines of the branch (default 100, at most MaxBrowseLimit): headers only, never the whole namespace.
 func (g *Graph) BaselineHistory(ctx context.Context, namespace, branch string, before int64, limit int) (h BaselineHistory, err error) {
 	if limit <= 0 || limit > MaxBrowseLimit {

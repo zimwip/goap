@@ -1,7 +1,7 @@
 <script lang="ts">
   // Comparing two baselines of a namespace: what going from one to the other changes, node by node (added, removed,
   // another version with the properties that differ). The default is the baseline against its parent: what its
-  // change landed.
+  // change committed.
   import { graph, errorMessage, shortId, type Baseline, type BaselineDiff, type JsonValue, type StackChange } from '../api';
   import { changeLabel } from '../changeStack';
   import { openTab } from '../shell/tabs.svelte';

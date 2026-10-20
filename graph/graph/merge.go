@@ -224,9 +224,9 @@ func (g *Graph) SetBranchDescription(ctx context.Context, namespace, name, descr
 	})
 }
 
-// BranchHead returns the latest baseline of a branch of a namespace; the head of main before any change landed is the
+// BranchHead returns the latest baseline of a branch of a namespace; the head of main before any change committed is the
 // empty state (empty id, no nodes). The branch of a change holds no baseline (ADR 0140): its state is answered with no
-// id, its fork as parent and the order of its last landing.
+// id, its fork as parent and the order of its last commit.
 func (g *Graph) BranchHead(ctx context.Context, namespace, name string) (b domain.Baseline, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		br, err := tx.Branch(ctx, domain.NamespaceOf(namespace), domain.BranchOf(name))
@@ -298,12 +298,12 @@ func branchHead(ctx context.Context, tx Tx, namespace, name string) (domain.Base
 			return bs[i], nil
 		}
 	}
-	// no change has landed in the namespace yet: its state is the empty one (ADR 0056), the empty baseline id
+	// no change has committed in the namespace yet: its state is the empty one (ADR 0056), the empty baseline id
 	return domain.Baseline{Namespace: namespace, Branch: name, Nodes: map[domain.NodeID]domain.Version{}}, nil
 }
 
 // branchStates reads the whole state a branch was forked from and the one it holds: its fork and head baselines, or, for
-// the branch of a change, which holds none, its fork with what landed on it (ADR 0140).
+// the branch of a change, which holds none, its fork with what committed on it (ADR 0140).
 func branchStates(ctx context.Context, tx Tx, b domain.Branch) (fork, head map[domain.NodeID]domain.Version, err error) {
 	if b.Ephemeral {
 		if fork, err = forkVersions(ctx, tx, b, nil); err != nil {
@@ -505,7 +505,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		from, ours *domain.Node
 		anc        *domain.Node
 		next       domain.NodeRef
-		// join: the source version lands as is (added or fast-forward, no resolution), no merge version (ADR 0032)
+		// join: the source version commits as is (added or fast-forward, no resolution), no merge version (ADR 0032)
 		join bool
 	}
 	var todo []*merged
@@ -567,7 +567,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	// 1. the merge versions, with the change impact that explains each: a node changed on one side only joins the
 	// target as is (ADR 0032), a node changed on both sides gets a merge version
 	res.Baseline.ID = domain.BaselineID(g.newID())
-	// the merge accepts what it lands in one review, recorded before the impacts it decides (ADR 0105)
+	// the merge accepts what it commits in one review, recorded before the impacts it decides (ADR 0105)
 	whyOf := func(m *merged) string {
 		why := fmt.Sprintf("merge of %s into %s", in.From, plan.Into)
 		if len(m.cand.Conflicts) > 0 {
@@ -619,7 +619,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			}
 		}
 		m.next = n.Ref()
-		// the merge records its change impact as events, accepted and landed at once: a node the merge creates on the
+		// the merge records its change impact as events, accepted and committed at once: a node the merge creates on the
 		// target is a created event (the impact and its version), one it modifies is proposed, then written
 		declared := cn
 		declared.Review = domain.ReviewProposed
@@ -631,17 +631,17 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		} else {
 			written = append(written, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactTransitioned, By: "graph.merge", Post: &m.next})
 		}
-		// by phase, so that the verdicts of the review and the versions of the landing are one entry each (ADR 0144)
+		// by phase, so that the verdicts of the review and the versions of the commit are one entry each (ADR 0144)
 		phases[0] = append(phases[0], first)
 		phases[1] = append(phases[1], domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactReviewed, By: "graph.merge", Review: &review, Causation: cause})
 		phases[2] = append(phases[2], written...)
-		phases[3] = append(phases[3], domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, By: "graph.merge", Landed: &m.next, Baseline: res.Baseline.ID, Branch: domain.BranchOf(plan.Into)})
+		phases[3] = append(phases[3], domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, By: "graph.merge", Committed: &m.next, Baseline: res.Baseline.ID, Branch: domain.BranchOf(plan.Into)})
 		if n.Deleted {
 			delete(target, n.ID)
 			continue
 		}
 		target[n.ID] = n.Version
-		if lc := ix.lifecycleOf(n.Type); lc != nil && !lc.Landable(n.State) {
+		if lc := ix.lifecycleOf(n.Type); lc != nil && !lc.Committable(n.State) {
 			stuck = append(stuck, fmt.Sprintf("%s (%s) in %s", n.Key, n.Type, n.State))
 		}
 	}
@@ -651,7 +651,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		}
 	}
 	if len(stuck) > 0 {
-		return res, invalidf("the change leaves nodes in a state that cannot land, move them to a landable state first: %s", strings.Join(stuck, ", "))
+		return res, invalidf("the change leaves nodes in a state that cannot commit, move them to a committable state first: %s", strings.Join(stuck, ", "))
 	}
 	// 2. their links: a 3-way merge keyed by (type, target node), retargeted to the merged versions
 	newRef := map[domain.NodeID]domain.NodeRef{}

@@ -2,7 +2,7 @@
   // Moves a change to another project (ADR 0091): a root change, draft or active, with its sub-changes. The projects
   // offered are those whose methodologies include the change's; the server stays the authority (the caller's access to
   // both projects, the methodology rule). The nodes the change already acts on keep their project; the ones it creates
-  // take the new one when it lands.
+  // take the new one when it commits.
   import { errorMessage, type Change } from '../api';
   import type { MoveChoices } from '../changeProject';
   import { loadMoveOffer, moveChangeTo } from '../changeMove';

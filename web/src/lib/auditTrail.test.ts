@@ -13,12 +13,12 @@ describe('buildTrail', () => {
     entry(2, { op: 'checkedOut', pre: { id: 'n1', version: 2 }, post: draft }),
     entry(3, { op: 'updated', post: draft, patch: { props: { title: 'x' } } }),
     entry(4, { op: 'transitioned', post: draft, patch: { state: { from: 'draft', to: 'approved' } } }),
-    entry(5, { op: 'landed', landed: { id: 'n1', version: 3 }, branch: 'main' }),
+    entry(5, { op: 'committed', committed: { id: 'n1', version: 3 }, branch: 'main' }),
   ];
   const trail = buildTrail({ nodes: [{ id: 'i1', key: 'REQ-A' }] }, log, new Map(), false);
 
   it('has no review line for an edit', () => {
-    expect(trail.map((t) => t.label)).toEqual(['proposed', 'checkedOut', 'updated', 'transitioned', 'landed']);
+    expect(trail.map((t) => t.label)).toEqual(['proposed', 'checkedOut', 'updated', 'transitioned', 'committed']);
   });
 
   it('shows a draft, not a version', () => {
@@ -28,12 +28,12 @@ describe('buildTrail', () => {
     expect(trail[3].summary).toBe('draft moved from draft to approved');
   });
 
-  it('shows the version written at landing', () => {
+  it('shows the version written at commit', () => {
     expect(trail[4].summary).toBe('draft merged as v3 into main');
   });
 
-  it('says a landing on the change branch is a commit', () => {
-    const own = buildTrail({ nodes: [] }, [entry(1, { op: 'landed', landed: { id: 'n1', version: 3 }, branch: 'change-ab12cd34' })], new Map(), false);
+  it('says a commit on the change branch is a commit', () => {
+    const own = buildTrail({ nodes: [] }, [entry(1, { op: 'committed', committed: { id: 'n1', version: 3 }, branch: 'change-ab12cd34' })], new Map(), false);
     expect(own[0].summary).toBe('draft committed as v3 on branch change-ab12cd34');
   });
 });

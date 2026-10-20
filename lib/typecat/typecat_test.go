@@ -140,7 +140,7 @@ func TestCrossDomainReferences(t *testing.T) {
 name: base
 version: 1.0.0
 lifecycles:
-  - {name: simple, initial: open, states: [{name: open, notLandable: true}, {name: done}], transitions: [{name: close, from: open, to: done}]}
+  - {name: simple, initial: open, states: [{name: open, notCommittable: true}, {name: done}], transitions: [{name: close, from: open, to: done}]}
 nodeTypes:
   - {name: Item, lifecycle: simple, editor: item, attributes: [title]}
 `)

@@ -41,10 +41,10 @@ it, with the checked values of the form in `ctx.var("form")` (by field name: a `
 `Item` (artifact, decision): `{id, type, target, status, data, producedBy}` (`type` the item type, `target` what the item is about within it: the type of an artifact, the name of a signal) — `Node`: `{id, version, key, type, props}` —
 `Link`: `{id, type, from, to}` (`from`/`to`: `{id, version, key, type}`).
 
-`ChangeImpact`: `{id, key, type, intent, rationale, review, planned, drafted, pre, post, landed, links}` — the node the change reads, modifies
-or creates ([ADR 0024](adr/0024-change-impacts.md)); `pre` / `post` / `landed` are `Node`s or `null`, `planned` is set while the
+`ChangeImpact`: `{id, key, type, intent, rationale, review, planned, drafted, pre, post, committed, links}` — the node the change reads, modifies
+or creates ([ADR 0024](adr/0024-change-impacts.md)); `pre` / `post` / `committed` are `Node`s or `null`, `planned` is set while the
 node has no draft (only the impact of an existing node), `drafted` while the change holds a draft of it: `post` is then the draft
-(`version` 0: a node has no version until the change lands, [ADR 0079](adr/0079-drafts-and-versions-at-landing.md)), `links` are the
+(`version` 0: a node has no version until the change commits, [ADR 0079](adr/0079-drafts-and-versions-at-commit.md)), `links` are the
 outgoing links of the draft.
 
 `Option`: `{id, name, hypothesis, status, active, evaluation}` — an option of the change, a hypothesis explored on a flow of
@@ -68,8 +68,8 @@ the point (with the platform's policy: `decider`, `threshold`, `maxRounds`, `rou
 | `ctx.impactNodePlan(type, key, rationale)` | the change will create a node, not written yet → `"#nN"`: a change impact of intent created with no draft (an impact analysis planning what is new, green field included); a later `writeNode` of its key, in this script or another action, creates it; a change holding a planned creation does not merge (create or withdraw it) |
 | `ctx.impactNodeMerge(sources, type, key, rationale)` | merge the nodes `sources` (keys or `#nN`) into a new node, from the side of their parents: each parent loses the links to the sources and gains one to the new node, the sources stay as they are, their impacts carry the parent's impact as `via` ([ADR 0077](adr/0077-impact-node-operations.md)) → `"#nN"` of the new node (with its draft) |
 | `ctx.impactNodeSplit(source, [{type, key, rationale, props}])` | split a node into new ones, from the side of its parents → the `#nN` of each new node, in order |
-| `ctx.writeNode(node, {props, links, removeLinks})` | edit the **draft** of the node of a change impact (`node`: key or `#nN`; the first write checks the node out; no version is written until the change lands, [ADR 0079](adr/0079-drafts-and-versions-at-landing.md); `links`: `[{type, to}]`, `to` a node key or a `#nN` already written; `props` merged; `removeLinks` ids of the draft's links; a lifecycle state is `ctx.impactNodeTransition`). A write never reviews |
-| `ctx.impactNodeReview(node, accept, comment)` | accept or reject a change impact; the comment is mandatory; an explicit operation (an edit never reviews); an acceptance runs the checks of a version on the draft of the impact and writes nothing ([ADR 0079](adr/0079-drafts-and-versions-at-landing.md)) |
+| `ctx.writeNode(node, {props, links, removeLinks})` | edit the **draft** of the node of a change impact (`node`: key or `#nN`; the first write checks the node out; no version is written until the change commits, [ADR 0079](adr/0079-drafts-and-versions-at-commit.md); `links`: `[{type, to}]`, `to` a node key or a `#nN` already written; `props` merged; `removeLinks` ids of the draft's links; a lifecycle state is `ctx.impactNodeTransition`). A write never reviews |
+| `ctx.impactNodeReview(node, accept, comment)` | accept or reject a change impact; the comment is mandatory; an explicit operation (an edit never reviews); an acceptance runs the checks of a version on the draft of the impact and writes nothing ([ADR 0079](adr/0079-drafts-and-versions-at-commit.md)) |
 | `ctx.impactNodeReviewWithReserve(node, derogation, comment)` | accept a change impact with a reserve ([ADR 0075](adr/0075-verification-derogation-criticality.md)): `derogation` is the key of an open derogation in force; the operation is a review with `NodeOp.Reserve` set; the graph's review policy still applies (the reviewer is not the producer) |
 | `ctx.openDecision(question, {options, criteria, decider, threshold, maxRounds, maxDuration})` | open a decision point (`options`: names or ids, none = the open options; every other key is a policy value, handed to the graph's decision policy) → `"#dN"` |
 | `ctx.decide(point, option, confidence, justification)` | rule a point decided (`point`: id, `#dN` or `""` for the only pending one; `option`: name or id; `confidence` 0 to 1): below the point's threshold (the platform's policy) the ruling waits for a person |
@@ -110,7 +110,7 @@ is the call order. Action code is not an algorithm: it stays in the action decla
 
 | Type | Plugged in | Result |
 |---|---|---|
-| `property_validator` | `nodeTypes[].attributes[].validators: [instance]` | accepts / rejects the value of an attribute, when the draft is accepted (its accepted review) and when the change lands (a draft may be incomplete; the attributes, their types and enums are checked on every edit, ADR 0076, 0079) |
+| `property_validator` | `nodeTypes[].attributes[].validators: [instance]` | accepts / rejects the value of an attribute, when the draft is accepted (its accepted review) and when the change commits (a draft may be incomplete; the attributes, their types and enums are checked on every edit, ADR 0076, 0079) |
 | `node_validator` | `nodeTypes[].validators: [instance]` | accepts / rejects a node as a whole (rules across attributes), after the attribute validators, at the same moments |
 | `link_validator` | `linkTypes[].validators: [instance]` | accepts / rejects a link as a whole, with the node it leaves and the node it reaches (rules across both ends and the link's properties), after the validators of the link's attributes (which run too, ADR 0100), at the same moments |
 | `transition_guard` | `lifecycles[].transitions[].guards: [instance]` | allows / refuses the transition, when it is taken (`ImpactNodeTransition`, ADR 0076) |
@@ -136,7 +136,7 @@ or by returning `false` or a message string.
 | `ctx.children()` | guard, action: the nodes a document contains (`Node[]`) |
 | `ctx.change()` | guard, action: `{id, title, intent, methodology, goal}` |
 | `ctx.transition()` | guard, action: `{name, from, to}` |
-| `ctx.impact()` | guard: the impact of the node in the change, `{intent, review}` ([ADR 0076](adr/0076-checkout-working-versions.md): a transition that requires a review checks it); a CEL guard also sees `change` (`id`, `title`, `intent`, `methodology`, `goal`, `state`, `status`) and `draft` (`key`, `type`, `state` it goes to, `props`, `owner`, `links`, `base` version it was checked out from, `new`), [ADR 0079](adr/0079-drafts-and-versions-at-landing.md) |
+| `ctx.impact()` | guard: the impact of the node in the change, `{intent, review}` ([ADR 0076](adr/0076-checkout-working-versions.md): a transition that requires a review checks it); a CEL guard also sees `change` (`id`, `title`, `intent`, `methodology`, `goal`, `state`, `status`) and `draft` (`key`, `type`, `state` it goes to, `props`, `owner`, `links`, `base` version it was checked out from, `new`), [ADR 0079](adr/0079-drafts-and-versions-at-commit.md) |
 | `ctx.setProp(name, value)` / `ctx.removeProp(name)` | action |
 
 ```js

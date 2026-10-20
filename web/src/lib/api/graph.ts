@@ -31,7 +31,7 @@ export function reviewUpdateRequest(changeId: string, key: string, e: ReviewEdit
 
 export const graph = {
   /** namespace is required: baselines are scoped to one namespace each. With `branch`, a page of its history (ADR
-   * 0140): the baselines landed before `before` (none: the newest), at most `limit`, with what draws them in `related`
+   * 0140): the baselines committed before `before` (none: the newest), at most `limit`, with what draws them in `related`
    * and the `before` of the older page in `next` ("0" or absent: none); with `ids`, those headers only. */
   listBaselines: (namespace: string, signal?: AbortSignal, opts: { branch?: string; before?: string; limit?: number; ids?: string[] } = {}) =>
     rpc<{ namespace: string; branch?: string; before?: string; limit?: number; ids?: string[] }, { baselines?: Baseline[]; related?: Baseline[]; next?: string }>(
@@ -250,7 +250,7 @@ export const graph = {
     rpc<{ changeId: string; question: string; answer: string }, { point?: DecisionPoint }>(GRAPH, 'AnswerQuestion', { changeId, question, answer }),
   ratifyDecision: (changeId: string, point: string, accept: boolean, comment: string) =>
     rpc<{ changeId: string; point: string; accept: boolean; comment: string }, { point?: DecisionPoint }>(GRAPH, 'RatifyDecision', { changeId, point, accept, comment }),
-  /** The graph of a change at a level (written, accepted, landed) on a flow (ADR 0032 §5). */
+  /** The graph of a change at a level (written, accepted, committed) on a flow (ADR 0032 §5). */
   getChangeView: (changeId: string, flow: string, level: string, signal?: AbortSignal) =>
     rpc<{ changeId: string; flow: string; level: string }, { baseline?: Baseline }>(GRAPH, 'GetChangeView', { changeId, flow, level }, signal),
   /** What merging a branch into another would do. */
@@ -265,13 +265,13 @@ export const graph = {
   getNode: (ref: NodeRef, signal?: AbortSignal, scope?: { changeId: string; flow?: string }) =>
     rpc<
       { ref: NodeRef; changeId?: string; flow?: string },
-      { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; notLandable?: boolean } }
+      { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; notCommittable?: boolean } }
     >(GRAPH, 'GetNode', { ref, ...(scope ? { changeId: scope.changeId, flow: scope.flow ?? '' } : {}) }, signal),
   /** A node of a change by key, as the change sees it (ADR 0079). */
   getChangeNodeByKey: (key: string, namespace: string, scope: { changeId: string; flow?: string }, signal?: AbortSignal) =>
     rpc<
       { key: string; namespace: string; changeId: string; flow: string },
-      { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; notLandable?: boolean } }
+      { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; notCommittable?: boolean } }
     >(GRAPH, 'GetNode', { key, namespace, changeId: scope.changeId, flow: scope.flow ?? '' }, signal),
   /** A page of the versions of a node, all branches, by version (ADR 0140): the latest `limit` (default 50) below the
    * version `before`; `next` is the `before` of the older page (absent: none). */
@@ -284,7 +284,7 @@ export const graph = {
   proposeImpact: (changeId: string, nodes: ChangeImpact[]) =>
     rpc<{ changeId: string; nodes: ChangeImpact[] }, { nodes?: ChangeImpact[] }>(GRAPH, 'ProposeImpact', { changeId, nodes }),
   // The node operations of a change (ADR 0076): a node is created or checked out in a change (a draft: the node has
-  // no version until the change lands, ADR 0079), edited in place (properties, owner, outgoing links), moved along its
+  // no version until the change commits, ADR 0079), edited in place (properties, owner, outgoing links), moved along its
   // lifecycle (a transition on a node with no draft checks it out first). An edit never reviews: the review is explicit. flow: the flow or
   // option written on ('main' names the main flow, '' is the active option).
   /** Creates a node in a change: the impact (intent created) and its draft. */
@@ -382,7 +382,7 @@ export const graph = {
       processIds.length ? { changeId, processIds } : { changeId },
       signal,
     ),
-  /** Removes a change that landed nothing, with its log (ADR 0037); refused once anything of it is applied or used. */
+  /** Removes a change that committed nothing, with its log (ADR 0037); refused once anything of it is applied or used. */
   deleteChange: (changeId: string) => rpc<{ changeId: string }, { change?: Change }>(GRAPH, 'DeleteChange', { changeId }),
   /** The settings dialog's edits not saved yet (ADR 0037, 0122): the personal changes of the caller, one per namespace. */
   getPendingSettings: () => rpc<Empty, PendingSettings>(GRAPH, 'GetPendingSettings', {}),

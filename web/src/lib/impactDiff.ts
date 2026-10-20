@@ -1,5 +1,5 @@
 // The diff of one change impact (the Diff button of the Impacts pane): the node as the change holds it (its draft, or
-// the version its landing wrote) against the version it was checked out from (ADR 0079), field by field: state, owner,
+// the version its commit wrote) against the version it was checked out from (ADR 0079), field by field: state, owner,
 // properties, and outgoing links (a link is its type and its target node; a draft's links point at exact versions or
 // at drafts, so the target's version is not compared). A node the change creates has no base: everything is added.
 import { graph, type ChangeImpact, type FieldChange, type GraphNode, type JsonValue, type Link } from './api';
@@ -65,7 +65,7 @@ export function nodeChanges(before: NodeSide | undefined, after: NodeSide | unde
 export interface ImpactDiffView {
   /** the version the change started from (undefined: the change creates the node) */
   base?: GraphNode;
-  /** what the change holds: its draft, or the version its landing wrote (undefined: planned, no draft yet) */
+  /** what the change holds: its draft, or the version its commit wrote (undefined: planned, no draft yet) */
   after?: GraphNode;
   changes: FieldChange[];
 }
@@ -74,10 +74,10 @@ export interface ImpactDiffView {
 export async function loadImpactDiff(changeId: string, impact: ChangeImpact, flow = '', signal?: AbortSignal): Promise<ImpactDiffView> {
   const scope = { changeId, flow };
   const pre = impact.pre?.id ? impact.pre : undefined;
-  const post = impact.landed?.id ? impact.landed : impact.post?.id ? impact.post : undefined;
+  const post = impact.committed?.id ? impact.committed : impact.post?.id ? impact.post : undefined;
   const [before, after] = await Promise.all([
     pre ? graph.getNode(pre, signal).then((r) => r.view) : undefined,
-    // a draft is read through the change (ADR 0079); a landed version is read as it is
+    // a draft is read through the change (ADR 0079); a committed version is read as it is
     post ? graph.getNode(post, signal, post.version ? undefined : scope).then((r) => r.view) : undefined,
   ]);
   if (!after) return { base: before?.node, changes: [] };

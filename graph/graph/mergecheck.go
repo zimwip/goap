@@ -9,7 +9,7 @@ import (
 
 // The merge of a change is held by its guardian (ADR 0102), the same as its transitions (ADR 0058): the lifecycle of
 // the change must be in a final state, then the methodology has its say (ChangeLifecycles.Merge: the goal of the
-// Activity the change is scoped to), else the landable states of the domain decide (ADR 0078); then the outer
+// Activity the change is scoped to), else the committable states of the domain decide (ADR 0078); then the outer
 // guardians of its chain, innermost first (ADR 0106). Before them, the changes it depends on must have reached the
 // branch it merges into (ADR 0108). Asked in the transaction of the merge (ADR 0140): the guardian may read the graph, with the context it is given.
 
@@ -17,7 +17,7 @@ import (
 func (g *Graph) checkMerge(ctx context.Context, id domain.ChangeID) error {
 	var c domain.Change
 	var bb domain.Blackboard
-	var landed []domain.NodeView
+	var committed []domain.NodeView
 	var deps []domain.Dependency
 	var logs map[string][]domain.LogEntry
 	err := g.repo.InTx(ctx, func(tx Tx) (err error) {
@@ -30,7 +30,7 @@ func (g *Graph) checkMerge(ctx context.Context, id domain.ChangeID) error {
 		if deps, err = dependenciesOf(ctx, tx, c); err != nil {
 			return err
 		}
-		bb, landed, err = g.mergeBlackboard(ctx, tx, c)
+		bb, committed, err = g.mergeBlackboard(ctx, tx, c)
 		bb = bb.WithFacet(domain.FacetDependencies, deps)
 		return err
 	})
@@ -54,15 +54,15 @@ func (g *Graph) checkMerge(ctx context.Context, id domain.ChangeID) error {
 			return fmt.Errorf("change %s is in state %s of lifecycle %s: it is merged once it is in a final state: %w", c.ID, c.State, c.Lifecycle, ErrConflict)
 		}
 	}
-	if err := g.ownGuardianMerge(ctx, c, bb, landed); err != nil {
+	if err := g.ownGuardianMerge(ctx, c, bb, committed); err != nil {
 		return err
 	}
 	// then the outer guardians of its chain (ADR 0106), innermost first
 	return g.checkGuardians(ctx, bb, "")
 }
 
-// ownGuardianMerge is the say of the change's own methodology on its merge: its Activity goal, else the landable states.
-func (g *Graph) ownGuardianMerge(ctx context.Context, c domain.Change, bb domain.Blackboard, landed []domain.NodeView) error {
+// ownGuardianMerge is the say of the change's own methodology on its merge: its Activity goal, else the committable states.
+func (g *Graph) ownGuardianMerge(ctx context.Context, c domain.Change, bb domain.Blackboard, committed []domain.NodeView) error {
 	if g.Lifecycles != nil {
 		decided, ok, err := g.Lifecycles.Merge(ctx, c, bb)
 		switch {
@@ -75,19 +75,19 @@ func (g *Graph) ownGuardianMerge(ctx context.Context, c domain.Change, bb domain
 		}
 	}
 	var stuck []string
-	for _, n := range landed {
-		if n.NotLandable {
+	for _, n := range committed {
+		if n.NotCommittable {
 			stuck = append(stuck, fmt.Sprintf("%s (%s) in %s", n.Key, n.Type, n.State))
 		}
 	}
 	if len(stuck) > 0 {
-		return invalidf("the change leaves nodes in a state that cannot land, move them to a landable state first: %s", joinSorted(stuck))
+		return invalidf("the change leaves nodes in a state that cannot commit, move them to a committable state first: %s", joinSorted(stuck))
 	}
 	return nil
 }
 
-// mergeBlackboard is what the guardian judges: the change with, for each impact, its pre version and what it lands (the
-// version on the change's branch), those landed nodes returned apart.
+// mergeBlackboard is what the guardian judges: the change with, for each impact, its pre version and what it commits (the
+// version on the change's branch), those committed nodes returned apart.
 func (g *Graph) mergeBlackboard(ctx context.Context, tx Tx, c domain.Change) (domain.Blackboard, []domain.NodeView, error) {
 	bb := domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}}
 	ix, err := g.typesAt(ctx, tx, c.BaselineID)
@@ -117,7 +117,7 @@ func (g *Graph) mergeBlackboard(ctx context.Context, tx Tx, c domain.Change) (do
 		if cn.Pre != nil {
 			refs = append(refs, *cn.Pre)
 		}
-		if at, ok := head[nodeOf(cn)]; ok && cn.Landed != nil {
+		if at, ok := head[nodeOf(cn)]; ok && cn.Committed != nil {
 			refs = append(refs, domain.NodeRef{ID: nodeOf(cn), Version: at})
 		}
 	}
@@ -127,11 +127,11 @@ func (g *Graph) mergeBlackboard(ctx context.Context, tx Tx, c domain.Change) (do
 	view := func(ref domain.NodeRef) (domain.NodeView, error) {
 		v, err := viewIn(ctx, tx, r, ref)
 		if lc := ix.lifecycleOf(v.Type); err == nil && lc != nil && v.State != "" {
-			v.NotLandable = !lc.Landable(v.State)
+			v.NotCommittable = !lc.Committable(v.State)
 		}
 		return v, err
 	}
-	var landed []domain.NodeView
+	var committed []domain.NodeView
 	for _, cn := range impacts {
 		if cn.Pre != nil {
 			v, err := view(*cn.Pre)
@@ -141,7 +141,7 @@ func (g *Graph) mergeBlackboard(ctx context.Context, tx Tx, c domain.Change) (do
 			bb.Nodes[*cn.Pre] = v
 		}
 		at, ok := head[nodeOf(cn)]
-		if !ok || cn.Landed == nil {
+		if !ok || cn.Committed == nil {
 			continue
 		}
 		to := &domain.NodeRef{ID: nodeOf(cn), Version: at}
@@ -150,10 +150,10 @@ func (g *Graph) mergeBlackboard(ctx context.Context, tx Tx, c domain.Change) (do
 			return bb, nil, err
 		}
 		bb.Nodes[*to] = v
-		bb.Nodes[*cn.Post] = v // the impact's post reads what it lands
-		landed = append(landed, v)
+		bb.Nodes[*cn.Post] = v // the impact's post reads what it commits
+		committed = append(committed, v)
 	}
-	return bb, landed, nil
+	return bb, committed, nil
 }
 
 // mainImpactsOf are the impacts of the main flow of a change: the ones its commit and its merge look at.

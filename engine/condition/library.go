@@ -88,7 +88,7 @@ var libraries = map[string][]Definition{
 		{Name: "description_accepted", Expr: fmt.Sprintf(`assessments.exists(a, a.key == "description" && a.current && a.answered && a.score >= %d)`, AcceptableScore), Description: fmt.Sprintf("the description is rated, with a score of %d or more", AcceptableScore)},
 	},
 	LibraryDerogations: {
-		// a change cannot land on a derogation that ran out; the debt is the count of the open ones
+		// a change cannot commit on a derogation that ran out; the debt is the count of the open ones
 		{Name: "no_expired_derogation", Expr: `!derogations.exists(d, d.expired)`, Description: "no derogation of the change has run out"},
 		{Name: "derogation_debt", Expr: fmt.Sprintf(`derogations.filter(d, d.open).size() >= %d`, DerogationDebtLimit), Description: "too many derogations are open"},
 	},

@@ -7,10 +7,10 @@ import (
 	"slices"
 )
 
-// Drafts and versions at landing (ADR 0079). During a change a node has no version: its working state in the change is a
+// Drafts and versions at commit (ADR 0079). During a change a node has no version: its working state in the change is a
 // Draft, one per change impact and flow, the fold (ADR 0029, 0030) of the impact events that carry it (not stored): `created`
-// and `checkedOut` carry the initial state, `updated` and `transitioned` patches, `cancelled`, `withdrawn` and `landed`
-// drop it. Landing (CommitChange) writes the node version from the draft and the draft goes.
+// and `checkedOut` carry the initial state, `updated` and `transitioned` patches, `cancelled`, `withdrawn` and `committed`
+// drop it. Commit (CommitChange) writes the node version from the draft and the draft goes.
 
 // IsDraft reports a reference to the draft of a node in a change: the node, no version (Version 0). Outside a change a
 // reference with Version 0 means the latest version of the node on main.
@@ -20,7 +20,7 @@ func (r NodeRef) IsDraft() bool { return r.ID != "" && r.Version == 0 }
 func DraftRef(id NodeID) NodeRef { return NodeRef{ID: id} }
 
 // DraftLink is an outgoing link of a draft: To is an exact node version, or a draft reference (Version 0) to a node the
-// change writes, resolved to the version landing writes for it.
+// change writes, resolved to the version commit writes for it.
 type DraftLink struct {
 	ID         LinkID         `json:"id"`
 	Type       string         `json:"type"`
@@ -34,7 +34,7 @@ type Draft struct {
 	Impact ChangeImpactID `json:"impactId"`
 	// Flow is the flow the draft belongs to ("" = the main flow): a flow checks the node out to write its own draft.
 	Flow string `json:"flow,omitempty"`
-	// Node is the id of the node, allocated when the draft is created and stable until landing.
+	// Node is the id of the node, allocated when the draft is created and stable until commit.
 	Node  NodeID `json:"node"`
 	Key   string `json:"key"`
 	Type  string `json:"type"`
@@ -47,7 +47,7 @@ type Draft struct {
 	// Base is the version the draft was checked out from (nil for a creation).
 	Base *NodeRef `json:"base,omitempty"`
 	// MergedWith is, for the draft a rebase of a committed change merged (ADR 0102), the version on the head of the target
-	// branch it was merged with: the second parent of the version it lands as.
+	// branch it was merged with: the second parent of the version it commits as.
 	MergedWith *NodeRef `json:"mergedWith,omitempty"`
 	// Execution is the action run that checked the node out (what a relaunch of a step marks stale, ADR 0025).
 	Execution string      `json:"execution,omitempty"`
@@ -317,7 +317,7 @@ func ApplyDraftEvent(drafts []Draft, e ImpactEvent, impacts []ChangeImpact) []Dr
 		case next != nil:
 			out = append(out, *next)
 		}
-	case ImpactWithdrawn, ImpactLanded:
+	case ImpactWithdrawn, ImpactCommitted:
 		out = slices.DeleteFunc(out, func(d Draft) bool { return d.Impact == e.Impact })
 	case ImpactAdopted:
 		// the adopted flow's drafts were installed on the main flow by the events that follow (see the adoption)
@@ -348,12 +348,12 @@ func DraftSeenBy(events []ImpactEvent, impact ChangeImpactID, chain []string, st
 	order := append(slices.Clone(chain), "")
 	rows := map[string]*Draft{}
 	for _, e := range events {
-		gone := e.Op == ImpactLanded || e.Op == ImpactWithdrawn
+		gone := e.Op == ImpactCommitted || e.Op == ImpactWithdrawn
 		if e.Impact != impact || !slices.Contains(order, e.Flow) || (stale(e.Execution) && !gone) {
 			continue
 		}
 		switch e.Op {
-		case ImpactWithdrawn, ImpactLanded:
+		case ImpactWithdrawn, ImpactCommitted:
 			clear(rows)
 		case ImpactCreated, ImpactCheckedOut, ImpactTransitioned, ImpactUpdated, ImpactCancelled:
 			rows[e.Flow] = applyDraft(rows[e.Flow], e)

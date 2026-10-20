@@ -3,15 +3,15 @@ import { changeSummary, diffSummary, impactEntities, stepEntities, transitionEnt
 
 describe('change screen facts', () => {
   const impacts = [
-    { id: 'I1', key: 'REQ-1', type: 'alm@Requirement', intent: 'modified', review: 'accepted', state: 'approved', landable: true },
-    { id: 'I2', key: 'REQ-2', type: 'alm@Requirement', intent: 'created', review: 'proposed', state: 'draft', landable: false },
+    { id: 'I1', key: 'REQ-1', type: 'alm@Requirement', intent: 'modified', review: 'accepted', state: 'approved', committable: true },
+    { id: 'I2', key: 'REQ-2', type: 'alm@Requirement', intent: 'created', review: 'proposed', state: 'draft', committable: false },
     { id: 'I3', key: 'TC-1', review: undefined },
   ];
 
   it('lists the impacts awaiting review first, with their state and a few props', () => {
     const e = impactEntities(impacts);
     expect(e.map((x) => x.id)).toEqual(['I2', 'I3', 'I1']);
-    expect(e[0]).toEqual({ type: 'impact', id: 'I2', label: 'REQ-2', state: 'proposed', props: { type: 'alm@Requirement', intent: 'created', nodeState: 'draft', landable: 'no' } });
+    expect(e[0]).toEqual({ type: 'impact', id: 'I2', label: 'REQ-2', state: 'proposed', props: { type: 'alm@Requirement', intent: 'created', nodeState: 'draft', committable: 'no' } });
     expect(e[1].state).toBe('proposed');
   });
 

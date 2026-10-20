@@ -98,9 +98,9 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 			add(id, "", "reference", fmt.Sprintf("refers to %s which is not in the reference baseline", cn.Pre))
 		}
 		outdated := cn.Recheck
-		if !outdated && cn.Pre != nil && cn.Post == nil && cn.Landed == nil {
-			// a planned impact is read against the latest version of its node where the change lands, never moved
-			// by the changes that landed meanwhile (ADR 0140): it starts from there when the change is rebased
+		if !outdated && cn.Pre != nil && cn.Post == nil && cn.Committed == nil {
+			// a planned impact is read against the latest version of its node where the change commits, never moved
+			// by the changes that committed meanwhile (ADR 0140): it starts from there when the change is rebased
 			if outdated, err = behindHead(ctx, tx, c, *cn.Pre); err != nil {
 				return nil, err
 			}
@@ -118,7 +118,7 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 	return out, nil
 }
 
-// behindHead tells whether a node version is no longer the latest of its node on the branch a change lands on.
+// behindHead tells whether a node version is no longer the latest of its node on the branch a change commits on.
 func behindHead(ctx context.Context, tx Tx, c domain.Change, ref domain.NodeRef) (bool, error) {
 	target := domain.MainBranch
 	if c.Branch != "" {

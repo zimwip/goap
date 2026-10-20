@@ -7,29 +7,29 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// A state is landable unless flagged notLandable (ADR 0078); the issues name what could never land.
-func TestLifecycleLandable(t *testing.T) {
-	lc := &domain.Lifecycle{Name: "l", Initial: "a", States: []domain.LifecycleState{{Name: "a", NotLandable: true}, {Name: "b"}, {Name: "c", NotLandable: true, Final: true}},
+// A state is committable unless flagged notCommittable (ADR 0078); the issues name what could never commit.
+func TestLifecycleCommittable(t *testing.T) {
+	lc := &domain.Lifecycle{Name: "l", Initial: "a", States: []domain.LifecycleState{{Name: "a", NotCommittable: true}, {Name: "b"}, {Name: "c", NotCommittable: true, Final: true}},
 		Transitions: []domain.Transition{{Name: "t", From: "a", To: "b"}, {Name: "u", From: "b", To: "c"}}}
-	if lc.Landable("a") || !lc.Landable("b") || !lc.Landable("") || !lc.Landable("unknown") {
-		t.Fatal("only a flagged state is not landable; no state or an unknown one is landable")
+	if lc.Committable("a") || !lc.Committable("b") || !lc.Committable("") || !lc.Committable("unknown") {
+		t.Fatal("only a flagged state is not committable; no state or an unknown one is committable")
 	}
 	var none *domain.Lifecycle
-	if !none.Landable("x") {
-		t.Fatal("no lifecycle: always landable")
+	if !none.Committable("x") {
+		t.Fatal("no lifecycle: always committable")
 	}
 	is := strings.Join(lc.Issues(), "; ")
-	if !strings.Contains(is, "state c is final and not landable") || strings.Contains(is, "state a") {
+	if !strings.Contains(is, "state c is final and not committable") || strings.Contains(is, "state a") {
 		t.Fatalf("issues: %s", is)
 	}
-	lc = &domain.Lifecycle{Name: "l", Initial: "a", States: []domain.LifecycleState{{Name: "a", NotLandable: true}, {Name: "b", NotLandable: true}, {Name: "c"}},
+	lc = &domain.Lifecycle{Name: "l", Initial: "a", States: []domain.LifecycleState{{Name: "a", NotCommittable: true}, {Name: "b", NotCommittable: true}, {Name: "c"}},
 		Transitions: []domain.Transition{{Name: "t", From: "a", To: "b"}}}
 	is = strings.Join(lc.Issues(), "; ")
-	if !strings.Contains(is, "state a is not landable and cannot reach a landable state") || !strings.Contains(is, "state b is not landable and cannot reach") {
+	if !strings.Contains(is, "state a is not committable and cannot reach a committable state") || !strings.Contains(is, "state b is not committable and cannot reach") {
 		t.Fatalf("issues: %s", is)
 	}
-	lc = &domain.Lifecycle{Name: "l", Initial: "a", States: []domain.LifecycleState{{Name: "a", NotLandable: true}}}
-	if is := strings.Join(lc.Issues(), "; "); !strings.Contains(is, "at least one landable state required") {
+	lc = &domain.Lifecycle{Name: "l", Initial: "a", States: []domain.LifecycleState{{Name: "a", NotCommittable: true}}}
+	if is := strings.Join(lc.Issues(), "; "); !strings.Contains(is, "at least one committable state required") {
 		t.Fatalf("issues: %s", is)
 	}
 }

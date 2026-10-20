@@ -78,7 +78,7 @@ const (
 	ReasonRebase = "rebase"
 	// ReasonRevert: the version the commit of a change writes on its branch for a node it changed and no longer does
 	// (its impact withdrawn): the properties of the version the branch was forked from. The branch reads it as the
-	// version of its fork (ADR 0140), and it never lands beyond the branch.
+	// version of its fork (ADR 0140), and it never commits beyond the branch.
 	ReasonRevert = "revert"
 )
 
@@ -94,7 +94,7 @@ func BranchOf(b string) string {
 // Draft.AsNode). Versions are numbered per
 // node across all branches; Parents link a version to the one(s) it comes from.
 // A version is written on one branch (Branch, never changed) and may join other
-// branches when a merge lands it there as is (Joined, ADR 0032).
+// branches when a merge commits it there as is (Joined, ADR 0032).
 type Node struct {
 	ID      NodeID  `json:"id"`
 	Version Version `json:"version"`
@@ -131,9 +131,9 @@ type Node struct {
 	// node).
 	Origins   []NodeRef `json:"origins,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
-	// Landed is the order (Baseline.Seq) of the baseline the version landed in on its branch (ADR 0140): the graph sets
+	// Committed is the order (Baseline.Seq) of the baseline the version committed in on its branch (ADR 0140): the graph sets
 	// it when it writes the version, and the state of a baseline follows from it.
-	Landed int64 `json:"-"`
+	Committed int64 `json:"-"`
 }
 
 // Ref returns the exact reference of this node version.
@@ -184,7 +184,7 @@ type Baseline struct {
 	// BaselineMerge, BaselineFastForward or BaselineSnapshot.
 	Kind string `json:"kind,omitempty"`
 	// Seq orders the baselines (ADR 0140): a baseline has a greater one than every baseline before it on its branch, and
-	// its state is the selection of the versions landed on its branch up to it (ADR 0143); the graph hides it.
+	// its state is the selection of the versions committed on its branch up to it (ADR 0143); the graph hides it.
 	Seq       int64              `json:"-"`
 	Nodes     map[NodeID]Version `json:"nodes"`
 	CreatedAt time.Time          `json:"createdAt"`
@@ -204,7 +204,7 @@ const (
 	// BaselineRevert is a commit that also puts back, on the branch of a change, the nodes it no longer changes (an impact
 	// withdrawn after its commit, ADR 0102).
 	BaselineRevert = "revert"
-	// BaselineSnapshot is the state the bootstrap leaves (ADR 0143: an ordinary landing).
+	// BaselineSnapshot is the state the bootstrap leaves (ADR 0143: an ordinary commit).
 	BaselineSnapshot = "snapshot"
 )
 
@@ -212,7 +212,7 @@ const (
 type TagID string
 
 // Tag names one exact node version (ADR 0143 §6): a release, a configuration, a document set, whose version links to
-// the exact versions of what it is made of (a link resolves to a version at landing, ADR 0079), so a reader follows
+// the exact versions of what it is made of (a link resolves to a version at commit, ADR 0079), so a reader follows
 // them as far as it needs; the tag stores no closure. Tags are not unique: one name may label several versions (a
 // "release" per product line), and a version may carry several names. Nothing names a whole namespace at a point.
 type Tag struct {
@@ -268,13 +268,13 @@ type Branch struct {
 	Status      string       `json:"status"`
 	CreatedAt   time.Time    `json:"createdAt"`
 	Description string       `json:"description,omitempty"`
-	// Ephemeral marks the branch of a change (ADR 0140): it lives until the change lands, its state is its fork with
-	// what it landed, never a checkpoint; only the lasting branches (main, the named ones) store states.
+	// Ephemeral marks the branch of a change (ADR 0140): it lives until the change commits, its state is its fork with
+	// what it committed, never a checkpoint; only the lasting branches (main, the named ones) store states.
 	Ephemeral bool `json:"ephemeral,omitempty"`
-	// ForkSeq is, for a branch forked from the branch of a change (a sub-change, ADR 0103), the order of landing up to
-	// which the versions landed on that branch, and on the branches it is forked from, are in its fork (ADR 0140): a
+	// ForkSeq is, for a branch forked from the branch of a change (a sub-change, ADR 0103), the order of commit up to
+	// which the versions committed on that branch, and on the branches it is forked from, are in its fork (ADR 0140): a
 	// change branch holds no baseline, so its fork is ForkBaseline, the lasting baseline under the chain, with those
-	// landings. 0 for a branch forked from a lasting one.
+	// commits. 0 for a branch forked from a lasting one.
 	ForkSeq int64 `json:"forkSeq,omitempty"`
 }
 

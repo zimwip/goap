@@ -1,6 +1,6 @@
 <script lang="ts">
   // History of one branch (git log --graph): its own baselines in one lane, and a lane for the branch of each change
-  // that landed on it, from where the change started to the commit the merge joined (baselineHistory.ts), so two
+  // that committed on it, from where the change started to the commit the merge joined (baselineHistory.ts), so two
   // changes started from the same baseline show as two lanes forking from it. Other branches appear only as the dot
   // where this one forks from or merges with them.
   import type { Baseline, Branch } from '../api';

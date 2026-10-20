@@ -398,7 +398,7 @@ func (s *GraphStore) read(ctx context.Context) (*defs, error) {
 // reads the new head and builds them again (up to three retries).
 func (s *GraphStore) carriesEvents() {}
 
-// commit lands the edits build gives, with the registry's events about them (ADR 0136). The graph takes events from a
+// commit commits the edits build gives, with the registry's events about them (ADR 0136). The graph takes events from a
 // platform service only: a commit carrying some goes as the registry, for the person it acts for.
 func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*defs) ([]graphapi.NodeEdit, error), events ...graphapi.CarriedEvent) error {
 	if len(events) > 0 && !authz.From(ctx).System() {

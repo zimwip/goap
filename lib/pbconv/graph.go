@@ -173,11 +173,11 @@ func LinksFromPB(ls []*graphv1.Link) []domain.Link {
 }
 
 func ViewToPB(v domain.NodeView) *graphv1.NodeView {
-	return &graphv1.NodeView{Node: NodeToPB(v.Node), Latest: int32(v.Latest), Out: LinksToPB(v.Out), In: LinksToPB(v.In), NotLandable: v.NotLandable}
+	return &graphv1.NodeView{Node: NodeToPB(v.Node), Latest: int32(v.Latest), Out: LinksToPB(v.Out), In: LinksToPB(v.In), NotCommittable: v.NotCommittable}
 }
 
 func ViewFromPB(v *graphv1.NodeView) domain.NodeView {
-	return domain.NodeView{Node: NodeFromPB(v.Node), Latest: domain.Version(v.Latest), Out: LinksFromPB(v.Out), In: LinksFromPB(v.In), NotLandable: v.NotLandable}
+	return domain.NodeView{Node: NodeFromPB(v.Node), Latest: domain.Version(v.Latest), Out: LinksFromPB(v.Out), In: LinksFromPB(v.In), NotCommittable: v.NotCommittable}
 }
 
 func BaselineToPB(b domain.Baseline) *graphv1.Baseline {
@@ -320,7 +320,7 @@ func BranchToPB(b domain.Branch) *graphv1.Branch {
 
 func ChangeImpactToPB(cn domain.ChangeImpact) *graphv1.ChangeImpact {
 	out := &graphv1.ChangeImpact{Id: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Rationale: cn.Rationale,
-		Pre: RefPtrToPB(cn.Pre), Post: RefPtrToPB(cn.Post), Landed: RefPtrToPB(cn.Landed), Review: string(cn.Review),
+		Pre: RefPtrToPB(cn.Pre), Post: RefPtrToPB(cn.Post), Committed: RefPtrToPB(cn.Committed), Review: string(cn.Review),
 		Via: string(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, CreatedAt: Time(cn.CreatedAt),
 		Flow: cn.Flow, Superseded: cn.Superseded}
 	if v := cn.Validation; v != nil {
@@ -343,7 +343,7 @@ func ChangeImpactFromPB(cn *graphv1.ChangeImpact) domain.ChangeImpact {
 		return domain.ChangeImpact{}
 	}
 	out := domain.ChangeImpact{ID: domain.ChangeImpactID(cn.Id), Key: cn.Key, Type: cn.Type, Intent: domain.NodeIntent(cn.Intent), Rationale: cn.Rationale,
-		Pre: RefPtrFromPB(cn.Pre), Post: RefPtrFromPB(cn.Post), Landed: RefPtrFromPB(cn.Landed), Review: domain.NodeReview(cn.Review),
+		Pre: RefPtrFromPB(cn.Pre), Post: RefPtrFromPB(cn.Post), Committed: RefPtrFromPB(cn.Committed), Review: domain.NodeReview(cn.Review),
 		Via: domain.ChangeImpactID(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, CreatedAt: FromTime(cn.CreatedAt),
 		Flow: cn.Flow, Superseded: cn.Superseded}
 	if v := cn.Validation; v != nil {
@@ -414,7 +414,7 @@ func EditsFromPB(edits []*graphv1.NodeEdit) []graphapi.NodeEdit {
 func ImpactEventToPB(e domain.ImpactEvent) *graphv1.ImpactEvent {
 	out := &graphv1.ImpactEvent{Id: e.ID, ChangeId: string(e.Change), Seq: int32(e.Seq), ImpactId: string(e.Impact), Op: string(e.Op),
 		Flow: e.Flow, Execution: e.Execution, By: e.By, At: Time(e.At), Post: RefPtrToPB(e.Post), Pre: RefPtrToPB(e.Pre),
-		Landed: RefPtrToPB(e.Landed), Stale: e.Stale}
+		Committed: RefPtrToPB(e.Committed), Stale: e.Stale}
 	if e.State != nil {
 		out.State = ChangeImpactToPB(*e.State)
 	}

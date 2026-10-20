@@ -140,7 +140,7 @@ func (a Alias) Validate() error {
 		return fmt.Errorf("alias must be 1-40 characters of a-z, 0-9, - or _")
 	}
 	// the target (provider/model, except for a protected alias) is the domain's rule: the node validator
-	// alias-needs-target of platform@LlmAlias, enforced at review and at landing.
+	// alias-needs-target of platform@LlmAlias, enforced at review and at commit.
 	return nil
 }
 

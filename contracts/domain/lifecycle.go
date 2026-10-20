@@ -11,8 +11,8 @@ import (
 // Lifecycle is a named state machine of a domain (ADR 0014). Node types refer
 // to it by name (NodeType.Lifecycle), inherit it through extends (a subtype that
 // names its own lifecycle replaces the inherited one), and every node version
-// stores its state. Every state is landable unless it opts out (NotLandable, ADR 0078): a
-// change can only land when each node it holds ends in a landable state. A node is edited
+// stores its state. Every state is committable unless it opts out (NotCommittable, ADR 0078): a
+// change can only commit when each node it holds ends in a committable state. A node is edited
 // in any state while it is in a change.
 type Lifecycle struct {
 	// Name identifies the lifecycle in its domain; node types refer to it.
@@ -27,9 +27,9 @@ type Lifecycle struct {
 type LifecycleState struct {
 	Name        string `yaml:"name" json:"name"`
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
-	// NotLandable opts the state out of landing (ADR 0078): a change cannot land while a node it holds rests
-	// in it (a draft to finish, a review to pass). Every other state is landable.
-	NotLandable bool `yaml:"notLandable,omitempty" json:"notLandable,omitempty"`
+	// NotCommittable opts the state out of commit (ADR 0078): a change cannot commit while a node it holds rests
+	// in it (a draft to finish, a review to pass). Every other state is committable.
+	NotCommittable bool `yaml:"notCommittable,omitempty" json:"notCommittable,omitempty"`
 	// Final states have no way out.
 	Final bool `yaml:"final,omitempty" json:"final,omitempty"`
 }
@@ -178,14 +178,14 @@ func (l *Lifecycle) State(name string) (LifecycleState, bool) {
 	return LifecycleState{}, false
 }
 
-// Landable tells whether a node in the state may land with its change. Without a lifecycle, or with no
-// state (or one the lifecycle does not know), a node is always landable.
-func (l *Lifecycle) Landable(state string) bool {
+// Committable tells whether a node in the state may commit with its change. Without a lifecycle, or with no
+// state (or one the lifecycle does not know), a node is always committable.
+func (l *Lifecycle) Committable(state string) bool {
 	if l == nil || state == "" {
 		return true
 	}
 	s, ok := l.State(state)
-	return !ok || !s.NotLandable
+	return !ok || !s.NotCommittable
 }
 
 // Transition finds the transition named name out of the state from.
@@ -221,7 +221,7 @@ func (l *Lifecycle) Issues() []string {
 	}
 	var out []string
 	names := map[string]bool{}
-	landable := 0
+	committable := 0
 	for _, s := range l.States {
 		switch {
 		case s.Name == "":
@@ -232,10 +232,10 @@ func (l *Lifecycle) Issues() []string {
 			continue
 		}
 		names[s.Name] = true
-		if !s.NotLandable {
-			landable++
+		if !s.NotCommittable {
+			committable++
 		} else if s.Final {
-			out = append(out, fmt.Sprintf("state %s is final and not landable: a node there could never land", s.Name))
+			out = append(out, fmt.Sprintf("state %s is final and not committable: a node there could never commit", s.Name))
 		}
 	}
 	if len(l.States) == 0 {
@@ -244,8 +244,8 @@ func (l *Lifecycle) Issues() []string {
 	if !names[l.Initial] {
 		out = append(out, fmt.Sprintf("initial state %q is not a state", l.Initial))
 	}
-	if landable == 0 {
-		out = append(out, "at least one landable state required (every state is flagged notLandable)")
+	if committable == 0 {
+		out = append(out, "at least one committable state required (every state is flagged notCommittable)")
 	}
 	seen := map[[2]string]bool{}
 	next := map[string][]string{}
@@ -277,9 +277,9 @@ func (l *Lifecycle) Issues() []string {
 			}
 		}
 	}
-	// a state that cannot land must be able to reach one that can
+	// a state that cannot commit must be able to reach one that can
 	for _, s := range l.States {
-		if !s.NotLandable || !names[s.Name] {
+		if !s.NotCommittable || !names[s.Name] {
 			continue
 		}
 		reach, todo := map[string]bool{s.Name: true}, []string{s.Name}
@@ -292,7 +292,7 @@ func (l *Lifecycle) Issues() []string {
 					continue
 				}
 				reach[n] = true
-				if st, _ := l.State(n); !st.NotLandable {
+				if st, _ := l.State(n); !st.NotCommittable {
 					ok = true
 					break
 				}
@@ -300,7 +300,7 @@ func (l *Lifecycle) Issues() []string {
 			}
 		}
 		if !ok {
-			out = append(out, fmt.Sprintf("state %s is not landable and cannot reach a landable state", s.Name))
+			out = append(out, fmt.Sprintf("state %s is not committable and cannot reach a committable state", s.Name))
 		}
 	}
 	return out

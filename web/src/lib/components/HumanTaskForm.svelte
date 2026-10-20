@@ -350,7 +350,7 @@
                   <button type="button" class="small" class:on-reject={nodeDecisions[id] === false} aria-pressed={nodeDecisions[id] === false} onclick={() => (nodeDecisions[id] = false)}>Reject</button>
                 </div>
               </div>
-              {#if n.post?.id}<div class="hint">{isDraft(n.post) ? 'draft: its version is written when the change lands' : `written as v${n.post.version}`}</div>{:else if n.intent === 'created'}<div class="hint">no draft yet</div>{/if}
+              {#if n.post?.id}<div class="hint">{isDraft(n.post) ? 'draft: its version is written when the change commits' : `written as v${n.post.version}`}</div>{:else if n.intent === 'created'}<div class="hint">no draft yet</div>{/if}
             </li>
           {/each}
         </ul>

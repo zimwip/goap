@@ -8,7 +8,7 @@ import (
 	"github.com/zimwip/goap/contracts/events"
 )
 
-// PurgeChange removes a change that landed nothing, with its whole log (ADR 0037). It is the exception to the
+// PurgeChange removes a change that committed nothing, with its whole log (ADR 0037). It is the exception to the
 // insert-only log of ADR 0030: what is removed was never part of the graph. A change is refused (ErrConflict) unless it
 // is draft, active or abandoned, has produced no baseline (no commit), has no sub-change, and its own branch, when it has
 // one, has not moved since it was forked. A change whose log records an execution (an entry of a stream the graph does
@@ -21,7 +21,7 @@ func (g *Graph) PurgeChange(ctx context.Context, id domain.ChangeID) (domain.Cha
 			return err
 		}
 		if c.Status != domain.ChangeDraft && c.Status != domain.ChangeActive && c.Status != domain.ChangeAbandoned {
-			return fmt.Errorf("change %s is %s, it landed in the graph: %w", id, c.Status, ErrConflict)
+			return fmt.Errorf("change %s is %s, it committed in the graph: %w", id, c.Status, ErrConflict)
 		}
 		if c.ResultBaselineID != "" {
 			return fmt.Errorf("change %s produced baseline %s: %w", id, c.ResultBaselineID, ErrConflict)
@@ -43,8 +43,8 @@ func (g *Graph) PurgeChange(ctx context.Context, id domain.ChangeID) (domain.Cha
 		}
 		if isOwn {
 			// the branch of a change holds no baseline (ADR 0140): what it committed, or a sub-change merged into it, is a
-			// landing on it
-			if last, err := tx.LastLanding(ctx, own.Name); err != nil {
+			// commit on it
+			if last, err := tx.LastCommit(ctx, own.Name); err != nil {
 				return err
 			} else if last > 0 {
 				return fmt.Errorf("change %s: its branch holds commits: %w", id, ErrConflict)

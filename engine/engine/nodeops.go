@@ -66,7 +66,7 @@ func ChangeImpactsFromBlackboard(bb domain.Blackboard) []dsl.ChangeImpact {
 	out := make([]dsl.ChangeImpact, 0, len(bb.Change.Nodes))
 	for _, cn := range bb.Change.Nodes {
 		x := dsl.ChangeImpact{ID: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Rationale: cn.Rationale, Review: string(cn.Review),
-			Planned: cn.Post == nil, Pre: view(cn.Pre), Post: view(cn.Post), Landed: view(cn.Landed), Items: []string{}, Links: []dsl.Link{}}
+			Planned: cn.Post == nil, Pre: view(cn.Pre), Post: view(cn.Post), Committed: view(cn.Committed), Items: []string{}, Links: []dsl.Link{}}
 		x.Drafted = cn.Drafted()
 		if cn.Post != nil {
 			for _, l := range bb.Nodes[*cn.Post].Out {
@@ -84,7 +84,7 @@ func ChangeImpactsFromBlackboard(bb domain.Blackboard) []dsl.ChangeImpact {
 // applyNodeOps applies the change impact operations a script buffered, in order:
 // a declaration adds a change impact, a write edits its draft (the node is checked
 // out on the first write, ADR 0076), a review accepts or rejects it (an explicit operation: a write never
-// reviews; the draft stays one until the change lands, ADR 0079), a transition moves it along its lifecycle, a cancel
+// reviews; the draft stays one until the change commits, ADR 0079), a transition moves it along its lifecycle, a cancel
 // drops the draft. References ("#nN")
 // name the change impacts declared earlier by the same script; a key names a
 // change impact the process sees. On a flow branch the process sees the change
@@ -119,7 +119,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			continue // derived from items: decided through them
 		}
 		byKey[cn.Key] = cn.ID
-		if cn.Intent == domain.IntentCreated && cn.Post == nil && cn.Landed == nil {
+		if cn.Intent == domain.IntentCreated && cn.Post == nil && cn.Committed == nil {
 			planned[cn.ID] = true
 		}
 		if cn.Post != nil {

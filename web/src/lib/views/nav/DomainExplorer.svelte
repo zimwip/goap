@@ -126,7 +126,7 @@
   function addState(d: DomainDraft, li: number) {
     if (d.readonly) return;
     const lc = d.form.lifecycles[li];
-    lc.states.push({ name: '', description: '', notLandable: false, final: false });
+    lc.states.push({ name: '', description: '', notCommittable: false, final: false });
     revealDomainPath(d.name, d.version, `lifecycles[${li}].states[${lc.states.length - 1}]`);
   }
 
@@ -583,7 +583,7 @@
                           depth={5}
                           label={st.name || '(unnamed)'}
                           italic={!st.name}
-                          detail={[l.initial && l.initial === st.name ? 'initial' : '', st.notLandable ? 'not landable' : '', st.final ? 'final' : ''].filter(Boolean).join(' · ')}
+                          detail={[l.initial && l.initial === st.name ? 'initial' : '', st.notCommittable ? 'not committable' : '', st.final ? 'final' : ''].filter(Boolean).join(' · ')}
                           badge={d.count(`${lp}.states[${j}]`) || undefined}
                           badgeTone="danger"
                           onselect={() => revealDomainPath(d.name, d.version, `${lp}.states[${j}]`)}

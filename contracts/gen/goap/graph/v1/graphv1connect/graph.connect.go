@@ -350,7 +350,7 @@ type GraphServiceClient interface {
 	ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error)
 	DeleteTag(context.Context, *connect.Request[v1.DeleteTagRequest]) (*connect.Response[v1.DeleteTagResponse], error)
 	GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error)
-	// GetBaselineDelta reads what moved from a baseline to a later one of its branch (ADR 0143 §4): the nodes landed in
+	// GetBaselineDelta reads what moved from a baseline to a later one of its branch (ADR 0143 §4): the nodes committed in
 	// between at their version in the later one, the links leaving them, the nodes it no longer holds. INVALID_ARGUMENT
 	// when the baselines do not follow each other or too much moved: read the later baseline whole.
 	GetBaselineDelta(context.Context, *connect.Request[v1.GetBaselineDeltaRequest]) (*connect.Response[v1.GetBaselineDeltaResponse], error)
@@ -411,7 +411,7 @@ type GraphServiceClient interface {
 	// reference, version 0); ImpactNodeUpdate and the link operations edit it; an edit never reviews, an accepted review runs
 	// the checks of a version on the draft and writes nothing; ImpactNodeTransition moves a node along its lifecycle (the
 	// state of its draft, the node checked out first when it has none); ImpactNodeCancel drops the draft (a creation cancelled
-	// removes its impact). The versions are written when the change lands.
+	// removes its impact). The versions are written when the change commits.
 	ImpactNodeCreate(context.Context, *connect.Request[v1.ImpactNodeCreateRequest]) (*connect.Response[v1.ImpactNodeCreateResponse], error)
 	ImpactNodeCheckout(context.Context, *connect.Request[v1.ImpactNodeCheckoutRequest]) (*connect.Response[v1.ImpactNodeCheckoutResponse], error)
 	ImpactNodeUpdate(context.Context, *connect.Request[v1.ImpactNodeUpdateRequest]) (*connect.Response[v1.ImpactNodeUpdateResponse], error)
@@ -429,7 +429,7 @@ type GraphServiceClient interface {
 	WithdrawImpact(context.Context, *connect.Request[v1.WithdrawImpactRequest]) (*connect.Response[v1.WithdrawImpactResponse], error)
 	// Take several change impacts out of the change at once, in one transaction: all of them or none.
 	WithdrawImpacts(context.Context, *connect.Request[v1.WithdrawImpactsRequest]) (*connect.Response[v1.WithdrawImpactsResponse], error)
-	// Sub-changes (ADR 0081, 0082): a sub-change lands in its parent's log, by a fast-forward. RebaseChange brings the drafts
+	// Sub-changes (ADR 0081, 0082): a sub-change commits in its parent's log, by a fast-forward. RebaseChange brings the drafts
 	// the parent changed since the sub-change took them up to date (a three-way merge; the fields changed on both sides are
 	// conflicts, the sub-change's value kept; a changed impact is to be reviewed again); ApplyChange rebases first.
 	// ImpactNodeResolve keeps the sub-change's values for the conflicts left on an impact (an edit of a field settles its
@@ -464,7 +464,7 @@ type GraphServiceClient interface {
 	// Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
 	// the expected world state) must hold, and it is journaled.
 	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
-	// Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
+	// Remove a change that committed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
 	DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error)
 	// Staged settings (ADR 0037, ADR 0122): the edits of the settings dialog, held by the personal changes of the caller
 	// (one per namespace). Each call does on the server what the dialog did call by call, and answers the whole pending
@@ -524,7 +524,7 @@ type GraphServiceClient interface {
 	// The impacts two flows of a change see, compared (ADR 0083): added, removed or modified, with the attribute-level
 	// changes of a modified one; the identical ones are counted, not listed.
 	DiffFlows(context.Context, *connect.Request[v1.DiffFlowsRequest]) (*connect.Response[v1.DiffFlowsResponse], error)
-	// The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
+	// The graph a change sees at a level (written, accepted, committed) on a flow (ADR 0032 §5), and the graph a call on
 	// the change reads (the active option's, else the reference baseline).
 	GetChangeView(context.Context, *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error)
 	// Decision points of a change (ADR 0009 §4): opened, ruled (decided or undecidable with questions), their questions
@@ -1856,7 +1856,7 @@ type GraphServiceHandler interface {
 	ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error)
 	DeleteTag(context.Context, *connect.Request[v1.DeleteTagRequest]) (*connect.Response[v1.DeleteTagResponse], error)
 	GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error)
-	// GetBaselineDelta reads what moved from a baseline to a later one of its branch (ADR 0143 §4): the nodes landed in
+	// GetBaselineDelta reads what moved from a baseline to a later one of its branch (ADR 0143 §4): the nodes committed in
 	// between at their version in the later one, the links leaving them, the nodes it no longer holds. INVALID_ARGUMENT
 	// when the baselines do not follow each other or too much moved: read the later baseline whole.
 	GetBaselineDelta(context.Context, *connect.Request[v1.GetBaselineDeltaRequest]) (*connect.Response[v1.GetBaselineDeltaResponse], error)
@@ -1917,7 +1917,7 @@ type GraphServiceHandler interface {
 	// reference, version 0); ImpactNodeUpdate and the link operations edit it; an edit never reviews, an accepted review runs
 	// the checks of a version on the draft and writes nothing; ImpactNodeTransition moves a node along its lifecycle (the
 	// state of its draft, the node checked out first when it has none); ImpactNodeCancel drops the draft (a creation cancelled
-	// removes its impact). The versions are written when the change lands.
+	// removes its impact). The versions are written when the change commits.
 	ImpactNodeCreate(context.Context, *connect.Request[v1.ImpactNodeCreateRequest]) (*connect.Response[v1.ImpactNodeCreateResponse], error)
 	ImpactNodeCheckout(context.Context, *connect.Request[v1.ImpactNodeCheckoutRequest]) (*connect.Response[v1.ImpactNodeCheckoutResponse], error)
 	ImpactNodeUpdate(context.Context, *connect.Request[v1.ImpactNodeUpdateRequest]) (*connect.Response[v1.ImpactNodeUpdateResponse], error)
@@ -1935,7 +1935,7 @@ type GraphServiceHandler interface {
 	WithdrawImpact(context.Context, *connect.Request[v1.WithdrawImpactRequest]) (*connect.Response[v1.WithdrawImpactResponse], error)
 	// Take several change impacts out of the change at once, in one transaction: all of them or none.
 	WithdrawImpacts(context.Context, *connect.Request[v1.WithdrawImpactsRequest]) (*connect.Response[v1.WithdrawImpactsResponse], error)
-	// Sub-changes (ADR 0081, 0082): a sub-change lands in its parent's log, by a fast-forward. RebaseChange brings the drafts
+	// Sub-changes (ADR 0081, 0082): a sub-change commits in its parent's log, by a fast-forward. RebaseChange brings the drafts
 	// the parent changed since the sub-change took them up to date (a three-way merge; the fields changed on both sides are
 	// conflicts, the sub-change's value kept; a changed impact is to be reviewed again); ApplyChange rebases first.
 	// ImpactNodeResolve keeps the sub-change's values for the conflicts left on an impact (an edit of a field settles its
@@ -1970,7 +1970,7 @@ type GraphServiceHandler interface {
 	// Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
 	// the expected world state) must hold, and it is journaled.
 	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
-	// Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
+	// Remove a change that committed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
 	DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error)
 	// Staged settings (ADR 0037, ADR 0122): the edits of the settings dialog, held by the personal changes of the caller
 	// (one per namespace). Each call does on the server what the dialog did call by call, and answers the whole pending
@@ -2030,7 +2030,7 @@ type GraphServiceHandler interface {
 	// The impacts two flows of a change see, compared (ADR 0083): added, removed or modified, with the attribute-level
 	// changes of a modified one; the identical ones are counted, not listed.
 	DiffFlows(context.Context, *connect.Request[v1.DiffFlowsRequest]) (*connect.Response[v1.DiffFlowsResponse], error)
-	// The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
+	// The graph a change sees at a level (written, accepted, committed) on a flow (ADR 0032 §5), and the graph a call on
 	// the change reads (the active option's, else the reference baseline).
 	GetChangeView(context.Context, *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error)
 	// Decision points of a change (ADR 0009 §4): opened, ruled (decided or undecidable with questions), their questions

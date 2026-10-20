@@ -8,7 +8,7 @@ a deployment (its purpose, its sector, who places it on the market) is for the d
 
 goap runs enterprise methodologies (software delivery, ALM, impact analysis, reviews, risk management) as agents that
 plan with a goal-oriented planner and act through language models, scripts, tools and people, on a versioned knowledge
-graph of the enterprise. Every modification is a change that people review before it lands. The models are third-party
+graph of the enterprise. Every modification is a change that people review before it commits. The models are third-party
 general-purpose models reached through the model gateway; goap trains and fine-tunes none.
 
 Roles: whoever distributes goap is the **provider of an AI system**; an organisation running it is a **deployer**.

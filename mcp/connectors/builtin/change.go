@@ -26,7 +26,7 @@ import (
 
 // Change is the goap-change connector: it works on a change, the blackboard every modification of
 // the graph goes through (CLAUDE.md, rule 2). A node is declared on the change (a change impact,
-// ADR 0024) the first time a tool touches it, then written on the change branch; nothing lands on
+// ADR 0024) the first time a tool touches it, then written on the change branch; nothing commits on
 // main until the change is applied, which stays a decision of the methodology or of a reviewer.
 // Without a change argument the tools work on the change of the calling process.
 type Change struct{ p Ports }
@@ -573,7 +573,7 @@ func (c Change) create(ctx context.Context, who authz.Principal, a args) (map[st
 }
 
 // close abandons an open change, with the reason in its data (closedBecause). From a process it reaches only the
-// calling change and its sub-changes: a proof of concept concluded, a sub-change that lands nothing (ADR 0131).
+// calling change and its sub-changes: a proof of concept concluded, a sub-change that commits nothing (ADR 0131).
 func (c Change) close(ctx context.Context, id domain.ChangeID, a args) (map[string]any, error) {
 	reason, err := a.required("reason")
 	if err != nil {

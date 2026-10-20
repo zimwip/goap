@@ -22,7 +22,7 @@ import (
 
 // Modes of writing a change.
 const (
-	// ModeCommit lands each change with one CommitEdits call (the producer path: the graph creates the change, its
+	// ModeCommit commits each change with one CommitEdits call (the producer path: the graph creates the change, its
 	// drafts, accepts and merges them).
 	ModeCommit = "commit"
 	// ModeLifecycle drives each change call by call, as the web and the engine do: CreateChange, ImpactNodeCreate or
@@ -101,7 +101,7 @@ type node struct {
 	key, typ string
 	id       string
 	version  int32
-	// out are the nodes it links to (landed): a node links to another once
+	// out are the nodes it links to (committed): a node links to another once
 	out []*node
 }
 
@@ -404,10 +404,10 @@ func (r *Runner) change(ctx context.Context, w *worker) {
 		return
 	}
 	w.failed = 0
-	r.landed(w, edits)
+	r.committed(w, edits)
 }
 
-func (r *Runner) landed(w *worker, edits []edit) {
+func (r *Runner) committed(w *worker, edits []edit) {
 	t := &r.Metrics.Totals
 	w.mu.Lock()
 	for _, e := range edits {
@@ -569,7 +569,7 @@ func (r *Runner) sampleNode(rnd *rand.Rand, hot bool) *node {
 
 func (r *Runner) probeOnce(ctx context.Context, rnd *rand.Rand) {
 	g, m := r.Clients.Graph, r.Metrics
-	// the node is sampled before the head is read: one landed later is not in that head
+	// the node is sampled before the head is read: one committed later is not in that head
 	sampled := r.sampleNode(rnd, false)
 	br, err := timed(ctx, m, "GetBranch", func(ctx context.Context) (*connect.Response[graphv1.GetBranchResponse], error) {
 		return g.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Namespace: Namespace, Name: "main", HeaderOnly: true}))

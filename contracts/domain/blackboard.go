@@ -10,11 +10,11 @@ import (
 type NodeView struct {
 	Node
 	Latest Version `json:"latest"`
-	// NotLandable: the node has a lifecycle and is in a state flagged notLandable (ADR 0078)
-	// (a change cannot land while a node rests there).
-	NotLandable bool   `json:"notLandable,omitempty"`
-	Out         []Link `json:"out,omitempty"`
-	In          []Link `json:"in,omitempty"`
+	// NotCommittable: the node has a lifecycle and is in a state flagged notCommittable (ADR 0078)
+	// (a change cannot commit while a node rests there).
+	NotCommittable bool   `json:"notCommittable,omitempty"`
+	Out            []Link `json:"out,omitempty"`
+	In             []Link `json:"in,omitempty"`
 }
 
 // Blackboard is the state an agent process observes: the change (axis change)
@@ -103,7 +103,7 @@ func (c *Change) ReferencedNodes() []NodeRef {
 	for _, cn := range c.Nodes {
 		add(cn.Pre)
 		add(cn.Post)
-		add(cn.Landed)
+		add(cn.Committed)
 	}
 	return out
 }

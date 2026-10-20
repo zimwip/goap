@@ -11,7 +11,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// A root change is rebased onto the head of the branch it was forked from before it lands, and lands as a fast-forward
+// A root change is rebased onto the head of the branch it was forked from before it commits, and commits as a fast-forward
 // (ADR 0101).
 
 // propChange opens a change from base that sets props on a node of the fixture, accepted.
@@ -139,7 +139,7 @@ func testRebaseRootDifferentNodes(t *testing.T, repo Repo) {
 }
 
 // Both change the same node, different properties: test2's commit is merged with the version test1 wrote at its merge, and
-// the version that lands is parented to both.
+// the version that commits is parented to both.
 func TestRebaseRootSameNodeLinear(t *testing.T) { forEachRepo(t, testRebaseRootSameNodeLinear) }
 
 func testRebaseRootSameNodeLinear(t *testing.T, repo Repo) {
@@ -183,11 +183,11 @@ func testRebaseRootSameNodeLinear(t *testing.T, repo Repo) {
 	if p, _ := ev[0].Patch["props"].(map[string]any); len(p) != 1 || p["a"] == nil {
 		t.Fatalf("the update carries the merge's difference: %+v", ev[0].Patch)
 	}
-	// the rebase in the log: the move, the node checked out and updated, the review of the merge, its landing
+	// the rebase in the log: the move, the node checked out and updated, the review of the merge, its commit
 	var order []string
 	for _, e := range must[[]domain.LogEntry](t)(logOf(g, t2.ID)) {
 		switch e.Type {
-		case "change.updated", "impact.checkedOut", "impact.updated", "fact.review", "impact.reviewed", "impact.landed":
+		case "change.updated", "impact.checkedOut", "impact.updated", "fact.review", "impact.reviewed", "impact.committed":
 			if len(order) == 0 || order[len(order)-1] != e.Type {
 				order = append(order, e.Type)
 			}
@@ -196,8 +196,8 @@ func testRebaseRootSameNodeLinear(t *testing.T, repo Repo) {
 	if i := slices.Index(order, "change.updated"); i < 0 || !slices.Equal(order[i:i+5], []string{"change.updated", "impact.checkedOut", "impact.updated", "fact.review", "impact.reviewed"}) {
 		t.Fatalf("the rebase in the log: %v", order)
 	}
-	// the review of the merged draft was kept, the version landed
-	if cn := must[domain.ChangeImpact](t)(g.seenImpact(ctx, t2.ID, i2, "")); cn.Review != domain.ReviewAccepted || cn.Landed == nil || *cn.Landed != n.Ref() {
+	// the review of the merged draft was kept, the version committed
+	if cn := must[domain.ChangeImpact](t)(g.seenImpact(ctx, t2.ID, i2, "")); cn.Review != domain.ReviewAccepted || cn.Committed == nil || *cn.Committed != n.Ref() {
 		t.Fatalf("test2's impact: %+v", cn)
 	}
 }
@@ -247,7 +247,7 @@ func testRebaseRootConflict(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.accept(ctx, t3.ID, i3, "u", "ok"))
 	b3 := must[domain.Baseline](t)(g.Apply(ctx, t3.ID, ""))
 	if b3.ParentID != b2.ID || b3.Kind != domain.BaselineFastForward {
-		t.Fatalf("test3 lands on test2: %+v", b3)
+		t.Fatalf("test3 commits on test2: %+v", b3)
 	}
 }
 
@@ -284,7 +284,7 @@ func testRebaseRootCreationCollision(t *testing.T, repo Repo) {
 }
 
 // ADR 0102: a committed change stays open; when the target moved, its merge rebases its branch first (the nodes changed on
-// both sides merged into drafts, committed when clean) and lands as a fast-forward.
+// both sides merged into drafts, committed when clean) and commits as a fast-forward.
 func TestRebaseRootCommittedRebasedAtMerge(t *testing.T) {
 	forEachRepo(t, testRebaseRootCommittedRebasedAtMerge)
 }
@@ -340,7 +340,7 @@ func testRebaseRootRaceFallsBackToMerge(t *testing.T, repo Repo) {
 	if _, err := g.RebaseChange(ctx, t2.ID); err != nil { // test2 brought up to date with test0...
 		t.Fatal(err)
 	}
-	b1 := must[domain.Baseline](t)(g.Apply(ctx, t1.ID, "")) // ...then the target moves before test2 lands
+	b1 := must[domain.Baseline](t)(g.Apply(ctx, t1.ID, "")) // ...then the target moves before test2 commits
 	if err := g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, t2.ID)
 		if err != nil {
@@ -360,7 +360,7 @@ func testRebaseRootRaceFallsBackToMerge(t *testing.T, repo Repo) {
 	}
 	res := must[domain.Baseline](t)(g.Baseline(ctx, ch.ResultBaselineID))
 	if res.Kind != domain.BaselineMerge || res.ParentID != b1.ID {
-		t.Fatalf("the race lands by a merge: %+v", res)
+		t.Fatalf("the race commits by a merge: %+v", res)
 	}
 	if moves := rebaseMoves(t, g, t2.ID); len(moves) == 0 || moves[0].From != string(f.base.ID) {
 		t.Fatalf("test2 was rebased onto test0 before: %+v", moves)

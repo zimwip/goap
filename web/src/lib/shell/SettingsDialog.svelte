@@ -83,7 +83,7 @@
     if (await confirmLeaveSettings(count)) closeSettings();
   }
 
-  // the gateway follows the graph through events: read it again shortly after a change landed
+  // the gateway follows the graph through events: read it again shortly after a change committed
   let later: ReturnType<typeof setTimeout> | undefined;
   async function refreshGateway() {
     await loadGateway();

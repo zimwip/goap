@@ -180,8 +180,8 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   const nodeProps = $derived((row?.props ?? stored?.props ?? {}) as Record<string, unknown>);
   const storedProps = $derived((stored?.props ?? {}) as Record<string, unknown>);
   const nodeState = $derived(row?.effective ?? stored?.state ?? '');
-  // edits are allowed in any state (ADR 0078): a state flagged notLandable only keeps the change from landing
-  const notLandable = $derived(!!row && !!row.lifecycle && !row.landable);
+  // edits are allowed in any state (ADR 0078): a state flagged notCommittable only keeps the change from commit
+  const notCommittable = $derived(!!row && !!row.lifecycle && !row.committable);
 
   const openChanges = $derived(changes.items.filter((c) => (c.status === 'draft' || c.status === 'active') && (!stored?.namespace || c.namespace === stored.namespace)));
   const attrViews = $derived(orderedAttributes(typeCatalog.cat.attributes(typeName)));
@@ -424,14 +424,14 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     <Icon name="node" size={18} />
     <h2>{stored?.key || tab.params.key || shortId(id)}</h2>
     {#if typeName}<span class="hint">{typeName}</span>{/if}
-    {#if nodeState}<span class="state" class:notLandable title={notLandable ? 'Not landable: a change cannot land with the node in this state' : ''}>{nodeState}</span>{/if}
+    {#if nodeState}<span class="state" class:notCommittable title={notCommittable ? 'Not committable: a change cannot commit with the node in this state' : ''}>{nodeState}</span>{/if}
     {#if inChange && isDraft(row?.impact?.post)}
-      <span class="hint" title="the working change holds a draft of the node; its version is written when the change lands (ADR 0079). Released: v{stored?.version ?? '—'}">draft in the change</span>
+      <span class="hint" title="the working change holds a draft of the node; its version is written when the change commits (ADR 0079). Released: v{stored?.version ?? '—'}">draft in the change</span>
     {:else if stored?.version}<span class="hint">v{stored.version}</span>{/if}
     {#if inChange && row?.impact}
       <StatusBadge status={row.impact.review} />
       {#if canReview}
-        <button type="button" class="small primary" disabled={busy !== ''} title="The edit awaits its review: the change cannot land before it is reviewed" onclick={() => (reviewing = !reviewing)}>Review…</button>
+        <button type="button" class="small primary" disabled={busy !== ''} title="The edit awaits its review: the change cannot commit before it is reviewed" onclick={() => (reviewing = !reviewing)}>Review…</button>
       {/if}
     {/if}
     {#if stored?.deleted}<span class="tag bad">deleted</span>{/if}
@@ -439,7 +439,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   {#if error}<div class="alert">{error}</div>{/if}
   {#if inChange && canReview}
     <div class="alert" role="status">
-      This node's impact awaits its review. An edit never reviews on its own: the change cannot land until someone accepts it.
+      This node's impact awaits its review. An edit never reviews on its own: the change cannot commit until someone accepts it.
       {#if reviewing}
         <div class="reviewrow">
           <input
@@ -619,7 +619,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     font-size: 0.85rem;
     font-family: var(--mono);
   }
-  .state.notLandable {
+  .state.notCommittable {
     border-color: var(--warn);
     color: var(--warn);
   }

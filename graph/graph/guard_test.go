@@ -304,7 +304,7 @@ func testGuardKeepsVersionsImmutable(t *testing.T, repo Repo) {
 	boot := must[domain.Change](t)(g.Change(ctx, org.ChangeID))
 	write := func(fn func(tx Tx) error) error { return g.repo.InTx(ctx, fn) }
 	node := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Namespace: "notes",
-		Key: "N-1", Type: "Note", ChangeID: boot.ID, CreatedAt: g.now(), Landed: -1}
+		Key: "N-1", Type: "Note", ChangeID: boot.ID, CreatedAt: g.now(), Committed: -1}
 	link := domain.Link{ID: domain.LinkID(g.newID()), Type: "refines", From: node.Ref(), To: node.Ref(), ChangeID: boot.ID}
 	if err := write(func(tx Tx) error {
 		if err := tx.PutNode(ctx, node); err != nil {

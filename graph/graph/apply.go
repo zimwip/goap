@@ -12,7 +12,7 @@ import (
 	"github.com/zimwip/goap/contracts/operations"
 )
 
-// A change lands in two acts (ADR 0056, 0102), the same for every change and every caller:
+// A change commits in two acts (ADR 0056, 0102), the same for every change and every caller:
 //
 //   - CommitChange writes the modifications the change accepted on its own branch, as versions (ADR 0079), and reverts
 //     there the nodes it no longer changes (an impact withdrawn after its commit). It checks the drafts as versions (their
@@ -24,7 +24,7 @@ import (
 //     settled: every impact committed, no open flow, decision point or sub-change. It first rebases its branch onto the
 //     head of its target (the branch it was forked from: main, a release branch, the branch of its parent change;
 //     rebase_committed.go), asks the guardian of the change (mergecheck.go: its lifecycle, the say of its methodology,
-//     the landable states), then fast-forwards; the change is applied, closed, and a sub-change's parent holds its work
+//     the committable states), then fast-forwards; the change is applied, closed, and a sub-change's parent holds its work
 //     as its own (recordInParent). Only a root change's target moving in between falls back to the three-way merge,
 //     which leaves the change committed until it is resolved.
 //
@@ -192,7 +192,7 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 
 // commitOnBranch writes the accepted modifications of a change on its own branch and reverts the nodes it no longer
 // changes. The branch of a change holds no baseline (ADR 0140): the header returned is the commit as an event tells it,
-// its order the landing of the versions written, stored nowhere.
+// its order the commit of the versions written, stored nowhere.
 func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	a, own, err := g.newApplier(ctx, tx, id)
 	if err != nil {
@@ -219,19 +219,19 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 		baselineName = c.Title
 	}
 	result := domain.Baseline{Name: baselineName, Namespace: c.Namespace, Branch: a.branch, ParentID: own.ForkBaseline, ChangeID: c.ID, Kind: domain.BaselineCommit,
-		Seq: endLanding(tx, a.branch), CreatedAt: g.now()}
+		Seq: endCommit(tx, a.branch), CreatedAt: g.now()}
 	if reverted > 0 {
 		result.Kind = domain.BaselineRevert
 	}
-	// each version the change applied has landed on its own branch; it lands again on the branch it is integrated into
-	// (integrate, land)
-	landed := make([]domain.ImpactEvent, 0, len(a.cposts))
+	// each version the change applied has committed on its own branch; it commits again on the branch it is integrated into
+	// (integrate, commit)
+	committed := make([]domain.ImpactEvent, 0, len(a.cposts))
 	for _, cp := range a.cposts {
 		ref := cp.post.Ref()
-		landed = append(landed, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactLanded, Landed: &ref, Branch: domain.BranchOf(a.branch)})
+		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Branch: domain.BranchOf(a.branch)})
 	}
-	// one entry for the landing (ADR 0144)
-	if err := g.emit(ctx, tx, landed...); err != nil {
+	// one entry for the commit (ADR 0144)
+	if err := g.emit(ctx, tx, committed...); err != nil {
 		return domain.Baseline{}, err
 	}
 	// the change stays open (ADR 0102): it is edited and committed again until it is merged
@@ -327,7 +327,7 @@ func nextVersion(ctx context.Context, tx Tx, id domain.NodeID) (domain.Version, 
 	return vs[0].Version + 1, nil
 }
 
-// applier checks and gathers what a change lands: the versions its accepted change impacts wrote.
+// applier checks and gathers what a change commits: the versions its accepted change impacts wrote.
 type applier struct {
 	g      *Graph
 	tx     Tx

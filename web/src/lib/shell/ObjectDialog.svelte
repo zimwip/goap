@@ -8,7 +8,7 @@
   import FormRenderer from '../forms/FormRenderer.svelte';
   import type { FormValues, NodeSource } from '../forms/types';
   import { nodeWrite } from '../forms/nodeForm';
-  import { landableBirthStates } from '../lifecycle';
+  import { committableBirthStates } from '../lifecycle';
 
   let key = $state('');
   let values = $state<Record<string, string>>({});
@@ -25,9 +25,9 @@
     queueMicrotask(() => keyInput?.focus());
   });
 
-  // the dialog applies its change on main at once, so the node is born in a state it can land in (ADR 0078)
+  // the dialog applies its change on main at once, so the node is born in a state it can commit in (ADR 0078)
   const lifecycle = $derived(objectDialog.open ? typeCatalog.cat.lifecycle(objectDialog.nodeType) : undefined);
-  const states = $derived(landableBirthStates(lifecycle));
+  const states = $derived(committableBirthStates(lifecycle));
   let birth = $state('');
   $effect(() => {
     birth = states[0] ?? '';

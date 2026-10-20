@@ -1,5 +1,5 @@
 // The history of a branch as lanes (BaselineBranchGraph): its own baselines in its lane, and, for each change that
-// landed on it, the change's own branch as a lane of its own, from the baseline the change started on to the commit
+// committed on it, the change's own branch as a lane of its own, from the baseline the change started on to the commit
 // the merge joined. Two changes started from the same baseline and applied one after the other read as two lanes
 // forking from the same dot, the second joining by a merge. The branches forked from the branch shown and still open
 // have a lane too (ADR 0102): the branch of a change holds no baseline (ADR 0140), so it is its open head, drawn as a
@@ -77,10 +77,10 @@ export function historyEntries(
 ): LaneEntry<Baseline>[] {
   const byId = new Map(baselines.map((b) => [b.id ?? '', b]));
   const own = baselines.filter((b) => branchOf(b) === branch);
-  const landed = new Set(own.map((b) => b.changeId).filter((c): c is string => !!c));
+  const committed = new Set(own.map((b) => b.changeId).filter((c): c is string => !!c));
   const commits = commitsOf(baselines, branch);
-  // the lanes of the changes that landed here (a change branch seen from itself has none: its commit is its own)
-  const side = [...commits.entries()].filter(([change]) => landed.has(change)).map(([, b]) => b);
+  // the lanes of the changes that committed here (a change branch seen from itself has none: its commit is its own)
+  const side = [...commits.entries()].filter(([change]) => committed.has(change)).map(([, b]) => b);
   const present = new Set([...own, ...side].map((b) => b.id));
 
   const edges = (b: Baseline, joined: Baseline | undefined): LaneEdge[] => {

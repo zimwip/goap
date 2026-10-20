@@ -339,7 +339,7 @@ func renderIndex(s graph.Snapshot, entries []*entry) ([]byte, error) {
 	if s.Baseline != "" {
 		fmt.Fprintf(&b, "\nState of baseline `%s` (branch %s).\n", s.Baseline, s.Branch)
 	} else {
-		b.WriteString("\nNothing landed yet: the empty state.\n")
+		b.WriteString("\nNothing committed yet: the empty state.\n")
 	}
 	types := slices.Sorted(func(yield func(string) bool) {
 		for t := range byType {

@@ -1,4 +1,4 @@
-// Package graphtest lands the fixtures of tests through the operations every change uses (ADR 0076, 0079): a node is
+// Package graphtest commits the fixtures of tests through the operations every change uses (ADR 0076, 0079): a node is
 // created in a change of its own, moved to its state on its draft, accepted (as the tester: a fixture is a bulk
 // system path, not an edit) and applied, which writes its version.
 package graphtest
@@ -10,7 +10,7 @@ import (
 	"github.com/zimwip/goap/graph/graph"
 )
 
-// Node is a node a fixture lands: Namespace (default domain.DefaultNamespace), Key (required), Type, the Properties of
+// Node is a node a fixture commits: Namespace (default domain.DefaultNamespace), Key (required), Type, the Properties of
 // its first version, its outgoing Links, the lifecycle State it is moved to and the unit owning it (its key).
 type Node struct {
 	Namespace  string
@@ -32,7 +32,7 @@ func open(ctx context.Context, g *graph.Graph, ns, title string) (domain.Change,
 		ProjectID: g.Structure(domain.StructureProject).Root})
 }
 
-// Import lands a node on main through a change of its own and returns its latest version. It names no required
+// Import commits a node on main through a change of its own and returns its latest version. It names no required
 // parent: a fixture adds structure links with Links, or afterwards (Link).
 func Import(ctx context.Context, g *graph.Graph, in Node) (domain.Node, error) {
 	ns := domain.NamespaceOf(in.Namespace)
@@ -64,7 +64,7 @@ func Import(ctx context.Context, g *graph.Graph, in Node) (domain.Node, error) {
 	return g.NodeByKey(ctx, ns, in.Key)
 }
 
-// Edit lands an edit of the latest version of a node on main through a change of its own: checked out, its
+// Edit commits an edit of the latest version of a node on main through a change of its own: checked out, its
 // properties merged, the links added, accepted, applied. It returns the new version.
 func Edit(ctx context.Context, g *graph.Graph, node domain.NodeID, props map[string]any, links ...graph.LinkWrite) (domain.Node, error) {
 	cur, err := g.Node(ctx, domain.NodeRef{ID: node})
@@ -98,7 +98,7 @@ func Edit(ctx context.Context, g *graph.Graph, node domain.NodeID, props map[str
 	return g.Node(ctx, domain.NodeRef{ID: node})
 }
 
-// Link lands an outgoing link of the latest version of a node on main (Edit): the source gets a new version.
+// Link commits an outgoing link of the latest version of a node on main (Edit): the source gets a new version.
 func Link(ctx context.Context, g *graph.Graph, typ string, from, to domain.NodeRef) (domain.Node, error) {
 	return Edit(ctx, g, from.ID, nil, graph.LinkWrite{Type: typ, To: to})
 }
@@ -118,12 +118,12 @@ func Accept(ctx context.Context, g *graph.Graph, change domain.ChangeID, impact 
 	return nil
 }
 
-// Project lands a project under the root project of the graph (ADR 0039: a project is created with its parent).
+// Project commits a project under the root project of the graph (ADR 0039: a project is created with its parent).
 func Project(ctx context.Context, g *graph.Graph, key, name string) (domain.Node, error) {
 	return under(ctx, g, domain.StructureProject, key, name)
 }
 
-// Unit lands a unit of the organisation under its root unit (ADR 0054: a unit is created with its parent).
+// Unit commits a unit of the organisation under its root unit (ADR 0054: a unit is created with its parent).
 func Unit(ctx context.Context, g *graph.Graph, key, name string) (domain.Node, error) {
 	return under(ctx, g, domain.StructureOrganisation, key, name)
 }

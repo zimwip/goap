@@ -186,7 +186,7 @@ type Node struct {
 	Owner   string `protobuf:"bytes,18,opt,name=owner,proto3" json:"owner,omitempty"`
 	Project string `protobuf:"bytes,19,opt,name=project,proto3" json:"project,omitempty"`
 	// the draft of a node in a change (ADR 0079): the node has no version while the change works, version is 0; the version
-	// is written when the change lands
+	// is written when the change commits
 	Draft bool `protobuf:"varint,20,opt,name=draft,proto3" json:"draft,omitempty"`
 	// the nodes this one derives from (ADR 0077, merge and split): set on the first version of a successor
 	Origins       []*NodeRef `protobuf:"bytes,21,rep,name=origins,proto3" json:"origins,omitempty"`
@@ -461,10 +461,10 @@ type NodeView struct {
 	Latest int32                  `protobuf:"varint,2,opt,name=latest,proto3" json:"latest,omitempty"`
 	Out    []*Link                `protobuf:"bytes,3,rep,name=out,proto3" json:"out,omitempty"`
 	In     []*Link                `protobuf:"bytes,4,rep,name=in,proto3" json:"in,omitempty"`
-	// the node has a lifecycle and its state is flagged notLandable (ADR 0078)
-	NotLandable   bool `protobuf:"varint,5,opt,name=not_landable,json=notLandable,proto3" json:"not_landable,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// the node has a lifecycle and its state is flagged notCommittable (ADR 0078)
+	NotCommittable bool `protobuf:"varint,5,opt,name=not_committable,json=notCommittable,proto3" json:"not_committable,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *NodeView) Reset() {
@@ -525,9 +525,9 @@ func (x *NodeView) GetIn() []*Link {
 	return nil
 }
 
-func (x *NodeView) GetNotLandable() bool {
+func (x *NodeView) GetNotCommittable() bool {
 	if x != nil {
-		return x.NotLandable
+		return x.NotCommittable
 	}
 	return false
 }
@@ -1265,7 +1265,7 @@ type ChangeImpact struct {
 	// the change is committed (empty while the impact of an existing node is only proposed)
 	Post *NodeRef `protobuf:"bytes,7,opt,name=post,proto3" json:"post,omitempty"`
 	// version on the target branch once applied
-	Landed *NodeRef `protobuf:"bytes,8,opt,name=landed,proto3" json:"landed,omitempty"`
+	Committed *NodeRef `protobuf:"bytes,8,opt,name=committed,proto3" json:"committed,omitempty"`
 	// proposed | accepted | rejected
 	Review      string    `protobuf:"bytes,9,opt,name=review,proto3" json:"review,omitempty"`
 	Reviews     []*Review `protobuf:"bytes,10,rep,name=reviews,proto3" json:"reviews,omitempty"`
@@ -1366,9 +1366,9 @@ func (x *ChangeImpact) GetPost() *NodeRef {
 	return nil
 }
 
-func (x *ChangeImpact) GetLanded() *NodeRef {
+func (x *ChangeImpact) GetCommitted() *NodeRef {
 	if x != nil {
-		return x.Landed
+		return x.Committed
 	}
 	return nil
 }
@@ -2031,7 +2031,7 @@ func (*DeleteTagResponse) Descriptor() ([]byte, []int) {
 type ListBaselinesRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	// a page of the history of this branch (ADR 0140): its baselines landed before `before` (0: the newest), at most
+	// a page of the history of this branch (ADR 0140): its baselines committed before `before` (0: the newest), at most
 	// `limit` (default 100, at most 500), with what draws them in `related`. Neither branch nor ids: every baseline of
 	// the namespace.
 	Branch string `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
@@ -2913,7 +2913,7 @@ type ImpactEvent struct {
 	// empty for a change-level event (adopted)
 	ImpactId string `protobuf:"bytes,4,opt,name=impact_id,json=impactId,proto3" json:"impact_id,omitempty"`
 	// proposed (an existing node) | created (a new node: its impact and its draft) | checkedOut | transitioned | updated |
-	// cancelled | withdrawn | reviewed | discarded | adopted | landed | rebased
+	// cancelled | withdrawn | reviewed | discarded | adopted | committed | rebased
 	Op string `protobuf:"bytes,5,opt,name=op,proto3" json:"op,omitempty"`
 	// the caller: the flow branch ("" = the main flow), the journal record of the action run, the principal or component
 	Flow      string                 `protobuf:"bytes,6,opt,name=flow,proto3" json:"flow,omitempty"`
@@ -2925,8 +2925,8 @@ type ImpactEvent struct {
 	// created, checkedOut, transitioned, updated
 	Post *NodeRef `protobuf:"bytes,11,opt,name=post,proto3" json:"post,omitempty"`
 	// rebased
-	Pre    *NodeRef `protobuf:"bytes,12,opt,name=pre,proto3" json:"pre,omitempty"`
-	Landed *NodeRef `protobuf:"bytes,13,opt,name=landed,proto3" json:"landed,omitempty"`
+	Pre       *NodeRef `protobuf:"bytes,12,opt,name=pre,proto3" json:"pre,omitempty"`
+	Committed *NodeRef `protobuf:"bytes,13,opt,name=committed,proto3" json:"committed,omitempty"`
 	// reviewed, discarded
 	Review *Review `protobuf:"bytes,14,opt,name=review,proto3" json:"review,omitempty"`
 	// adopted: the action runs the flow replaces
@@ -3049,9 +3049,9 @@ func (x *ImpactEvent) GetPre() *NodeRef {
 	return nil
 }
 
-func (x *ImpactEvent) GetLanded() *NodeRef {
+func (x *ImpactEvent) GetCommitted() *NodeRef {
 	if x != nil {
-		return x.Landed
+		return x.Committed
 	}
 	return nil
 }
@@ -9900,7 +9900,7 @@ type CommitEditsRequest struct {
 	// caller's active project, else the default project), ADR 0054
 	OwnerOrg  string `protobuf:"bytes,9,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
 	ProjectId string `protobuf:"bytes,10,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	// the writer's own events, stored in the graph's outbox with the landing of the commit and delivered with the graph's
+	// the writer's own events, stored in the graph's outbox in the transaction of the commit and delivered with the graph's
 	// (ADR 0136): what a registry keeping its versions in the graph emits; system callers only, never a subject of the graph
 	Events        []*CarriedEvent `protobuf:"bytes,11,rep,name=events,proto3" json:"events,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -16458,7 +16458,7 @@ type GetChangeViewRequest struct {
 	ChangeId string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
 	// flow or option (empty: the active option, else the main flow; "main": the main flow)
 	Flow string `protobuf:"bytes,2,opt,name=flow,proto3" json:"flow,omitempty"`
-	// written (default) | accepted | landed
+	// written (default) | accepted | committed
 	Level         string `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -16517,7 +16517,7 @@ func (x *GetChangeViewRequest) GetLevel() string {
 
 type GetChangeViewResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// a baseline without an id below landed: computed, not stored
+	// a baseline without an id below committed: computed, not stored
 	Baseline      *Baseline `protobuf:"bytes,1,opt,name=baseline,proto3" json:"baseline,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -17854,13 +17854,13 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04from\x18\x03 \x01(\v2\x16.goap.graph.v1.NodeRefR\x04from\x12&\n" +
 	"\x02to\x18\x04 \x01(\v2\x16.goap.graph.v1.NodeRefR\x02to\x12-\n" +
 	"\x05props\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x05props\x12\x1b\n" +
-	"\tchange_id\x18\x06 \x01(\tR\bchangeId\"\xba\x01\n" +
+	"\tchange_id\x18\x06 \x01(\tR\bchangeId\"\xc0\x01\n" +
 	"\bNodeView\x12'\n" +
 	"\x04node\x18\x01 \x01(\v2\x13.goap.graph.v1.NodeR\x04node\x12\x16\n" +
 	"\x06latest\x18\x02 \x01(\x05R\x06latest\x12%\n" +
 	"\x03out\x18\x03 \x03(\v2\x13.goap.graph.v1.LinkR\x03out\x12#\n" +
-	"\x02in\x18\x04 \x03(\v2\x13.goap.graph.v1.LinkR\x02in\x12!\n" +
-	"\fnot_landable\x18\x05 \x01(\bR\vnotLandable\"\xa5\x03\n" +
+	"\x02in\x18\x04 \x03(\v2\x13.goap.graph.v1.LinkR\x02in\x12'\n" +
+	"\x0fnot_committable\x18\x05 \x01(\bR\x0enotCommittable\"\xa5\x03\n" +
 	"\bBaseline\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1b\n" +
@@ -17947,7 +17947,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\n" +
 	"superseded\x18\a \x01(\bR\n" +
 	"superseded\x12\x1b\n" +
-	"\treview_id\x18\b \x01(\tR\breviewId\"\x9d\x05\n" +
+	"\treview_id\x18\b \x01(\tR\breviewId\"\xa3\x05\n" +
 	"\fChangeImpact\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n" +
@@ -17955,8 +17955,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x06intent\x18\x04 \x01(\tR\x06intent\x12\x1c\n" +
 	"\trationale\x18\x05 \x01(\tR\trationale\x12(\n" +
 	"\x03pre\x18\x06 \x01(\v2\x16.goap.graph.v1.NodeRefR\x03pre\x12*\n" +
-	"\x04post\x18\a \x01(\v2\x16.goap.graph.v1.NodeRefR\x04post\x12.\n" +
-	"\x06landed\x18\b \x01(\v2\x16.goap.graph.v1.NodeRefR\x06landed\x12\x16\n" +
+	"\x04post\x18\a \x01(\v2\x16.goap.graph.v1.NodeRefR\x04post\x124\n" +
+	"\tcommitted\x18\b \x01(\v2\x16.goap.graph.v1.NodeRefR\tcommitted\x12\x16\n" +
 	"\x06review\x18\t \x01(\tR\x06review\x12/\n" +
 	"\areviews\x18\n" +
 	" \x03(\v2\x15.goap.graph.v1.ReviewR\areviews\x12\x10\n" +
@@ -18075,7 +18075,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04node\x18\x01 \x01(\v2\x13.goap.graph.v1.NodeR\x04node\x12)\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x13.goap.graph.v1.NodeR\x05nodes\x12)\n" +
 	"\x05links\x18\x03 \x03(\v2\x13.goap.graph.v1.LinkR\x05links\x12(\n" +
-	"\x10suspect_link_ids\x18\x04 \x03(\tR\x0esuspectLinkIds\"\xe5\x03\n" +
+	"\x10suspect_link_ids\x18\x04 \x03(\tR\x0esuspectLinkIds\"\xeb\x03\n" +
 	"\vImpactEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tchange_id\x18\x02 \x01(\tR\bchangeId\x12\x10\n" +
@@ -18089,8 +18089,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x05state\x18\n" +
 	" \x01(\v2\x1b.goap.graph.v1.ChangeImpactR\x05state\x12*\n" +
 	"\x04post\x18\v \x01(\v2\x16.goap.graph.v1.NodeRefR\x04post\x12(\n" +
-	"\x03pre\x18\f \x01(\v2\x16.goap.graph.v1.NodeRefR\x03pre\x12.\n" +
-	"\x06landed\x18\r \x01(\v2\x16.goap.graph.v1.NodeRefR\x06landed\x12-\n" +
+	"\x03pre\x18\f \x01(\v2\x16.goap.graph.v1.NodeRefR\x03pre\x124\n" +
+	"\tcommitted\x18\r \x01(\v2\x16.goap.graph.v1.NodeRefR\tcommitted\x12-\n" +
 	"\x06review\x18\x0e \x01(\v2\x15.goap.graph.v1.ReviewR\x06review\x12\x14\n" +
 	"\x05stale\x18\x0f \x03(\tR\x05stale\"\xbc\x02\n" +
 	"\bLogEntry\x12\x10\n" +
@@ -19665,7 +19665,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	278, // 21: goap.graph.v1.Review.at:type_name -> google.protobuf.Timestamp
 	2,   // 22: goap.graph.v1.ChangeImpact.pre:type_name -> goap.graph.v1.NodeRef
 	2,   // 23: goap.graph.v1.ChangeImpact.post:type_name -> goap.graph.v1.NodeRef
-	2,   // 24: goap.graph.v1.ChangeImpact.landed:type_name -> goap.graph.v1.NodeRef
+	2,   // 24: goap.graph.v1.ChangeImpact.committed:type_name -> goap.graph.v1.NodeRef
 	11,  // 25: goap.graph.v1.ChangeImpact.reviews:type_name -> goap.graph.v1.Review
 	278, // 26: goap.graph.v1.ChangeImpact.created_at:type_name -> google.protobuf.Timestamp
 	13,  // 27: goap.graph.v1.ChangeImpact.validation:type_name -> goap.graph.v1.ImpactValidation
@@ -19697,7 +19697,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	12,  // 53: goap.graph.v1.ImpactEvent.state:type_name -> goap.graph.v1.ChangeImpact
 	2,   // 54: goap.graph.v1.ImpactEvent.post:type_name -> goap.graph.v1.NodeRef
 	2,   // 55: goap.graph.v1.ImpactEvent.pre:type_name -> goap.graph.v1.NodeRef
-	2,   // 56: goap.graph.v1.ImpactEvent.landed:type_name -> goap.graph.v1.NodeRef
+	2,   // 56: goap.graph.v1.ImpactEvent.committed:type_name -> goap.graph.v1.NodeRef
 	11,  // 57: goap.graph.v1.ImpactEvent.review:type_name -> goap.graph.v1.Review
 	278, // 58: goap.graph.v1.LogEntry.at:type_name -> google.protobuf.Timestamp
 	37,  // 59: goap.graph.v1.ListChangeLogResponse.entries:type_name -> goap.graph.v1.LogEntry

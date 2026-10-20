@@ -32,7 +32,7 @@ func newStateView(ctx context.Context, tx Tx, at domain.BaselineID) *stateView {
 	})
 }
 
-// newBranchView is the state of the branch of a change (ADR 0140): its fork with what landed on it.
+// newBranchView is the state of the branch of a change (ADR 0140): its fork with what committed on it.
 func newBranchView(ctx context.Context, tx Tx, b domain.Branch) *stateView {
 	return newView(ctx, tx, func(ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
 		return branchVersions(ctx, tx, b, ids)
@@ -131,7 +131,7 @@ func versionsAt(ctx context.Context, tx Tx, at domain.BaselineID, ids []domain.N
 }
 
 // branchHeadHeader returns the head baseline of a branch without its state (ADR 0137); the empty state (no change
-// landed yet) has the empty id.
+// committed yet) has the empty id.
 func branchHeadHeader(ctx context.Context, tx Tx, namespace, name string) (domain.Baseline, error) {
 	ns, n := domain.NamespaceOf(namespace), domain.BranchOf(name)
 	b, err := tx.Branch(ctx, ns, n)

@@ -102,7 +102,7 @@
             <label class="check" title="The attribute is the display name of the node"><input type="checkbox" bind:checked={a.asName} onchange={() => setAsName(a)} disabled={readonly} /> display name of the node</label>
           {/if}
           <div class="field" data-path="{ap}.validators">
-            <span class="label">Validators <span class="hint">(property validators, run in this order when the draft is accepted and at landing)</span></span>
+            <span class="label">Validators <span class="hint">(property validators, run in this order when the draft is accepted and at commit)</span></span>
             <ValidatorList bind:list={a.validators} instances={validatorInstances} usage="property_validator" {bad} {readonly} path="{ap}.validators" />
           </div>
         </div>

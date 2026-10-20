@@ -51,7 +51,7 @@ export function persistenceFromForm(f: PersistenceForm): Persistence | undefined
 export interface LifecycleStateForm {
   name: string;
   description: string;
-  notLandable: boolean;
+  notCommittable: boolean;
   final: boolean;
 }
 
@@ -841,7 +841,7 @@ export function lifecycleToForm(l: Lifecycle): LifecycleForm {
     name: l.name ?? '',
     description: l.description ?? '',
     initial: l.initial ?? '',
-    states: (l.states ?? []).map((s) => ({ name: s.name ?? '', description: s.description ?? '', notLandable: !!s.notLandable, final: !!s.final })),
+    states: (l.states ?? []).map((s) => ({ name: s.name ?? '', description: s.description ?? '', notCommittable: !!s.notCommittable, final: !!s.final })),
     transitions: (l.transitions ?? []).map((t) => ({
       name: t.name ?? '',
       description: t.description ?? '',
@@ -864,7 +864,7 @@ export function lifecycleFromForm(l: LifecycleForm): Lifecycle {
   o.states = l.states.map((s) => {
     const st: LifecycleState = { name: s.name.trim() };
     put(st, 'description', s.description.trim());
-    if (s.notLandable) st.notLandable = true;
+    if (s.notCommittable) st.notCommittable = true;
     if (s.final) st.final = true;
     return st;
   });
@@ -891,9 +891,9 @@ export function defaultLifecycle(name = ''): LifecycleForm {
     description: '',
     initial: 'proposed',
     states: [
-      { name: 'proposed', description: '', notLandable: false, final: false },
-      { name: 'draft', description: 'Being worked on in a change', notLandable: true, final: false },
-      { name: 'approved', description: '', notLandable: false, final: false },
+      { name: 'proposed', description: '', notCommittable: false, final: false },
+      { name: 'draft', description: 'Being worked on in a change', notCommittable: true, final: false },
+      { name: 'approved', description: '', notCommittable: false, final: false },
     ],
     transitions: [
       { name: 'start', description: '', from: 'proposed', to: 'draft', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] },

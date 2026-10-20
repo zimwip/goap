@@ -156,7 +156,7 @@
       </section>
       <section class="card" data-path="{path}.validators">
         <h3>Validators</h3>
-        <p class="hint">Node validators check a node as a whole, across its attributes, when the draft is accepted and at landing, after the attribute validators and those of the parent types. Run in this order.</p>
+        <p class="hint">Node validators check a node as a whole, across its attributes, when the draft is accepted and at commit, after the attribute validators and those of the parent types. Run in this order.</p>
         <ValidatorList bind:list={f.nodeTypes[index].validators} instances={instancesOf('node_validator')} usage="node_validator" noun="node validator" bad={(p) => d.bad(p)} readonly={d.readonly} path="{path}.validators" />
       </section>
       <section class="card">

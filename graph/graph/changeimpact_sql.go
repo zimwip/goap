@@ -10,7 +10,7 @@ import (
 type cnRow struct {
 	ID                          string
 	NodeID                      *string
-	Pre, Post, Landed           *int
+	Pre, Post, Committed        *int
 	Reviews, DerivedFrom, Items []byte
 	Key, Type, Intent, Review   string
 	Rationale, Via              string
@@ -29,7 +29,7 @@ func toCNRow(cn domain.ChangeImpact) (cnRow, error) {
 		v := int(ref.Version)
 		return &v
 	}
-	r.Pre, r.Post, r.Landed = ver(cn.Pre), ver(cn.Post), ver(cn.Landed)
+	r.Pre, r.Post, r.Committed = ver(cn.Pre), ver(cn.Post), ver(cn.Committed)
 	switch {
 	case cn.Pre != nil:
 		s := string(cn.Pre.ID)
@@ -66,7 +66,7 @@ func (r cnRow) node() (domain.ChangeImpact, error) {
 		}
 		return &domain.NodeRef{ID: domain.NodeID(*r.NodeID), Version: domain.Version(*v)}
 	}
-	cn.Pre, cn.Post, cn.Landed = ref(r.Pre), ref(r.Post), ref(r.Landed)
+	cn.Pre, cn.Post, cn.Committed = ref(r.Pre), ref(r.Post), ref(r.Committed)
 	if err := json.Unmarshal(r.Reviews, &cn.Reviews); err != nil {
 		return cn, err
 	}

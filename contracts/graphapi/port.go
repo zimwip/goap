@@ -61,7 +61,7 @@ type Port interface {
 	// ChangeGraph is the graph a call on a change reads: the active option's (or the option flow names), else the
 	// reference baseline of the change (ADR 0032 §6).
 	ChangeGraph(ctx context.Context, id domain.ChangeID, flow string) ([]domain.Node, []domain.Link, error)
-	// ChangeView is the graph of a change at a level (written, accepted, landed) on a flow (ADR 0032 §5).
+	// ChangeView is the graph of a change at a level (written, accepted, committed) on a flow (ADR 0032 §5).
 	ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (domain.Baseline, error)
 	// Options of a change (ADR 0009 §3, ADR 0032 §6): open, activate, evaluate, list and compare them. Selecting and
 	// rejecting one is a decision, made through the graph service.

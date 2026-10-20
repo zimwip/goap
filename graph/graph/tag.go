@@ -51,7 +51,7 @@ func (g *Graph) DeleteTag(ctx context.Context, id domain.TagID) error {
 	return g.repo.InTx(ctx, func(tx Tx) error { return tx.DeleteTag(ctx, id) })
 }
 
-// StateAfter returns the state of the namespace after change id landed: the baseline that change produced.
+// StateAfter returns the state of the namespace after change id committed: the baseline that change produced.
 func (g *Graph) StateAfter(ctx context.Context, id domain.ChangeID) (b domain.Baseline, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)

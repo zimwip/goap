@@ -25,7 +25,7 @@ func setEdit(ref domain.NodeRef, props map[string]any) NodeEdit {
 	return NodeEdit{Pre: &ref, Props: props}
 }
 
-// commitOn makes a change of edits that lands on a branch ("" = main) and returns its resulting baseline.
+// commitOn makes a change of edits that commits on a branch ("" = main) and returns its resulting baseline.
 func commitOn(t *testing.T, g *Graph, branch string, from domain.BaselineID, edits ...NodeEdit) domain.Baseline {
 	t.Helper()
 	res, err := g.Commit(context.Background(), Commit{ProjectID: "PROJ-ROOT", Title: "c-" + branch, Baseline: from, Branch: branch, By: "test", Edits: edits})
@@ -60,7 +60,7 @@ func testBranchMerge(t *testing.T, repo Repo) {
 		t.Fatalf("opt-a baseline: %+v", bA)
 	}
 	versions := func() []domain.Node { return must[[]domain.Node](t)(g.Versions(ctx, f.req.ID)) }
-	// written on the branch of the change, joined opt-a when the change landed there (ADR 0032)
+	// written on the branch of the change, joined opt-a when the change committed there (ADR 0032)
 	v2 := versions()[1]
 	if !strings.HasPrefix(v2.Branch, "change-") || !slices.Equal(v2.Joined, []string{"opt-a"}) || v2.Reason != domain.ReasonDerive || !slices.Equal(v2.Parents, []domain.Version{1}) {
 		t.Fatalf("derived version: %+v", v2)
@@ -72,7 +72,7 @@ func testBranchMerge(t *testing.T, repo Repo) {
 		t.Fatalf("opt-a head %s, want %s", h.ID, bA.ID)
 	}
 
-	// main moves in parallel: REQ-1 v3, derived from v1 on the branch of the change and landed on main.
+	// main moves in parallel: REQ-1 v3, derived from v1 on the branch of the change and committed on main.
 	bM := commitOn(t, g, "", f.base.ID, setEdit(req1, map[string]any{"prio": "high"}))
 	v3 := versions()[2]
 	if !slices.Equal(v3.Joined, []string{domain.MainBranch}) || !slices.Equal(v3.Parents, []domain.Version{1}) || bM.Nodes[f.req.ID] != 3 {
@@ -134,7 +134,7 @@ func testBranchMerge(t *testing.T, repo Repo) {
 	// the branch is suspect, REQ-1 got a merge version with the changes of main
 	des := must[domain.Node](t)(g.NodeByKey(ctx, "", "DES-1"))
 	if des.Version != 1 || b.Nodes[des.ID] != 1 {
-		t.Fatalf("DES-1 must land as is: %+v", des)
+		t.Fatalf("DES-1 must commit as is: %+v", des)
 	}
 	suspect := must[[]domain.Link](t)(g.SuspectLinks(ctx, b.ID))
 	if !slices.ContainsFunc(suspect, func(l domain.Link) bool { return l.Type == "refines" && l.From == des.Ref() && l.To == v2.Ref() }) {
@@ -224,11 +224,11 @@ func testBranchMergeRecordsChangeImpacts(t *testing.T, repo Repo) {
 		byKey[n.Key] = n
 	}
 	req, des := byKey["REQ-1"], byKey["DES-1"]
-	if req.Intent != domain.IntentModified || req.Pre == nil || req.Landed == nil || req.Review != domain.ReviewAccepted || des.Intent != domain.IntentCreated || des.Pre != nil {
+	if req.Intent != domain.IntentModified || req.Pre == nil || req.Committed == nil || req.Review != domain.ReviewAccepted || des.Intent != domain.IntentCreated || des.Pre != nil {
 		t.Fatalf("change impacts: %+v %+v", req, des)
 	}
 	head, err := g.Node(ctx, domain.NodeRef{ID: f.req.ID})
-	if err != nil || head.Reason != domain.ReasonMerge || head.Properties["title"] != "both" || head.ChangeImpact != req.ID || len(head.Parents) != 2 || head.Ref() != *req.Landed {
+	if err != nil || head.Reason != domain.ReasonMerge || head.Properties["title"] != "both" || head.ChangeImpact != req.ID || len(head.Parents) != 2 || head.Ref() != *req.Committed {
 		t.Fatalf("merge version: %+v %v", head, err)
 	}
 	if head.Comment == "" || res.Change.Status != domain.ChangeApplied {
@@ -291,7 +291,7 @@ func testHeadIsScopedToOneNamespace(t *testing.T, repo Repo) {
 	}
 }
 
-// A namespace no change landed in has the empty state for head (empty id); its first change starts from it and leaves
+// A namespace no change committed in has the empty state for head (empty id); its first change starts from it and leaves
 // the first baseline, which has no parent but a change (ADR 0056).
 func TestFirstChangeStartsFromTheEmptyState(t *testing.T) {
 	forEachRepo(t, testFirstChangeStartsFromTheEmptyState)

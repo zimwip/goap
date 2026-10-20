@@ -633,7 +633,7 @@ func TestSDLCProcess(t *testing.T) {
 		t.Fatalf("release train: %v %s %s", err, train.Status, train.Error)
 	}
 	e.Drain()
-	// back in the delivery: its gate delivers the change (a final state: it may land), then the application waits for
+	// back in the delivery: its gate delivers the change (a final state: it may commit), then the application waits for
 	// an approver (four-eyes)
 	if p, err = e.Store.Get(ctx, p.ID); err != nil {
 		t.Fatal(err)

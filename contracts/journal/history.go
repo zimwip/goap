@@ -98,7 +98,7 @@ type writeOf struct {
 
 // impactMoves are the operations on an impact that change what a step reading it saw: an edit of the draft, a move of
 // its lifecycle, its cancellation or withdrawal, the rebase of the version it starts from (ADR 0109 §5). A review, a
-// commit or a landing does not change the content.
+// commit or a commit does not change the content.
 var impactMoves = []domain.ImpactOp{domain.ImpactUpdated, domain.ImpactTransitioned, domain.ImpactCancelled,
 	domain.ImpactWithdrawn, domain.ImpactRebased}
 

@@ -2,7 +2,7 @@
   // History of a change with its parent and its sub-changes (ADR 0103), as a branch graph: a lane per change, a row per
   // event of its impact log, the parent's lane on the left. A sub-change's lane starts from where its parent stood (its
   // branch is forked from the parent's), a rebase onto the parent's branch is named, and its merge ties the parent's
-  // landing of a version to the sub-change's own. A node filter follows one node across the family.
+  // commit of a version to the sub-change's own. A node filter follows one node across the family.
   import { graph, errorMessage, formatDate, type Change, type LogEntry } from '../api';
   import { stamp, keyOf } from '../flux/signals.svelte';
   import { openTab } from '../shell/tabs.svelte';
@@ -123,7 +123,7 @@
     color: var(--warn);
   }
   .label.integrate,
-  .label.land {
+  .label.commit {
     color: var(--ok, var(--accent));
   }
   .hchange {

@@ -22,7 +22,7 @@ func ActivityOf(c domain.Change) string {
 }
 
 // Merge implements pkg/graph.ChangeLifecycles (ADR 0066, 0102): a change scoped to an Activity (DataActivity) is
-// merged when that activity's own goal condition holds, instead of the node-type lifecycle's landable-state floor; any
+// merged when that activity's own goal condition holds, instead of the node-type lifecycle's committable-state floor; any
 // other change is not decided.
 func (s *Service) Merge(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error) {
 	ref := ActivityOf(c)

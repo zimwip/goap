@@ -11,7 +11,7 @@ import (
 
 // The history of a branch is read a page at a time (ADR 0140): the pages cover its baselines once each, newest page
 // first, each with the baselines the changes of the page left on their own branches; a branch list carries the heads and
-// the counts of the branches. Changes started from the same baseline and changing other nodes land with one baseline on
+// the counts of the branches. Changes started from the same baseline and changing other nodes commit with one baseline on
 // main each and their commit on their own branch: no rebase baseline.
 func TestBaselineHistory(t *testing.T) { forEachRepo(t, testBaselineHistory) }
 
@@ -53,7 +53,7 @@ func testBaselineHistory(t *testing.T, repo Repo) {
 		t.Fatalf("pages = %d baselines, main has %d", len(got), len(main))
 	}
 	for _, c := range changes[:4] {
-		// a change's branch holds no baseline: the change is on the page by the baseline it landed in
+		// a change's branch holds no baseline: the change is on the page by the baseline it committed in
 		for _, b := range must[[]domain.Baseline](t)(g.Baselines(ctx, "")) {
 			if b.ChangeID == c.ID && (b.Kind == domain.BaselineCommit || b.Kind == domain.BaselineRebase) {
 				t.Fatalf("%s left a baseline on its own branch: %+v", c.Title, b)

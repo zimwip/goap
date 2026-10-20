@@ -137,7 +137,7 @@ func TestStagedSettings(t *testing.T) {
 		t.Fatalf("on main after discard = %+v", n)
 	}
 
-	// an edit put back as it was is not saved: the change goes, landing nothing
+	// an edit put back as it was is not saved: the change goes, commit nothing
 	stage("alice", edit("LLP:p1", map[string]any{"enabled": true}))
 	stage("alice", edit("LLP:p1", map[string]any{"enabled": false}))
 	before, _ := g.BranchHead(ctx, ns, domain.MainBranch)

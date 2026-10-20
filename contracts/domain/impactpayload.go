@@ -120,14 +120,14 @@ func marshalImpact(e ImpactEvent) ([]byte, error) {
 }
 
 // One log entry may carry several events of one operation (ADR 0144): the verdicts of a review, the versions of a
-// landing. The payload of such an entry is {"impacts": [part...]} with the keys every part has alike hoisted next to it;
+// commit. The payload of such an entry is {"impacts": [part...]} with the keys every part has alike hoisted next to it;
 // a part is the payload of its event with its "impactId". The envelope (the columns) is the events', which share it.
 
 // batchKey is the key of the parts of an entry carrying several events.
 const batchKey = "impacts"
 
 // Batched reports the operations whose events of one operation share a log entry (ADR 0144).
-func (o ImpactOp) Batched() bool { return o == ImpactReviewed || o == ImpactLanded }
+func (o ImpactOp) Batched() bool { return o == ImpactReviewed || o == ImpactCommitted }
 
 // SameEntry reports events one log entry can carry: of one change and one batched operation, with one envelope.
 func SameEntry(a, b ImpactEvent) bool {

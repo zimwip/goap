@@ -722,7 +722,7 @@ func (c *Compiled) AgentActions(ag Agent) []Action {
 	}
 	all := c.PlannedActions()
 	if len(ag.Actions) == 0 {
-		// an agent of every action plans the gates of the methodology too (ADR 0132): a change lands through them
+		// an agent of every action plans the gates of the methodology too (ADR 0132): a change commits through them
 		return append(all, c.gateActions()...)
 	}
 	out := make([]Action, 0, len(ag.Actions))

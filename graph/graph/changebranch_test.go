@@ -89,7 +89,7 @@ func testChangeBranch(t *testing.T, repo Repo) {
 		t.Fatalf("B's baseline = %s on %s, want a fast-forward of %s", bb.Kind, bb.ParentID, ba.ID)
 	}
 	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "B title" || len(n.Parents) != 2 {
-		t.Fatalf("B not landed on A: %v %v", n.Properties, n.Parents)
+		t.Fatalf("B not committed on A: %v %v", n.Properties, n.Parents)
 	}
 }
 

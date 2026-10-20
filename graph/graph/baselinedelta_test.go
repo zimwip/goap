@@ -10,7 +10,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// The state of a baseline is the selection of the versions landed (ADR 0143): reading it back gives what was written,
+// The state of a baseline is the selection of the versions committed (ADR 0143): reading it back gives what was written,
 // with nodes added and changed.
 func TestBaselineStates(t *testing.T) { forEachRepo(t, testBaselineStates) }
 
@@ -48,9 +48,9 @@ func testBaselineStates(t *testing.T, repo Repo) {
 	}
 }
 
-// checkLandings verifies that every landed event agrees with the baseline it names (ADR 0032): the version is in it
+// checkCommits verifies that every committed event agrees with the baseline it names (ADR 0032): the version is in it
 // (a tombstone: the node is not), and the baseline changed it from its parent.
-func checkLandings(t *testing.T, repo Repo) {
+func checkCommits(t *testing.T, repo Repo) {
 	t.Helper()
 	if t.Failed() {
 		return
@@ -67,7 +67,7 @@ func checkLandings(t *testing.T, repo Repo) {
 				return err
 			}
 			for _, e := range events {
-				if e.Op != domain.ImpactLanded || e.Baseline == "" {
+				if e.Op != domain.ImpactCommitted || e.Baseline == "" {
 					continue
 				}
 				b, err := tx.Baseline(ctx, e.Baseline)
@@ -82,18 +82,18 @@ func checkLandings(t *testing.T, repo Repo) {
 					}
 					parent = p.Nodes
 				}
-				n, err := tx.Node(ctx, *e.Landed)
+				n, err := tx.Node(ctx, *e.Committed)
 				if err != nil {
 					return err
 				}
 				v, in := b.Nodes[n.ID]
 				switch {
 				case n.Deleted && in:
-					t.Errorf("change %s: %s landed as a tombstone in %s, which holds v%d", c.ID, n.Key, b.ID, v)
+					t.Errorf("change %s: %s committed as a tombstone in %s, which holds v%d", c.ID, n.Key, b.ID, v)
 				case !n.Deleted && v != n.Version:
-					t.Errorf("change %s: %s landed as v%d in %s, which holds v%d", c.ID, n.Key, n.Version, b.ID, v)
+					t.Errorf("change %s: %s committed as v%d in %s, which holds v%d", c.ID, n.Key, n.Version, b.ID, v)
 				case !n.Deleted && parent[n.ID] == n.Version:
-					t.Errorf("change %s: %s landed as v%d in %s, already in its parent", c.ID, n.Key, n.Version, b.ID)
+					t.Errorf("change %s: %s committed as v%d in %s, already in its parent", c.ID, n.Key, n.Version, b.ID)
 				}
 			}
 		}
@@ -104,7 +104,7 @@ func checkLandings(t *testing.T, repo Repo) {
 	}
 }
 
-// A commit writes a header (ADR 0143): its state, whole or for some nodes, is the selection of the versions landed.
+// A commit writes a header (ADR 0143): its state, whole or for some nodes, is the selection of the versions committed.
 func TestCommitWritesNoEntry(t *testing.T) { forEachRepo(t, testCommitWritesNoEntry) }
 
 func testCommitWritesNoEntry(t *testing.T, repo Repo) {
@@ -140,7 +140,7 @@ func testCommitWritesNoEntry(t *testing.T, repo Repo) {
 }
 
 // checkStates verifies that what the changes did tells the state of every baseline (ADR 0056, 0140): replaying, from
-// the state of its parent, the `landed` events naming a baseline whose state is derived gives the state the graph reads
+// the state of its parent, the `committed` events naming a baseline whose state is derived gives the state the graph reads
 // for it, whatever the baselines in between are stored as. A baseline that is not derived is a source and is skipped.
 func checkStates(t *testing.T, repo Repo) {
 	t.Helper()
@@ -153,7 +153,7 @@ func checkStates(t *testing.T, repo Repo) {
 		if err != nil {
 			return err
 		}
-		landed := map[domain.BaselineID][]domain.NodeRef{}
+		committed := map[domain.BaselineID][]domain.NodeRef{}
 		cs, err := tx.Changes(ctx)
 		if err != nil {
 			return err
@@ -164,8 +164,8 @@ func checkStates(t *testing.T, repo Repo) {
 				return err
 			}
 			for _, e := range events {
-				if e.Op == domain.ImpactLanded && e.Baseline != "" && e.Landed != nil {
-					landed[e.Baseline] = append(landed[e.Baseline], *e.Landed)
+				if e.Op == domain.ImpactCommitted && e.Baseline != "" && e.Committed != nil {
+					committed[e.Baseline] = append(committed[e.Baseline], *e.Committed)
 				}
 			}
 		}
@@ -188,9 +188,9 @@ func checkStates(t *testing.T, repo Repo) {
 					continue
 				}
 				want := maps.Clone(p.Nodes)
-				refs := landed[b.ID]
+				refs := committed[b.ID]
 				if b.Kind == domain.BaselineFastForward {
-					// a fast-forward lands what its change joined to the branch, the last version of each node
+					// a fast-forward commits what its change joined to the branch, the last version of each node
 					refs = nil
 					ids := maps.Clone(p.Nodes)
 					maps.Copy(ids, b.Nodes)
@@ -266,7 +266,7 @@ func testFailedCommitLeavesNothing(t *testing.T, repo Repo) {
 		{Key: "DES-3", Type: "Design"},
 		{Pre: &domain.NodeRef{ID: f.req.ID, Version: head.Nodes[f.req.ID]}, Props: map[string]any{"step": 2}},
 	}}); err == nil {
-		t.Fatal("a commit from a stale version lands")
+		t.Fatal("a commit from a stale version commits")
 	}
 	for _, c := range must[[]domain.Change](t)(g.Changes(ctx))[changes:] {
 		if c.Status != domain.ChangeAbandoned {
@@ -345,7 +345,7 @@ func checkDiffs(ctx context.Context, t *testing.T, tx Tx, bs []domain.Baseline) 
 }
 
 // replayable tells whether the state of a baseline of this kind is replayed from what its change did: a commit and a
-// merge from the `landed` events naming the baseline, a fast-forward from the versions its change joined to the branch.
+// merge from the `committed` events naming the baseline, a fast-forward from the versions its change joined to the branch.
 func replayable(kind string) bool {
 	return kind == domain.BaselineCommit || kind == domain.BaselineMerge || kind == domain.BaselineFastForward
 }

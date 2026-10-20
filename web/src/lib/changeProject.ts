@@ -8,7 +8,7 @@ export interface ProjectChoice {
   label: string;
 }
 
-/** A root change still being worked on can move; a sub-change goes with its parent, a landed or abandoned one stays. */
+/** A root change still being worked on can move; a sub-change goes with its parent, a committed or abandoned one stays. */
 export const movable = (c?: Pick<Change, 'parentId' | 'status'>): boolean => !!c && !c.parentId && (c.status === 'draft' || c.status === 'active');
 
 export interface MoveChoices {

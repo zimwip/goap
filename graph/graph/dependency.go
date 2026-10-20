@@ -20,7 +20,7 @@ const HeaderDependsOn = "dependsOn"
 
 // SetChangeDependencies replaces the changes a change depends on. The change is open; each dependency exists, is
 // another change, neither one of its ancestors nor one of its sub-changes (a change already waits for its sub-changes),
-// and the relation never makes a cycle (ErrInvalid). An abandoned dependency is refused (ErrConflict): it never lands.
+// and the relation never makes a cycle (ErrInvalid). An abandoned dependency is refused (ErrConflict): it never commits.
 // The change is journaled in a change.updated entry (dependsOn {from, to}); no entry when nothing changes.
 //
 //goap:operation change.depend doer
@@ -78,7 +78,7 @@ func (g *Graph) checkDependency(ctx context.Context, tx Tx, c domain.Change, anc
 		return err
 	}
 	if dc.Status == domain.ChangeAbandoned {
-		return fmt.Errorf("change %s is abandoned: it never lands: %w", d, ErrConflict)
+		return fmt.Errorf("change %s is abandoned: it never commits: %w", d, ErrConflict)
 	}
 	up, err := ancestorIDs(ctx, tx, dc)
 	if err != nil {
@@ -134,7 +134,7 @@ func dependencyOf(ctx context.Context, tx Tx, c domain.Change, d domain.ChangeID
 	out := domain.Dependency{ID: dc.ID, Title: dc.Title, Methodology: dc.Methodology, Status: dc.Status, State: dc.State, ParentID: dc.ParentID}
 	switch dc.Status {
 	case domain.ChangeAbandoned:
-		out.Reason = "abandoned: it never lands"
+		out.Reason = "abandoned: it never commits"
 		return out, nil
 	case domain.ChangeApplied:
 	default:
@@ -152,10 +152,10 @@ func dependencyOf(ctx context.Context, tx Tx, c domain.Change, d domain.ChangeID
 		}
 	}
 	if x.Status == domain.ChangeApplied {
-		out.Satisfied = true // landed on main
+		out.Satisfied = true // committed on main
 		return out, nil
 	}
-	out.Reason = fmt.Sprintf("merged into change %s (%s), which has not landed", x.ID, x.Title)
+	out.Reason = fmt.Sprintf("merged into change %s (%s), which has not committed", x.ID, x.Title)
 	return out, nil
 }
 

@@ -17,7 +17,7 @@ type lcWorld struct {
 	reqLC, specLC    domain.Lifecycle
 }
 
-// Requirement: proposed → draft (not landable) → approved → draft…; a Spec document
+// Requirement: proposed → draft (not committable) → approved → draft…; a Spec document
 // contains requirements and can only be released when they are all approved.
 func newLifecycleWorld(t *testing.T, repo Repo) lcWorld { return newLifecycleWorldG(t, repo, "") }
 
@@ -26,14 +26,14 @@ func newLifecycleWorldG(t *testing.T, repo Repo, approveGuard string) lcWorld {
 	ctx := context.Background()
 	w := lcWorld{g: New(repo)}
 	w.reqLC = domain.Lifecycle{Initial: "proposed",
-		States: []domain.LifecycleState{{Name: "proposed"}, {Name: "draft", NotLandable: true}, {Name: "approved"}},
+		States: []domain.LifecycleState{{Name: "proposed"}, {Name: "draft", NotCommittable: true}, {Name: "approved"}},
 		Transitions: []domain.Transition{
 			{Name: "start", From: "proposed", To: "draft"},
 			{Name: "approve", From: "draft", To: "approved", Guard: approveGuard, Requires: domain.TransitionRequires{Attributes: []string{"title"}}},
 			{Name: "reopen", From: "approved", To: "draft"},
 		}}
 	w.specLC = domain.Lifecycle{Initial: "released",
-		States: []domain.LifecycleState{{Name: "draft", NotLandable: true}, {Name: "released"}},
+		States: []domain.LifecycleState{{Name: "draft", NotCommittable: true}, {Name: "released"}},
 		Transitions: []domain.Transition{
 			{Name: "reopen", From: "released", To: "draft"},
 			{Name: "release", From: "draft", To: "released", Children: &domain.ChildrenRule{States: []string{"approved"}}},
@@ -95,13 +95,13 @@ func (w lcWorld) accept(t *testing.T, c domain.Change) {
 }
 
 // A change scoped to an Activity (architecture plan "Activity concept") is gated by its own goal condition
-// (the guardian of the merge, ChangeLifecycles.Merge), not the node-type lifecycle's landable-state floor: the activity's call on content/state
-// maturity replaces the blanket "state cannot land" check, rather than adding to it.
-func TestActivityGoalsGateReplacesLandableFloor(t *testing.T) {
-	forEachRepo(t, testActivityGoalsGateReplacesLandableFloor)
+// (the guardian of the merge, ChangeLifecycles.Merge), not the node-type lifecycle's committable-state floor: the activity's call on content/state
+// maturity replaces the blanket "state cannot commit" check, rather than adding to it.
+func TestActivityGoalsGateReplacesCommittableFloor(t *testing.T) {
+	forEachRepo(t, testActivityGoalsGateReplacesCommittableFloor)
 }
 
-func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
+func testActivityGoalsGateReplacesCommittableFloor(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
 	c, err := w.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "edit REQ-2", BaselineID: w.base.ID, Data: map[string]any{"scope": "deliver/draft-requirement"}})
@@ -116,9 +116,9 @@ func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
 	}
 	w.accept(t, c)
 
-	// no hook registered: the landable-state floor still applies, exactly as for a change the gate does not decide
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot land") {
-		t.Fatalf("no hook: landable floor must still apply: %v", err)
+	// no hook registered: the committable-state floor still applies, exactly as for a change the gate does not decide
+	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot commit") {
+		t.Fatalf("no hook: committable floor must still apply: %v", err)
 	}
 
 	var gotRef string
@@ -133,14 +133,14 @@ func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
 		return true, met, nil
 	})
 
-	// the hook says no: refused, by the activity's own message, not the landable-state one
+	// the hook says no: refused, by the activity's own message, not the committable-state one
 	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
 		t.Fatalf("hook unmet: %v", err)
 	}
 	if gotRef != "deliver/draft-requirement" || len(gotBB.Change.Nodes) != 1 || gotBB.Change.Nodes[0].ID != id {
 		t.Fatalf("hook arguments: ref=%q change=%+v", gotRef, gotBB.Change)
 	}
-	// the blackboard is hydrated with the pending write this Apply is about to land, including its draft state
+	// the blackboard is hydrated with the pending write this Apply is about to commit, including its draft state
 	post := gotBB.Change.Nodes[0].Post
 	if post == nil {
 		t.Fatalf("no post version on the impact: %+v", gotBB.Change.Nodes[0])
@@ -149,13 +149,13 @@ func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
 		t.Fatalf("blackboard must see this change's own pending write: %+v, ok=%v", v, ok)
 	}
 
-	// the hook says yes: applies even though REQ-2 is left in the not landable "draft" state
+	// the hook says yes: applies even though REQ-2 is left in the not committable "draft" state
 	met = true
 	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
-		t.Fatalf("hook met: the activity goal replaces the landable floor: %v", err)
+		t.Fatalf("hook met: the activity goal replaces the committable floor: %v", err)
 	}
 	if n, err := stateOf(t, w.g, w.req2.ID); err != nil || n.State != "draft" {
-		t.Fatalf("REQ-2 must land in draft: %+v %v", n, err)
+		t.Fatalf("REQ-2 must commit in draft: %+v %v", n, err)
 	}
 }
 
@@ -191,13 +191,13 @@ func testLifecycleReopenEditAndApprove(t *testing.T, repo Repo) {
 	if cs, _, _ := w.g.NodeChanges(ctx, w.req1.ID, 0, 0); len(cs) != 1 || cs[0].ID != c.ID {
 		t.Fatalf("node changes: %+v", cs)
 	}
-	// leaving the node in draft (not landable) is refused at Apply, the node listed with its state
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "move them to a landable state first") || !strings.Contains(err.Error(), "REQ-1 (Requirement) in draft") {
-		t.Fatalf("apply must refuse a node left in a state that cannot land, naming it: %v", err)
+	// leaving the node in draft (not committable) is refused at Apply, the node listed with its state
+	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "move them to a committable state first") || !strings.Contains(err.Error(), "REQ-1 (Requirement) in draft") {
+		t.Fatalf("apply must refuse a node left in a state that cannot commit, naming it: %v", err)
 	}
-	// the refusal leaves the change as it was: the node is still edited in its not landable state, then moved
+	// the refusal leaves the change as it was: the node is still edited in its not committable state, then moved
 	if err := w.write(c, id, edit{Properties: map[string]any{"title": "one v3"}}); err != nil {
-		t.Fatalf("editing in a not landable state: %v", err)
+		t.Fatalf("editing in a not committable state: %v", err)
 	}
 	if err := w.write(c, id, edit{State: "approved"}); err != nil {
 		t.Fatal(err)
@@ -314,7 +314,7 @@ func testLifecycleImpactNodeCreate(t *testing.T, repo Repo) {
 		t.Fatalf("no transition proposed → approved: %v", err)
 	}
 	c := w.change(t, "create")
-	// created in the (landable) initial state
+	// created in the (committable) initial state
 	if err := create(c, "REQ-9", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -325,7 +325,7 @@ func testLifecycleImpactNodeCreate(t *testing.T, repo Repo) {
 	if n, err := w.g.NodeByKey(ctx, "", "REQ-9"); err != nil || n.State != "proposed" {
 		t.Fatalf("created node: %+v %v", n, err)
 	}
-	// created directly in a not landable state: refused when applied
+	// created directly in a not committable state: refused when applied
 	c = w.change(t, "create draft")
 	if err := create(c, "REQ-10", "draft"); err != nil {
 		t.Fatal(err)
@@ -370,7 +370,7 @@ func testLifecycleDocumentValidatesChildren(t *testing.T, repo Repo) {
 	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatalf("spec release with approved children: %v", err)
 	}
-	// no version of the spec; REQ-2 lands
+	// no version of the spec; REQ-2 commits
 	if n, _ := stateOf(t, w.g, w.spec.ID); n.State != "released" || n.ChangeID == c.ID {
 		t.Fatalf("spec: %+v", n)
 	}

@@ -113,8 +113,8 @@ func changeNodesIn(ctx context.Context, tx Tx, id domain.BaselineID, change doma
 		if n := nodeOf(cn); n != "" {
 			ids = append(ids, n)
 		}
-		if cn.Landed != nil {
-			ids = append(ids, cn.Landed.ID)
+		if cn.Committed != nil {
+			ids = append(ids, cn.Committed.ID)
 		}
 	}
 	slices.Sort(ids)

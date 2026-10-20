@@ -159,7 +159,7 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 	for _, cn := range pc.Nodes {
 		if cn.Key == "CMP-1" || cn.Key == "CMP-2" {
 			found++
-			if cn.Review != domain.ReviewAccepted || cn.Landed == nil || cn.Drafted() || !strings.Contains(cn.Reviews[len(cn.Reviews)-1].Comment, "merged from sub-change") {
+			if cn.Review != domain.ReviewAccepted || cn.Committed == nil || cn.Drafted() || !strings.Contains(cn.Reviews[len(cn.Reviews)-1].Comment, "merged from sub-change") {
 				t.Fatalf("parent impact of %s = %+v", cn.Key, cn)
 			}
 		}
@@ -476,7 +476,7 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 	if got := inParent(); got != "from A and B" {
 		t.Fatalf("parent after B's integration: %q", got)
 	}
-	// the parent lands what both brought in
+	// the parent commits what both brought in
 	if _, err := g.Apply(ctx, parent.ID, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -549,7 +549,7 @@ func testNestedSubChanges(t *testing.T, repo Repo) {
 		t.Fatalf("the middle change holds the leaf's work: %v", v.Properties)
 	}
 
-	// each level merges into the one above, then the root lands on main
+	// each level merges into the one above, then the root commits on main
 	if _, err := g.Apply(ctx, mid.ID, ""); err != nil {
 		t.Fatal(err)
 	}

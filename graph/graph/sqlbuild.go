@@ -206,11 +206,11 @@ func (d dialect) nodeIDList(col string, n int, ids []domain.NodeID) (string, any
 	return col + ` IN (SELECT value FROM json_each(` + d.ph(n) + `))`, string(b)
 }
 
-// sqlLandedVersions reads the versions that landed on a branch of a namespace in the baselines after the order after,
-// up to upTo (Baseline.Seq, ADR 0140): written on the branch or joined to it, the last landing of each node, for some
+// sqlCommittedVersions reads the versions that committed on a branch of a namespace in the baselines after the order after,
+// up to upTo (Baseline.Seq, ADR 0140): written on the branch or joined to it, the last commit of each node, for some
 // nodes (nil: every node), with whether that version deletes the node and why it was written (a revert, on the branch
 // of a change).
-func (d dialect) sqlLandedVersions(namespace, branch string, after, upTo int64, ids []domain.NodeID) (string, []any) {
+func (d dialect) sqlCommittedVersions(namespace, branch string, after, upTo int64, ids []domain.NodeID) (string, []any) {
 	args := []any{domain.BranchOf(branch), after, upTo, domain.NamespaceOf(namespace)}
 	if ids != nil && d.pg {
 		return d.sqlFoldVersions(args, ids)
@@ -222,20 +222,20 @@ func (d dialect) sqlLandedVersions(namespace, branch string, after, upTo int64, 
 		inV, args = ` AND `+in, append(args, arg)
 	}
 	return `SELECT ` + d.id("node_id") + `, version, deleted, reason FROM (
-		SELECT x.node_id, x.version, x.deleted, x.reason, row_number() OVER (PARTITION BY x.node_id ORDER BY x.landed DESC, x.version DESC) AS rn
+		SELECT x.node_id, x.version, x.deleted, x.reason, row_number() OVER (PARTITION BY x.node_id ORDER BY x.committed DESC, x.version DESC) AS rn
 		FROM (
-			SELECT v.node_id, v.version, v.deleted, v.reason, v.landed FROM node_version v
-			WHERE v.branch = ` + d.ph(1) + ` AND v.landed > ` + d.ph(2) + ` AND v.landed <= ` + d.ph(3) + inV + `
+			SELECT v.node_id, v.version, v.deleted, v.reason, v.committed FROM node_version v
+			WHERE v.branch = ` + d.ph(1) + ` AND v.committed > ` + d.ph(2) + ` AND v.committed <= ` + d.ph(3) + inV + `
 			UNION ALL
-			SELECT j.node_id, j.version, v.deleted, v.reason, j.landed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
-			WHERE j.branch = ` + d.ph(1) + ` AND j.landed > ` + d.ph(2) + ` AND j.landed <= ` + d.ph(3) + inJ + `
+			SELECT j.node_id, j.version, v.deleted, v.reason, j.committed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
+			WHERE j.branch = ` + d.ph(1) + ` AND j.committed > ` + d.ph(2) + ` AND j.committed <= ` + d.ph(3) + inJ + `
 		) x JOIN node n ON n.id = x.node_id WHERE n.namespace = ` + d.ph(4) + `
 	) y WHERE rn = 1`, args
 }
 
-// sqlFoldVersions is sqlLandedVersions for some nodes on PostgreSQL: for each node its last landing on the branch in the
+// sqlFoldVersions is sqlCommittedVersions for some nodes on PostgreSQL: for each node its last commit on the branch in the
 // range, one lookup of the indexes node_version_fold / node_branch_fold whatever the length of its history (the planner
-// of a generic plan cannot estimate the range, a join over the list could walk every landing of the branch); what the
+// of a generic plan cannot estimate the range, a join over the list could walk every commit of the branch); what the
 // version found holds is read by its key once it is found (scalar subqueries: a join would let the planner read the
 // versions of the node first, one by one, a node estimated to have a single one).
 func (d dialect) sqlFoldVersions(args []any, ids []domain.NodeID) (string, []any) {
@@ -245,12 +245,12 @@ func (d dialect) sqlFoldVersions(args []any, ids []domain.NodeID) (string, []any
 		FROM unnest($5::uuid[]) AS q(id) JOIN node n ON n.id = q.id AND n.namespace = $4
 		CROSS JOIN LATERAL (
 			SELECT u.version FROM (
-				(SELECT v.version, v.landed FROM node_version v
-				WHERE v.node_id = q.id AND v.branch = $1 AND v.landed > $2 AND v.landed <= $3 ORDER BY v.landed DESC, v.version DESC LIMIT 1)
+				(SELECT v.version, v.committed FROM node_version v
+				WHERE v.node_id = q.id AND v.branch = $1 AND v.committed > $2 AND v.committed <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
 				UNION ALL
-				(SELECT j.version, j.landed FROM node_branch j
-				WHERE j.node_id = q.id AND j.branch = $1 AND j.landed > $2 AND j.landed <= $3 ORDER BY j.landed DESC, j.version DESC LIMIT 1)
-			) u ORDER BY u.landed DESC, u.version DESC LIMIT 1
+				(SELECT j.version, j.committed FROM node_branch j
+				WHERE j.node_id = q.id AND j.branch = $1 AND j.committed > $2 AND j.committed <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
+			) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
 		) x`, append(args, nodeIDStrings(ids))
 }
 
@@ -267,10 +267,10 @@ func (d dialect) sqlNamespaceNodeIDs(namespace string) (string, []any) {
 	return `SELECT ` + d.id("id") + ` FROM node WHERE namespace = ` + d.ph(1) + ` ORDER BY id`, []any{domain.NamespaceOf(namespace)}
 }
 
-// sqlLastLanding reads the order of the last landing on a branch (index node_version_landed, node_branch_landed).
-func (d dialect) sqlLastLanding(branch string) (string, []any) {
-	return `SELECT coalesce(max(landed), 0) FROM (SELECT max(landed) AS landed FROM node_version WHERE branch = ` + d.ph(1) +
-		` UNION ALL SELECT max(landed) FROM node_branch WHERE branch = ` + d.ph(1) + `) l`, []any{domain.BranchOf(branch)}
+// sqlLastCommit reads the order of the last commit on a branch (index node_version_committed, node_branch_committed).
+func (d dialect) sqlLastCommit(branch string) (string, []any) {
+	return `SELECT coalesce(max(committed), 0) FROM (SELECT max(committed) AS committed FROM node_version WHERE branch = ` + d.ph(1) +
+		` UNION ALL SELECT max(committed) FROM node_branch WHERE branch = ` + d.ph(1) + `) l`, []any{domain.BranchOf(branch)}
 }
 
 // sqlBranchNodeIDs reads the nodes a branch holds a version of: written on it or joined to it (ADR 0137).
@@ -415,7 +415,7 @@ func (d dialect) headerListCols() string {
 		`, created_at, branch, kind, ` + d.idOr("coalesce", "rebased_from") + `, seq`
 }
 
-// sqlBaselinePage reads the headers of the baselines of a branch landed before the order before (0: the newest), newest
+// sqlBaselinePage reads the headers of the baselines of a branch committed before the order before (0: the newest), newest
 // first, at most limit.
 func (d dialect) sqlBaselinePage(namespace, branch string, before int64, limit int) (string, []any) {
 	return `SELECT ` + d.headerListCols() + ` FROM baseline WHERE namespace = ` + d.ph(1) + ` AND branch = ` + d.ph(2) + ` AND (` + d.ph(3) + ` = 0 OR seq < ` + d.ph(3) +
@@ -523,7 +523,7 @@ func (d dialect) sqlNodeChangePage(node domain.NodeID, before int64, limit int) 
 
 // changeImpactCols is the select list of a change impact (the order both repositories scan).
 func (d dialect) changeImpactCols() string {
-	return d.cols(su("id"), su("node_id"), sc("key"), sc("type"), sc("intent"), sc("rationale"), sc("pre_version"), sc("post_version"), sc("landed_version"),
+	return d.cols(su("id"), su("node_id"), sc("key"), sc("type"), sc("intent"), sc("rationale"), sc("pre_version"), sc("post_version"), sc("committed_version"),
 		sc("review"), sc("reviews"), sqlCol{name: d.idOr("COALESCE", "via")}, sc("recheck"), sc("produced_by"), sc("derived_from"), sc("items"), sc("execution"),
 		sc("created_at"), sc("flow"), sc("superseded"))
 }
@@ -610,9 +610,9 @@ func (d dialect) sqlSetNodeOrigin() string {
 }
 
 // sqlJoinBranch makes a version join a branch: arguments node, version, branch, change, the order of the baseline it
-// lands in.
+// commits in.
 func (d dialect) sqlJoinBranch() string {
-	return `INSERT INTO node_branch (node_id, version, branch, change_id, landed) SELECT node_id, version, ` + d.ph(3) + `, ` + d.ph(4) + `, ` + d.ph(5) + ` FROM node_version
+	return `INSERT INTO node_branch (node_id, version, branch, change_id, committed) SELECT node_id, version, ` + d.ph(3) + `, ` + d.ph(4) + `, ` + d.ph(5) + ` FROM node_version
 		WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2) + ` AND branch <> ` + d.ph(3) + ` ON CONFLICT DO NOTHING`
 }
 
@@ -666,7 +666,7 @@ func (d dialect) sqlDeleteChange() string { return `DELETE FROM change WHERE id 
 
 // The columns of the inserts both repositories run, in the order of their arguments.
 var (
-	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "origins", "landed"}
+	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "origins", "committed"}
 	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id", "removes"}
 	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "kind", "rebased_from", "seq"}
 	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "causation", "at", "payload"}

@@ -28,7 +28,7 @@ const (
 	MethodologyPublished = "methodology.published"
 )
 
-// ChangePurged: a change that landed nothing was removed with its log (ADR 0037). The web forgets it; it is not an
+// ChangePurged: a change that committed nothing was removed with its log (ADR 0037). The web forgets it; it is not an
 // event a trigger reacts to (not in All).
 const ChangePurged = "change.purged"
 

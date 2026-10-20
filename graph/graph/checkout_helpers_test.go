@@ -9,7 +9,7 @@ import (
 
 // The fixtures of the tests write through the operations every change uses (ADR 0076).
 
-// newNode is a node a fixture lands: Namespace (default domain.DefaultNamespace), Key (default: an id), Type, the
+// newNode is a node a fixture commits: Namespace (default domain.DefaultNamespace), Key (default: an id), Type, the
 // Properties of its first version, the lifecycle State it is moved to and the unit owning it.
 type newNode struct {
 	Namespace  string
@@ -22,7 +22,7 @@ type newNode struct {
 	Links []LinkWrite
 }
 
-// importNode lands a node on main through a change of its own: ImpactNodeCreate, moved to its State, accepted,
+// importNode commits a node on main through a change of its own: ImpactNodeCreate, moved to its State, accepted,
 // applied. It names no required parent: fixtures add structure links afterwards (importLink).
 func importNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) {
 	ns := domain.NamespaceOf(in.Namespace)
@@ -238,7 +238,7 @@ func (g *Graph) acceptAll(ctx context.Context, id domain.ChangeID) error {
 	return nil
 }
 
-// accept accepts a change impact (freezing its working version): what a test applies next lands it.
+// accept accepts a change impact (freezing its working version): what a test applies next commits it.
 func (g *Graph) accept(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, by, comment string) (domain.ChangeImpact, error) {
 	return g.acceptOn(ctx, id, "", "", impact, by, comment)
 }
@@ -286,7 +286,7 @@ func (g *Graph) draftOf(ctx context.Context, id domain.ChangeID, flow string, im
 	return
 }
 
-// versionCount is the number of stored versions of a node (0: the node has none: a node of a change that did not land).
+// versionCount is the number of stored versions of a node (0: the node has none: a node of a change that did not commit).
 func (g *Graph) versionCount(ctx context.Context, node domain.NodeID) int {
 	vs, err := g.Versions(ctx, node)
 	if err != nil {

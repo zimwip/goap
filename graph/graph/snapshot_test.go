@@ -57,7 +57,7 @@ func testSnapshotExportImport(t *testing.T, repo Repo) {
 		t.Fatalf("the change stays open for review: %+v", c)
 	}
 	if latest := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID})); latest.Version != f.req.Version {
-		t.Fatal("nothing lands before the change is merged")
+		t.Fatal("nothing commits before the change is merged")
 	}
 	if err := g.acceptAll(ctx, res.Change); err != nil {
 		t.Fatal(err)

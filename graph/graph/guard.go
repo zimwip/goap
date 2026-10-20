@@ -23,7 +23,7 @@ import (
 //   - every baseline is the result of a change (ADR 0056); what precedes the first change of a namespace is the empty
 //     state, the empty baseline id, which nothing stores;
 //   - a version is immutable once written (ADR 0079): the working state of a node in a change is a draft, the version is
-//     written when the change lands, with its outgoing links, in the same transaction; no version is ever edited,
+//     written when the change commits, with its outgoing links, in the same transaction; no version is ever edited,
 //     frozen or dropped, and only a version written in the transaction gets links.
 //
 // What names a change, a unit or a project is checked when the transaction ends, before it commits (as a deferred
@@ -70,9 +70,9 @@ type guardTx struct {
 	baselineReads map[domain.BaselineID]map[domain.NodeID]domain.Version
 	// forks are the baselines the lasting branches read by the transaction were forked from, by namespace and branch
 	forks map[string]domain.BaselineID
-	// landing is, per branch, the order of the baseline the versions the transaction writes or joins there land in
+	// commit is, per branch, the order of the baseline the versions the transaction writes or joins there commit in
 	// (ADR 0140): taken by the first of them, given to the baseline written after them
-	landing map[string]int64
+	commit map[string]int64
 	// headers caches the changes read to stamp versions
 	headers map[domain.ChangeID]domain.Change
 	// written are the versions the transaction wrote
@@ -236,7 +236,7 @@ func copyChange(c domain.Change) domain.Change {
 		cn.Reviews = slices.Clone(cn.Reviews)
 		cn.DerivedFrom = slices.Clone(cn.DerivedFrom)
 		cn.Items = slices.Clone(cn.Items)
-		for _, r := range []**domain.NodeRef{&cn.Pre, &cn.Post, &cn.Landed} {
+		for _, r := range []**domain.NodeRef{&cn.Pre, &cn.Post, &cn.Committed} {
 			if *r != nil {
 				v := **r
 				*r = &v
@@ -405,12 +405,12 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	}
 	t.owners[n.Owner] = what
 	t.projects[n.Project] = what
-	if n.Landed >= 0 { // a negative order lands the version in no baseline (a test fixture)
-		landed, err := t.landingOn(ctx, n.Branch)
+	if n.Committed >= 0 { // a negative order commits the version in no baseline (a test fixture)
+		committed, err := t.commitOn(ctx, n.Branch)
 		if err != nil {
 			return err
 		}
-		n.Landed = landed
+		n.Committed = committed
 	}
 	if err := t.Tx.PutNode(ctx, n); err != nil {
 		return err
@@ -471,11 +471,11 @@ func (t *guardTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch str
 	if err := t.needChange(change, "node "+ref.String()+" joining "+branch); err != nil {
 		return err
 	}
-	landed, err := t.landingOn(ctx, branch)
+	committed, err := t.commitOn(ctx, branch)
 	if err != nil {
 		return err
 	}
-	return t.Tx.JoinBranch(ctx, ref, branch, change, landed)
+	return t.Tx.JoinBranch(ctx, ref, branch, change, committed)
 }
 
 func (t *guardTx) PutChange(ctx context.Context, c domain.Change) error {
@@ -507,7 +507,7 @@ func (t *guardTx) PutChange(ctx context.Context, c domain.Change) error {
 }
 
 func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error {
-	// a version lands only in a baseline of the change that wrote or joined it (ADR 0140): the store refuses a change
+	// a version commits only in a baseline of the change that wrote or joined it (ADR 0140): the store refuses a change
 	// that produced a baseline, and checks the entries stored
 	if err := t.LockChange(ctx, id); err != nil {
 		return err
@@ -525,10 +525,10 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 }
 
 // verify checks, at the end of the transaction, that what it wrote names changes, units and projects that exist, and
-// that every version it landed is in a baseline.
+// that every version it committed is in a baseline.
 func (t *guardTx) verify(ctx context.Context) error {
-	for branch := range t.landing {
-		return fmt.Errorf("versions landed on branch %s in no baseline: a version is written when its change lands (ADR 0079, 0140): %w", branch, ErrInvalid)
+	for branch := range t.commit {
+		return fmt.Errorf("versions committed on branch %s in no baseline: a version is written when its change commits (ADR 0079, 0140): %w", branch, ErrInvalid)
 	}
 	for id, what := range t.changeRefs {
 		if _, ok := t.changes[id]; ok {

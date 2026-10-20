@@ -62,7 +62,7 @@ func diffBaselines(ctx context.Context, tx Tx, from, to domain.BaselineID) ([]Ba
 			return nil, err
 		}
 		for _, cn := range cns {
-			for _, ref := range []*domain.NodeRef{cn.Pre, cn.Post, cn.Landed} {
+			for _, ref := range []*domain.NodeRef{cn.Pre, cn.Post, cn.Committed} {
 				if ref != nil {
 					add(ref.ID)
 				}

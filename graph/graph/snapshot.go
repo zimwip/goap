@@ -88,7 +88,7 @@ func (g *Graph) ExportSnapshot(ctx context.Context, namespace, branch string, ba
 	}
 	s.Baseline = string(baseline)
 	if baseline == "" {
-		return s, nil // nothing landed yet: the empty state
+		return s, nil // nothing committed yet: the empty state
 	}
 	nodes, links, err := g.BaselineGraph(ctx, baseline)
 	if err != nil {

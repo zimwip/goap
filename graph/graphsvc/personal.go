@@ -123,7 +123,7 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	user := linkTo(SeedNode(key, access.NodeTypeUser, u.Props()), access.LinkMemberOf, org.Ref())
 	user.Rationale = "First sign-in of " + subject
 	// activate it in the same commit (ADR 0048's user lifecycle starts a new account "proposed"): a sign-in
-	// lands it usable right away, with no separate admin step needed for every single new user.
+	// commits it usable right away, with no separate admin step needed for every single new user.
 	user.State = "active"
 	edits := []graph.NodeEdit{user}
 	if len(existing) == 0 {

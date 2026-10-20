@@ -11,13 +11,13 @@ import (
 )
 
 // What the state of a baseline costs to read (ADR 0143): every read of a state says where it came from (the cache or the
-// selection of the versions landed), how many branches of the chain of forks it read and how many versions it found.
+// selection of the versions committed), how many branches of the chain of forks it read and how many versions it found.
 // Prometheus: goap_graph_state_* (deploy/grafana/dashboards/goap-perf.json).
 
 // Sources of a state read: where the walk down the chain of baselines stopped.
 const (
-	stateFromCache    = "cache"    // a state computed before (the state cache)
-	stateFromLandings = "landings" // the selection of the versions landed (ADR 0143)
+	stateFromCache   = "cache"   // a state computed before (the state cache)
+	stateFromCommits = "commits" // the selection of the versions committed (ADR 0143)
 )
 
 type stateMetrics struct {
@@ -31,7 +31,7 @@ var stateMeter = sync.OnceValue(func() *stateMetrics {
 	m := otel.Meter("github.com/zimwip/goap/graph/graph")
 	s := &stateMetrics{}
 	s.reads, _ = m.Int64Counter("graph.state.reads", metric.WithUnit("{read}"),
-		metric.WithDescription("Reads of the state of a baseline, by scope (whole, nodes) and by source (cache, landings)"))
+		metric.WithDescription("Reads of the state of a baseline, by scope (whole, nodes) and by source (cache, commits)"))
 	s.chain, _ = m.Int64Histogram("graph.state.chain", metric.WithUnit("{baseline}"),
 		metric.WithDescription("Branches of the chain of forks a read of a state selected on"),
 		metric.WithExplicitBucketBoundaries(0, 1, 2, 3, 5, 10, 20, 50, 100, 200))
@@ -45,11 +45,11 @@ var stateMeter = sync.OnceValue(func() *stateMetrics {
 
 // stateRead is what one read of a state found, recorded when it ends.
 type stateRead struct {
-	start  time.Time
-	whole  bool
-	source string
-	chain  int
-	landed int
+	start     time.Time
+	whole     bool
+	source    string
+	chain     int
+	committed int
 }
 
 func (r *stateRead) record(ctx context.Context) {
@@ -60,8 +60,8 @@ func (r *stateRead) record(ctx context.Context) {
 	}
 	m.reads.Add(ctx, 1, metric.WithAttributes(scope, attribute.String("source", r.source)))
 	m.chain.Record(ctx, int64(r.chain), metric.WithAttributes(scope))
-	if r.landed > 0 {
-		m.entries.Add(ctx, int64(r.landed), metric.WithAttributes(attribute.String("source", "landed")))
+	if r.committed > 0 {
+		m.entries.Add(ctx, int64(r.committed), metric.WithAttributes(attribute.String("source", "committed")))
 	}
 	m.duration.Record(ctx, time.Since(r.start).Seconds(), metric.WithAttributes(scope))
 }

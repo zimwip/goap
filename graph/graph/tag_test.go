@@ -16,7 +16,7 @@ func testTags(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	commit := func(title, key, status string) (landed, domain.Node) {
+	commit := func(title, key, status string) (committed, domain.Node) {
 		edit := NodeEdit{Key: key, Type: "Doc", Props: map[string]any{"status": status}}
 		if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, key); err == nil {
 			ref := n.Ref()
@@ -27,7 +27,7 @@ func testTags(t *testing.T, repo Repo) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return landed{res.Change, res.Baseline}, must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, key))
+		return committed{res.Change, res.Baseline}, must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, key))
 	}
 	// a tag names one exact version (ADR 0143 §6)
 	_, v1 := commit("First", "T-1", "draft")
@@ -79,13 +79,13 @@ func testTags(t *testing.T, repo Repo) {
 	}
 }
 
-// landed is what a commit of the test leaves: its change and the baseline it produced.
-type landed struct {
+// committed is what a commit of the test leaves: its change and the baseline it produced.
+type committed struct {
 	change   domain.ChangeID
 	baseline domain.Baseline
 }
 
-// A state is the selection of the versions landed (ADR 0143): the graph and a store read the same, whatever the cache.
+// A state is the selection of the versions committed (ADR 0143): the graph and a store read the same, whatever the cache.
 func TestBaselinesAreSelections(t *testing.T) { forEachRepo(t, testBaselinesAreSelections) }
 
 func testBaselinesAreSelections(t *testing.T, repo Repo) {

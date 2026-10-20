@@ -68,7 +68,7 @@ func TestCheckAttributesIsStrict(t *testing.T) {
 	if err := (&typeIndex{}).checkAttributes(node("shop@Item"), map[string]any{"anything": 1}); err != nil {
 		t.Fatalf("the untyped graph: %v", err)
 	}
-	// the landing check (validateProps) holds a version to it too
+	// the commit check (validateProps) holds a version to it too
 	if err := g.validateProps(context.Background(), ix, node("shop@Item"), map[string]any{"colour": "red"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("validateProps: %v", err)
 	}

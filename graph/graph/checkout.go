@@ -13,7 +13,7 @@ import (
 
 // This file is how a change edits nodes (ADR 0076, 0079). Every write names the change; a node has no version during
 // the change: ImpactNodeCreate or ImpactNodeCheckout gives it a draft on the flow (once per change and flow), and the
-// draft stays until the change lands, which writes the version from it:
+// draft stays until the change commits, which writes the version from it:
 //
 //   - ImpactNodeUpdate and the link operations edit the draft (an `updated` event with the patch), writing no version;
 //   - an accepted review runs the checks of a version on the draft and records the acceptance; editing it again sends
@@ -25,7 +25,7 @@ import (
 // A creation may be planned before it is written (ProposeImpact with intent created: a key, a type, a rationale, no
 // draft): the impact analysis names what the change will create, the specification writes it. Creating or checking
 // out the key of a planned creation gives it its draft (a checkedOut event, so a flow fulfils it as it edits any
-// impact); it lands like any creation.
+// impact); it commits like any creation.
 
 // work is what an operation on a change impact needs: the change, the flow it works on and the branch versions are
 // written on, and the change impact as the flow sees it.
@@ -48,7 +48,7 @@ type work struct {
 }
 
 // workOn opens an operation on a change, on a flow: the change gets its branch (where its versions are written when it
-// lands, ADR 0079).
+// commits, ADR 0079).
 func (g *Graph) workOn(ctx context.Context, tx Tx, id domain.ChangeID, flow string) (*work, error) {
 	c, err := changeOpen(ctx, tx, id)
 	if err != nil {
@@ -266,14 +266,14 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 // plannedCreation reports whether the change impact is a creation planned by ProposeImpact and not drafted yet: no
 // draft, no version.
 func plannedCreation(cn domain.ChangeImpact) bool {
-	return cn.Intent == domain.IntentCreated && cn.Post == nil && cn.Landed == nil
+	return cn.Intent == domain.IntentCreated && cn.Post == nil && cn.Committed == nil
 }
 
 // base is the stored version a draft of the impact starts from: its pre version (on the main flow, the latest of the
 // node on the change branch); nil for a creation.
 func (w *work) base(ctx context.Context, tx Tx) (*domain.Node, error) {
 	if w.cn.Pre == nil {
-		if w.cn.Landed == nil {
+		if w.cn.Committed == nil {
 			return nil, nil
 		}
 		// a node the change created and committed: checked out again from the version it wrote (ADR 0102)
@@ -333,7 +333,7 @@ func (w *work) checkDraftAttributes(d domain.Draft, props map[string]any) error 
 }
 
 // ImpactNodeCreate creates a node in a change: one `created` event adds the change impact (intent created) and the
-// draft of the node (ADR 0076, 0077, 0079). There is no proposal of a new node, and no version until the change lands.
+// draft of the node (ADR 0076, 0077, 0079). There is no proposal of a new node, and no version until the change commits.
 //
 //goap:operation impact.create doer
 func (g *Graph) ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in NodeCreate) (cn domain.ChangeImpact, err error) {
@@ -685,7 +685,7 @@ func (g *Graph) ImpactLinkDelete(ctx context.Context, id domain.ChangeID, link d
 
 // checkAccepted is the gate of an accepted review (ADR 0079): the draft of the impact the flow sees must satisfy what
 // a version does (checkDraft: validators, required links, link attributes) and the review gate of the merge and split
-// origins. Nothing is written: the version is written when the change lands. It does nothing when the impact has no
+// origins. Nothing is written: the version is written when the change commits. It does nothing when the impact has no
 // draft.
 func (g *Graph) checkAccepted(ctx context.Context, tx Tx, id domain.ChangeID, flow string, impact domain.ChangeImpactID) error {
 	w, err := g.workOn(ctx, tx, id, flow)
@@ -760,9 +760,9 @@ func (g *Graph) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact
 		}
 		// what the flow falls back to: the draft of its parent flows
 		var back *domain.NodeRef
-		if w.flow == "" && w.cn.Landed != nil {
+		if w.flow == "" && w.cn.Committed != nil {
 			// committed already (ADR 0102): the impact falls back to the version the change wrote
-			r := *w.cn.Landed
+			r := *w.cn.Committed
 			back = &r
 		} else if ids := flowIDs(flowChain(w.c, w.flow)); w.flow != "" {
 			for _, f := range append(ids[1:], "") {
@@ -776,7 +776,7 @@ func (g *Graph) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact
 		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: impact, Op: domain.ImpactCancelled, Flow: w.flow, Execution: execution, Post: back}); err != nil {
 			return err
 		}
-		if w.cn.Intent == domain.IntentModified || w.cn.Landed != nil { // a creation cancelled is gone with its impact
+		if w.cn.Intent == domain.IntentModified || w.cn.Committed != nil { // a creation cancelled is gone with its impact
 			if err := g.editedAgain(ctx, tx, w, execution); err != nil {
 				return err
 			}

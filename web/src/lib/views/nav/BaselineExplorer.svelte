@@ -220,7 +220,7 @@
   {#if error}<div class="alert small">{error}</div>{/if}
   {#if !loading && !error && baselineTool.namespace && !branches.length}
     <div class="empty pad">
-      No baselines in {baselineTool.namespace} yet: the first change that lands creates one.
+      No baselines in {baselineTool.namespace} yet: the first change that commits creates one.
     </div>
   {/if}
   {#if !baselineTool.namespace && !error}<p class="empty pad">The graph holds no nodes yet.</p>{/if}

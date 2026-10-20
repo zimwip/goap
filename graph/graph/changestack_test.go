@@ -10,7 +10,7 @@ import (
 )
 
 // The change-stack of a version and of a baseline (ADR 0133): two sub-changes of one parent change the same node, the
-// second is rebased onto the first (a version of reason rebase, its second parent the first's), the parent lands both.
+// second is rebased onto the first (a version of reason rebase, its second parent the first's), the parent commits both.
 // The stack of the node's version on main and the one of main's head both name the four changes, sub-changes first,
 // and each sub-change under its parent.
 func TestChangeStack(t *testing.T) { forEachRepo(t, testChangeStack) }
@@ -87,11 +87,11 @@ func testChangeStack(t *testing.T, repo Repo) {
 	if bs.Baselines[len(bs.Baselines)-1].ID != head.ID {
 		t.Fatalf("the lineage ends with the baseline asked: %+v", bs.Baselines)
 	}
-	// the branch of a change holds no baseline (ADR 0140): the parent's landing names the sub-changes merged into it
+	// the branch of a change holds no baseline (ADR 0140): the parent's commit names the sub-changes merged into it
 	if !slices.ContainsFunc(bs.Baselines, func(s domain.BaselineStep) bool {
 		return s.Change == parent.ID && slices.Equal(s.Merged, []domain.ChangeID{a.ID, b.ID})
 	}) {
-		t.Fatalf("A and B are merged into the parent's landing: %+v", bs.Baselines)
+		t.Fatalf("A and B are merged into the parent's commit: %+v", bs.Baselines)
 	}
 
 	added, removed := mustStacks(t)(g.DiffStacks(ctx, before.ID, head.ID))

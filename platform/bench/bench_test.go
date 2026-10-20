@@ -72,7 +72,7 @@ func runner(t *testing.T, url string, cfg bench.Config) (*bench.Runner, *bytes.B
 		Reviewer: bench.NewClients(url, url, authz.System("bench-reviewer", access.RoleAdmin), "", m)}, &report
 }
 
-// Both modes land their changes through the API: the domain is published, nodes are created then modified (their
+// Both modes commit their changes through the API: the domain is published, nodes are created then modified (their
 // versions follow), the reads are probed, and the report has one row per operation.
 func TestRun(t *testing.T) {
 	for _, mode := range []string{bench.ModeCommit, bench.ModeLifecycle} {

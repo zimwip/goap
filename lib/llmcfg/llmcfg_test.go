@@ -55,7 +55,7 @@ func TestProtectedAliasProps(t *testing.T) {
 	if _, err := AliasFromProps(Alias{Alias: "Bad Name"}.Props()); err == nil {
 		t.Fatal("an alias needs a valid name")
 	}
-	// an unprotected alias with no target cannot land; read anyway it resolves to no model and is reported as such
+	// an unprotected alias with no target cannot commit; read anyway it resolves to no model and is reported as such
 	s0 := BuildSnapshot("", []domain.Node{node(AliasKey("x"), NodeTypeAlias, Alias{Alias: "x"}.Props())}, nil)
 	if len(s0.Aliases) != 0 || len(s0.Problems) != 1 {
 		t.Fatalf("%+v", s0)

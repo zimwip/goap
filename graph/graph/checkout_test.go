@@ -10,7 +10,7 @@ import (
 )
 
 // A node is edited through its draft (ADR 0079): ImpactNodeUpdate and the link operations change it, no version is written
-// during the change; an accepted review checks it and writes nothing; landing writes the version.
+// during the change; an accepted review checks it and writes nothing; commit writes the version.
 func TestCheckoutEditAccept(t *testing.T) { forEachRepo(t, testCheckoutEditAccept) }
 
 func testCheckoutEditAccept(t *testing.T, repo Repo) {
@@ -36,7 +36,7 @@ func testCheckoutEditAccept(t *testing.T, repo Repo) {
 	must[domain.Link](t)(g.ImpactLinkUpdate(ctx, c.ID, link.ID, map[string]any{"why": "spec"}, "", ""))
 	view := must[domain.NodeView](t)(g.ChangeNodeView(ctx, c.ID, "", work))
 	if latest := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID})); latest.Version != f.req.Version {
-		t.Fatalf("nothing is on main before the change lands: v%d", latest.Version)
+		t.Fatalf("nothing is on main before the change commits: v%d", latest.Version)
 	}
 	if !view.IsDraft() || view.Properties["title"] != "Use PSP v2" || view.Properties["owner"] != "alice" {
 		t.Fatalf("edited: %+v", view.Node)
@@ -82,23 +82,23 @@ func testCheckoutEditAccept(t *testing.T, repo Repo) {
 		t.Fatalf("no version for the whole edit: %d versions", n)
 	}
 	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
-	landed := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Nodes[f.req.ID]}))
-	if landed.Properties["title"] != "Use PSP v3" || landed.Version != f.req.Version+1 || landed.Comment != "fine again" || len(landed.Parents) != 1 || landed.Parents[0] != f.req.Version {
-		t.Fatalf("landing writes the version from the draft: %+v", landed)
+	committed := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Nodes[f.req.ID]}))
+	if committed.Properties["title"] != "Use PSP v3" || committed.Version != f.req.Version+1 || committed.Comment != "fine again" || len(committed.Parents) != 1 || committed.Parents[0] != f.req.Version {
+		t.Fatalf("commit writes the version from the draft: %+v", committed)
 	}
-	if out := must[[]domain.Link](t)(g.OutLinksOf(ctx, landed.Ref())); len(out) != 1 || out[0].Type != "satisfies" {
+	if out := must[[]domain.Link](t)(g.OutLinksOf(ctx, committed.Ref())); len(out) != 1 || out[0].Type != "satisfies" {
 		t.Fatalf("with its links: %+v", out)
 	}
 	if d := must[*domain.Draft](t)(g.draftOf(ctx, c.ID, "", cn.ID)); d != nil {
 		t.Fatalf("the draft goes when its version is written: %+v", d)
 	}
 	got := must[domain.ChangeImpact](t)(g.seenImpact(ctx, c.ID, cn.ID, ""))
-	if got.Post == nil || *got.Post != landed.Ref() || got.Landed == nil || *got.Landed != landed.Ref() {
-		t.Fatalf("post is rewritten to the landed version: %+v", got)
+	if got.Post == nil || *got.Post != committed.Ref() || got.Committed == nil || *got.Committed != committed.Ref() {
+		t.Fatalf("post is rewritten to the committed version: %+v", got)
 	}
 	// a version never changes once written
 	if err := g.repo.InTx(ctx, func(tx Tx) error {
-		return tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: "x", From: landed.Ref(), To: landed.Ref(), ChangeID: c.ID})
+		return tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: "x", From: committed.Ref(), To: committed.Ref(), ChangeID: c.ID})
 	}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a link added to a written version: %v", err)
 	}
@@ -167,7 +167,7 @@ func testAdoptFlowNeedsAccept(t *testing.T, repo Repo) {
 }
 
 // A link a draft of the change holds to a node of the change targets the draft: it follows the node to the version
-// landing writes for it (ADR 0079); the link of a version written before stays where it is, suspect (ADR 0003).
+// commit writes for it (ADR 0079); the link of a version written before stays where it is, suspect (ADR 0003).
 func TestDraftLinksFollowNewVersions(t *testing.T) {
 	forEachRepo(t, testDraftLinksFollowNewVersions)
 }
@@ -191,9 +191,9 @@ func testDraftLinksFollowNewVersions(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, note.ID, "u", "ok"))
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, req2, "u", "ok"))
 	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
-	landed := must[[]domain.Link](t)(g.OutLinksOf(ctx, domain.NodeRef{ID: note.Post.ID, Version: res.Nodes[note.Post.ID]}))
-	if len(landed) != 1 || landed[0].To != (domain.NodeRef{ID: w.req2.ID, Version: res.Nodes[w.req2.ID]}) || res.Nodes[w.req2.ID] != w.req2.Version+1 {
-		t.Fatalf("landing resolves the link to the version it writes for REQ-2 (%v): %+v", res.Nodes[w.req2.ID], landed)
+	committed := must[[]domain.Link](t)(g.OutLinksOf(ctx, domain.NodeRef{ID: note.Post.ID, Version: res.Nodes[note.Post.ID]}))
+	if len(committed) != 1 || committed[0].To != (domain.NodeRef{ID: w.req2.ID, Version: res.Nodes[w.req2.ID]}) || res.Nodes[w.req2.ID] != w.req2.Version+1 {
+		t.Fatalf("commit resolves the link to the version it writes for REQ-2 (%v): %+v", res.Nodes[w.req2.ID], committed)
 	}
 }
 

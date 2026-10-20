@@ -22,7 +22,7 @@ import (
 )
 
 // A personal change (ADR 0037) belongs to its owner: another caller neither sees nor touches it, and only its
-// owner removes it, as long as it landed nothing.
+// owner removes it, as long as it committed nothing.
 func TestPersonalChange(t *testing.T) {
 	ctx := context.Background()
 	g := typedGraph(t)
@@ -319,7 +319,7 @@ func TestEnsureUserJoinsWaitingUnit(t *testing.T) {
 }
 
 // A new user is created and activated in one change: the activation is a transition of its draft (ADR 0079), so the
-// User has one version, active, written at landing, and its log reads created, transitioned, reviewed, landed.
+// User has one version, active, written at commit, and its log reads created, transitioned, reviewed, committed.
 func TestEnsureUserIsOneVersion(t *testing.T) {
 	ctx := context.Background()
 	g := typedGraph(t)
@@ -347,7 +347,7 @@ func TestEnsureUserIsOneVersion(t *testing.T) {
 			ops = append(ops, e.Op)
 		}
 	}
-	if len(ops) < 4 || ops[0] != domain.ImpactCreated || ops[1] != domain.ImpactTransitioned || ops[2] != domain.ImpactReviewed || ops[3] != domain.ImpactLanded {
+	if len(ops) < 4 || ops[0] != domain.ImpactCreated || ops[1] != domain.ImpactTransitioned || ops[2] != domain.ImpactReviewed || ops[3] != domain.ImpactCommitted {
 		t.Fatalf("log of the user: %v", ops)
 	}
 }

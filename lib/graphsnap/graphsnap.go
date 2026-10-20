@@ -23,7 +23,7 @@ type Graph interface {
 // Reader is the one way the services read the graph (ADR 0145): At gives the state of a namespace at a commit (a
 // baseline), Head names the commit at the head of its main branch. A commit never changes, so the state at one is a
 // pure function of it: the reader keeps the last state it gave per namespace and reaches the next commit asked from it
-// by the nodes landed in between (Graph.BaselineDelta), else by reading that commit whole. Nothing is kept about the
+// by the nodes committed in between (Graph.BaselineDelta), else by reading that commit whole. Nothing is kept about the
 // head: a reader asks the graph for it each time.
 type Reader struct {
 	Graph Graph
@@ -190,7 +190,7 @@ type DeltaReader interface {
 }
 
 // Head is the state of the head of a branch as a snapshot follows it (ADR 0143 §4): read whole once, then moved by the
-// nodes that landed since, so that a commit costs a snapshot the nodes it touched rather than the namespace. It keeps
+// nodes that committed since, so that a commit costs a snapshot the nodes it touched rather than the namespace. It keeps
 // the links whose target it holds, suspect ones included when read with them; State gives them as a baseline read gives
 // them.
 type Head struct {

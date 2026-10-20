@@ -23,7 +23,7 @@ const HeaderProjectID = "projectId"
 // with it its open sub-changes, in one transaction. A sub-change cannot move alone: its project is its parent's. The
 // target must be a project and not the one the change is in, and ProjectMoveGate (when set) must accept the move. The
 // nodes keep their projects (the project of a node never changes), the nodes the change creates take the new project
-// when it lands. The guardian chain of each moved change is computed again for the new project (ADR 0106). Each moved
+// when it commits. The guardian chain of each moved change is computed again for the new project (ADR 0106). Each moved
 // change logs a change.updated entry with a projectId field {from, to} (and a guardians field when its chain changed),
 // by the caller. It returns the change as moved.
 func (g *Graph) MoveChange(ctx context.Context, id domain.ChangeID, project string) (domain.Change, error) {

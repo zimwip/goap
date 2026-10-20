@@ -90,7 +90,7 @@ func TestAnEntryCarriesTheEventsOfOneOperation(t *testing.T) {
 	if !reflect.DeepEqual(got, events) {
 		t.Fatalf("read back\n%+v\nwant\n%+v", got, events)
 	}
-	if _, err := ImpactBatchEntry("e2", []ImpactEvent{events[0], {Change: "c1", Impact: "i4", Op: ImpactLanded}}); err == nil {
+	if _, err := ImpactBatchEntry("e2", []ImpactEvent{events[0], {Change: "c1", Impact: "i4", Op: ImpactCommitted}}); err == nil {
 		t.Fatal("events of two operations share an entry")
 	}
 	one, err := ImpactEventsOf(LogEntry{ID: "e3", Change: "c1", Type: "impact.withdrawn", Subject: "i9", Payload: []byte(`{"op":"withdrawn"}`)})

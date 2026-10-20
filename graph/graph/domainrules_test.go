@@ -50,7 +50,7 @@ func testWithdrawImpact(t *testing.T, repo Repo) {
 		t.Fatalf("the created node is gone: %v", err)
 	}
 
-	// an accepted impact keeps its draft until the change lands: it is withdrawn like any other
+	// an accepted impact keeps its draft until the change commits: it is withdrawn like any other
 	cn = must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.test.ID, Rationale: "v2"}))
 	g.touch(t, c.ID, cn.ID)
 	if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
@@ -99,7 +99,7 @@ func testWithdrawImpacts(t *testing.T, repo Repo) {
 }
 
 // The links a type requires (the parent of a unit, ADR 0054) are checked when the draft is accepted and when the version
-// lands, whatever operations built it; a draft may be on its way there.
+// commits, whatever operations built it; a draft may be on its way there.
 func TestRequiredLinksAtAccept(t *testing.T) { forEachRepo(t, testRequiredLinksAtAccept) }
 
 func testRequiredLinksAtAccept(t *testing.T, repo Repo) {

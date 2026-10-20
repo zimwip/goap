@@ -342,7 +342,7 @@ func (h *Handler) saveSettings(ctx context.Context, id domain.ChangeID, me strin
 		}
 	}
 	if len(b.Verdicts) == 0 {
-		// nothing left to save: the change goes, it landed nothing
+		// nothing left to save: the change goes, it committed nothing
 		_, err := h.Graph.PurgeChange(ctx, id)
 		return err
 	}

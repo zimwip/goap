@@ -47,7 +47,7 @@ function unhoist(
 }
 
 /** Decodes the impact events of a log entry: the one it records, or the several one entry carries (ADR 0144: the
- * verdicts of a review, the versions of a landing, as `impacts` parts), each with the envelope of the entry and the id
+ * verdicts of a review, the versions of a commit, as `impacts` parts), each with the envelope of the entry and the id
  * `<entry>#<n>`. Another entry is decoded as one value (decodeLogEntry). */
 export function decodeImpactEvents<T>(l: LogEntry): T[] {
   const payload = JSON.parse(l.payload ?? "{}");
@@ -151,7 +151,7 @@ export function shortId(id: string | undefined): string {
 }
 
 /** A reference to the draft a change holds of a node (ADR 0079): an id with no version. A node has no version while a
- * change works on it; the version is written when the change lands. The web never needs a version for a draft. */
+ * change works on it; the version is written when the change commits. The web never needs a version for a draft. */
 export function isDraft(
   ref: NodeRef | undefined,
 ): ref is NodeRef & { id: string } {

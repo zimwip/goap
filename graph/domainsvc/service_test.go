@@ -223,7 +223,7 @@ version: 1.0.0
 lifecycles:
   - name: req
     initial: draft
-    states: [{name: draft, notLandable: true}, {name: approved}]
+    states: [{name: draft, notCommittable: true}, {name: approved}]
     transitions: [{name: approve, from: draft, to: approved, permission: "requirement:approve", requires: {attributes: [title]}}]
 nodeTypes:
   - {name: Requirement, lifecycle: req}
@@ -252,7 +252,7 @@ linkTypes:
 			if err != nil || len(got.Domain.Lifecycles) != 1 || got.Domain.Lifecycles[0].Name != "req" || got.Domain.NodeTypes[0].Lifecycle != "req" {
 				t.Fatalf("stored domain: %+v %v", got.Domain, err)
 			}
-			if l := got.Domain.LifecycleOf("Spec"); l == nil || l.Landable("draft") || !l.Landable("approved") {
+			if l := got.Domain.LifecycleOf("Spec"); l == nil || l.Committable("draft") || !l.Committable("approved") {
 				t.Fatalf("resolved lifecycle: %+v", l)
 			}
 			// a reference to a lifecycle the domain does not have is rejected

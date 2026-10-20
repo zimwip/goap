@@ -59,7 +59,7 @@ func (g *Graph) checkRequiredParent(e NodeEdit) error {
 // checkRequiredLinks checks that a version or a draft carries the links its type requires (the parent of a node of a
 // structure, the membership of a User): read back from the node itself, so a client that built its edits from a stale
 // read (a link it did not know of) fails instead of leaving the node with zero or two of them. Checked when a draft is
-// accepted (ADR 0079) and when the version lands (Apply), never while the draft is edited, which may be on its way there.
+// accepted (ADR 0079) and when the version commits (Apply), never while the draft is edited, which may be on its way there.
 func (g *Graph) checkRequiredLinks(n domain.Node, links []domain.Link) error {
 	reqs := g.requirementsOf(n.Type, n.Key)
 	if len(reqs) == 0 || n.Deleted {
@@ -83,7 +83,7 @@ func (g *Graph) checkRequiredLinks(n domain.Node, links []domain.Link) error {
 // reference, else the stored version. ok is false when it cannot be found.
 type nodeResolver func(ref domain.NodeRef) (n domain.Node, ok bool, err error)
 
-// storedResolver resolves exact versions from the store: the links of a version written by a landing, whose drafts
+// storedResolver resolves exact versions from the store: the links of a version written by a commit, whose drafts
 // references have been replaced by the versions it writes.
 func storedResolver(ctx context.Context, tx Tx) nodeResolver {
 	return func(ref domain.NodeRef) (domain.Node, bool, error) {
@@ -112,7 +112,7 @@ func draftResolver(ctx context.Context, tx Tx, r *draftReader) nodeResolver {
 	}
 }
 
-// checkVersion is what a draft must satisfy to be accepted and the version written from it to land (ADR 0076, 0079): its
+// checkVersion is what a draft must satisfy to be accepted and the version written from it to commit (ADR 0076, 0079): its
 // properties (attributes, attribute validators and node validators of its type), the links its type requires, and for
 // each outgoing link its attributes, their validators and the link validators of its type. A link whose target cannot
 // be resolved is not given to the link validators: a dangling link is reported by the checks of the links themselves.

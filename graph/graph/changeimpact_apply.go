@@ -30,11 +30,11 @@ func (a *applier) prepareChangeImpacts() error {
 	if err != nil {
 		return err
 	}
-	type landing struct {
+	type commit struct {
 		cn domain.ChangeImpact
 		d  domain.Draft
 	}
-	var todo []landing
+	var todo []commit
 	impacts := a.mainImpacts()
 	// the versions the drafts start from, read in one batch: what the drafts are compared with, and the links the new
 	// versions share or write a delta over (ADR 0141)
@@ -66,7 +66,7 @@ func (a *applier) prepareChangeImpacts() error {
 		if err := a.g.checkOrigins(impacts, cn, d); err != nil {
 			return err
 		}
-		todo = append(todo, landing{cn, *d})
+		todo = append(todo, commit{cn, *d})
 	}
 	// 1. the versions: the next version of each node, whatever the branch it was written on; the latest version of
 	// each node, and the latest on the change's branch, read in two statements
@@ -108,7 +108,7 @@ func (a *applier) prepareChangeImpacts() error {
 				to.Version = v
 			}
 			if to.IsDraft() {
-				return invalidf("%s links to the draft of node %s, which the change does not land", nodes[i].Key, to.ID)
+				return invalidf("%s links to the draft of node %s, which the change does not commit", nodes[i].Key, to.ID)
 			}
 			links = append(links, domain.Link{ID: dl.ID, Type: dl.Type, To: to, Properties: dl.Properties})
 		}
@@ -182,11 +182,11 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 	return n, a.tx.PutNode(a.ctx, n)
 }
 
-// mainImpacts are the impacts of the main flow that count at landing.
+// mainImpacts are the impacts of the main flow that count at commit.
 func (a *applier) mainImpacts() []domain.ChangeImpact { return mainImpactsOf(a.change) }
 
 // walkChangeImpacts validates the properties of each produced version and walks its transitions: it returns the nodes
-// left in a state that cannot land (ADR 0078).
+// left in a state that cannot commit (ADR 0078).
 func (a *applier) walkChangeImpacts() (stuck []string, err error) {
 	for _, cp := range a.cposts {
 		n := cp.post
@@ -200,7 +200,7 @@ func (a *applier) walkChangeImpacts() (stuck []string, err error) {
 		if lc == nil || n.State == "" {
 			continue
 		}
-		if !lc.Landable(n.State) {
+		if !lc.Committable(n.State) {
 			stuck = append(stuck, fmt.Sprintf("%s (%s) in %s", n.Key, n.Type, n.State))
 		}
 		if err := a.walkTransitions(cp, lc); err != nil {
@@ -268,18 +268,18 @@ func joinSorted(s []string) string {
 	return out
 }
 
-// land records, once the branch of a change is merged into its parent (the baseline result), the
-// version each change impact landed as: the version it wrote, joined to the parent, or the merge
+// commit records, once the branch of a change is merged into its parent (the baseline result), the
+// version each change impact committed as: the version it wrote, joined to the parent, or the merge
 // version of mergeChange. The other open changes on the same nodes are not read: each starts from the latest version
 // of its nodes when it is rebased, at its own merge (ADR 0101, 0140).
-func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.BaselineID) error {
-	lands := func(cn domain.ChangeImpact) bool {
-		return cn.Post != nil && (cn.Review == domain.ReviewAccepted || cn.Landed != nil) && cn.Flow == "" && !cn.Superseded
+func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.BaselineID) error {
+	commits := func(cn domain.ChangeImpact) bool {
+		return cn.Post != nil && (cn.Review == domain.ReviewAccepted || cn.Committed != nil) && cn.Flow == "" && !cn.Superseded
 	}
 	// the latest version of each node on the target, read in two statements
 	var ids []domain.NodeID
 	for _, cn := range c.Nodes {
-		if lands(cn) {
+		if commits(cn) {
 			ids = append(ids, cn.Post.ID)
 		}
 	}
@@ -299,21 +299,21 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 	for _, n := range heads {
 		byID[n.ID] = n
 	}
-	var landed []domain.ImpactEvent
+	var committed []domain.ImpactEvent
 	for _, cn := range c.Nodes {
-		if !lands(cn) {
+		if !commits(cn) {
 			continue
 		}
 		post := *cn.Post
-		if post.IsDraft() && cn.Landed != nil {
-			post = *cn.Landed // checked out again after its commit, left as it was (ADR 0102)
+		if post.IsDraft() && cn.Committed != nil {
+			post = *cn.Committed // checked out again after its commit, left as it was (ADR 0102)
 		}
 		head, ok := byID[post.ID]
 		if !ok {
 			return fmt.Errorf("node %s on %s: %w", post.ID, domain.BranchOf(own.Parent), ErrNotFound)
 		}
 		if head.ChangeID != mergeChange && head.Ref() != post {
-			continue // left as is on the target: nothing of this change landed
+			continue // left as is on the target: nothing of this change committed
 		}
 		ref := head.Ref()
 		comment := cn.Rationale
@@ -327,8 +327,8 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 				return err
 			}
 		}
-		landed = append(landed, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, Landed: &ref, Baseline: result, Branch: domain.BranchOf(own.Parent)})
+		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Baseline: result, Branch: domain.BranchOf(own.Parent)})
 	}
-	// one entry for the landing (ADR 0144)
-	return g.emit(ctx, tx, landed...)
+	// one entry for the commit (ADR 0144)
+	return g.emit(ctx, tx, committed...)
 }
