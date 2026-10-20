@@ -1,6 +1,6 @@
 # ADR 0143 — The state of a node is a selection; baselines keep no entries, tags name versions
 
-**Status**: accepted; implemented: §1 to §3 (no `baseline_entry`, no checkpoints, the bootstrap a landing), §4 (a whole state is the namespace's node list then a selection in batches; the access and hub snapshots, the explorer and the export reading the node index instead of a baseline are not done: the access snapshot needs a consistent state), §5 to §8 (version tags, smart tags in `graph/smarttagsvc`, RPCs, `goap-change` / `goap-graph`, web) · **Date**: 2026-10 · Builds on ADR 0032 (versions and branches), 0056 (baselines and tags), 0137
+**Status**: accepted; implemented: §1 to §3 (no `baseline_entry`, no checkpoints, the bootstrap a landing), §4 (a whole state is the namespace's node list then a selection in batches; the views of the head follow it by deltas, see below; the explorer and the export read a baseline page by page), §5 to §8 (version tags, smart tags in `graph/smarttagsvc`, RPCs, `goap-change` / `goap-graph`, web) · **Date**: 2026-10 · Builds on ADR 0032 (versions and branches), 0056 (baselines and tags), 0137
 (a commit reads the nodes it touches, and its addendum *The version of a node in a baseline is a selection*), 0140 (a
 baseline is computed from the versions that landed) · Supersedes the checkpoints of ADR 0140 and the change tags of
 ADR 0056
@@ -52,6 +52,15 @@ configuration, a document set, whose version links to the exact versions of what
    the index: the snapshot export, the explorer's pages, the access and hub snapshots read it rather than a baseline;
    reading a past baseline whole stays possible (the same selection with its order) and pages like the explorer does.
    `checkStates` replays the landings and compares with the selection.
+
+   *As implemented*: the views of the head (the access, hub, model and methodology snapshots) do not read the node index,
+   which is fed after the commit through the outbox: an access snapshot must see a grant as soon as its commit returns.
+   They read the graph, whole once, then by what moved: `Graph.BaselineDelta(from, to)` (RPC `GetBaselineDelta`,
+   `graphapi.BaselineDelta`) gives the nodes landed on the branch between two of its baselines at their version in the
+   later one (the same selection, `Tx.LandedVersions` over the window of orders), the links leaving them and the nodes
+   it no longer holds; `graphsnap.Head` lays it over the state it keeps (`Move`, `State`), and reads the later
+   baseline whole when the delta is refused (not of one branch, backwards, more than `MaxDeltaNodes` moved). A commit
+   costs a snapshot the nodes it touched, not the namespace.
 5. **A diff walks the changes between two baselines.** `DiffBaselines` and the change-stack follow the landings that
    lead from one to the other and compare the nodes they touched, selected at both ends: cheap between close baselines,
    dearer as they move apart, refused past `MaxDiffChanges` (1000) with a request to compare closer baselines (done

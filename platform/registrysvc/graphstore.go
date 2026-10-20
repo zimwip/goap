@@ -81,7 +81,7 @@ func (s *GraphStore) aliasStubGraph() StoreGraph { return s.Graph }
 // NewGraphStore returns a store over a graph (the graph itself, or a client of the graph service).
 func NewGraphStore(g StoreGraph) *GraphStore {
 	s := &GraphStore{Graph: g}
-	s.cache = graphsnap.Cache[*defs]{Graph: withSuspects{g}, Namespace: NamespaceMethodology, Build: buildDefs}
+	s.cache = graphsnap.Cache[*defs]{Graph: g, Namespace: NamespaceMethodology, Suspects: true, Build: buildDefs}
 	return s
 }
 

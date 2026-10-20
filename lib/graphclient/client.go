@@ -483,6 +483,20 @@ func (c *Client) BaselineGraph(ctx context.Context, id domain.BaselineID) ([]dom
 	return pbconv.NodesFromPB(r.Msg.Nodes), pbconv.LinksFromPB(r.Msg.Links), nil
 }
 
+// BaselineDelta reads what moved from a baseline to a later one of its branch (graphsnap.DeltaReader, ADR 0143 §4).
+func (c *Client) BaselineDelta(ctx context.Context, from, to domain.BaselineID) (graphapi.BaselineDelta, error) {
+	r, err := c.rpc.GetBaselineDelta(ctx, connect.NewRequest(&graphv1.GetBaselineDeltaRequest{From: string(from), To: string(to)}))
+	if err != nil {
+		return graphapi.BaselineDelta{}, rpcerr.FromConnect(err)
+	}
+	d := graphapi.BaselineDelta{From: pbconv.BaselineFromPB(r.Msg.From), To: pbconv.BaselineFromPB(r.Msg.To),
+		Nodes: pbconv.NodesFromPB(r.Msg.Nodes), Links: pbconv.LinksFromPB(r.Msg.Links)}
+	for _, id := range r.Msg.Removed {
+		d.Removed = append(d.Removed, domain.NodeID(id))
+	}
+	return d, nil
+}
+
 // SuspectLinks returns the links whose source is in the baseline and whose target is there at another version (the
 // suspect links GetBaselineGraph answers with).
 func (c *Client) SuspectLinks(ctx context.Context, id domain.BaselineID) ([]domain.Link, error) {

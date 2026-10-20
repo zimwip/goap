@@ -4,8 +4,11 @@
 package graphsnap
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -32,6 +35,7 @@ type Cache[T any] struct {
 	Suspects bool
 
 	mu      sync.Mutex
+	head    Head
 	have    bool
 	cur     T
 	id      domain.BaselineID
@@ -73,16 +77,10 @@ func (c *Cache[T]) get(ctx context.Context, fresh bool) (T, domain.BaselineID, e
 	if c.have && c.id == head.ID {
 		return c.cur, c.id, nil
 	}
-	read := c.Graph.BaselineGraph
-	if c.Suspects {
-		read = func(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
-			return BaselineWithSuspects(ctx, c.Graph, id)
-		}
-	}
-	nodes, links, err := read(ctx, head.ID)
-	if err != nil {
+	if err := c.head.Move(ctx, c.Graph, head.ID, c.Suspects); err != nil {
 		return c.cur, c.id, err
 	}
+	nodes, links := c.head.State()
 	c.cur, c.id, c.have = c.Build(head.ID, nodes, links), head.ID, true
 	return c.cur, c.id, nil
 }
@@ -118,4 +116,102 @@ func BaselineWithSuspects(ctx context.Context, g Graph, id domain.BaselineID) ([
 		links = append(links, sus...)
 	}
 	return nodes, links, nil
+}
+
+// DeltaReader is a graph that reads what moved between two baselines of a branch (ADR 0143 §4: *graph.Graph, the graph
+// service client); refused with graphapi.ErrInvalid when it cannot, and the head is then read whole.
+type DeltaReader interface {
+	BaselineDelta(ctx context.Context, from, to domain.BaselineID) (graphapi.BaselineDelta, error)
+}
+
+// Head is the state of the head of a branch as a snapshot follows it (ADR 0143 §4): read whole once, then moved by the
+// nodes that landed since, so that a commit costs a snapshot the nodes it touched rather than the namespace. It keeps
+// the links whose target it holds, suspect ones included; State gives them as a baseline read gives them.
+type Head struct {
+	// ID is the baseline the state is of ("": none read yet, or the empty state).
+	ID       domain.BaselineID
+	suspects bool
+	nodes    map[domain.NodeID]domain.Node
+	out      map[domain.NodeID][]domain.Link
+}
+
+// Move brings the state to the baseline to: from the nodes moved since the state's baseline when g reads deltas,
+// else (or when the delta is refused) by reading to whole, with its suspect links when suspects.
+func (h *Head) Move(ctx context.Context, g Graph, to domain.BaselineID, suspects bool) error {
+	if to == h.ID && h.nodes != nil && h.suspects == suspects {
+		return nil
+	}
+	if to == "" {
+		h.ID, h.suspects, h.nodes, h.out = "", suspects, map[domain.NodeID]domain.Node{}, map[domain.NodeID][]domain.Link{}
+		return nil
+	}
+	if dr, ok := g.(DeltaReader); ok && h.ID != "" && h.nodes != nil && h.suspects == suspects {
+		d, err := dr.BaselineDelta(ctx, h.ID, to)
+		if err == nil {
+			h.apply(d)
+			h.ID = to
+			return nil
+		}
+		if !errors.Is(err, graphapi.ErrInvalid) {
+			return err
+		}
+	}
+	read := g.BaselineGraph
+	if suspects {
+		read = func(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
+			return BaselineWithSuspects(ctx, g, id)
+		}
+	}
+	nodes, links, err := read(ctx, to)
+	if err != nil {
+		return err
+	}
+	h.nodes, h.out = make(map[domain.NodeID]domain.Node, len(nodes)), map[domain.NodeID][]domain.Link{}
+	for _, n := range nodes {
+		h.nodes[n.ID] = n
+	}
+	for _, l := range links {
+		h.out[l.From.ID] = append(h.out[l.From.ID], l)
+	}
+	h.ID, h.suspects = to, suspects
+	return nil
+}
+
+// apply lays a delta over the state: the moved nodes take their new version and its outgoing links, the removed ones go.
+func (h *Head) apply(d graphapi.BaselineDelta) {
+	for _, id := range d.Removed {
+		delete(h.nodes, id)
+		delete(h.out, id)
+	}
+	for _, n := range d.Nodes {
+		h.nodes[n.ID] = n
+		delete(h.out, n.ID)
+	}
+	for _, l := range d.Links {
+		if _, ok := h.nodes[l.To.ID]; ok {
+			h.out[l.From.ID] = append(h.out[l.From.ID], l)
+		}
+	}
+}
+
+// State returns the nodes of the state by key and the links between them by id: those whose target is at the version
+// the state holds, and the suspect ones too when the state was read with them.
+func (h *Head) State() ([]domain.Node, []domain.Link) {
+	if len(h.nodes) == 0 {
+		return nil, nil
+	}
+	nodes := slices.SortedFunc(maps.Values(h.nodes), func(a, b domain.Node) int { return cmp.Compare(a.Key, b.Key) })
+	var links []domain.Link
+	for from, out := range h.out {
+		if _, ok := h.nodes[from]; !ok {
+			continue
+		}
+		for _, l := range out {
+			if to, ok := h.nodes[l.To.ID]; ok && (h.suspects || to.Version == l.To.Version) {
+				links = append(links, l)
+			}
+		}
+	}
+	slices.SortFunc(links, func(a, b domain.Link) int { return cmp.Compare(a.ID, b.ID) })
+	return nodes, links
 }

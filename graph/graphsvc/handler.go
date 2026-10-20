@@ -202,6 +202,20 @@ func (h *Handler) GetBaselineGraph(ctx context.Context, r *connect.Request[graph
 		Links: pbconv.LinksToPB(links), SuspectLinks: pbconv.LinksToPB(suspects)}, err)
 }
 
+// GetBaselineDelta serves graph.Graph.BaselineDelta: what a snapshot of the head reads when the head moved (ADR 0143 §4).
+func (h *Handler) GetBaselineDelta(ctx context.Context, r *connect.Request[graphv1.GetBaselineDeltaRequest]) (*connect.Response[graphv1.GetBaselineDeltaResponse], error) {
+	d, err := h.Graph.BaselineDelta(ctx, domain.BaselineID(r.Msg.From), domain.BaselineID(r.Msg.To))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	removed := make([]string, len(d.Removed))
+	for i, id := range d.Removed {
+		removed[i] = string(id)
+	}
+	return res(&graphv1.GetBaselineDeltaResponse{From: pbconv.BaselineToPB(d.From), To: pbconv.BaselineToPB(d.To), Nodes: pbconv.NodesToPB(d.Nodes),
+		Links: pbconv.LinksToPB(d.Links), Removed: removed}, nil)
+}
+
 // Caller names the principal of a request, recorded on the events of the change impacts (graph.Graph.Caller,
 // ADR 0029).
 func Caller(ctx context.Context) string { return authz.From(ctx).Subject }

@@ -47,6 +47,9 @@ const (
 	// GraphServiceGetBaselineGraphProcedure is the fully-qualified name of the GraphService's
 	// GetBaselineGraph RPC.
 	GraphServiceGetBaselineGraphProcedure = "/goap.graph.v1.GraphService/GetBaselineGraph"
+	// GraphServiceGetBaselineDeltaProcedure is the fully-qualified name of the GraphService's
+	// GetBaselineDelta RPC.
+	GraphServiceGetBaselineDeltaProcedure = "/goap.graph.v1.GraphService/GetBaselineDelta"
 	// GraphServiceListBaselineNodesProcedure is the fully-qualified name of the GraphService's
 	// ListBaselineNodes RPC.
 	GraphServiceListBaselineNodesProcedure = "/goap.graph.v1.GraphService/ListBaselineNodes"
@@ -347,6 +350,10 @@ type GraphServiceClient interface {
 	ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error)
 	DeleteTag(context.Context, *connect.Request[v1.DeleteTagRequest]) (*connect.Response[v1.DeleteTagResponse], error)
 	GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error)
+	// GetBaselineDelta reads what moved from a baseline to a later one of its branch (ADR 0143 §4): the nodes landed in
+	// between at their version in the later one, the links leaving them, the nodes it no longer holds. INVALID_ARGUMENT
+	// when the baselines do not follow each other or too much moved: read the later baseline whole.
+	GetBaselineDelta(context.Context, *connect.Request[v1.GetBaselineDeltaRequest]) (*connect.Response[v1.GetBaselineDeltaResponse], error)
 	// Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
 	ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error)
 	ListBaselineLinks(context.Context, *connect.Request[v1.ListBaselineLinksRequest]) (*connect.Response[v1.ListBaselineLinksResponse], error)
@@ -582,6 +589,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceGetBaselineGraphProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("GetBaselineGraph")),
+			connect.WithClientOptions(opts...),
+		),
+		getBaselineDelta: connect.NewClient[v1.GetBaselineDeltaRequest, v1.GetBaselineDeltaResponse](
+			httpClient,
+			baseURL+GraphServiceGetBaselineDeltaProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetBaselineDelta")),
 			connect.WithClientOptions(opts...),
 		),
 		listBaselineNodes: connect.NewClient[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse](
@@ -1195,6 +1208,7 @@ type graphServiceClient struct {
 	listTags               *connect.Client[v1.ListTagsRequest, v1.ListTagsResponse]
 	deleteTag              *connect.Client[v1.DeleteTagRequest, v1.DeleteTagResponse]
 	getBaselineGraph       *connect.Client[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse]
+	getBaselineDelta       *connect.Client[v1.GetBaselineDeltaRequest, v1.GetBaselineDeltaResponse]
 	listBaselineNodes      *connect.Client[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse]
 	listBaselineLinks      *connect.Client[v1.ListBaselineLinksRequest, v1.ListBaselineLinksResponse]
 	getNodeNeighbourhood   *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
@@ -1325,6 +1339,11 @@ func (c *graphServiceClient) DeleteTag(ctx context.Context, req *connect.Request
 // GetBaselineGraph calls goap.graph.v1.GraphService.GetBaselineGraph.
 func (c *graphServiceClient) GetBaselineGraph(ctx context.Context, req *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error) {
 	return c.getBaselineGraph.CallUnary(ctx, req)
+}
+
+// GetBaselineDelta calls goap.graph.v1.GraphService.GetBaselineDelta.
+func (c *graphServiceClient) GetBaselineDelta(ctx context.Context, req *connect.Request[v1.GetBaselineDeltaRequest]) (*connect.Response[v1.GetBaselineDeltaResponse], error) {
+	return c.getBaselineDelta.CallUnary(ctx, req)
 }
 
 // ListBaselineNodes calls goap.graph.v1.GraphService.ListBaselineNodes.
@@ -1837,6 +1856,10 @@ type GraphServiceHandler interface {
 	ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error)
 	DeleteTag(context.Context, *connect.Request[v1.DeleteTagRequest]) (*connect.Response[v1.DeleteTagResponse], error)
 	GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error)
+	// GetBaselineDelta reads what moved from a baseline to a later one of its branch (ADR 0143 §4): the nodes landed in
+	// between at their version in the later one, the links leaving them, the nodes it no longer holds. INVALID_ARGUMENT
+	// when the baselines do not follow each other or too much moved: read the later baseline whole.
+	GetBaselineDelta(context.Context, *connect.Request[v1.GetBaselineDeltaRequest]) (*connect.Response[v1.GetBaselineDeltaResponse], error)
 	// Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
 	ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error)
 	ListBaselineLinks(context.Context, *connect.Request[v1.ListBaselineLinksRequest]) (*connect.Response[v1.ListBaselineLinksResponse], error)
@@ -2068,6 +2091,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceGetBaselineGraphProcedure,
 		svc.GetBaselineGraph,
 		connect.WithSchema(graphServiceMethods.ByName("GetBaselineGraph")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceGetBaselineDeltaHandler := connect.NewUnaryHandler(
+		GraphServiceGetBaselineDeltaProcedure,
+		svc.GetBaselineDelta,
+		connect.WithSchema(graphServiceMethods.ByName("GetBaselineDelta")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceListBaselineNodesHandler := connect.NewUnaryHandler(
@@ -2684,6 +2713,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceDeleteTagHandler.ServeHTTP(w, r)
 		case GraphServiceGetBaselineGraphProcedure:
 			graphServiceGetBaselineGraphHandler.ServeHTTP(w, r)
+		case GraphServiceGetBaselineDeltaProcedure:
+			graphServiceGetBaselineDeltaHandler.ServeHTTP(w, r)
 		case GraphServiceListBaselineNodesProcedure:
 			graphServiceListBaselineNodesHandler.ServeHTTP(w, r)
 		case GraphServiceListBaselineLinksProcedure:
@@ -2915,6 +2946,10 @@ func (UnimplementedGraphServiceHandler) DeleteTag(context.Context, *connect.Requ
 
 func (UnimplementedGraphServiceHandler) GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetBaselineGraph is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetBaselineDelta(context.Context, *connect.Request[v1.GetBaselineDeltaRequest]) (*connect.Response[v1.GetBaselineDeltaResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetBaselineDelta is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error) {

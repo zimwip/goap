@@ -17,6 +17,10 @@ service GraphService {
   rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
   rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
   rpc GetBaselineGraph(GetBaselineGraphRequest) returns (GetBaselineGraphResponse);
+  // GetBaselineDelta reads what moved from a baseline to a later one of its branch (ADR 0143 §4): the nodes landed in
+  // between at their version in the later one, the links leaving them, the nodes it no longer holds. INVALID_ARGUMENT
+  // when the baselines do not follow each other or too much moved: read the later baseline whole.
+  rpc GetBaselineDelta(GetBaselineDeltaRequest) returns (GetBaselineDeltaResponse);
   // Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
   rpc ListBaselineNodes(ListBaselineNodesRequest) returns (ListBaselineNodesResponse);
   rpc ListBaselineLinks(ListBaselineLinksRequest) returns (ListBaselineLinksResponse);
@@ -509,6 +513,19 @@ message GetBaselineGraphResponse {
   repeated Node nodes = 2;
   repeated Link links = 3;
   repeated Link suspect_links = 4;
+}
+
+message GetBaselineDeltaRequest {
+  string from = 1;
+  string to = 2;
+}
+
+message GetBaselineDeltaResponse {
+  Baseline from = 1;
+  Baseline to = 2;
+  repeated Node nodes = 3;
+  repeated Link links = 4;
+  repeated string removed = 5;
 }
 
 message ListBaselineNodesRequest {

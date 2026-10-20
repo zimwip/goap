@@ -225,6 +225,8 @@ type Directory struct {
 
 	mu  sync.Mutex
 	cur *Snapshot
+	// org and plat follow the heads of the two namespaces, by what moved (ADR 0143 §4)
+	org, plat graphsnap.Head
 	// st are the structures of the graph, asked once (ADR 0054: tagged by a frozen built-in domain)
 	st *domain.Structures
 }
@@ -263,22 +265,16 @@ func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
 	if d.cur != nil && d.cur.Baselines == baselines {
 		return d.cur, nil
 	}
-	var nodes []domain.Node
-	var links []domain.Link
-	if orgHead.ID != "" {
-		n, l, err := graphsnap.BaselineWithSuspects(ctx, d.Graph, orgHead.ID) // a unit edited keeps its sub-units
-		if err != nil {
-			return nil, err
-		}
-		nodes, links = append(nodes, n...), append(links, l...)
+	// a unit edited keeps its sub-units: the suspect links are references too
+	if err := d.org.Move(ctx, d.Graph, orgHead.ID, true); err != nil {
+		return nil, err
 	}
-	if platHead.ID != "" {
-		n, l, err := graphsnap.BaselineWithSuspects(ctx, d.Graph, platHead.ID)
-		if err != nil {
-			return nil, err
-		}
-		nodes, links = append(nodes, n...), append(links, l...)
+	if err := d.plat.Move(ctx, d.Graph, platHead.ID, true); err != nil {
+		return nil, err
 	}
+	nodes, links := d.org.State()
+	pn, pl := d.plat.State()
+	nodes, links = append(nodes, pn...), append(links, pl...)
 	d.cur = BuildSnapshot(st, baselines, nodes, links)
 	return d.cur, nil
 }
