@@ -325,7 +325,12 @@ func TestImportRepository(t *testing.T) {
 	g := newGraphOn(t, graph.NewSQLite(db))
 	max, _ := strconv.Atoi(os.Getenv("GOAP_GITIMPORT_MAX"))
 	im := &gitimport.Importer{Graph: g, Dir: dir, Name: filepath.Base(dir), ProjectID: project, Max: max,
-		Base: os.Getenv("GOAP_GITIMPORT_BASE"), Progress: testWriter{t}, ProgressEvery: 50}
+		Base: os.Getenv("GOAP_GITIMPORT_BASE"), Progress: testWriter{t}, ProgressEvery: 50,
+		OnPart: func(i, n int, name string) {
+			if i%50 == 0 || i == n {
+				t.Logf("part %d/%d: %s", i, n, name)
+			}
+		}}
 	if os.Getenv("GOAP_GITIMPORT_SYMBOLS") == "1" {
 		ts, err := gitimport.NewTreeSitter()
 		if err != nil {
@@ -335,7 +340,13 @@ func TestImportRepository(t *testing.T) {
 		im.Symbols, im.Code = ts, true
 	}
 	start := time.Now()
-	st, err := im.Run(ctx)
+	run := ctx
+	if d, err := time.ParseDuration(os.Getenv("GOAP_GITIMPORT_DEADLINE")); err == nil {
+		var cancel context.CancelFunc
+		run, cancel = context.WithTimeout(ctx, d)
+		defer cancel()
+	}
+	st, err := im.Run(run)
 	if err != nil {
 		t.Fatal(err)
 	}

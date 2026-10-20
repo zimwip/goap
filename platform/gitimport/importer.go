@@ -63,7 +63,9 @@ type Port interface {
 	ImpactLinkDelete(ctx context.Context, id domain.ChangeID, link domain.LinkID, flow, execution string) error
 	ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in graphapi.NodeTransition) (domain.ChangeImpact, error)
 	ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b domain.ReviewBatch) ([]domain.ChangeImpact, error)
-	Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
+	CommitChangeHeader(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
+	IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]graphapi.Resolution) (domain.Change, error)
+	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 	BaselineDelta(ctx context.Context, from, to domain.BaselineID) (graphapi.BaselineDelta, error)
@@ -99,6 +101,11 @@ type Importer struct {
 	MaxSymbolBytes int64
 	Code           bool
 	Parallel       int
+	// Batch is the most operations on nodes the change of a commit takes by itself (default 1000): a commit doing more
+	// is written by sub-changes of its change, one per file (the files naming each other's declarations together,
+	// the packages first, the directories last), each merged into it in turn (an operation on a change costs in
+	// proportion to the impacts it holds).
+	Batch int
 	// Progress, when set, receives a line every ProgressEvery commits (default 100) and at the end.
 	Progress      io.Writer
 	ProgressEvery int
@@ -108,6 +115,9 @@ type Importer struct {
 	OnBegin func(Stats, Commit)
 	// OnCommit, when set, is called after each commit imported with what the run did so far.
 	OnCommit func(Stats)
+	// OnPart, when set, is called before each sub-change of a commit written by sub-changes: its number, how many, what
+	// it writes.
+	OnPart func(i, n int, name string)
 
 	ix      index
 	head    domain.BaselineID
@@ -133,6 +143,7 @@ type Stats struct {
 
 // Run imports the commits not imported yet and returns what it did.
 func (im *Importer) Run(ctx context.Context) (Stats, error) {
+	im.stats = Stats{}
 	st, err := im.run(ctx)
 	// a cancelled run says so, whatever its cancel broke first (a git process killed, a transaction refused)
 	if err != nil && ctx.Err() != nil && !errors.Is(err, ctx.Err()) {
@@ -388,7 +399,9 @@ func (ix *index) apply(repo string, nodes []domain.Node, links []domain.Link) {
 		str := func(k string) string { s, _ := n.Properties[k].(string); return s }
 		switch {
 		case n.Key == repo:
-			ix.commit = str("commit")
+			ix.commit, e.sum = str("commit"), entrySum(n.Type, n.Properties)
+		case n.Type == TypeDirectory:
+			e.sum = entrySum(n.Type, n.Properties)
 		case isSymbolType(n.Type):
 			e.sum = fingerprint(n.Properties)
 			kind := str("kind")
@@ -406,7 +419,7 @@ func (ix *index) apply(repo string, nodes []domain.Node, links []domain.Link) {
 		case n.Type == TypePackage:
 			e.sum, e.name = pkgFingerprint(n.Properties), str("name")
 		case n.Type == TypeFile:
-			e.blob = str("blob")
+			e.blob, e.sum = str("blob"), entrySum(n.Type, n.Properties)
 			if p := str("path"); path.Base(p) == "go.mod" {
 				if e.removed {
 					delete(ix.gomods, dirOf(p))
@@ -479,21 +492,8 @@ func (im *Importer) commit(ctx context.Context, c Commit) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	ch, err := im.Graph.CreateChange(ctx, graphapi.NewChange{Namespace: Namespace, Title: title(c), Intent: capText(c.Message, maxIntent),
-		Data: changeData(im.Name, c), OwnBranch: true, ProjectID: im.ProjectID, OwnerOrg: im.OwnerOrg})
+	b, err := im.change(ctx, c, ops)
 	if err != nil {
-		return fmt.Errorf("commit %s: %w", short(c.Hash), err)
-	}
-	b, err := im.write(ctx, ch.ID, c, ops)
-	if err != nil {
-		abandoned := domain.ChangeAbandoned
-		// abandoned even when the run is cancelled: an open change would hold the keys it committed
-		actx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abandonWait)
-		_, aerr := im.Graph.UpdateChange(actx, ch.ID, graphapi.ChangePatch{Status: &abandoned})
-		cancel()
-		if aerr != nil {
-			err = errors.Join(err, aerr)
-		}
 		return fmt.Errorf("commit %s: %w", short(c.Hash), err)
 	}
 	if err := im.follow(ctx, b.ID); err != nil {
@@ -506,6 +506,226 @@ func (im *Importer) commit(ctx context.Context, c Commit) error {
 		im.OnCommit(im.stats)
 	}
 	return nil
+}
+
+// change writes the change of a commit, by itself or through its sub-changes, and applies it; a change that fails is
+// abandoned, with its sub-change at work.
+func (im *Importer) change(ctx context.Context, c Commit, ops []*op) (domain.Baseline, error) {
+	ch, err := im.Graph.CreateChange(ctx, graphapi.NewChange{Namespace: Namespace, Title: title(c), Intent: capText(c.Message, maxIntent),
+		Data: changeData(im.Name, c), OwnBranch: true, ProjectID: im.ProjectID, OwnerOrg: im.OwnerOrg})
+	if err != nil {
+		return domain.Baseline{}, err
+	}
+	var b domain.Baseline
+	var sub domain.ChangeID
+	batch := im.Batch
+	if batch <= 0 {
+		batch = defaultBatch
+	}
+	if len(ops) <= batch {
+		b, err = im.write(ctx, ch.ID, c, ops, nil)
+	} else {
+		done := map[string]domain.NodeRef{}
+		units := im.units(ops)
+		for i, u := range units {
+			if err = ctx.Err(); err != nil {
+				break
+			}
+			if im.OnPart != nil {
+				im.OnPart(i+1, len(units), u.name)
+			}
+			var s domain.Change
+			s, err = im.Graph.CreateChange(ctx, graphapi.NewChange{Namespace: Namespace, Title: capText(fmt.Sprintf("%s (%d/%d): %s", title(c), i+1, len(units), u.name), maxTitle),
+				ParentID: ch.ID, ProjectID: im.ProjectID, OwnerOrg: im.OwnerOrg})
+			if err != nil {
+				break
+			}
+			sub = s.ID
+			if _, err = im.write(ctx, sub, c, u.ops, done); err != nil {
+				break
+			}
+			// the versions the sub-change wrote, which the next ones link to
+			if s, err = im.Graph.Change(ctx, sub); err != nil {
+				break
+			}
+			sub = ""
+			for _, cn := range s.Nodes {
+				if cn.Committed != nil {
+					done[cn.Key] = *cn.Committed
+				}
+			}
+		}
+		if err == nil {
+			err = ctx.Err()
+		}
+		if err == nil {
+			b, err = im.land(ctx, ch.ID)
+		}
+	}
+	if err != nil {
+		abandoned := domain.ChangeAbandoned
+		// abandoned even when the run is cancelled: an open change would hold the keys it committed
+		actx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abandonWait)
+		defer cancel()
+		for _, id := range []domain.ChangeID{sub, ch.ID} {
+			if id == "" {
+				continue
+			}
+			if _, aerr := im.Graph.UpdateChange(actx, id, graphapi.ChangePatch{Status: &abandoned}); aerr != nil {
+				err = errors.Join(err, aerr)
+			}
+		}
+		return b, err
+	}
+	return b, nil
+}
+
+const defaultBatch = 1000
+
+// unit is the operations of a sub-change of a commit.
+type unit struct {
+	name  string
+	ops   []*op
+	files int // the units packed with the first one
+}
+
+// units groups the operations of a commit by file (a symbol goes with its file): the packages first, then each file
+// after those whose nodes it links to, the files linking to each other together (a strongly connected component), the
+// directories and the root last; small files that follow each other share a sub-change.
+func (im *Importer) units(ops []*op) []unit {
+	repo := im.Name
+	unitOf := func(o *op) string {
+		switch {
+		case o.pkg:
+			return "\x00packages"
+		case isSymbolType(o.typ):
+			return o.parent
+		case o.typ == TypeFile:
+			return o.key
+		}
+		return "\xfftree"
+	}
+	byUnit := map[string][]*op{}
+	opUnit := map[string]string{}
+	for _, o := range ops {
+		u := unitOf(o)
+		byUnit[u] = append(byUnit[u], o)
+		opUnit[o.key] = u
+	}
+	// what each unit links to: the links it adds, and those its nodes hold already (renewed when written)
+	deps := map[string]map[string]bool{}
+	dep := func(u, k string) {
+		if v, ok := opUnit[k]; ok && v != u {
+			if deps[u] == nil {
+				deps[u] = map[string]bool{}
+			}
+			deps[u][v] = true
+		}
+	}
+	for _, o := range ops {
+		u := opUnit[o.key]
+		for _, w := range o.add {
+			dep(u, w.key)
+		}
+		if o.cur != nil {
+			for _, l := range o.cur.links {
+				dep(u, im.ix.keyOf[l.to])
+			}
+		}
+	}
+	tree := "\xfftree"
+	if _, ok := byUnit[tree]; ok {
+		for u := range byUnit {
+			if u != tree {
+				dep(tree, byUnit[u][0].key)
+			}
+		}
+	}
+	// Tarjan: a component comes out after every component it reaches, so after what it links to
+	names := slices.Sorted(maps.Keys(byUnit))
+	index, low, on := map[string]int{}, map[string]int{}, map[string]bool{}
+	var stack []string
+	var out []unit
+	var visit func(u string)
+	visit = func(u string) {
+		index[u], low[u] = len(index), len(index)
+		stack = append(stack, u)
+		on[u] = true
+		for _, v := range slices.Sorted(maps.Keys(deps[u])) {
+			if _, seen := index[v]; !seen {
+				visit(v)
+				low[u] = min(low[u], low[v])
+			} else if on[v] {
+				low[u] = min(low[u], index[v])
+			}
+		}
+		if low[u] != index[u] {
+			return
+		}
+		var comp []string
+		for {
+			v := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			on[v] = false
+			comp = append(comp, v)
+			if v == u {
+				break
+			}
+		}
+		slices.Sort(comp)
+		var us unit
+		for _, v := range comp {
+			us.ops = append(us.ops, byUnit[v]...)
+		}
+		us.name = unitName(repo, comp)
+		slices.SortStableFunc(us.ops, byRank)
+		out = append(out, us)
+	}
+	for _, u := range names {
+		if _, seen := index[u]; !seen {
+			visit(u)
+		}
+	}
+	// the small ones that follow each other go together, up to half a batch: a merge into the change of the commit
+	// costs in proportion to what it holds
+	limit := im.Batch
+	if limit <= 0 {
+		limit = defaultBatch
+	}
+	limit /= 2
+	var packed []unit
+	for _, u := range out {
+		if n := len(packed); n > 0 && len(packed[n-1].ops)+len(u.ops) <= limit {
+			last := &packed[n-1]
+			last.ops = append(last.ops, u.ops...)
+			slices.SortStableFunc(last.ops, byRank)
+			last.files++
+			continue
+		}
+		packed = append(packed, u)
+	}
+	for i := range packed {
+		if packed[i].files > 0 {
+			packed[i].name = fmt.Sprintf("%s and %d more", packed[i].name, packed[i].files)
+		}
+	}
+	return packed
+}
+
+func unitName(repo string, comp []string) string {
+	name := func(u string) string {
+		switch u {
+		case "\x00packages":
+			return "packages"
+		case "\xfftree":
+			return "directories"
+		}
+		return strings.TrimPrefix(u, repo+":")
+	}
+	if len(comp) == 1 {
+		return name(comp[0])
+	}
+	return fmt.Sprintf("%s and %d other files", name(comp[0]), len(comp)-1)
 }
 
 // plan turns the raw diff of a commit into the operations on the nodes, deepest first: an entry's draft exists before
@@ -620,15 +840,53 @@ func (im *Importer) plan(ctx context.Context, c Commit) ([]*op, error) {
 		o.add = slices.Compact(o.add)
 		slices.Sort(o.drop)
 		o.drop = slices.Compact(o.drop)
+		// what the graph holds already (a commit written in part before a cancel) is left alone
+		if o.cur != nil && !o.cur.removed && !o.remove {
+			if o.props != nil && o.typ != TypePackage && !isSymbolType(o.typ) && entrySum(o.typ, o.props) == o.cur.sum {
+				o.props = nil
+			}
+			if o.props == nil && len(o.add)+len(o.drop) == 0 {
+				delete(ops, o.key)
+			}
+		}
 	}
 	out := slices.Collect(maps.Values(ops))
-	slices.SortFunc(out, func(a, b *op) int {
-		if a.depth != b.depth {
-			return b.depth - a.depth
-		}
-		return strings.Compare(a.key, b.key)
-	})
+	slices.SortFunc(out, byRank)
 	return out, nil
+}
+
+func byRank(a, b *op) int {
+	if ra, rb := rank(a), rank(b); ra != rb {
+		return ra - rb
+	}
+	if a.depth != b.depth {
+		return b.depth - a.depth
+	}
+	return strings.Compare(a.key, b.key)
+}
+
+// rank orders the operations of a change: the packages, the symbols, then the files and directories, deepest first,
+// the root last (a creation carries the links to the nodes written before it).
+func rank(o *op) int {
+	switch {
+	case o.pkg:
+		return 0
+	case isSymbolType(o.typ):
+		return 1
+	}
+	return 2
+}
+
+// entrySum is the attributes of a file, a directory or the repository that tell a changed one (the others derive from
+// them).
+func entrySum(typ string, p map[string]any) string {
+	switch typ {
+	case TypeFile:
+		return sumOf(p, "name", "path", "blob", "mode")
+	case TypeDirectory:
+		return sumOf(p, "name", "path", "tree")
+	}
+	return sumOf(p, "name", "path", "tree", "commit", "url", "ref")
 }
 
 func (im *Importer) tally(o *op) {
@@ -678,7 +936,9 @@ func (im *Importer) props(e Entry, dir bool) (map[string]any, error) {
 
 // write runs the operations of a commit on its change, accepts them in one review and applies the change: the nodes
 // first (a creation with the links whose targets have their draft already), then the other links.
-func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops []*op) (domain.Baseline, error) {
+// A node written renews the links it holds to an older version of their target than the head, or than the version an
+// earlier sub-change of the commit wrote (done).
+func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops []*op, done map[string]domain.NodeRef) (domain.Baseline, error) {
 	byKey := map[string]*op{}
 	for _, o := range ops {
 		byKey[o.key] = o
@@ -688,6 +948,9 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 	target := func(k string) (domain.NodeRef, bool) {
 		if t := byKey[k]; t != nil {
 			return t.ref, t.ref.ID != ""
+		}
+		if r, ok := done[k]; ok {
+			return r, true
 		}
 		if e := im.ix.byKey[k]; e != nil {
 			return domain.NodeRef{ID: e.id, Version: e.ver}, true
@@ -749,12 +1012,16 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 			im.tally(o)
 		}
 		o.ref = domain.DraftRef(o.cur.id)
-		for _, l := range o.drop {
+		drop := slices.Clone(o.drop)
+		later[o] = slices.Clone(o.add)
+		if !o.remove {
+			drop, later[o] = im.renew(o, byKey, done, drop, later[o])
+		}
+		for _, l := range drop {
 			if err := im.Graph.ImpactLinkDelete(ctx, id, l, "", ""); err != nil {
 				return domain.Baseline{}, fmt.Errorf("%s: %w", o.key, err)
 			}
 		}
-		later[o] = o.add
 	}
 	for _, o := range ops {
 		for _, w := range later[o] {
@@ -783,7 +1050,57 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 	if err := ctx.Err(); err != nil {
 		return domain.Baseline{}, err
 	}
-	return im.Graph.Apply(ctx, id, "")
+	return im.land(ctx, id)
+}
+
+// land commits a change and merges it into the branch it was forked from (main, or the branch of the change of its
+// commit for a sub-change): the baseline it leaves on main, by its header (empty for a sub-change).
+func (im *Importer) land(ctx context.Context, id domain.ChangeID) (domain.Baseline, error) {
+	if _, err := im.Graph.CommitChangeHeader(ctx, id, ""); err != nil && !errors.Is(err, graphapi.ErrNothingToCommit) {
+		return domain.Baseline{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return domain.Baseline{}, err
+	}
+	c, err := im.Graph.IntegrateChange(ctx, id, nil)
+	if err != nil {
+		return domain.Baseline{}, err
+	}
+	if c.ParentID == "" && (c.Status != domain.ChangeApplied || c.ResultBaselineID == "") {
+		return domain.Baseline{}, fmt.Errorf("change %s left %s: the head moved while it was imported: %w", id, c.Status, graphapi.ErrConflict)
+	}
+	return domain.Baseline{ID: c.ResultBaselineID}, nil
+}
+
+// renew adds to the links a node written drops and adds those it holds to an older version of their target than the
+// one it will hold: the head, the version an earlier sub-change of the commit wrote, or the draft of the change (the
+// landing follows a link to the version the draft was checked out from by itself).
+func (im *Importer) renew(o *op, byKey map[string]*op, done map[string]domain.NodeRef, drop []domain.LinkID, add []want) ([]domain.LinkID, []want) {
+	dropped := map[domain.LinkID]bool{}
+	for _, l := range drop {
+		dropped[l] = true
+	}
+	for _, lid := range slices.Sorted(maps.Keys(o.cur.links)) {
+		l := o.cur.links[lid]
+		if dropped[lid] {
+			continue
+		}
+		k := im.ix.keyOf[l.to]
+		if t := byKey[k]; t != nil {
+			if t.cur == nil || t.cur.ver == l.ver {
+				continue
+			}
+		} else if r, ok := done[k]; ok {
+			if r.Version == l.ver {
+				continue
+			}
+		} else if e := im.ix.byKey[k]; e == nil || e.ver == l.ver {
+			continue
+		}
+		drop = append(drop, lid)
+		add = append(add, want{l.typ, k})
+	}
+	return drop, add
 }
 
 // ---- the change of a commit ----

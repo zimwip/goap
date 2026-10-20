@@ -54,6 +54,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.Int64Var(&im.MaxSymbolBytes, "symbols-max", 1<<20, "leave the source files larger than this many bytes out of -symbols")
 	fs.BoolVar(&im.Code, "code", true, "with -symbols, keep the source text of each declaration on its node")
 	fs.IntVar(&im.Parallel, "parallel", 0, "with -symbols, how many files are parsed at once (default: the processors, at most 8)")
+	fs.IntVar(&im.Batch, "batch", 0, "the most operations the change of a commit takes by itself; a larger commit is written by a sub-change per file (default 1000)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

@@ -633,6 +633,15 @@ func (c *Client) PlanMerge(ctx context.Context, namespace, from, into string) (g
 	return pbconv.MergePlanFromPB(r.Msg.Plan), nil
 }
 
+// CommitChangeHeader commits a change (CommitChange over RPC), answering the header of its baseline.
+func (c *Client) CommitChangeHeader(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+	r, err := c.rpc.CommitChange(ctx, connect.NewRequest(&graphv1.CommitChangeRequest{ChangeId: string(id), BaselineName: baselineName}))
+	if err != nil {
+		return domain.Baseline{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
+}
+
 // IntegrateChange implements engine.GraphPort (MergeChange over RPC).
 func (c *Client) IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]graphapi.Resolution) (domain.Change, error) {
 	r, err := c.rpc.MergeChange(ctx, connect.NewRequest(&graphv1.MergeChangeRequest{ChangeId: string(id), Resolutions: pbconv.ResolutionsToPB(resolutions)}))

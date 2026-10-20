@@ -51,11 +51,27 @@ commit after commit like the files.
    per goroutine at a time); the importer reads the contents of a commit's source files from one `git cat-file`, in
    order, and parses them on `Importer.Parallel` workers (default: the processors, at most 8; `-parallel`).
 6. **Writing a commit in two passes**: every node first (creations carry the links whose targets have a draft
-   already, the packages and the deepest nodes first), then the other links, since a declaration may call one written
-   later in the change.
+   already: the packages, then the declarations, then the files and directories, deepest first, the root last), then
+   the other links, since a declaration may call one written later in the change. A node written renews the links it
+   holds to an older version of their target than the one it will hold.
+7. **A large commit is written by sub-changes** (ADR 0103). An operation on a change costs in proportion to the
+   impacts it holds, so the first commit of a repository (this one: 31 851 nodes) written as one change is quadratic.
+   A commit of more than `Importer.Batch` operations (default 1000, `-batch`) keeps its change, the change of the
+   commit, and writes it through sub-changes merged into it in turn: one per file, a declaration with its file, the
+   files naming each other's declarations together (a strongly connected component: in Go, the files of a package),
+   each after the files it links to, the packages first, the directories and the root last; small files that follow
+   each other share a sub-change, up to half a batch. The change of the commit holds every impact at the end and is
+   merged into main once: still one change per commit, and a cancel abandons it with its sub-change at work, nothing
+   reaching main. The importer commits and merges by header (`CommitChangeHeader`, `IntegrateChange`), never reading
+   a whole state. The graph gained what this asks of it: a version of a merged branch no longer holds its key (the
+   versions live on in the branches it joined, so a sub-change merged into an abandoned change frees its keys), the
+   merge of a sub-change finds the parent's impacts by node, and an operation on the main flow no longer copies the
+   impacts it sees nor looks a draft up among all the drafts of the change.
 
 ## Consequences
 
+- Measured on this repository (SQLite, symbols and code): the first commit in 2 min 40, twenty commits in 3 min 20,
+  imported again with nothing new: no change.
 - `goap-gitimport -symbols` or the *Symbols* param of the IDE import gives the declarations, the calls and uses
   between them, the packages and their dependencies; the tests import a Go module (members, calls across packages
   through the import, packages and their dependencies, a rename leaving a suspect call, a run with nothing new) and

@@ -159,7 +159,7 @@ func (im *Importer) planCode(ctx context.Context, ops map[string]*op) error {
 			} else {
 				cur = im.ix.byKey[s.key]
 			}
-			add, drop := im.linkDiff(cur, rel[s.key], relationTypes, o != nil && o.props != nil)
+			add, drop := im.linkDiff(cur, rel[s.key], relationTypes)
 			switch {
 			case o == nil && len(add)+len(drop) == 0:
 				continue
@@ -194,7 +194,7 @@ func (im *Importer) planCode(ctx context.Context, ops map[string]*op) error {
 			set[want{LinkImports, k}] = true
 			touched[k] = true
 		}
-		add, drop := im.linkDiff(o.cur, set, kinds(LinkInPackage, LinkImports), true)
+		add, drop := im.linkDiff(o.cur, set, kinds(LinkInPackage, LinkImports))
 		o.add, o.drop = append(o.add, add...), append(o.drop, drop...)
 	}
 	// the packages: present while a file is in them or imports them, depending on what their files import
@@ -252,7 +252,7 @@ func (im *Importer) planCode(ctx context.Context, ops map[string]*op) error {
 				props["name"] = im.Name
 			}
 		}
-		add, drop := im.linkDiff(cur, deps, kinds(LinkDependsOn), false)
+		add, drop := im.linkDiff(cur, deps, kinds(LinkDependsOn))
 		o := &op{key: k, typ: TypePackage, pkg: true, depth: pkgDepth, cur: cur, add: add, drop: drop}
 		if cur == nil || cur.removed || cur.sum != pkgFingerprint(props) {
 			o.props = props
@@ -267,12 +267,11 @@ func (im *Importer) planCode(ctx context.Context, ops map[string]*op) error {
 // pkgDepth puts the packages first: the files link to them.
 const pkgDepth = 1 << 20
 
-// linkDiff compares the links of some types a node holds with the ones it should: the links to add, those to drop.
-// A link to another version of its target than the one at the head is renewed when the node changes anyway (refresh)
-// or its links do.
-func (im *Importer) linkDiff(cur *entry, set map[want]bool, types map[string]bool, refresh bool) (add []want, drop []domain.LinkID) {
-	held := map[want]domain.LinkID{}
-	stale := map[want]bool{}
+// linkDiff compares the links of some types a node holds with the ones it should: the links to add, those to drop. A
+// link held to another version of its target than the head is not a difference: it is renewed when the node is written
+// anyway (write).
+func (im *Importer) linkDiff(cur *entry, set map[want]bool, types map[string]bool) (add []want, drop []domain.LinkID) {
+	held := map[want]bool{}
 	if cur != nil && !cur.removed {
 		for lid, l := range cur.links {
 			if !types[l.typ] {
@@ -283,20 +282,11 @@ func (im *Importer) linkDiff(cur *entry, set map[want]bool, types map[string]boo
 				drop = append(drop, lid)
 				continue
 			}
-			held[w] = lid
-			if t := im.ix.byKey[w.key]; t != nil && t.ver != l.ver {
-				stale[w] = true
-			}
+			held[w] = true
 		}
 	}
 	for w := range set {
-		if _, ok := held[w]; !ok {
-			add = append(add, w)
-		}
-	}
-	if refresh || len(add)+len(drop) > 0 {
-		for w := range stale {
-			drop = append(drop, held[w])
+		if !held[w] {
 			add = append(add, w)
 		}
 	}

@@ -259,8 +259,11 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 	if err != nil {
 		return nil, err
 	}
-	if w, err = g.workOn(ctx, tx, id, t.Flow); err != nil {
-		return nil, err
+	// a creation is not recorded yet: the change is as it was read, unless the declaration activated a draft change
+	if !t.create || w.c.Status == domain.ChangeDraft {
+		if w, err = g.workOn(ctx, tx, id, t.Flow); err != nil {
+			return nil, err
+		}
 	}
 	w.transition, w.reuse = t.transition, reuse
 	if t.create {
@@ -291,7 +294,9 @@ func (g *Graph) takeKey(ctx context.Context, tx Tx, ns string, nid domain.NodeID
 			if err != nil && !errors.Is(err, ErrNotFound) {
 				return err
 			}
-			if err != nil || b.Status != domain.BranchAbandoned {
+			// a version of a merged branch lives on in the branches it joined, checked with it (a sub-change merged
+			// into a change abandoned since holds nothing)
+			if err != nil || (b.Status != domain.BranchAbandoned && b.Status != domain.BranchMerged) {
 				return fmt.Errorf("cannot create %s (%s): the key is taken by a node change %s created on branch %s: rename it, or merge or abandon that change: %w", key, typ, v.ChangeID, name, ErrConflict)
 			}
 		}
@@ -336,12 +341,12 @@ func (w *work) base(ctx context.Context, tx Tx) (*domain.Node, error) {
 // working is the draft of the impact on the flow itself, editable: the flow checked the node out, and the impact is not
 // rejected. An accepted one is edited all the same: editedAgain then sends its review back to proposed.
 func (g *Graph) working(ctx context.Context, tx Tx, w *work) (domain.Draft, error) {
-	rows, err := g.drafts(ctx, tx, w.c.ID)
+	st, err := g.draftState(ctx, tx, w.c.ID)
 	if err != nil {
 		return domain.Draft{}, err
 	}
-	d := ownDraft(rows, w.cn.ID, w.flow)
-	if d == nil {
+	d, ok := st.draft(w.cn.ID, w.flow)
+	if !ok {
 		if seen, err := g.seenDraft(ctx, tx, w.c, w.flow, w.cn.ID); err != nil {
 			return domain.Draft{}, err
 		} else if seen != nil {
@@ -350,7 +355,7 @@ func (g *Graph) working(ctx context.Context, tx Tx, w *work) (domain.Draft, erro
 		}
 		return domain.Draft{}, fmt.Errorf("%s is not checked out: check it out first: %w", draftOf(w.cn), ErrConflict)
 	}
-	return *d, nil
+	return d.Clone(), nil
 }
 
 // seenAs returns the change impact as the operation leaves it, with its post.
@@ -477,11 +482,9 @@ func (g *Graph) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in N
 // checkoutTx is the checkout of the impact w selects, inside a transaction (see ImpactNodeCheckout).
 func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string) (domain.NodeRef, error) {
 	id := w.c.ID
-	rows, err := g.drafts(ctx, tx, id)
-	if err != nil {
+	if own, err := g.ownDraftOf(ctx, tx, id, w.cn.ID, w.flow); err != nil {
 		return domain.NodeRef{}, err
-	}
-	if ownDraft(rows, w.cn.ID, w.flow) != nil {
+	} else if own != nil {
 		return domain.NodeRef{}, fmt.Errorf("%s is already checked out: %w", draftOf(w.cn), ErrConflict)
 	}
 	var d domain.Draft
@@ -632,14 +635,20 @@ func (g *Graph) linkWork(ctx context.Context, tx Tx, id domain.ChangeID, link do
 	if err != nil {
 		return nil, domain.Draft{}, domain.DraftLink{}, err
 	}
-	rows, err := g.drafts(ctx, tx, id)
-	if err != nil {
-		return nil, domain.Draft{}, domain.DraftLink{}, err
-	}
 	var stored *domain.Link
 	if l, err := tx.Link(ctx, link); err == nil {
 		stored = &l
 	} else if !errors.Is(err, ErrNotFound) {
+		return nil, domain.Draft{}, domain.DraftLink{}, err
+	}
+	// a stored link is held by the drafts of its source; a link a draft added, by any
+	var rows []domain.Draft
+	if stored != nil {
+		rows, err = g.nodeDrafts(ctx, tx, id, stored.From.ID)
+	} else {
+		rows, err = g.drafts(ctx, tx, id)
+	}
+	if err != nil {
 		return nil, domain.Draft{}, domain.DraftLink{}, err
 	}
 	other := false
@@ -801,11 +810,10 @@ func (g *Graph) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact
 		if err := g.impact(ctx, tx, w, impact); err != nil {
 			return err
 		}
-		rows, err := g.drafts(ctx, tx, id)
+		d, err := g.ownDraftOf(ctx, tx, id, impact, w.flow)
 		if err != nil {
 			return err
 		}
-		d := ownDraft(rows, impact, w.flow)
 		if d == nil {
 			return fmt.Errorf("change impact %s (%s) is not checked out: %w", impact, w.cn.Key, ErrConflict)
 		}
@@ -817,7 +825,9 @@ func (g *Graph) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact
 			back = &r
 		} else if ids := flowIDs(flowChain(w.c, w.flow)); w.flow != "" {
 			for _, f := range append(ids[1:], "") {
-				if ownDraft(rows, impact, f) != nil {
+				if other, err := g.ownDraftOf(ctx, tx, id, impact, f); err != nil {
+					return err
+				} else if other != nil {
 					r := d.Ref()
 					back = &r
 					break
@@ -880,11 +890,11 @@ func (g *Graph) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in
 		if authorized != nil && (pendingMove{node: cur, t: t}).key() != authorized.key() {
 			return fmt.Errorf("%s moved while the transition was authorized: take it again: %w", cur.Key, ErrConflict)
 		}
-		rows, err := g.drafts(ctx, tx, id)
+		own, err := g.ownDraftOf(ctx, tx, id, w.cn.ID, w.flow)
 		if err != nil {
 			return err
 		}
-		if ownDraft(rows, w.cn.ID, w.flow) == nil {
+		if own == nil {
 			// the node is checked out first, the draft the move acts on
 			if _, err := g.checkoutTx(ctx, tx, w, in.Execution); err != nil {
 				return err

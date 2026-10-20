@@ -88,6 +88,11 @@ func nodeOf(cn domain.ChangeImpact) domain.NodeID {
 // impact log (ADR 0029 §3).
 func (v *flowNodes) nodes(ctx context.Context) ([]domain.ChangeImpact, error) {
 	if v.flow == "" {
+		// the main flow sees the change impacts of the change as they are, but the superseded ones and those of other
+		// flows: when there are none, the change's own (a copy its reader owns) serve, clipped so that an append copies
+		if !slices.ContainsFunc(v.c.Nodes, func(cn domain.ChangeImpact) bool { return cn.Superseded || cn.Flow != "" }) {
+			return slices.Clip(v.c.Nodes), nil
+		}
 		return domain.ImpactsSeenBy(v.c.Nodes, nil, nil, v.stale), nil
 	}
 	events, err := impactEvents(ctx, v.tx, v.c.ID)

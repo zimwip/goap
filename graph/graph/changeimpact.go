@@ -106,9 +106,21 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 		if err != nil {
 			return err
 		}
-		known := map[domain.ChangeImpactID]bool{}
-		for _, cn := range c.Nodes {
-			known[cn.ID] = true
+		// the impacts a via may name, read only when one names one
+		var known map[domain.ChangeImpactID]bool
+		isKnown := func(id domain.ChangeImpactID) bool {
+			if known == nil {
+				known = make(map[domain.ChangeImpactID]bool, len(c.Nodes)+len(nodes))
+				for _, cn := range c.Nodes {
+					known[cn.ID] = true
+				}
+				for _, cn := range nodes {
+					if cn.ID != "" {
+						known[cn.ID] = true
+					}
+				}
+			}
+			return known[id]
 		}
 		// a node appears once per flow: what the flow sees (the stale change impacts of a relaunched step do not count)
 		presByFlow := map[string]map[domain.NodeID]bool{}
@@ -133,7 +145,10 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 			}
 			batch[i].Flow = c.ResolveFlow(batch[i].Flow) // no flow: the active option (ADR 0032 §6)
 			batch[i].Validation = nil                    // a read model, never stored
-			known[batch[i].ID] = true
+		}
+		inBatch := map[domain.ChangeImpactID]bool{}
+		for _, cn := range batch {
+			inBatch[cn.ID] = true
 		}
 		for _, cn := range batch {
 			if cn.Post != nil || cn.Committed != nil || len(cn.Reviews) > 0 || cn.Recheck {
@@ -153,7 +168,7 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 					return fmt.Errorf("change impact %s: flow %s is not open: %w", cn.ID, cn.Flow, ErrConflict)
 				}
 			}
-			if cn.Via != "" && !known[cn.Via] {
+			if cn.Via != "" && !inBatch[cn.Via] && !isKnown(cn.Via) {
 				return fmt.Errorf("change impact %s: unknown via %s: %w", cn.ID, cn.Via, ErrInvalid)
 			}
 			if cn.Pre != nil {

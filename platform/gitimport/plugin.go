@@ -92,7 +92,8 @@ func (p *Plugin) Run(ctx context.Context, job *importerkit.Job) error {
 		ProjectID: job.ProjectID, OwnerOrg: job.OwnerOrg,
 		OnPhase:  job.Progress,
 		OnBegin:  func(st Stats, c Commit) { begin(job, st, c) },
-		OnCommit: func(st Stats) { record(job, st) }}
+		OnCommit: func(st Stats) { record(job, st) },
+		OnPart:   func(i, n int, name string) { job.Progress(fmt.Sprintf("  part %d/%d: %s", i, n, capLine(name, 100))) }}
 	if job.Bool("symbols") {
 		if p.Symbols == nil {
 			return errors.New("symbols: this importer service reads no symbols")

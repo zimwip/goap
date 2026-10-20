@@ -327,6 +327,39 @@ func (g *Graph) draftCacheSize() int {
 }
 
 // drafts lists the drafts of a change (every flow), by impact then flow, deep copies the caller may edit.
+// ownDraftOf is the draft a change impact has on a flow (a copy), nil when it has none.
+func (g *Graph) ownDraftOf(ctx context.Context, tx Tx, id domain.ChangeID, impact domain.ChangeImpactID, flow string) (*domain.Draft, error) {
+	st, err := g.draftState(ctx, tx, id)
+	if err != nil {
+		return nil, err
+	}
+	d, ok := st.draft(impact, flow)
+	if !ok {
+		return nil, nil
+	}
+	d = d.Clone()
+	return &d, nil
+}
+
+// nodeDrafts are the drafts of the change impacts that held a draft of a node (copies), in the order of drafts.
+func (g *Graph) nodeDrafts(ctx context.Context, tx Tx, id domain.ChangeID, node domain.NodeID) ([]domain.Draft, error) {
+	st, err := g.draftState(ctx, tx, id)
+	if err != nil {
+		return nil, err
+	}
+	impacts := slices.Clone(st.nodes[node])
+	slices.Sort(impacts)
+	var out []domain.Draft
+	for _, imp := range slices.Compact(impacts) {
+		rows := slices.Clone(st.drafts[imp])
+		slices.SortStableFunc(rows, func(a, b domain.Draft) int { return strings.Compare(a.Flow, b.Flow) })
+		for _, d := range rows {
+			out = append(out, d.Clone())
+		}
+	}
+	return out, nil
+}
+
 func (g *Graph) drafts(ctx context.Context, tx Tx, id domain.ChangeID) ([]domain.Draft, error) {
 	st, err := g.draftState(ctx, tx, id)
 	if err != nil {

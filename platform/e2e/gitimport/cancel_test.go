@@ -77,9 +77,14 @@ func (c *cancelling) ImpactNodeReviewBatch(ctx context.Context, id domain.Change
 	return c.Port.ImpactNodeReviewBatch(c.at(ctx), id, b)
 }
 
-func (c *cancelling) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+func (c *cancelling) CommitChangeHeader(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	defer c.done()
-	return c.Port.Apply(c.at(ctx), id, baselineName)
+	return c.Port.CommitChangeHeader(c.at(ctx), id, baselineName)
+}
+
+func (c *cancelling) IntegrateChange(ctx context.Context, id domain.ChangeID, r map[domain.NodeID]graphapi.Resolution) (domain.Change, error) {
+	defer c.done()
+	return c.Port.IntegrateChange(c.at(ctx), id, r)
 }
 
 // TestImportCancelled cancels a run at every write it makes, before and after the write: the run stops with the
@@ -121,8 +126,9 @@ func TestImportCancelled(t *testing.T) {
 				port := &cancelling{Port: g, cancel: cancel, n: n, after: after}
 				_, err := (&gitimport.Importer{Graph: port, Dir: r.dir, Name: "demo", ProjectID: project}).Run(ctx)
 				cancel()
-				// a cancel after the last write comes once the work is done
-				if !errors.Is(err, context.Canceled) && (err != nil || n < count.calls || !after) {
+				// a cancel at the last write comes once the work is done, or nearly: the memory store does not watch
+				// the context, and the history may be read to its end before the cancel reaches git
+				if !errors.Is(err, context.Canceled) && (err != nil || n < count.calls) {
 					t.Fatalf("cancelled at write %d (after %v): %v", n, after, err)
 				}
 				changes, err := g.ListChanges(context.Background(), graph.ChangesFilter{Namespace: gitimport.Namespace})

@@ -286,18 +286,17 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 	}
 	var todo []committedIn
 	var entries []domain.ReviewEntry
+	held := map[domain.NodeID]domain.ChangeImpactID{} // the parent's impact of each node, the last one
+	for _, p := range mainImpactsOf(parent) {
+		held[nodeOf(p)] = p.ID
+	}
 	for _, cn := range mainImpactsOf(c) {
 		if cn.Committed == nil {
 			continue
 		}
 		ref := *cn.Committed
 		var events []domain.ImpactEvent
-		id := domain.ChangeImpactID("")
-		for _, p := range mainImpactsOf(parent) {
-			if nodeOf(p) == ref.ID {
-				id = p.ID
-			}
-		}
+		id := held[ref.ID]
 		if id == "" {
 			id = domain.ChangeImpactID(g.newID())
 			st := domain.ChangeImpact{ID: id, Key: cn.Key, Type: cn.Type, Intent: cn.Intent, Rationale: cn.Rationale, Review: domain.ReviewProposed,
