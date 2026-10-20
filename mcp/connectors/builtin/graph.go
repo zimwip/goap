@@ -27,6 +27,7 @@ var graphOps = []op{
 	{"grep", "Search the nodes whose properties match a regular expression: {nodes, truncated}", schema(map[string]string{"namespace": "string", "pattern": "string", "type": "string", "property": "string", "ignoreCase": "boolean", "baseline": "string", "limit": "integer"}, "namespace", "pattern")},
 	{"links", "List the links of a node: {links}", schema(map[string]string{"namespace": "string", "key": "string", "direction": "string", "type": "string", "baseline": "string"}, "namespace", "key")},
 	{"baselines", "List the baselines of a namespace: {head, baselines}", schema(map[string]string{"namespace": "string", "limit": "integer"}, "namespace")},
+	{"tags", "List the tags of a node, or the versions a tag name labels: {tags}", schema(map[string]string{"namespace": "string", "key": "string", "name": "string"}, "namespace")},
 }
 
 // Info implements connectorkit.Connector.
@@ -170,6 +171,8 @@ func (c Graph) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ m
 		return nil, err
 	}
 	switch op {
+	case "tags":
+		return c.tags(ctx, v, a)
 	case "read":
 		key, err := a.required("key")
 		if err != nil {
@@ -263,6 +266,38 @@ func text(v any) string {
 	}
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+// tags lists the tags of a node (key) or of a name, each with the key of the node it names when the caller reads it
+// (ADR 0143 §6).
+func (c Graph) tags(ctx context.Context, v *view, a args) (map[string]any, error) {
+	f := domain.TagFilter{Namespace: a.str("namespace"), Name: a.str("name")}
+	if key := a.str("key"); key != "" {
+		n, ok := v.node(key)
+		if !ok {
+			return nil, fmt.Errorf("no node %s in %s (baseline %s)", key, a.str("namespace"), v.baseline)
+		}
+		f.Node = n.ID
+	} else if f.Name == "" {
+		return nil, fmt.Errorf(`argument "key" or "name" is required`)
+	}
+	ts, err := c.p.Graph.Tags(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	keys := map[domain.NodeID]domain.Node{}
+	for _, n := range v.nodes {
+		keys[n.ID] = n
+	}
+	list := []map[string]any{}
+	for _, t := range ts {
+		n, ok := keys[t.Node]
+		if !ok {
+			continue // a node the caller may not read
+		}
+		list = append(list, map[string]any{"name": t.Name, "key": n.Key, "type": n.Type, "version": t.Version, "by": t.By, "createdAt": t.CreatedAt})
+	}
+	return result(map[string]any{"tags": list})
 }
 
 func (c Graph) baselines(ctx context.Context, a args) (map[string]any, error) {

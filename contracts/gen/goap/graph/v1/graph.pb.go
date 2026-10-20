@@ -1645,14 +1645,15 @@ func (x *GetNodeResponse) GetView() *NodeView {
 	return nil
 }
 
+// A tag names one exact node version (ADR 0143 §6).
 type Tag struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name      string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Namespace string                 `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	ChangeId  string                 `protobuf:"bytes,4,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
-	// the materialised snapshot of the state, empty while it is only computed
-	BaselineId    string                 `protobuf:"bytes,5,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// the namespace of the node
+	Namespace     string                 `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	NodeId        string                 `protobuf:"bytes,4,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Version       int32                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
 	By            string                 `protobuf:"bytes,6,opt,name=by,proto3" json:"by,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1710,18 +1711,18 @@ func (x *Tag) GetNamespace() string {
 	return ""
 }
 
-func (x *Tag) GetChangeId() string {
+func (x *Tag) GetNodeId() string {
 	if x != nil {
-		return x.ChangeId
+		return x.NodeId
 	}
 	return ""
 }
 
-func (x *Tag) GetBaselineId() string {
+func (x *Tag) GetVersion() int32 {
 	if x != nil {
-		return x.BaselineId
+		return x.Version
 	}
-	return ""
+	return 0
 }
 
 func (x *Tag) GetBy() string {
@@ -1738,28 +1739,29 @@ func (x *Tag) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-type TagChangeRequest struct {
+type TagVersionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ChangeId      string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Version       int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *TagChangeRequest) Reset() {
-	*x = TagChangeRequest{}
+func (x *TagVersionRequest) Reset() {
+	*x = TagVersionRequest{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *TagChangeRequest) String() string {
+func (x *TagVersionRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*TagChangeRequest) ProtoMessage() {}
+func (*TagVersionRequest) ProtoMessage() {}
 
-func (x *TagChangeRequest) ProtoReflect() protoreflect.Message {
+func (x *TagVersionRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1771,46 +1773,53 @@ func (x *TagChangeRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TagChangeRequest.ProtoReflect.Descriptor instead.
-func (*TagChangeRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use TagVersionRequest.ProtoReflect.Descriptor instead.
+func (*TagVersionRequest) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{17}
 }
 
-func (x *TagChangeRequest) GetChangeId() string {
+func (x *TagVersionRequest) GetNodeId() string {
 	if x != nil {
-		return x.ChangeId
+		return x.NodeId
 	}
 	return ""
 }
 
-func (x *TagChangeRequest) GetName() string {
+func (x *TagVersionRequest) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *TagVersionRequest) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-type TagChangeResponse struct {
+type TagVersionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tag           *Tag                   `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *TagChangeResponse) Reset() {
-	*x = TagChangeResponse{}
+func (x *TagVersionResponse) Reset() {
+	*x = TagVersionResponse{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *TagChangeResponse) String() string {
+func (x *TagVersionResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*TagChangeResponse) ProtoMessage() {}
+func (*TagVersionResponse) ProtoMessage() {}
 
-func (x *TagChangeResponse) ProtoReflect() protoreflect.Message {
+func (x *TagVersionResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1822,12 +1831,12 @@ func (x *TagChangeResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TagChangeResponse.ProtoReflect.Descriptor instead.
-func (*TagChangeResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use TagVersionResponse.ProtoReflect.Descriptor instead.
+func (*TagVersionResponse) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{18}
 }
 
-func (x *TagChangeResponse) GetTag() *Tag {
+func (x *TagVersionResponse) GetTag() *Tag {
 	if x != nil {
 		return x.Tag
 	}
@@ -1839,7 +1848,7 @@ type ListTagsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	ChangeId      string                 `protobuf:"bytes,3,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	NodeId        string                 `protobuf:"bytes,3,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1888,9 +1897,9 @@ func (x *ListTagsRequest) GetName() string {
 	return ""
 }
 
-func (x *ListTagsRequest) GetChangeId() string {
+func (x *ListTagsRequest) GetNodeId() string {
 	if x != nil {
-		return x.ChangeId
+		return x.NodeId
 	}
 	return ""
 }
@@ -17796,26 +17805,26 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\tchange_id\x18\x04 \x01(\tR\bchangeId\x12\x12\n" +
 	"\x04flow\x18\x05 \x01(\tR\x04flow\">\n" +
 	"\x0fGetNodeResponse\x12+\n" +
-	"\x04view\x18\x01 \x01(\v2\x17.goap.graph.v1.NodeViewR\x04view\"\xd0\x01\n" +
+	"\x04view\x18\x01 \x01(\v2\x17.goap.graph.v1.NodeViewR\x04view\"\xc5\x01\n" +
 	"\x03Tag\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +
-	"\tnamespace\x18\x03 \x01(\tR\tnamespace\x12\x1b\n" +
-	"\tchange_id\x18\x04 \x01(\tR\bchangeId\x12\x1f\n" +
-	"\vbaseline_id\x18\x05 \x01(\tR\n" +
-	"baselineId\x12\x0e\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\x12\x17\n" +
+	"\anode_id\x18\x04 \x01(\tR\x06nodeId\x12\x18\n" +
+	"\aversion\x18\x05 \x01(\x05R\aversion\x12\x0e\n" +
 	"\x02by\x18\x06 \x01(\tR\x02by\x129\n" +
 	"\n" +
-	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"C\n" +
-	"\x10TagChangeRequest\x12\x1b\n" +
-	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"9\n" +
-	"\x11TagChangeResponse\x12$\n" +
-	"\x03tag\x18\x01 \x01(\v2\x12.goap.graph.v1.TagR\x03tag\"`\n" +
+	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"Z\n" +
+	"\x11TagVersionRequest\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\":\n" +
+	"\x12TagVersionResponse\x12$\n" +
+	"\x03tag\x18\x01 \x01(\v2\x12.goap.graph.v1.TagR\x03tag\"\\\n" +
 	"\x0fListTagsRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1b\n" +
-	"\tchange_id\x18\x03 \x01(\tR\bchangeId\":\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x17\n" +
+	"\anode_id\x18\x03 \x01(\tR\x06nodeId\":\n" +
 	"\x10ListTagsResponse\x12&\n" +
 	"\x04tags\x18\x01 \x03(\v2\x12.goap.graph.v1.TagR\x04tags\"\"\n" +
 	"\x10DeleteTagRequest\x12\x0e\n" +
@@ -19022,11 +19031,12 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x19ListDecisionPointsRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\"R\n" +
 	"\x1aListDecisionPointsResponse\x124\n" +
-	"\x06points\x18\x01 \x03(\v2\x1c.goap.graph.v1.DecisionPointR\x06points2\xc7M\n" +
+	"\x06points\x18\x01 \x03(\v2\x1c.goap.graph.v1.DecisionPointR\x06points2\xcaM\n" +
 	"\fGraphService\x12H\n" +
 	"\aGetNode\x12\x1d.goap.graph.v1.GetNodeRequest\x1a\x1e.goap.graph.v1.GetNodeResponse\x12Z\n" +
-	"\rListBaselines\x12#.goap.graph.v1.ListBaselinesRequest\x1a$.goap.graph.v1.ListBaselinesResponse\x12N\n" +
-	"\tTagChange\x12\x1f.goap.graph.v1.TagChangeRequest\x1a .goap.graph.v1.TagChangeResponse\x12K\n" +
+	"\rListBaselines\x12#.goap.graph.v1.ListBaselinesRequest\x1a$.goap.graph.v1.ListBaselinesResponse\x12Q\n" +
+	"\n" +
+	"TagVersion\x12 .goap.graph.v1.TagVersionRequest\x1a!.goap.graph.v1.TagVersionResponse\x12K\n" +
 	"\bListTags\x12\x1e.goap.graph.v1.ListTagsRequest\x1a\x1f.goap.graph.v1.ListTagsResponse\x12N\n" +
 	"\tDeleteTag\x12\x1f.goap.graph.v1.DeleteTagRequest\x1a .goap.graph.v1.DeleteTagResponse\x12c\n" +
 	"\x10GetBaselineGraph\x12&.goap.graph.v1.GetBaselineGraphRequest\x1a'.goap.graph.v1.GetBaselineGraphResponse\x12f\n" +
@@ -19167,8 +19177,8 @@ var file_goap_graph_v1_graph_proto_goTypes = []any{
 	(*GetNodeRequest)(nil),                 // 14: goap.graph.v1.GetNodeRequest
 	(*GetNodeResponse)(nil),                // 15: goap.graph.v1.GetNodeResponse
 	(*Tag)(nil),                            // 16: goap.graph.v1.Tag
-	(*TagChangeRequest)(nil),               // 17: goap.graph.v1.TagChangeRequest
-	(*TagChangeResponse)(nil),              // 18: goap.graph.v1.TagChangeResponse
+	(*TagVersionRequest)(nil),              // 17: goap.graph.v1.TagVersionRequest
+	(*TagVersionResponse)(nil),             // 18: goap.graph.v1.TagVersionResponse
 	(*ListTagsRequest)(nil),                // 19: goap.graph.v1.ListTagsRequest
 	(*ListTagsResponse)(nil),               // 20: goap.graph.v1.ListTagsResponse
 	(*DeleteTagRequest)(nil),               // 21: goap.graph.v1.DeleteTagRequest
@@ -19461,7 +19471,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	2,   // 28: goap.graph.v1.GetNodeRequest.ref:type_name -> goap.graph.v1.NodeRef
 	5,   // 29: goap.graph.v1.GetNodeResponse.view:type_name -> goap.graph.v1.NodeView
 	276, // 30: goap.graph.v1.Tag.created_at:type_name -> google.protobuf.Timestamp
-	16,  // 31: goap.graph.v1.TagChangeResponse.tag:type_name -> goap.graph.v1.Tag
+	16,  // 31: goap.graph.v1.TagVersionResponse.tag:type_name -> goap.graph.v1.Tag
 	16,  // 32: goap.graph.v1.ListTagsResponse.tags:type_name -> goap.graph.v1.Tag
 	6,   // 33: goap.graph.v1.ListBaselinesResponse.baselines:type_name -> goap.graph.v1.Baseline
 	6,   // 34: goap.graph.v1.ListBaselinesResponse.related:type_name -> goap.graph.v1.Baseline
@@ -19679,7 +19689,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	275, // 246: goap.graph.v1.OptionNode.PropsEntry.value:type_name -> google.protobuf.Struct
 	14,  // 247: goap.graph.v1.GraphService.GetNode:input_type -> goap.graph.v1.GetNodeRequest
 	23,  // 248: goap.graph.v1.GraphService.ListBaselines:input_type -> goap.graph.v1.ListBaselinesRequest
-	17,  // 249: goap.graph.v1.GraphService.TagChange:input_type -> goap.graph.v1.TagChangeRequest
+	17,  // 249: goap.graph.v1.GraphService.TagVersion:input_type -> goap.graph.v1.TagVersionRequest
 	19,  // 250: goap.graph.v1.GraphService.ListTags:input_type -> goap.graph.v1.ListTagsRequest
 	21,  // 251: goap.graph.v1.GraphService.DeleteTag:input_type -> goap.graph.v1.DeleteTagRequest
 	25,  // 252: goap.graph.v1.GraphService.GetBaselineGraph:input_type -> goap.graph.v1.GetBaselineGraphRequest
@@ -19785,7 +19795,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	0,   // 352: goap.graph.v1.GraphService.RepublishIndex:input_type -> goap.graph.v1.RepublishIndexRequest
 	15,  // 353: goap.graph.v1.GraphService.GetNode:output_type -> goap.graph.v1.GetNodeResponse
 	24,  // 354: goap.graph.v1.GraphService.ListBaselines:output_type -> goap.graph.v1.ListBaselinesResponse
-	18,  // 355: goap.graph.v1.GraphService.TagChange:output_type -> goap.graph.v1.TagChangeResponse
+	18,  // 355: goap.graph.v1.GraphService.TagVersion:output_type -> goap.graph.v1.TagVersionResponse
 	20,  // 356: goap.graph.v1.GraphService.ListTags:output_type -> goap.graph.v1.ListTagsResponse
 	22,  // 357: goap.graph.v1.GraphService.DeleteTag:output_type -> goap.graph.v1.DeleteTagResponse
 	26,  // 358: goap.graph.v1.GraphService.GetBaselineGraph:output_type -> goap.graph.v1.GetBaselineGraphResponse

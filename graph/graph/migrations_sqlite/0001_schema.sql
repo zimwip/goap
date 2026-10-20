@@ -184,16 +184,3 @@ CREATE INDEX change_log_flow ON change_log (change_id, flow, seq);
 CREATE INDEX change_log_process ON change_log (process_id, seq);
 CREATE INDEX change_log_execution ON change_log (execution);
 
--- A tag names the state a change leaves (ADR 0056). Not unique: a name may label several changes. baseline_id is the
--- materialised snapshot of that state, when one is kept.
-CREATE TABLE tag (
-    id          text PRIMARY KEY,
-    name        text NOT NULL CHECK (name <> ''),
-    namespace   text NOT NULL,
-    change_id   text NOT NULL REFERENCES change(id) DEFERRABLE INITIALLY DEFERRED,
-    baseline_id text REFERENCES baseline(id),
-    by          text NOT NULL DEFAULT '',
-    created_at  text NOT NULL
-);
-CREATE INDEX tag_name ON tag (namespace, name);
-CREATE INDEX tag_change ON tag (change_id);

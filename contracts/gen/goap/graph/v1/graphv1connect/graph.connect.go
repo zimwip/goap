@@ -38,8 +38,8 @@ const (
 	// GraphServiceListBaselinesProcedure is the fully-qualified name of the GraphService's
 	// ListBaselines RPC.
 	GraphServiceListBaselinesProcedure = "/goap.graph.v1.GraphService/ListBaselines"
-	// GraphServiceTagChangeProcedure is the fully-qualified name of the GraphService's TagChange RPC.
-	GraphServiceTagChangeProcedure = "/goap.graph.v1.GraphService/TagChange"
+	// GraphServiceTagVersionProcedure is the fully-qualified name of the GraphService's TagVersion RPC.
+	GraphServiceTagVersionProcedure = "/goap.graph.v1.GraphService/TagVersion"
 	// GraphServiceListTagsProcedure is the fully-qualified name of the GraphService's ListTags RPC.
 	GraphServiceListTagsProcedure = "/goap.graph.v1.GraphService/ListTags"
 	// GraphServiceDeleteTagProcedure is the fully-qualified name of the GraphService's DeleteTag RPC.
@@ -342,8 +342,8 @@ type GraphServiceClient interface {
 	// Domain axis
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)
 	ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error)
-	// Tags (ADR 0056) name the state an applied change leaves; not unique, a name may label several changes.
-	TagChange(context.Context, *connect.Request[v1.TagChangeRequest]) (*connect.Response[v1.TagChangeResponse], error)
+	// Tags (ADR 0143 §6) name one exact node version; not unique, a name may label several versions.
+	TagVersion(context.Context, *connect.Request[v1.TagVersionRequest]) (*connect.Response[v1.TagVersionResponse], error)
 	ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error)
 	DeleteTag(context.Context, *connect.Request[v1.DeleteTagRequest]) (*connect.Response[v1.DeleteTagResponse], error)
 	GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error)
@@ -560,10 +560,10 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("ListBaselines")),
 			connect.WithClientOptions(opts...),
 		),
-		tagChange: connect.NewClient[v1.TagChangeRequest, v1.TagChangeResponse](
+		tagVersion: connect.NewClient[v1.TagVersionRequest, v1.TagVersionResponse](
 			httpClient,
-			baseURL+GraphServiceTagChangeProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("TagChange")),
+			baseURL+GraphServiceTagVersionProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("TagVersion")),
 			connect.WithClientOptions(opts...),
 		),
 		listTags: connect.NewClient[v1.ListTagsRequest, v1.ListTagsResponse](
@@ -1191,7 +1191,7 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 type graphServiceClient struct {
 	getNode                *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
 	listBaselines          *connect.Client[v1.ListBaselinesRequest, v1.ListBaselinesResponse]
-	tagChange              *connect.Client[v1.TagChangeRequest, v1.TagChangeResponse]
+	tagVersion             *connect.Client[v1.TagVersionRequest, v1.TagVersionResponse]
 	listTags               *connect.Client[v1.ListTagsRequest, v1.ListTagsResponse]
 	deleteTag              *connect.Client[v1.DeleteTagRequest, v1.DeleteTagResponse]
 	getBaselineGraph       *connect.Client[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse]
@@ -1307,9 +1307,9 @@ func (c *graphServiceClient) ListBaselines(ctx context.Context, req *connect.Req
 	return c.listBaselines.CallUnary(ctx, req)
 }
 
-// TagChange calls goap.graph.v1.GraphService.TagChange.
-func (c *graphServiceClient) TagChange(ctx context.Context, req *connect.Request[v1.TagChangeRequest]) (*connect.Response[v1.TagChangeResponse], error) {
-	return c.tagChange.CallUnary(ctx, req)
+// TagVersion calls goap.graph.v1.GraphService.TagVersion.
+func (c *graphServiceClient) TagVersion(ctx context.Context, req *connect.Request[v1.TagVersionRequest]) (*connect.Response[v1.TagVersionResponse], error) {
+	return c.tagVersion.CallUnary(ctx, req)
 }
 
 // ListTags calls goap.graph.v1.GraphService.ListTags.
@@ -1832,8 +1832,8 @@ type GraphServiceHandler interface {
 	// Domain axis
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)
 	ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error)
-	// Tags (ADR 0056) name the state an applied change leaves; not unique, a name may label several changes.
-	TagChange(context.Context, *connect.Request[v1.TagChangeRequest]) (*connect.Response[v1.TagChangeResponse], error)
+	// Tags (ADR 0143 §6) name one exact node version; not unique, a name may label several versions.
+	TagVersion(context.Context, *connect.Request[v1.TagVersionRequest]) (*connect.Response[v1.TagVersionResponse], error)
 	ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error)
 	DeleteTag(context.Context, *connect.Request[v1.DeleteTagRequest]) (*connect.Response[v1.DeleteTagResponse], error)
 	GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error)
@@ -2046,10 +2046,10 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("ListBaselines")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceTagChangeHandler := connect.NewUnaryHandler(
-		GraphServiceTagChangeProcedure,
-		svc.TagChange,
-		connect.WithSchema(graphServiceMethods.ByName("TagChange")),
+	graphServiceTagVersionHandler := connect.NewUnaryHandler(
+		GraphServiceTagVersionProcedure,
+		svc.TagVersion,
+		connect.WithSchema(graphServiceMethods.ByName("TagVersion")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceListTagsHandler := connect.NewUnaryHandler(
@@ -2676,8 +2676,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetNodeHandler.ServeHTTP(w, r)
 		case GraphServiceListBaselinesProcedure:
 			graphServiceListBaselinesHandler.ServeHTTP(w, r)
-		case GraphServiceTagChangeProcedure:
-			graphServiceTagChangeHandler.ServeHTTP(w, r)
+		case GraphServiceTagVersionProcedure:
+			graphServiceTagVersionHandler.ServeHTTP(w, r)
 		case GraphServiceListTagsProcedure:
 			graphServiceListTagsHandler.ServeHTTP(w, r)
 		case GraphServiceDeleteTagProcedure:
@@ -2901,8 +2901,8 @@ func (UnimplementedGraphServiceHandler) ListBaselines(context.Context, *connect.
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListBaselines is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) TagChange(context.Context, *connect.Request[v1.TagChangeRequest]) (*connect.Response[v1.TagChangeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.TagChange is not implemented"))
+func (UnimplementedGraphServiceHandler) TagVersion(context.Context, *connect.Request[v1.TagVersionRequest]) (*connect.Response[v1.TagVersionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.TagVersion is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error) {

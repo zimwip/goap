@@ -211,26 +211,29 @@ const (
 // TagID identifies a tag.
 type TagID string
 
-// Tag is a name given to the state a change leaves (ADR 0056): it labels the change that produced the state, and
-// the materialised baseline of that change when one is kept, never a baseline of its own. Tags are not unique: one
-// name may label several changes (a "release" per product line), and a change may carry several names.
+// Tag names one exact node version (ADR 0143 §6): a release, a configuration, a document set, whose version links to
+// the exact versions of what it is made of (a link resolves to a version at landing, ADR 0079), so a reader follows
+// them as far as it needs; the tag stores no closure. Tags are not unique: one name may label several versions (a
+// "release" per product line), and a version may carry several names. Nothing names a whole namespace at a point.
 type Tag struct {
-	ID        TagID  `json:"id"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	// ChangeID is the change whose resulting state is named.
-	ChangeID ChangeID `json:"changeId"`
-	// BaselineID is the materialised snapshot of that state, empty while it is only computed.
-	BaselineID BaselineID `json:"baselineId,omitempty"`
-	By         string     `json:"by,omitempty"`
-	CreatedAt  time.Time  `json:"createdAt"`
+	ID   TagID  `json:"id"`
+	Name string `json:"name"`
+	// Namespace is the namespace of the node, kept to list the tags of a namespace.
+	Namespace string    `json:"namespace"`
+	Node      NodeID    `json:"node"`
+	Version   Version   `json:"version"`
+	By        string    `json:"by,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }
+
+// Ref is the version the tag names.
+func (t Tag) Ref() NodeRef { return NodeRef{ID: t.Node, Version: t.Version} }
 
 // TagFilter selects tags; an empty field matches every value.
 type TagFilter struct {
 	Namespace string
 	Name      string
-	Change    ChangeID
+	Node      NodeID
 }
 
 // Contains reports whether the exact node version is part of the baseline.

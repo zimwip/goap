@@ -477,6 +477,16 @@ func (t *sqliteTx) BranchNodeIDs(ctx context.Context, branch string) ([]domain.N
 	return out, err
 }
 
+func (t *sqliteTx) NamespaceNodeIDs(ctx context.Context, namespace string) ([]domain.NodeID, error) {
+	q, args := dialectSQLite.sqlNamespaceNodeIDs(namespace)
+	ids, err := t.ids(ctx, q, args...)
+	out := make([]domain.NodeID, len(ids))
+	for i, id := range ids {
+		out[i] = domain.NodeID(id)
+	}
+	return out, err
+}
+
 func (t *sqliteTx) BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	q, args := dialectSQLite.sqlNamespaceBaselineHeaders(namespace)
 	return t.baselineHeaders(ctx, namespace, q, args)
@@ -930,9 +940,7 @@ func (t *sqliteTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch st
 }
 
 func (t *sqliteTx) PutTag(ctx context.Context, tag domain.Tag) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO tag (id, name, namespace, change_id, baseline_id, by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (id) DO UPDATE SET name = excluded.name, baseline_id = excluded.baseline_id`,
-		string(tag.ID), tag.Name, domain.NamespaceOf(tag.Namespace), string(tag.ChangeID), nullUUID(string(tag.BaselineID)), tag.By, tsText(tag.CreatedAt))
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlPutTag(), string(tag.ID), tag.Name, domain.NamespaceOf(tag.Namespace), string(tag.Node), int(tag.Version), tag.By, tsText(tag.CreatedAt))
 	return sqliteErr(err, "tag "+tag.Name)
 }
 
@@ -959,7 +967,7 @@ func (t *sqliteTx) Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, 
 	for rows.Next() {
 		var tag domain.Tag
 		var created string
-		if err := rows.Scan((*string)(&tag.ID), &tag.Name, &tag.Namespace, (*string)(&tag.ChangeID), (*string)(&tag.BaselineID), &tag.By, &created); err != nil {
+		if err := rows.Scan((*string)(&tag.ID), &tag.Name, &tag.Namespace, (*string)(&tag.Node), (*int)(&tag.Version), &tag.By, &created); err != nil {
 			return nil, err
 		}
 		tag.CreatedAt = tsParse(created)

@@ -16,60 +16,65 @@ func testTags(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	commit := func(title, key, name string) landed {
+	commit := func(title, key, status string) (landed, domain.Node) {
+		edit := NodeEdit{Key: key, Type: "Doc", Props: map[string]any{"status": status}}
+		if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, key); err == nil {
+			ref := n.Ref()
+			edit = NodeEdit{Pre: &ref, Props: edit.Props}
+		}
 		res, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: title, Baseline: must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)).ID,
-			By: "test", BaselineName: name, Edits: []NodeEdit{{Key: key, Type: "Doc", Props: map[string]any{"status": "draft"}}}})
+			By: "test", Edits: []NodeEdit{edit}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return landed{res.Change, res.Baseline}
+		return landed{res.Change, res.Baseline}, must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, key))
 	}
-	// a name other than the title tags the state the change leaves; the title itself is no tag
-	a := commit("First", "T-1", "release")
-	commit("Second", "T-2", "Second")
-	tags := must[[]domain.Tag](t)(g.Tags(ctx, domain.TagFilter{}))
-	if len(tags) != 1 || tags[0].Name != "release" || tags[0].ChangeID != a.change || tags[0].BaselineID != a.baseline.ID {
-		t.Fatalf("tags = %+v", tags)
+	// a tag names one exact version (ADR 0143 §6)
+	_, v1 := commit("First", "T-1", "draft")
+	_, v2 := commit("Second", "T-1", "final")
+	if v1.ID != v2.ID || v1.Version == v2.Version {
+		t.Fatalf("two versions of T-1: %s, %s", v1.Ref(), v2.Ref())
 	}
-	// not unique: the same name on another change, and several names on one change
-	b := commit("Third", "T-3", "")
+	rel := must[domain.Tag](t)(g.TagVersion(ctx, v1.Ref(), "release"))
+	if rel.Ref() != v1.Ref() || rel.Namespace != domain.DefaultNamespace {
+		t.Fatalf("tag = %+v", rel)
+	}
+	// not unique: the same name on another version, and several names on one version
 	for _, name := range []string{"release", "stable"} {
-		if _, err := g.TagChange(ctx, b.change, name, "me"); err != nil {
+		if _, err := g.TagVersion(ctx, v2.Ref(), name); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if again := must[domain.Tag](t)(g.TagChange(ctx, b.change, "release", "me")); again.ChangeID != b.change {
-		t.Fatalf("repeating a name on the same change: %+v", again)
+	if again := must[domain.Tag](t)(g.TagVersion(ctx, v2.Ref(), "release")); again.Ref() != v2.Ref() {
+		t.Fatalf("repeating a name on the same version: %+v", again)
 	}
 	if got := must[[]domain.Tag](t)(g.Tags(ctx, domain.TagFilter{Name: "release"})); len(got) != 2 {
-		t.Fatalf("release labels two changes, got %+v", got)
+		t.Fatalf("release labels two versions, got %+v", got)
 	}
-	if got := must[[]domain.Tag](t)(g.Tags(ctx, domain.TagFilter{Change: b.change})); len(got) != 2 {
-		t.Fatalf("two names on the third change, got %+v", got)
+	if got := must[[]domain.Tag](t)(g.Tags(ctx, domain.TagFilter{Node: v1.ID})); len(got) != 3 {
+		t.Fatalf("three tags on T-1, got %+v", got)
 	}
-	// the state named is the one the change left
-	if s := must[domain.Baseline](t)(g.StateAfter(ctx, b.change)); s.ID != b.baseline.ID {
-		t.Fatalf("state after = %s, want %s", s.ID, b.baseline.ID)
+	if got := must[[]domain.Tag](t)(g.Tags(ctx, domain.TagFilter{Namespace: "elsewhere"})); len(got) != 0 {
+		t.Fatalf("no tag in another namespace, got %+v", got)
 	}
-	// a draft has no state to name
-	draft := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "Draft", BaselineID: b.baseline.ID}))
-	if _, err := g.TagChange(ctx, draft.ID, "x", ""); !errors.Is(err, ErrConflict) {
+	// a version that does not exist, a draft and an empty name are refused
+	if _, err := g.TagVersion(ctx, domain.NodeRef{ID: v1.ID, Version: v2.Version + 5}, "x"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("tagging a missing version: %v", err)
+	}
+	if _, err := g.TagVersion(ctx, domain.NodeRef{ID: v1.ID}, "x"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("tagging a draft: %v", err)
 	}
-	if _, err := g.StateAfter(ctx, draft.ID); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("state after a draft: %v", err)
-	}
-	if _, err := g.TagChange(ctx, b.change, "", ""); !errors.Is(err, ErrInvalid) {
+	if _, err := g.TagVersion(ctx, v1.Ref(), ""); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a tag needs a name: %v", err)
 	}
-	// deleting a tag leaves the change
-	if err := g.DeleteTag(ctx, tags[0].ID); err != nil {
+	// deleting a tag leaves the version
+	if err := g.DeleteTag(ctx, rel.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.DeleteTag(ctx, tags[0].ID); !errors.Is(err, ErrNotFound) {
+	if err := g.DeleteTag(ctx, rel.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("deleting twice: %v", err)
 	}
-	if _, err := g.Change(ctx, a.change); err != nil {
+	if _, err := g.Node(ctx, v1.Ref()); err != nil {
 		t.Fatal(err)
 	}
 }

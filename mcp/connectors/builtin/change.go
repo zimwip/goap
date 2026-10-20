@@ -41,6 +41,7 @@ var changeOps = []op{
 	{"detach", "Detach a sub-change from the change integrating it, a root change again: {change}", schema(map[string]string{"change": "string"})},
 	{"depend", "Add or remove changes this change depends on: {change, add: [ids], remove: [ids]}", schema(map[string]string{"change": "string", "add": "array", "remove": "array"})},
 	{"upgrade", "Move an open change to another version of its methodology (default: the latest): {change}", schema(map[string]string{"change": "string", "version": "string"})},
+	{"tag", "Name one exact version of a node (default: the version at the head of main): {tag}", schema(map[string]string{"namespace": "string", "key": "string", "version": "integer", "name": "string"}, "namespace", "key", "name")},
 	{"dependencies", "Read the dependencies of a change, its dependents and the merge order of its sub-changes: {change}", schema(map[string]string{"change": "string"})},
 	{"read", "Read a change: {change, nodes, items}", schema(map[string]string{"change": "string"})},
 	{"list", "List changes, the latest first: {changes, truncated}", schema(map[string]string{"namespace": "string", "unit": "string", "status": "string", "limit": "integer"})},
@@ -114,6 +115,8 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		return c.create(ctx, who, a)
 	case "list":
 		return c.list(ctx, a)
+	case "tag":
+		return c.tag(ctx, a)
 	}
 	id, err := changeID(ctx, a)
 	if err != nil {
@@ -1047,4 +1050,40 @@ func (c Change) derogate(ctx context.Context, bb domain.Blackboard, a args) (map
 		return nil, err
 	}
 	return result(map[string]any{"derogation": items[0]})
+}
+
+// tag names one exact version of a node (ADR 0143 §6): the one at the head of main unless version names another.
+func (c Change) tag(ctx context.Context, a args) (map[string]any, error) {
+	key, err := a.required("key")
+	if err != nil {
+		return nil, err
+	}
+	name, err := a.required("name")
+	if err != nil {
+		return nil, err
+	}
+	v, err := Graph(c).view(ctx, args{"namespace": a.str("namespace")})
+	if err != nil {
+		return nil, err
+	}
+	n, ok := v.node(key)
+	if !ok {
+		return nil, fmt.Errorf("no node %s in %s", key, a.str("namespace"))
+	}
+	ref := n.Ref()
+	switch ver := a["version"].(type) {
+	case float64:
+		if ver > 0 {
+			ref.Version = domain.Version(ver)
+		}
+	case int:
+		if ver > 0 {
+			ref.Version = domain.Version(ver)
+		}
+	}
+	t, err := c.p.Graph.TagVersion(ctx, ref, name)
+	if err != nil {
+		return nil, err
+	}
+	return result(map[string]any{"tag": map[string]any{"id": t.ID, "name": t.Name, "key": n.Key, "version": t.Version}})
 }

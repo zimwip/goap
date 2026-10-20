@@ -43,7 +43,7 @@ type memState struct {
 	nodes map[domain.ChangeID][]domain.ChangeImpact
 	// log holds the entries of every change's log, in their order (ADR 0030)
 	log []domain.LogEntry
-	// tags name the state a change leaves (ADR 0056), in creation order
+	// tags name node versions (ADR 0143 §6), in creation order
 	tags []domain.Tag
 }
 
@@ -614,8 +614,15 @@ func (t *memTx) landings(namespace, branch string, after, upTo int64, ids []doma
 		v      domain.Node
 	}
 	last := map[domain.NodeID]landing{}
+	var want map[domain.NodeID]bool
+	if ids != nil {
+		want = make(map[domain.NodeID]bool, len(ids))
+		for _, id := range ids {
+			want[id] = true
+		}
+	}
 	put := func(landed int64, v domain.Node) {
-		if landed <= after || landed > upTo || domain.NamespaceOf(v.Namespace) != namespace || ids != nil && !slices.Contains(ids, v.ID) {
+		if landed <= after || landed > upTo || domain.NamespaceOf(v.Namespace) != namespace || want != nil && !want[v.ID] {
 			return
 		}
 		if l, ok := last[v.ID]; !ok || landed > l.landed || landed == l.landed && v.Version > l.v.Version {
@@ -658,6 +665,18 @@ func (t *memTx) NodesAt(ctx context.Context, refs []domain.NodeRef, nodeType str
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out, nil
+}
+
+func (t *memTx) NamespaceNodeIDs(_ context.Context, namespace string) ([]domain.NodeID, error) {
+	namespace = domain.NamespaceOf(namespace)
+	var out []domain.NodeID
+	for id, vs := range t.st.versions {
+		if len(vs) > 0 && domain.NamespaceOf(vs[0].Namespace) == namespace {
+			out = append(out, id)
+		}
+	}
+	slices.Sort(out)
 	return out, nil
 }
 
@@ -859,13 +878,8 @@ func (t *memTx) JoinBranch(_ context.Context, ref domain.NodeRef, branch string,
 }
 
 func (t *memTx) PutTag(_ context.Context, tag domain.Tag) error {
-	if _, ok := t.st.changes[tag.ChangeID]; !ok {
-		return fmt.Errorf("tag %q: change %s: %w", tag.Name, tag.ChangeID, ErrNotFound)
-	}
-	if tag.BaselineID != "" {
-		if _, ok := t.st.baselines[tag.BaselineID]; !ok {
-			return fmt.Errorf("tag %q: baseline %s: %w", tag.Name, tag.BaselineID, ErrNotFound)
-		}
+	if !slices.ContainsFunc(t.st.versions[tag.Node], func(n domain.Node) bool { return n.Version == tag.Version }) {
+		return fmt.Errorf("tag %q: node %s: %w", tag.Name, tag.Ref(), ErrNotFound)
 	}
 	for i, old := range t.st.tags {
 		if old.ID == tag.ID {
@@ -890,7 +904,7 @@ func (t *memTx) DeleteTag(_ context.Context, id domain.TagID) error {
 func (t *memTx) Tags(_ context.Context, f domain.TagFilter) ([]domain.Tag, error) {
 	var out []domain.Tag
 	for _, tag := range t.st.tags {
-		if (f.Namespace == "" || tag.Namespace == domain.NamespaceOf(f.Namespace)) && (f.Name == "" || tag.Name == f.Name) && (f.Change == "" || tag.ChangeID == f.Change) {
+		if (f.Namespace == "" || tag.Namespace == domain.NamespaceOf(f.Namespace)) && (f.Name == "" || tag.Name == f.Name) && (f.Node == "" || tag.Node == f.Node) {
 			out = append(out, tag)
 		}
 	}
@@ -981,7 +995,7 @@ func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, b
 	}
 	t.st.log = slices.DeleteFunc(t.st.log, func(e domain.LogEntry) bool { return e.Change == id })
 	delete(t.st.nodes, id)
-	t.st.tags = slices.DeleteFunc(t.st.tags, func(tag domain.Tag) bool { return tag.ChangeID == id })
+	t.st.tags = slices.DeleteFunc(t.st.tags, func(tag domain.Tag) bool { return removed(tag.Ref()) })
 	if branch != "" {
 		delete(t.st.branches, branchKey(namespace, branch))
 	}

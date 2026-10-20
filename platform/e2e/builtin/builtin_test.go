@@ -221,6 +221,17 @@ func TestGraphTools(t *testing.T) {
 	if bs := p.call(t, ctx, "", "goap-graph/baselines", map[string]any{"namespace": "alm"}); bs["head"] == nil || len(bs["baselines"].([]any)) == 0 {
 		t.Fatalf("baselines = %v", bs)
 	}
+	// a tag names one exact version (ADR 0143 §6): the one at the head of main by default
+	tag := p.call(t, ctx, "", "goap-change/tag", map[string]any{"namespace": "alm", "key": "REQ-1", "name": "baseline-1"})["tag"].(map[string]any)
+	if tag["key"] != "REQ-1" || tag["version"] != node["version"] {
+		t.Fatalf("tag = %v, node = %v", tag, node)
+	}
+	if ts := p.call(t, ctx, "", "goap-graph/tags", map[string]any{"namespace": "alm", "name": "baseline-1"})["tags"].([]any); len(ts) != 1 || ts[0].(map[string]any)["key"] != "REQ-1" {
+		t.Fatalf("tags by name = %v", ts)
+	}
+	if ts := p.call(t, ctx, "", "goap-graph/tags", map[string]any{"namespace": "alm", "key": "REQ-1"})["tags"].([]any); len(ts) != 1 || ts[0].(map[string]any)["name"] != "baseline-1" {
+		t.Fatalf("tags of REQ-1 = %v", ts)
+	}
 	// the platform APIs act for a caller
 	var te *mcpsvc.ToolError
 	if _, err := p.hub.Call(context.Background(), "", "goap-graph/read", map[string]any{"namespace": "alm", "key": "REQ-1"}); !errors.As(err, &te) {

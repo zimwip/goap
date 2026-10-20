@@ -220,14 +220,14 @@ export interface Baseline {
   rebasedFrom?: string;
 }
 
-/** A name given to the state an applied change leaves (ADR 0056); not unique. */
+/** A name given to one exact node version (ADR 0143 §6); not unique. */
 export interface Tag {
   id?: string;
   name?: string;
+  /** the namespace of the node */
   namespace?: string;
-  changeId?: string;
-  /** the materialised snapshot of the state, empty while it is only computed */
-  baselineId?: string;
+  nodeId?: string;
+  version?: number;
   by?: string;
   createdAt?: string;
 }

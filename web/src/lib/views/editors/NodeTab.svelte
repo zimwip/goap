@@ -24,6 +24,7 @@
   import NodeGraph from '../../components/NodeGraph.svelte';
   import LifecycleDiagram from '../../components/LifecycleDiagram.svelte';
   import NodeHistory from '../../components/NodeHistory.svelte';
+  import NodeTags from '../../components/NodeTags.svelte';
   import NodePropertyForm from '../../components/NodePropertyForm.svelte';
   import FormRenderer from '../../forms/FormRenderer.svelte';
   import type { FormValues, NodeSource } from '../../forms/types';
@@ -596,6 +597,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
             {/if}
           </section>
           <NodeHistory {id} reloadKey={reload} />
+          <NodeTags {id} versions={versions.map((v) => v.version ?? 0).filter((v) => v > 0)} />
         {/if}
       {/snippet}
     </EditorPanes>

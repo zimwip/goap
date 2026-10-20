@@ -595,6 +595,19 @@ func (t *pgTx) BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeI
 	})
 }
 
+func (t *pgTx) NamespaceNodeIDs(ctx context.Context, namespace string) ([]domain.NodeID, error) {
+	q, args := dialectPG.sqlNamespaceNodeIDs(namespace)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.NodeID, error) {
+		var id string
+		err := r.Scan(&id)
+		return domain.NodeID(id), err
+	})
+}
+
 func (t *pgTx) BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	q, args := dialectPG.sqlNamespaceBaselineHeaders(namespace)
 	return t.baselineHeaders(ctx, namespace, q, args)
@@ -1036,9 +1049,7 @@ func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string
 }
 
 func (t *pgTx) PutTag(ctx context.Context, tag domain.Tag) error {
-	_, err := t.tx.Exec(ctx, `INSERT INTO tag (id, name, namespace, change_id, baseline_id, by, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (id) DO UPDATE SET name = excluded.name, baseline_id = excluded.baseline_id`,
-		string(tag.ID), tag.Name, domain.NamespaceOf(tag.Namespace), string(tag.ChangeID), nullUUID(string(tag.BaselineID)), tag.By, tag.CreatedAt)
+	_, err := t.tx.Exec(ctx, dialectPG.sqlPutTag(), string(tag.ID), tag.Name, domain.NamespaceOf(tag.Namespace), string(tag.Node), int(tag.Version), tag.By, tag.CreatedAt)
 	return mapErr(err, "tag "+tag.Name)
 }
 
@@ -1064,7 +1075,7 @@ func (t *pgTx) Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, erro
 	var out []domain.Tag
 	for rows.Next() {
 		var tag domain.Tag
-		if err := rows.Scan((*string)(&tag.ID), &tag.Name, &tag.Namespace, (*string)(&tag.ChangeID), (*string)(&tag.BaselineID), &tag.By, &tag.CreatedAt); err != nil {
+		if err := rows.Scan((*string)(&tag.ID), &tag.Name, &tag.Namespace, (*string)(&tag.Node), (*int)(&tag.Version), &tag.By, &tag.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, tag)

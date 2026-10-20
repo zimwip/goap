@@ -116,23 +116,33 @@ func (h *Handler) mayReadNode(ctx context.Context, n domain.Node) bool {
 	return err == nil && h.worksOn(ctx, project.Key)
 }
 
-func (h *Handler) TagChange(ctx context.Context, r *connect.Request[graphv1.TagChangeRequest]) (*connect.Response[graphv1.TagChangeResponse], error) {
+func (h *Handler) TagVersion(ctx context.Context, r *connect.Request[graphv1.TagVersionRequest]) (*connect.Response[graphv1.TagVersionResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
-	c, err := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId))
+	ref := domain.NodeRef{ID: domain.NodeID(r.Msg.NodeId), Version: domain.Version(r.Msg.Version)}
+	n, err := h.Graph.Node(ctx, ref)
+	if err == nil && !h.mayReadNode(ctx, n) {
+		err = fmt.Errorf("node %s: %w", ref, graph.ErrNotFound)
+	}
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
 	who := authz.From(ctx)
+	project := ""
+	if n.Project != "" {
+		if p, err := h.Graph.Node(ctx, domain.NodeRef{ID: n.Project}); err == nil {
+			project = p.Key
+		}
+	}
 	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
-		Resource: authz.Resource{Type: "tag", Namespace: c.Namespace, Org: who.Org, Owner: who.Subject, ProjectID: c.ProjectID}}); err != nil {
+		Resource: authz.Resource{Type: "tag", Namespace: n.Namespace, Org: who.Org, Owner: who.Subject, ProjectID: project}}); err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	t, err := h.Graph.TagChange(ctx, c.ID, r.Msg.Name, who.Subject)
-	return res(&graphv1.TagChangeResponse{Tag: pbconv.TagToPB(t)}, err)
+	t, err := h.Graph.TagVersion(ctx, ref, r.Msg.Name)
+	return res(&graphv1.TagVersionResponse{Tag: pbconv.TagToPB(t)}, err)
 }
 
 func (h *Handler) ListTags(ctx context.Context, r *connect.Request[graphv1.ListTagsRequest]) (*connect.Response[graphv1.ListTagsResponse], error) {
-	ts, err := h.Graph.Tags(ctx, domain.TagFilter{Namespace: r.Msg.Namespace, Name: r.Msg.Name, Change: domain.ChangeID(r.Msg.ChangeId)})
+	ts, err := h.Graph.Tags(ctx, domain.TagFilter{Namespace: r.Msg.Namespace, Name: r.Msg.Name, Node: domain.NodeID(r.Msg.NodeId)})
 	out := &graphv1.ListTagsResponse{}
 	for _, t := range ts {
 		out.Tags = append(out.Tags, pbconv.TagToPB(t))

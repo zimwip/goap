@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package goap.smarttag.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// SmartTagService keeps the smart tags (ADR 0143 §7): shared selections of exact node versions, of any nodes and
+// namespaces, that give people a context (the versions a review, a release or an investigation is about). A smart tag
+// is data of its own, never a state of the graph: changing its selection is an edit of the smart tag, with no change to
+// go through and no journal. Its owner shares it with users by subject, to read or to edit; only the owner shares and
+// deletes it.
+service SmartTagService {
+  // The smart tags the caller owns or that are shared with them.
+  rpc ListSmartTags(ListSmartTagsRequest) returns (ListSmartTagsResponse);
+  rpc GetSmartTag(GetSmartTagRequest) returns (GetSmartTagResponse);
+  rpc CreateSmartTag(CreateSmartTagRequest) returns (CreateSmartTagResponse);
+  // Renames, describes, adds versions to and removes versions from a smart tag (its owner or an editor).
+  rpc UpdateSmartTag(UpdateSmartTagRequest) returns (UpdateSmartTagResponse);
+  // Shares a smart tag with a user, to read or to edit; access "" withdraws the share (its owner).
+  rpc ShareSmartTag(ShareSmartTagRequest) returns (ShareSmartTagResponse);
+  rpc DeleteSmartTag(DeleteSmartTagRequest) returns (DeleteSmartTagResponse);
+}
+
+// one exact node version
+message TaggedVersion {
+  string node_id = 1;
+  int32 version = 2;
+}
+
+message Share {
+  string subject = 1;
+  // "read" or "edit"
+  string access = 2;
+}
+
+message SmartTag {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  // the subject who owns it
+  string owner = 4;
+  repeated TaggedVersion versions = 5;
+  // the users it is shared with (the owner sees them all, the others only their own)
+  repeated Share shares = 6;
+  // the caller's access: "owner", "edit" or "read"
+  string access = 7;
+  // who last changed it, and when
+  string by = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message ListSmartTagsRequest {
+  // keep only the smart tags selecting a version of this node
+  string node_id = 1;
+}
+
+message ListSmartTagsResponse {
+  repeated SmartTag smart_tags = 1;
+}
+
+message GetSmartTagRequest {
+  string id = 1;
+}
+
+message GetSmartTagResponse {
+  SmartTag smart_tag = 1;
+}
+
+message CreateSmartTagRequest {
+  string name = 1;
+  string description = 2;
+  repeated TaggedVersion versions = 3;
+}
+
+message CreateSmartTagResponse {
+  SmartTag smart_tag = 1;
+}
+
+message UpdateSmartTagRequest {
+  string id = 1;
+  // a new name, unchanged when empty
+  string name = 2;
+  // a new description, unchanged unless set_description
+  string description = 3;
+  bool set_description = 4;
+  repeated TaggedVersion add = 5;
+  repeated TaggedVersion remove = 6;
+}
+
+message UpdateSmartTagResponse {
+  SmartTag smart_tag = 1;
+}
+
+message ShareSmartTagRequest {
+  string id = 1;
+  string subject = 2;
+  // "read", "edit", or "" to withdraw
+  string access = 3;
+}
+
+message ShareSmartTagResponse {
+  SmartTag smart_tag = 1;
+}
+
+message DeleteSmartTagRequest {
+  string id = 1;
+}
+
+message DeleteSmartTagResponse {}

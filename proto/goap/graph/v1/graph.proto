@@ -12,8 +12,8 @@ service GraphService {
   // Domain axis
   rpc GetNode(GetNodeRequest) returns (GetNodeResponse);
   rpc ListBaselines(ListBaselinesRequest) returns (ListBaselinesResponse);
-  // Tags (ADR 0056) name the state an applied change leaves; not unique, a name may label several changes.
-  rpc TagChange(TagChangeRequest) returns (TagChangeResponse);
+  // Tags (ADR 0143 §6) name one exact node version; not unique, a name may label several versions.
+  rpc TagVersion(TagVersionRequest) returns (TagVersionResponse);
   rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
   rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
   rpc GetBaselineGraph(GetBaselineGraphRequest) returns (GetBaselineGraphResponse);
@@ -439,23 +439,25 @@ message GetNodeResponse {
 }
 
 
+// A tag names one exact node version (ADR 0143 §6).
 message Tag {
   string id = 1;
   string name = 2;
+  // the namespace of the node
   string namespace = 3;
-  string change_id = 4;
-  // the materialised snapshot of the state, empty while it is only computed
-  string baseline_id = 5;
+  string node_id = 4;
+  int32 version = 5;
   string by = 6;
   google.protobuf.Timestamp created_at = 7;
 }
 
-message TagChangeRequest {
-  string change_id = 1;
-  string name = 2;
+message TagVersionRequest {
+  string node_id = 1;
+  int32 version = 2;
+  string name = 3;
 }
 
-message TagChangeResponse {
+message TagVersionResponse {
   Tag tag = 1;
 }
 
@@ -463,7 +465,7 @@ message TagChangeResponse {
 message ListTagsRequest {
   string namespace = 1;
   string name = 2;
-  string change_id = 3;
+  string node_id = 3;
 }
 
 message ListTagsResponse {

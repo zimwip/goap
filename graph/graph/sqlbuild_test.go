@@ -155,6 +155,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg BranchNodeIDs", pg, q, a, `SELECT node_id::text FROM node_version WHERE branch = $1 UNION SELECT node_id::text FROM node_branch WHERE branch = $1`, []any{"change-1"})
 	q, a = lite.sqlBranchNodeIDs("change-1")
 	check("sqlite BranchNodeIDs", lite, q, a, `SELECT node_id FROM node_version WHERE branch = ? UNION SELECT node_id FROM node_branch WHERE branch = ?`, []any{"change-1"})
+	q, a = pg.sqlNamespaceNodeIDs("alm")
+	check("pg NamespaceNodeIDs", pg, q, a, `SELECT id::text FROM node WHERE namespace = $1 ORDER BY id`, []any{"alm"})
+	q, a = lite.sqlNamespaceNodeIDs("alm")
+	check("sqlite NamespaceNodeIDs", lite, q, a, `SELECT id FROM node WHERE namespace = ? ORDER BY id`, []any{"alm"})
 
 	// Pages of a state (ADR 0140): filtered, counted and paged by the store
 	pgRefs := []any{[]string{"n1", "n2"}, []int32{2, 1}}
@@ -308,15 +312,17 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg Log no flows", pg, q, a, `SELECT seq, id, change_id::text, type, flow, process_id, execution, subject, by_whom, causation, at, payload FROM change_log WHERE change_id = $1 AND 1 = 0 ORDER BY seq`, []any{"c1"})
 
 	// Tags
-	tf := domain.TagFilter{Namespace: "ns", Name: "v1", Change: "c1"}
+	tf := domain.TagFilter{Namespace: "ns", Name: "v1", Node: "n1"}
 	q, a = pg.sqlTags(tf)
-	check("pg Tags", pg, q, a, `SELECT id::text, name, namespace, change_id::text, COALESCE(baseline_id::text, ''), by, created_at FROM tag WHERE true AND namespace = $1 AND name = $2 AND change_id = $3 ORDER BY created_at, id`, []any{"ns", "v1", "c1"})
+	check("pg Tags", pg, q, a, `SELECT id::text, name, namespace, node_id::text, version, by, created_at FROM tag WHERE true AND namespace = $1 AND name = $2 AND node_id = $3 ORDER BY created_at, id`, []any{"ns", "v1", "n1"})
 	q, a = lite.sqlTags(tf)
-	check("sqlite Tags", lite, q, a, `SELECT id, name, namespace, change_id, COALESCE(baseline_id, ''), by, created_at FROM tag WHERE 1 = 1 AND namespace = ? AND name = ? AND change_id = ? ORDER BY created_at, rowid`, []any{"ns", "v1", "c1"})
+	check("sqlite Tags", lite, q, a, `SELECT id, name, namespace, node_id, version, by, created_at FROM tag WHERE 1 = 1 AND namespace = ? AND name = ? AND node_id = ? ORDER BY created_at, rowid`, []any{"ns", "v1", "n1"})
 	q, a = pg.sqlTags(domain.TagFilter{})
-	check("pg Tags unfiltered", pg, q, a, `SELECT id::text, name, namespace, change_id::text, COALESCE(baseline_id::text, ''), by, created_at FROM tag WHERE true ORDER BY created_at, id`, []any{})
+	check("pg Tags unfiltered", pg, q, a, `SELECT id::text, name, namespace, node_id::text, version, by, created_at FROM tag WHERE true ORDER BY created_at, id`, []any{})
 	q, a = lite.sqlTags(domain.TagFilter{})
-	check("sqlite Tags unfiltered", lite, q, a, `SELECT id, name, namespace, change_id, COALESCE(baseline_id, ''), by, created_at FROM tag WHERE 1 = 1 ORDER BY created_at, rowid`, []any{})
+	check("sqlite Tags unfiltered", lite, q, a, `SELECT id, name, namespace, node_id, version, by, created_at FROM tag WHERE 1 = 1 ORDER BY created_at, rowid`, []any{})
+	checkSQL(t, "pg PutTag", pg, pg.sqlPutTag(), `INSERT INTO tag (id, name, namespace, node_id, version, by, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO UPDATE SET name = excluded.name`)
+	checkSQL(t, "sqlite PutTag", lite, lite.sqlPutTag(), `INSERT INTO tag (id, name, namespace, node_id, version, by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET name = excluded.name`)
 
 	// Single statements
 	q, _ = pg.sqlDeleteTag("t1")
@@ -372,20 +378,20 @@ func TestSQLBuildersGolden(t *testing.T) {
 	checkSQL(t, "pg change nodes", pg, pg.sqlChangeNodes(), `SELECT DISTINCT node_id::text FROM node_version WHERE change_id = $1`)
 	checkSQL(t, "sqlite change nodes", lite, lite.sqlChangeNodes(), `SELECT DISTINCT node_id FROM node_version WHERE change_id = ?`)
 	checkList("pg DeleteChange rows", pg, pg.deleteChangeRows(), []string{
+		`DELETE FROM tag WHERE (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
 		`DELETE FROM link WHERE change_id = $1 OR (from_id, from_version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
 		`DELETE FROM node_branch WHERE change_id = $1 OR (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
 		`DELETE FROM node_version WHERE change_id = $1`,
 		`DELETE FROM change_impact WHERE change_id = $1`,
 		`DELETE FROM change_log WHERE change_id = $1`,
-		`DELETE FROM tag WHERE change_id = $1`,
 	})
 	checkList("sqlite DeleteChange rows", lite, lite.deleteChangeRows(), []string{
+		`DELETE FROM tag WHERE (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = ?1)`,
 		`DELETE FROM link WHERE change_id = ?1 OR (from_id, from_version) IN (SELECT node_id, version FROM node_version WHERE change_id = ?1)`,
 		`DELETE FROM node_branch WHERE change_id = ?1 OR (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = ?1)`,
 		`DELETE FROM node_version WHERE change_id = ?1`,
 		`DELETE FROM change_impact WHERE change_id = ?1`,
 		`DELETE FROM change_log WHERE change_id = ?1`,
-		`DELETE FROM tag WHERE change_id = ?1`,
 	})
 	checkSQL(t, "pg orphan", pg, pg.sqlDeleteOrphanNode(), `DELETE FROM node WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM node_version WHERE node_id = $1)`)
 	checkSQL(t, "sqlite orphan", lite, lite.sqlDeleteOrphanNode(), `DELETE FROM node WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM node_version WHERE node_id = ?1)`)

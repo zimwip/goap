@@ -77,13 +77,7 @@ func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName stri
 		if whole {
 			read = tx.Baseline
 		}
-		if result, err = read(ctx, c.ResultBaselineID); err != nil {
-			return err
-		}
-		// a name other than the title the change already carries is a tag on the state it leaves (ADR 0056)
-		if c.Status == domain.ChangeApplied && baselineName != "" && baselineName != c.Title {
-			_, err = g.tagTx(ctx, tx, c, baselineName, "")
-		}
+		result, err = read(ctx, c.ResultBaselineID)
 		return err
 	})
 	return result, err

@@ -20,11 +20,13 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/registry/v1/registryv1connect"
+	"github.com/zimwip/goap/contracts/gen/goap/smarttag/v1/smarttagv1connect"
 	"github.com/zimwip/goap/contracts/risk"
 	"github.com/zimwip/goap/contracts/verify"
 	"github.com/zimwip/goap/graph/domainsvc"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/graph/graphsvc"
+	"github.com/zimwip/goap/graph/smarttagsvc"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/identity"
@@ -70,6 +72,7 @@ func main() {
 	defer telemetry.Setup(context.Background(), log, "graph")(context.Background())
 	var repo graph.Repo = graph.NewMemory()
 	var domainStore domainsvc.Store = domainsvc.NewMemoryStore()
+	var smartTagStore smarttagsvc.Store = smarttagsvc.NewMemoryStore()
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	if pool := platform.OptionalPostgres(ctx, log, graph.Migrations); pool != nil {
 		defer pool.Close()
@@ -77,8 +80,13 @@ func main() {
 		if err := platform.Migrate(ctx, log, pool, domainsvc.Migrations, "migrations"); err != nil {
 			platform.Fatal(log, "migrate domains", err)
 		}
+		// the smart tags select versions of this graph, in a store of their own (ADR 0143 §7)
+		if err := platform.Migrate(ctx, log, pool, smarttagsvc.Migrations, "migrations"); err != nil {
+			platform.Fatal(log, "migrate smart tags", err)
+		}
 		repo = graph.NewPostgres(pool)
 		domainStore = domainsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
+		smartTagStore = smarttagsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
 		srv.Readiness(pool.Ping)
 	}
 	events := platform.OptionalEvents(ctx, log)
@@ -186,6 +194,8 @@ func main() {
 		Demo: devseed.DemoLoader(directory)} // the "Load demo data" setting; the alm domain must be published
 	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	srv.Mount(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: domains}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
+	smartTags := &smarttagsvc.Service{Store: smartTagStore, Exists: smarttagsvc.VersionsExist(g.Node)}
+	srv.Mount(smarttagv1connect.NewSmartTagServiceHandler(&smarttagsvc.Handler{Service: smartTags}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

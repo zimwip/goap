@@ -708,9 +708,9 @@ func (c *Client) BranchHead(ctx context.Context, namespace, name string) (domain
 	return pbconv.BaselineFromPB(r.Msg.Head), nil
 }
 
-// TagChange names the state an applied change leaves (ADR 0056).
-func (c *Client) TagChange(ctx context.Context, id domain.ChangeID, name string) (domain.Tag, error) {
-	r, err := c.rpc.TagChange(ctx, connect.NewRequest(&graphv1.TagChangeRequest{ChangeId: string(id), Name: name}))
+// TagVersion names a node version (ADR 0143 §6).
+func (c *Client) TagVersion(ctx context.Context, ref domain.NodeRef, name string) (domain.Tag, error) {
+	r, err := c.rpc.TagVersion(ctx, connect.NewRequest(&graphv1.TagVersionRequest{NodeId: string(ref.ID), Version: int32(ref.Version), Name: name}))
 	if err != nil {
 		return domain.Tag{}, rpcerr.FromConnect(err)
 	}
@@ -719,7 +719,7 @@ func (c *Client) TagChange(ctx context.Context, id domain.ChangeID, name string)
 
 // Tags lists the tags matching f.
 func (c *Client) Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, error) {
-	r, err := c.rpc.ListTags(ctx, connect.NewRequest(&graphv1.ListTagsRequest{Namespace: f.Namespace, Name: f.Name, ChangeId: string(f.Change)}))
+	r, err := c.rpc.ListTags(ctx, connect.NewRequest(&graphv1.ListTagsRequest{Namespace: f.Namespace, Name: f.Name, NodeId: string(f.Node)}))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}

@@ -216,11 +216,11 @@ func StackChangesToPB(cs []domain.StackChange) []*graphv1.StackChange {
 }
 
 func TagToPB(t domain.Tag) *graphv1.Tag {
-	return &graphv1.Tag{Id: string(t.ID), Name: t.Name, Namespace: t.Namespace, ChangeId: string(t.ChangeID), BaselineId: string(t.BaselineID), By: t.By, CreatedAt: Time(t.CreatedAt)}
+	return &graphv1.Tag{Id: string(t.ID), Name: t.Name, Namespace: t.Namespace, NodeId: string(t.Node), Version: int32(t.Version), By: t.By, CreatedAt: Time(t.CreatedAt)}
 }
 
 func TagFromPB(t *graphv1.Tag) domain.Tag {
-	return domain.Tag{ID: domain.TagID(t.Id), Name: t.Name, Namespace: t.Namespace, ChangeID: domain.ChangeID(t.ChangeId), BaselineID: domain.BaselineID(t.BaselineId), By: t.By, CreatedAt: FromTime(t.CreatedAt)}
+	return domain.Tag{ID: domain.TagID(t.Id), Name: t.Name, Namespace: t.Namespace, Node: domain.NodeID(t.NodeId), Version: domain.Version(t.Version), By: t.By, CreatedAt: FromTime(t.CreatedAt)}
 }
 
 func BaselineFromPB(b *graphv1.Baseline) domain.Baseline {

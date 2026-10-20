@@ -88,6 +88,8 @@ func Defs() []mcp.Def {
 					"direction": str("in, out or both (default)"), "type": str("link type, <namespace>@<link>"), "baseline": argBaseline}, "namespace", "key")},
 			{Name: "baselines", ReadOnly: true, Description: "List the baselines of a namespace, the head of main first.",
 				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "limit": argLimit}, "namespace")},
+			{Name: "tags", ReadOnly: true, Description: "List the tags naming versions of a node (key), or the versions a tag name labels in a namespace (name). A tag names one exact version; follow its links to read what it stands for.",
+				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "name": str("name of the tag")}, "namespace")},
 		}},
 		{Name: Change, Description: "Work on a change, the blackboard every modification of the graph goes through (built in).", Tools: []mcp.Tool{
 			{Name: "create", Description: "Open a change on the head of main of a namespace: its intent (why), unit (who) and methodology (how); with parent, a sub-change forked from the parent's branch, in its namespace and project.",
@@ -109,6 +111,9 @@ func Defs() []mcp.Def {
 				InputSchema: schemaObj(map[string]any{"change": argChange, "add": list("ids of changes it now depends on"), "remove": list("ids of changes it no longer depends on")})},
 			{Name: "upgrade", Description: "Move an open change to another version of its methodology (by default the latest published one): a change otherwise keeps the version it was created with. Its lifecycle and state must exist in that version.",
 				InputSchema: schemaObj(map[string]any{"change": argChange, "version": str("version of the methodology (default: the latest published one)")})},
+			{Name: "tag", Description: "Name one exact version of a node (a release, a configuration): by default the version at the head of main. Not unique: a name may label several versions.",
+				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "version": map[string]any{"type": "integer", "description": "version to name (default: the one at the head of main)"},
+					"name": str("name of the tag")}, "namespace", "key", "name")},
 			{Name: "dependencies", ReadOnly: true, Description: "Read the dependencies of a change (satisfied or what each waits for), the open changes depending on it, and the order its open sub-changes merge in.",
 				InputSchema: schemaObj(map[string]any{"change": argChange})},
 			{Name: "read", ReadOnly: true, Description: "Read a change: status, items, the nodes it acts on and their review.",

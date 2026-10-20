@@ -88,6 +88,9 @@ type Port interface {
 	// RebaseState tells where a change stands against what it builds on: the conflicts a rebase left to settle (ADR 0101).
 	RebaseState(ctx context.Context, id domain.ChangeID) (RebaseState, error)
 	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
+	// TagVersion names one exact node version for the caller; Tags lists the tags matching a filter (ADR 0143 §6).
+	TagVersion(ctx context.Context, ref domain.NodeRef, name string) (domain.Tag, error)
+	Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, error)
 	// AppendLog / ChangeLog are the log of the changes, where the execution journal lives (ADR 0011, pkg/journal).
 	AppendLog(ctx context.Context, entries []domain.LogEntry) error
 	ChangeLog(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, map[string]int, error)

@@ -20,12 +20,14 @@ import (
 	"github.com/zimwip/goap/contracts/gen/goap/preferences/v1/preferencesv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/runtime/v1/runtimev1connect"
+	"github.com/zimwip/goap/contracts/gen/goap/smarttag/v1/smarttagv1connect"
 	"github.com/zimwip/goap/engine/engine"
 	"github.com/zimwip/goap/gateway/credsvc"
 	"github.com/zimwip/goap/gateway/gateway"
 	"github.com/zimwip/goap/graph/domainsvc"
 	"github.com/zimwip/goap/graph/graphsvc"
 	"github.com/zimwip/goap/graph/indexersvc"
+	"github.com/zimwip/goap/graph/smarttagsvc"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/identity"
 	"github.com/zimwip/goap/lib/platform"
@@ -70,6 +72,9 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: rp.reg, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	mount(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: rp.domains, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
+	// the smart tags (ADR 0143 §7): shared selections of node versions, in a store of their own
+	smartTags := &smarttagsvc.Service{Store: st.smartTags, Exists: smarttagsvc.VersionsExist(gp.g.Node)}
+	mount(smarttagv1connect.NewSmartTagServiceHandler(&smarttagsvc.Handler{Service: smartTags, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	whoami := func(ctx context.Context, p authz.Principal) (any, error) { return authorizer.Session(ctx, p) }
 	if authMW != nil {
 		srv.Echo.GET("/api/whoami", identity.WhoAmI(identity.Extractor{}, whoami), authMW)

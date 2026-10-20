@@ -1,6 +1,6 @@
 # ADR 0143 — The state of a node is a selection; baselines keep no entries, tags name versions
 
-**Status**: accepted; §1 to §3 implemented (no `baseline_entry`, no checkpoints, the bootstrap a landing), §4 to §8 to come · **Date**: 2026-10 · Builds on ADR 0032 (versions and branches), 0056 (baselines and tags), 0137
+**Status**: accepted; implemented: §1 to §3 (no `baseline_entry`, no checkpoints, the bootstrap a landing), §4 (a whole state is the namespace's node list then a selection in batches; the access and hub snapshots, the explorer and the export reading the node index instead of a baseline are not done: the access snapshot needs a consistent state), §5 to §8 (version tags, smart tags in `graph/smarttagsvc`, RPCs, `goap-change` / `goap-graph`, web) · **Date**: 2026-10 · Builds on ADR 0032 (versions and branches), 0056 (baselines and tags), 0137
 (a commit reads the nodes it touches, and its addendum *The version of a node in a baseline is a selection*), 0140 (a
 baseline is computed from the versions that landed) · Supersedes the checkpoints of ADR 0140 and the change tags of
 ADR 0056

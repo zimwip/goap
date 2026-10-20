@@ -28,3 +28,4 @@ export * from './api/conversations';
 export * from './api/assistant';
 export * from './api/mcp';
 export * from './api/nodeIndex';
+export * from './api/smartTags';

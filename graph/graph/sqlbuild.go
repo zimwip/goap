@@ -247,6 +247,11 @@ func nodeIDStrings(ids []domain.NodeID) []string {
 	return list
 }
 
+// sqlNamespaceNodeIDs reads the nodes of a namespace (ADR 0143 §4), in the order of their ids.
+func (d dialect) sqlNamespaceNodeIDs(namespace string) (string, []any) {
+	return `SELECT ` + d.id("id") + ` FROM node WHERE namespace = ` + d.ph(1) + ` ORDER BY id`, []any{domain.NamespaceOf(namespace)}
+}
+
 // sqlLastLanding reads the order of the last landing on a branch (index node_version_landed, node_branch_landed).
 func (d dialect) sqlLastLanding(branch string) (string, []any) {
 	return `SELECT coalesce(max(landed), 0) FROM (SELECT max(landed) AS landed FROM node_version WHERE branch = ` + d.ph(1) +
@@ -502,7 +507,7 @@ func (d dialect) sqlLogCounts(f domain.LogFilter) (string, []any) {
 
 // sqlTags reads the tags matching f, oldest first.
 func (d dialect) sqlTags(f domain.TagFilter) (string, []any) {
-	q, args := `SELECT `+d.cols(su("id"), sc("name"), sc("namespace"), su("change_id"), sqlCol{name: d.idOr("COALESCE", "baseline_id")}, sc("by"), sc("created_at"))+` FROM tag`+d.where1(), []any{}
+	q, args := `SELECT `+d.cols(su("id"), sc("name"), sc("namespace"), su("node_id"), sc("version"), sc("by"), sc("created_at"))+` FROM tag`+d.where1(), []any{}
 	add := func(cond string, v any) {
 		args = append(args, v)
 		q += " AND " + cond + " = " + d.ph(len(args))
@@ -513,8 +518,8 @@ func (d dialect) sqlTags(f domain.TagFilter) (string, []any) {
 	if f.Name != "" {
 		add("name", f.Name)
 	}
-	if f.Change != "" {
-		add("change_id", string(f.Change))
+	if f.Node != "" {
+		add("node_id", string(f.Node))
 	}
 	return q + d.orderBy("created_at", ", id"), args
 }
@@ -527,6 +532,11 @@ func (d dialect) sqlInsert(table string, columns []string, tail string) string {
 		ps[i] = d.ph(i + 1)
 	}
 	return `INSERT INTO ` + table + ` (` + strings.Join(columns, ", ") + `) VALUES (` + strings.Join(ps, ", ") + `)` + tail
+}
+
+// sqlPutTag inserts a tag (ADR 0143 §6), its arguments in the order of the columns.
+func (d dialect) sqlPutTag() string {
+	return d.sqlInsert("tag", []string{"id", "name", "namespace", "node_id", "version", "by", "created_at"}, ` ON CONFLICT (id) DO UPDATE SET name = excluded.name`)
 }
 
 // sqlDeleteTag deletes a tag.
@@ -577,12 +587,12 @@ func (d dialect) deleteChangeRows() []string {
 	p := d.ph(1)
 	mine := `(SELECT node_id, version FROM node_version WHERE change_id = ` + p + `)`
 	return []string{
+		`DELETE FROM tag WHERE (node_id, version) IN ` + mine,
 		`DELETE FROM link WHERE change_id = ` + p + ` OR (from_id, from_version) IN ` + mine,
 		`DELETE FROM node_branch WHERE change_id = ` + p + ` OR (node_id, version) IN ` + mine,
 		`DELETE FROM node_version WHERE change_id = ` + p,
 		`DELETE FROM change_impact WHERE change_id = ` + p,
 		`DELETE FROM change_log WHERE change_id = ` + p,
-		`DELETE FROM tag WHERE change_id = ` + p,
 	}
 }
 

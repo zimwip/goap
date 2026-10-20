@@ -184,7 +184,10 @@ func branchFork(ctx context.Context, tx Tx, namespace, branch string) (domain.Ba
 
 // selectState is the selection of ADR 0143 from the header of a baseline: for each node (nil ids: every node), its last
 // landing on the branch up to the order of the baseline, then the nodes not decided on the branch it was forked from
-// at the fork; a version deleting its node leaves it out.
+// at the fork; a version deleting its node leaves it out. A whole state reads the landings of the branches forked off
+// as they are (their history is theirs alone, short), and the branch at the root of the chain, whose history is the
+// namespace's, as its node list then one selection per node, in batches (§4): its cost is the number of nodes, never
+// the length of the history.
 func selectState(ctx context.Context, tx Tx, b domain.Baseline, ids []domain.NodeID,
 	header func(context.Context, domain.BaselineID) (domain.Baseline, error),
 	fork func(context.Context, string, string) (domain.BaselineID, error), read *stateRead) (map[domain.NodeID]domain.Version, error) {
@@ -197,36 +200,58 @@ func selectState(ctx context.Context, tx Tx, b domain.Baseline, ids []domain.Nod
 		}
 	}
 	for {
-		var want []domain.NodeID
-		if pending != nil {
-			if len(pending) == 0 {
-				break
-			}
-			want = slices.Sorted(maps.Keys(pending))
-		}
-		got, err := tx.LandedVersions(ctx, b.Namespace, b.Branch, 0, b.Seq, want)
+		next, err := fork(ctx, b.Namespace, b.Branch)
 		if err != nil {
 			return nil, err
 		}
-		if read != nil {
-			read.chain++
-			read.landed += len(got)
-		}
-		for n, v := range got {
-			if pending == nil {
-				if _, ok := decided[n]; !ok {
-					decided[n] = v
-				}
-			} else if pending[n] {
-				decided[n] = v
-				delete(pending, n)
-			}
-		}
-		next, err := fork(ctx, b.Namespace, b.Branch)
-		if err != nil || next == "" {
+		if pending == nil && next == "" {
+			// the root of the chain: the nodes of the namespace not decided yet, selected one by one
+			all, err := tx.NamespaceNodeIDs(ctx, b.Namespace)
 			if err != nil {
 				return nil, err
 			}
+			pending = make(map[domain.NodeID]bool, len(all))
+			for _, n := range all {
+				if _, ok := decided[n]; !ok {
+					pending[n] = true
+				}
+			}
+		}
+		if pending != nil && len(pending) == 0 {
+			break
+		}
+		var want []domain.NodeID
+		if pending != nil {
+			want = slices.Sorted(maps.Keys(pending))
+		}
+		for start := 0; start == 0 || start < len(want); start += selectBatch {
+			batch := want
+			if want != nil {
+				batch = want[start:min(start+selectBatch, len(want))]
+			}
+			got, err := tx.LandedVersions(ctx, b.Namespace, b.Branch, 0, b.Seq, batch)
+			if err != nil {
+				return nil, err
+			}
+			if read != nil {
+				read.chain++
+				read.landed += len(got)
+			}
+			for n, v := range got {
+				if pending == nil {
+					if _, ok := decided[n]; !ok {
+						decided[n] = v
+					}
+				} else if pending[n] {
+					decided[n] = v
+					delete(pending, n)
+				}
+			}
+			if want == nil {
+				break
+			}
+		}
+		if next == "" {
 			break
 		}
 		if b, err = header(ctx, next); err != nil {
@@ -241,6 +266,9 @@ func selectState(ctx context.Context, tx Tx, b domain.Baseline, ids []domain.Nod
 	}
 	return out, nil
 }
+
+// selectBatch is the number of nodes one statement selects the version of.
+const selectBatch = 2000
 
 // nodesOf returns the whole state of a baseline.
 func (t *guardTx) nodesOf(ctx context.Context, id domain.BaselineID) (map[domain.NodeID]domain.Version, error) {

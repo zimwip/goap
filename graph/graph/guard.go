@@ -422,13 +422,6 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	return nil
 }
 
-func (t *guardTx) PutTag(ctx context.Context, tag domain.Tag) error {
-	if err := t.needChange(tag.ChangeID, "tag "+tag.Name); err != nil {
-		return err
-	}
-	return t.Tx.PutTag(ctx, tag)
-}
-
 func (t *guardTx) PutLink(ctx context.Context, l domain.Link) error {
 	if err := t.needChange(l.ChangeID, "link "+l.Type); err != nil {
 		return err

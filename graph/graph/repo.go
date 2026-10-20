@@ -94,6 +94,8 @@ type Tx interface {
 	NextLanding(ctx context.Context) (int64, error)
 	// BranchNodeIDs lists the nodes a branch holds a version of: written on it or joined to it (ADR 0137).
 	BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error)
+	// NamespaceNodeIDs lists the nodes of a namespace (its node rows, ADR 0143 §4): what a whole state is selected over.
+	NamespaceNodeIDs(ctx context.Context, namespace string) ([]domain.NodeID, error)
 	// BaselineHeaders returns the header of every baseline of a namespace, oldest first, without their nodes (ADR 0133).
 	BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error)
 	// BranchBaselineHeaders returns the header of every baseline of a branch of a namespace, oldest first.

@@ -131,10 +131,10 @@ export const graph = {
   mergeBranch: (req: { namespace: string; from: string; into: string; title?: string; resolutions?: Record<string, Resolution> }) =>
     rpc<typeof req, { change?: Change; baseline?: Baseline; plan?: MergePlan }>(GRAPH, 'MergeBranch', req),
   /** Names the state an applied change leaves (ADR 0056); tags are not unique. */
-  tagChange: (changeId: string, name: string) =>
-    rpc<{ changeId: string; name: string }, { tag?: Tag }>(GRAPH, 'TagChange', { changeId, name }),
+  tagVersion: (nodeId: string, version: number, name: string) =>
+    rpc<{ nodeId: string; version: number; name: string }, { tag?: Tag }>(GRAPH, 'TagVersion', { nodeId, version, name }),
   /** The tags matching the filter (all empty: every tag). */
-  listTags: (filter: { namespace?: string; name?: string; changeId?: string } = {}) =>
+  listTags: (filter: { namespace?: string; name?: string; nodeId?: string } = {}) =>
     rpc<typeof filter, { tags?: Tag[] }>(GRAPH, 'ListTags', filter),
   deleteTag: (id: string) => rpc<{ id: string }, Record<string, never>>(GRAPH, 'DeleteTag', { id }),
   /** What going from a baseline to another changes, node by node. */
