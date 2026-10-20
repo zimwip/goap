@@ -60,9 +60,9 @@ func TestSQLBuildersGolden(t *testing.T) {
 
 	// LatestOn (the branch is named by BranchOf: "" is main)
 	q, a = pg.sqlLatestOn("n1", "")
-	check("pg LatestOn", pg, q, a, `SELECT `+goldPGNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND v.version = (SELECT max(b.version) FROM (SELECT version FROM node_version WHERE node_id = $1 AND branch = $2 UNION ALL SELECT version FROM node_branch WHERE node_id = $1 AND branch = $2) b)`, []any{"n1", "main"})
+	check("pg LatestOn", pg, q, a, `SELECT `+goldPGNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND v.version = greatest(coalesce((SELECT version FROM node_version WHERE node_id = $1 AND branch = $2 ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = $1 AND branch = $2 ORDER BY version DESC LIMIT 1), 0))`, []any{"n1", "main"})
 	q, a = lite.sqlLatestOn("n1", "")
-	check("sqlite LatestOn", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? AND v.version = (SELECT max(b.version) FROM (SELECT version FROM node_version WHERE node_id = ? AND branch = ? UNION ALL SELECT version FROM node_branch WHERE node_id = ? AND branch = ?) b)`, []any{"n1", "main"})
+	check("sqlite LatestOn", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? AND v.version = max(coalesce((SELECT version FROM node_version WHERE node_id = ? AND branch = ? ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = ? AND branch = ? ORDER BY version DESC LIMIT 1), 0))`, []any{"n1", "main"})
 
 	// DerivedNodes (ADR 0077): the versions naming a node among their origins
 	q, a = pg.sqlDerivedNodes(ref)
@@ -129,14 +129,16 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = pg.sqlLandedVersions("", "main", 3, 9, nil)
 	check("pg LandedVersions", pg, q, a, landed("node_id::text", "", "", "$4"), []any{"main", int64(3), int64(9), "default"})
 	q, a = pg.sqlLandedVersions("", "main", 3, 9, ids)
-	check("pg LandedVersions ids", pg, q, a, `SELECT q.id::text, x.version, x.deleted, x.reason
+	check("pg LandedVersions ids", pg, q, a, `SELECT q.id::text, x.version,
+			(SELECT w.deleted FROM node_version w WHERE w.node_id = q.id AND w.version = x.version),
+			(SELECT w.reason FROM node_version w WHERE w.node_id = q.id AND w.version = x.version)
 		FROM unnest($5::uuid[]) AS q(id) JOIN node n ON n.id = q.id AND n.namespace = $4
 		CROSS JOIN LATERAL (
-			SELECT u.version, u.deleted, u.reason FROM (
-				(SELECT v.version, v.deleted, v.reason, v.landed FROM node_version v
+			SELECT u.version FROM (
+				(SELECT v.version, v.landed FROM node_version v
 				WHERE v.node_id = q.id AND v.branch = $1 AND v.landed > $2 AND v.landed <= $3 ORDER BY v.landed DESC, v.version DESC LIMIT 1)
 				UNION ALL
-				(SELECT j.version, v.deleted, v.reason, j.landed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
+				(SELECT j.version, j.landed FROM node_branch j
 				WHERE j.node_id = q.id AND j.branch = $1 AND j.landed > $2 AND j.landed <= $3 ORDER BY j.landed DESC, j.version DESC LIMIT 1)
 			) u ORDER BY u.landed DESC, u.version DESC LIMIT 1
 		) x`, []any{"main", int64(3), int64(9), "default", []string{"n1", "n2"}})
@@ -177,7 +179,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 	const pgLinkCols = `l.id::text, l.type, l.from_id::text, l.from_version, l.to_id::text, l.to_version, l.props, l.change_id::text`
 	const liteLinkCols = `l.id, l.type, l.from_id, l.from_version, l.to_id, l.to_version, l.props, l.change_id`
 	held := func(refs string) string {
-		return `WITH RECURSIVE r(id, version) AS (` + refs + `), c(nid, rv, sv) AS ( SELECT v.node_id, v.version, coalesce(v.links, v.version) FROM node_version v JOIN r ON r.id = v.node_id AND r.version = v.version UNION ALL SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_base IS NOT NULL ), h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes FROM c JOIN link l ON l.from_id = c.nid AND l.from_version = c.sv) SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id FROM h WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
+		return `WITH RECURSIVE r(id, version) AS (` + refs + `), c(nid, rv, sv) AS ( SELECT v.node_id, v.version, coalesce(v.links, v.version) FROM node_version v JOIN r ON r.id = v.node_id AND r.version = v.version UNION ALL SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_depth > 0 ), h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes FROM c JOIN link l ON l.from_id = c.nid AND l.from_version = c.sv) SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id FROM h WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
 	}
 	pgHeld, liteHeld := held(`SELECT * FROM unnest($1::uuid[], $2::int[])`), held(`SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?)`)
 	pgLinkWhere := ` FROM (` + pgHeld + `) l JOIN unnest($1::uuid[], $2::int[]) AS t(id, version) ON t.id = l.to_id AND t.version = l.to_version WHERE ($3 = '' OR lower(l.type) LIKE $3 ESCAPE '\' OR EXISTS (SELECT 1 FROM jsonb_each(l.props) p WHERE jsonb_typeof(p.value) = 'string' AND lower(p.value #>> '{}') LIKE $3 ESCAPE '\'))`
@@ -227,9 +229,9 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlLatestVersions(ids)
 	check("sqlite LatestVersions", lite, q, a, `SELECT id, latest FROM node WHERE id IN (SELECT value FROM json_each(?))`, []any{`["n1","n2"]`})
 	q, a = pg.sqlLatestVersionsOn(ids, "b")
-	check("pg LatestVersionsOn", pg, q, a, `SELECT node_id::text, max(version) FROM (SELECT node_id, version FROM node_version WHERE node_id = ANY($1::uuid[]) AND branch = $2 UNION ALL SELECT node_id, version FROM node_branch WHERE node_id = ANY($1::uuid[]) AND branch = $2) b GROUP BY node_id`, []any{[]string{"n1", "n2"}, "b"})
+	check("pg LatestVersionsOn", pg, q, a, `SELECT id::text, version FROM (SELECT q.id, greatest(coalesce((SELECT version FROM node_version WHERE node_id = q.id AND branch = $2 ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = q.id AND branch = $2 ORDER BY version DESC LIMIT 1), 0)) AS version FROM unnest($1::uuid[]) AS q(id)) l WHERE version > 0`, []any{[]string{"n1", "n2"}, "b"})
 	q, a = lite.sqlLatestVersionsOn(ids, "b")
-	check("sqlite LatestVersionsOn", lite, q, a, `SELECT node_id, max(version) FROM (SELECT node_id, version FROM node_version WHERE node_id IN (SELECT value FROM json_each(?)) AND branch = ? UNION ALL SELECT node_id, version FROM node_branch WHERE node_id IN (SELECT value FROM json_each(?)) AND branch = ?) b GROUP BY node_id`, []any{`["n1","n2"]`, "b"})
+	check("sqlite LatestVersionsOn", lite, q, a, `SELECT id, version FROM (SELECT q.id, max(coalesce((SELECT version FROM node_version WHERE node_id = q.id AND branch = ? ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = q.id AND branch = ? ORDER BY version DESC LIMIT 1), 0)) AS version FROM (SELECT value AS id FROM json_each(?)) q) l WHERE version > 0`, []any{`["n1","n2"]`, "b"})
 
 	// Branches
 	const pgBranchCols = `namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at, description, intent, coalesce(rebased_from::text, ''), ephemeral, fork_seq`

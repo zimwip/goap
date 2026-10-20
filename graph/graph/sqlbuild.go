@@ -111,14 +111,25 @@ func (d dialect) sqlNode(ref domain.NodeRef) (string, []any) {
 	return `SELECT ` + d.nodeCols() + nodeFrom + ` WHERE n.id = ` + d.ph(1) + ` AND v.version = ` + d.ph(2), []any{string(ref.ID), int(ref.Version)}
 }
 
-// sqlLatestOn reads the latest version of a node on a branch (the branch as domain.BranchOf names it): the greatest of
-// the versions written there (index node_version_branch) and the ones joined to it (node_branch_pkey), never a scan
-// of the joins of the branch (onBranchSQL would plan one).
+// sqlLatestOn reads the latest version of a node on a branch (the branch as domain.BranchOf names it): latestOn.
 func (d dialect) sqlLatestOn(id domain.NodeID, branch string) (string, []any) {
-	return `SELECT ` + d.nodeCols() + nodeFrom + ` WHERE n.id = ` + d.ph(1) + ` AND v.version = (SELECT max(b.version) FROM (` +
-			`SELECT version FROM node_version WHERE node_id = ` + d.ph(1) + ` AND branch = ` + d.ph(2) +
-			` UNION ALL SELECT version FROM node_branch WHERE node_id = ` + d.ph(1) + ` AND branch = ` + d.ph(2) + `) b)`,
+	return `SELECT ` + d.nodeCols() + nodeFrom + ` WHERE n.id = ` + d.ph(1) + ` AND v.version = ` + d.latestOn(d.ph(1), d.ph(2)),
 		[]any{string(id), domain.BranchOf(branch)}
+}
+
+// latestOn is the number of the latest version of the node node on the branch branch (expressions), 0 when it has
+// none there: the greatest of the last version written there (index node_version_branch) and the last one joined to it
+// (node_branch_pkey), each one step of an index in version order, never a walk of the history of the node nor of the
+// joins of the branch.
+func (d dialect) latestOn(node, branch string) string {
+	last := func(table string) string {
+		return `coalesce((SELECT version FROM ` + table + ` WHERE node_id = ` + node + ` AND branch = ` + branch + ` ORDER BY version DESC LIMIT 1), 0)`
+	}
+	greatest := "max"
+	if d.pg {
+		greatest = "greatest"
+	}
+	return greatest + `(` + last("node_version") + `, ` + last("node_branch") + `)`
 }
 
 // sqlVersions reads every version of a node, oldest first.
@@ -224,16 +235,20 @@ func (d dialect) sqlLandedVersions(namespace, branch string, after, upTo int64, 
 
 // sqlFoldVersions is sqlLandedVersions for some nodes on PostgreSQL: for each node its last landing on the branch in the
 // range, one lookup of the indexes node_version_fold / node_branch_fold whatever the length of its history (the planner
-// of a generic plan cannot estimate the range, a join over the list could walk every landing of the branch).
+// of a generic plan cannot estimate the range, a join over the list could walk every landing of the branch); what the
+// version found holds is read by its key once it is found (scalar subqueries: a join would let the planner read the
+// versions of the node first, one by one, a node estimated to have a single one).
 func (d dialect) sqlFoldVersions(args []any, ids []domain.NodeID) (string, []any) {
-	return `SELECT q.id::text, x.version, x.deleted, x.reason
+	return `SELECT q.id::text, x.version,
+			(SELECT w.deleted FROM node_version w WHERE w.node_id = q.id AND w.version = x.version),
+			(SELECT w.reason FROM node_version w WHERE w.node_id = q.id AND w.version = x.version)
 		FROM unnest($5::uuid[]) AS q(id) JOIN node n ON n.id = q.id AND n.namespace = $4
 		CROSS JOIN LATERAL (
-			SELECT u.version, u.deleted, u.reason FROM (
-				(SELECT v.version, v.deleted, v.reason, v.landed FROM node_version v
+			SELECT u.version FROM (
+				(SELECT v.version, v.landed FROM node_version v
 				WHERE v.node_id = q.id AND v.branch = $1 AND v.landed > $2 AND v.landed <= $3 ORDER BY v.landed DESC, v.version DESC LIMIT 1)
 				UNION ALL
-				(SELECT j.version, v.deleted, v.reason, j.landed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
+				(SELECT j.version, j.landed FROM node_branch j
 				WHERE j.node_id = q.id AND j.branch = $1 AND j.landed > $2 AND j.landed <= $3 ORDER BY j.landed DESC, j.version DESC LIMIT 1)
 			) u ORDER BY u.landed DESC, u.version DESC LIMIT 1
 		) x`, append(args, nodeIDStrings(ids))
@@ -280,13 +295,15 @@ func (d dialect) refsRows(n int) string {
 
 // heldLinks is the query of the links the versions of refsArgs at placeholder n hold (ADR 0141), each read as leaving
 // that version: the rows of its set and of the sets it is a delta over (c, the chain of sets of each version: rv the
-// version, sv a set), minus those a row of the chain drops. Its columns are the link's, unqualified.
+// version, sv a set), minus those a row of the chain drops. Its columns are the link's, unqualified. A set is a delta
+// exactly when it is deep (links_depth > 0): asked so, the next set of the chain is read by its key (node_version_pkey),
+// never by the index of the bases (links_base IS NOT NULL would let the planner scan every delta of the table).
 func (d dialect) heldLinks(n int) string {
 	return `WITH RECURSIVE r(id, version) AS (` + d.refsRows(n) + `),
 		c(nid, rv, sv) AS (
 			SELECT v.node_id, v.version, coalesce(v.links, v.version) FROM node_version v JOIN r ON r.id = v.node_id AND r.version = v.version
 			UNION ALL
-			SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_base IS NOT NULL
+			SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_depth > 0
 		),
 		h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes FROM c JOIN link l ON l.from_id = c.nid AND l.from_version = c.sv)
 		SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id FROM h
@@ -337,9 +354,13 @@ func (d dialect) sqlLatestVersions(ids []domain.NodeID) (string, []any) {
 
 // sqlLatestVersionsOn reads the version sqlLatestOn reads for several nodes: node, version.
 func (d dialect) sqlLatestVersionsOn(ids []domain.NodeID, branch string) (string, []any) {
-	inV, arg := d.nodeIDList("node_id", 1, ids)
-	return `SELECT ` + d.id("node_id") + `, max(version) FROM (SELECT node_id, version FROM node_version WHERE ` + inV + ` AND branch = ` + d.ph(2) +
-		` UNION ALL SELECT node_id, version FROM node_branch WHERE ` + inV + ` AND branch = ` + d.ph(2) + `) b GROUP BY node_id`, []any{arg, domain.BranchOf(branch)}
+	list, arg := `unnest(` + d.ph(1) + `::uuid[]) AS q(id)`, any(nodeIDStrings(ids))
+	if !d.pg {
+		b, _ := json.Marshal(nodeIDStrings(ids))
+		list, arg = `(SELECT value AS id FROM json_each(`+d.ph(1)+`)) q`, string(b)
+	}
+	return `SELECT ` + d.id("id") + `, version FROM (SELECT q.id, ` + d.latestOn("q.id", d.ph(2)) + ` AS version FROM ` + list + `) l WHERE version > 0`,
+		[]any{arg, domain.BranchOf(branch)}
 }
 
 // sqlLinkSetOf reads how a version holds its links (ADR 0141).
