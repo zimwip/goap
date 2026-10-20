@@ -1,4 +1,4 @@
-// Package gitimport loads a git repository into the graph, in the code domain (domains/code.yaml, ADR 0146): one change
+// Package gitimport loads a git repository into the graph, in the code domain (domains/code.yaml, ADR 0147): one change
 // per commit of the first-parent history, a node per directory and per file, a directory holding its entries by
 // contains links. It reads git through the git command (one streaming git log for the whole history, one cat-file for
 // the sizes) and writes through the graph's operations on a change, so it works over the graph service (graphclient)

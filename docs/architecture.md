@@ -1911,7 +1911,7 @@ lib/def/              domain definition model (ADR 0060): Domain, Schema, node /
 engine/methodology/             methodology model only (a methodology is a domain-typed definition): validation (localized anomalies), compilation, YAML import/export
 contracts/authz/                   ABAC: identity, requests, Casbin model and enforcer, default policies
 contracts/llm/                     completion and embedding contracts (implemented by platform/modelgw)
-platform/gitimport/            git importer into the `code` domain: one change per commit, directories and files as nodes (ADR 0146; command `platform/cmd/goap-gitimport`)
+platform/gitimport/            git importer into the `code` domain: one change per commit, directories and files as nodes (ADR 0147; command `platform/cmd/goap-gitimport`)
 graph/index/                   document index (nodes and changes): hybrid search, facets, similar_to, stores (memory, SQLite FTS5, PostgreSQL pgvector)
 proto/                       connect-rpc contracts (buf)
 contracts/gen/                         generated code (committed)

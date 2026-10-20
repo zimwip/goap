@@ -1,4 +1,4 @@
-// Command goap-gitimport loads a git repository into the graph, in the code domain (ADR 0146): one change per commit of
+// Command goap-gitimport loads a git repository into the graph, in the code domain (ADR 0147): one change per commit of
 // the first-parent history, a node per directory and per file. It talks to the graph service (or goap-dev) and resumes
 // where the last run stopped, so a long history (the Linux kernel) is imported in as many runs as wanted. With -symbols
 // it reads the declarations of the source files with Tree-sitter, which needs a build with cgo.

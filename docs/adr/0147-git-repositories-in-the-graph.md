@@ -1,4 +1,4 @@
-# ADR 0146 — Git repositories in the graph: one commit, one change
+# ADR 0147 — Git repositories in the graph: one commit, one change
 
 **Status**: accepted; implemented · **Date**: 2026-10
 

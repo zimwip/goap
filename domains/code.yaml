@@ -1,7 +1,7 @@
 name: code
 version: 1.0.0
 description: >
-  Source code held in git repositories (ADR 0146): a repository, its directories and its files as of the last commit
+  Source code held in git repositories (ADR 0147): a repository, its directories and its files as of the last commit
   imported. The git importer (platform/gitimport, goap-gitimport) makes one change per commit; a directory or a file is a
   node, a directory holds its entries by `contains` links, and a version of a directory is a git tree (its links follow
   the versions of its entries, as a tree names the objects it holds). With the symbols read (Tree-sitter), a source file
