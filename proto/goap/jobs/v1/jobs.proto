@@ -74,6 +74,14 @@ message Job {
   google.protobuf.Timestamp started_at = 20;
   google.protobuf.Timestamp ended_at = 21;
   google.protobuf.Timestamp updated_at = 22;
+  // what the run said it does, the last lines (oldest first)
+  repeated LogLine log = 23;
+}
+
+// LogLine is a line of the feedback of a run.
+message LogLine {
+  google.protobuf.Timestamp at = 1;
+  string text = 2;
 }
 
 message GetJobRequest {
@@ -166,6 +174,8 @@ message ReportJobRequest {
   // empty: still running; done | failed | cancelled ends it
   string status = 8;
   string error = 9;
+  // the lines said since the last report
+  repeated LogLine log = 10;
 }
 
 message ReportJobResponse {

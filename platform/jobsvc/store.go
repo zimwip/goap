@@ -55,20 +55,22 @@ type Record struct {
 	Done, Total int64
 	Stats       map[string]int64
 	Output      map[string]any
-	ResultName  string
-	ResultType  string
-	ResultSize  int64
-	Error       string
-	Worker      string
-	Created     time.Time
-	Started     time.Time
-	Ended       time.Time
-	Updated     time.Time
-	LeaseUntil  time.Time
+	// Log is the feedback of the run, its last KeepLog lines.
+	Log        []jobkit.LogLine
+	ResultName string
+	ResultType string
+	ResultSize int64
+	Error      string
+	Worker     string
+	Created    time.Time
+	Started    time.Time
+	Ended      time.Time
+	Updated    time.Time
+	LeaseUntil time.Time
 }
 
 func (r Record) clone() Record {
-	r.Params, r.Stats, r.Output = maps.Clone(r.Params), maps.Clone(r.Stats), maps.Clone(r.Output)
+	r.Params, r.Stats, r.Output, r.Log = maps.Clone(r.Params), maps.Clone(r.Stats), maps.Clone(r.Output), slices.Clone(r.Log)
 	return r
 }
 
@@ -351,17 +353,17 @@ func jsonOf(v any) (string, error) {
 
 const columns = `id, kind, label, target, status, cancel_requested, params, by_subject, project_id, owner_org, principal, progress,
 	done, total, stats, output, result_name, result_type, result_size, error, worker, created_at, started_at, ended_at,
-	updated_at, lease_until`
+	updated_at, lease_until, log`
 
 type scanner interface{ Scan(...any) error }
 
 func scanRecord(row scanner) (Record, error) {
 	var r Record
-	var params, stats, output string
+	var params, stats, output, logs string
 	var cancel any
 	if err := row.Scan(&r.ID, &r.Kind, &r.Label, &r.Target, &r.Status, &cancel, &params, &r.By, &r.ProjectID, &r.OwnerOrg,
 		&r.Principal, &r.Progress, &r.Done, &r.Total, &stats, &output, &r.ResultName, &r.ResultType, &r.ResultSize, &r.Error,
-		&r.Worker, sqlTime{&r.Created}, sqlTime{&r.Started}, sqlTime{&r.Ended}, sqlTime{&r.Updated}, sqlTime{&r.LeaseUntil}); err != nil {
+		&r.Worker, sqlTime{&r.Created}, sqlTime{&r.Started}, sqlTime{&r.Ended}, sqlTime{&r.Updated}, sqlTime{&r.LeaseUntil}, &logs); err != nil {
 		return r, err
 	}
 	switch c := cancel.(type) {
@@ -379,6 +381,9 @@ func scanRecord(row scanner) (Record, error) {
 	if err := json.Unmarshal([]byte(output), &r.Output); err != nil {
 		return r, fmt.Errorf("job %s output: %w", r.ID, err)
 	}
+	if err := json.Unmarshal([]byte(logs), &r.Log); err != nil {
+		return r, fmt.Errorf("job %s log: %w", r.ID, err)
+	}
 	return r, nil
 }
 
@@ -395,6 +400,13 @@ func (s SQLStore) args(r Record) ([]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	logs, err := json.Marshal(r.Log)
+	if err != nil {
+		return nil, err
+	}
+	if r.Log == nil {
+		logs = []byte("[]")
+	}
 	var cancel any = r.CancelRequested
 	if !s.Dollar {
 		cancel = 0
@@ -404,7 +416,7 @@ func (s SQLStore) args(r Record) ([]any, error) {
 	}
 	return []any{r.ID, r.Kind, r.Label, r.Target, r.Status, cancel, params, r.By, r.ProjectID, r.OwnerOrg, r.Principal, r.Progress,
 		r.Done, r.Total, stats, output, r.ResultName, r.ResultType, r.ResultSize, r.Error, r.Worker, s.ts(r.Created), s.ts(r.Started),
-		s.ts(r.Ended), s.ts(r.Updated), s.ts(r.LeaseUntil)}, nil
+		s.ts(r.Ended), s.ts(r.Updated), s.ts(r.LeaseUntil), string(logs)}, nil
 }
 
 func (s SQLStore) Create(ctx context.Context, r Record, input []byte, msgs []outbox.Message) error {
@@ -417,7 +429,7 @@ func (s SQLStore) Create(ctx context.Context, r Record, input []byte, msgs []out
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, s.q(`INSERT INTO job (`+columns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), args...); err != nil {
+	if _, err := tx.ExecContext(ctx, s.q(`INSERT INTO job (`+columns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), args...); err != nil {
 		return err
 	}
 	for seq, off := 0, 0; off < len(input); seq, off = seq+1, off+blobChunk {
@@ -481,7 +493,7 @@ func (s SQLStore) put(ctx context.Context, tx *sql.Tx, r Record) error {
 	_, err = tx.ExecContext(ctx, s.q(`UPDATE job SET kind = ?, label = ?, target = ?, status = ?, cancel_requested = ?, params = ?,
 		by_subject = ?, project_id = ?, owner_org = ?, principal = ?, progress = ?, done = ?, total = ?, stats = ?, output = ?,
 		result_name = ?, result_type = ?, result_size = ?, error = ?, worker = ?, created_at = ?, started_at = ?, ended_at = ?,
-		updated_at = ?, lease_until = ? WHERE id = ?`), append(args[1:], r.ID)...)
+		updated_at = ?, lease_until = ?, log = ? WHERE id = ?`), append(args[1:], r.ID)...)
 	return err
 }
 

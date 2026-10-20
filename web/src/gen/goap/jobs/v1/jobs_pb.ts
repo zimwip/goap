@@ -12,7 +12,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file goap/jobs/v1/jobs.proto.
  */
 export const file_goap_jobs_v1_jobs: GenFile = /*@__PURE__*/
-  fileDesc("Chdnb2FwL2pvYnMvdjEvam9icy5wcm90bxIMZ29hcC5qb2JzLnYxIjgKBlJlc3VsdBIMCgRuYW1lGAEgASgJEhIKCm1lZGlhX3R5cGUYAiABKAkSDAoEc2l6ZRgDIAEoAyL6BAoDSm9iEgoKAmlkGAEgASgJEgwKBGtpbmQYAiABKAkSDQoFbGFiZWwYAyABKAkSDgoGdGFyZ2V0GAQgASgJEg4KBnN0YXR1cxgFIAEoCRIYChBjYW5jZWxfcmVxdWVzdGVkGAYgASgIEicKBnBhcmFtcxgHIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSCgoCYnkYCCABKAkSEgoKcHJvamVjdF9pZBgJIAEoCRIRCglvd25lcl9vcmcYCiABKAkSEAoIcHJvZ3Jlc3MYCyABKAkSDAoEZG9uZRgMIAEoAxINCgV0b3RhbBgNIAEoAxIrCgVzdGF0cxgOIAMoCzIcLmdvYXAuam9icy52MS5Kb2IuU3RhdHNFbnRyeRInCgZvdXRwdXQYDyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EiQKBnJlc3VsdBgQIAEoCzIULmdvYXAuam9icy52MS5SZXN1bHQSDQoFZXJyb3IYESABKAkSDgoGd29ya2VyGBIgASgJEi4KCmNyZWF0ZWRfYXQYEyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnN0YXJ0ZWRfYXQYFCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiwKCGVuZGVkX2F0GBUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GBYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBosCgpTdGF0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEiGwoNR2V0Sm9iUmVxdWVzdBIKCgJpZBgBIAEoCSIwCg5HZXRKb2JSZXNwb25zZRIeCgNqb2IYASABKAsyES5nb2FwLmpvYnMudjEuSm9iIlIKD0xpc3RKb2JzUmVxdWVzdBITCgtraW5kX3ByZWZpeBgBIAEoCRIOCgZ0YXJnZXQYAiABKAkSCwoDYWxsGAMgASgIEg0KBWxpbWl0GAQgASgFIjMKEExpc3RKb2JzUmVzcG9uc2USHwoEam9icxgBIAMoCzIRLmdvYXAuam9icy52MS5Kb2IiHgoQQ2FuY2VsSm9iUmVxdWVzdBIKCgJpZBgBIAEoCSIzChFDYW5jZWxKb2JSZXNwb25zZRIeCgNqb2IYASABKAsyES5nb2FwLmpvYnMudjEuSm9iIr0BChBDcmVhdGVKb2JSZXF1ZXN0EgwKBGtpbmQYASABKAkSDQoFbGFiZWwYAiABKAkSDgoGdGFyZ2V0GAMgASgJEicKBnBhcmFtcxgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSEgoKcHJvamVjdF9pZBgFIAEoCRIRCglvd25lcl9vcmcYBiABKAkSCgoCYnkYByABKAkSEQoJcHJpbmNpcGFsGAggASgJEg0KBWlucHV0GAkgASgMIjMKEUNyZWF0ZUpvYlJlc3BvbnNlEh4KA2pvYhgBIAEoCzIRLmdvYXAuam9icy52MS5Kb2IiUgoGV29ya2VyEgoKAmlkGAEgASgJEg0KBWtpbmRzGAIgAygJEi0KCWxhc3Rfc2VlbhgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiFAoSTGlzdFdvcmtlcnNSZXF1ZXN0IjwKE0xpc3RXb3JrZXJzUmVzcG9uc2USJQoHd29ya2VycxgBIAMoCzIULmdvYXAuam9icy52MS5Xb3JrZXIiQQoPQ2xhaW1Kb2JSZXF1ZXN0Eg4KBndvcmtlchgBIAEoCRINCgVraW5kcxgCIAMoCRIPCgd3YWl0X21zGAMgASgFIlwKEENsYWltSm9iUmVzcG9uc2USHgoDam9iGAEgASgLMhEuZ29hcC5qb2JzLnYxLkpvYhIRCglwcmluY2lwYWwYAiABKAkSFQoNbGVhc2Vfc2Vjb25kcxgDIAEoBSKNAgoQUmVwb3J0Sm9iUmVxdWVzdBIKCgJpZBgBIAEoCRIOCgZ3b3JrZXIYAiABKAkSEAoIcHJvZ3Jlc3MYAyABKAkSDAoEZG9uZRgEIAEoAxINCgV0b3RhbBgFIAEoAxI4CgVzdGF0cxgGIAMoCzIpLmdvYXAuam9icy52MS5SZXBvcnRKb2JSZXF1ZXN0LlN0YXRzRW50cnkSJwoGb3V0cHV0GAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIOCgZzdGF0dXMYCCABKAkSDQoFZXJyb3IYCSABKAkaLAoKU3RhdHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBIkMKEVJlcG9ydEpvYlJlc3BvbnNlEg4KBmNhbmNlbBgBIAEoCBIeCgNqb2IYAiABKAsyES5nb2FwLmpvYnMudjEuSm9iIkEKE1JlYWRKb2JJbnB1dFJlcXVlc3QSCgoCaWQYASABKAkSDgoGd29ya2VyGAIgASgJEg4KBm9mZnNldBgDIAEoAyIxChRSZWFkSm9iSW5wdXRSZXNwb25zZRIMCgRkYXRhGAEgASgMEgsKA2VvZhgCIAEoCCJjChVXcml0ZUpvYlJlc3VsdFJlcXVlc3QSCgoCaWQYASABKAkSDgoGd29ya2VyGAIgASgJEgwKBG5hbWUYAyABKAkSEgoKbWVkaWFfdHlwZRgEIAEoCRIMCgRkYXRhGAUgASgMIiYKFldyaXRlSm9iUmVzdWx0UmVzcG9uc2USDAoEc2l6ZRgBIAEoAzLZBQoKSm9iU2VydmljZRJDCgZHZXRKb2ISGy5nb2FwLmpvYnMudjEuR2V0Sm9iUmVxdWVzdBocLmdvYXAuam9icy52MS5HZXRKb2JSZXNwb25zZRJJCghMaXN0Sm9icxIdLmdvYXAuam9icy52MS5MaXN0Sm9ic1JlcXVlc3QaHi5nb2FwLmpvYnMudjEuTGlzdEpvYnNSZXNwb25zZRJMCglDYW5jZWxKb2ISHi5nb2FwLmpvYnMudjEuQ2FuY2VsSm9iUmVxdWVzdBofLmdvYXAuam9icy52MS5DYW5jZWxKb2JSZXNwb25zZRJMCglDcmVhdGVKb2ISHi5nb2FwLmpvYnMudjEuQ3JlYXRlSm9iUmVxdWVzdBofLmdvYXAuam9icy52MS5DcmVhdGVKb2JSZXNwb25zZRJSCgtMaXN0V29ya2VycxIgLmdvYXAuam9icy52MS5MaXN0V29ya2Vyc1JlcXVlc3QaIS5nb2FwLmpvYnMudjEuTGlzdFdvcmtlcnNSZXNwb25zZRJJCghDbGFpbUpvYhIdLmdvYXAuam9icy52MS5DbGFpbUpvYlJlcXVlc3QaHi5nb2FwLmpvYnMudjEuQ2xhaW1Kb2JSZXNwb25zZRJMCglSZXBvcnRKb2ISHi5nb2FwLmpvYnMudjEuUmVwb3J0Sm9iUmVxdWVzdBofLmdvYXAuam9icy52MS5SZXBvcnRKb2JSZXNwb25zZRJVCgxSZWFkSm9iSW5wdXQSIS5nb2FwLmpvYnMudjEuUmVhZEpvYklucHV0UmVxdWVzdBoiLmdvYXAuam9icy52MS5SZWFkSm9iSW5wdXRSZXNwb25zZRJbCg5Xcml0ZUpvYlJlc3VsdBIjLmdvYXAuam9icy52MS5Xcml0ZUpvYlJlc3VsdFJlcXVlc3QaJC5nb2FwLmpvYnMudjEuV3JpdGVKb2JSZXN1bHRSZXNwb25zZUKpAQoQY29tLmdvYXAuam9icy52MUIJSm9ic1Byb3RvUAFaOGdpdGh1Yi5jb20vemltd2lwL2dvYXAvY29udHJhY3RzL2dlbi9nb2FwL2pvYnMvdjE7am9ic3YxogIDR0pYqgIMR29hcC5Kb2JzLlYxygIMR29hcFxKb2JzXFYx4gIYR29hcFxKb2JzXFYxXEdQQk1ldGFkYXRh6gIOR29hcDo6Sm9iczo6VjFiBnByb3RvMw", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("Chdnb2FwL2pvYnMvdjEvam9icy5wcm90bxIMZ29hcC5qb2JzLnYxIjgKBlJlc3VsdBIMCgRuYW1lGAEgASgJEhIKCm1lZGlhX3R5cGUYAiABKAkSDAoEc2l6ZRgDIAEoAyKeBQoDSm9iEgoKAmlkGAEgASgJEgwKBGtpbmQYAiABKAkSDQoFbGFiZWwYAyABKAkSDgoGdGFyZ2V0GAQgASgJEg4KBnN0YXR1cxgFIAEoCRIYChBjYW5jZWxfcmVxdWVzdGVkGAYgASgIEicKBnBhcmFtcxgHIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSCgoCYnkYCCABKAkSEgoKcHJvamVjdF9pZBgJIAEoCRIRCglvd25lcl9vcmcYCiABKAkSEAoIcHJvZ3Jlc3MYCyABKAkSDAoEZG9uZRgMIAEoAxINCgV0b3RhbBgNIAEoAxIrCgVzdGF0cxgOIAMoCzIcLmdvYXAuam9icy52MS5Kb2IuU3RhdHNFbnRyeRInCgZvdXRwdXQYDyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EiQKBnJlc3VsdBgQIAEoCzIULmdvYXAuam9icy52MS5SZXN1bHQSDQoFZXJyb3IYESABKAkSDgoGd29ya2VyGBIgASgJEi4KCmNyZWF0ZWRfYXQYEyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnN0YXJ0ZWRfYXQYFCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiwKCGVuZGVkX2F0GBUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GBYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIiCgNsb2cYFyADKAsyFS5nb2FwLmpvYnMudjEuTG9nTGluZRosCgpTdGF0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEiPwoHTG9nTGluZRImCgJhdBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDAoEdGV4dBgCIAEoCSIbCg1HZXRKb2JSZXF1ZXN0EgoKAmlkGAEgASgJIjAKDkdldEpvYlJlc3BvbnNlEh4KA2pvYhgBIAEoCzIRLmdvYXAuam9icy52MS5Kb2IiUgoPTGlzdEpvYnNSZXF1ZXN0EhMKC2tpbmRfcHJlZml4GAEgASgJEg4KBnRhcmdldBgCIAEoCRILCgNhbGwYAyABKAgSDQoFbGltaXQYBCABKAUiMwoQTGlzdEpvYnNSZXNwb25zZRIfCgRqb2JzGAEgAygLMhEuZ29hcC5qb2JzLnYxLkpvYiIeChBDYW5jZWxKb2JSZXF1ZXN0EgoKAmlkGAEgASgJIjMKEUNhbmNlbEpvYlJlc3BvbnNlEh4KA2pvYhgBIAEoCzIRLmdvYXAuam9icy52MS5Kb2IivQEKEENyZWF0ZUpvYlJlcXVlc3QSDAoEa2luZBgBIAEoCRINCgVsYWJlbBgCIAEoCRIOCgZ0YXJnZXQYAyABKAkSJwoGcGFyYW1zGAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBISCgpwcm9qZWN0X2lkGAUgASgJEhEKCW93bmVyX29yZxgGIAEoCRIKCgJieRgHIAEoCRIRCglwcmluY2lwYWwYCCABKAkSDQoFaW5wdXQYCSABKAwiMwoRQ3JlYXRlSm9iUmVzcG9uc2USHgoDam9iGAEgASgLMhEuZ29hcC5qb2JzLnYxLkpvYiJSCgZXb3JrZXISCgoCaWQYASABKAkSDQoFa2luZHMYAiADKAkSLQoJbGFzdF9zZWVuGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIUChJMaXN0V29ya2Vyc1JlcXVlc3QiPAoTTGlzdFdvcmtlcnNSZXNwb25zZRIlCgd3b3JrZXJzGAEgAygLMhQuZ29hcC5qb2JzLnYxLldvcmtlciJBCg9DbGFpbUpvYlJlcXVlc3QSDgoGd29ya2VyGAEgASgJEg0KBWtpbmRzGAIgAygJEg8KB3dhaXRfbXMYAyABKAUiXAoQQ2xhaW1Kb2JSZXNwb25zZRIeCgNqb2IYASABKAsyES5nb2FwLmpvYnMudjEuSm9iEhEKCXByaW5jaXBhbBgCIAEoCRIVCg1sZWFzZV9zZWNvbmRzGAMgASgFIrECChBSZXBvcnRKb2JSZXF1ZXN0EgoKAmlkGAEgASgJEg4KBndvcmtlchgCIAEoCRIQCghwcm9ncmVzcxgDIAEoCRIMCgRkb25lGAQgASgDEg0KBXRvdGFsGAUgASgDEjgKBXN0YXRzGAYgAygLMikuZ29hcC5qb2JzLnYxLlJlcG9ydEpvYlJlcXVlc3QuU3RhdHNFbnRyeRInCgZvdXRwdXQYByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Eg4KBnN0YXR1cxgIIAEoCRINCgVlcnJvchgJIAEoCRIiCgNsb2cYCiADKAsyFS5nb2FwLmpvYnMudjEuTG9nTGluZRosCgpTdGF0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEiQwoRUmVwb3J0Sm9iUmVzcG9uc2USDgoGY2FuY2VsGAEgASgIEh4KA2pvYhgCIAEoCzIRLmdvYXAuam9icy52MS5Kb2IiQQoTUmVhZEpvYklucHV0UmVxdWVzdBIKCgJpZBgBIAEoCRIOCgZ3b3JrZXIYAiABKAkSDgoGb2Zmc2V0GAMgASgDIjEKFFJlYWRKb2JJbnB1dFJlc3BvbnNlEgwKBGRhdGEYASABKAwSCwoDZW9mGAIgASgIImMKFVdyaXRlSm9iUmVzdWx0UmVxdWVzdBIKCgJpZBgBIAEoCRIOCgZ3b3JrZXIYAiABKAkSDAoEbmFtZRgDIAEoCRISCgptZWRpYV90eXBlGAQgASgJEgwKBGRhdGEYBSABKAwiJgoWV3JpdGVKb2JSZXN1bHRSZXNwb25zZRIMCgRzaXplGAEgASgDMtkFCgpKb2JTZXJ2aWNlEkMKBkdldEpvYhIbLmdvYXAuam9icy52MS5HZXRKb2JSZXF1ZXN0GhwuZ29hcC5qb2JzLnYxLkdldEpvYlJlc3BvbnNlEkkKCExpc3RKb2JzEh0uZ29hcC5qb2JzLnYxLkxpc3RKb2JzUmVxdWVzdBoeLmdvYXAuam9icy52MS5MaXN0Sm9ic1Jlc3BvbnNlEkwKCUNhbmNlbEpvYhIeLmdvYXAuam9icy52MS5DYW5jZWxKb2JSZXF1ZXN0Gh8uZ29hcC5qb2JzLnYxLkNhbmNlbEpvYlJlc3BvbnNlEkwKCUNyZWF0ZUpvYhIeLmdvYXAuam9icy52MS5DcmVhdGVKb2JSZXF1ZXN0Gh8uZ29hcC5qb2JzLnYxLkNyZWF0ZUpvYlJlc3BvbnNlElIKC0xpc3RXb3JrZXJzEiAuZ29hcC5qb2JzLnYxLkxpc3RXb3JrZXJzUmVxdWVzdBohLmdvYXAuam9icy52MS5MaXN0V29ya2Vyc1Jlc3BvbnNlEkkKCENsYWltSm9iEh0uZ29hcC5qb2JzLnYxLkNsYWltSm9iUmVxdWVzdBoeLmdvYXAuam9icy52MS5DbGFpbUpvYlJlc3BvbnNlEkwKCVJlcG9ydEpvYhIeLmdvYXAuam9icy52MS5SZXBvcnRKb2JSZXF1ZXN0Gh8uZ29hcC5qb2JzLnYxLlJlcG9ydEpvYlJlc3BvbnNlElUKDFJlYWRKb2JJbnB1dBIhLmdvYXAuam9icy52MS5SZWFkSm9iSW5wdXRSZXF1ZXN0GiIuZ29hcC5qb2JzLnYxLlJlYWRKb2JJbnB1dFJlc3BvbnNlElsKDldyaXRlSm9iUmVzdWx0EiMuZ29hcC5qb2JzLnYxLldyaXRlSm9iUmVzdWx0UmVxdWVzdBokLmdvYXAuam9icy52MS5Xcml0ZUpvYlJlc3VsdFJlc3BvbnNlQqkBChBjb20uZ29hcC5qb2JzLnYxQglKb2JzUHJvdG9QAVo4Z2l0aHViLmNvbS96aW13aXAvZ29hcC9jb250cmFjdHMvZ2VuL2dvYXAvam9icy92MTtqb2JzdjGiAgNHSliqAgxHb2FwLkpvYnMuVjHKAgxHb2FwXEpvYnNcVjHiAhhHb2FwXEpvYnNcVjFcR1BCTWV0YWRhdGHqAg5Hb2FwOjpKb2JzOjpWMWIGcHJvdG8z", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * Result is the file a job produced.
@@ -200,6 +200,13 @@ export type Job = Message<"goap.jobs.v1.Job"> & {
    * @generated from field: google.protobuf.Timestamp updated_at = 22;
    */
   updatedAt?: Timestamp | undefined;
+
+  /**
+   * what the run said it does, the last lines (oldest first)
+   *
+   * @generated from field: repeated goap.jobs.v1.LogLine log = 23;
+   */
+  log: LogLine[];
 };
 
 /**
@@ -337,6 +344,13 @@ export type JobJson = {
    * @generated from field: google.protobuf.Timestamp updated_at = 22;
    */
   updatedAt?: TimestampJson;
+
+  /**
+   * what the run said it does, the last lines (oldest first)
+   *
+   * @generated from field: repeated goap.jobs.v1.LogLine log = 23;
+   */
+  log?: LogLineJson[];
 };
 
 /**
@@ -345,6 +359,47 @@ export type JobJson = {
  */
 export const JobSchema: GenMessage<Job, {jsonType: JobJson}> = /*@__PURE__*/
   messageDesc(file_goap_jobs_v1_jobs, 1);
+
+/**
+ * LogLine is a line of the feedback of a run.
+ *
+ * @generated from message goap.jobs.v1.LogLine
+ */
+export type LogLine = Message<"goap.jobs.v1.LogLine"> & {
+  /**
+   * @generated from field: google.protobuf.Timestamp at = 1;
+   */
+  at?: Timestamp | undefined;
+
+  /**
+   * @generated from field: string text = 2;
+   */
+  text: string;
+};
+
+/**
+ * LogLine is a line of the feedback of a run.
+ *
+ * @generated from message goap.jobs.v1.LogLine
+ */
+export type LogLineJson = {
+  /**
+   * @generated from field: google.protobuf.Timestamp at = 1;
+   */
+  at?: TimestampJson;
+
+  /**
+   * @generated from field: string text = 2;
+   */
+  text?: string;
+};
+
+/**
+ * Describes the message goap.jobs.v1.LogLine.
+ * Use `create(LogLineSchema)` to create a new message.
+ */
+export const LogLineSchema: GenMessage<LogLine, {jsonType: LogLineJson}> = /*@__PURE__*/
+  messageDesc(file_goap_jobs_v1_jobs, 2);
 
 /**
  * @generated from message goap.jobs.v1.GetJobRequest
@@ -371,7 +426,7 @@ export type GetJobRequestJson = {
  * Use `create(GetJobRequestSchema)` to create a new message.
  */
 export const GetJobRequestSchema: GenMessage<GetJobRequest, {jsonType: GetJobRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 2);
+  messageDesc(file_goap_jobs_v1_jobs, 3);
 
 /**
  * @generated from message goap.jobs.v1.GetJobResponse
@@ -398,7 +453,7 @@ export type GetJobResponseJson = {
  * Use `create(GetJobResponseSchema)` to create a new message.
  */
 export const GetJobResponseSchema: GenMessage<GetJobResponse, {jsonType: GetJobResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 3);
+  messageDesc(file_goap_jobs_v1_jobs, 4);
 
 /**
  * @generated from message goap.jobs.v1.ListJobsRequest
@@ -471,7 +526,7 @@ export type ListJobsRequestJson = {
  * Use `create(ListJobsRequestSchema)` to create a new message.
  */
 export const ListJobsRequestSchema: GenMessage<ListJobsRequest, {jsonType: ListJobsRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 4);
+  messageDesc(file_goap_jobs_v1_jobs, 5);
 
 /**
  * @generated from message goap.jobs.v1.ListJobsResponse
@@ -498,7 +553,7 @@ export type ListJobsResponseJson = {
  * Use `create(ListJobsResponseSchema)` to create a new message.
  */
 export const ListJobsResponseSchema: GenMessage<ListJobsResponse, {jsonType: ListJobsResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 5);
+  messageDesc(file_goap_jobs_v1_jobs, 6);
 
 /**
  * @generated from message goap.jobs.v1.CancelJobRequest
@@ -525,7 +580,7 @@ export type CancelJobRequestJson = {
  * Use `create(CancelJobRequestSchema)` to create a new message.
  */
 export const CancelJobRequestSchema: GenMessage<CancelJobRequest, {jsonType: CancelJobRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 6);
+  messageDesc(file_goap_jobs_v1_jobs, 7);
 
 /**
  * @generated from message goap.jobs.v1.CancelJobResponse
@@ -552,7 +607,7 @@ export type CancelJobResponseJson = {
  * Use `create(CancelJobResponseSchema)` to create a new message.
  */
 export const CancelJobResponseSchema: GenMessage<CancelJobResponse, {jsonType: CancelJobResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 7);
+  messageDesc(file_goap_jobs_v1_jobs, 8);
 
 /**
  * @generated from message goap.jobs.v1.CreateJobRequest
@@ -671,7 +726,7 @@ export type CreateJobRequestJson = {
  * Use `create(CreateJobRequestSchema)` to create a new message.
  */
 export const CreateJobRequestSchema: GenMessage<CreateJobRequest, {jsonType: CreateJobRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 8);
+  messageDesc(file_goap_jobs_v1_jobs, 9);
 
 /**
  * @generated from message goap.jobs.v1.CreateJobResponse
@@ -698,7 +753,7 @@ export type CreateJobResponseJson = {
  * Use `create(CreateJobResponseSchema)` to create a new message.
  */
 export const CreateJobResponseSchema: GenMessage<CreateJobResponse, {jsonType: CreateJobResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 9);
+  messageDesc(file_goap_jobs_v1_jobs, 10);
 
 /**
  * @generated from message goap.jobs.v1.Worker
@@ -745,7 +800,7 @@ export type WorkerJson = {
  * Use `create(WorkerSchema)` to create a new message.
  */
 export const WorkerSchema: GenMessage<Worker, {jsonType: WorkerJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 10);
+  messageDesc(file_goap_jobs_v1_jobs, 11);
 
 /**
  * @generated from message goap.jobs.v1.ListWorkersRequest
@@ -764,7 +819,7 @@ export type ListWorkersRequestJson = {
  * Use `create(ListWorkersRequestSchema)` to create a new message.
  */
 export const ListWorkersRequestSchema: GenMessage<ListWorkersRequest, {jsonType: ListWorkersRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 11);
+  messageDesc(file_goap_jobs_v1_jobs, 12);
 
 /**
  * @generated from message goap.jobs.v1.ListWorkersResponse
@@ -791,7 +846,7 @@ export type ListWorkersResponseJson = {
  * Use `create(ListWorkersResponseSchema)` to create a new message.
  */
 export const ListWorkersResponseSchema: GenMessage<ListWorkersResponse, {jsonType: ListWorkersResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 12);
+  messageDesc(file_goap_jobs_v1_jobs, 13);
 
 /**
  * @generated from message goap.jobs.v1.ClaimJobRequest
@@ -846,7 +901,7 @@ export type ClaimJobRequestJson = {
  * Use `create(ClaimJobRequestSchema)` to create a new message.
  */
 export const ClaimJobRequestSchema: GenMessage<ClaimJobRequest, {jsonType: ClaimJobRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 13);
+  messageDesc(file_goap_jobs_v1_jobs, 14);
 
 /**
  * @generated from message goap.jobs.v1.ClaimJobResponse
@@ -905,7 +960,7 @@ export type ClaimJobResponseJson = {
  * Use `create(ClaimJobResponseSchema)` to create a new message.
  */
 export const ClaimJobResponseSchema: GenMessage<ClaimJobResponse, {jsonType: ClaimJobResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 14);
+  messageDesc(file_goap_jobs_v1_jobs, 15);
 
 /**
  * @generated from message goap.jobs.v1.ReportJobRequest
@@ -957,6 +1012,13 @@ export type ReportJobRequest = Message<"goap.jobs.v1.ReportJobRequest"> & {
    * @generated from field: string error = 9;
    */
   error: string;
+
+  /**
+   * the lines said since the last report
+   *
+   * @generated from field: repeated goap.jobs.v1.LogLine log = 10;
+   */
+  log: LogLine[];
 };
 
 /**
@@ -1009,6 +1071,13 @@ export type ReportJobRequestJson = {
    * @generated from field: string error = 9;
    */
   error?: string;
+
+  /**
+   * the lines said since the last report
+   *
+   * @generated from field: repeated goap.jobs.v1.LogLine log = 10;
+   */
+  log?: LogLineJson[];
 };
 
 /**
@@ -1016,7 +1085,7 @@ export type ReportJobRequestJson = {
  * Use `create(ReportJobRequestSchema)` to create a new message.
  */
 export const ReportJobRequestSchema: GenMessage<ReportJobRequest, {jsonType: ReportJobRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 15);
+  messageDesc(file_goap_jobs_v1_jobs, 16);
 
 /**
  * @generated from message goap.jobs.v1.ReportJobResponse
@@ -1057,7 +1126,7 @@ export type ReportJobResponseJson = {
  * Use `create(ReportJobResponseSchema)` to create a new message.
  */
 export const ReportJobResponseSchema: GenMessage<ReportJobResponse, {jsonType: ReportJobResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 16);
+  messageDesc(file_goap_jobs_v1_jobs, 17);
 
 /**
  * @generated from message goap.jobs.v1.ReadJobInputRequest
@@ -1104,7 +1173,7 @@ export type ReadJobInputRequestJson = {
  * Use `create(ReadJobInputRequestSchema)` to create a new message.
  */
 export const ReadJobInputRequestSchema: GenMessage<ReadJobInputRequest, {jsonType: ReadJobInputRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 17);
+  messageDesc(file_goap_jobs_v1_jobs, 18);
 
 /**
  * @generated from message goap.jobs.v1.ReadJobInputResponse
@@ -1145,7 +1214,7 @@ export type ReadJobInputResponseJson = {
  * Use `create(ReadJobInputResponseSchema)` to create a new message.
  */
 export const ReadJobInputResponseSchema: GenMessage<ReadJobInputResponse, {jsonType: ReadJobInputResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 18);
+  messageDesc(file_goap_jobs_v1_jobs, 19);
 
 /**
  * @generated from message goap.jobs.v1.WriteJobResultRequest
@@ -1216,7 +1285,7 @@ export type WriteJobResultRequestJson = {
  * Use `create(WriteJobResultRequestSchema)` to create a new message.
  */
 export const WriteJobResultRequestSchema: GenMessage<WriteJobResultRequest, {jsonType: WriteJobResultRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 19);
+  messageDesc(file_goap_jobs_v1_jobs, 20);
 
 /**
  * @generated from message goap.jobs.v1.WriteJobResultResponse
@@ -1243,7 +1312,7 @@ export type WriteJobResultResponseJson = {
  * Use `create(WriteJobResultResponseSchema)` to create a new message.
  */
 export const WriteJobResultResponseSchema: GenMessage<WriteJobResultResponse, {jsonType: WriteJobResultResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_jobs_v1_jobs, 20);
+  messageDesc(file_goap_jobs_v1_jobs, 21);
 
 /**
  * The job service (ADR 0149): the long runs a person starts (an import from a source, the import of a graph snapshot,

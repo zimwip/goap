@@ -86,7 +86,9 @@ func (p *Plugin) Run(ctx context.Context, job *importerkit.Job) error {
 		return err
 	}
 	im := &Importer{Graph: p.Graph, Dir: dir, Name: name, Source: repo, Rev: job.String("rev"), Base: job.String("base"), Max: job.Int("max"),
-		ProjectID: job.ProjectID, OwnerOrg: job.OwnerOrg, Progress: job, ProgressEvery: 10,
+		ProjectID: job.ProjectID, OwnerOrg: job.OwnerOrg,
+		OnPhase:  job.Progress,
+		OnBegin:  func(st Stats, c Commit) { begin(job, st, c) },
 		OnCommit: func(st Stats) { record(job, st) }}
 	if job.Bool("symbols") {
 		if p.Symbols == nil {
@@ -103,10 +105,40 @@ func (p *Plugin) Run(ctx context.Context, job *importerkit.Job) error {
 	}
 	st, err := im.Run(ctx)
 	record(job, st)
+	if err == nil {
+		job.Progress(summary(name, st))
+	}
 	return err
 }
 
+// begin says which commit the run imports now: its rank, its hash and its subject.
+func begin(job *importerkit.Job, st Stats, c Commit) {
+	of := ""
+	if st.Total > 0 {
+		of = fmt.Sprintf("/%d", st.Total)
+	}
+	job.Progress(fmt.Sprintf("commit %d%s %s %s", st.Commits+1, of, short(c.Hash), capLine(c.Subject(), 100)))
+}
+
+// summary is the last line of a run.
+func summary(name string, st Stats) string {
+	if st.Commits == 0 {
+		return name + " is up to date: no new commit"
+	}
+	return fmt.Sprintf("%s: %d commit(s) imported, up to %s", name, st.Commits, short(st.Last))
+}
+
+// capLine cuts a line at n runes.
+func capLine(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n-1]) + "…"
+}
+
 func record(job *importerkit.Job, st Stats) {
+	job.Step(int64(st.Commits), int64(st.Total))
 	job.Set("commits", int64(st.Commits))
 	job.Set("created", int64(st.Created))
 	job.Set("modified", int64(st.Modified))

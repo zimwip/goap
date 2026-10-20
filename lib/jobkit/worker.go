@@ -157,6 +157,8 @@ func (w *Worker) run(parent context.Context, c *Claim) {
 				log.Warn("job report failed", "err", err)
 				if errors.Is(err, ErrLost) {
 					cancelled.Do(cancel)
+				} else {
+					j.unreport(r)
 				}
 				continue
 			}

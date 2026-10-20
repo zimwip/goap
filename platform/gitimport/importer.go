@@ -79,6 +79,10 @@ type Importer struct {
 	// Progress, when set, receives a line every ProgressEvery commits (default 100) and at the end.
 	Progress      io.Writer
 	ProgressEvery int
+	// OnPhase, when set, says what the run does before its commits (reading the graph, counting the commits).
+	OnPhase func(string)
+	// OnBegin, when set, is called before each commit is imported, with what the run did so far (Stats.Total known).
+	OnBegin func(Stats, Commit)
 	// OnCommit, when set, is called after each commit imported with what the run did so far.
 	OnCommit func(Stats)
 
@@ -98,6 +102,8 @@ type Stats struct {
 	Symbols int
 	// Last is the last commit imported.
 	Last string
+	// Total is the number of commits this run imports (known once it counted them, the first tree of Base included).
+	Total int
 }
 
 // Run imports the commits not imported yet and returns what it did.
@@ -125,6 +131,7 @@ func (im *Importer) Run(ctx context.Context) (Stats, error) {
 	if err != nil {
 		return im.stats, err
 	}
+	im.phase("reading what the graph holds of " + im.Name)
 	if err := im.load(ctx); err != nil {
 		return im.stats, err
 	}
@@ -146,6 +153,9 @@ func (im *Importer) Run(ctx context.Context) (Stats, error) {
 		defer blobs.Close()
 	}
 	from := im.ix.commit
+	if err := im.count(ctx, from, rev); err != nil {
+		return im.stats, err
+	}
 	if from == "" && im.Base != "" {
 		c, err := Tree(ctx, im.Dir, im.Base)
 		if err != nil {
@@ -170,6 +180,38 @@ func (im *Importer) Run(ctx context.Context) (Stats, error) {
 	err = Log(ctx, im.Dir, from, rev, max, func(c Commit) error { return im.commit(ctx, c) })
 	im.report(true)
 	return im.stats, err
+}
+
+func (im *Importer) phase(what string) {
+	if im.OnPhase != nil {
+		im.OnPhase(what)
+	}
+}
+
+// count gives Stats.Total: the commits after from up to rev (bounded by Max), and the first tree of Base.
+func (im *Importer) count(ctx context.Context, from, rev string) error {
+	im.phase("counting the commits of " + im.Name)
+	base := 0
+	if from == "" && im.Base != "" {
+		b, err := Resolve(ctx, im.Dir, im.Base)
+		if err != nil {
+			return err
+		}
+		from, base = b, 1
+	}
+	n := 0
+	if from != rev {
+		var err error
+		if n, err = Count(ctx, im.Dir, from, rev); err != nil {
+			return err
+		}
+	}
+	n += base
+	if im.Max > 0 && n > im.Max {
+		n = im.Max
+	}
+	im.stats.Total = n
+	return nil
 }
 
 func (im *Importer) report(final bool) {
@@ -309,6 +351,9 @@ func Key(repo, p string, dir bool) string {
 }
 
 func (im *Importer) commit(ctx context.Context, c Commit) error {
+	if im.OnBegin != nil {
+		im.OnBegin(im.stats, c)
+	}
 	ops, err := im.plan(c)
 	if err != nil {
 		return fmt.Errorf("commit %s: %w", short(c.Hash), err)

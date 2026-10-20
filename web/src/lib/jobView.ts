@@ -93,3 +93,24 @@ export function graphImportResult(j: Job): GraphImportResult {
     warnings: Array.isArray(o.warnings) ? o.warnings.filter((w): w is string => typeof w === 'string') : [],
   };
 }
+
+/** How long the job still needs at the pace it went so far ("about 3 min left"); empty while unknown (no total, too
+ *  early to tell, or ended). */
+export function remaining(j: Job, now: number): string {
+  if (!isActive(j)) return '';
+  const total = Number(j.total ?? 0);
+  const done = Number(j.done ?? 0);
+  const start = Date.parse(j.startedAt ?? '');
+  if (!(total > 0) || !(done > 0) || done >= total || Number.isNaN(start)) return '';
+  const spent = now - start;
+  if (spent < 3000) return '';
+  return `about ${duration((spent / done) * (total - done))} left`;
+}
+
+/** The feedback lines of a job, oldest first, with their time of day. */
+export function logLines(j: Job): { at: string; text: string }[] {
+  return (j.log ?? []).map((l) => {
+    const t = Date.parse(typeof l.at === 'string' ? l.at : '');
+    return { at: Number.isNaN(t) ? '' : new Date(t).toLocaleTimeString(), text: l.text ?? '' };
+  });
+}

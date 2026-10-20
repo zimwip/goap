@@ -160,7 +160,7 @@ func (h *Handler) ReportJob(ctx context.Context, r *connect.Request[jobsv1.Repor
 	}
 	m := r.Msg
 	cancel, err := h.Service.Report(ctx, m.Id, m.Worker, jobkit.Report{Progress: m.Progress, Done: m.Done, Total: m.Total, Stats: m.Stats,
-		Output: pbconv.Map(m.Output), Status: m.Status, Error: m.Error})
+		Output: pbconv.Map(m.Output), Status: m.Status, Error: m.Error, Log: jobkit.LogFromPB(m.Log)})
 	if err != nil {
 		return nil, rpcErr(err)
 	}

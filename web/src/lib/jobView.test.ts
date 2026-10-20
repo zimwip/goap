@@ -35,3 +35,16 @@ describe('jobs', () => {
     expect(graphImportResult({ output: { unchanged: 3 } }).change).toBeUndefined();
   });
 });
+
+describe('job feedback', () => {
+  it('estimates what is left and reads the log', async () => {
+    const { remaining, logLines } = await import('./jobView');
+    const start = Date.parse('2026-10-20T10:00:00Z');
+    const j = { status: 'running', startedAt: '2026-10-20T10:00:00Z', done: '10', total: '40' };
+    expect(remaining(j, start + 20_000)).toBe('about 1 min 0 s left');
+    expect(remaining(j, start + 1000)).toBe('');
+    expect(remaining({ ...j, status: 'done' }, start + 20_000)).toBe('');
+    expect(remaining({ ...j, total: '0' }, start + 20_000)).toBe('');
+    expect(logLines({ log: [{ at: '2026-10-20T10:00:01Z', text: 'commit 1/40 abc first' }] })[0].text).toBe('commit 1/40 abc first');
+  });
+});

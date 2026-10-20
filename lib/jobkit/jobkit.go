@@ -9,6 +9,7 @@ package jobkit
 import (
 	"context"
 	"errors"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"regexp"
 	"time"
 
@@ -79,6 +80,34 @@ type Report struct {
 	Output      map[string]any
 	Status      string
 	Error       string
+	// Log are the progress lines said since the last report.
+	Log []LogLine
+}
+
+// MaxLog bounds the log of a job: the last lines of its feedback.
+const MaxLog = 200
+
+// LogLine is a line of the feedback of a run.
+type LogLine struct {
+	At   time.Time `json:"at"`
+	Text string    `json:"text"`
+}
+
+// LogToPB and LogFromPB convert log lines to and from the protocol.
+func LogToPB(lines []LogLine) []*jobsv1.LogLine {
+	out := make([]*jobsv1.LogLine, 0, len(lines))
+	for _, l := range lines {
+		out = append(out, &jobsv1.LogLine{At: timestamppb.New(l.At), Text: l.Text})
+	}
+	return out
+}
+
+func LogFromPB(lines []*jobsv1.LogLine) []LogLine {
+	out := make([]LogLine, 0, len(lines))
+	for _, l := range lines {
+		out = append(out, LogLine{At: l.GetAt().AsTime(), Text: l.GetText()})
+	}
+	return out
 }
 
 // Queue is the job service as the services and the workers call it.

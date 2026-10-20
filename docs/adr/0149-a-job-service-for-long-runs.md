@@ -39,6 +39,14 @@ review, a report) would have invented a fourth way.
    any more: `RegisterImporter`, `importer.v1.ImporterService` and `GOAP_IMPORTER_TOKEN` are gone). An importer
    service is a worker of the kinds of the importers it implements (`importerkit.Run`, unchanged for its author); the
    graph process is the worker of `graph.*` (`graphsvc.JobRunners`).
+
+   **Feedback.** Every progress line a run says (`Job.Progress`, or a line written to the job) is also a line of its
+   log (`jobkit.LogLine{At, Text}`): a report carries the lines said since the previous one (taken back when the report
+   fails), the service keeps the last `KeepLog` (100) on the job (`Job.log`, column `log`), so the people read what the
+   run did, not only where it is. `Step(done, total)` gives the progress bar and, with the start, the time left. The git
+   import says its phases (reading what the graph holds, counting the commits: `git rev-list --count --first-parent`),
+   then each commit as it starts it ("commit 12/340 <hash> <subject>", done of total), its counters after each one, and
+   a last line ("<name>: 12 commit(s) imported, up to <hash>", or up to date).
 4. **People read their jobs.** `ListJobs` (own jobs; `all` for an administrator), `GetJob`, `CancelJob` (who started
    it, or an administrator: a queued job is cancelled at once, a running one when its worker next reports). Two HTTP
    endpoints, routed by the gateway under `/api/jobs/`: `GET /api/jobs/events` is a Server-Sent Events stream of the

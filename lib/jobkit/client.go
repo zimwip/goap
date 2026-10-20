@@ -120,7 +120,7 @@ func (c Client) Claim(ctx context.Context, worker string, kinds []string, wait t
 // Report implements Queue.
 func (c Client) Report(ctx context.Context, id, worker string, rep Report) (bool, error) {
 	r, err := c.RPC.ReportJob(ctx, connect.NewRequest(&jobsv1.ReportJobRequest{Id: id, Worker: worker, Progress: rep.Progress, Done: rep.Done,
-		Total: rep.Total, Stats: rep.Stats, Output: pbconv.Struct(rep.Output), Status: rep.Status, Error: rep.Error}))
+		Total: rep.Total, Stats: rep.Stats, Output: pbconv.Struct(rep.Output), Status: rep.Status, Error: rep.Error, Log: LogToPB(rep.Log)}))
 	if err != nil {
 		return false, fromRPC(err)
 	}

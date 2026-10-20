@@ -1,6 +1,6 @@
 <script lang="ts">
   // One job (ADR 0149): what it is, how far it is, its counters, its error, and what can be done with it (cancel while
-  // it goes, save the file it wrote, open the change it created).
+  // it goes, save the file it wrote, open the change it created), and its feedback, the lines its run said.
   import type { Job } from '../api';
   import { errorMessage } from '../api';
   import Icon from '../shell/Icon.svelte';
@@ -8,7 +8,7 @@
   import { openTab } from '../shell/tabs.svelte';
   import { notify } from '../shell/workbench.svelte';
   import { cancelJob, downloadJobResult } from '../stores/jobs.svelte';
-  import { elapsed, fraction, isActive, jobChange, jobTitle, kindLabel, size, statsLine } from '../jobView';
+  import { elapsed, fraction, isActive, jobChange, jobTitle, kindLabel, logLines, remaining, size, statsLine } from '../jobView';
 
   let {
     job,
@@ -22,7 +22,17 @@
   const active = $derived(isActive(job));
   const change = $derived(jobChange(job));
   const stats = $derived(statsLine(job));
+  const left = $derived(remaining(job, now));
+  const lines = $derived(compact ? [] : logLines(job));
   let busy = $state(false);
+  let showLog = $state(false);
+  let logBox = $state<HTMLElement | undefined>();
+
+  // the newest line in view while the log is open
+  $effect(() => {
+    void lines.length;
+    if (showLog && logBox) logBox.scrollTop = logBox.scrollHeight;
+  });
 
   async function cancel() {
     busy = true;
@@ -64,9 +74,14 @@
   {#if job.cancelRequested && active}<div class="hint line">Stopping…</div>{/if}
   <div class="foot">
     <span class="hint">
-      {#if !compact}{kindLabel(job.kind)}{#if job.target} · {job.target}{/if} · {/if}{#if showBy && job.by}{job.by} · {/if}{job.status === 'queued' ? 'waiting for a worker' : elapsed(job, now)}
+      {#if !compact}{kindLabel(job.kind)}{#if job.target} · {job.target}{/if} · {/if}{#if showBy && job.by}{job.by} · {/if}{job.status === 'queued' ? 'waiting for a worker' : elapsed(job, now)}{left ? ` · ${left}` : ''}
     </span>
     <span class="acts">
+      {#if lines.length}
+        <button type="button" class="ghost small" aria-expanded={showLog} title="What the run said it did" onclick={() => (showLog = !showLog)}>
+          <Icon name="list" size={13} /> {showLog ? 'Hide log' : `Log (${lines.length})`}
+        </button>
+      {/if}
       {#if change}
         <button type="button" class="ghost small" title="Open the change {change.title}" onclick={() => openTab({ kind: 'change', params: { id: change.id } }, { pin: true })}>
           <Icon name="branch" size={13} /> Change
@@ -84,6 +99,13 @@
       {/if}
     </span>
   </div>
+  {#if showLog && lines.length}
+    <ol class="log" bind:this={logBox} aria-label="Log of the job">
+      {#each lines as l, i (i)}
+        <li><span class="at">{l.at}</span> {l.text}</li>
+      {/each}
+    </ol>
+  {/if}
 </div>
 
 <style>
@@ -129,6 +151,23 @@
     display: inline-flex;
     align-items: center;
     gap: 0.2rem;
+  }
+  .log {
+    list-style: none;
+    margin: 0.2rem 0 0;
+    padding: 0.3rem 0.45rem;
+    max-height: 14rem;
+    overflow: auto;
+    background: var(--neutral-soft);
+    border-radius: 4px;
+    font-family: var(--mono, monospace);
+    font-size: 0.78rem;
+  }
+  .log li {
+    overflow-wrap: anywhere;
+  }
+  .log .at {
+    color: var(--muted);
   }
   .bar {
     height: 4px;

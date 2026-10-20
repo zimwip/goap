@@ -114,11 +114,13 @@ type Job struct {
 	Result *Result `protobuf:"bytes,16,opt,name=result,proto3" json:"result,omitempty"`
 	Error  string  `protobuf:"bytes,17,opt,name=error,proto3" json:"error,omitempty"`
 	// the worker running it
-	Worker        string                 `protobuf:"bytes,18,opt,name=worker,proto3" json:"worker,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	EndedAt       *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Worker    string                 `protobuf:"bytes,18,opt,name=worker,proto3" json:"worker,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	StartedAt *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	EndedAt   *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
+	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// what the run said it does, the last lines (oldest first)
+	Log           []*LogLine `protobuf:"bytes,23,rep,name=log,proto3" json:"log,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -307,6 +309,66 @@ func (x *Job) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Job) GetLog() []*LogLine {
+	if x != nil {
+		return x.Log
+	}
+	return nil
+}
+
+// LogLine is a line of the feedback of a run.
+type LogLine struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	At            *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=at,proto3" json:"at,omitempty"`
+	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogLine) Reset() {
+	*x = LogLine{}
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogLine) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogLine) ProtoMessage() {}
+
+func (x *LogLine) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogLine.ProtoReflect.Descriptor instead.
+func (*LogLine) Descriptor() ([]byte, []int) {
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *LogLine) GetAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.At
+	}
+	return nil
+}
+
+func (x *LogLine) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
 type GetJobRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -316,7 +378,7 @@ type GetJobRequest struct {
 
 func (x *GetJobRequest) Reset() {
 	*x = GetJobRequest{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[2]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -328,7 +390,7 @@ func (x *GetJobRequest) String() string {
 func (*GetJobRequest) ProtoMessage() {}
 
 func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[2]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -341,7 +403,7 @@ func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobRequest.ProtoReflect.Descriptor instead.
 func (*GetJobRequest) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{2}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetJobRequest) GetId() string {
@@ -360,7 +422,7 @@ type GetJobResponse struct {
 
 func (x *GetJobResponse) Reset() {
 	*x = GetJobResponse{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[3]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -372,7 +434,7 @@ func (x *GetJobResponse) String() string {
 func (*GetJobResponse) ProtoMessage() {}
 
 func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[3]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -385,7 +447,7 @@ func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobResponse.ProtoReflect.Descriptor instead.
 func (*GetJobResponse) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{3}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetJobResponse) GetJob() *Job {
@@ -411,7 +473,7 @@ type ListJobsRequest struct {
 
 func (x *ListJobsRequest) Reset() {
 	*x = ListJobsRequest{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[4]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -423,7 +485,7 @@ func (x *ListJobsRequest) String() string {
 func (*ListJobsRequest) ProtoMessage() {}
 
 func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[4]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -436,7 +498,7 @@ func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsRequest.ProtoReflect.Descriptor instead.
 func (*ListJobsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{4}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListJobsRequest) GetKindPrefix() string {
@@ -476,7 +538,7 @@ type ListJobsResponse struct {
 
 func (x *ListJobsResponse) Reset() {
 	*x = ListJobsResponse{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[5]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -488,7 +550,7 @@ func (x *ListJobsResponse) String() string {
 func (*ListJobsResponse) ProtoMessage() {}
 
 func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[5]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -501,7 +563,7 @@ func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsResponse.ProtoReflect.Descriptor instead.
 func (*ListJobsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{5}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListJobsResponse) GetJobs() []*Job {
@@ -520,7 +582,7 @@ type CancelJobRequest struct {
 
 func (x *CancelJobRequest) Reset() {
 	*x = CancelJobRequest{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[6]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -532,7 +594,7 @@ func (x *CancelJobRequest) String() string {
 func (*CancelJobRequest) ProtoMessage() {}
 
 func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[6]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -545,7 +607,7 @@ func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobRequest.ProtoReflect.Descriptor instead.
 func (*CancelJobRequest) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{6}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CancelJobRequest) GetId() string {
@@ -564,7 +626,7 @@ type CancelJobResponse struct {
 
 func (x *CancelJobResponse) Reset() {
 	*x = CancelJobResponse{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[7]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -576,7 +638,7 @@ func (x *CancelJobResponse) String() string {
 func (*CancelJobResponse) ProtoMessage() {}
 
 func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[7]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -589,7 +651,7 @@ func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobResponse.ProtoReflect.Descriptor instead.
 func (*CancelJobResponse) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{7}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CancelJobResponse) GetJob() *Job {
@@ -619,7 +681,7 @@ type CreateJobRequest struct {
 
 func (x *CreateJobRequest) Reset() {
 	*x = CreateJobRequest{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[8]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -631,7 +693,7 @@ func (x *CreateJobRequest) String() string {
 func (*CreateJobRequest) ProtoMessage() {}
 
 func (x *CreateJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[8]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -644,7 +706,7 @@ func (x *CreateJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateJobRequest.ProtoReflect.Descriptor instead.
 func (*CreateJobRequest) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{8}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *CreateJobRequest) GetKind() string {
@@ -719,7 +781,7 @@ type CreateJobResponse struct {
 
 func (x *CreateJobResponse) Reset() {
 	*x = CreateJobResponse{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[9]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -731,7 +793,7 @@ func (x *CreateJobResponse) String() string {
 func (*CreateJobResponse) ProtoMessage() {}
 
 func (x *CreateJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[9]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -744,7 +806,7 @@ func (x *CreateJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateJobResponse.ProtoReflect.Descriptor instead.
 func (*CreateJobResponse) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{9}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CreateJobResponse) GetJob() *Job {
@@ -765,7 +827,7 @@ type Worker struct {
 
 func (x *Worker) Reset() {
 	*x = Worker{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[10]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -777,7 +839,7 @@ func (x *Worker) String() string {
 func (*Worker) ProtoMessage() {}
 
 func (x *Worker) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[10]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -790,7 +852,7 @@ func (x *Worker) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Worker.ProtoReflect.Descriptor instead.
 func (*Worker) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{10}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Worker) GetId() string {
@@ -822,7 +884,7 @@ type ListWorkersRequest struct {
 
 func (x *ListWorkersRequest) Reset() {
 	*x = ListWorkersRequest{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[11]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -834,7 +896,7 @@ func (x *ListWorkersRequest) String() string {
 func (*ListWorkersRequest) ProtoMessage() {}
 
 func (x *ListWorkersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[11]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -847,7 +909,7 @@ func (x *ListWorkersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWorkersRequest.ProtoReflect.Descriptor instead.
 func (*ListWorkersRequest) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{11}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{12}
 }
 
 type ListWorkersResponse struct {
@@ -859,7 +921,7 @@ type ListWorkersResponse struct {
 
 func (x *ListWorkersResponse) Reset() {
 	*x = ListWorkersResponse{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[12]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -871,7 +933,7 @@ func (x *ListWorkersResponse) String() string {
 func (*ListWorkersResponse) ProtoMessage() {}
 
 func (x *ListWorkersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[12]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -884,7 +946,7 @@ func (x *ListWorkersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWorkersResponse.ProtoReflect.Descriptor instead.
 func (*ListWorkersResponse) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{12}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListWorkersResponse) GetWorkers() []*Worker {
@@ -907,7 +969,7 @@ type ClaimJobRequest struct {
 
 func (x *ClaimJobRequest) Reset() {
 	*x = ClaimJobRequest{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[13]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -919,7 +981,7 @@ func (x *ClaimJobRequest) String() string {
 func (*ClaimJobRequest) ProtoMessage() {}
 
 func (x *ClaimJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[13]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -932,7 +994,7 @@ func (x *ClaimJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimJobRequest.ProtoReflect.Descriptor instead.
 func (*ClaimJobRequest) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{13}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ClaimJobRequest) GetWorker() string {
@@ -970,7 +1032,7 @@ type ClaimJobResponse struct {
 
 func (x *ClaimJobResponse) Reset() {
 	*x = ClaimJobResponse{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[14]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -982,7 +1044,7 @@ func (x *ClaimJobResponse) String() string {
 func (*ClaimJobResponse) ProtoMessage() {}
 
 func (x *ClaimJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[14]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -995,7 +1057,7 @@ func (x *ClaimJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimJobResponse.ProtoReflect.Descriptor instead.
 func (*ClaimJobResponse) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{14}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ClaimJobResponse) GetJob() *Job {
@@ -1029,15 +1091,17 @@ type ReportJobRequest struct {
 	Stats    map[string]int64       `protobuf:"bytes,6,rep,name=stats,proto3" json:"stats,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	Output   *structpb.Struct       `protobuf:"bytes,7,opt,name=output,proto3" json:"output,omitempty"`
 	// empty: still running; done | failed | cancelled ends it
-	Status        string `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
-	Error         string `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`
+	Status string `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
+	Error  string `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`
+	// the lines said since the last report
+	Log           []*LogLine `protobuf:"bytes,10,rep,name=log,proto3" json:"log,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ReportJobRequest) Reset() {
 	*x = ReportJobRequest{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[15]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1049,7 +1113,7 @@ func (x *ReportJobRequest) String() string {
 func (*ReportJobRequest) ProtoMessage() {}
 
 func (x *ReportJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[15]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1062,7 +1126,7 @@ func (x *ReportJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportJobRequest.ProtoReflect.Descriptor instead.
 func (*ReportJobRequest) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{15}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ReportJobRequest) GetId() string {
@@ -1128,6 +1192,13 @@ func (x *ReportJobRequest) GetError() string {
 	return ""
 }
 
+func (x *ReportJobRequest) GetLog() []*LogLine {
+	if x != nil {
+		return x.Log
+	}
+	return nil
+}
+
 type ReportJobResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// the job was cancelled: stop
@@ -1139,7 +1210,7 @@ type ReportJobResponse struct {
 
 func (x *ReportJobResponse) Reset() {
 	*x = ReportJobResponse{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[16]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1151,7 +1222,7 @@ func (x *ReportJobResponse) String() string {
 func (*ReportJobResponse) ProtoMessage() {}
 
 func (x *ReportJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[16]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1164,7 +1235,7 @@ func (x *ReportJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportJobResponse.ProtoReflect.Descriptor instead.
 func (*ReportJobResponse) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{16}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ReportJobResponse) GetCancel() bool {
@@ -1192,7 +1263,7 @@ type ReadJobInputRequest struct {
 
 func (x *ReadJobInputRequest) Reset() {
 	*x = ReadJobInputRequest{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[17]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1204,7 +1275,7 @@ func (x *ReadJobInputRequest) String() string {
 func (*ReadJobInputRequest) ProtoMessage() {}
 
 func (x *ReadJobInputRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[17]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1217,7 +1288,7 @@ func (x *ReadJobInputRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadJobInputRequest.ProtoReflect.Descriptor instead.
 func (*ReadJobInputRequest) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{17}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ReadJobInputRequest) GetId() string {
@@ -1252,7 +1323,7 @@ type ReadJobInputResponse struct {
 
 func (x *ReadJobInputResponse) Reset() {
 	*x = ReadJobInputResponse{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[18]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1264,7 +1335,7 @@ func (x *ReadJobInputResponse) String() string {
 func (*ReadJobInputResponse) ProtoMessage() {}
 
 func (x *ReadJobInputResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[18]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1277,7 +1348,7 @@ func (x *ReadJobInputResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadJobInputResponse.ProtoReflect.Descriptor instead.
 func (*ReadJobInputResponse) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{18}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ReadJobInputResponse) GetData() []byte {
@@ -1308,7 +1379,7 @@ type WriteJobResultRequest struct {
 
 func (x *WriteJobResultRequest) Reset() {
 	*x = WriteJobResultRequest{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[19]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1320,7 +1391,7 @@ func (x *WriteJobResultRequest) String() string {
 func (*WriteJobResultRequest) ProtoMessage() {}
 
 func (x *WriteJobResultRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[19]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1333,7 +1404,7 @@ func (x *WriteJobResultRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteJobResultRequest.ProtoReflect.Descriptor instead.
 func (*WriteJobResultRequest) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{19}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *WriteJobResultRequest) GetId() string {
@@ -1380,7 +1451,7 @@ type WriteJobResultResponse struct {
 
 func (x *WriteJobResultResponse) Reset() {
 	*x = WriteJobResultResponse{}
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[20]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1392,7 +1463,7 @@ func (x *WriteJobResultResponse) String() string {
 func (*WriteJobResultResponse) ProtoMessage() {}
 
 func (x *WriteJobResultResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[20]
+	mi := &file_goap_jobs_v1_jobs_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1405,7 +1476,7 @@ func (x *WriteJobResultResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteJobResultResponse.ProtoReflect.Descriptor instead.
 func (*WriteJobResultResponse) Descriptor() ([]byte, []int) {
-	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{20}
+	return file_goap_jobs_v1_jobs_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *WriteJobResultResponse) GetSize() int64 {
@@ -1424,7 +1495,7 @@ const file_goap_jobs_v1_jobs_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
 	"media_type\x18\x02 \x01(\tR\tmediaType\x12\x12\n" +
-	"\x04size\x18\x03 \x01(\x03R\x04size\"\xc0\x06\n" +
+	"\x04size\x18\x03 \x01(\x03R\x04size\"\xe9\x06\n" +
 	"\x03Job\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
@@ -1452,11 +1523,15 @@ const file_goap_jobs_v1_jobs_proto_rawDesc = "" +
 	"started_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x125\n" +
 	"\bended_at\x18\x15 \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x1a8\n" +
+	"updated_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12'\n" +
+	"\x03log\x18\x17 \x03(\v2\x15.goap.jobs.v1.LogLineR\x03log\x1a8\n" +
 	"\n" +
 	"StatsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\x1f\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"I\n" +
+	"\aLogLine\x12*\n" +
+	"\x02at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\"\x1f\n" +
 	"\rGetJobRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"5\n" +
 	"\x0eGetJobResponse\x12#\n" +
@@ -1500,7 +1575,7 @@ const file_goap_jobs_v1_jobs_proto_rawDesc = "" +
 	"\x10ClaimJobResponse\x12#\n" +
 	"\x03job\x18\x01 \x01(\v2\x11.goap.jobs.v1.JobR\x03job\x12\x1c\n" +
 	"\tprincipal\x18\x02 \x01(\tR\tprincipal\x12#\n" +
-	"\rlease_seconds\x18\x03 \x01(\x05R\fleaseSeconds\"\xda\x02\n" +
+	"\rlease_seconds\x18\x03 \x01(\x05R\fleaseSeconds\"\x83\x03\n" +
 	"\x10ReportJobRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06worker\x18\x02 \x01(\tR\x06worker\x12\x1a\n" +
@@ -1510,7 +1585,9 @@ const file_goap_jobs_v1_jobs_proto_rawDesc = "" +
 	"\x05stats\x18\x06 \x03(\v2).goap.jobs.v1.ReportJobRequest.StatsEntryR\x05stats\x12/\n" +
 	"\x06output\x18\a \x01(\v2\x17.google.protobuf.StructR\x06output\x12\x16\n" +
 	"\x06status\x18\b \x01(\tR\x06status\x12\x14\n" +
-	"\x05error\x18\t \x01(\tR\x05error\x1a8\n" +
+	"\x05error\x18\t \x01(\tR\x05error\x12'\n" +
+	"\x03log\x18\n" +
+	" \x03(\v2\x15.goap.jobs.v1.LogLineR\x03log\x1a8\n" +
 	"\n" +
 	"StatsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -1559,77 +1636,81 @@ func file_goap_jobs_v1_jobs_proto_rawDescGZIP() []byte {
 	return file_goap_jobs_v1_jobs_proto_rawDescData
 }
 
-var file_goap_jobs_v1_jobs_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_goap_jobs_v1_jobs_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_goap_jobs_v1_jobs_proto_goTypes = []any{
 	(*Result)(nil),                 // 0: goap.jobs.v1.Result
 	(*Job)(nil),                    // 1: goap.jobs.v1.Job
-	(*GetJobRequest)(nil),          // 2: goap.jobs.v1.GetJobRequest
-	(*GetJobResponse)(nil),         // 3: goap.jobs.v1.GetJobResponse
-	(*ListJobsRequest)(nil),        // 4: goap.jobs.v1.ListJobsRequest
-	(*ListJobsResponse)(nil),       // 5: goap.jobs.v1.ListJobsResponse
-	(*CancelJobRequest)(nil),       // 6: goap.jobs.v1.CancelJobRequest
-	(*CancelJobResponse)(nil),      // 7: goap.jobs.v1.CancelJobResponse
-	(*CreateJobRequest)(nil),       // 8: goap.jobs.v1.CreateJobRequest
-	(*CreateJobResponse)(nil),      // 9: goap.jobs.v1.CreateJobResponse
-	(*Worker)(nil),                 // 10: goap.jobs.v1.Worker
-	(*ListWorkersRequest)(nil),     // 11: goap.jobs.v1.ListWorkersRequest
-	(*ListWorkersResponse)(nil),    // 12: goap.jobs.v1.ListWorkersResponse
-	(*ClaimJobRequest)(nil),        // 13: goap.jobs.v1.ClaimJobRequest
-	(*ClaimJobResponse)(nil),       // 14: goap.jobs.v1.ClaimJobResponse
-	(*ReportJobRequest)(nil),       // 15: goap.jobs.v1.ReportJobRequest
-	(*ReportJobResponse)(nil),      // 16: goap.jobs.v1.ReportJobResponse
-	(*ReadJobInputRequest)(nil),    // 17: goap.jobs.v1.ReadJobInputRequest
-	(*ReadJobInputResponse)(nil),   // 18: goap.jobs.v1.ReadJobInputResponse
-	(*WriteJobResultRequest)(nil),  // 19: goap.jobs.v1.WriteJobResultRequest
-	(*WriteJobResultResponse)(nil), // 20: goap.jobs.v1.WriteJobResultResponse
-	nil,                            // 21: goap.jobs.v1.Job.StatsEntry
-	nil,                            // 22: goap.jobs.v1.ReportJobRequest.StatsEntry
-	(*structpb.Struct)(nil),        // 23: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),  // 24: google.protobuf.Timestamp
+	(*LogLine)(nil),                // 2: goap.jobs.v1.LogLine
+	(*GetJobRequest)(nil),          // 3: goap.jobs.v1.GetJobRequest
+	(*GetJobResponse)(nil),         // 4: goap.jobs.v1.GetJobResponse
+	(*ListJobsRequest)(nil),        // 5: goap.jobs.v1.ListJobsRequest
+	(*ListJobsResponse)(nil),       // 6: goap.jobs.v1.ListJobsResponse
+	(*CancelJobRequest)(nil),       // 7: goap.jobs.v1.CancelJobRequest
+	(*CancelJobResponse)(nil),      // 8: goap.jobs.v1.CancelJobResponse
+	(*CreateJobRequest)(nil),       // 9: goap.jobs.v1.CreateJobRequest
+	(*CreateJobResponse)(nil),      // 10: goap.jobs.v1.CreateJobResponse
+	(*Worker)(nil),                 // 11: goap.jobs.v1.Worker
+	(*ListWorkersRequest)(nil),     // 12: goap.jobs.v1.ListWorkersRequest
+	(*ListWorkersResponse)(nil),    // 13: goap.jobs.v1.ListWorkersResponse
+	(*ClaimJobRequest)(nil),        // 14: goap.jobs.v1.ClaimJobRequest
+	(*ClaimJobResponse)(nil),       // 15: goap.jobs.v1.ClaimJobResponse
+	(*ReportJobRequest)(nil),       // 16: goap.jobs.v1.ReportJobRequest
+	(*ReportJobResponse)(nil),      // 17: goap.jobs.v1.ReportJobResponse
+	(*ReadJobInputRequest)(nil),    // 18: goap.jobs.v1.ReadJobInputRequest
+	(*ReadJobInputResponse)(nil),   // 19: goap.jobs.v1.ReadJobInputResponse
+	(*WriteJobResultRequest)(nil),  // 20: goap.jobs.v1.WriteJobResultRequest
+	(*WriteJobResultResponse)(nil), // 21: goap.jobs.v1.WriteJobResultResponse
+	nil,                            // 22: goap.jobs.v1.Job.StatsEntry
+	nil,                            // 23: goap.jobs.v1.ReportJobRequest.StatsEntry
+	(*structpb.Struct)(nil),        // 24: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),  // 25: google.protobuf.Timestamp
 }
 var file_goap_jobs_v1_jobs_proto_depIdxs = []int32{
-	23, // 0: goap.jobs.v1.Job.params:type_name -> google.protobuf.Struct
-	21, // 1: goap.jobs.v1.Job.stats:type_name -> goap.jobs.v1.Job.StatsEntry
-	23, // 2: goap.jobs.v1.Job.output:type_name -> google.protobuf.Struct
+	24, // 0: goap.jobs.v1.Job.params:type_name -> google.protobuf.Struct
+	22, // 1: goap.jobs.v1.Job.stats:type_name -> goap.jobs.v1.Job.StatsEntry
+	24, // 2: goap.jobs.v1.Job.output:type_name -> google.protobuf.Struct
 	0,  // 3: goap.jobs.v1.Job.result:type_name -> goap.jobs.v1.Result
-	24, // 4: goap.jobs.v1.Job.created_at:type_name -> google.protobuf.Timestamp
-	24, // 5: goap.jobs.v1.Job.started_at:type_name -> google.protobuf.Timestamp
-	24, // 6: goap.jobs.v1.Job.ended_at:type_name -> google.protobuf.Timestamp
-	24, // 7: goap.jobs.v1.Job.updated_at:type_name -> google.protobuf.Timestamp
-	1,  // 8: goap.jobs.v1.GetJobResponse.job:type_name -> goap.jobs.v1.Job
-	1,  // 9: goap.jobs.v1.ListJobsResponse.jobs:type_name -> goap.jobs.v1.Job
-	1,  // 10: goap.jobs.v1.CancelJobResponse.job:type_name -> goap.jobs.v1.Job
-	23, // 11: goap.jobs.v1.CreateJobRequest.params:type_name -> google.protobuf.Struct
-	1,  // 12: goap.jobs.v1.CreateJobResponse.job:type_name -> goap.jobs.v1.Job
-	24, // 13: goap.jobs.v1.Worker.last_seen:type_name -> google.protobuf.Timestamp
-	10, // 14: goap.jobs.v1.ListWorkersResponse.workers:type_name -> goap.jobs.v1.Worker
-	1,  // 15: goap.jobs.v1.ClaimJobResponse.job:type_name -> goap.jobs.v1.Job
-	22, // 16: goap.jobs.v1.ReportJobRequest.stats:type_name -> goap.jobs.v1.ReportJobRequest.StatsEntry
-	23, // 17: goap.jobs.v1.ReportJobRequest.output:type_name -> google.protobuf.Struct
-	1,  // 18: goap.jobs.v1.ReportJobResponse.job:type_name -> goap.jobs.v1.Job
-	2,  // 19: goap.jobs.v1.JobService.GetJob:input_type -> goap.jobs.v1.GetJobRequest
-	4,  // 20: goap.jobs.v1.JobService.ListJobs:input_type -> goap.jobs.v1.ListJobsRequest
-	6,  // 21: goap.jobs.v1.JobService.CancelJob:input_type -> goap.jobs.v1.CancelJobRequest
-	8,  // 22: goap.jobs.v1.JobService.CreateJob:input_type -> goap.jobs.v1.CreateJobRequest
-	11, // 23: goap.jobs.v1.JobService.ListWorkers:input_type -> goap.jobs.v1.ListWorkersRequest
-	13, // 24: goap.jobs.v1.JobService.ClaimJob:input_type -> goap.jobs.v1.ClaimJobRequest
-	15, // 25: goap.jobs.v1.JobService.ReportJob:input_type -> goap.jobs.v1.ReportJobRequest
-	17, // 26: goap.jobs.v1.JobService.ReadJobInput:input_type -> goap.jobs.v1.ReadJobInputRequest
-	19, // 27: goap.jobs.v1.JobService.WriteJobResult:input_type -> goap.jobs.v1.WriteJobResultRequest
-	3,  // 28: goap.jobs.v1.JobService.GetJob:output_type -> goap.jobs.v1.GetJobResponse
-	5,  // 29: goap.jobs.v1.JobService.ListJobs:output_type -> goap.jobs.v1.ListJobsResponse
-	7,  // 30: goap.jobs.v1.JobService.CancelJob:output_type -> goap.jobs.v1.CancelJobResponse
-	9,  // 31: goap.jobs.v1.JobService.CreateJob:output_type -> goap.jobs.v1.CreateJobResponse
-	12, // 32: goap.jobs.v1.JobService.ListWorkers:output_type -> goap.jobs.v1.ListWorkersResponse
-	14, // 33: goap.jobs.v1.JobService.ClaimJob:output_type -> goap.jobs.v1.ClaimJobResponse
-	16, // 34: goap.jobs.v1.JobService.ReportJob:output_type -> goap.jobs.v1.ReportJobResponse
-	18, // 35: goap.jobs.v1.JobService.ReadJobInput:output_type -> goap.jobs.v1.ReadJobInputResponse
-	20, // 36: goap.jobs.v1.JobService.WriteJobResult:output_type -> goap.jobs.v1.WriteJobResultResponse
-	28, // [28:37] is the sub-list for method output_type
-	19, // [19:28] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	25, // 4: goap.jobs.v1.Job.created_at:type_name -> google.protobuf.Timestamp
+	25, // 5: goap.jobs.v1.Job.started_at:type_name -> google.protobuf.Timestamp
+	25, // 6: goap.jobs.v1.Job.ended_at:type_name -> google.protobuf.Timestamp
+	25, // 7: goap.jobs.v1.Job.updated_at:type_name -> google.protobuf.Timestamp
+	2,  // 8: goap.jobs.v1.Job.log:type_name -> goap.jobs.v1.LogLine
+	25, // 9: goap.jobs.v1.LogLine.at:type_name -> google.protobuf.Timestamp
+	1,  // 10: goap.jobs.v1.GetJobResponse.job:type_name -> goap.jobs.v1.Job
+	1,  // 11: goap.jobs.v1.ListJobsResponse.jobs:type_name -> goap.jobs.v1.Job
+	1,  // 12: goap.jobs.v1.CancelJobResponse.job:type_name -> goap.jobs.v1.Job
+	24, // 13: goap.jobs.v1.CreateJobRequest.params:type_name -> google.protobuf.Struct
+	1,  // 14: goap.jobs.v1.CreateJobResponse.job:type_name -> goap.jobs.v1.Job
+	25, // 15: goap.jobs.v1.Worker.last_seen:type_name -> google.protobuf.Timestamp
+	11, // 16: goap.jobs.v1.ListWorkersResponse.workers:type_name -> goap.jobs.v1.Worker
+	1,  // 17: goap.jobs.v1.ClaimJobResponse.job:type_name -> goap.jobs.v1.Job
+	23, // 18: goap.jobs.v1.ReportJobRequest.stats:type_name -> goap.jobs.v1.ReportJobRequest.StatsEntry
+	24, // 19: goap.jobs.v1.ReportJobRequest.output:type_name -> google.protobuf.Struct
+	2,  // 20: goap.jobs.v1.ReportJobRequest.log:type_name -> goap.jobs.v1.LogLine
+	1,  // 21: goap.jobs.v1.ReportJobResponse.job:type_name -> goap.jobs.v1.Job
+	3,  // 22: goap.jobs.v1.JobService.GetJob:input_type -> goap.jobs.v1.GetJobRequest
+	5,  // 23: goap.jobs.v1.JobService.ListJobs:input_type -> goap.jobs.v1.ListJobsRequest
+	7,  // 24: goap.jobs.v1.JobService.CancelJob:input_type -> goap.jobs.v1.CancelJobRequest
+	9,  // 25: goap.jobs.v1.JobService.CreateJob:input_type -> goap.jobs.v1.CreateJobRequest
+	12, // 26: goap.jobs.v1.JobService.ListWorkers:input_type -> goap.jobs.v1.ListWorkersRequest
+	14, // 27: goap.jobs.v1.JobService.ClaimJob:input_type -> goap.jobs.v1.ClaimJobRequest
+	16, // 28: goap.jobs.v1.JobService.ReportJob:input_type -> goap.jobs.v1.ReportJobRequest
+	18, // 29: goap.jobs.v1.JobService.ReadJobInput:input_type -> goap.jobs.v1.ReadJobInputRequest
+	20, // 30: goap.jobs.v1.JobService.WriteJobResult:input_type -> goap.jobs.v1.WriteJobResultRequest
+	4,  // 31: goap.jobs.v1.JobService.GetJob:output_type -> goap.jobs.v1.GetJobResponse
+	6,  // 32: goap.jobs.v1.JobService.ListJobs:output_type -> goap.jobs.v1.ListJobsResponse
+	8,  // 33: goap.jobs.v1.JobService.CancelJob:output_type -> goap.jobs.v1.CancelJobResponse
+	10, // 34: goap.jobs.v1.JobService.CreateJob:output_type -> goap.jobs.v1.CreateJobResponse
+	13, // 35: goap.jobs.v1.JobService.ListWorkers:output_type -> goap.jobs.v1.ListWorkersResponse
+	15, // 36: goap.jobs.v1.JobService.ClaimJob:output_type -> goap.jobs.v1.ClaimJobResponse
+	17, // 37: goap.jobs.v1.JobService.ReportJob:output_type -> goap.jobs.v1.ReportJobResponse
+	19, // 38: goap.jobs.v1.JobService.ReadJobInput:output_type -> goap.jobs.v1.ReadJobInputResponse
+	21, // 39: goap.jobs.v1.JobService.WriteJobResult:output_type -> goap.jobs.v1.WriteJobResultResponse
+	31, // [31:40] is the sub-list for method output_type
+	22, // [22:31] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_goap_jobs_v1_jobs_proto_init() }
@@ -1643,7 +1724,7 @@ func file_goap_jobs_v1_jobs_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_jobs_v1_jobs_proto_rawDesc), len(file_goap_jobs_v1_jobs_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   23,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -123,12 +123,15 @@ func (s *Service) written(ctx context.Context, r Record, emitted bool) {
 	s.publish(r)
 }
 
+// KeepLog is the number of lines of the feedback of a job the service keeps (the last ones).
+const KeepLog = 100
+
 // ToPB is the protocol form of a job.
 func ToPB(r Record) *jobsv1.Job {
 	j := &jobsv1.Job{Id: r.ID, Kind: r.Kind, Label: r.Label, Target: r.Target, Status: r.Status, CancelRequested: r.CancelRequested,
 		Params: pbconv.Struct(r.Params), By: r.By, ProjectId: r.ProjectID, OwnerOrg: r.OwnerOrg, Progress: r.Progress, Done: r.Done,
 		Total: r.Total, Stats: maps.Clone(r.Stats), Output: pbconv.Struct(r.Output), Error: r.Error, Worker: r.Worker,
-		CreatedAt: pbconv.Time(r.Created), UpdatedAt: pbconv.Time(r.Updated)}
+		CreatedAt: pbconv.Time(r.Created), UpdatedAt: pbconv.Time(r.Updated), Log: jobkit.LogToPB(r.Log)}
 	if !r.Started.IsZero() {
 		j.StartedAt = pbconv.Time(r.Started)
 	}
@@ -288,6 +291,12 @@ func (s *Service) Report(ctx context.Context, id, worker string, rep jobkit.Repo
 		}
 		if rep.Output != nil {
 			r.Output = maps.Clone(rep.Output)
+		}
+		if len(rep.Log) > 0 {
+			r.Log = append(r.Log, rep.Log...)
+			if len(r.Log) > KeepLog {
+				r.Log = slices.Clone(r.Log[len(r.Log)-KeepLog:])
+			}
 		}
 		if rep.Status == "" {
 			return nil, nil

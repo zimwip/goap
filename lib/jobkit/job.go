@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/zimwip/goap/contracts/authz"
 )
@@ -34,7 +36,9 @@ type Job struct {
 	total    int64
 	stats    map[string]int64
 	output   map[string]any
-	dirty    bool
+	// lines are the progress lines said since the last report
+	lines []LogLine
+	dirty bool
 }
 
 // String is a parameter as a string ("" when unset).
@@ -77,10 +81,17 @@ func (j *Job) Bool(name string) bool {
 	return false
 }
 
-// Progress records the last progress line of the run.
+// Progress records the last progress line of the run; each line also goes to the log of the job (its feedback, the
+// last MaxLog lines kept by the service).
 func (j *Job) Progress(line string) {
 	j.mu.Lock()
 	j.progress, j.dirty = line, true
+	if line != "" {
+		j.lines = append(j.lines, LogLine{At: time.Now().UTC(), Text: line})
+		if len(j.lines) > MaxLog {
+			j.lines = j.lines[len(j.lines)-MaxLog:]
+		}
+	}
 	j.mu.Unlock()
 }
 
@@ -190,5 +201,21 @@ func (j *Job) report() (Report, bool) {
 	defer j.mu.Unlock()
 	dirty := j.dirty
 	j.dirty = false
-	return Report{Progress: j.progress, Done: j.done, Total: j.total, Stats: maps.Clone(j.stats), Output: maps.Clone(j.output)}, dirty
+	lines := j.lines
+	j.lines = nil
+	return Report{Progress: j.progress, Done: j.done, Total: j.total, Stats: maps.Clone(j.stats), Output: maps.Clone(j.output), Log: lines}, dirty
+}
+
+// unreport takes back the lines of a report that did not reach the service, for the next one.
+func (j *Job) unreport(r Report) {
+	if len(r.Log) == 0 {
+		return
+	}
+	j.mu.Lock()
+	j.lines = append(slices.Clone(r.Log), j.lines...)
+	if len(j.lines) > MaxLog {
+		j.lines = j.lines[len(j.lines)-MaxLog:]
+	}
+	j.dirty = true
+	j.mu.Unlock()
 }

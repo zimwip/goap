@@ -112,6 +112,9 @@ func TestJobRunsOnAWorker(t *testing.T) {
 			if r.Status != jobkit.StatusDone || r.Stats["bytes"] != int64(len(input)) || r.Output["ok"] != true || r.Done != 2 || r.Worker != "w1" {
 				t.Fatalf("ended %+v", r)
 			}
+			if len(r.Log) != 1 || r.Log[0].Text != "copying" || r.Log[0].At.IsZero() {
+				t.Fatalf("log %+v", r.Log)
+			}
 			if seen.Subject != "alice" {
 				t.Fatalf("the run acts as %q", seen.Subject)
 			}

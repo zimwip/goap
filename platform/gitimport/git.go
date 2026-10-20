@@ -238,6 +238,18 @@ func Tree(ctx context.Context, dir, rev string) (c Commit, err error) {
 	return c, nil
 }
 
+// Count gives the number of commits Log walks from `from` (excluded; empty: the root) to rev on the first-parent line.
+func Count(ctx context.Context, dir, from, rev string) (int, error) {
+	if from != "" {
+		rev = from + ".." + rev
+	}
+	b, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-list", "--count", "--first-parent", rev, "--").Output()
+	if err != nil {
+		return 0, gitErr("git rev-list --count", err)
+	}
+	return strconv.Atoi(strings.TrimSpace(string(b)))
+}
+
 // Resolve gives the object id of a revision.
 func Resolve(ctx context.Context, dir, rev string) (string, error) {
 	b, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--verify", "--end-of-options", rev+"^{commit}").Output()

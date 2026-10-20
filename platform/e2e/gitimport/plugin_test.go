@@ -84,13 +84,27 @@ func TestImportThroughTheRegistry(t *testing.T) {
 		return jobsvc.Record{}
 	}
 
+	// the feedback of a run: how far it is (commits done of the commits to import), a line per commit in its log
+	logged := func(j jobsvc.Record, text string) bool {
+		for _, l := range j.Log {
+			if strings.Contains(l.Text, text) {
+				return true
+			}
+		}
+		return false
+	}
 	j := run(map[string]any{"directory": r.dir, "name": "demo", "max": 1})
-	if j.Status != jobkit.StatusDone || j.Stats["commits"] != 1 {
+	if j.Status != jobkit.StatusDone || j.Stats["commits"] != 1 || j.Done != 1 || j.Total != 1 || !logged(j, "commit 1/1 ") {
 		t.Fatalf("first run: %+v", j)
 	}
 	j = run(map[string]any{"directory": r.dir, "name": "demo"})
-	if j.Status != jobkit.StatusDone || j.Stats["commits"] != 1 || !strings.Contains(j.Progress, "demo: 1 commits") {
+	if j.Status != jobkit.StatusDone || j.Stats["commits"] != 1 || j.Total != 1 || j.Progress != "demo: 1 commit(s) imported, up to "+r.git("rev-parse", "--short=12", "HEAD")[:12] ||
+		!logged(j, "counting the commits of demo") || !logged(j, "commit 1/1 ") {
 		t.Fatalf("second run (resumed): %+v", j)
+	}
+	// nothing new: says so
+	if j = run(map[string]any{"directory": r.dir, "name": "demo"}); j.Status != jobkit.StatusDone || j.Total != 0 || j.Progress != "demo is up to date: no new commit" {
+		t.Fatalf("third run (up to date): %+v", j)
 	}
 	got, root := graphTree(t, g, "demo")
 	same(t, r.tree(), got)
