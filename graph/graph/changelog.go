@@ -42,20 +42,22 @@ func impactEvents(ctx context.Context, tx Tx, change domain.ChangeID) ([]domain.
 	return decodeImpacts(ctx, tx, entries)
 }
 
-// decodeImpacts reads impact events from their log entries (domain.ImpactEventOf), the drafts that copy a version as is
+// decodeImpacts reads impact events from their log entries (domain.ImpactEventsOf: one, or the ones an entry carries), the drafts that copy a version as is
 // rebuilt from it (ADR 0142).
 func decodeImpacts(ctx context.Context, tx Tx, entries []domain.LogEntry) ([]domain.ImpactEvent, error) {
 	var out []domain.ImpactEvent // nil when empty, as the stores returned before
 	var bases []domain.NodeRef
 	for _, l := range entries {
-		e, err := domain.ImpactEventOf(l)
+		events, err := domain.ImpactEventsOf(l)
 		if err != nil {
 			return nil, fmt.Errorf("log entry %d (%s): %w", l.Seq, l.Type, err)
 		}
-		if !e.Hydrated() && e.Draft.Base != nil {
-			bases = append(bases, *e.Draft.Base)
+		for _, e := range events {
+			if !e.Hydrated() && e.Draft.Base != nil {
+				bases = append(bases, *e.Draft.Base)
+			}
+			out = append(out, e)
 		}
-		out = append(out, e)
 	}
 	if len(bases) == 0 {
 		return out, nil

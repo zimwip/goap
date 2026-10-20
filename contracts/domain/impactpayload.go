@@ -1,7 +1,10 @@
 package domain
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"strconv"
 
 	"github.com/google/uuid"
 )
@@ -112,8 +115,183 @@ func marshalImpact(e ImpactEvent) ([]byte, error) {
 	return json.Marshal(p)
 }
 
-// ImpactEventOf is the impact event of a log entry: its payload with the envelope of the entry. The draft of a BaseCopy
-// event holds its base only until the graph hydrates it (Hydrated).
+// One log entry may carry several events of one operation (ADR 0144): the verdicts of a review, the versions of a
+// landing. The payload of such an entry is {"impacts": [part...]} with the keys every part has alike hoisted next to it;
+// a part is the payload of its event with its "impactId". The envelope (the columns) is the events', which share it.
+
+// batchKey is the key of the parts of an entry carrying several events.
+const batchKey = "impacts"
+
+// Batched reports the operations whose events of one operation share a log entry (ADR 0144).
+func (o ImpactOp) Batched() bool { return o == ImpactReviewed || o == ImpactLanded }
+
+// SameEntry reports events one log entry can carry: of one change and one batched operation, with one envelope.
+func SameEntry(a, b ImpactEvent) bool {
+	return a.Op.Batched() && a.Change == b.Change && a.Op == b.Op && a.Flow == b.Flow && a.Execution == b.Execution && a.By == b.By &&
+		a.Causation == b.Causation
+}
+
+// PartID is the id of the n-th event an entry carries.
+func PartID(entry string, n int) string { return entry + "#" + strconv.Itoa(n) }
+
+// ImpactBatchEntry is the log entry carrying several events (SameEntry, in their order) under the id given; its time is
+// the first event's. ImpactEventsOf reads them back, with the ids PartID gives.
+func ImpactBatchEntry(id string, events []ImpactEvent) (LogEntry, error) {
+	if len(events) == 0 {
+		return LogEntry{}, fmt.Errorf("an entry carries at least one event")
+	}
+	first := events[0]
+	parts := make([]map[string]json.RawMessage, len(events))
+	for i, e := range events {
+		if !SameEntry(first, e) {
+			return LogEntry{}, fmt.Errorf("event %d (%s of %s) is not carried with the %s of %s", i, e.Op, e.Impact, first.Op, first.Impact)
+		}
+		raw, err := marshalImpact(e)
+		if err != nil {
+			return LogEntry{}, err
+		}
+		if err := json.Unmarshal(raw, &parts[i]); err != nil {
+			return LogEntry{}, err
+		}
+		impact, _ := json.Marshal(e.Impact)
+		parts[i]["impactId"] = impact
+	}
+	top := hoist(parts)
+	raw, err := json.Marshal(parts)
+	if err != nil {
+		return LogEntry{}, err
+	}
+	top[batchKey] = raw
+	raw, err = json.Marshal(top)
+	return LogEntry{ID: id, Change: first.Change, Type: LogImpact + "." + string(first.Op), Flow: first.Flow, Execution: first.Execution,
+		By: first.By, At: first.At, Causation: first.Causation, Payload: raw}, err
+}
+
+// hoist takes out of the parts what every one of them holds alike, a key or, in an object every part holds, a key of
+// it, and returns it (unhoist puts it back).
+func hoist(parts []map[string]json.RawMessage) map[string]json.RawMessage {
+	top := map[string]json.RawMessage{}
+	for k, v := range parts[0] {
+		if k == "impactId" {
+			continue
+		}
+		shared := true
+		for _, p := range parts[1:] {
+			if w, ok := p[k]; !ok || !bytes.Equal(v, w) {
+				shared = false
+				break
+			}
+		}
+		if shared {
+			top[k] = v
+			for _, p := range parts {
+				delete(p, k)
+			}
+			continue
+		}
+		// an object in every part: what its keys hold alike
+		subs := make([]map[string]json.RawMessage, len(parts))
+		for i, p := range parts {
+			if json.Unmarshal(p[k], &subs[i]) != nil || subs[i] == nil {
+				subs = nil
+				break
+			}
+		}
+		if len(subs) < 2 {
+			continue
+		}
+		in := hoist(subs)
+		if len(in) == 0 {
+			continue
+		}
+		raw, _ := json.Marshal(in)
+		top[k] = raw
+		for i, p := range parts {
+			p[k], _ = json.Marshal(subs[i])
+		}
+	}
+	return top
+}
+
+// unhoist puts back into a part what hoist took out of it.
+func unhoist(top, part map[string]json.RawMessage) error {
+	for k, v := range top {
+		w, ok := part[k]
+		if !ok {
+			part[k] = v
+			continue
+		}
+		var in, sub map[string]json.RawMessage
+		if err := json.Unmarshal(v, &in); err != nil {
+			return err
+		}
+		if err := json.Unmarshal(w, &sub); err != nil {
+			return err
+		}
+		if err := unhoist(in, sub); err != nil {
+			return err
+		}
+		raw, err := json.Marshal(sub)
+		if err != nil {
+			return err
+		}
+		part[k] = raw
+	}
+	return nil
+}
+
+// ImpactEventsOf is the impact events of a log entry: the one it records, or the ones it carries (ImpactBatchEntry).
+func ImpactEventsOf(l LogEntry) ([]ImpactEvent, error) {
+	if !bytes.Contains(l.Payload, []byte(`"`+batchKey+`"`)) {
+		e, err := ImpactEventOf(l)
+		if err != nil {
+			return nil, err
+		}
+		return []ImpactEvent{e}, nil
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(l.Payload, &top); err != nil {
+		return nil, err
+	}
+	raw, ok := top[batchKey]
+	if !ok {
+		e, err := ImpactEventOf(l)
+		if err != nil {
+			return nil, err
+		}
+		return []ImpactEvent{e}, nil
+	}
+	delete(top, batchKey)
+	var parts []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &parts); err != nil {
+		return nil, err
+	}
+	out := make([]ImpactEvent, len(parts))
+	for i, p := range parts {
+		if err := unhoist(top, p); err != nil {
+			return nil, err
+		}
+		payload, err := json.Marshal(p)
+		if err != nil {
+			return nil, err
+		}
+		part := l
+		part.ID, part.Payload = PartID(l.ID, i), payload
+		if part.Subject == "" {
+			var impact ChangeImpactID
+			_ = json.Unmarshal(p["impactId"], &impact)
+			part.Subject = string(impact)
+		}
+		if out[i], err = ImpactEventOf(part); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// ImpactEventOf is the impact event of a log entry recording one: its payload with the envelope of the entry. The draft
+// of a BaseCopy event holds its base only until the graph hydrates it (Hydrated). An entry carrying several events is
+// read by ImpactEventsOf.
 func ImpactEventOf(l LogEntry) (ImpactEvent, error) {
 	var e ImpactEvent
 	if err := json.Unmarshal(l.Payload, &e); err != nil {

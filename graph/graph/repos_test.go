@@ -292,25 +292,27 @@ func checkVerdictCauses(ctx context.Context, tx Tx, id domain.ChangeID) error {
 		if e.Type != domain.LogImpact+"."+string(domain.ImpactReviewed) {
 			continue
 		}
-		ev, err := domain.ImpactEventOf(e)
+		events, err := domain.ImpactEventsOf(e)
 		if err != nil {
 			return err
 		}
-		if ev.Review == nil || (ev.Review.Status != domain.ReviewAccepted && ev.Review.Status != domain.ReviewRejected) {
-			continue
-		}
-		cause, ok := seen[e.Causation]
-		if !ok || cause.Type != domain.LogFact+"."+string(domain.TypeReview) {
-			return fmt.Errorf("verdict %d on %s has no earlier review as its cause (%q)", e.Seq, ev.Impact, e.Causation)
-		}
-		var it domain.ChangeItem
-		if err := json.Unmarshal(cause.Payload, &it); err != nil {
-			return err
-		}
-		rec := domain.ReviewRecordOf(it.Data)
-		i := slices.IndexFunc(rec.Entries, func(x domain.ReviewEntry) bool { return x.Impact == string(ev.Impact) })
-		if rec.Status != domain.ReviewStatusSubmitted || rec.Key != ev.Review.ReviewID || i < 0 || rec.Entries[i].Outcome != domain.ReviewOutcome(ev.Review.Status) {
-			return fmt.Errorf("verdict %d on %s (review %s) is not recorded by its cause %+v", e.Seq, ev.Impact, ev.Review.ReviewID, rec)
+		for _, ev := range events {
+			if ev.Review == nil || (ev.Review.Status != domain.ReviewAccepted && ev.Review.Status != domain.ReviewRejected) {
+				continue
+			}
+			cause, ok := seen[e.Causation]
+			if !ok || cause.Type != domain.LogFact+"."+string(domain.TypeReview) {
+				return fmt.Errorf("verdict %d on %s has no earlier review as its cause (%q)", e.Seq, ev.Impact, e.Causation)
+			}
+			var it domain.ChangeItem
+			if err := json.Unmarshal(cause.Payload, &it); err != nil {
+				return err
+			}
+			rec := domain.ReviewRecordOf(it.Data)
+			i := slices.IndexFunc(rec.Entries, func(x domain.ReviewEntry) bool { return x.Impact == string(ev.Impact) })
+			if rec.Status != domain.ReviewStatusSubmitted || rec.Key != ev.Review.ReviewID || i < 0 || rec.Entries[i].Outcome != domain.ReviewOutcome(ev.Review.Status) {
+				return fmt.Errorf("verdict %d on %s (review %s) is not recorded by its cause %+v", e.Seq, ev.Impact, ev.Review.ReviewID, rec)
+			}
 		}
 	}
 	return nil

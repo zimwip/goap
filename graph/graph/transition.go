@@ -264,12 +264,14 @@ func (g *Graph) phases(ctx context.Context, tx Tx, c domain.Change) (map[domain.
 				state = m.To
 			}
 		case len(l.Type) > len(domain.LogImpact) && l.Type[:len(domain.LogImpact)] == domain.LogImpact:
-			ev, err := domain.ImpactEventOf(l)
+			events, err := domain.ImpactEventsOf(l)
 			if err != nil {
 				return nil, err
 			}
-			if ev.StartsDraft() && ev.Flow == "" {
-				out[ev.Impact] = phase{State: state, Seq: l.Seq}
+			for _, ev := range events {
+				if ev.StartsDraft() && ev.Flow == "" {
+					out[ev.Impact] = phase{State: state, Seq: l.Seq}
+				}
 			}
 		}
 	}

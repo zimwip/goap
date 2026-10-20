@@ -26,7 +26,7 @@ const (
 	// drafts, accepts and merges them).
 	ModeCommit = "commit"
 	// ModeLifecycle drives each change call by call, as the web and the engine do: CreateChange, ImpactNodeCreate or
-	// ImpactNodeCheckout + ImpactNodeUpdate per node, ImpactNodeReview by a second principal, CommitChange, MergeChange.
+	// ImpactNodeCheckout + ImpactNodeUpdate per node, one ImpactNodeReviewBatch by a second principal, CommitChange, MergeChange.
 	ModeLifecycle = "lifecycle"
 )
 
@@ -510,12 +510,15 @@ func (r *Runner) lifecycle(ctx context.Context, w *worker, edits []edit) error {
 		}
 		impacts = append(impacts, imp)
 	}
-	for _, imp := range impacts {
-		if _, err := timed(ctx, m, "ImpactNodeReview", func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeReviewResponse], error) {
-			return r.Reviewer.Graph.ImpactNodeReview(ctx, connect.NewRequest(&graphv1.ImpactNodeReviewRequest{ChangeId: id, ChangeImpactId: imp, Accept: true, Comment: "bench"}))
-		}); err != nil {
-			return abandon(err)
-		}
+	// one review of the change, as the web submits one (ADR 0080, 0144)
+	verdicts := make([]*graphv1.ImpactVerdict, len(impacts))
+	for i, imp := range impacts {
+		verdicts[i] = &graphv1.ImpactVerdict{ChangeImpactId: imp, Accept: true, Comment: "bench"}
+	}
+	if _, err := timed(ctx, m, "ImpactNodeReviewBatch", func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeReviewBatchResponse], error) {
+		return r.Reviewer.Graph.ImpactNodeReviewBatch(ctx, connect.NewRequest(&graphv1.ImpactNodeReviewBatchRequest{ChangeId: id, Verdicts: verdicts}))
+	}); err != nil {
+		return abandon(err)
 	}
 	if _, err := timed(ctx, m, "CommitChange", func(ctx context.Context) (*connect.Response[graphv1.CommitChangeResponse], error) {
 		return g.CommitChange(ctx, connect.NewRequest(&graphv1.CommitChangeRequest{ChangeId: id}))

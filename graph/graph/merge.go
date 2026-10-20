@@ -588,6 +588,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		}
 	}
 	var stuck []string
+	var phases [4][]domain.ImpactEvent
 	for i, m := range todo {
 		n := *m.from
 		n.Reason, n.Parents = domain.ReasonMerge, []domain.Version{m.from.Version}
@@ -630,11 +631,11 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		} else {
 			written = append(written, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactTransitioned, By: "graph.merge", Post: &m.next})
 		}
-		events := append([]domain.ImpactEvent{first, {Change: c.ID, Impact: cn.ID, Op: domain.ImpactReviewed, By: "graph.merge", Review: &review, Causation: cause}}, written...)
-		events = append(events, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, By: "graph.merge", Landed: &m.next, Baseline: res.Baseline.ID, Branch: domain.BranchOf(plan.Into)})
-		if err := g.emit(ctx, tx, events...); err != nil {
-			return res, err
-		}
+		// by phase, so that the verdicts of the review and the versions of the landing are one entry each (ADR 0144)
+		phases[0] = append(phases[0], first)
+		phases[1] = append(phases[1], domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactReviewed, By: "graph.merge", Review: &review, Causation: cause})
+		phases[2] = append(phases[2], written...)
+		phases[3] = append(phases[3], domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, By: "graph.merge", Landed: &m.next, Baseline: res.Baseline.ID, Branch: domain.BranchOf(plan.Into)})
 		if n.Deleted {
 			delete(target, n.ID)
 			continue
@@ -642,6 +643,11 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		target[n.ID] = n.Version
 		if lc := ix.lifecycleOf(n.Type); lc != nil && !lc.Landable(n.State) {
 			stuck = append(stuck, fmt.Sprintf("%s (%s) in %s", n.Key, n.Type, n.State))
+		}
+	}
+	for _, events := range phases {
+		if err := g.emit(ctx, tx, events...); err != nil {
+			return res, err
 		}
 	}
 	if len(stuck) > 0 {

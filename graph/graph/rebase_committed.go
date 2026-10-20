@@ -326,13 +326,17 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 		if err != nil {
 			return err
 		}
+		// by phase, so that the verdicts of the review and the versions of the landing are one entry each (ADR 0144)
+		var phases [3][]domain.ImpactEvent
 		for _, t := range todo {
 			r := t.review
 			r.ReviewID = key
 			ref := t.ref
-			events := append(t.events,
-				domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactReviewed, By: r.By, Review: &r, Causation: cause},
-				domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactLanded, Landed: &ref, Branch: domain.BranchOf(parent.Branch)})
+			phases[0] = append(phases[0], t.events...)
+			phases[1] = append(phases[1], domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactReviewed, By: r.By, Review: &r, Causation: cause})
+			phases[2] = append(phases[2], domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactLanded, Landed: &ref, Branch: domain.BranchOf(parent.Branch)})
+		}
+		for _, events := range phases {
 			if err := g.emit(ctx, tx, events...); err != nil {
 				return err
 			}

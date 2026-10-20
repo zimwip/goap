@@ -231,11 +231,14 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 	}
 	// each version the change applied has landed on its own branch; it lands again on the branch it is integrated into
 	// (integrate, land)
+	landed := make([]domain.ImpactEvent, 0, len(a.cposts))
 	for _, cp := range a.cposts {
 		ref := cp.post.Ref()
-		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactLanded, Landed: &ref, Branch: domain.BranchOf(a.branch)}); err != nil {
-			return domain.Baseline{}, err
-		}
+		landed = append(landed, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactLanded, Landed: &ref, Branch: domain.BranchOf(a.branch)})
+	}
+	// one entry for the landing (ADR 0144)
+	if err := g.emit(ctx, tx, landed...); err != nil {
+		return domain.Baseline{}, err
 	}
 	// the change stays open (ADR 0102): it is edited and committed again until it is merged
 	if c, err = tx.Change(ctx, id); err != nil {

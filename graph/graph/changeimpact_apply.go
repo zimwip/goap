@@ -299,6 +299,7 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 	for _, n := range heads {
 		byID[n.ID] = n
 	}
+	var landed []domain.ImpactEvent
 	for _, cn := range c.Nodes {
 		if !lands(cn) {
 			continue
@@ -326,9 +327,8 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 				return err
 			}
 		}
-		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, Landed: &ref, Baseline: result, Branch: domain.BranchOf(own.Parent)}); err != nil {
-			return err
-		}
+		landed = append(landed, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, Landed: &ref, Baseline: result, Branch: domain.BranchOf(own.Parent)})
 	}
-	return nil
+	// one entry for the landing (ADR 0144)
+	return g.emit(ctx, tx, landed...)
 }

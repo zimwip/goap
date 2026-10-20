@@ -70,9 +70,11 @@ func Export(c domain.Change, entries []domain.LogEntry) (Document, error) {
 		case domain.LogChange:
 			b.header(c, e)
 		case domain.LogImpact:
-			var ev domain.ImpactEvent
-			if ev, err = domain.ImpactEventOf(e); err == nil {
-				b.impact(c, e, ev)
+			var events []domain.ImpactEvent
+			if events, err = domain.ImpactEventsOf(e); err == nil {
+				for _, ev := range events {
+					b.impact(c, e, ev)
+				}
 			}
 		}
 		if err != nil {

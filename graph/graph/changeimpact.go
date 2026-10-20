@@ -298,7 +298,7 @@ var errOriginsPending = errors.New("settle the origins first")
 // reviewTx is one verdict inside a transaction: the policy, the acceptance gate, the reviewed event. Nothing is
 // written when it refuses. reviewID is the key of the submitted review that makes the verdict, stamped on the review of
 // the impact (ADR 0080), and causation the log entry of its record, the cause of the reviewed event (ADR 0105).
-func (g *Graph) reviewTx(ctx context.Context, tx Tx, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment, reviewID, causation string) (cn domain.ChangeImpact, err error) {
+func (g *Graph) reviewTx(ctx context.Context, tx Tx, stage *impactStage, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment, reviewID, causation string) (cn domain.ChangeImpact, err error) {
 	c, err := changeOpen(ctx, tx, id)
 	if err != nil {
 		return cn, err
@@ -325,15 +325,8 @@ func (g *Graph) reviewTx(ctx context.Context, tx Tx, id domain.ChangeID, flow, e
 		return cn, fmt.Errorf("change impact %s is already %s: %w", node, seen.Review, ErrConflict)
 	}
 	if g.ReviewPolicy != nil {
-		entries, err := tx.Log(ctx, factsFilter(id))
-		if err != nil {
-			return cn, err
-		}
-		facts, err := itemsOf(entries)
-		if err != nil {
-			return cn, err
-		}
-		if err := g.ReviewPolicy.Review(domain.ReviewRequest{Impact: seen, Reviewer: by, Status: status, Items: facts}); err != nil {
+		// the facts of the change are its items, folded with its log
+		if err := g.ReviewPolicy.Review(domain.ReviewRequest{Impact: seen, Reviewer: by, Status: status, Items: c.Items}); err != nil {
 			return cn, fmt.Errorf("review of %s refused: %v: %w", node, err, ErrInvalid)
 		}
 	}
@@ -358,7 +351,11 @@ func (g *Graph) reviewTx(ctx context.Context, tx Tx, id domain.ChangeID, flow, e
 		cn.Review = status
 	}
 	cn.Reviews = append(cn.Reviews, r)
-	return cn, g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactReviewed, Flow: flow, Execution: execution, By: by, Review: &r, Causation: causation})
+	e := domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactReviewed, Flow: flow, Execution: execution, By: by, Review: &r, Causation: causation}
+	if stage != nil {
+		return cn, g.stage(ctx, tx, stage, e)
+	}
+	return cn, g.emit(ctx, tx, e)
 }
 
 // ImpactNodeReviewBatch submits a review (ADR 0080, 0105): every verdict is made as ImpactNodeReviewOn would make it,
@@ -421,6 +418,12 @@ func (g *Graph) reviewBatch(ctx context.Context, id domain.ChangeID, b domain.Re
 		if err := putItem(ctx, tx, id, it); err != nil {
 			return err
 		}
+		// the verdicts judge each other (the origins of an acceptance) and are one entry of the log (ADR 0144): staged,
+		// then flushed. On a flow they are not: what a flow sees is read from the log (flowNodes)
+		var stage *impactStage
+		if it.Flow == "" {
+			stage = &impactStage{}
+		}
 		out = make([]domain.ChangeImpact, len(b.Verdicts))
 		pending := make([]int, len(b.Verdicts))
 		for i := range pending {
@@ -440,7 +443,7 @@ func (g *Graph) reviewBatch(ctx context.Context, id domain.ChangeID, b domain.Re
 			var lastErr error
 			for _, i := range pending {
 				v := b.Verdicts[i]
-				cn, err := g.reviewTx(ctx, tx, id, b.Flow, b.Execution, v.Impact, v.Status, b.By, strings.TrimSpace(v.Comment), key, string(it.ID))
+				cn, err := g.reviewTx(ctx, tx, stage, id, b.Flow, b.Execution, v.Impact, v.Status, b.By, strings.TrimSpace(v.Comment), key, string(it.ID))
 				switch {
 				case err == nil:
 					out[i] = cn
@@ -454,6 +457,9 @@ func (g *Graph) reviewBatch(ctx context.Context, id domain.ChangeID, b domain.Re
 				return lastErr // no progress: the origins are not settled by this batch
 			}
 			pending = next
+		}
+		if stage != nil {
+			return g.flush(ctx, tx, stage)
 		}
 		return nil
 	})

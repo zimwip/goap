@@ -64,3 +64,37 @@ func TestCheckoutOfAVersionStoresItsBase(t *testing.T) {
 		t.Fatalf("links: %+v", h.Links)
 	}
 }
+
+func TestAnEntryCarriesTheEventsOfOneOperation(t *testing.T) {
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	var events []ImpactEvent
+	for i, id := range []ChangeImpactID{"i1", "i2", "i3"} {
+		r := Review{Status: ReviewAccepted, By: "bob", Comment: "ok " + string(id), At: at, ReviewID: "REV-1"}
+		events = append(events, ImpactEvent{ID: PartID("e1", i), Change: "c1", Impact: id, Op: ImpactReviewed, By: "bob", At: at, Causation: "r1", Review: &r})
+	}
+	l, err := ImpactBatchEntry("e1", events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(l.Payload), "REV-1") != 1 {
+		t.Errorf("what the events share is written once: %s", l.Payload)
+	}
+	l.Seq = 4
+	got, err := ImpactEventsOf(l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range events {
+		events[i].Seq = 4
+	}
+	if !reflect.DeepEqual(got, events) {
+		t.Fatalf("read back\n%+v\nwant\n%+v", got, events)
+	}
+	if _, err := ImpactBatchEntry("e2", []ImpactEvent{events[0], {Change: "c1", Impact: "i4", Op: ImpactLanded}}); err == nil {
+		t.Fatal("events of two operations share an entry")
+	}
+	one, err := ImpactEventsOf(LogEntry{ID: "e3", Change: "c1", Type: "impact.withdrawn", Subject: "i9", Payload: []byte(`{"op":"withdrawn"}`)})
+	if err != nil || len(one) != 1 || one[0].Impact != "i9" {
+		t.Fatalf("an entry of one event: %+v, %v", one, err)
+	}
+}
