@@ -17,7 +17,8 @@ const endListeners = new Set<(j: Job) => void>();
 /** Takes a state of a job (from the stream, or the answer that started it). */
 export function takeJob(j: Job): void {
   const id = j.id ?? '';
-  if (!id) return;
+  // a short job a chooser awaits (browse.<domain>.<importer>, the folder chooser) is not a run of the person's
+  if (!id || (j.kind ?? '').startsWith('browse.')) return;
   const prev = knownJobs.get(id);
   if (!newer(prev, j)) return;
   knownJobs.set(id, j);

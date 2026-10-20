@@ -19,6 +19,10 @@ service ImportService {
   rpc ListImporters(ListImportersRequest) returns (ListImportersResponse);
   // StartImport runs an importer for the caller (permission import:run on the namespace and the project).
   rpc StartImport(StartImportRequest) returns (StartImportResponse);
+  // BrowseImport lists what a parameter of an importer may name, as the service implementing it sees it: the
+  // directories under the roots it reads, for a parameter whose widget is "directory" (the folder chooser). A short
+  // job of kind browse.<domain>.<importer> (permission import:run), answered by its worker.
+  rpc BrowseImport(BrowseImportRequest) returns (BrowseImportResponse);
 }
 
 // Implements names one importer a domain declares.
@@ -72,3 +76,33 @@ message StartImportResponse {
   goap.jobs.v1.Job job = 1;
 }
 
+
+message BrowseImportRequest {
+  string domain = 1;
+  string importer = 2;
+  // the parameter the chooser fills
+  string param = 3;
+  // the directory to list; empty: the roots the service reads
+  string path = 4;
+  // empty: the caller's active project
+  string project_id = 5;
+}
+
+// BrowseEntry is a directory a parameter may name.
+message BrowseEntry {
+  string name = 1;
+  // absolute, as the service reads it
+  string path = 2;
+  // it is a git repository (worktree or bare): what the parameter names
+  bool repository = 3;
+}
+
+message BrowseImportResponse {
+  // the directory listed (empty: the roots)
+  string path = 1;
+  // the directory above it, empty at a root
+  string parent = 2;
+  // the path itself is a repository
+  bool repository = 3;
+  repeated BrowseEntry entries = 4;
+}

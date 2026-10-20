@@ -1,5 +1,5 @@
 name: code
-version: 1.2.0
+version: 1.2.1
 description: >
   Source code held in git repositories (ADR 0147): a repository, its directories and its files as of the last commit
   imported. The git importer (platform/gitimport: the importer `git` below, served by importer-git, ADR 0148; the
@@ -16,7 +16,7 @@ importers:
       last commit imported.
     params:
       - {name: url, label: URL, description: "URL of the repository, cloned by the importer service and fetched again at each run (https://, ssh://, git@host:path). Give the URL or the local directory", order: 1}
-      - {name: directory, label: Local directory, description: "Directory of a repository on the machine of the importer service, read in place (a working tree or a bare repository, ~ for the home directory); it must be under the directories the service reads (GOAP_IMPORT_GIT_ROOTS; make dev: the home directory). Give the URL or the local directory", order: 2}
+      - {name: directory, label: Local directory, widget: directory, description: "Directory of a repository on the machine of the importer service, read in place (a working tree or a bare repository, ~ for the home directory); it must be under the directories the service reads (GOAP_IMPORT_GIT_ROOTS; make dev: the home directory). Give the URL or the local directory", order: 2}
       - {name: name, label: Name, description: "Name of the repository in the graph, the prefix of its keys (default: the last element of the repository)", order: 3}
       - {name: rev, label: Revision, default: HEAD, description: The revision whose first-parent history is imported, order: 4}
       - {name: base, label: Start at, description: "First import only: start at this revision, its tree as the first change (default: the root commit)", order: 5}

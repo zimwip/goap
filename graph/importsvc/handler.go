@@ -68,6 +68,17 @@ func (h *Handler) StartImport(ctx context.Context, r *connect.Request[importerv1
 	return connect.NewResponse(&importerv1.StartImportResponse{Job: job}), nil
 }
 
+// BrowseImport implements the protocol.
+func (h *Handler) BrowseImport(ctx context.Context, r *connect.Request[importerv1.BrowseImportRequest]) (*connect.Response[importerv1.BrowseImportResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	l, err := h.Service.Browse(ctx, BrowseRequest{Domain: m.Domain, Importer: m.Importer, Param: m.Param, Path: m.Path, ProjectID: m.ProjectId})
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	return connect.NewResponse(l), nil
+}
+
 // params are the parameters of an importer, an enum one with its values.
 func params(im Importer) []*registryv1.AttributeInfo {
 	var out []*registryv1.AttributeInfo

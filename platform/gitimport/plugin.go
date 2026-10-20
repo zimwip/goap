@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,7 +41,10 @@ type Plugin struct {
 	locks map[string]*sync.Mutex
 }
 
-var _ importerkit.Importer = (*Plugin)(nil)
+var (
+	_ importerkit.Importer = (*Plugin)(nil)
+	_ importerkit.Browser  = (*Plugin)(nil)
+)
 
 // Info implements importerkit.Importer.
 func (p *Plugin) Info() *importerv1.ImporterInfo {
@@ -135,6 +139,19 @@ func (p *Plugin) remote(ctx context.Context, job *importerkit.Job, url string) (
 
 // local is a repository of a directory under a root, read in place.
 func (p *Plugin) local(ctx context.Context, repo string) (string, error) {
+	abs, err := p.dir(repo)
+	if err != nil {
+		return "", err
+	}
+	if err := git(ctx, "-C", abs, "rev-parse", "--git-dir"); err != nil {
+		return "", fmt.Errorf("directory %s: not a git repository", repo)
+	}
+	return abs, nil
+}
+
+// dir resolves a directory a parameter names (~ for the home directory, symbolic links followed), refused when it is
+// not under the roots.
+func (p *Plugin) dir(repo string) (string, error) {
 	if strings.Contains(repo, "://") {
 		return "", fmt.Errorf("directory %q: a URL goes in the URL", repo)
 	}
@@ -160,10 +177,75 @@ func (p *Plugin) local(ctx context.Context, repo string) (string, error) {
 		}
 		return "", fmt.Errorf("directory %s: not under the directories this importer service reads (%s)", repo, strings.Join(p.Roots, ", "))
 	}
-	if err := git(ctx, "-C", abs, "rev-parse", "--git-dir"); err != nil {
-		return "", fmt.Errorf("directory %s: not a git repository", repo)
-	}
 	return abs, nil
+}
+
+// maxBrowse bounds the directories a listing names.
+const maxBrowse = 1000
+
+// Browse implements importerkit.Browser for the parameter directory: the roots when path is empty, else the
+// directories in path (the hidden ones left out), each flagged when it is a git repository.
+func (p *Plugin) Browse(_ context.Context, _, _, param, path string) (*importerv1.BrowseImportResponse, error) {
+	if param != "directory" {
+		return nil, fmt.Errorf("%s: not a directory parameter", param)
+	}
+	out := &importerv1.BrowseImportResponse{}
+	if path == "" {
+		for _, root := range p.Roots {
+			abs, err := filepath.EvalSymlinks(root)
+			if err != nil {
+				continue
+			}
+			out.Entries = append(out.Entries, &importerv1.BrowseEntry{Name: abs, Path: abs, Repository: isRepository(abs)})
+		}
+		return out, nil
+	}
+	abs, err := p.dir(path)
+	if err != nil {
+		return nil, err
+	}
+	des, err := os.ReadDir(abs)
+	if err != nil {
+		return nil, fmt.Errorf("directory %s: %w", path, err)
+	}
+	out.Path, out.Repository = abs, isRepository(abs)
+	if up := filepath.Dir(abs); up != abs && p.under(up) {
+		out.Parent = up
+	}
+	for _, de := range des {
+		if strings.HasPrefix(de.Name(), ".") {
+			continue
+		}
+		full := filepath.Join(abs, de.Name())
+		if !de.IsDir() {
+			// a symbolic link to a directory under the roots is one too
+			if de.Type()&fs.ModeSymlink == 0 {
+				continue
+			}
+			if st, err := os.Stat(full); err != nil || !st.IsDir() {
+				continue
+			}
+		}
+		if len(out.Entries) == maxBrowse {
+			break
+		}
+		out.Entries = append(out.Entries, &importerv1.BrowseEntry{Name: de.Name(), Path: full, Repository: isRepository(full)})
+	}
+	return out, nil
+}
+
+// isRepository tells a git repository by its layout, without running git: a working tree (.git, a directory or the
+// file of a linked worktree or submodule) or a bare repository (HEAD, objects and refs).
+func isRepository(dir string) bool {
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+		return true
+	}
+	for _, f := range []string{"HEAD", "objects", "refs"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // under tells a path is under one of the roots.

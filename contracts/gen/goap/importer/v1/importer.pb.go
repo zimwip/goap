@@ -460,6 +460,219 @@ func (x *StartImportResponse) GetJob() *v11.Job {
 	return nil
 }
 
+type BrowseImportRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Domain   string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	Importer string                 `protobuf:"bytes,2,opt,name=importer,proto3" json:"importer,omitempty"`
+	// the parameter the chooser fills
+	Param string `protobuf:"bytes,3,opt,name=param,proto3" json:"param,omitempty"`
+	// the directory to list; empty: the roots the service reads
+	Path string `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`
+	// empty: the caller's active project
+	ProjectId     string `protobuf:"bytes,5,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowseImportRequest) Reset() {
+	*x = BrowseImportRequest{}
+	mi := &file_goap_importer_v1_importer_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowseImportRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowseImportRequest) ProtoMessage() {}
+
+func (x *BrowseImportRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_importer_v1_importer_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowseImportRequest.ProtoReflect.Descriptor instead.
+func (*BrowseImportRequest) Descriptor() ([]byte, []int) {
+	return file_goap_importer_v1_importer_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *BrowseImportRequest) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *BrowseImportRequest) GetImporter() string {
+	if x != nil {
+		return x.Importer
+	}
+	return ""
+}
+
+func (x *BrowseImportRequest) GetParam() string {
+	if x != nil {
+		return x.Param
+	}
+	return ""
+}
+
+func (x *BrowseImportRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *BrowseImportRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+// BrowseEntry is a directory a parameter may name.
+type BrowseEntry struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// absolute, as the service reads it
+	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// it is a git repository (worktree or bare): what the parameter names
+	Repository    bool `protobuf:"varint,3,opt,name=repository,proto3" json:"repository,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowseEntry) Reset() {
+	*x = BrowseEntry{}
+	mi := &file_goap_importer_v1_importer_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowseEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowseEntry) ProtoMessage() {}
+
+func (x *BrowseEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_importer_v1_importer_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowseEntry.ProtoReflect.Descriptor instead.
+func (*BrowseEntry) Descriptor() ([]byte, []int) {
+	return file_goap_importer_v1_importer_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *BrowseEntry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *BrowseEntry) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *BrowseEntry) GetRepository() bool {
+	if x != nil {
+		return x.Repository
+	}
+	return false
+}
+
+type BrowseImportResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the directory listed (empty: the roots)
+	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	// the directory above it, empty at a root
+	Parent string `protobuf:"bytes,2,opt,name=parent,proto3" json:"parent,omitempty"`
+	// the path itself is a repository
+	Repository    bool           `protobuf:"varint,3,opt,name=repository,proto3" json:"repository,omitempty"`
+	Entries       []*BrowseEntry `protobuf:"bytes,4,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowseImportResponse) Reset() {
+	*x = BrowseImportResponse{}
+	mi := &file_goap_importer_v1_importer_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowseImportResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowseImportResponse) ProtoMessage() {}
+
+func (x *BrowseImportResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_importer_v1_importer_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowseImportResponse.ProtoReflect.Descriptor instead.
+func (*BrowseImportResponse) Descriptor() ([]byte, []int) {
+	return file_goap_importer_v1_importer_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *BrowseImportResponse) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *BrowseImportResponse) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
+func (x *BrowseImportResponse) GetRepository() bool {
+	if x != nil {
+		return x.Repository
+	}
+	return false
+}
+
+func (x *BrowseImportResponse) GetEntries() []*BrowseEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
 var File_goap_importer_v1_importer_proto protoreflect.FileDescriptor
 
 const file_goap_importer_v1_importer_proto_rawDesc = "" +
@@ -497,10 +710,31 @@ const file_goap_importer_v1_importer_proto_rawDesc = "" +
 	"project_id\x18\x04 \x01(\tR\tprojectId\x12\x1b\n" +
 	"\towner_org\x18\x05 \x01(\tR\bownerOrg\":\n" +
 	"\x13StartImportResponse\x12#\n" +
-	"\x03job\x18\x01 \x01(\v2\x11.goap.jobs.v1.JobR\x03job2\xcd\x01\n" +
+	"\x03job\x18\x01 \x01(\v2\x11.goap.jobs.v1.JobR\x03job\"\x92\x01\n" +
+	"\x13BrowseImportRequest\x12\x16\n" +
+	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x1a\n" +
+	"\bimporter\x18\x02 \x01(\tR\bimporter\x12\x14\n" +
+	"\x05param\x18\x03 \x01(\tR\x05param\x12\x12\n" +
+	"\x04path\x18\x04 \x01(\tR\x04path\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x05 \x01(\tR\tprojectId\"U\n" +
+	"\vBrowseEntry\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1e\n" +
+	"\n" +
+	"repository\x18\x03 \x01(\bR\n" +
+	"repository\"\x9b\x01\n" +
+	"\x14BrowseImportResponse\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
+	"\x06parent\x18\x02 \x01(\tR\x06parent\x12\x1e\n" +
+	"\n" +
+	"repository\x18\x03 \x01(\bR\n" +
+	"repository\x127\n" +
+	"\aentries\x18\x04 \x03(\v2\x1d.goap.importer.v1.BrowseEntryR\aentries2\xac\x02\n" +
 	"\rImportService\x12`\n" +
 	"\rListImporters\x12&.goap.importer.v1.ListImportersRequest\x1a'.goap.importer.v1.ListImportersResponse\x12Z\n" +
-	"\vStartImport\x12$.goap.importer.v1.StartImportRequest\x1a%.goap.importer.v1.StartImportResponseB\xc9\x01\n" +
+	"\vStartImport\x12$.goap.importer.v1.StartImportRequest\x1a%.goap.importer.v1.StartImportResponse\x12]\n" +
+	"\fBrowseImport\x12%.goap.importer.v1.BrowseImportRequest\x1a&.goap.importer.v1.BrowseImportResponseB\xc9\x01\n" +
 	"\x14com.goap.importer.v1B\rImporterProtoP\x01Z@github.com/zimwip/goap/contracts/gen/goap/importer/v1;importerv1\xa2\x02\x03GIX\xaa\x02\x10Goap.Importer.V1\xca\x02\x10Goap\\Importer\\V1\xe2\x02\x1cGoap\\Importer\\V1\\GPBMetadata\xea\x02\x12Goap::Importer::V1b\x06proto3"
 
 var (
@@ -515,7 +749,7 @@ func file_goap_importer_v1_importer_proto_rawDescGZIP() []byte {
 	return file_goap_importer_v1_importer_proto_rawDescData
 }
 
-var file_goap_importer_v1_importer_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_goap_importer_v1_importer_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_goap_importer_v1_importer_proto_goTypes = []any{
 	(*Implements)(nil),            // 0: goap.importer.v1.Implements
 	(*ImporterInfo)(nil),          // 1: goap.importer.v1.ImporterInfo
@@ -524,25 +758,31 @@ var file_goap_importer_v1_importer_proto_goTypes = []any{
 	(*ListImportersResponse)(nil), // 4: goap.importer.v1.ListImportersResponse
 	(*StartImportRequest)(nil),    // 5: goap.importer.v1.StartImportRequest
 	(*StartImportResponse)(nil),   // 6: goap.importer.v1.StartImportResponse
-	(*v1.AttributeInfo)(nil),      // 7: goap.registry.v1.AttributeInfo
-	(*structpb.Struct)(nil),       // 8: google.protobuf.Struct
-	(*v11.Job)(nil),               // 9: goap.jobs.v1.Job
+	(*BrowseImportRequest)(nil),   // 7: goap.importer.v1.BrowseImportRequest
+	(*BrowseEntry)(nil),           // 8: goap.importer.v1.BrowseEntry
+	(*BrowseImportResponse)(nil),  // 9: goap.importer.v1.BrowseImportResponse
+	(*v1.AttributeInfo)(nil),      // 10: goap.registry.v1.AttributeInfo
+	(*structpb.Struct)(nil),       // 11: google.protobuf.Struct
+	(*v11.Job)(nil),               // 12: goap.jobs.v1.Job
 }
 var file_goap_importer_v1_importer_proto_depIdxs = []int32{
-	0, // 0: goap.importer.v1.ImporterInfo.implements:type_name -> goap.importer.v1.Implements
-	7, // 1: goap.importer.v1.Importer.params:type_name -> goap.registry.v1.AttributeInfo
-	3, // 2: goap.importer.v1.ListImportersResponse.importers:type_name -> goap.importer.v1.Importer
-	8, // 3: goap.importer.v1.StartImportRequest.params:type_name -> google.protobuf.Struct
-	9, // 4: goap.importer.v1.StartImportResponse.job:type_name -> goap.jobs.v1.Job
-	2, // 5: goap.importer.v1.ImportService.ListImporters:input_type -> goap.importer.v1.ListImportersRequest
-	5, // 6: goap.importer.v1.ImportService.StartImport:input_type -> goap.importer.v1.StartImportRequest
-	4, // 7: goap.importer.v1.ImportService.ListImporters:output_type -> goap.importer.v1.ListImportersResponse
-	6, // 8: goap.importer.v1.ImportService.StartImport:output_type -> goap.importer.v1.StartImportResponse
-	7, // [7:9] is the sub-list for method output_type
-	5, // [5:7] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	0,  // 0: goap.importer.v1.ImporterInfo.implements:type_name -> goap.importer.v1.Implements
+	10, // 1: goap.importer.v1.Importer.params:type_name -> goap.registry.v1.AttributeInfo
+	3,  // 2: goap.importer.v1.ListImportersResponse.importers:type_name -> goap.importer.v1.Importer
+	11, // 3: goap.importer.v1.StartImportRequest.params:type_name -> google.protobuf.Struct
+	12, // 4: goap.importer.v1.StartImportResponse.job:type_name -> goap.jobs.v1.Job
+	8,  // 5: goap.importer.v1.BrowseImportResponse.entries:type_name -> goap.importer.v1.BrowseEntry
+	2,  // 6: goap.importer.v1.ImportService.ListImporters:input_type -> goap.importer.v1.ListImportersRequest
+	5,  // 7: goap.importer.v1.ImportService.StartImport:input_type -> goap.importer.v1.StartImportRequest
+	7,  // 8: goap.importer.v1.ImportService.BrowseImport:input_type -> goap.importer.v1.BrowseImportRequest
+	4,  // 9: goap.importer.v1.ImportService.ListImporters:output_type -> goap.importer.v1.ListImportersResponse
+	6,  // 10: goap.importer.v1.ImportService.StartImport:output_type -> goap.importer.v1.StartImportResponse
+	9,  // 11: goap.importer.v1.ImportService.BrowseImport:output_type -> goap.importer.v1.BrowseImportResponse
+	9,  // [9:12] is the sub-list for method output_type
+	6,  // [6:9] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_goap_importer_v1_importer_proto_init() }
@@ -556,7 +796,7 @@ func file_goap_importer_v1_importer_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_importer_v1_importer_proto_rawDesc), len(file_goap_importer_v1_importer_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

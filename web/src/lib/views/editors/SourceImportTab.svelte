@@ -6,6 +6,7 @@
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import JobRow from '../../components/JobRow.svelte';
+  import DirectoryChooser from '../../components/DirectoryChooser.svelte';
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { refreshBranches } from '../../stores/baselineTool.svelte';
   import { jobList, onJobEnded, takeJob } from '../../stores/jobs.svelte';
@@ -24,6 +25,8 @@
   let loading = $state(true);
   let starting = $state(false);
   let error = $state('');
+  /** the parameter whose folder chooser is open */
+  let choosing = $state('');
 
   const current = $derived(importers.find((im) => `${im.domain}/${im.name}` === picked));
   const fields = $derived<ParamField[]>(current ? paramFields(current) : []);
@@ -145,13 +148,20 @@
                   {#each f.options as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
                 </select>
               {:else}
-                <input
-                  id="src-{f.name}"
-                  type={f.kind === 'number' ? 'number' : 'text'}
-                  value={values[f.name] as string}
-                  placeholder={f.default}
-                  oninput={(e) => (values[f.name] = e.currentTarget.value)}
-                />
+                <div class="with-chooser">
+                  <input
+                    id="src-{f.name}"
+                    type={f.kind === 'number' ? 'number' : 'text'}
+                    value={values[f.name] as string}
+                    placeholder={f.default}
+                    oninput={(e) => (values[f.name] = e.currentTarget.value)}
+                  />
+                  {#if f.directory}
+                    <button type="button" disabled={!current.available} onclick={() => (choosing = f.name)} title="Choose a directory the importer reads">
+                      <Icon name="folder" size={14} /> Browse…
+                    </button>
+                  {/if}
+                </div>
               {/if}
               {#if f.description}<span class="hint small">{f.description}</span>{/if}
             </div>
@@ -164,6 +174,19 @@
       </button>
     {/if}
   </section>
+  {#if choosing && current}
+    <DirectoryChooser
+      domain={current.domain ?? ''}
+      importer={current.name ?? ''}
+      param={choosing}
+      start={(values[choosing] as string) ?? ''}
+      onpick={(path) => {
+        values[choosing] = path;
+        choosing = '';
+      }}
+      onclose={() => (choosing = '')}
+    />
+  {/if}
   {#if jobs.length}
     <section class="card">
       <h3>Runs</h3>
@@ -177,6 +200,14 @@
 </div>
 
 <style>
+  .with-chooser {
+    display: flex;
+    gap: 6px;
+  }
+  .with-chooser input {
+    flex: 1;
+    min-width: 0;
+  }
   .runs {
     list-style: none;
     margin: 0;

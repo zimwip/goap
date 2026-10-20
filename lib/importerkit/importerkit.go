@@ -16,10 +16,14 @@ package importerkit
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/zimwip/goap/contracts/authz"
 	importerv1 "github.com/zimwip/goap/contracts/gen/goap/importer/v1"
@@ -59,8 +63,22 @@ type Importer interface {
 	Run(ctx context.Context, job *Job) error
 }
 
+// BrowsePrefix starts the kinds of the short jobs a folder chooser awaits.
+const BrowsePrefix = "browse."
+
+// BrowseKind is the job kind of the chooser of an importer of a domain: browse.<domain>.<importer>.
+func BrowseKind(domain, importer string) string { return BrowsePrefix + domain + "." + importer }
+
+// Browser is an importer that lists what a parameter may name as it reads it (the directories under its roots, for a
+// parameter whose widget is "directory"): the folder chooser of the web, answered as a short job. path empty: the
+// roots.
+type Browser interface {
+	Browse(ctx context.Context, domain, importer, param, path string) (*importerv1.BrowseImportResponse, error)
+}
+
 // Runners are the job runners of an importer: one kind per importer it implements, each running as the service on
-// behalf of the person.
+// behalf of the person, and the kind of its chooser when it is a Browser (the listing is the output of the job, under
+// the key "listing").
 func Runners(im Importer) map[string]jobkit.Runner {
 	info := im.Info()
 	out := map[string]jobkit.Runner{}
@@ -68,8 +86,48 @@ func Runners(im Importer) map[string]jobkit.Runner {
 		out[Kind(x.Domain, x.Importer)] = func(ctx context.Context, j *jobkit.Job) error {
 			return im.Run(authz.With(ctx, authz.System(info.GetId(), "admin").For(j.By)), j)
 		}
+		b, ok := im.(Browser)
+		if !ok {
+			continue
+		}
+		out[BrowseKind(x.Domain, x.Importer)] = func(ctx context.Context, j *jobkit.Job) error {
+			l, err := b.Browse(authz.With(ctx, authz.System(info.GetId(), "admin").For(j.By)), x.Domain, x.Importer, j.String("param"), j.String("path"))
+			if err != nil {
+				return err
+			}
+			v, err := ListingValue(l)
+			if err != nil {
+				return err
+			}
+			j.Output(map[string]any{"listing": v})
+			return nil
+		}
 	}
 	return out
+}
+
+// ListingValue is a listing as the output of a job holds it.
+func ListingValue(l *importerv1.BrowseImportResponse) (map[string]any, error) {
+	b, err := protojson.Marshal(l)
+	if err != nil {
+		return nil, err
+	}
+	var v map[string]any
+	return v, json.Unmarshal(b, &v)
+}
+
+// ListingOf reads ListingValue back from the output of a job.
+func ListingOf(output map[string]any) (*importerv1.BrowseImportResponse, error) {
+	l := &importerv1.BrowseImportResponse{}
+	v, ok := output["listing"]
+	if !ok {
+		return nil, errors.New("the job answered no listing")
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	return l, protojson.Unmarshal(b, l)
 }
 
 // Worker is the worker of an importer over a job queue.

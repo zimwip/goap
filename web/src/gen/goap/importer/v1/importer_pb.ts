@@ -16,7 +16,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file goap/importer/v1/importer.proto.
  */
 export const file_goap_importer_v1_importer: GenFile = /*@__PURE__*/
-  fileDesc("Ch9nb2FwL2ltcG9ydGVyL3YxL2ltcG9ydGVyLnByb3RvEhBnb2FwLmltcG9ydGVyLnYxIi4KCkltcGxlbWVudHMSDgoGZG9tYWluGAEgASgJEhAKCGltcG9ydGVyGAIgASgJInIKDEltcG9ydGVySW5mbxIKCgJpZBgBIAEoCRIPCgd2ZXJzaW9uGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEjAKCmltcGxlbWVudHMYBCADKAsyHC5nb2FwLmltcG9ydGVyLnYxLkltcGxlbWVudHMiKQoUTGlzdEltcG9ydGVyc1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJIrkBCghJbXBvcnRlchIOCgZkb21haW4YASABKAkSFgoOZG9tYWluX3ZlcnNpb24YAiABKAkSDAoEbmFtZRgDIAEoCRINCgVsYWJlbBgEIAEoCRITCgtkZXNjcmlwdGlvbhgFIAEoCRIvCgZwYXJhbXMYBiADKAsyHy5nb2FwLnJlZ2lzdHJ5LnYxLkF0dHJpYnV0ZUluZm8SEQoJYXZhaWxhYmxlGAcgASgIEg8KB3NlcnZpY2UYCCABKAkiRgoVTGlzdEltcG9ydGVyc1Jlc3BvbnNlEi0KCWltcG9ydGVycxgBIAMoCzIaLmdvYXAuaW1wb3J0ZXIudjEuSW1wb3J0ZXIihgEKElN0YXJ0SW1wb3J0UmVxdWVzdBIOCgZkb21haW4YASABKAkSEAoIaW1wb3J0ZXIYAiABKAkSJwoGcGFyYW1zGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBISCgpwcm9qZWN0X2lkGAQgASgJEhEKCW93bmVyX29yZxgFIAEoCSI1ChNTdGFydEltcG9ydFJlc3BvbnNlEh4KA2pvYhgBIAEoCzIRLmdvYXAuam9icy52MS5Kb2IyzQEKDUltcG9ydFNlcnZpY2USYAoNTGlzdEltcG9ydGVycxImLmdvYXAuaW1wb3J0ZXIudjEuTGlzdEltcG9ydGVyc1JlcXVlc3QaJy5nb2FwLmltcG9ydGVyLnYxLkxpc3RJbXBvcnRlcnNSZXNwb25zZRJaCgtTdGFydEltcG9ydBIkLmdvYXAuaW1wb3J0ZXIudjEuU3RhcnRJbXBvcnRSZXF1ZXN0GiUuZ29hcC5pbXBvcnRlci52MS5TdGFydEltcG9ydFJlc3BvbnNlQskBChRjb20uZ29hcC5pbXBvcnRlci52MUINSW1wb3J0ZXJQcm90b1ABWkBnaXRodWIuY29tL3ppbXdpcC9nb2FwL2NvbnRyYWN0cy9nZW4vZ29hcC9pbXBvcnRlci92MTtpbXBvcnRlcnYxogIDR0lYqgIQR29hcC5JbXBvcnRlci5WMcoCEEdvYXBcSW1wb3J0ZXJcVjHiAhxHb2FwXEltcG9ydGVyXFYxXEdQQk1ldGFkYXRh6gISR29hcDo6SW1wb3J0ZXI6OlYxYgZwcm90bzM", [file_google_protobuf_struct, file_goap_jobs_v1_jobs, file_goap_registry_v1_registry]);
+  fileDesc("Ch9nb2FwL2ltcG9ydGVyL3YxL2ltcG9ydGVyLnByb3RvEhBnb2FwLmltcG9ydGVyLnYxIi4KCkltcGxlbWVudHMSDgoGZG9tYWluGAEgASgJEhAKCGltcG9ydGVyGAIgASgJInIKDEltcG9ydGVySW5mbxIKCgJpZBgBIAEoCRIPCgd2ZXJzaW9uGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEjAKCmltcGxlbWVudHMYBCADKAsyHC5nb2FwLmltcG9ydGVyLnYxLkltcGxlbWVudHMiKQoUTGlzdEltcG9ydGVyc1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJIrkBCghJbXBvcnRlchIOCgZkb21haW4YASABKAkSFgoOZG9tYWluX3ZlcnNpb24YAiABKAkSDAoEbmFtZRgDIAEoCRINCgVsYWJlbBgEIAEoCRITCgtkZXNjcmlwdGlvbhgFIAEoCRIvCgZwYXJhbXMYBiADKAsyHy5nb2FwLnJlZ2lzdHJ5LnYxLkF0dHJpYnV0ZUluZm8SEQoJYXZhaWxhYmxlGAcgASgIEg8KB3NlcnZpY2UYCCABKAkiRgoVTGlzdEltcG9ydGVyc1Jlc3BvbnNlEi0KCWltcG9ydGVycxgBIAMoCzIaLmdvYXAuaW1wb3J0ZXIudjEuSW1wb3J0ZXIihgEKElN0YXJ0SW1wb3J0UmVxdWVzdBIOCgZkb21haW4YASABKAkSEAoIaW1wb3J0ZXIYAiABKAkSJwoGcGFyYW1zGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBISCgpwcm9qZWN0X2lkGAQgASgJEhEKCW93bmVyX29yZxgFIAEoCSI1ChNTdGFydEltcG9ydFJlc3BvbnNlEh4KA2pvYhgBIAEoCzIRLmdvYXAuam9icy52MS5Kb2IiaAoTQnJvd3NlSW1wb3J0UmVxdWVzdBIOCgZkb21haW4YASABKAkSEAoIaW1wb3J0ZXIYAiABKAkSDQoFcGFyYW0YAyABKAkSDAoEcGF0aBgEIAEoCRISCgpwcm9qZWN0X2lkGAUgASgJIj0KC0Jyb3dzZUVudHJ5EgwKBG5hbWUYASABKAkSDAoEcGF0aBgCIAEoCRISCgpyZXBvc2l0b3J5GAMgASgIIngKFEJyb3dzZUltcG9ydFJlc3BvbnNlEgwKBHBhdGgYASABKAkSDgoGcGFyZW50GAIgASgJEhIKCnJlcG9zaXRvcnkYAyABKAgSLgoHZW50cmllcxgEIAMoCzIdLmdvYXAuaW1wb3J0ZXIudjEuQnJvd3NlRW50cnkyrAIKDUltcG9ydFNlcnZpY2USYAoNTGlzdEltcG9ydGVycxImLmdvYXAuaW1wb3J0ZXIudjEuTGlzdEltcG9ydGVyc1JlcXVlc3QaJy5nb2FwLmltcG9ydGVyLnYxLkxpc3RJbXBvcnRlcnNSZXNwb25zZRJaCgtTdGFydEltcG9ydBIkLmdvYXAuaW1wb3J0ZXIudjEuU3RhcnRJbXBvcnRSZXF1ZXN0GiUuZ29hcC5pbXBvcnRlci52MS5TdGFydEltcG9ydFJlc3BvbnNlEl0KDEJyb3dzZUltcG9ydBIlLmdvYXAuaW1wb3J0ZXIudjEuQnJvd3NlSW1wb3J0UmVxdWVzdBomLmdvYXAuaW1wb3J0ZXIudjEuQnJvd3NlSW1wb3J0UmVzcG9uc2VCyQEKFGNvbS5nb2FwLmltcG9ydGVyLnYxQg1JbXBvcnRlclByb3RvUAFaQGdpdGh1Yi5jb20vemltd2lwL2dvYXAvY29udHJhY3RzL2dlbi9nb2FwL2ltcG9ydGVyL3YxO2ltcG9ydGVydjGiAgNHSViqAhBHb2FwLkltcG9ydGVyLlYxygIQR29hcFxJbXBvcnRlclxWMeICHEdvYXBcSW1wb3J0ZXJcVjFcR1BCTWV0YWRhdGHqAhJHb2FwOjpJbXBvcnRlcjo6VjFiBnByb3RvMw", [file_google_protobuf_struct, file_goap_jobs_v1_jobs, file_goap_registry_v1_registry]);
 
 /**
  * Implements names one importer a domain declares.
@@ -390,6 +390,213 @@ export const StartImportResponseSchema: GenMessage<StartImportResponse, {jsonTyp
   messageDesc(file_goap_importer_v1_importer, 6);
 
 /**
+ * @generated from message goap.importer.v1.BrowseImportRequest
+ */
+export type BrowseImportRequest = Message<"goap.importer.v1.BrowseImportRequest"> & {
+  /**
+   * @generated from field: string domain = 1;
+   */
+  domain: string;
+
+  /**
+   * @generated from field: string importer = 2;
+   */
+  importer: string;
+
+  /**
+   * the parameter the chooser fills
+   *
+   * @generated from field: string param = 3;
+   */
+  param: string;
+
+  /**
+   * the directory to list; empty: the roots the service reads
+   *
+   * @generated from field: string path = 4;
+   */
+  path: string;
+
+  /**
+   * empty: the caller's active project
+   *
+   * @generated from field: string project_id = 5;
+   */
+  projectId: string;
+};
+
+/**
+ * @generated from message goap.importer.v1.BrowseImportRequest
+ */
+export type BrowseImportRequestJson = {
+  /**
+   * @generated from field: string domain = 1;
+   */
+  domain?: string;
+
+  /**
+   * @generated from field: string importer = 2;
+   */
+  importer?: string;
+
+  /**
+   * the parameter the chooser fills
+   *
+   * @generated from field: string param = 3;
+   */
+  param?: string;
+
+  /**
+   * the directory to list; empty: the roots the service reads
+   *
+   * @generated from field: string path = 4;
+   */
+  path?: string;
+
+  /**
+   * empty: the caller's active project
+   *
+   * @generated from field: string project_id = 5;
+   */
+  projectId?: string;
+};
+
+/**
+ * Describes the message goap.importer.v1.BrowseImportRequest.
+ * Use `create(BrowseImportRequestSchema)` to create a new message.
+ */
+export const BrowseImportRequestSchema: GenMessage<BrowseImportRequest, {jsonType: BrowseImportRequestJson}> = /*@__PURE__*/
+  messageDesc(file_goap_importer_v1_importer, 7);
+
+/**
+ * BrowseEntry is a directory a parameter may name.
+ *
+ * @generated from message goap.importer.v1.BrowseEntry
+ */
+export type BrowseEntry = Message<"goap.importer.v1.BrowseEntry"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * absolute, as the service reads it
+   *
+   * @generated from field: string path = 2;
+   */
+  path: string;
+
+  /**
+   * it is a git repository (worktree or bare): what the parameter names
+   *
+   * @generated from field: bool repository = 3;
+   */
+  repository: boolean;
+};
+
+/**
+ * BrowseEntry is a directory a parameter may name.
+ *
+ * @generated from message goap.importer.v1.BrowseEntry
+ */
+export type BrowseEntryJson = {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name?: string;
+
+  /**
+   * absolute, as the service reads it
+   *
+   * @generated from field: string path = 2;
+   */
+  path?: string;
+
+  /**
+   * it is a git repository (worktree or bare): what the parameter names
+   *
+   * @generated from field: bool repository = 3;
+   */
+  repository?: boolean;
+};
+
+/**
+ * Describes the message goap.importer.v1.BrowseEntry.
+ * Use `create(BrowseEntrySchema)` to create a new message.
+ */
+export const BrowseEntrySchema: GenMessage<BrowseEntry, {jsonType: BrowseEntryJson}> = /*@__PURE__*/
+  messageDesc(file_goap_importer_v1_importer, 8);
+
+/**
+ * @generated from message goap.importer.v1.BrowseImportResponse
+ */
+export type BrowseImportResponse = Message<"goap.importer.v1.BrowseImportResponse"> & {
+  /**
+   * the directory listed (empty: the roots)
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * the directory above it, empty at a root
+   *
+   * @generated from field: string parent = 2;
+   */
+  parent: string;
+
+  /**
+   * the path itself is a repository
+   *
+   * @generated from field: bool repository = 3;
+   */
+  repository: boolean;
+
+  /**
+   * @generated from field: repeated goap.importer.v1.BrowseEntry entries = 4;
+   */
+  entries: BrowseEntry[];
+};
+
+/**
+ * @generated from message goap.importer.v1.BrowseImportResponse
+ */
+export type BrowseImportResponseJson = {
+  /**
+   * the directory listed (empty: the roots)
+   *
+   * @generated from field: string path = 1;
+   */
+  path?: string;
+
+  /**
+   * the directory above it, empty at a root
+   *
+   * @generated from field: string parent = 2;
+   */
+  parent?: string;
+
+  /**
+   * the path itself is a repository
+   *
+   * @generated from field: bool repository = 3;
+   */
+  repository?: boolean;
+
+  /**
+   * @generated from field: repeated goap.importer.v1.BrowseEntry entries = 4;
+   */
+  entries?: BrowseEntryJson[];
+};
+
+/**
+ * Describes the message goap.importer.v1.BrowseImportResponse.
+ * Use `create(BrowseImportResponseSchema)` to create a new message.
+ */
+export const BrowseImportResponseSchema: GenMessage<BrowseImportResponse, {jsonType: BrowseImportResponseJson}> = /*@__PURE__*/
+  messageDesc(file_goap_importer_v1_importer, 9);
+
+/**
  * ImportService is the import registry, served by the graph service next to the domain registry: the people list the
  * sources of a namespace and run them through it; the runs are jobs (goap.jobs.v1), followed and cancelled there.
  *
@@ -415,6 +622,18 @@ export const ImportService: GenService<{
     methodKind: "unary";
     input: typeof StartImportRequestSchema;
     output: typeof StartImportResponseSchema;
+  },
+  /**
+   * BrowseImport lists what a parameter of an importer may name, as the service implementing it sees it: the
+   * directories under the roots it reads, for a parameter whose widget is "directory" (the folder chooser). A short
+   * job of kind browse.<domain>.<importer> (permission import:run), answered by its worker.
+   *
+   * @generated from rpc goap.importer.v1.ImportService.BrowseImport
+   */
+  browseImport: {
+    methodKind: "unary";
+    input: typeof BrowseImportRequestSchema;
+    output: typeof BrowseImportResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_goap_importer_v1_importer, 0);

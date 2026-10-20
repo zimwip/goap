@@ -85,6 +85,8 @@ type Report struct {
 type Queue interface {
 	// Create queues a job.
 	Create(ctx context.Context, s Spec) (*jobsv1.Job, error)
+	// Job reads a job as the person of ctx: the service that created it for them follows it (a short job awaited).
+	Job(ctx context.Context, id string) (*jobsv1.Job, error)
 	// Workers lists the live workers and their kinds.
 	Workers(ctx context.Context) ([]*jobsv1.Worker, error)
 	// Claim takes the oldest queued job of the kinds, waiting up to wait; nil when none came.

@@ -96,7 +96,7 @@ export interface LinkTypeInfo {
 }
 
 export type AttributeType = 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'json';
-export type AttributeWidget = 'text' | 'textarea' | 'dropdown' | 'checkbox' | 'date';
+export type AttributeWidget = 'text' | 'textarea' | 'dropdown' | 'checkbox' | 'date' | 'directory';
 
 /** Defines a property of a node type or link type: its code and what the UI needs to display and edit it. */
 export interface Attribute {

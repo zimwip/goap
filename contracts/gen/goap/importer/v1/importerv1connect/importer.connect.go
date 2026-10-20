@@ -39,6 +39,9 @@ const (
 	// ImportServiceStartImportProcedure is the fully-qualified name of the ImportService's StartImport
 	// RPC.
 	ImportServiceStartImportProcedure = "/goap.importer.v1.ImportService/StartImport"
+	// ImportServiceBrowseImportProcedure is the fully-qualified name of the ImportService's
+	// BrowseImport RPC.
+	ImportServiceBrowseImportProcedure = "/goap.importer.v1.ImportService/BrowseImport"
 )
 
 // ImportServiceClient is a client for the goap.importer.v1.ImportService service.
@@ -47,6 +50,10 @@ type ImportServiceClient interface {
 	ListImporters(context.Context, *connect.Request[v1.ListImportersRequest]) (*connect.Response[v1.ListImportersResponse], error)
 	// StartImport runs an importer for the caller (permission import:run on the namespace and the project).
 	StartImport(context.Context, *connect.Request[v1.StartImportRequest]) (*connect.Response[v1.StartImportResponse], error)
+	// BrowseImport lists what a parameter of an importer may name, as the service implementing it sees it: the
+	// directories under the roots it reads, for a parameter whose widget is "directory" (the folder chooser). A short
+	// job of kind browse.<domain>.<importer> (permission import:run), answered by its worker.
+	BrowseImport(context.Context, *connect.Request[v1.BrowseImportRequest]) (*connect.Response[v1.BrowseImportResponse], error)
 }
 
 // NewImportServiceClient constructs a client for the goap.importer.v1.ImportService service. By
@@ -72,6 +79,12 @@ func NewImportServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(importServiceMethods.ByName("StartImport")),
 			connect.WithClientOptions(opts...),
 		),
+		browseImport: connect.NewClient[v1.BrowseImportRequest, v1.BrowseImportResponse](
+			httpClient,
+			baseURL+ImportServiceBrowseImportProcedure,
+			connect.WithSchema(importServiceMethods.ByName("BrowseImport")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -79,6 +92,7 @@ func NewImportServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 type importServiceClient struct {
 	listImporters *connect.Client[v1.ListImportersRequest, v1.ListImportersResponse]
 	startImport   *connect.Client[v1.StartImportRequest, v1.StartImportResponse]
+	browseImport  *connect.Client[v1.BrowseImportRequest, v1.BrowseImportResponse]
 }
 
 // ListImporters calls goap.importer.v1.ImportService.ListImporters.
@@ -91,12 +105,21 @@ func (c *importServiceClient) StartImport(ctx context.Context, req *connect.Requ
 	return c.startImport.CallUnary(ctx, req)
 }
 
+// BrowseImport calls goap.importer.v1.ImportService.BrowseImport.
+func (c *importServiceClient) BrowseImport(ctx context.Context, req *connect.Request[v1.BrowseImportRequest]) (*connect.Response[v1.BrowseImportResponse], error) {
+	return c.browseImport.CallUnary(ctx, req)
+}
+
 // ImportServiceHandler is an implementation of the goap.importer.v1.ImportService service.
 type ImportServiceHandler interface {
 	// ListImporters lists the importers the domains in force declare, each with whether a live worker implements it.
 	ListImporters(context.Context, *connect.Request[v1.ListImportersRequest]) (*connect.Response[v1.ListImportersResponse], error)
 	// StartImport runs an importer for the caller (permission import:run on the namespace and the project).
 	StartImport(context.Context, *connect.Request[v1.StartImportRequest]) (*connect.Response[v1.StartImportResponse], error)
+	// BrowseImport lists what a parameter of an importer may name, as the service implementing it sees it: the
+	// directories under the roots it reads, for a parameter whose widget is "directory" (the folder chooser). A short
+	// job of kind browse.<domain>.<importer> (permission import:run), answered by its worker.
+	BrowseImport(context.Context, *connect.Request[v1.BrowseImportRequest]) (*connect.Response[v1.BrowseImportResponse], error)
 }
 
 // NewImportServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -118,12 +141,20 @@ func NewImportServiceHandler(svc ImportServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(importServiceMethods.ByName("StartImport")),
 		connect.WithHandlerOptions(opts...),
 	)
+	importServiceBrowseImportHandler := connect.NewUnaryHandler(
+		ImportServiceBrowseImportProcedure,
+		svc.BrowseImport,
+		connect.WithSchema(importServiceMethods.ByName("BrowseImport")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.importer.v1.ImportService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ImportServiceListImportersProcedure:
 			importServiceListImportersHandler.ServeHTTP(w, r)
 		case ImportServiceStartImportProcedure:
 			importServiceStartImportHandler.ServeHTTP(w, r)
+		case ImportServiceBrowseImportProcedure:
+			importServiceBrowseImportHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -139,4 +170,8 @@ func (UnimplementedImportServiceHandler) ListImporters(context.Context, *connect
 
 func (UnimplementedImportServiceHandler) StartImport(context.Context, *connect.Request[v1.StartImportRequest]) (*connect.Response[v1.StartImportResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.importer.v1.ImportService.StartImport is not implemented"))
+}
+
+func (UnimplementedImportServiceHandler) BrowseImport(context.Context, *connect.Request[v1.BrowseImportRequest]) (*connect.Response[v1.BrowseImportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.importer.v1.ImportService.BrowseImport is not implemented"))
 }

@@ -121,10 +121,13 @@ const (
 	WidgetDropdown = "dropdown"
 	WidgetCheckbox = "checkbox"
 	WidgetDate     = "date"
+	// WidgetDirectory is a directory on the machine of a service, a text field with a chooser: the parameter of an
+	// importer that reads a local directory (ADR 0148), listed by the service implementing it.
+	WidgetDirectory = "directory"
 )
 
 // AttributeWidgets lists the widgets.
-var AttributeWidgets = []string{WidgetText, WidgetTextarea, WidgetDropdown, WidgetCheckbox, WidgetDate}
+var AttributeWidgets = []string{WidgetText, WidgetTextarea, WidgetDropdown, WidgetCheckbox, WidgetDate, WidgetDirectory}
 
 // Attribute defines a property of a node type or a link type: the code that keys the value, and what the user
 // interface needs to display and edit it. Its validators are the property validator instances (ADR 0018)

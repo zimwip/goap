@@ -9,6 +9,8 @@ export interface ParamField {
   label: string;
   description: string;
   kind: 'text' | 'number' | 'boolean' | 'enum';
+  /** a directory on the machine of the importer service: the form offers the chooser (widget `directory`) */
+  directory: boolean;
   /** the values of an enum parameter */
   options: { value: string; label: string }[];
   default: string;
@@ -27,6 +29,7 @@ export function paramFields(im: Importer): ParamField[] {
         label: a.label || a.name || '',
         description: a.description || a.tooltip || '',
         kind,
+        directory: a.widget === 'directory',
         options: (p.values ?? []).map((v) => ({ value: v.value ?? '', label: v.label || v.value || '' })),
         default: a.defaultValue ?? '',
       };

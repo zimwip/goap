@@ -11,6 +11,7 @@ import (
 	"github.com/zimwip/goap/contracts/authz"
 	jobsv1 "github.com/zimwip/goap/contracts/gen/goap/jobs/v1"
 	"github.com/zimwip/goap/contracts/gen/goap/jobs/v1/jobsv1connect"
+	"github.com/zimwip/goap/lib/identity"
 	"github.com/zimwip/goap/lib/pbconv"
 )
 
@@ -78,6 +79,17 @@ func DecodePrincipal(s string) authz.Principal {
 func (c Client) Create(ctx context.Context, s Spec) (*jobsv1.Job, error) {
 	r, err := c.RPC.CreateJob(ctx, connect.NewRequest(&jobsv1.CreateJobRequest{Kind: s.Kind, Label: s.Label, Target: s.Target,
 		Params: pbconv.Struct(s.Params), ProjectId: s.ProjectID, OwnerOrg: s.OwnerOrg, By: s.By, Principal: EncodePrincipal(s.Principal), Input: s.Input}))
+	if err != nil {
+		return nil, fromRPC(err)
+	}
+	return r.Msg.Job, nil
+}
+
+// Job implements Queue: the person of ctx asks.
+func (c Client) Job(ctx context.Context, id string) (*jobsv1.Job, error) {
+	req := connect.NewRequest(&jobsv1.GetJobRequest{Id: id})
+	identity.SetHeaders(authz.From(ctx), req.Header())
+	r, err := c.RPC.GetJob(ctx, req)
 	if err != nil {
 		return nil, fromRPC(err)
 	}

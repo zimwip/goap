@@ -2,12 +2,15 @@ package gitimporte2e
 
 import (
 	"context"
+	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/zimwip/goap/contracts/authz"
+	importerv1 "github.com/zimwip/goap/contracts/gen/goap/importer/v1"
 	"github.com/zimwip/goap/graph/importsvc"
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/importerkit"
@@ -93,6 +96,31 @@ func TestImportThroughTheRegistry(t *testing.T) {
 	same(t, r.tree(), got)
 	if root.Properties["commit"] != strings.TrimSpace(r.git("rev-parse", "HEAD")) {
 		t.Fatalf("repository node at %v", root.Properties["commit"])
+	}
+
+	// the folder chooser: the roots, then a root's directories, the repository flagged; outside the roots refused
+	browse := func(path string) (*importerv1.BrowseImportResponse, error) {
+		return reg.Browse(ctx, importsvc.BrowseRequest{Domain: gitimport.Namespace, Importer: gitimport.ImporterName, Param: "directory", Path: path})
+	}
+	if err := os.Mkdir(filepath.Join(plain, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	roots, err := browse("")
+	if err != nil || len(roots.Entries) != 2 || !roots.Entries[0].Repository || roots.Entries[1].Repository {
+		t.Fatalf("roots = %v, %v", roots, err)
+	}
+	in, err := browse(roots.Entries[1].Path)
+	if err != nil || in.Repository || in.Parent != "" || len(in.Entries) != 1 || in.Entries[0].Name != "sub" || in.Entries[0].Repository {
+		t.Fatalf("listing of a root = %v, %v", in, err)
+	}
+	if sub, err := browse(in.Entries[0].Path); err != nil || sub.Parent != in.Path || len(sub.Entries) != 0 {
+		t.Fatalf("listing of sub = %v, %v", sub, err)
+	}
+	if _, err := browse(t.TempDir()); !errors.Is(err, importsvc.ErrInvalid) {
+		t.Fatalf("outside the roots: %v", err)
+	}
+	if _, err := reg.Browse(ctx, importsvc.BrowseRequest{Domain: gitimport.Namespace, Importer: gitimport.ImporterName, Param: "url"}); !errors.Is(err, importsvc.ErrInvalid) {
+		t.Fatalf("not a directory parameter: %v", err)
 	}
 
 	// a directory outside the roots of the service, a directory under one that holds no repository, a URL of another

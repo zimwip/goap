@@ -13,9 +13,11 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
+	importerv1 "github.com/zimwip/goap/contracts/gen/goap/importer/v1"
 	jobsv1 "github.com/zimwip/goap/contracts/gen/goap/jobs/v1"
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/importerkit"
@@ -174,6 +176,77 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*jobsv1.Job, err
 	}
 	return s.Jobs.Create(ctx, jobkit.Spec{Kind: kind, Label: label, Target: req.Domain, Params: params, ProjectID: req.ProjectID,
 		OwnerOrg: req.OwnerOrg, By: p.EndUser(), Principal: p})
+}
+
+// BrowseRequest asks what a parameter of an importer may name, under path (empty: the roots).
+type BrowseRequest struct {
+	Domain, Importer, Param, Path string
+	ProjectID                     string
+}
+
+// browseWait bounds the wait of a listing, browsePoll how often the job is read meanwhile.
+const (
+	browseWait = 15 * time.Second
+	browsePoll = 50 * time.Millisecond
+)
+
+// Browse lists what a parameter whose widget is "directory" may name, as the service implementing the importer reads
+// it: a short job of kind browse.<domain>.<importer> for the caller (permission import:run, as for a run), awaited.
+func (s *Service) Browse(ctx context.Context, req BrowseRequest) (*importerv1.BrowseImportResponse, error) {
+	p := authz.From(ctx)
+	if p.Anonymous() {
+		return nil, fmt.Errorf("a chooser acts for a person: %w", ErrForbidden)
+	}
+	if req.ProjectID == "" {
+		req.ProjectID = p.Project
+	}
+	decl, _, err := s.declared(ctx)
+	if err != nil {
+		return nil, err
+	}
+	d, ok := decl[[2]string{req.Domain, req.Importer}]
+	if !ok {
+		return nil, fmt.Errorf("importer %s/%s: declared by no domain in force: %w", req.Domain, req.Importer, ErrNotFound)
+	}
+	i := slices.IndexFunc(d.importer.Params, func(a def.Attribute) bool { return a.Name == req.Param })
+	if i < 0 || d.importer.Params[i].Widget != def.WidgetDirectory {
+		return nil, fmt.Errorf("%s: not a directory parameter of %s: %w", req.Param, req.Importer, ErrInvalid)
+	}
+	if err := authz.Check(ctx, s.Authz, authz.Request{Subject: p, Action: "run",
+		Resource: authz.Resource{Type: "import", Namespace: req.Domain, Name: req.Importer, ProjectID: req.ProjectID}}); err != nil {
+		return nil, err
+	}
+	live, err := s.serving(ctx)
+	if err != nil {
+		return nil, err
+	}
+	kind := importerkit.BrowseKind(req.Domain, req.Importer)
+	if live[kind] == "" {
+		return nil, fmt.Errorf("importer %s/%s: no service lists its directories now: %w", req.Domain, req.Importer, ErrUnavailable)
+	}
+	job, err := s.Jobs.Create(ctx, jobkit.Spec{Kind: kind, Label: "Browse", Target: req.Domain,
+		Params: map[string]any{"param": req.Param, "path": req.Path}, ProjectID: req.ProjectID, By: p.EndUser(), Principal: p})
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, browseWait)
+	defer cancel()
+	tick := time.NewTicker(browsePoll)
+	defer tick.Stop()
+	for !jobkit.Final(job.GetStatus()) {
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("importer %s/%s: no listing in %s: %w", req.Domain, req.Importer, browseWait, ErrUnavailable)
+		case <-tick.C:
+		}
+		if job, err = s.Jobs.Job(ctx, job.GetId()); err != nil {
+			return nil, err
+		}
+	}
+	if job.GetStatus() != jobkit.StatusDone {
+		return nil, fmt.Errorf("%s: %w", job.GetError(), ErrInvalid)
+	}
+	return importerkit.ListingOf(job.GetOutput().AsMap())
 }
 
 // Params checks the values of a run against the parameters an importer declares and gives the defaults.

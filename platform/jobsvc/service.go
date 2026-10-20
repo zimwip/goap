@@ -376,6 +376,15 @@ func (s *Service) Get(ctx context.Context, id string) (Record, error) {
 	return r, nil
 }
 
+// Job implements jobkit.Queue: Get, in the form of the protocol.
+func (s *Service) Job(ctx context.Context, id string) (*jobsv1.Job, error) {
+	r, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return ToPB(r), nil
+}
+
 // ListRequest selects the caller's jobs.
 type ListRequest struct {
 	KindPrefix, Target string

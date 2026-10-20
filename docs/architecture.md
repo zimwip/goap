@@ -996,7 +996,10 @@ service claiming the jobs of kind `import.<domain>.<importer>`. The **import reg
 checks the parameters of a run against the declaration and the permission `import:run`, and creates its job for the
 person; the run writes through the graph's change operations as `system:<service>` for the person. The first is
 `importer-git` (`platform/cmd/importer-git`, the `git` source of `code`, ADR 0147); the Baseline explorer opens the
-*Import from a source* tab.
+*Import from a source* tab. A parameter whose widget is `directory` names a directory on the machine of the service, so
+the browser cannot pick it itself: `BrowseImport` creates a short job of kind `browse.<domain>.<importer>`, which an
+importer implementing `importerkit.Browser` answers with the directories it may read (its roots, then the
+subdirectories, git repositories flagged), and the registry awaits it; the tab's folder chooser walks that listing.
 
 The long runs are **jobs** (ADR 0149): `platform/jobsvc` (`platform/cmd/jobs`, `goap.jobs.v1.JobService`, port 8091,
 tables `job` / `job_blob`, outbox `job_outbox`) keeps a record per run (kind, label, target, the person, status
