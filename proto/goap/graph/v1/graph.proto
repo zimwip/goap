@@ -4,6 +4,7 @@ package goap.graph.v1;
 
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
+import "goap/jobs/v1/jobs.proto";
 
 // GraphService exposes the two axes of the knowledge graph: the domain axis
 // (versioned nodes, version-to-version links, baselines) and the change axis
@@ -41,11 +42,14 @@ service GraphService {
   rpc ExportChangeProvenance(ExportChangeProvenanceRequest) returns (ExportChangeProvenanceResponse);
   // The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
   rpc ExportGraph(ExportGraphRequest) returns (ExportGraphResponse);
-  // The same state as an OKF tree, one Markdown file per node, streamed as a zip archive written while it is rendered
-  // (ADR 0111): the first message names the file, the next ones carry the bytes of the archive in order.
-  rpc ExportGraphOkf(ExportGraphOkfRequest) returns (stream ExportGraphOkfResponse);
+  // StartGraphExport exports the state of a namespace as a job (ADR 0149, kind graph.export): a JSON snapshot
+  // (ADR 0104) or an OKF zip archive, one Markdown file per node (ADR 0111), downloaded from the job when it ends.
+  rpc StartGraphExport(StartGraphExportRequest) returns (StartGraphExportResponse);
   // Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
   rpc ImportGraph(ImportGraphRequest) returns (ImportGraphResponse);
+  // StartGraphImport imports a JSON snapshot as a job (ADR 0149, kind graph.import): what ImportGraph does, followed
+  // from the job, whose output names the change created.
+  rpc StartGraphImport(StartGraphImportRequest) returns (StartGraphImportResponse);
   // Loads the demo data (administrators only): the demo organisation, the demo project bound to it and the ALM
   // repository acting in that project, each part when it is missing. Unimplemented where the deployment ships no demo.
   rpc LoadDemoData(LoadDemoDataRequest) returns (LoadDemoDataResponse);
@@ -691,20 +695,17 @@ message ExportGraphResponse {
   int32 nodes = 4;
 }
 
-message ExportGraphOkfRequest {
+message StartGraphExportRequest {
   string namespace = 1;
   // the branch whose head is exported (default main), unless a baseline is named
   string branch = 2;
   string baseline_id = 3;
+  // json (default) | okf
+  string format = 4;
 }
 
-message ExportGraphOkfResponse {
-  // first message: the name and media type of the archive and the number of nodes it holds
-  string filename = 1;
-  string media_type = 2;
-  int32 nodes = 3;
-  // next messages: the bytes of the zip archive, in order
-  bytes chunk = 4;
+message StartGraphExportResponse {
+  goap.jobs.v1.Job job = 1;
 }
 
 message ImportGraphRequest {
@@ -728,6 +729,20 @@ message ImportGraphResponse {
   int32 unchanged = 4;
   // what the import left out (unknown owner, link to a missing node, lifecycle state not reached)
   repeated string warnings = 5;
+}
+
+// StartGraphImportRequest is an ImportGraphRequest run as a job.
+message StartGraphImportRequest {
+  string document = 1;
+  string title = 2;
+  string intent = 3;
+  string methodology = 4;
+  string owner_org = 5;
+  string project_id = 6;
+}
+
+message StartGraphImportResponse {
+  goap.jobs.v1.Job job = 1;
 }
 
 message ListChangeEventsRequest {

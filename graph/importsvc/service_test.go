@@ -3,20 +3,17 @@ package importsvc_test
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
-
-	"connectrpc.com/connect"
 
 	"github.com/zimwip/goap/contracts/authz"
 	importerv1 "github.com/zimwip/goap/contracts/gen/goap/importer/v1"
-	"github.com/zimwip/goap/contracts/gen/goap/importer/v1/importerv1connect"
+	jobsv1 "github.com/zimwip/goap/contracts/gen/goap/jobs/v1"
 	"github.com/zimwip/goap/graph/importsvc"
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/importerkit"
+	"github.com/zimwip/goap/lib/jobkit"
+	"github.com/zimwip/goap/lib/pbconv"
 )
 
 type domains []*def.Domain
@@ -32,51 +29,38 @@ var codeDomain = &def.Domain{Name: "code", Version: "1.1.0", Schema: def.Schema{
 		{Name: "svn"},
 	}}}
 
-// fake is an importer that records its runs and ends when told.
-type fake struct {
-	release chan struct{}
-	seen    chan *importerkit.Job
+// queue is a job queue recording the jobs it is given, with a live worker of import.code.git.
+type queue struct {
+	jobkit.Queue
+	created []jobkit.Spec
 }
 
-func (f *fake) Info() *importerv1.ImporterInfo {
-	return &importerv1.ImporterInfo{Id: "importer-fake", Implements: []*importerv1.Implements{{Domain: "code", Importer: "git"}}}
+func (q *queue) Workers(context.Context) ([]*jobsv1.Worker, error) {
+	return []*jobsv1.Worker{{Id: "importer-fake@host:1", Kinds: []string{importerkit.Kind("code", "git")}}}, nil
 }
 
-func (f *fake) Run(ctx context.Context, j *importerkit.Job) error {
-	j.Progress("working")
-	j.Set("commits", 3)
-	if who := authz.From(ctx); who.Subject != "system:importer-fake" || who.EndUser() != j.By || !who.HasRole("admin") {
-		return errors.New("unexpected principal " + who.Subject)
-	}
-	f.seen <- j
-	select {
-	case <-f.release:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+func (q *queue) Create(_ context.Context, s jobkit.Spec) (*jobsv1.Job, error) {
+	q.created = append(q.created, s)
+	return &jobsv1.Job{Id: "job-1", Kind: s.Kind, Label: s.Label, Target: s.Target, Status: jobkit.StatusQueued, By: s.By, ProjectId: s.ProjectID,
+		Params: pbconv.Struct(s.Params)}, nil
 }
 
 func person(subject string, roles ...string) context.Context {
 	return authz.With(context.Background(), authz.Principal{Subject: subject, Project: "PROJ-ROOT", Roles: roles})
 }
 
-func registry(t *testing.T, a authz.Authorizer) (*importsvc.Service, *fake, *importerkit.Service) {
-	t.Helper()
-	f := &fake{release: make(chan struct{}), seen: make(chan *importerkit.Job, 4)}
-	svc := importerkit.New(f, "")
-	reg := &importsvc.Service{Domains: domains{codeDomain}, Authz: a}
-	reg.AddLocal(svc)
-	return reg, f, svc
+func registry(a authz.Authorizer) (*importsvc.Service, *queue) {
+	q := &queue{}
+	return &importsvc.Service{Domains: domains{codeDomain}, Authz: a, Jobs: q}, q
 }
 
 func TestImportersFollowTheDomains(t *testing.T) {
-	reg, _, _ := registry(t, authz.AllowAll{})
+	reg, _ := registry(authz.AllowAll{})
 	ims, err := reg.Importers(person("ann"), "code")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ims) != 2 || ims[0].Def.Name != "git" || ims[0].Service != "importer-fake" || ims[1].Def.Name != "svn" || ims[1].Service != "" {
+	if len(ims) != 2 || ims[0].Def.Name != "git" || ims[0].Service != "importer-fake@host:1" || ims[1].Def.Name != "svn" || ims[1].Service != "" {
 		t.Fatalf("importers = %+v", ims)
 	}
 	if ims, _ := reg.Importers(person("ann"), "alm"); len(ims) != 0 {
@@ -84,8 +68,8 @@ func TestImportersFollowTheDomains(t *testing.T) {
 	}
 }
 
-func TestStartChecksAndRuns(t *testing.T) {
-	reg, f, svc := registry(t, authz.AllowAll{})
+func TestStartChecksAndQueues(t *testing.T) {
+	reg, q := registry(authz.AllowAll{})
 	ctx := person("ann")
 	for _, c := range []struct {
 		params map[string]any
@@ -110,30 +94,20 @@ func TestStartChecksAndRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if job.Service != "importer-fake" || job.Status != importerkit.StatusRunning || job.By != "ann" || job.ProjectId != "PROJ-ROOT" {
+	if job.Kind != "import.code.git" || job.Label != "Git repository" || job.Target != "code" || job.By != "ann" || job.ProjectId != "PROJ-ROOT" {
 		t.Fatalf("job = %+v", job)
 	}
-	j := <-f.seen
-	if j.String("rev") != "HEAD" || j.Int("max") != 2 || j.String("repository") != "/r" {
-		t.Fatalf("params = %v (the default of rev given)", j.Params)
+	if len(q.created) != 1 {
+		t.Fatalf("%d jobs created", len(q.created))
 	}
-	// the jobs: the caller's own, every one for an administrator
-	if jobs, _ := reg.Jobs(person("bob"), "code"); len(jobs) != 0 {
-		t.Fatalf("bob sees %d jobs", len(jobs))
-	}
-	jobs, err := reg.Jobs(person("root", "admin"), "")
-	if err != nil || len(jobs) != 1 || jobs[0].Progress != "working" || jobs[0].Stats["commits"] != 3 {
-		t.Fatalf("jobs = %+v, %v", jobs, err)
-	}
-	close(f.release)
-	done, err := svc.Wait(context.Background(), job.Id)
-	if err != nil || done.Status != importerkit.StatusDone {
-		t.Fatalf("done = %+v, %v", done, err)
+	sp := q.created[0]
+	if sp.Params["rev"] != "HEAD" || sp.Params["max"] != 2.0 || sp.Params["repository"] != "/r" || sp.Principal.Subject != "ann" {
+		t.Fatalf("spec = %+v (the default of rev given)", sp)
 	}
 }
 
 func TestStartNeedsThePermission(t *testing.T) {
-	reg, _, _ := registry(t, nil)
+	reg, q := registry(nil)
 	_, err := reg.Start(person("ann"), importsvc.StartRequest{Domain: "code", Importer: "git"})
 	if !errors.Is(err, authz.ErrForbidden) {
 		t.Fatalf("err = %v, want forbidden (no authorizer: everything refused)", err)
@@ -141,67 +115,39 @@ func TestStartNeedsThePermission(t *testing.T) {
 	if _, err := reg.Start(context.Background(), importsvc.StartRequest{Domain: "code", Importer: "git"}); !errors.Is(err, authz.ErrForbidden) {
 		t.Fatalf("anonymous: err = %v", err)
 	}
-}
-
-func TestCancel(t *testing.T) {
-	reg, f, svc := registry(t, authz.AllowAll{})
-	job, err := reg.Start(person("ann"), importsvc.StartRequest{Domain: "code", Importer: "git"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	<-f.seen
-	if _, err := reg.Cancel(person("ann"), "importer-fake", job.Id); err != nil {
-		t.Fatal(err)
-	}
-	done, err := svc.Wait(context.Background(), job.Id)
-	if err != nil || done.Status != importerkit.StatusCancelled {
-		t.Fatalf("done = %+v, %v", done, err)
+	if len(q.created) != 0 {
+		t.Fatalf("%d jobs created", len(q.created))
 	}
 }
 
-// A service of another process registers with the token, over Connect, and is reached at its endpoint with it.
-func TestRemoteImporter(t *testing.T) {
-	f := &fake{release: make(chan struct{}), seen: make(chan *importerkit.Job, 1)}
-	svc := importerkit.New(f, "secret")
-	mux := http.NewServeMux()
-	mux.Handle(svc.Handler())
-	importer := httptest.NewServer(mux)
-	defer importer.Close()
-
-	reg := &importsvc.Service{Domains: domains{codeDomain}, Authz: authz.AllowAll{}, Token: "secret", Lease: time.Minute}
-	rmux := http.NewServeMux()
-	rmux.Handle(importerv1connect.NewImportServiceHandler(&importsvc.Handler{Service: reg}))
-	registrySrv := httptest.NewServer(rmux)
-	defer registrySrv.Close()
-	client := importerv1connect.NewImportServiceClient(http.DefaultClient, registrySrv.URL)
-
-	if _, err := client.RegisterImporter(context.Background(), connect.NewRequest(&importerv1.RegisterImporterRequest{Info: f.Info(), Endpoint: importer.URL})); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("no token: err = %v", err)
+// An importer's runners act as its service on behalf of the person, one kind per importer it implements.
+func TestRunnersActAsTheService(t *testing.T) {
+	var who authz.Principal
+	run := importerkit.Runners(fake{func(ctx context.Context, j *importerkit.Job) error { who = authz.From(ctx); return nil }})
+	r := run["import.code.git"]
+	if r == nil || len(run) != 1 {
+		t.Fatalf("runners = %v", run)
 	}
-	info := f.Info()
-	info.Implements = append(info.Implements, &importerv1.Implements{Domain: "code", Importer: "cvs"})
-	req := connect.NewRequest(&importerv1.RegisterImporterRequest{Info: info, Endpoint: importer.URL})
-	req.Header().Set(importerkit.TokenHeader, "secret")
-	resp, err := client.RegisterImporter(context.Background(), req)
-	if err != nil {
+	if err := r(person("ann"), &jobkit.Job{By: "ann"}); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Msg.LeaseSeconds != 60 || len(resp.Msg.Undeclared) != 1 || resp.Msg.Undeclared[0].Importer != "cvs" {
-		t.Fatalf("register = %+v", resp.Msg)
+	if who.Subject != "system:importer-fake" || who.EndUser() != "ann" || !who.HasRole("admin") {
+		t.Fatalf("principal = %+v", who)
 	}
-	job, err := reg.Start(person("ann"), importsvc.StartRequest{Domain: "code", Importer: "git"})
-	if err != nil {
-		t.Fatal(err)
+	if d, im, ok := importerkit.SplitKind("import.code.git"); !ok || d != "code" || im != "git" {
+		t.Fatalf("split = %s %s %v", d, im, ok)
 	}
-	<-f.seen
-	close(f.release)
-	done, err := svc.Wait(context.Background(), job.Id)
-	if err != nil || done.Status != importerkit.StatusDone {
-		t.Fatalf("done = %+v, %v", done, err)
-	}
-	// the service refuses a call without the token
-	direct := importerv1connect.NewImporterServiceClient(http.DefaultClient, importer.URL)
-	if _, err := direct.Jobs(context.Background(), connect.NewRequest(&importerv1.JobsRequest{})); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("no token: err = %v", err)
+	if _, _, ok := importerkit.SplitKind("graph.export"); ok {
+		t.Fatal("graph.export is no import")
 	}
 }
+
+type fake struct {
+	run func(context.Context, *importerkit.Job) error
+}
+
+func (f fake) Info() *importerv1.ImporterInfo {
+	return &importerv1.ImporterInfo{Id: "importer-fake", Implements: []*importerv1.Implements{{Domain: "code", Importer: "git"}}}
+}
+
+func (f fake) Run(ctx context.Context, j *importerkit.Job) error { return f.run(ctx, j) }

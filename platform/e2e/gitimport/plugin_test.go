@@ -5,13 +5,15 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zimwip/goap/contracts/authz"
-	importerv1 "github.com/zimwip/goap/contracts/gen/goap/importer/v1"
 	"github.com/zimwip/goap/graph/importsvc"
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/importerkit"
+	"github.com/zimwip/goap/lib/jobkit"
 	"github.com/zimwip/goap/platform/gitimport"
+	"github.com/zimwip/goap/platform/jobsvc"
 )
 
 type domains []*def.Domain
@@ -41,34 +43,50 @@ func TestImportThroughTheRegistry(t *testing.T) {
 		t.Fatalf("code domain: %v", issues)
 	}
 	plain := t.TempDir() // a directory the service reads that holds no repository
-	svc := importerkit.New(&gitimport.Plugin{Graph: g, Roots: []string{r.dir, plain}}, "")
-	reg := &importsvc.Service{Domains: domains{code}, Authz: authz.AllowAll{}}
-	reg.AddLocal(svc)
+	// the runs are jobs (ADR 0149): the git importer is a worker of the job service
+	jobs := &jobsvc.Service{Store: jobsvc.NewMemoryStore()}
+	wctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	w := importerkit.Worker(jobs, &gitimport.Plugin{Graph: g, Roots: []string{r.dir, plain}})
+	w.Wait = 100 * time.Millisecond
+	go w.Run(wctx)
+	reg := &importsvc.Service{Domains: domains{code}, Authz: authz.AllowAll{}, Jobs: jobs}
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "ann", Project: project})
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if ws, _ := jobs.Workers(ctx); len(ws) > 0 {
+			break
+		}
+	}
 
 	ims, err := reg.Importers(ctx, gitimport.Namespace)
-	if err != nil || len(ims) != 1 || ims[0].Def.Name != gitimport.ImporterName || ims[0].Service != gitimport.ServiceID {
+	if err != nil || len(ims) != 1 || ims[0].Def.Name != gitimport.ImporterName || !strings.HasPrefix(ims[0].Service, gitimport.ServiceID+"@") {
 		t.Fatalf("importers = %+v, %v", ims, err)
 	}
-	run := func(params map[string]any) *importerv1.Job {
+	run := func(params map[string]any) jobsvc.Record {
 		t.Helper()
 		job, err := reg.Start(ctx, importsvc.StartRequest{Domain: gitimport.Namespace, Importer: gitimport.ImporterName, Params: params})
 		if err != nil {
 			t.Fatal(err)
 		}
-		done, err := svc.Wait(context.Background(), job.Id)
-		if err != nil {
-			t.Fatal(err)
+		for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+			j, err := jobs.Get(ctx, job.Id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if jobkit.Final(j.Status) {
+				return j
+			}
 		}
-		return done
+		t.Fatalf("job %s did not end", job.Id)
+		return jobsvc.Record{}
 	}
 
 	j := run(map[string]any{"directory": r.dir, "name": "demo", "max": 1})
-	if j.Status != importerkit.StatusDone || j.Stats["commits"] != 1 {
+	if j.Status != jobkit.StatusDone || j.Stats["commits"] != 1 {
 		t.Fatalf("first run: %+v", j)
 	}
 	j = run(map[string]any{"directory": r.dir, "name": "demo"})
-	if j.Status != importerkit.StatusDone || j.Stats["commits"] != 1 || !strings.Contains(j.Progress, "demo: 1 commits") {
+	if j.Status != jobkit.StatusDone || j.Stats["commits"] != 1 || !strings.Contains(j.Progress, "demo: 1 commits") {
 		t.Fatalf("second run (resumed): %+v", j)
 	}
 	got, root := graphTree(t, g, "demo")
@@ -82,7 +100,7 @@ func TestImportThroughTheRegistry(t *testing.T) {
 	for _, params := range []map[string]any{{"directory": t.TempDir()}, {"directory": plain}, {"url": "file:///etc"},
 		{"url": r.dir}, {"url": "https://example.com/r.git", "directory": r.dir}, {}} {
 		params["name"] = "other"
-		if j := run(params); j.Status != importerkit.StatusFailed {
+		if j := run(params); j.Status != jobkit.StatusFailed {
 			t.Errorf("%v: %+v, want failed", params, j)
 		}
 	}

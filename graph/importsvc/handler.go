@@ -2,7 +2,6 @@ package importsvc
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
 
 	"connectrpc.com/connect"
@@ -12,12 +11,10 @@ import (
 	registryv1 "github.com/zimwip/goap/contracts/gen/goap/registry/v1"
 	"github.com/zimwip/goap/lib/domainpb"
 	"github.com/zimwip/goap/lib/identity"
-	"github.com/zimwip/goap/lib/importerkit"
 	"github.com/zimwip/goap/lib/pbconv"
 )
 
-// Handler implements importerv1connect.ImportServiceHandler: RegisterImporter is the importers' (the shared token),
-// every other request acts for its caller.
+// Handler implements importerv1connect.ImportServiceHandler: every request acts for its caller.
 type Handler struct {
 	Service  *Service
 	Identity identity.Extractor
@@ -42,22 +39,6 @@ func rpcErr(err error) error {
 		return connect.NewError(connect.CodeUnavailable, err)
 	}
 	return connect.NewError(connect.CodeInternal, err)
-}
-
-// RegisterImporter implements the protocol.
-func (h *Handler) RegisterImporter(ctx context.Context, r *connect.Request[importerv1.RegisterImporterRequest]) (*connect.Response[importerv1.RegisterImporterResponse], error) {
-	token := h.Service.Token
-	if token == "" {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("importer registration is closed: the registry has no token (GOAP_IMPORTER_TOKEN)"))
-	}
-	if subtle.ConstantTimeCompare([]byte(r.Header().Get(importerkit.TokenHeader)), []byte(token)) != 1 {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("invalid importer token"))
-	}
-	lease, undeclared, err := h.Service.Register(ctx, r.Msg.Info, r.Msg.Endpoint)
-	if err != nil {
-		return nil, rpcErr(err)
-	}
-	return connect.NewResponse(&importerv1.RegisterImporterResponse{LeaseSeconds: int32(lease.Seconds()), Undeclared: undeclared}), nil
 }
 
 // ListImporters implements the protocol.
@@ -85,26 +66,6 @@ func (h *Handler) StartImport(ctx context.Context, r *connect.Request[importerv1
 		return nil, rpcErr(err)
 	}
 	return connect.NewResponse(&importerv1.StartImportResponse{Job: job}), nil
-}
-
-// ListImportJobs implements the protocol.
-func (h *Handler) ListImportJobs(ctx context.Context, r *connect.Request[importerv1.ListImportJobsRequest]) (*connect.Response[importerv1.ListImportJobsResponse], error) {
-	ctx = h.Identity.Context(ctx, r.Header())
-	jobs, err := h.Service.Jobs(ctx, r.Msg.Namespace)
-	if err != nil {
-		return nil, rpcErr(err)
-	}
-	return connect.NewResponse(&importerv1.ListImportJobsResponse{Jobs: jobs}), nil
-}
-
-// CancelImportJob implements the protocol.
-func (h *Handler) CancelImportJob(ctx context.Context, r *connect.Request[importerv1.CancelImportJobRequest]) (*connect.Response[importerv1.CancelImportJobResponse], error) {
-	ctx = h.Identity.Context(ctx, r.Header())
-	job, err := h.Service.Cancel(ctx, r.Msg.Service, r.Msg.Id)
-	if err != nil {
-		return nil, rpcErr(err)
-	}
-	return connect.NewResponse(&importerv1.CancelImportJobResponse{Job: job}), nil
 }
 
 // params are the parameters of an importer, an enum one with its values.

@@ -83,12 +83,15 @@ const (
 	// GraphServiceExportGraphProcedure is the fully-qualified name of the GraphService's ExportGraph
 	// RPC.
 	GraphServiceExportGraphProcedure = "/goap.graph.v1.GraphService/ExportGraph"
-	// GraphServiceExportGraphOkfProcedure is the fully-qualified name of the GraphService's
-	// ExportGraphOkf RPC.
-	GraphServiceExportGraphOkfProcedure = "/goap.graph.v1.GraphService/ExportGraphOkf"
+	// GraphServiceStartGraphExportProcedure is the fully-qualified name of the GraphService's
+	// StartGraphExport RPC.
+	GraphServiceStartGraphExportProcedure = "/goap.graph.v1.GraphService/StartGraphExport"
 	// GraphServiceImportGraphProcedure is the fully-qualified name of the GraphService's ImportGraph
 	// RPC.
 	GraphServiceImportGraphProcedure = "/goap.graph.v1.GraphService/ImportGraph"
+	// GraphServiceStartGraphImportProcedure is the fully-qualified name of the GraphService's
+	// StartGraphImport RPC.
+	GraphServiceStartGraphImportProcedure = "/goap.graph.v1.GraphService/StartGraphImport"
 	// GraphServiceLoadDemoDataProcedure is the fully-qualified name of the GraphService's LoadDemoData
 	// RPC.
 	GraphServiceLoadDemoDataProcedure = "/goap.graph.v1.GraphService/LoadDemoData"
@@ -374,11 +377,14 @@ type GraphServiceClient interface {
 	ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error)
 	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
 	ExportGraph(context.Context, *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error)
-	// The same state as an OKF tree, one Markdown file per node, streamed as a zip archive written while it is rendered
-	// (ADR 0111): the first message names the file, the next ones carry the bytes of the archive in order.
-	ExportGraphOkf(context.Context, *connect.Request[v1.ExportGraphOkfRequest]) (*connect.ServerStreamForClient[v1.ExportGraphOkfResponse], error)
+	// StartGraphExport exports the state of a namespace as a job (ADR 0149, kind graph.export): a JSON snapshot
+	// (ADR 0104) or an OKF zip archive, one Markdown file per node (ADR 0111), downloaded from the job when it ends.
+	StartGraphExport(context.Context, *connect.Request[v1.StartGraphExportRequest]) (*connect.Response[v1.StartGraphExportResponse], error)
 	// Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
 	ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error)
+	// StartGraphImport imports a JSON snapshot as a job (ADR 0149, kind graph.import): what ImportGraph does, followed
+	// from the job, whose output names the change created.
+	StartGraphImport(context.Context, *connect.Request[v1.StartGraphImportRequest]) (*connect.Response[v1.StartGraphImportResponse], error)
 	// Loads the demo data (administrators only): the demo organisation, the demo project bound to it and the ALM
 	// repository acting in that project, each part when it is missing. Unimplemented where the deployment ships no demo.
 	LoadDemoData(context.Context, *connect.Request[v1.LoadDemoDataRequest]) (*connect.Response[v1.LoadDemoDataResponse], error)
@@ -663,16 +669,22 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("ExportGraph")),
 			connect.WithClientOptions(opts...),
 		),
-		exportGraphOkf: connect.NewClient[v1.ExportGraphOkfRequest, v1.ExportGraphOkfResponse](
+		startGraphExport: connect.NewClient[v1.StartGraphExportRequest, v1.StartGraphExportResponse](
 			httpClient,
-			baseURL+GraphServiceExportGraphOkfProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("ExportGraphOkf")),
+			baseURL+GraphServiceStartGraphExportProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("StartGraphExport")),
 			connect.WithClientOptions(opts...),
 		),
 		importGraph: connect.NewClient[v1.ImportGraphRequest, v1.ImportGraphResponse](
 			httpClient,
 			baseURL+GraphServiceImportGraphProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ImportGraph")),
+			connect.WithClientOptions(opts...),
+		),
+		startGraphImport: connect.NewClient[v1.StartGraphImportRequest, v1.StartGraphImportResponse](
+			httpClient,
+			baseURL+GraphServiceStartGraphImportProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("StartGraphImport")),
 			connect.WithClientOptions(opts...),
 		),
 		loadDemoData: connect.NewClient[v1.LoadDemoDataRequest, v1.LoadDemoDataResponse](
@@ -1220,8 +1232,9 @@ type graphServiceClient struct {
 	listChangeLog          *connect.Client[v1.ListChangeLogRequest, v1.ListChangeLogResponse]
 	exportChangeProvenance *connect.Client[v1.ExportChangeProvenanceRequest, v1.ExportChangeProvenanceResponse]
 	exportGraph            *connect.Client[v1.ExportGraphRequest, v1.ExportGraphResponse]
-	exportGraphOkf         *connect.Client[v1.ExportGraphOkfRequest, v1.ExportGraphOkfResponse]
+	startGraphExport       *connect.Client[v1.StartGraphExportRequest, v1.StartGraphExportResponse]
 	importGraph            *connect.Client[v1.ImportGraphRequest, v1.ImportGraphResponse]
+	startGraphImport       *connect.Client[v1.StartGraphImportRequest, v1.StartGraphImportResponse]
 	loadDemoData           *connect.Client[v1.LoadDemoDataRequest, v1.LoadDemoDataResponse]
 	createChange           *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
 	getChange              *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
@@ -1401,14 +1414,19 @@ func (c *graphServiceClient) ExportGraph(ctx context.Context, req *connect.Reque
 	return c.exportGraph.CallUnary(ctx, req)
 }
 
-// ExportGraphOkf calls goap.graph.v1.GraphService.ExportGraphOkf.
-func (c *graphServiceClient) ExportGraphOkf(ctx context.Context, req *connect.Request[v1.ExportGraphOkfRequest]) (*connect.ServerStreamForClient[v1.ExportGraphOkfResponse], error) {
-	return c.exportGraphOkf.CallServerStream(ctx, req)
+// StartGraphExport calls goap.graph.v1.GraphService.StartGraphExport.
+func (c *graphServiceClient) StartGraphExport(ctx context.Context, req *connect.Request[v1.StartGraphExportRequest]) (*connect.Response[v1.StartGraphExportResponse], error) {
+	return c.startGraphExport.CallUnary(ctx, req)
 }
 
 // ImportGraph calls goap.graph.v1.GraphService.ImportGraph.
 func (c *graphServiceClient) ImportGraph(ctx context.Context, req *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error) {
 	return c.importGraph.CallUnary(ctx, req)
+}
+
+// StartGraphImport calls goap.graph.v1.GraphService.StartGraphImport.
+func (c *graphServiceClient) StartGraphImport(ctx context.Context, req *connect.Request[v1.StartGraphImportRequest]) (*connect.Response[v1.StartGraphImportResponse], error) {
+	return c.startGraphImport.CallUnary(ctx, req)
 }
 
 // LoadDemoData calls goap.graph.v1.GraphService.LoadDemoData.
@@ -1880,11 +1898,14 @@ type GraphServiceHandler interface {
 	ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error)
 	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
 	ExportGraph(context.Context, *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error)
-	// The same state as an OKF tree, one Markdown file per node, streamed as a zip archive written while it is rendered
-	// (ADR 0111): the first message names the file, the next ones carry the bytes of the archive in order.
-	ExportGraphOkf(context.Context, *connect.Request[v1.ExportGraphOkfRequest], *connect.ServerStream[v1.ExportGraphOkfResponse]) error
+	// StartGraphExport exports the state of a namespace as a job (ADR 0149, kind graph.export): a JSON snapshot
+	// (ADR 0104) or an OKF zip archive, one Markdown file per node (ADR 0111), downloaded from the job when it ends.
+	StartGraphExport(context.Context, *connect.Request[v1.StartGraphExportRequest]) (*connect.Response[v1.StartGraphExportResponse], error)
 	// Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
 	ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error)
+	// StartGraphImport imports a JSON snapshot as a job (ADR 0149, kind graph.import): what ImportGraph does, followed
+	// from the job, whose output names the change created.
+	StartGraphImport(context.Context, *connect.Request[v1.StartGraphImportRequest]) (*connect.Response[v1.StartGraphImportResponse], error)
 	// Loads the demo data (administrators only): the demo organisation, the demo project bound to it and the ALM
 	// repository acting in that project, each part when it is missing. Unimplemented where the deployment ships no demo.
 	LoadDemoData(context.Context, *connect.Request[v1.LoadDemoDataRequest]) (*connect.Response[v1.LoadDemoDataResponse], error)
@@ -2165,16 +2186,22 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("ExportGraph")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceExportGraphOkfHandler := connect.NewServerStreamHandler(
-		GraphServiceExportGraphOkfProcedure,
-		svc.ExportGraphOkf,
-		connect.WithSchema(graphServiceMethods.ByName("ExportGraphOkf")),
+	graphServiceStartGraphExportHandler := connect.NewUnaryHandler(
+		GraphServiceStartGraphExportProcedure,
+		svc.StartGraphExport,
+		connect.WithSchema(graphServiceMethods.ByName("StartGraphExport")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceImportGraphHandler := connect.NewUnaryHandler(
 		GraphServiceImportGraphProcedure,
 		svc.ImportGraph,
 		connect.WithSchema(graphServiceMethods.ByName("ImportGraph")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceStartGraphImportHandler := connect.NewUnaryHandler(
+		GraphServiceStartGraphImportProcedure,
+		svc.StartGraphImport,
+		connect.WithSchema(graphServiceMethods.ByName("StartGraphImport")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceLoadDemoDataHandler := connect.NewUnaryHandler(
@@ -2737,10 +2764,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceExportChangeProvenanceHandler.ServeHTTP(w, r)
 		case GraphServiceExportGraphProcedure:
 			graphServiceExportGraphHandler.ServeHTTP(w, r)
-		case GraphServiceExportGraphOkfProcedure:
-			graphServiceExportGraphOkfHandler.ServeHTTP(w, r)
+		case GraphServiceStartGraphExportProcedure:
+			graphServiceStartGraphExportHandler.ServeHTTP(w, r)
 		case GraphServiceImportGraphProcedure:
 			graphServiceImportGraphHandler.ServeHTTP(w, r)
+		case GraphServiceStartGraphImportProcedure:
+			graphServiceStartGraphImportHandler.ServeHTTP(w, r)
 		case GraphServiceLoadDemoDataProcedure:
 			graphServiceLoadDemoDataHandler.ServeHTTP(w, r)
 		case GraphServiceCreateChangeProcedure:
@@ -2996,12 +3025,16 @@ func (UnimplementedGraphServiceHandler) ExportGraph(context.Context, *connect.Re
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ExportGraph is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) ExportGraphOkf(context.Context, *connect.Request[v1.ExportGraphOkfRequest], *connect.ServerStream[v1.ExportGraphOkfResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ExportGraphOkf is not implemented"))
+func (UnimplementedGraphServiceHandler) StartGraphExport(context.Context, *connect.Request[v1.StartGraphExportRequest]) (*connect.Response[v1.StartGraphExportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.StartGraphExport is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ImportGraph is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) StartGraphImport(context.Context, *connect.Request[v1.StartGraphImportRequest]) (*connect.Response[v1.StartGraphImportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.StartGraphImport is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) LoadDemoData(context.Context, *connect.Request[v1.LoadDemoDataRequest]) (*connect.Response[v1.LoadDemoDataResponse], error) {

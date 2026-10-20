@@ -16,9 +16,7 @@
     type Link,
     type TypeCount,
   } from '../../api';
-  import { downloadText } from '../../download';
-  import { downloadGraphOkf } from '../../okfExport';
-  import { notify } from '../../shell/workbench.svelte';
+  import { exportGraph } from '../../graphExport';
   import Icon from '../../shell/Icon.svelte';
   import NodeNeighbourhood, { emptyNeighbourhood, type Neighbourhood } from '../../components/NodeNeighbourhood.svelte';
   import BaselineCompare from '../../components/BaselineCompare.svelte';
@@ -149,22 +147,15 @@
     else tab.params.baseline = id;
   }
 
-  /** Downloads the state of the shown baseline, without history: a JSON snapshot (ADR 0104) or an OKF zip, one
-   *  Markdown file per node with a YAML front matter, streamed while the server writes it (ADR 0111). */
+  /** Exports the state of the shown baseline, without history: a JSON snapshot (ADR 0104) or an OKF zip, one Markdown
+   *  file per node with a YAML front matter (ADR 0111); a job (ADR 0149), saved when done. */
   let exporting = $state(false);
   async function exportBaseline(format: 'json' | 'okf') {
     const id = shownId;
     if (!namespace || !id || isOpenHead(id)) return;
     exporting = true;
     try {
-      let nodes = 0;
-      if (format === 'okf') nodes = await downloadGraphOkf(namespace, { baselineId: id });
-      else {
-        const res = await graph.exportGraph(namespace, undefined, id);
-        downloadText(res.document ?? '', res.filename || `graph-${namespace}-${shortId(id)}.json`, res.mediaType || 'application/json');
-        nodes = res.nodes ?? 0;
-      }
-      notify(`Exported ${nodes} node(s) of ${namespace} at ${shortId(id)}.`, 'ok');
+      await exportGraph({ namespace, baselineId: id, format });
     } catch (e) {
       error = errorMessage(e);
     } finally {

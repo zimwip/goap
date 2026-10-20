@@ -117,7 +117,7 @@ footer { font-size: 13px; color: var(--muted); }
       <div class="tier">
         <div class="mod m-platform" data-module="platform"><h3>platform <span>composition</span></h3>
           <p>Every binary (<code>cmd/*</code>, <code>goap-dev</code> first), the methodology registry, model gateway, conversations and assistant, event stream, dev seeds, and the tests that need two modules.</p>
-          <div class="pk">cmd/* · registrysvc · modelgw · convsvc · assistantsvc · eventsvc · prefssvc · devseed · e2e/* · layering</div></div>
+          <div class="pk">cmd/* · registrysvc · modelgw · convsvc · assistantsvc · eventsvc · jobsvc · prefssvc · devseed · e2e/* · layering</div></div>
       </div>
       <div class="arrowrow">↓ may use any module below</div>
       <div class="tier" style="--n:4">
@@ -137,8 +137,8 @@ footer { font-size: 13px; color: var(--muted); }
       <div class="arrowrow">↓ never each other: they meet through contracts and the generated clients</div>
       <div class="tier">
         <div class="mod m-lib" data-module="lib"><h3>lib <span>shared libraries</span></h3>
-          <p>Domain model, type catalogue, CEL guards, the DSL (JavaScript: goja, or QuickJS in WebAssembly on wazero), access, adapters, built-in MCP definitions, service plumbing, the importer kit and the clients of the graph and domain registry.</p>
-          <div class="pk">def · typecat · guard · dsl · access · adapter · mcpbuiltin · llmcfg · platform · identity · telemetry · graphclient · domainclient · importerkit</div></div>
+          <p>Domain model, type catalogue, CEL guards, the DSL (JavaScript: goja, or QuickJS in WebAssembly on wazero), access, adapters, built-in MCP definitions, service plumbing, the importer and job kits and the clients of the graph and domain registry.</p>
+          <div class="pk">def · typecat · guard · dsl · access · adapter · mcpbuiltin · llmcfg · platform · identity · telemetry · graphclient · domainclient · importerkit · jobkit</div></div>
       </div>
       <div class="arrowrow">↓</div>
       <div class="tier">
@@ -156,7 +156,7 @@ footer { font-size: 13px; color: var(--muted); }
     <div class="fig">
       <svg viewBox="0 0 940 600" role="img" aria-labelledby="rt-t rt-d">
         <title id="rt-t">Runtime services and flows</title>
-        <desc id="rt-d">The browser calls the gateway, which routes to graph, registry, engine, MCP hub and model gateway. The engine calls graph, registry, model gateway, MCP hub and its sandbox. The MCP hub calls connectors. Every service publishes its events on NATS through its outbox: the graph its changes, nodes and baselines (and the methodology registry's, carried by its commits), the engine its processes, the conversations, the hub, the model gateway, the preferences and the credentials theirs; the event stream, the indexer and the engine read them, and the event stream pushes them to the browser. An importer service registers with the import registry of the graph, which starts its runs; a run writes changes through the graph.</desc>
+        <desc id="rt-d">The browser calls the gateway, which routes to graph, registry, engine, MCP hub and model gateway. The engine calls graph, registry, model gateway, MCP hub and its sandbox. The MCP hub calls connectors. Every service publishes its events on NATS through its outbox: the graph its changes, nodes and baselines (and the methodology registry's, carried by its commits), the engine its processes, the conversations, the hub, the model gateway, the preferences and the credentials theirs; the event stream, the indexer and the engine read them, and the event stream pushes them to the browser. The long runs (an import from a source, a snapshot import, an export) are jobs of the job service: the graph creates them for the person, workers (the graph itself, the importer services) claim and report on them, and the browser follows them over Server-Sent Events through the gateway; an import writes its changes through the graph.</desc>
         <defs>
           <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
         </defs>
@@ -226,11 +226,13 @@ footer { font-size: 13px; color: var(--muted); }
         <text class="lbl" x="766" y="312">/anthropic</text>
         <path class="w" d="M180 344H222V280" marker-end="url(#a)"/>
         <text class="lbl" x="186" y="320">as the caller</text>
-        <!-- an importer service registers with the graph's import registry, which starts its runs; a run writes changes (ADR 0148) -->
+        <!-- an importer service claims its runs from the job service, and writes changes through the graph (ADR 0148, 0149) -->
         <g class="m-platform"><rect class="box" x="234" y="330" width="108" height="56" rx="6"/>
           <text class="t" x="288" y="352" text-anchor="middle">importer-git</text>
           <text class="s" x="288" y="370" text-anchor="middle">a source · ADR 0148</text></g>
-        <path class="w" d="M288 284V326" marker-start="url(#a)" marker-end="url(#a)"/>
+        <path class="w" d="M288 326V284" marker-end="url(#a)"/>
+        <path class="w" d="M260 386V504" marker-end="url(#a)"/>
+        <text class="lbl" x="196" y="490">claims runs</text>
 
         <!-- bus -->
         <rect class="bus" x="20" y="430" width="900" height="36" rx="18"/>
@@ -244,6 +246,10 @@ footer { font-size: 13px; color: var(--muted); }
         <path class="w ev" d="M575 430V262H564" marker-end="url(#a)"/>
         <text class="lbl" x="581" y="414">triggers</text>
 
+        <!-- the long runs (ADR 0149): created by the graph, claimed by the workers, followed by the browser over SSE -->
+        <g class="m-platform"><rect class="box" x="150" y="508" width="130" height="56" rx="6"/>
+          <text class="t" x="215" y="530" text-anchor="middle">jobs</text>
+          <text class="s" x="215" y="548" text-anchor="middle">long runs · SSE · :8091</text></g>
         <g class="m-platform"><rect class="box" x="300" y="508" width="200" height="56" rx="6"/>
           <text class="t" x="400" y="530" text-anchor="middle">events</text>
           <text class="s" x="400" y="548" text-anchor="middle">one stream · presence · :8089</text></g>
@@ -257,7 +263,7 @@ footer { font-size: 13px; color: var(--muted); }
           <text class="s" x="740" y="548" text-anchor="middle">a schema per service · secrets by reference · traces</text></g>
       </svg>
     </div>
-    <div class="legend"><span><i></i>connect-rpc call</span><span><i class="d"></i>event over NATS</span><span>not drawn: preferences and credentials (called by the gateway only), the MCP hub calling the graph and engine for the built-in MCPs, the events the hub, the gateway, the preferences and the credentials publish through their outboxes; the importer: registers with the graph, is called by it to start a run, writes its changes through it</span></div>
+    <div class="legend"><span><i></i>connect-rpc call</span><span><i class="d"></i>event over NATS</span><span>not drawn: preferences and credentials (called by the gateway only), the MCP hub calling the graph and engine for the built-in MCPs, the events the hub, the gateway, the preferences and the credentials publish through their outboxes; the jobs: the gateway routing its RPCs and its SSE stream (<code>/api/jobs/</code>), the graph creating the jobs and running the graph's kinds as a worker, its events through its outbox</span></div>
   </section>
 
   <section>
@@ -278,7 +284,8 @@ footer { font-size: 13px; color: var(--muted); }
         <tr data-binary="events" data-service="events"><td><code>events</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8089</td><td>the one event stream and presence; NATS</td></tr>
         <tr data-binary="conversations" data-service="conversations"><td><code>conversations</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8090</td><td>conversations and the assistant; PostgreSQL</td></tr>
         <tr data-binary="connector-localfs" data-service="connector-localfs"><td><code>connector-localfs</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>file connector; registers with the hub</td></tr>
-        <tr data-binary="importer-git" data-service="importer-git"><td><code>importer-git</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>importer of the <code>code</code> domain's <code>git</code> source: registers with the graph's import registry, runs an import as one change per commit (ADR 0148)</td></tr>
+        <tr data-binary="jobs" data-service="jobs"><td><code>jobs</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8091</td><td>the long runs: jobs created by the owning service, claimed by workers, followed over SSE and downloaded (ADR 0149); PostgreSQL</td></tr>
+        <tr data-binary="importer-git" data-service="importer-git"><td><code>importer-git</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>importer of the <code>code</code> domain's <code>git</code> source: a worker of the job service, runs an import as one change per commit (ADR 0148)</td></tr>
         <tr data-binary="connector-workspace"><td><code>connector-workspace</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>workspace of a change (git, commands); standalone, not in compose</td></tr>
         <tr data-binary="connector-claude-coding-agent"><td><code>connector-claude-coding-agent</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>Claude Code sessions; their model calls go to modelgw <code>/anthropic</code> with a token the hub mints; standalone, not in compose</td></tr>
         <tr data-binary="goap-runner"><td><code>goap-runner</code></td><td><span class="chip m-engine">engine</span></td><td class="num">—</td><td>sandbox image the engine runs scripts in (make runner-image)</td></tr>

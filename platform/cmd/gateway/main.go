@@ -93,6 +93,9 @@ func main() {
 			{Prefix: "/goap.index.v1.IndexService/", Upstream: platform.Env("GOAP_INDEXER_URL", "http://localhost:8086")},
 			{Prefix: "/goap.events.v1.EventService/", Upstream: platform.Env("GOAP_EVENTS_URL", "http://localhost:8089")},
 			{Prefix: "/goap.mcp.v1.McpService/", Upstream: platform.Env("GOAP_MCP_URL", "http://localhost:8085")},
+			// the long runs (ADR 0149): the RPCs, the SSE stream of a person's jobs and the downloads of their results
+			{Prefix: "/goap.jobs.v1.JobService/", Upstream: platform.Env("GOAP_JOBS_URL", "http://localhost:8091")},
+			{Prefix: "/api/jobs/", Upstream: platform.Env("GOAP_JOBS_URL", "http://localhost:8091")},
 		},
 	}
 	// who a caller is comes from the User nodes of the graph as well as from its token

@@ -1,22 +1,24 @@
 <script lang="ts">
   // "Import from a source" tab (ADR 0148): the importers the domain of a namespace declares (a git repository for the
   // code domain), the form of the one picked from the parameters it declares, and the runs. A run is done by the importer
-  // service implementing it, through the change operations; the tab follows the runs while one is going (the importer
-  // services publish no event).
-  import { imports, errorMessage, type Importer, type ImportJob } from '../../api';
+  // service implementing it, through the change operations; a run is a job (ADR 0149), followed live from the job stream.
+  import { imports, errorMessage, type Importer } from '../../api';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
-  import StatusBadge from '../../components/StatusBadge.svelte';
+  import JobRow from '../../components/JobRow.svelte';
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { refreshBranches } from '../../stores/baselineTool.svelte';
-  import { initialValues, jobSubject, paramFields, runParams, running, statsLine, type ParamField } from '../../importSources';
+  import { jobList, onJobEnded, takeJob } from '../../stores/jobs.svelte';
+  import { isActive } from '../../jobView';
+  import { initialValues, isImportJob, jobSubject, paramFields, runParams, type ParamField } from '../../importSources';
 
   let { tab }: { tab: Tab } = $props();
 
   const namespace = $derived(tab.params.ns ?? '');
 
   let importers = $state<Importer[]>([]);
-  let jobs = $state<ImportJob[]>([]);
+  const jobs = $derived(jobList().filter((j) => isImportJob(j, namespace)));
+  let now = $state(Date.now());
   let picked = $state('');
   let values = $state<Record<string, string | boolean>>({});
   let loading = $state(true);
@@ -28,9 +30,7 @@
 
   async function load() {
     try {
-      const [ims, js] = await Promise.all([imports.list(namespace), imports.jobs(namespace)]);
-      importers = ims.importers ?? [];
-      jobs = js.jobs ?? [];
+      importers = (await imports.list(namespace)).importers ?? [];
       if (!current && importers.length) pick(`${importers[0].domain}/${importers[0].name}`);
       error = '';
     } catch (e) {
@@ -52,18 +52,13 @@
     void load();
   });
 
-  // follow the runs while one is going
+  // a run that ends changed the branches
+  $effect(() => onJobEnded((j) => isImportJob(j, namespace) && refreshBranches()));
+  // the clock of the runs going
   $effect(() => {
-    if (!jobs.some(running)) return;
-    const t = setInterval(async () => {
-      const before = jobs.filter(running).length;
-      try {
-        jobs = (await imports.jobs(namespace)).jobs ?? [];
-      } catch {
-        return;
-      }
-      if (jobs.filter(running).length < before) refreshBranches();
-    }, 2000);
+    if (!jobs.some(isActive)) return;
+    now = Date.now();
+    const t = setInterval(() => (now = Date.now()), 1000);
     return () => clearInterval(t);
   });
 
@@ -78,22 +73,13 @@
     error = '';
     try {
       const { job } = await imports.start({ domain: current.domain ?? '', importer: current.name ?? '', params });
-      jobs = [job, ...jobs.filter((j) => j.id !== job.id)];
+      takeJob(job);
       notify(`Import started: ${current.label || current.name}.`, 'ok');
     } catch (e) {
       error = errorMessage(e);
       return error;
     } finally {
       starting = false;
-    }
-  }
-
-  async function cancel(j: ImportJob) {
-    try {
-      const { job } = await imports.cancel(j.service ?? '', j.id ?? '');
-      jobs = jobs.map((x) => (x.id === job.id ? job : x));
-    } catch (e) {
-      error = errorMessage(e);
     }
   }
 
@@ -181,41 +167,23 @@
   {#if jobs.length}
     <section class="card">
       <h3>Runs</h3>
-      <table class="runs">
-        <tbody>
-          {#each jobs as j (j.id)}
-            <tr>
-              <td><StatusBadge status={j.status ?? ''} /></td>
-              <td>
-                <div><strong>{j.importer}</strong> {jobSubject(j)}</div>
-                {#if j.progress}<div class="hint small">{j.progress}</div>{/if}
-                {#if statsLine(j)}<div class="hint small">{statsLine(j)}</div>{/if}
-                {#if j.error}<div class="alert small">{j.error}</div>{/if}
-              </td>
-              <td class="hint small">{j.by}<br />{j.startedAt ? new Date(j.startedAt).toLocaleString() : ''}</td>
-              <td>
-                {#if running(j)}
-                  <button type="button" class="ghost small" title="Stop this run (it resumes at the next one)" onclick={() => void cancel(j)}
-                    ><Icon name="stop" size={14} /></button
-                  >
-                {/if}
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      <ul class="runs">
+        {#each jobs as j (j.id)}
+          <li><JobRow job={j} {now} detail={jobSubject(j)} /></li>
+        {/each}
+      </ul>
     </section>
   {/if}
 </div>
 
 <style>
   .runs {
-    width: 100%;
-    border-collapse: collapse;
+    list-style: none;
+    margin: 0;
+    padding: 0;
   }
-  .runs td {
-    padding: 0.35rem 0.4rem;
-    vertical-align: top;
+  .runs li {
+    padding: 0.5rem 0.2rem;
     border-top: 1px solid var(--border);
   }
 </style>

@@ -60,17 +60,12 @@ export function runParams(fields: ParamField[], values: Record<string, string | 
   return out;
 }
 
-/** A run is still going. */
-export const running = (j: ImportJob) => j.status === 'running';
-
-/** The counters of a run, as a line ("12 commits, 40 created, 3 modified"). */
-export function statsLine(j: ImportJob): string {
-  const st = j.stats ?? {};
-  return Object.entries(st)
-    .filter(([, n]) => Number(n) > 0)
-    .map(([k, n]) => `${n} ${k}`)
-    .join(', ');
+/** A job runs an importer, of the domain of `namespace` when one is named. */
+export function isImportJob(j: ImportJob, namespace = ''): boolean {
+  return (j.kind ?? '').startsWith('import.') && (!namespace || j.target === namespace);
 }
+
+export { statsLine } from './jobView';
 
 /** What a run imported from, for the list of runs (its first text parameter, the repository for git). */
 export function jobSubject(j: ImportJob): string {

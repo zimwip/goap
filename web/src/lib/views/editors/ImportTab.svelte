@@ -14,6 +14,9 @@
   import { domainSpec } from './domainTabs';
   import { importKind, IMPORT_KINDS } from './importKinds';
   import { registerAssist } from '../../assist/registry.svelte';
+  import JobRow from '../../components/JobRow.svelte';
+  import { followJob, knownJobs } from '../../stores/jobs.svelte';
+  import { graphImportResult } from '../../jobView';
   import { contentFacts, importSummary } from '../../assist/importScreen';
 
   let { tab }: { tab: Tab } = $props();
@@ -28,7 +31,10 @@
   let error = $state('');
   /** a methodology or domain imported: its name, version, status and issues */
   let definition = $state<{ name: string; version: string; status?: string; issues: Issue[] } | null>(null);
-  let graphResult = $state<GraphImportResult | null>(null);
+  /** the job of a graph import (ADR 0149), live from the job stream; its result once it is done */
+  let graphJobId = $state('');
+  const graphJob = $derived(graphJobId ? knownJobs.get(graphJobId) : undefined);
+  const graphResult = $derived<GraphImportResult | null>(graphJob?.status === 'done' ? graphImportResult(graphJob) : null);
 
   async function readFile(e: Event & { currentTarget: HTMLInputElement }) {
     const file = e.currentTarget.files?.[0];
@@ -45,14 +51,18 @@
     importing = true;
     error = '';
     definition = null;
-    graphResult = null;
+    graphJobId = '';
     try {
       if (what === 'graph') {
-        const res = await graph.importGraph({ document: text, ...(title.trim() ? { title: title.trim() } : {}) });
-        graphResult = res;
-        if (res.change) notify(`Change created: ${res.change.title ?? res.change.id}.`, 'ok');
-        else notify('The graph already holds this snapshot: nothing to import.', 'ok');
-        refreshBranches();
+        const { job } = await graph.startGraphImport({ document: text, ...(title.trim() ? { title: title.trim() } : {}) });
+        graphJobId = job.id ?? '';
+        followJob(job, (j) => {
+          if (j.status !== 'done') return;
+          const r = graphImportResult(j);
+          if (r.change) notify(`Change created: ${r.change.title || r.change.id}.`, 'ok');
+          else notify('The graph already holds this snapshot: nothing to import.', 'ok');
+          refreshBranches();
+        });
       } else if (what === 'domain') {
         const res = await registry.importDomain(text, publish);
         const d = res.domain;
@@ -108,7 +118,7 @@
         }),
         entities: graphResult?.change?.id ? [{ type: 'change', id: graphResult.change.id, label: graphResult.change.title || graphResult.change.id }] : [],
       }),
-      focus: () => ({ pendingAction: importing ? `importing ${contentFacts(what, text)}` : undefined, errors: error ? [error] : [] }),
+      focus: () => ({ pendingAction: importing || (graphJob && !graphResult && graphJob.status !== 'failed' && graphJob.status !== 'cancelled') ? `importing ${contentFacts(what, text)}` : undefined, errors: error ? [error] : [] }),
       tools: [
         {
           name: 'run_import',
@@ -181,6 +191,9 @@
         </ul>
       {/if}
     {/if}
+    {#if graphJob && !graphResult}
+      <div class="job"><JobRow job={graphJob} /></div>
+    {/if}
     {#if graphResult}
       {@const r = graphResult}
       <div class="alert" class:ok={!r.warnings?.length} class:warn={!!r.warnings?.length}>
@@ -206,6 +219,9 @@
 </div>
 
 <style>
+  .job {
+    margin: 0.5rem 0;
+  }
   .issues {
     margin: -0.3rem 0 0.8rem;
     padding-left: 1.2rem;

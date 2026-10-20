@@ -75,6 +75,7 @@ export const COMMANDS: Command[] = [
   { id: 'import', label: 'Import a methodology (YAML or JSON)', icon: 'upload', run: () => openTab({ kind: 'import', params: {} }, { pin: true }) },
   { id: 'importDomain', label: 'Import a domain (YAML or JSON)', icon: 'upload', run: () => openTab({ kind: 'import', params: { what: 'domain' } }, { pin: true }) },
   { id: 'importGraph', label: 'Import a graph snapshot (JSON)', icon: 'upload', run: () => openTab({ kind: 'import', params: { what: 'graph' } }, { pin: true }) },
+  { id: 'jobs', label: 'Open my jobs (imports, exports)', icon: 'clock', run: () => openTab({ kind: 'jobs', params: {} }, { pin: true }) },
   { id: 'policies', label: 'Open access policies', icon: 'shield', run: () => openTab({ kind: 'policies', params: {} }) },
   { id: 'dsl', label: 'DSL Help', icon: 'help', run: () => showTool('right', 'dsl') },
   {

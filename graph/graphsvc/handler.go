@@ -2,7 +2,6 @@
 package graphsvc
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,13 +19,12 @@ import (
 	"github.com/zimwip/goap/contracts/journal"
 	"github.com/zimwip/goap/contracts/review"
 	"github.com/zimwip/goap/graph/graph"
-	"github.com/zimwip/goap/graph/okf"
 	"github.com/zimwip/goap/graph/prov"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/identity"
+	"github.com/zimwip/goap/lib/jobkit"
 	"github.com/zimwip/goap/lib/pbconv"
 	"github.com/zimwip/goap/lib/rpcerr"
-	"github.com/zimwip/goap/lib/typecat"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -57,6 +55,9 @@ type Handler struct {
 	Floor authz.Authorizer
 	// Identity extracts the caller from request headers (set by the gateway).
 	Identity identity.Extractor
+	// Jobs is the job service (ADR 0149): StartGraphExport and StartGraphImport create their jobs there, run by
+	// JobRunners (nil: the two RPCs are unimplemented).
+	Jobs jobkit.Queue
 	// Demo loads the demo data of the composition (platform/devseed), reporting whether it wrote anything and the key
 	// of the demo project; nil: the deployment ships no demo (LoadDemoData is unimplemented).
 	Demo func(ctx context.Context, g *graph.Graph) (loaded bool, project string, err error)
@@ -316,52 +317,6 @@ func (h *Handler) ExportGraph(ctx context.Context, r *connect.Request[graphv1.Ex
 	}
 	name := fmt.Sprintf("graph-%s-%s.json", s.Namespace, s.ExportedAt.Format("20060102-150405"))
 	return connect.NewResponse(&graphv1.ExportGraphResponse{Document: string(doc), Filename: name, MediaType: "application/json", Nodes: int32(len(s.Nodes))}), nil
-}
-
-// okfChunk is the size of the chunks of an OKF archive sent on the stream.
-const okfChunk = 64 << 10
-
-// ExportGraphOkf streams the state of a namespace at a baseline as an OKF tree, one Markdown file per node, in a zip
-// archive written while it is rendered (ADR 0111): a first message with the name of the archive, then its bytes in
-// chunks. A streaming call passes none of the unary interceptors: the caller is identified here.
-func (h *Handler) ExportGraphOkf(ctx context.Context, r *connect.Request[graphv1.ExportGraphOkfRequest], stream *connect.ServerStream[graphv1.ExportGraphOkfResponse]) error {
-	ctx = h.Identity.Context(ctx, r.Header())
-	if authz.From(ctx).Anonymous() {
-		return connect.NewError(connect.CodeUnauthenticated, errors.New("the caller is not identified"))
-	}
-	s, err := h.Graph.ExportSnapshot(ctx, r.Msg.Namespace, r.Msg.Branch, domain.BaselineID(r.Msg.BaselineId))
-	if err != nil {
-		return rpcerr.ToConnect(err)
-	}
-	var o okf.Options
-	if h.Graph.Types != nil {
-		if c, ok := h.Graph.Types().(interface {
-			Type(string) (*typecat.Type, bool)
-		}); ok {
-			o = okf.FromTypes(c.Type)
-		}
-	}
-	name := fmt.Sprintf("graph-%s-%s.okf.zip", s.Namespace, s.ExportedAt.Format("20060102-150405"))
-	if err := stream.Send(&graphv1.ExportGraphOkfResponse{Filename: name, MediaType: "application/zip", Nodes: int32(len(s.Nodes))}); err != nil {
-		return err
-	}
-	w := bufio.NewWriterSize(chunkSender(func(p []byte) error {
-		return stream.Send(&graphv1.ExportGraphOkfResponse{Chunk: p})
-	}), okfChunk)
-	if err := okf.Write(w, s, o, s.ExportedAt); err != nil {
-		return connect.NewError(connect.CodeInternal, err)
-	}
-	return w.Flush()
-}
-
-// chunkSender is an io.Writer sending every write as one message (a bufio.Writer in front sizes the chunks).
-type chunkSender func([]byte) error
-
-func (f chunkSender) Write(p []byte) (int, error) {
-	if err := f(slices.Clone(p)); err != nil {
-		return 0, err
-	}
-	return len(p), nil
 }
 
 // ImportGraph imports a JSON snapshot as one new change of the caller (ADR 0104): every node type it writes is

@@ -1,0 +1,37 @@
+import { describe, expect, it } from 'vitest';
+import { elapsed, fraction, graphImportResult, isActive, isFinal, jobChange, kindLabel, newer, statsLine } from './jobView';
+
+describe('jobs', () => {
+  it('names the kinds', () => {
+    expect(kindLabel('import.code.git')).toBe('Import code (git)');
+    expect(kindLabel('graph.export')).toBe('Graph export');
+    expect(kindLabel('other.kind')).toBe('other.kind');
+  });
+
+  it('measures the progress', () => {
+    expect(fraction({ done: '3', total: '4' })).toBe(0.75);
+    expect(fraction({ status: 'running' })).toBeUndefined();
+    expect(fraction({ status: 'done' })).toBe(1);
+    expect(isActive({ status: 'queued' })).toBe(true);
+    expect(isFinal({ status: 'cancelled' })).toBe(true);
+    expect(statsLine({ stats: { commits: '12', created: '40', removed: '0' } })).toBe('12 commits, 40 created');
+    const t = Date.parse('2026-10-20T10:00:00Z');
+    expect(elapsed({ startedAt: '2026-10-20T10:00:00Z' }, t + 65_000)).toBe('1 min 5 s');
+    expect(elapsed({ startedAt: '2026-10-20T10:00:00Z', endedAt: '2026-10-20T10:00:12Z' }, t + 99_000)).toBe('12 s');
+    expect(elapsed({ status: 'queued' }, t)).toBe('');
+  });
+
+  it('never takes an ended job back', () => {
+    const done = { id: 'a', status: 'done', updatedAt: '2026-10-20T10:00:02Z' };
+    expect(newer(done, { id: 'a', status: 'running', updatedAt: '2026-10-20T10:00:03Z' })).toBe(false);
+    expect(newer({ id: 'a', status: 'running', updatedAt: '2026-10-20T10:00:02Z' }, { id: 'a', status: 'running', updatedAt: '2026-10-20T10:00:01.5Z' })).toBe(false);
+    expect(newer({ id: 'a', status: 'queued', updatedAt: '2026-10-20T10:00:00Z' }, done)).toBe(true);
+  });
+
+  it('reads what a graph import did', () => {
+    const j = { status: 'done', output: { created: 2, updated: 1, unchanged: 5, warnings: ['w'], changeId: 'C1', changeTitle: 'Import' } };
+    expect(jobChange(j)).toEqual({ id: 'C1', title: 'Import' });
+    expect(graphImportResult(j)).toEqual({ change: { id: 'C1', title: 'Import' }, created: 2, updated: 1, unchanged: 5, warnings: ['w'] });
+    expect(graphImportResult({ output: { unchanged: 3 } }).change).toBeUndefined();
+  });
+});

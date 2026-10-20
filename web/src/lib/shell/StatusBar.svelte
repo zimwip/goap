@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Status bar: my running runs and token usage. Platform health/stream,
+  // Status bar: my jobs (ADR 0149: imports, exports, live from the job stream), my running runs and token usage. Platform health/stream,
   // identity, settings and notifications live in the header (one place
   // for each, no duplicates).
   import Icon from './Icon.svelte';
@@ -8,13 +8,36 @@
   import { myActiveRuns, myRunsState } from '../stores/status.svelte';
   import { shortId } from '../api';
   import StatusBadge from '../components/StatusBadge.svelte';
+  import JobRow from '../components/JobRow.svelte';
+  import { activeJobs, jobList, onJobEnded, startJobs } from '../stores/jobs.svelte';
+  import { fraction, jobTitle } from '../jobView';
+  import { notify } from './workbench.svelte';
 
   let runsOpen = $state(false);
+  let jobsOpen = $state(false);
   let now = $state(Date.now());
 
-  // Elapsed-time clock (only while the list is open).
+  // the job stream lives as long as the shell
+  $effect(() => startJobs());
+  // a job that ends says so, wherever the person is
+  $effect(() =>
+    onJobEnded((j) => {
+      if (j.status === 'done') notify(`${jobTitle(j)}: done.`, 'ok');
+      else if (j.status === 'failed') notify(`${jobTitle(j)} failed: ${j.error || 'no reason given'}`, 'error');
+    }),
+  );
+
+  const jobs = $derived(activeJobs());
+  // the recent ones under the running ones, in the list
+  const recentJobs = $derived(jobList().slice(0, 8));
+  const jobsPart = $derived.by(() => {
+    const parts = jobs.map(fraction);
+    return parts.length && parts.every((p) => p !== undefined) ? parts.reduce((a, b) => a! + b!, 0)! / parts.length : undefined;
+  });
+
+  // Elapsed-time clock (only while a list is open).
   $effect(() => {
-    if (!runsOpen) return;
+    if (!runsOpen && !jobsOpen) return;
     now = Date.now();
     const t = setInterval(() => (now = Date.now()), 1000);
     return () => clearInterval(t);
@@ -31,6 +54,11 @@
     return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
   }
 
+  function openJobs() {
+    openTab({ kind: 'jobs', params: {} }, { pin: true });
+    jobsOpen = false;
+  }
+
   function openRun(id: string) {
     openTab({ kind: 'run', params: { id } }, { pin: true });
     runsOpen = false;
@@ -39,6 +67,33 @@
 
 <footer class="status" aria-label="Status bar">
   <span class="grow"></span>
+
+  <div class="item-wrap">
+    <button type="button" class="item" aria-haspopup="dialog" aria-expanded={jobsOpen} onclick={() => (jobsOpen = !jobsOpen)} title="My jobs: imports and exports">
+      {#if jobs.length}<span class="spin" aria-hidden="true"></span>{:else}<Icon name="clock" size={12} />{/if}
+      {jobs.length ? `${jobs.length} job${jobs.length > 1 ? 's' : ''}` : 'Jobs'}
+      {#if jobs.length && jobsPart !== undefined}
+        <span class="mini" aria-hidden="true"><span style:width={`${jobsPart * 100}%`}></span></span>
+        {Math.round(jobsPart * 100)} %
+      {/if}
+    </button>
+    <Popover bind:open={jobsOpen} label="My jobs" width="420px">
+      <div class="pop-head">
+        <strong>My jobs</strong>
+        <span class="grow"></span>
+        <button type="button" class="ghost small" onclick={openJobs}>Open all</button>
+      </div>
+      {#if recentJobs.length}
+        <ul class="list">
+          {#each recentJobs as j (j.id)}
+            <li class="job-li"><JobRow job={j} {now} compact /></li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="pad hint">No job yet. Imports from a source and graph exports run here.</p>
+      {/if}
+    </Popover>
+  </div>
 
   <div class="item-wrap">
     <button type="button" class="item" aria-haspopup="dialog" aria-expanded={runsOpen} onclick={() => (runsOpen = !runsOpen)} title="My running runs">
@@ -170,5 +225,29 @@
   }
   .el {
     white-space: nowrap;
+  }
+  .grow {
+    flex: 1;
+  }
+  .job-li {
+    padding: 0.4rem 0.6rem;
+    border-top: 1px solid var(--border);
+  }
+  .job-li:first-child {
+    border-top: none;
+  }
+  .mini {
+    display: inline-block;
+    width: 48px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--neutral-soft);
+    overflow: hidden;
+  }
+  .mini span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.3s ease;
   }
 </style>

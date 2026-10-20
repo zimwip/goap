@@ -4,8 +4,10 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { StructJson, Timestamp, TimestampJson } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { StructJson } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
+import type { Job, JobJson } from "../../jobs/v1/jobs_pb";
+import { file_goap_jobs_v1_jobs } from "../../jobs/v1/jobs_pb";
 import type { AttributeInfo, AttributeInfoJson } from "../../registry/v1/registry_pb";
 import { file_goap_registry_v1_registry } from "../../registry/v1/registry_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
@@ -14,7 +16,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file goap/importer/v1/importer.proto.
  */
 export const file_goap_importer_v1_importer: GenFile = /*@__PURE__*/
-  fileDesc("Ch9nb2FwL2ltcG9ydGVyL3YxL2ltcG9ydGVyLnByb3RvEhBnb2FwLmltcG9ydGVyLnYxIi4KCkltcGxlbWVudHMSDgoGZG9tYWluGAEgASgJEhAKCGltcG9ydGVyGAIgASgJInIKDEltcG9ydGVySW5mbxIKCgJpZBgBIAEoCRIPCgd2ZXJzaW9uGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEjAKCmltcGxlbWVudHMYBCADKAsyHC5nb2FwLmltcG9ydGVyLnYxLkltcGxlbWVudHMiEQoPRGVzY3JpYmVSZXF1ZXN0IkAKEERlc2NyaWJlUmVzcG9uc2USLAoEaW5mbxgBIAEoCzIeLmdvYXAuaW1wb3J0ZXIudjEuSW1wb3J0ZXJJbmZvIowBCgxTdGFydFJlcXVlc3QSDgoGZG9tYWluGAEgASgJEhAKCGltcG9ydGVyGAIgASgJEicKBnBhcmFtcxgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSEgoKcHJvamVjdF9pZBgEIAEoCRIRCglvd25lcl9vcmcYBSABKAkSCgoCYnkYBiABKAkiMwoNU3RhcnRSZXNwb25zZRIiCgNqb2IYASABKAsyFS5nb2FwLmltcG9ydGVyLnYxLkpvYiINCgtKb2JzUmVxdWVzdCIzCgxKb2JzUmVzcG9uc2USIwoEam9icxgBIAMoCzIVLmdvYXAuaW1wb3J0ZXIudjEuSm9iIhsKDUNhbmNlbFJlcXVlc3QSCgoCaWQYASABKAkiNAoOQ2FuY2VsUmVzcG9uc2USIgoDam9iGAEgASgLMhUuZ29hcC5pbXBvcnRlci52MS5Kb2Ii+wIKA0pvYhIKCgJpZBgBIAEoCRIOCgZkb21haW4YAiABKAkSEAoIaW1wb3J0ZXIYAyABKAkSDgoGc3RhdHVzGAQgASgJEicKBnBhcmFtcxgFIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSEgoKcHJvamVjdF9pZBgGIAEoCRIKCgJieRgHIAEoCRIuCgpzdGFydGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIsCghlbmRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIcHJvZ3Jlc3MYCiABKAkSLwoFc3RhdHMYCyADKAsyIC5nb2FwLmltcG9ydGVyLnYxLkpvYi5TdGF0c0VudHJ5Eg0KBWVycm9yGAwgASgJEg8KB3NlcnZpY2UYDSABKAkaLAoKU3RhdHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBIlkKF1JlZ2lzdGVySW1wb3J0ZXJSZXF1ZXN0EiwKBGluZm8YASABKAsyHi5nb2FwLmltcG9ydGVyLnYxLkltcG9ydGVySW5mbxIQCghlbmRwb2ludBgCIAEoCSJjChhSZWdpc3RlckltcG9ydGVyUmVzcG9uc2USFQoNbGVhc2Vfc2Vjb25kcxgBIAEoBRIwCgp1bmRlY2xhcmVkGAIgAygLMhwuZ29hcC5pbXBvcnRlci52MS5JbXBsZW1lbnRzIikKFExpc3RJbXBvcnRlcnNSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCSK5AQoISW1wb3J0ZXISDgoGZG9tYWluGAEgASgJEhYKDmRvbWFpbl92ZXJzaW9uGAIgASgJEgwKBG5hbWUYAyABKAkSDQoFbGFiZWwYBCABKAkSEwoLZGVzY3JpcHRpb24YBSABKAkSLwoGcGFyYW1zGAYgAygLMh8uZ29hcC5yZWdpc3RyeS52MS5BdHRyaWJ1dGVJbmZvEhEKCWF2YWlsYWJsZRgHIAEoCBIPCgdzZXJ2aWNlGAggASgJIkYKFUxpc3RJbXBvcnRlcnNSZXNwb25zZRItCglpbXBvcnRlcnMYASADKAsyGi5nb2FwLmltcG9ydGVyLnYxLkltcG9ydGVyIoYBChJTdGFydEltcG9ydFJlcXVlc3QSDgoGZG9tYWluGAEgASgJEhAKCGltcG9ydGVyGAIgASgJEicKBnBhcmFtcxgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSEgoKcHJvamVjdF9pZBgEIAEoCRIRCglvd25lcl9vcmcYBSABKAkiOQoTU3RhcnRJbXBvcnRSZXNwb25zZRIiCgNqb2IYASABKAsyFS5nb2FwLmltcG9ydGVyLnYxLkpvYiIqChVMaXN0SW1wb3J0Sm9ic1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJIj0KFkxpc3RJbXBvcnRKb2JzUmVzcG9uc2USIwoEam9icxgBIAMoCzIVLmdvYXAuaW1wb3J0ZXIudjEuSm9iIjUKFkNhbmNlbEltcG9ydEpvYlJlcXVlc3QSDwoHc2VydmljZRgBIAEoCRIKCgJpZBgCIAEoCSI9ChdDYW5jZWxJbXBvcnRKb2JSZXNwb25zZRIiCgNqb2IYASABKAsyFS5nb2FwLmltcG9ydGVyLnYxLkpvYjLCAgoPSW1wb3J0ZXJTZXJ2aWNlElEKCERlc2NyaWJlEiEuZ29hcC5pbXBvcnRlci52MS5EZXNjcmliZVJlcXVlc3QaIi5nb2FwLmltcG9ydGVyLnYxLkRlc2NyaWJlUmVzcG9uc2USSAoFU3RhcnQSHi5nb2FwLmltcG9ydGVyLnYxLlN0YXJ0UmVxdWVzdBofLmdvYXAuaW1wb3J0ZXIudjEuU3RhcnRSZXNwb25zZRJFCgRKb2JzEh0uZ29hcC5pbXBvcnRlci52MS5Kb2JzUmVxdWVzdBoeLmdvYXAuaW1wb3J0ZXIudjEuSm9ic1Jlc3BvbnNlEksKBkNhbmNlbBIfLmdvYXAuaW1wb3J0ZXIudjEuQ2FuY2VsUmVxdWVzdBogLmdvYXAuaW1wb3J0ZXIudjEuQ2FuY2VsUmVzcG9uc2UyhQQKDUltcG9ydFNlcnZpY2USaQoQUmVnaXN0ZXJJbXBvcnRlchIpLmdvYXAuaW1wb3J0ZXIudjEuUmVnaXN0ZXJJbXBvcnRlclJlcXVlc3QaKi5nb2FwLmltcG9ydGVyLnYxLlJlZ2lzdGVySW1wb3J0ZXJSZXNwb25zZRJgCg1MaXN0SW1wb3J0ZXJzEiYuZ29hcC5pbXBvcnRlci52MS5MaXN0SW1wb3J0ZXJzUmVxdWVzdBonLmdvYXAuaW1wb3J0ZXIudjEuTGlzdEltcG9ydGVyc1Jlc3BvbnNlEloKC1N0YXJ0SW1wb3J0EiQuZ29hcC5pbXBvcnRlci52MS5TdGFydEltcG9ydFJlcXVlc3QaJS5nb2FwLmltcG9ydGVyLnYxLlN0YXJ0SW1wb3J0UmVzcG9uc2USYwoOTGlzdEltcG9ydEpvYnMSJy5nb2FwLmltcG9ydGVyLnYxLkxpc3RJbXBvcnRKb2JzUmVxdWVzdBooLmdvYXAuaW1wb3J0ZXIudjEuTGlzdEltcG9ydEpvYnNSZXNwb25zZRJmCg9DYW5jZWxJbXBvcnRKb2ISKC5nb2FwLmltcG9ydGVyLnYxLkNhbmNlbEltcG9ydEpvYlJlcXVlc3QaKS5nb2FwLmltcG9ydGVyLnYxLkNhbmNlbEltcG9ydEpvYlJlc3BvbnNlQskBChRjb20uZ29hcC5pbXBvcnRlci52MUINSW1wb3J0ZXJQcm90b1ABWkBnaXRodWIuY29tL3ppbXdpcC9nb2FwL2NvbnRyYWN0cy9nZW4vZ29hcC9pbXBvcnRlci92MTtpbXBvcnRlcnYxogIDR0lYqgIQR29hcC5JbXBvcnRlci5WMcoCEEdvYXBcSW1wb3J0ZXJcVjHiAhxHb2FwXEltcG9ydGVyXFYxXEdQQk1ldGFkYXRh6gISR29hcDo6SW1wb3J0ZXI6OlYxYgZwcm90bzM", [file_google_protobuf_struct, file_google_protobuf_timestamp, file_goap_registry_v1_registry]);
+  fileDesc("Ch9nb2FwL2ltcG9ydGVyL3YxL2ltcG9ydGVyLnByb3RvEhBnb2FwLmltcG9ydGVyLnYxIi4KCkltcGxlbWVudHMSDgoGZG9tYWluGAEgASgJEhAKCGltcG9ydGVyGAIgASgJInIKDEltcG9ydGVySW5mbxIKCgJpZBgBIAEoCRIPCgd2ZXJzaW9uGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEjAKCmltcGxlbWVudHMYBCADKAsyHC5nb2FwLmltcG9ydGVyLnYxLkltcGxlbWVudHMiKQoUTGlzdEltcG9ydGVyc1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJIrkBCghJbXBvcnRlchIOCgZkb21haW4YASABKAkSFgoOZG9tYWluX3ZlcnNpb24YAiABKAkSDAoEbmFtZRgDIAEoCRINCgVsYWJlbBgEIAEoCRITCgtkZXNjcmlwdGlvbhgFIAEoCRIvCgZwYXJhbXMYBiADKAsyHy5nb2FwLnJlZ2lzdHJ5LnYxLkF0dHJpYnV0ZUluZm8SEQoJYXZhaWxhYmxlGAcgASgIEg8KB3NlcnZpY2UYCCABKAkiRgoVTGlzdEltcG9ydGVyc1Jlc3BvbnNlEi0KCWltcG9ydGVycxgBIAMoCzIaLmdvYXAuaW1wb3J0ZXIudjEuSW1wb3J0ZXIihgEKElN0YXJ0SW1wb3J0UmVxdWVzdBIOCgZkb21haW4YASABKAkSEAoIaW1wb3J0ZXIYAiABKAkSJwoGcGFyYW1zGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBISCgpwcm9qZWN0X2lkGAQgASgJEhEKCW93bmVyX29yZxgFIAEoCSI1ChNTdGFydEltcG9ydFJlc3BvbnNlEh4KA2pvYhgBIAEoCzIRLmdvYXAuam9icy52MS5Kb2IyzQEKDUltcG9ydFNlcnZpY2USYAoNTGlzdEltcG9ydGVycxImLmdvYXAuaW1wb3J0ZXIudjEuTGlzdEltcG9ydGVyc1JlcXVlc3QaJy5nb2FwLmltcG9ydGVyLnYxLkxpc3RJbXBvcnRlcnNSZXNwb25zZRJaCgtTdGFydEltcG9ydBIkLmdvYXAuaW1wb3J0ZXIudjEuU3RhcnRJbXBvcnRSZXF1ZXN0GiUuZ29hcC5pbXBvcnRlci52MS5TdGFydEltcG9ydFJlc3BvbnNlQskBChRjb20uZ29hcC5pbXBvcnRlci52MUINSW1wb3J0ZXJQcm90b1ABWkBnaXRodWIuY29tL3ppbXdpcC9nb2FwL2NvbnRyYWN0cy9nZW4vZ29hcC9pbXBvcnRlci92MTtpbXBvcnRlcnYxogIDR0lYqgIQR29hcC5JbXBvcnRlci5WMcoCEEdvYXBcSW1wb3J0ZXJcVjHiAhxHb2FwXEltcG9ydGVyXFYxXEdQQk1ldGFkYXRh6gISR29hcDo6SW1wb3J0ZXI6OlYxYgZwcm90bzM", [file_google_protobuf_struct, file_goap_jobs_v1_jobs, file_goap_registry_v1_registry]);
 
 /**
  * Implements names one importer a domain declares.
@@ -119,521 +121,6 @@ export const ImporterInfoSchema: GenMessage<ImporterInfo, {jsonType: ImporterInf
   messageDesc(file_goap_importer_v1_importer, 1);
 
 /**
- * @generated from message goap.importer.v1.DescribeRequest
- */
-export type DescribeRequest = Message<"goap.importer.v1.DescribeRequest"> & {
-};
-
-/**
- * @generated from message goap.importer.v1.DescribeRequest
- */
-export type DescribeRequestJson = {
-};
-
-/**
- * Describes the message goap.importer.v1.DescribeRequest.
- * Use `create(DescribeRequestSchema)` to create a new message.
- */
-export const DescribeRequestSchema: GenMessage<DescribeRequest, {jsonType: DescribeRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 2);
-
-/**
- * @generated from message goap.importer.v1.DescribeResponse
- */
-export type DescribeResponse = Message<"goap.importer.v1.DescribeResponse"> & {
-  /**
-   * @generated from field: goap.importer.v1.ImporterInfo info = 1;
-   */
-  info?: ImporterInfo | undefined;
-};
-
-/**
- * @generated from message goap.importer.v1.DescribeResponse
- */
-export type DescribeResponseJson = {
-  /**
-   * @generated from field: goap.importer.v1.ImporterInfo info = 1;
-   */
-  info?: ImporterInfoJson;
-};
-
-/**
- * Describes the message goap.importer.v1.DescribeResponse.
- * Use `create(DescribeResponseSchema)` to create a new message.
- */
-export const DescribeResponseSchema: GenMessage<DescribeResponse, {jsonType: DescribeResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 3);
-
-/**
- * @generated from message goap.importer.v1.StartRequest
- */
-export type StartRequest = Message<"goap.importer.v1.StartRequest"> & {
-  /**
-   * the importer, as the domain declares it
-   *
-   * @generated from field: string domain = 1;
-   */
-  domain: string;
-
-  /**
-   * @generated from field: string importer = 2;
-   */
-  importer: string;
-
-  /**
-   * the values of the parameters the domain declares for it, checked by the registry
-   *
-   * @generated from field: google.protobuf.Struct params = 3;
-   */
-  params?: JsonObject | undefined;
-
-  /**
-   * the project the changes act in, the unit holding them (empty: the root unit)
-   *
-   * @generated from field: string project_id = 4;
-   */
-  projectId: string;
-
-  /**
-   * @generated from field: string owner_org = 5;
-   */
-  ownerOrg: string;
-
-  /**
-   * the subject the import acts for (the person who started it)
-   *
-   * @generated from field: string by = 6;
-   */
-  by: string;
-};
-
-/**
- * @generated from message goap.importer.v1.StartRequest
- */
-export type StartRequestJson = {
-  /**
-   * the importer, as the domain declares it
-   *
-   * @generated from field: string domain = 1;
-   */
-  domain?: string;
-
-  /**
-   * @generated from field: string importer = 2;
-   */
-  importer?: string;
-
-  /**
-   * the values of the parameters the domain declares for it, checked by the registry
-   *
-   * @generated from field: google.protobuf.Struct params = 3;
-   */
-  params?: StructJson;
-
-  /**
-   * the project the changes act in, the unit holding them (empty: the root unit)
-   *
-   * @generated from field: string project_id = 4;
-   */
-  projectId?: string;
-
-  /**
-   * @generated from field: string owner_org = 5;
-   */
-  ownerOrg?: string;
-
-  /**
-   * the subject the import acts for (the person who started it)
-   *
-   * @generated from field: string by = 6;
-   */
-  by?: string;
-};
-
-/**
- * Describes the message goap.importer.v1.StartRequest.
- * Use `create(StartRequestSchema)` to create a new message.
- */
-export const StartRequestSchema: GenMessage<StartRequest, {jsonType: StartRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 4);
-
-/**
- * @generated from message goap.importer.v1.StartResponse
- */
-export type StartResponse = Message<"goap.importer.v1.StartResponse"> & {
-  /**
-   * @generated from field: goap.importer.v1.Job job = 1;
-   */
-  job?: Job | undefined;
-};
-
-/**
- * @generated from message goap.importer.v1.StartResponse
- */
-export type StartResponseJson = {
-  /**
-   * @generated from field: goap.importer.v1.Job job = 1;
-   */
-  job?: JobJson;
-};
-
-/**
- * Describes the message goap.importer.v1.StartResponse.
- * Use `create(StartResponseSchema)` to create a new message.
- */
-export const StartResponseSchema: GenMessage<StartResponse, {jsonType: StartResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 5);
-
-/**
- * @generated from message goap.importer.v1.JobsRequest
- */
-export type JobsRequest = Message<"goap.importer.v1.JobsRequest"> & {
-};
-
-/**
- * @generated from message goap.importer.v1.JobsRequest
- */
-export type JobsRequestJson = {
-};
-
-/**
- * Describes the message goap.importer.v1.JobsRequest.
- * Use `create(JobsRequestSchema)` to create a new message.
- */
-export const JobsRequestSchema: GenMessage<JobsRequest, {jsonType: JobsRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 6);
-
-/**
- * @generated from message goap.importer.v1.JobsResponse
- */
-export type JobsResponse = Message<"goap.importer.v1.JobsResponse"> & {
-  /**
-   * @generated from field: repeated goap.importer.v1.Job jobs = 1;
-   */
-  jobs: Job[];
-};
-
-/**
- * @generated from message goap.importer.v1.JobsResponse
- */
-export type JobsResponseJson = {
-  /**
-   * @generated from field: repeated goap.importer.v1.Job jobs = 1;
-   */
-  jobs?: JobJson[];
-};
-
-/**
- * Describes the message goap.importer.v1.JobsResponse.
- * Use `create(JobsResponseSchema)` to create a new message.
- */
-export const JobsResponseSchema: GenMessage<JobsResponse, {jsonType: JobsResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 7);
-
-/**
- * @generated from message goap.importer.v1.CancelRequest
- */
-export type CancelRequest = Message<"goap.importer.v1.CancelRequest"> & {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
-};
-
-/**
- * @generated from message goap.importer.v1.CancelRequest
- */
-export type CancelRequestJson = {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id?: string;
-};
-
-/**
- * Describes the message goap.importer.v1.CancelRequest.
- * Use `create(CancelRequestSchema)` to create a new message.
- */
-export const CancelRequestSchema: GenMessage<CancelRequest, {jsonType: CancelRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 8);
-
-/**
- * @generated from message goap.importer.v1.CancelResponse
- */
-export type CancelResponse = Message<"goap.importer.v1.CancelResponse"> & {
-  /**
-   * @generated from field: goap.importer.v1.Job job = 1;
-   */
-  job?: Job | undefined;
-};
-
-/**
- * @generated from message goap.importer.v1.CancelResponse
- */
-export type CancelResponseJson = {
-  /**
-   * @generated from field: goap.importer.v1.Job job = 1;
-   */
-  job?: JobJson;
-};
-
-/**
- * Describes the message goap.importer.v1.CancelResponse.
- * Use `create(CancelResponseSchema)` to create a new message.
- */
-export const CancelResponseSchema: GenMessage<CancelResponse, {jsonType: CancelResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 9);
-
-/**
- * Job is one run of an importer.
- *
- * @generated from message goap.importer.v1.Job
- */
-export type Job = Message<"goap.importer.v1.Job"> & {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
-
-  /**
-   * @generated from field: string domain = 2;
-   */
-  domain: string;
-
-  /**
-   * @generated from field: string importer = 3;
-   */
-  importer: string;
-
-  /**
-   * running | done | failed | cancelled
-   *
-   * @generated from field: string status = 4;
-   */
-  status: string;
-
-  /**
-   * @generated from field: google.protobuf.Struct params = 5;
-   */
-  params?: JsonObject | undefined;
-
-  /**
-   * @generated from field: string project_id = 6;
-   */
-  projectId: string;
-
-  /**
-   * @generated from field: string by = 7;
-   */
-  by: string;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp started_at = 8;
-   */
-  startedAt?: Timestamp | undefined;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp ended_at = 9;
-   */
-  endedAt?: Timestamp | undefined;
-
-  /**
-   * the last progress line the importer reported
-   *
-   * @generated from field: string progress = 10;
-   */
-  progress: string;
-
-  /**
-   * counters the importer keeps (commits, created, ...)
-   *
-   * @generated from field: map<string, int64> stats = 11;
-   */
-  stats: { [key: string]: bigint };
-
-  /**
-   * @generated from field: string error = 12;
-   */
-  error: string;
-
-  /**
-   * the service running it (filled by the registry)
-   *
-   * @generated from field: string service = 13;
-   */
-  service: string;
-};
-
-/**
- * Job is one run of an importer.
- *
- * @generated from message goap.importer.v1.Job
- */
-export type JobJson = {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id?: string;
-
-  /**
-   * @generated from field: string domain = 2;
-   */
-  domain?: string;
-
-  /**
-   * @generated from field: string importer = 3;
-   */
-  importer?: string;
-
-  /**
-   * running | done | failed | cancelled
-   *
-   * @generated from field: string status = 4;
-   */
-  status?: string;
-
-  /**
-   * @generated from field: google.protobuf.Struct params = 5;
-   */
-  params?: StructJson;
-
-  /**
-   * @generated from field: string project_id = 6;
-   */
-  projectId?: string;
-
-  /**
-   * @generated from field: string by = 7;
-   */
-  by?: string;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp started_at = 8;
-   */
-  startedAt?: TimestampJson;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp ended_at = 9;
-   */
-  endedAt?: TimestampJson;
-
-  /**
-   * the last progress line the importer reported
-   *
-   * @generated from field: string progress = 10;
-   */
-  progress?: string;
-
-  /**
-   * counters the importer keeps (commits, created, ...)
-   *
-   * @generated from field: map<string, int64> stats = 11;
-   */
-  stats?: { [key: string]: string };
-
-  /**
-   * @generated from field: string error = 12;
-   */
-  error?: string;
-
-  /**
-   * the service running it (filled by the registry)
-   *
-   * @generated from field: string service = 13;
-   */
-  service?: string;
-};
-
-/**
- * Describes the message goap.importer.v1.Job.
- * Use `create(JobSchema)` to create a new message.
- */
-export const JobSchema: GenMessage<Job, {jsonType: JobJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 10);
-
-/**
- * @generated from message goap.importer.v1.RegisterImporterRequest
- */
-export type RegisterImporterRequest = Message<"goap.importer.v1.RegisterImporterRequest"> & {
-  /**
-   * @generated from field: goap.importer.v1.ImporterInfo info = 1;
-   */
-  info?: ImporterInfo | undefined;
-
-  /**
-   * URL the registry reaches the service at
-   *
-   * @generated from field: string endpoint = 2;
-   */
-  endpoint: string;
-};
-
-/**
- * @generated from message goap.importer.v1.RegisterImporterRequest
- */
-export type RegisterImporterRequestJson = {
-  /**
-   * @generated from field: goap.importer.v1.ImporterInfo info = 1;
-   */
-  info?: ImporterInfoJson;
-
-  /**
-   * URL the registry reaches the service at
-   *
-   * @generated from field: string endpoint = 2;
-   */
-  endpoint?: string;
-};
-
-/**
- * Describes the message goap.importer.v1.RegisterImporterRequest.
- * Use `create(RegisterImporterRequestSchema)` to create a new message.
- */
-export const RegisterImporterRequestSchema: GenMessage<RegisterImporterRequest, {jsonType: RegisterImporterRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 11);
-
-/**
- * @generated from message goap.importer.v1.RegisterImporterResponse
- */
-export type RegisterImporterResponse = Message<"goap.importer.v1.RegisterImporterResponse"> & {
-  /**
-   * @generated from field: int32 lease_seconds = 1;
-   */
-  leaseSeconds: number;
-
-  /**
-   * implemented importers no domain in force declares: they are not offered (published later, they are)
-   *
-   * @generated from field: repeated goap.importer.v1.Implements undeclared = 2;
-   */
-  undeclared: Implements[];
-};
-
-/**
- * @generated from message goap.importer.v1.RegisterImporterResponse
- */
-export type RegisterImporterResponseJson = {
-  /**
-   * @generated from field: int32 lease_seconds = 1;
-   */
-  leaseSeconds?: number;
-
-  /**
-   * implemented importers no domain in force declares: they are not offered (published later, they are)
-   *
-   * @generated from field: repeated goap.importer.v1.Implements undeclared = 2;
-   */
-  undeclared?: ImplementsJson[];
-};
-
-/**
- * Describes the message goap.importer.v1.RegisterImporterResponse.
- * Use `create(RegisterImporterResponseSchema)` to create a new message.
- */
-export const RegisterImporterResponseSchema: GenMessage<RegisterImporterResponse, {jsonType: RegisterImporterResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 12);
-
-/**
  * @generated from message goap.importer.v1.ListImportersRequest
  */
 export type ListImportersRequest = Message<"goap.importer.v1.ListImportersRequest"> & {
@@ -662,7 +149,7 @@ export type ListImportersRequestJson = {
  * Use `create(ListImportersRequestSchema)` to create a new message.
  */
 export const ListImportersRequestSchema: GenMessage<ListImportersRequest, {jsonType: ListImportersRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 13);
+  messageDesc(file_goap_importer_v1_importer, 2);
 
 /**
  * Importer is an importer a domain declares, as the registry knows it.
@@ -703,14 +190,14 @@ export type Importer = Message<"goap.importer.v1.Importer"> & {
   params: AttributeInfo[];
 
   /**
-   * a live service implements it
+   * a live worker implements it
    *
    * @generated from field: bool available = 7;
    */
   available: boolean;
 
   /**
-   * the service implementing it, when there is one
+   * the worker implementing it, when there is one
    *
    * @generated from field: string service = 8;
    */
@@ -756,14 +243,14 @@ export type ImporterJson = {
   params?: AttributeInfoJson[];
 
   /**
-   * a live service implements it
+   * a live worker implements it
    *
    * @generated from field: bool available = 7;
    */
   available?: boolean;
 
   /**
-   * the service implementing it, when there is one
+   * the worker implementing it, when there is one
    *
    * @generated from field: string service = 8;
    */
@@ -775,7 +262,7 @@ export type ImporterJson = {
  * Use `create(ImporterSchema)` to create a new message.
  */
 export const ImporterSchema: GenMessage<Importer, {jsonType: ImporterJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 14);
+  messageDesc(file_goap_importer_v1_importer, 3);
 
 /**
  * @generated from message goap.importer.v1.ListImportersResponse
@@ -802,7 +289,7 @@ export type ListImportersResponseJson = {
  * Use `create(ListImportersResponseSchema)` to create a new message.
  */
 export const ListImportersResponseSchema: GenMessage<ListImportersResponse, {jsonType: ListImportersResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 15);
+  messageDesc(file_goap_importer_v1_importer, 4);
 
 /**
  * @generated from message goap.importer.v1.StartImportRequest
@@ -873,14 +360,14 @@ export type StartImportRequestJson = {
  * Use `create(StartImportRequestSchema)` to create a new message.
  */
 export const StartImportRequestSchema: GenMessage<StartImportRequest, {jsonType: StartImportRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 16);
+  messageDesc(file_goap_importer_v1_importer, 5);
 
 /**
  * @generated from message goap.importer.v1.StartImportResponse
  */
 export type StartImportResponse = Message<"goap.importer.v1.StartImportResponse"> & {
   /**
-   * @generated from field: goap.importer.v1.Job job = 1;
+   * @generated from field: goap.jobs.v1.Job job = 1;
    */
   job?: Job | undefined;
 };
@@ -890,7 +377,7 @@ export type StartImportResponse = Message<"goap.importer.v1.StartImportResponse"
  */
 export type StartImportResponseJson = {
   /**
-   * @generated from field: goap.importer.v1.Job job = 1;
+   * @generated from field: goap.jobs.v1.Job job = 1;
    */
   job?: JobJson;
 };
@@ -900,199 +387,17 @@ export type StartImportResponseJson = {
  * Use `create(StartImportResponseSchema)` to create a new message.
  */
 export const StartImportResponseSchema: GenMessage<StartImportResponse, {jsonType: StartImportResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 17);
+  messageDesc(file_goap_importer_v1_importer, 6);
 
 /**
- * @generated from message goap.importer.v1.ListImportJobsRequest
- */
-export type ListImportJobsRequest = Message<"goap.importer.v1.ListImportJobsRequest"> & {
-  /**
-   * only the jobs of the domain of this namespace
-   *
-   * @generated from field: string namespace = 1;
-   */
-  namespace: string;
-};
-
-/**
- * @generated from message goap.importer.v1.ListImportJobsRequest
- */
-export type ListImportJobsRequestJson = {
-  /**
-   * only the jobs of the domain of this namespace
-   *
-   * @generated from field: string namespace = 1;
-   */
-  namespace?: string;
-};
-
-/**
- * Describes the message goap.importer.v1.ListImportJobsRequest.
- * Use `create(ListImportJobsRequestSchema)` to create a new message.
- */
-export const ListImportJobsRequestSchema: GenMessage<ListImportJobsRequest, {jsonType: ListImportJobsRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 18);
-
-/**
- * @generated from message goap.importer.v1.ListImportJobsResponse
- */
-export type ListImportJobsResponse = Message<"goap.importer.v1.ListImportJobsResponse"> & {
-  /**
-   * @generated from field: repeated goap.importer.v1.Job jobs = 1;
-   */
-  jobs: Job[];
-};
-
-/**
- * @generated from message goap.importer.v1.ListImportJobsResponse
- */
-export type ListImportJobsResponseJson = {
-  /**
-   * @generated from field: repeated goap.importer.v1.Job jobs = 1;
-   */
-  jobs?: JobJson[];
-};
-
-/**
- * Describes the message goap.importer.v1.ListImportJobsResponse.
- * Use `create(ListImportJobsResponseSchema)` to create a new message.
- */
-export const ListImportJobsResponseSchema: GenMessage<ListImportJobsResponse, {jsonType: ListImportJobsResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 19);
-
-/**
- * @generated from message goap.importer.v1.CancelImportJobRequest
- */
-export type CancelImportJobRequest = Message<"goap.importer.v1.CancelImportJobRequest"> & {
-  /**
-   * @generated from field: string service = 1;
-   */
-  service: string;
-
-  /**
-   * @generated from field: string id = 2;
-   */
-  id: string;
-};
-
-/**
- * @generated from message goap.importer.v1.CancelImportJobRequest
- */
-export type CancelImportJobRequestJson = {
-  /**
-   * @generated from field: string service = 1;
-   */
-  service?: string;
-
-  /**
-   * @generated from field: string id = 2;
-   */
-  id?: string;
-};
-
-/**
- * Describes the message goap.importer.v1.CancelImportJobRequest.
- * Use `create(CancelImportJobRequestSchema)` to create a new message.
- */
-export const CancelImportJobRequestSchema: GenMessage<CancelImportJobRequest, {jsonType: CancelImportJobRequestJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 20);
-
-/**
- * @generated from message goap.importer.v1.CancelImportJobResponse
- */
-export type CancelImportJobResponse = Message<"goap.importer.v1.CancelImportJobResponse"> & {
-  /**
-   * @generated from field: goap.importer.v1.Job job = 1;
-   */
-  job?: Job | undefined;
-};
-
-/**
- * @generated from message goap.importer.v1.CancelImportJobResponse
- */
-export type CancelImportJobResponseJson = {
-  /**
-   * @generated from field: goap.importer.v1.Job job = 1;
-   */
-  job?: JobJson;
-};
-
-/**
- * Describes the message goap.importer.v1.CancelImportJobResponse.
- * Use `create(CancelImportJobResponseSchema)` to create a new message.
- */
-export const CancelImportJobResponseSchema: GenMessage<CancelImportJobResponse, {jsonType: CancelImportJobResponseJson}> = /*@__PURE__*/
-  messageDesc(file_goap_importer_v1_importer, 21);
-
-/**
- * ImporterService is the protocol every importer service implements. It is called by the import registry only.
- *
- * @generated from service goap.importer.v1.ImporterService
- */
-export const ImporterService: GenService<{
-  /**
-   * Describe returns the identity of the service and the importers it implements.
-   *
-   * @generated from rpc goap.importer.v1.ImporterService.Describe
-   */
-  describe: {
-    methodKind: "unary";
-    input: typeof DescribeRequestSchema;
-    output: typeof DescribeResponseSchema;
-  },
-  /**
-   * Start starts an import in the background and returns its job at once.
-   *
-   * @generated from rpc goap.importer.v1.ImporterService.Start
-   */
-  start: {
-    methodKind: "unary";
-    input: typeof StartRequestSchema;
-    output: typeof StartResponseSchema;
-  },
-  /**
-   * Jobs lists the jobs the service holds (running and finished, newest first).
-   *
-   * @generated from rpc goap.importer.v1.ImporterService.Jobs
-   */
-  jobs: {
-    methodKind: "unary";
-    input: typeof JobsRequestSchema;
-    output: typeof JobsResponseSchema;
-  },
-  /**
-   * Cancel stops a running job; the importer stops between two units of work (a commit for the git importer).
-   *
-   * @generated from rpc goap.importer.v1.ImporterService.Cancel
-   */
-  cancel: {
-    methodKind: "unary";
-    input: typeof CancelRequestSchema;
-    output: typeof CancelResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_goap_importer_v1_importer, 0);
-
-/**
- * ImportService is the import registry, served by the graph service next to the domain registry: the importer services
- * register with it, the people list the sources of a namespace and run them through it.
+ * ImportService is the import registry, served by the graph service next to the domain registry: the people list the
+ * sources of a namespace and run them through it; the runs are jobs (goap.jobs.v1), followed and cancelled there.
  *
  * @generated from service goap.importer.v1.ImportService
  */
 export const ImportService: GenService<{
   /**
-   * RegisterImporter announces an importer service and renews its lease (a heartbeat). It needs the shared token of the
-   * importers (GOAP_IMPORTER_TOKEN, header X-Goap-Importer-Token).
-   *
-   * @generated from rpc goap.importer.v1.ImportService.RegisterImporter
-   */
-  registerImporter: {
-    methodKind: "unary";
-    input: typeof RegisterImporterRequestSchema;
-    output: typeof RegisterImporterResponseSchema;
-  },
-  /**
-   * ListImporters lists the importers the domains in force declare, each with whether a live service implements it.
+   * ListImporters lists the importers the domains in force declare, each with whether a live worker implements it.
    *
    * @generated from rpc goap.importer.v1.ImportService.ListImporters
    */
@@ -1111,26 +416,6 @@ export const ImportService: GenService<{
     input: typeof StartImportRequestSchema;
     output: typeof StartImportResponseSchema;
   },
-  /**
-   * ListImportJobs lists the jobs of the live importer services, newest first.
-   *
-   * @generated from rpc goap.importer.v1.ImportService.ListImportJobs
-   */
-  listImportJobs: {
-    methodKind: "unary";
-    input: typeof ListImportJobsRequestSchema;
-    output: typeof ListImportJobsResponseSchema;
-  },
-  /**
-   * CancelImportJob stops a running job (who started it, or an administrator).
-   *
-   * @generated from rpc goap.importer.v1.ImportService.CancelImportJob
-   */
-  cancelImportJob: {
-    methodKind: "unary";
-    input: typeof CancelImportJobRequestSchema;
-    output: typeof CancelImportJobResponseSchema;
-  },
 }> = /*@__PURE__*/
-  serviceDesc(file_goap_importer_v1_importer, 1);
+  serviceDesc(file_goap_importer_v1_importer, 0);
 

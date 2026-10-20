@@ -36,6 +36,8 @@
     archived: 'archived',
     allow: 'allow',
     deny: 'deny',
+    queued: 'queued',
+    done: 'done',
   };
 
   const TONES: Record<string, string> = {
@@ -72,6 +74,8 @@
     archived: 'neutral',
     allow: 'ok',
     deny: 'danger',
+    queued: 'info',
+    done: 'ok',
   };
 
   const tone = $derived(TONES[status] ?? 'neutral');

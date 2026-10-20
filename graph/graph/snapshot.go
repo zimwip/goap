@@ -246,6 +246,14 @@ type SnapshotImport struct {
 	// Gate, when set, is asked for every node type the import writes, once the change exists (authorization of the
 	// edges): an error stops the import, and the change is purged.
 	Gate func(c domain.Change, typ string) error
+	// Progress, when set, is told how far the import is: done of total steps (a node written, then its links).
+	Progress func(done, total int)
+}
+
+func (in SnapshotImport) progress(done, total int) {
+	if in.Progress != nil {
+		in.Progress(done, total)
+	}
 }
 
 // SnapshotImportResult is the outcome of an import: the change it created (empty when the graph already held the
@@ -394,7 +402,8 @@ func (g *Graph) ImportSnapshot(ctx context.Context, in SnapshotImport) (res Snap
 	why := "imported from a snapshot"
 
 	// first the nodes, created or checked out, so that the links may name any of them
-	for _, p := range plans {
+	for i, p := range plans {
+		in.progress(i, 2*len(plans))
 		if p.node == nil {
 			cn, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: p.sn.Key, Type: p.sn.Type, Properties: p.sn.Properties, Owner: p.owner, Rationale: why, ProducedBy: in.By})
 			if err != nil {
@@ -431,7 +440,8 @@ func (g *Graph) ImportSnapshot(ctx context.Context, in SnapshotImport) (res Snap
 		}
 		return domain.NodeRef{}, false
 	}
-	for _, p := range plans {
+	for i, p := range plans {
+		in.progress(len(plans)+i, 2*len(plans))
 		if p.node != nil && !p.links {
 			continue
 		}

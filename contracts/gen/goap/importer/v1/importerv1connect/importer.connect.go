@@ -21,8 +21,6 @@ import (
 const _ = connect.IsAtLeastVersion1_13_0
 
 const (
-	// ImporterServiceName is the fully-qualified name of the ImporterService service.
-	ImporterServiceName = "goap.importer.v1.ImporterService"
 	// ImportServiceName is the fully-qualified name of the ImportService service.
 	ImportServiceName = "goap.importer.v1.ImportService"
 )
@@ -35,201 +33,20 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ImporterServiceDescribeProcedure is the fully-qualified name of the ImporterService's Describe
-	// RPC.
-	ImporterServiceDescribeProcedure = "/goap.importer.v1.ImporterService/Describe"
-	// ImporterServiceStartProcedure is the fully-qualified name of the ImporterService's Start RPC.
-	ImporterServiceStartProcedure = "/goap.importer.v1.ImporterService/Start"
-	// ImporterServiceJobsProcedure is the fully-qualified name of the ImporterService's Jobs RPC.
-	ImporterServiceJobsProcedure = "/goap.importer.v1.ImporterService/Jobs"
-	// ImporterServiceCancelProcedure is the fully-qualified name of the ImporterService's Cancel RPC.
-	ImporterServiceCancelProcedure = "/goap.importer.v1.ImporterService/Cancel"
-	// ImportServiceRegisterImporterProcedure is the fully-qualified name of the ImportService's
-	// RegisterImporter RPC.
-	ImportServiceRegisterImporterProcedure = "/goap.importer.v1.ImportService/RegisterImporter"
 	// ImportServiceListImportersProcedure is the fully-qualified name of the ImportService's
 	// ListImporters RPC.
 	ImportServiceListImportersProcedure = "/goap.importer.v1.ImportService/ListImporters"
 	// ImportServiceStartImportProcedure is the fully-qualified name of the ImportService's StartImport
 	// RPC.
 	ImportServiceStartImportProcedure = "/goap.importer.v1.ImportService/StartImport"
-	// ImportServiceListImportJobsProcedure is the fully-qualified name of the ImportService's
-	// ListImportJobs RPC.
-	ImportServiceListImportJobsProcedure = "/goap.importer.v1.ImportService/ListImportJobs"
-	// ImportServiceCancelImportJobProcedure is the fully-qualified name of the ImportService's
-	// CancelImportJob RPC.
-	ImportServiceCancelImportJobProcedure = "/goap.importer.v1.ImportService/CancelImportJob"
 )
-
-// ImporterServiceClient is a client for the goap.importer.v1.ImporterService service.
-type ImporterServiceClient interface {
-	// Describe returns the identity of the service and the importers it implements.
-	Describe(context.Context, *connect.Request[v1.DescribeRequest]) (*connect.Response[v1.DescribeResponse], error)
-	// Start starts an import in the background and returns its job at once.
-	Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error)
-	// Jobs lists the jobs the service holds (running and finished, newest first).
-	Jobs(context.Context, *connect.Request[v1.JobsRequest]) (*connect.Response[v1.JobsResponse], error)
-	// Cancel stops a running job; the importer stops between two units of work (a commit for the git importer).
-	Cancel(context.Context, *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error)
-}
-
-// NewImporterServiceClient constructs a client for the goap.importer.v1.ImporterService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewImporterServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ImporterServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	importerServiceMethods := v1.File_goap_importer_v1_importer_proto.Services().ByName("ImporterService").Methods()
-	return &importerServiceClient{
-		describe: connect.NewClient[v1.DescribeRequest, v1.DescribeResponse](
-			httpClient,
-			baseURL+ImporterServiceDescribeProcedure,
-			connect.WithSchema(importerServiceMethods.ByName("Describe")),
-			connect.WithClientOptions(opts...),
-		),
-		start: connect.NewClient[v1.StartRequest, v1.StartResponse](
-			httpClient,
-			baseURL+ImporterServiceStartProcedure,
-			connect.WithSchema(importerServiceMethods.ByName("Start")),
-			connect.WithClientOptions(opts...),
-		),
-		jobs: connect.NewClient[v1.JobsRequest, v1.JobsResponse](
-			httpClient,
-			baseURL+ImporterServiceJobsProcedure,
-			connect.WithSchema(importerServiceMethods.ByName("Jobs")),
-			connect.WithClientOptions(opts...),
-		),
-		cancel: connect.NewClient[v1.CancelRequest, v1.CancelResponse](
-			httpClient,
-			baseURL+ImporterServiceCancelProcedure,
-			connect.WithSchema(importerServiceMethods.ByName("Cancel")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// importerServiceClient implements ImporterServiceClient.
-type importerServiceClient struct {
-	describe *connect.Client[v1.DescribeRequest, v1.DescribeResponse]
-	start    *connect.Client[v1.StartRequest, v1.StartResponse]
-	jobs     *connect.Client[v1.JobsRequest, v1.JobsResponse]
-	cancel   *connect.Client[v1.CancelRequest, v1.CancelResponse]
-}
-
-// Describe calls goap.importer.v1.ImporterService.Describe.
-func (c *importerServiceClient) Describe(ctx context.Context, req *connect.Request[v1.DescribeRequest]) (*connect.Response[v1.DescribeResponse], error) {
-	return c.describe.CallUnary(ctx, req)
-}
-
-// Start calls goap.importer.v1.ImporterService.Start.
-func (c *importerServiceClient) Start(ctx context.Context, req *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error) {
-	return c.start.CallUnary(ctx, req)
-}
-
-// Jobs calls goap.importer.v1.ImporterService.Jobs.
-func (c *importerServiceClient) Jobs(ctx context.Context, req *connect.Request[v1.JobsRequest]) (*connect.Response[v1.JobsResponse], error) {
-	return c.jobs.CallUnary(ctx, req)
-}
-
-// Cancel calls goap.importer.v1.ImporterService.Cancel.
-func (c *importerServiceClient) Cancel(ctx context.Context, req *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error) {
-	return c.cancel.CallUnary(ctx, req)
-}
-
-// ImporterServiceHandler is an implementation of the goap.importer.v1.ImporterService service.
-type ImporterServiceHandler interface {
-	// Describe returns the identity of the service and the importers it implements.
-	Describe(context.Context, *connect.Request[v1.DescribeRequest]) (*connect.Response[v1.DescribeResponse], error)
-	// Start starts an import in the background and returns its job at once.
-	Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error)
-	// Jobs lists the jobs the service holds (running and finished, newest first).
-	Jobs(context.Context, *connect.Request[v1.JobsRequest]) (*connect.Response[v1.JobsResponse], error)
-	// Cancel stops a running job; the importer stops between two units of work (a commit for the git importer).
-	Cancel(context.Context, *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error)
-}
-
-// NewImporterServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewImporterServiceHandler(svc ImporterServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	importerServiceMethods := v1.File_goap_importer_v1_importer_proto.Services().ByName("ImporterService").Methods()
-	importerServiceDescribeHandler := connect.NewUnaryHandler(
-		ImporterServiceDescribeProcedure,
-		svc.Describe,
-		connect.WithSchema(importerServiceMethods.ByName("Describe")),
-		connect.WithHandlerOptions(opts...),
-	)
-	importerServiceStartHandler := connect.NewUnaryHandler(
-		ImporterServiceStartProcedure,
-		svc.Start,
-		connect.WithSchema(importerServiceMethods.ByName("Start")),
-		connect.WithHandlerOptions(opts...),
-	)
-	importerServiceJobsHandler := connect.NewUnaryHandler(
-		ImporterServiceJobsProcedure,
-		svc.Jobs,
-		connect.WithSchema(importerServiceMethods.ByName("Jobs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	importerServiceCancelHandler := connect.NewUnaryHandler(
-		ImporterServiceCancelProcedure,
-		svc.Cancel,
-		connect.WithSchema(importerServiceMethods.ByName("Cancel")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/goap.importer.v1.ImporterService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ImporterServiceDescribeProcedure:
-			importerServiceDescribeHandler.ServeHTTP(w, r)
-		case ImporterServiceStartProcedure:
-			importerServiceStartHandler.ServeHTTP(w, r)
-		case ImporterServiceJobsProcedure:
-			importerServiceJobsHandler.ServeHTTP(w, r)
-		case ImporterServiceCancelProcedure:
-			importerServiceCancelHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
-}
-
-// UnimplementedImporterServiceHandler returns CodeUnimplemented from all methods.
-type UnimplementedImporterServiceHandler struct{}
-
-func (UnimplementedImporterServiceHandler) Describe(context.Context, *connect.Request[v1.DescribeRequest]) (*connect.Response[v1.DescribeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.importer.v1.ImporterService.Describe is not implemented"))
-}
-
-func (UnimplementedImporterServiceHandler) Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.importer.v1.ImporterService.Start is not implemented"))
-}
-
-func (UnimplementedImporterServiceHandler) Jobs(context.Context, *connect.Request[v1.JobsRequest]) (*connect.Response[v1.JobsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.importer.v1.ImporterService.Jobs is not implemented"))
-}
-
-func (UnimplementedImporterServiceHandler) Cancel(context.Context, *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.importer.v1.ImporterService.Cancel is not implemented"))
-}
 
 // ImportServiceClient is a client for the goap.importer.v1.ImportService service.
 type ImportServiceClient interface {
-	// RegisterImporter announces an importer service and renews its lease (a heartbeat). It needs the shared token of the
-	// importers (GOAP_IMPORTER_TOKEN, header X-Goap-Importer-Token).
-	RegisterImporter(context.Context, *connect.Request[v1.RegisterImporterRequest]) (*connect.Response[v1.RegisterImporterResponse], error)
-	// ListImporters lists the importers the domains in force declare, each with whether a live service implements it.
+	// ListImporters lists the importers the domains in force declare, each with whether a live worker implements it.
 	ListImporters(context.Context, *connect.Request[v1.ListImportersRequest]) (*connect.Response[v1.ListImportersResponse], error)
 	// StartImport runs an importer for the caller (permission import:run on the namespace and the project).
 	StartImport(context.Context, *connect.Request[v1.StartImportRequest]) (*connect.Response[v1.StartImportResponse], error)
-	// ListImportJobs lists the jobs of the live importer services, newest first.
-	ListImportJobs(context.Context, *connect.Request[v1.ListImportJobsRequest]) (*connect.Response[v1.ListImportJobsResponse], error)
-	// CancelImportJob stops a running job (who started it, or an administrator).
-	CancelImportJob(context.Context, *connect.Request[v1.CancelImportJobRequest]) (*connect.Response[v1.CancelImportJobResponse], error)
 }
 
 // NewImportServiceClient constructs a client for the goap.importer.v1.ImportService service. By
@@ -243,12 +60,6 @@ func NewImportServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	importServiceMethods := v1.File_goap_importer_v1_importer_proto.Services().ByName("ImportService").Methods()
 	return &importServiceClient{
-		registerImporter: connect.NewClient[v1.RegisterImporterRequest, v1.RegisterImporterResponse](
-			httpClient,
-			baseURL+ImportServiceRegisterImporterProcedure,
-			connect.WithSchema(importServiceMethods.ByName("RegisterImporter")),
-			connect.WithClientOptions(opts...),
-		),
 		listImporters: connect.NewClient[v1.ListImportersRequest, v1.ListImportersResponse](
 			httpClient,
 			baseURL+ImportServiceListImportersProcedure,
@@ -261,33 +72,13 @@ func NewImportServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(importServiceMethods.ByName("StartImport")),
 			connect.WithClientOptions(opts...),
 		),
-		listImportJobs: connect.NewClient[v1.ListImportJobsRequest, v1.ListImportJobsResponse](
-			httpClient,
-			baseURL+ImportServiceListImportJobsProcedure,
-			connect.WithSchema(importServiceMethods.ByName("ListImportJobs")),
-			connect.WithClientOptions(opts...),
-		),
-		cancelImportJob: connect.NewClient[v1.CancelImportJobRequest, v1.CancelImportJobResponse](
-			httpClient,
-			baseURL+ImportServiceCancelImportJobProcedure,
-			connect.WithSchema(importServiceMethods.ByName("CancelImportJob")),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
 // importServiceClient implements ImportServiceClient.
 type importServiceClient struct {
-	registerImporter *connect.Client[v1.RegisterImporterRequest, v1.RegisterImporterResponse]
-	listImporters    *connect.Client[v1.ListImportersRequest, v1.ListImportersResponse]
-	startImport      *connect.Client[v1.StartImportRequest, v1.StartImportResponse]
-	listImportJobs   *connect.Client[v1.ListImportJobsRequest, v1.ListImportJobsResponse]
-	cancelImportJob  *connect.Client[v1.CancelImportJobRequest, v1.CancelImportJobResponse]
-}
-
-// RegisterImporter calls goap.importer.v1.ImportService.RegisterImporter.
-func (c *importServiceClient) RegisterImporter(ctx context.Context, req *connect.Request[v1.RegisterImporterRequest]) (*connect.Response[v1.RegisterImporterResponse], error) {
-	return c.registerImporter.CallUnary(ctx, req)
+	listImporters *connect.Client[v1.ListImportersRequest, v1.ListImportersResponse]
+	startImport   *connect.Client[v1.StartImportRequest, v1.StartImportResponse]
 }
 
 // ListImporters calls goap.importer.v1.ImportService.ListImporters.
@@ -300,29 +91,12 @@ func (c *importServiceClient) StartImport(ctx context.Context, req *connect.Requ
 	return c.startImport.CallUnary(ctx, req)
 }
 
-// ListImportJobs calls goap.importer.v1.ImportService.ListImportJobs.
-func (c *importServiceClient) ListImportJobs(ctx context.Context, req *connect.Request[v1.ListImportJobsRequest]) (*connect.Response[v1.ListImportJobsResponse], error) {
-	return c.listImportJobs.CallUnary(ctx, req)
-}
-
-// CancelImportJob calls goap.importer.v1.ImportService.CancelImportJob.
-func (c *importServiceClient) CancelImportJob(ctx context.Context, req *connect.Request[v1.CancelImportJobRequest]) (*connect.Response[v1.CancelImportJobResponse], error) {
-	return c.cancelImportJob.CallUnary(ctx, req)
-}
-
 // ImportServiceHandler is an implementation of the goap.importer.v1.ImportService service.
 type ImportServiceHandler interface {
-	// RegisterImporter announces an importer service and renews its lease (a heartbeat). It needs the shared token of the
-	// importers (GOAP_IMPORTER_TOKEN, header X-Goap-Importer-Token).
-	RegisterImporter(context.Context, *connect.Request[v1.RegisterImporterRequest]) (*connect.Response[v1.RegisterImporterResponse], error)
-	// ListImporters lists the importers the domains in force declare, each with whether a live service implements it.
+	// ListImporters lists the importers the domains in force declare, each with whether a live worker implements it.
 	ListImporters(context.Context, *connect.Request[v1.ListImportersRequest]) (*connect.Response[v1.ListImportersResponse], error)
 	// StartImport runs an importer for the caller (permission import:run on the namespace and the project).
 	StartImport(context.Context, *connect.Request[v1.StartImportRequest]) (*connect.Response[v1.StartImportResponse], error)
-	// ListImportJobs lists the jobs of the live importer services, newest first.
-	ListImportJobs(context.Context, *connect.Request[v1.ListImportJobsRequest]) (*connect.Response[v1.ListImportJobsResponse], error)
-	// CancelImportJob stops a running job (who started it, or an administrator).
-	CancelImportJob(context.Context, *connect.Request[v1.CancelImportJobRequest]) (*connect.Response[v1.CancelImportJobResponse], error)
 }
 
 // NewImportServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -332,12 +106,6 @@ type ImportServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewImportServiceHandler(svc ImportServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	importServiceMethods := v1.File_goap_importer_v1_importer_proto.Services().ByName("ImportService").Methods()
-	importServiceRegisterImporterHandler := connect.NewUnaryHandler(
-		ImportServiceRegisterImporterProcedure,
-		svc.RegisterImporter,
-		connect.WithSchema(importServiceMethods.ByName("RegisterImporter")),
-		connect.WithHandlerOptions(opts...),
-	)
 	importServiceListImportersHandler := connect.NewUnaryHandler(
 		ImportServiceListImportersProcedure,
 		svc.ListImporters,
@@ -350,30 +118,12 @@ func NewImportServiceHandler(svc ImportServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(importServiceMethods.ByName("StartImport")),
 		connect.WithHandlerOptions(opts...),
 	)
-	importServiceListImportJobsHandler := connect.NewUnaryHandler(
-		ImportServiceListImportJobsProcedure,
-		svc.ListImportJobs,
-		connect.WithSchema(importServiceMethods.ByName("ListImportJobs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	importServiceCancelImportJobHandler := connect.NewUnaryHandler(
-		ImportServiceCancelImportJobProcedure,
-		svc.CancelImportJob,
-		connect.WithSchema(importServiceMethods.ByName("CancelImportJob")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/goap.importer.v1.ImportService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case ImportServiceRegisterImporterProcedure:
-			importServiceRegisterImporterHandler.ServeHTTP(w, r)
 		case ImportServiceListImportersProcedure:
 			importServiceListImportersHandler.ServeHTTP(w, r)
 		case ImportServiceStartImportProcedure:
 			importServiceStartImportHandler.ServeHTTP(w, r)
-		case ImportServiceListImportJobsProcedure:
-			importServiceListImportJobsHandler.ServeHTTP(w, r)
-		case ImportServiceCancelImportJobProcedure:
-			importServiceCancelImportJobHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -383,22 +133,10 @@ func NewImportServiceHandler(svc ImportServiceHandler, opts ...connect.HandlerOp
 // UnimplementedImportServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedImportServiceHandler struct{}
 
-func (UnimplementedImportServiceHandler) RegisterImporter(context.Context, *connect.Request[v1.RegisterImporterRequest]) (*connect.Response[v1.RegisterImporterResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.importer.v1.ImportService.RegisterImporter is not implemented"))
-}
-
 func (UnimplementedImportServiceHandler) ListImporters(context.Context, *connect.Request[v1.ListImportersRequest]) (*connect.Response[v1.ListImportersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.importer.v1.ImportService.ListImporters is not implemented"))
 }
 
 func (UnimplementedImportServiceHandler) StartImport(context.Context, *connect.Request[v1.StartImportRequest]) (*connect.Response[v1.StartImportResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.importer.v1.ImportService.StartImport is not implemented"))
-}
-
-func (UnimplementedImportServiceHandler) ListImportJobs(context.Context, *connect.Request[v1.ListImportJobsRequest]) (*connect.Response[v1.ListImportJobsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.importer.v1.ImportService.ListImportJobs is not implemented"))
-}
-
-func (UnimplementedImportServiceHandler) CancelImportJob(context.Context, *connect.Request[v1.CancelImportJobRequest]) (*connect.Response[v1.CancelImportJobResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.importer.v1.ImportService.CancelImportJob is not implemented"))
 }

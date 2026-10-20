@@ -36,6 +36,8 @@ type Options struct {
 	Name func(typ string) string
 	// Body are the attributes rendered as sections of the body (the long texts); nil: "description".
 	Body func(typ string) []BodyAttribute
+	// Progress, when set, is told how many of the nodes are written.
+	Progress func(done, total int)
 }
 
 // The front matter of a node is flat, so that Obsidian shows it as properties and draws its links (ADR 0111):
@@ -163,7 +165,10 @@ func Write(w io.Writer, s graph.Snapshot, o Options, at time.Time) error {
 	if err := put(IndexFile, index); err != nil {
 		return err
 	}
-	for _, e := range entries {
+	for i, e := range entries {
+		if o.Progress != nil {
+			o.Progress(i, len(entries))
+		}
 		content, err := renderNode(s, e, byKey, incoming[e.node.Key], o)
 		if err != nil {
 			return fmt.Errorf("node %s: %w", e.node.Key, err)

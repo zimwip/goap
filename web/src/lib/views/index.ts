@@ -55,6 +55,7 @@ import ChangeTab from './editors/ChangeTab.svelte';
 import PoliciesTab from './editors/PoliciesTab.svelte';
 import ImportTab from './editors/ImportTab.svelte';
 import SourceImportTab from './editors/SourceImportTab.svelte';
+import JobsTab from './editors/JobsTab.svelte';
 import BaselineTab from './editors/BaselineTab.svelte';
 import { importKind, IMPORT_KINDS } from './editors/importKinds';
 
@@ -643,4 +644,15 @@ registerView({
   component: SourceImportTab,
   key: (p) => p.ns ?? '',
   tabTitle: (t) => (t.params.ns ? `Import into ${t.params.ns}` : 'Import from a source'),
+});
+
+// the long runs of the person (ADR 0149), live from the job stream
+registerView({
+  id: 'jobs',
+  zone: 'editor',
+  title: 'Jobs',
+  icon: 'clock',
+  component: JobsTab,
+  key: () => 'main',
+  tabTitle: () => 'Jobs',
 });

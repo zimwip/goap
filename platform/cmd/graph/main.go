@@ -33,6 +33,7 @@ import (
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/identity"
+	"github.com/zimwip/goap/lib/jobkit"
 	"github.com/zimwip/goap/lib/llmcfg"
 	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/platform"
@@ -193,15 +194,18 @@ func main() {
 		}
 	})
 	domains.Authz = authorizer
+	// the job service (ADR 0149): the exports, the snapshot imports and the imports from a source are its jobs; this
+	// process creates them with the services' token and runs the graph's kinds as a worker
+	jobs := jobkit.NewClient(platform.H2CClient(), platform.Env("GOAP_JOBS_URL", "http://localhost:8091"), os.Getenv("GOAP_JOB_TOKEN"), telemetry.ClientOptions()...)
 	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor(), Projects: directory.MayAccessProject, Stopped: directory.ProjectStopped,
-		Demo: devseed.DemoLoader(directory)} // the "Load demo data" setting; the alm domain must be published
+		Jobs: jobs, Demo: devseed.DemoLoader(directory)} // the "Load demo data" setting; the alm domain must be published
+	go (&jobkit.Worker{Queue: jobs, ID: jobkit.WorkerID("graph"), Kinds: graphHandler.JobRunners(), Log: log}).Run(ctx)
 	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	srv.Mount(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: domains}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	smartTags := &smarttagsvc.Service{Store: smartTagStore, Exists: smarttagsvc.VersionsExist(g.Node)}
 	srv.Mount(smarttagv1connect.NewSmartTagServiceHandler(&smarttagsvc.Handler{Service: smartTags}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
-	// the import registry (ADR 0148): the importer services register with GOAP_IMPORTER_TOKEN (none: registration
-	// closed) and are reached with it
-	imports := &importsvc.Service{Domains: domains, Authz: authorizer, Token: os.Getenv("GOAP_IMPORTER_TOKEN"), HTTPClient: platform.H2CClient()}
+	// the import registry (ADR 0148): a run is a job of the job service, an importer available when a worker claims it
+	imports := &importsvc.Service{Domains: domains, Authz: authorizer, Jobs: jobs}
 	srv.Mount(importerv1connect.NewImportServiceHandler(&importsvc.Handler{Service: imports}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)

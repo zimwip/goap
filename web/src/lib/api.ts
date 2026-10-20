@@ -30,3 +30,4 @@ export * from './api/mcp';
 export * from './api/nodeIndex';
 export * from './api/smartTags';
 export * from './api/imports';
+export * from './api/jobs';

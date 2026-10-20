@@ -581,14 +581,6 @@ export interface GraphExport {
   nodes?: number;
 }
 
-/** A message of the OKF export stream (ADR 0111): the first names the archive, the next carry its bytes (base64). */
-export interface GraphOkfChunk {
-  filename?: string;
-  mediaType?: string;
-  nodes?: number;
-  chunk?: string;
-}
-
 export interface GraphImport {
   document: string;
   title?: string;

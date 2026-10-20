@@ -28,6 +28,7 @@ import (
 	"github.com/zimwip/goap/mcp/mcpsvc"
 	"github.com/zimwip/goap/platform/convsvc"
 	"github.com/zimwip/goap/platform/eventsvc"
+	"github.com/zimwip/goap/platform/jobsvc"
 	"github.com/zimwip/goap/platform/modelgw"
 	"github.com/zimwip/goap/platform/prefssvc"
 )
@@ -44,6 +45,7 @@ type stores struct {
 	index     index.Store
 	domains   domainsvc.Store
 	smartTags smarttagsvc.Store
+	jobs      jobsvc.Store
 	// dir is the directory of the local database (sqlite), empty in memory: where the generated JWT
 	// secret of local sign-in is kept (localJWTSecret).
 	dir   string
@@ -55,7 +57,7 @@ type stores struct {
 func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 	switch kind := platform.Env("GOAP_STORE", "memory"); kind {
 	case "memory":
-		return stores{graph: graph.NewMemory(), processes: engine.NewMemoryStore(), models: modelgw.NewMemoryStore(), prefs: prefssvc.NewMemoryStore(), convs: convsvc.NewMemoryStore(), creds: credsvc.NewMemoryStore(), mcp: mcpsvc.NewMemoryStore(), index: index.NewMemory(), domains: domainsvc.NewMemoryStore(), smartTags: smarttagsvc.NewMemoryStore(), close: func() {}}, nil
+		return stores{graph: graph.NewMemory(), processes: engine.NewMemoryStore(), models: modelgw.NewMemoryStore(), prefs: prefssvc.NewMemoryStore(), convs: convsvc.NewMemoryStore(), creds: credsvc.NewMemoryStore(), mcp: mcpsvc.NewMemoryStore(), index: index.NewMemory(), domains: domainsvc.NewMemoryStore(), smartTags: smarttagsvc.NewMemoryStore(), jobs: jobsvc.NewMemoryStore(), close: func() {}}, nil
 	case "sqlite":
 		path := platform.Env("GOAP_SQLITE_PATH", filepath.Join(".goap", "goap.db"))
 		db, err := platform.OpenSQLite(ctx, path)
@@ -73,6 +75,7 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 			// the domain registry (ADR 0125 §3), under the component name it had in the registry: a local database keeps its table
 			{"registry", domainsvc.SQLiteMigrations},
 			{"smarttags", smarttagsvc.SQLiteMigrations},
+			{"jobs", jobsvc.SQLiteMigrations},
 		} {
 			if err := platform.MigrateSQLite(ctx, db, m.component, m.fs, "migrations_sqlite"); err != nil {
 				db.Close()
@@ -89,7 +92,7 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 		abs, _ := filepath.Abs(path)
 		log.Info("local storage", "sqlite", abs)
 		return stores{graph: graph.NewSQLite(db),
-			processes: processes, models: modelgw.SQLStore{DB: db}, prefs: prefssvc.SQLStore{DB: db}, convs: convsvc.SQLStore{DB: db}, creds: credsvc.SQLStore{DB: db}, mcp: mcpsvc.SQLStore{DB: db}, index: index.NewSQLite(db), domains: domainsvc.SQLStore{DB: db}, smartTags: smarttagsvc.SQLStore{DB: db}, dir: filepath.Dir(path), close: func() { closeDB(log, db) }}, nil
+			processes: processes, models: modelgw.SQLStore{DB: db}, prefs: prefssvc.SQLStore{DB: db}, convs: convsvc.SQLStore{DB: db}, creds: credsvc.SQLStore{DB: db}, mcp: mcpsvc.SQLStore{DB: db}, index: index.NewSQLite(db), domains: domainsvc.SQLStore{DB: db}, smartTags: smarttagsvc.SQLStore{DB: db}, jobs: jobsvc.SQLStore{DB: db}, dir: filepath.Dir(path), close: func() { closeDB(log, db) }}, nil
 	default:
 		return stores{}, fmt.Errorf("GOAP_STORE must be memory or sqlite, got %q", kind)
 	}

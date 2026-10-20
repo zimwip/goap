@@ -1,37 +1,26 @@
-// Package importsvc is the import registry (ADR 0148): the importer services register with it as implementing the
-// importers the domains declare (`importers:` of a domain), and the people list the sources of a namespace and run
-// them through it. The registry checks the run (the permission import:run, the parameters against the declaration) and
-// asks the service, which writes through the graph's change operations like any producer; it holds no data of its own:
-// the registrations are leases kept in memory (a service renews its own), the jobs are the services'.
+// Package importsvc is the import registry (ADR 0148): the people list the sources of a namespace the domains declare
+// (`importers:` of a domain) and run them through it. The registry checks the run (the permission import:run, the
+// parameters against the declaration) and creates its job (ADR 0149, kind import.<domain>.<importer>) for the person;
+// the importer service implementing it is a worker of the job service, which writes through the graph's change
+// operations like any producer. The registry holds no data of its own: an importer is available when a live worker
+// claims its kind, and the runs are followed, cancelled and listed on the job service.
 package importsvc
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"slices"
 	"sort"
 	"strings"
-	"sync"
-	"time"
-
-	"connectrpc.com/connect"
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
-	importerv1 "github.com/zimwip/goap/contracts/gen/goap/importer/v1"
-	"github.com/zimwip/goap/contracts/gen/goap/importer/v1/importerv1connect"
+	jobsv1 "github.com/zimwip/goap/contracts/gen/goap/jobs/v1"
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/importerkit"
-	"github.com/zimwip/goap/lib/pbconv"
+	"github.com/zimwip/goap/lib/jobkit"
 )
-
-// DefaultLease is how long a registration holds without being renewed.
-const DefaultLease = 30 * time.Second
-
-// LocalScheme is the endpoint scheme of a service running in the registry's process (AddLocal).
-const LocalScheme = "inproc://"
 
 // Errors of the registry.
 var (
@@ -48,44 +37,13 @@ type Domains interface {
 	Domains(ctx context.Context) ([]*def.Domain, error)
 }
 
-// Registration is a registered importer service.
-type Registration struct {
-	Info     *importerv1.ImporterInfo
-	Endpoint string
-	LastSeen time.Time
-	// Local registrations (AddLocal) never expire.
-	Local bool
-}
-
 // Service is the registry.
 type Service struct {
 	Domains Domains
 	// Authz decides import:run (nil: everything is refused, ADR 0138).
 	Authz authz.Authorizer
-	// Client reaches the services registered at an http(s) endpoint (default: Connect over Dial's client).
-	HTTPClient connect.HTTPClient
-	// Token is the shared secret of the importers, sent to the services on every call.
-	Token string
-	Lease time.Duration
-
-	mu    sync.Mutex
-	regs  map[string]*Registration
-	local map[string]importerv1connect.ImporterServiceClient
-	now   func() time.Time
-}
-
-func (s *Service) clock() time.Time {
-	if s.now != nil {
-		return s.now()
-	}
-	return time.Now().UTC()
-}
-
-func (s *Service) lease() time.Duration {
-	if s.Lease > 0 {
-		return s.Lease
-	}
-	return DefaultLease
+	// Jobs is the job service: the runs are its jobs, and its live workers say which importers are available.
+	Jobs jobkit.Queue
 }
 
 // declared are the importers the domains in force declare, by domain and name.
@@ -111,115 +69,12 @@ type declaration struct {
 	importer def.Importer
 }
 
-// Register records a service and renews its lease; it answers the lease and the importers it implements that no domain
-// in force declares (not offered until one does).
-func (s *Service) Register(ctx context.Context, info *importerv1.ImporterInfo, endpoint string) (time.Duration, []*importerv1.Implements, error) {
-	if info == nil || !def.NameRE.MatchString(info.Id) {
-		return 0, nil, fmt.Errorf("importer id %q: lowercase letters, digits, - and _: %w", info.GetId(), ErrInvalid)
+// serving are the kinds a live worker claims, with the worker (none without a job service).
+func (s *Service) serving(ctx context.Context) (map[string]string, error) {
+	if s.Jobs == nil {
+		return map[string]string{}, nil
 	}
-	if endpoint == "" {
-		return 0, nil, fmt.Errorf("endpoint required: %w", ErrInvalid)
-	}
-	if len(info.Implements) == 0 {
-		return 0, nil, fmt.Errorf("%s implements no importer: %w", info.Id, ErrInvalid)
-	}
-	decl, _, err := s.declared(ctx)
-	if err != nil {
-		return 0, nil, err
-	}
-	var undeclared []*importerv1.Implements
-	for _, im := range info.Implements {
-		if _, ok := decl[[2]string{im.Domain, im.Importer}]; !ok {
-			undeclared = append(undeclared, im)
-		}
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.regs == nil {
-		s.regs = map[string]*Registration{}
-	}
-	if r := s.regs[info.Id]; r != nil && r.Local {
-		return 0, nil, fmt.Errorf("%s runs in the registry's process: %w", info.Id, ErrInvalid)
-	}
-	s.regs[info.Id] = &Registration{Info: info, Endpoint: endpoint, LastSeen: s.clock()}
-	return s.lease(), undeclared, nil
-}
-
-// AddLocal registers a service running in the registry's process (goap-dev): it is called directly and never expires.
-func (s *Service) AddLocal(svc *importerkit.Service) {
-	info := svc.Importer.Info()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.regs == nil {
-		s.regs = map[string]*Registration{}
-		s.local = map[string]importerv1connect.ImporterServiceClient{}
-	}
-	if s.local == nil {
-		s.local = map[string]importerv1connect.ImporterServiceClient{}
-	}
-	ep := LocalScheme + info.Id
-	s.local[ep] = svc
-	s.regs[info.Id] = &Registration{Info: info, Endpoint: ep, LastSeen: s.clock(), Local: true}
-}
-
-// live are the registrations whose lease holds, by id.
-func (s *Service) live() []*Registration {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := s.clock()
-	var out []*Registration
-	for _, r := range s.regs {
-		if r.Local || now.Sub(r.LastSeen) <= s.lease() {
-			out = append(out, r)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Info.Id < out[j].Info.Id })
-	return out
-}
-
-// serving is the live service implementing an importer (the first by id when several do).
-func (s *Service) serving(domainName, importer string) *Registration {
-	for _, r := range s.live() {
-		for _, im := range r.Info.Implements {
-			if im.Domain == domainName && im.Importer == importer {
-				return r
-			}
-		}
-	}
-	return nil
-}
-
-func (s *Service) byID(id string) *Registration {
-	for _, r := range s.live() {
-		if r.Info.Id == id {
-			return r
-		}
-	}
-	return nil
-}
-
-func (s *Service) client(r *Registration) importerv1connect.ImporterServiceClient {
-	if strings.HasPrefix(r.Endpoint, LocalScheme) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		return s.local[r.Endpoint]
-	}
-	hc := s.HTTPClient
-	if hc == nil {
-		hc = http.DefaultClient
-	}
-	return importerv1connect.NewImporterServiceClient(hc, r.Endpoint, connect.WithInterceptors(tokenInterceptor(s.Token)))
-}
-
-func tokenInterceptor(token string) connect.Interceptor {
-	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if token != "" {
-				req.Header().Set(importerkit.TokenHeader, token)
-			}
-			return next(ctx, req)
-		}
-	})
+	return jobkit.LiveKinds(ctx, s.Jobs)
 }
 
 // Importer is a declared importer as the registry answers it.
@@ -239,6 +94,10 @@ func (s *Service) Importers(ctx context.Context, namespace string) ([]Importer, 
 	if err != nil {
 		return nil, err
 	}
+	live, err := s.serving(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var out []Importer
 	for _, d := range ds {
 		if namespace != "" && d.Name != namespace {
@@ -251,9 +110,7 @@ func (s *Service) Importers(ctx context.Context, namespace string) ([]Importer, 
 					x.Enums[a.Enum] = e.Values
 				}
 			}
-			if r := s.serving(d.Name, im.Name); r != nil {
-				x.Service = r.Info.Id
-			}
+			x.Service = live[importerkit.Kind(d.Name, im.Name)]
 			out = append(out, x)
 		}
 	}
@@ -276,7 +133,7 @@ type StartRequest struct {
 
 // Start checks and starts a run for the caller of ctx: permission import:run on the namespace and the project, the
 // parameters against the declaration (unknown ones refused, types and enums checked, defaults given).
-func (s *Service) Start(ctx context.Context, req StartRequest) (*importerv1.Job, error) {
+func (s *Service) Start(ctx context.Context, req StartRequest) (*jobsv1.Job, error) {
 	p := authz.From(ctx)
 	if p.Anonymous() {
 		return nil, fmt.Errorf("an import acts for a person: %w", ErrForbidden)
@@ -303,19 +160,20 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*importerv1.Job,
 	if err != nil {
 		return nil, err
 	}
-	r := s.serving(req.Domain, req.Importer)
-	if r == nil {
-		return nil, fmt.Errorf("importer %s/%s: no service implements it now: %w", req.Domain, req.Importer, ErrUnavailable)
-	}
-	by := p.EndUser()
-	resp, err := s.client(r).Start(ctx, connect.NewRequest(&importerv1.StartRequest{Domain: req.Domain, Importer: req.Importer,
-		Params: pbconv.Struct(params), ProjectId: req.ProjectID, OwnerOrg: req.OwnerOrg, By: by}))
+	live, err := s.serving(ctx)
 	if err != nil {
 		return nil, err
 	}
-	job := resp.Msg.Job
-	job.Service = r.Info.Id
-	return job, nil
+	kind := importerkit.Kind(req.Domain, req.Importer)
+	if live[kind] == "" {
+		return nil, fmt.Errorf("importer %s/%s: no service implements it now: %w", req.Domain, req.Importer, ErrUnavailable)
+	}
+	label := d.importer.Label
+	if label == "" {
+		label = d.importer.Name
+	}
+	return s.Jobs.Create(ctx, jobkit.Spec{Kind: kind, Label: label, Target: req.Domain, Params: params, ProjectID: req.ProjectID,
+		OwnerOrg: req.OwnerOrg, By: p.EndUser(), Principal: p})
 }
 
 // Params checks the values of a run against the parameters an importer declares and gives the defaults.
@@ -355,68 +213,4 @@ func Params(d *def.Domain, im def.Importer, values map[string]any) (map[string]a
 		return nil, fmt.Errorf("%s: %w", strings.Join(problems, "; "), ErrInvalid)
 	}
 	return out, nil
-}
-
-// Jobs lists the jobs of the live services (of the domain of namespace when set), newest first: every job for an
-// administrator, the caller's own otherwise.
-func (s *Service) Jobs(ctx context.Context, namespace string) ([]*importerv1.Job, error) {
-	p := authz.From(ctx)
-	if p.Anonymous() {
-		return nil, fmt.Errorf("anonymous: %w", ErrForbidden)
-	}
-	admin := p.HasRole("admin")
-	var out []*importerv1.Job
-	for _, r := range s.live() {
-		resp, err := s.client(r).Jobs(ctx, connect.NewRequest(&importerv1.JobsRequest{}))
-		if err != nil {
-			continue // a service that does not answer has no job to show
-		}
-		for _, j := range resp.Msg.Jobs {
-			if (namespace != "" && j.Domain != namespace) || (!admin && j.By != p.EndUser()) {
-				continue
-			}
-			j.Service = r.Info.Id
-			out = append(out, j)
-		}
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].StartedAt.AsTime().After(out[j].StartedAt.AsTime()) })
-	return out, nil
-}
-
-// Cancel stops a running job: who started it, or a holder of import:run on its namespace and project.
-func (s *Service) Cancel(ctx context.Context, service, id string) (*importerv1.Job, error) {
-	p := authz.From(ctx)
-	if p.Anonymous() {
-		return nil, fmt.Errorf("anonymous: %w", ErrForbidden)
-	}
-	r := s.byID(service)
-	if r == nil {
-		return nil, fmt.Errorf("importer service %s: %w", service, ErrNotFound)
-	}
-	c := s.client(r)
-	resp, err := c.Jobs(ctx, connect.NewRequest(&importerv1.JobsRequest{}))
-	if err != nil {
-		return nil, err
-	}
-	var job *importerv1.Job
-	for _, j := range resp.Msg.Jobs {
-		if j.Id == id {
-			job = j
-		}
-	}
-	if job == nil {
-		return nil, fmt.Errorf("job %s: %w", id, ErrNotFound)
-	}
-	if job.By != p.EndUser() {
-		if err := authz.Check(ctx, s.Authz, authz.Request{Subject: p, Action: "run",
-			Resource: authz.Resource{Type: "import", Namespace: job.Domain, Name: job.Importer, ProjectID: job.ProjectId}}); err != nil {
-			return nil, err
-		}
-	}
-	cr, err := c.Cancel(ctx, connect.NewRequest(&importerv1.CancelRequest{Id: id}))
-	if err != nil {
-		return nil, err
-	}
-	cr.Msg.Job.Service = r.Info.Id
-	return cr.Msg.Job, nil
 }

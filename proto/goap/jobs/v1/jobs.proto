@@ -1,0 +1,200 @@
+syntax = "proto3";
+
+package goap.jobs.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// The job service (ADR 0149): the long runs a person starts (an import from a source, the import of a graph snapshot,
+// an export) are jobs. The service owning a kind authorizes and creates the job for the person; a worker claims it,
+// reports its progress and writes its result; the person follows it (ListJobs, and the SSE stream GET /api/jobs/events
+// served next to this service), cancels it and downloads its result (GET /api/jobs/<id>/result).
+service JobService {
+  // GetJob returns a job of the caller (any job for an administrator).
+  rpc GetJob(GetJobRequest) returns (GetJobResponse);
+  // ListJobs lists the caller's jobs, newest first (every one with `all`, for an administrator).
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+  // CancelJob cancels a job: a queued one at once, a running one when its worker next reports.
+  rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
+
+  // The calls of the services (the job token, GOAP_JOB_TOKEN, header X-Goap-Job-Token).
+
+  // CreateJob queues a job for a person; the calling service has authorized it.
+  rpc CreateJob(CreateJobRequest) returns (CreateJobResponse);
+  // ListWorkers lists the live workers and the kinds they claim.
+  rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
+  // ClaimJob takes the oldest queued job of the worker's kinds, waiting up to `wait_ms` for one.
+  rpc ClaimJob(ClaimJobRequest) returns (ClaimJobResponse);
+  // ReportJob records the progress of a running job, renews its lease, and ends it with a final status.
+  rpc ReportJob(ReportJobRequest) returns (ReportJobResponse);
+  // ReadJobInput reads the input of a job (the snapshot of an import) from an offset.
+  rpc ReadJobInput(ReadJobInputRequest) returns (ReadJobInputResponse);
+  // WriteJobResult appends a chunk of the result of a job (the file of an export).
+  rpc WriteJobResult(WriteJobResultRequest) returns (WriteJobResultResponse);
+}
+
+// Result is the file a job produced.
+message Result {
+  string name = 1;
+  string media_type = 2;
+  int64 size = 3;
+}
+
+// Job is a long run.
+message Job {
+  string id = 1;
+  // what runs it: "import.code.git", "graph.export", "graph.import"
+  string kind = 2;
+  // what the people read
+  string label = 3;
+  // what it works on (a namespace)
+  string target = 4;
+  // queued | running | done | failed | cancelled
+  string status = 5;
+  // a cancel was asked of a running job
+  bool cancel_requested = 6;
+  google.protobuf.Struct params = 7;
+  // the person it runs for, the project and the unit its changes act in
+  string by = 8;
+  string project_id = 9;
+  string owner_org = 10;
+  // the last progress line, and how far it is (total 0: unknown)
+  string progress = 11;
+  int64 done = 12;
+  int64 total = 13;
+  map<string, int64> stats = 14;
+  // the answer of a job (the change an import created)
+  google.protobuf.Struct output = 15;
+  // the file of a job, when it wrote one
+  Result result = 16;
+  string error = 17;
+  // the worker running it
+  string worker = 18;
+  google.protobuf.Timestamp created_at = 19;
+  google.protobuf.Timestamp started_at = 20;
+  google.protobuf.Timestamp ended_at = 21;
+  google.protobuf.Timestamp updated_at = 22;
+}
+
+message GetJobRequest {
+  string id = 1;
+}
+
+message GetJobResponse {
+  Job job = 1;
+}
+
+message ListJobsRequest {
+  // only the jobs whose kind starts with this
+  string kind_prefix = 1;
+  // only the jobs about this target
+  string target = 2;
+  // every person's (an administrator)
+  bool all = 3;
+  // at most this many (default 50, at most 200)
+  int32 limit = 4;
+}
+
+message ListJobsResponse {
+  repeated Job jobs = 1;
+}
+
+message CancelJobRequest {
+  string id = 1;
+}
+
+message CancelJobResponse {
+  Job job = 1;
+}
+
+message CreateJobRequest {
+  string kind = 1;
+  string label = 2;
+  string target = 3;
+  google.protobuf.Struct params = 4;
+  string project_id = 5;
+  string owner_org = 6;
+  // the person it runs for (required)
+  string by = 7;
+  // the principal the run acts as, as JSON (authz.Principal): the person's, as the service creating the job saw it
+  string principal = 8;
+  // what the worker reads (ReadJobInput)
+  bytes input = 9;
+}
+
+message CreateJobResponse {
+  Job job = 1;
+}
+
+message Worker {
+  string id = 1;
+  repeated string kinds = 2;
+  google.protobuf.Timestamp last_seen = 3;
+}
+
+message ListWorkersRequest {}
+
+message ListWorkersResponse {
+  repeated Worker workers = 1;
+}
+
+message ClaimJobRequest {
+  // a stable id of the worker process
+  string worker = 1;
+  repeated string kinds = 2;
+  // how long to wait for a job (at most 30 s)
+  int32 wait_ms = 3;
+}
+
+message ClaimJobResponse {
+  // none when nothing came in time
+  Job job = 1;
+  // the principal the run acts as (CreateJobRequest.principal)
+  string principal = 2;
+  // the lease to renew (ReportJob) before it lapses
+  int32 lease_seconds = 3;
+}
+
+message ReportJobRequest {
+  string id = 1;
+  string worker = 2;
+  string progress = 3;
+  int64 done = 4;
+  int64 total = 5;
+  map<string, int64> stats = 6;
+  google.protobuf.Struct output = 7;
+  // empty: still running; done | failed | cancelled ends it
+  string status = 8;
+  string error = 9;
+}
+
+message ReportJobResponse {
+  // the job was cancelled: stop
+  bool cancel = 1;
+  Job job = 2;
+}
+
+message ReadJobInputRequest {
+  string id = 1;
+  string worker = 2;
+  int64 offset = 3;
+}
+
+message ReadJobInputResponse {
+  bytes data = 1;
+  // nothing past it
+  bool eof = 2;
+}
+
+message WriteJobResultRequest {
+  string id = 1;
+  string worker = 2;
+  // the first chunk names the file
+  string name = 3;
+  string media_type = 4;
+  bytes data = 5;
+}
+
+message WriteJobResultResponse {
+  int64 size = 1;
+}

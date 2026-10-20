@@ -74,8 +74,9 @@ services:
       GOAP_GRAPH_SEED: dev
       # the domain registry is the graph's (ADR 0125 §3): it publishes the shipped domains at start
       GOAP_DOMAINS_DIR: /domains
-      # the importer services register with it (ADR 0148)
-      GOAP_IMPORTER_TOKEN: ${GOAP_IMPORTER_TOKEN:-dev-importer-token}
+      # the job service (ADR 0149): the exports, the snapshot imports and the imports from a source are its jobs
+      GOAP_JOBS_URL: http://jobs:8080
+      GOAP_JOB_TOKEN: ${GOAP_JOB_TOKEN:-dev-job-token}
     ports: ["8081:8080"]
 
   registry:
@@ -113,6 +114,16 @@ services:
       <<: *env
       GOAP_DB_DSN: postgres://preferences:preferences@postgres:5432/goap?sslmode=disable
     ports: ["8087:8080"]
+
+  # the long runs (ADR 0149): one replica, its SSE stream follows the writes of its process
+  jobs:
+    <<: *service
+    entrypoint: ["/goap/jobs"]
+    environment:
+      <<: *env
+      GOAP_DB_DSN: postgres://jobs:jobs@postgres:5432/goap?sslmode=disable
+      GOAP_JOB_TOKEN: ${GOAP_JOB_TOKEN:-dev-job-token}
+    ports: ["8091:8080"]
 
   conversations:
     <<: *service
@@ -246,8 +257,8 @@ services:
     volumes: ["localfs:/data"]
     depends_on: [mcp]
 
-  # An importer is a service of its own that registers itself with the import registry of the graph (ADR 0148) for the
-  # importers the domains declare; adding a source is adding a service like this one. The git importer runs git, so it
+  # An importer is a service of its own, a worker of the job service (ADR 0149) claiming the runs of the importers the
+  # domains declare (ADR 0148); adding a source is adding a service like this one. The git importer runs git, so it
   # has an image of its own (Dockerfile, target importer-git), built by compose.
   importer-git:
     build: {context: ../.., target: importer-git}
@@ -256,12 +267,12 @@ services:
     environment:
       <<: *env
       GOAP_GRAPH_URL: http://graph:8080
-      GOAP_IMPORTER_URL: http://importer-git:8080
-      GOAP_IMPORTER_TOKEN: ${GOAP_IMPORTER_TOKEN:-dev-importer-token}
+      GOAP_JOBS_URL: http://jobs:8080
+      GOAP_JOB_TOKEN: ${GOAP_JOB_TOKEN:-dev-job-token}
       GOAP_IMPORT_GIT_ROOTS: /repos
       GOAP_IMPORT_GIT_CLONES: /clones
     volumes: ["${GOAP_IMPORT_REPOS:-./repos}:/repos:ro,z", "gitclones:/clones"]
-    depends_on: [graph]
+    depends_on: [graph, jobs]
 
   gateway:
     <<: *service
@@ -282,6 +293,7 @@ services:
       GOAP_CREDENTIALS_URL: http://credentials:8080
       GOAP_CREDENTIALS_TOKEN: ${GOAP_CREDENTIALS_TOKEN:-dev-credentials-token}
       GOAP_EVENTS_URL: http://events:8080
+      GOAP_JOBS_URL: http://jobs:8080
     ports: ["${GOAP_GATEWAY_PORT:-8080}:8080"]
 
   web:

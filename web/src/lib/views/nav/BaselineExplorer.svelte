@@ -18,8 +18,7 @@
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { notify } from '../../shell/workbench.svelte';
   import Icon from '../../shell/Icon.svelte';
-  import { downloadText } from '../../download';
-  import { downloadGraphOkf } from '../../okfExport';
+  import { exportGraph } from '../../graphExport';
 
   // Methodologies are nodes typed by the meta-domain methodology (ADR 0023), authored in their own editors and
   // explorer: not offered here by default.
@@ -146,20 +145,13 @@
     });
   }
 
-  /** Downloads the head of a branch of the namespace without history: a JSON snapshot (ADR 0104) or an OKF zip, one
-   *  Markdown file per node, streamed (ADR 0111). */
+  /** Exports the head of a branch of the namespace without history: a JSON snapshot (ADR 0104) or an OKF zip, one
+   *  Markdown file per node (ADR 0111); a job (ADR 0149), saved when done. */
   async function exportSnapshot(branch: string, format: 'json' | 'okf' = 'json') {
     const ns = baselineTool.namespace;
     if (!ns) return;
     try {
-      let nodes = 0;
-      if (format === 'okf') nodes = await downloadGraphOkf(ns, { branch });
-      else {
-        const res = await graph.exportGraph(ns, branch);
-        downloadText(res.document ?? '', res.filename || `graph-${ns}.json`, res.mediaType || 'application/json');
-        nodes = res.nodes ?? 0;
-      }
-      notify(`Exported ${nodes} node(s) of ${ns} (${branch}).`, 'ok');
+      await exportGraph({ namespace: ns, branch, format });
     } catch (e) {
       error = errorMessage(e);
     }

@@ -4,6 +4,7 @@ import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite
 import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeStack, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ItemTypeInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, PendingSettings, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SettingEdit, SharedNode, StackChange, Tag, TypeCount } from './types/graph';
 
 import type { LoadDemoDataResponseJson } from '../../gen/goap/graph/v1/graph_pb';
+import type { Job } from './jobs';
 
 const GRAPH = 'goap.graph.v1.GraphService';
 
@@ -78,12 +79,18 @@ export const graph = {
   listChangeLog: (req: ChangeLogQuery, signal?: AbortSignal) =>
     rpc<ChangeLogQuery, { entries?: LogEntry[]; counts?: Record<string, number> }>(GRAPH, 'ListChangeLog', req, signal),
   /** The whole log of a change as W3C PROV-O provenance, a JSON-LD document (ADR 0057). */
-  /** The state of a namespace at a baseline (default: the head of main) as a JSON snapshot, without history (ADR 0104);
-   *  the OKF tree of the same state is streamed (`exportGraphOkf`, okfExport.ts). */
+  /** The state of a namespace at a baseline (default: the head of main) as a JSON snapshot, without history (ADR 0104),
+   *  in one answer; the web exports through `startGraphExport` (a job, ADR 0149). */
   exportGraph: (namespace: string, branch?: string, baselineId?: string) =>
     rpc<{ namespace: string; branch?: string; baselineId?: string }, GraphExport>(GRAPH, 'ExportGraph', { namespace, branch, baselineId }),
   /** Imports a JSON snapshot into main as one new change, left open for review (ADR 0104). */
   importGraph: (req: GraphImport) => rpc<GraphImport, GraphImportResult>(GRAPH, 'ImportGraph', req),
+  /** Exports the state of a namespace (head of a branch, default main, or a baseline) as a job (ADR 0149): a JSON
+   *  snapshot or an OKF zip, the file the job writes once done. */
+  startGraphExport: (req: { namespace: string; branch?: string; baselineId?: string; format: 'json' | 'okf' }) =>
+    rpc<object, { job: Job }>(GRAPH, 'StartGraphExport', req),
+  /** Imports a JSON snapshot as a job (ADR 0149): its output names the change it created and what it did. */
+  startGraphImport: (req: GraphImport) => rpc<GraphImport, { job: Job }>(GRAPH, 'StartGraphImport', req),
   /** Loads the demo data (administrators only): the demo organisation, the demo project bound to it and its ALM
    *  data, whatever is missing of them; `loaded` false when the graph held them already. */
   loadDemoData: () => rpc<Empty, LoadDemoDataResponseJson>(GRAPH, 'LoadDemoData', {}),
