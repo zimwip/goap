@@ -15,7 +15,8 @@
 </script>
 
 <script lang="ts">
-  // The graph view of one node of a baseline: its direct neighbours (GetNodeNeighbourhood), a click recenters, a
+  // The graph view of one node of a baseline: its neighbours (GetNodeNeighbourhood), up to `MAX_LEVELS` levels the
+  // reader picks (the deeper ones read on demand: parents of parents, children of children), a click recenters, a
   // double-click opens the node, a link selected shows both of its ends with its properties; below, the node's
   // change-stack and properties. Shared by the Baseline tab and the Graph pane of the node editor.
   import { graph, errorMessage } from '../api';
@@ -33,6 +34,7 @@
     hood = $bindable(emptyNeighbourhood()),
     reload = 0,
     empty = 'Select a node to see its neighbours.',
+    details = true,
   }: {
     baselineId: string;
     /** the namespace the baseline holds: a node of another one opens in its editor instead of recentering */
@@ -44,7 +46,13 @@
     hood?: Neighbourhood;
     reload?: number;
     empty?: string;
+    /** false: the graph only, without the change-stack and the properties */
+    details?: boolean;
   } = $props();
+
+  const MAX_LEVELS = 4;
+  /** the nodes read per level beyond the first (the graph shows at most 14 per column anyway) */
+  const LEVEL_CAP = 30;
 
   /** the node version whose change-stack is open (ADR 0133) */
   let stackOf = $state('');
@@ -71,8 +79,82 @@
   });
 
   const center = $derived(hood.center);
-  const index = $derived(indexOf(baselineId, center ? [center, ...hood.neighbours] : [], hood.links));
-  const byNodeId = (nid: string) => (nid === center?.id ? center : hood.neighbours.find((n) => n.id === nid));
+
+  // ---- deeper levels: the neighbourhoods of the frontier, read as the reader asks for them ---------
+
+  let depth = $state(1);
+  type Read = { node?: GraphNode; nodes?: GraphNode[]; links?: Link[]; suspectLinkIds?: string[] };
+  /** the neighbourhoods read beyond the center's, by node id, for this baseline and reload */
+  let reads = $state(new Map<string, Read>());
+  let deepLoading = $state(false);
+
+  $effect(() => {
+    void reload;
+    void baselineId;
+    reads = new Map();
+  });
+
+  /** the nodes of each level beyond the first, from what was read: parents leftwards, children rightwards */
+  function frontiers(levels: number): string[][] {
+    const out: string[][] = [];
+    if (!center?.id) return out;
+    const seen = new Set<string>([center.id, ...hood.neighbours.map((n) => n.id ?? '')]);
+    let ins = hood.links.filter((l) => l.to?.id === center.id).map((l) => l.from?.id ?? '');
+    let outs = hood.links.filter((l) => l.from?.id === center.id).map((l) => l.to?.id ?? '');
+    for (let d = 2; d <= levels; d++) {
+      const level = [...new Set([...ins, ...outs])].filter((id) => id && (hood.neighbours.find((n) => n.id === id) ?? nodeOf(id))?.namespace === namespace).slice(0, LEVEL_CAP);
+      out.push(level);
+      const nextIn: string[] = [];
+      const nextOut: string[] = [];
+      for (const id of ins) for (const l of reads.get(id)?.links ?? []) if (l.to?.id === id && l.from?.id && !seen.has(l.from.id)) nextIn.push(l.from.id);
+      for (const id of outs) for (const l of reads.get(id)?.links ?? []) if (l.from?.id === id && l.to?.id && !seen.has(l.to.id)) nextOut.push(l.to.id);
+      [...nextIn, ...nextOut].forEach((id) => seen.add(id));
+      ins = nextIn;
+      outs = nextOut;
+    }
+    return out;
+  }
+
+  const nodeOf = (id: string): GraphNode | undefined => {
+    for (const r of reads.values()) {
+      if (r.node?.id === id) return r.node;
+      const n = r.nodes?.find((x) => x.id === id);
+      if (n) return n;
+    }
+    return undefined;
+  };
+
+  $effect(() => {
+    const b = baselineId;
+    const missing = b && center?.id && depth > 1 ? frontiers(depth).flat().filter((id) => !reads.has(id)) : [];
+    deepLoading = missing.length > 0;
+    if (!missing.length) return;
+    const ctrl = new AbortController();
+    deepLoading = true;
+    Promise.all(missing.map((id) => graph.getNodeNeighbourhood(b, id, ctrl.signal).catch((): Read => ({}))))
+      .then((rs) => {
+        if (ctrl.signal.aborted) return;
+        const next = new Map(reads);
+        missing.forEach((id, i) => next.set(id, rs[i]));
+        reads = next;
+      });
+    return () => ctrl.abort();
+  });
+
+  const index = $derived.by(() => {
+    if (!center) return indexOf(baselineId, [], []);
+    const nodes = new Map<string, GraphNode>();
+    const links = new Map<string, Link>();
+    const add = (r: Read) => {
+      for (const n of [...(r.node ? [r.node] : []), ...(r.nodes ?? [])]) if (n.id && !nodes.has(n.id)) nodes.set(n.id, n);
+      for (const l of r.links ?? []) if (l.id && !links.has(l.id)) links.set(l.id, l);
+    };
+    add({ node: center, nodes: hood.neighbours, links: hood.links });
+    if (depth > 1) for (const id of frontiers(depth).flat()) add(reads.get(id) ?? {});
+    return indexOf(baselineId, [...nodes.values()], [...links.values()]);
+  });
+  const suspect = $derived(new Set([...hood.suspect, ...[...reads.values()].flatMap((r) => r.suspectLinkIds ?? [])]));
+  const byNodeId = (nid: string) => index.nodes.get(nid);
 
   function select(n: GraphNode | undefined) {
     if (!n?.id) return;
@@ -182,18 +264,20 @@
       onLinkSelect={(id) => selectLink([...linkFromLinks, ...linkToLinks].find((x) => x.id === id))}
     />
     {#if linkViewLoading}<p class="hint">Loading…</p>{/if}
-    <details class="props" open>
-      <summary>Link properties</summary>
-      {#if propRows(link).length}
-        <table>
-          <tbody>
-            {#each propRows(link) as [k, v] (k)}<tr><th>{k}</th><td>{v}</td></tr>{/each}
-          </tbody>
-        </table>
-      {:else}
-        <p class="empty small">No properties.</p>
-      {/if}
-    </details>
+    {#if details}
+      <details class="props" open>
+        <summary>Link properties</summary>
+        {#if propRows(link).length}
+          <table>
+            <tbody>
+              {#each propRows(link) as [k, v] (k)}<tr><th>{k}</th><td>{v}</td></tr>{/each}
+            </tbody>
+          </table>
+        {:else}
+          <p class="empty small">No properties.</p>
+        {/if}
+      </details>
+    {/if}
   {/if}
 {:else if !node}
   <h3>Neighbours</h3>
@@ -208,29 +292,32 @@
   <NodeGraph
     {index}
     center={center.id ?? ''}
-    maxDepth={1}
-    suspect={hood.suspect}
+    maxDepth={MAX_LEVELS}
+    bind:depth
+    {suspect}
     onrecenter={(nid) => select(byNodeId(nid))}
     onopen={(nid) => {
       const n = byNodeId(nid);
       if (n) void openNode(n, { pin: true });
     }}
-    onLinkSelect={(id) => selectLink(hood.links.find((x) => x.id === id))}
+    onLinkSelect={(id) => selectLink([...index.out.values()].flat().find((x) => x.id === id))}
   />
-  {#if hood.loading}<p class="hint">Loading…</p>{/if}
-  <details class="props" ontoggle={(e) => (stackOf = (e.currentTarget as HTMLDetailsElement).open ? `${center?.id}@${center?.version}` : '')}>
-    <summary>Change-stack of v{center.version}</summary>
-    {#if stackOf === `${center.id}@${center.version}`}<ChangeStackView nodeId={center.id} version={center.version} />{/if}
-  </details>
-  {#if propRows(center).length}
-    <details class="props" open>
-      <summary>Properties</summary>
-      <table>
-        <tbody>
-          {#each propRows(center) as [k, v] (k)}<tr><th>{k}</th><td>{v}</td></tr>{/each}
-        </tbody>
-      </table>
+  {#if hood.loading || deepLoading}<p class="hint">Loading…</p>{/if}
+  {#if details}
+    <details class="props" ontoggle={(e) => (stackOf = (e.currentTarget as HTMLDetailsElement).open ? `${center?.id}@${center?.version}` : '')}>
+      <summary>Change-stack of v{center.version}</summary>
+      {#if stackOf === `${center.id}@${center.version}`}<ChangeStackView nodeId={center.id} version={center.version} />{/if}
     </details>
+    {#if propRows(center).length}
+      <details class="props" open>
+        <summary>Properties</summary>
+        <table>
+          <tbody>
+            {#each propRows(center) as [k, v] (k)}<tr><th>{k}</th><td>{v}</td></tr>{/each}
+          </tbody>
+        </table>
+      </details>
+    {/if}
   {/if}
 {/if}
 

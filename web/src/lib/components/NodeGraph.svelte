@@ -14,6 +14,7 @@
     onrecenter,
     onopen,
     maxDepth = 2,
+    depth = $bindable(1),
     suspect,
     secondaryCenter,
     onLinkSelect,
@@ -22,16 +23,16 @@
     center: string;
     onrecenter: (id: string) => void;
     onopen: (id: string) => void;
-    /** 1: the index only holds the direct neighbours of the center (no level choice) */
-    maxDepth?: 1 | 2;
+    /** the levels the reader may pick (1: no choice); the index must hold what the deepest one reaches */
+    maxDepth?: number;
+    /** the levels shown: parents of parents on the left, children of children on the right */
+    depth?: number;
     /** ids of the suspect links (drawn dashed) */
     suspect?: Set<string>;
     /** a link's other endpoint, in link view: drawn as a second centered node, its edge to `center` emphasized */
     secondaryCenter?: string;
     onLinkSelect?: (linkId: string) => void;
   } = $props();
-
-  let depth = $state<1 | 2>(1);
 
   const W = 168;
   const H = 34;
@@ -73,9 +74,9 @@
     };
     expand(0, 'in', -1);
     expand(0, 'out', 1);
-    if (depth === 2 && maxDepth === 2) {
-      expand(-1, 'in', -1);
-      expand(1, 'out', 1);
+    for (let d = 1; d < Math.min(depth, maxDepth); d++) {
+      expand(-d, 'in', -1);
+      expand(d, 'out', 1);
     }
     return { placed, byCol };
   });
@@ -335,10 +336,11 @@
 
 <div class="graph">
   <div class="tools" role="group" aria-label="Graph depth">
-    {#if maxDepth === 2}
+    {#if maxDepth > 1}
       <span class="hint">Levels</span>
-      <button type="button" class="small" class:primary={depth === 1} onclick={() => (depth = 1)}>1</button>
-      <button type="button" class="small" class:primary={depth === 2} onclick={() => (depth = 2)}>2</button>
+      {#each Array.from({ length: maxDepth }, (_, i) => i + 1) as d (d)}
+        <button type="button" class="small" class:primary={depth === d} onclick={() => (depth = d)}>{d}</button>
+      {/each}
     {/if}
     <span class="hint legend">parents ← node → children</span>
     {#if viewOverride}<button type="button" class="small" onclick={() => (viewOverride = null)}>Fit</button>{/if}

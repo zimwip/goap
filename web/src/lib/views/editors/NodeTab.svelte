@@ -21,7 +21,6 @@
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import NodeTree from '../../components/NodeTree.svelte';
-  import NodeGraph from '../../components/NodeGraph.svelte';
   import NodeNeighbourhood from '../../components/NodeNeighbourhood.svelte';
   import LifecycleDiagram from '../../components/LifecycleDiagram.svelte';
   import NodeHistory from '../../components/NodeHistory.svelte';
@@ -66,7 +65,6 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   let busy = $state('');
   let editing = $state(false);
   let reload = $state(0);
-  let centerId = $state('');
   /** the Graph pane: the node at its center and the link it shows, in the head baseline (as in the Baseline tab) */
   let graphNode = $state('');
   let graphLink = $state<Link | undefined>();
@@ -150,7 +148,6 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   $effect(() => {
     void id;
     void stamp(keyOf.node(id)); // a new version of the node, by anyone
-    centerId = id;
     graphNode = id;
     graphLink = undefined;
     const ctrl = new AbortController();
@@ -472,14 +469,16 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   {:else}
     <EditorPanes {panes} bind:active={pane} label="Node sections">
       {#snippet toolbar()}
-        <label class="wc" for="work-change">Working change</label>
-        <select id="work-change" value={workId} onchange={(e) => pickChange(e.currentTarget.value)}>
-          <option value="">none: created when you edit</option>
-          {#each openChanges as c (c.id)}<option value={c.id}>{c.title || shortId(c.id)} ({c.status})</option>{/each}
-          {#if workId && !openChanges.some((c) => c.id === workId)}<option value={workId}>{work?.change.title || shortId(workId)}</option>{/if}
-        </select>
-        {#if workId && work?.flowName}<span class="hint" title="the node is seen and edited as this flow of the change has it">on {work.flowName}</span>{/if}
-        {#if workId}<button type="button" class="small" onclick={openChange}>Open change</button>{/if}
+        {#if pane !== 'graph'}
+          <label class="wc" for="work-change">Working change</label>
+          <select id="work-change" value={workId} onchange={(e) => pickChange(e.currentTarget.value)}>
+            <option value="">none: created when you edit</option>
+            {#each openChanges as c (c.id)}<option value={c.id}>{c.title || shortId(c.id)} ({c.status})</option>{/each}
+            {#if workId && !openChanges.some((c) => c.id === workId)}<option value={workId}>{work?.change.title || shortId(workId)}</option>{/if}
+          </select>
+          {#if workId && work?.flowName}<span class="hint" title="the node is seen and edited as this flow of the change has it">on {work.flowName}</span>{/if}
+          {#if workId}<button type="button" class="small" onclick={openChange}>Open change</button>{/if}
+        {/if}
       {/snippet}
 
       {#snippet children(active)}
@@ -553,22 +552,16 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
             onopen={openNeighbour}
           />
           {#if head && head.nodes.has(id)}
-            <div class="rel">
-              <div class="trees">
-                <section class="card">
-                  <h3>Parents <span class="count">{head.in.get(id)?.length ?? 0}</span></h3>
-                  <p class="hint">Nodes that link to this one.</p>
-                  <NodeTree index={head} root={id} dir="in" onopen={(n) => openNeighbour(n)} />
-                </section>
-                <section class="card">
-                  <h3>Children <span class="count">{head.out.get(id)?.length ?? 0}</span></h3>
-                  <p class="hint">Nodes this one links to.</p>
-                  <NodeTree index={head} root={id} dir="out" onopen={(n) => openNeighbour(n)} />
-                </section>
-              </div>
-              <section class="card graph">
-                <h3>Graph {#if centerId !== id}<button type="button" class="small" onclick={() => (centerId = id)}>Back to {stored.key}</button>{/if}</h3>
-                <NodeGraph index={head} center={centerId || id} onrecenter={(n) => (centerId = n)} onopen={(n) => openNeighbour(n)} />
+            <div class="trees">
+              <section class="card">
+                <h3>Parents <span class="count">{head.in.get(id)?.length ?? 0}</span></h3>
+                <p class="hint">Nodes that link to this one.</p>
+                <NodeTree index={head} root={id} dir="in" onopen={(n) => openNeighbour(n)} />
+              </section>
+              <section class="card">
+                <h3>Children <span class="count">{head.out.get(id)?.length ?? 0}</span></h3>
+                <p class="hint">Nodes this one links to.</p>
+                <NodeTree index={head} root={id} dir="out" onopen={(n) => openNeighbour(n)} />
               </section>
             </div>
           {:else}
@@ -580,7 +573,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
               {#if graphNode !== id || graphLink}
                 <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
               {/if}
-              <NodeNeighbourhood baselineId={head.baselineId} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} reload={reload} />
+              <NodeNeighbourhood baselineId={head.baselineId} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} details={false} {reload} />
             </section>
           {:else}
             <p class="empty">This node is not in the current graph (deleted, or only created by a change).</p>
@@ -694,18 +687,14 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     align-items: center;
     flex-wrap: wrap;
   }
-  .rel {
+  .trees {
     display: grid;
-    grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.8rem;
     align-items: start;
   }
-  .trees {
-    display: grid;
-    gap: 0;
-  }
   @media (max-width: 1000px) {
-    .rel {
+    .trees {
       grid-template-columns: 1fr;
     }
   }
