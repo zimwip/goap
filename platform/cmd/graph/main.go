@@ -90,9 +90,7 @@ func main() {
 	g.Caller = graphsvc.Caller
 	g.EndUser = graphsvc.EndUser         // the person the events of the changes are for (ADR 0114)
 	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
-	// a baseline of a branch in 50 stores its state, off the commit (ADR 0140); GOAP_CHECKPOINT_EVERY=0: none
-	g.CheckpointEvery = platform.EnvInt("GOAP_CHECKPOINT_EVERY", graph.DefaultCheckpointEvery)
-	g.ReviewPolicy = verify.Policy{} // a verifier is not the producer (ADR 0075)
+	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
 	// the events of the graph (changes, nodes, baselines) go through its outbox to the bus (ADR 0136)
 	outbox.Start(ctx, g.Observe(outbox.NATS(events)), log)
 	// the graph judges nodes by the types of the published domains (ADR 0012): the domain registry served here is the

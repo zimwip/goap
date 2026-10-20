@@ -584,23 +584,7 @@ func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {
 		return fmt.Errorf("baseline %s: %w", b.ID, ErrConflict)
 	}
 	b.Namespace = domain.NamespaceOf(b.Namespace)
-	for id, v := range b.Nodes {
-		vs := t.st.versions[id]
-		if v < 0 {
-			v = -v
-		}
-		if len(vs) < int(v) {
-			return fmt.Errorf("baseline %s: node %s v%d: %w", b.ID, id, v, ErrNotFound)
-		}
-		if vs[0].Namespace != b.Namespace {
-			return fmt.Errorf("baseline %s is of namespace %s, node %s is of namespace %s: %w",
-				b.ID, b.Namespace, id, vs[0].Namespace, ErrInvalid)
-		}
-	}
-	b.Nodes = maps.Clone(b.Nodes)
-	if b.Gap > 0 {
-		b.Nodes = nil // only the header is kept: the graph computes the state (ADR 0140)
-	}
+	b.Nodes = nil // only the header is kept: the state is the selection of the versions landed (ADR 0143)
 	t.st.baselines[b.ID] = b
 	return nil
 }
@@ -612,51 +596,6 @@ func (t *memTx) BaselineHeader(_ context.Context, id domain.BaselineID) (domain.
 	}
 	b.Nodes = nil
 	return b, nil
-}
-
-func (t *memTx) StoredVersions(_ context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, domain.BaselineID, error) {
-	out := map[domain.NodeID]domain.Version{}
-	want := func(n domain.NodeID) bool {
-		_, done := out[n]
-		return !done && (ids == nil || slices.Contains(ids, n))
-	}
-	for cur := id; ; {
-		b, ok := t.st.baselines[cur]
-		if !ok {
-			return nil, "", fmt.Errorf("baseline %s: %w", cur, ErrNotFound)
-		}
-		if b.Gap > 0 {
-			return out, cur, nil
-		}
-		for n, v := range b.Nodes {
-			if want(n) {
-				out[n] = max(v, 0)
-			}
-		}
-		if b.BaseID == "" {
-			return out, "", nil
-		}
-		cur = b.BaseID
-	}
-}
-
-func (t *memTx) StoredSizes(_ context.Context, id domain.BaselineID) (overlays, whole int, err error) {
-	for cur := id; cur != ""; {
-		b, ok := t.st.baselines[cur]
-		if !ok {
-			return 0, 0, fmt.Errorf("baseline %s: %w", cur, ErrNotFound)
-		}
-		if b.Gap > 0 {
-			break
-		}
-		if b.BaseID == "" {
-			whole += len(b.Nodes)
-		} else {
-			overlays += len(b.Nodes)
-		}
-		cur = b.BaseID
-	}
-	return overlays, whole, nil
 }
 
 func (t *memTx) LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
@@ -700,26 +639,6 @@ func (t *memTx) landings(namespace, branch string, after, upTo int64, ids []doma
 		out[id] = Landing{Version: l.v.Version, Deleted: l.v.Deleted, Revert: l.v.Reason == domain.ReasonRevert}
 	}
 	return out, nil
-}
-
-func (t *memTx) LatestStored(_ context.Context, namespace, branch string, after, upTo int64) (domain.BaselineID, error) {
-	var best domain.Baseline
-	for _, b := range t.st.baselines {
-		if b.Gap == 0 && b.Namespace == domain.NamespaceOf(namespace) && domain.BranchOf(b.Branch) == domain.BranchOf(branch) && b.Seq > after && b.Seq <= upTo && b.Seq > best.Seq {
-			best = b
-		}
-	}
-	return best.ID, nil
-}
-
-func (t *memTx) LatestUnderived(_ context.Context, namespace, branch string, before int64) (domain.BaselineID, int64, error) {
-	var best domain.Baseline
-	for _, b := range t.st.baselines {
-		if !domain.DerivedKind(b.Kind) && b.Namespace == domain.NamespaceOf(namespace) && domain.BranchOf(b.Branch) == domain.BranchOf(branch) && b.Seq < before && b.Seq > best.Seq {
-			best = b
-		}
-	}
-	return best.ID, best.Seq, nil
 }
 
 func (t *memTx) NextLanding(context.Context) (int64, error) {
@@ -798,16 +717,6 @@ func (t *memTx) VersionJoins(_ context.Context, id domain.NodeID) ([]domain.Vers
 		return out[i].Version < out[j].Version || out[i].Version == out[j].Version && out[i].Branch < out[j].Branch
 	})
 	return out, nil
-}
-
-func (t *memTx) MaterializeBaseline(_ context.Context, id, over domain.BaselineID, depth int, nodes map[domain.NodeID]domain.Version) error {
-	b, ok := t.st.baselines[id]
-	if !ok {
-		return fmt.Errorf("baseline %s: %w", id, ErrNotFound)
-	}
-	b.Nodes, b.Gap, b.Depth, b.BaseID = maps.Clone(nodes), 0, depth, over
-	t.st.baselines[id] = b
-	return nil
 }
 
 func (t *memTx) PutChange(_ context.Context, c domain.Change) error {

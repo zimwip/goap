@@ -51,7 +51,6 @@ services:
       GOAP_DOMAINS_DIR: /domains
       GOAP_PPROF_ADDR: ":6060"
       # baselines storing their whole state (ADR 0056): 1 every baseline, the default otherwise
-      GOAP_MATERIALIZE_EVERY: ${GOAP_MATERIALIZE_EVERY:-}
     depends_on:
       postgres: {condition: service_healthy}
     ports: ["8380:8080", "6060:6060"]

@@ -9,14 +9,13 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-func TestEphemeralBranchStoresNoCheckpoint(t *testing.T) { forEachRepo(t, testEphemeralBranch) }
+func TestEphemeralBranchHoldsNoBaseline(t *testing.T) { forEachRepo(t, testEphemeralBranch) }
 
 // testEphemeralBranch: the branch of a change is ephemeral, it holds no baseline however many commits it has, and its
 // state (its fork and its landings) still reads right (ADR 0140).
 func testEphemeralBranch(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
-	g.CheckpointEvery = 2
 	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "seed", By: "t", Edits: []NodeEdit{{Key: "N-0", Type: "Need"}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +34,6 @@ func testEphemeralBranch(t *testing.T, repo Repo) {
 		if _, err := g.commitChange(ctx, c.ID, ""); err != nil {
 			t.Fatal(err)
 		}
-		g.WaitCheckpoints()
 	}
 	if err := repo.InTx(ctx, func(tx Tx) error {
 		own, err := tx.Branch(ctx, c.Namespace, changeBranchName(c.ID))

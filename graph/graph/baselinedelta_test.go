@@ -10,16 +10,11 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// A baseline is stored as a delta from its parent, whole every checkpointEvery baselines (ADR 0032): reading it back
-// gives what was written, across checkpoints, with nodes added, changed and removed.
-func TestBaselineDeltas(t *testing.T) {
-	old, oldEvery := checkpointEvery, DefaultMaterializeEvery
-	checkpointEvery, DefaultMaterializeEvery = 3, 1 // every baseline materialised: what is stored are its entries
-	defer func() { checkpointEvery, DefaultMaterializeEvery = old, oldEvery }()
-	forEachRepo(t, testBaselineDeltas)
-}
+// The state of a baseline is the selection of the versions landed (ADR 0143): reading it back gives what was written,
+// with nodes added and changed.
+func TestBaselineStates(t *testing.T) { forEachRepo(t, testBaselineStates) }
 
-func testBaselineDeltas(t *testing.T, repo Repo) {
+func testBaselineStates(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
@@ -51,42 +46,6 @@ func testBaselineDeltas(t *testing.T, repo Repo) {
 			}
 		}
 	}
-	// what is stored: whole at a checkpoint, the difference with the parent otherwise
-	counts := storedEntryCounts(t, repo, written)
-	if counts == nil {
-		return // the memory store keeps whole maps
-	}
-	deltas := 0
-	for i, b := range written {
-		if counts[i] < len(b.Nodes) {
-			deltas++
-		}
-	}
-	if deltas == 0 {
-		t.Fatalf("no baseline stored as a delta: %v", counts)
-	}
-}
-
-// storedEntryCounts counts the stored entries of each baseline (nil for the memory store).
-func storedEntryCounts(t *testing.T, repo Repo, bs []domain.Baseline) []int {
-	t.Helper()
-	ctx := context.Background()
-	out := make([]int, len(bs))
-	for i, b := range bs {
-		var err error
-		switch r := repo.(type) {
-		case *SQLite:
-			err = r.db.QueryRowContext(ctx, `SELECT count(*) FROM baseline_entry WHERE baseline_id = ?`, string(b.ID)).Scan(&out[i])
-		case *Postgres:
-			err = r.pool.QueryRow(ctx, `SELECT count(*) FROM baseline_entry WHERE baseline_id = $1`, string(b.ID)).Scan(&out[i])
-		default:
-			return nil
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	return out
 }
 
 // checkLandings verifies that every landed event agrees with the baseline it names (ADR 0032): the version is in it
@@ -145,14 +104,10 @@ func checkLandings(t *testing.T, repo Repo) {
 	}
 }
 
-// A commit writes no entry (ADR 0140): its baseline is a header, its state the versions it landed put in the state of
-// the baseline before, read back the same through every chain of headers.
+// A commit writes a header (ADR 0143): its state, whole or for some nodes, is the selection of the versions landed.
 func TestCommitWritesNoEntry(t *testing.T) { forEachRepo(t, testCommitWritesNoEntry) }
 
 func testCommitWritesNoEntry(t *testing.T, repo Repo) {
-	if DefaultMaterializeEvery != 0 {
-		t.Skip("GOAP_MATERIALIZE_EVERY stores entries")
-	}
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
@@ -180,107 +135,6 @@ func testCommitWritesNoEntry(t *testing.T, repo Repo) {
 		}
 		if len(some) != 1 || some[f.req.ID] != want.Nodes[f.req.ID] {
 			t.Fatalf("baseline %d: versions %v, want %s v%d", i, some, f.req.ID, want.Nodes[f.req.ID])
-		}
-	}
-	counts := storedEntryCounts(t, repo, written)
-	for i, c := range counts {
-		if c != 0 {
-			t.Fatalf("baseline %d stores %d entries: %v", i, c, counts)
-		}
-	}
-}
-
-func TestCheckpoints(t *testing.T) { forEachRepo(t, testCheckpoints) }
-
-// testCheckpoints: every CheckpointEvery-th header of a branch stores its state after its commit, and the headers
-// committed after it are kept over it, their states unchanged (ADR 0140).
-func testCheckpoints(t *testing.T, repo Repo) {
-	if DefaultMaterializeEvery != 0 {
-		t.Skip("GOAP_MATERIALIZE_EVERY stores entries")
-	}
-	ctx := context.Background()
-	f := newFixture(t, repo)
-	g := f.g
-	g.CheckpointEvery = 3
-	var written []domain.Baseline
-	head := f.base
-	for i := range 8 {
-		edits := []NodeEdit{{Key: fmt.Sprintf("DES-%d", i), Type: "Design"}}
-		if i == 0 { // a state large enough for the next checkpoints to store what landed over it
-			for j := range 30 {
-				edits = append(edits, NodeEdit{Key: fmt.Sprintf("BULK-%d", j), Type: "Design"})
-			}
-		}
-		if i%2 == 1 {
-			edits = append(edits, NodeEdit{Pre: &domain.NodeRef{ID: f.req.ID, Version: head.Nodes[f.req.ID]}, Props: map[string]any{"step": i}})
-		}
-		head = commitOn(t, g, "", head.ID, edits...)
-		g.WaitCheckpoints()
-		written = append(written, head)
-	}
-	var stored []domain.BaselineID
-	headers := map[domain.BaselineID]domain.Baseline{}
-	if err := repo.InTx(ctx, func(tx Tx) error {
-		for _, b := range written {
-			h, err := tx.BaselineHeader(ctx, b.ID)
-			if err != nil {
-				return err
-			}
-			headers[b.ID] = h
-			if h.Gap == 0 {
-				stored = append(stored, b.ID)
-			}
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if len(stored) != 3 { // the fixture committed twice before: the 1st, 4th and 7th commits are 3rd headers
-		t.Fatalf("stored %v, want 3 checkpoints out of 8 commits", stored)
-	}
-	for i, cp := range stored[1:] { // a checkpoint stores what landed since the one before it
-		if h, prev := headers[cp], headers[stored[i]]; h.BaseID != prev.ID || h.Depth != prev.Depth+1 {
-			t.Fatalf("checkpoint %s is stored over %s at depth %d, want over %s at depth %d", cp, h.BaseID, h.Depth, prev.ID, prev.Depth+1)
-		}
-	}
-	for _, b := range written {
-		h := headers[b.ID]
-		if h.Gap == 0 {
-			continue
-		}
-		var want domain.BaselineID
-		for _, cp := range stored {
-			if headers[cp].Seq < h.Seq {
-				want = cp
-			}
-		}
-		if h.BaseID != want {
-			t.Fatalf("header %s is kept over %s, want the checkpoint %s", b.ID, h.BaseID, want)
-		}
-	}
-	// a header committed after a checkpoint stored late (here by hand) is kept over it
-	g.CheckpointEvery = 0
-	head = commitOn(t, g, "", head.ID, NodeEdit{Key: "DES-8", Type: "Design"})
-	written = append(written, head)
-	if err := g.Materialize(ctx, written[7].ID); err != nil {
-		t.Fatal(err)
-	}
-	head = commitOn(t, g, "", head.ID, NodeEdit{Key: "DES-9", Type: "Design"})
-	written = append(written, head)
-	if err := repo.InTx(ctx, func(tx Tx) error {
-		h, err := tx.BaselineHeader(ctx, head.ID)
-		if err == nil && h.BaseID != written[7].ID {
-			t.Errorf("header kept over %s, want the late checkpoint %s", h.BaseID, written[7].ID)
-		}
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	reread := New(repo) // no cache
-	for i, want := range written {
-		got := must[domain.Baseline](t)(reread.Baseline(ctx, want.ID))
-		if !maps.Equal(got.Nodes, want.Nodes) {
-			t.Fatalf("baseline %d: read %v, wrote %v", i, got.Nodes, want.Nodes)
 		}
 	}
 }
@@ -325,7 +179,7 @@ func checkStates(t *testing.T, repo Repo) {
 				byID[b.ID] = b
 			}
 			for _, b := range bs {
-				if !domain.DerivedKind(b.Kind) || b.ParentID == "" {
+				if !replayable(b.Kind) || b.ParentID == "" {
 					continue
 				}
 				p, ok := byID[b.ParentID]
@@ -488,4 +342,10 @@ func checkDiffs(ctx context.Context, t *testing.T, tx Tx, bs []domain.Baseline) 
 		}
 	}
 	return nil
+}
+
+// replayable tells whether the state of a baseline of this kind is replayed from what its change did: a commit and a
+// merge from the `landed` events naming the baseline, a fast-forward from the versions its change joined to the branch.
+func replayable(kind string) bool {
+	return kind == domain.BaselineCommit || kind == domain.BaselineMerge || kind == domain.BaselineFastForward
 }

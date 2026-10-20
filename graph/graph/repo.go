@@ -76,19 +76,11 @@ type Tx interface {
 	NodePage(ctx context.Context, refs []domain.NodeRef, q NodeQuery) (NodePage, error)
 	LinkPage(ctx context.Context, refs []domain.NodeRef, q LinkQuery) (LinkPage, error)
 	// Baseline reads a baseline with its state and Baselines the baselines of a namespace, oldest first, with theirs:
-	// through the guard of the graph, which computes the state (ADR 0140); a store gives the entries it stores (none
-	// for a baseline kept as a header, the entries of the chain of stored ones down to a whole one or a header).
+	// the selection of the versions landed (ADR 0143), cached by the guard of the graph.
 	Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
 	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
-	// BaselineHeader reads a baseline without its state (Nodes nil), with how it is stored (Seq, BaseID, Depth, Gap).
+	// BaselineHeader reads a baseline without its state (Nodes nil), with its order (Seq).
 	BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
-	// StoredVersions reads the entries in effect, for some nodes (nil: every node), in a baseline whose entries are
-	// stored (Gap 0) and the stored ones its entries are put in (BaseID), down to a whole one: a version, 0 for a node an
-	// entry removes. tail is the baseline kept as a header the chain ends on, empty when it reaches a whole one (ADR 0140).
-	StoredVersions(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (versions map[domain.NodeID]domain.Version, tail domain.BaselineID, err error)
-	// StoredSizes counts the entries along the chain StoredVersions reads: those of the baselines stored over another
-	// (overlays) and those of the whole one it reaches (0 when it ends on a header).
-	StoredSizes(ctx context.Context, id domain.BaselineID) (overlays, whole int, err error)
 	// LandedVersions reads the last version of each node (nil ids: every node of the namespace) that landed on a branch
 	// in a baseline whose order is after `after`, up to upTo (Baseline.Seq, ADR 0140): written there or joined; 0 for a
 	// version that deletes its node.
@@ -98,13 +90,6 @@ type Tx interface {
 	BranchLandings(ctx context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error)
 	// LastLanding returns the order of the last landing on a branch (0: none, ADR 0140).
 	LastLanding(ctx context.Context, branch string) (int64, error)
-	// LatestStored returns the last baseline of a branch of a namespace storing its state (Gap 0) whose order is after
-	// `after`, up to upTo: the checkpoint a header is stored over (empty: none, ADR 0140).
-	LatestStored(ctx context.Context, namespace, branch string, after, upTo int64) (domain.BaselineID, error)
-	// LatestUnderived returns the last baseline of a branch of a namespace before the order `before` whose state does
-	// not follow from the landings (not domain.DerivedKind), with its order (empty: none): where the fold of the
-	// landings of a node on the branch stops.
-	LatestUnderived(ctx context.Context, namespace, branch string, before int64) (domain.BaselineID, int64, error)
 	// NextLanding allocates the order of a new baseline (Baseline.Seq): greater than every order allocated before.
 	NextLanding(ctx context.Context) (int64, error)
 	// BranchNodeIDs lists the nodes a branch holds a version of: written on it or joined to it (ADR 0137).
@@ -149,13 +134,8 @@ type Tx interface {
 	LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, error)
 	// LinkSetsOf is LinkSetOf for several versions, in one read: a version that does not exist has no entry.
 	LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[domain.NodeRef]LinkSet, error)
-	// PutBaseline stores a baseline as the graph says (ADR 0140): only its header when b.Gap > 0, else its entries
-	// (b.Nodes: a version, or minus the version a node had in BaseID for a node the baseline removes), put in the state
-	// of b.BaseID when it names one.
+	// PutBaseline stores the header of a baseline (ADR 0143): its state is the selection at its order, never stored.
 	PutBaseline(ctx context.Context, b domain.Baseline) error
-	// MaterializeBaseline stores the entries of a baseline kept as a header: its Gap becomes 0, its entries nodes (as
-	// PutBaseline's), put in the state of over at the given Depth; over "" stores its whole state (Depth 0).
-	MaterializeBaseline(ctx context.Context, id, over domain.BaselineID, depth int, nodes map[domain.NodeID]domain.Version) error
 	// PutTag stores a tag (ADR 0056); DeleteTag removes it (ErrNotFound when absent); Tags lists the tags matching
 	// f, oldest first.
 	PutTag(ctx context.Context, t domain.Tag) error

@@ -47,9 +47,6 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	if gt != nil && gt.purged {
 		r.g.versions.reset() // what the transaction deleted may have been read meanwhile
 	}
-	if err == nil && len(gt.checkpoints) > 0 {
-		r.g.checkpoints.store(r.g, gt.checkpoints)
-	}
 	if err == nil {
 		// what the transaction folded of the logs it wrote is committed now: the next one folds only what follows
 		for _, st := range gt.drafts {
@@ -76,8 +73,6 @@ type guardTx struct {
 	// landing is, per branch, the order of the baseline the versions the transaction writes or joins there land in
 	// (ADR 0140): taken by the first of them, given to the baseline written after them
 	landing map[string]int64
-	// checkpoints are the headers the transaction wrote whose whole state is to be stored once it is over
-	checkpoints []domain.BaselineID
 	// headers caches the changes read to stamp versions
 	headers map[domain.ChangeID]domain.Change
 	// written are the versions the transaction wrote

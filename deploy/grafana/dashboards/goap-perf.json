@@ -1554,7 +1554,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (relname) (pg_stat_user_tables_n_live_tup{datname=\"goap\", relname=~\"node_version|baseline_entry|change_log|change_impact|link|node_branch|baseline|change|branch\"}) / scalar(max(goap_bench_versions))",
+          "expr": "sum by (relname) (pg_stat_user_tables_n_live_tup{datname=\"goap\", relname=~\"node_version|change_log|change_impact|link|node_branch|baseline|change|branch\"}) / scalar(max(goap_bench_versions))",
           "legendFormat": "{{relname}}",
           "refId": "A",
           "range": true
@@ -1592,7 +1592,7 @@
     },
     {
       "type": "row",
-      "title": "Baseline states and checkpoints ($service)",
+      "title": "Baseline states ($service)",
       "id": 30,
       "collapsed": false,
       "gridPos": {
@@ -1610,7 +1610,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Reads of the state of a baseline (ADR 0140), by where the walk down its chain stopped: cache (a state computed before), stored (a baseline storing its entries: a checkpoint, a snapshot, a rebase, a revert), landings (the versions landed down to the empty state, no stored baseline on the way). whole: the whole state, nodes: some nodes (commit, merge).",
+      "description": "Reads of the state of a baseline (ADR 0143), by source: cache (a state computed before) or landings (the selection of the versions landed on the branch and the branches it was forked from). whole: the whole state, nodes: some nodes (commit, merge).",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -1624,7 +1624,7 @@
             "uid": "prometheus"
           },
           "expr": "sum by (scope, source) (rate(goap_graph_state_reads_total{service_name=\"$service\"}[$__rate_interval]))",
-          "legendFormat": "{{scope}} \u00b7 {{source}}",
+          "legendFormat": "{{scope}} · {{source}}",
           "refId": "A",
           "range": true
         }
@@ -1661,80 +1661,13 @@
     },
     {
       "type": "timeseries",
-      "title": "Share of state reads served by a stored baseline",
-      "id": 32,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Of the state reads that missed the cache, the share that stopped on a stored baseline (a checkpoint above all): how much the checkpoints are used. Low while the branch is shorter than the checkpoint period.",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 74
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (scope) (rate(goap_graph_state_reads_total{service_name=\"$service\", source=\"stored\"}[$__rate_interval])) / sum by (scope) (rate(goap_graph_state_reads_total{service_name=\"$service\", source!=\"cache\"}[$__rate_interval]))",
-          "legendFormat": "{{scope}}",
-          "refId": "A",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(goap_graph_state_reads_total{service_name=\"$service\", source=\"cache\"}[$__rate_interval])) / sum(rate(goap_graph_state_reads_total{service_name=\"$service\"}[$__rate_interval]))",
-          "legendFormat": "cache hits (all reads)",
-          "refId": "B",
-          "range": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Baselines walked per read",
+      "title": "Branches selected on per read",
       "id": 33,
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Baselines a read of a state walks before it stops (cache, stored baseline or empty state): bounded by the checkpoint period when the checkpoints are used.",
+      "description": "Branches of the chain of forks a read of a state selects on (ADR 0143): 1 on main.",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -1795,13 +1728,13 @@
     },
     {
       "type": "timeseries",
-      "title": "Entries read for states",
+      "title": "Versions selected for states",
       "id": 34,
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Entries read per second to build states: stored (entries of stored baselines, the checkpoints) against landed (versions landed since the baseline below).",
+      "description": "Versions selected per second to build states (ADR 0143).",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -1890,297 +1823,6 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Checkpoints stored",
-      "id": 36,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Checkpoints stored in the background (a whole state every CheckpointEvery baselines of a branch): rate, mean entries written each and checkpoints queued.",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 82
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (outcome) (rate(goap_graph_checkpoint_stored_total{service_name=\"$service\"}[$__rate_interval])) * 60",
-          "legendFormat": "per minute ({{outcome}})",
-          "refId": "A",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(goap_graph_checkpoint_entries_sum{service_name=\"$service\"}[$__rate_interval])) / sum(rate(goap_graph_checkpoint_entries_count{service_name=\"$service\"}[$__rate_interval]))",
-          "legendFormat": "entries per checkpoint",
-          "refId": "B",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "max(goap_graph_checkpoint_pending{service_name=\"$service\"})",
-          "legendFormat": "queued",
-          "refId": "C",
-          "range": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "entries per checkpoint"
-            },
-            "properties": [
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Checkpoint duration",
-      "id": 37,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Time to store one checkpoint (read the whole state, write its entries): grows with the size of the state.",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 90
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(goap_graph_checkpoint_duration_seconds_bucket{service_name=\"$service\"}[$__rate_interval])))",
-          "legendFormat": "p95",
-          "refId": "A",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(goap_graph_checkpoint_duration_seconds_sum{service_name=\"$service\"}[$__rate_interval])) / sum(rate(goap_graph_checkpoint_duration_seconds_count{service_name=\"$service\"}[$__rate_interval]))",
-          "legendFormat": "mean",
-          "refId": "B",
-          "range": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Space of the stored baselines",
-      "id": 38,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "What the stored baselines take in the database: the rows of baseline_entry (checkpoints and overlays) and its size with indexes, against the versions the bench wrote.",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 90
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(pg_stat_user_tables_table_size_bytes{datname=\"goap\", relname=\"baseline_entry\"} + pg_stat_user_tables_index_size_bytes{datname=\"goap\", relname=\"baseline_entry\"})",
-          "legendFormat": "baseline_entry size",
-          "refId": "A",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(pg_stat_user_tables_table_size_bytes{datname=\"goap\", relname=\"node_version\"} + pg_stat_user_tables_index_size_bytes{datname=\"goap\", relname=\"node_version\"})",
-          "legendFormat": "node_version size",
-          "refId": "B",
-          "range": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Stored entries per checkpoint read",
-      "id": 39,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Rows of baseline_entry, and entries stored for each entry read from them since the start of the window: how much the space of the checkpoints serves.",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 90
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(pg_stat_user_tables_n_live_tup{datname=\"goap\", relname=\"baseline_entry\"})",
-          "legendFormat": "baseline_entry rows",
-          "refId": "A",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(goap_graph_state_entries_total{service_name=\"$service\", source=\"stored\"}[$__range]))",
-          "legendFormat": "entries read from stored baselines (range)",
-          "refId": "B",
-          "range": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
           "custom": {
             "lineWidth": 2,
             "fillOpacity": 10,

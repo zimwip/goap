@@ -47,7 +47,6 @@ func TestOperationCost(t *testing.T) {
 
 	repo, wal, size, queries := costRepo(t)
 	g := New(repo)
-	g.CheckpointEvery = DefaultCheckpointEvery
 
 	keys := make([]string, 0, n)
 	start := time.Now()
@@ -83,14 +82,6 @@ func TestOperationCost(t *testing.T) {
 	}
 	if extra > 0 {
 		t.Logf("versions: %d more per node, %v (%.0f versions/s)", extra, time.Since(start).Round(time.Second), float64(extra*n)/time.Since(start).Seconds())
-	}
-	g.WaitCheckpoints()
-	if head, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch); err == nil {
-		w, t0 := wal(), time.Now()
-		if err := g.Materialize(ctx, head.ID); err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("one checkpoint (head stored whole): %v, %d KB WAL", time.Since(t0).Round(time.Millisecond), (wal()-w)>>10)
 	}
 	t.Logf("database: %d MB", size()>>20)
 

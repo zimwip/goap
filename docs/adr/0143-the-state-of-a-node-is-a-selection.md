@@ -1,6 +1,6 @@
 # ADR 0143 — The state of a node is a selection; baselines keep no entries, tags name versions
 
-**Status**: accepted · **Date**: 2026-10 · Builds on ADR 0032 (versions and branches), 0056 (baselines and tags), 0137
+**Status**: accepted; §1 to §3 implemented (no `baseline_entry`, no checkpoints, the bootstrap a landing), §4 to §8 to come · **Date**: 2026-10 · Builds on ADR 0032 (versions and branches), 0056 (baselines and tags), 0137
 (a commit reads the nodes it touches, and its addendum *The version of a node in a baseline is a selection*), 0140 (a
 baseline is computed from the versions that landed) · Supersedes the checkpoints of ADR 0140 and the change tags of
 ADR 0056

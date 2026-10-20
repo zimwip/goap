@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
@@ -40,22 +39,7 @@ const (
 	goldSQLiteOnBranch = `(v.branch = ? OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = ?))`
 	goldPGImpactCols   = `id::text, node_id::text, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, COALESCE(via::text, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded`
 	goldSQLiteImpact   = `id, node_id, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, COALESCE(via, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded`
-	goldChain          = `WITH RECURSIVE chain(id, base_id, d) AS (
-		SELECT id, base_id, 0 FROM baseline WHERE id = %s AND gap = 0
-		UNION ALL
-		SELECT b.id, b.base_id, c.d + 1 FROM baseline b JOIN chain c ON b.id = c.base_id WHERE b.gap = 0
-	)`
 )
-
-// chain is the stored chain of a dialect: PostgreSQL reads each step by the primary key.
-func chain(p string) string {
-	c := strings.Replace(goldChain, "%s", p, 1)
-	if p == "$1" {
-		c = strings.Replace(c, `SELECT b.id, b.base_id, c.d + 1 FROM baseline b JOIN chain c ON b.id = c.base_id WHERE b.gap = 0`,
-			`SELECT b.id, b.base_id, c.d + 1 FROM chain c CROSS JOIN LATERAL (SELECT id, base_id FROM baseline WHERE id = c.base_id AND gap = 0 LIMIT 1) b`, 1)
-	}
-	return c
-}
 
 func TestSQLBuildersGolden(t *testing.T) {
 	ref := domain.NodeRef{ID: "n1", Version: 3}
@@ -128,27 +112,8 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite NodesAt", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id JOIN json_each(?) r ON json_extract(r.value, '$[0]') = v.node_id AND json_extract(r.value, '$[1]') = v.version
 		      WHERE (? = '' OR n.type = ?) ORDER BY n.key`, []any{`[["n1",2],["n2",1]]`, "t"})
 
-	// The state of a baseline (ADR 0140): the entries stored along its chain, the versions landed on its branch
-	const eff = `, eff AS (
-		SELECT e.node_id, e.version, e.removed, row_number() OVER (PARTITION BY e.node_id ORDER BY c.d) AS rn
-		FROM chain c JOIN baseline_entry e ON e.baseline_id = c.id%s
-	) SELECT %s, version, removed FROM eff WHERE rn = 1`
+	// The state of a baseline (ADR 0143): the versions landed on its branch
 	ids := []domain.NodeID{"n1", "n2"}
-	q, a = pg.sqlStoredVersions("b1", nil)
-	check("pg StoredVersions", pg, q, a, chain("$1")+fmt.Sprintf(eff, "", "node_id::text"), []any{"b1"})
-	q, a = pg.sqlStoredVersions("b1", ids)
-	check("pg StoredVersions ids", pg, q, a, chain("$1")+fmt.Sprintf(eff, " WHERE e.node_id = ANY($2::uuid[])", "node_id::text"), []any{"b1", []string{"n1", "n2"}})
-	q, a = lite.sqlStoredVersions("b1", ids)
-	check("sqlite StoredVersions ids", lite, q, a, chain("?")+fmt.Sprintf(eff, " WHERE e.node_id IN (SELECT value FROM json_each(?))", "node_id"), []any{"b1", `["n1","n2"]`})
-	q, a = pg.sqlStoredTail("b1")
-	check("pg StoredTail", pg, q, a, chain("$1")+` SELECT coalesce(base_id::text, '') FROM chain ORDER BY d DESC LIMIT 1`, []any{"b1"})
-	q, a = lite.sqlStoredTail("b1")
-	check("sqlite StoredTail", lite, q, a, chain("?")+` SELECT coalesce(base_id, '') FROM chain ORDER BY d DESC LIMIT 1`, []any{"b1"})
-	sizes := ` SELECT CASE WHEN c.base_id IS NULL THEN 1 ELSE 0 END, (SELECT count(*) FROM baseline_entry e WHERE e.baseline_id = c.id) FROM chain c`
-	q, a = pg.sqlStoredSizes("b1")
-	check("pg StoredSizes", pg, q, a, chain("$1")+sizes, []any{"b1"})
-	q, a = lite.sqlStoredSizes("b1")
-	check("sqlite StoredSizes", lite, q, a, chain("?")+sizes, []any{"b1"})
 	landed := func(id, inV, inJ, ns string) string {
 		return `SELECT ` + id + `, version, deleted, reason FROM (
 		SELECT x.node_id, x.version, x.deleted, x.reason, row_number() OVER (PARTITION BY x.node_id ORDER BY x.landed DESC, x.version DESC) AS rn
@@ -175,17 +140,13 @@ func TestSQLBuildersGolden(t *testing.T) {
 				WHERE j.node_id = q.id AND j.branch = $1 AND j.landed > $2 AND j.landed <= $3 ORDER BY j.landed DESC, j.version DESC LIMIT 1)
 			) u ORDER BY u.landed DESC, u.version DESC LIMIT 1
 		) x`, []any{"main", int64(3), int64(9), "default", []string{"n1", "n2"}})
-	q, a = pg.sqlLatestUnderived("", "main", 9)
-	check("pg LatestUnderived", pg, q, a, `SELECT id::text, seq FROM baseline WHERE namespace = $1 AND branch = $2 AND kind NOT IN ('commit', 'merge', 'fast-forward') AND seq < $3 ORDER BY seq DESC LIMIT 1`, []any{"default", "main", int64(9)})
-	q, a = lite.sqlLatestUnderived("", "main", 9)
-	check("sqlite LatestUnderived", lite, q, a, `SELECT id, seq FROM baseline WHERE namespace = ? AND branch = ? AND kind NOT IN ('commit', 'merge', 'fast-forward') AND seq < ? ORDER BY seq DESC LIMIT 1`, []any{"default", "main", int64(9)})
 	q, a = lite.sqlLandedVersions("", "main", 3, 9, ids)
 	check("sqlite LandedVersions ids", lite, q, a, strings.NewReplacer("$1", "?", "$2", "?", "$3", "?").Replace(landed("node_id",
 		" AND v.node_id IN (SELECT value FROM json_each(?))", " AND j.node_id IN (SELECT value FROM json_each(?))", "?")), []any{"main", int64(3), int64(9), "default", `["n1","n2"]`})
 	q, a = pg.sqlBaselineHeader("b1")
-	check("pg BaselineHeader", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, namespace, gap, kind, coalesce(rebased_from::text, ''), seq, coalesce(base_id::text, ''), depth FROM baseline WHERE id = $1`, []any{"b1"})
+	check("pg BaselineHeader", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, namespace, kind, coalesce(rebased_from::text, ''), seq FROM baseline WHERE id = $1`, []any{"b1"})
 	q, a = lite.sqlBaselineHeader("b1")
-	check("sqlite BaselineHeader", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, namespace, gap, kind, coalesce(rebased_from, ''), seq, coalesce(base_id, ''), depth FROM baseline WHERE id = ?`, []any{"b1"})
+	check("sqlite BaselineHeader", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, namespace, kind, coalesce(rebased_from, ''), seq FROM baseline WHERE id = ?`, []any{"b1"})
 	q, a = pg.sqlLastLanding("change-1")
 	check("pg LastLanding", pg, q, a, `SELECT coalesce(max(landed), 0) FROM (SELECT max(landed) AS landed FROM node_version WHERE branch = $1 UNION ALL SELECT max(landed) FROM node_branch WHERE branch = $1) l`, []any{"change-1"})
 	q, a = lite.sqlLastLanding("change-1")
@@ -399,13 +360,11 @@ func TestSQLBuildersGolden(t *testing.T) {
 		}
 	}
 	checkList("pg DeleteChange used", pg, pg.deleteChangeUsed(), []string{
-		`SELECT count(*) FROM baseline_entry e JOIN node_version v ON e.node_id = v.node_id AND e.version = v.version WHERE v.change_id = $1`,
 		`SELECT count(*) FROM baseline WHERE change_id = $1`,
 		`SELECT count(*) FROM link l JOIN node_version v ON l.to_id = v.node_id AND l.to_version = v.version WHERE v.change_id = $1 AND l.change_id IS DISTINCT FROM $1::uuid`,
 		`SELECT count(*) FROM node_version o JOIN node_version v ON o.node_id = v.node_id AND o.version > v.version WHERE v.change_id = $1 AND o.change_id IS DISTINCT FROM $1::uuid`,
 	})
 	checkList("sqlite DeleteChange used", lite, lite.deleteChangeUsed(), []string{
-		`SELECT count(*) FROM baseline_entry e JOIN node_version v ON e.node_id = v.node_id AND e.version = v.version WHERE v.change_id = ?1`,
 		`SELECT count(*) FROM baseline WHERE change_id = ?1`,
 		`SELECT count(*) FROM link l JOIN node_version v ON l.to_id = v.node_id AND l.to_version = v.version WHERE v.change_id = ?1 AND (l.change_id IS NULL OR l.change_id != ?1)`,
 		`SELECT count(*) FROM node_version o JOIN node_version v ON o.node_id = v.node_id AND o.version > v.version WHERE v.change_id = ?1 AND (o.change_id IS NULL OR o.change_id != ?1)`,

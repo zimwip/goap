@@ -138,16 +138,6 @@ type Graph struct {
 	// whether the methodology applies to its project.
 	MethodologyGate MethodologyGate
 
-	// MaterializeEvery is how many baselines kept as headers of a chain pass between two that store their entries
-	// (ADR 0056, 0140); the others are computed from the versions landed. 0: DefaultMaterializeEvery (never).
-	MaterializeEvery int
-	// CheckpointEvery is how many baselines kept as headers along a branch pass between two whose whole state is stored
-	// (a checkpoint, ADR 0140), in the background once the commit that wrote the header is over: a commit never stores
-	// a state. 0: no checkpoint (the compositions set DefaultCheckpointEvery).
-	CheckpointEvery int
-	// checkpoints are the checkpoints being stored
-	checkpoints checkpointer
-
 	// booted is set once the roots of the structures are known to exist (Bootstrap).
 	booted atomic.Bool
 	// states caches the whole states computed for baselines, headers their headers (ADR 0137, 0140).

@@ -80,14 +80,13 @@ type landed struct {
 	baseline domain.Baseline
 }
 
-// A state is computed from the log of the changes; materialising one only stores it (ADR 0056).
-func TestVirtualBaselines(t *testing.T) { forEachRepo(t, testVirtualBaselines) }
+// A state is the selection of the versions landed (ADR 0143): the graph and a store read the same, whatever the cache.
+func TestBaselinesAreSelections(t *testing.T) { forEachRepo(t, testBaselinesAreSelections) }
 
-func testVirtualBaselines(t *testing.T, repo Repo) {
+func testBaselinesAreSelections(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	g.MaterializeEvery = 3
 	head := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
 	var written []domain.Baseline
 	for i := range 7 {
@@ -98,45 +97,27 @@ func testVirtualBaselines(t *testing.T, repo Repo) {
 		head = commitOn(t, g, "", head.ID, edits...)
 		written = append(written, head)
 	}
-	// stored: a header only between two snapshots
-	raw := map[domain.BaselineID]domain.Baseline{}
+	// a store selects the state without the graph
 	if err := repo.InTx(ctx, func(tx Tx) error {
-		for _, b := range written {
+		for i, b := range written {
 			r, err := tx.Baseline(ctx, b.ID)
 			if err != nil {
 				return err
 			}
-			raw[b.ID] = r
+			if !maps.Equal(r.Nodes, b.Nodes) {
+				t.Errorf("baseline %d read by the store: %v, want %v", i, r.Nodes, b.Nodes)
+			}
 		}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	gaps := make([]int, len(written))
-	for i, b := range written {
-		gaps[i] = raw[b.ID].Gap
-		if raw[b.ID].Gap > 0 && len(raw[b.ID].Nodes) != 0 {
-			t.Fatalf("baseline %d is a header only, yet holds %d nodes", i, len(raw[b.ID].Nodes))
-		}
-	}
-	virtual := 0
-	for _, gap := range gaps {
-		if gap > 0 {
-			virtual++
-		}
-		if gap >= 3 {
-			t.Fatalf("gaps %v: a snapshot at least every 3 baselines", gaps)
-		}
-	}
-	if virtual == 0 {
-		t.Fatalf("gaps %v: no baseline is computed", gaps)
-	}
-	// read: every one holds what was written, computed or stored, through a graph with no cache
+	// read: every one holds what was written, through a graph with no cache
 	fresh := New(repo)
 	for i, want := range written {
 		got := must[domain.Baseline](t)(fresh.Baseline(ctx, want.ID))
-		if !maps.Equal(got.Nodes, want.Nodes) || got.Gap != gaps[i] {
-			t.Fatalf("baseline %d (gap %d): read %v, wrote %v", i, gaps[i], got.Nodes, want.Nodes)
+		if !maps.Equal(got.Nodes, want.Nodes) {
+			t.Fatalf("baseline %d: read %v, wrote %v", i, got.Nodes, want.Nodes)
 		}
 		if st := must[domain.Baseline](t)(fresh.StateAfter(ctx, want.ChangeID)); !maps.Equal(st.Nodes, want.Nodes) {
 			t.Fatalf("state after the change of baseline %d: %v, want %v", i, st.Nodes, want.Nodes)
@@ -145,31 +126,9 @@ func testVirtualBaselines(t *testing.T, repo Repo) {
 			t.Fatalf("baseline %d: graph of %d nodes, want %d", i, len(nodes), len(want.Nodes))
 		}
 	}
-	// browsing a computed baseline by type reads it, without storing its state (ADR 0140)
-	for i, b := range written {
-		if gaps[i] == 0 {
-			continue
-		}
-		page := must[NodePage](t)(fresh.BaselineNodes(ctx, b.ID, NodeQuery{Type: "Design"}))
-		if page.Total == 0 {
-			t.Fatalf("baseline %d: no Design node listed", i)
-		}
-		if got := must[domain.Baseline](t)(fresh.Baseline(ctx, b.ID)); got.Gap != gaps[i] {
-			t.Fatalf("baseline %d was browsed by type, its gap is %d now, not %d", i, got.Gap, gaps[i])
-		}
-		break
-	}
-	// a snapshot on demand
-	for i, b := range written {
-		if gaps[i] == 0 {
-			continue
-		}
-		if err := fresh.Materialize(ctx, b.ID); err != nil {
-			t.Fatal(err)
-		}
-		got := must[domain.Baseline](t)(New(repo).Baseline(ctx, b.ID))
-		if got.Gap != 0 || !maps.Equal(got.Nodes, b.Nodes) {
-			t.Fatalf("baseline %d after Materialize: gap %d, %v", i, got.Gap, got.Nodes)
-		}
+	// browsing a baseline by type
+	page := must[NodePage](t)(New(repo).BaselineNodes(ctx, written[3].ID, NodeQuery{Type: "Design"}))
+	if page.Total != 4 {
+		t.Fatalf("baseline 3: %d Design nodes listed, want 4", page.Total)
 	}
 }

@@ -183,19 +183,9 @@ type Baseline struct {
 	// Kind says how the state of the baseline follows from the change that produced it (ADR 0056): BaselineCommit,
 	// BaselineMerge, BaselineFastForward or BaselineSnapshot.
 	Kind string `json:"kind,omitempty"`
-	// Gap is how far the baseline is from a snapshot of its state (ADR 0056): 0, the state is materialised (its
-	// entries are stored); n > 0, only its header is stored and the state is computed from the baseline n steps back
-	// and what the changes in between did (see Kind). The graph hides it: a baseline it returns always holds its nodes.
-	Gap int `json:"gap,omitempty"`
-	// Seq orders the baselines (ADR 0140): a baseline has a greater one than every baseline before it on its branch.
-	// Seq, BaseID and Depth are how the graph stores the state; it hides them.
-	Seq int64 `json:"-"`
-	// BaseID is the baseline the state is stored over (ADR 0140): for a baseline kept as a header, the versions that
-	// landed on its branch since BaseID put in the state of BaseID; for one whose entries are stored, its entries put in
-	// the state of BaseID; none: the entries are the whole state.
-	BaseID BaselineID `json:"-"`
-	// Depth counts the baselines with entries stored over one another down to a whole one (a checkpoint).
-	Depth     int                `json:"-"`
+	// Seq orders the baselines (ADR 0140): a baseline has a greater one than every baseline before it on its branch, and
+	// its state is the selection of the versions landed on its branch up to it (ADR 0143); the graph hides it.
+	Seq       int64              `json:"-"`
 	Nodes     map[NodeID]Version `json:"nodes"`
 	CreatedAt time.Time          `json:"createdAt"`
 }
@@ -209,21 +199,14 @@ const (
 	// BaselineFastForward is the state of a branch after a change was fast-forwarded into it.
 	BaselineFastForward = "fast-forward"
 	// BaselineRebase is the state of the branch of a committed change moved onto the head of its target (ADR 0102): that
-	// head with what the change committed; stored whole (not derived).
+	// head with what the change committed.
 	BaselineRebase = "rebase"
 	// BaselineRevert is a commit that also puts back, on the branch of a change, the nodes it no longer changes (an impact
-	// withdrawn after its commit, ADR 0102): stored whole (not derived).
+	// withdrawn after its commit, ADR 0102).
 	BaselineRevert = "revert"
-	// BaselineSnapshot is a state nothing derives (the bootstrap, a fixture): always stored.
+	// BaselineSnapshot is the state the bootstrap leaves (ADR 0143: an ordinary landing).
 	BaselineSnapshot = "snapshot"
 )
-
-// DerivedKind tells whether the state of a baseline of this kind follows from what its change did: a commit and a merge
-// from the `landed` events naming the baseline in the log of its change, a fast-forward from the versions its change
-// joined to the branch (ADR 0056).
-func DerivedKind(kind string) bool {
-	return kind == BaselineCommit || kind == BaselineMerge || kind == BaselineFastForward
-}
 
 // TagID identifies a tag.
 type TagID string

@@ -18,12 +18,8 @@ CREATE TABLE baseline (
     created_at  text        NOT NULL,
     branch      text        NOT NULL DEFAULT 'main',
     namespace   text        NOT NULL DEFAULT 'default',
-    depth       integer     NOT NULL DEFAULT 0,
-    -- 0: the state is materialised (baseline_entry rows hold it, as a delta from the parent, or whole at a checkpoint);
-    -- n > 0: only this header is stored, the state is computed from the baseline n steps back and what the changes in
-    -- between did (ADR 0056)
-    gap         integer     NOT NULL DEFAULT 0,
-    -- commit | merge | fast-forward | snapshot: how the state follows from the change (ADR 0056)
+    -- commit | merge | fast-forward | rebase | revert | snapshot: how the state follows from the change (ADR 0056); the
+    -- state itself is the selection of the versions landed on the branch up to seq (ADR 0143), never stored
     kind        text        NOT NULL DEFAULT 'snapshot',
     merged_from text REFERENCES baseline(id),
     -- the baseline the change was forked from before its rebase onto the head of its target (ADR 0101); NULL: never rebased
@@ -122,15 +118,6 @@ CREATE TABLE link (
 CREATE INDEX link_from ON link (from_id, from_version);
 CREATE INDEX link_to ON link (to_id, to_version);
 CREATE INDEX link_change ON link (change_id);
-
-CREATE TABLE baseline_entry (
-    baseline_id text    NOT NULL REFERENCES baseline(id),
-    node_id     text    NOT NULL,
-    version     integer NOT NULL,
-    removed     integer NOT NULL DEFAULT 0,
-    PRIMARY KEY (baseline_id, node_id),
-    FOREIGN KEY (node_id, version) REFERENCES node_version(node_id, version)
-);
 
 -- ADR 0032: a node version is written on one branch (node_version.branch, never changed) and may join other branches:
 -- a merge that lands a version as is makes it join the target branch instead of copying it. change_id is the change

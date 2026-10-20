@@ -3,48 +3,20 @@ package graph
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log/slog"
 	"maps"
-	"os"
 	"slices"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// The state of a namespace after a change follows from what the change did (ADR 0056), and what it did is the versions
-// it landed (ADR 0140): a version written on a branch and a version joining one carry the order of the baseline they
-// landed in (Node.Landed, Baseline.Seq), so a baseline is kept as a header only, over the baseline its state builds on
-// (BaseID): its state is the last version of each node that landed on its branch since BaseID, put in the state of
-// BaseID. A commit, a merge and a fast-forward write no entry. What is not derived from the versions landed (a
-// snapshot, a rebase, a revert) stores its entries: what it changed over the baseline it is put on (BaseID), or the
-// whole state at a checkpoint. Reading the state of some nodes is then one indexed read per baseline of that chain
-// (StoredVersions, LandedVersions), whatever the length of the branch.
-
-// DefaultMaterializeEvery is how often a baseline is stored with its entries along a chain of baselines kept as
-// headers when the graph is given no MaterializeEvery: 0, never (ADR 0140). GOAP_MATERIALIZE_EVERY overrides it (1:
-// every baseline stores its entries).
-var DefaultMaterializeEvery = 0
-
-func init() {
-	if n, err := strconv.Atoi(os.Getenv("GOAP_MATERIALIZE_EVERY")); err == nil && n > 0 {
-		DefaultMaterializeEvery = n
-	}
-}
-
-func (g *Graph) materializeEvery() int {
-	if g.MaterializeEvery > 0 {
-		return g.MaterializeEvery
-	}
-	return DefaultMaterializeEvery
-}
-
-// checkpointEvery is the longest chain of baselines storing their entries over one another (ADR 0032): one that would
-// be that deep stores the whole state.
-var checkpointEvery = 50
+// The state of a namespace at a baseline is a selection (ADR 0143): a version is complete (its properties, owner, state
+// and link set, ADR 0141) and lands on a branch at a point of one global order (Node.Landed, Baseline.Seq), so the
+// version of a node at a baseline is the last one that landed on the baseline's branch up to its order, else, past the
+// fork of the branch, the one selected on the branch it was forked from at the fork. Nothing is folded and no baseline
+// stores entries: a baseline is a header, and reading the state of some nodes is one indexed read per branch of the
+// chain of forks (LandedVersions), whatever the length of the branches.
 
 // stateCache keeps the whole states computed for baselines: a state never changes once its baseline exists, so an
 // entry is never stale (an id written in a transaction that rolled back is never asked again). It is bounded.
@@ -97,8 +69,7 @@ func (c *stateCache) put(id domain.BaselineID, s map[domain.NodeID]domain.Versio
 	c.m[id] = maps.Clone(s)
 }
 
-// headerCache keeps the headers of baselines: what they say of the state never becomes wrong (a materialisation only
-// stores what the versions landed already give; Materialize drops the header it changed).
+// headerCache keeps the headers of baselines: a header never changes once written.
 type headerCache struct {
 	mu    sync.Mutex
 	m     map[domain.BaselineID]domain.Baseline
@@ -148,9 +119,9 @@ func (t *guardTx) header(ctx context.Context, id domain.BaselineID) (domain.Base
 	return b, err
 }
 
-// stateAt reads the versions of some nodes (nil: every node) in a baseline (ADR 0140), the nodes it does not hold left
-// out: down the chain of the baselines its state is stored over, each one gives the nodes not given yet, a stored
-// one its entries, one kept as a header the versions landed on its branch since the baseline it is stored over.
+// stateAt reads the versions of some nodes (nil: every node) in a baseline (ADR 0143), the nodes it does not hold left
+// out: the selection on its branch up to its order, then, for the nodes not decided, on the branch it was forked from
+// at the fork, and so on.
 func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (_ map[domain.NodeID]domain.Version, err error) {
 	read := stateRead{start: time.Now(), whole: ids == nil, source: stateFromLandings}
 	defer func() {
@@ -158,6 +129,65 @@ func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domai
 			read.record(ctx)
 		}
 	}()
+	if id == "" {
+		return map[domain.NodeID]domain.Version{}, nil
+	}
+	if ids == nil {
+		if s, ok := t.g.states.get(id); ok {
+			read.source = stateFromCache
+			return s, nil
+		}
+	} else if s, ok := t.g.states.lookup(id, ids); ok {
+		read.source = stateFromCache
+		for n, v := range s {
+			if v == 0 {
+				delete(s, n)
+			}
+		}
+		return s, nil
+	}
+	b, err := t.header(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return selectState(ctx, t.Tx, b, ids, t.header, t.forkOf, &read)
+}
+
+// forkOf returns the baseline a lasting branch was forked from (none for main), read once per transaction.
+func (t *guardTx) forkOf(ctx context.Context, namespace, branch string) (domain.BaselineID, error) {
+	key := domain.NamespaceOf(namespace) + "\x00" + domain.BranchOf(branch)
+	if fork, ok := t.forks[key]; ok {
+		return fork, nil
+	}
+	fork, err := branchFork(ctx, t.Tx, namespace, branch)
+	if err != nil {
+		return "", err
+	}
+	if t.forks == nil {
+		t.forks = map[string]domain.BaselineID{}
+	}
+	t.forks[key] = fork
+	return fork, nil
+}
+
+// branchFork returns the baseline a branch was forked from: none for main or a branch the store does not know.
+func branchFork(ctx context.Context, tx Tx, namespace, branch string) (domain.BaselineID, error) {
+	if domain.BranchOf(branch) == domain.MainBranch {
+		return "", nil
+	}
+	br, err := tx.Branch(ctx, domain.NamespaceOf(namespace), domain.BranchOf(branch))
+	if errors.Is(err, ErrNotFound) {
+		return "", nil
+	}
+	return br.ForkBaseline, err
+}
+
+// selectState is the selection of ADR 0143 from the header of a baseline: for each node (nil ids: every node), its last
+// landing on the branch up to the order of the baseline, then the nodes not decided on the branch it was forked from
+// at the fork; a version deleting its node leaves it out.
+func selectState(ctx context.Context, tx Tx, b domain.Baseline, ids []domain.NodeID,
+	header func(context.Context, domain.BaselineID) (domain.Baseline, error),
+	fork func(context.Context, string, string) (domain.BaselineID, error), read *stateRead) (map[domain.NodeID]domain.Version, error) {
 	decided := map[domain.NodeID]domain.Version{} // 0: the baseline does not hold the node
 	var pending map[domain.NodeID]bool            // nil: every node
 	if ids != nil {
@@ -166,7 +196,22 @@ func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domai
 			pending[n] = true
 		}
 	}
-	take := func(got map[domain.NodeID]domain.Version) {
+	for {
+		var want []domain.NodeID
+		if pending != nil {
+			if len(pending) == 0 {
+				break
+			}
+			want = slices.Sorted(maps.Keys(pending))
+		}
+		got, err := tx.LandedVersions(ctx, b.Namespace, b.Branch, 0, b.Seq, want)
+		if err != nil {
+			return nil, err
+		}
+		if read != nil {
+			read.chain++
+			read.landed += len(got)
+		}
 		for n, v := range got {
 			if pending == nil {
 				if _, ok := decided[n]; !ok {
@@ -177,65 +222,16 @@ func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domai
 				delete(pending, n)
 			}
 		}
-	}
-	for id != "" && (pending == nil || len(pending) > 0) {
-		var want []domain.NodeID
-		if pending != nil {
-			want = slices.Sorted(maps.Keys(pending))
-			if s, ok := t.g.states.lookup(id, want); ok {
-				take(s)
-				read.source = stateFromCache
-				break
-			}
-		} else if s, ok := t.g.states.get(id); ok {
-			take(s)
-			read.source = stateFromCache
-			break
-		}
-		read.chain++
-		b, err := t.header(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		var got map[domain.NodeID]domain.Version
-		if pending != nil && domain.DerivedKind(b.Kind) {
-			// some nodes in a state that follows from the landings: the history of each node on the branch folded in one
-			// statement, down to the last baseline that does not follow from them, else to where the branch starts; the
-			// checkpoints on the way are what a whole state is read from, not needed here
-			stop, after, err := t.foldStop(ctx, b)
+		next, err := fork(ctx, b.Namespace, b.Branch)
+		if err != nil || next == "" {
 			if err != nil {
 				return nil, err
 			}
-			if got, err = t.Tx.LandedVersions(ctx, b.Namespace, b.Branch, after, b.Seq, want); err != nil {
-				return nil, err
-			}
-			read.source, read.landed = stateFromFold, read.landed+len(got)
-			id = stop
-		} else if b.Gap == 0 {
-			if got, id, err = t.Tx.StoredVersions(ctx, b.ID, want); err != nil {
-				return nil, err
-			}
-			read.source, read.stored = stateFromStored, read.stored+len(got)
-		} else {
-			// the landings of its branch since its base; a base on another branch (the fork of a change's branch, the
-			// head a rebase brought it onto) is under every landing of the branch: all of them up to the header
-			var after int64
-			if b.BaseID != "" {
-				base, err := t.header(ctx, b.BaseID)
-				if err != nil {
-					return nil, err
-				}
-				if domain.BranchOf(base.Branch) == domain.BranchOf(b.Branch) {
-					after = base.Seq
-				}
-			}
-			if got, err = t.Tx.LandedVersions(ctx, b.Namespace, b.Branch, after, b.Seq, want); err != nil {
-				return nil, err
-			}
-			read.landed += len(got)
-			id = b.BaseID
+			break
 		}
-		take(got)
+		if b, err = header(ctx, next); err != nil {
+			return nil, err
+		}
 	}
 	out := make(map[domain.NodeID]domain.Version, len(decided))
 	for n, v := range decided {
@@ -244,30 +240,6 @@ func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domai
 		}
 	}
 	return out, nil
-}
-
-// foldStop is where the fold of the landings on the branch of a derived baseline stops (ADR 0140): the last baseline of
-// the branch before it that does not follow from the landings, with its order, else the baseline the branch was forked
-// from (none for main), under every landing of the branch.
-func (t *guardTx) foldStop(ctx context.Context, b domain.Baseline) (domain.BaselineID, int64, error) {
-	id, seq, err := t.Tx.LatestUnderived(ctx, b.Namespace, b.Branch, b.Seq)
-	if err != nil || id != "" {
-		return id, seq, err
-	}
-	key := domain.NamespaceOf(b.Namespace) + "\x00" + domain.BranchOf(b.Branch)
-	fork, ok := t.forks[key]
-	if !ok {
-		br, err := t.Tx.Branch(ctx, domain.NamespaceOf(b.Namespace), domain.BranchOf(b.Branch))
-		if err != nil {
-			return "", 0, err
-		}
-		if t.forks == nil {
-			t.forks = map[string]domain.BaselineID{}
-		}
-		fork = br.ForkBaseline
-		t.forks[key] = fork
-	}
-	return fork, 0, nil
 }
 
 // nodesOf returns the whole state of a baseline.
@@ -410,208 +382,20 @@ func (t *guardTx) landed(ctx context.Context, b *domain.Baseline) error {
 	return nil
 }
 
-// asHeader makes a baseline whose state follows from the versions its change landed a header over the baseline the
-// state of its parent is stored over (ADR 0140), unless it is a MaterializeEvery-th header of a chain: false then.
-func (t *guardTx) asHeader(ctx context.Context, b *domain.Baseline) (bool, error) {
-	if b.ParentID == "" || !domain.DerivedKind(b.Kind) {
-		return false, nil
-	}
-	parent, err := t.header(ctx, b.ParentID)
-	if err != nil {
-		return false, err
-	}
-	sameRun := domain.BranchOf(parent.Branch) == domain.BranchOf(b.Branch) && parent.Gap > 0
-	gap := 1
-	if sameRun {
-		gap = parent.Gap + 1
-	}
-	if every := t.g.materializeEvery(); every > 0 && gap >= every {
-		return false, nil
-	}
-	b.Gap, b.Depth, b.Nodes, b.BaseID = gap, 0, nil, parent.ID
-	if sameRun {
-		b.BaseID = parent.BaseID
-		// a checkpoint stored since along the branch is nearer (CheckpointEvery): one of its baselines, so an ancestor
-		var after int64
-		if b.BaseID != "" {
-			base, err := t.header(ctx, b.BaseID)
-			if err != nil {
-				return false, err
-			}
-			if domain.BranchOf(base.Branch) == domain.BranchOf(b.Branch) {
-				after = base.Seq
-			}
-		}
-		cp, err := t.Tx.LatestStored(ctx, b.Namespace, b.Branch, after, parent.Seq)
-		if err != nil {
-			return false, err
-		}
-		if cp != "" {
-			b.BaseID = cp
-		}
-	}
-	if every := t.g.CheckpointEvery; every > 0 && gap%every == 0 {
-		// only a lasting branch stores checkpoints: the state of a change's branch is its fork with what it landed
-		if br, err := t.Tx.Branch(ctx, b.Namespace, b.Branch); err != nil && !errors.Is(err, ErrNotFound) {
-			return false, err
-		} else if err != nil || !br.Ephemeral {
-			t.checkpoints = append(t.checkpoints, b.ID)
-		}
-	}
-	return true, nil
+// putBaselineOver writes a baseline whose state is the state of over with delta put in: a header (ADR 0143), the
+// versions of its landing selecting its state.
+func (t *guardTx) putBaselineOver(ctx context.Context, b domain.Baseline, _ domain.BaselineID, _ map[domain.NodeID]domain.Version) error {
+	return t.PutBaseline(ctx, b)
 }
 
-// putOver stores the entries of a baseline over the state of over (ADR 0140): delta is what it changed there (a
-// version, 0 for a node it removed); a baseline that would be checkpointEvery deep, or over nothing, stores its whole
-// state.
-func (t *guardTx) putOver(ctx context.Context, b domain.Baseline, over domain.BaselineID, delta map[domain.NodeID]domain.Version) error {
-	b.Gap, b.Depth, b.BaseID = 0, 1, over
-	if over != "" {
-		base, err := t.header(ctx, over)
-		if err != nil {
-			return err
-		}
-		if base.Gap == 0 {
-			b.Depth = base.Depth + 1
-		}
-	}
-	if over == "" || b.Depth >= checkpointEvery {
-		from, err := t.nodesOf(ctx, over)
-		if err != nil {
-			return err
-		}
-		applyMoves(from, delta)
-		b.Nodes, b.Depth, b.BaseID = from, 0, ""
-		if err := t.Tx.PutBaseline(ctx, b); err != nil {
-			return err
-		}
-		t.g.states.put(b.ID, from)
-		return nil
-	}
-	var removed []domain.NodeID
-	for n, v := range delta {
-		if v == 0 {
-			removed = append(removed, n)
-		}
-	}
-	had, err := t.BaselineVersions(ctx, over, removed)
-	if err != nil {
-		return err
-	}
-	b.Nodes = map[domain.NodeID]domain.Version{}
-	for n, v := range delta {
-		switch {
-		case v > 0:
-			b.Nodes[n] = v
-		case had[n] > 0:
-			b.Nodes[n] = -had[n] // a removal records the version the node had
-		}
-	}
-	return t.Tx.PutBaseline(ctx, b)
-}
-
-// putBaselineOver writes a baseline whose state is the state of over with delta put in (a version, 0: the node left),
-// without reading that state (ADR 0137, 0140): a baseline whose state follows from the versions its change landed is a
-// header, any other stores delta over over.
-func (t *guardTx) putBaselineOver(ctx context.Context, b domain.Baseline, over domain.BaselineID, delta map[domain.NodeID]domain.Version) error {
-	if err := t.landed(ctx, &b); err != nil {
-		return err
-	}
-	if over == b.ParentID {
-		if ok, err := t.asHeader(ctx, &b); err != nil {
-			return err
-		} else if ok {
-			return t.Tx.PutBaseline(ctx, b)
-		}
-	} else if b.Kind == domain.BaselineRebase {
-		if ok, err := t.asRebaseHeader(ctx, &b, over, delta); err != nil {
-			return err
-		} else if ok {
-			return t.Tx.PutBaseline(ctx, b)
-		}
-	}
-	return t.putOver(ctx, b, over, delta)
-}
-
-// asRebaseHeader makes a rebase a header over the head it brings its branch onto (over) when what it puts there (delta)
-// is every last version its branch landed: its state is then the state of over with the landings of its branch, as
-// stateAt reads a header over another branch. A branch storing a baseline (a revert, an earlier rebase stored) or
-// holding a version the rebase leaves out (a node withdrawn since its commit) keeps the stored rebase.
-func (t *guardTx) asRebaseHeader(ctx context.Context, b *domain.Baseline, over domain.BaselineID, delta map[domain.NodeID]domain.Version) (bool, error) {
-	if over == "" || domain.BranchOf(b.Branch) == domain.MainBranch {
-		return false, nil
-	}
-	if every := t.g.materializeEvery(); every == 1 {
-		return false, nil
-	}
-	base, err := t.header(ctx, over)
-	if err != nil || domain.BranchOf(base.Branch) == domain.BranchOf(b.Branch) {
-		return false, err
-	}
-	if stored, err := t.Tx.LatestStored(ctx, b.Namespace, b.Branch, 0, b.Seq); err != nil || stored != "" {
-		return false, err
-	}
-	ids, err := t.Tx.BranchNodeIDs(ctx, b.Branch)
-	if err != nil {
-		return false, err
-	}
-	landed, err := t.Tx.LandedVersions(ctx, b.Namespace, b.Branch, 0, b.Seq, ids)
-	if err != nil {
-		return false, err
-	}
-	if len(landed) != len(delta) {
-		return false, nil
-	}
-	for id, v := range landed {
-		if d, ok := delta[id]; !ok || d != v {
-			return false, nil
-		}
-	}
-	b.Gap, b.Depth, b.Nodes, b.BaseID = 1, 0, nil, over
-	return true, nil
-}
-
-// PutBaseline writes a baseline given its whole state: a header when its state follows from the versions its change
-// landed, else its entries over its parent (what differs from the state of the parent, ADR 0032), or whole without a
-// parent.
+// PutBaseline writes the header of a baseline (ADR 0143): its state is the selection at its order, the versions of its
+// landing taking it.
 func (t *guardTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 	if err := t.landed(ctx, &b); err != nil {
 		return err
 	}
-	if ok, err := t.asHeader(ctx, &b); err != nil {
-		return err
-	} else if ok {
-		return t.Tx.PutBaseline(ctx, b)
-	}
-	if b.ParentID == "" {
-		b.Gap, b.Depth, b.BaseID = 0, 0, ""
-		if err := t.Tx.PutBaseline(ctx, b); err != nil {
-			return err
-		}
-		t.g.states.put(b.ID, b.Nodes)
-		return nil
-	}
-	parent, err := t.nodesOf(ctx, b.ParentID)
-	if err != nil {
-		return err
-	}
-	delta := map[domain.NodeID]domain.Version{}
-	for n, v := range b.Nodes {
-		if parent[n] != v {
-			delta[n] = v
-		}
-	}
-	for n := range parent {
-		if _, ok := b.Nodes[n]; !ok {
-			delta[n] = 0
-		}
-	}
-	whole := b.Nodes
-	if err := t.putOver(ctx, b, b.ParentID, delta); err != nil {
-		return err
-	}
-	t.g.states.put(b.ID, whole)
-	return nil
+	b.Nodes = nil
+	return t.Tx.PutBaseline(ctx, b)
 }
 
 func (t *guardTx) markNew(id domain.BaselineID) {
@@ -632,189 +416,14 @@ func applyMoves(state, mv map[domain.NodeID]domain.Version) {
 	}
 }
 
-// putBaselineOver writes a baseline whose state is the state of over with delta put in (0: the node left), through
-// the guard of the transaction (guardTx.putBaselineOver), else whole.
+// putBaselineOver writes a baseline over another (guardTx.putBaselineOver): a header.
 func putBaselineOver(ctx context.Context, tx Tx, b domain.Baseline, over domain.BaselineID, delta map[domain.NodeID]domain.Version) error {
 	if p, ok := tx.(interface {
 		putBaselineOver(context.Context, domain.Baseline, domain.BaselineID, map[domain.NodeID]domain.Version) error
 	}); ok {
 		return p.putBaselineOver(ctx, b, over, delta)
 	}
-	from, err := tx.Baseline(ctx, over)
-	if err != nil {
-		return err
-	}
-	b.Nodes = from.Nodes
-	applyMoves(b.Nodes, delta)
 	return tx.PutBaseline(ctx, b)
-}
-
-// materialize stores the whole state of a baseline kept as a header or storing its entries over another.
-func (t *guardTx) materialize(ctx context.Context, id domain.BaselineID) error {
-	b, err := t.Tx.BaselineHeader(ctx, id)
-	if err != nil || b.Gap == 0 && b.BaseID == "" {
-		return err
-	}
-	start := time.Now()
-	nodes, err := t.nodesOf(ctx, id)
-	if err == nil {
-		err = t.Tx.MaterializeBaseline(ctx, id, "", 0, nodes)
-	}
-	recordCheckpoint(ctx, start, len(nodes), err)
-	return err
-}
-
-// checkpoint stores the entries of a baseline kept as a header over the stored baseline its state is read over: the
-// versions landed on its branch since, one deeper; whole when it would be checkpointEvery deep or is over no stored
-// baseline (materialize). Writing the whole state at every checkpoint wrote the namespace again every CheckpointEvery
-// baselines, a cost growing with the graph.
-func (t *guardTx) checkpoint(ctx context.Context, id domain.BaselineID) error {
-	b, err := t.Tx.BaselineHeader(ctx, id)
-	if err != nil || b.Gap == 0 {
-		return err
-	}
-	if b.BaseID == "" {
-		return t.materialize(ctx, id)
-	}
-	base, err := t.header(ctx, b.BaseID)
-	if err != nil {
-		return err
-	}
-	if base.Gap > 0 || base.Depth+1 >= checkpointEvery {
-		return t.materialize(ctx, id)
-	}
-	start := time.Now()
-	var after int64
-	if domain.BranchOf(base.Branch) == domain.BranchOf(b.Branch) {
-		after = base.Seq
-	}
-	delta, err := t.Tx.LandedVersions(ctx, b.Namespace, b.Branch, after, b.Seq, nil)
-	if err != nil {
-		return err
-	}
-	// a whole read walks the whole state and every overlay of its chain: stored whole once the overlays would weigh
-	// more than half the whole state, so a read stays within one and a half states and the writes stay what landed
-	overlays, whole, err := t.Tx.StoredSizes(ctx, base.ID)
-	if err != nil {
-		return err
-	}
-	if whole == 0 || 2*(overlays+len(delta)) > whole {
-		return t.materialize(ctx, id)
-	}
-	{
-		var removed []domain.NodeID
-		for n, v := range delta {
-			if v == 0 {
-				removed = append(removed, n)
-			}
-		}
-		var had map[domain.NodeID]domain.Version
-		if had, err = t.BaselineVersions(ctx, base.ID, removed); err == nil {
-			for _, n := range removed {
-				if had[n] > 0 {
-					delta[n] = -had[n] // a removal records the version the node had
-				} else {
-					delete(delta, n)
-				}
-			}
-			err = t.Tx.MaterializeBaseline(ctx, id, base.ID, base.Depth+1, delta)
-		}
-	}
-	recordCheckpoint(ctx, start, len(delta), err)
-	return err
-}
-
-// DefaultCheckpointEvery is the CheckpointEvery the compositions give the graph: a branch stores its whole state every
-// 50 baselines, in the background.
-const DefaultCheckpointEvery = 50
-
-// checkpointer stores checkpoints one after the other, outside the transactions of the commits (ADR 0140).
-type checkpointer struct {
-	mu      sync.Mutex
-	pending []domain.BaselineID
-	running bool
-	done    sync.WaitGroup
-}
-
-// store queues checkpoints and stores them in the background; a failure is logged, the state stays computed.
-func (c *checkpointer) store(g *Graph, ids []domain.BaselineID) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.pending = append(c.pending, ids...)
-	stateMeter().cpPending.Add(context.Background(), int64(len(ids)))
-	if c.running {
-		return
-	}
-	c.running = true
-	c.done.Add(1)
-	go func() {
-		defer c.done.Done()
-		for {
-			c.mu.Lock()
-			if len(c.pending) == 0 {
-				c.running = false
-				c.mu.Unlock()
-				return
-			}
-			id := c.pending[0]
-			c.pending = c.pending[1:]
-			c.mu.Unlock()
-			stateMeter().cpPending.Add(context.Background(), -1)
-			if err := g.storeCheckpoint(context.Background(), id); err != nil {
-				slog.Warn("checkpoint of a baseline", "baseline", id, "err", err)
-			}
-		}
-	}()
-}
-
-// WaitCheckpoints waits until the checkpoints queued are stored.
-func (g *Graph) WaitCheckpoints() { g.checkpoints.done.Wait() }
-
-// Materialize stores the whole state of a baseline (a checkpoint to speed up reading the states built on it); a whole
-// one is left as it is.
-func (g *Graph) Materialize(ctx context.Context, id domain.BaselineID) error {
-	err := g.repo.InTx(ctx, func(tx Tx) error {
-		if gt, ok := unwrapGuard(tx); ok {
-			return gt.materialize(ctx, id)
-		}
-		return fmt.Errorf("the transaction of the graph is not guarded: %w", ErrInvalid)
-	})
-	if err == nil {
-		g.headers.drop(id)
-		g.warmState(ctx, id)
-	}
-	return err
-}
-
-// warmState reads the whole state of a checkpoint just stored into the cache, outside the transactions of the commits:
-// the reads of some nodes in the baselines built on it (a node operation resolving its node, a commit, a merge) then
-// stop at it in memory, instead of reading its chain of stored baselines again for each (a cost that grew with the
-// overlays between two whole checkpoints, paid under the lock of the branch by the merges).
-func (g *Graph) warmState(ctx context.Context, id domain.BaselineID) {
-	err := g.repo.InTx(ctx, func(tx Tx) error {
-		if gt, ok := unwrapGuard(tx); ok {
-			_, err := gt.nodesOf(ctx, id)
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		slog.Warn("reading the state of a checkpoint", "baseline", id, "err", err)
-	}
-}
-
-// storeCheckpoint stores a checkpoint over the one before it (guardTx.checkpoint).
-func (g *Graph) storeCheckpoint(ctx context.Context, id domain.BaselineID) error {
-	err := g.repo.InTx(ctx, func(tx Tx) error {
-		if gt, ok := unwrapGuard(tx); ok {
-			return gt.checkpoint(ctx, id)
-		}
-		return fmt.Errorf("the transaction of the graph is not guarded: %w", ErrInvalid)
-	})
-	if err == nil {
-		g.headers.drop(id)
-	}
-	return err
 }
 
 // unwrapGuard returns the guard of a transaction of the graph.
@@ -826,24 +435,18 @@ func unwrapGuard(tx Tx) (*guardTx, bool) {
 	return gt, ok
 }
 
-// storedNodes is the state a store holds of a baseline without the graph: the entries in effect along its chain of
-// stored baselines (none for one kept as a header).
+// storedNodes is the state of a baseline read by a store without the graph: the selection (ADR 0143).
 func storedNodes(ctx context.Context, tx Tx, b domain.Baseline) (map[domain.NodeID]domain.Version, error) {
-	out := map[domain.NodeID]domain.Version{}
-	if b.Gap > 0 {
-		return out, nil
-	}
-	vs, _, err := tx.StoredVersions(ctx, b.ID, nil)
-	for n, v := range vs {
-		if v > 0 {
-			out[n] = v
-		}
-	}
-	return out, err
+	return selectState(ctx, tx, b, nil, tx.BaselineHeader, func(ctx context.Context, ns, branch string) (domain.BaselineID, error) {
+		return branchFork(ctx, tx, ns, branch)
+	}, nil)
 }
 
-// storedNodesIn lists the nodes of the entries a store holds of a baseline (storedNodes), of a type, by key.
+// storedNodesIn lists the nodes of a baseline read by a store (storedNodes), of a type, by key.
 func storedNodesIn(ctx context.Context, tx Tx, id domain.BaselineID, nodeType string) ([]domain.Node, error) {
+	if id == "" {
+		return nil, nil
+	}
 	b, err := tx.BaselineHeader(ctx, id)
 	if err != nil {
 		return nil, err

@@ -244,6 +244,14 @@ func pinBaseline(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRe
 		for id, v := range head.Nodes {
 			nodes[id] = v
 		}
+		gt, ok := unwrapGuard(tx)
+		if !ok {
+			return fmt.Errorf("the transaction of the graph is not guarded: %w", ErrInvalid)
+		}
+		seq, err := gt.landingOn(ctx, domain.MainBranch)
+		if err != nil {
+			return err
+		}
 		for _, r := range refs {
 			n, err := tx.Node(ctx, r)
 			if err != nil {
@@ -254,6 +262,10 @@ func pinBaseline(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRe
 			}
 			if !n.Deleted {
 				nodes[n.ID] = n.Version
+			}
+			// the state is the selection of the versions landed (ADR 0143): the version lands in the pin
+			if err := landForTest(ctx, gt.Tx, r, seq); err != nil {
+				return err
 			}
 		}
 		org, proj := g.Structure(domain.StructureOrganisation), g.Structure(domain.StructureProject)
@@ -316,4 +328,27 @@ func checkVerdictCauses(ctx context.Context, tx Tx, id domain.ChangeID) error {
 		}
 	}
 	return nil
+}
+
+// landForTest makes a version written by a fixture outside a landing (seedNode) land on its branch at an order: what a
+// pin needs for its state to select it (ADR 0143). Production code never moves the order of a version.
+func landForTest(ctx context.Context, tx Tx, r domain.NodeRef, seq int64) error {
+	switch t := tx.(type) {
+	case *memTx:
+		vs := t.st.versions[r.ID]
+		if int(r.Version) > len(vs) {
+			return fmt.Errorf("node %s: %w", r, ErrNotFound)
+		}
+		vs[r.Version-1].Landed = seq
+		return nil
+	case *sqliteTx:
+		_, err := t.tx.ExecContext(ctx, `UPDATE node_version SET landed = ? WHERE node_id = ? AND version = ?`, seq, string(r.ID), int(r.Version))
+		return err
+	case *pgTx:
+		_, err := t.tx.Exec(ctx, `UPDATE node_version SET landed = $1 WHERE node_id = $2 AND version = $3`, seq, string(r.ID), int(r.Version))
+		return err
+	case interface{ unwrap() Tx }:
+		return landForTest(ctx, t.unwrap(), r, seq)
+	}
+	return fmt.Errorf("landing a fixture version: unknown transaction %T", tx)
 }

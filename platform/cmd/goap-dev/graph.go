@@ -9,7 +9,6 @@ import (
 	"github.com/zimwip/goap/graph/graphsvc"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/llmcfg"
-	"github.com/zimwip/goap/lib/platform"
 )
 
 // graphPart is the graph and what judges who may do what on it.
@@ -25,9 +24,7 @@ func buildGraph(e *env, st stores) (*graphPart, error) {
 	g.Caller = graphsvc.Caller           // the principal behind each event of the impact logs (ADR 0029)
 	g.EndUser = graphsvc.EndUser         // the person the events of the changes are for (ADR 0114)
 	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
-	// a baseline of a branch in 50 stores its state, off the commit (ADR 0140); GOAP_CHECKPOINT_EVERY=0: none
-	g.CheckpointEvery = platform.EnvInt("GOAP_CHECKPOINT_EVERY", graph.DefaultCheckpointEvery)
-	g.ReviewPolicy = verify.Policy{} // a verifier is not the producer (ADR 0075)
+	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
 	directory := &access.Directory{Graph: g}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
