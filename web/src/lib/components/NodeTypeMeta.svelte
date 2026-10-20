@@ -1,9 +1,12 @@
 <script lang="ts">
   // What a node type says beyond its attributes: its lifecycle (by name), the
   // node types it embeds when it is a document, whether it is change controlled,
-  // and the editor the user interface opens its nodes with.
+  // the editor the user interface opens its nodes with, and the icon and color it draws them with.
   import type { NodeTypeForm } from '../methodologyForm';
   import { nodeEditorNames } from '../shell/registry';
+  import Icon, { iconNames, type IconName } from '../shell/Icon.svelte';
+
+  const COLOR = /^#[0-9a-fA-F]{6}$/;
 
   let {
     n = $bindable(),
@@ -29,7 +32,7 @@
   } = $props();
 </script>
 
-<details class="meta" open={!!n.lifecycle || !!n.document || !n.changeControlled || n.additionalProperties || !!n.editor}>
+<details class="meta" open={!!n.lifecycle || !!n.document || !n.changeControlled || n.additionalProperties || !!n.editor || !!n.icon || !!n.color}>
   <summary>
     Lifecycle, documents &amp; editor
     {#if n.lifecycle}<span class="tag">lifecycle: {n.lifecycle}</span>{:else if inherited}<span class="tag muted">inherits {inherited.lifecycle} from {inherited.type}</span>{/if}
@@ -37,6 +40,7 @@
     {#if !n.changeControlled}<span class="tag muted">direct writes</span>{/if}
     {#if n.additionalProperties}<span class="tag muted">free-form</span>{/if}
     {#if n.editor}<span class="tag">editor: {n.editor}</span>{/if}
+    {#if n.icon || n.color}<span class="tag look" style:color={COLOR.test(n.color) ? n.color : undefined}><Icon name={(iconNames.includes(n.icon as IconName) ? n.icon : 'node') as IconName} size={12} /></span>{/if}
   </summary>
   <div class="body" data-path="{path}.lifecycle">
     <div class="line">
@@ -63,6 +67,19 @@
       <input id="{path}-editor" type="text" class="mono" class:bad={bad(`${path}.editor`)} bind:value={n.editor} placeholder="default node editor" list="{path}-editors" disabled={readonly} />
       <datalist id="{path}-editors">{#each nodeEditorNames() as e (e)}<option value={e}></option>{/each}</datalist>
     </div>
+    <div class="line" data-path="{path}.icon">
+      <label for="{path}-icon">Icon</label>
+      <select id="{path}-icon" class:bad={bad(`${path}.icon`)} bind:value={n.icon} disabled={readonly}>
+        <option value="">— inherited, else the default —</option>
+        {#if n.icon && !iconNames.includes(n.icon as IconName)}<option value={n.icon}>{n.icon} (unknown)</option>{/if}
+        {#each iconNames as i (i)}<option value={i}>{i}</option>{/each}
+      </select>
+      <span class="preview" style:color={COLOR.test(n.color) ? n.color : undefined} title="How the nodes are drawn"><Icon name={(iconNames.includes(n.icon as IconName) ? n.icon : 'node') as IconName} size={18} /></span>
+      <label for="{path}-color" data-path="{path}.color">Color</label>
+      <input id="{path}-color" type="text" class="mono color" class:bad={bad(`${path}.color`)} bind:value={n.color} placeholder="#rrggbb (inherited)" disabled={readonly} />
+      <input type="color" aria-label="Pick the color" value={COLOR.test(n.color) ? n.color : '#888888'} oninput={(e) => (n.color = e.currentTarget.value)} disabled={readonly} />
+      {#if n.color}<button type="button" class="small ghost" onclick={() => (n.color = '')} disabled={readonly}>Clear</button>{/if}
+    </div>
   </div>
 </details>
 
@@ -87,6 +104,22 @@
   }
   .tag.muted {
     color: var(--muted);
+  }
+  .tag.look {
+    display: inline-flex;
+    vertical-align: middle;
+    padding: 0.1rem 0.3rem;
+  }
+  .preview {
+    display: inline-flex;
+    color: var(--muted);
+  }
+  input.color {
+    width: 8rem;
+  }
+  input[type='color'] {
+    width: 2rem;
+    padding: 0;
   }
   .body {
     display: grid;

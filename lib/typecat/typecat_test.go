@@ -242,6 +242,24 @@ func TestComposeFlag(t *testing.T) {
 	}
 }
 
+// A node type's icon and color are its own, else its nearest ancestor's; a malformed one is refused by the schema.
+func TestIconAndColorInherited(t *testing.T) {
+	c, err := New(fromFile(t, "alm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := c.Type("alm@FunctionalRequirement"); r.Icon != "list" || r.Color != "#2563eb" {
+		t.Fatalf("FunctionalRequirement: %q %q, want Requirement's", r.Icon, r.Color)
+	}
+	if s, _ := c.Type("alm@SecurityRequirement"); s.Icon != "shield" || s.Color != "#dc2626" {
+		t.Fatalf("SecurityRequirement: %q %q, want its own", s.Icon, s.Color)
+	}
+	issues := parse(t, "name: bad\nversion: 1.0.0\nnodeTypes: [{name: A, icon: Bad-icon, color: red}]\n").Validate()
+	if len(issues) != 2 || issues[0].Path != "nodeTypes[0].icon" || issues[1].Path != "nodeTypes[0].color" {
+		t.Fatalf("a malformed icon and color are refused: %v", issues)
+	}
+}
+
 // The structures (ADR 0054) are the types the domains tag: the built-in organisation domain tags the organisation and
 // the project, users are units through subtyping, and no other domain may tag a structure again.
 func TestStructures(t *testing.T) {

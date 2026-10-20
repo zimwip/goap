@@ -138,6 +138,9 @@ export interface NodeTypeForm {
   validators: string[];
   /** editor the UI opens the nodes with ("" : inherited, or the default node editor) */
   editor: string;
+  /** icon and color the UI draws the nodes with ("" : inherited, or the defaults) */
+  icon: string;
+  color: string;
   /** the creation form of the nodes as JSON (ADR 0115 §7; "" : none, or inherited) */
   form: string;
   /** node index declarations (kept as they are: not edited by the form) */
@@ -502,7 +505,7 @@ export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 
 // --- constructors --------------------------------------------------------------
 
-export const emptyNodeType = (): NodeTypeForm => ({ uid: newUid(), name: '', description: '', attributes: [], extends: '', lifecycle: '', document: '', changeControlled: true, additionalProperties: false, validators: [], editor: '', form: '', search: [] });
+export const emptyNodeType = (): NodeTypeForm => ({ uid: newUid(), name: '', description: '', attributes: [], extends: '', lifecycle: '', document: '', changeControlled: true, additionalProperties: false, validators: [], editor: '', icon: '', color: '', form: '', search: [] });
 export const emptyLinkType = (): LinkTypeForm => ({ uid: newUid(), name: '', description: '', from: '', to: '', attributes: [], compose: false, validators: [], label: '', inverseLabel: '' });
 let uidSeq = 0;
 /** New local id (elements created in the UI). */
@@ -824,6 +827,8 @@ export function nodeTypeToForm(n: NodeType): NodeTypeForm {
     additionalProperties: n.additionalProperties === true,
     validators: [...(n.validators ?? [])],
     editor: n.editor ?? '',
+    icon: n.icon ?? '',
+    color: n.color ?? '',
     form: n.form ? JSON.stringify(n.form, null, 2) : '',
     search: (n.search ?? []).map((s) => ({ ...s })),
   };
@@ -972,6 +977,8 @@ export function nodeTypeFromForm(n: NodeTypeForm): NodeType {
   put(o, 'validators', n.validators.map((v) => v.trim()).filter(Boolean));
   if (n.search.length) o.search = n.search.map((s) => ({ ...s }));
   put(o, 'editor', n.editor.trim());
+  put(o, 'icon', n.icon.trim());
+  put(o, 'color', n.color.trim());
   if (n.form.trim()) {
     try {
       const f: unknown = JSON.parse(n.form);

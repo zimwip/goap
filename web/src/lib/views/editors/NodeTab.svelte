@@ -573,7 +573,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
               {#if graphNode !== id || graphLink}
                 <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
               {/if}
-              <NodeNeighbourhood baselineId={head.baselineId} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} details={false} {reload} />
+              <NodeNeighbourhood baselineId={head.baselineId} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} details={false} compact fill {reload} />
             </section>
           {:else}
             <p class="empty">This node is not in the current graph (deleted, or only created by a change).</p>

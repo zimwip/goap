@@ -45,6 +45,8 @@ type Type struct {
 	Search []domain.SearchProperty
 	// Editor is the IDE editor of the nodes (own or inherited); empty: the default node editor.
 	Editor string
+	// Icon and Color draw the nodes (own or inherited); empty: the user interface's defaults.
+	Icon, Color string
 	// Form is the creation form of the nodes (own or the nearest ancestor's, ADR 0115 §7); nil: none.
 	Form *form.Form
 	// Requires are the links a node must carry (own and inherited, a subtype redefining one by link), the link types
@@ -367,6 +369,12 @@ func resolve(ref domain.TypeRef, decl map[domain.TypeRef]declared) (*Type, error
 		}
 		if t.Editor == "" {
 			t.Editor = dc.t.Editor
+		}
+		if t.Icon == "" {
+			t.Icon = dc.t.Icon
+		}
+		if t.Color == "" {
+			t.Color = dc.t.Color
 		}
 		if t.Form == nil {
 			t.Form = dc.t.Form

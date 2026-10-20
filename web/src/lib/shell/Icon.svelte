@@ -46,6 +46,7 @@
     tag: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z M7 7h.01',
     send: 'M22 2L11 13 M22 2l-7 20-4-9-9-4z',
     node: 'M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+    app: 'M3 4h18v16H3z M3 9h18 M6.5 6.5h.01 M9.5 6.5h.01',
     moon: 'M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z',
     code: 'M16 18l6-6-6-6 M8 6l-6 6 6 6',
     stop: 'M6 6h12v12H6z',
@@ -60,6 +61,10 @@
   } as const;
 
   export type IconName = keyof typeof PATHS;
+  /** The names of the set (a domain names one for a node type). */
+  export const iconNames = Object.keys(PATHS) as IconName[];
+  /** The path of an icon by name, drawn in a 24×24 box; an unknown name: the node icon. */
+  export const iconPath = (name: string | undefined): string => (PATHS as Record<string, string>)[name ?? ''] ?? PATHS.node;
 </script>
 
 <script lang="ts">

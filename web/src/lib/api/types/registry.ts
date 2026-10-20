@@ -70,6 +70,9 @@ export interface TypeInfo {
   additionalProperties?: boolean;
   /** IDE editor of the nodes (ADR 0027) */
   editor?: string;
+  /** icon and color the nodes are drawn with (own or inherited; absent: the interface's defaults) */
+  icon?: string;
+  color?: string;
   /** qualified types the nodes embed through "contains" links */
   contains?: string[];
   /** node_validator instances checking a node as a whole, in call order (own and inherited) */
@@ -161,6 +164,9 @@ export interface NodeType {
   search?: SearchProperty[];
   /** editor the UI opens the nodes with (inherited through extends; absent: the default node editor) */
   editor?: string;
+  /** icon the UI draws the nodes with (a name of its icon set) and their color (#rrggbb); inherited */
+  icon?: string;
+  color?: string;
   /** tags the type as a structure of the graph (ADR 0054): the organisation or the project hierarchy */
   structure?: StructureTagJson;
   /** links a node of the type must carry (ADR 0065) */

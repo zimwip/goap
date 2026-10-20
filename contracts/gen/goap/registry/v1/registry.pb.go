@@ -53,7 +53,11 @@ type NodeType struct {
 	// nodes of the type may carry properties that are no attribute of it (strict attributes, ADR 0079); inherited
 	AdditionalProperties bool `protobuf:"varint,14,opt,name=additional_properties,json=additionalProperties,proto3" json:"additional_properties,omitempty"`
 	// what a person fills in to create a node of the type (pkg/form.Form, ADR 0115 §7); inherited
-	Form          *structpb.Struct `protobuf:"bytes,15,opt,name=form,proto3" json:"form,omitempty"`
+	Form *structpb.Struct `protobuf:"bytes,15,opt,name=form,proto3" json:"form,omitempty"`
+	// icon the user interface draws the nodes with (a name of its icon set); inherited
+	Icon string `protobuf:"bytes,16,opt,name=icon,proto3" json:"icon,omitempty"`
+	// color of the nodes (#rrggbb); inherited
+	Color         string `protobuf:"bytes,17,opt,name=color,proto3" json:"color,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -191,6 +195,20 @@ func (x *NodeType) GetForm() *structpb.Struct {
 		return x.Form
 	}
 	return nil
+}
+
+func (x *NodeType) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+func (x *NodeType) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
 }
 
 // RequiredLink: a node of the type has exactly count outgoing links of the link type (ADR 0065).
@@ -7267,7 +7285,10 @@ type TypeInfo struct {
 	// the nodes may carry properties that are no attribute of the type (own or inherited)
 	AdditionalProperties bool `protobuf:"varint,10,opt,name=additional_properties,json=additionalProperties,proto3" json:"additional_properties,omitempty"`
 	// the creation form of the nodes (own or the nearest ancestor's, pkg/form.Form, ADR 0115 §7)
-	Form          *structpb.Struct `protobuf:"bytes,11,opt,name=form,proto3" json:"form,omitempty"`
+	Form *structpb.Struct `protobuf:"bytes,11,opt,name=form,proto3" json:"form,omitempty"`
+	// icon and color of the nodes (own or inherited); empty: the user interface's defaults
+	Icon          string `protobuf:"bytes,12,opt,name=icon,proto3" json:"icon,omitempty"`
+	Color         string `protobuf:"bytes,13,opt,name=color,proto3" json:"color,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7377,6 +7398,20 @@ func (x *TypeInfo) GetForm() *structpb.Struct {
 		return x.Form
 	}
 	return nil
+}
+
+func (x *TypeInfo) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+func (x *TypeInfo) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
 }
 
 // LinkTypeInfo is the resolved model of a link type; an empty end accepts any node type.
@@ -9521,7 +9556,7 @@ var File_goap_registry_v1_registry_proto protoreflect.FileDescriptor
 
 const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
-	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa6\x05\n" +
+	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd0\x05\n" +
 	"\bNodeType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12;\n" +
@@ -9543,7 +9578,9 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"admin_only\x18\r \x01(\bR\tadminOnly\x123\n" +
 	"\x15additional_properties\x18\x0e \x01(\bR\x14additionalProperties\x12+\n" +
-	"\x04form\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x04formB\x14\n" +
+	"\x04form\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x04form\x12\x12\n" +
+	"\x04icon\x18\x10 \x01(\tR\x04icon\x12\x14\n" +
+	"\x05color\x18\x11 \x01(\tR\x05colorB\x14\n" +
 	"\x12_change_controlled\"8\n" +
 	"\fRequiredLink\x12\x12\n" +
 	"\x04link\x18\x01 \x01(\tR\x04link\x12\x14\n" +
@@ -10167,7 +10204,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\adomains\x18\x03 \x03(\v20.goap.registry.v1.ListTypesResponse.DomainsEntryR\adomains\x1a:\n" +
 	"\fDomainsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc4\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xee\x03\n" +
 	"\bTypeInfo\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12?\n" +
@@ -10182,7 +10219,9 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x0fnode_validators\x18\t \x03(\tR\x0enodeValidators\x123\n" +
 	"\x15additional_properties\x18\n" +
 	" \x01(\bR\x14additionalProperties\x12+\n" +
-	"\x04form\x18\v \x01(\v2\x17.google.protobuf.StructR\x04form\"\xda\x01\n" +
+	"\x04form\x18\v \x01(\v2\x17.google.protobuf.StructR\x04form\x12\x12\n" +
+	"\x04icon\x18\f \x01(\tR\x04icon\x12\x14\n" +
+	"\x05color\x18\r \x01(\tR\x05color\"\xda\x01\n" +
 	"\fLinkTypeInfo\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
