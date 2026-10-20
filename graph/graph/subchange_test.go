@@ -531,17 +531,7 @@ func testNestedSubChanges(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 
-	// the guardian of the leaf holds its merge, then lets it go
-	allow := false
-	var asked domain.ChangeID
-	g.Lifecycles = mergeGate(func(_ context.Context, c domain.Change, _ domain.Blackboard) (bool, bool, error) {
-		asked = c.ID
-		return true, allow, nil
-	})
-	if _, err := g.IntegrateChange(ctx, leaf.ID, nil); !errors.Is(err, ErrInvalid) || asked != leaf.ID {
-		t.Fatalf("the guardian refuses the merge of %s: %v (asked for %s)", leaf.ID, err, asked)
-	}
-	allow = true
+	// cancelled, the leaf merges (no guardian: ADR 0146)
 	if _, err := g.IntegrateChange(ctx, leaf.ID, nil); err != nil {
 		t.Fatal(err)
 	}

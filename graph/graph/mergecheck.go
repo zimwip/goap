@@ -7,38 +7,15 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// The merge of a change is held by its guardian (ADR 0102), the same as its transitions (ADR 0058): the lifecycle of
-// the change must be in a final state, then the methodology has its say (ChangeLifecycles.Merge: the goal of the
-// Activity the change is scoped to), else the committable states of the domain decide (ADR 0078); then the outer
-// guardians of its chain, innermost first (ADR 0106). Before them, the changes it depends on must have reached the
-// branch it merges into (ADR 0108). Asked in the transaction of the merge (ADR 0140): the guardian may read the graph, with the context it is given.
+// The merge of a change is mechanical (ADR 0146): it takes the work the change committed into what it was forked from,
+// combining two views of the graph, and asks no methodology. It only checks what makes the work whole: the changes it
+// depends on reached the branch it merges into (ADR 0108), and its lifecycle, when it follows one, is in a final state.
+// What the methodology says about the work, its guardians, is asked at each commit (commitcheck.go).
 
-// checkMerge asks the guardian of a change whether it may merge.
-func (g *Graph) checkMerge(ctx context.Context, id domain.ChangeID) error {
-	var c domain.Change
-	var bb domain.Blackboard
-	var committed []domain.NodeView
-	var deps []domain.Dependency
-	var logs map[string][]domain.LogEntry
-	err := g.repo.InTx(ctx, func(tx Tx) (err error) {
-		if c, err = tx.Change(ctx, id); err != nil {
-			return err
-		}
-		if logs, err = g.logEntries(ctx, tx, id); err != nil {
-			return err
-		}
-		if deps, err = dependenciesOf(ctx, tx, c); err != nil {
-			return err
-		}
-		bb, committed, err = g.mergeBlackboard(ctx, tx, c)
-		bb = bb.WithFacet(domain.FacetDependencies, deps)
-		return err
-	})
+// checkMerge refuses the merge of a change whose dependencies or lifecycle do not allow it yet.
+func (g *Graph) checkMerge(ctx context.Context, tx Tx, c domain.Change) error {
+	deps, err := dependenciesOf(ctx, tx, c)
 	if err != nil {
-		return err
-	}
-	// the facets folded from the log (the history of the change, ADR 0109)
-	if bb, err = g.withLogFacets(ctx, bb, logs); err != nil {
 		return err
 	}
 	// first the changes it depends on (ADR 0108): their work has reached the branch it merges into
@@ -54,106 +31,7 @@ func (g *Graph) checkMerge(ctx context.Context, id domain.ChangeID) error {
 			return fmt.Errorf("change %s is in state %s of lifecycle %s: it is merged once it is in a final state: %w", c.ID, c.State, c.Lifecycle, ErrConflict)
 		}
 	}
-	if err := g.ownGuardianMerge(ctx, c, bb, committed); err != nil {
-		return err
-	}
-	// then the outer guardians of its chain (ADR 0106), innermost first
-	return g.checkGuardians(ctx, bb, "")
-}
-
-// ownGuardianMerge is the say of the change's own methodology on its merge: its Activity goal, else the committable states.
-func (g *Graph) ownGuardianMerge(ctx context.Context, c domain.Change, bb domain.Blackboard, committed []domain.NodeView) error {
-	if g.Lifecycles != nil {
-		decided, ok, err := g.Lifecycles.Merge(ctx, c, bb)
-		switch {
-		case err != nil:
-			return err
-		case decided && !ok:
-			return invalidf("the change does not satisfy the goal of its methodology")
-		case decided:
-			return nil
-		}
-	}
-	var stuck []string
-	for _, n := range committed {
-		if n.NotCommittable {
-			stuck = append(stuck, fmt.Sprintf("%s (%s) in %s", n.Key, n.Type, n.State))
-		}
-	}
-	if len(stuck) > 0 {
-		return invalidf("the change leaves nodes in a state that cannot commit, move them to a committable state first: %s", joinSorted(stuck))
-	}
 	return nil
-}
-
-// mergeBlackboard is what the guardian judges: the change with, for each impact, its pre version and what it commits (the
-// version on the change's branch), those committed nodes returned apart.
-func (g *Graph) mergeBlackboard(ctx context.Context, tx Tx, c domain.Change) (domain.Blackboard, []domain.NodeView, error) {
-	bb := domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}}
-	ix, err := g.typesAt(ctx, tx, c.BaselineID)
-	if err != nil {
-		return bb, nil, err
-	}
-	impacts := mainImpactsOf(c)
-	r, err := g.newDraftReader(ctx, tx, c, "", impacts)
-	if err != nil {
-		return bb, nil, err
-	}
-	var head map[domain.NodeID]domain.Version
-	if own, ok, err := ownBranch(ctx, tx, c); err != nil {
-		return bb, nil, err
-	} else if ok {
-		ids := make([]domain.NodeID, 0, len(impacts))
-		for _, cn := range impacts {
-			ids = append(ids, nodeOf(cn))
-		}
-		if head, err = branchVersions(ctx, tx, own, ids); err != nil { // the nodes of the impacts only (ADR 0137)
-			return bb, nil, err
-		}
-	}
-	// the versions the blackboard shows, read in one batch
-	var refs []domain.NodeRef
-	for _, cn := range impacts {
-		if cn.Pre != nil {
-			refs = append(refs, *cn.Pre)
-		}
-		if at, ok := head[nodeOf(cn)]; ok && cn.Committed != nil {
-			refs = append(refs, domain.NodeRef{ID: nodeOf(cn), Version: at})
-		}
-	}
-	if err := r.prefetch(ctx, tx, refs); err != nil {
-		return bb, nil, err
-	}
-	view := func(ref domain.NodeRef) (domain.NodeView, error) {
-		v, err := viewIn(ctx, tx, r, ref)
-		if lc := ix.lifecycleOf(v.Type); err == nil && lc != nil && v.State != "" {
-			v.NotCommittable = !lc.Committable(v.State)
-		}
-		return v, err
-	}
-	var committed []domain.NodeView
-	for _, cn := range impacts {
-		if cn.Pre != nil {
-			v, err := view(*cn.Pre)
-			if err != nil {
-				return bb, nil, err
-			}
-			bb.Nodes[*cn.Pre] = v
-		}
-		at, ok := head[nodeOf(cn)]
-		if !ok || cn.Committed == nil {
-			continue
-		}
-		to := &domain.NodeRef{ID: nodeOf(cn), Version: at}
-		v, err := view(*to)
-		if err != nil {
-			return bb, nil, err
-		}
-		bb.Nodes[*to] = v
-		bb.Nodes[*cn.Post] = v // the impact's post reads what it commits
-		committed = append(committed, v)
-	}
-	return bb, committed, nil
 }
 
 // mainImpactsOf are the impacts of the main flow of a change: the ones its commit and its merge look at.

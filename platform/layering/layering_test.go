@@ -65,7 +65,7 @@ var forbidden = map[string][]string{
 }
 
 // The graph core names no concept of the methodology namespace (ADR 0066: the Activity a change is scoped to lives in
-// Change.Data, read by the registry through ChangeLifecycles.Merge and Graph.SubChangeValidator).
+// Change.Data, read by the registry through ChangeLifecycles.Commit and Graph.SubChangeValidator).
 func TestGraphNamesNoMethodology(t *testing.T) {
 	files, err := filepath.Glob("../../graph/graph/*.go")
 	if err != nil || len(files) == 0 {

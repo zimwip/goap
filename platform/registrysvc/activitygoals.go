@@ -12,7 +12,7 @@ import (
 // DataActivity is the key of Change.Data holding the Activity a change is scoped to (architecture plan "Activity
 // concept"): the node key of a methodology@Process/Step/Method/MethodStep ("MV:<name>@<version>/<kind>/<item>"), the
 // activity whose goal condition the change must satisfy to merge. The graph never reads it: Service.Merge (the guardian
-// of a merge, graph.ChangeLifecycles) and Service.SubChangeValidator do. Absent: no activity-relative gating beyond a node type's own lifecycle.
+// of its commits, graph.ChangeLifecycles) and Service.SubChangeValidator do. Absent: no activity-relative gating beyond a node type's own lifecycle.
 const DataActivity = "activityRef"
 
 // ActivityOf is the Activity a change is scoped to ("" when it has none).
@@ -21,10 +21,10 @@ func ActivityOf(c domain.Change) string {
 	return ref
 }
 
-// Merge implements pkg/graph.ChangeLifecycles (ADR 0066, 0102): a change scoped to an Activity (DataActivity) is
-// merged when that activity's own goal condition holds, instead of the node-type lifecycle's committable-state floor; any
+// Commit implements graph.ChangeLifecycles (ADR 0066, 0146): a change scoped to an Activity (DataActivity) commits
+// when that activity's own goal condition holds, instead of the node-type lifecycle's committable-state floor; any
 // other change is not decided.
-func (s *Service) Merge(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error) {
+func (s *Service) Commit(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error) {
 	ref := ActivityOf(c)
 	if ref == "" {
 		return false, false, nil

@@ -307,11 +307,11 @@
               <IssueHints draft={d} path="integrates[{i}]" />
             {/each}
             {#if !d.readonly}<button type="button" class="small" onclick={() => f.integrates.push({ methodologies: '', exclusive: false, attach: '' })}>+ Integration</button>{/if}
-            {#if f.integrates.length || f.guardianMerge || f.guardianTransitions.length}
+            {#if f.integrates.length || f.guardianCommit || f.guardianTransitions.length}
               <div class="field" data-path="guardian">
-                <label for="m-guardian-merge">Guardian: merge <span class="opt">(CEL over change, world, integrator: what an integrated change needs to merge)</span></label>
-                <input id="m-guardian-merge" type="text" class="mono" bind:value={f.guardianMerge} class:bad={d.bad('guardian.merge')} data-path="guardian.merge" placeholder={'integrator.state == "integrating"'} />
-                <IssueHints draft={d} path="guardian.merge" />
+                <label for="m-guardian-commit">Guardian: commit <span class="opt">(CEL over change, world, integrator: what an integrated change needs at each commit)</span></label>
+                <input id="m-guardian-commit" type="text" class="mono" bind:value={f.guardianCommit} class:bad={d.bad('guardian.commit')} data-path="guardian.commit" placeholder={'integrator.state == "integrating"'} />
+                <IssueHints draft={d} path="guardian.commit" />
               </div>
               <div class="label">Guardian: transitions <span class="opt">(a guard per transition of the lifecycle of the integrated changes)</span></div>
               {#each f.guardianTransitions as gt, i (i)}

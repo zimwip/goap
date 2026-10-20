@@ -18,7 +18,7 @@ func TestReleaseBasedMethodology(t *testing.T) {
 	if !m.IntegratesChangesOf("sdlc") || m.IntegratesChangesOf("release-based") || m.IntegratesChangesOf("risk-management") {
 		t.Fatalf("integrates %+v", m.Integrates)
 	}
-	if g := m.MergeGuard("sdlc"); g != `integrator.attached && (integrator.state == "integrating")` {
+	if g := m.CommitGuard("sdlc"); g != `integrator.attached && (integrator.state == "integrating")` {
 		t.Fatalf("merge guard %q", g)
 	}
 	for _, s := range m.On {
@@ -37,10 +37,10 @@ func TestIntegrationIssues(t *testing.T) {
 		"integrates[0].methodologies":    func(m *Methodology) { m.Integrates = []Integration{{}} },
 		"integrates[0].methodologies[0]": func(m *Methodology) { m.Integrates = []Integration{{Methodologies: []string{"rel"}}} },
 		"integrates[0].attach":           func(m *Methodology) { m.Integrates = []Integration{{Methodologies: []string{"sdlc"}, Attach: "now"}} },
-		"guardian":                       func(m *Methodology) { m.Guardian = &Guardian{Merge: "true"} },
-		"guardian.merge": func(m *Methodology) {
+		"guardian":                       func(m *Methodology) { m.Guardian = &Guardian{Commit: "true"} },
+		"guardian.commit": func(m *Methodology) {
 			m.Integrates = []Integration{{Methodologies: []string{"sdlc"}}}
-			m.Guardian = &Guardian{Merge: "integrator.state =="}
+			m.Guardian = &Guardian{Commit: "integrator.state =="}
 		},
 		"on[0].from": func(m *Methodology) { m.On = []Subscription{{Event: "change.committed", From: "integrated"}} },
 	}

@@ -158,14 +158,14 @@ func guardianToPB(g *methodology.Guardian) *registryv1.Guardian {
 	if g == nil {
 		return nil
 	}
-	return &registryv1.Guardian{Merge: g.Merge, Transitions: g.Transitions}
+	return &registryv1.Guardian{Commit: g.Commit, Transitions: g.Transitions}
 }
 
 func guardianFromPB(g *registryv1.Guardian) *methodology.Guardian {
-	if g == nil || (g.Merge == "" && len(g.Transitions) == 0) {
+	if g == nil || (g.Commit == "" && len(g.Transitions) == 0) {
 		return nil
 	}
-	return &methodology.Guardian{Merge: g.Merge, Transitions: g.Transitions}
+	return &methodology.Guardian{Commit: g.Commit, Transitions: g.Transitions}
 }
 
 func respToPB(r *methodology.Responsibilities) *registryv1.Responsibilities {

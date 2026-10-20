@@ -33,7 +33,7 @@ func TestGuardianChain(t *testing.T) {
 	save(methodology.Methodology{Name: "work", Version: "1", Namespace: "alm", Processes: steps("work")})
 	save(methodology.Methodology{Name: "release", Version: "2", Namespace: "alm", Processes: steps("release"),
 		Integrates: []methodology.Integration{{Methodologies: []string{"work"}, Exclusive: true}},
-		Guardian: &methodology.Guardian{Merge: `integrator.state == "integrating"`,
+		Guardian: &methodology.Guardian{Commit: `integrator.state == "integrating"`,
 			Transitions: map[string]string{"ready": `!integrator.attached || integrator.state != "frozen"`}}})
 	save(methodology.Methodology{Name: "portfolio", Version: "1", Namespace: "alm", Processes: steps("portfolio"),
 		Integrates: []methodology.Integration{{Methodologies: []string{"release"}}}})

@@ -83,7 +83,7 @@ type Graph struct {
 	Validators []NodeValidator
 	// SubChangeValidator, when set, is asked by CreateChange about a sub-change before it is stored, with its parent
 	// as stored and the change as it is about to be (Data, Methodology, ...): an error refuses it (wrap ErrInvalid).
-	// Like the guardian of a merge (ChangeLifecycles.Merge) it runs in the transaction it judges (ADR 0140) and may read
+	// Like the guardian of a commit (ChangeLifecycles.Commit) it runs in the transaction it judges (ADR 0140) and may read
 	// the graph with the context it is given.
 	SubChangeValidator func(ctx context.Context, parent, child domain.Change) error
 

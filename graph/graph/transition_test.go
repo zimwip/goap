@@ -71,7 +71,7 @@ func (l *lifecycles) Guard(_ context.Context, bb domain.Blackboard, expr, transi
 	return gd.CheckChange(map[string]any{"id": string(bb.Change.ID), "transition": transition, "decision": decision}, f, l.world)
 }
 
-func (l *lifecycles) Merge(context.Context, domain.Change, domain.Blackboard) (bool, bool, error) {
+func (l *lifecycles) Commit(context.Context, domain.Change, domain.Blackboard) (bool, bool, error) {
 	return false, false, nil
 }
 
@@ -83,26 +83,26 @@ func (l *lifecycles) CheckGuardians(context.Context, domain.Blackboard, string, 
 	return "", nil
 }
 
-// mergeGate is a guardian that has only its say on the merge of a change (the goal of an activity, ADR 0066).
-type mergeGate func(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
+// commitGate is a guardian that has only its say on the merge of a change (the goal of an activity, ADR 0066).
+type commitGate func(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
 
-func (mergeGate) MethodologyVersion(context.Context, string) (string, error)   { return "", nil }
-func (mergeGate) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return nil, nil }
-func (mergeGate) DefaultGoal(context.Context, string) (string, error)          { return "", nil }
-func (mergeGate) Guard(context.Context, domain.Blackboard, string, string, string) (bool, error) {
+func (commitGate) MethodologyVersion(context.Context, string) (string, error)   { return "", nil }
+func (commitGate) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return nil, nil }
+func (commitGate) DefaultGoal(context.Context, string) (string, error)          { return "", nil }
+func (commitGate) Guard(context.Context, domain.Blackboard, string, string, string) (bool, error) {
 	return true, nil
 }
-func (mergeGate) Gate(context.Context, domain.Blackboard, domain.Transition, string) (domain.GateResult, error) {
+func (commitGate) Gate(context.Context, domain.Blackboard, domain.Transition, string) (domain.GateResult, error) {
 	return domain.GateResult{}, nil
 }
-func (mergeGate) Guardians(context.Context, string, string) ([]domain.GuardianRef, error) {
+func (commitGate) Guardians(context.Context, string, string) ([]domain.GuardianRef, error) {
 	return nil, nil
 }
-func (mergeGate) Integrates(context.Context, string, string) (bool, error) { return false, nil }
-func (mergeGate) CheckGuardians(context.Context, domain.Blackboard, string, []domain.Change) (string, error) {
+func (commitGate) Integrates(context.Context, string, string) (bool, error) { return false, nil }
+func (commitGate) CheckGuardians(context.Context, domain.Blackboard, string, []domain.Change) (string, error) {
 	return "", nil
 }
-func (f mergeGate) Merge(ctx context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
+func (f commitGate) Commit(ctx context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
 	return f(ctx, c, bb)
 }
 
@@ -192,7 +192,13 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 	impl := create("N-2")
 	w.accept(t, c)
 	// the merge guards hold a change that is not in a final state (ADR 0102: FinalStateGuard)
-	if err := g.checkMerge(ctx, c.ID); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "final state") {
+	if err := g.repo.InTx(ctx, func(tx Tx) error {
+		cur, err := tx.Change(ctx, c.ID)
+		if err != nil {
+			return err
+		}
+		return g.checkMerge(ctx, tx, cur)
+	}); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "final state") {
 		t.Fatalf("a change is merged in a final state only: %v", err)
 	}
 

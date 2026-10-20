@@ -197,11 +197,11 @@ func (g *Graph) mergeIn(ctx context.Context, id domain.ChangeID, resolutions map
 	if res.Changed() {
 		return c, fmt.Errorf("change %s %s: %w", id, res.Summary(), ErrConflict), nil
 	}
-	if err := g.checkMerge(ctx, id); err != nil {
-		return c, nil, err
-	}
 	err = g.changeTx(ctx, id, func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
+			return err
+		}
+		if err := g.checkMerge(ctx, tx, c); err != nil {
 			return err
 		}
 		own, ok, err := ownBranch(ctx, tx, c)
@@ -491,7 +491,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 	}
 	// a rebase that met no conflict commits its merges: the branch holds the work brought up to date
 	if len(res.Impacts) > 0 && !res.Changed() {
-		if _, err := g.commitOnBranch(ctx, tx, c.ID, ""); err != nil {
+		if _, err := g.commitOnBranch(ctx, tx, c.ID, "", true); err != nil {
 			return res, err
 		}
 	}

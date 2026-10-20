@@ -16,15 +16,16 @@ import (
 //
 //   - CommitChange writes the modifications the change accepted on its own branch, as versions (ADR 0079), and reverts
 //     there the nodes it no longer changes (an impact withdrawn after its commit). It checks the drafts as versions (their
-//     attributes, validators, required links, the moves of their lifecycle) and nothing else: neither the methodology
-//     nor the target branch. The change stays open; it is edited and committed again as often as needed. A commit that
+//     attributes, validators, required links, the moves of their lifecycle), then asks the guardian of the change
+//     (commitcheck.go: the say of its methodology, the committable states, the outer guardians; ADR 0146), never the
+//     target branch. The change stays open; it is edited and committed again as often as needed. A commit that
 //     writes and reverts nothing is refused (ErrNothingToCommit). A sub-change is a change like any other, whose branch
 //     is forked from the branch of its parent change (ADR 0103).
 //   - IntegrateChange (the merge) takes the work into what the change was forked from, once everything in it is
 //     settled: every impact committed, no open flow, decision point or sub-change. It first rebases its branch onto the
 //     head of its target (the branch it was forked from: main, a release branch, the branch of its parent change;
-//     rebase_committed.go), asks the guardian of the change (mergecheck.go: its lifecycle, the say of its methodology,
-//     the committable states), then fast-forwards; the change is applied, closed, and a sub-change's parent holds its work
+//     rebase_committed.go), checks its dependencies and the final state of its lifecycle (mergecheck.go), then
+//     fast-forwards; it asks no methodology (ADR 0146); the change is applied, closed, and a sub-change's parent holds its work
 //     as its own (recordInParent). Only a root change's target moving in between falls back to the three-way merge,
 //     which leaves the change committed until it is resolved.
 //
@@ -122,7 +123,19 @@ func (g *Graph) CommitChangeHeader(ctx context.Context, id domain.ChangeID, base
 
 // commitChange is CommitChange once allowed, its baseline returned without its state (ADR 0137).
 func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, baselineName string) (result domain.Baseline, err error) {
-	err = g.changeTx(ctx, id, func(tx Tx) error {
+	// one transaction: the guardian judges the versions written and a refusal undoes them (ADR 0146)
+	err = g.inChange(ctx, id, func(ctx context.Context) error {
+		if err := g.commitTx(ctx, id, baselineName, &result); err != nil {
+			return err
+		}
+		return g.checkCommit(ctx, id)
+	})
+	return result, err
+}
+
+// commitTx writes the commit of a change, in the transaction of ctx.
+func (g *Graph) commitTx(ctx context.Context, id domain.ChangeID, baselineName string, result *domain.Baseline) error {
+	return g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err
@@ -135,16 +148,15 @@ func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, baselineNa
 				return err
 			}
 		}
-		if result, err = g.commitOnBranch(ctx, tx, id, baselineName); err != nil {
+		if *result, err = g.commitOnBranch(ctx, tx, id, baselineName, false); err != nil {
 			return err
 		}
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
 		}
-		g.raiseBaseline(ctx, tx, events.ChangeCommitted, c, result)
+		g.raiseBaseline(ctx, tx, events.ChangeCommitted, c, *result)
 		return nil
 	})
-	return result, err
 }
 
 // errCollected rolls back a pass that only reads what an authorization or a hook needs before the transaction that
@@ -191,9 +203,10 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 }
 
 // commitOnBranch writes the accepted modifications of a change on its own branch and reverts the nodes it no longer
-// changes. The branch of a change holds no baseline (ADR 0140): the header returned is the commit as an event tells it,
+// changes. A rebase (mechanical) writes its merges and checks nothing of what they mean (ADR 0146): the lifecycle moves
+// and the validators judged the work of each side when it was committed. The branch of a change holds no baseline (ADR 0140): the header returned is the commit as an event tells it,
 // its order the commit of the versions written, stored nowhere.
-func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, mechanical bool) (domain.Baseline, error) {
 	a, own, err := g.newApplier(ctx, tx, id)
 	if err != nil {
 		return domain.Baseline{}, err
@@ -209,11 +222,13 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 	if len(a.cposts) == 0 && reverted == 0 {
 		return domain.Baseline{}, fmt.Errorf("change %s: no accepted change impact modifies a node, and nothing it committed is withdrawn: %w", id, ErrNothingToCommit)
 	}
-	if _, err := a.walkChangeImpacts(); err != nil {
-		return domain.Baseline{}, err
-	}
-	if err := g.runNodeValidators(ctx, tx, a.target, a.cposts); err != nil {
-		return domain.Baseline{}, err
+	if !mechanical {
+		if _, err := a.walkChangeImpacts(); err != nil {
+			return domain.Baseline{}, err
+		}
+		if err := g.runNodeValidators(ctx, tx, a.target, a.cposts); err != nil {
+			return domain.Baseline{}, err
+		}
 	}
 	if baselineName == "" {
 		baselineName = c.Title

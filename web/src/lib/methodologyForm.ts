@@ -470,8 +470,8 @@ export interface MethodologyForm {
   criticality: string;
   /** the methodologies whose changes its changes integrate (ADR 0106) */
   integrates: IntegrationForm[];
-  /** guardian.merge: what a change it integrates must satisfy to merge (CEL, with `integrator`) */
-  guardianMerge: string;
+  /** guardian.commit: what a change it integrates must satisfy at each commit (CEL, with `integrator`) */
+  guardianCommit: string;
   /** guardian.transitions: a guard per transition of the lifecycle of the changes it integrates */
   guardianTransitions: { name: string; expr: string }[];
 }
@@ -669,7 +669,7 @@ export function emptyForm(): MethodologyForm {
     lifecycle: '',
     criticality: '',
     integrates: [],
-    guardianMerge: '',
+    guardianCommit: '',
     guardianTransitions: [],
   };
 }
@@ -1072,7 +1072,7 @@ export function toForm(m: Methodology): MethodologyForm {
     lifecycle: m.lifecycle ?? '',
     criticality: m.criticality ?? '',
     integrates: (m.integrates ?? []).map((x) => ({ methodologies: (x.methodologies ?? []).join(', '), exclusive: !!x.exclusive, attach: x.attach === 'decision' ? '' : (x.attach ?? '') })),
-    guardianMerge: m.guardian?.merge ?? '',
+    guardianCommit: m.guardian?.commit ?? '',
     guardianTransitions: Object.entries(m.guardian?.transitions ?? {}).map(([name, expr]) => ({ name, expr })),
   };
 }
@@ -1512,9 +1512,9 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
   );
   const transitions: Record<string, string> = {};
   for (const t of f.guardianTransitions) if (t.name.trim() && t.expr.trim()) transitions[t.name.trim()] = t.expr.trim();
-  if (f.guardianMerge.trim() || Object.keys(transitions).length) {
+  if (f.guardianCommit.trim() || Object.keys(transitions).length) {
     const g: MethodologyGuardian = {};
-    put(g, 'merge', f.guardianMerge.trim());
+    put(g, 'commit', f.guardianCommit.trim());
     if (Object.keys(transitions).length) g.transitions = transitions;
     m.guardian = g;
   }

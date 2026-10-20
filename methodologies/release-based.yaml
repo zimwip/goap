@@ -1,9 +1,9 @@
 name: release-based
-version: 0.1.2
+version: 0.1.3
 description: >
   Release-based delivery of a project (ADR 0106): a release is a change of this methodology, the parent of the sdlc
   changes it integrates. It screens the open changes of its project for candidates, attaches the selected ones as its
-  sub-changes, lets them merge into it while it integrates (each under its own guardian first), then is delivered:
+  sub-changes, lets them commit and merge into it while it integrates (each under its own guardian first), then is delivered:
   the release commits on main, tagged with its name. In a project where it is in force an sdlc change commits only through
   a release (exclusive).
 
@@ -17,8 +17,8 @@ integrates:
     exclusive: true
     attach: decision
 guardian:
-  # an integrated change merges into its release while the release integrates
-  merge: 'integrator.state == "integrating"'
+  # an integrated change commits while its release integrates (ADR 0146: the guardian judges each commit)
+  commit: 'integrator.state == "integrating"'
 
 # the events of the integrated changes the release follows (its `candidates` process)
 on:

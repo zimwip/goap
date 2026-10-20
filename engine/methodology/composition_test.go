@@ -47,7 +47,7 @@ func release(mut func(*Methodology)) *Methodology {
 	m := &Methodology{Name: "release", Lifecycle: "delivery",
 		Processes:  []Process{{Name: "release", Steps: []Step{{Name: "plan"}}}},
 		Integrates: []Integration{{Methodologies: []string{"work"}, Exclusive: true}},
-		Guardian:   &Guardian{Merge: `integrator.state == "integrating"`}}
+		Guardian:   &Guardian{Commit: `integrator.state == "integrating"`}}
 	if mut != nil {
 		mut(m)
 	}
@@ -129,23 +129,23 @@ func TestCompositionMissingEvents(t *testing.T) {
 func TestCompositionGuardian(t *testing.T) {
 	// a state the integrator's lifecycle does not have; a transition the integrated lifecycle does not have
 	r := release(func(m *Methodology) {
-		m.Guardian.Merge = `integrator.state == "integrate"`
+		m.Guardian.Commit = `integrator.state == "integrate"`
 		m.Guardian.Transitions = map[string]string{"aprove": `integrator.attached`}
 	})
 	is := r.CompositionIssues(composition(work("work")))
-	if issueAt(is, "guardian.merge", `integrator.state "integrate"`, `did you mean "integrating"`) == nil {
+	if issueAt(is, "guardian.commit", `integrator.state "integrate"`, `did you mean "integrating"`) == nil {
 		t.Fatalf("unknown integrator state: %v", is)
 	}
 	if issueAt(is, "guardian.transitions.aprove", "no transition aprove", `did you mean "approve"`) == nil {
 		t.Fatalf("unknown transition: %v", is)
 	}
-	if issueAt(is, "guardian.merge", "never holds") == nil {
+	if issueAt(is, "guardian.commit", "never holds") == nil {
 		t.Fatalf("a merge guard on a state that does not exist never holds: %v", is)
 	}
 
 	// an exclusive integration contradicted by its merge guard
-	r = release(func(m *Methodology) { m.Guardian.Merge = `!integrator.attached` })
-	if is := r.CompositionIssues(composition(work("work"))); issueAt(is, "guardian.merge", "never holds", "exclusive integration") == nil {
+	r = release(func(m *Methodology) { m.Guardian.Commit = `!integrator.attached` })
+	if is := r.CompositionIssues(composition(work("work"))); issueAt(is, "guardian.commit", "never holds", "exclusive integration") == nil {
 		t.Fatalf("exclusive and unattached: %v", is)
 	}
 
@@ -156,8 +156,8 @@ func TestCompositionGuardian(t *testing.T) {
 	}
 
 	// a world condition the integrated methodology does not hold
-	r = release(func(m *Methodology) { m.Guardian.Merge = `integrator.state == "integrating" && world.reviewed` })
-	if is := r.CompositionIssues(composition(work("work"))); issueAt(is, "guardian.merge", "world.reviewed") == nil {
+	r = release(func(m *Methodology) { m.Guardian.Commit = `integrator.state == "integrating" && world.reviewed` })
+	if is := r.CompositionIssues(composition(work("work"))); issueAt(is, "guardian.commit", "world.reviewed") == nil {
 		t.Fatalf("unknown condition: %v", is)
 	}
 }

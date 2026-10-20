@@ -1290,7 +1290,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
               {/if}
             </dd>
           {/if}
-          {#if guardianChain(ch)}<dt>Guardians</dt><dd title="The methodologies whose guardians hold its merge and its moves, outermost first (ADR 0106)">{guardianChain(ch)}</dd>{/if}
+          {#if guardianChain(ch)}<dt>Guardians</dt><dd title="The methodologies whose guardians hold its commits and its moves, outermost first (ADR 0106)">{guardianChain(ch)}</dd>{/if}
           {#if ch.goal}
             <dt>Goal</dt>
             <dd>

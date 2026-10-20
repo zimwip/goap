@@ -41,8 +41,8 @@ const AnyMethodology = "*"
 // Integration names methodologies whose changes the changes of this one integrate as sub-changes.
 type Integration struct {
 	Methodologies []string `yaml:"methodologies" json:"methodologies"`
-	// Exclusive: in a project where this methodology is in force, those changes commit only through one of its changes
-	// (shorthand for a guardian.merge requiring an attached integrator).
+	// Exclusive: in a project where this methodology is in force, those changes commit only as one of its sub-changes
+	// (shorthand for a guardian.commit requiring an attached integrator).
 	Exclusive bool `yaml:"exclusive,omitempty" json:"exclusive,omitempty"`
 	// Attach is how a candidate becomes a sub-change: AttachDecision (default) or AttachAuto.
 	Attach string `yaml:"attach,omitempty" json:"attach,omitempty"`
@@ -51,8 +51,8 @@ type Integration struct {
 // Guardian is what a methodology requires of the changes it integrates, when it is an outer guardian of their chain
 // (ADR 0106): CEL guards in the environment of the guards of a change lifecycle, plus `integrator`.
 type Guardian struct {
-	// Merge must hold for the change to merge.
-	Merge string `yaml:"merge,omitempty" json:"merge,omitempty"`
+	// Commit must hold for each commit of the change (ADR 0146).
+	Commit string `yaml:"commit,omitempty" json:"commit,omitempty"`
 	// Transitions adds a guard to transitions of the change's own lifecycle, by transition name.
 	Transitions map[string]string `yaml:"transitions,omitempty" json:"transitions,omitempty"`
 }
@@ -76,15 +76,15 @@ func (m *Methodology) IntegrationOf(other string) *Integration {
 	return nil
 }
 
-// MergeGuard is the guard m adds to the merge of a change it integrates: guardian.merge, and an attached integrator
+// CommitGuard is the guard m adds to each commit of a change it integrates: guardian.commit, and an attached integrator
 // when the integration is exclusive. "" when it adds none.
-func (m *Methodology) MergeGuard(of string) string {
+func (m *Methodology) CommitGuard(of string) string {
 	var parts []string
 	if in := m.IntegrationOf(of); in != nil && in.Exclusive {
 		parts = append(parts, "integrator.attached")
 	}
-	if m.Guardian != nil && strings.TrimSpace(m.Guardian.Merge) != "" {
-		parts = append(parts, "("+m.Guardian.Merge+")")
+	if m.Guardian != nil && strings.TrimSpace(m.Guardian.Commit) != "" {
+		parts = append(parts, "("+m.Guardian.Commit+")")
 	}
 	return strings.Join(parts, " && ")
 }
@@ -125,8 +125,8 @@ func (s *compileState) checkIntegration() {
 		if len(m.Integrates) == 0 {
 			s.add("guardian", "a guardian applies to the changes the methodology integrates: declare integrates")
 		}
-		if _, err := guard.Compile(g.Merge); err != nil {
-			s.add("guardian.merge", "%v", err)
+		if _, err := guard.Compile(g.Commit); err != nil {
+			s.add("guardian.commit", "%v", err)
 		}
 		for name, expr := range g.Transitions {
 			if _, err := guard.Compile(expr); err != nil {

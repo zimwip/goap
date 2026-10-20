@@ -542,7 +542,8 @@ message Integration {
 
 // The guards a methodology adds to the changes it integrates (ADR 0106): CEL, with `integrator`.
 message Guardian {
-  string merge = 1;
+  // must hold for each commit of a change it integrates (ADR 0146)
+  string commit = 1;
   // transition name -> guard
   map<string, string> transitions = 2;
 }

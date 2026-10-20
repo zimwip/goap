@@ -11,7 +11,7 @@ describe('the composition of a methodology form', () => {
     lifecycle: 'delivery',
     criticality: 'C1',
     integrates: [{ methodologies: ['sdlc', 'hotfix'], exclusive: true, attach: 'auto' }, { methodologies: ['docs'] }],
-    guardian: { merge: 'integrator.state == "integrating"', transitions: { ready: 'integrator.attached' } },
+    guardian: { commit: 'integrator.state == "integrating"', transitions: { ready: 'integrator.attached' } },
     on: [{ event: 'change.committed', from: 'integrated' }, { event: 'step.completed', filter: 'true' }],
   };
 

@@ -95,7 +95,7 @@ func (w lcWorld) accept(t *testing.T, c domain.Change) {
 }
 
 // A change scoped to an Activity (architecture plan "Activity concept") is gated by its own goal condition
-// (the guardian of the merge, ChangeLifecycles.Merge), not the node-type lifecycle's committable-state floor: the activity's call on content/state
+// (the guardian of the commits, ChangeLifecycles.Commit), not the node-type lifecycle's committable-state floor: the activity's call on content/state
 // maturity replaces the blanket "state cannot commit" check, rather than adding to it.
 func TestActivityGoalsGateReplacesCommittableFloor(t *testing.T) {
 	forEachRepo(t, testActivityGoalsGateReplacesCommittableFloor)
@@ -124,7 +124,7 @@ func testActivityGoalsGateReplacesCommittableFloor(t *testing.T, repo Repo) {
 	var gotRef string
 	var gotBB domain.Blackboard
 	met := false
-	w.g.Lifecycles = mergeGate(func(_ context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
+	w.g.Lifecycles = commitGate(func(_ context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
 		ref, _ := c.Data["scope"].(string)
 		if ref == "" {
 			return false, false, nil

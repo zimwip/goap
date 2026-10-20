@@ -38,10 +38,10 @@ type ChangeLifecycles interface {
 	// Gate evaluates the vetos and the objectives of a transition in the same environment (condition.CheckGate, ADR
 	// 0075 §3); a transition that declares none is not asked.
 	Gate(ctx context.Context, bb domain.Blackboard, t domain.Transition, decision string) (domain.GateResult, error)
-	// Merge is the say of the methodology on the merge of a change (ADR 0066, 0102: the goal of the Activity it is
-	// scoped to), on the blackboard of what it commits: decided false, it has none and the committable states of the domain
-	// decide; decided true, ok says whether the change may merge, in place of the committable states.
-	Merge(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
+	// Commit is the say of the methodology on each commit of a change (ADR 0066, 0146: the goal of the Activity it is
+	// scoped to), on the blackboard of what it committed: decided false, it has none and the committable states of the
+	// domain decide; decided true, ok says whether the commit stands, in place of the committable states.
+	Commit(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
 	// Guardians is the guardian chain of a new root change of a methodology in a project (ADR 0106): the methodologies
 	// integrating it in force in the project chain, followed upwards, outermost first, then the methodology itself.
 	Guardians(ctx context.Context, methodology, project string) ([]domain.GuardianRef, error)
@@ -49,7 +49,7 @@ type ChangeLifecycles interface {
 	// condition of an attachment (ADR 0106).
 	Integrates(ctx context.Context, integrator, methodology string) (bool, error)
 	// CheckGuardians asks the outer guardians of the chain of a change (domain.Change.OuterGuardians, innermost first)
-	// about a transition, or about its merge when transition is "": refusal names the guardian that refused and why,
+	// about a transition, or about its commit when transition is "": refusal names the guardian that refused and why,
 	// "" when they all agree. ancestors are the parent changes of the change, nearest first: the integrator a guardian
 	// sees is the nearest one of its methodology.
 	CheckGuardians(ctx context.Context, bb domain.Blackboard, transition string, ancestors []domain.Change) (refusal string, err error)
@@ -349,8 +349,8 @@ func (g *Graph) reopenPhase(ctx context.Context, tx Tx, c domain.Change, to stri
 	return nil
 }
 
-// checkGuardians asks the outer guardians of the chain of a change (ADR 0106) about a transition, or about its merge
-// when transition is "". A change whose chain is its own methodology only is not asked.
+// checkGuardians asks the outer guardians of the chain of a change (ADR 0106) about a transition, or about its commit
+// when transition is "" (ADR 0146). A change whose chain is its own methodology only is not asked.
 func (g *Graph) checkGuardians(ctx context.Context, bb domain.Blackboard, transition string) error {
 	c := bb.Change
 	if g.Lifecycles == nil || len(c.OuterGuardians()) == 0 {
@@ -373,7 +373,7 @@ func (g *Graph) checkGuardians(ctx context.Context, bb domain.Blackboard, transi
 	if refusal == "" {
 		return nil
 	}
-	what := "merge"
+	what := "commit"
 	if transition != "" {
 		what = "take " + transition
 	}

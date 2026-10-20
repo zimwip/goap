@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -169,20 +170,19 @@ func testSubSubChangeBranches(t *testing.T, repo Repo) {
 	}
 }
 
-// The guardian of a change holds its merge into its parent like a root change's into main (ADR 0102): it is asked for
-// the change being merged, with the versions it commits; a refusal leaves the parent's branch as it was.
-func TestSubChangeMergeGuardian(t *testing.T) { forEachRepo(t, testSubChangeMergeGuardian) }
+// The guardian of a change judges each of its commits (ADR 0146), with the versions it writes; a refusal undoes the
+// commit. The merges into the parent, then into the root, are mechanical: no guardian is asked.
+func TestSubChangeCommitGuardian(t *testing.T) { forEachRepo(t, testSubChangeCommitGuardian) }
 
-func testSubChangeMergeGuardian(t *testing.T, repo Repo) {
+func testSubChangeCommitGuardian(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	n := newNested(t, repo)
 	g := n.w.g
-	commitProps(t, g, n.leaf, n.w.cmp3, map[string]any{"title": "leaf's"})
 
 	var asked []domain.ChangeID
 	var judged []string
 	refuse := map[domain.ChangeID]bool{n.leaf.ID: true, n.mid.ID: true}
-	g.Lifecycles = mergeGate(func(_ context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
+	g.Lifecycles = commitGate(func(_ context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
 		asked = append(asked, c.ID)
 		judged = judged[:0]
 		for _, v := range bb.Nodes {
@@ -193,51 +193,42 @@ func testSubChangeMergeGuardian(t *testing.T, repo Repo) {
 		return true, !refuse[c.ID], nil
 	})
 	midHead := headOf(t, g, n.mid)
-	if _, err := g.IntegrateChange(ctx, n.leaf.ID, nil); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("the guardian refuses the leaf's merge: %v", err)
+	id := draftProps(t, g, n.leaf, n.w.cmp3, map[string]any{"title": "leaf's"})
+	if _, err := g.accept(ctx, n.leaf.ID, id, "u", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.CommitChange(ctx, n.leaf.ID, ""); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("the guardian refuses the leaf's commit: %v", err)
 	}
 	if len(asked) != 1 || asked[0] != n.leaf.ID {
-		t.Fatalf("the guardian is asked for the change being merged only: %v", asked)
+		t.Fatalf("the guardian is asked for the change committing only: %v", asked)
 	}
-	hasLeaf := false
-	for _, s := range judged {
-		hasLeaf = hasLeaf || s == "leaf's"
-	}
-	if !hasLeaf {
+	if !slices.Contains(judged, "leaf's") {
 		t.Fatalf("the guardian judges the version the leaf commits: %v", judged)
 	}
-	if headOf(t, g, n.mid) != midHead || seen(t, g, n.mid, "CMP-3", "title") != "three" {
-		t.Fatal("a refused merge moved the parent's branch")
-	}
-	if len(must[domain.Change](t)(g.Change(ctx, n.mid.ID)).Nodes) != 0 {
-		t.Fatal("a refused merge recorded impacts in the parent")
-	}
-	if c := must[domain.Change](t)(g.Change(ctx, n.leaf.ID)); c.Status == domain.ChangeApplied {
-		t.Fatal("a refused merge applied the leaf")
+	for _, cn := range must[domain.Change](t)(g.Change(ctx, n.leaf.ID)).Nodes {
+		if cn.Committed != nil {
+			t.Fatalf("a refused commit is undone: %+v", cn)
+		}
 	}
 
-	// let the leaf go: the middle change holds its work; its own guardian then holds the merge into the root
+	// let the leaf commit: its merges, into the middle change then into the root, ask no guardian
 	refuse[n.leaf.ID] = false
-	if _, err := g.IntegrateChange(ctx, n.leaf.ID, nil); err != nil {
+	if _, err := g.CommitChange(ctx, n.leaf.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	asked = nil
-	rootHead := headOf(t, g, n.root)
-	if _, err := g.IntegrateChange(ctx, n.mid.ID, nil); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("the guardian refuses the middle change's merge: %v", err)
-	}
-	if len(asked) != 1 || asked[0] != n.mid.ID {
-		t.Fatalf("the guardian is asked for the middle change: %v", asked)
-	}
-	if headOf(t, g, n.root) != rootHead {
-		t.Fatal("a refused merge moved the root's branch")
-	}
-	if got := seen(t, g, n.mid, "CMP-3", "title"); got != "leaf's" {
-		t.Fatalf("refusing the middle change's merge leaves the leaf's merge in it: %v", got)
-	}
-	refuse[n.mid.ID] = false
-	if _, err := g.IntegrateChange(ctx, n.mid.ID, nil); err != nil {
+	if _, err := g.IntegrateChange(ctx, n.leaf.ID, nil); err != nil {
 		t.Fatal(err)
+	}
+	if headOf(t, g, n.mid) == midHead {
+		t.Fatal("the merge moved the middle change's branch")
+	}
+	if _, err := g.IntegrateChange(ctx, n.mid.ID, nil); err != nil {
+		t.Fatalf("the merge of the middle change is mechanical, its guardian refusing commits does not hold it: %v", err)
+	}
+	if len(asked) != 0 {
+		t.Fatalf("a merge asks no guardian: %v", asked)
 	}
 	if got := seen(t, g, n.root, "CMP-3", "title"); got != "leaf's" {
 		t.Fatalf("the root holds the work of both levels: %v", got)

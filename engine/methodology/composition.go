@@ -376,8 +376,8 @@ func (ck *compositionCheck) guardian() {
 	}
 	own := ck.c.lifecycle(ck.m)
 	if g != nil {
-		if strings.TrimSpace(g.Merge) != "" {
-			ck.guardRefs("guardian.merge", g.Merge, own, in, wild)
+		if strings.TrimSpace(g.Commit) != "" {
+			ck.guardRefs("guardian.commit", g.Commit, own, in, wild)
 		}
 		for _, t := range slices.Sorted(maps.Keys(g.Transitions)) {
 			path := "guardian.transitions." + t
@@ -396,7 +396,7 @@ func (ck *compositionCheck) guardian() {
 			switch {
 			case len(in) == 0:
 			case withLC == 0:
-				ck.add(path, "name a transition of their lifecycle, or move the guard to guardian.merge",
+				ck.add(path, "name a transition of their lifecycle, or move the guard to guardian.commit",
 					"the changes %s integrates (%s) follow no lifecycle: this guard is never asked", ck.m.Name, names(in))
 			case !slices.Contains(all, t):
 				ck.add(path, suggest(t, all, "transitions"), "no transition %s in the lifecycle of %s: this guard is never asked", t, names(in))
@@ -408,9 +408,9 @@ func (ck *compositionCheck) guardian() {
 	}
 	for _, b := range framed {
 		x := b.m
-		if expr := ck.m.MergeGuard(b.via(x)); expr != "" {
+		if expr := ck.m.CommitGuard(b.via(x)); expr != "" {
 			if res := ck.satisfiable(expr, x, ""); res == unsat {
-				ck.add("guardian.merge", mergeHint(ck.m, b.via(x)), "the merge guard %s never holds for a change of %s: it can never merge", expr, x.Name)
+				ck.add("guardian.commit", commitHint(ck.m, b.via(x)), "the commit guard %s never holds for a change of %s: it can never commit", expr, x.Name)
 			}
 		}
 		if g == nil {
@@ -437,15 +437,15 @@ func (ck *compositionCheck) exclusive() bool {
 	return false
 }
 
-func mergeHint(m *Methodology, via string) string {
+func commitHint(m *Methodology, via string) string {
 	if in := m.IntegrationOf(via); in != nil && in.Exclusive {
-		return "an exclusive integration already requires integrator.attached: the merge guard must hold for an attached change, in a state of " + m.Name
+		return "an exclusive integration already requires integrator.attached: the commit guard must hold for an attached change, in a state of " + m.Name
 	}
-	return "relax the merge guard: some state of " + m.Name + " and of the changes it integrates must satisfy it"
+	return "relax the commit guard: some state of " + m.Name + " and of the changes it integrates must satisfy it"
 }
 
 // framed is a methodology whose changes the guardian of m frames: one m integrates, or one integrated by those, down
-// the integrations (each guardian of a change's chain is asked on its moves and its merge, ADR 0106).
+// the integrations (each guardian of a change's chain is asked on its moves and its commits, ADR 0106, 0146).
 type framed struct {
 	m *Methodology
 	// between are the guardians from its integrator up to m, m left out, innermost first.
@@ -561,7 +561,7 @@ type level struct {
 	guardian *Methodology
 }
 
-// satisfiable tries the guard of m's guardian over a change of x (transition "" : the merge) for every state x may
+// satisfiable tries the guard of m's guardian over a change of x (transition "" : a commit) for every state x may
 // be in, every state of m's lifecycle its integrator may be in, attached or not, and the conditions of the world it
 // reads.
 func (ck *compositionCheck) satisfiable(expr string, x *Methodology, transition string) satisfiability {
@@ -671,7 +671,7 @@ func (ck *compositionCheck) composite() {
 		if len(levels) < 2 {
 			continue
 		}
-		ck.compositeOn(f.m, levels, f.via(f.m), "guardian.merge", "guardian.transitions.")
+		ck.compositeOn(f.m, levels, f.via(f.m), "guardian.commit", "guardian.transitions.")
 	}
 }
 
@@ -697,15 +697,15 @@ func (ck *compositionCheck) chainAbove(m *Methodology) []*Methodology {
 	return out
 }
 
-// compositeOn checks the guardians (innermost first) over a change of x, for the merge and each transition of x's
+// compositeOn checks the guardians (innermost first) over a change of x, for the commit and each transition of x's
 // lifecycle more than one of them guards, when m's own guard takes part (via: what m integrates on the way to x);
-// mergePath / transPrefix: where to report on m ("": on the methodology).
-func (ck *compositionCheck) compositeOn(x *Methodology, chain []*Methodology, via, mergePath, transPrefix string) {
-	var merge []level
+// commitPath / transPrefix: where to report on m ("": on the methodology).
+func (ck *compositionCheck) compositeOn(x *Methodology, chain []*Methodology, via, commitPath, transPrefix string) {
+	var commit []level
 	inner := x.Name
 	for _, g := range chain {
-		if e := g.MergeGuard(inner); e != "" {
-			merge = append(merge, level{expr: e, guardian: g})
+		if e := g.CommitGuard(inner); e != "" {
+			commit = append(commit, level{expr: e, guardian: g})
 		}
 		inner = g.Name
 	}
@@ -718,8 +718,8 @@ func (ck *compositionCheck) compositeOn(x *Methodology, chain []*Methodology, vi
 		ck.add(path, hint, "the guardians of %s never hold together on %s of a change of %s", names(chain), what, x.Name)
 	}
 	own := x == ck.m // the guardians above m on its own changes: reported on the methodology
-	if len(merge) > 1 && (own || ck.m.MergeGuard(via) != "") && ck.allAlone(merge, x, "") && ck.together(merge, x, "") == unsat {
-		report(mergePath, "the merge", merge)
+	if len(commit) > 1 && (own || ck.m.CommitGuard(via) != "") && ck.allAlone(commit, x, "") && ck.together(commit, x, "") == unsat {
+		report(commitPath, "the commit", commit)
 	}
 	lc := ck.c.lifecycle(x)
 	if lc == nil {

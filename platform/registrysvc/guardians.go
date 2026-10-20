@@ -20,7 +20,7 @@ import (
 // maxChain bounds the walk up the integrations (a cycle is cut by the methodologies already seen anyway).
 const maxChain = 8
 
-// Guardians implements pkg/graph.ChangeLifecycles: the guardian chain of a new root change of a methodology in a
+// Guardians implements graph.ChangeLifecycles: the guardian chain of a new root change of a methodology in a
 // project. From the methodology, the methodologies applicable to the project chain (nearest project first, Applicable)
 // are searched for one integrating it; the first found frames it, and the search goes on from that one. Without
 // Applicable, or for a methodology the registry does not know, the chain is the methodology alone.
@@ -68,7 +68,7 @@ func (s *Service) Guardians(ctx context.Context, ref, project string) ([]domain.
 	return chain, nil
 }
 
-// Integrates implements pkg/graph.ChangeLifecycles: whether integrator (at the version its reference names, else the
+// Integrates implements graph.ChangeLifecycles: whether integrator (at the version its reference names, else the
 // latest) integrates the changes of methodology; false for a methodology the registry does not know.
 func (s *Service) Integrates(ctx context.Context, integrator, methodology string) (bool, error) {
 	r, err := s.record(ctx, integrator)
@@ -80,8 +80,8 @@ func (s *Service) Integrates(ctx context.Context, integrator, methodology string
 	return r.Methodology.IntegratesChangesOf(methodology), nil
 }
 
-// CheckGuardians implements pkg/graph.ChangeLifecycles: the outer guardians of the chain of the change, innermost
-// first, each with its guard for the transition (guardian.transitions) or the merge (MergeGuard: guardian.merge, and
+// CheckGuardians implements graph.ChangeLifecycles: the outer guardians of the chain of the change, innermost
+// first, each with its guard for the transition (guardian.transitions) or a commit (CommitGuard: guardian.commit, and
 // an attached integrator when its integration is exclusive), in the environment of the conditions of the change's
 // own methodology plus `integrator`, the nearest ancestor change of that guardian's methodology.
 func (s *Service) CheckGuardians(ctx context.Context, bb domain.Blackboard, transition string, ancestors []domain.Change) (string, error) {
@@ -99,7 +99,7 @@ func (s *Service) CheckGuardians(ctx context.Context, bb domain.Blackboard, tran
 	for i := len(c.Guardians) - 1; i >= 0; i-- {
 		g := c.Guardians[i]
 		if g.Methodology == c.Methodology {
-			continue // its own: the lifecycle and the merge of the change
+			continue // its own: the lifecycle and the commits of the change
 		}
 		m, err := s.guardianMethodology(ctx, g)
 		if err != nil {
@@ -114,7 +114,7 @@ func (s *Service) CheckGuardians(ctx context.Context, bb domain.Blackboard, tran
 		}
 		expr := m.TransitionGuard(transition)
 		if transition == "" {
-			expr = m.MergeGuard(inner)
+			expr = m.CommitGuard(inner)
 		}
 		if expr == "" {
 			continue

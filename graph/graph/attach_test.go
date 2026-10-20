@@ -10,7 +10,7 @@ import (
 )
 
 // chainGate is a guardian chain of two methodologies (ADR 0106): "release" integrates "sdlc", exclusively (a change
-// of sdlc merges only once attached to a release).
+// of sdlc commits only once attached to a release, ADR 0146).
 type chainGate struct{ asked []string }
 
 func (*chainGate) MethodologyVersion(context.Context, string) (string, error)   { return "", nil }
@@ -22,7 +22,7 @@ func (*chainGate) Guard(context.Context, domain.Blackboard, string, string, stri
 func (*chainGate) Gate(context.Context, domain.Blackboard, domain.Transition, string) (domain.GateResult, error) {
 	return domain.GateResult{}, nil
 }
-func (*chainGate) Merge(context.Context, domain.Change, domain.Blackboard) (bool, bool, error) {
+func (*chainGate) Commit(context.Context, domain.Change, domain.Blackboard) (bool, bool, error) {
 	return false, false, nil
 }
 func (*chainGate) Guardians(_ context.Context, m, _ string) ([]domain.GuardianRef, error) {
@@ -75,12 +75,14 @@ func testAttachChange(t *testing.T, repo Repo) {
 	if _, err := g.accept(ctx, cand.ID, added[0].ID, "u", "ok"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.CommitChange(ctx, cand.ID, ""); err != nil {
-		t.Fatal(err)
+	// the outer guardian holds the commits of a change not attached to a release (ADR 0146)
+	if _, err := g.CommitChange(ctx, cand.ID, ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("an exclusive integrator refuses the commit of an unattached change: %v", err)
 	}
-	// the outer guardian holds the merge of a change not attached to a release
-	if _, err := g.IntegrateChange(ctx, cand.ID, nil); !errors.Is(err, ErrConflict) {
-		t.Fatalf("an exclusive integrator refuses the merge of an unattached change: %v", err)
+	for _, cn := range must[domain.Change](t)(g.Change(ctx, cand.ID)).Nodes {
+		if cn.Committed != nil {
+			t.Fatalf("a refused commit committed nothing: %+v", cn)
+		}
 	}
 
 	// a change of a methodology the parent does not integrate is not attached
@@ -103,8 +105,8 @@ func testAttachChange(t *testing.T, repo Repo) {
 	if b := must[domain.Branch](t)(g.Branch(ctx, att.Namespace, att.Branch)); b.Parent != rel.Branch {
 		t.Fatalf("the attached change forks from the branch of its parent %s: %+v", rel.Branch, b)
 	}
-	if v := must[domain.NodeView](t)(g.ChangeNodeViewByKey(ctx, cand.ID, "", domain.DefaultNamespace, "CMP-3")); v.Properties["title"] != "fixed" {
-		t.Fatalf("what the change committed is rebased onto its parent: %v", v.Properties)
+	if _, err := g.CommitChange(ctx, cand.ID, ""); err != nil {
+		t.Fatalf("attached, it commits: %v", err)
 	}
 	if _, err := g.AttachChange(ctx, cand.ID, release.ID); !errors.Is(err, ErrConflict) {
 		t.Fatalf("attached twice: %v", err)
@@ -125,6 +127,9 @@ func testAttachChange(t *testing.T, repo Repo) {
 	// attached again, it merges into the release, which holds its work
 	if _, err := g.AttachChange(ctx, cand.ID, release.ID); err != nil {
 		t.Fatal(err)
+	}
+	if v := must[domain.NodeView](t)(g.ChangeNodeViewByKey(ctx, cand.ID, "", domain.DefaultNamespace, "CMP-3")); v.Properties["title"] != "fixed" {
+		t.Fatalf("what the change committed is rebased onto its parent: %v", v.Properties)
 	}
 	if _, err := g.IntegrateChange(ctx, cand.ID, nil); err != nil {
 		t.Fatal(err)

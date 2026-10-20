@@ -90,7 +90,7 @@
         {/each}
       </ul>
     {:else}
-      <p class="hint">No dependency: it merges whenever its guardians agree.</p>
+      <p class="hint">No dependency: it merges once its work is committed and settled.</p>
     {/if}
     {#if adding}
       <form class="add" onsubmit={(e) => (e.preventDefault(), save(withDependency(change.dependsOn, target), 'Dependency added.'))}>

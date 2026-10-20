@@ -26,7 +26,7 @@ nodeTypes:
       - {name: on, label: "Reacts to", description: "Events a methodology reacts to: of its own change (a transverse methodology), of the changes it integrates or of the change integrating it (ADR 0106)", type: json, widget: textarea, section: Definition, order: 4}
       - {name: events, label: Events, description: "Events of the methodology, in addition to the standard ones (ADR 0110): name, description; raised by a signal item of that name (an action's emits)", type: json, widget: textarea, section: Definition, order: 4}
       - {name: integrates, label: Integrates, description: "Methodologies whose changes its changes integrate as sub-changes (ADR 0106)", type: json, widget: textarea, section: Definition, order: 4}
-      - {name: guardian, label: Guardian, description: "What it requires of the changes it integrates: merge and transition guards (ADR 0106)", type: json, widget: textarea, section: Definition, order: 4}
+      - {name: guardian, label: Guardian, description: "What it requires of the changes it integrates: commit and transition guards (ADR 0106, 0146)", type: json, widget: textarea, section: Definition, order: 4}
       - {name: assessments, label: Assessments, description: "How the assessments of the subjects of its changes read (ADR 0116): per subject pattern, states bound to conditions or a CEL when, with a tone, a label and whether the bubble opens", type: json, widget: textarea, section: Definition, order: 4}
       - {name: status, label: Status, description: "draft, published or archived", type: string, section: Definition, order: 5}
       - {name: createdAt, label: "Created at", description: "When the version was created", type: string, section: History, order: 6}

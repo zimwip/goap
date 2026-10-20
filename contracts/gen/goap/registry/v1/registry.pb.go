@@ -3205,7 +3205,8 @@ func (x *Integration) GetAttach() string {
 // The guards a methodology adds to the changes it integrates (ADR 0106): CEL, with `integrator`.
 type Guardian struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Merge string                 `protobuf:"bytes,1,opt,name=merge,proto3" json:"merge,omitempty"`
+	// must hold for each commit of a change it integrates (ADR 0146)
+	Commit string `protobuf:"bytes,1,opt,name=commit,proto3" json:"commit,omitempty"`
 	// transition name -> guard
 	Transitions   map[string]string `protobuf:"bytes,2,rep,name=transitions,proto3" json:"transitions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
@@ -3242,9 +3243,9 @@ func (*Guardian) Descriptor() ([]byte, []int) {
 	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{34}
 }
 
-func (x *Guardian) GetMerge() string {
+func (x *Guardian) GetCommit() string {
 	if x != nil {
-		return x.Merge
+		return x.Commit
 	}
 	return ""
 }
@@ -9766,9 +9767,9 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\vIntegration\x12$\n" +
 	"\rmethodologies\x18\x01 \x03(\tR\rmethodologies\x12\x1c\n" +
 	"\texclusive\x18\x02 \x01(\bR\texclusive\x12\x16\n" +
-	"\x06attach\x18\x03 \x01(\tR\x06attach\"\xaf\x01\n" +
-	"\bGuardian\x12\x14\n" +
-	"\x05merge\x18\x01 \x01(\tR\x05merge\x12M\n" +
+	"\x06attach\x18\x03 \x01(\tR\x06attach\"\xb1\x01\n" +
+	"\bGuardian\x12\x16\n" +
+	"\x06commit\x18\x01 \x01(\tR\x06commit\x12M\n" +
 	"\vtransitions\x18\x02 \x03(\v2+.goap.registry.v1.Guardian.TransitionsEntryR\vtransitions\x1a>\n" +
 	"\x10TransitionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
