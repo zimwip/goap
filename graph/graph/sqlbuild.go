@@ -293,6 +293,16 @@ func (d dialect) refsRows(n int) string {
 	return `SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(` + d.ph(n) + `)`
 }
 
+// outerJoin joins a table to the rows on its left read first: SQLite, which knows nothing of the size of a
+// materialized CTE, would otherwise scan the whole table on the right (the links) and probe the rows (a CROSS JOIN keeps
+// the order of its tables); PostgreSQL plans it from its statistics.
+func (d dialect) outerJoin() string {
+	if d.pg {
+		return ` JOIN `
+	}
+	return ` CROSS JOIN `
+}
+
 // heldLinks is the query of the links the versions of refsArgs at placeholder n hold (ADR 0141), each read as leaving
 // that version: the rows of its set and of the sets it is a delta over (c, the chain of sets of each version: rv the
 // version, sv a set), minus those a row of the chain drops. Its columns are the link's, unqualified. A set is a delta
@@ -305,7 +315,7 @@ func (d dialect) heldLinks(n int) string {
 			UNION ALL
 			SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_depth > 0
 		),
-		h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes FROM c JOIN link l ON l.from_id = c.nid AND l.from_version = c.sv)
+		h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes FROM c` + d.outerJoin() + `link l ON l.from_id = c.nid AND l.from_version = c.sv)
 		SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id FROM h
 		WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
 }
@@ -542,6 +552,11 @@ func (d dialect) changeImpactCols() string {
 // sqlChangeImpacts reads the impacts of a change in the order they were written.
 func (d dialect) sqlChangeImpacts(change domain.ChangeID) (string, []any) {
 	return `SELECT ` + d.changeImpactCols() + ` FROM change_impact WHERE change_id = ` + d.ph(1) + ` ORDER BY seq`, []any{string(change)}
+}
+
+// sqlChangeImpactKeys reads the key and type of the first limit impacts of a change, in the order they were written.
+func (d dialect) sqlChangeImpactKeys(change domain.ChangeID, limit int) (string, []any) {
+	return `SELECT key, type FROM change_impact WHERE change_id = ` + d.ph(1) + ` ORDER BY seq LIMIT ` + d.ph(2), []any{string(change), limit}
 }
 
 // logCols is the select list of a log entry.

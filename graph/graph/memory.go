@@ -825,6 +825,17 @@ func (t *memTx) PutChangeImpact(_ context.Context, change domain.ChangeID, cn do
 	return nil
 }
 
+func (t *memTx) ChangeImpactKeys(_ context.Context, change domain.ChangeID, limit int) ([]domain.ChangeDocRef, error) {
+	var out []domain.ChangeDocRef
+	for _, cn := range t.st.nodes[change] {
+		if len(out) == limit {
+			break
+		}
+		out = append(out, domain.ChangeDocRef{Key: cn.Key, Type: cn.Type})
+	}
+	return out, nil
+}
+
 func (t *memTx) ChangeImpacts(_ context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {
 	return slices.Clone(t.st.nodes[change]), nil
 }

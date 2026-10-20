@@ -392,23 +392,18 @@ func (g *Graph) changeDocs(ctx context.Context, tx Tx, ot *observedTx) ([]publis
 	var out []published
 	for _, id := range ot.indexed {
 		c, ok := ot.headers[id]
-		if !ok { // the impacts alone were written: the header is read (its items are not needed, but the repository has no lighter read)
+		if !ok { // the impacts alone were written: the head is read, neither the impacts nor the items
 			var err error
-			if c, err = tx.Change(ctx, id); err != nil {
+			if c, err = tx.ChangeHead(ctx, id); err != nil {
 				return nil, err
 			}
 		}
 		ev := domain.ChangeDocEvent{ID: c.ID, Title: c.Title, Intent: c.Intent, Goal: c.Goal, Methodology: c.Methodology, Namespace: c.Namespace,
 			Status: c.Status, State: c.State, ProjectID: c.ProjectID, OwnerOrg: c.OwnerOrg, ParentID: c.ParentID, Branch: c.Branch, CreatedAt: c.CreatedAt}
-		impacts, err := tx.ChangeImpacts(ctx, id)
-		if err != nil {
+		// the first impacts only: a write of an impact must not read every impact of a big change (an import)
+		var err error
+		if ev.Impacts, err = tx.ChangeImpactKeys(ctx, id, maxIndexedImpacts); err != nil {
 			return nil, err
-		}
-		for _, cn := range impacts {
-			if len(ev.Impacts) == maxIndexedImpacts {
-				break
-			}
-			ev.Impacts = append(ev.Impacts, domain.ChangeDocRef{Key: cn.Key, Type: cn.Type})
 		}
 		out = append(out, published{fmt.Sprintf(domain.SubjectChangeIndexed, id), ev})
 	}

@@ -321,7 +321,8 @@ func (im *Importer) commit(ctx context.Context, c Commit) error {
 	b, err := im.write(ctx, ch.ID, c, ops)
 	if err != nil {
 		abandoned := domain.ChangeAbandoned
-		if _, aerr := im.Graph.UpdateChange(ctx, ch.ID, graphapi.ChangePatch{Status: &abandoned}); aerr != nil {
+		// abandoned even when the run is cancelled: an open change would hold the keys it committed
+		if _, aerr := im.Graph.UpdateChange(context.WithoutCancel(ctx), ch.ID, graphapi.ChangePatch{Status: &abandoned}); aerr != nil {
 			err = errors.Join(err, aerr)
 		}
 		return fmt.Errorf("commit %s: %w", short(c.Hash), err)

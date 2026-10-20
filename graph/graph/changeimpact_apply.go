@@ -154,12 +154,26 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 		State: d.State, ChangeID: a.change.ID, Owner: d.Owner, ChangeImpact: cn.ID, Comment: comment, Execution: d.Execution, Origins: slices.Clone(d.Origins), CreatedAt: a.g.now()}
 	if d.Base == nil {
 		// a key is one node's: another change may have created it meanwhile
-		if id, err := a.tx.NodeIDByKey(a.ctx, n.Namespace, n.Key); err == nil && id != n.ID {
+		id, err := a.tx.NodeIDByKey(a.ctx, n.Namespace, n.Key)
+		switch {
+		case err == nil && id != n.ID:
 			return n, fmt.Errorf("%s (%s): the key is taken by a node another change created meanwhile: rename it or withdraw it: %w", d.Key, d.Type, ErrConflict)
-		} else if err != nil && !errors.Is(err, ErrNotFound) {
+		case err == nil:
+			// a node only abandoned changes wrote, taken over by the creation (takeKey): its next version, still a creation
+			if err := a.g.takeKey(a.ctx, a.tx, n.Namespace, n.ID, n.Key, n.Type); err != nil {
+				return n, err
+			}
+			last, err := a.tx.LatestVersions(a.ctx, []domain.NodeID{n.ID})
+			if err != nil {
+				return n, err
+			}
+			n.Version = last[n.ID] + 1
+		case errors.Is(err, ErrNotFound):
+			n.Version = 1
+		default:
 			return n, err
 		}
-		n.Version, n.Reason = 1, domain.ReasonCreate
+		n.Reason = domain.ReasonCreate
 		return n, a.tx.PutNode(a.ctx, n)
 	}
 	last, ok := a.latest[d.Node]

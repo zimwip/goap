@@ -867,6 +867,24 @@ func (t *sqliteTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, 
 	return sqliteErr(err, "change impact "+cn.Key)
 }
 
+func (t *sqliteTx) ChangeImpactKeys(ctx context.Context, change domain.ChangeID, limit int) ([]domain.ChangeDocRef, error) {
+	q, args := dialectSQLite.sqlChangeImpactKeys(change, limit)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.ChangeDocRef
+	for rows.Next() {
+		var r domain.ChangeDocRef
+		if err := rows.Scan(&r.Key, &r.Type); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 func (t *sqliteTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {
 	q, args := dialectSQLite.sqlChangeImpacts(change)
 	rows, err := t.tx.QueryContext(ctx, q, args...)

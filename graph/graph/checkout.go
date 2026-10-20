@@ -40,6 +40,8 @@ type work struct {
 	vcn    domain.ChangeImpact // as the flow sees it
 	// planned is set when a creation names the key of a planned creation (resolve): its draft fulfils that impact
 	planned bool
+	// reuse is the node a creation takes over: the node of its key, which only abandoned changes wrote (takeKey)
+	reuse domain.NodeID
 	// transition is set for a move of the lifecycle of the node (ImpactNodeTransition): a freeze of its type may let
 	// it through (domain.Freezes.Transitions, ADR 0132 §4)
 	transition bool
@@ -231,9 +233,16 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 		v, inBase = at[nid]
 	}
 	var decl domain.ChangeImpact
+	var reuse domain.NodeID
 	switch {
 	case t.create && inBase:
 		return nil, fmt.Errorf("cannot create %s (%s): the reference baseline of change %s already holds it: %w", t.Key, t.Type, id, ErrConflict)
+	case t.create && nid != "":
+		if err := g.takeKey(ctx, tx, w.ns, nid, t.Key, t.Type); err != nil {
+			return nil, err
+		}
+		reuse = nid
+		decl = domain.ChangeImpact{Intent: domain.IntentCreated, Key: t.Key, Type: t.Type, DerivedFrom: t.DerivedFrom}
 	case t.create:
 		decl = domain.ChangeImpact{Intent: domain.IntentCreated, Key: t.Key, Type: t.Type, DerivedFrom: t.DerivedFrom}
 	case inBase:
@@ -253,7 +262,7 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 	if w, err = g.workOn(ctx, tx, id, t.Flow); err != nil {
 		return nil, err
 	}
-	w.transition = t.transition
+	w.transition, w.reuse = t.transition, reuse
 	if t.create {
 		// not recorded yet: the created event of the first version adds it (createTx)
 		w.cn, w.vcn = out[0], out[0]
@@ -261,6 +270,33 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 		return w, nil
 	}
 	return w, g.impact(ctx, tx, w, out[0].ID)
+}
+
+// takeKey decides a creation whose key is the key of a node out of the reference baseline of the change (a key is one
+// node's): a node another change wrote on a branch that is not abandoned holds it (ErrConflict, the creation is refused
+// now rather than at the commit); a node only abandoned changes wrote never reached the graph, and the creation takes
+// it over, so that the work of an abandoned change (an import stopped between its commit and its merge) does not hold
+// its keys for ever.
+func (g *Graph) takeKey(ctx context.Context, tx Tx, ns string, nid domain.NodeID, key, typ string) error {
+	vs, err := tx.Versions(ctx, nid)
+	if err != nil {
+		return err
+	}
+	for _, v := range vs {
+		if v.Type != typ {
+			return fmt.Errorf("cannot create %s (%s): the key is taken by a node of type %s: %w", key, typ, v.Type, ErrConflict)
+		}
+		for _, name := range append([]string{domain.BranchOf(v.Branch)}, v.Joined...) {
+			b, err := tx.Branch(ctx, ns, name)
+			if err != nil && !errors.Is(err, ErrNotFound) {
+				return err
+			}
+			if err != nil || b.Status != domain.BranchAbandoned {
+				return fmt.Errorf("cannot create %s (%s): the key is taken by a node change %s created on branch %s: rename it, or merge or abandon that change: %w", key, typ, v.ChangeID, name, ErrConflict)
+			}
+		}
+	}
+	return nil
 }
 
 // plannedCreation reports whether the change impact is a creation planned by ProposeImpact and not drafted yet: no
@@ -386,6 +422,9 @@ func (g *Graph) createTx(ctx context.Context, tx Tx, id domain.ChangeID, in Node
 func (g *Graph) newDraft(ctx context.Context, tx Tx, w *work, in NodeCreate, origins []domain.NodeRef) (domain.Draft, error) {
 	d := domain.Draft{Change: w.c.ID, Impact: w.cn.ID, Flow: w.flow, Node: domain.NodeID(g.newID()), Key: in.Key, Type: in.Type,
 		Properties: cloneMap(in.Properties), Origins: slices.Clone(origins), Execution: in.Execution}
+	if w.reuse != "" {
+		d.Node = w.reuse
+	}
 	if lc := w.ix.lifecycleOf(d.Type); lc != nil {
 		d.State = lc.Initial
 	}
@@ -700,6 +739,18 @@ func (g *Graph) checkAccepted(ctx context.Context, tx Tx, id domain.ChangeID, fl
 		return err
 	}
 	return g.checkDraftOf(ctx, tx, w.c, w.flow, w.ix, w.seen, w.vcn, d)
+}
+
+// checkAcceptedIn is checkAccepted for a verdict of a batch on the main flow, over the scope of the batch.
+func (g *Graph) checkAcceptedIn(ctx context.Context, tx Tx, s *reviewScope, cn domain.ChangeImpact) error {
+	d, err := g.seenDraft(ctx, tx, s.c, "", cn.ID)
+	if err != nil || d == nil {
+		return err
+	}
+	if err := g.checkOrigins(s.seen, cn, d); err != nil {
+		return err
+	}
+	return g.checkDraft(ctx, s.ix, s.c, *d, draftResolver(ctx, tx, s.r))
 }
 
 // checkDraftOf is the check of an accepted review on one draft, writing nothing: the origins gate over the change

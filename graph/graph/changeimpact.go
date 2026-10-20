@@ -295,31 +295,90 @@ func checkVerdict(status domain.NodeReview, comment string) error {
 // reviews retries it once the others stood.
 var errOriginsPending = errors.New("settle the origins first")
 
+// reviewScope is what the verdicts of a batch on the main flow share (they are staged, ADR 0144): the change, the
+// change impacts the flow sees, the type index and the reader of the drafts, read once for the batch and kept up to date
+// by its verdicts, so that a batch of N verdicts reads and copies the N impacts of the change once, not once per
+// verdict (an import reviews every node of a commit in one batch).
+type reviewScope struct {
+	c  domain.Change
+	at map[domain.ChangeImpactID]int // position in c.Nodes
+	// seen are the change impacts the main flow sees (its own live ones, as they are), seenAt their positions
+	seen   []domain.ChangeImpact
+	seenAt map[domain.ChangeImpactID]int
+	ix     *typeIndex
+	r      *draftReader
+}
+
+// newReviewScope reads what the verdicts of a batch on the main flow share.
+func (g *Graph) newReviewScope(ctx context.Context, tx Tx, id domain.ChangeID) (*reviewScope, error) {
+	w, err := g.workOn(ctx, tx, id, domain.MainFlow)
+	if err != nil {
+		return nil, err
+	}
+	s := &reviewScope{c: w.c, seen: w.seen, ix: w.ix, at: make(map[domain.ChangeImpactID]int, len(w.c.Nodes)), seenAt: make(map[domain.ChangeImpactID]int, len(w.seen))}
+	for i, cn := range s.c.Nodes {
+		s.at[cn.ID] = i
+	}
+	for i, cn := range s.seen {
+		s.seenAt[cn.ID] = i
+	}
+	// the drafts do not change by a review: one reader serves every verdict
+	if s.r, err = g.newDraftReader(ctx, tx, s.c, "", s.seen); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// verdict records a verdict of the batch in the scope, as the fold of the change records it.
+func (s *reviewScope) verdict(cn domain.ChangeImpact) {
+	if i, ok := s.at[cn.ID]; ok {
+		s.c.Nodes[i] = cn
+	}
+	if i, ok := s.seenAt[cn.ID]; ok {
+		s.seen[i] = cn
+	}
+}
+
 // reviewTx is one verdict inside a transaction: the policy, the acceptance gate, the reviewed event. Nothing is
 // written when it refuses. reviewID is the key of the submitted review that makes the verdict, stamped on the review of
-// the impact (ADR 0080), and causation the log entry of its record, the cause of the reviewed event (ADR 0105).
-func (g *Graph) reviewTx(ctx context.Context, tx Tx, stage *impactStage, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment, reviewID, causation string) (cn domain.ChangeImpact, err error) {
-	c, err := changeOpen(ctx, tx, id)
-	if err != nil {
-		return cn, err
-	}
-	flow = c.ResolveFlow(flow)
-	if flow != "" {
-		if _, ok := c.Flow(flow); !ok {
-			return cn, fmt.Errorf("flow %s: %w", flow, ErrNotFound)
+// the impact (ADR 0080), and causation the log entry of its record, the cause of the reviewed event (ADR 0105). A
+// verdict of a batch on the main flow is staged and reads the change from the scope of the batch (scope and stage set).
+func (g *Graph) reviewTx(ctx context.Context, tx Tx, stage *impactStage, scope *reviewScope, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment, reviewID, causation string) (cn domain.ChangeImpact, err error) {
+	var c domain.Change
+	var seen domain.ChangeImpact
+	if scope != nil {
+		c, flow = scope.c, ""
+		i, ok := scope.at[node]
+		if !ok {
+			return cn, fmt.Errorf("change impact %s not in change %s: %w", node, id, ErrNotFound)
 		}
-		if c.FlowStatusOf(flow) != domain.FlowOpen {
-			return cn, fmt.Errorf("flow %s is not open: %w", flow, ErrConflict)
+		cn = c.Nodes[i]
+		j, ok := scope.seenAt[node]
+		if !ok {
+			return cn, fmt.Errorf("change impact %s is not on the flow %q of change %s: %w", node, flow, id, ErrNotFound)
 		}
-	}
-	i, err := findChangeImpact(c, node)
-	if err != nil {
-		return cn, err
-	}
-	cn = c.Nodes[i]
-	seen, err := g.newFlowNodes(tx, c, flow).find(ctx, node)
-	if err != nil {
-		return cn, err
+		seen = scope.seen[j]
+	} else {
+		if c, err = changeOpen(ctx, tx, id); err != nil {
+			return cn, err
+		}
+		flow = c.ResolveFlow(flow)
+		if flow != "" {
+			if _, ok := c.Flow(flow); !ok {
+				return cn, fmt.Errorf("flow %s: %w", flow, ErrNotFound)
+			}
+			if c.FlowStatusOf(flow) != domain.FlowOpen {
+				return cn, fmt.Errorf("flow %s is not open: %w", flow, ErrConflict)
+			}
+		}
+		i, err := findChangeImpact(c, node)
+		if err != nil {
+			return cn, err
+		}
+		cn = c.Nodes[i]
+		if seen, err = g.newFlowNodes(tx, c, flow).find(ctx, node); err != nil {
+			return cn, err
+		}
 	}
 	if seen.Review != domain.ReviewProposed {
 		return cn, fmt.Errorf("change impact %s is already %s: %w", node, seen.Review, ErrConflict)
@@ -342,7 +401,12 @@ func (g *Graph) reviewTx(ctx context.Context, tx Tx, stage *impactStage, id doma
 		}
 	}
 	if status == domain.ReviewAccepted && seen.Post != nil {
-		if err := g.checkAccepted(ctx, tx, id, flow, node); err != nil {
+		if scope != nil {
+			err = g.checkAcceptedIn(ctx, tx, scope, seen)
+		} else {
+			err = g.checkAccepted(ctx, tx, id, flow, node)
+		}
+		if err != nil {
 			return cn, err
 		}
 	}
@@ -350,10 +414,16 @@ func (g *Graph) reviewTx(ctx context.Context, tx Tx, stage *impactStage, id doma
 	if flow == "" {
 		cn.Review = status
 	}
-	cn.Reviews = append(cn.Reviews, r)
+	cn.Reviews = append(slices.Clip(cn.Reviews), r)
 	e := domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactReviewed, Flow: flow, Execution: execution, By: by, Review: &r, Causation: causation}
 	if stage != nil {
-		return cn, g.stage(ctx, tx, stage, e)
+		if err := g.stage(ctx, tx, stage, e); err != nil {
+			return cn, err
+		}
+		if scope != nil {
+			scope.verdict(cn)
+		}
+		return cn, nil
 	}
 	return cn, g.emit(ctx, tx, e)
 }
@@ -421,8 +491,12 @@ func (g *Graph) reviewBatch(ctx context.Context, id domain.ChangeID, b domain.Re
 		// the verdicts judge each other (the origins of an acceptance) and are one entry of the log (ADR 0144): staged,
 		// then flushed. On a flow they are not: what a flow sees is read from the log (flowNodes)
 		var stage *impactStage
+		var scope *reviewScope
 		if it.Flow == "" {
 			stage = &impactStage{}
+			if scope, err = g.newReviewScope(ctx, tx, id); err != nil {
+				return err
+			}
 		}
 		out = make([]domain.ChangeImpact, len(b.Verdicts))
 		pending := make([]int, len(b.Verdicts))
@@ -443,7 +517,7 @@ func (g *Graph) reviewBatch(ctx context.Context, id domain.ChangeID, b domain.Re
 			var lastErr error
 			for _, i := range pending {
 				v := b.Verdicts[i]
-				cn, err := g.reviewTx(ctx, tx, stage, id, b.Flow, b.Execution, v.Impact, v.Status, b.By, strings.TrimSpace(v.Comment), key, string(it.ID))
+				cn, err := g.reviewTx(ctx, tx, stage, scope, id, b.Flow, b.Execution, v.Impact, v.Status, b.By, strings.TrimSpace(v.Comment), key, string(it.ID))
 				switch {
 				case err == nil:
 					out[i] = cn

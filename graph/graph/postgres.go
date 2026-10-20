@@ -991,6 +991,24 @@ func (t *pgTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn d
 	return mapErr(err, "change impact "+cn.Key)
 }
 
+func (t *pgTx) ChangeImpactKeys(ctx context.Context, change domain.ChangeID, limit int) ([]domain.ChangeDocRef, error) {
+	q, args := dialectPG.sqlChangeImpactKeys(change, limit)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.ChangeDocRef
+	for rows.Next() {
+		var r domain.ChangeDocRef
+		if err := rows.Scan(&r.Key, &r.Type); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 func (t *pgTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {
 	q, args := dialectPG.sqlChangeImpacts(change)
 	rows, err := t.tx.Query(ctx, q, args...)

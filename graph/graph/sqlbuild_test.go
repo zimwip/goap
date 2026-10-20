@@ -179,7 +179,11 @@ func TestSQLBuildersGolden(t *testing.T) {
 	const pgLinkCols = `l.id::text, l.type, l.from_id::text, l.from_version, l.to_id::text, l.to_version, l.props, l.change_id::text`
 	const liteLinkCols = `l.id, l.type, l.from_id, l.from_version, l.to_id, l.to_version, l.props, l.change_id`
 	held := func(refs string) string {
-		return `WITH RECURSIVE r(id, version) AS (` + refs + `), c(nid, rv, sv) AS ( SELECT v.node_id, v.version, coalesce(v.links, v.version) FROM node_version v JOIN r ON r.id = v.node_id AND r.version = v.version UNION ALL SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_depth > 0 ), h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes FROM c JOIN link l ON l.from_id = c.nid AND l.from_version = c.sv) SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id FROM h WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
+		join := " JOIN "
+		if strings.Contains(refs, "json_each") {
+			join = " CROSS JOIN " // SQLite reads the chain first
+		}
+		return `WITH RECURSIVE r(id, version) AS (` + refs + `), c(nid, rv, sv) AS ( SELECT v.node_id, v.version, coalesce(v.links, v.version) FROM node_version v JOIN r ON r.id = v.node_id AND r.version = v.version UNION ALL SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_depth > 0 ), h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes FROM c` + join + `link l ON l.from_id = c.nid AND l.from_version = c.sv) SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id FROM h WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
 	}
 	pgHeld, liteHeld := held(`SELECT * FROM unnest($1::uuid[], $2::int[])`), held(`SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?)`)
 	pgLinkWhere := ` FROM (` + pgHeld + `) l JOIN unnest($1::uuid[], $2::int[]) AS t(id, version) ON t.id = l.to_id AND t.version = l.to_version WHERE ($3 = '' OR lower(l.type) LIKE $3 ESCAPE '\' OR EXISTS (SELECT 1 FROM jsonb_each(l.props) p WHERE jsonb_typeof(p.value) = 'string' AND lower(p.value #>> '{}') LIKE $3 ESCAPE '\'))`
@@ -303,6 +307,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlChangeImpacts("c1")
 	check("sqlite ChangeImpacts", lite, q, a, `SELECT `+goldSQLiteImpact+`
 			FROM change_impact WHERE change_id = ? ORDER BY seq`, []any{"c1"})
+	q, a = pg.sqlChangeImpactKeys("c1", 200)
+	check("pg ChangeImpactKeys", pg, q, a, `SELECT key, type FROM change_impact WHERE change_id = $1 ORDER BY seq LIMIT $2`, []any{"c1", 200})
+	q, a = lite.sqlChangeImpactKeys("c1", 200)
+	check("sqlite ChangeImpactKeys", lite, q, a, `SELECT key, type FROM change_impact WHERE change_id = ? ORDER BY seq LIMIT ?`, []any{"c1", 200})
 	q, a = pg.sqlNodeChangePage("n1", 0, 3)
 	check("pg NodeChangePage", pg, q, a, `SELECT change_id::text, min(seq) FROM change_impact WHERE node_id = $1 GROUP BY change_id ORDER BY 2 DESC LIMIT $2`, []any{"n1", 3})
 	q, a = lite.sqlNodeChangePage("n1", 9, 3)

@@ -372,3 +372,39 @@ func logOf(g *Graph, id domain.ChangeID) ([]domain.LogEntry, error) {
 	entries, _, err := g.ChangeLog(context.Background(), domain.LogFilter{Change: id})
 	return entries, err
 }
+
+// A key created by a change that committed but never merged is taken while that change is open: a creation of it is
+// refused at once. Once the change is abandoned its node never reached the graph, and a creation takes the node over.
+func TestCreationTakesAbandonedKey(t *testing.T) { forEachRepo(t, testCreationTakesAbandonedKey) }
+
+func testCreationTakesAbandonedKey(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	newChange := func(title string) domain.Change {
+		return must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: title, BaselineID: f.base.ID, OwnBranch: true}))
+	}
+	create := func(c domain.Change) (domain.ChangeImpact, error) {
+		cn, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-9", Type: "Requirement", Rationale: c.Title})
+		if err != nil {
+			return cn, err
+		}
+		must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, cn.ID, edit{Properties: map[string]any{"title": c.Title}}))
+		return g.accept(ctx, c.ID, cn.ID, "u", "ok")
+	}
+	t1 := newChange("test1")
+	must[domain.ChangeImpact](t)(create(t1))
+	must[domain.Baseline](t)(g.CommitChange(ctx, t1.ID, ""))
+	t2 := newChange("test2")
+	if _, err := create(t2); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "the key is taken by a node change "+string(t1.ID)) {
+		t.Fatalf("the key is test1's while it is open: %v", err)
+	}
+	abandoned := domain.ChangeAbandoned
+	must[domain.Change](t)(g.UpdateChange(ctx, t1.ID, ChangePatch{Status: &abandoned}))
+	cn := must[domain.ChangeImpact](t)(create(t2))
+	must[domain.Baseline](t)(g.Apply(ctx, t2.ID, ""))
+	n := must[domain.Node](t)(g.NodeByKey(ctx, "", "REQ-9"))
+	if n.Properties["title"] != "test2" || n.ChangeID != t2.ID || n.ID != nodeOf(cn) || n.Version != 2 || n.Reason != domain.ReasonCreate || len(n.Parents) != 0 {
+		t.Fatalf("test2 takes the node over with a creation: %+v", n)
+	}
+}

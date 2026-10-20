@@ -166,6 +166,9 @@ type Tx interface {
 	DeleteChangeImpact(ctx context.Context, change domain.ChangeID, id domain.ChangeImpactID) error
 	// ChangeImpacts lists the change impacts of a change, in creation order.
 	ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error)
+	// ChangeImpactKeys lists the key and type of the first limit change impacts of a change, in creation order: what
+	// its index document carries (ADR 0095), read at every write of an impact without decoding the others.
+	ChangeImpactKeys(ctx context.Context, change domain.ChangeID, limit int) ([]domain.ChangeDocRef, error)
 	// NodeChangePage lists the last limit changes holding a change impact on a node whose cursor is below before (0:
 	// any), newest first; the cursor of a change is the order of its first impact on the node (ADR 0140: a page of a
 	// history, whatever its length).
