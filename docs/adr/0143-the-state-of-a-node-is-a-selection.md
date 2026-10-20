@@ -56,13 +56,19 @@ configuration, a document set, whose version links to the exact versions of what
    lead from one to the other and compare the nodes they touched, selected at both ends: cheap between close baselines,
    dearer as they move apart, refused past `MaxDiffChanges` (1000) with a request to compare closer baselines (done
    with the addendum of ADR 0137).
-6. **A tag names a node version.** `domain.Tag` becomes `{name, node, version, by, at}`: it labels one exact version,
-   typically of a node whose links name what it is made of (a release, a configuration). The state it stands for is
-   that version and the closure of its outgoing links, each to an exact version (ADR 0079: a link resolves to a
-   version at landing), read through the link sets; `compose: true` links bound the closure when a type declares them.
-   `Graph.TagChange` and the change tags go: a change keeps its title and its baseline its name, and a whole namespace
-   at a point is its (branch, order), which costs nothing to keep. RPCs, `goap-change`, the web (the tags of the
-   Baseline explorer) move to `TagVersion` / `Tags(node)` / `TaggedState(tag)`.
+6. **A tag names one node version.** `domain.Tag` becomes `{name, node, version, by, at}`: it references one exact
+   version, nothing more. What that version stands for is read from it: its outgoing links name exact versions
+   (ADR 0079: a link resolves to a version at landing), so a reader follows them as far as it needs; the tag stores no
+   closure. `Graph.TagChange` and the change tags go, and nothing names a whole namespace at a point: a change keeps its
+   title, its baseline its name, and the point is its (branch, order).
+7. **A smart tag is a shared selection of node versions.** A smart tag `{name, description, owner, versions [(node,
+   version)], by, at}` selects several exact versions, of any nodes and namespaces, to give people a context (the
+   versions a review, a release or an investigation is about). Its owner shares it with other users (read or edit, the
+   way other shared things are granted); the selection is data of its own, never a state of the graph, and adding or
+   removing a version is an edit of the smart tag, not a change of the nodes. Reading it is the versions it lists and,
+   from each, its links.
+8. RPCs, `goap-change` and the web (the tags of the Baseline explorer) move to `TagVersion` / `Tags(node)` and the
+   smart tag calls (create, edit the selection, share, list the ones shared with the caller).
 
 ## Consequences
 
@@ -73,12 +79,11 @@ configuration, a document set, whose version links to the exact versions of what
 - `MaxDiffChanges` makes a diff of distant baselines a refusal rather than a long read; the change-stack and the
   explorer say so.
 - Tags no longer label a namespace: a release that must be reproducible is a node whose version links to what it
-  releases. The demo data and the docs that tag changes move to such a node.
+  releases, or a smart tag selecting the versions. The demo data and the docs that tag changes move to these.
 - The database starts from zero (no migration of `baseline_entry` or of the stored tags); the suites drop their runs
   with `GOAP_MATERIALIZE_EVERY`.
 
-## Open questions
+## Still to settle
 
-- Whether a name on a (branch, order) of a whole namespace is still wanted next to the version tags (for example
-  "state of main when release R was cut"); if so it is a label of a baseline header, with no state of its own.
-- Whether the closure of a tagged version follows every link or only the composing ones by default.
+- Where smart tags are kept (graph data of the `organisation` namespace, changed through a change and versioned, or a
+  store of their own like the preferences) and how sharing is granted.
