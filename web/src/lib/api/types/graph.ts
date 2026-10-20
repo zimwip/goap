@@ -1,7 +1,7 @@
 // Graph types (proto3 JSON).
 
 import type { Int64, Struct } from './common';
-import type { ChangeStackJson, StackChangeJson, VersionStepJson, BaselineStepJson } from '../../../gen/goap/graph/v1/graph_pb';
+import type { ChangeStackJson, StackChangeJson, VersionStepJson, BaselineStepJson, GraphStatsJson, NamespaceSummaryJson, DistributionJson, NodeTypeStatsJson, LinkTypeStatsJson } from '../../../gen/goap/graph/v1/graph_pb';
 
 // --- graph ------------------------------------------------------------------
 
@@ -637,3 +637,14 @@ export type StackChange = StackChangeJson;
 export type VersionStep = VersionStepJson;
 /** A baseline of the lineage of a baseline. */
 export type BaselineStep = BaselineStepJson;
+
+// --- statistics of the graph --------------------------------------------------
+
+/** What one namespace holds (the overview of the graph statistics). */
+export type NamespaceSummary = NamespaceSummaryJson;
+/** The statistics of a namespace: the store's rows and the shape of the state at the head of a branch. */
+export type GraphStats = GraphStatsJson;
+/** Min, max, mean, median, 90th percentile and sum of a list of counts. */
+export type Distribution = DistributionJson;
+export type NodeTypeStats = NodeTypeStatsJson;
+export type LinkTypeStats = LinkTypeStatsJson;

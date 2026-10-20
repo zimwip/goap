@@ -1241,6 +1241,19 @@ func (t *pgTx) BaselineCounts(ctx context.Context, namespace string) (map[string
 	return t.typeCounts(ctx, q, args)
 }
 
+func (t *pgTx) StoreCounts(ctx context.Context, namespace string) (map[string]map[string]int, error) {
+	namespace = domain.NamespaceOf(namespace)
+	out := map[string]map[string]int{}
+	for measure, q := range dialectPG.sqlStoreCounts(namespace) {
+		counts, err := t.typeCounts(ctx, q, []any{namespace})
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", measure, err)
+		}
+		out[measure] = counts
+	}
+	return out, nil
+}
+
 func (t *pgTx) LastCommit(ctx context.Context, branch string) (int64, error) {
 	q, args := dialectPG.sqlLastCommit(branch)
 	var seq int64

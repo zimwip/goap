@@ -1178,6 +1178,19 @@ func (t *sqliteTx) BaselineCounts(ctx context.Context, namespace string) (map[st
 	return t.typeCounts(ctx, q, args)
 }
 
+func (t *sqliteTx) StoreCounts(ctx context.Context, namespace string) (map[string]map[string]int, error) {
+	namespace = domain.NamespaceOf(namespace)
+	out := map[string]map[string]int{}
+	for measure, q := range dialectSQLite.sqlStoreCounts(namespace) {
+		counts, err := t.typeCounts(ctx, q, []any{namespace})
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", measure, err)
+		}
+		out[measure] = counts
+	}
+	return out, nil
+}
+
 func (t *sqliteTx) LastCommit(ctx context.Context, branch string) (int64, error) {
 	q, args := dialectSQLite.sqlLastCommit(branch)
 	var seq int64

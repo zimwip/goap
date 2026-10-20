@@ -104,6 +104,15 @@ func TestSmoke(t *testing.T) {
 	if !found["organisation"] || !found["platform"] {
 		t.Fatalf("namespaces = %v", ns.Msg.Namespaces)
 	}
+	// the statistics of the graph: every namespace in the overview, the shape of the organisation's head
+	ov, err := graph.GetGraphOverview(context.Background(), connect.NewRequest(&graphv1.GetGraphOverviewRequest{}))
+	if err != nil || len(ov.Msg.Namespaces) != len(ns.Msg.Namespaces) {
+		t.Fatalf("GetGraphOverview: %v, %v", ov, err)
+	}
+	st, err := graph.GetGraphStats(context.Background(), connect.NewRequest(&graphv1.GetGraphStatsRequest{Namespace: "organisation"}))
+	if err != nil || st.Msg.Stats.State.Nodes == 0 || st.Msg.Stats.BaselineId == "" {
+		t.Fatalf("GetGraphStats: %v, %v", st, err)
+	}
 }
 
 // Close stops the background loops: a second app on the same process starts and stops cleanly, and a context ended

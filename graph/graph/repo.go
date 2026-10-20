@@ -107,6 +107,9 @@ type Tx interface {
 	BaselineHeadersOf(ctx context.Context, namespace string, ids []domain.BaselineID) ([]domain.Baseline, error)
 	ChangeBaselineHeaders(ctx context.Context, namespace string, changes []domain.ChangeID) ([]domain.Baseline, error)
 	BaselineCounts(ctx context.Context, namespace string) (map[string]int, error)
+	// StoreCounts counts the rows of a namespace for the statistics of the graph: per measure (StoreMeasures), the
+	// count of each key.
+	StoreCounts(ctx context.Context, namespace string) (map[string]map[string]int, error)
 	// VersionJoins lists the branches the versions of a node joined, with the changes whose merge made them join.
 	VersionJoins(ctx context.Context, id domain.NodeID) ([]domain.VersionJoin, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)

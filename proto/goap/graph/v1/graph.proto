@@ -28,6 +28,11 @@ service GraphService {
   rpc GetNodeNeighbourhood(GetNodeNeighbourhoodRequest) returns (GetNodeNeighbourhoodResponse);
   // The namespaces holding at least one node.
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
+  // The statistics of the graph: what every namespace holds (the overview of the graph statistics view).
+  rpc GetGraphOverview(GetGraphOverviewRequest) returns (GetGraphOverviewResponse);
+  // The statistics of a namespace: what the store holds for it and the shape of the state at the head of a lasting branch
+  // (nodes, links, degrees, components, per node type and link type).
+  rpc GetGraphStats(GetGraphStatsRequest) returns (GetGraphStatsResponse);
   // The structures of the graph (ADR 0054): the organisation and the projects, with the node types belonging to each.
   rpc GetStructures(GetStructuresRequest) returns (GetStructuresResponse);
   // The item types the graph accepts on a change, described (ADR 0119).
@@ -757,6 +762,159 @@ message ListNamespacesRequest {}
 
 message ListNamespacesResponse {
   repeated string namespaces = 1;
+}
+
+message GetGraphOverviewRequest {}
+
+message GetGraphOverviewResponse {
+  repeated NamespaceSummary namespaces = 1;
+}
+
+// What one namespace holds.
+message NamespaceSummary {
+  string namespace = 1;
+  int32 nodes = 2;
+  int32 versions = 3;
+  // the link rows written (a version holding the set of another writes none, ADR 0141)
+  int32 link_rows = 4;
+  int32 changes = 5;
+  int32 baselines = 6;
+  int32 branches = 7;
+  // the node types holding nodes
+  int32 types = 8;
+  // the entries of the logs of its changes
+  int32 log_entries = 9;
+}
+
+message GetGraphStatsRequest {
+  // empty: the default namespace
+  string namespace = 1;
+  // a lasting branch; empty: main
+  string branch = 2;
+}
+
+message GetGraphStatsResponse {
+  GraphStats stats = 1;
+}
+
+message GraphStats {
+  string namespace = 1;
+  string branch = 2;
+  // the head the state was read at; empty: nothing committed yet
+  string baseline_id = 3;
+  google.protobuf.Timestamp baseline_at = 4;
+  BranchStats branches = 5;
+  // the rows of the namespace in the store, one entry per measure (nodesByType, versionsByType, versionsByReason,
+  // versionsPerNode, linkRowsByType, linkDrops, linkSetsByMode, joins, baselinesByKind, changesByStatus, tags, logByType)
+  repeated StoreMeasure store = 6;
+  StateStats state = 7;
+}
+
+message BranchStats {
+  int32 total = 1;
+  int32 lasting = 2;
+  int32 ephemeral = 3;
+  map<string, int32> by_status = 4;
+  // the lasting branches (main first): the ones a state is read at
+  repeated string names = 5;
+}
+
+// The counts of one measure of the store, by key.
+message StoreMeasure {
+  string name = 1;
+  map<string, int32> counts = 2;
+}
+
+// The shape of the state at the head of a branch.
+message StateStats {
+  int32 nodes = 1;
+  // nodes whose version at the head deletes them, left out of the rest
+  int32 deleted = 2;
+  // links between two nodes of the state; suspect: among them, the ones reaching a version of their target the state no
+  // longer holds; external: reaching a node outside the state, counted nowhere else
+  int32 links = 3;
+  int32 suspect = 4;
+  int32 external = 5;
+  int32 isolated = 6;
+  int32 self_links = 7;
+  // pairs of nodes linked both ways
+  int32 reciprocal = 8;
+  // links / (nodes × (nodes − 1))
+  double density = 9;
+  // weakly connected components: how many, and the sizes of the largest (at most 20)
+  int32 component_count = 10;
+  repeated int32 components = 11;
+  Distribution out = 12;
+  Distribution in = 13;
+  Distribution degree = 14;
+  // nodes by total degree
+  repeated HistogramBucket histogram = 15;
+  // the version numbers the state holds
+  Distribution versions = 16;
+  // the number of properties set on a node
+  Distribution properties = 17;
+  repeated NodeTypeStats types = 18;
+  repeated LinkTypeStats link_types = 19;
+  // the nodes with the most links (at most 10)
+  repeated HubNode hubs = 20;
+  // distinct owner units and projects of the nodes
+  int32 owners = 21;
+  int32 projects = 22;
+}
+
+message Distribution {
+  int32 min = 1;
+  int32 max = 2;
+  double mean = 3;
+  double median = 4;
+  int32 p90 = 5;
+  int32 sum = 6;
+}
+
+message HistogramBucket {
+  string label = 1;
+  int32 from = 2;
+  // 0: no upper bound
+  int32 to = 3;
+  int32 count = 4;
+}
+
+message NodeTypeStats {
+  string type = 1;
+  int32 nodes = 2;
+  map<string, int32> states = 3;
+  Distribution out = 4;
+  Distribution in = 5;
+  Distribution versions = 6;
+  Distribution properties = 7;
+  int32 isolated = 8;
+}
+
+message LinkTypeStats {
+  string type = 1;
+  int32 links = 2;
+  int32 suspect = 3;
+  // distinct nodes the links leave and reach
+  int32 sources = 4;
+  int32 targets = 5;
+  // the links by the types of their ends, the most frequent first
+  repeated TypePair pairs = 6;
+  // the most links of the type one node holds
+  int32 max_out = 7;
+}
+
+message TypePair {
+  string from = 1;
+  string to = 2;
+  int32 count = 3;
+}
+
+message HubNode {
+  string id = 1;
+  string key = 2;
+  string type = 3;
+  int32 out = 4;
+  int32 in = 5;
 }
 
 message GetStructuresRequest {}

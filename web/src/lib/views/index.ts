@@ -20,6 +20,7 @@ import ChangesExplorer from './nav/ChangesExplorer.svelte';
 import AccessExplorer from './nav/AccessExplorer.svelte';
 import PeopleOrgExplorer from './nav/PeopleOrgExplorer.svelte';
 import AdaptersExplorer from './nav/AdaptersExplorer.svelte';
+import StatsExplorer from './nav/StatsExplorer.svelte';
 import ConnectorTab from './editors/ConnectorTab.svelte';
 import OrganisationTab from './editors/OrganisationTab.svelte';
 import ProjectTab from './editors/ProjectTab.svelte';
@@ -56,6 +57,7 @@ import PoliciesTab from './editors/PoliciesTab.svelte';
 import ImportTab from './editors/ImportTab.svelte';
 import SourceImportTab from './editors/SourceImportTab.svelte';
 import JobsTab from './editors/JobsTab.svelte';
+import GraphStatsTab from './editors/GraphStatsTab.svelte';
 import BaselineTab from './editors/BaselineTab.svelte';
 import { importKind, IMPORT_KINDS } from './editors/importKinds';
 
@@ -92,6 +94,7 @@ registerView({
     return n || undefined;
   },
 });
+registerView({ id: 'stats', zone: 'left', title: 'Graph statistics', icon: 'chart', component: StatsExplorer, order: 3.5 });
 registerView({ id: 'peopleOrg', zone: 'left', title: 'People & Organisation', icon: 'user', component: PeopleOrgExplorer, order: 4.5 });
 registerView({ id: 'adapters', zone: 'left', title: 'Adapters', icon: 'zap', component: AdaptersExplorer, order: 4.6 });
 registerView({ id: 'access', zone: 'left', title: 'Access', icon: 'shield', component: AccessExplorer, order: 5 });
@@ -647,6 +650,16 @@ registerView({
 });
 
 // the long runs of the person (ADR 0149), live from the job stream
+registerView({
+  id: 'graphStats',
+  zone: 'editor',
+  title: 'Statistics',
+  icon: 'chart',
+  component: GraphStatsTab,
+  key: (p) => p.namespace ?? '',
+  tabTitle: (t) => `Stats ${t.params.namespace ?? ''}`,
+  tooltip: (t) => `Statistics of the graph of ${t.params.namespace ?? ''}`,
+});
 registerView({
   id: 'jobs',
   zone: 'editor',

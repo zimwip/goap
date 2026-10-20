@@ -62,6 +62,12 @@ const (
 	// GraphServiceListNamespacesProcedure is the fully-qualified name of the GraphService's
 	// ListNamespaces RPC.
 	GraphServiceListNamespacesProcedure = "/goap.graph.v1.GraphService/ListNamespaces"
+	// GraphServiceGetGraphOverviewProcedure is the fully-qualified name of the GraphService's
+	// GetGraphOverview RPC.
+	GraphServiceGetGraphOverviewProcedure = "/goap.graph.v1.GraphService/GetGraphOverview"
+	// GraphServiceGetGraphStatsProcedure is the fully-qualified name of the GraphService's
+	// GetGraphStats RPC.
+	GraphServiceGetGraphStatsProcedure = "/goap.graph.v1.GraphService/GetGraphStats"
 	// GraphServiceGetStructuresProcedure is the fully-qualified name of the GraphService's
 	// GetStructures RPC.
 	GraphServiceGetStructuresProcedure = "/goap.graph.v1.GraphService/GetStructures"
@@ -360,6 +366,11 @@ type GraphServiceClient interface {
 	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
 	// The namespaces holding at least one node.
 	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
+	// The statistics of the graph: what every namespace holds (the overview of the graph statistics view).
+	GetGraphOverview(context.Context, *connect.Request[v1.GetGraphOverviewRequest]) (*connect.Response[v1.GetGraphOverviewResponse], error)
+	// The statistics of a namespace: what the store holds for it and the shape of the state at the head of a lasting branch
+	// (nodes, links, degrees, components, per node type and link type).
+	GetGraphStats(context.Context, *connect.Request[v1.GetGraphStatsRequest]) (*connect.Response[v1.GetGraphStatsResponse], error)
 	// The structures of the graph (ADR 0054): the organisation and the projects, with the node types belonging to each.
 	GetStructures(context.Context, *connect.Request[v1.GetStructuresRequest]) (*connect.Response[v1.GetStructuresResponse], error)
 	// The item types the graph accepts on a change, described (ADR 0119).
@@ -622,6 +633,18 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceListNamespacesProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ListNamespaces")),
+			connect.WithClientOptions(opts...),
+		),
+		getGraphOverview: connect.NewClient[v1.GetGraphOverviewRequest, v1.GetGraphOverviewResponse](
+			httpClient,
+			baseURL+GraphServiceGetGraphOverviewProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetGraphOverview")),
+			connect.WithClientOptions(opts...),
+		),
+		getGraphStats: connect.NewClient[v1.GetGraphStatsRequest, v1.GetGraphStatsResponse](
+			httpClient,
+			baseURL+GraphServiceGetGraphStatsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetGraphStats")),
 			connect.WithClientOptions(opts...),
 		),
 		getStructures: connect.NewClient[v1.GetStructuresRequest, v1.GetStructuresResponse](
@@ -1216,6 +1239,8 @@ type graphServiceClient struct {
 	listBaselineLinks      *connect.Client[v1.ListBaselineLinksRequest, v1.ListBaselineLinksResponse]
 	getNodeNeighbourhood   *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
 	listNamespaces         *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
+	getGraphOverview       *connect.Client[v1.GetGraphOverviewRequest, v1.GetGraphOverviewResponse]
+	getGraphStats          *connect.Client[v1.GetGraphStatsRequest, v1.GetGraphStatsResponse]
 	getStructures          *connect.Client[v1.GetStructuresRequest, v1.GetStructuresResponse]
 	listItemTypes          *connect.Client[v1.ListItemTypesRequest, v1.ListItemTypesResponse]
 	isAdminOnlyType        *connect.Client[v1.IsAdminOnlyTypeRequest, v1.IsAdminOnlyTypeResponse]
@@ -1367,6 +1392,16 @@ func (c *graphServiceClient) GetNodeNeighbourhood(ctx context.Context, req *conn
 // ListNamespaces calls goap.graph.v1.GraphService.ListNamespaces.
 func (c *graphServiceClient) ListNamespaces(ctx context.Context, req *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error) {
 	return c.listNamespaces.CallUnary(ctx, req)
+}
+
+// GetGraphOverview calls goap.graph.v1.GraphService.GetGraphOverview.
+func (c *graphServiceClient) GetGraphOverview(ctx context.Context, req *connect.Request[v1.GetGraphOverviewRequest]) (*connect.Response[v1.GetGraphOverviewResponse], error) {
+	return c.getGraphOverview.CallUnary(ctx, req)
+}
+
+// GetGraphStats calls goap.graph.v1.GraphService.GetGraphStats.
+func (c *graphServiceClient) GetGraphStats(ctx context.Context, req *connect.Request[v1.GetGraphStatsRequest]) (*connect.Response[v1.GetGraphStatsResponse], error) {
+	return c.getGraphStats.CallUnary(ctx, req)
 }
 
 // GetStructures calls goap.graph.v1.GraphService.GetStructures.
@@ -1869,6 +1904,11 @@ type GraphServiceHandler interface {
 	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
 	// The namespaces holding at least one node.
 	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
+	// The statistics of the graph: what every namespace holds (the overview of the graph statistics view).
+	GetGraphOverview(context.Context, *connect.Request[v1.GetGraphOverviewRequest]) (*connect.Response[v1.GetGraphOverviewResponse], error)
+	// The statistics of a namespace: what the store holds for it and the shape of the state at the head of a lasting branch
+	// (nodes, links, degrees, components, per node type and link type).
+	GetGraphStats(context.Context, *connect.Request[v1.GetGraphStatsRequest]) (*connect.Response[v1.GetGraphStatsResponse], error)
 	// The structures of the graph (ADR 0054): the organisation and the projects, with the node types belonging to each.
 	GetStructures(context.Context, *connect.Request[v1.GetStructuresRequest]) (*connect.Response[v1.GetStructuresResponse], error)
 	// The item types the graph accepts on a change, described (ADR 0119).
@@ -2127,6 +2167,18 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceListNamespacesProcedure,
 		svc.ListNamespaces,
 		connect.WithSchema(graphServiceMethods.ByName("ListNamespaces")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceGetGraphOverviewHandler := connect.NewUnaryHandler(
+		GraphServiceGetGraphOverviewProcedure,
+		svc.GetGraphOverview,
+		connect.WithSchema(graphServiceMethods.ByName("GetGraphOverview")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceGetGraphStatsHandler := connect.NewUnaryHandler(
+		GraphServiceGetGraphStatsProcedure,
+		svc.GetGraphStats,
+		connect.WithSchema(graphServiceMethods.ByName("GetGraphStats")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceGetStructuresHandler := connect.NewUnaryHandler(
@@ -2729,6 +2781,10 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetNodeNeighbourhoodHandler.ServeHTTP(w, r)
 		case GraphServiceListNamespacesProcedure:
 			graphServiceListNamespacesHandler.ServeHTTP(w, r)
+		case GraphServiceGetGraphOverviewProcedure:
+			graphServiceGetGraphOverviewHandler.ServeHTTP(w, r)
+		case GraphServiceGetGraphStatsProcedure:
+			graphServiceGetGraphStatsHandler.ServeHTTP(w, r)
 		case GraphServiceGetStructuresProcedure:
 			graphServiceGetStructuresHandler.ServeHTTP(w, r)
 		case GraphServiceListItemTypesProcedure:
@@ -2972,6 +3028,14 @@ func (UnimplementedGraphServiceHandler) GetNodeNeighbourhood(context.Context, *c
 
 func (UnimplementedGraphServiceHandler) ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListNamespaces is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetGraphOverview(context.Context, *connect.Request[v1.GetGraphOverviewRequest]) (*connect.Response[v1.GetGraphOverviewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetGraphOverview is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetGraphStats(context.Context, *connect.Request[v1.GetGraphStatsRequest]) (*connect.Response[v1.GetGraphStatsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetGraphStats is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) GetStructures(context.Context, *connect.Request[v1.GetStructuresRequest]) (*connect.Response[v1.GetStructuresResponse], error) {

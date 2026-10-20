@@ -1,7 +1,7 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
-import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeStack, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ItemTypeInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, PendingSettings, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SettingEdit, SharedNode, StackChange, Tag, TypeCount } from './types/graph';
+import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeStack, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, GraphStats, NamespaceSummary, ItemTypeInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, PendingSettings, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SettingEdit, SharedNode, StackChange, Tag, TypeCount } from './types/graph';
 
 import type { LoadDemoDataResponseJson } from '../../gen/goap/graph/v1/graph_pb';
 import type { Job } from './jobs';
@@ -104,6 +104,11 @@ export const graph = {
   /** The item types a change may hold, described (ADR 0119). */
   listItemTypes: (signal?: AbortSignal) => rpc<Empty, { types?: ItemTypeInfo[] }>(GRAPH, 'ListItemTypes', {}, signal),
   /** The namespaces holding at least one node. */
+  /** What every namespace holds: nodes, versions, link rows, changes, baselines, branches. */
+  graphOverview: (signal?: AbortSignal) => rpc<Empty, { namespaces?: NamespaceSummary[] }>(GRAPH, 'GetGraphOverview', {}, signal),
+  /** The statistics of a namespace at the head of a lasting branch (default main). */
+  graphStats: (namespace: string, branch?: string, signal?: AbortSignal) =>
+    rpc<{ namespace: string; branch?: string }, { stats?: GraphStats }>(GRAPH, 'GetGraphStats', { namespace, branch }, signal),
   listNamespaces: (signal?: AbortSignal) => rpc<Empty, { namespaces?: string[] }>(GRAPH, 'ListNamespaces', {}, signal),
   /** The changes; `headerOnly`: their heads only, without impacts nor items (what a list shows, ADR 0140). */
   /** The changes, every one; with a limit, a page of them newest first, after the cursor (nextCursor of the page

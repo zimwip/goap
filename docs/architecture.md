@@ -74,6 +74,14 @@ A baseline can be browsed without loading it whole (`ListNamespaces`, `ListBasel
 and a page of the nodes of one type, text-filtered on the server; `GetNodeNeighbourhood`: a node, its direct
 neighbours in both directions and the suspect links among them, `graph/graph/browse.go`). The IDE's Baseline explorer
 and tab navigate namespace → baseline → node type → paged nodes, and show the neighbour graph of the selected node.
+The statistics of the graph are read on demand, nothing stored (`graph/graph/stats.go`): `GetGraphOverview` sums what
+each namespace holds, `GetGraphStats` gives for one namespace the rows of the store counted by the database
+(`Tx.StoreCounts`, one statement per measure in `sqlbuild.go`: nodes and versions per type, versions per reason and per
+node, link rows and drops, how versions hold their link sets, joins, baselines per kind, changes per status, tags, log
+entries per type) and the shape of the state at the head of a lasting branch, computed from that state (links within
+it, suspect and leaving ones, degree distributions, histogram, per node type and link type with the type pairs, the
+most connected nodes, weakly connected components, density, reciprocal pairs). The IDE's *Graph statistics* tool (left
+bar) lists the namespaces and opens a statistics tab per namespace.
 A request started without a baseline or a change (the assistant, a trigger) opens its change on the latest baseline
 of the namespace its methodology acts on, known once the intent is identified.
 The organisation is a hierarchy of units in its own namespace (`organisation`); nodes reference their owner
@@ -280,6 +288,7 @@ makes for the person.
 | Merge a committed change | A `committed` change (its merge into the branch it was forked from, a release branch for instance, waits until someone merges it) shows each node changed on both sides: keep the target, or merge taking a side per conflicting property | `PlanMerge`, `MergeChange` (`IntegrateChange`) |
 | Merge in a run | The `graph.apply` action commits and merges; when the three-way merge cannot settle a property (both branches changed it apart) the run waits on a `merge` human task listing the value of each side and proposing the change's; *Merge and go on* completes the merge and resumes the run. Before that, when the rebase of the change onto its target (or parent) left conflicts, the apply stops and the run waits on a `rebase` task listing them per impact; once settled and reviewed again in the change tab, *Settled, continue* applies again (ADR 0101) | `ResolveMerge`, `ResolveRebase` (engine), `Engine.ResolveMerge`, `Engine.ResolveRebase` |
 | Branches | Baseline explorer → Branches: open one from a baseline, merge it into another (same resolver), abandon or reopen it | `ListBranches`, `CreateBranch`, `MergeBranch`, `SetBranchStatus` |
+| Graph statistics | *Graph statistics* tool (left bar): the namespaces with their totals; a namespace opens its tab (branch selector, key figures, links per node, node and link types, most connected nodes, connected parts, the store) | `GetGraphOverview`, `GetGraphStats` |
 | Compare baselines | Baseline tab → *Compare*: the nodes added, removed or changed from another baseline (its parent by default), with the properties that differ | `DiffBaselines` |
 | Browse the changes | Changes explorer, grouped by status: the open changes listed whole; the applied and abandoned ones by pages of 50, newest first, of the active project (every project with the toggle or a search, the search matched by the server), *Load more* under each group | `ListChanges` (`limit`, `cursor` → `next_cursor`, `total`; `project`, `query`) |
 | A node's history | Node editor → History: the changes that acted on it, its versions and the branches each joined | `ListNodeChanges`, `ListNodeVersions` |

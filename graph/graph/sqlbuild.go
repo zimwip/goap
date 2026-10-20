@@ -457,6 +457,29 @@ func (d dialect) sqlBaselineCounts(namespace string) (string, []any) {
 	return `SELECT branch, count(*) FROM baseline WHERE namespace = ` + d.ph(1) + ` GROUP BY branch`, []any{domain.NamespaceOf(namespace)}
 }
 
+// sqlStoreCounts gives the statement of each measure of the store (StoreMeasures) for a namespace: rows of a key and a
+// count, the same text for both dialects but the placeholder.
+func (d dialect) sqlStoreCounts(namespace string) map[string]string {
+	ns := d.ph(1)
+	versions := ` FROM node_version v JOIN node n ON n.id = v.node_id WHERE n.namespace = ` + ns
+	links := ` FROM link l JOIN node n ON n.id = l.from_id WHERE n.namespace = ` + ns
+	return map[string]string{
+		StatNodesByType:      `SELECT type, count(*) FROM node WHERE namespace = ` + ns + ` GROUP BY type`,
+		StatVersionsByType:   `SELECT n.type, count(*)` + versions + ` GROUP BY n.type`,
+		StatVersionsByReason: `SELECT v.reason, count(*)` + versions + ` GROUP BY v.reason`,
+		StatVersionsPerNode:  `SELECT CAST(latest AS text), count(*) FROM node WHERE namespace = ` + ns + ` GROUP BY latest`,
+		StatLinkRowsByType:   `SELECT l.type, count(*)` + links + ` AND l.removes IS NULL GROUP BY l.type`,
+		StatLinkDrops:        `SELECT l.type, count(*)` + links + ` AND l.removes IS NOT NULL GROUP BY l.type`,
+		StatLinkSetsByMode: `SELECT CASE WHEN v.links IS NOT NULL THEN '` + LinkSetShared + `' WHEN v.links_base IS NOT NULL THEN '` + LinkSetDelta +
+			`' ELSE '` + LinkSetOwn + `' END AS mode, count(*)` + versions + ` GROUP BY mode`,
+		StatJoins:           `SELECT '', count(*) FROM node_branch j JOIN node n ON n.id = j.node_id WHERE n.namespace = ` + ns,
+		StatBaselinesByKind: `SELECT kind, count(*) FROM baseline WHERE namespace = ` + ns + ` GROUP BY kind`,
+		StatChangesByStatus: `SELECT status, count(*) FROM change WHERE namespace = ` + ns + ` GROUP BY status`,
+		StatTags:            `SELECT name, count(*) FROM tag WHERE namespace = ` + ns + ` GROUP BY name`,
+		StatLogByType:       `SELECT l.type, count(*) FROM change_log l JOIN change c ON c.id = l.change_id WHERE c.namespace = ` + ns + ` GROUP BY l.type`,
+	}
+}
+
 // uuidList tests col against a list of uuids given as the n-th argument: an array for PostgreSQL, a JSON list for SQLite.
 func (d dialect) uuidList(col string, n int, list []string) (string, any) {
 	if d.pg {

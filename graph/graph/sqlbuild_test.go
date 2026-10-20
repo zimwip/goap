@@ -450,3 +450,19 @@ func TestDialectPlaceholders(t *testing.T) {
 		t.Errorf("sqlite ph = %q", got)
 	}
 }
+
+// The statements of the store's statistics (graph statistics view): one per measure, the same text for both dialects but
+// the placeholder.
+func TestSQLStoreCounts(t *testing.T) {
+	pg, lite := dialectPG.sqlStoreCounts("ns"), dialectSQLite.sqlStoreCounts("ns")
+	if len(pg) != len(StoreMeasures) || len(lite) != len(StoreMeasures) {
+		t.Fatalf("%d / %d statements for %d measures", len(pg), len(lite), len(StoreMeasures))
+	}
+	for _, m := range StoreMeasures {
+		if pg[m] == "" || qmarkNn.ReplaceAllString(lite[m], "$$1") != pg[m] {
+			t.Errorf("%s:\n pg     %s\n sqlite %s", m, pg[m], lite[m])
+		}
+	}
+	checkSQL(t, "pg linkSetsByMode", dialectPG, pg[StatLinkSetsByMode], `SELECT CASE WHEN v.links IS NOT NULL THEN 'shared' WHEN v.links_base IS NOT NULL THEN 'delta' ELSE 'own' END AS mode, count(*) FROM node_version v JOIN node n ON n.id = v.node_id WHERE n.namespace = $1 GROUP BY mode`)
+	checkSQL(t, "sqlite logByType", dialectSQLite, lite[StatLogByType], `SELECT l.type, count(*) FROM change_log l JOIN change c ON c.id = l.change_id WHERE c.namespace = ? GROUP BY l.type`)
+}

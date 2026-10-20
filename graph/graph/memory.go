@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1091,6 +1092,74 @@ func (t *memTx) BaselineCounts(ctx context.Context, namespace string) (map[strin
 		out[domain.BranchOf(b.Branch)]++
 	}
 	return out, err
+}
+
+func (t *memTx) StoreCounts(_ context.Context, namespace string) (map[string]map[string]int, error) {
+	namespace = domain.NamespaceOf(namespace)
+	out := map[string]map[string]int{}
+	for _, m := range StoreMeasures {
+		out[m] = map[string]int{}
+	}
+	in := map[domain.NodeID]bool{}
+	for id, vs := range t.st.versions {
+		if len(vs) == 0 || vs[0].Namespace != namespace {
+			continue
+		}
+		in[id] = true
+		out[StatNodesByType][vs[0].Type]++
+		out[StatVersionsPerNode][strconv.Itoa(len(vs))]++
+		for _, v := range vs {
+			out[StatVersionsByType][v.Type]++
+			out[StatVersionsByReason][v.Reason]++
+			set := t.setOf(v.Ref())
+			switch {
+			case set.Of != v.Version:
+				out[StatLinkSetsByMode][LinkSetShared]++
+			case set.Base != 0:
+				out[StatLinkSetsByMode][LinkSetDelta]++
+			default:
+				out[StatLinkSetsByMode][LinkSetOwn]++
+			}
+		}
+	}
+	types := map[domain.LinkID]string{}
+	for _, l := range t.st.links {
+		types[l.ID] = l.Type
+		if in[l.From.ID] {
+			out[StatLinkRowsByType][l.Type]++
+		}
+	}
+	for _, d := range t.st.drops {
+		if in[d.from.ID] {
+			out[StatLinkDrops][types[d.removes]]++
+		}
+	}
+	for k := range t.st.joins {
+		if in[k.ref.ID] {
+			out[StatJoins][""]++
+		}
+	}
+	for _, b := range t.st.baselines {
+		if b.Namespace == namespace {
+			out[StatBaselinesByKind][b.Kind]++
+		}
+	}
+	for _, c := range t.st.changes {
+		if domain.NamespaceOf(c.Namespace) == namespace {
+			out[StatChangesByStatus][string(c.Status)]++
+		}
+	}
+	for _, tg := range t.st.tags {
+		if tg.Namespace == namespace {
+			out[StatTags][tg.Name]++
+		}
+	}
+	for _, e := range t.st.log {
+		if c, ok := t.st.changes[e.Change]; ok && domain.NamespaceOf(c.Namespace) == namespace {
+			out[StatLogByType][e.Type]++
+		}
+	}
+	return out, nil
 }
 
 func (t *memTx) LastCommit(_ context.Context, branch string) (int64, error) {
