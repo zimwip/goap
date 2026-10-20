@@ -116,14 +116,21 @@
     }
   }
 
-  async function save() {
-    busy = 'save';
-    error = '';
-    notice = '';
-    if (await saveProvider()) {
-      notice = `Provider "${form?.name}" staged: save the settings to apply it.`;
-    }
-    busy = '';
+  // There is no Save of its own: every committed edit of the form (a field left, a choice made) is staged at once in the
+  // settings' pending change, applied by the dialog's Save. Stagings run one after the other.
+  let staging: Promise<void> = Promise.resolve();
+  function stage() {
+    staging = staging.then(async () => {
+      if (!form || !valid) return;
+      error = '';
+      if (await saveProvider()) notice = `Provider "${form?.name}" staged: save the settings to apply it.`;
+    });
+    return staging;
+  }
+
+  function staged(e: Event) {
+    if ((e.target as HTMLElement | null)?.id === 'pv-test') return; // the test key is never stored
+    void stage();
   }
 
   async function fetchModels() {
@@ -277,15 +284,15 @@
     class="card"
     onsubmit={(e) => {
       e.preventDefault();
-      void save();
+      void stage();
     }}
   >
     <h3>{form.isNew ? 'New provider' : `Edit ${form.name}`} <span class="hint">{typeOf(form.kind)?.label ?? form.kind}</span></h3>
-    <div class="grid">
+    <div class="grid" onchange={staged}>
       <div class="field">
         <label for="pv-name">Name</label>
         <input id="pv-name" type="text" class="mono" bind:value={form.name} disabled={!form.isNew} spellcheck="false" />
-        <span class="hint">Used in model names: <code>{form.name || 'name'}/model</code></span>
+        <span class="hint">Used in model names: <code>{form.name || 'name'}/model</code>{#if form.isNew}, fixed once the provider is staged{/if}</span>
       </div>
       <div class="field">
         <label for="pv-kind">Preset</label>
@@ -306,7 +313,7 @@
       <div class="field wide">
         <label for="pv-key">API key reference {#if !keyRequired}<span class="hint">(optional)</span>{/if}</label>
         <input id="pv-key" type="text" class="mono" bind:value={form.apiKeyRef} placeholder="env:MISTRAL_API_KEY, goap/modelgw#mistral_api_key, or paste the raw key" spellcheck="false" autocomplete="off" />
-        <span class="hint">The key is read by the gateway from the environment (<code>env:NAME</code>) or Vault (<code>path#field</code>); alternatives separated by <code>|</code>. It is never stored on the graph. Paste a raw key and Save stores it in Vault for you.</span>
+        <span class="hint">The key is read by the gateway from the environment (<code>env:NAME</code>) or Vault (<code>path#field</code>); alternatives separated by <code>|</code>. It is never stored on the graph. Paste a raw key and it is stored in Vault for you.</span>
       </div>
       <div class="field wide">
         <label for="pv-test">Key for the test only <span class="hint">(optional)</span></label>
@@ -316,7 +323,6 @@
     </div>
 
     <div class="row">
-      <button type="submit" class="primary" disabled={!valid || busy !== ''}>{busy === 'save' ? 'Saving…' : 'Save'}</button>
       <button type="button" disabled={!canFetch || !valid || busy !== ''} onclick={fetchModels}>
         {busy === 'fetch' ? 'Contacting the provider…' : 'Test & fetch models'}
       </button>
