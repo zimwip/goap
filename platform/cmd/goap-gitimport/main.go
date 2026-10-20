@@ -3,7 +3,7 @@
 // where the last run stopped, so a long history (the Linux kernel) is imported in as many runs as wanted. With -symbols
 // it reads the declarations of the source files with Tree-sitter, which needs a build with cgo.
 //
-//	goap-gitimport -repo ~/src/linux -name linux [-graph http://localhost:8080] [-project PROJ-ROOT] [-rev master] [-base v6.12] [-max 1000] [-symbols]
+//	goap-gitimport -repo ~/src/linux -name linux [-graph http://localhost:8080] [-project PROJ-ROOT] [-rev master] [-branches all] [-base v6.12] [-max 1000] [-symbols]
 //
 // It acts with the platform's identity headers (a system principal holding the admin role, the services behind the
 // gateway), or through the gateway with -token.
@@ -45,6 +45,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&im.Name, "name", "", "name of the repository in the graph (default: the name of its directory)")
 	fs.StringVar(&im.Source, "source", "", "where the repository comes from, recorded on its node (default: -repo)")
 	fs.StringVar(&im.Rev, "rev", "HEAD", "revision followed: its first-parent history is imported")
+	branches := fs.String("branches", "", "other git branches imported, each on a branch of the graph named <name>/<branch>: names or patterns separated by commas, all for every branch")
 	fs.StringVar(&im.Base, "base", "", "first import only: start at this revision, its tree as the first change (default: the root commit)")
 	fs.IntVar(&im.Max, "max", 0, "import at most this many commits in this run (0: all)")
 	fs.StringVar(&im.ProjectID, "project", "PROJ-ROOT", "project the changes act in")
@@ -89,7 +90,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	im.Graph = graphclient.NewClient(hc, *graphURL)
 	im.Progress = stdout
+	im.Branches = gitimport.ParseBranches(*branches)
 	st, err := im.Run(ctx)
+	for _, s := range st.Skipped {
+		fmt.Fprintln(stderr, "goap-gitimport: git branch "+s)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "goap-gitimport:", err)
 		if st.Last != "" {

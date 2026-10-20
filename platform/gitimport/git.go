@@ -259,6 +259,79 @@ func Resolve(ctx context.Context, dir, rev string) (string, error) {
 	return strings.TrimSpace(string(b)), nil
 }
 
+// GitBranch is a branch of the repository: its short name and the commit it points to.
+type GitBranch struct {
+	Name, Hash string
+}
+
+// Branches lists the local branches of the repository (refs/heads: in a bare clone fetched by the importer service,
+// the branches of its origin), by name.
+func Branches(ctx context.Context, dir string) ([]GitBranch, error) {
+	b, err := exec.CommandContext(ctx, "git", "-C", dir, "for-each-ref", "--format=%(refname:short)%00%(objectname)", "refs/heads/").Output()
+	if err != nil {
+		return nil, gitErr("git for-each-ref", err)
+	}
+	var out []GitBranch
+	for _, line := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		name, hash, ok := strings.Cut(line, "\x00")
+		if ok && name != "" {
+			out = append(out, GitBranch{Name: name, Hash: hash})
+		}
+	}
+	return out, nil
+}
+
+// BranchOf is the branch a revision names: rev when it is a branch, the branch HEAD is on for HEAD, "" otherwise (a
+// detached HEAD, a commit, a tag).
+func BranchOf(ctx context.Context, dir, rev string) string {
+	if rev == "HEAD" {
+		b, err := exec.CommandContext(ctx, "git", "-C", dir, "symbolic-ref", "-q", "--short", "HEAD").Output()
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(b))
+	}
+	if err := exec.CommandContext(ctx, "git", "-C", dir, "show-ref", "-q", "--verify", "refs/heads/"+rev).Run(); err != nil {
+		return ""
+	}
+	return rev
+}
+
+// FirstParents is the set of the commits of the first-parent line of rev.
+func FirstParents(ctx context.Context, dir, rev string) (map[string]bool, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-list", "--first-parent", rev, "--")
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	set := map[string]bool{}
+	sc := bufio.NewScanner(out)
+	for sc.Scan() {
+		set[sc.Text()] = true
+	}
+	if err := cmd.Wait(); err != nil {
+		return nil, gitErr("git rev-list --first-parent "+rev, err)
+	}
+	return set, sc.Err()
+}
+
+// IsAncestor tells whether commit a is an ancestor of commit b (a commit is its own ancestor).
+func IsAncestor(ctx context.Context, dir, a, b string) (bool, error) {
+	err := exec.CommandContext(ctx, "git", "-C", dir, "merge-base", "--is-ancestor", a, b).Run()
+	var ee *exec.ExitError
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.As(err, &ee) && ee.ExitCode() == 1:
+		return false, nil
+	default:
+		return false, gitErr("git merge-base --is-ancestor", err)
+	}
+}
+
 func gitErr(what string, err error) error {
 	var ee *exec.ExitError
 	if errors.As(err, &ee) && len(ee.Stderr) > 0 {

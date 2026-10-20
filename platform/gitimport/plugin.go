@@ -88,7 +88,8 @@ func (p *Plugin) Run(ctx context.Context, job *importerkit.Job) error {
 	if err != nil {
 		return err
 	}
-	im := &Importer{Graph: p.Graph, Dir: dir, Name: name, Source: repo, Rev: job.String("rev"), Base: job.String("base"), Max: job.Int("max"),
+	im := &Importer{Graph: p.Graph, Dir: dir, Name: name, Source: repo, Rev: job.String("rev"), Branches: ParseBranches(job.String("branches")),
+		Base: job.String("base"), Max: job.Int("max"),
 		ProjectID: job.ProjectID, OwnerOrg: job.OwnerOrg,
 		OnPhase:  job.Progress,
 		OnBegin:  func(st Stats, c Commit) { begin(job, st, c) },
@@ -126,10 +127,17 @@ func begin(job *importerkit.Job, st Stats, c Commit) {
 
 // summary is the last line of a run.
 func summary(name string, st Stats) string {
+	s := fmt.Sprintf("%s: %d commit(s) imported, up to %s", name, st.Commits, short(st.Last))
 	if st.Commits == 0 {
-		return name + " is up to date: no new commit"
+		s = name + " is up to date: no new commit"
 	}
-	return fmt.Sprintf("%s: %d commit(s) imported, up to %s", name, st.Commits, short(st.Last))
+	if st.Branches > 0 {
+		s += fmt.Sprintf(", %d other branch(es)", st.Branches)
+	}
+	if len(st.Skipped) > 0 {
+		s += "; left out: " + strings.Join(st.Skipped, "; ")
+	}
+	return s
 }
 
 // capLine cuts a line at n runes.
@@ -149,6 +157,7 @@ func record(job *importerkit.Job, st Stats) {
 	job.Set("removed", int64(st.Removed))
 	job.Set("symbols", int64(st.Symbols))
 	job.Set("packages", int64(st.Packages))
+	job.Set("branches", int64(st.Branches))
 }
 
 func (p *Plugin) lock(ctx context.Context, name string) (func(), error) {

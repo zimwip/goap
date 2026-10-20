@@ -95,9 +95,12 @@ func (r *repo) commit(msg string) {
 }
 
 // tree is the tree of HEAD as git lists it: path → object id, directories with a trailing /.
-func (r *repo) tree() map[string]string {
-	out := map[string]string{"": strings.TrimSpace(r.git("rev-parse", "HEAD^{tree}"))}
-	for _, line := range strings.Split(strings.TrimSpace(r.git("ls-tree", "-r", "-t", "HEAD")), "\n") {
+func (r *repo) tree() map[string]string { return r.treeOf("HEAD") }
+
+// treeOf is the tree of a revision as git lists it.
+func (r *repo) treeOf(rev string) map[string]string {
+	out := map[string]string{"": strings.TrimSpace(r.git("rev-parse", rev+"^{tree}"))}
+	for _, line := range strings.Split(strings.TrimSpace(r.git("ls-tree", "-r", "-t", rev)), "\n") {
 		if line == "" {
 			continue
 		}
@@ -114,8 +117,14 @@ func (r *repo) tree() map[string]string {
 // graphTree walks the repository from its node at the head: path → object id of each entry it reaches.
 func graphTree(t *testing.T, g *graph.Graph, name string) (map[string]string, domain.Node) {
 	t.Helper()
+	return graphTreeOn(t, g, name, domain.MainBranch)
+}
+
+// graphTreeOn walks the repository from its node at the head of a branch of the graph.
+func graphTreeOn(t *testing.T, g *graph.Graph, name, branch string) (map[string]string, domain.Node) {
+	t.Helper()
 	ctx := context.Background()
-	head, err := g.BranchHead(ctx, gitimport.Namespace, domain.MainBranch)
+	head, err := g.BranchHead(ctx, gitimport.Namespace, branch)
 	if err != nil {
 		t.Fatal(err)
 	}

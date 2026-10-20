@@ -159,8 +159,9 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 		case err == nil && id != n.ID:
 			return n, fmt.Errorf("%s (%s): the key is taken by a node another change created meanwhile: rename it or withdraw it: %w", d.Key, d.Type, ErrConflict)
 		case err == nil:
-			// a node only abandoned changes wrote, taken over by the creation (takeKey): its next version, still a creation
-			if err := a.g.takeKey(a.ctx, a.tx, n.Namespace, n.ID, n.Key, n.Type); err != nil {
+			// a node only abandoned changes or other lines of work wrote, taken over by the creation (takeKey): its next
+			// version, still a creation
+			if err := a.g.takeKey(a.ctx, a.tx, a.change, n.ID, n.Key, n.Type); err != nil {
 				return n, err
 			}
 			last, err := a.tx.LatestVersions(a.ctx, []domain.NodeID{n.ID})

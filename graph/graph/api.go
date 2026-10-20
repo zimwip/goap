@@ -30,6 +30,7 @@ type (
 	RuleRequest         = graphapi.RuleRequest
 	Resolution          = graphapi.Resolution
 	MergePlan           = graphapi.MergePlan
+	NewBranch           = graphapi.NewBranch
 	MergeCandidate      = graphapi.MergeCandidate
 	ImpactConflicts     = graphapi.ImpactConflicts
 	RebaseState         = graphapi.RebaseState

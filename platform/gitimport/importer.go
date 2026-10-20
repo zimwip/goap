@@ -51,8 +51,8 @@ const (
 	StateRemoved  = "removed"
 )
 
-// Port is what the importer asks of the graph: open a change, give it its node operations, review and apply it, and
-// read the heads it follows (*graph.Graph and graphclient.Client).
+// Port is what the importer asks of the graph: open a change, give it its node operations, review and apply it, read
+// the heads it follows, and open the branches of the git branches (*graph.Graph and graphclient.Client).
 type Port interface {
 	CreateChange(ctx context.Context, in graphapi.NewChange) (domain.Change, error)
 	UpdateChange(ctx context.Context, id domain.ChangeID, p graphapi.ChangePatch) (domain.Change, error)
@@ -67,6 +67,9 @@ type Port interface {
 	IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]graphapi.Resolution) (domain.Change, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
+	Branch(ctx context.Context, namespace, name string) (domain.Branch, error)
+	CreateBranch(ctx context.Context, in graphapi.NewBranch) (domain.Branch, error)
+	VersionPage(ctx context.Context, id domain.NodeID, before domain.Version, limit int) ([]domain.Node, domain.Version, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 	BaselineDelta(ctx context.Context, from, to domain.BaselineID) (graphapi.BaselineDelta, error)
 	SuspectLinks(ctx context.Context, id domain.BaselineID) ([]domain.Link, error)
@@ -81,8 +84,15 @@ type Importer struct {
 	Name string
 	// Source is recorded on the repository node (default: Dir).
 	Source string
-	// Rev is the revision followed (default HEAD).
+	// Rev is the revision followed on the main branch of the graph (default HEAD).
 	Rev string
+	// Branches names the other git branches imported (ADR 0151), each on a branch of the graph of its own named
+	// <Name>/<git branch>, forked from the state of the last commit of its first-parent line already imported (on main
+	// or on the branch of another git branch): a name, a pattern (path.Match) or "*" for every branch; the branch Rev
+	// follows is main's. A branch forked before the first commit imported (Base) is left out, an orphan branch starts
+	// from the empty state, a branch rewritten since its last import (its last commit imported no longer in its history)
+	// is left out (Stats.Skipped).
+	Branches []string
 	// Base, for a first import, starts at that revision: its whole tree is the first change, then the commits after it
 	// (the history of the Linux kernel before a release left out). Empty: from the root commit.
 	Base string
@@ -121,6 +131,8 @@ type Importer struct {
 
 	ix      index
 	head    domain.BaselineID
+	branch  string            // the branch of the graph the commits are imported on
+	gitRef  string            // the git branch it follows ("" when unknown)
 	modules map[string]string // the module paths of the go.mod files, by blob
 	sizes   *Sizes
 	blobs   *Blobs
@@ -137,8 +149,12 @@ type Stats struct {
 	Symbols, Packages int
 	// Last is the last commit imported.
 	Last string
-	// Total is the number of commits this run imports (known once it counted them, the first tree of Base included).
+	// Total is the number of commits this run imports (known once it counted them, the first tree of Base included;
+	// the commits of a git branch counted as those not on Rev's line until the run reaches it).
 	Total int
+	// Branches is the number of git branches imported besides Rev's; Skipped says which were left out and why.
+	Branches int
+	Skipped  []string
 }
 
 // Run imports the commits not imported yet and returns what it did.
@@ -176,6 +192,11 @@ func (im *Importer) run(ctx context.Context) (Stats, error) {
 	if err != nil {
 		return im.stats, err
 	}
+	lines, err := im.lines(ctx)
+	if err != nil {
+		return im.stats, err
+	}
+	im.branch, im.gitRef = domain.MainBranch, BranchOf(ctx, im.Dir, im.Rev)
 	im.phase("reading what the graph holds of " + im.Name)
 	if err := im.load(ctx); err != nil {
 		return im.stats, err
@@ -201,30 +222,56 @@ func (im *Importer) run(ctx context.Context) (Stats, error) {
 	if err := im.count(ctx, from, rev); err != nil {
 		return im.stats, err
 	}
+	for i, l := range lines {
+		if lines[i].estimate, err = Count(ctx, im.Dir, rev, l.tip); err != nil {
+			return im.stats, err
+		}
+		im.stats.Total += lines[i].estimate
+	}
+	if im.Max > 0 {
+		im.stats.Total = min(im.stats.Total, im.Max)
+	}
+	if err := im.main(ctx, from, rev); err != nil {
+		im.report(true)
+		return im.stats, err
+	}
+	for _, l := range lines {
+		if err := im.line(ctx, l); err != nil {
+			im.report(true)
+			return im.stats, err
+		}
+	}
+	im.report(true)
+	return im.stats, nil
+}
+
+// main imports the commits of Rev after from on the main branch.
+func (im *Importer) main(ctx context.Context, from, rev string) error {
 	if from == "" && im.Base != "" {
 		c, err := Tree(ctx, im.Dir, im.Base)
 		if err != nil {
-			return im.stats, err
+			return err
 		}
 		if err := im.commit(ctx, c); err != nil {
-			return im.stats, err
+			return err
 		}
 		from = c.Hash
 	}
+	return im.history(ctx, from, rev)
+}
+
+// history imports the commits of the first-parent line of rev after from on the current branch, within Max.
+func (im *Importer) history(ctx context.Context, from, rev string) error {
 	if from == rev {
-		im.report(true)
-		return im.stats, nil
+		return nil
 	}
 	max := im.Max
 	if max > 0 && im.stats.Commits >= max {
-		im.report(true)
-		return im.stats, nil
+		return nil
 	} else if max > 0 {
 		max -= im.stats.Commits
 	}
-	err = Log(ctx, im.Dir, from, rev, max, func(c Commit) error { return im.commit(ctx, c) })
-	im.report(true)
-	return im.stats, err
+	return Log(ctx, im.Dir, from, rev, max, func(c Commit) error { return im.commit(ctx, c) })
 }
 
 func (im *Importer) phase(what string) {
@@ -325,7 +372,7 @@ type index struct {
 func (im *Importer) load(ctx context.Context) error {
 	im.ix = index{byKey: map[string]*entry{}, keyOf: map[domain.NodeID]string{}, into: map[domain.NodeID]map[domain.LinkID]domain.NodeID{},
 		fileSyms: map[string]map[string]bool{}, gomods: map[string]string{}}
-	head, err := im.Graph.BranchHead(ctx, Namespace, domain.MainBranch)
+	head, err := im.Graph.BranchHead(ctx, Namespace, im.branch)
 	if err != nil {
 		return err
 	}
@@ -512,7 +559,7 @@ func (im *Importer) commit(ctx context.Context, c Commit) error {
 // abandoned, with its sub-change at work.
 func (im *Importer) change(ctx context.Context, c Commit, ops []*op) (domain.Baseline, error) {
 	ch, err := im.Graph.CreateChange(ctx, graphapi.NewChange{Namespace: Namespace, Title: title(c), Intent: capText(c.Message, maxIntent),
-		Data: changeData(im.Name, c), OwnBranch: true, ProjectID: im.ProjectID, OwnerOrg: im.OwnerOrg})
+		Data: changeData(im.Name, im.gitRef, c), Branch: im.branch, OwnBranch: true, ProjectID: im.ProjectID, OwnerOrg: im.OwnerOrg})
 	if err != nil {
 		return domain.Baseline{}, err
 	}
@@ -1118,16 +1165,20 @@ func title(c Commit) string {
 }
 
 // changeData is what the change keeps of its commit (Change.Data, free-form).
-func changeData(repo string, c Commit) map[string]any {
+func changeData(repo, branch string, c Commit) map[string]any {
 	parents := make([]any, len(c.Parents))
 	for i, p := range c.Parents {
 		parents[i] = p
 	}
-	return map[string]any{"git": map[string]any{
+	git := map[string]any{
 		"repository": repo, "commit": c.Hash, "parents": parents, "tree": c.Tree,
 		"author": c.Author.Name, "authorEmail": c.Author.Email, "authorDate": c.Author.When.Format(time.RFC3339),
 		"committer": c.Committer.Name, "committerEmail": c.Committer.Email, "committerDate": c.Committer.When.Format(time.RFC3339),
-	}}
+	}
+	if branch != "" {
+		git["branch"] = branch
+	}
+	return map[string]any{"git": git}
 }
 
 // capText cuts a text to at most n bytes, on a rune boundary.

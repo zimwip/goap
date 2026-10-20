@@ -146,16 +146,6 @@ func CommonAncestor(ctx context.Context, tx Tx, id domain.NodeID, a, b domain.Ve
 
 // ---- Branches --------------------------------------------------------------
 
-// NewBranch describes a branch to open from a baseline.
-type NewBranch struct {
-	Name string
-	// Namespace the branch belongs to (default: domain.DefaultNamespace).
-	Namespace   string
-	From        domain.BaselineID
-	Origin      string // change / option that opens the branch
-	Description string
-}
-
 // CreateBranch opens a branch forked from a baseline.
 func (g *Graph) CreateBranch(ctx context.Context, in NewBranch) (b domain.Branch, err error) {
 	if in.Name == "" || in.Name == domain.MainBranch || strings.ContainsAny(in.Name, " \t\n") {
@@ -401,7 +391,18 @@ func planMerge(ctx context.Context, tx Tx, namespace, from, into string) (MergeP
 			if err != nil {
 				return plan, err
 			}
+			or := ours.Ref()
 			anc, err := CommonAncestor(ctx, tx, t.ID, ov, t.Version)
+			if errors.Is(err, ErrNotFound) {
+				// the node created on both lines of work, each its own history (takeKey): a merge with no base
+				c.Ours, c.OursProps, c.Kind = &or, ours.Properties, MergeThreeWay
+				c.Merged, c.Conflicts = MergeProps(nil, ours.Properties, t.Properties)
+				if t.Deleted {
+					c.Conflicts = []string{DeletedKey}
+				}
+				plan.Candidates = append(plan.Candidates, c)
+				continue
+			}
 			if err != nil {
 				return plan, err
 			}
@@ -412,7 +413,6 @@ func planMerge(ctx context.Context, tx Tx, namespace, from, into string) (MergeP
 			if err != nil {
 				return plan, err
 			}
-			or := ours.Ref()
 			c.Ours, c.Ancestor, c.Base, c.OursProps = &or, &anc, an.Properties, ours.Properties
 			if anc.Version == ov {
 				c.Kind, c.Merged = MergeFastForward, t.Properties
@@ -540,18 +540,23 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			anc := cand.Ancestor
 			if anc == nil {
 				a, err := CommonAncestor(ctx, tx, from.ID, cand.Ours.Version, from.Version)
+				if err != nil && !errors.Is(err, ErrNotFound) {
+					return res, err
+				}
+				if err == nil {
+					anc = &a
+				}
+			}
+			var base map[string]any
+			if anc != nil {
+				an, err := tx.Node(ctx, *anc)
 				if err != nil {
 					return res, err
 				}
-				anc = &a
+				m.anc, base = &an, an.Properties
 			}
-			an, err := tx.Node(ctx, *anc)
-			if err != nil {
-				return res, err
-			}
-			m.anc = &an
 			if props == nil {
-				props, _ = MergeProps(an.Properties, ours.Properties, from.Properties)
+				props, _ = MergeProps(base, ours.Properties, from.Properties)
 			}
 		} else {
 			if _, ok := target[from.ID]; ok {
@@ -667,12 +672,15 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			return res, err
 		}
 		ours, anc := theirs, theirs // a node new on the target: take the links of the source
-		if m.anc != nil {
+		if m.ours != nil {
 			if ours, err = tx.OutLinks(ctx, m.ours.Ref()); err != nil {
 				return res, err
 			}
-			if anc, err = tx.OutLinks(ctx, m.anc.Ref()); err != nil {
-				return res, err
+			anc = nil // created on both lines with no common version: the links of both
+			if m.anc != nil {
+				if anc, err = tx.OutLinks(ctx, m.anc.Ref()); err != nil {
+					return res, err
+				}
 			}
 		}
 		var links []domain.Link
@@ -689,7 +697,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			links = append(links, domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, To: to, Properties: l.Properties})
 		}
 		like := []domain.NodeRef{m.from.Ref()}
-		if m.anc != nil {
+		if m.ours != nil {
 			like = []domain.NodeRef{m.ours.Ref(), m.from.Ref()}
 		}
 		if err := g.putLinks(ctx, tx, domain.Node{ID: m.next.ID, Version: m.next.Version, ChangeID: c.ID}, links, like...); err != nil {

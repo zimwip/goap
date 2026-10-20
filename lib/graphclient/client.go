@@ -625,6 +625,26 @@ func (c *Client) Branch(ctx context.Context, namespace, name string) (domain.Bra
 	return pbconv.BranchFromPB(r.Msg.Branch), nil
 }
 
+// CreateBranch opens a branch forked from a baseline.
+func (c *Client) CreateBranch(ctx context.Context, in graphapi.NewBranch) (domain.Branch, error) {
+	r, err := c.rpc.CreateBranch(ctx, connect.NewRequest(&graphv1.CreateBranchRequest{Name: in.Name, Namespace: in.Namespace,
+		FromBaseline: string(in.From), Origin: in.Origin, Description: in.Description}))
+	if err != nil {
+		return domain.Branch{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.BranchFromPB(r.Msg.Branch), nil
+}
+
+// VersionPage gives a page of the history of a node: its last limit versions below before (0: up to its latest), by
+// version, and the before of the next older page (0: none).
+func (c *Client) VersionPage(ctx context.Context, id domain.NodeID, before domain.Version, limit int) ([]domain.Node, domain.Version, error) {
+	r, err := c.rpc.ListNodeVersions(ctx, connect.NewRequest(&graphv1.ListNodeVersionsRequest{Id: string(id), Before: int32(before), Limit: int32(limit)}))
+	if err != nil {
+		return nil, 0, rpcerr.FromConnect(err)
+	}
+	return pbconv.NodesFromPB(r.Msg.Versions), domain.Version(r.Msg.Next), nil
+}
+
 // PlanMerge implements engine.GraphPort.
 func (c *Client) PlanMerge(ctx context.Context, namespace, from, into string) (graphapi.MergePlan, error) {
 	r, err := c.rpc.PlanMerge(ctx, connect.NewRequest(&graphv1.PlanMergeRequest{Namespace: namespace, From: from, Into: into}))

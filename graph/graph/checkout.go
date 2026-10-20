@@ -238,7 +238,7 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 	case t.create && inBase:
 		return nil, fmt.Errorf("cannot create %s (%s): the reference baseline of change %s already holds it: %w", t.Key, t.Type, id, ErrConflict)
 	case t.create && nid != "":
-		if err := g.takeKey(ctx, tx, w.ns, nid, t.Key, t.Type); err != nil {
+		if err := g.takeKey(ctx, tx, w.c, nid, t.Key, t.Type); err != nil {
 			return nil, err
 		}
 		reuse = nid
@@ -275,16 +275,21 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 	return w, g.impact(ctx, tx, w, out[0].ID)
 }
 
-// takeKey decides a creation whose key is the key of a node out of the reference baseline of the change (a key is one
+// takeKey decides a creation whose key is the key of a node out of the reference baseline of change c (a key is one
 // node's): a node another change wrote on a branch that is not abandoned holds it (ErrConflict, the creation is refused
 // now rather than at the commit); a node only abandoned changes wrote never reached the graph, and the creation takes
 // it over, so that the work of an abandoned change (an import stopped between its commit and its merge) does not hold
-// its keys for ever.
-func (g *Graph) takeKey(ctx context.Context, tx Tx, ns string, nid domain.NodeID, key, typ string) error {
+// its keys for ever. A node that lives only on other lasting lines of work (a named branch, main seen from a branch
+// forked from it before the node was created) is taken over too: the same key on two lines of work is the same node,
+// each line writing its own versions (a file a git branch adds, then the main branch when the branch is merged, ADR
+// 0151); the lasting branch the change lands on holding it is the race of two changes, refused.
+func (g *Graph) takeKey(ctx context.Context, tx Tx, c domain.Change, nid domain.NodeID, key, typ string) error {
+	ns := domain.NamespaceOf(c.Namespace)
 	vs, err := tx.Versions(ctx, nid)
 	if err != nil {
 		return err
 	}
+	line := ""
 	for _, v := range vs {
 		if v.Type != typ {
 			return fmt.Errorf("cannot create %s (%s): the key is taken by a node of type %s: %w", key, typ, v.Type, ErrConflict)
@@ -296,12 +301,33 @@ func (g *Graph) takeKey(ctx context.Context, tx Tx, ns string, nid domain.NodeID
 			}
 			// a version of a merged branch lives on in the branches it joined, checked with it (a sub-change merged
 			// into a change abandoned since holds nothing)
-			if err != nil || (b.Status != domain.BranchAbandoned && b.Status != domain.BranchMerged) {
-				return fmt.Errorf("cannot create %s (%s): the key is taken by a node change %s created on branch %s: rename it, or merge or abandon that change: %w", key, typ, v.ChangeID, name, ErrConflict)
+			if err == nil && (b.Status == domain.BranchAbandoned || b.Status == domain.BranchMerged) {
+				continue
 			}
+			if err == nil && !b.Ephemeral && b.Status == domain.BranchOpen {
+				if line == "" {
+					if line, err = lastingLine(ctx, tx, c); err != nil {
+						return err
+					}
+				}
+				if name != line {
+					continue
+				}
+			}
+			return fmt.Errorf("cannot create %s (%s): the key is taken by a node change %s created on branch %s: rename it, or merge or abandon that change: %w", key, typ, v.ChangeID, name, ErrConflict)
 		}
 	}
 	return nil
+}
+
+// lastingLine is the lasting branch a change lands on in the end: its branch, else the branch its branch is forked
+// from, up the branches of its parent changes (ADR 0103).
+func lastingLine(ctx context.Context, tx Tx, c domain.Change) (string, error) {
+	b, err := branchOf(ctx, tx, c.Namespace, c.Branch)
+	for err == nil && b.Ephemeral {
+		b, err = branchOf(ctx, tx, c.Namespace, b.Parent)
+	}
+	return b.Name, err
 }
 
 // plannedCreation reports whether the change impact is a creation planned by ProposeImpact and not drafted yet: no

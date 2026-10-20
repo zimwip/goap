@@ -328,3 +328,49 @@ func testFirstChangeStartsFromTheEmptyState(t *testing.T, repo Repo) {
 		}
 	}
 }
+
+// A key created on two lines of work is one node (ADR 0151): main, forked from before the creation on a named branch,
+// takes the node over with versions of its own; the line the change lands on holding the key is still refused, and a
+// merge of the two lines is a three-way merge with no base.
+func TestKeyOnTwoLines(t *testing.T) { forEachRepo(t, testKeyOnTwoLines) }
+
+func testKeyOnTwoLines(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	must[domain.Branch](t)(g.CreateBranch(ctx, NewBranch{Name: "line-a", From: f.base.ID}))
+	bA := commitOn(t, g, "line-a", f.base.ID, NodeEdit{Key: "REQ-9", Type: "Requirement", Props: map[string]any{"title": "on a"}})
+	var onA domain.Node
+	nodes, _ := must2(t)(g.BaselineGraph(ctx, bA.ID))
+	for _, n := range nodes {
+		if n.Key == "REQ-9" {
+			onA = n
+		}
+	}
+	bM := commitOn(t, g, "", f.base.ID, NodeEdit{Key: "REQ-9", Type: "Requirement", Props: map[string]any{"title": "on main"}})
+	vs := must[[]domain.Node](t)(g.Versions(ctx, onA.ID))
+	if len(vs) != 2 || bA.Nodes[onA.ID] != 1 || bM.Nodes[onA.ID] != 2 || vs[1].Reason != domain.ReasonCreate || len(vs[1].Parents) != 0 {
+		t.Fatalf("main takes the node over with a creation of its own: %+v, line-a %v, main %v", vs, bA.Nodes, bM.Nodes)
+	}
+	// a change forked from main before that creation, creating the key again, races the one that landed on main
+	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "late", Baseline: f.base.ID, By: "test",
+		Edits: []NodeEdit{{Key: "REQ-9", Type: "Requirement", Props: map[string]any{"title": "late"}}}}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("the key is main's: %v", err)
+	}
+	plan := must[MergePlan](t)(g.PlanMerge(ctx, "", "line-a", ""))
+	var c MergeCandidate
+	for _, x := range plan.Candidates {
+		if x.Key == "REQ-9" {
+			c = x
+		}
+	}
+	if c.Kind != MergeThreeWay || c.Ancestor != nil || c.Ours == nil || c.Ours.Version != 2 || !slices.Contains(c.Conflicts, "title") {
+		t.Fatalf("a merge with no base: %+v", c)
+	}
+	res := must[MergeResult](t)(g.MergeBranch(ctx, MergeRequest{ProjectID: "PROJ-ROOT", From: "line-a", Into: domain.MainBranch,
+		Resolutions: map[domain.NodeID]Resolution{onA.ID: {Props: map[string]any{"title": "both"}}}}))
+	n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: onA.ID, Version: res.Baseline.Nodes[onA.ID]}))
+	if n.Properties["title"] != "both" || !slices.Equal(n.Parents, []domain.Version{2, 1}) {
+		t.Fatalf("merged: %+v", n)
+	}
+}

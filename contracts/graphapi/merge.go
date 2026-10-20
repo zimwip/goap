@@ -2,6 +2,16 @@ package graphapi
 
 import "github.com/zimwip/goap/contracts/domain"
 
+// NewBranch describes a branch to open from a baseline (CreateBranch).
+type NewBranch struct {
+	Name string
+	// Namespace the branch belongs to (default: domain.DefaultNamespace).
+	Namespace   string
+	From        domain.BaselineID
+	Origin      string // change / option that opens the branch
+	Description string
+}
+
 // MergeCandidate is a node changed on the source branch since its fork.
 type MergeCandidate struct {
 	Node     domain.NodeID   `json:"node"`
