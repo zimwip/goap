@@ -2,11 +2,15 @@
   // Graph centered on a node (or, in link view, two nodes — a link's endpoints): parents left, children right by
   // bias, laid out by a live d3-force simulation rather than fixed rows. Click a node to recenter, double-click to
   // open it, drag to rearrange; click a link to select it (info only, never navigates). Wheel to zoom, drag the
-  // background to pan.
+  // background to pan. `compact`: each node a circle with its type's icon and color (as its domain declares them),
+  // its key below, the link labels and the details shown on hover. `fill`: the graph takes the height left in the
+  // editor it is in.
   import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type ForceLink, type Simulation } from 'd3-force';
   import { untrack } from 'svelte';
   import type { GraphIndex } from '../graphIndex';
   import { typeCatalog } from '../stores/types.svelte';
+  import { nodeTitle, type GraphNode } from '../api';
+  import { iconPath } from '../shell/Icon.svelte';
 
   let {
     index,
@@ -18,6 +22,8 @@
     suspect,
     secondaryCenter,
     onLinkSelect,
+    compact = false,
+    fill = false,
   }: {
     index: GraphIndex;
     center: string;
@@ -32,11 +38,18 @@
     /** a link's other endpoint, in link view: drawn as a second centered node, its edge to `center` emphasized */
     secondaryCenter?: string;
     onLinkSelect?: (linkId: string) => void;
+    /** circles with the type's icon and color, details on hover */
+    compact?: boolean;
+    /** take the height left in the scrolling editor the graph is in */
+    fill?: boolean;
   } = $props();
 
-  const W = 168;
-  const H = 34;
-  const GX = 90;
+  /** the radius of a node in compact mode */
+  const R = 20;
+  const small = untrack(() => compact);
+  const W = small ? 2 * R + 40 : 168;
+  const H = small ? 2 * R + 18 : 34;
+  const GX = small ? 70 : 90;
   const CAP = 14;
 
   interface Box {
@@ -238,12 +251,22 @@
         seen.add(key);
         const fwd = t.x > b.x;
         const same = t.x === b.x;
-        const x1 = same ? b.x : fwd ? b.x + W / 2 : b.x - W / 2;
-        const x2 = same ? t.x : fwd ? t.x - W / 2 : t.x + W / 2;
-        const y1 = b.y + (same ? (t.y > b.y ? H / 2 : -H / 2) : 0);
-        const y2 = t.y + (same ? (t.y > b.y ? -H / 2 : H / 2) : 0);
-        const cx = same ? x1 + (W / 2 + 26) : (x1 + x2) / 2;
-        const cy = (y1 + y2) / 2;
+        let x1: number, x2: number, y1: number, y2: number, cx: number, cy: number;
+        if (small) {
+          // from circle to circle, slightly bent so that two links between the same nodes stay apart
+          const len0 = Math.max(Math.hypot(t.x - b.x, t.y - b.y), 1);
+          const [ux0, uy0] = [(t.x - b.x) / len0, (t.y - b.y) / len0];
+          [x1, y1] = [b.x + ux0 * R, b.y + uy0 * R];
+          [x2, y2] = [t.x - ux0 * (R + 2), t.y - uy0 * (R + 2)];
+          [cx, cy] = [(x1 + x2) / 2 - uy0 * 14, (y1 + y2) / 2 + ux0 * 14];
+        } else {
+          x1 = same ? b.x : fwd ? b.x + W / 2 : b.x - W / 2;
+          x2 = same ? t.x : fwd ? t.x - W / 2 : t.x + W / 2;
+          y1 = b.y + (same ? (t.y > b.y ? H / 2 : -H / 2) : 0);
+          y2 = t.y + (same ? (t.y > b.y ? -H / 2 : H / 2) : 0);
+          cx = same ? x1 + (W / 2 + 26) : (x1 + x2) / 2;
+          cy = (y1 + y2) / 2;
+        }
         const dx = x2 - cx;
         const dy = y2 - cy;
         const len = Math.max(Math.hypot(dx, dy), 1);
@@ -282,7 +305,62 @@
 
   /** the user's own pan/zoom, kept until recentering (a structural change) replaces the picture under it */
   let viewOverride = $state<{ x: number; y: number; w: number; h: number } | null>(null);
-  const view = $derived(viewOverride ?? autoView);
+  /** the size of the drawing area, to keep the picture's proportions in fill mode */
+  let areaW = $state(0);
+  let areaH = $state(0);
+  const view = $derived.by(() => {
+    const v = viewOverride ?? autoView;
+    if (!fill || !areaW || !areaH) return v;
+    // widen the box to the area's proportions, around its middle: the picture is never stretched
+    const ratio = areaW / areaH;
+    if (v.w / v.h < ratio) {
+      const w = v.h * ratio;
+      return { x: v.x - (w - v.w) / 2, y: v.y, w, h: v.h };
+    }
+    const h = v.w / ratio;
+    return { x: v.x, y: v.y - (h - v.h) / 2, w: v.w, h };
+  });
+
+  // fill mode: the area takes the height its scrolling editor has left below it
+  let scrollRef = $state<HTMLDivElement | undefined>();
+  let fillHeight = $state(0);
+  $effect(() => {
+    if (!fill || !scrollRef) return;
+    const el = scrollRef;
+    let host: HTMLElement | null = el.parentElement;
+    while (host && !/(auto|scroll)/.test(getComputedStyle(host).overflowY)) host = host.parentElement;
+    const measure = () => {
+      const bottom = host ? host.getBoundingClientRect().bottom : window.innerHeight;
+      fillHeight = Math.max(240, Math.floor(bottom - el.getBoundingClientRect().top - 24));
+      // what still overflows the editor below the graph (its paddings) comes off the graph
+      requestAnimationFrame(() => {
+        const over = host ? host.scrollHeight - host.clientHeight : 0;
+        if (over > 0 && host && host.scrollTop === 0) fillHeight = Math.max(240, fillHeight - over);
+      });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (host) ro.observe(host);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  });
+
+  // compact mode: the details of the node under the pointer, in a popup over the drawing
+  let hover = $state<{ node: GraphNode; x: number; y: number } | undefined>();
+  function showDetails(e: PointerEvent, n: GraphNode | undefined) {
+    if (!small || !n || !scrollRef || draggingId) return;
+    const r = scrollRef.getBoundingClientRect();
+    hover = { node: n, x: e.clientX - r.left + scrollRef.scrollLeft, y: e.clientY - r.top + scrollRef.scrollTop };
+  }
+  const hoverProps = $derived(
+    Object.entries(hover?.node.props ?? {})
+      .filter(([, v]) => v !== undefined && v !== null && v !== '')
+      .slice(0, 8)
+      .map(([k, v]): [string, string] => [k, trunc(typeof v === 'string' ? v : JSON.stringify(v), 80)]),
+  );
 
   $effect(() => {
     void center;
@@ -345,11 +423,11 @@
     <span class="hint legend">parents ← node → children</span>
     {#if viewOverride}<button type="button" class="small" onclick={() => (viewOverride = null)}>Fit</button>{/if}
   </div>
-  <div class="scroll">
+  <div class="scroll" class:fill bind:this={scrollRef} bind:clientWidth={areaW} bind:clientHeight={areaH} style:height={fill && fillHeight ? `${fillHeight}px` : undefined}>
     <svg
       bind:this={svgRef}
       viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
-      style={`width:${Math.max(view.w, 320)}px;height:${Math.max(view.h, 120)}px`}
+      style={fill ? 'width:100%;height:100%' : `width:${Math.max(view.w, 320)}px;height:${Math.max(view.h, 120)}px`}
       role="img"
       aria-label="Graph of the node and its neighbours"
       onwheel={onWheel}
@@ -363,6 +441,7 @@
           class:dim={!e.touchesCenter}
           class:suspect={e.suspect}
           class:selected={e.touchesBoth}
+          class:compact={small}
           style={`--c:${e.color}`}
           role={onLinkSelect ? 'button' : undefined}
           tabindex={onLinkSelect ? 0 : undefined}
@@ -371,11 +450,11 @@
         >
           <path d={e.d} />
           <polygon points={e.head} />
-          <g transform={`translate(${e.lx} ${e.ly})`}>
+          <g class="label" transform={`translate(${e.lx} ${e.ly})`}>
             <rect x={-(e.label.length * 3.2 + 6)} y="-8" width={e.label.length * 6.4 + 12} height="16" rx="8" />
             <text y="3.5" text-anchor="middle">{e.label}</text>
           </g>
-          <title>{e.type}{onLinkSelect ? ' — click for its properties.' : ''}</title>
+          <title>{e.label} ({e.type}){onLinkSelect ? ' — click for its properties.' : ''}</title>
         </g>
       {/each}
       {#each boxes as b (b.id)}
@@ -401,16 +480,44 @@
             }}
             ondblclick={() => onopen(b.id)}
             onkeydown={(e) => (e.key === 'Enter' ? onrecenter(b.id) : undefined)}
-            onpointerdown={(e) => dragNode(e, b.id)}
+            onpointerdown={(e) => {
+              hover = undefined;
+              dragNode(e, b.id);
+            }}
+            onpointerenter={(e) => showDetails(e, n)}
+            onpointermove={(e) => showDetails(e, n)}
+            onpointerleave={() => (hover = undefined)}
           >
-            <rect x={-W / 2} y={-H / 2} width={W} height={H} rx="7" />
-            <text y="-2" text-anchor="middle" class="k">{trunc(n?.key ?? '')}</text>
-            <text y="11" text-anchor="middle" class="t">{trunc(`${n?.type ?? ''}${n?.state ? ` · ${n.state}` : ''}`, 26)}</text>
-            <title>{n?.key} — {n?.type}{n?.state ? ` (${n.state})` : ''}. Click to recenter, double-click to open.</title>
+            {#if small}
+              {@const look = typeCatalog.cat.look(n?.type)}
+              <circle r={R} class="dot" style:--tc={look.color} />
+              <path d={iconPath(look.icon)} class="ico" style:--tc={look.color} transform={`translate(${-11} ${-11}) scale(0.92)`} />
+              <text y={R + 13} text-anchor="middle" class="k">{trunc(n?.key ?? '', 18)}</text>
+            {:else}
+              <rect x={-W / 2} y={-H / 2} width={W} height={H} rx="7" />
+              <text y="-2" text-anchor="middle" class="k">{trunc(n?.key ?? '')}</text>
+              <text y="11" text-anchor="middle" class="t">{trunc(`${n?.type ?? ''}${n?.state ? ` · ${n.state}` : ''}`, 26)}</text>
+              <title>{n?.key} — {n?.type}{n?.state ? ` (${n.state})` : ''}. Click to recenter, double-click to open.</title>
+            {/if}
           </g>
         {/if}
       {/each}
     </svg>
+    {#if hover}
+      {@const n = hover.node}
+      {@const look = typeCatalog.cat.look(n.type)}
+      <div class="popup" style:left={`${hover.x + 14}px`} style:top={`${hover.y + 14}px`} role="tooltip">
+        <div class="ph"><span class="sw" style:background={look.color}></span><strong class="mono">{n.key}</strong>{#if n.version} <span class="muted">v{n.version}</span>{/if}</div>
+        {#if nodeTitle(n)}<div class="pt">{nodeTitle(n)}</div>{/if}
+        <div class="muted">{n.type}{n.state ? ` · ${n.state}` : ''}</div>
+        {#if hoverProps.length}
+          <table>
+            <tbody>{#each hoverProps as [k, v] (k)}<tr><th>{k}</th><td>{v}</td></tr>{/each}</tbody>
+          </table>
+        {/if}
+        <div class="hint">Click to recenter, double-click to open.</div>
+      </div>
+    {/if}
   </div>
   {#if boxes.length === 1}<p class="hint">This node has no link yet.</p>{/if}
 </div>
@@ -426,11 +533,93 @@
     margin-left: 0.8rem;
   }
   .scroll {
+    position: relative;
     overflow: auto;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface);
     max-height: 60vh;
+  }
+  .scroll.fill {
+    max-height: none;
+    min-height: 240px;
+    overflow: hidden;
+  }
+  .dot {
+    fill: color-mix(in srgb, var(--tc) 18%, var(--surface));
+    stroke: var(--tc);
+    stroke-width: 2;
+  }
+  .node:hover .dot,
+  .node:focus-visible .dot {
+    stroke-width: 3;
+  }
+  .node.center .dot {
+    stroke-width: 3.5;
+    fill: color-mix(in srgb, var(--tc) 32%, var(--surface));
+  }
+  .ico {
+    fill: none;
+    stroke: var(--tc, currentColor);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
+  }
+  .edge.compact .label {
+    display: none;
+  }
+  .edge.compact:hover .label,
+  .edge.compact:focus-visible .label,
+  .edge.compact.selected .label {
+    display: inline;
+  }
+  .popup {
+    position: absolute;
+    z-index: 2;
+    max-width: 320px;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+    font-size: 0.85rem;
+    pointer-events: none;
+  }
+  .popup .ph {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .popup .sw {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    flex: none;
+  }
+  .popup .pt {
+    margin: 0.15rem 0;
+  }
+  .popup .muted {
+    color: var(--muted);
+  }
+  .popup table {
+    margin-top: 0.3rem;
+    font-size: 0.8rem;
+  }
+  .popup th {
+    text-align: left;
+    font-weight: 600;
+    padding-right: 0.5rem;
+    vertical-align: top;
+    white-space: nowrap;
+  }
+  .popup td {
+    word-break: break-word;
+  }
+  .popup .hint {
+    margin-top: 0.3rem;
+    font-size: 0.75rem;
   }
   svg {
     display: block;

@@ -667,6 +667,10 @@ A node type may name the **editor** of its nodes in the IDE (`editor: agent`, in
 [ADR 0027](adr/0027-node-type-editors.md)): the IDE opens every node through `openNode` (`web/src/lib/nodeEditors.ts`),
 which reads the editor from the type catalogue the IDE loads from the registry (`ListTypes`) and falls back to the default node editor; the editors a type can name
 are registered in `web/src/lib/views/nodeEditors.ts` (`agent`, `action`, `methodology`, `domain`, `unit`, `mcp`, ...).
+It may also give the **icon** and **color** its nodes are drawn with (`icon: database`, a name of the IDE's icon set,
+`color: "#b45309"`; inherited through `extends`, `def.NodeType.Icon` / `Color`, `TypeInfo.icon` / `color`): the compact graph
+of the node editor's *Graph* pane draws each node as a circle of that color holding that icon, its details in a popup on
+hover (`NodeGraph.svelte` `compact`, `TypeCatalog.look`, which falls back to the node icon and a color from the type's name).
 
 A link type may be flagged **`compose: true`** (`def.LinkType.Compose`, `typecat.LinkType.Compose`, `LinkTypeInfo.compose`): its target is a part of its source, a piece of display metadata
 the editors read from the domain rather than knowing links by name. The methodology editor lists as panes the element types the version composes

@@ -35,6 +35,8 @@
     reload = 0,
     empty = 'Select a node to see its neighbours.',
     details = true,
+    compact = false,
+    fill = false,
   }: {
     baselineId: string;
     /** the namespace the baseline holds: a node of another one opens in its editor instead of recentering */
@@ -48,6 +50,10 @@
     empty?: string;
     /** false: the graph only, without the change-stack and the properties */
     details?: boolean;
+    /** the graph's drawing: circles with the type's icon and color, details on hover (NodeGraph) */
+    compact?: boolean;
+    /** the graph takes the height left in the editor (NodeGraph) */
+    fill?: boolean;
   } = $props();
 
   const MAX_LEVELS = 4;
@@ -258,6 +264,8 @@
       center={linkFromNode.id ?? ''}
       secondaryCenter={linkToNode.id}
       maxDepth={1}
+      {compact}
+      {fill}
       suspect={linkSuspect}
       onrecenter={recenterFromLink}
       onopen={openFromLink}
@@ -294,6 +302,8 @@
     center={center.id ?? ''}
     maxDepth={MAX_LEVELS}
     bind:depth
+    {compact}
+    {fill}
     {suspect}
     onrecenter={(nid) => select(byNodeId(nid))}
     onopen={(nid) => {

@@ -145,7 +145,7 @@ func (h *Handler) ListTypes(ctx context.Context, _ *connect.Request[registryv1.L
 	}
 	out := &registryv1.ListTypesResponse{Domains: cat.Domains()}
 	for _, t := range cat.Types() {
-		ti := &registryv1.TypeInfo{Ref: t.Ref.String(), Description: t.Description, Attributes: domainpb.AttributeInfosToPB(t.Attributes), ChangeControlled: t.ChangeControlled, Editor: t.Editor, AdditionalProperties: t.AdditionalProperties, Form: pbconv.FormToPB(t.Form)}
+		ti := &registryv1.TypeInfo{Ref: t.Ref.String(), Description: t.Description, Attributes: domainpb.AttributeInfosToPB(t.Attributes), ChangeControlled: t.ChangeControlled, Editor: t.Editor, Icon: t.Icon, Color: t.Color, AdditionalProperties: t.AdditionalProperties, Form: pbconv.FormToPB(t.Form)}
 		for _, a := range t.Ancestors {
 			ti.Ancestors = append(ti.Ancestors, a.String())
 		}

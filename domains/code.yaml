@@ -1,5 +1,5 @@
 name: code
-version: 1.1.0
+version: 1.1.1
 description: >
   Source code held in git repositories (ADR 0147): a repository, its directories and its files as of the last commit
   imported. The git importer (platform/gitimport: the importer `git` below, served by importer-git, ADR 0148; the
@@ -44,6 +44,8 @@ enums:
 nodeTypes:
   # an entry of a repository: what a directory holds
   - name: Entry
+    icon: file
+    color: "#64748b"
     description: An entry of a source tree, a directory or a file
     attributes:
       - {name: name, label: Name, description: Last element of the path, type: string, section: Identity, order: 1, asName: true}
@@ -51,11 +53,15 @@ nodeTypes:
     lifecycle: presence
     search: [{property: name, text: true}, {property: path, text: true}]
   - name: Directory
+    icon: folder
+    color: "#ca8a04"
     description: A directory of a repository (a git tree)
     extends: Entry
     attributes:
       - {name: tree, label: Tree, description: Object id of the git tree the directory is at, type: string, section: Git, order: 10}
   - name: File
+    icon: file
+    color: "#2563eb"
     description: A file of a repository (a git blob, a symbolic link or a submodule)
     extends: Entry
     attributes:
@@ -66,6 +72,8 @@ nodeTypes:
     search: [{property: extension, facet: true}]
   # the root directory of a repository, the node that says where its import stands
   - name: Repository
+    icon: branch
+    color: "#ea580c"
     description: A git repository, its root directory
     extends: Directory
     attributes:
@@ -74,6 +82,8 @@ nodeTypes:
       - {name: commit, label: Commit, description: Object id of the last commit imported, type: string, section: Origin, order: 22}
   # a declaration of a source file, read by Tree-sitter: a new version when its own text changes
   - name: Symbol
+    icon: code
+    color: "#7c3aed"
     description: A declaration of a source file (a function, a type, an import, a variable...)
     attributes:
       - {name: name, label: Name, description: Name of the declaration (the path of an import), type: string, section: Identity, order: 1, asName: true}

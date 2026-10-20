@@ -56,6 +56,12 @@ export class TypeCatalog {
     return this.type(ref)?.editor ?? '';
   }
 
+  /** How its nodes are drawn: the icon and color the domain gives the type, else the defaults (a color from the name). */
+  look(ref: string | undefined): { icon: string; color: string } {
+    const t = this.type(ref);
+    return { icon: t?.icon || 'node', color: t?.color || defaultColor(ref ?? '') };
+  }
+
   /** The type and its ancestors. */
   typesOf(ref: string | undefined): string[] {
     const t = this.type(ref);
@@ -170,4 +176,11 @@ export function loadTypes(force = false): Promise<TypeCatalog> {
     });
   pending = p;
   return p;
+}
+
+/** A stable color for a type the domain gives none. */
+function defaultColor(ref: string): string {
+  let h = 0;
+  for (const c of ref) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return `hsl(${h % 360} 55% 50%)`;
 }

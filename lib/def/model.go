@@ -53,6 +53,11 @@ type NodeType struct {
 	// node editor when it has no editor of that name. Inherited through
 	// extends; empty: the default node editor.
 	Editor string `yaml:"editor,omitempty" json:"editor,omitempty"`
+	// Icon names the icon the user interface draws the nodes of the type with (a name of its icon set, an
+	// unknown one falling back to its default); Color is their color (#rrggbb). Both inherited through extends;
+	// empty: the user interface's defaults.
+	Icon  string `yaml:"icon,omitempty" json:"icon,omitempty"`
+	Color string `yaml:"color,omitempty" json:"color,omitempty"`
 	// Structure tags the type as the one building a hierarchy every node version is placed in (ADR 0054):
 	// the organisational units owning node versions and changes, or the projects nodes are created in. The graph
 	// bootstraps its root and checks every write against it. One type per kind across the domains in force.
@@ -328,3 +333,9 @@ func (is Issues) of(warning bool) Issues {
 var lifecycleNameRE = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
 
 var NameRE = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
+
+// IconRE is the form of a node type's icon (a name of the user interface's icon set, camelCase).
+var IconRE = regexp.MustCompile(`^[a-z][A-Za-z0-9]*$`)
+
+// ColorRE is the form of a node type's color.
+var ColorRE = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)

@@ -95,6 +95,10 @@ message NodeType {
   bool additional_properties = 14;
   // what a person fills in to create a node of the type (pkg/form.Form, ADR 0115 §7); inherited
   google.protobuf.Struct form = 15;
+  // icon the user interface draws the nodes with (a name of its icon set); inherited
+  string icon = 16;
+  // color of the nodes (#rrggbb); inherited
+  string color = 17;
 }
 
 // RequiredLink: a node of the type has exactly count outgoing links of the link type (ADR 0065).
@@ -1053,6 +1057,9 @@ message TypeInfo {
   bool additional_properties = 10;
   // the creation form of the nodes (own or the nearest ancestor's, pkg/form.Form, ADR 0115 §7)
   google.protobuf.Struct form = 11;
+  // icon and color of the nodes (own or inherited); empty: the user interface's defaults
+  string icon = 12;
+  string color = 13;
 }
 
 // LinkTypeInfo is the resolved model of a link type; an empty end accepts any node type.

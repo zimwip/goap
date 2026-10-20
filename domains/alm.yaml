@@ -1,5 +1,5 @@
 name: alm
-version: 1.7.1
+version: 1.7.2
 description: >
   Application lifecycle management domain: needs, requirements, functions, components, builds, releases and deployments. Shared by the delivery methodologies (impact-analysis, test-design, sdlc).
 enums:
@@ -10,6 +10,8 @@ enums:
   - {name: stage, description: Stage of an environment on the way to production, values: [{value: dev, label: Development}, {value: test, label: Integration test}, {value: staging, label: Staging}, {value: prod, label: Production}]}
 nodeTypes:
   - name: Need
+    icon: target
+    color: "#d97706"
     description: Business need expressed by a stakeholder
     attributes:
       - {name: title, label: Title, description: Short statement of the need, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
@@ -17,6 +19,8 @@ nodeTypes:
       - {name: stakeholder, label: Stakeholder, description: Who expressed the need, type: string, section: Origin, order: 3}
     search: [{property: title, text: true}, {property: description, text: true}, {property: stakeholder, facet: true}]
   - name: Requirement
+    icon: list
+    color: "#2563eb"
     description: Requirement satisfying a need
     attributes:
       - {name: title, label: Title, description: Short statement of the requirement, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
@@ -38,21 +42,29 @@ nodeTypes:
     description: "Functional requirement"
     extends: Requirement
   - name: NonFunctionalRequirement
+    icon: check
+    color: "#0891b2"
     extends: Requirement
     description: Non-functional requirement (performance, availability…)
     attributes:
       - {name: category, label: Category, description: Quality attribute concerned (performance, availability, security…), type: string, section: Classification, order: 6}
     search: [{property: category, facet: true}]
   - name: SecurityRequirement
+    icon: shield
+    color: "#dc2626"
     description: "Security requirement"
     extends: NonFunctionalRequirement
   - name: Function
+    icon: zap
+    color: "#7c3aed"
     description: Function (capability) realizing requirements
     attributes:
       - {name: title, label: Title, description: Name of the function, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
       - {name: description, label: Description, description: What the function does, type: string, widget: textarea, section: Identity, order: 2, validators: [description-max-2000]}
     search: [{property: title, text: true}, {property: description, text: true}]
   - name: Component
+    icon: code
+    color: "#059669"
     description: Software component implementing functions
     attributes:
       - {name: title, label: Name, description: Name of the component, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
@@ -62,6 +74,8 @@ nodeTypes:
       - {name: buildCommand, label: Build command, description: "Shell command building and testing the component in its sources (default: the one of its technology; ADR 0118)", type: string, section: Build, order: 5}
     search: [{property: title, text: true}, {property: technology, facet: true}, {property: version, facet: true}]
   - name: BuildArtifact
+    icon: download
+    color: "#65a30d"
     description: Artifact produced by the build of a component
     attributes:
       - {name: name, label: Name, description: Name of the artifact, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
@@ -72,22 +86,30 @@ nodeTypes:
       - {name: toolchain, label: Toolchain, description: Build tools and their versions, type: string, section: Build, order: 6}
       - {name: checks, label: Checks, description: Results of the checks run on the artifact (structured), type: json, widget: textarea, section: Build, order: 7}
   - name: Application
+    icon: app
+    color: "#0d9488"
     description: Deployable application composed of components
     attributes:
       - {name: title, label: Name, description: Name of the application, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
       - {name: version, label: Version, description: Current version of the application, dotted, type: string, section: Identity, order: 2, validators: [dotted-version]}
     search: [{property: title, text: true}, {property: version, facet: true}]
   - name: Solution
+    icon: graph
+    color: "#4f46e5"
     description: Solution grouping applications serving needs
     attributes:
       - {name: title, label: Name, description: Name of the solution, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
     search: [{property: title, text: true}]
   - name: Data
+    icon: database
+    color: "#b45309"
     description: Data object
     attributes:
       - {name: title, label: Name, description: Name of the data object, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
       - {name: classification, label: Classification, description: Sensitivity of the data, type: enum, enum: classification, section: Governance, order: 2}
   - name: Interface
+    icon: radio
+    color: "#db2777"
     description: Interface (API, file, event) exposed by an application
     attributes:
       - {name: title, label: Name, description: Name of the interface, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
@@ -95,12 +117,16 @@ nodeTypes:
       - {name: version, label: Version, description: Version of the contract (v1, v2…), type: string, section: Technical, order: 3}
     search: [{property: title, text: true}, {property: protocol, facet: true}]
   - name: Flow
+    icon: send
+    color: "#c026d3"
     description: Data flow between applications through an interface
     attributes:
       - {name: title, label: Name, description: Name of the flow, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
       - {name: mode, label: Mode, description: How the data is exchanged, type: enum, enum: flow-mode, section: Exchange, order: 2}
       - {name: frequency, label: Frequency, description: How often data flows (real time, daily…), type: string, section: Exchange, order: 3}
   - name: TestCase
+    icon: flask
+    color: "#16a34a"
     description: Test case verifying a requirement
     attributes:
       - {name: title, label: Title, description: Name of the test case, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
@@ -108,6 +134,8 @@ nodeTypes:
       - {name: steps, label: Steps, description: Steps to run and the expected result, type: string, widget: textarea, section: Procedure, order: 3, validators: [description-max-2000]}
     search: [{property: title, text: true}, {property: steps, text: true}, {property: level, facet: true}]
   - name: Release
+    icon: tag
+    color: "#ea580c"
     description: Deliverable version of an application (a set of artifacts)
     attributes:
       - {name: title, label: Title, description: Name of the release, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
@@ -117,6 +145,8 @@ nodeTypes:
     lifecycle: release
     search: [{property: title, text: true}, {property: notes, text: true}, {property: version, facet: true}]
   - name: Environment
+    icon: settings
+    color: "#475569"
     description: Execution environment (dev, test, staging, production)
     attributes:
       - {name: name, label: Name, description: Name of the environment, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
@@ -124,6 +154,8 @@ nodeTypes:
       - {name: order, label: Order, description: Position in the promotion path (1 = first), type: number, section: Identity, order: 3}
       - {name: url, label: URL, description: Address of the environment, type: string, section: Access, order: 4, validators: [url-format]}
   - name: Deployment
+    icon: upload
+    color: "#0284c7"
     description: Deployment of a release to an environment
     attributes:
       - {name: status, label: Status, description: Outcome of the deployment (succeeded, failed…), type: string, section: Outcome, order: 1}

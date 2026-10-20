@@ -123,7 +123,7 @@ func importersFromPB(ims []*registryv1.ImporterDecl) []def.Importer {
 
 func nodeTypeToPB(n def.NodeType) *registryv1.NodeType {
 	out := &registryv1.NodeType{Name: n.Name, Description: n.Description, Attributes: attributesToPB(n.Attributes), Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: n.Validators, Search: searchToPB(n.Search), Editor: n.Editor, AdminOnly: n.AdminOnly, AdditionalProperties: n.AdditionalProperties, Form: pbconv.FormToPB(n.Form)}
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: n.Validators, Search: searchToPB(n.Search), Editor: n.Editor, Icon: n.Icon, Color: n.Color, AdminOnly: n.AdminOnly, AdditionalProperties: n.AdditionalProperties, Form: pbconv.FormToPB(n.Form)}
 	if d := n.Document; d != nil {
 		out.Document = &registryv1.DocumentSpec{Contains: d.Contains}
 	}
@@ -138,7 +138,7 @@ func nodeTypeToPB(n def.NodeType) *registryv1.NodeType {
 
 func nodeTypeFromPB(n *registryv1.NodeType) def.NodeType {
 	out := def.NodeType{Name: n.Name, Description: n.Description, Attributes: attributesFromPB(n.Attributes), Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: nilIfNone(n.Validators), Search: searchFromPB(n.Search), Editor: n.Editor, AdminOnly: n.AdminOnly, AdditionalProperties: n.AdditionalProperties, Form: pbconv.FormFromPB(n.Form)}
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: nilIfNone(n.Validators), Search: searchFromPB(n.Search), Editor: n.Editor, Icon: n.Icon, Color: n.Color, AdminOnly: n.AdminOnly, AdditionalProperties: n.AdditionalProperties, Form: pbconv.FormFromPB(n.Form)}
 	if d := n.Document; d != nil {
 		out.Document = &domain.DocumentSpec{Contains: nilIfNone(d.Contains)}
 	}

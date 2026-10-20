@@ -85,6 +85,12 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 		if n.Editor != "" && !NameRE.MatchString(n.Editor) {
 			add(path+".editor", "invalid editor name %q (lowercase letters, digits, - and _)", n.Editor)
 		}
+		if n.Icon != "" && !IconRE.MatchString(n.Icon) {
+			add(path+".icon", "invalid icon name %q (letters and digits, starting with a lowercase letter)", n.Icon)
+		}
+		if n.Color != "" && !ColorRE.MatchString(n.Color) {
+			add(path+".color", "invalid color %q (#rrggbb)", n.Color)
+		}
 	}
 	parents := map[string]string{}
 	for i, n := range s.NodeTypes {
