@@ -50,7 +50,6 @@
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
 import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
-  import ProjectChanges from '../../components/ProjectChanges.svelte';
   import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, awaitingReview, writeNodeInChange, removeFromChange, removeManyFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
   import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { openTab } from '../../shell/tabs.svelte';
@@ -1181,10 +1180,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       onopennode={(s, d) => openNode({ id: d.node ?? '', key: d.key ?? '' }, { pin: true, change: ch.id ?? '', flow: s })}
     />
   {/if}
-  <EditorPanes {panes} bind:active={pane} label="Change context">
+  <EditorPanes {panes} bind:active={pane} label="Change context" changeId={ch.id}>
     {#snippet head()}
-      <!-- the change among the open changes of its project, then its detail -->
-      {#if !ch.parentId}<ProjectChanges change={ch} />{/if}
       <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} {writable} onchange={() => load(selected)} oncompare={() => (compareOpen = true)} />
       {#if ch.lifecycle}
         <ChangeLifecycleView lifecycle={ch.lifecycle} current={ch.state ?? ''} definition={lcDef} domain={lcDomain} loading={lcLoading} failure={lcFailure}>
@@ -1194,7 +1191,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         </ChangeLifecycleView>
       {/if}
     {/snippet}
-    <!-- what the change waits for from people (ADR 0117, ADR 0152): in the context column, by the assistant, else above every pane -->
+    <!-- what the change waits for from people (ADR 0117, ADR 0152): in the context bar while it is docked, else above every pane -->
     {#snippet aside()}
       <ChangeAsks
         changeId={selected}

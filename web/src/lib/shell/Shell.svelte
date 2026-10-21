@@ -5,8 +5,11 @@
   import { onMount, type Component } from 'svelte';
   import Header from './Header.svelte';
   import ActivityBar from './ActivityBar.svelte';
-  import SidePanel from './SidePanel.svelte';
   import NavSidebar from './NavSidebar.svelte';
+  import ContextBar from './ContextBar.svelte';
+  import Icon from './Icon.svelte';
+  import { contextBar } from './context.svelte';
+  import { viewsIn } from './registry';
   import EditorArea from './EditorArea.svelte';
   import BottomPanel from './BottomPanel.svelte';
   import Resizer from './Resizer.svelte';
@@ -60,6 +63,49 @@
   const narrow = $derived(width < 1024);
   const sideMax = $derived(Math.max(LIMITS.side.min, Math.min(LIMITS.side.max, Math.floor(width * 0.4))));
   const bottomMax = $derived(Math.max(LIMITS.bottom.min, Math.min(LIMITS.bottom.max, height - 200)));
+
+  // The context bar: docked when pinned on a wide screen, else on the edge, shown over the editor while hovered,
+  // focused, asked for (an edge button) or holding the assistant's conversation.
+  const docked = $derived(layout.rightOpen && !narrow);
+  $effect(() => {
+    contextBar.docked = docked;
+  });
+  $effect(() => {
+    if (assistant.panelOpen && !docked) contextBar.revealed = true;
+  });
+  const shown = $derived(!docked && (contextBar.revealed || (layout.rightOpen && narrow)));
+  let overlay = $state<HTMLElement>();
+  let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  let showTimer: ReturnType<typeof setTimeout> | undefined;
+  const edgeTools = $derived(viewsIn('right'));
+
+  function reveal(tool?: string) {
+    clearTimeout(hideTimer);
+    if (tool) layout.right = tool;
+    contextBar.revealed = true;
+  }
+  function revealSoon() {
+    clearTimeout(showTimer);
+    showTimer = setTimeout(() => reveal(), 180);
+  }
+  function hideSoon() {
+    clearTimeout(showTimer);
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      // kept while it holds the focus or the conversation
+      if (assistant.panelOpen || overlay?.contains(document.activeElement)) return;
+      contextBar.revealed = false;
+    }, 400);
+  }
+  function leaveFocus(e: FocusEvent) {
+    if (!overlay?.contains(e.relatedTarget as Node | null)) hideSoon();
+  }
+  function overlayKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && !assistant.panelOpen) {
+      contextBar.revealed = false;
+      e.stopPropagation();
+    }
+  }
 
   function keydown(e: KeyboardEvent) {
     const mod = e.ctrlKey || e.metaKey;
@@ -135,23 +181,42 @@
         </div>
       {/if}
     </div>
-    {#if layout.rightOpen}
-      {#if !narrow}
-        <Resizer
-          orientation="vertical"
-          value={Math.min(layout.rightWidth, sideMax)}
-          min={LIMITS.side.min}
-          max={sideMax}
-          invert
-          label="Right side panel width"
-          onresize={(v) => (layout.rightWidth = v)}
-        />
-      {/if}
+    {#if docked}
+      <Resizer
+        orientation="vertical"
+        value={Math.min(layout.rightWidth, sideMax)}
+        min={LIMITS.side.min}
+        max={sideMax}
+        invert
+        label="Context bar width"
+        onresize={(v) => (layout.rightWidth = v)}
+      />
       <div class="side right" style:width="{Math.min(layout.rightWidth, sideMax)}px">
-        <SidePanel side="right" />
+        <ContextBar />
       </div>
+    {:else}
+      <!-- the context bar's edge: hovering or focusing it shows the bar -->
+      <div class="edge" role="toolbar" aria-orientation="vertical" tabindex="-1" aria-label="Context bar" onmouseenter={revealSoon} onmouseleave={() => clearTimeout(showTimer)}>
+        <button type="button" title="Context" aria-label="Show the context" aria-expanded={shown} onclick={() => reveal()} onfocus={() => reveal()}><Icon name="target" size={16} /></button>
+        {#each edgeTools as v (v.id)}
+          <button type="button" title={v.title} aria-label={v.title} onclick={() => reveal(v.id)}><Icon name={v.icon} size={16} /></button>
+        {/each}
+      </div>
+      {#if shown}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="side right over"
+          bind:this={overlay}
+          style:width="{Math.min(layout.rightWidth, sideMax)}px"
+          onmouseenter={() => clearTimeout(hideTimer)}
+          onmouseleave={hideSoon}
+          onfocusout={leaveFocus}
+          onkeydown={overlayKey}
+        >
+          <ContextBar />
+        </div>
+      {/if}
     {/if}
-    <ActivityBar side="right" />
   </div>
   <StatusBar />
 </div>
@@ -205,6 +270,46 @@
     flex: none;
     min-height: 0;
   }
+  .edge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    width: 34px;
+    flex: none;
+    padding: 6px 0;
+    background: var(--bg-panel-translucent);
+    border-left: 1px solid var(--border);
+  }
+  .edge button {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-3);
+  }
+  .edge button:hover:not(:disabled) {
+    background: transparent;
+    color: var(--text);
+  }
+  .edge button:focus-visible {
+    outline-offset: -2px;
+  }
+  /* the context bar shown over the editor, by its edge */
+  .side.right.over {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 34px;
+    z-index: 20;
+    max-width: calc(100% - 34px);
+    border-left: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
   /* Narrow: side panels overlaid on the editor. */
   .narrow .side {
     position: absolute;
@@ -219,7 +324,7 @@
     border-right: 1px solid var(--border);
   }
   .narrow .side.right {
-    right: 42px;
+    right: 34px;
     border-left: 1px solid var(--border);
   }
 </style>

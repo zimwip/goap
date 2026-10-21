@@ -1,5 +1,5 @@
-// Where the assistant's conversation docks: the lower part of the context column of the editor shown (EditorPanes as
-// a column). None: the conversation floats over the corner, by its bubble.
+// Where the assistant's conversation docks: the lower part of the context bar, on its Assistant tool. None: the
+// conversation floats over the corner, by its bubble.
 export const dock = $state({ el: undefined as HTMLElement | undefined });
 
 /** Moves the node into the dock while one is given (a Svelte action), and takes it out when it goes. */

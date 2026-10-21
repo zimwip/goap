@@ -1,6 +1,7 @@
 <script lang="ts">
   // The floating assistant (ADR 0087): a round bubble on every screen that opens the conversation as a compact panel,
-  // docked in the lower part of the editor's context column when the editor shows one, else floating by the bubble.
+  // docked in the lower part of the context bar (which shows itself for it), floating by the bubble while there is
+  // no bar to hold it.
   // Not rendered when the assistant alias has no model. It keeps clear of the right activity bar and tool panel, the
   // console and the status bar, and gives way to the field helper (ADR 0086): they are never open together.
   import { tick } from 'svelte';
@@ -14,6 +15,7 @@
   import { startCapture } from '../assist/capture';
   import { entityOfElement } from '../assist/registry.svelte';
   import { dock, portal } from './dock.svelte';
+  import { contextBar } from '../shell/context.svelte';
 
   // what is selected or focused on the page is remembered, for the assistant to use (ADR 0092)
   $effect(() => startCapture((el) => !!entityOfElement(el)));
@@ -23,10 +25,10 @@
   let button = $state<HTMLButtonElement>();
   let returnFocus: Element | null = null;
 
-  // keep clear of what is docked at the right and at the bottom
-  const ACTIVITY_BAR = 42;
+  // keep clear of the context bar (its edge, or the bar itself while it shows) and of what is docked at the bottom
+  const EDGE = 34;
   const STATUS_BAR = 24;
-  const right = $derived(ACTIVITY_BAR + (layout.rightOpen ? layout.rightWidth : 0) + 12);
+  const right = $derived((contextBar.docked ? 0 : EDGE) + (contextBar.docked || contextBar.revealed ? layout.rightWidth : 0) + 12);
   const bottom = $derived(STATUS_BAR + (layout.bottomOpen ? layout.bottomHeight : 0) + 12);
 
   // the helper and the panel never share the screen

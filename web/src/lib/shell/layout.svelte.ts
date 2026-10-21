@@ -17,8 +17,6 @@ interface LayoutState {
   bottomOpen: boolean;
   bottomHeight: number;
   theme: Theme;
-  /** sections of the navigation sidebar folded by the person */
-  navFolded: string[];
 }
 
 const DEFAULTS: LayoutState = {
@@ -32,7 +30,6 @@ const DEFAULTS: LayoutState = {
   bottomOpen: true,
   bottomHeight: 220,
   theme: 'auto',
-  navFolded: [],
 };
 
 /** What the browser keeps: how the workbench looks, not where the user was. */
@@ -44,7 +41,6 @@ const kept = (l: LayoutState) => ({
   bottomOpen: l.bottomOpen,
   bottomHeight: l.bottomHeight,
   theme: l.theme,
-  navFolded: l.navFolded,
 });
 
 export const layout: LayoutState = $state({ ...DEFAULTS, ...kept(load(KEY, DEFAULTS)) });

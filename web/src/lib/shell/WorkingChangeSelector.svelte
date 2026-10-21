@@ -55,7 +55,7 @@
     <Icon name="branch" size={14} />
     <span class="wl">{label}</span>
   </button>
-  <Popover bind:open label="Working change" align="left" placement="below" width="300px">
+  <Popover bind:open label="Working change" align={block ? "right" : "left"} placement="below" width="300px">
     <div class="pop-head">
       <strong>Working change</strong>
       <span class="grow"></span>
