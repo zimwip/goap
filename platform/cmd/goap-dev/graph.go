@@ -1,6 +1,8 @@
 package main
 
 import (
+	"time"
+
 	"github.com/zimwip/goap/contracts/criticality"
 	"github.com/zimwip/goap/contracts/decision"
 	"github.com/zimwip/goap/contracts/domain"
@@ -30,7 +32,10 @@ func buildGraph(e *env, st stores) (*graphPart, error) {
 	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
 	g.Resolvers = graphsvc.Resolvers()   // the sources of the logical URLs beyond its namespaces (ADR 0154)
 	reader := graphsnap.NewReader(g)
-	directory := &access.Directory{Graph: g, Reader: reader}
+	// the platform graph delivers the policies, the organisation and the projects to every graph, this one included, the
+	// same way (ADR 0154 §9): the directory keeps its snapshot until the baseline events of the graph (delivered in
+	// process by its outbox, buildPlatform) say the organisation moved
+	directory := &access.Directory{Graph: g, Reader: reader, Follow: &graphsnap.Heads{MaxAge: 30 * time.Second}}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
 		return nil, err

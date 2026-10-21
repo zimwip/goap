@@ -327,7 +327,7 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 		}
 	}
 	for _, b := range ot.baselines {
-		ev := domain.BaselineEvent{ID: b.ID, Branch: domain.BranchOf(b.Branch), Parent: b.ParentID, Set: map[domain.NodeID]domain.Version{}, Time: b.CreatedAt}
+		ev := domain.BaselineEvent{ID: b.ID, Namespace: domain.NamespaceOf(b.Namespace), Branch: domain.BranchOf(b.Branch), Parent: b.ParentID, Set: map[domain.NodeID]domain.Version{}, Time: b.CreatedAt}
 		if delta, ok := ot.deltas[b.ID]; ok {
 			for _, id := range slices.Sorted(maps.Keys(delta)) {
 				if v := delta[id]; v == 0 {

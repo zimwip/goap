@@ -165,22 +165,27 @@ func main() {
 			log.Info("domains imported", "dir", dir, "domains", doms)
 		}
 	}
-	// the hooks of the graph are set before the seeds start (they run in the background, and write through them)
-	directory := &access.Directory{Graph: g}
+	// the hooks of the graph are set before the seeds start (they run in the background, and write through them).
+	// The platform graph delivers the policies, the organisation and the projects to every graph, itself included, the
+	// same way (ADR 0154 §9): a directory over the platform graph (this one in process, else its client) keeps its
+	// snapshot until the platform's baseline events say the organisation moved
+	var source access.Graph = g
 	if content {
 		// the organisation and the projects are the platform graph's: its directory places the changes and the versions
-		// of this graph, read at each use from the head of the platform's organisation (ADR 0145)
-		platformGraph := followedGraph{Client: graphclient.NewClient(platform.H2CClient(), platformURL, telemetry.ClientOptions()...), heads: &graphsnap.Heads{}}
-		if events != nil {
-			// read once, then again when the platform's main moves (its baseline events); a lost event is caught up later
-			platformGraph.heads.MaxAge = 30 * time.Second
-			if err := events.Subscribe(fmt.Sprintf(domain.SubjectBaselineAdvanced, domain.MainBranch), func([]byte) { platformGraph.heads.Moved() }); err != nil {
-				platform.Fatal(log, "subscribe", err)
-			}
-		} else {
-			platformGraph.heads.MaxAge = time.Nanosecond // no bus: asked at each read
+		// of this graph
+		source = graphclient.NewClient(platform.H2CClient(), platformURL, telemetry.ClientOptions()...)
+	}
+	directory := &access.Directory{Graph: source, Follow: &graphsnap.Heads{}}
+	if events != nil {
+		// read once, then again when the organisation moves; a lost event is caught up after MaxAge
+		directory.Follow.MaxAge = 30 * time.Second
+		if err := events.Subscribe(fmt.Sprintf(domain.SubjectBaselineAdvanced, domain.MainBranch), directory.Moved); err != nil {
+			platform.Fatal(log, "subscribe", err)
 		}
-		directory = &access.Directory{Graph: platformGraph}
+	} else {
+		directory.Follow = nil // no bus: the head is asked at each read
+	}
+	if content {
 		g.Directory = directory
 	}
 	authorizer, err := access.NewAuthorizer(directory)
@@ -299,17 +304,6 @@ func main() {
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}
-}
-
-// followedGraph is the platform graph as a content graph reads its organisation (ADR 0154 §9): the heads of its
-// branches are kept until its events say one moved, the rest is read from it.
-type followedGraph struct {
-	*graphclient.Client
-	heads *graphsnap.Heads
-}
-
-func (f followedGraph) BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error) {
-	return f.heads.Get(ctx, namespace, name, f.Client.BranchHead)
 }
 
 // registryOperationRoles reads the roles that allow an operation from the methodology of the change, compiled by the

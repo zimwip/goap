@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -546,9 +547,15 @@ type Directory struct {
 	Graph Graph
 	// Reader is the reader of the graph of the process the directory shares (nil: its own).
 	Reader *graphsnap.Reader
+	// Follow, when set, keeps the snapshot until the platform says the organisation moved (ADR 0154 §9: the platform
+	// graph delivers the policies, the organisation and the projects to every graph, itself included, the same way):
+	// Moved, given the baseline events of the platform graph, forgets the head; Follow.MaxAge catches a lost event.
+	// Nil: the head is asked at each read.
+	Follow *graphsnap.Heads
 
-	mu    sync.Mutex
-	cache *graphsnap.View[*Snapshot]
+	mu        sync.Mutex
+	cache     *graphsnap.View[*Snapshot]
+	namespace string // of the structures, once read
 }
 
 // Snapshot returns the current snapshot. A graph without any baseline yields an empty one; when the graph
@@ -565,8 +572,31 @@ func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
 // Refresh reads the snapshot of the head after a write the next calls must see (a user just declared at sign-in, ADR
 // 0042): every read asks for the head, so it only tells whether the graph answers.
 func (d *Directory) Refresh(ctx context.Context) error {
+	if d.Follow != nil {
+		d.Follow.Moved()
+	}
 	_, err := d.Snapshot(ctx)
 	return err
+}
+
+// Moved takes a baseline event of the platform graph (a domain.BaselineEvent, subject domain.SubjectBaselineAdvanced):
+// a commit on the main branch of the organisation's namespace (a policy, a unit, an assignment, a project changed)
+// makes a following directory read the snapshot again at its next use. Other events are left alone.
+func (d *Directory) Moved(data []byte) {
+	if d.Follow == nil {
+		return
+	}
+	var ev domain.BaselineEvent
+	if json.Unmarshal(data, &ev) != nil {
+		d.Follow.Moved() // unreadable: read again rather than miss a change
+		return
+	}
+	d.mu.Lock()
+	ns := d.namespace
+	d.mu.Unlock()
+	if ev.Branch == domain.MainBranch && (ev.Namespace == "" || ns == "" || ev.Namespace == ns) {
+		d.Follow.Moved()
+	}
 }
 
 // snapshots returns the cache of the head of the namespace of the structures, asking the graph for them first (ADR
@@ -585,9 +615,11 @@ func (d *Directory) snapshots(ctx context.Context) (*graphsnap.View[*Snapshot], 
 		if r == nil {
 			r = graphsnap.NewReader(d.Graph)
 		}
-		d.cache = graphsnap.One(r, st.Organisation().Namespace, true, func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
+		d.namespace = st.Organisation().Namespace
+		d.cache = graphsnap.One(r, d.namespace, true, func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
 			return BuildSnapshot(st, id, nodes, links)
 		})
+		d.cache.Heads = d.Follow
 	}
 	return d.cache, nil
 }

@@ -1164,6 +1164,13 @@ listings are merged over every graph, each naming its source (the statistics gro
 (`GOAP_GRAPH_SPACE=content`) reads its types and its organisation from the platform graph (`Graph.Directory`,
 `graphsnap.Heads`), holds no root and seeds nothing.
 
+
+The platform graph delivers the policies, the organisation and the projects to every graph, itself included, the
+same way: each graph's `access.Directory` reads them from the platform graph (in process, else its client) and keeps
+its snapshot (`Directory.Follow`) until a baseline event of the organisation's namespace (`domain.BaselineEvent`
+carries its namespace) reaches `Directory.Moved`; a change of a policy is a commit on the platform graph, its outbox
+sends the event, every graph refreshes.
+
 ### 3.4b Node index and search ([ADR 0026](adr/0026-node-index-and-search.md))
 
 A node type declares the searchable properties of its nodes (`search: [{property, text, facet}]`, inherited through

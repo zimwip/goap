@@ -185,3 +185,11 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
   it, through `Graph.Directory` in a content graph). What needs a key only (the authorizations, the engine's process,
   the index, the events) takes `URL.Key`; the web reads them with `refKey` (`web/src/lib/lnk.ts`). A structure held by
   another source than its namespace is refused for now.
+- **The platform delivers the policies to every graph the same way** (Thomas, 2026-10-21): the policies, the
+  organisation and the projects are read by every graph, the platform graph itself included, through one
+  `access.Directory` over the platform graph (in process for the platform graph, its client for a content graph) that
+  keeps its snapshot (`Directory.Follow`, a `graphsnap.Heads` set on its `graphsnap.View`) until a baseline event of
+  the organisation's namespace says it moved (`Directory.Moved`; `domain.BaselineEvent.Namespace`): changing a node of
+  the organisation (a policy, a unit, an assignment) commits on the platform graph, whose outbox sends the event, and
+  every graph listening refreshes (`platform/cmd/graph` over NATS, `goap-dev` from its outbox in process; `MaxAge`
+  30 s catches a lost event, no bus: the head asked at each read; `Refresh` reads again at once, the sign-in).
