@@ -494,6 +494,16 @@ func (g *Graph) Change(ctx context.Context, id domain.ChangeID) (c domain.Change
 	return
 }
 
+// ChangeHead reads the head of a change: neither its impacts nor its items (Tx.ChangeHead), what a check of who may act
+// on it reads (its unit, project, methodology) without folding its log.
+func (g *Graph) ChangeHead(ctx context.Context, id domain.ChangeID) (c domain.Change, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		c, err = tx.ChangeHead(ctx, id)
+		return err
+	})
+	return
+}
+
 // ChangeChecked is Change with the validation of each impact carrying a draft (ImpactValidation): what the change
 // impacts look like to a person who reviews them. Each impact is checked on the flow that declared it.
 func (g *Graph) ChangeChecked(ctx context.Context, id domain.ChangeID) (c domain.Change, err error) {

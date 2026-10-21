@@ -255,6 +255,25 @@ func (g *Graph) ListChangeImpacts(ctx context.Context, id domain.ChangeID) (out 
 	return
 }
 
+// ImpactType returns the type of a change impact of a change, "" when the change holds no such impact: what a gate on
+// the type of the node an operation touches reads, without copying the impacts of the change.
+func (g *Graph) ImpactType(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID) (typ string, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		if _, err := tx.ChangeHead(ctx, id); err != nil {
+			return err
+		}
+		st, err := g.draftState(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if i, ok := st.at[impact]; ok {
+			typ = st.impacts[i].Type
+		}
+		return nil
+	})
+	return
+}
+
 // ImpactsOf returns the change impacts one execution (an Activity Run, architecture plan "Activity concept")
 // declared: its Pre (the context graph) and Post (the modified graph) node versions, scoped to exactly what that
 // run touched rather than the whole change. Empty when the execution declared none.
