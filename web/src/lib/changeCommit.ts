@@ -11,10 +11,13 @@ export const unmodified = (c: ChangeImpact): boolean => !!c.validation && c.vali
 /** The impact holds a draft that modifies its node (the server's validation says so; unknown: taken as one). */
 export const modifies = (c: ChangeImpact): boolean => isDraft(c.post) && !unmodified(c);
 
+/** The impact is committed: its post is the version its draft was written as (ADR 0079), no longer a draft. */
+export const committed = (c: ChangeImpact): boolean => !!c.committed?.id || (!!c.post && !isDraft(c.post));
+
 /** Why an impact cannot be accepted (it modifies nothing: a candidate, a draft left as it was checked out); undefined when
- * it may be. */
+ * it may be, or when it is committed (its acceptance was judged on its draft, ADR 0152). */
 export function notAcceptableWhy(c: ChangeImpact): string | undefined {
-  if (modifies(c)) return undefined;
+  if (modifies(c) || committed(c)) return undefined;
   return isDraft(c.post) ? 'it modifies nothing: its draft is the version it was checked out from' : 'it modifies nothing: a candidate, check it out and change it, or withdraw it';
 }
 

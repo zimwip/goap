@@ -7,7 +7,7 @@
   import { isDraft, type GraphNode, type LifecycleTransition } from '../api';
   import { birthStates, type LifecycleRow } from '../lifecycle';
   import type { Lifecycle } from '../api';
-  import StatusBadge from './StatusBadge.svelte';
+  import ImpactDecisions from './ImpactDecisions.svelte';
   import { confirmDialog } from '../shell/confirmState.svelte';
   import { assistTarget } from '../assist/registry.svelte';
   import AssessmentBubble from './AssessmentBubble.svelte';
@@ -352,9 +352,8 @@
             {#if impacts}
               <td>
                 {#if r.impact}
-                  <StatusBadge status={r.impact.review} />
+                  <ImpactDecisions impact={r.impact} />
                   {#if r.impact.validation && !r.impact.validation.valid}<div class="invalid" role="alert" title="The review of this impact is blocked until its draft passes the validation rules">Validation failed: {r.impact.validation.message || 'the draft fails a validation rule'}</div>{/if}
-                  {#if r.impact.reviews?.length}<div class="hint">{r.impact.reviews.at(-1)?.by}: {r.impact.reviews.at(-1)?.comment}</div>{/if}
                 {/if}
               </td>
             {/if}

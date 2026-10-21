@@ -67,3 +67,24 @@ export function waitingFor(since: string | undefined, now: number = Date.now()):
   if (h < 48) return `${h} h`;
   return `${Math.floor(h / 24)} d`;
 }
+
+/** One count of the attention strip of a change (ADR 0152): what it counts, and whether the caller is the one asked. */
+export interface AttentionChip {
+  label: string;
+  mine: boolean;
+}
+
+/** The counts the strip shows folded: the asks the caller may answer, the impacts awaiting their review (the caller's to
+ * review while the change is open), then the asks waiting for others, grouped by addressee. Empty: nothing waits. */
+export function attentionChips(g: AskGroups, reviews: number, me = ''): AttentionChip[] {
+  const out: AttentionChip[] = [];
+  if (g.mine.length) out.push({ label: `${g.mine.length} for you`, mine: true });
+  if (reviews) out.push({ label: `${reviews} impact${reviews > 1 ? 's' : ''} to review`, mine: true });
+  const by = new Map<string, number>();
+  for (const a of g.others) {
+    const who = addressee(a, me);
+    by.set(who, (by.get(who) ?? 0) + 1);
+  }
+  for (const [who, n] of by) out.push({ label: `${n} for ${who}`, mine: false });
+  return out;
+}

@@ -1,42 +1,39 @@
 <script lang="ts">
-  // What the change waits for from people (ADR 0117), at the top of its overview: what the person looking at it may
-  // answer, answered in place (the panel of the run's task, the answer to a question), then what waits for someone
-  // else and whom. The engine gathers the asks and says who may answer each; the runs stay one click away.
+  // What the change waits for from people (ADR 0117), as one strip above the panes of the change (ADR 0152): folded, it
+  // counts what waits for the person looking at it and for whom else; unfolded, it lists what the person may answer,
+  // answered in place (the panel of the run's task, the answer to a question), then what waits for someone else and
+  // whom. Nothing waiting, or the asks unreadable: no strip. The engine gathers the asks and says who may answer each.
   import { engine, errorMessage, graph, shortId, type ChangeAsk, type Process } from '../api';
   import { processes, ingestProcess } from '../stores/live.svelte';
   import { me } from '../stores/session.svelte';
   import { stamp, keyOf } from '../flux/signals.svelte';
-  import { addressee, answeredInPlace, askKind, groupAsks, waitingFor } from '../changeAsks';
+  import { addressee, answeredInPlace, askKind, attentionChips, groupAsks, waitingFor } from '../changeAsks';
   import PendingTask from './PendingTask.svelte';
   import IntentDialogue from '../views/editors/IntentDialogue.svelte';
 
   let {
     changeId,
     closed = false,
-    always = false,
     reviews = [],
     onreview,
     ondecisions,
     onopen,
-    oncount,
   }: {
     changeId: string;
     closed?: boolean;
-    /** shown even when nothing is asked (the side column of the change) */
-    always?: boolean;
     /** keys of the impacts awaiting their review */
     reviews?: string[];
     onreview?: () => void;
     ondecisions?: () => void;
     onopen: (processId: string, pin?: boolean) => void;
-    /** how many asks the person may answer, reviews included */
-    oncount?: (n: number) => void;
   } = $props();
 
   let asks = $state<ChangeAsk[]>([]);
   let error = $state('');
   let answers = $state<Record<string, string>>({});
   let busy = $state('');
+  /** the strip unfolded (per tab, not remembered) */
+  let open = $state(false);
 
   // the runs of the change move (live stream) or the change itself does: read the asks again
   const version = $derived(
@@ -53,17 +50,18 @@
       .getChangeAsks(changeId, ctl.signal)
       .then((r) => {
         asks = r.asks ?? [];
-        error = '';
       })
-      .catch((e: unknown) => {
-        if (!ctl.signal.aborted) error = errorMessage(e);
+      .catch(() => {
+        // the engine cannot say what the change waits for: show nothing of it rather than an error beside every pane
+        if (!ctl.signal.aborted) asks = [];
       });
     return () => ctl.abort();
   });
 
   const groups = $derived(groupAsks(asks));
   const subject = $derived(me());
-  $effect(() => oncount?.(groups.mine.length + (closed ? 0 : reviews.length)));
+  const chips = $derived(attentionChips(groups, closed ? 0 : reviews.length, subject));
+  const forMe = $derived(chips.some((c) => c.mine));
 
   const runOf = (a: ChangeAsk): Process | undefined => (a.processId ? processes.get(a.processId) : undefined);
 
@@ -83,8 +81,16 @@
   }
 </script>
 
-{#if always || groups.mine.length || groups.others.length || (!closed && reviews.length) || error}
-  <section class="card asks" aria-label="What the change waits for">
+{#if chips.length}
+  <section class="asks" class:mine={forMe} aria-label="What the change waits for">
+    <button type="button" class="strip" aria-expanded={open} onclick={() => (open = !open)}>
+      <strong>Waiting on people</strong>
+      {#each chips as c (c.label)}<span class="chip" class:mine={c.mine}>{c.label}</span>{/each}
+      <span class="grow"></span>
+      <span class="hint">{open ? 'Hide ▴' : 'Show ▾'}</span>
+    </button>
+    {#if open}
+    <div class="panel">
     {#if groups.mine.length || (!closed && reviews.length)}
       <h3>Waiting for you <span class="count">{groups.mine.length + (closed ? 0 : reviews.length)}</span></h3>
       {#each groups.mine as a, i (a.id)}
@@ -138,17 +144,62 @@
         {/each}
       </ul>
     {/if}
-    {#if !groups.mine.length && !groups.others.length && (closed || !reviews.length) && !error}
-      <h3>Waiting for people</h3>
-      <p class="hint">Nothing waits for anyone: what a run or a decision needs from a person shows here.</p>
+    {#if error}<p class="hint">Answering failed: {error}</p>{/if}
+    </div>
     {/if}
-    {#if error}<p class="hint">What the change waits for is unavailable: {error}</p>{/if}
   </section>
 {/if}
 
 <style>
   .asks {
-    border-left: 3px solid var(--accent);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    margin: 0 0 0.6rem;
+  }
+  .asks.mine {
+    border-color: var(--accent);
+  }
+  .strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    align-items: center;
+    width: 100%;
+    padding: 5px 10px;
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .asks.mine .strip {
+    background: var(--accent-soft);
+  }
+  .strip .grow {
+    flex: 1;
+  }
+  .chip {
+    font-size: 0.85em;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 8px;
+    background: var(--surface);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .chip.mine {
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .panel {
+    padding: 6px 12px 10px;
+    border-top: 1px solid var(--border);
+    max-height: 60vh;
+    overflow-y: auto;
   }
   h3,
   h4 {

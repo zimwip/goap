@@ -1,7 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { addressee, answeredInPlace, askKind, groupAsks, roleLabel, waitingFor } from './changeAsks';
+import { addressee, answeredInPlace, askKind, attentionChips, groupAsks, roleLabel, waitingFor } from './changeAsks';
 
 describe('changeAsks', () => {
+  it('counts what the strip shows folded, the caller first, the others by addressee', () => {
+    const g = groupAsks([
+      { id: 'a', mayAnswer: true },
+      { id: 'b', roles: ['release_manager'] },
+      { id: 'c', roles: ['release_manager'] },
+      { id: 'd', owner: 'alice' },
+    ]);
+    expect(attentionChips(g, 3, 'bob')).toEqual([
+      { label: '1 for you', mine: true },
+      { label: '3 impacts to review', mine: true },
+      { label: '2 for release manager', mine: false },
+      { label: '1 for alice', mine: false },
+    ]);
+    expect(attentionChips(groupAsks([]), 1)).toEqual([{ label: '1 impact to review', mine: true }]);
+    expect(attentionChips(groupAsks([]), 0)).toEqual([]);
+  });
+
   it('splits the asks between the caller and the others, keeping their order', () => {
     const g = groupAsks([
       { id: 'a', mayAnswer: true },

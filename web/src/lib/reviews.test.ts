@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { awaitingImpacts, canSubmit, invalidReason, validImpacts, reviewRows, staleEntries, effectiveComment, foldReviews, mayEdit, overlay, reviewOrder, submitProblems, tally } from './reviews';
+import { awaitingImpacts, canSubmit, decisionHistory, invalidReason, stageOf, validImpacts, reviewRows, staleEntries, effectiveComment, foldReviews, mayEdit, overlay, reviewOrder, submitProblems, tally } from './reviews';
 import type { ChangeImpact, ChangeItem, ReviewRecord } from './api';
 
 const item = (id: string, data: Record<string, unknown>, extra: Partial<ChangeItem> = {}): ChangeItem => ({ id, type: 'review', status: 'proposed', producedBy: 'alice', data: data as ChangeItem['data'], ...extra });
@@ -151,6 +151,9 @@ describe('validation of an impact', () => {
     // ADR 0102: a candidate or a draft that modifies nothing is not accepted
     expect(invalidReason({ id: 'e', review: 'proposed', pre: { id: 'n', version: 1 } })).toMatch(/modifies nothing/);
     expect(invalidReason({ ...ok, validation: { valid: true, modified: false } })).toMatch(/modifies nothing/);
+    // ADR 0152: a committed impact is not a candidate (its post is the version its draft was written as)
+    expect(invalidReason({ id: 'f', review: 'accepted', pre: { id: 'n', version: 1 }, post: { id: 'n', version: 2 }, committed: { id: 'n', version: 2 } })).toBe('');
+    expect(invalidReason({ id: 'g', review: 'accepted', post: { id: 'n', version: 1 } })).toBe('');
   });
 
   it('keeps the impacts that pass', () => {
@@ -163,5 +166,28 @@ describe('validation of an impact', () => {
     expect(submitProblems(r, new Set(), [ok, bad])[0]).toContain('alias reasoning needs a target');
     expect(canSubmit(rec({ comment: 'ok', entries: [{ changeImpactId: 'b', outcome: 'reject' }] }), undefined, [ok, bad])).toBe(true);
     expect(canSubmit(rec({ comment: 'ok', entries: [{ changeImpactId: 'a', outcome: 'accept' }] }), undefined, [ok, bad])).toBe(true);
+  });
+});
+
+describe('decision history', () => {
+  it('lists the decisions the latest first, an accepted verdict having passed the rules then', () => {
+    const n: ChangeImpact = {
+      id: 'a',
+      reviews: [
+        { status: 'rejected', by: 'bob', comment: 'missing link', at: '2026-10-21T07:30:00Z', reviewId: 'REV-1' },
+        { status: 'proposed', by: 'alice', comment: 'edited again', at: '2026-10-21T07:50:00Z' },
+        { status: 'accepted', by: 'carol', comment: 'ok', at: '2026-10-21T08:11:00Z', reviewId: 'REV-2', flow: 'main' },
+      ],
+    };
+    const h = decisionHistory(n);
+    expect(h.map((d) => d.status)).toEqual(['accepted', 'proposed', 'rejected']);
+    expect(h[0]).toMatchObject({ by: 'carol', reviewId: 'REV-2', flow: '', checked: true });
+    expect(h.slice(1).every((d) => !d.checked)).toBe(true);
+    expect(decisionHistory(undefined)).toEqual([]);
+  });
+
+  it('tells the stage of a review', () => {
+    expect(stageOf(rec({ status: 'open' }))).toBe('open');
+    expect(stageOf(rec({ status: 'submitted' }))).toBe('submitted');
   });
 });

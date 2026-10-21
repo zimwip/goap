@@ -5,12 +5,14 @@
   // A new review is prefilled with every impact awaiting a review; the open review is one table of those impacts, a box to
   // include or remove each (a removed row stays, greyed, to be included again), its comment and outcome inline. Nothing is read again after a
   // write: the answer is put over what the change shows until the platform stream brings the new version.
+  // ADR 0152: the state of each review reads at a glance: a banner when impacts await a review (to create), a stepper on
+  // each review (open, submitted); a submitted review folds to one line and shows what it decided, never the validation
+  // of the impacts as they are now (each verdict was checked on the draft of its time; the impact keeps its history).
   import { graph, errorMessage, formatDate, shortId, type Change, type ChangeImpact, type ReviewEdit, type ReviewRecord } from '../api';
   import { MAIN_SCOPE } from '../changeScope';
-  import { awaitingImpacts, canSubmit, foldReviews, invalidReason, validImpacts, mayEdit, overlay, reviewOrder, reviewRows, staleEntries, submitProblems, tally, OUTCOMES } from '../reviews';
+  import { awaitingImpacts, canSubmit, foldReviews, invalidReason, validImpacts, mayEdit, overlay, reviewOrder, reviewRows, stageOf, staleEntries, submitProblems, tally, OUTCOMES, REVIEW_STAGES } from '../reviews';
   import { can, me } from '../stores/session.svelte';
   import { confirmDialog } from '../shell/confirmState.svelte';
-  import StatusBadge from './StatusBadge.svelte';
   import { assistField } from '../assist/registry.svelte';
 
   let {
@@ -35,6 +37,8 @@
   let local = $state<Record<string, ReviewRecord>>({});
   let busy = $state('');
   let error = $state('');
+  /** the submitted reviews unfolded */
+  let unfolded = $state<Record<string, boolean>>({});
 
   const all = $derived(overlay(foldReviews(change.items ?? []), local));
   const reviews = $derived(reviewOrder(all.filter((r) => flowOf(r.flow) === flowOf(scope))));
@@ -99,12 +103,6 @@
 
   const rowsOf = (r: ReviewRecord) => reviewRows(nodes, all, r);
   const staleOf = (r: ReviewRecord) => new Set(staleEntries(nodes, r));
-  /** what the review of the impact made in this review says (the impact may have been reviewed again since) */
-  function outcomeOf(r: ReviewRecord, id: string): string {
-    const rs = byId.get(id)?.reviews ?? [];
-    for (let i = rs.length - 1; i >= 0; i--) if (rs[i].reviewId === r.key) return rs[i].status ?? '';
-    return byId.get(id)?.review ?? '';
-  }
 </script>
 
 <section class="card">
@@ -121,7 +119,16 @@
 
   {#if waiting.length}
     <div class="waiting" aria-label="Impacts awaiting a review">
-      <h4>Awaiting a review <span class="hint">{waiting.length} impact{waiting.length > 1 ? 's' : ''} · {waiting.length - blocked.length} can be reviewed now{blocked.length ? ` · ${blocked.length} blocked by a validation rule` : ''}</span></h4>
+      <div class="banner todo">
+        <strong>{waiting.length} impact{waiting.length > 1 ? 's' : ''} wait{waiting.length > 1 ? '' : 's'} for a review</strong>
+        <span class="hint">{waiting.length - blocked.length} can be reviewed now{blocked.length ? ` · ${blocked.length} blocked by a validation rule` : ''}</span>
+        <span class="grow"></span>
+        {#if !closed}
+          <button type="button" class="small primary" disabled={!!busy || waiting.length === blocked.length} title="Opens a review holding the impacts that pass their validation; the others stay here until their draft is fixed" onclick={open}>
+            Start a review of the {waiting.length - blocked.length} valid
+          </button>
+        {/if}
+      </div>
       <table class="reg">
         <thead><tr><th>Impact</th><th>Why</th><th>Validation</th></tr></thead>
         <tbody>
@@ -137,13 +144,6 @@
           {/each}
         </tbody>
       </table>
-      {#if !closed}
-        <div class="row actions">
-          <button type="button" class="primary" disabled={!!busy || waiting.length === blocked.length} title="Opens a review holding the impacts that pass their validation; the others stay here until their draft is fixed" onclick={open}>
-            Review the {waiting.length - blocked.length} valid impact{waiting.length - blocked.length > 1 ? 's' : ''}
-          </button>
-        </div>
-      {/if}
     </div>
   {/if}
 
@@ -153,12 +153,24 @@
     {@const t = tally(r)}
     {@const rows = rowsOf(r)}
     {@const stale = staleOf(r)}
+    {@const stage = stageOf(r)}
+    {@const shown = isOpen || !!unfolded[r.key]}
     <article class="review" class:final={!isOpen} aria-label="Review {r.key}">
+      <ol class="stepper" aria-label="Stage of the review">
+        {#each REVIEW_STAGES as st, i (st.id)}
+          {@const at = REVIEW_STAGES.findIndex((x) => x.id === stage)}
+          <li class:done={i < at} class:on={i === at} class:submitted={i === at && stage === 'submitted'} aria-current={i === at ? 'step' : undefined}>{st.label}</li>
+        {/each}
+      </ol>
       <header>
         <span class="mono key">{r.key}</span>
-        <StatusBadge status={r.status} />
-        <span class="hint">by {r.by || '—'}{r.submittedAt ? ` · submitted ${formatDate(r.submittedAt)}` : ''}</span>
-        <span class="hint tally">{(r.entries?.length ?? 0) - staleOf(r).size} impact(s){isOpen ? '' : ` · ${t.accept} accepted · ${t.reject} rejected`}</span>
+        <span class="hint">{isOpen ? (mine ? 'yours, not submitted' : `by ${r.by || '—'}, not submitted`) : `by ${r.by || '—'}`}{r.submittedAt ? ` · submitted ${formatDate(r.submittedAt)}` : ''}</span>
+        <span class="hint tally">{(r.entries?.length ?? 0) - staleOf(r).size} impact(s){isOpen ? ` · ${r.entries?.filter((e) => e.outcome).length ?? 0} decided` : ''}</span>
+        {#if !isOpen}
+          {#if t.accept}<span class="verdict accept">{t.accept} accepted</span>{/if}
+          {#if t.reject}<span class="verdict reject">{t.reject} rejected</span>{/if}
+          <button type="button" class="link small" aria-expanded={shown} onclick={() => (unfolded[r.key] = !shown)}>{shown ? 'Hide entries' : 'Show entries'}</button>
+        {/if}
       </header>
 
       {#if mine}
@@ -172,11 +184,13 @@
             use:assistField={{ id: `review_global_comment:${r.key}`, label: `Comment of review ${r.key}`, type: 'string', get: () => r.comment ?? '', set: (v) => void setComment(r, String(v)) }}
           ></textarea>
         </label>
-      {:else if r.comment}
+      {:else if r.comment && shown}
         <p class="global">{r.comment}</p>
       {/if}
 
-      {#if rows.length}
+      {#if !shown}
+        <!-- folded: the header says what it decided -->
+      {:else if rows.length}
         <table class="reg">
           <thead>
             <tr>
@@ -192,7 +206,6 @@
                   </span>
                 {/if}
               </th>
-              {#if !isOpen}<th>Impact now</th>{/if}
             </tr>
           </thead>
           <tbody>
@@ -208,7 +221,7 @@
                   <button type="button" class="link mono" title="Open the impact" onclick={() => onopenimpact?.(x.id)}>{label(x.id)}</button>
                   <div class="hint">{[n?.type, n?.intent].filter(Boolean).join(' · ')}</div>
                   {#if n?.rationale}<div class="hint" title={n.rationale}>{n.rationale}</div>{/if}
-                  {#if invalidReason(n)}<div class="invalid" role="alert">Validation failed: {invalidReason(n)}</div>{/if}
+                  {#if isOpen && invalidReason(n)}<div class="invalid" role="alert">Validation failed: {invalidReason(n)}</div>{/if}
                 </td>
                 <td>
                   {#if mine}
@@ -229,9 +242,12 @@
                     {/each}
                   {:else}
                     <span class="verdict {x.outcome}">{x.outcome === 'accept' ? 'accepted' : x.outcome === 'reject' ? 'rejected' : '—'}</span>
+                    {@const now = byId.get(x.id)?.review}
+                    {#if now && x.outcome && now !== (x.outcome === 'accept' ? 'accepted' : 'rejected')}
+                      <span class="hint" title="Decided again since this review: the impact's history says by whom and why">now {now}</span>
+                    {/if}
                   {/if}
                 </td>
-                {#if !isOpen}<td><StatusBadge status={outcomeOf(r, x.id)} /></td>{/if}
               </tr>
             {/each}
           </tbody>
@@ -262,9 +278,6 @@
   .waiting {
     margin: 0.5rem 0 1rem;
   }
-  .waiting h4 {
-    margin: 0 0 0.3rem;
-  }
   .ok {
     color: var(--muted);
     font-size: 0.85rem;
@@ -279,8 +292,55 @@
     padding: 10px 12px;
     margin-top: 10px;
   }
-  .review.final {
-    opacity: 0.85;
+  .review:not(.final) {
+    border-color: var(--warn);
+  }
+  .banner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    margin-bottom: 6px;
+  }
+  .banner.todo {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .banner .grow {
+    flex: 1;
+  }
+  .stepper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    list-style: none;
+    margin: 0 0 6px;
+    padding: 0;
+    font-size: 0.8rem;
+  }
+  .stepper li {
+    padding: 0 8px;
+    border-radius: 999px;
+    background: var(--neutral-soft);
+    color: var(--muted);
+  }
+  .stepper li + li::before {
+    content: '› ';
+  }
+  .stepper li.done {
+    background: var(--ok-soft);
+    color: var(--ok);
+  }
+  .stepper li.on {
+    background: var(--warn-soft);
+    color: var(--warn);
+    font-weight: 600;
+  }
+  .stepper li.on.submitted {
+    background: var(--ok);
+    color: var(--surface);
   }
   header {
     display: flex;

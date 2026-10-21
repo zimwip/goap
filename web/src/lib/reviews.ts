@@ -2,7 +2,7 @@
 // impact with its own comment and outcome), then submitted. It is an item of type `review`, each version of the item
 // the whole record of its data.key (the server's review.Reviews); this module folds the items and holds the pure rules
 // the panel shows: which impacts await a review, when a review may be submitted, the comment each impact keeps.
-import type { ChangeImpact, ChangeItem, ReviewEntry, ReviewRecord } from './api';
+import type { ChangeImpact, ChangeItem, NodeRef, ReviewEntry, ReviewRecord } from './api';
 import { notAcceptableWhy } from './changeCommit';
 
 export const REVIEW_KIND = 'review';
@@ -183,3 +183,52 @@ export function tally(r: ReviewRecord): { accept: number; reject: number; undeci
 
 /** Whether the principal may change the review: its author, or an administrator. */
 export const mayEdit = (r: ReviewRecord, me: string, admin: boolean): boolean => r.status === 'open' && (admin || r.by === me);
+
+/** Where a review stands in its life (ADR 0152): to create (impacts await a review and no review is open), open (a
+ * draft its author builds up), submitted (final, read-only). */
+export type ReviewStage = 'create' | 'open' | 'submitted';
+export const REVIEW_STAGES: { id: ReviewStage; label: string }[] = [
+  { id: 'create', label: 'To create' },
+  { id: 'open', label: 'Open · draft' },
+  { id: 'submitted', label: 'Submitted' },
+];
+
+/** The stage of a review record. */
+export const stageOf = (r: ReviewRecord): ReviewStage => (r.status === 'open' ? 'open' : 'submitted');
+
+/** One decision on a change impact, as its history shows it (ADR 0152). */
+export interface Decision {
+  at: string;
+  /** accepted | rejected | proposed (proposed: sent back, an edit after a verdict) */
+  status: string;
+  by: string;
+  comment: string;
+  /** the review the verdict was submitted in (ADR 0105) */
+  reviewId: string;
+  /** the flow it was made on, '' for the main flow */
+  flow: string;
+  superseded: boolean;
+  /** an accepted verdict passed the validation rules on the draft as it stood then: the graph refuses an accept that
+   * fails them, in the transaction of the verdict (ADR 0079, checkAccepted) */
+  checked: boolean;
+}
+
+/** The history of the decisions on a change impact, the latest first: every verdict and every return to proposed, as
+ * the graph recorded them (ChangeImpact.reviews). */
+export function decisionHistory(n: ChangeImpact | undefined): Decision[] {
+  return (n?.reviews ?? [])
+    .map((r) => ({
+      at: r.at ?? '',
+      status: r.status ?? '',
+      by: r.by ?? '',
+      comment: r.comment ?? '',
+      reviewId: r.reviewId ?? '',
+      flow: flowOf(r.flow),
+      superseded: !!r.superseded,
+      checked: r.status === 'accepted',
+    }))
+    .reverse();
+}
+
+/** The version a committed impact was written as, else undefined. */
+export const committedAs = (n: ChangeImpact | undefined): NodeRef | undefined => (n?.committed?.id ? n.committed : undefined);

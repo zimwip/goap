@@ -44,8 +44,6 @@
   import { movable } from '../../changeProject';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
-  import Resizer from '../../shell/Resizer.svelte';
-  import { layout, LIMITS } from '../../shell/layout.svelte';
   import ChangeAudit from '../../components/ChangeAudit.svelte';
   import { artifactsOf, decisionsByItem, rawItems } from '../../artifacts';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -111,14 +109,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   /** the Compare & decide dialog, opened from the scope bar */
   let compareOpen = $state(false);
   let pane = $state(untrack(() => tab.params.pane) || 'overview');
-  // how many asks of the change the person may answer (ADR 0117): the badge of the overview
-  let asksForMe = $state(0);
-  // the column of the asks folded to a strip (per tab, not remembered)
-  let asksFolded = $state(false);
-  // its width, dragged by the person (kept with the layout of the workbench), never leaving the change less than 360px
-  let frameWidth = $state(0);
-  const asksMax = $derived(Math.max(LIMITS.asks.min, Math.min(LIMITS.asks.max, frameWidth - 360)));
-  const asksWidth = $derived(Math.min(Math.max(layout.asksWidth, LIMITS.asks.min), asksMax));
   $effect(() => {
     tab.params.pane = pane;
   });
@@ -1198,9 +1188,15 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       onopennode={(s, d) => openNode({ id: d.node ?? '', key: d.key ?? '' }, { pin: true, change: ch.id ?? '', flow: s })}
     />
   {/if}
-  <div class="asks-frame" bind:clientWidth={frameWidth}>
-  <div class="with-asks" class:folded={asksFolded} style:--asks-w="{asksWidth}px">
-  <div class="main">
+  <!-- what the change waits for from people, one strip above every pane (ADR 0117, ADR 0152) -->
+  <ChangeAsks
+    changeId={selected}
+    {closed}
+    reviews={awaiting.map((n) => n.key ?? '')}
+    onreview={() => (pane = 'reviews')}
+    ondecisions={() => (pane = 'decisions')}
+    onopen={(id, pin) => openTab({ kind: 'run', params: { id } }, { pin })}
+  />
   <EditorPanes {panes} bind:active={pane} label="Change sections">
     {#snippet children(active)}
       {#if active === 'overview'}
@@ -1549,90 +1545,10 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       {/if}
     {/snippet}
   </EditorPanes>
-  </div>
-  {#if !asksFolded}
-    <div class="asks-resizer">
-      <Resizer
-        orientation="vertical"
-        invert
-        value={asksWidth}
-        min={LIMITS.asks.min}
-        max={asksMax}
-        label="Resize what the change waits for"
-        onresize={(w) => (layout.asksWidth = w)}
-      />
-    </div>
-  {/if}
-  <!-- what the change waits for from people, beside every pane (ADR 0117) -->
-  <aside class="asks-side" aria-label="What the change waits for">
-    <button type="button" class="link small fold" title={asksFolded ? 'Show what the change waits for' : 'Hide'} onclick={() => (asksFolded = !asksFolded)}>
-      {asksFolded ? `◀ ${asksForMe || ''}` : '▶'}
-    </button>
-    {#if !asksFolded}
-      <ChangeAsks
-        changeId={selected}
-        {closed}
-        always
-        reviews={awaiting.map((n) => n.key ?? '')}
-        onreview={() => (pane = 'reviews')}
-        ondecisions={() => (pane = 'decisions')}
-        onopen={(id, pin) => openTab({ kind: 'run', params: { id } }, { pin })}
-        oncount={(n) => (asksForMe = n)}
-      />
-    {/if}
-  </aside>
-  </div>
-  </div>
 {/if}
 </div>
 
 <style>
-  /* the change and what it waits for side by side; stacked when the tab is narrow */
-  .with-asks {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto var(--asks-w, 480px);
-    gap: 0 0.6rem;
-    align-items: start;
-  }
-  .asks-frame {
-    container-type: inline-size;
-  }
-  .with-asks.folded {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .asks-resizer {
-    position: sticky;
-    top: 0;
-    display: flex;
-    align-self: stretch;
-  }
-  .with-asks > .main {
-    min-width: 0;
-  }
-  .asks-side {
-    position: sticky;
-    top: 0;
-    max-height: calc(100vh - 6rem);
-    overflow-y: auto;
-  }
-  .asks-side .fold {
-    display: block;
-    margin-left: auto;
-  }
-  @container (max-width: 900px) {
-    .with-asks,
-    .with-asks.folded {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .asks-side {
-      position: static;
-      max-height: none;
-      order: -1;
-    }
-    .asks-resizer {
-      display: none;
-    }
-  }
   .filter {
     display: flex;
     gap: 0.4rem;
