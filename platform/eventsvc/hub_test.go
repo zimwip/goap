@@ -18,7 +18,11 @@ import (
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/identity"
 	"github.com/zimwip/goap/lib/platform"
+	"github.com/zimwip/goap/mcp/mcpsvc"
 	"github.com/zimwip/goap/platform/convsvc"
+	"github.com/zimwip/goap/platform/jobsvc"
+	"github.com/zimwip/goap/platform/modelgw"
+	"github.com/zimwip/goap/platform/prefssvc"
 )
 
 func node(id string) domain.NodeEvent {
@@ -170,15 +174,84 @@ func TestPresenceLifecycle(t *testing.T) {
 	}
 }
 
-func TestSlowSubscriberIsCut(t *testing.T) {
+func TestBurstDoesNotCutAStream(t *testing.T) {
 	h := NewHub()
 	s, _, _, cancel := h.subscribe("", 0)
 	defer cancel()
-	for i := 0; i < subscriberBuffer+1; i++ {
+	// a git import commits thousands of nodes at once: the stream reads them from the history at its pace
+	for i := 0; i < 2000; i++ {
 		publish(t, h, "goap.node.alm.x.n.written", node("n"))
 	}
-	if !s.overflow {
-		t.Fatal("a subscriber that cannot keep up must be cut")
+	if s.overflow {
+		t.Fatal("a burst within the history must not cut the stream")
+	}
+	<-s.wake
+	recs, ok := h.after(s.cursor)
+	if !ok || len(recs) != 2000 || recs[0].ev.Seq != 1 {
+		t.Fatalf("after = %d records (ok %v), want the 2000 of the burst", len(recs), ok)
+	}
+}
+
+func TestStreamBehindTheHistoryResyncs(t *testing.T) {
+	h := NewHub()
+	h.History = 10
+	for i := 0; i < 30; i++ {
+		publish(t, h, "goap.node.alm.x.n.written", node("n"))
+	}
+	if _, ok := h.after(5); ok {
+		t.Fatal("a cursor the history no longer covers must resync")
+	}
+	if recs, ok := h.after(25); !ok || len(recs) != 5 {
+		t.Fatalf("after(25) = %d (ok %v), want 5", len(recs), ok)
+	}
+	if recs, ok := h.after(30); !ok || len(recs) != 0 {
+		t.Fatalf("after(last) = %d (ok %v), want none", len(recs), ok)
+	}
+}
+
+func TestServiceEventsReachTheStream(t *testing.T) {
+	h := NewHub()
+	ingest := func(subject string, v any) {
+		data, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.Ingest(subject, data, platform.Stamp{})
+	}
+	at := time.Now()
+	ingest(jobsvc.Subject("J1", jobsvc.EventStarted), jobsvc.Event{ID: "J1", Kind: "import.code.git", Target: "code", Status: "running", By: "alice", At: at})
+	ingest(mcpsvc.ConnectorSubject("fs", mcpsvc.EventLost), mcpsvc.ConnectorEvent{Event: mcpsvc.EventLost, Connector: "fs", At: at})
+	ingest(modelgw.CallSubject(7), modelgw.CallRecorded{Seq: 7, Subject: "system:engine", EndUser: "alice", Alias: "assistant", ChangeID: "C1", At: at})
+	ingest(prefssvc.Subject("alice", "updated"), prefssvc.Event{Subject: "alice", Keys: []string{"theme"}, At: at})
+	ingest("goap.credentials.alice.session_started", map[string]string{"subject": "alice"})
+
+	alice := &viewer{h: h, who: authz.Principal{Subject: "alice"}, allowed: map[string]bool{}}
+	bob := &viewer{h: h, who: authz.Principal{Subject: "bob"}, allowed: map[string]bool{}}
+	recs, _ := h.after(0)
+	var got, bobs []string
+	for _, r := range recs {
+		if alice.sees(context.Background(), r) {
+			got = append(got, r.ev.Type+":"+r.ev.Id)
+		}
+		if bob.sees(context.Background(), r) {
+			bobs = append(bobs, r.ev.Type)
+		}
+	}
+	want := []string{"job.started:J1", "connector.lost:fs", "model.call:7", "preferences.updated:alice"}
+	if len(got) != len(want) {
+		t.Fatalf("alice sees %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("alice sees %v, want %v", got, want)
+		}
+	}
+	// a job, a model call and preferences are their person's alone; a connector is everyone's
+	if len(bobs) != 1 || bobs[0] != "connector.lost" {
+		t.Fatalf("bob sees %v, want only the connector", bobs)
+	}
+	if recs[0].ev.Label != "import.code.git" || recs[0].ev.Namespace != "code" {
+		t.Fatalf("job event = %+v", recs[0].ev)
 	}
 }
 
@@ -322,5 +395,34 @@ func TestChangeEventPosition(t *testing.T) {
 	publish(t, h, "goap.changed.C1", domain.ChangeEvent{Type: "change.updated", Change: domain.Change{ID: "C1", Seq: 42}})
 	if ev := h.ring[0].ev; ev.Type != "change.updated" || ev.Version != 42 {
 		t.Fatalf("event %s at version %d, want change.updated at 42", ev.Type, ev.Version)
+	}
+}
+
+func TestWatchFollowsABurst(t *testing.T) {
+	h := NewHub()
+	srv := httptest.NewServer(mux(&Handler{Hub: h, Identity: identity.Extractor{Default: &authz.Principal{Subject: "alice"}}}))
+	defer srv.Close()
+	client := eventsv1connect.NewEventServiceClient(http.DefaultClient, srv.URL)
+	ctx, stop := context.WithTimeout(context.Background(), 10*time.Second)
+	defer stop()
+	st, err := client.Watch(ctx, connect.NewRequest(&eventsv1.WatchRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if !st.Receive() || st.Msg().Type != "presence.snapshot" {
+		t.Fatalf("first event: %v", st.Err())
+	}
+	const n = 3 * subscriberBuffer
+	for i := 0; i < n; i++ {
+		publish(t, h, "goap.node.alm.x.n.written", node("n"))
+	}
+	for want := uint64(1); want <= n; want++ {
+		if !st.Receive() {
+			t.Fatalf("stream ended at %d: %v", want, st.Err())
+		}
+		if ev := st.Msg(); ev.Type != "node.written" || ev.Seq != want {
+			t.Fatalf("event %d = %s #%d", want, ev.Type, ev.Seq)
+		}
 	}
 }

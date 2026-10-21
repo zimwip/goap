@@ -42,8 +42,12 @@ func (h *Handler) Watch(ctx context.Context, r *connect.Request[eventsv1.WatchRe
 	defer cancel()
 	v := h.Hub.visibility(ctx, who)
 	send := func(ev *eventsv1.Event) error { return stream.Send(ev) }
+	// resync says the client missed what the history no longer holds; it carries the seq the stream goes on from
+	resyncFrom := func(seq uint64) error {
+		return send(&eventsv1.Event{Epoch: h.Hub.Epoch(), Seq: seq, Type: "resync", Time: pbconv.Time(h.Hub.now())})
+	}
 	if resync {
-		if err := send(&eventsv1.Event{Epoch: h.Hub.Epoch(), Type: "resync", Time: pbconv.Time(h.Hub.now())}); err != nil {
+		if err := resyncFrom(sub.cursor); err != nil {
 			return err
 		}
 	}
@@ -51,12 +55,19 @@ func (h *Handler) Watch(ctx context.Context, r *connect.Request[eventsv1.WatchRe
 	if err := send(h.Hub.snapshot(v)); err != nil {
 		return err
 	}
-	for _, rec := range backlog {
-		if v.sees(ctx, rec) {
-			if err := send(rec.ev); err != nil {
-				return err
+	deliver := func(recs []*record) error {
+		for _, rec := range recs {
+			sub.cursor = rec.ev.Seq
+			if v.sees(ctx, rec) {
+				if err := send(rec.ev); err != nil {
+					return err
+				}
 			}
 		}
+		return nil
+	}
+	if err := deliver(backlog); err != nil {
+		return err
 	}
 	every := h.Idle
 	if every <= 0 {
@@ -72,10 +83,24 @@ func (h *Handler) Watch(ctx context.Context, r *connect.Request[eventsv1.WatchRe
 			if err := send(&eventsv1.Event{Epoch: h.Hub.Epoch(), Seq: h.Hub.Seq(), Type: "heartbeat", Time: pbconv.Time(h.Hub.now())}); err != nil {
 				return err
 			}
+		case <-sub.wake:
+			recs, ok := h.Hub.after(sub.cursor)
+			if !ok {
+				// this client read slower than the platform wrote for longer than the history: what it holds is
+				// stale, it goes on from now
+				sub.cursor = h.Hub.Seq()
+				if err := resyncFrom(sub.cursor); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := deliver(recs); err != nil {
+				return err
+			}
 		case rec, ok := <-sub.ch:
 			if !ok {
-				// too slow to follow: say so, the client reconnects and refetches
-				return send(&eventsv1.Event{Epoch: h.Hub.Epoch(), Type: "resync", Time: pbconv.Time(h.Hub.now())})
+				// too slow to follow the presence: the client reconnects from its seq and gets a new snapshot
+				return nil
 			}
 			if v.sees(ctx, rec) {
 				if err := send(rec.ev); err != nil {
@@ -113,11 +138,12 @@ func (h *Hub) Seq() uint64 {
 	return h.seq
 }
 
-// subscribe registers a stream and returns what it missed since (epoch, after), or says it must resync.
+// subscribe registers a stream and returns what it missed since (epoch, after), or says it must resync. The
+// stream's cursor is the last event of the backlog (the last event of the hub when there is none).
 func (h *Hub) subscribe(epoch string, after uint64) (*subscriber, []*record, bool, func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	s := &subscriber{ch: make(chan *record, subscriberBuffer)}
+	s := &subscriber{wake: make(chan struct{}, 1), cursor: h.seq, ch: make(chan *record, subscriberBuffer)}
 	id := h.next
 	h.next++
 	h.subs[id] = s
@@ -128,19 +154,11 @@ func (h *Hub) subscribe(epoch string, after uint64) (*subscriber, []*record, boo
 		// a first connection: nothing to catch up
 	case epoch != h.epoch:
 		resync = true
-	case after > h.seq:
-		resync = true
 	default:
-		oldest := h.seq + 1
-		if len(h.ring) > 0 {
-			oldest = h.ring[0].ev.Seq
-		}
-		if after+1 < oldest {
+		var ok bool
+		if backlog, ok = h.afterLocked(after); !ok {
 			resync = true
-			break
 		}
-		i := sort.Search(len(h.ring), func(i int) bool { return h.ring[i].ev.Seq > after })
-		backlog = append(backlog, h.ring[i:]...)
 	}
 	return s, backlog, resync, func() {
 		h.mu.Lock()

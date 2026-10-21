@@ -1,12 +1,17 @@
 // The feed of LLM calls: the gateway's ledger (ADR 0089), the one source of every per-call token view (the Tokens
-// console, the Token usage pane). Initial load = the latest rows, then a cursor follow (`ListUsage(afterSeq)`, no
-// event exists for it); the polling runs only while a view is attached and the page visible.
+// console, the Token usage pane). Initial load = the latest rows, then a cursor follow (`ListUsage(afterSeq)`) each time
+// the event stream says a call was recorded for the caller (`model.call`, key `usage`); while the stream is down it
+// polls instead. It runs only while a view is attached and the page visible.
 import { untrack } from 'svelte';
 import { errorMessage, int, models, type LLMCall, type UsageFilter } from '../api';
 import { can, me } from './session.svelte';
+import { stream } from '../flux/events.svelte';
+import { keyOf, stamp } from '../flux/signals.svelte';
 
 export const POLL_MS = 2000;
 const POLL_MAX_MS = 15000;
+/** the poll while the event stream is open: a safety net, the events say when to read */
+export const FOLLOW_MS = 60000;
 /** rows asked by the first load and by every follow */
 export const PAGE = 500;
 /** rows kept: the oldest are dropped */
@@ -26,6 +31,10 @@ let viewers = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let inflight: AbortController | undefined;
 let fails = 0;
+/** an event came while a read was in flight: read again once it is done */
+let again = false;
+/** the effect following the events, while a view is attached */
+let following: (() => void) | undefined;
 /** the last seq seen: the cursor of the follow (0: nothing loaded yet) */
 let cursor = 0;
 /** rows at or below it were cleared locally (the ledger keeps them) */
@@ -55,8 +64,33 @@ function schedule(delay?: number): void {
       timer = undefined;
       void poll();
     },
-    delay ?? Math.min(POLL_MS * 2 ** fails, POLL_MAX_MS),
+    delay ?? (stream.status === 'open' && !fails ? FOLLOW_MS : Math.min(POLL_MS * 2 ** fails, POLL_MAX_MS)),
   );
+}
+
+/** A call was recorded (the event stream): read what follows the cursor now. */
+function onRecorded(): void {
+  if (viewers <= 0) return;
+  if (inflight) {
+    again = true;
+    return;
+  }
+  if (timer) clearTimeout(timer);
+  timer = undefined;
+  void poll();
+}
+
+/** Follows the `usage` stamp while a view is attached. */
+function follow(): () => void {
+  let seen = -1;
+  return $effect.root(() => {
+    $effect(() => {
+      const at = stamp(keyOf.usage);
+      const moved = seen >= 0 && at > seen;
+      seen = at;
+      if (moved) untrack(onRecorded);
+    });
+  });
 }
 
 function append(calls: LLMCall[]): void {
@@ -82,8 +116,9 @@ async function poll(): Promise<void> {
     cursor = Math.max(cursor, int(res.nextSeq), ...(res.calls ?? []).map(seqOf));
     usage.error = '';
     fails = 0;
-    // a backlog is read without waiting
-    schedule(res.hasMore ? 0 : undefined);
+    // a backlog is read without waiting, so is a call recorded meanwhile
+    schedule(res.hasMore || again ? 0 : undefined);
+    again = false;
   } catch (e) {
     if (mine !== epoch || ctrl.signal.aborted) return;
     usage.error = errorMessage(e);
@@ -114,6 +149,7 @@ export function attachUsage(): () => void {
     viewers++;
     if (viewers === 1) {
       fails = 0;
+      following = follow();
       void poll();
     }
   });
@@ -122,7 +158,11 @@ export function attachUsage(): () => void {
     if (released) return;
     released = true;
     viewers = Math.max(0, viewers - 1);
-    if (viewers === 0) stop();
+    if (viewers === 0) {
+      stop();
+      following?.();
+      following = undefined;
+    }
   };
 }
 
@@ -143,6 +183,9 @@ export function clearUsage(): void {
 /** Forgets everything (tests, sign-out). */
 export function resetUsage(): void {
   stop();
+  following?.();
+  following = undefined;
+  again = false;
   epoch++;
   viewers = 0;
   cursor = 0;

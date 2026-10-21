@@ -5,6 +5,7 @@ import { SvelteMap } from 'svelte/reactivity';
 import { errorMessage, jobResult, jobService, onTokenChange, RpcError, streamJobs, type Job, type JobStreamEvent } from '../api';
 import { downloadBlob } from '../download';
 import { isActive, isFinal, newer } from '../jobView';
+import { onKind } from '../flux/events.svelte';
 
 /** The known jobs by id. */
 export const knownJobs = new SvelteMap<string, Job>();
@@ -134,6 +135,15 @@ export function startJobs(): () => void {
       });
   };
 
+  // the platform stream says when a job of the person is created, starts or ends (ADR 0136): while the job stream is
+  // down, the job is read on that word, so a run started elsewhere still shows and ends here
+  const offEvents = onKind('job', (e) => {
+    if (jobStream.connected || !e.id) return;
+    jobService
+      .get(e.id)
+      .then(({ job }) => job && takeJob(job))
+      .catch(() => undefined);
+  });
   const offToken = onTokenChange(() => {
     knownJobs.clear();
     jobDetail.job = undefined;
@@ -144,6 +154,7 @@ export function startJobs(): () => void {
   connect();
   return () => {
     stopped = true;
+    offEvents();
     offToken();
     clearTimeout(timer);
     ctl?.abort();

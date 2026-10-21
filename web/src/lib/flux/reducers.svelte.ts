@@ -26,7 +26,7 @@ export function startReducers(): () => void {
   const offs = [
     // where a write left the log of a change (ADR 0153): the reads it causes must see at least that far
     onKind('change', (e) => notePosition(e.id, e.version)),
-    onKind(['change', 'node', 'baseline', 'methodology', 'domain', 'conversation'], (e) => {
+    onKind(['change', 'node', 'baseline', 'methodology', 'domain', 'conversation', 'job', 'model', 'connector', 'preferences'], (e) => {
       for (const k of keysOf(e)) touchSoon(k);
     }),
     // a version somebody else saved, published or removed, in an open draft

@@ -7,8 +7,12 @@ const stamps = new SvelteMap<string, number>();
 /** moves when everything must be read again (the stream could not vouch for what it missed) */
 let generation = $state(0);
 
+/** the keys a view or a store ever read: a key nobody reads is not counted (an import writes thousands of nodes) */
+const read = new Set<string>();
+
 /** Reactive: moves each time `touch(key)` or `touchAll()` is called. 0 until then. */
 export function stamp(key: string): number {
+  read.add(key);
   return (stamps.get(key) ?? 0) + generation;
 }
 
@@ -17,22 +21,31 @@ export function touchAll(): void {
   generation++;
 }
 
-const timers = new Map<string, ReturnType<typeof setTimeout>>();
+/** the keys waiting for their touch, per delay */
+const pending = new Map<number, Set<string>>();
 
-/** `touch` once the events of a burst stopped coming (a change applying writes dozens of nodes). */
-export function touchSoon(key: string, ms = 120): void {
-  clearTimeout(timers.get(key));
-  timers.set(
-    key,
+/**
+ * `touch` once per `ms` at most: the first touch of a burst waits `ms`, those that come meanwhile join it. A burst
+ * (a change applying writes dozens of nodes) moves a key once, and a key touched without pause (an import running for
+ * minutes) still moves every `ms`, so what shows it follows the work while it runs.
+ */
+export function touchSoon(key: string, ms = 250): void {
+  if (!read.has(key)) return;
+  let keys = pending.get(ms);
+  if (!keys) {
+    keys = new Set();
+    pending.set(ms, keys);
     setTimeout(() => {
-      timers.delete(key);
-      touch(key);
-    }, ms),
-  );
+      pending.delete(ms);
+      for (const k of keys!) touch(k);
+    }, ms);
+  }
+  keys.add(key);
 }
 
 /** Says something changed (reducers call it, from the events). */
 export function touch(key: string): void {
+  if (!read.has(key)) return;
   stamps.set(key, (stamps.get(key) ?? 0) + 1);
 }
 
@@ -55,6 +68,16 @@ export const keyOf = {
   conversation: (id: string) => `conversation:${id}`,
   /** the caller's list of conversations: one was created, renamed or deleted */
   conversations: 'conversations',
+  /** a job of the caller (ADR 0149): created, started, ended */
+  job: (id: string) => `job:${id}`,
+  /** the caller's jobs: one was created, started or ended */
+  jobs: 'jobs',
+  /** the ledger of the model calls attributed to the caller (ADR 0089, 0114): a call was recorded */
+  usage: 'usage',
+  /** the connectors of the MCP hub: one registered, was lost or came back */
+  connectors: 'connectors',
+  /** the caller's preferences, written by another tab or device (ADR 0038) */
+  preferences: 'preferences',
 };
 
 /**

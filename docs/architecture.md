@@ -1057,6 +1057,7 @@ hand-written API types are checked against it field by field (`web/src/lib/api/c
 | `goap.conversation.<id>.created` / `.renamed` / `.deleted` / `.message_appended` / `.message_updated` / `.action_updated` / `.summarized` | conversations, through its outbox | conversation, owner, message, role, action index, status (never a text); the event stream delivers it to the owner only |
 | `goap.mcp.connector.<id>.registered` / `.lost` / `.back` | hub, through its outbox | connector id, endpoint, liveness |
 | `goap.model.call.<seq>.recorded`, `goap.model.quota.<subject>.exceeded` | model gateway, through its outbox, with the ledger row | the row (subject, end user, source, alias, model, tokens, outcome; never the exchange) |
+| `goap.job.<id>.created` / `.started` / `.ended` | job service, through its outbox (`job_outbox`, ADR 0149) | id, kind, target, status, by (the progress travels on the job stream, `GET /api/jobs/events`) |
 
 Each service emits its own events ([ADR 0136](adr/0136-each-service-emits-its-events-through-an-outbox.md)): an event is
 written in the outbox table of its database in the transaction that writes its fact, and a relay (`lib/outbox`, started
@@ -1255,8 +1256,12 @@ methodologies' code ([ADR 0007](adr/0007-sandbox-executor.md)).
 ### 3.6b Events and presence for the web
 
 One Connect stream, `EventService/Watch` ([ADR 0053](adr/0053-one-event-stream-and-presence.md)), carries every
-platform fact (processes, changes, nodes, baselines, registry) as a thin ordered event with resume by `(epoch, seq)`;
-the web reduces them into invalidation signals and never refetches after a write. `Heartbeat` / `Leave` and the
+platform fact (processes, changes, nodes, baselines, registry, jobs, model calls, connectors, preferences, conversations)
+as a thin ordered event with resume by `(epoch, seq)`; the web reduces them into invalidation signals and never refetches
+after a write. The events of a person (a personal change, a job, a model call attributed to them, preferences, a
+conversation) reach that person only; credentials events never reach the web. A stream reads the hub's history from its
+own cursor (`Hub.after`), so a burst (a git import writes thousands of nodes) never cuts it; only a client that stays
+more than `History` events behind is told `resync`, with the seq it goes on from. `Heartbeat` / `Leave` and the
 `presence.*` events say who looks at which tab. `platform/cmd/events` follows `goap.>` on NATS (presence is relayed between replicas on `presence.>`); `goap-dev` feeds the hub in process.
 
 ### 3.7 Observability (OpenTelemetry)
