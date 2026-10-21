@@ -1513,7 +1513,11 @@ func (h *Handler) GetChangeView(ctx context.Context, r *connect.Request[graphv1.
 }
 
 func (h *Handler) GetChangeGraph(ctx context.Context, r *connect.Request[graphv1.GetChangeGraphRequest]) (*connect.Response[graphv1.GetChangeGraphResponse], error) {
-	nodes, links, err := h.Graph.ChangeGraph(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow)
+	read := h.Graph.ChangeGraph
+	if r.Msg.World {
+		read = h.Graph.ChangeWorld
+	}
+	nodes, links, err := read(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow)
 	return res(&graphv1.GetChangeGraphResponse{Nodes: pbconv.NodesToPB(nodes), Links: pbconv.LinksToPB(links)}, err)
 }
 

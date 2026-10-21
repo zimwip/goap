@@ -2376,6 +2376,10 @@ message GetChangeGraphRequest {
   string change_id = 1;
   // flow or option (empty: the active option, else the main flow; "main": the main flow)
   string flow = 2;
+  // the world the change sees, whatever its flow (Graph.ChangeWorld): the nodes of its fork it left alone, the
+  // versions it committed and its drafts, with the links whose target node is in it (at whatever version they name);
+  // false: the graph a call on the change reads (an option's, else the reference baseline)
+  bool world = 3;
 }
 
 message GetChangeGraphResponse {

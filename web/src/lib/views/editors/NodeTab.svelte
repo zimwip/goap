@@ -1,9 +1,12 @@
 <script lang="ts">
   // Node editor: one tab for a node, its information organized in panes —
   // details (properties), relations (parents, children, graph), lifecycle,
-  // history. Modifications are proposals of a working change (created on demand).
+  // history. The editor sees the world through the change selected in the context (the working change of the header,
+  // stores/workingChange.svelte.ts): the nodes the change created, the versions and drafts it made of the others, the
+  // rest as it stands in the fork of the change; with no change selected, the latest released versions. Modifications
+  // are proposals of that change (created on demand).
   import EditorActions from '../../shell/EditorActions.svelte';
-  import { working, workIn } from '../../stores/workingChange.svelte';
+  import { stopWorking, working, workIn, workInId } from '../../stores/workingChange.svelte';
   import {
     graph,
     errorMessage,
@@ -39,7 +42,7 @@
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
-  import { loadGraph, loadHead, type GraphIndex } from '../../graphIndex';
+  import { indexOf, loadChangeWorld, loadGraph, loadHead, type GraphIndex } from '../../graphIndex';
   import { namespaceOf } from '../../namespace';
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { assistField, registerAssist } from '../../assist/registry.svelte';
@@ -78,22 +81,47 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     change: Change;
     /** the name of the flow the change is seen on ('' : the change as a whole) */
     flowName: string;
+    /** the fork of the change: the versions its impacts start from */
+    base: GraphIndex;
+    /** the world of the change: its fork as it left it, its commits, its drafts (GetChangeGraph world) */
     index: GraphIndex;
     attached: NodeRef[];
     posts: PostVersions;
   }
-  let workId = $state(untrack(() => tab.params.change) ?? '');
-  // the change the node is edited in, unless the tab names one or the person picked one: the working change of the
-  // header when it acts on the namespace of the node (stores/workingChange.svelte.ts)
-  let workPicked = untrack(() => tab.params.change !== undefined);
-  /** the flow of the working change the node is seen and edited on: 'main' or an option (ADR 0032 §6); empty: the
-   * change as a whole (its edits go to its active option) */
-  let workFlow = $state(untrack(() => tab.params.flow) ?? '');
+  /** the namespace of the node, once read: a change acting on another one does not hold it */
+  let nodeNamespace = $state('');
+  // the change the editor follows: the one selected in the context, when it acts on the namespace of the node
+  const workId = $derived(working.change && (!nodeNamespace || namespaceOf(working.change.namespace) === nodeNamespace) ? working.change.id : '');
+  /** the change the tab was opened in (an Edit of an impact, a link), selected in the context when the tab opens it */
+  let asked = $state('');
+  /** the flow of the change the node is seen and edited on: 'main' or an option (ADR 0032 §6), given with the change
+   * the tab was opened in; empty: the change as a whole (its edits go to its active option) */
+  let flowAsked = $state({ change: untrack(() => tab.params.change) ?? '', flow: untrack(() => tab.params.flow) ?? '' });
+  const workFlow = $derived(workId && flowAsked.change === workId ? flowAsked.flow : '');
   let work = $state<Work | undefined>();
 
+  // opened in a change (tab.params.change, set again when the tab is opened anew): that change becomes the one selected
+  // in the context, which the editor then follows
   $effect(() => {
-    tab.params.change = workId;
-    tab.params.flow = workFlow;
+    const c = tab.params.change ?? '';
+    const f = tab.params.flow ?? '';
+    untrack(() => {
+      if (!c) return;
+      if (flowAsked.change !== c || flowAsked.flow !== f) flowAsked = { change: c, flow: f };
+      if (c === workId || c === asked) return;
+      asked = c;
+      void workInId(c).finally(() => (asked = ''));
+    });
+  });
+  // the tab names what it shows (its URL): the change followed and its flow
+  $effect(() => {
+    const c = workId;
+    const f = workFlow;
+    if (asked) return;
+    untrack(() => {
+      tab.params.change = c;
+      tab.params.flow = f;
+    });
   });
 
   async function loadNode(signal?: AbortSignal) {
@@ -113,6 +141,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
       if (workId && !list.length) draftNode = (await graph.getNode({ id, version: 0 }, signal, { changeId: workId, flow: workFlow })).view?.node;
       versions = list.slice().sort((a, b) => (a.version ?? 0) - (b.version ?? 0));
       const namespace = namespaceOf(versions.at(-1)?.namespace ?? draftNode?.namespace);
+      nodeNamespace = namespace;
       head = await loadHead(namespace, signal);
       if (!changes.loaded) void refreshChanges();
     } catch (e) {
@@ -121,6 +150,9 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
       if (!signal?.aborted) loading = false;
     }
   }
+
+  /** the fork of a change (the empty state for the first change of a namespace, ADR 0056) */
+  const loadFork = (baselineId?: string): Promise<GraphIndex> => (baselineId ? loadGraph(baselineId) : Promise.resolve(indexOf('', [], [])));
 
   async function loadWork() {
     if (!workId) {
@@ -132,16 +164,22 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
         // the change as the flow sees it: its change impacts with the versions that flow wrote
         const bb = await graph.getBlackboard(workId, workFlow);
         const change = bb.change;
-        if (!change?.baselineId) throw new Error('unknown change');
+        if (!change) throw new Error('unknown change');
         const attached = (change.nodes ?? []).filter((n) => n.pre?.id && !n.superseded).map((n) => n.pre!);
         const flowName = workFlow === 'main' ? 'main flow' : (bb.options?.find((o) => o.id === workFlow)?.option?.name ?? shortId(workFlow));
-        work = { change, flowName, index: await loadGraph(change.baselineId), attached, posts: await loadPosts(change.nodes ?? [], true, { changeId: workId, flow: workFlow }) };
+        const [base, index, posts] = await Promise.all([loadFork(change.baselineId), loadChangeWorld(workId, change.baselineId ?? '', workFlow), loadPosts(change.nodes ?? [], true, { changeId: workId, flow: workFlow })]);
+        work = { change, flowName, base, index, attached, posts };
         return;
       }
       const change = (await graph.getChange(workId)).change;
-      if (!change?.baselineId) throw new Error('unknown change');
-      const [index, attached] = await Promise.all([loadGraph(change.baselineId), graph.getChangeImpacts(workId)]);
-      work = { change, flowName: '', index, attached: attached.nodes ?? [], posts: await loadPosts(change.nodes ?? [], false, { changeId: workId }) };
+      if (!change) throw new Error('unknown change');
+      const [base, index, attached, posts] = await Promise.all([
+        loadFork(change.baselineId),
+        loadChangeWorld(workId, change.baselineId ?? ''),
+        graph.getChangeImpacts(workId),
+        loadPosts(change.nodes ?? [], false, { changeId: workId }),
+      ]);
+      work = { change, flowName: '', base, index, attached: attached.nodes ?? [], posts };
     } catch (e) {
       error = errorMessage(e);
       work = undefined;
@@ -158,14 +196,28 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     return () => ctrl.abort();
   });
 
+  // a node only a change holds (a draft, no version) is read through the change followed
+  $effect(() => {
+    const w = workId;
+    void workFlow;
+    untrack(() => {
+      if (w && !loading && !versions.length) void loadNode();
+    });
+  });
+
   $effect(() => {
     void workId;
+    void workFlow;
     void stamp(keyOf.change(workId)); // its impacts or log moved, by anyone
     void loadWork();
   });
 
   // --- derived ----------------------------------------------------------------------
-  const stored = $derived(head?.nodes.get(id) ?? versions.at(-1) ?? draftNode);
+  const stored = $derived(head?.nodes.get(id) ?? versions.at(-1) ?? (workId ? draftNode : undefined));
+  /** the world the editor sees: the change's when one is followed, else the latest released versions */
+  const world = $derived(work?.index ?? head);
+  /** the node in the world seen: as the change has it (a draft is version 0), else its latest released version */
+  const inWorld = $derived(world?.nodes.get(id));
   const typeName = $derived(stored?.type ?? '');
   const headList = $derived(head?.list ?? []);
   void loadTypes();
@@ -177,7 +229,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   const row = $derived.by<LifecycleRow | undefined>(() => {
     // a node the change creates is not in its baseline: its row is the one whose written version is this node
     if (work)
-      return lifecycleRows(typeCatalog.cat, work.index.list, work.attached, work.change.nodes ?? [], work.posts, [id], !!workFlow).find(
+      return lifecycleRows(typeCatalog.cat, work.base.list, work.attached, work.change.nodes ?? [], work.posts, [id], !!workFlow).find(
         (r) => r.node.id === id || (!!r.created && r.impact?.post?.id === id),
       );
     return lifecycleRows(typeCatalog.cat, headList, [], [], new Map(), [id]).find((r) => r.node.id === id);
@@ -205,19 +257,30 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
 
   const panes = $derived<Pane[]>([
     { id: 'details', label: 'Details' },
-    { id: 'relations', label: 'Relations', badge: head ? (head.in.get(id)?.length ?? 0) + (head.out.get(id)?.length ?? 0) : undefined },
+    { id: 'relations', label: 'Relations', badge: world ? (world.in.get(id)?.length ?? 0) + (world.out.get(id)?.length ?? 0) : undefined },
     { id: 'graph', label: 'Graph' },
     { id: 'lifecycle', label: 'Lifecycle', badge: nodeState || undefined, hidden: !lifecycle },
     { id: 'history', label: 'History', badge: versions.at(-1)?.version || undefined },
   ]);
 
-  // --- working change ---------------------------------------------------------------
+  // opened on the edit of the node (the Edit of an impact, tab.params.edit): the edit starts once the node is read as
+  // the change followed has it, never from another state of it
+  let editAsked = $state(false);
   $effect(() => {
-    const w = working.change;
-    if (workPicked || workId || !w || !stored) return;
-    if (!stored.namespace || w.namespace === stored.namespace) workId = w.id;
+    if (!tab.params.edit) return;
+    untrack(() => {
+      delete tab.params.edit;
+      pane = 'details';
+      editAsked = true;
+    });
+  });
+  $effect(() => {
+    if (!editAsked || loading || !stored || asked || (workId && work?.change.id !== workId)) return;
+    editAsked = false;
+    if (!stored.deleted) editing = true;
   });
 
+  // --- the change followed ------------------------------------------------------------
   async function ensureChange(): Promise<string> {
     if (workId) return workId;
     const baselineId = head?.baselineId;
@@ -225,10 +288,9 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     // the change acts on the namespace of the node (ADR 0015 §2)
     const c = (await graph.createChange({ title: `Edit ${stored?.key ?? shortId(id)}`, baselineId, namespace: stored?.namespace })).change;
     if (!c?.id) throw new Error('The change could not be created.');
-    workId = c.id;
+    // a change created to edit a node is the change the person works in from now on: the one the editor follows
+    if (!(await workIn(c)) || workId !== c.id) throw new Error(`Change “${c.title}” was created, but could not be selected: select it to edit the node.`);
     await loadWork();
-    // a change created to edit a node is the change the person works in from now on
-    await workIn(c);
     notify(`Change “${c.title}” created.`, 'ok');
     return c.id;
   }
@@ -243,9 +305,10 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     error = '';
     try {
       const cid = await ensureChange();
-      const node = work?.index.nodes.get(id);
+      // the version the change starts from: the fork's
+      const node = work?.base.nodes.get(id);
       const target = row?.created ? { key: row.node.key, type: row.node.type } : node?.id ? { pre: { id: node.id, version: node.version } } : undefined;
-      if (!target) throw new Error('This node is not in the baseline of the working change: choose another change.');
+      if (!target) throw new Error('This node is not in the world of the selected change: select another change.');
       await writeNodeInChange(cid, work?.change.nodes ?? [], target, w, rationale, workFlow);
       await Promise.all([loadWork(), loadNode()]);
       reload++;
@@ -262,7 +325,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   /** what is shown: the draft the working change holds of the node (a draft reference, no version: read through the
    * change, ADR 0079), else the stored version */
   const shownRef = $derived<NodeRef | undefined>(
-    inChange && row?.impact?.post?.id ? row.impact.post : stored?.id ? { id: stored.id, version: stored.version } : undefined,
+    inChange && row?.impact?.post?.id ? row.impact.post : inWorld?.id ? { id: inWorld.id, version: inWorld.version } : stored?.id ? { id: stored.id, version: stored.version } : undefined,
   );
   let outLinks = $state<Link[]>([]);
   let nodeChanges = $state<Change[]>([]);
@@ -298,7 +361,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
       .catch(() => ((nodeChanges = []), (olderChanges = undefined)));
     return () => ctrl.abort();
   });
-  const addLink = (type: string, to: NodeRef) => propose('link', { addLinks: [{ type, to }] }, `Link ${stored?.key} ${type} ${head?.nodes.get(to.id ?? '')?.key ?? ''}`.trim());
+  const addLink = (type: string, to: NodeRef) => propose('link', { addLinks: [{ type, to }] }, `Link ${stored?.key} ${type} ${world?.nodes.get(to.id ?? '')?.key ?? ''}`.trim());
   const removeLink = (l: Link) => propose('link', { removeLinks: [l.id ?? ''] }, `Unlink ${stored?.key} ${typeCatalog.cat.linkLabel(l.type, 'out')}`);
 
   const transition = (t: LifecycleTransition) => propose('move', { state: t.to }, `Move ${stored?.key} to ${t.to}`);
@@ -308,7 +371,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   // The form of the node's type (ADR 0115 §10): when the type declares one, the node is edited through it, its link
   // fields standing for the outgoing links of their types.
   const typeForm = $derived(typeName ? typeCatalog.cat.type(typeName)?.form : undefined);
-  const formIndex = $derived(work?.index ?? head);
+  const formIndex = $derived(world);
   const keyOfId = (nid: string | undefined) => (nid ? (formIndex?.nodes.get(nid)?.key ?? head?.nodes.get(nid)?.key) : undefined);
   const currentLinks = $derived<CurrentLink[]>(
     outLinks.flatMap((l) => {
@@ -403,14 +466,15 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     }
   }
 
+  /** Selects the change of the context the editor follows ('': none, the latest released versions). */
   function pickChange(value: string) {
-    workPicked = true;
     editing = false;
-    workFlow = ''; // another change: seen as a whole
-    workId = value;
+    flowAsked = { change: '', flow: '' }; // another change: seen as a whole
+    if (value) void workInId(value);
+    else stopWorking();
   }
 
-  const openNeighbour = (nid: string) => openNode(head?.nodes.get(nid) ?? { id: nid }, { pin: true });
+  const openNeighbour = (nid: string) => openNode(world?.nodes.get(nid) ?? head?.nodes.get(nid) ?? { id: nid }, { pin: true });
 
   // the editor the node type names (NodeType `editor`): this default editor offers to open the node there
   const typeEditor = $derived(nodeEditor(typeCatalog.cat.editor(typeName)));
@@ -441,7 +505,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     {#if nodeState}<span class="state" class:notCommittable title={notCommittable ? 'Not committable: a change cannot commit with the node in this state' : ''}>{nodeState}</span>{/if}
     {#if inChange && isDraft(row?.impact?.post)}
       <span class="hint" title="the working change holds a draft of the node; its version is written when the change commits (ADR 0079). Released: v{stored?.version ?? '—'}">draft in the change</span>
-    {:else if stored?.version}<span class="hint">v{stored.version}</span>{/if}
+    {:else if (work ? inWorld?.version : undefined) || stored?.version}<span class="hint" title={work && inWorld?.version !== stored?.version ? `as the change has it; released: v${stored?.version ?? '—'}` : undefined}>v{(work ? inWorld?.version : undefined) || stored?.version}</span>{/if}
     {#if inChange && row?.impact}
       <StatusBadge status={row.impact.review} />
       {#if canReview}
@@ -480,21 +544,24 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   {:else}
     <EditorPanes {panes} bind:active={pane} label="Node sections">
       {#snippet toolbar()}
-        {#if pane !== 'graph'}
-          <label class="wc" for="work-change">Working change</label>
-          <select id="work-change" value={workId} onchange={(e) => pickChange(e.currentTarget.value)}>
-            <option value="">none: created when you edit</option>
-            {#each openChanges as c (c.id)}<option value={c.id}>{c.title || shortId(c.id)} ({c.status})</option>{/each}
-            {#if workId && !openChanges.some((c) => c.id === workId)}<option value={workId}>{work?.change.title || shortId(workId)}</option>{/if}
-          </select>
-          {#if workId && work?.flowName}<span class="hint" title="the node is seen and edited as this flow of the change has it">on {work.flowName}</span>{/if}
-          {#if workId}<button type="button" class="small" onclick={openChange}>Open change</button>{/if}
+        <label class="wc" for="work-change" title="The editor sees the graph through the change selected in the context (the working change of the header)">Seen through</label>
+        <select id="work-change" value={workId} onchange={(e) => pickChange(e.currentTarget.value)}>
+          <option value="">the latest released versions</option>
+          {#each openChanges as c (c.id)}<option value={c.id}>{c.title || shortId(c.id)} ({c.status})</option>{/each}
+          {#if workId && !openChanges.some((c) => c.id === workId)}<option value={workId}>{work?.change.title || shortId(workId)}</option>{/if}
+        </select>
+        {#if workId && work?.flowName}<span class="hint" title="the node is seen and edited as this flow of the change has it">on {work.flowName}</span>{/if}
+        {#if workId}
+          <button type="button" class="small" onclick={openChange}>Open change</button>
+          <button type="button" class="small ghost" title="Release the selected change: the editor shows the latest released versions (an edit then starts a change)" onclick={() => pickChange('')}>Latest version</button>
+        {:else if working.change}
+          <span class="hint" title="The selected change acts on another namespace than this node">({working.change.title} acts on {working.change.namespace})</span>
         {/if}
       {/snippet}
 
       {#snippet children(active)}
         {#if workId && work && !row}
-          <div class="alert info">This node is not in the baseline of the working change: choose another change, or none.</div>
+          <div class="alert info">This node is not in the world of the selected change: select another change, or none to see its latest released version.</div>
         {/if}
 
         {#if active === 'details'}
@@ -563,7 +630,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
           <NodeLinks
             node={stored}
             links={outLinks}
-            index={work?.index ?? head}
+            index={world}
             readonly={!!stored.deleted}
             why="The node is deleted."
             busy={busy !== ''}
@@ -571,24 +638,31 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
             onremove={removeLink}
             onopen={openNeighbour}
           />
-          {#if head && head.nodes.has(id)}
+          {#if world && inWorld}
             <div class="trees">
               <section class="card">
-                <h3>Parents <span class="count">{head.in.get(id)?.length ?? 0}</span></h3>
-                <p class="hint">Nodes that link to this one.</p>
-                <NodeTree index={head} root={id} dir="in" onopen={(n) => openNeighbour(n)} />
+                <h3>Parents <span class="count">{world.in.get(id)?.length ?? 0}</span></h3>
+                <p class="hint">Nodes that link to this one{work ? ', as the change has them' : ''}.</p>
+                <NodeTree index={world} root={id} dir="in" onopen={(n) => openNeighbour(n)} />
               </section>
               <section class="card">
-                <h3>Children <span class="count">{head.out.get(id)?.length ?? 0}</span></h3>
-                <p class="hint">Nodes this one links to.</p>
-                <NodeTree index={head} root={id} dir="out" onopen={(n) => openNeighbour(n)} />
+                <h3>Children <span class="count">{world.out.get(id)?.length ?? 0}</span></h3>
+                <p class="hint">Nodes this one links to{work ? ', as the change has them' : ''}.</p>
+                <NodeTree index={world} root={id} dir="out" onopen={(n) => openNeighbour(n)} />
               </section>
             </div>
           {:else}
-            <p class="empty">This node is not in the current graph (deleted, or only created by a change).</p>
+            <p class="empty">{work ? 'This node is not in the world of the selected change.' : 'This node is not in the current graph (deleted, or only created by a change: select that change to see it).'}</p>
           {/if}
         {:else if active === 'graph'}
-          {#if head?.baselineId && head.nodes.has(id)}
+          {#if work && inWorld}
+            <section class="card neighbourhood">
+              {#if graphNode !== id || graphLink}
+                <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
+              {/if}
+              <NodeNeighbourhood baselineId={work.index.baselineId} world={work.index} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} details={false} compact fill {reload} />
+            </section>
+          {:else if !work && head?.baselineId && head.nodes.has(id)}
             <section class="card neighbourhood">
               {#if graphNode !== id || graphLink}
                 <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
@@ -596,7 +670,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
               <NodeNeighbourhood baselineId={head.baselineId} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} details={false} compact fill {reload} />
             </section>
           {:else}
-            <p class="empty">This node is not in the current graph (deleted, or only created by a change).</p>
+            <p class="empty">{work ? 'This node is not in the world of the selected change.' : 'This node is not in the current graph (deleted, or only created by a change: select that change to see it).'}</p>
           {/if}
         {:else if active === 'lifecycle'}
           {#if lifecycle}

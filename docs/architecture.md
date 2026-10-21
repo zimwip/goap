@@ -676,6 +676,12 @@ A node type may name the **editor** of its nodes in the IDE (`editor: agent`, in
 [ADR 0027](adr/0027-node-type-editors.md)): the IDE opens every node through `openNode` (`web/src/lib/nodeEditors.ts`),
 which reads the editor from the type catalogue the IDE loads from the registry (`ListTypes`) and falls back to the default node editor; the editors a type can name
 are registered in `web/src/lib/views/nodeEditors.ts` (`agent`, `action`, `methodology`, `domain`, `unit`, `mcp`, ...).
+The default node editor (`NodeTab.svelte`) follows the change selected in the context (the working change of the
+header): it sees the graph through it, the nodes the change created, the versions it committed and the drafts it holds,
+the other nodes as its fork has them (`Graph.ChangeWorld`, `GetChangeGraph` with `world`: read by node, a link kept when
+its target node is in that world at whatever version it names; web `loadChangeWorld`, the *Graph* pane reads its
+neighbourhoods from it, `hoodIn`); the *Edit* of an impact and opening a node from a change select that change first,
+and with no change selected (*Latest version*, or none in the header) it shows the latest released versions.
 It may also give the **icon** and **color** its nodes are drawn with (`icon: database`, a name of the IDE's icon set,
 `color: "#b45309"`; inherited through `extends`, `def.NodeType.Icon` / `Color`, `TypeInfo.icon` / `color`): the compact graph
 of the node editor's *Graph* pane draws each node as a circle of that color holding that icon, its details in a popup on

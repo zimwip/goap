@@ -95,3 +95,64 @@ func testChangeViewOfAFlow(t *testing.T, repo Repo) {
 		t.Fatalf("flow accepted view: %v", a.Nodes)
 	}
 }
+
+// The world of a change is its fork as it left it, what it committed and its drafts, read by node (the node editor
+// of a change): a link to a node the change moved stays.
+func TestChangeWorld(t *testing.T) { forEachRepo(t, testChangeWorld) }
+
+func testChangeWorld(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", BaselineID: f.base.ID, OwnBranch: true}))
+	mod := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "PSP v2"}))
+	must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, mod.ID, edit{Properties: map[string]any{"title": "Use PSP v2"}}))
+	must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-9", Type: "Requirement", Rationale: "new",
+		Links: []LinkWrite{{Type: "satisfies", To: f.need.Ref()}}}))
+
+	type world struct {
+		nodes map[string]domain.Node
+		links map[string]bool
+	}
+	read := func(get func(context.Context, domain.ChangeID, string) ([]domain.Node, []domain.Link, error)) world {
+		t.Helper()
+		nodes, links, err := get(ctx, c.ID, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		w := world{nodes: map[string]domain.Node{}, links: map[string]bool{}}
+		keys := map[domain.NodeID]string{}
+		for _, n := range nodes {
+			w.nodes[n.Key] = n
+			keys[n.ID] = n.Key
+		}
+		for _, l := range links {
+			w.links[keys[l.From.ID]+" "+l.Type+" "+keys[l.To.ID]] = true
+		}
+		return w
+	}
+	check := func(w world, title string) {
+		t.Helper()
+		if len(w.nodes) != 4 || w.nodes["REQ-1"].Properties["title"] != title || w.nodes["REQ-9"].ID == "" || w.nodes["TST-1"].Version != f.test.Version {
+			t.Fatalf("world nodes: %+v", w.nodes)
+		}
+		for _, l := range []string{"REQ-1 satisfies NEED-1", "REQ-9 satisfies NEED-1", "TST-1 verifies REQ-1"} {
+			if !w.links[l] {
+				t.Fatalf("world links lack %q: %v", l, w.links)
+			}
+		}
+	}
+	check(read(g.ChangeWorld), "Use PSP v2")
+	// the graph a call on the change reads stays its reference baseline
+	if ref := read(g.ChangeGraph); ref.nodes["REQ-1"].Properties["title"] != "Use PSP v1" || ref.nodes["REQ-9"].ID != "" {
+		t.Fatalf("change graph: %+v", ref.nodes)
+	}
+	// committed: the version it wrote on its branch, the created node still a draft
+	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, mod.ID, "u", "ok"))
+	must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
+	w := read(g.ChangeWorld)
+	check(w, "Use PSP v2")
+	if w.nodes["REQ-1"].Version != f.req.Version+1 || w.nodes["REQ-9"].Version != 0 {
+		t.Fatalf("after the commit: REQ-1 v%d, REQ-9 v%d", w.nodes["REQ-1"].Version, w.nodes["REQ-9"].Version)
+	}
+}
