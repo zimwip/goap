@@ -129,7 +129,9 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
    principal `.For` the person (ADR 0114). Until then the federation client forwards the caller's identity, which only a
    graph of the same platform trusts.
 5. **Per-project sources** (done): the mapping of §8, the seam `Graph.ProjectSources`, `Graph.ResolveIn` /
-   `ResolveFrom`.
+   `ResolveFrom`. Web: the sources are declared in *Settings → Sources* (`SourcesPane.svelte`, staged like the other
+   settings), a project maps them on the *Sources* pane of its tab (`ProjectSources.svelte`: the mapping in force, the
+   project it comes from); `web/src/lib/sources.ts`.
 6. **Graph spaces**: the four moves of §9, each its own change.
 7. **The other readers of links**: the OKF export writes a link to another source as its URL, the snapshot import /
    export carries URLs (a snapshot of one graph imported in another keeps its links to the first), the index stores the
