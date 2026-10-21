@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { elapsed, fraction, graphImportResult, isActive, isFinal, jobChange, kindLabel, newer, statsLine } from './jobView';
+import { elapsed, fraction, graphImportResult, isActive, isFinal, jobChange, jobFacts, kindLabel, newer, paramLines, statsLine } from './jobView';
 
 describe('jobs', () => {
   it('names the kinds', () => {
@@ -19,6 +19,18 @@ describe('jobs', () => {
     expect(elapsed({ startedAt: '2026-10-20T10:00:00Z' }, t + 65_000)).toBe('1 min 5 s');
     expect(elapsed({ startedAt: '2026-10-20T10:00:00Z', endedAt: '2026-10-20T10:00:12Z' }, t + 99_000)).toBe('12 s');
     expect(elapsed({ status: 'queued' }, t)).toBe('');
+  });
+
+  it('lists what the detail shows', () => {
+    const t = Date.parse('2026-10-20T10:00:00Z');
+    const facts = jobFacts({ id: 'j1', kind: 'graph.export', by: 'ann', startedAt: '2026-10-20T10:00:00Z' }, t + 5_000);
+    expect(facts.map((f) => f.label)).toEqual(['Kind', 'Started by', 'Started', 'Duration', 'Id']);
+    expect(facts.find((f) => f.label === 'Duration')?.value).toBe('5 s');
+    expect(paramLines({ params: { directory: '/src/jq', depth: 2, empty: '', opts: { a: 1 } } })).toEqual([
+      { name: 'directory', value: '/src/jq' },
+      { name: 'depth', value: '2' },
+      { name: 'opts', value: '{"a":1}' },
+    ]);
   });
 
   it('never takes an ended job back', () => {

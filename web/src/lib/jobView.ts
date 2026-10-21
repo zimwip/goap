@@ -114,3 +114,33 @@ export function logLines(j: Job): { at: string; text: string }[] {
     return { at: Number.isNaN(t) ? '' : new Date(t).toLocaleTimeString(), text: l.text ?? '' };
   });
 }
+
+/** A time of a job in words, date and time of day; empty when unset. */
+export function when(ts: string | undefined): string {
+  const t = Date.parse(ts ?? '');
+  return Number.isNaN(t) ? '' : new Date(t).toLocaleString();
+}
+
+/** What the detail of a job lists about it, in order, the unset facts left out. */
+export function jobFacts(j: Job, now: number): { label: string; value: string }[] {
+  const facts: [string, string | undefined][] = [
+    ['Kind', kindLabel(j.kind)],
+    ['Target', j.target],
+    ['Started by', j.by],
+    ['Project', j.projectId],
+    ['Worker', j.worker],
+    ['Created', when(j.createdAt)],
+    ['Started', when(j.startedAt)],
+    ['Ended', when(j.endedAt)],
+    ['Duration', elapsed(j, now)],
+    ['Id', j.id],
+  ];
+  return facts.filter(([, v]) => !!v).map(([label, value]) => ({ label, value: value as string }));
+}
+
+/** The parameters a job was started with, as name and value, a structured value as JSON. */
+export function paramLines(j: Job): { name: string; value: string }[] {
+  return Object.entries((j.params ?? {}) as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([name, v]) => ({ name, value: typeof v === 'object' ? JSON.stringify(v) : String(v) }));
+}

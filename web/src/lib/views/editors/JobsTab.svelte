@@ -9,6 +9,7 @@
   import { can } from '../../stores/session.svelte';
   import { jobList, jobStream, knownJobs } from '../../stores/jobs.svelte';
   import { isActive } from '../../jobView';
+  import { jobSubject } from '../../importSources';
 
   let { tab }: { tab: Tab } = $props();
   void tab;
@@ -83,7 +84,7 @@
     {:else}
       <ul class="jobs">
         {#each shown as j (j.id)}
-          <li><JobRow job={j} {now} showBy={everyone} /></li>
+          <li><JobRow job={j} {now} showBy={everyone} detail={jobSubject(j)} /></li>
         {/each}
       </ul>
     {/if}
