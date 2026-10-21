@@ -65,7 +65,8 @@ the drafts and the change impacts they depend on (a superseded impact loses its 
 last event folded. A read asks the log for the impact events **after** that `seq` (an indexed `Tx.Log` with `AfterSeq`,
 empty when nothing happened) and folds only those on top of the cached state: a read after one edit folds one event, not
 the whole log. The cache is an LRU of `Graph.DraftCacheSize` changes (`DefaultDraftCacheSize`, 128) behind a mutex; its
-entries are immutable and what a read returns is a deep copy.
+entries are immutable and what a read returns is a deep copy. (ADR 0153: the cache between calls is gone; the fold is
+built per call and kept by its transaction only.)
 
 Why it stays correct:
 

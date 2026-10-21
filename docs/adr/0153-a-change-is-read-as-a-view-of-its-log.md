@@ -5,7 +5,7 @@
 ## Context
 
 A change is its log (ADR 0029, 0030): the impacts, the drafts and the items are folds of its entries. The graph
-already kept one fold per change, cached and extended entry by entry (`draftState`, ADR 0079 §2), and a write folded
+already kept one fold per change, extended entry by entry (`draftState`, ADR 0079 §2), and a write folded
 its own events into it (`emitEntry`). An audit of the operations on a change (the second performance round) found the
 rule only half kept:
 
@@ -28,9 +28,12 @@ rule only half kept:
    reader of these goes through the view (`frozen`, `reopenPhase`, `flowNodes`, `seenDrafts`, `adoptNodes`,
    `walkTransitions`, `RebaseState`, `ImpactNodeResolve`, `ChangeEvents`, `draftsOf`); nothing on these paths reads the
    log whole.
-2. **Facets are built per call.** A log facet (`LogFacet`, the history) is a cache of the log for one call: the call
-   that needs it reads its entries and folds them once, uses it for what it does, and nothing of it is kept for the next
-   call (stateless: the log is the state). The engine does the same when the graph sends no history (`withHistory`).
+2. **Views and facets are built per call.** The view of a change and a log facet (`LogFacet`, the history) are caches
+   of the log for one call: the call that needs one reads its entries and folds them once, uses it for what it does,
+   and nothing of it is kept for the next call (stateless: the log is the state). Within the call the transaction keeps
+   the view (`guardTx`: `views` for a change it read, `drafts` for one it wrote, folded on in place by its own writes),
+   so a batch of writes to one change folds the log once. There is no cache of views between calls (the LRU of ADR 0079
+   §2, `DraftCacheSize`, is gone). The engine does the same when the graph sends no history (`withHistory`).
 3. **The guard reads headers.** The unit and the project of a change are read from its header (`ChangeHead`), never
    from its log.
 4. **Positions.** A change is read at a position, `Change.Seq` (proto `Change.seq`): the last impact event or fact its
@@ -54,11 +57,18 @@ rule only half kept:
 
 - An operation on a change with a long log costs what its own events touch: no read of the log beyond the entries
   after the view, no decode of the facts or the impact events again.
-- The view holds the decoded impact events of the changes it caches (bounded by `DraftCacheSize`).
+- A call on a change folds its log once: the cost of a call grows with the log of the change it reads, and a change
+  read by two calls is folded twice. No memory is held for a change between calls, and every replica answers the same.
+  An operation built of several operations on one change runs them in one transaction so the view is folded once:
+  `Graph.Commit` (CommitEdits) does (`inOne`), and a failed commit now leaves nothing behind (no purge, no abandoned
+  change). Measured with goap-bench (PostgreSQL, 4 workers, 6,000 versions): CommitEdits p50 845 ms with the cache, 2.4 s
+  per call with a transaction per operation, 305 ms per call in one transaction; a single operation on a change of the
+  lifecycle mode (about 50 impacts) pays its fold, about 20 ms more (ImpactNodeCreate 7 → 27 ms, MergeChange 41 → 80 ms).
+- Dropping the cache surfaced a fold that differed from the writes it replayed: a version checked out by two flows was
+  hydrated with its links twice (`decodeImpacts` read it once per copy); the versions are now read once per fold.
 - The web reads the positions (`web/src/lib/flux/positions.ts`): the transport notes the ones a graph answer carries
   (`X-Goap-Change-Seq`), the reducers the ones the change events carry (`change.updated`: `Change.Seq` of the write,
   `Event.version` on the stream), `getChange` the one it read; every graph request naming a known change (`changeId`,
   `id`, `parentId`) asks for it in `X-Goap-At-Least`, and a read refused as behind is tried again three times. The
   gateway lets both headers and the error reason through CORS.
-- A facet costs one read of its entries of the log per call that needs it; no cache to keep in step with the log,
-  and every replica answers the same.
+- A facet costs one read of its entries of the log per call that needs it; no cache to keep in step with the log.

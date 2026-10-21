@@ -50,7 +50,7 @@ records the branch it was written on (`node_version.branch`). The versions a bra
    the repository (`ambientRepo`) makes every operation called with that context join it, the guardian reading the graph
    included. A rebase that changed the branch is kept and the merge refused (`ErrConflict`), as before.
    `Graph.Commit`, the shortcut of the seeds and the registries, keeps one transaction per operation, as a person or an
-   agent takes them.
+   agent takes them (ADR 0153: since the view of a change is built per call, it runs them all in one transaction).
 7. **An operation on a change costs what its event touches, not the size of the change.** The fold of the impact log
    (`draftState`, `graph/graph/draftcache.go`) is indexed (impacts by id, drafts by impact and flow, impacts by node) and
    carries the pending conflicts. A transaction folds its events in place in its own copy of it, made once, and

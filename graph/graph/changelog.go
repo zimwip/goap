@@ -47,13 +47,15 @@ func impactEvents(ctx context.Context, tx Tx, change domain.ChangeID) ([]domain.
 func decodeImpacts(ctx context.Context, tx Tx, entries []domain.LogEntry) ([]domain.ImpactEvent, error) {
 	var out []domain.ImpactEvent // nil when empty, as the stores returned before
 	var bases []domain.NodeRef
+	seen := map[domain.NodeRef]bool{} // a version several events copy is read once: its links would come back once per copy
 	for _, l := range entries {
 		events, err := domain.ImpactEventsOf(l)
 		if err != nil {
 			return nil, fmt.Errorf("log entry %d (%s): %w", l.Seq, l.Type, err)
 		}
 		for _, e := range events {
-			if !e.Hydrated() && e.Draft.Base != nil {
+			if !e.Hydrated() && e.Draft.Base != nil && !seen[*e.Draft.Base] {
+				seen[*e.Draft.Base] = true
 				bases = append(bases, *e.Draft.Base)
 			}
 			out = append(out, e)
