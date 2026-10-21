@@ -15,6 +15,7 @@ import (
 	"github.com/zimwip/goap/contracts/algo"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/events"
+	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/typecat"
 )
@@ -69,6 +70,10 @@ type Graph struct {
 	newID func() string
 	// Authorizer, when set, is asked before every lifecycle transition.
 	Authorizer TransitionAuthorizer
+	// Resolvers are the resolvers of the kinds of source beyond the self one (ADR 0153: lnk.KindGraph, lnk.KindFiles...),
+	// read once, at the first use of Lnk. Unset: the graph resolves its own namespaces only.
+	Resolvers map[string]lnk.Resolver
+	lnk       lnkState
 	// Types returns the type catalogue in force (ADR 0012 §2, pkg/typecat): the graph judges the nodes by it and
 	// refuses the ones whose type or link type it does not resolve. Unset: an untyped graph (tests, tools).
 	Types func() TypeCatalog

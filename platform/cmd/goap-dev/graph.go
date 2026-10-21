@@ -28,6 +28,7 @@ func buildGraph(e *env, st stores) (*graphPart, error) {
 	g.EndUser = graphsvc.EndUser         // the person the events of the changes are for (ADR 0114)
 	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
 	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
+	g.Resolvers = graphsvc.Resolvers()   // the sources of the logical URLs beyond its namespaces (ADR 0153)
 	reader := graphsnap.NewReader(g)
 	directory := &access.Directory{Graph: g, Reader: reader}
 	authorizer, err := access.NewAuthorizer(directory)

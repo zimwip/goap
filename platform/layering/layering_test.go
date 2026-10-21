@@ -26,12 +26,14 @@ var forbidden = map[string][]string{
 	"lib/llmcfg":     {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "graph/graph", "engine/engine"},
 	// The methodology describes and compiles; the engine plans and runs (ADR 0126): neither the compiler nor the
 	// conditions know the planner.
-	"engine/methodology":    {"engine/goap", "engine/engine"},
-	"engine/condition":      {"engine/goap", "engine/engine"},
-	"engine/engine":         {"lib/adapter", "lib/mcpbuiltin", "engine/observe", "engine/selfimprove", "platform/assistantsvc", "graph/graph"},
-	"contracts/builtins":    {"engine/methodology", "engine/engine", "contracts/domain"},
-	"lib/adapter":           {"lib/mcpbuiltin", "lib/access"},
-	"contracts/domain":      {"contracts/risk", "engine/methodology", "contracts/journal", "contracts/decision", "contracts/verify", "contracts/criticality", "contracts/review"},
+	"engine/methodology": {"engine/goap", "engine/engine"},
+	"engine/condition":   {"engine/goap", "engine/engine"},
+	"engine/engine":      {"lib/adapter", "lib/mcpbuiltin", "engine/observe", "engine/selfimprove", "platform/assistantsvc", "graph/graph"},
+	"contracts/builtins": {"engine/methodology", "engine/engine", "contracts/domain"},
+	"lib/adapter":        {"lib/mcpbuiltin", "lib/access"},
+	"contracts/domain":   {"contracts/risk", "engine/methodology", "contracts/journal", "contracts/decision", "contracts/verify", "contracts/criticality", "contracts/review"},
+	// A logical URL knows no graph (ADR 0153): the graph and its clients implement its resolvers.
+	"contracts/lnk":         {"contracts/domain", "graph/graph", "lib/graphclient", "graph/graphsvc"},
 	"contracts/criticality": {"graph/graph", "engine/engine", "engine/methodology", "contracts/journal", "contracts/decision", "engine/condition", "lib/access"},
 	"contracts/verify":      {"graph/graph", "engine/engine", "engine/methodology", "contracts/risk", "contracts/journal", "contracts/decision", "engine/condition"},
 	"contracts/decision":    {"graph/graph", "engine/engine", "engine/methodology", "contracts/risk", "contracts/journal"},

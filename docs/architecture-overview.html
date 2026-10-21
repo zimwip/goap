@@ -144,7 +144,7 @@ footer { font-size: 13px; color: var(--muted); }
       <div class="tier">
         <div class="mod m-contracts" data-module="contracts"><h3>contracts <span>depends on nothing</span></h3>
           <p>Protos' generated Go (<code>gen</code>), the pure model, and the graph's contract <code>graphapi</code>: the port the engine and the built-in MCPs call.</p>
-          <div class="pk">gen · domain · graphapi · authz · mcp · llm · journal · operations · risk · assess · verify · review</div></div>
+          <div class="pk">gen · domain · graphapi · lnk · authz · mcp · llm · journal · operations · risk · assess · verify · review</div></div>
       </div>
     </div>
     <div class="rule"><span class="chip m-contracts">contracts</span>←<span class="chip m-lib">lib</span>←<span class="chip m-graph">graph</span>/<span class="chip m-engine">engine</span>/<span class="chip m-mcp">mcp</span>/<span class="chip m-gateway">gateway</span>←<span class="chip m-platform">platform</span></div>
@@ -273,7 +273,7 @@ footer { font-size: 13px; color: var(--muted); }
       <thead><tr><th>Binary</th><th>Module</th><th>Port</th><th>What it runs</th></tr></thead>
       <tbody>
         <tr data-binary="gateway" data-service="gateway"><td><code>gateway</code></td><td><span class="chip m-gateway">gateway</span></td><td class="num">:8080</td><td>HTTP entry: sign-in, sessions, routing by service</td></tr>
-        <tr data-binary="graph" data-service="graph"><td><code>graph</code></td><td><span class="chip m-graph">graph</span></td><td class="num">:8081</td><td>the graph, changes, the domain registry, the import registry; PostgreSQL</td></tr>
+        <tr data-binary="graph" data-service="graph"><td><code>graph</code></td><td><span class="chip m-graph">graph</span></td><td class="num">:8081</td><td>the graph, changes, the domain registry, the import registry; PostgreSQL; resolves the logical URLs of its sources, reading another graph service by key (ADR 0153)</td></tr>
         <tr data-binary="registry" data-service="registry"><td><code>registry</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8082</td><td>the methodology registry; reads the graph and its domains, no database</td></tr>
         <tr data-binary="engine" data-service="engine"><td><code>engine</code></td><td><span class="chip m-engine">engine</span></td><td class="num">:8083</td><td>runs and plans processes; PostgreSQL; starts the sandboxes</td></tr>
         <tr data-binary="modelgw" data-service="modelgw"><td><code>modelgw</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8084</td><td>every LLM call and its ledger; PostgreSQL</td></tr>

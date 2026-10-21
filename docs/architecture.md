@@ -1145,6 +1145,16 @@ are a second line, a storage without any keeps the rules.
 - Secrets are never in environment variables in prod: `lib/platform/secrets` reads from Vault
   (KV v2, token auth in dev / Kubernetes auth in prod) with a fallback to the environment in dev.
 
+### 3.4a Logical URLs and federation ([ADR 0153](adr/0153-logical-urls-and-graph-federation.md))
+
+What a link points to can be named by a logical URL, `lnk:<source>/<type>/<key>` (`contracts/lnk`): a source is where
+things live (a namespace of this graph, a namespace of another graph service, a directory of files), the type and the
+key say which thing. Every namespace of the graph is a self source of its name (`graph.SelfResolver`, always there);
+other sources are `platform@Source` nodes (`SRC:<name>`, admin only), read by the resolver of their kind
+(`Graph.Resolvers`: `graphclient.Federation` for `graph`, `lnk.Files` for `files`). `Graph.Lnk()` is the registry,
+`Graph.Resolve` reads a URL, `Node.URL()` / `Node.SourceName()` give a node's. Links still target node versions; their
+logical targets are step 2 of the ADR.
+
 ### 3.4b Node index and search ([ADR 0026](adr/0026-node-index-and-search.md))
 
 A node type declares the searchable properties of its nodes (`search: [{property, text, facet}]`, inherited through
