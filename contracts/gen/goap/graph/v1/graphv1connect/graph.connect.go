@@ -149,6 +149,9 @@ const (
 	// GraphServiceImpactNodeCheckoutProcedure is the fully-qualified name of the GraphService's
 	// ImpactNodeCheckout RPC.
 	GraphServiceImpactNodeCheckoutProcedure = "/goap.graph.v1.GraphService/ImpactNodeCheckout"
+	// GraphServiceImpactNodeCheckoutBatchProcedure is the fully-qualified name of the GraphService's
+	// ImpactNodeCheckoutBatch RPC.
+	GraphServiceImpactNodeCheckoutBatchProcedure = "/goap.graph.v1.GraphService/ImpactNodeCheckoutBatch"
 	// GraphServiceImpactNodeUpdateProcedure is the fully-qualified name of the GraphService's
 	// ImpactNodeUpdate RPC.
 	GraphServiceImpactNodeUpdateProcedure = "/goap.graph.v1.GraphService/ImpactNodeUpdate"
@@ -428,6 +431,8 @@ type GraphServiceClient interface {
 	// removes its impact). The versions are written when the change commits.
 	ImpactNodeCreate(context.Context, *connect.Request[v1.ImpactNodeCreateRequest]) (*connect.Response[v1.ImpactNodeCreateResponse], error)
 	ImpactNodeCheckout(context.Context, *connect.Request[v1.ImpactNodeCheckoutRequest]) (*connect.Response[v1.ImpactNodeCheckoutResponse], error)
+	// ImpactNodeCheckoutBatch checks out several nodes at once, all or none, in one transaction.
+	ImpactNodeCheckoutBatch(context.Context, *connect.Request[v1.ImpactNodeCheckoutBatchRequest]) (*connect.Response[v1.ImpactNodeCheckoutBatchResponse], error)
 	ImpactNodeUpdate(context.Context, *connect.Request[v1.ImpactNodeUpdateRequest]) (*connect.Response[v1.ImpactNodeUpdateResponse], error)
 	ImpactLinkCreate(context.Context, *connect.Request[v1.ImpactLinkCreateRequest]) (*connect.Response[v1.ImpactLinkCreateResponse], error)
 	ImpactLinkUpdate(context.Context, *connect.Request[v1.ImpactLinkUpdateRequest]) (*connect.Response[v1.ImpactLinkUpdateResponse], error)
@@ -813,6 +818,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceImpactNodeCheckoutProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ImpactNodeCheckout")),
+			connect.WithClientOptions(opts...),
+		),
+		impactNodeCheckoutBatch: connect.NewClient[v1.ImpactNodeCheckoutBatchRequest, v1.ImpactNodeCheckoutBatchResponse](
+			httpClient,
+			baseURL+GraphServiceImpactNodeCheckoutBatchProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ImpactNodeCheckoutBatch")),
 			connect.WithClientOptions(opts...),
 		),
 		impactNodeUpdate: connect.NewClient[v1.ImpactNodeUpdateRequest, v1.ImpactNodeUpdateResponse](
@@ -1228,115 +1239,116 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // graphServiceClient implements GraphServiceClient.
 type graphServiceClient struct {
-	getNode                *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
-	listBaselines          *connect.Client[v1.ListBaselinesRequest, v1.ListBaselinesResponse]
-	tagVersion             *connect.Client[v1.TagVersionRequest, v1.TagVersionResponse]
-	listTags               *connect.Client[v1.ListTagsRequest, v1.ListTagsResponse]
-	deleteTag              *connect.Client[v1.DeleteTagRequest, v1.DeleteTagResponse]
-	getBaselineGraph       *connect.Client[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse]
-	getBaselineDelta       *connect.Client[v1.GetBaselineDeltaRequest, v1.GetBaselineDeltaResponse]
-	listBaselineNodes      *connect.Client[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse]
-	listBaselineLinks      *connect.Client[v1.ListBaselineLinksRequest, v1.ListBaselineLinksResponse]
-	getNodeNeighbourhood   *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
-	listNamespaces         *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
-	getGraphOverview       *connect.Client[v1.GetGraphOverviewRequest, v1.GetGraphOverviewResponse]
-	getGraphStats          *connect.Client[v1.GetGraphStatsRequest, v1.GetGraphStatsResponse]
-	getStructures          *connect.Client[v1.GetStructuresRequest, v1.GetStructuresResponse]
-	listItemTypes          *connect.Client[v1.ListItemTypesRequest, v1.ListItemTypesResponse]
-	isAdminOnlyType        *connect.Client[v1.IsAdminOnlyTypeRequest, v1.IsAdminOnlyTypeResponse]
-	listChangeEvents       *connect.Client[v1.ListChangeEventsRequest, v1.ListChangeEventsResponse]
-	listChangeLog          *connect.Client[v1.ListChangeLogRequest, v1.ListChangeLogResponse]
-	exportChangeProvenance *connect.Client[v1.ExportChangeProvenanceRequest, v1.ExportChangeProvenanceResponse]
-	exportGraph            *connect.Client[v1.ExportGraphRequest, v1.ExportGraphResponse]
-	startGraphExport       *connect.Client[v1.StartGraphExportRequest, v1.StartGraphExportResponse]
-	importGraph            *connect.Client[v1.ImportGraphRequest, v1.ImportGraphResponse]
-	startGraphImport       *connect.Client[v1.StartGraphImportRequest, v1.StartGraphImportResponse]
-	loadDemoData           *connect.Client[v1.LoadDemoDataRequest, v1.LoadDemoDataResponse]
-	createChange           *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
-	getChange              *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
-	listChanges            *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
-	getChangeImpacts       *connect.Client[v1.GetChangeImpactsRequest, v1.GetChangeImpactsResponse]
-	listNodeChanges        *connect.Client[v1.ListNodeChangesRequest, v1.ListNodeChangesResponse]
-	updateChange           *connect.Client[v1.UpdateChangeRequest, v1.UpdateChangeResponse]
-	moveChange             *connect.Client[v1.MoveChangeRequest, v1.MoveChangeResponse]
-	attachChange           *connect.Client[v1.AttachChangeRequest, v1.AttachChangeResponse]
-	detachChange           *connect.Client[v1.DetachChangeRequest, v1.DetachChangeResponse]
-	setChangeDependencies  *connect.Client[v1.SetChangeDependenciesRequest, v1.SetChangeDependenciesResponse]
-	getChangeDependencies  *connect.Client[v1.GetChangeDependenciesRequest, v1.GetChangeDependenciesResponse]
-	upgradeChange          *connect.Client[v1.UpgradeChangeRequest, v1.UpgradeChangeResponse]
-	setChangeMethodology   *connect.Client[v1.SetChangeMethodologyRequest, v1.SetChangeMethodologyResponse]
-	addItems               *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
-	proposeImpact          *connect.Client[v1.ProposeImpactRequest, v1.ProposeImpactResponse]
-	impactNodeCreate       *connect.Client[v1.ImpactNodeCreateRequest, v1.ImpactNodeCreateResponse]
-	impactNodeCheckout     *connect.Client[v1.ImpactNodeCheckoutRequest, v1.ImpactNodeCheckoutResponse]
-	impactNodeUpdate       *connect.Client[v1.ImpactNodeUpdateRequest, v1.ImpactNodeUpdateResponse]
-	impactLinkCreate       *connect.Client[v1.ImpactLinkCreateRequest, v1.ImpactLinkCreateResponse]
-	impactLinkUpdate       *connect.Client[v1.ImpactLinkUpdateRequest, v1.ImpactLinkUpdateResponse]
-	impactLinkDelete       *connect.Client[v1.ImpactLinkDeleteRequest, v1.ImpactLinkDeleteResponse]
-	impactNodeTransition   *connect.Client[v1.ImpactNodeTransitionRequest, v1.ImpactNodeTransitionResponse]
-	impactNodeCancel       *connect.Client[v1.ImpactNodeCancelRequest, v1.ImpactNodeCancelResponse]
-	impactNodeMerge        *connect.Client[v1.ImpactNodeMergeRequest, v1.ImpactNodeRestructureResponse]
-	impactNodeSplit        *connect.Client[v1.ImpactNodeSplitRequest, v1.ImpactNodeRestructureResponse]
-	withdrawImpact         *connect.Client[v1.WithdrawImpactRequest, v1.WithdrawImpactResponse]
-	withdrawImpacts        *connect.Client[v1.WithdrawImpactsRequest, v1.WithdrawImpactsResponse]
-	rebaseChange           *connect.Client[v1.RebaseChangeRequest, v1.RebaseChangeResponse]
-	impactNodeResolve      *connect.Client[v1.ImpactNodeResolveRequest, v1.ImpactNodeResolveResponse]
-	getRebaseState         *connect.Client[v1.GetRebaseStateRequest, v1.GetRebaseStateResponse]
-	getCommitState         *connect.Client[v1.GetCommitStateRequest, v1.GetCommitStateResponse]
-	impactNodeReview       *connect.Client[v1.ImpactNodeReviewRequest, v1.ImpactNodeReviewResponse]
-	impactNodeReviewBatch  *connect.Client[v1.ImpactNodeReviewBatchRequest, v1.ImpactNodeReviewBatchResponse]
-	reviewOpen             *connect.Client[v1.ReviewOpenRequest, v1.ReviewResponse]
-	reviewUpdate           *connect.Client[v1.ReviewUpdateRequest, v1.ReviewResponse]
-	reviewSubmit           *connect.Client[v1.ReviewSubmitRequest, v1.ReviewResponse]
-	reviewDiscard          *connect.Client[v1.ReviewDiscardRequest, v1.ReviewResponse]
-	reopenChangeImpacts    *connect.Client[v1.ReopenChangeImpactsRequest, v1.ReopenChangeImpactsResponse]
-	commitEdits            *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
-	getBlackboard          *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
-	commitChange           *connect.Client[v1.CommitChangeRequest, v1.CommitChangeResponse]
-	transitionChange       *connect.Client[v1.TransitionChangeRequest, v1.TransitionChangeResponse]
-	deleteChange           *connect.Client[v1.DeleteChangeRequest, v1.DeleteChangeResponse]
-	getPendingSettings     *connect.Client[v1.GetPendingSettingsRequest, v1.PendingSettingsResponse]
-	stageSettings          *connect.Client[v1.StageSettingsRequest, v1.PendingSettingsResponse]
-	saveSettings           *connect.Client[v1.SaveSettingsRequest, v1.PendingSettingsResponse]
-	discardSettings        *connect.Client[v1.DiscardSettingsRequest, v1.PendingSettingsResponse]
-	createBranch           *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
-	listBranches           *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
-	getBranch              *connect.Client[v1.GetBranchRequest, v1.GetBranchResponse]
-	setBranchStatus        *connect.Client[v1.SetBranchStatusRequest, v1.SetBranchStatusResponse]
-	setBranchDescription   *connect.Client[v1.SetBranchDescriptionRequest, v1.SetBranchDescriptionResponse]
-	listNodeVersions       *connect.Client[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse]
-	derivedNodes           *connect.Client[v1.DerivedNodesRequest, v1.DerivedNodesResponse]
-	planMerge              *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
-	mergeBranch            *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
-	diffBaselines          *connect.Client[v1.DiffBaselinesRequest, v1.DiffBaselinesResponse]
-	getChangeStack         *connect.Client[v1.GetChangeStackRequest, v1.GetChangeStackResponse]
-	mergeChange            *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
-	getSharedNodes         *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
-	splitChange            *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
-	listSubChanges         *connect.Client[v1.ListSubChangesRequest, v1.ListSubChangesResponse]
-	openFlow               *connect.Client[v1.OpenFlowRequest, v1.OpenFlowResponse]
-	adoptFlow              *connect.Client[v1.AdoptFlowRequest, v1.AdoptFlowResponse]
-	discardFlow            *connect.Client[v1.DiscardFlowRequest, v1.DiscardFlowResponse]
-	listFlows              *connect.Client[v1.ListFlowsRequest, v1.ListFlowsResponse]
-	validateBoard          *connect.Client[v1.ValidateBoardRequest, v1.ValidateBoardResponse]
-	openOption             *connect.Client[v1.OpenOptionRequest, v1.OpenOptionResponse]
-	activateOption         *connect.Client[v1.ActivateOptionRequest, v1.ActivateOptionResponse]
-	evaluateOption         *connect.Client[v1.EvaluateOptionRequest, v1.EvaluateOptionResponse]
-	selectOption           *connect.Client[v1.SelectOptionRequest, v1.SelectOptionResponse]
-	rejectOption           *connect.Client[v1.RejectOptionRequest, v1.RejectOptionResponse]
-	listOptions            *connect.Client[v1.ListOptionsRequest, v1.ListOptionsResponse]
-	compareOptions         *connect.Client[v1.CompareOptionsRequest, v1.CompareOptionsResponse]
-	diffFlows              *connect.Client[v1.DiffFlowsRequest, v1.DiffFlowsResponse]
-	getChangeView          *connect.Client[v1.GetChangeViewRequest, v1.GetChangeViewResponse]
-	openDecision           *connect.Client[v1.OpenDecisionRequest, v1.OpenDecisionResponse]
-	ruleDecision           *connect.Client[v1.RuleDecisionRequest, v1.RuleDecisionResponse]
-	answerQuestion         *connect.Client[v1.AnswerQuestionRequest, v1.AnswerQuestionResponse]
-	ratifyDecision         *connect.Client[v1.RatifyDecisionRequest, v1.RatifyDecisionResponse]
-	listDecisionPoints     *connect.Client[v1.ListDecisionPointsRequest, v1.ListDecisionPointsResponse]
-	getChangeGraph         *connect.Client[v1.GetChangeGraphRequest, v1.GetChangeGraphResponse]
-	appendLog              *connect.Client[v1.AppendLogRequest, v1.AppendLogResponse]
-	listExecutions         *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
-	republishIndex         *connect.Client[v1.RepublishIndexRequest, v1.RepublishIndexResponse]
+	getNode                 *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
+	listBaselines           *connect.Client[v1.ListBaselinesRequest, v1.ListBaselinesResponse]
+	tagVersion              *connect.Client[v1.TagVersionRequest, v1.TagVersionResponse]
+	listTags                *connect.Client[v1.ListTagsRequest, v1.ListTagsResponse]
+	deleteTag               *connect.Client[v1.DeleteTagRequest, v1.DeleteTagResponse]
+	getBaselineGraph        *connect.Client[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse]
+	getBaselineDelta        *connect.Client[v1.GetBaselineDeltaRequest, v1.GetBaselineDeltaResponse]
+	listBaselineNodes       *connect.Client[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse]
+	listBaselineLinks       *connect.Client[v1.ListBaselineLinksRequest, v1.ListBaselineLinksResponse]
+	getNodeNeighbourhood    *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
+	listNamespaces          *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
+	getGraphOverview        *connect.Client[v1.GetGraphOverviewRequest, v1.GetGraphOverviewResponse]
+	getGraphStats           *connect.Client[v1.GetGraphStatsRequest, v1.GetGraphStatsResponse]
+	getStructures           *connect.Client[v1.GetStructuresRequest, v1.GetStructuresResponse]
+	listItemTypes           *connect.Client[v1.ListItemTypesRequest, v1.ListItemTypesResponse]
+	isAdminOnlyType         *connect.Client[v1.IsAdminOnlyTypeRequest, v1.IsAdminOnlyTypeResponse]
+	listChangeEvents        *connect.Client[v1.ListChangeEventsRequest, v1.ListChangeEventsResponse]
+	listChangeLog           *connect.Client[v1.ListChangeLogRequest, v1.ListChangeLogResponse]
+	exportChangeProvenance  *connect.Client[v1.ExportChangeProvenanceRequest, v1.ExportChangeProvenanceResponse]
+	exportGraph             *connect.Client[v1.ExportGraphRequest, v1.ExportGraphResponse]
+	startGraphExport        *connect.Client[v1.StartGraphExportRequest, v1.StartGraphExportResponse]
+	importGraph             *connect.Client[v1.ImportGraphRequest, v1.ImportGraphResponse]
+	startGraphImport        *connect.Client[v1.StartGraphImportRequest, v1.StartGraphImportResponse]
+	loadDemoData            *connect.Client[v1.LoadDemoDataRequest, v1.LoadDemoDataResponse]
+	createChange            *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
+	getChange               *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
+	listChanges             *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
+	getChangeImpacts        *connect.Client[v1.GetChangeImpactsRequest, v1.GetChangeImpactsResponse]
+	listNodeChanges         *connect.Client[v1.ListNodeChangesRequest, v1.ListNodeChangesResponse]
+	updateChange            *connect.Client[v1.UpdateChangeRequest, v1.UpdateChangeResponse]
+	moveChange              *connect.Client[v1.MoveChangeRequest, v1.MoveChangeResponse]
+	attachChange            *connect.Client[v1.AttachChangeRequest, v1.AttachChangeResponse]
+	detachChange            *connect.Client[v1.DetachChangeRequest, v1.DetachChangeResponse]
+	setChangeDependencies   *connect.Client[v1.SetChangeDependenciesRequest, v1.SetChangeDependenciesResponse]
+	getChangeDependencies   *connect.Client[v1.GetChangeDependenciesRequest, v1.GetChangeDependenciesResponse]
+	upgradeChange           *connect.Client[v1.UpgradeChangeRequest, v1.UpgradeChangeResponse]
+	setChangeMethodology    *connect.Client[v1.SetChangeMethodologyRequest, v1.SetChangeMethodologyResponse]
+	addItems                *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
+	proposeImpact           *connect.Client[v1.ProposeImpactRequest, v1.ProposeImpactResponse]
+	impactNodeCreate        *connect.Client[v1.ImpactNodeCreateRequest, v1.ImpactNodeCreateResponse]
+	impactNodeCheckout      *connect.Client[v1.ImpactNodeCheckoutRequest, v1.ImpactNodeCheckoutResponse]
+	impactNodeCheckoutBatch *connect.Client[v1.ImpactNodeCheckoutBatchRequest, v1.ImpactNodeCheckoutBatchResponse]
+	impactNodeUpdate        *connect.Client[v1.ImpactNodeUpdateRequest, v1.ImpactNodeUpdateResponse]
+	impactLinkCreate        *connect.Client[v1.ImpactLinkCreateRequest, v1.ImpactLinkCreateResponse]
+	impactLinkUpdate        *connect.Client[v1.ImpactLinkUpdateRequest, v1.ImpactLinkUpdateResponse]
+	impactLinkDelete        *connect.Client[v1.ImpactLinkDeleteRequest, v1.ImpactLinkDeleteResponse]
+	impactNodeTransition    *connect.Client[v1.ImpactNodeTransitionRequest, v1.ImpactNodeTransitionResponse]
+	impactNodeCancel        *connect.Client[v1.ImpactNodeCancelRequest, v1.ImpactNodeCancelResponse]
+	impactNodeMerge         *connect.Client[v1.ImpactNodeMergeRequest, v1.ImpactNodeRestructureResponse]
+	impactNodeSplit         *connect.Client[v1.ImpactNodeSplitRequest, v1.ImpactNodeRestructureResponse]
+	withdrawImpact          *connect.Client[v1.WithdrawImpactRequest, v1.WithdrawImpactResponse]
+	withdrawImpacts         *connect.Client[v1.WithdrawImpactsRequest, v1.WithdrawImpactsResponse]
+	rebaseChange            *connect.Client[v1.RebaseChangeRequest, v1.RebaseChangeResponse]
+	impactNodeResolve       *connect.Client[v1.ImpactNodeResolveRequest, v1.ImpactNodeResolveResponse]
+	getRebaseState          *connect.Client[v1.GetRebaseStateRequest, v1.GetRebaseStateResponse]
+	getCommitState          *connect.Client[v1.GetCommitStateRequest, v1.GetCommitStateResponse]
+	impactNodeReview        *connect.Client[v1.ImpactNodeReviewRequest, v1.ImpactNodeReviewResponse]
+	impactNodeReviewBatch   *connect.Client[v1.ImpactNodeReviewBatchRequest, v1.ImpactNodeReviewBatchResponse]
+	reviewOpen              *connect.Client[v1.ReviewOpenRequest, v1.ReviewResponse]
+	reviewUpdate            *connect.Client[v1.ReviewUpdateRequest, v1.ReviewResponse]
+	reviewSubmit            *connect.Client[v1.ReviewSubmitRequest, v1.ReviewResponse]
+	reviewDiscard           *connect.Client[v1.ReviewDiscardRequest, v1.ReviewResponse]
+	reopenChangeImpacts     *connect.Client[v1.ReopenChangeImpactsRequest, v1.ReopenChangeImpactsResponse]
+	commitEdits             *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
+	getBlackboard           *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
+	commitChange            *connect.Client[v1.CommitChangeRequest, v1.CommitChangeResponse]
+	transitionChange        *connect.Client[v1.TransitionChangeRequest, v1.TransitionChangeResponse]
+	deleteChange            *connect.Client[v1.DeleteChangeRequest, v1.DeleteChangeResponse]
+	getPendingSettings      *connect.Client[v1.GetPendingSettingsRequest, v1.PendingSettingsResponse]
+	stageSettings           *connect.Client[v1.StageSettingsRequest, v1.PendingSettingsResponse]
+	saveSettings            *connect.Client[v1.SaveSettingsRequest, v1.PendingSettingsResponse]
+	discardSettings         *connect.Client[v1.DiscardSettingsRequest, v1.PendingSettingsResponse]
+	createBranch            *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
+	listBranches            *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
+	getBranch               *connect.Client[v1.GetBranchRequest, v1.GetBranchResponse]
+	setBranchStatus         *connect.Client[v1.SetBranchStatusRequest, v1.SetBranchStatusResponse]
+	setBranchDescription    *connect.Client[v1.SetBranchDescriptionRequest, v1.SetBranchDescriptionResponse]
+	listNodeVersions        *connect.Client[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse]
+	derivedNodes            *connect.Client[v1.DerivedNodesRequest, v1.DerivedNodesResponse]
+	planMerge               *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
+	mergeBranch             *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
+	diffBaselines           *connect.Client[v1.DiffBaselinesRequest, v1.DiffBaselinesResponse]
+	getChangeStack          *connect.Client[v1.GetChangeStackRequest, v1.GetChangeStackResponse]
+	mergeChange             *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
+	getSharedNodes          *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
+	splitChange             *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
+	listSubChanges          *connect.Client[v1.ListSubChangesRequest, v1.ListSubChangesResponse]
+	openFlow                *connect.Client[v1.OpenFlowRequest, v1.OpenFlowResponse]
+	adoptFlow               *connect.Client[v1.AdoptFlowRequest, v1.AdoptFlowResponse]
+	discardFlow             *connect.Client[v1.DiscardFlowRequest, v1.DiscardFlowResponse]
+	listFlows               *connect.Client[v1.ListFlowsRequest, v1.ListFlowsResponse]
+	validateBoard           *connect.Client[v1.ValidateBoardRequest, v1.ValidateBoardResponse]
+	openOption              *connect.Client[v1.OpenOptionRequest, v1.OpenOptionResponse]
+	activateOption          *connect.Client[v1.ActivateOptionRequest, v1.ActivateOptionResponse]
+	evaluateOption          *connect.Client[v1.EvaluateOptionRequest, v1.EvaluateOptionResponse]
+	selectOption            *connect.Client[v1.SelectOptionRequest, v1.SelectOptionResponse]
+	rejectOption            *connect.Client[v1.RejectOptionRequest, v1.RejectOptionResponse]
+	listOptions             *connect.Client[v1.ListOptionsRequest, v1.ListOptionsResponse]
+	compareOptions          *connect.Client[v1.CompareOptionsRequest, v1.CompareOptionsResponse]
+	diffFlows               *connect.Client[v1.DiffFlowsRequest, v1.DiffFlowsResponse]
+	getChangeView           *connect.Client[v1.GetChangeViewRequest, v1.GetChangeViewResponse]
+	openDecision            *connect.Client[v1.OpenDecisionRequest, v1.OpenDecisionResponse]
+	ruleDecision            *connect.Client[v1.RuleDecisionRequest, v1.RuleDecisionResponse]
+	answerQuestion          *connect.Client[v1.AnswerQuestionRequest, v1.AnswerQuestionResponse]
+	ratifyDecision          *connect.Client[v1.RatifyDecisionRequest, v1.RatifyDecisionResponse]
+	listDecisionPoints      *connect.Client[v1.ListDecisionPointsRequest, v1.ListDecisionPointsResponse]
+	getChangeGraph          *connect.Client[v1.GetChangeGraphRequest, v1.GetChangeGraphResponse]
+	appendLog               *connect.Client[v1.AppendLogRequest, v1.AppendLogResponse]
+	listExecutions          *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
+	republishIndex          *connect.Client[v1.RepublishIndexRequest, v1.RepublishIndexResponse]
 }
 
 // GetNode calls goap.graph.v1.GraphService.GetNode.
@@ -1542,6 +1554,11 @@ func (c *graphServiceClient) ImpactNodeCreate(ctx context.Context, req *connect.
 // ImpactNodeCheckout calls goap.graph.v1.GraphService.ImpactNodeCheckout.
 func (c *graphServiceClient) ImpactNodeCheckout(ctx context.Context, req *connect.Request[v1.ImpactNodeCheckoutRequest]) (*connect.Response[v1.ImpactNodeCheckoutResponse], error) {
 	return c.impactNodeCheckout.CallUnary(ctx, req)
+}
+
+// ImpactNodeCheckoutBatch calls goap.graph.v1.GraphService.ImpactNodeCheckoutBatch.
+func (c *graphServiceClient) ImpactNodeCheckoutBatch(ctx context.Context, req *connect.Request[v1.ImpactNodeCheckoutBatchRequest]) (*connect.Response[v1.ImpactNodeCheckoutBatchResponse], error) {
+	return c.impactNodeCheckoutBatch.CallUnary(ctx, req)
 }
 
 // ImpactNodeUpdate calls goap.graph.v1.GraphService.ImpactNodeUpdate.
@@ -1966,6 +1983,8 @@ type GraphServiceHandler interface {
 	// removes its impact). The versions are written when the change commits.
 	ImpactNodeCreate(context.Context, *connect.Request[v1.ImpactNodeCreateRequest]) (*connect.Response[v1.ImpactNodeCreateResponse], error)
 	ImpactNodeCheckout(context.Context, *connect.Request[v1.ImpactNodeCheckoutRequest]) (*connect.Response[v1.ImpactNodeCheckoutResponse], error)
+	// ImpactNodeCheckoutBatch checks out several nodes at once, all or none, in one transaction.
+	ImpactNodeCheckoutBatch(context.Context, *connect.Request[v1.ImpactNodeCheckoutBatchRequest]) (*connect.Response[v1.ImpactNodeCheckoutBatchResponse], error)
 	ImpactNodeUpdate(context.Context, *connect.Request[v1.ImpactNodeUpdateRequest]) (*connect.Response[v1.ImpactNodeUpdateResponse], error)
 	ImpactLinkCreate(context.Context, *connect.Request[v1.ImpactLinkCreateRequest]) (*connect.Response[v1.ImpactLinkCreateResponse], error)
 	ImpactLinkUpdate(context.Context, *connect.Request[v1.ImpactLinkUpdateRequest]) (*connect.Response[v1.ImpactLinkUpdateResponse], error)
@@ -2347,6 +2366,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceImpactNodeCheckoutProcedure,
 		svc.ImpactNodeCheckout,
 		connect.WithSchema(graphServiceMethods.ByName("ImpactNodeCheckout")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceImpactNodeCheckoutBatchHandler := connect.NewUnaryHandler(
+		GraphServiceImpactNodeCheckoutBatchProcedure,
+		svc.ImpactNodeCheckoutBatch,
+		connect.WithSchema(graphServiceMethods.ByName("ImpactNodeCheckoutBatch")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceImpactNodeUpdateHandler := connect.NewUnaryHandler(
@@ -2841,6 +2866,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceImpactNodeCreateHandler.ServeHTTP(w, r)
 		case GraphServiceImpactNodeCheckoutProcedure:
 			graphServiceImpactNodeCheckoutHandler.ServeHTTP(w, r)
+		case GraphServiceImpactNodeCheckoutBatchProcedure:
+			graphServiceImpactNodeCheckoutBatchHandler.ServeHTTP(w, r)
 		case GraphServiceImpactNodeUpdateProcedure:
 			graphServiceImpactNodeUpdateHandler.ServeHTTP(w, r)
 		case GraphServiceImpactLinkCreateProcedure:
@@ -3148,6 +3175,10 @@ func (UnimplementedGraphServiceHandler) ImpactNodeCreate(context.Context, *conne
 
 func (UnimplementedGraphServiceHandler) ImpactNodeCheckout(context.Context, *connect.Request[v1.ImpactNodeCheckoutRequest]) (*connect.Response[v1.ImpactNodeCheckoutResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ImpactNodeCheckout is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ImpactNodeCheckoutBatch(context.Context, *connect.Request[v1.ImpactNodeCheckoutBatchRequest]) (*connect.Response[v1.ImpactNodeCheckoutBatchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ImpactNodeCheckoutBatch is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ImpactNodeUpdate(context.Context, *connect.Request[v1.ImpactNodeUpdateRequest]) (*connect.Response[v1.ImpactNodeUpdateResponse], error) {

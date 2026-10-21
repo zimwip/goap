@@ -134,6 +134,25 @@ const (
 // AttributeWidgets lists the widgets.
 var AttributeWidgets = []string{WidgetText, WidgetTextarea, WidgetDropdown, WidgetCheckbox, WidgetDate, WidgetDirectory, WidgetCode}
 
+// Attribute diffs: how the user interface shows what changed between two values of an attribute (a version and the
+// next, a draft and its base, two baselines).
+const (
+	// DiffValue shows the two values whole, the old one struck out (the usual diff of a number, a date, an enum...).
+	DiffValue = "value"
+	// DiffWords marks the words added and removed within the text (the usual diff of a string).
+	DiffWords = "words"
+	// DiffLines compares the text line by line, unified or side by side (long text).
+	DiffLines = "lines"
+	// DiffJSON compares the values as indented JSON with sorted keys, line by line (the usual diff of a json value).
+	DiffJSON = "json"
+	// DiffCode compares source text line by line, highlighted in the language its value names (the usual diff of a
+	// code value).
+	DiffCode = "code"
+)
+
+// AttributeDiffs lists the diffs.
+var AttributeDiffs = []string{DiffValue, DiffWords, DiffLines, DiffJSON, DiffCode}
+
 // Attribute defines a property of a node type or a link type: the code that keys the value, and what the user
 // interface needs to display and edit it. Its validators are the property validator instances (ADR 0018)
 // that check the value when a node is created or modified.
@@ -146,6 +165,8 @@ type Attribute struct {
 	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 	// Widget edits the value (AttributeWidgets); empty: the usual one of the type.
 	Widget string `yaml:"widget,omitempty" json:"widget,omitempty"`
+	// Diff shows what changed between two values (AttributeDiffs); empty: the usual one of the type.
+	Diff string `yaml:"diff,omitempty" json:"diff,omitempty"`
 	// Enum names the enum of the domain whose values an enum attribute takes.
 	Enum    string `yaml:"enum,omitempty" json:"enum,omitempty"`
 	Default string `yaml:"default,omitempty" json:"default,omitempty"`
@@ -185,6 +206,28 @@ func (a Attribute) DefaultWidget() string {
 		return WidgetCode
 	}
 	return WidgetText
+}
+
+// DefaultDiff is the diff used when an attribute names none.
+func (a Attribute) DefaultDiff() string {
+	if a.Diff != "" {
+		return a.Diff
+	}
+	switch a.Type {
+	case AttrCode:
+		return DiffCode
+	case AttrJSON:
+		return DiffJSON
+	case AttrNumber, AttrBoolean, AttrDate, AttrEnum:
+		return DiffValue
+	}
+	switch a.Widget {
+	case WidgetCode:
+		return DiffCode
+	case WidgetTextarea:
+		return DiffLines
+	}
+	return DiffWords
 }
 
 // EnumValue is one value of an enum.

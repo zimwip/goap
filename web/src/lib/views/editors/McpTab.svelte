@@ -1,6 +1,7 @@
 <script lang="ts">
   // MCP tab: a generic MCP definition (name, description, scope, tools with their JSON schemas), stored as a
   // node `MCP:<name>` of the platform namespace and edited through a change applied on main.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import { types as nodeTypes, ns } from '../../stores/session.svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -112,7 +113,7 @@
 </script>
 
 <div class="editor-page">
-  <header class="head"><Icon name="book" size={18} /><h2>{isNew ? 'New MCP' : name}</h2></header>
+  <header class="head"><Icon name="book" size={18} /><h2>{isNew ? 'New MCP' : name}</h2><EditorActions tabId={tab.id} /></header>
   {#if error}<div class="alert">{error}</div>{/if}
   <section class="card">
     <div class="field">

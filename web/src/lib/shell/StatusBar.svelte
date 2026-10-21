@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Status bar: my jobs (ADR 0149: imports, exports, live from the job stream), my running runs and token usage. Platform health/stream,
+  // Status bar: the stream, then my jobs (ADR 0149: imports, exports, live from the job stream), my running runs and token usage. Platform health/stream,
   // identity, settings and notifications live in the header (one place
   // for each, no duplicates).
   import Icon from './Icon.svelte';
@@ -9,9 +9,13 @@
   import { shortId } from '../api';
   import StatusBadge from '../components/StatusBadge.svelte';
   import JobRow from '../components/JobRow.svelte';
-  import { activeJobs, jobList, onJobEnded, startJobs } from '../stores/jobs.svelte';
+  import JobDialog from '../components/JobDialog.svelte';
+  import { activeJobs, closeJob, jobDetail, jobList, onJobEnded, startJobs } from '../stores/jobs.svelte';
   import { fraction, jobTitle } from '../jobView';
   import { notify } from './workbench.svelte';
+  import { layout, toggleTool } from './layout.svelte';
+  import { viewsIn } from './registry';
+  import { live } from '../stores/live.svelte';
 
   let runsOpen = $state(false);
   let jobsOpen = $state(false);
@@ -43,6 +47,9 @@
     return () => clearInterval(t);
   });
 
+  // the side tools (Test, Properties, DSL Help): each opens over the right of the editor
+  const tools = $derived(viewsIn('right'));
+
   const runs = $derived(myActiveRuns());
   const running = $derived(runs.some((p) => p.status === 'running'));
 
@@ -66,6 +73,9 @@
 </script>
 
 <footer class="status" aria-label="Status bar">
+  <span class="item where" class:down={live.status === 'stopped'} class:warn={live.status === 'retrying'}>
+    <span class="dot" aria-hidden="true"></span>{live.status === 'retrying' ? 'Reconnecting' : live.status === 'stopped' ? 'Offline' : 'Connected'}
+  </span>
   <span class="grow"></span>
 
   <div class="item-wrap">
@@ -86,7 +96,7 @@
       {#if recentJobs.length}
         <ul class="list">
           {#each recentJobs as j (j.id)}
-            <li class="job-li"><JobRow job={j} {now} compact /></li>
+            <li class="job-li"><JobRow job={j} {now} compact onopen={() => (jobsOpen = false)} /></li>
           {/each}
         </ul>
       {:else}
@@ -123,16 +133,35 @@
       {/if}
     </Popover>
   </div>
+
+  <span class="sep" aria-hidden="true"></span>
+  <button type="button" class="item" aria-pressed={layout.leftOpen} title="Navigation panel (Ctrl+B)" aria-label="Navigation panel" onclick={() => (layout.leftOpen = !layout.leftOpen)}
+    ><Icon name="panelLeft" size={13} /></button
+  >
+  <button type="button" class="item" aria-pressed={layout.bottomOpen} title="Console (Ctrl+J)" aria-label="Console" onclick={() => (layout.bottomOpen = !layout.bottomOpen)}
+    ><Icon name="panelBottom" size={13} /></button
+  >
+  <button type="button" class="item" aria-pressed={layout.rightOpen} title="Keep the context bar open" aria-label="Pin the context bar" onclick={() => (layout.rightOpen = !layout.rightOpen)}
+    ><Icon name="panelRight" size={13} /></button
+  >
+  <span class="sep" aria-hidden="true"></span>
+  {#each tools as v (v.id)}
+    {@const on = layout.drawer && layout.right === v.id}
+    <button type="button" class="item" aria-pressed={on} title={v.title} onclick={() => toggleTool('right', v.id)}><Icon name={v.icon} size={12} />{v.title}</button>
+  {/each}
 </footer>
+
+<!-- the detail of a job, opened from any list of jobs -->
+{#if jobDetail.job}<JobDialog job={jobDetail.job} onclose={closeJob} />{/if}
 
 <style>
   .status {
     display: flex;
     align-items: stretch;
-    height: 22px;
+    height: var(--status-h);
     flex: none;
-    background: var(--chrome-2);
-    color: var(--text);
+    background: var(--bg-panel);
+    color: var(--text-3);
     border-top: 1px solid var(--border);
     font-size: 12px;
     padding: 0 0.3rem;
@@ -153,16 +182,49 @@
     border-radius: 0;
     background: transparent;
     color: inherit;
-    font-size: 12px;
-    font-weight: 500;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 400;
     white-space: nowrap;
   }
   button.item:hover:not(:disabled) {
     background: var(--hover);
+    color: var(--text);
   }
   button.item:focus-visible {
     outline: 1px solid currentColor;
     outline-offset: -2px;
+  }
+  .where {
+    color: var(--text-3);
+    max-width: 22rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--success);
+  }
+  .warn .dot {
+    background: var(--warning);
+  }
+  .down .dot {
+    background: var(--danger);
+  }
+  .sep {
+    width: 1px;
+    margin: 5px 4px;
+    background: var(--border);
+  }
+  button.item[aria-pressed='true'] {
+    color: var(--text);
+  }
+  @media (max-width: 900px) {
+    .where:not(:first-child) {
+      display: none;
+    }
   }
   .spin {
     width: 10px;

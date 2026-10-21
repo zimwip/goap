@@ -2,12 +2,15 @@
 // properties are laid out, edited and shown.
 import type { AttributeInfo } from './api';
 import { parseCode } from './codeText';
+import { defaultDiff, type DiffMode } from './valueDiff';
 
 export interface AttributeView {
   name: string;
   label: string;
   type: string;
   widget: string;
+  /** how a change of its value is shown (the attribute's, else the usual one of its type) */
+  diff: DiffMode;
   tooltip: string;
   section: string;
   asName: boolean;
@@ -28,6 +31,7 @@ export function attributeView(a: AttributeInfo): AttributeView {
     label: at.label || at.name || '',
     type,
     widget: at.widget || WIDGETS[type] || 'text',
+    diff: defaultDiff(at),
     tooltip: at.tooltip ?? '',
     section: at.section ?? '',
     asName: at.asName === true,
@@ -45,6 +49,12 @@ export function orderedAttributes(infos: AttributeInfo[]): AttributeView[] {
   for (const it of items) if (!sections.includes(it.v.section)) sections.push(it.v.section);
   items.sort((a, b) => sections.indexOf(a.v.section) - sections.indexOf(b.v.section) || a.order - b.order || a.i - b.i);
   return items.map((it) => it.v);
+}
+
+/** The attribute of that name among the attributes of a type (undefined: the type declares none). */
+export function attributeOf(infos: AttributeInfo[], name: string | undefined): AttributeView | undefined {
+  const a = name ? infos.find((x) => x.attribute?.name === name) : undefined;
+  return a ? attributeView(a) : undefined;
 }
 
 /** The name of a node: the value of its asName attribute, when it has one. */

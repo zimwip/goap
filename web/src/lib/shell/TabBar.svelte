@@ -187,7 +187,7 @@
     display: flex;
     flex: none;
     align-items: stretch;
-    background: var(--chrome);
+    background: var(--bg-panel-translucent);
     border-bottom: 1px solid var(--border);
     position: relative;
   }
@@ -230,7 +230,7 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+    box-shadow: var(--shadow);
   }
   .menu button {
     display: flex;
@@ -283,7 +283,7 @@
     background: var(--hover);
   }
   .tab.on {
-    background: var(--bg);
+    background: var(--accent-subtle);
     color: var(--text);
     margin-bottom: -1px;
     box-shadow: inset 0 2px 0 var(--accent);

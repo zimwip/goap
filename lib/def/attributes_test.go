@@ -54,6 +54,26 @@ algorithmInstances:
 	}
 }
 
+func TestDefaultDiff(t *testing.T) {
+	for _, c := range []struct {
+		a    Attribute
+		want string
+	}{
+		{Attribute{}, DiffWords},
+		{Attribute{Type: AttrString, Widget: WidgetTextarea}, DiffLines},
+		{Attribute{Type: AttrCode}, DiffCode},
+		{Attribute{Widget: WidgetCode}, DiffCode},
+		{Attribute{Type: AttrJSON}, DiffJSON},
+		{Attribute{Type: AttrEnum}, DiffValue},
+		{Attribute{Type: AttrNumber}, DiffValue},
+		{Attribute{Type: AttrCode, Diff: DiffLines}, DiffLines},
+	} {
+		if got := c.a.DefaultDiff(); got != c.want {
+			t.Errorf("%+v: diff %s, want %s", c.a, got, c.want)
+		}
+	}
+}
+
 func TestAttributeIssues(t *testing.T) {
 	got := domainIssues(t, `
 name: m
@@ -71,6 +91,7 @@ nodeTypes:
       - {name: n1, asName: true}
       - {name: n2, asName: true}
       - {name: bad-name}
+      - {name: u, diff: nope}
     validators: [ghost]
 `)
 	for _, want := range []string{
@@ -78,6 +99,7 @@ nodeTypes:
 		"attributes[0].type: unknown type", "attributes[1].name: duplicate attribute x", "attributes[2].widget: unknown widget",
 		"attributes[3].enum: an enum attribute names its enum", "attributes[4].enum: unknown enum missing", "attributes[5].enum: only an enum attribute",
 		"attributes: at most one attribute is the name", "attributes[8].name: name must be", "validators[0]: unknown algorithm instance ghost",
+		"attributes[9].diff: unknown diff",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing issue %q in:\n%s", want, got)

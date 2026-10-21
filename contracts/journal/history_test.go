@@ -1,7 +1,6 @@
 package journal
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -118,47 +117,5 @@ func TestHistoryWritesOfSuccessorsDoNotCount(t *testing.T) {
 	l.impact("I1", domain.ImpactUpdated, "") // a person's edit
 	if last := fold(t, l); last["collect"].Current || last["analyse"].Current {
 		t.Fatalf("an edit from outside makes them stale: %+v", last)
-	}
-}
-
-// A folder fed the log a few entries at a time, through copies, gives the history of the whole log at once, and a copy
-// left behind keeps the history of what it was fed (ADR 0153).
-func TestFolderEqualsFold(t *testing.T) {
-	l := &logOf{t: t}
-	l.impact("I1", domain.ImpactCreated, "x0")
-	l.ended("collect", "x1", false)
-	l.ended("analyse", "x2", true)
-	l.ended("analyse", "x3", false)
-	l.impact("I1", domain.ImpactUpdated, "x3")
-	l.ended("report", "x4", false)
-	l.impact("I1", domain.ImpactRebased, "")
-	l.ended("collect", "x5", false)
-	for step := 1; step <= len(l.entries); step++ {
-		f := NewFolder()
-		var kept []*Folder
-		for i := 0; i < len(l.entries); i += step {
-			kept = append(kept, f)
-			f = f.Clone()
-			if err := f.Add(l.entries[i:min(i+step, len(l.entries))]); err != nil {
-				t.Fatal(err)
-			}
-		}
-		want, err := Fold(l.entries, chain)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := f.History(chain); !reflect.DeepEqual(got, want) {
-			t.Fatalf("by %d: %+v\nwant %+v", step, got, want)
-		}
-		// each copy left behind still gives the history of the entries it was fed
-		for k, kf := range kept {
-			prefix, err := Fold(l.entries[:min(k*step, len(l.entries))], chain)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got := kf.History(chain); !reflect.DeepEqual(got, prefix) {
-				t.Fatalf("by %d, copy %d: %+v\nwant %+v", step, k, got, prefix)
-			}
-		}
 	}
 }

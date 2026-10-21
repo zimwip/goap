@@ -92,7 +92,8 @@ type Event struct {
 	Branch    string `protobuf:"bytes,7,opt,name=branch,proto3" json:"branch,omitempty"`
 	Project   string `protobuf:"bytes,8,opt,name=project,proto3" json:"project,omitempty"`
 	ChangeId  string `protobuf:"bytes,9,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
-	Version   int64  `protobuf:"varint,10,opt,name=version,proto3" json:"version,omitempty"`
+	// the version of a node; for a change, the position its write left the log of the change at (ADR 0153), 0 when none
+	Version int64 `protobuf:"varint,10,opt,name=version,proto3" json:"version,omitempty"`
 	// who caused it, and the client-generated id of the command that did (X-Goap-Command), when known
 	Actor     string                 `protobuf:"bytes,11,opt,name=actor,proto3" json:"actor,omitempty"`
 	CommandId string                 `protobuf:"bytes,12,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`

@@ -1,17 +1,21 @@
 <script lang="ts">
   // Comparing two baselines of a namespace: what going from one to the other changes, node by node (added, removed,
   // another version with the properties that differ). The default is the baseline against its parent: what its
-  // change committed.
+  // change committed; the first baseline of a namespace has none, it is compared with the empty state (ADR 0056: the
+  // baseline id "", which nothing stores), so every node it holds shows as added.
   import { graph, errorMessage, shortId, type Baseline, type BaselineDiff, type JsonValue, type StackChange } from '../api';
   import { changeLabel } from '../changeStack';
   import { openTab } from '../shell/tabs.svelte';
   import ChangeStackView from './ChangeStackView.svelte';
+  import ValueDiff from './ValueDiff.svelte';
   import { openNode } from '../nodeEditors';
 
   /** candidates: the baselines offered as "from" (the history the caller read), newest last */
   let { baseline, candidates = [] }: { baseline: Baseline; candidates?: Baseline[] } = $props();
 
   const others = $derived(candidates.filter((x) => x.id !== baseline.id).reverse());
+  /** the empty state, a choice of "from" (its id is "", which the select keeps for nothing chosen) */
+  const EMPTY = '∅';
   let from = $state('');
   let diff = $state<BaselineDiff[] | undefined>();
   /** the changes that explain the difference (ADR 0133) */
@@ -21,7 +25,7 @@
   let error = $state('');
 
   $effect(() => {
-    from = baseline.parentId ?? '';
+    from = baseline.parentId || EMPTY;
   });
 
   $effect(() => {
@@ -33,7 +37,7 @@
     if (!f || !to) return;
     const ctrl = new AbortController();
     graph
-      .diffBaselines(f, to, ctrl.signal)
+      .diffBaselines(f === EMPTY ? '' : f, to, ctrl.signal)
       .then((r) => ((diff = r.nodes ?? []), (added = r.changesAdded ?? []), (removed = r.changesRemoved ?? []), (error = '')))
       .catch((e) => {
         if (!ctrl.signal.aborted) error = errorMessage(e);
@@ -41,7 +45,6 @@
     return () => ctrl.abort();
   });
 
-  const show = (v: unknown) => (v === undefined || v === null ? '—' : typeof v === 'string' ? v : JSON.stringify(v));
   function changedProps(d: BaselineDiff): string[] {
     const a = (d.from?.props ?? {}) as Record<string, JsonValue>;
     const b = (d.to?.props ?? {}) as Record<string, JsonValue>;
@@ -56,6 +59,7 @@
     <label for="cmp-from">from</label>
     <select id="cmp-from" bind:value={from}>
       <option value="">— baseline —</option>
+      <option value={EMPTY}>empty state{baseline.parentId ? '' : ' · parent'}</option>
       {#each others as b (b.id)}<option value={b.id}>{label(b)}{b.id === baseline.parentId ? ' · parent' : ''}</option>{/each}
     </select>
     <span>to this baseline</span>
@@ -87,7 +91,7 @@
               <td>
                 {#if d.kind === 'changed'}
                   {#if d.from?.state !== d.to?.state}<div>state: {d.from?.state || '—'} → {d.to?.state || '—'}</div>{/if}
-                  {#each keys as k (k)}<div><code>{k}</code>: <span class="muted">{show(d.from?.props?.[k])}</span> → {show(d.to?.props?.[k])}</div>{/each}
+                  {#each keys as k (k)}<div class="prop"><code>{k}</code> <ValueDiff before={d.from?.props?.[k]} after={d.to?.props?.[k]} type={d.type} name={k} /></div>{/each}
                   {#if !keys.length && d.from?.state === d.to?.state}<span class="hint">links only</span>{/if}
                 {/if}
               </td>
@@ -102,6 +106,13 @@
 </section>
 
 <style>
+  .prop {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: baseline;
+    margin-bottom: 0.2rem;
+  }
   .compare {
     height: 100%;
     min-height: 0;

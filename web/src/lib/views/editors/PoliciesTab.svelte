@@ -2,6 +2,7 @@
   // Access tab: the ABAC policies (Policy nodes, evaluated by Casbin) and the users (User nodes: profile; their roles are
   // granted by Assignments, ADR 0043, 0047) of the organisation namespace, changed through
   // changes applied on main.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import { types as nodeTypes, links as linkTypes, ns, userKey, newUserUnit } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import { errorMessage, type GraphNode, type Policy } from '../../api';
@@ -186,6 +187,7 @@
 <div class="editor-head">
   <Icon name="shield" size={18} />
   <h2>Access: policies and users</h2>
+  <EditorActions tabId={tab.id} />
 </div>
 
 <p class="hint intro">

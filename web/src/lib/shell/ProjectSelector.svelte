@@ -6,6 +6,8 @@
   import Popover from './Popover.svelte';
   import { project, refreshProjects, selectProject } from '../stores/project.svelte';
 
+  /** full width, in the navigation sidebar (else a chip of the header) */
+  let { block = false }: { block?: boolean } = $props();
   let open = $state(false);
 
   $effect(() => {
@@ -20,12 +22,12 @@
   }
 </script>
 
-<div class="item-wrap">
+<div class="item-wrap" class:block>
   <button type="button" class="proj" class:none={!project.current} aria-haspopup="dialog" aria-expanded={open} title={project.current ? `Active project: ${project.current}` : 'No project selected: pick the project you work in'} onclick={() => (open = !open)}>
-    <Icon name="diff" size={14} />
+    <Icon name="folder" size={14} />
     <span class="pl">{label}</span>
   </button>
-  <Popover bind:open label="Project" align="left" placement="below" width="260px">
+  <Popover bind:open label="Project" align={block ? "right" : "left"} placement="below" width="260px">
     <div class="pop-head">
       <strong>Project</strong>
       <span class="grow"></span>
@@ -58,24 +60,38 @@
     position: relative;
     display: flex;
   }
+  .item-wrap.block {
+    display: block;
+  }
+  .block .proj {
+    width: 100%;
+  }
+  .block .pl {
+    flex: 1;
+    max-width: none;
+    text-align: left;
+  }
   .proj {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.25rem 0.55rem;
-    border: 1px solid var(--border, #8884);
-    border-radius: 6px;
-    background: transparent;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    background: var(--bg-raised);
     color: inherit;
     font: inherit;
+    font-family: var(--font-mono);
+    font-size: 12px;
     cursor: pointer;
   }
   .proj.none {
     border-style: dashed;
-    color: var(--muted, inherit);
+    background: transparent;
+    color: var(--muted);
   }
   .proj:hover {
-    background: var(--hover, #8882);
+    border-color: var(--border-strong);
   }
   .pl {
     max-width: 12rem;

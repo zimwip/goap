@@ -5,7 +5,7 @@
   import Icon from '../../shell/Icon.svelte';
   import { engine, errorMessage, formatDate, shortId, type TriggerState } from '../../api';
   import { openTab } from '../../shell/tabs.svelte';
-  import { notify, select } from '../../shell/workbench.svelte';
+  import { notify } from '../../shell/workbench.svelte';
   import { ingestProcess, onLiveEvent } from '../../stores/live.svelte';
   import { methodologySpec } from '../editors/methodologyTabs';
   import { methodologies, refreshMethodologies, latestPublished } from '../../stores/catalog.svelte';
@@ -65,24 +65,6 @@
     }
   }
 
-  function show(t: TriggerState) {
-    select({
-      title: t.name ?? '',
-      subtitle: `Trigger of ${t.methodology} / ${t.agent}`,
-      rows: [
-        ['Description', t.description ?? ''],
-        ['Type', t.type ?? ''],
-        ['Event', t.event ?? ''],
-        ['Schedule', t.schedule ?? ''],
-        ['Enabled', t.enabled ? 'yes' : 'no'],
-        ['Runs', String(t.fires ?? 0)],
-        ['Last fired', formatDate(t.lastFired)],
-        ['Next', formatDate(t.nextFire)],
-        ['Last error', t.lastError ?? ''],
-        ['Last process', t.lastProcessId ?? ''],
-      ],
-    });
-  }
 
   function openAgent(t: TriggerState) {
     const m = latestPublished().find((x) => x.name === t.methodology);
@@ -106,7 +88,7 @@
     {#each shown as t (key(t))}
       <li class:off={!t.enabled}>
         <div class="line1">
-          <button type="button" class="link name" onclick={() => show(t)} title="Details in 'Properties'">{t.name}</button>
+          <button type="button" class="link name" onclick={() => openAgent(t)} title="Open its agent: the triggers are edited there">{t.name}</button>
           <span class="type">{t.type === 'schedule' ? 'cron' : 'event'}</span>
           <span class="grow"></span>
           <button

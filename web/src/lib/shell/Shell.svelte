@@ -1,12 +1,15 @@
 <script lang="ts">
-  // IDE shell: header, toolbar, activity bars, resizable panels,
+  // IDE shell: header (with the editor's actions), navigation sidebar, resizable panels,
   // editor area, and console. Content comes from the view
   // registry.
   import { onMount, type Component } from 'svelte';
   import Header from './Header.svelte';
-  import Toolbar from './Toolbar.svelte';
   import ActivityBar from './ActivityBar.svelte';
-  import SidePanel from './SidePanel.svelte';
+  import NavSidebar from './NavSidebar.svelte';
+  import ContextBar from './ContextBar.svelte';
+  import Icon from './Icon.svelte';
+  import { panelView } from './registry';
+  import { contextBar } from './context.svelte';
   import EditorArea from './EditorArea.svelte';
   import BottomPanel from './BottomPanel.svelte';
   import Resizer from './Resizer.svelte';
@@ -30,7 +33,7 @@
   import { assistantEnabled } from '../assistant/enabled';
   import { assistant, closePanel, openPanel } from '../stores/assistant.svelte';
   import StatusBar from './StatusBar.svelte';
-  import { layout, LIMITS, toggleConsole } from './layout.svelte';
+  import { layout, LIMITS, RAIL, nav, toggleConsole } from './layout.svelte';
   import { activeTab, closeTab, startRouting } from './tabs.svelte';
   import { runTabAction, focusRequests } from './workbench.svelte';
   import { session } from '../stores/session.svelte';
@@ -60,6 +63,82 @@
   const narrow = $derived(width < 1024);
   const sideMax = $derived(Math.max(LIMITS.side.min, Math.min(LIMITS.side.max, Math.floor(width * 0.4))));
   const bottomMax = $derived(Math.max(LIMITS.bottom.min, Math.min(LIMITS.bottom.max, height - 200)));
+
+  // The context bar: docked open when pinned on a wide screen, else a rail of icons that slides open over the editor
+  // while hovered or focused.
+  const docked = $derived(layout.rightOpen && !narrow);
+  $effect(() => {
+    contextBar.docked = docked;
+  });
+  const ctxMax = $derived(Math.min(LIMITS.context.max, sideMax));
+  const ctxWidth = $derived(Math.max(LIMITS.context.min, Math.min(layout.contextWidth, ctxMax)));
+  let rail = $state<HTMLElement>();
+  let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  let showTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function reveal() {
+    clearTimeout(hideTimer);
+    contextBar.revealed = true;
+  }
+  function revealSoon() {
+    clearTimeout(hideTimer);
+    clearTimeout(showTimer);
+    showTimer = setTimeout(reveal, 160);
+  }
+  function hideSoon() {
+    clearTimeout(showTimer);
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      // kept while it holds the focus (a selector open)
+      if (rail?.contains(document.activeElement)) return;
+      contextBar.revealed = false;
+    }, 350);
+  }
+  function leaveFocus(e: FocusEvent) {
+    if (!rail?.contains(e.relatedTarget as Node | null)) {
+      clearTimeout(showTimer);
+      contextBar.revealed = false;
+    }
+  }
+  function railKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && contextBar.revealed) {
+      contextBar.revealed = false;
+      e.stopPropagation();
+    }
+  }
+
+  // The navigation: docked when pinned on a wide screen, else shown over the editor from its rail once a tool is
+  // clicked (or the rail focused), while the pointer or the focus stays on it.
+  const leftDocked = $derived(layout.leftOpen && !narrow);
+  let lrail = $state<HTMLElement>();
+  let navTimer: ReturnType<typeof setTimeout> | undefined;
+  function navLeave() {
+    clearTimeout(navTimer);
+    navTimer = setTimeout(() => {
+      // kept while it holds the focus (a filter being typed, a menu open)
+      const el = document.activeElement;
+      if (lrail?.contains(el) && el !== document.body && el?.matches('input, textarea, select, [aria-expanded="true"]')) return;
+      nav.revealed = false;
+    }, 350);
+  }
+  function navFocusOut(e: FocusEvent) {
+    if (!lrail?.contains(e.relatedTarget as Node | null) && !lrail?.matches(':hover')) nav.revealed = false;
+  }
+  function navKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && nav.revealed) {
+      nav.revealed = false;
+      e.stopPropagation();
+    }
+  }
+
+  // the side tool (Test, Properties, DSL Help), opened from the status bar
+  const tool = $derived(layout.drawer ? panelView(layout.right) : undefined);
+  function toolKey(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      layout.drawer = false;
+      e.stopPropagation();
+    }
+  }
 
   function keydown(e: KeyboardEvent) {
     const mod = e.ctrlKey || e.metaKey;
@@ -99,12 +178,29 @@
 
 <div class="shell" class:narrow>
   <Header />
-  <Toolbar />
   <div class="main">
-    <ActivityBar side="left" />
-    {#if layout.leftOpen}
+    {#if !leftDocked}
+      <!-- the navigation's rail: a click on a tool (or the focus) shows the navigation over the editor; leaving it hides it -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="lrail"
+        bind:this={lrail}
+        onmouseenter={() => clearTimeout(navTimer)}
+        onmouseleave={navLeave}
+        onfocusin={() => (nav.revealed = true)}
+        onfocusout={navFocusOut}
+        onkeydown={navKey}
+      >
+        <ActivityBar side="left" />
+        {#if nav.revealed}
+          <div class="side left over" style:width="{Math.min(layout.leftWidth, sideMax)}px">
+            <NavSidebar />
+          </div>
+        {/if}
+      </div>
+    {:else}
       <div class="side left" style:width="{Math.min(layout.leftWidth, sideMax)}px">
-        <SidePanel side="left" />
+        <NavSidebar />
       </div>
       {#if !narrow}
         <Resizer
@@ -136,7 +232,8 @@
         </div>
       {/if}
     </div>
-    {#if layout.rightOpen}
+    {#if tool}
+      {@const C = tool.component}
       {#if !narrow}
         <Resizer
           orientation="vertical"
@@ -144,15 +241,52 @@
           min={LIMITS.side.min}
           max={sideMax}
           invert
-          label="Right side panel width"
+          label="Side tool width"
           onresize={(v) => (layout.rightWidth = v)}
         />
       {/if}
-      <div class="side right" style:width="{Math.min(layout.rightWidth, sideMax)}px">
-        <SidePanel side="right" />
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="side right tool" style:width="{Math.min(layout.rightWidth, sideMax)}px" onkeydown={toolKey}>
+        <div class="tool-head">
+          <Icon name={tool.icon} size={13} />
+          <span class="tool-title">{tool.title}</span>
+          <button type="button" class="ghost small" title="Close" aria-label="Close {tool.title}" onclick={() => (layout.drawer = false)}><Icon name="x" size={13} /></button>
+        </div>
+        <div class="tool-body"><C /></div>
       </div>
     {/if}
-    <ActivityBar side="right" />
+    {#if docked}
+      <Resizer
+        orientation="vertical"
+        value={ctxWidth}
+        min={LIMITS.context.min}
+        max={ctxMax}
+        invert
+        label="Context bar width"
+        onresize={(v) => (layout.contextWidth = v)}
+      />
+      <div class="ctx-docked" style:width="{ctxWidth}px">
+        <ContextBar open />
+      </div>
+    {:else}
+      <!-- the context bar's rail: hovering or focusing it slides the bar open over the editor -->
+      <div class="rail-slot" style:width="{RAIL}px">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="rail"
+          class:open={contextBar.revealed}
+          bind:this={rail}
+          style:width="{contextBar.revealed ? ctxWidth : RAIL}px"
+          onmouseenter={revealSoon}
+          onmouseleave={hideSoon}
+          onfocusin={reveal}
+          onfocusout={leaveFocus}
+          onkeydown={railKey}
+        >
+          <ContextBar open={contextBar.revealed} />
+        </div>
+      </div>
+    {/if}
   </div>
   <StatusBar />
 </div>
@@ -206,6 +340,80 @@
     flex: none;
     min-height: 0;
   }
+  .lrail {
+    flex: none;
+    position: relative;
+    display: flex;
+    height: 100%;
+  }
+  /* the navigation shown over the editor, by its rail */
+  .side.left.over {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 100%;
+    z-index: 25;
+    max-width: calc(100vw - 120px);
+    border-right: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+  .ctx-docked {
+    flex: none;
+    height: 100%;
+    min-width: 0;
+  }
+  .rail-slot {
+    flex: none;
+    position: relative;
+    height: 100%;
+  }
+  /* the rail slides open over the editor, from the right edge */
+  .rail {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    z-index: 20;
+    transition: width 0.18s ease;
+  }
+  .rail.open {
+    box-shadow: var(--shadow);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rail {
+      transition: none;
+    }
+  }
+  .tool {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+  }
+  .tool-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    flex: none;
+    padding: 0 4px 0 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-3);
+  }
+  .tool-title {
+    flex: 1;
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .tool-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+  }
   /* Narrow: side panels overlaid on the editor. */
   .narrow .side {
     position: absolute;
@@ -216,11 +424,11 @@
     max-width: calc(100% - 84px);
   }
   .narrow .side.left {
-    left: 42px;
+    left: 0;
     border-right: 1px solid var(--border);
   }
   .narrow .side.right {
-    right: 42px;
+    right: 44px;
     border-left: 1px solid var(--border);
   }
 </style>

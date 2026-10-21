@@ -5,7 +5,7 @@
 ## Context
 
 A change is its log (ADR 0029, 0030): the impacts, the drafts and the items are folds of its entries. The graph
-already kept one fold per change, cached and extended entry by entry (`draftState`, ADR 0079 §2), and a write folded
+already kept one fold per change, extended entry by entry (`draftState`, ADR 0079 §2), and a write folded
 its own events into it (`emitEntry`). An audit of the operations on a change (the second performance round) found the
 rule only half kept:
 
@@ -28,13 +28,15 @@ rule only half kept:
    reader of these goes through the view (`frozen`, `reopenPhase`, `flowNodes`, `seenDrafts`, `adoptNodes`,
    `walkTransitions`, `RebaseState`, `ImpactNodeResolve`, `ChangeEvents`, `draftsOf`); nothing on these paths reads the
    log whole.
-2. **The history read once.** The entries a log facet folds are kept per change like the view (`facetlog.go`): a read
-   asks the log only for the entries after the last one kept. A facet may fold incrementally (`LogFacet.Folder`, a
-   `domain.LogFolder`: `Add` the new entries, `Clone`, `Value` for a change): the cache keeps the folder, a read clones
-   it and adds only the entries after it, so each entry is decoded once. The history is such a facet
-   (`journal.FolderWith`, over `journal.Folder`, which `journal.Fold` runs too: one decoding, whole or in steps); the
-   step dependencies are applied by `Value`, on the history folded so far. What a transaction that wrote the log read
-   is not kept.
+2. **Facets are built per call; views are kept in a bounded cache.** A log facet (`LogFacet`, the history) is a cache
+   of the log for one call: the call that needs it reads its entries and folds them once, uses it for what it does, and
+   nothing of it is kept for the next call (stateless: the log is the state). The engine does the same when the graph
+   sends no history (`withHistory`). The view of a change is kept between calls (`draftCache`, ADR 0079 §2), bounded in
+   memory and in time (a `lib/cache`, ADR 0156: `Graph.Caches.Drafts`, default 64 MiB of the estimated size of the
+   views held, `draftState.bytes`, counted as each event and fact is folded, `approxsize.go`; the least recently read go
+   first, a view larger than the bound is not kept; a view no one read for 5 minutes goes). A
+   view read from the cache is still checked against the log (the entries after its position), so the bounds only
+   decide what is folded again, never what is answered.
 3. **The guard reads headers.** The unit and the project of a change are read from its header (`ChangeHead`), never
    from its log.
 4. **Positions.** A change is read at a position, `Change.Seq` (proto `Change.seq`): the last impact event or fact its
@@ -58,7 +60,17 @@ rule only half kept:
 
 - An operation on a change with a long log costs what its own events touch: no read of the log beyond the entries
   after the view, no decode of the facts or the impact events again.
-- The view holds the decoded impact events of the changes it caches (bounded by `DraftCacheSize`).
-- The web does not read the positions yet; the event stream (ADR 0053) keeps its own order.
-- The history facet decodes each entry once; what it still does per read is the cascade of `current` over the runs
-  and steps folded (`journal.Folder.History`), linear in the steps, not in the log.
+- An operation built of several operations on one change runs them in one transaction, so its view is folded and
+  copied once: `Graph.Commit` (CommitEdits) does (`inOne`), and a failed commit leaves nothing behind (no purge, no
+  abandoned change). Measured with goap-bench (PostgreSQL, 4 workers, 6,000 versions): CommitEdits p50 845 ms with a
+  transaction per operation, 305 ms in one transaction even with no cache at all.
+- Without the cache, every operation on a change pays the fold of its log (about 20 ms at 50 impacts: ImpactNodeCreate
+  7 → 27 ms, MergeChange 41 → 80 ms), which is why the view stays cached, within its bounds.
+- Running without the cache surfaced a fold that differed from the writes it replayed: a version checked out by two flows was
+  hydrated with its links twice (`decodeImpacts` read it once per copy); the versions are now read once per fold.
+- The web reads the positions (`web/src/lib/flux/positions.ts`): the transport notes the ones a graph answer carries
+  (`X-Goap-Change-Seq`), the reducers the ones the change events carry (`change.updated`: `Change.Seq` of the write,
+  `Event.version` on the stream), `getChange` the one it read; every graph request naming a known change (`changeId`,
+  `id`, `parentId`) asks for it in `X-Goap-At-Least`, and a read refused as behind is tried again three times. The
+  gateway lets both headers and the error reason through CORS.
+- A facet costs one read of its entries of the log per call that needs it; no cache to keep in step with the log.

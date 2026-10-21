@@ -532,7 +532,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, op) (rate(goap_bench_op_duration_seconds_bucket{service_name=\"goap-bench\", outcome=\"ok\", op=~\"CommitEdits|CreateChange|ImpactNodeCreate|ImpactNodeCheckout|ImpactNodeUpdate|ImpactNodeReview|ImpactNodeReviewBatch|CommitChange|MergeChange|ImportDomain\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, op) (rate(goap_bench_op_duration_seconds_bucket{service_name=\"goap-bench\", outcome=\"ok\", op=~\"CommitEdits|CreateChange|ImpactNodeCreate|ImpactNodeCheckout|ImpactNodeCheckoutBatch|ImpactNodeUpdate|ImpactNodeReview|ImpactNodeReviewBatch|CommitChange|MergeChange|ImportDomain\"}[$__rate_interval])))",
           "legendFormat": "{{op}}",
           "refId": "A",
           "range": true
@@ -589,7 +589,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.5, sum by (le, op) (rate(goap_bench_op_duration_seconds_bucket{service_name=\"goap-bench\", outcome=\"ok\", op=~\"CommitEdits|CreateChange|ImpactNodeCreate|ImpactNodeCheckout|ImpactNodeUpdate|ImpactNodeReview|ImpactNodeReviewBatch|CommitChange|MergeChange|ImportDomain\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le, op) (rate(goap_bench_op_duration_seconds_bucket{service_name=\"goap-bench\", outcome=\"ok\", op=~\"CommitEdits|CreateChange|ImpactNodeCreate|ImpactNodeCheckout|ImpactNodeCheckoutBatch|ImpactNodeUpdate|ImpactNodeReview|ImpactNodeReviewBatch|CommitChange|MergeChange|ImportDomain\"}[$__rate_interval])))",
           "legendFormat": "{{op}}",
           "refId": "A",
           "range": true
@@ -1610,7 +1610,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Reads of the state of a baseline (ADR 0143), by source: cache (a state computed before) or commits (the selection of the versions committed on the branch and the branches it was forked from). whole: the whole state, nodes: some nodes (commit, merge).",
+      "description": "Reads of the state of a baseline (ADR 0143), by source: commits (the selection of the versions committed on the branch and the branches it was forked from; the states are not cached, ADR 0156). whole: the whole state, nodes: some nodes (commit, merge).",
       "gridPos": {
         "h": 8,
         "w": 8,

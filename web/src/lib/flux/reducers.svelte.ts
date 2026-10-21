@@ -5,6 +5,7 @@ import { ns } from '../stores/session.svelte';
 import { untrack } from 'svelte';
 import { onKind, onResync } from './events.svelte';
 import { stamp, throttled, touchAll, touchSoon } from './signals.svelte';
+import { notePosition } from './positions';
 import { keysOf } from './keys';
 import { keyOf } from './signals.svelte';
 import { baselines, changes, methodologies, refreshBaselines, refreshChanges, refreshMethodologies, baselinesNamespace } from '../stores/catalog.svelte';
@@ -23,6 +24,8 @@ export const CHANGES_REFRESH_MS = 2000;
 /** Starts the reducers; returns the stop function. */
 export function startReducers(): () => void {
   const offs = [
+    // where a write left the log of a change (ADR 0153): the reads it causes must see at least that far
+    onKind('change', (e) => notePosition(e.id, e.version)),
     onKind(['change', 'node', 'baseline', 'methodology', 'domain', 'conversation'], (e) => {
       for (const k of keysOf(e)) touchSoon(k);
     }),

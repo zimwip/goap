@@ -19,11 +19,11 @@ import (
 // Commit runs the edits as one change, through the operations every change uses (ADR 0076): it opens the change on a
 // branch of its own; a created node is a ImpactNodeCreate, a modified one a ImpactNodeCheckout with its ImpactNodeUpdate and link edits;
 // the state edits are transitions (ImpactNodeTransition, on the draft), each impact that modifies its node is accepted by
-// the producer and one that modifies nothing withdrawn (ADR 0102), and the change is applied. Each step is the
-// operation a change takes, in its own transaction, as a person or an agent would take it: a commit that commits nothing
-// (ErrNothingToCommit) or fails leaves no change behind (purged); when the branch cannot be merged without conflict
-// (another change moved a node meanwhile) the change is abandoned and ErrConflict returned: the producer reads again and
-// rebuilds its edits.
+// the producer and one that modifies nothing withdrawn (ADR 0102), and the change is applied. The operations are the
+// ones a change takes, as a person or an agent would take them, all in one transaction (inOne, ADR 0153: the view of the
+// change is folded once for the call): a commit that commits nothing (ErrNothingToCommit) or fails leaves nothing
+// behind; when the branch cannot be merged without conflict (another change moved a node meanwhile) ErrConflict is
+// returned and nothing is kept either: the producer reads again and rebuilds its edits.
 // A created node of a structure or a User must name its required parent (checkRequiredParent, ADR 0040).
 // The baseline returned is a header, without its state: reading it costs the size of the namespace (ADR 0137).
 func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err error) {
@@ -38,26 +38,25 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 			return res, err
 		}
 	}
+	err = g.inOne(ctx, func(ctx context.Context) error {
+		var err error
+		res, err = g.commitEdits(ctx, in)
+		return err
+	})
+	if err != nil {
+		return CommitResult{}, err
+	}
+	return res, nil
+}
+
+// commitEdits is the work of Commit, in the transaction of the call.
+func (g *Graph) commitEdits(ctx context.Context, in Commit) (res CommitResult, err error) {
 	c, err := g.CreateChange(ctx, NewChange{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent, Methodology: in.Methodology,
 		BaselineID: in.Baseline, Branch: in.Branch, Data: in.Data, OwnBranch: true, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID})
 	if err != nil {
 		return res, err
 	}
 	res.Change = c.ID
-	defer func() {
-		if err == nil {
-			return
-		}
-		// a commit is all or nothing: a change that committed nothing leaves no trace (purged with its drafts and its log,
-		// no key is held, ADR 0079), else it is abandoned
-		if _, perr := g.PurgeChange(ctx, c.ID); perr == nil {
-			return
-		}
-		abandoned := domain.ChangeAbandoned
-		if _, aerr := g.UpdateChange(ctx, c.ID, ChangePatch{Status: &abandoned}); aerr != nil {
-			err = errors.Join(err, aerr)
-		}
-	}()
 	order, err := g.commitOrder(ctx, in.Edits)
 	if err != nil {
 		return res, err

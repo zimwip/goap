@@ -5,6 +5,7 @@
   import { openTab } from '../../shell/tabs.svelte';
   import { methodologySpec } from './methodologyTabs';
   import { splitIssues } from '../../issues';
+  import EditorActions from '../../shell/EditorActions.svelte';
   import type { Draft } from '../../stores/drafts.svelte';
 
   let {
@@ -14,7 +15,8 @@
     title,
     dirty,
     path = '',
-  }: { draft: Draft; icon: IconName; kind: string; title: string; dirty: boolean; path?: string } = $props();
+    tabId,
+  }: { draft: Draft; icon: IconName; kind: string; title: string; dirty: boolean; path?: string; tabId?: string } = $props();
 
   // the rules this element breaks (compilation and validation issues), with where each is
   const all = $derived(path ? draft.issuesAt(path) : []);
@@ -37,6 +39,7 @@
   <h2>{title}</h2>
   <StatusBadge status={draft.status} />
   {#if dirty}<span class="dirty" title="Unsaved changes">● modified</span>{/if}
+  {#if tabId}<EditorActions {tabId} />{/if}
 </div>
 {#if ruled.length}
   <div class="alert broken" role="alert">

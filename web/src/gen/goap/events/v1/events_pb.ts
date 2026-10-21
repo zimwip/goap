@@ -115,6 +115,8 @@ export type Event = Message<"goap.events.v1.Event"> & {
   changeId: string;
 
   /**
+   * the version of a node; for a change, the position its write left the log of the change at (ADR 0153), 0 when none
+   *
    * @generated from field: int64 version = 10;
    */
   version: bigint;
@@ -221,6 +223,8 @@ export type EventJson = {
   changeId?: string;
 
   /**
+   * the version of a node; for a change, the position its write left the log of the change at (ADR 0153), 0 when none
+   *
    * @generated from field: int64 version = 10;
    */
   version?: string;

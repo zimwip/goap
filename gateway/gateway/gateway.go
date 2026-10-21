@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -21,6 +20,8 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/contracts/graphapi"
+	"github.com/zimwip/goap/lib/cache"
 	"github.com/zimwip/goap/lib/identity"
 )
 
@@ -107,18 +108,26 @@ func Prepare(cfg Config) Config {
 		if ttl <= 0 {
 			ttl = DefaultSessionCheckTTL
 		}
-		cfg.sessions = &sessionCache{creds: cfg.Credentials, ttl: ttl, entries: map[string]sessionEntry{}}
+		keep := cfg.MaxSession
+		if keep <= 0 {
+			keep = DefaultMaxSession
+		}
+		cfg.sessions = &sessionCache{creds: cfg.Credentials, ttl: ttl,
+			entries: cache.New(cache.Fixed(cache.Bounds{Bytes: SessionCacheBytes, TTL: keep}), func(id string, _ sessionEntry) int64 { return int64(len(id)) + cache.WordBytes })}
 	}
 	return cfg
 }
 
+// SessionCacheBytes bounds the memory the states of the sessions kept by a gateway hold (estimated).
+const SessionCacheBytes = 4 << 20
+
 // sessionCache remembers for a while whether a session is open, so the authenticator does not ask Credentials on
-// every request.
+// every request: an open one is checked again after ttl, an ended one never reopens. The entries are a lib/cache,
+// a session no request named for the longest session (MaxSession) forgotten.
 type sessionCache struct {
 	creds   Credentials
 	ttl     time.Duration
-	mu      sync.Mutex
-	entries map[string]sessionEntry
+	entries *cache.Cache[string, sessionEntry]
 }
 
 type sessionEntry struct {
@@ -129,9 +138,7 @@ type sessionEntry struct {
 // active reports whether a session is open: from the cache while fresh, else from Credentials (the last known
 // state when they cannot answer; an error when nothing is known).
 func (c *sessionCache) active(ctx context.Context, id, subject string) (bool, error) {
-	c.mu.Lock()
-	e, ok := c.entries[id]
-	c.mu.Unlock()
+	e, ok := c.entries.Get(id)
 	if ok && (!e.active || time.Since(e.at) < c.ttl) {
 		return e.active, nil // an ended session never reopens
 	}
@@ -147,16 +154,7 @@ func (c *sessionCache) active(ctx context.Context, id, subject string) (bool, er
 }
 
 func (c *sessionCache) set(id string, active bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if len(c.entries) > 10000 { // forget the old entries rather than grow without bound
-		for k, e := range c.entries {
-			if time.Since(e.at) > c.ttl {
-				delete(c.entries, k)
-			}
-		}
-	}
-	c.entries[id] = sessionEntry{active: active, at: time.Now()}
+	c.entries.Put(id, sessionEntry{active: active, at: time.Now()})
 }
 
 // DefaultAuthMode is the AuthMode of a deployment that names none (GOAP_AUTH_MODE unset, ADR 0042): local
@@ -221,8 +219,8 @@ func Mount(e *echo.Echo, cfg Config) error {
 	if len(cfg.AllowOrigins) > 0 {
 		e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 			AllowOrigins:  cfg.AllowOrigins,
-			AllowHeaders:  []string{"Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms", "X-User-Agent", "X-Goap-Command"},
-			ExposeHeaders: []string{"Grpc-Status", "Grpc-Message"},
+			AllowHeaders:  []string{"Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms", "X-User-Agent", "X-Goap-Command", graphapi.HeaderAtLeast},
+			ExposeHeaders: []string{"Grpc-Status", "Grpc-Message", graphapi.HeaderChangeSeq, "Goap-Error-Reason"},
 			AllowMethods:  []string{http.MethodGet, http.MethodPost, http.MethodOptions},
 		}))
 	}

@@ -104,10 +104,20 @@ func TestSmoke(t *testing.T) {
 	if !found["organisation"] || !found["platform"] {
 		t.Fatalf("namespaces = %v", ns.Msg.Namespaces)
 	}
-	// the statistics of the graph: every namespace in the overview, the shape of the organisation's head
+	// the statistics of the graph: every namespace in the overview, the published domains holding no node too, the
+	// shape of the organisation's head
 	ov, err := graph.GetGraphOverview(context.Background(), connect.NewRequest(&graphv1.GetGraphOverviewRequest{}))
-	if err != nil || len(ov.Msg.Namespaces) != len(ns.Msg.Namespaces) {
-		t.Fatalf("GetGraphOverview: %v, %v", ov, err)
+	if err != nil {
+		t.Fatalf("GetGraphOverview: %v", err)
+	}
+	listed := map[string]bool{}
+	for _, n := range ov.Msg.Namespaces {
+		listed[n.Namespace] = true
+	}
+	for _, n := range append(ns.Msg.Namespaces, "alm") {
+		if !listed[n] {
+			t.Fatalf("GetGraphOverview misses %s: %v", n, ov)
+		}
 	}
 	st, err := graph.GetGraphStats(context.Background(), connect.NewRequest(&graphv1.GetGraphStatsRequest{Namespace: "organisation"}))
 	if err != nil || st.Msg.Stats.State.Nodes == 0 || st.Msg.Stats.BaselineId == "" {

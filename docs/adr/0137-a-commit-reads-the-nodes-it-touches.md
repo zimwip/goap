@@ -62,7 +62,7 @@ its merge). What a version is never changes once written (ADR 0079, 0141), so:
    (`draftReader.prefetch`, which also reads the links entering them, `Tx.LinksInto`, and their latest version on main,
    `Tx.LatestVersionsOn`). A version read by a transaction is kept for that transaction (`guardTx.nodes`: its origin may
    still be set, `SetNodeOrigin`); its links and link set are kept by the graph (`versionCache`, bounded by
-   `Graph.VersionCacheSize`): only a version the transaction did not write, an empty set only for a version known to
+   `Graph.Caches.Versions`, a `lib/cache`, ADR 0156): only a version the transaction did not write, an empty set only for a version known to
    exist, emptied by a purge (the only delete of versions) before and after its transaction.
 2. **The commit reads the latest versions of its nodes in two statements** (`Tx.LatestVersions`, `Tx.LatestVersionsOn`
    on the change's branch): the number of each version, the conflict check and `revise` / `derive` come from them; the

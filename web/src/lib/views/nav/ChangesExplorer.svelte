@@ -9,7 +9,6 @@
   import { project, inActiveProject } from '../../stores/project.svelte';
   import { changes, refreshChanges, closedChanges, loadMoreChanges, setChangesScope, CLOSED_STATUSES, type ClosedStatus } from '../../stores/catalog.svelte';
   import { live, processes, refreshProcesses } from '../../stores/live.svelte';
-  import { select as select } from '../../shell/workbench.svelte';
   import { openTab, tabsState } from '../../shell/tabs.svelte';
   import { formatDate, formatInt, shortId, int, type Change, type Process } from '../../api';
 
@@ -81,24 +80,6 @@
 
   function openRun(p: Process, pin = false) {
     openTab({ kind: 'run', params: { id: p.id ?? '' } }, { pin });
-    select({
-      title: plabel(p),
-      subtitle: 'Execution',
-      rows: [
-        ['Id', p.id ?? ''],
-        ['Change', p.changeId ?? ''],
-        ['Status', p.status ?? ''],
-        ['Methodology', p.methodology ?? ''],
-        ['Agent', p.agent ?? ''],
-        ['Planner', p.planner ?? ''],
-        ['Goal', p.goal ?? ''],
-        ['Triggered by', p.trigger ?? ''],
-        ['Initiator', p.initiator?.subject ?? ''],
-        ['Tokens (input / output)', `${formatInt(p.usage?.inputTokens)} / ${formatInt(p.usage?.outputTokens)}`],
-        ['LLM / tool calls', `${p.usage?.llmCalls ?? 0} / ${p.usage?.toolCalls ?? 0}`],
-        ['Created', formatDate(p.createdAt)],
-      ],
-    });
   }
 
   const STATUSES = [
@@ -142,21 +123,6 @@
 
   function open(c: Change, pin = false) {
     openTab({ kind: 'change', params: { id: c.id ?? '' } }, { pin });
-    select({
-      title: c.title || shortId(c.id),
-      subtitle: 'Change',
-      rows: [
-        ['Id', c.id ?? ''],
-        ['Status', c.status ?? ''],
-        ['Intent', c.intent ?? ''],
-        ['Namespace', c.namespace ?? ''],
-        ['Methodology', c.methodology ?? ''],
-        ['Goal', c.goal ?? ''],
-        ['Starting baseline', c.baselineId ?? ''],
-        ['Resulting baseline', c.resultBaselineId ?? ''],
-        ['Created', formatDate(c.createdAt)],
-      ],
-    });
   }
 
   function openManual(e: SubmitEvent) {

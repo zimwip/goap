@@ -1,17 +1,16 @@
 package graph
 
 import (
-	"container/list"
 	"context"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/graphapi"
+	"github.com/zimwip/goap/lib/cache"
 )
 
 // The drafts of a change are derived from its log, not stored (ADR 0079 §2): the fold of the impact events
@@ -33,9 +32,6 @@ import (
 //
 // Writers of one change are serialized (ADR 0127: the lock of its tree, taken before the first append; the change_impact
 // projection of ADR 0029 needs it too): with seqs handed out in commit order, "everything up to seq S" is a stable prefix.
-
-// DefaultDraftCacheSize is the number of changes whose folded drafts the graph keeps in memory.
-const DefaultDraftCacheSize = 128
 
 // draftState is the fold of a change's impact log up to Seq: the change impacts (the drafts of a superseded impact go)
 // and the drafts, indexed. Immutable once published; the transaction that keeps one (ownDrafts) folds its next events in
@@ -69,12 +65,14 @@ type draftState struct {
 	moveSeq map[domain.ItemID]int64
 	// frozen: a reader of the transaction still reads it (draftReader), so its next fold is a copy
 	frozen bool
+	// bytes estimates the memory the view holds (eventSize, itemSize): what the cache counts against its bound
+	bytes int64
 }
 
 // copy is a state the caller may fold in place (the values it holds are never modified, only replaced).
 func (s *draftState) copy() *draftState {
 	n := &draftState{change: s.change, seq: s.seq, impacts: slices.Clone(s.impacts), at: maps.Clone(s.at), drafts: maps.Clone(s.drafts), nodes: maps.Clone(s.nodes), conflicts: maps.Clone(s.conflicts), items: slices.Clip(s.items), events: slices.Clip(s.events),
-		phases: maps.Clone(s.phases), moved: s.moved, first: s.first, state: s.state, moveSeq: maps.Clone(s.moveSeq)}
+		phases: maps.Clone(s.phases), moved: s.moved, first: s.first, state: s.state, moveSeq: maps.Clone(s.moveSeq), bytes: s.bytes}
 	if n.at == nil {
 		n.at = map[domain.ChangeImpactID]int{}
 	}
@@ -108,6 +106,7 @@ func (s *draftState) draft(id domain.ChangeImpactID, flow string) (domain.Draft,
 // fact folds an item of the change, at its position in the log, in place: a move of the main flow moves the phase.
 func (s *draftState) fact(it domain.ChangeItem, seq int64) {
 	s.items = append(s.items, it)
+	s.bytes += itemSize(it)
 	if it.Type != domain.TypeTransition || it.Flow != "" {
 		return
 	}
@@ -139,6 +138,7 @@ func (s *draftState) phaseOf(id domain.ChangeImpactID) (phase, bool) {
 // apply folds an event in place: domain.ApplyImpactEvent, then domain.ApplyDraftEvent and domain.ApplyConflictEvent.
 func (s *draftState) apply(e domain.ImpactEvent) {
 	s.events = append(s.events, e)
+	s.bytes += eventSize(e)
 	if e.StartsDraft() && e.Flow == "" {
 		if s.phases == nil {
 			s.phases = map[domain.ChangeImpactID]phase{}
@@ -223,55 +223,31 @@ func (s *draftState) apply(e domain.ImpactEvent) {
 	s.seq = int64(e.Seq)
 }
 
+// draftCache keeps the views of the changes between calls in the one cache of the platform (lib/cache): bounded in
+// memory (the estimated bytes of the views, the least recently read dropped first; a view larger than the bound is not
+// kept) and in time (a view not read for the TTL goes).
 type draftCache struct {
-	mu sync.Mutex
-	ll *list.List // of *draftState, most recently used first
-	m  map[domain.ChangeID]*list.Element
+	views *cache.Cache[domain.ChangeID, *draftState]
 	// folded counts the events folded since the graph started (tests and benchmarks: a read after N events folds the new
 	// ones only).
 	folded atomic.Int64
 }
 
+func newDraftCache(bounds func() cache.Bounds) draftCache {
+	return draftCache{views: cache.New(bounds, func(_ domain.ChangeID, s *draftState) int64 { return s.bytes })}
+}
+
 func (c *draftCache) get(id domain.ChangeID) *draftState {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if el, ok := c.m[id]; ok {
-		c.ll.MoveToFront(el)
-		return el.Value.(*draftState)
-	}
-	return nil
+	s, _ := c.views.Get(id)
+	return s
 }
 
-// put keeps a state when it is ahead of the one held.
-func (c *draftCache) put(s *draftState, size int) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.m == nil {
-		c.m, c.ll = map[domain.ChangeID]*list.Element{}, list.New()
-	}
-	if el, ok := c.m[s.change]; ok {
-		if el.Value.(*draftState).seq < s.seq {
-			el.Value = s
-		}
-		c.ll.MoveToFront(el)
-		return
-	}
-	c.m[s.change] = c.ll.PushFront(s)
-	for c.ll.Len() > size {
-		last := c.ll.Back()
-		delete(c.m, last.Value.(*draftState).change)
-		c.ll.Remove(last)
-	}
+// put keeps a view when it is ahead of the one held.
+func (c *draftCache) put(s *draftState) {
+	c.views.Update(s.change, func(old *draftState, ok bool) (*draftState, bool) { return s, !ok || old.seq < s.seq })
 }
 
-func (c *draftCache) drop(id domain.ChangeID) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if el, ok := c.m[id]; ok {
-		c.ll.Remove(el)
-		delete(c.m, id)
-	}
-}
+func (c *draftCache) drop(id domain.ChangeID) { c.views.Remove(id) }
 
 // logWriter is what a transaction says of the log entries it appended.
 type logWriter interface{ wroteLog(domain.ChangeID) bool }
@@ -365,7 +341,7 @@ func (g *Graph) foldDrafts(ctx context.Context, tx Tx, id domain.ChangeID) (*dra
 	if wroteLog(tx, id) {
 		keepDrafts(tx, next)
 	} else {
-		g.draftStates.put(next, g.draftCacheSize())
+		g.draftStates.put(next)
 	}
 	return next, nil
 }
@@ -433,13 +409,6 @@ func (g *Graph) foldedEvents(ctx context.Context, tx Tx, id domain.ChangeID) ([]
 		return nil, err
 	}
 	return slices.Clip(st.events), nil
-}
-
-func (g *Graph) draftCacheSize() int {
-	if g.DraftCacheSize > 0 {
-		return g.DraftCacheSize
-	}
-	return DefaultDraftCacheSize
 }
 
 // drafts lists the drafts of a change (every flow), by impact then flow, deep copies the caller may edit.

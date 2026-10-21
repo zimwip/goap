@@ -9,16 +9,22 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/zimwip/goap/engine/engine"
 	"github.com/zimwip/goap/engine/methodology"
+	"github.com/zimwip/goap/lib/cache"
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/typecat"
 )
 
-// maxCompiled bounds the compile cache: the latest published version of every methodology, with room for the
-// versions in use. When it is full the cache starts over (a compile is only a cost, never a result to keep).
-const maxCompiled = 256
+// CompiledBounds are the bounds of the caches of compiled methodologies (the registry's and its clients', lib/cache):
+// a compile is only a cost, never a result to keep.
+var CompiledBounds = cache.Bounds{Bytes: 64 << 20, TTL: 10 * time.Minute}
+
+// compiledBytes estimates the memory a compiled methodology holds from the size of its definition: the definition, its
+// CEL programs and indexes, about eight times it (an estimate, not a measure).
+func compiledBytes(definition int) int64 { return 8 * int64(definition) }
 
 // compileKey identifies one compilation: the definition (name, version and a hash of its content: a draft is
 // replaced in place) and the types it was compiled against (the published domains in force, name@version each).
@@ -27,8 +33,9 @@ type compileKey struct {
 }
 
 type compileEntry struct {
-	c   *methodology.Compiled
-	err error
+	c     *methodology.Compiled
+	err   error
+	bytes int64 // estimated
 }
 
 // compileCache holds the compiled methodologies of the registry (ADR 0072): Methodology and List are called on the
@@ -37,33 +44,24 @@ type compileEntry struct {
 // service also empties it on every write it publishes, to let go of what can no longer be asked for. Safe for
 // concurrent use.
 type compileCache struct {
-	mu      sync.Mutex
-	entries map[compileKey]compileEntry
+	once    sync.Once
+	entries *cache.Cache[compileKey, compileEntry]
 	// compiles counts the compilations done on a miss (a test seam: a second read must not add one).
 	compiles atomic.Int64
 }
 
-func (c *compileCache) get(k compileKey) (compileEntry, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	e, ok := c.entries[k]
-	return e, ok
+func (c *compileCache) cache() *cache.Cache[compileKey, compileEntry] {
+	c.once.Do(func() {
+		c.entries = cache.New(cache.Fixed(CompiledBounds), func(_ compileKey, e compileEntry) int64 { return e.bytes })
+	})
+	return c.entries
 }
 
-func (c *compileCache) put(k compileKey, e compileEntry) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.entries == nil || len(c.entries) >= maxCompiled {
-		c.entries = map[compileKey]compileEntry{}
-	}
-	c.entries[k] = e
-}
+func (c *compileCache) get(k compileKey) (compileEntry, bool) { return c.cache().Get(k) }
 
-func (c *compileCache) clear() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.entries = nil
-}
+func (c *compileCache) put(k compileKey, e compileEntry) { c.cache().Put(k, e) }
+
+func (c *compileCache) clear() { c.cache().Clear() }
 
 // typesStamp names the types in force: the published domains, name@version each, in name order (a published
 // version is immutable, a republish is a new version).
@@ -76,13 +74,14 @@ func typesStamp(ds []*def.Domain) string {
 	return strings.Join(parts, ",")
 }
 
-func contentHash(m methodology.Methodology) string {
+// contentHash is the hash of a definition and its size.
+func contentHash(m methodology.Methodology) (string, int) {
 	b, err := json.Marshal(m)
 	if err != nil {
-		return "" // not cacheable under a shared key: the caller compiles anyway
+		return "", 0 // not cacheable under a shared key: the caller compiles anyway
 	}
 	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:])
+	return hex.EncodeToString(sum[:]), len(b)
 }
 
 // Activate builds the activable form of a methodology version from its definition and the domains it compiles against
@@ -136,7 +135,8 @@ func (s *Service) Methodology(ctx context.Context, ref string) (*methodology.Com
 // compileAgainst compiles a stored version against domains, through the cache: the refusal of the compiler, or of the
 // type catalogue when the domains do not make one together.
 func (s *Service) compileAgainst(r Record, ds []*def.Domain) (*methodology.Compiled, error) {
-	k := compileKey{name: r.Methodology.Name, version: r.Methodology.Version, content: contentHash(r.Methodology), types: typesStamp(ds)}
+	content, size := contentHash(r.Methodology)
+	k := compileKey{name: r.Methodology.Name, version: r.Methodology.Version, content: content, types: typesStamp(ds)}
 	if k.content != "" {
 		if e, ok := s.compiled.get(k); ok {
 			return e.c, e.err
@@ -145,7 +145,7 @@ func (s *Service) compileAgainst(r Record, ds []*def.Domain) (*methodology.Compi
 	s.compiled.compiles.Add(1)
 	c, err := Activate(r.Methodology, ds)
 	if k.content != "" {
-		s.compiled.put(k, compileEntry{c: c, err: err})
+		s.compiled.put(k, compileEntry{c: c, err: err, bytes: compiledBytes(size)})
 	}
 	return c, err
 }

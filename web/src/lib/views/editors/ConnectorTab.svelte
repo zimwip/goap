@@ -1,5 +1,6 @@
 <script lang="ts">
   // Connector tab (read-only): what a registered connector announced.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -25,6 +26,7 @@
       <h2>{info.id} <span class="muted">v{info.version}</span></h2>
       <StatusBadge status={c?.live ? 'completed' : 'failed'} />
       <span class="muted">{c?.live ? 'live' : 'registration expired'}</span>
+      <EditorActions tabId={tab.id} />
     </header>
     <section class="card">
       <dl class="kv">

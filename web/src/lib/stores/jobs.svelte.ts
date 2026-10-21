@@ -49,6 +49,18 @@ export function onJobEnded(fn: (j: Job) => void): () => void {
   return () => endListeners.delete(fn);
 }
 
+/** The job whose detail dialog is open, one at a time, shown by the shell (the status bar): live from `knownJobs` when
+ *  the person follows it, else as it was read (another person's job in the Jobs tab). */
+export const jobDetail = $state<{ job: Job | undefined }>({ job: undefined });
+/** Opens the detail of a job. */
+export function openJob(j: Job): void {
+  jobDetail.job = j;
+}
+/** Closes the detail of a job. */
+export function closeJob(): void {
+  jobDetail.job = undefined;
+}
+
 /** The jobs, newest first. */
 export function jobList(): Job[] {
   return [...knownJobs.values()].sort((a, b) => Date.parse(b.createdAt ?? '') - Date.parse(a.createdAt ?? '') || 0);
@@ -124,6 +136,7 @@ export function startJobs(): () => void {
 
   const offToken = onTokenChange(() => {
     knownJobs.clear();
+    jobDetail.job = undefined;
     jobStream.loaded = false;
     backoff = 1000;
     connect();

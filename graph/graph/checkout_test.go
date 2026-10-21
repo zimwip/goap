@@ -225,3 +225,34 @@ func testCreateIsCheckedOut(t *testing.T, repo Repo) {
 		}
 	}
 }
+
+// A batch checks out several nodes in one transaction, all or none: a refused node (gate, or a second checkout) leaves
+// none of the others checked out.
+func TestCheckoutBatch(t *testing.T) { forEachRepo(t, testCheckoutBatch) }
+
+func testCheckoutBatch(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "batch", BaselineID: f.base.ID}))
+	refused := errors.New("refused")
+	gated := func(typ string) error {
+		if typ == f.test.Type {
+			return refused
+		}
+		return nil
+	}
+	if _, err := g.ImpactNodeCheckoutBatch(ctx, c.ID, CheckoutBatch{Nodes: []NodeCheckout{{Node: f.req.ID, Rationale: "r"}, {Key: f.test.Key, Rationale: "t"}}, Gate: gated}); !errors.Is(err, refused) {
+		t.Fatalf("the gate refuses the batch: %v", err)
+	}
+	if got := must[domain.Change](t)(g.Change(ctx, c.ID)); len(got.Nodes) != 0 {
+		t.Fatalf("a refused batch leaves nothing: %+v", got.Nodes)
+	}
+	out := must[[]domain.ChangeImpact](t)(g.ImpactNodeCheckoutBatch(ctx, c.ID, CheckoutBatch{Nodes: []NodeCheckout{{Node: f.req.ID, Rationale: "r"}, {Key: f.test.Key, Rationale: "t"}}}))
+	if len(out) != 2 || nodeOf(out[0]) != f.req.ID || nodeOf(out[1]) != f.test.ID || !out[0].Post.IsDraft() || !out[1].Post.IsDraft() {
+		t.Fatalf("both checked out, in order: %+v", out)
+	}
+	if _, err := g.ImpactNodeCheckoutBatch(ctx, c.ID, CheckoutBatch{Nodes: []NodeCheckout{{Node: f.req.ID, Rationale: "again"}}}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a node checked out twice: %v", err)
+	}
+}

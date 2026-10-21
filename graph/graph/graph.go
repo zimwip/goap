@@ -7,6 +7,7 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/events"
 	"github.com/zimwip/goap/contracts/lnk"
+	"github.com/zimwip/goap/lib/cache"
 	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/typecat"
 )
@@ -154,23 +156,16 @@ type Graph struct {
 
 	// booted is set once the roots of the structures are known to exist (Bootstrap).
 	booted atomic.Bool
-	// states caches the whole states computed for baselines, headers their headers (ADR 0137, 0140).
-	states  stateCache
-	headers headerCache
-
-	// DraftCacheSize is how many changes keep their folded drafts in memory (ADR 0079 §2). 0: DefaultDraftCacheSize.
-	DraftCacheSize int
-	// VersionCacheSize is the number of versions whose outgoing links are kept in memory (DefaultVersionCacheSize when
-	// 0): they never change once written (versioncache.go).
-	VersionCacheSize int
+	// Caches bounds what the graph keeps in memory between calls (caches.go): a zero field takes DefaultCaches'.
+	Caches Caches
+	// headers caches the headers of baselines (ADR 0137, 0140).
+	headers *cache.Cache[domain.BaselineID, domain.Baseline]
 	// versions caches the outgoing links of versions.
 	versions versionCache
-	// draftStates caches the drafts folded from the impact logs.
+	// draftStates caches the views of the changes folded from their logs.
 	draftStates draftCache
-	// facetLogs caches the entries the log facets fold (facetlog.go).
-	facetLogs facetLogCache
 	// validations caches the validation of the impacts of a change on a flow, by the log position it was computed at.
-	validations validationCache
+	validations *cache.Cache[validationKey, validationEntry]
 }
 
 // New returns a Graph backed by repo. Every transaction goes through the guard of the graph (guardRepo, ADR 0054),
@@ -178,6 +173,7 @@ type Graph struct {
 func New(repo Repo) *Graph {
 	g := &Graph{base: repo, now: func() time.Time { return time.Now().UTC() }, newID: func() string { return uuid.NewString() }}
 	g.repo = &ambientRepo{Repo: &guardRepo{Repo: repo, g: g}, g: g}
+	g.newCaches()
 	return g
 }
 
@@ -537,6 +533,57 @@ func (g *Graph) Change(ctx context.Context, id domain.ChangeID) (c domain.Change
 	return
 }
 
+// ChangeHead reads the head of a change: neither its impacts nor its items (Tx.ChangeHead), what a check of who may act
+// on it reads (its unit, project, methodology) without folding its log. Under WithHeadMemo, a head read once is not
+// read again.
+func (g *Graph) ChangeHead(ctx context.Context, id domain.ChangeID) (c domain.Change, err error) {
+	if c, ok := memoHead(ctx, id); ok {
+		return c, nil
+	}
+	memo, _ := ctx.Value(headMemoKey{}).(*headMemo)
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		c, err = tx.ChangeHead(ctx, id)
+		return err
+	})
+	if err == nil && memo != nil {
+		memo.mu.Lock()
+		memo.heads[id] = c
+		memo.mu.Unlock()
+	}
+	return
+}
+
+type headMemoKey struct{}
+
+// headMemo keeps the heads of the changes one request read (WithHeadMemo).
+type headMemo struct {
+	mu    sync.Mutex
+	heads map[domain.ChangeID]domain.Change
+}
+
+// memoHead is the head of a change the request read already (WithHeadMemo).
+func memoHead(ctx context.Context, id domain.ChangeID) (domain.Change, bool) {
+	memo, _ := ctx.Value(headMemoKey{}).(*headMemo)
+	if memo == nil {
+		return domain.Change{}, false
+	}
+	memo.mu.Lock()
+	defer memo.mu.Unlock()
+	c, ok := memo.heads[id]
+	return c, ok
+}
+
+// WithHeadMemo returns a context under which ChangeHead reads the head of a change once: the checks made before an
+// operation of one request (who may read the change, who may perform the operation) ask for the same head, and the
+// operation reads the change again in its own transaction. Meant for the life of one request, never across writes the
+// checks must see.
+func WithHeadMemo(ctx context.Context) context.Context {
+	if _, ok := ctx.Value(headMemoKey{}).(*headMemo); ok {
+		return ctx
+	}
+	return context.WithValue(ctx, headMemoKey{}, &headMemo{heads: map[domain.ChangeID]domain.Change{}})
+}
+
 // ChangeChecked is Change with the validation of each impact carrying a draft (ImpactValidation): what the change
 // impacts look like to a person who reviews them. Each impact is checked on the flow that declared it.
 func (g *Graph) ChangeChecked(ctx context.Context, id domain.ChangeID) (c domain.Change, err error) {
@@ -828,7 +875,7 @@ func (g *Graph) Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blac
 // BlackboardIn is the blackboard as seen by the process running on a flow
 // branch ("" = the main flow, see domain.Change.View).
 func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow string) (bb domain.Blackboard, err error) {
-	var logs map[string]facetRead
+	var logs map[string][]domain.LogEntry
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {

@@ -16,7 +16,9 @@
   async function load() {
     loading = true;
     try {
-      items = ((await graph.graphOverview()).namespaces ?? []).sort((a, b) => num(b.nodes) - num(a.nodes));
+      items = ((await graph.graphOverview()).namespaces ?? []).sort(
+        (a, b) => num(b.nodes) - num(a.nodes) || (a.namespace ?? '').localeCompare(b.namespace ?? '')
+      );
       error = '';
     } catch (e) {
       error = errorMessage(e);
@@ -76,7 +78,11 @@
             </span>
             <span class="bar" aria-hidden="true"><span style:width="{(100 * num(n.nodes)) / largest}%"></span></span>
             <span class="detail">
-              {fmt(n.types)} types · {fmt(n.versions)} versions · {fmt(n.linkRows)} links · {fmt(n.changes)} changes
+              {#if num(n.nodes) || num(n.changes)}
+                {fmt(n.types)} types · {fmt(n.versions)} versions · {fmt(n.linkRows)} links · {fmt(n.changes)} changes
+              {:else}
+                Domain published, no node yet
+              {/if}
             </span>
           </button>
         </li>

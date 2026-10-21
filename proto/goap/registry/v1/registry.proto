@@ -136,9 +136,9 @@ message Attribute {
   string name = 1;
   string label = 2;
   string description = 3;
-  // string | number | boolean | date | enum | json (empty: string)
+  // string | number | boolean | date | enum | json | code (empty: string)
   string type = 4;
-  // text | textarea | dropdown | checkbox | date (empty: the usual one of the type)
+  // text | textarea | dropdown | checkbox | date | directory | code (empty: the usual one of the type)
   string widget = 5;
   // enum of the domain an enum attribute takes its values from
   string enum = 6;
@@ -150,6 +150,8 @@ message Attribute {
   bool as_name = 11;
   // property_validator instances (ADR 0018), in call order
   repeated string validators = 12;
+  // how a change of its value is shown: value | words | lines | json | code (empty: the usual one of the type)
+  string diff = 13;
 }
 
 // EnumValue is one value of an enum; the label defaults to the value.

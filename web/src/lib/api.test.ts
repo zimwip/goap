@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { COMMAND_HEADER } from './flux/commands';
+import { AT_LEAST_HEADER, CHANGE_SEQ_HEADER, MAX_POSITIONS, atLeastFor, notePosition, parsePositions, positionOf, resetPositions } from './flux/positions';
 import { RpcError, errorMessage, getToken, onTokenChange, onUnauthorized, reportUnauthorized, rpc, setToken } from './api';
 
 // the transport: what every call of the web goes through (rpc, the token store, the 401 listeners)
@@ -138,5 +139,63 @@ describe('errorMessage', () => {
     expect(errorMessage(new RpcError('not_found', 'gone', 404))).toBe('not_found: gone');
     expect(errorMessage(new Error('plain'))).toBe('plain');
     expect(errorMessage('str')).toBe('str');
+  });
+});
+
+describe('positions of the logs of the changes (ADR 0153)', () => {
+  const G = 'goap.graph.v1.GraphService';
+  const withHeaders = (status: number, body: unknown, headers: Record<string, string>) =>
+    Promise.resolve(new Response(JSON.stringify(body), { status, headers }));
+  afterEach(() => resetPositions());
+
+  it('notes where a write left the logs and asks the next reads of those changes to reach it', async () => {
+    fetchMock.mockReturnValueOnce(withHeaders(200, {}, { [CHANGE_SEQ_HEADER]: 'C1:7,C2:3' }));
+    await rpc(G, 'AddItems', { changeId: 'C1' });
+    expect(positionOf('C1')).toBe(7);
+    fetchMock.mockImplementation(() => reply(200, {}));
+    await rpc(G, 'GetChange', { id: 'C1' });
+    expect(fetchMock.mock.calls[1][1].headers[AT_LEAST_HEADER]).toBe('C1:7');
+    await rpc(G, 'GetChange', { id: 'C9' });
+    expect(fetchMock.mock.calls[2][1].headers[AT_LEAST_HEADER]).toBeUndefined();
+    await rpc('goap.engine.v1.EngineService', 'GetChangeState', { changeId: 'C1' });
+    expect(fetchMock.mock.calls[3][1].headers[AT_LEAST_HEADER]).toBeUndefined();
+  });
+
+  it('reads again a change whose view is behind', async () => {
+    vi.useFakeTimers();
+    notePosition('C1', 5);
+    fetchMock
+      .mockReturnValueOnce(withHeaders(409, { code: 'aborted', message: 'behind' }, { 'Goap-Error-Reason': 'behind' }))
+      .mockReturnValueOnce(reply(200, { change: { id: 'C1', seq: '5' } }));
+    const p = rpc(G, 'GetChange', { id: 'C1' });
+    await vi.runAllTimersAsync();
+    await expect(p).resolves.toEqual({ change: { id: 'C1', seq: '5' } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('gives up on a view still behind after its retries', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(() => withHeaders(409, { code: 'aborted', message: 'behind' }, { 'Goap-Error-Reason': 'behind' }));
+    const p = rpc(G, 'GetChange', { id: 'C1' }).catch((e) => e);
+    await vi.runAllTimersAsync();
+    const e = await p;
+    expect(e).toBeInstanceOf(RpcError);
+    expect((e as RpcError).reason).toBe('behind');
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    vi.useRealTimers();
+  });
+});
+
+describe('positions', () => {
+  afterEach(() => resetPositions());
+  it('keeps the highest position, parses the header and forgets the oldest beyond its memory', () => {
+    notePosition('A', 4);
+    notePosition('A', 2);
+    expect(positionOf('A')).toBe(4);
+    expect([...parsePositions('A:1, B:x,:3,C:2')]).toEqual([['A', 1], ['C', 2]]);
+    expect(atLeastFor({ changeId: 'A', id: 'A', parentId: 'Z' })).toBe('A:4');
+    for (let i = 0; i < MAX_POSITIONS; i++) notePosition(`X${i}`, 1);
+    expect(positionOf('A')).toBe(0);
   });
 });

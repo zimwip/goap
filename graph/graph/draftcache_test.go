@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/lib/cache"
 )
 
 // scratchDrafts is the drafts of a change as one comparable text, from a from-scratch fold of its whole impact log.
@@ -193,4 +196,63 @@ func BenchmarkDraftRead(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = g.repo.InTx(ctx, func(tx Tx) error { _, err := g.drafts(ctx, tx, c.ID); return err })
 	}
+}
+
+// The cache of views keeps the most advanced view of a change (its bounds are lib/cache's, tested there).
+func TestDraftCacheKeepsTheNewest(t *testing.T) {
+	c := newDraftCache(cache.Fixed(cache.Bounds{Bytes: 1 << 20, TTL: time.Hour}))
+	view := func(seq int64) *draftState { return &draftState{change: "a", seq: seq, bytes: 10} }
+	c.put(view(2))
+	c.put(view(1))
+	if s := c.get("a"); s == nil || s.seq != 2 {
+		t.Fatalf("an older view replaced a newer one: %+v", s)
+	}
+	c.put(view(3))
+	if s := c.get("a"); s == nil || s.seq != 3 {
+		t.Fatalf("a newer view was not kept: %+v", s)
+	}
+	c.drop("a")
+	if c.get("a") != nil {
+		t.Fatal("a dropped view is still kept")
+	}
+}
+
+// A view counts what it folds: the size grows with the events and facts of the log.
+func TestDraftViewCountsItsSize(t *testing.T) {
+	forEachRepo(t, func(t *testing.T, repo Repo) {
+		ctx := context.Background()
+		f := newFixture(t, repo)
+		g := f.g
+		c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "size", BaselineID: f.base.ID, OwnBranch: true}))
+		pre := f.req.Ref()
+		mod := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "edit"}}))
+		size := func() (n int64) {
+			_ = g.repo.InTx(ctx, func(tx Tx) error {
+				st, err := g.draftState(ctx, tx, c.ID)
+				if err == nil {
+					n = st.bytes
+				}
+				return err
+			})
+			return
+		}
+		before := size()
+		must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, mod[0].ID, edit{Properties: map[string]any{"title": strings.Repeat("x", 5000)}}))
+		if after := size(); after < before+5000 {
+			t.Fatalf("view size %d after an edit of 5000 bytes, %d before", after, before)
+		}
+		// a cold fold counts the same
+		cold := New(repo)
+		var n int64
+		_ = cold.repo.InTx(ctx, func(tx Tx) error {
+			st, err := cold.draftState(ctx, tx, c.ID)
+			if err == nil {
+				n = st.bytes
+			}
+			return err
+		})
+		if n != size() {
+			t.Fatalf("cold fold %d bytes, warm %d", n, size())
+		}
+	})
 }

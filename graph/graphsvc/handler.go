@@ -766,16 +766,11 @@ func (h *Handler) CommitEdits(ctx context.Context, r *connect.Request[graphv1.Co
 
 // impactType is the node type of a change impact of a change ("" when the change holds none under the id).
 func (h *Handler) impactType(ctx context.Context, change, impact string) (string, error) {
-	list, err := h.Graph.ListChangeImpacts(ctx, domain.ChangeID(change))
+	typ, err := h.Graph.ImpactType(ctx, domain.ChangeID(change), domain.ChangeImpactID(impact))
 	if err != nil {
 		return "", rpcerr.ToConnect(err)
 	}
-	for _, cn := range list {
-		if string(cn.ID) == impact {
-			return cn.Type, nil
-		}
-	}
-	return "", nil
+	return typ, nil
 }
 
 // gateImpact applies to an operation on a change impact the gate of the access nodes (gateAccess): the impact names
@@ -835,7 +830,7 @@ func targetsOf(ls []*graphv1.NodeLinkWrite) []string {
 func (h *Handler) ImpactNodeCreate(ctx context.Context, r *connect.Request[graphv1.ImpactNodeCreateRequest]) (*connect.Response[graphv1.ImpactNodeCreateResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
-	c, err := h.Graph.Change(ctx, domain.ChangeID(m.ChangeId))
+	c, err := h.Graph.ChangeHead(ctx, domain.ChangeID(m.ChangeId))
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
@@ -885,7 +880,7 @@ func (h *Handler) checkCreate(ctx context.Context, c domain.Change, typ string) 
 func (h *Handler) ImpactNodeMerge(ctx context.Context, r *connect.Request[graphv1.ImpactNodeMergeRequest]) (*connect.Response[graphv1.ImpactNodeRestructureResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
-	c, err := h.Graph.Change(ctx, domain.ChangeID(m.ChangeId))
+	c, err := h.Graph.ChangeHead(ctx, domain.ChangeID(m.ChangeId))
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
@@ -904,7 +899,7 @@ func (h *Handler) ImpactNodeMerge(ctx context.Context, r *connect.Request[graphv
 func (h *Handler) ImpactNodeSplit(ctx context.Context, r *connect.Request[graphv1.ImpactNodeSplitRequest]) (*connect.Response[graphv1.ImpactNodeRestructureResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
-	c, err := h.Graph.Change(ctx, domain.ChangeID(m.ChangeId))
+	c, err := h.Graph.ChangeHead(ctx, domain.ChangeID(m.ChangeId))
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
@@ -934,6 +929,25 @@ func (h *Handler) ImpactNodeCheckout(ctx context.Context, r *connect.Request[gra
 	cn, err := h.Graph.ImpactNodeCheckout(ctx, domain.ChangeID(m.ChangeId), graph.NodeCheckout{Impact: domain.ChangeImpactID(m.ChangeImpactId), Node: domain.NodeID(m.NodeId),
 		Rationale: m.Rationale, Flow: m.Flow, Execution: m.Execution, ProducedBy: authz.From(ctx).Subject})
 	return res(&graphv1.ImpactNodeCheckoutResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
+}
+
+// ImpactNodeCheckoutBatch checks out several nodes at once: the gate of the access nodes is asked for the type of each
+// inside the transaction of the checkout, which reads it anyway.
+func (h *Handler) ImpactNodeCheckoutBatch(ctx context.Context, r *connect.Request[graphv1.ImpactNodeCheckoutBatchRequest]) (*connect.Response[graphv1.ImpactNodeCheckoutBatchResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	by := authz.From(ctx).Subject
+	in := graph.CheckoutBatch{Gate: h.gateFunc(ctx)}
+	for _, n := range m.Nodes {
+		in.Nodes = append(in.Nodes, graph.NodeCheckout{Impact: domain.ChangeImpactID(n.ChangeImpactId), Node: domain.NodeID(n.NodeId), Key: n.Key,
+			Rationale: n.Rationale, Flow: m.Flow, Execution: m.Execution, ProducedBy: by})
+	}
+	out, err := h.Graph.ImpactNodeCheckoutBatch(ctx, domain.ChangeID(m.ChangeId), in)
+	resp := &graphv1.ImpactNodeCheckoutBatchResponse{}
+	for _, cn := range out {
+		resp.Nodes = append(resp.Nodes, pbconv.ChangeImpactToPB(cn))
+	}
+	return res(resp, err)
 }
 
 func (h *Handler) ImpactNodeUpdate(ctx context.Context, r *connect.Request[graphv1.ImpactNodeUpdateRequest]) (*connect.Response[graphv1.ImpactNodeUpdateResponse], error) {

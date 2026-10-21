@@ -9,7 +9,6 @@
   import { headGraph } from '../../graphEdit';
   import { policiesOf } from '../../access';
   import { openTab } from '../../shell/tabs.svelte';
-  import { select } from '../../shell/workbench.svelte';
 
   let policies = $state<Policy[]>([]);
   let error = $state('');
@@ -32,25 +31,14 @@
     void load();
   });
 
-  function open(p?: Policy, pin = false) {
+  function open(pin = false) {
     openTab({ kind: 'policies', params: {} }, { pin });
-    if (p)
-      select({
-        title: `${p.effect} ${p.resource}/${p.action}`,
-        subtitle: 'ABAC policy',
-        rows: [
-          ['Rule', p.rule ?? ''],
-          ['Resource', p.resource ?? ''],
-          ['Action', p.action ?? ''],
-          ['Effect', p.effect ?? ''],
-        ],
-      });
   }
 </script>
 
 <div class="explorer">
   <div class="tools">
-    <button type="button" class="small" onclick={() => open(undefined, true)}>
+    <button type="button" class="small" onclick={() => open(true)}>
       <Icon name="shield" size={13} /> Edit policies
     </button>
     <span class="grow"></span>
@@ -65,8 +53,8 @@
         icon="shield"
         label={`${p.resource}/${p.action}`}
         detail={p.rule}
-        onselect={() => open(p)}
-        onopen={() => open(p, true)}
+        onselect={() => open()}
+        onopen={() => open(true)}
       >
         {#snippet trail()}<StatusBadge status={p.effect} />{/snippet}
       </TreeRow>

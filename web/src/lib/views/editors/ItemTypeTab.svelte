@@ -1,6 +1,7 @@
 <script lang="ts">
   // "Item type" tab (ADR 0128): a type of change item a domain declares, edited in the draft of its domain. What the
   // platform code adds to it (a validation, a permission) is read from the graph's list of the types in force.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -71,6 +72,7 @@
       <span class="hint">item type · {d.label}</span>
       <StatusBadge status={d.status} />
       {#if d.dirty}<span class="dirty" title="Unsaved changes">● modified</span>{/if}
+      <EditorActions tabId={tab.id} />
     </div>
     {#if d.error}<div class="alert">{d.error}</div>{/if}
     {#if d.readonly}

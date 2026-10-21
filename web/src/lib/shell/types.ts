@@ -34,13 +34,6 @@ export interface ToolbarAction {
   shortcut?: string;
 }
 
-/** Details shown by the "Properties" panel. */
-export interface Properties {
-  title: string;
-  subtitle?: string;
-  rows: [string, string][];
-}
-
 interface BaseView {
   id: string;
   title: string;
@@ -78,7 +71,6 @@ export interface EditorView extends BaseView {
   groupDirty?: (tab: Tab) => boolean;
   /** discards the group's changes (close without saving) */
   discard?: (tab: Tab) => void;
-  properties?: (tab: Tab) => Properties | undefined;
   /** the script the tab holds, for the "DSL Help" panel (unset: the tab holds none) */
   help?: (tab: Tab) => DslTarget | undefined;
 }

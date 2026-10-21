@@ -1,7 +1,7 @@
 // Registration of the workbench's views in the shell's registry.
 import { registerView } from '../shell/registry';
 import type { Tab } from '../shell/types';
-import { formatDate, formatInt, shortId } from '../api';
+import { shortId } from '../api';
 import { peekDraft, drafts } from '../stores/drafts.svelte';
 import { peekDomainDraft, domainDrafts } from '../stores/domains.svelte';
 import { processes } from '../stores/live.svelte';
@@ -28,7 +28,6 @@ import UserTab from './editors/UserTab.svelte';
 import McpTab from './editors/McpTab.svelte';
 import TriggersExplorer from './nav/TriggersExplorer.svelte';
 import ProcessesExplorer from './nav/ProcessesExplorer.svelte';
-import AssistantPanel from './assistant/AssistantPanel.svelte';
 import AssistantTab from './assistant/AssistantTab.svelte';
 
 import MethodologyTab from './editors/MethodologyTab.svelte';
@@ -39,13 +38,11 @@ import LinkTypeTab from './editors/LinkTypeTab.svelte';
 import LifecycleTab from './editors/LifecycleTab.svelte';
 import EnumTab from './editors/EnumTab.svelte';
 import ItemTypeTab from './editors/ItemTypeTab.svelte';
-import { itemTypeShownIn } from '../itemTypes';
 import AdapterTab from './editors/AdapterTab.svelte';
 import InstanceTab from './editors/InstanceTab.svelte';
 import AgentTab from './editors/AgentTab.svelte';
 import ActionTab from './editors/ActionTab.svelte';
 import ConditionTab from './editors/ConditionTab.svelte';
-import { walkSteps } from '../methodologyForm';
 import GoalTab from './editors/GoalTab.svelte';
 import ProcessTab from './editors/ProcessTab.svelte';
 import MethodTab from './editors/MethodTab.svelte';
@@ -67,13 +64,11 @@ import ProblemsConsole from './bottom/ProblemsConsole.svelte';
 import TokensConsole from './bottom/TokensConsole.svelte';
 
 import TesterPanel from './right/TesterPanel.svelte';
-import { issueBadge, issueSummary } from '../issues';
-import PropertiesPanel from './right/PropertiesPanel.svelte';
+import { issueBadge } from '../issues';
 import DslHelpPanel from './right/DslHelpPanel.svelte';
 
 // --- navigation (left) -------------------------------------------------------------
 
-registerView({ id: 'assistant', zone: 'left', title: 'Assistant', icon: 'chat', component: AssistantPanel, order: 0 });
 registerView({ id: 'methodologies', zone: 'left', title: 'Methodologies', icon: 'book', component: MethodologyExplorer, order: 1 });
 registerView({ id: 'domains', zone: 'left', title: 'Domains', icon: 'graph', component: DomainExplorer, order: 1.5 });
 registerView({ id: 'processes', zone: 'left', title: 'My processes', icon: 'runs', component: ProcessesExplorer, order: 2.2 });
@@ -127,7 +122,6 @@ registerView({
 // --- tools (right) ---------------------------------------------------------------------
 
 registerView({ id: 'tester', zone: 'right', title: 'Test', icon: 'flask', component: TesterPanel, order: 1 });
-registerView({ id: 'properties', zone: 'right', title: 'Properties', icon: 'info', component: PropertiesPanel, order: 2 });
 registerView({ id: 'dsl', zone: 'right', title: 'DSL Help', icon: 'help', component: DslHelpPanel, order: 3 });
 
 // --- editors ------------------------------------------------------------------------------
@@ -156,25 +150,6 @@ registerView({
   group: draftGroup,
   discard: discardGroup,
   help: methodologyHelp,
-  properties: (t) => {
-    const d = peekDraft(draftGroup(t));
-    if (!d || d.isNew) return undefined;
-    return {
-      title: d.label,
-      subtitle: 'Methodology',
-      rows: [
-        ['Status', d.status],
-        ['Description', d.form.description],
-        ['Agents', String(d.form.agents.length)],
-        ['Actions', String(d.form.actions.length)],
-        ['Conditions', String(d.form.conditions.length)],
-        ['Goals', String(d.form.goals.length)],
-        ['Issues', d.issues === null ? 'not validated' : issueSummary(d.allIssues)],
-        ['Modified', `${formatDate(d.meta.updatedAt)}${d.meta.updatedBy ? ` by ${d.meta.updatedBy}` : ''}`],
-        ['Published', formatDate(d.meta.publishedAt)],
-      ],
-    };
-  },
 });
 
 const domainGroupDirty = (tab: Tab) => peekDomainDraft(domainGroup(tab))?.dirty ?? false;
@@ -201,103 +176,8 @@ registerView({
   group: domainGroup,
   discard: discardDomain,
   help: domainHelp,
-  properties: (t) => {
-    const d = peekDomainDraft(domainGroup(t));
-    if (!d || d.isNew) return undefined;
-    return {
-      title: d.label,
-      subtitle: 'Domain',
-      rows: [
-        ['Status', d.status],
-        ['Description', d.form.description],
-        ['Node types', String(d.form.nodeTypes.length)],
-        ['Link types', String(d.form.linkTypes.length)],
-        ['Enums', String(d.form.enums.length)],
-        ['Item types', String(d.form.itemTypes.length)],
-        ['Lifecycles', String(d.form.lifecycles.length)],
-        ['Algorithms', `${d.form.algorithms.length} (${d.form.instances.length} instances)`],
-        ['Used by', String(d.usage.length)],
-        ['Issues', d.issues === null ? 'not validated' : issueSummary(d.allIssues)],
-        ['Modified', `${formatDate(d.meta.updatedAt)}${d.meta.updatedBy ? ` by ${d.meta.updatedBy}` : ''}`],
-        ['Published', formatDate(d.meta.publishedAt)],
-      ],
-    };
-  },
 });
 
-// node types, link types and lifecycles: one tab each, on the draft of their domain
-const domainPartProps = (kind: 'nodetype' | 'linktype' | 'lifecycle' | 'enum' | 'itemtype') => (t: Tab) => {
-  const d = peekDomainDraft(domainGroup(t));
-  if (!d || d.isNew) return undefined;
-  if (kind === 'nodetype') {
-    const n = d.form.nodeTypes.find((x) => x.uid === t.params.uid);
-    if (!n) return undefined;
-    return {
-      title: n.name || '(unnamed)',
-      subtitle: 'Node type',
-      rows: [
-        ['Domain', d.label],
-        ['Extends', n.extends],
-        ['Lifecycle', n.lifecycle],
-        ['Attributes', n.attributes.map((a) => a.name).join(', ')],
-        ['Description', n.description],
-      ] as [string, string][],
-    };
-  }
-  if (kind === 'linktype') {
-    const l = d.form.linkTypes.find((x) => x.uid === t.params.uid);
-    if (!l) return undefined;
-    return {
-      title: l.name || '(unnamed)',
-      subtitle: 'Link type',
-      rows: [
-        ['Domain', d.label],
-        ['From', l.from],
-        ['To', l.to],
-        ['Composition', l.compose ? 'yes' : 'no'],
-      ] as [string, string][],
-    };
-  }
-  if (kind === 'enum') {
-    const e = d.form.enums.find((x) => x.uid === t.params.uid);
-    if (!e) return undefined;
-    return {
-      title: e.name || '(unnamed)',
-      subtitle: 'Enum',
-      rows: [
-        ['Domain', d.label],
-        ['Values', e.values.map((v) => v.value).join(', ')],
-        ['Description', e.description],
-      ] as [string, string][],
-    };
-  }
-  if (kind === 'itemtype') {
-    const x = d.form.itemTypes.find((y) => y.uid === t.params.uid);
-    if (!x) return undefined;
-    return {
-      title: x.name || '(unnamed)',
-      subtitle: 'Item type',
-      rows: [
-        ['Domain', d.label],
-        ['Description', x.description],
-        ['Data', x.attributes.map((a) => a.name).join(', ')],
-        ['Shown in', itemTypeShownIn(x.name.trim())],
-      ] as [string, string][],
-    };
-  }
-  const l = d.form.lifecycles.find((x) => x.uid === t.params.uid);
-  if (!l) return undefined;
-  return {
-    title: l.name || '(unnamed)',
-    subtitle: 'Lifecycle',
-    rows: [
-      ['Domain', d.label],
-      ['Initial state', l.initial],
-      ['States', l.states.map((s) => s.name).join(', ')],
-      ['Transitions', l.transitions.map((x) => x.name).join(', ')],
-    ] as [string, string][],
-  };
-};
 
 for (const v of [
   { id: 'nodetype', title: 'Node type', icon: 'node', component: NodeTypeTab, param: 'nt', short: 'nt' },
@@ -319,41 +199,9 @@ for (const v of [
     groupDirty: domainGroupDirty,
     group: domainGroup,
     discard: discardDomain,
-    properties: domainPartProps(v.id),
   });
 }
 
-const algorithmProps = (kind: 'algorithm' | 'instance') => (t: Tab) => {
-  const d = peekDomainDraft(domainGroup(t));
-  if (!d || d.isNew) return undefined;
-  if (kind === 'algorithm') {
-    const a = d.form.algorithms.find((x) => x.uid === t.params.uid);
-    if (!a) return undefined;
-    return {
-      title: a.name || '(unnamed)',
-      subtitle: 'Algorithm',
-      rows: [
-        ['Domain', d.label],
-        ['Type', a.type],
-        ['Language', a.language],
-        ['Parameters', a.params.map((p) => p.name).join(', ')],
-        ['Description', a.description],
-      ] as [string, string][],
-    };
-  }
-  const i = d.form.instances.find((x) => x.uid === t.params.uid);
-  if (!i) return undefined;
-  return {
-    title: i.name || '(unnamed)',
-    subtitle: 'Algorithm instance',
-    rows: [
-      ['Domain', d.label],
-      ['Algorithm', i.algorithm],
-      ['Values', JSON.stringify(i.values)],
-      ['Description', i.description],
-    ] as [string, string][],
-  };
-};
 
 registerView({
   id: 'algorithm',
@@ -369,7 +217,6 @@ registerView({
   group: domainGroup,
   discard: discardDomain,
   help: algorithmHelp,
-  properties: algorithmProps('algorithm'),
 });
 
 registerView({
@@ -397,7 +244,6 @@ registerView({
   group: domainGroup,
   discard: discardDomain,
   help: instanceHelp,
-  properties: algorithmProps('instance'),
 });
 
 const ITEM_TITLES: Record<string, string> = { agent: 'Agent', action: 'Action', condition: 'Condition', goal: 'Goal', process: 'Process', method: 'Method' };
@@ -428,27 +274,6 @@ for (const kind of ['agent', 'action', 'condition', 'goal', 'process', 'method']
     group: draftGroup,
     discard: discardGroup,
     help: kind === 'action' ? actionHelp : undefined,
-    properties: (t) => {
-      const x = itemOf(t);
-      if (!x) return undefined;
-      const it = x.item;
-      const rows: [string, string][] = [
-        ['Methodology', x.d.label],
-        ['Description', it.description],
-      ];
-      if ('planner' in it && !('for' in it)) rows.push(['Planner', it.planner], ['Actions', it.actions.join(', ') || 'all'], ['Goals', it.goals.join(', ') || 'all']);
-      if ('kind' in it) {
-        rows.push(['Type', it.kind]);
-        if (it.specializes) rows.push(['Specializes', it.specializes], ['Guard', it.when], ['Priority', String(it.priority)]);
-        else rows.push(['Cost', String(it.cost)]);
-        rows.push(['Permission', it.permission], ['Utility', it.utility]);
-      }
-      if ('expr' in it) rows.push(['Expression', it.expr]);
-      if ('value' in it) rows.push(['Value', String(it.value)]);
-      if ('for' in it) rows.push(['Capability', it.for], ['Planner', it.planner], ['Actions', it.actions.join(', ') || 'none'], ['Context', it.when || 'always'], ['Priority', String(it.priority)]);
-      if ('steps' in it) rows.push(['Steps', String(walkSteps(it.steps).length)], ['References', String(it.references.length)]);
-      return { title: it.name || '(unnamed)', subtitle: ITEM_TITLES[kind], rows };
-    },
   });
 }
 
@@ -505,26 +330,6 @@ registerView({
   tooltip: (t) => {
     const p = processes.get(t.params.id ?? '');
     return `Run ${t.params.id}${p ? ` — ${p.status}` : ''}`;
-  },
-  properties: (t) => {
-    const p = processes.get(t.params.id ?? '');
-    if (!p) return undefined;
-    return {
-      title: p.title || `Run ${shortId(p.id)}`,
-      subtitle: 'Run',
-      rows: [
-        ['Id', p.id ?? ''],
-        ['Status', p.status ?? ''],
-        ['Methodology', p.methodology ?? ''],
-        ['Agent', p.agent ?? ''],
-        ['Planner', p.planner ?? ''],
-        ['Goal', p.goal ?? ''],
-        ['Triggered by', p.trigger ?? ''],
-        ['Tokens (input / output)', `${formatInt(p.usage?.inputTokens)} / ${formatInt(p.usage?.outputTokens)}`],
-        ['Trace', p.traceId ?? ''],
-        ['Created', formatDate(p.createdAt)],
-      ],
-    };
   },
 });
 

@@ -11,6 +11,8 @@ import {
   bracketMatching,
   foldGutter,
   foldKeymap,
+  LanguageSupport,
+  type Language,
 } from '@codemirror/language';
 import {
   autocompletion,
@@ -28,7 +30,7 @@ import { go } from '@codemirror/lang-go';
 import { java } from '@codemirror/lang-java';
 import { python } from '@codemirror/lang-python';
 import { rust } from '@codemirror/lang-rust';
-import { tags as t } from '@lezer/highlight';
+import { highlightCode, tagHighlighter, tags as t } from '@lezer/highlight';
 import { DSL_FIELDS, DSL_FUNCTIONS, algorithmUsage, type DslFunction } from './dsl';
 
 /** The languages of code attributes highlighted (the names the git importer gives them, CODE_LANGUAGES). */
@@ -74,17 +76,21 @@ const theme = EditorView.theme({
   '&.cm-editor[aria-readonly=true] .cm-content, &.readonly .cm-content': { opacity: '0.85' },
 });
 
-const highlight = HighlightStyle.define([
-  { tag: [t.keyword, t.controlKeyword, t.moduleKeyword, t.definitionKeyword, t.operatorKeyword], color: 'var(--syn-keyword)', fontWeight: '600' },
-  { tag: [t.string, t.special(t.string), t.regexp], color: 'var(--syn-string)' },
-  { tag: [t.number, t.bool, t.null, t.atom], color: 'var(--syn-number)' },
-  { tag: [t.lineComment, t.blockComment, t.comment], color: 'var(--syn-comment)', fontStyle: 'italic' },
-  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: 'var(--syn-function)' },
-  { tag: [t.typeName, t.className, t.namespace], color: 'var(--syn-type)' },
-  { tag: [t.propertyName], color: 'var(--syn-property)' },
-  { tag: [t.definition(t.variableName)], color: 'var(--syn-def)' },
-  { tag: [t.operator, t.punctuation, t.bracket], color: 'var(--muted)' },
-]);
+// the tags highlighted, by the token class outside an editor (`syn-<class>`, styled by the diff of code values)
+const SYNTAX = [
+  { tag: [t.keyword, t.controlKeyword, t.moduleKeyword, t.definitionKeyword, t.operatorKeyword], cls: 'keyword', color: 'var(--syn-keyword)', fontWeight: '600' },
+  { tag: [t.string, t.special(t.string), t.regexp], cls: 'string', color: 'var(--syn-string)' },
+  { tag: [t.number, t.bool, t.null, t.atom], cls: 'number', color: 'var(--syn-number)' },
+  { tag: [t.lineComment, t.blockComment, t.comment], cls: 'comment', color: 'var(--syn-comment)', fontStyle: 'italic' },
+  { tag: [t.function(t.variableName), t.function(t.propertyName)], cls: 'function', color: 'var(--syn-function)' },
+  { tag: [t.typeName, t.className, t.namespace], cls: 'type', color: 'var(--syn-type)' },
+  { tag: [t.propertyName], cls: 'property', color: 'var(--syn-property)' },
+  { tag: [t.definition(t.variableName)], cls: 'def', color: 'var(--syn-def)' },
+  { tag: [t.operator, t.punctuation, t.bracket], cls: 'punct', color: 'var(--muted)' },
+];
+
+const highlight = HighlightStyle.define(SYNTAX.map(({ cls: _cls, ...spec }) => spec));
+const tokenClasses = tagHighlighter(SYNTAX.map(({ tag, cls }) => ({ tag, class: `syn-${cls}` })));
 
 // --- DSL completion -------------------------------------------------------------
 
@@ -174,6 +180,36 @@ export function baseExtensions(opts: { lineNumbers: boolean; placeholder?: strin
     EditorState.tabSize.of(opts.lineNumbers ? 4 : 2),
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...foldKeymap, ...completionKeymap, indentWithTab]),
   ];
+}
+
+// --- highlighting outside an editor ------------------------------------------------
+
+/** The language parsed for highlighting (none for plain text). */
+export function languageOf(lang: CodeLanguage): Language | undefined {
+  const ext = lang === 'javascript' || lang === 'cel' ? javascript() : languageExtension(lang, false);
+  return ext instanceof LanguageSupport ? ext.language : undefined;
+}
+
+/** A piece of a highlighted line: its text and its token class (`syn-keyword`, `syn-string`… '' : none). */
+export interface Token {
+  text: string;
+  cls: string;
+}
+
+/** The lines of a text highlighted in its language with the tags of the editor's style (the diff of code values), one
+ * array of tokens per line. */
+export function highlightLines(text: string, lang: CodeLanguage): Token[][] {
+  const out: Token[][] = [[]];
+  const language = languageOf(lang);
+  if (!language) return text.split('\n').map((l) => (l ? [{ text: l, cls: '' }] : []));
+  highlightCode(
+    text,
+    language.parser.parse(text),
+    tokenClasses,
+    (piece, cls) => out.at(-1)!.push({ text: piece, cls }),
+    () => out.push([]),
+  );
+  return out;
 }
 
 export { EditorView, EditorState, Compartment };

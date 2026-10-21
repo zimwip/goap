@@ -8,6 +8,7 @@
   // ADR 0028), with or without an adapter of its own: restrictions add up along the chain, so a unit
   // narrows what it inherits (the built-in MCPs every unit gets from the default organisation) and never
   // widens it.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import { types as nodeTypes, links as linkTypes, ns, defaultOrg, waitingProp, can, newUserUnit } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import type { Tab } from '../../shell/types';
@@ -388,7 +389,7 @@
       {#snippet children(active)}
         {#if active === 'overview'}
           <section class="card">
-            <div class="head"><Icon name="user" size={18} /><h2>{String(unit.props?.['name'] ?? key)}</h2></div>
+            <div class="head"><Icon name="user" size={18} /><h2>{String(unit.props?.['name'] ?? key)}</h2><EditorActions tabId={tab.id} /></div>
             <dl class="kv">
               <dt>Key</dt><dd><code>{key}</code></dd>
               {#if unit.props?.['kind']}<dt>Kind</dt><dd>{unit.props['kind']}</dd>{/if}

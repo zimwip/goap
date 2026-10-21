@@ -118,9 +118,13 @@ func timing() connect.UnaryInterceptorFunc {
 	}
 }
 
-// HandlerOptions instruments Connect handlers.
+// compressMinBytes is the size under which a Connect answer goes uncompressed.
+const compressMinBytes = 1024
+
+// HandlerOptions instruments Connect handlers, and leaves the small answers uncompressed: resetting a gzip writer
+// costs more than the bytes of an answer under compressMinBytes save.
 func HandlerOptions() []connect.HandlerOption {
-	return []connect.HandlerOption{connect.WithInterceptors(interceptor(), timing())}
+	return []connect.HandlerOption{connect.WithInterceptors(interceptor(), timing()), connect.WithCompressMinBytes(compressMinBytes)}
 }
 
 // ClientOptions instruments Connect clients.

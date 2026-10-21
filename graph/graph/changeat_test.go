@@ -78,8 +78,8 @@ func testChangeViewPositions(t *testing.T, repo Repo) {
 	}
 }
 
-// The entries a log facet folds are read once: a later read asks the log for the ones after them only, and gives the
-// whole list.
+// A log facet is read from the log at each call (ADR 0153): every read gives the entries written so far, nothing kept
+// from an earlier one.
 func TestLogFacetEntriesFollowTheLog(t *testing.T) { forEachRepo(t, testLogFacetEntriesFollowTheLog) }
 
 func testLogFacetEntriesFollowTheLog(t *testing.T, repo Repo) {
@@ -93,7 +93,7 @@ func testLogFacetEntriesFollowTheLog(t *testing.T, repo Repo) {
 		var n int
 		err := g.repo.InTx(ctx, func(tx Tx) error {
 			m, err := g.logEntries(ctx, tx, c.ID)
-			n = len(m["notes"].entries)
+			n = len(m["notes"])
 			return err
 		})
 		if err != nil {
@@ -110,57 +110,6 @@ func testLogFacetEntriesFollowTheLog(t *testing.T, repo Repo) {
 		}
 		if got := read(); got != i {
 			t.Fatalf("read again after %d notes the facet reads %d", i, got)
-		}
-	}
-}
-
-// countFolder counts the entries it is fed.
-type countFolder struct{ n *int }
-
-func (f countFolder) Add(es []domain.LogEntry) error { *f.n += len(es); return nil }
-func (f countFolder) Clone() domain.LogFolder        { n := *f.n; return countFolder{n: &n} }
-func (f countFolder) Value(context.Context, domain.Change) (any, error) {
-	return *f.n, nil
-}
-
-// A facet with a folder is fed each entry once, through a copy, and gives its value from what it was fed (ADR 0153).
-func TestLogFacetFolderTakesEachEntryOnce(t *testing.T) {
-	forEachRepo(t, testLogFacetFolderTakesEachEntryOnce)
-}
-
-func testLogFacetFolderTakesEachEntryOnce(t *testing.T, repo Repo) {
-	ctx := context.Background()
-	f := newFixture(t, repo)
-	g := f.g
-	g.LogFacets = map[string]LogFacet{"notes": {Types: []string{"journal.note"}, Folder: func() domain.LogFolder {
-		return countFolder{n: new(int)}
-	}}}
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "folder", BaselineID: f.base.ID, OwnBranch: true}))
-	read := func() int {
-		t.Helper()
-		var v any
-		err := g.repo.InTx(ctx, func(tx Tx) error {
-			m, err := g.logEntries(ctx, tx, c.ID)
-			if err != nil {
-				return err
-			}
-			v, err = m["notes"].folder.Value(ctx, c)
-			return err
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return v.(int)
-	}
-	for i := 1; i <= 3; i++ {
-		if err := g.AppendLog(ctx, []domain.LogEntry{{Change: c.ID, Type: "journal.note", Payload: []byte(`{}`)}}); err != nil {
-			t.Fatal(err)
-		}
-		if got := read(); got != i {
-			t.Fatalf("after %d notes the folder counts %d", i, got)
-		}
-		if got := read(); got != i {
-			t.Fatalf("read again after %d notes the folder counts %d", i, got)
 		}
 	}
 }

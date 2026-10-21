@@ -258,6 +258,26 @@ func (c *Client) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in 
 	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
 }
 
+// ImpactNodeCheckoutBatch checks out several nodes at once, all or none, on the flow and execution of the first.
+func (c *Client) ImpactNodeCheckoutBatch(ctx context.Context, id domain.ChangeID, nodes []graphapi.NodeCheckout) ([]domain.ChangeImpact, error) {
+	req := &graphv1.ImpactNodeCheckoutBatchRequest{ChangeId: string(id)}
+	if len(nodes) > 0 {
+		req.Flow, req.Execution = nodes[0].Flow, nodes[0].Execution
+	}
+	for _, n := range nodes {
+		req.Nodes = append(req.Nodes, &graphv1.NodeCheckoutSpec{ChangeImpactId: string(n.Impact), NodeId: string(n.Node), Key: n.Key, Rationale: n.Rationale})
+	}
+	r, err := c.rpc.ImpactNodeCheckoutBatch(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	out := make([]domain.ChangeImpact, 0, len(r.Msg.Nodes))
+	for _, n := range r.Msg.Nodes {
+		out = append(out, pbconv.ChangeImpactFromPB(n))
+	}
+	return out, nil
+}
+
 // ImpactNodeUpdate implements engine.GraphPort.
 func (c *Client) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in graphapi.NodeUpdate) (domain.ChangeImpact, error) {
 	r, err := c.rpc.ImpactNodeUpdate(ctx, connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: string(id), ChangeImpactId: string(impact), Props: pbconv.Struct(in.Properties),

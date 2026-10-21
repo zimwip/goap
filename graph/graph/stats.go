@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"maps"
 	"math"
 	"slices"
 	"sort"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/lnk"
+	"github.com/zimwip/goap/lib/typecat"
 )
 
 // Statistics of the graph (the graph statistics view): what the store holds for a namespace, counted by the database,
@@ -176,13 +178,21 @@ type NamespaceSummary struct {
 	LogItems  int
 }
 
-// GraphOverview summarizes every namespace of the graph.
+// GraphOverview summarizes every namespace of the graph: those holding nodes and those of the domains in force, a
+// domain with no node yet listed with zero counts.
 func (g *Graph) GraphOverview(ctx context.Context) (out []NamespaceSummary, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		ns, err := tx.Namespaces(ctx)
+		held, err := tx.Namespaces(ctx)
 		if err != nil {
 			return err
 		}
+		ns := g.domainNamespaces()
+		for _, n := range held {
+			if !slices.Contains(ns, n) {
+				ns = append(ns, n)
+			}
+		}
+		slices.Sort(ns)
 		for _, n := range ns {
 			counts, err := tx.StoreCounts(ctx, n)
 			if err != nil {
@@ -199,6 +209,19 @@ func (g *Graph) GraphOverview(ctx context.Context) (out []NamespaceSummary, err 
 		return nil
 	})
 	return
+}
+
+// domainNamespaces are the namespaces of the domains in force (untyped graph: the built-in ones).
+func (g *Graph) domainNamespaces() []string {
+	var cat TypeCatalog = typecat.Builtin()
+	if g.Types != nil {
+		cat = g.Types()
+	}
+	d, ok := cat.(interface{ Domains() map[string]string })
+	if !ok {
+		return nil
+	}
+	return slices.Collect(maps.Keys(d.Domains()))
 }
 
 // GraphStats reads the statistics of a namespace (empty: the default one) at the head of a lasting branch (empty: main).

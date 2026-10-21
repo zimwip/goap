@@ -3,6 +3,7 @@
   // It names the methodologies that apply (inherited by its sub-projects), which identifies the roles the
   // project needs (ADR 0043); its Assignments pane is the meeting point with organisation: which org units or
   // users hold which of those roles here.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import { types as nodeTypes, links as linkTypes, ns, isUserKey, can } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import type { Tab } from '../../shell/types';
@@ -153,7 +154,7 @@
       {#snippet children(active)}
         {#if active === 'overview'}
           <section class="card">
-            <div class="head"><Icon name="diff" size={18} /><h2>{String(project.props?.['name'] ?? key)}</h2></div>
+            <div class="head"><Icon name="diff" size={18} /><h2>{String(project.props?.['name'] ?? key)}</h2><EditorActions tabId={tab.id} /></div>
             {#if !editing}
               <dl class="kv">
                 <dt>Key</dt><dd><code>{key}</code></dd>

@@ -1,6 +1,7 @@
 <script lang="ts">
   // "Import" tab: import a methodology or a domain (YAML or JSON), or a graph snapshot (JSON, ADR 0104), from a file or
   // a text. The tab's `what` param says which; a methodology by default.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import { registry, graph, errorMessage, type Issue, type GraphImportResult } from '../../api';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -144,6 +145,7 @@
   <div class="editor-head">
     <Icon name="upload" size={18} />
     <h2>{kind.heading}</h2>
+    <EditorActions tabId={tab.id} />
   </div>
   <section class="card">
     {#if what === 'graph'}

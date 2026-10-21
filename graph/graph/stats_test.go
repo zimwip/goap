@@ -83,13 +83,17 @@ func testGraphStats(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := false
+	found, domainListed := false, false
 	for _, n := range ov {
 		if n.Namespace == domain.DefaultNamespace {
 			found = n.Nodes == 4 && n.Versions == 5 && n.Types == 3
 		}
+		// a domain in force holding no node is listed too, empty
+		if n.Namespace == "methodology" {
+			domainListed = n.Nodes == 0
+		}
 	}
-	if !found {
+	if !found || !domainListed {
 		t.Fatalf("overview %+v", ov)
 	}
 	// a namespace with nothing committed: an empty state, no error

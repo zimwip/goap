@@ -41,6 +41,7 @@ message Event {
   string branch = 7;
   string project = 8;
   string change_id = 9;
+  // the version of a node; for a change, the position its write left the log of the change at (ADR 0153), 0 when none
   int64 version = 10;
   // who caused it, and the client-generated id of the command that did (X-Goap-Command), when known
   string actor = 11;

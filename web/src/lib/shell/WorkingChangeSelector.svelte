@@ -12,6 +12,8 @@
   import { openTab } from './tabs.svelte';
   import { refKey } from '../lnk';
 
+  /** full width, in the navigation sidebar (else a chip of the header) */
+  let { block = false }: { block?: boolean } = $props();
   let open = $state(false);
 
   $effect(() => {
@@ -40,7 +42,7 @@
   }
 </script>
 
-<div class="item-wrap">
+<div class="item-wrap" class:block>
   <button
     type="button"
     class="wc"
@@ -54,7 +56,7 @@
     <Icon name="branch" size={14} />
     <span class="wl">{label}</span>
   </button>
-  <Popover bind:open label="Working change" align="left" placement="below" width="300px">
+  <Popover bind:open label="Working change" align={block ? "right" : "left"} placement="below" width="300px">
     <div class="pop-head">
       <strong>Working change</strong>
       <span class="grow"></span>
@@ -89,24 +91,37 @@
     position: relative;
     display: flex;
   }
+  .item-wrap.block {
+    display: block;
+  }
+  .block .wc {
+    width: 100%;
+  }
+  .block .wl {
+    flex: 1;
+    max-width: none;
+    text-align: left;
+  }
   .wc {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.25rem 0.55rem;
-    border: 1px solid var(--border, #8884);
-    border-radius: 6px;
-    background: transparent;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    background: var(--bg-raised);
     color: inherit;
     font: inherit;
+    font-size: 12px;
     cursor: pointer;
   }
   .wc.none {
     border-style: dashed;
-    color: var(--muted, inherit);
+    background: transparent;
+    color: var(--muted);
   }
   .wc:hover:not(:disabled) {
-    background: var(--hover, #8882);
+    border-color: var(--border-strong);
   }
   .wc:disabled {
     cursor: default;

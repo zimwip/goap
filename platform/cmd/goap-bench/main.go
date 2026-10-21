@@ -55,6 +55,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.Float64Var(&cfg.Spread, "spread", 0.5, "variability of each change around -edits, -create, -links and -add-links: uniform within ±spread of the value, the mean staying it (0..1; 0: every change alike)")
 	fs.IntVar(&cfg.HotNodes, "hot", 20, "nodes per writer that take -hot-ratio of the modifications (deep histories)")
 	fs.Float64Var(&cfg.HotRatio, "hot-ratio", 0.2, "share of the modifications on the hot nodes")
+	fs.BoolVar(&cfg.NodeCheckout, "node-checkout", false, "lifecycle: check the modified nodes out one call each rather than in one batch")
 	fs.IntVar(&cfg.TextBytes, "text", 200, "bytes of the description of a created node")
 	fs.StringVar(&cfg.Mode, "mode", bench.ModeCommit, "commit (one CommitEdits per change) or lifecycle (the change API call by call)")
 	fs.Int64Var(&cfg.TargetVersions, "versions", 10000, "stop once this many versions are written (0: no bound)")

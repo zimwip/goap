@@ -52,7 +52,7 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	if err == nil {
 		// what the transaction folded of the logs it wrote is committed now: the next one folds only what follows
 		for _, st := range gt.drafts {
-			r.g.draftStates.put(st, r.g.draftCacheSize())
+			r.g.draftStates.put(st)
 		}
 		// the caller's watermark: where the writes left the log of each change (ADR 0153)
 		if w := graphapi.WatermarkOf(ctx); w != nil {
@@ -286,6 +286,8 @@ func (t *guardTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogE
 	}
 	return out, err
 }
+
+var _ draftKeeper = (*guardTx)(nil)
 
 func (t *guardTx) wroteLog(id domain.ChangeID) bool { return t.logged[id] }
 
