@@ -10,6 +10,16 @@
   const active = $derived(side === 'left' ? layout.left : layout.right);
   const open = $derived(side === 'left' ? layout.leftOpen || nav.revealed : layout.drawer);
 
+  // the navigation shown over the editor follows the tool hovered; closed, a click opens it
+  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+  function hover(id: string) {
+    clearTimeout(hoverTimer);
+    if (side !== 'left' || !nav.revealed || layout.left === id) return;
+    hoverTimer = setTimeout(() => {
+      if (nav.revealed) layout.left = id;
+    }, 120);
+  }
+
   function keydown(e: KeyboardEvent) {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     const buttons = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('button')];
@@ -31,6 +41,8 @@
       aria-label={v.title}
       aria-pressed={on}
       onclick={() => toggleTool(side, v.id)}
+      onmouseenter={() => hover(v.id)}
+      onmouseleave={() => clearTimeout(hoverTimer)}
     >
       <Icon name={v.icon} size={20} />
       {#if badge}<span class="badge">{badge}</span>{/if}

@@ -107,15 +107,11 @@
     }
   }
 
-  // The navigation: docked when pinned on a wide screen, else shown over the editor from its rail while hovered,
-  // focused or asked for.
+  // The navigation: docked when pinned on a wide screen, else shown over the editor from its rail once a tool is
+  // clicked (or the rail focused), while the pointer or the focus stays on it.
   const leftDocked = $derived(layout.leftOpen && !narrow);
   let lrail = $state<HTMLElement>();
   let navTimer: ReturnType<typeof setTimeout> | undefined;
-  function navSoon() {
-    clearTimeout(navTimer);
-    navTimer = setTimeout(() => (nav.revealed = true), 160);
-  }
   function navLeave() {
     clearTimeout(navTimer);
     navTimer = setTimeout(() => {
@@ -184,12 +180,12 @@
   <Header />
   <div class="main">
     {#if !leftDocked}
-      <!-- the navigation's rail: hovering or focusing it shows the navigation over the editor -->
+      <!-- the navigation's rail: a click on a tool (or the focus) shows the navigation over the editor; leaving it hides it -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="lrail"
         bind:this={lrail}
-        onmouseenter={navSoon}
+        onmouseenter={() => clearTimeout(navTimer)}
         onmouseleave={navLeave}
         onfocusin={() => (nav.revealed = true)}
         onfocusout={navFocusOut}
