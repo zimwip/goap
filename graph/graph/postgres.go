@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/lib/outbox"
 )
 
@@ -447,12 +448,17 @@ func (t *pgTx) queryLinks(ctx context.Context, q string, args ...any) ([]domain.
 		var fv, tv int
 		var p []byte
 		var change *string
-		if err := rows.Scan(&id, &l.Type, &from, &fv, &to, &tv, &p, &change); err != nil {
+		var url string
+		if err := rows.Scan(&id, &l.Type, &from, &fv, &to, &tv, &p, &change, &url); err != nil {
 			return nil, err
 		}
 		l.ID, l.Properties, l.ChangeID = domain.LinkID(id), props(p), domain.ChangeID(str(change))
 		l.From = domain.NodeRef{ID: domain.NodeID(from), Version: domain.Version(fv)}
-		l.To = domain.NodeRef{ID: domain.NodeID(to), Version: domain.Version(tv)}
+		if to != "" {
+			l.To = domain.NodeRef{ID: domain.NodeID(to), Version: domain.Version(tv)}
+		} else if l.Target, err = lnk.Parse(url); err != nil {
+			return nil, fmt.Errorf("link %s: %w", id, err)
+		}
 		out = append(out, l)
 	}
 	return out, rows.Err()
@@ -841,14 +847,16 @@ func (t *pgTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, error) 
 }
 
 func (t *pgTx) PutLink(ctx context.Context, l domain.Link) error {
+	to, tv, url := linkTarget(l)
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("link", linkColumns, ""),
-		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), string(l.To.ID), int(l.To.Version), jsonb(l.Properties), nullUUID(string(l.ChangeID)), nil)
+		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), to, tv, jsonb(l.Properties), nullUUID(string(l.ChangeID)), nil, url)
 	return mapErr(err, "link")
 }
 
 func (t *pgTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, l domain.Link) error {
+	to, tv, url := linkTarget(l)
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("link", linkColumns, ""),
-		string(row), l.Type, string(from.ID), int(from.Version), string(l.To.ID), int(l.To.Version), jsonb(l.Properties), nullUUID(string(l.ChangeID)), string(l.ID))
+		string(row), l.Type, string(from.ID), int(from.Version), to, tv, jsonb(l.Properties), nullUUID(string(l.ChangeID)), string(l.ID), url)
 	return mapErr(err, "link")
 }
 

@@ -373,13 +373,16 @@ func (x *Node) GetOrigins() []*NodeRef {
 }
 
 type Link struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	From          *NodeRef               `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
-	To            *NodeRef               `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
-	Props         *structpb.Struct       `protobuf:"bytes,5,opt,name=props,proto3" json:"props,omitempty"`
-	ChangeId      string                 `protobuf:"bytes,6,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Type  string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	From  *NodeRef               `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
+	// the node version of this graph the link points to; unset for a link to another source
+	To       *NodeRef         `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	Props    *structpb.Struct `protobuf:"bytes,5,opt,name=props,proto3" json:"props,omitempty"`
+	ChangeId string           `protobuf:"bytes,6,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	// the logical URL of a target in another source (ADR 0154: lnk:<source>/<type>/<key>[?v=n]), to unset
+	Target        string `protobuf:"bytes,7,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -452,6 +455,13 @@ func (x *Link) GetProps() *structpb.Struct {
 func (x *Link) GetChangeId() string {
 	if x != nil {
 		return x.ChangeId
+	}
+	return ""
+}
+
+func (x *Link) GetTarget() string {
+	if x != nil {
+		return x.Target
 	}
 	return ""
 }
@@ -11474,10 +11484,12 @@ func (x *ProposeImpactResponse) GetNodes() []*ChangeImpact {
 }
 
 type NodeLinkWrite struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	To            *NodeRef               `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
-	Props         *structpb.Struct       `protobuf:"bytes,3,opt,name=props,proto3" json:"props,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Type  string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	To    *NodeRef               `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
+	Props *structpb.Struct       `protobuf:"bytes,3,opt,name=props,proto3" json:"props,omitempty"`
+	// with to unset: the logical URL of the target (ADR 0154), a node of this graph or a target in another source
+	Target        string `protobuf:"bytes,4,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11531,6 +11543,13 @@ func (x *NodeLinkWrite) GetProps() *structpb.Struct {
 		return x.Props
 	}
 	return nil
+}
+
+func (x *NodeLinkWrite) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
 }
 
 // The node a ImpactNodeCheckout or a ImpactNodeTransition works on: a change impact of the change, or a node (then the impact the
@@ -12507,8 +12526,10 @@ type ImpactLinkCreateRequest struct {
 	Props          *structpb.Struct `protobuf:"bytes,5,opt,name=props,proto3" json:"props,omitempty"`
 	Flow           string           `protobuf:"bytes,6,opt,name=flow,proto3" json:"flow,omitempty"`
 	Execution      string           `protobuf:"bytes,7,opt,name=execution,proto3" json:"execution,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// with to unset: the logical URL of the target (ADR 0154), a node of this graph or a target in another source
+	Target        string `protobuf:"bytes,8,opt,name=target,proto3" json:"target,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ImpactLinkCreateRequest) Reset() {
@@ -12586,6 +12607,13 @@ func (x *ImpactLinkCreateRequest) GetFlow() string {
 func (x *ImpactLinkCreateRequest) GetExecution() string {
 	if x != nil {
 		return x.Execution
+	}
+	return ""
+}
+
+func (x *ImpactLinkCreateRequest) GetTarget() string {
+	if x != nil {
+		return x.Target
 	}
 	return ""
 }
@@ -19105,14 +19133,15 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x05owner\x18\x12 \x01(\tR\x05owner\x12\x18\n" +
 	"\aproject\x18\x13 \x01(\tR\aproject\x12\x14\n" +
 	"\x05draft\x18\x14 \x01(\bR\x05draft\x120\n" +
-	"\aorigins\x18\x15 \x03(\v2\x16.goap.graph.v1.NodeRefR\aorigins\"\xca\x01\n" +
+	"\aorigins\x18\x15 \x03(\v2\x16.goap.graph.v1.NodeRefR\aorigins\"\xe2\x01\n" +
 	"\x04Link\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12*\n" +
 	"\x04from\x18\x03 \x01(\v2\x16.goap.graph.v1.NodeRefR\x04from\x12&\n" +
 	"\x02to\x18\x04 \x01(\v2\x16.goap.graph.v1.NodeRefR\x02to\x12-\n" +
 	"\x05props\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x05props\x12\x1b\n" +
-	"\tchange_id\x18\x06 \x01(\tR\bchangeId\"\xc0\x01\n" +
+	"\tchange_id\x18\x06 \x01(\tR\bchangeId\x12\x16\n" +
+	"\x06target\x18\a \x01(\tR\x06target\"\xc0\x01\n" +
 	"\bNodeView\x12'\n" +
 	"\x04node\x18\x01 \x01(\v2\x13.goap.graph.v1.NodeR\x04node\x12\x16\n" +
 	"\x06latest\x18\x02 \x01(\x05R\x06latest\x12%\n" +
@@ -20042,11 +20071,12 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x121\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x1b.goap.graph.v1.ChangeImpactR\x05nodes\"J\n" +
 	"\x15ProposeImpactResponse\x121\n" +
-	"\x05nodes\x18\x01 \x03(\v2\x1b.goap.graph.v1.ChangeImpactR\x05nodes\"z\n" +
+	"\x05nodes\x18\x01 \x03(\v2\x1b.goap.graph.v1.ChangeImpactR\x05nodes\"\x92\x01\n" +
 	"\rNodeLinkWrite\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12&\n" +
 	"\x02to\x18\x02 \x01(\v2\x16.goap.graph.v1.NodeRefR\x02to\x12-\n" +
-	"\x05props\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x05props\"\xa5\x02\n" +
+	"\x05props\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x05props\x12\x16\n" +
+	"\x06target\x18\x04 \x01(\tR\x06target\"\xa5\x02\n" +
 	"\x17ImpactNodeCreateRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n" +
@@ -20118,7 +20148,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04flow\x18\x05 \x01(\tR\x04flow\x12\x1c\n" +
 	"\texecution\x18\x06 \x01(\tR\texecution\"K\n" +
 	"\x18ImpactNodeUpdateResponse\x12/\n" +
-	"\x04node\x18\x01 \x01(\v2\x1b.goap.graph.v1.ChangeImpactR\x04node\"\xfd\x01\n" +
+	"\x04node\x18\x01 \x01(\v2\x1b.goap.graph.v1.ChangeImpactR\x04node\"\x95\x02\n" +
 	"\x17ImpactLinkCreateRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12(\n" +
 	"\x10change_impact_id\x18\x02 \x01(\tR\x0echangeImpactId\x12\x12\n" +
@@ -20126,7 +20156,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x02to\x18\x04 \x01(\v2\x16.goap.graph.v1.NodeRefR\x02to\x12-\n" +
 	"\x05props\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x05props\x12\x12\n" +
 	"\x04flow\x18\x06 \x01(\tR\x04flow\x12\x1c\n" +
-	"\texecution\x18\a \x01(\tR\texecution\"C\n" +
+	"\texecution\x18\a \x01(\tR\texecution\x12\x16\n" +
+	"\x06target\x18\b \x01(\tR\x06target\"C\n" +
 	"\x18ImpactLinkCreateResponse\x12'\n" +
 	"\x04link\x18\x01 \x01(\v2\x13.goap.graph.v1.LinkR\x04link\"\xb0\x01\n" +
 	"\x17ImpactLinkUpdateRequest\x12\x1b\n" +

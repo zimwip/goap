@@ -1,6 +1,6 @@
 # ADR 0154 — Logical URLs and the federation of graphs
 
-**Status**: proposed; steps 1 and 5 implemented, step 6 under way (§9.1 done) · **Date**: 2026-10
+**Status**: proposed; steps 1, 2 and 5 implemented, step 6 under way (§9.1 and §9.2 done) · **Date**: 2026-10
 
 ## Context
 
@@ -78,8 +78,8 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
       `Draft.Owner` are keys, the `owner` patch of a draft names the unit's key); the guard checks them through the
       seam `Graph.StructureKeys(kind, key)` (the platform's directory, for a content graph), else against the
       transaction (`guardTx.inStructure`);
-   2. links become URLs (step 2), so a content node may name a node of the platform graph (an owner, a project, a
-      methodology) and the reverse;
+   2. (done) links may target URLs (step 2), so a content node may name a node of the platform graph (an owner, a
+      project, a methodology) and the reverse;
    3. the clients route by namespace (`graphclient.Router`: a namespace to the graph serving it, from the sources of
       the platform; the engine, the hub, the registry and the gateway take it where they take a `graphclient.Client`
       today), a change acting on one namespace (CLAUDE.md, rule 2) runs on one graph;
@@ -91,14 +91,21 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
 1. **Done (this ADR)**: the contract (`contracts/lnk`: URL, source, target, resolver, registry, the files resolver), the
    graph resolver and the declared sources in the graph, the federation resolver over the graph client, the source of a
    node, the `platform@Source` type. Links are unchanged: `Graph.LinkURL` gives the logical URL of a link's target.
-2. **Logical targets of links.** A link's target becomes its URL: `Link.Target lnk.URL` (proto `Link.target`), the
-   writes taking a URL (`LinkWrite.Target`; a `NodeRef` still accepted, turned into its URL). A link to a node of a
-   graph source is always versioned (for now): its URL carries `?v=`, the version it was written against, so the
-   suspect links, the lineage, the rebase and the merge keep re-pointing it as they do today. Storage, greenfield (the
-   database starts from zero, no migration): `link.to_url` in `0001_schema.sql` of both dialects (indexed), `to_id` /
-   `to_version` kept for a target in this graph as the resolution of its URL (the in-links read stays as it is) and null
-   for any other source. A link set (ADR 0141) compares links by type and URL. A link of a draft to a node created in the
-   same change is the URL of that node's key (the draft reference goes), versioned at commit.
+2. **Logical targets of links** (done). A link is written to a node version (`LinkWrite.To`, as before) or to a URL
+   (`LinkWrite.Target`, proto `NodeLinkWrite.target` / `ImpactLinkCreateRequest.target`). The URL's source is read as
+   the project of the change maps it (§8), before the write's transaction (`Graph.withLinkSources`): a namespace of this
+   graph turns the URL into its node (the version the URL names, else the draft the change holds, else the version on
+   the change's branch; `Graph.targetOf` / `localTarget`), and the link is the link it always was, so the suspect
+   links, the lineage, the rebase and the merge keep re-pointing it; any other source keeps the URL as the target
+   (`Link.Target`, `DraftLink.Target`, `Link.External()`, proto `Link.target`, `to` unset), checked against the type
+   the URL names in the source's namespace, and a node of another graph names its version (`?v=`, graph links are
+   versioned). Storage, greenfield: `link.to_url` in `0001_schema.sql` of both dialects (indexed where set), `to_id` /
+   `to_version` null for another source (a check keeps exactly one), the select lists reading them with `coalesce`.
+   The identity of a link in a link set (ADR 0141), a draft's links, a three-way merge and a flow diff is its type and
+   its target, the node or the URL (`Link.Points`); the draft patches carry `target` for such a link. What differs from
+   the first draft of this step: a link to a node of this graph keeps its node reference rather than storing its URL
+   (the URL is derived from the node, `Graph.LinkURL`, so renaming nothing and keeping the in-links read), and a draft
+   reference stays the way to point at a node the change creates.
 3. **Resolution at read.** A view of a node (`NodeView.out`) resolves the URLs of its links in one batch per source
    (`Registry.ResolveAll`), a target not found or a source unreachable shown as such, never an error of the read;
    the web draws a target of another source with its source (a chip), opens a node of another graph read-only, and a

@@ -268,7 +268,9 @@ func (g *Graph) NodeNeighbourhood(ctx context.Context, id domain.BaselineID, nod
 		}
 		var near []domain.NodeID
 		for _, l := range out {
-			near = append(near, l.To.ID)
+			if !l.External() {
+				near = append(near, l.To.ID)
+			}
 		}
 		for _, l := range in {
 			near = append(near, l.From.ID)

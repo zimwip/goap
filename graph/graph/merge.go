@@ -75,7 +75,12 @@ func jsonEqual(a, b any) bool {
 // kept when present on both sides, or added on one side since the ancestor; it
 // is dropped when removed on one side. Ours is preferred when both have it.
 func MergeLinks(anc, ours, theirs []domain.Link) []domain.Link {
-	key := func(l domain.Link) string { return l.Type + "\x00" + string(l.To.ID) }
+	key := func(l domain.Link) string {
+		if l.External() {
+			return l.Type + "\x00" + l.Target.Logical().String()
+		}
+		return l.Type + "\x00" + string(l.To.ID)
+	}
 	index := func(ls []domain.Link) map[string]domain.Link {
 		m := make(map[string]domain.Link, len(ls))
 		for _, l := range ls {
@@ -685,6 +690,10 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		}
 		var links []domain.Link
 		for _, l := range MergeLinks(anc, ours, theirs) {
+			if l.External() {
+				links = append(links, domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, Target: l.Target, Properties: l.Properties})
+				continue
+			}
 			to := l.To
 			if r, ok := newRef[to.ID]; ok {
 				if v, live := target[r.ID]; !live || v != r.Version {

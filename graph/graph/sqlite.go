@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/platform"
 )
@@ -353,12 +354,17 @@ func (t *sqliteTx) queryLinks(ctx context.Context, q string, args ...any) ([]dom
 		var id, from, to, p string
 		var fv, tv int
 		var change sql.NullString
-		if err := rows.Scan(&id, &l.Type, &from, &fv, &to, &tv, &p, &change); err != nil {
+		var url string
+		if err := rows.Scan(&id, &l.Type, &from, &fv, &to, &tv, &p, &change, &url); err != nil {
 			return nil, err
 		}
 		l.ID, l.Properties, l.ChangeID = domain.LinkID(id), props([]byte(p)), domain.ChangeID(change.String)
 		l.From = domain.NodeRef{ID: domain.NodeID(from), Version: domain.Version(fv)}
-		l.To = domain.NodeRef{ID: domain.NodeID(to), Version: domain.Version(tv)}
+		if to != "" {
+			l.To = domain.NodeRef{ID: domain.NodeID(to), Version: domain.Version(tv)}
+		} else if l.Target, err = lnk.Parse(url); err != nil {
+			return nil, fmt.Errorf("link %s: %w", id, err)
+		}
 		out = append(out, l)
 	}
 	return out, rows.Err()
@@ -760,14 +766,16 @@ func (t *sqliteTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, err
 }
 
 func (t *sqliteTx) PutLink(ctx context.Context, l domain.Link) error {
+	to, tv, url := linkTarget(l)
 	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("link", linkColumns, ""),
-		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), string(l.To.ID), int(l.To.Version), string(jsonb(l.Properties)), nullUUID(string(l.ChangeID)), nil)
+		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), to, tv, string(jsonb(l.Properties)), nullUUID(string(l.ChangeID)), nil, url)
 	return sqliteErr(err, "link")
 }
 
 func (t *sqliteTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, l domain.Link) error {
+	to, tv, url := linkTarget(l)
 	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("link", linkColumns, ""),
-		string(row), l.Type, string(from.ID), int(from.Version), string(l.To.ID), int(l.To.Version), string(jsonb(l.Properties)), nullUUID(string(l.ChangeID)), string(l.ID))
+		string(row), l.Type, string(from.ID), int(from.Version), to, tv, string(jsonb(l.Properties)), nullUUID(string(l.ChangeID)), string(l.ID), url)
 	return sqliteErr(err, "link")
 }
 

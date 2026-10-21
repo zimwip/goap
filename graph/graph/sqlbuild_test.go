@@ -176,14 +176,14 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg NodeTypeCounts", pg, q, a, `SELECT n.type, count(*)`+pgNodeWhere+` GROUP BY n.type`, append(pgRefs, "", true))
 	q, a = lite.sqlNodeTypeCounts(refs, NodeQuery{IncludeDeleted: true})
 	check("sqlite NodeTypeCounts", lite, q, a, `SELECT n.type, count(*)`+liteNodeWhere+` GROUP BY n.type`, []any{liteRefs, "", true})
-	const pgLinkCols = `l.id::text, l.type, l.from_id::text, l.from_version, l.to_id::text, l.to_version, l.props, l.change_id::text`
-	const liteLinkCols = `l.id, l.type, l.from_id, l.from_version, l.to_id, l.to_version, l.props, l.change_id`
+	const pgLinkCols = `l.id::text, l.type, l.from_id::text, l.from_version, coalesce(l.to_id::text, ''), coalesce(l.to_version, 0), l.props, l.change_id::text, l.to_url`
+	const liteLinkCols = `l.id, l.type, l.from_id, l.from_version, coalesce(l.to_id, ''), coalesce(l.to_version, 0), l.props, l.change_id, l.to_url`
 	held := func(refs string) string {
 		join := " JOIN "
 		if strings.Contains(refs, "json_each") {
 			join = " CROSS JOIN " // SQLite reads the chain first
 		}
-		return `WITH RECURSIVE r(id, version) AS (` + refs + `), c(nid, rv, sv) AS ( SELECT v.node_id, v.version, coalesce(v.links, v.version) FROM node_version v JOIN r ON r.id = v.node_id AND r.version = v.version UNION ALL SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_depth > 0 ), h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes FROM c` + join + `link l ON l.from_id = c.nid AND l.from_version = c.sv) SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id FROM h WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
+		return `WITH RECURSIVE r(id, version) AS (` + refs + `), c(nid, rv, sv) AS ( SELECT v.node_id, v.version, coalesce(v.links, v.version) FROM node_version v JOIN r ON r.id = v.node_id AND r.version = v.version UNION ALL SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_depth > 0 ), h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes, l.to_url FROM c` + join + `link l ON l.from_id = c.nid AND l.from_version = c.sv) SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id, h.to_url FROM h WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
 	}
 	pgHeld, liteHeld := held(`SELECT * FROM unnest($1::uuid[], $2::int[])`), held(`SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?)`)
 	pgLinkWhere := ` FROM (` + pgHeld + `) l JOIN unnest($1::uuid[], $2::int[]) AS t(id, version) ON t.id = l.to_id AND t.version = l.to_version WHERE ($3 = '' OR lower(l.type) LIKE $3 ESCAPE '\' OR EXISTS (SELECT 1 FROM jsonb_each(l.props) p WHERE jsonb_typeof(p.value) = 'string' AND lower(p.value #>> '{}') LIKE $3 ESCAPE '\'))`
@@ -202,10 +202,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlLinksFrom(refs)
 	check("sqlite LinksFrom", lite, q, a, `SELECT `+liteLinkCols+` FROM (`+liteHeld+`) l ORDER BY l.id`, []any{liteRefs})
 	linksTo := func(cols, target string) string {
-		return `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id FROM link WHERE ` + target + ` AND removes IS NULL), s(lid, nid, sv) AS ( SELECT id, from_id, from_version FROM t UNION ALL SELECT s.lid, v.node_id, v.version FROM s JOIN node_version v ON v.node_id = s.nid AND v.links_base = s.sv WHERE NOT EXISTS (SELECT 1 FROM link x WHERE x.from_id = v.node_id AND x.from_version = v.version AND x.removes = s.lid) ) SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.node_id = s.nid AND v.version = s.sv AND v.links IS NULL UNION ALL SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.links = s.sv AND v.node_id = s.nid ORDER BY 1, 4`
+		return `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id, to_url FROM link WHERE ` + target + ` AND removes IS NULL), s(lid, nid, sv) AS ( SELECT id, from_id, from_version FROM t UNION ALL SELECT s.lid, v.node_id, v.version FROM s JOIN node_version v ON v.node_id = s.nid AND v.links_base = s.sv WHERE NOT EXISTS (SELECT 1 FROM link x WHERE x.from_id = v.node_id AND x.from_version = v.version AND x.removes = s.lid) ) SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.node_id = s.nid AND v.version = s.sv AND v.links IS NULL UNION ALL SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.links = s.sv AND v.node_id = s.nid ORDER BY 1, 4`
 	}
-	const pgToCols = `t.id::text, t.type, t.from_id::text, v.version, t.to_id::text, t.to_version, t.props, t.change_id::text`
-	const liteToCols = `t.id, t.type, t.from_id, v.version, t.to_id, t.to_version, t.props, t.change_id`
+	const pgToCols = `t.id::text, t.type, t.from_id::text, v.version, t.to_id::text, t.to_version, t.props, t.change_id::text, t.to_url`
+	const liteToCols = `t.id, t.type, t.from_id, v.version, t.to_id, t.to_version, t.props, t.change_id, t.to_url`
 	q, a = pg.sqlLinksTo(domain.NodeRef{ID: "n1"})
 	check("pg LinksTo", pg, q, a, linksTo(pgToCols, `to_id = $1`), []any{"n1"})
 	q, a = lite.sqlLinksTo(domain.NodeRef{ID: "n1"})
@@ -221,8 +221,8 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlLinkSetsOf(refs)
 	check("sqlite LinkSetsOf", lite, q, a, `SELECT v.node_id, v.version, coalesce(v.links, v.version), coalesce(v.links_base, 0), v.links_depth, v.links_seq FROM node_version v JOIN json_each(?) r ON json_extract(r.value, '$[0]') = v.node_id AND json_extract(r.value, '$[1]') = v.version`, []any{liteRefs})
 	linksInto := func(cols, refs string) string {
-		return strings.Replace(squash(linksTo(cols, "")), `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id FROM link WHERE AND removes IS NULL)`,
-			`WITH RECURSIVE r(id, version) AS (`+refs+`), t AS (SELECT l.id, l.type, l.from_id, l.from_version, l.to_id, l.to_version, l.props, l.change_id FROM link l JOIN r ON l.to_id = r.id AND l.to_version = r.version WHERE l.removes IS NULL)`, 1)
+		return strings.Replace(squash(linksTo(cols, "")), `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id, to_url FROM link WHERE AND removes IS NULL)`,
+			`WITH RECURSIVE r(id, version) AS (`+refs+`), t AS (SELECT l.id, l.type, l.from_id, l.from_version, l.to_id, l.to_version, l.props, l.change_id, l.to_url FROM link l JOIN r ON l.to_id = r.id AND l.to_version = r.version WHERE l.removes IS NULL)`, 1)
 	}
 	q, a = pg.sqlLinksInto(refs)
 	check("pg LinksInto", pg, q, a, linksInto(pgToCols, `SELECT * FROM unnest($1::uuid[], $2::int[])`), pgRefs)

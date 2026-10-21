@@ -11,6 +11,7 @@ import (
 	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/graph/graph/graphtest"
+	"github.com/zimwip/goap/lib/platform"
 )
 
 // TestGraphResolver: every namespace of the graph is a graph source of its name with no location (ADR 0154), a URL
@@ -181,4 +182,142 @@ func TestProjectSources(t *testing.T) {
 	if _, err := g.ResolveFrom(ctx, req, u); err != nil || asked.Name != "alm-eu" {
 		t.Fatalf("from a node of %s: %v (source %+v)", req.Project, err, asked)
 	}
+}
+
+// TestLinkTargets: a link is written to a logical URL (ADR 0154 step 2). A URL naming a node of this graph is that
+// node (the version it names, else the one the change sees); a URL of another source is kept as the link's target,
+// committed, read back and checked out again as it is; a node of another graph names its version.
+func TestLinkTargets(t *testing.T) {
+	run := func(t *testing.T, repo graph.Repo) {
+		ctx := context.Background()
+		g := graph.New(repo)
+		for _, n := range []graphtest.Node{
+			{Namespace: domain.NamespacePlatform, Key: domain.SourceKey("acme"), Type: domain.TypeSource,
+				Properties: map[string]any{"kind": lnk.KindGraph, "namespace": "alm", "location": "https://acme.example/graph"}},
+			{Namespace: domain.NamespacePlatform, Key: domain.SourceKey("docs"), Type: domain.TypeSource,
+				Properties: map[string]any{"kind": lnk.KindFiles, "location": t.TempDir()}},
+		} {
+			if _, err := graphtest.Import(ctx, g, n); err != nil {
+				t.Fatal(err)
+			}
+		}
+		req, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		remote, doc := lnk.MustParse("lnk:acme/Requirement/R-9?v=2"), lnk.MustParse("lnk:docs/File/specs/login.md")
+		spec, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "alm", Key: "SPEC-1", Type: "alm@Specification", Links: []graph.LinkWrite{
+			{Type: "alm@refines", Target: lnk.MustParse("lnk:alm/Requirement/REQ-1")},
+			{Type: "alm@refines", Target: remote},
+			{Type: "alm@documents", Target: doc, Properties: map[string]any{"note": "the login page"}},
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		check := func(what string, links []domain.Link) {
+			t.Helper()
+			byURL := map[string]domain.Link{}
+			for _, l := range links {
+				u, err := g.LinkURL(ctx, l)
+				if err != nil {
+					t.Fatalf("%s: LinkURL(%+v) = %v", what, l, err)
+				}
+				byURL[u.Logical().String()] = l
+			}
+			if l := byURL["lnk:alm/Requirement/REQ-1"]; l.To != req.Ref() || l.External() {
+				t.Fatalf("%s: a URL of this graph is its node: %+v", what, links)
+			}
+			if l := byURL["lnk:acme/Requirement/R-9"]; !l.External() || l.Target != remote {
+				t.Fatalf("%s: a node of another graph keeps its URL and version: %+v", what, links)
+			}
+			if l := byURL["lnk:docs/File/specs/login.md"]; !l.External() || l.Target != doc || l.Properties["note"] != "the login page" {
+				t.Fatalf("%s: a file keeps its URL: %+v", what, links)
+			}
+		}
+		links, err := g.OutLinksOf(ctx, spec.Ref())
+		if err != nil || len(links) != 3 {
+			t.Fatalf("links = %+v, %v", links, err)
+		}
+		check("committed", links)
+
+		// a new version keeps the links it is checked out with, the ones to other sources included
+		v2, err := graphtest.Edit(ctx, g, spec.ID, map[string]any{"title": "Login"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		links, err = g.OutLinksOf(ctx, v2.Ref())
+		if err != nil || len(links) != 3 {
+			t.Fatalf("links of v2 = %+v, %v", links, err)
+		}
+		check("checked out again", links)
+
+		// a link to another source is removed like any
+		head, err := g.BranchHead(ctx, "alm", domain.MainBranch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		drop, err := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "drop the doc", BaselineID: head.ID, OwnBranch: true, ProjectID: g.Structure(domain.StructureProject).Root})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cn, err := g.ImpactNodeCheckout(ctx, drop.ID, graph.NodeCheckout{Node: spec.ID, Rationale: "drop the doc"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		dv, err := g.ChangeNodeView(ctx, drop.ID, "", *cn.Post)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, l := range dv.Out {
+			if l.Target == doc {
+				if err := g.ImpactLinkDelete(ctx, drop.ID, l.ID, "", ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		if err := graphtest.Accept(ctx, g, drop.ID, cn.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := graphtest.CommitMerge(ctx, g, drop.ID, ""); err != nil {
+			t.Fatal(err)
+		}
+		v3, err := g.NodeByKey(ctx, "alm", "SPEC-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if links, err = g.OutLinksOf(ctx, v3.Ref()); err != nil || len(links) != 2 || v3.Version != 3 {
+			t.Fatalf("links of v%d = %+v, %v", v3.Version, links, err)
+		}
+
+		// a node of another graph names its version; a source no project maps and nobody declares is this graph's namespace
+		head, err = g.BranchHead(ctx, "alm", domain.MainBranch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "unversioned", BaselineID: head.ID, ProjectID: g.Structure(domain.StructureProject).Root})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := g.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: "SPEC-2", Type: "alm@Specification",
+			Links: []graph.LinkWrite{{Type: "alm@refines", Target: lnk.MustParse("lnk:acme/Requirement/R-9")}}}); !errors.Is(err, graph.ErrInvalid) {
+			t.Fatalf("unversioned link to another graph: %v", err)
+		}
+		if _, err := g.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: "SPEC-2", Type: "alm@Specification",
+			Links: []graph.LinkWrite{{Type: "alm@refines", Target: lnk.MustParse("lnk:alm/Requirement/REQ-404")}}}); !errors.Is(err, graph.ErrInvalid) {
+			t.Fatalf("link to no node of this graph: %v", err)
+		}
+	}
+	t.Run("memory", func(t *testing.T) { run(t, graph.NewMemory()) })
+	t.Run("sqlite", func(t *testing.T) {
+		ctx := context.Background()
+		db, err := platform.OpenSQLite(ctx, filepath.Join(t.TempDir(), "goap.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		if err := platform.MigrateSQLite(ctx, db, "graph", graph.SQLiteMigrations, "migrations_sqlite"); err != nil {
+			t.Fatal(err)
+		}
+		run(t, graph.NewSQLite(db))
+	})
 }

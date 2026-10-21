@@ -117,6 +117,10 @@ func draftView(d *domain.Draft) map[string]any {
 	}
 	links := make([]any, 0, len(d.Links))
 	for _, l := range d.Links {
+		if l.External() {
+			links = append(links, map[string]any{"type": l.Type, "url": l.Target.String()})
+			continue
+		}
 		links = append(links, map[string]any{"type": l.Type, "to": string(l.To.ID), "version": int(l.To.Version)})
 	}
 	base := 0
@@ -129,6 +133,9 @@ func draftView(d *domain.Draft) map[string]any {
 // childOf is the node a link of a draft to a part of it targets as the flow sees it: the draft of the child, else the
 // version of the view of the namespace (nil: the node is not in it).
 func (a *applier) childOf(l domain.Link) (*domain.Node, error) {
+	if l.External() {
+		return nil, nil // a part in another source is not checked here
+	}
 	if a.drafts != nil {
 		if d, ok := a.drafts.draft(a.drafts.normalize(l.To)); ok {
 			n := draftNode(a.change, d)

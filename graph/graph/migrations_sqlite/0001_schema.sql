@@ -108,15 +108,20 @@ CREATE TABLE link (
     type         text    NOT NULL,
     from_id      text    NOT NULL,
     from_version integer NOT NULL,
-    to_id        text    NOT NULL,
-    to_version   integer NOT NULL,
+    -- the target: a node version of this graph (to_id, to_version), or the logical URL of a target in another source
+    -- (to_url, ADR 0154), never both
+    to_id        text   ,
+    to_version   integer,
+    to_url       text    NOT NULL DEFAULT '',
     props        text    NOT NULL DEFAULT '{}',
     change_id    text    NOT NULL REFERENCES change(id) DEFERRABLE INITIALLY DEFERRED,
     FOREIGN KEY (from_id, from_version) REFERENCES node_version(node_id, version),
-    FOREIGN KEY (to_id, to_version) REFERENCES node_version(node_id, version)
+    FOREIGN KEY (to_id, to_version) REFERENCES node_version(node_id, version),
+    CHECK ((to_id IS NULL AND to_version IS NULL) = (to_url <> ''))
 );
 CREATE INDEX link_from ON link (from_id, from_version);
 CREATE INDEX link_to ON link (to_id, to_version);
+CREATE INDEX link_url ON link (to_url) WHERE to_url <> '';
 CREATE INDEX link_change ON link (change_id);
 
 -- ADR 0032: a node version is written on one branch (node_version.branch, never changed) and may join other branches:

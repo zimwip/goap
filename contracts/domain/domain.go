@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/contracts/codetext"
+	"github.com/zimwip/goap/contracts/lnk"
 )
 
 // NodeID is the stable identity of a node across all its versions.
@@ -160,12 +161,27 @@ type LinkID string
 
 // Link is a typed relation between two exact node versions.
 type Link struct {
-	ID         LinkID         `json:"id"`
-	Type       string         `json:"type"`
-	From       NodeRef        `json:"from"`
-	To         NodeRef        `json:"to"`
+	ID   LinkID  `json:"id"`
+	Type string  `json:"type"`
+	From NodeRef `json:"from"`
+	// To is the version of a node of this graph the link points to; zero for a link to another source (Target).
+	To NodeRef `json:"to"`
+	// Target is the logical URL of a target in another source (ADR 0154: another graph, a file...), with To zero; empty
+	// for a link to a node of this graph, whose URL is the node's (Graph.LinkURL).
+	Target     lnk.URL        `json:"target,omitzero"`
 	Properties map[string]any `json:"props,omitempty"`
 	ChangeID   ChangeID       `json:"changeId,omitempty"`
+}
+
+// External reports a link to another source (ADR 0154): its target is a URL, not a node of this graph.
+func (l Link) External() bool { return l.To.IsZero() && !l.Target.IsZero() }
+
+// Points is where the link points to: its URL when it leaves the graph, else the node version.
+func (l Link) Points() string {
+	if l.External() {
+		return l.Target.String()
+	}
+	return l.To.String()
 }
 
 // BaselineID identifies a baseline.

@@ -153,5 +153,14 @@ func linkKey(l domain.Link) string {
 	if len(l.Properties) == 0 {
 		p = nil
 	}
-	return l.Type + "\x00" + l.To.String() + "\x00" + string(p)
+	return l.Type + "\x00" + l.Points() + "\x00" + string(p)
+}
+
+// linkTarget is how a row of the link table names the target of a link (ADR 0154): to_id and to_version for a node of
+// this graph, null with to_url for a target in another source.
+func linkTarget(l domain.Link) (to, version any, url string) {
+	if l.External() {
+		return nil, nil, l.Target.String()
+	}
+	return string(l.To.ID), int(l.To.Version), ""
 }

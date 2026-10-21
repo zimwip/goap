@@ -276,9 +276,12 @@ message Link {
   string id = 1;
   string type = 2;
   NodeRef from = 3;
+  // the node version of this graph the link points to; unset for a link to another source
   NodeRef to = 4;
   google.protobuf.Struct props = 5;
   string change_id = 6;
+  // the logical URL of a target in another source (ADR 0154: lnk:<source>/<type>/<key>[?v=n]), to unset
+  string target = 7;
 }
 
 message NodeView {
@@ -1626,6 +1629,8 @@ message NodeLinkWrite {
   string type = 1;
   NodeRef to = 2;
   google.protobuf.Struct props = 3;
+  // with to unset: the logical URL of the target (ADR 0154), a node of this graph or a target in another source
+  string target = 4;
 }
 
 // The node a ImpactNodeCheckout or a ImpactNodeTransition works on: a change impact of the change, or a node (then the impact the
@@ -1747,6 +1752,8 @@ message ImpactLinkCreateRequest {
   google.protobuf.Struct props = 5;
   string flow = 6;
   string execution = 7;
+  // with to unset: the logical URL of the target (ADR 0154), a node of this graph or a target in another source
+  string target = 8;
 }
 
 message ImpactLinkCreateResponse {

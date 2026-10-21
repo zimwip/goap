@@ -835,6 +835,9 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 			}
 			bb.Nodes[r] = v
 			for _, l := range v.Out {
+				if l.External() {
+					continue
+				}
 				if err := neighbor(ctx, tx, reader, bb.Neighbors, l.To); err != nil {
 					return err
 				}

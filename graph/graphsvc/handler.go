@@ -806,7 +806,26 @@ func (h *Handler) gateLink(ctx context.Context, change, link string) error {
 func linkWrites(ls []*graphv1.NodeLinkWrite) []graph.LinkWrite {
 	var out []graph.LinkWrite
 	for _, l := range ls {
-		out = append(out, graph.LinkWrite{Type: l.Type, To: pbconv.RefFromPB(l.To), Properties: pbconv.Map(l.Props)})
+		u, _ := pbconv.TargetFromPB(l.Target) // checked by checkTargets
+		out = append(out, graph.LinkWrite{Type: l.Type, To: pbconv.RefFromPB(l.To), Target: u, Properties: pbconv.Map(l.Props)})
+	}
+	return out
+}
+
+// checkTargets refuses a link write whose target URL does not parse.
+func checkTargets(targets ...string) error {
+	for _, t := range targets {
+		if _, err := pbconv.TargetFromPB(t); err != nil {
+			return connect.NewError(connect.CodeInvalidArgument, err)
+		}
+	}
+	return nil
+}
+
+func targetsOf(ls []*graphv1.NodeLinkWrite) []string {
+	out := make([]string, len(ls))
+	for i, l := range ls {
+		out[i] = l.Target
 	}
 	return out
 }
@@ -826,6 +845,9 @@ func (h *Handler) ImpactNodeCreate(ctx context.Context, r *connect.Request[graph
 		return nil, rpcerr.ToConnect(err)
 	}
 	if err := h.gateAccess(ctx, m.Type); err != nil {
+		return nil, err
+	}
+	if err := checkTargets(targetsOf(m.Links)...); err != nil {
 		return nil, err
 	}
 	cn, err := h.Graph.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: m.Key, Type: m.Type, Properties: pbconv.Map(m.Props), Owner: m.Owner, Rationale: m.Rationale,
@@ -931,8 +953,12 @@ func (h *Handler) ImpactLinkCreate(ctx context.Context, r *connect.Request[graph
 	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, ""); err != nil {
 		return nil, err
 	}
+	if err := checkTargets(m.Target); err != nil {
+		return nil, err
+	}
+	u, _ := pbconv.TargetFromPB(m.Target)
 	l, err := h.Graph.ImpactLinkCreate(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId),
-		graph.LinkWrite{Type: m.Type, To: pbconv.RefFromPB(m.To), Properties: pbconv.Map(m.Props)}, m.Flow, m.Execution)
+		graph.LinkWrite{Type: m.Type, To: pbconv.RefFromPB(m.To), Target: u, Properties: pbconv.Map(m.Props)}, m.Flow, m.Execution)
 	return res(&graphv1.ImpactLinkCreateResponse{Link: pbconv.LinkToPB(l)}, err)
 }
 

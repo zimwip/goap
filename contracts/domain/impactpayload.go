@@ -55,7 +55,7 @@ func CopyDraft(e ImpactEvent, base Node, links []Link) Draft {
 				break
 			}
 		}
-		d.Links = append(d.Links, DraftLink{ID: BaseLinkID(e.ID, l.ID), Type: l.Type, To: to, Properties: cloneProps(l.Properties)})
+		d.Links = append(d.Links, DraftLink{ID: BaseLinkID(e.ID, l.ID), Type: l.Type, To: to, Target: l.Target, Properties: cloneProps(l.Properties)})
 	}
 	return d
 }

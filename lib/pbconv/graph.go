@@ -11,6 +11,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	graphv1 "github.com/zimwip/goap/contracts/gen/goap/graph/v1"
 	"github.com/zimwip/goap/contracts/graphapi"
+	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/lib/typecat"
 )
 
@@ -149,11 +150,34 @@ func NodesFromPB(ns []*graphv1.Node) []domain.Node {
 }
 
 func LinkToPB(l domain.Link) *graphv1.Link {
+	if l.External() {
+		return &graphv1.Link{Id: string(l.ID), Type: l.Type, From: RefToPB(l.From), Target: l.Target.String(), Props: Struct(l.Properties), ChangeId: string(l.ChangeID)}
+	}
 	return &graphv1.Link{Id: string(l.ID), Type: l.Type, From: RefToPB(l.From), To: RefToPB(l.To), Props: Struct(l.Properties), ChangeId: string(l.ChangeID)}
 }
 
 func LinkFromPB(l *graphv1.Link) domain.Link {
-	return domain.Link{ID: domain.LinkID(l.Id), Type: l.Type, From: RefFromPB(l.From), To: RefFromPB(l.To), Properties: Map(l.Props), ChangeID: domain.ChangeID(l.ChangeId)}
+	out := domain.Link{ID: domain.LinkID(l.Id), Type: l.Type, From: RefFromPB(l.From), To: RefFromPB(l.To), Properties: Map(l.Props), ChangeID: domain.ChangeID(l.ChangeId)}
+	if l.Target != "" {
+		out.Target, _ = lnk.Parse(l.Target) // a server's URL: parsed once when written
+	}
+	return out
+}
+
+// TargetFromPB reads the target URL of a link write: empty is none.
+func TargetFromPB(s string) (lnk.URL, error) {
+	if s == "" {
+		return lnk.URL{}, nil
+	}
+	return lnk.Parse(s)
+}
+
+// TargetToPB is the target URL of a link write, empty when none.
+func TargetToPB(u lnk.URL) string {
+	if u.IsZero() {
+		return ""
+	}
+	return u.String()
 }
 
 func LinksToPB(ls []domain.Link) []*graphv1.Link {

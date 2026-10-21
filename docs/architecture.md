@@ -1097,7 +1097,7 @@ cut halfway: failed, nothing: run again), so a step never writes twice. Core NAT
 ```sql
 node(id uuid, namespace, key text, type text, latest int, project text)  -- the key of the project it was created in (ADR 0154 §9)
 node_version(node_id, version, props jsonb, deleted bool, change_id → change, owner text, created_at, committed)  -- PK (node_id, version); committed: the order of its baseline (ADR 0140)
-link(id uuid, type, from_id, from_version, to_id, to_version, props jsonb, change_id → change)
+link(id uuid, type, from_id, from_version, to_id, to_version, to_url, props jsonb, change_id → change)  -- to_url: a target in another source (ADR 0154), to_id / to_version null then
 node_branch(node_id, version, branch, change_id → change, committed)  -- the branches a version joined besides the one it was written on (ADR 0032)
 baseline(id uuid, name, namespace, branch, parent_id, change_id, created_at, seq)  -- seq: the order of commits; its state is a selection (ADR 0143)
 branch(namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at)  -- PK (namespace, name)

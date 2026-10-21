@@ -110,7 +110,7 @@ func (a *applier) prepareChangeImpacts() error {
 			if to.IsDraft() {
 				return invalidf("%s links to the draft of node %s, which the change does not commit", nodes[i].Key, to.ID)
 			}
-			links = append(links, domain.Link{ID: dl.ID, Type: dl.Type, To: to, Properties: dl.Properties})
+			links = append(links, domain.Link{ID: dl.ID, Type: dl.Type, To: to, Target: dl.Target, Properties: dl.Properties})
 		}
 		// the links of a version are a set, shared with the version it was checked out from or a delta over it (ADR 0141)
 		var like []domain.NodeRef

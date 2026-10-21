@@ -150,7 +150,7 @@ func (g *Graph) storedVersion(ctx context.Context, tx Tx, ref domain.NodeRef, wi
 		return domain.Draft{}, err
 	}
 	for _, l := range links {
-		out.Links = append(out.Links, domain.DraftLink{ID: l.ID, Type: l.Type, To: l.To, Properties: cloneMap(l.Properties)})
+		out.Links = append(out.Links, domain.DraftLink{ID: l.ID, Type: l.Type, To: l.To, Target: l.Target, Properties: cloneMap(l.Properties)})
 	}
 	return out, nil
 }

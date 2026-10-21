@@ -5,6 +5,8 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+
+	"github.com/zimwip/goap/contracts/lnk"
 )
 
 // Drafts and versions at commit (ADR 0079). During a change a node has no version: its working state in the change is a
@@ -22,11 +24,16 @@ func DraftRef(id NodeID) NodeRef { return NodeRef{ID: id} }
 // DraftLink is an outgoing link of a draft: To is an exact node version, or a draft reference (Version 0) to a node the
 // change writes, resolved to the version commit writes for it.
 type DraftLink struct {
-	ID         LinkID         `json:"id"`
-	Type       string         `json:"type"`
-	To         NodeRef        `json:"to"`
+	ID   LinkID  `json:"id"`
+	Type string  `json:"type"`
+	To   NodeRef `json:"to"`
+	// Target is the URL of a target in another source (Link.Target), with To zero.
+	Target     lnk.URL        `json:"target,omitzero"`
 	Properties map[string]any `json:"props,omitempty"`
 }
+
+// External reports a link to another source.
+func (l DraftLink) External() bool { return l.To.IsZero() && !l.Target.IsZero() }
 
 // Draft is the working state of a node in a change on a flow: everything its next version will carry.
 type Draft struct {
@@ -104,7 +111,7 @@ func draftReason(d Draft) string {
 func (d Draft) OutLinks() []Link {
 	out := make([]Link, 0, len(d.Links))
 	for _, l := range d.Links {
-		out = append(out, Link{ID: l.ID, Type: l.Type, From: d.Ref(), To: l.To, Properties: l.Properties, ChangeID: d.Change})
+		out = append(out, Link{ID: l.ID, Type: l.Type, From: d.Ref(), To: l.To, Target: l.Target, Properties: l.Properties, ChangeID: d.Change})
 	}
 	return out
 }
@@ -144,6 +151,7 @@ type patchLink struct {
 	Type      string         `json:"type,omitempty"`
 	ToID      NodeID         `json:"toId,omitempty"`
 	ToVersion Version        `json:"toVersion,omitempty"`
+	Target    string         `json:"target,omitempty"`
 	Props     map[string]any `json:"props,omitempty"`
 }
 
@@ -190,7 +198,7 @@ func DraftDiff(from, to Draft) map[string]any {
 	used := make([]bool, len(to.Links))
 	match := func(l DraftLink, sameProps bool) int {
 		for i, m := range to.Links {
-			if !used[i] && m.Type == l.Type && m.To == l.To && (!sameProps || reflect.DeepEqual(m.Properties, l.Properties)) {
+			if !used[i] && m.Type == l.Type && m.To == l.To && m.Target == l.Target && (!sameProps || reflect.DeepEqual(m.Properties, l.Properties)) {
 				return i
 			}
 		}
@@ -214,7 +222,11 @@ func DraftDiff(from, to Draft) map[string]any {
 	}
 	for i, l := range to.Links {
 		if !used[i] {
-			adds = append(adds, map[string]any{"id": l.ID, "type": l.Type, "toId": l.To.ID, "toVersion": l.To.Version, "props": l.Properties})
+			add := map[string]any{"id": l.ID, "type": l.Type, "toId": l.To.ID, "toVersion": l.To.Version, "props": l.Properties}
+			if l.External() {
+				add = map[string]any{"id": l.ID, "type": l.Type, "target": l.Target.String(), "props": l.Properties}
+			}
+			adds = append(adds, add)
 		}
 	}
 	for k, v := range map[string][]any{"addLinks": adds, "updateLinks": updates, "removeLinks": removes} {
@@ -277,7 +289,11 @@ func applyDraft(d *Draft, e ImpactEvent) *Draft {
 			n.State = p.State.To
 		}
 		for _, a := range linksOf(p.AddLink, p.AddLinks) {
-			n.Links = append(n.Links, DraftLink{ID: a.ID, Type: a.Type, To: NodeRef{ID: a.ToID, Version: a.ToVersion}, Properties: a.Props})
+			l := DraftLink{ID: a.ID, Type: a.Type, To: NodeRef{ID: a.ToID, Version: a.ToVersion}, Properties: a.Props}
+			if a.ToID == "" && a.Target != "" {
+				l.Target, _ = lnk.Parse(a.Target)
+			}
+			n.Links = append(n.Links, l)
 		}
 		for _, u := range linksOf(p.UpdateLink, p.UpdateLinks) {
 			for i := range n.Links {

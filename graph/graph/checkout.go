@@ -420,6 +420,9 @@ func (g *Graph) ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in Nod
 	if in.Key == "" || in.Type == "" {
 		return cn, invalidf("a node needs a key and a type")
 	}
+	if ctx, err = g.withLinkSources(ctx, id, in.Links...); err != nil {
+		return cn, err
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		var err error
 		cn, err = g.createTx(ctx, tx, id, in, nil)
@@ -612,8 +615,19 @@ func (g *Graph) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact
 	return
 }
 
+// removeLinkPatch describes a link removed from a draft, for the updated event.
+func removeLinkPatch(l domain.DraftLink) map[string]any {
+	if l.External() {
+		return map[string]any{"id": string(l.ID), "type": l.Type, "to": l.Target.String(), "target": l.Target.String()}
+	}
+	return map[string]any{"id": string(l.ID), "type": l.Type, "to": l.To.String(), "toId": string(l.To.ID)}
+}
+
 // linkPatch describes a link added to a draft, for the updated event: the audit trail reads to, the draft fold the rest.
 func linkPatch(l domain.DraftLink) map[string]any {
+	if l.External() {
+		return map[string]any{"id": string(l.ID), "type": l.Type, "to": l.Target.String(), "target": l.Target.String(), "props": l.Properties}
+	}
 	return map[string]any{"id": string(l.ID), "type": l.Type, "to": l.To.String(), "toId": string(l.To.ID), "toVersion": int(l.To.Version), "props": l.Properties}
 }
 
@@ -622,6 +636,9 @@ func linkPatch(l domain.DraftLink) map[string]any {
 //goap:operation impact.link.create doer
 func (g *Graph) ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l LinkWrite, flow, execution string) (link domain.Link, err error) {
 	if err := g.allow(ctx, id, operations.ImpactLinkCreate); err != nil {
+		return link, err
+	}
+	if ctx, err = g.withLinkSources(ctx, id, l); err != nil {
 		return link, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
@@ -640,7 +657,7 @@ func (g *Graph) ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact
 		if err != nil {
 			return err
 		}
-		link = domain.Link{ID: dl.ID, Type: dl.Type, From: d.Ref(), To: dl.To, Properties: dl.Properties, ChangeID: id}
+		link = domain.Link{ID: dl.ID, Type: dl.Type, From: d.Ref(), To: dl.To, Target: dl.Target, Properties: dl.Properties, ChangeID: id}
 		return g.emitUpdated(ctx, tx, w, d.Ref(), execution, map[string]any{"addLink": linkPatch(dl)})
 	})
 	return
@@ -661,7 +678,7 @@ func (g *Graph) emitAddLink(ctx context.Context, tx Tx, w *work, d domain.Draft,
 }
 
 func (g *Graph) emitRemoveLink(ctx context.Context, tx Tx, w *work, d domain.Draft, l domain.DraftLink, execution string) error {
-	return g.emitUpdated(ctx, tx, w, d.Ref(), execution, map[string]any{"removeLink": map[string]any{"id": string(l.ID), "type": l.Type, "to": l.To.String(), "toId": string(l.To.ID)}})
+	return g.emitUpdated(ctx, tx, w, d.Ref(), execution, map[string]any{"removeLink": removeLinkPatch(l)})
 }
 
 // linkWork finds the draft of the flow holding a link, and the link: by its id, or by the id of the stored link of the
@@ -702,7 +719,7 @@ func (g *Graph) linkWork(ctx context.Context, tx Tx, id domain.ChangeID, link do
 				continue
 			}
 			for _, c := range d.Links {
-				if c.Type == stored.Type && c.To.ID == stored.To.ID {
+				if c.Type == stored.Type && c.To.ID == stored.To.ID && c.Target == stored.Target {
 					c := c
 					found = &c
 				}
@@ -745,8 +762,12 @@ func (g *Graph) ImpactLinkUpdate(ctx context.Context, id domain.ChangeID, link d
 		if err := w.ix.checkLinkAttributes(cur.Type, props); err != nil {
 			return err
 		}
-		l = domain.Link{ID: cur.ID, Type: cur.Type, From: d.Ref(), To: cur.To, Properties: props, ChangeID: id}
-		return g.emitUpdated(ctx, tx, w, d.Ref(), execution, map[string]any{"updateLink": map[string]any{"id": string(cur.ID), "type": cur.Type, "toId": string(cur.To.ID), "props": props}})
+		l = domain.Link{ID: cur.ID, Type: cur.Type, From: d.Ref(), To: cur.To, Target: cur.Target, Properties: props, ChangeID: id}
+		patch := map[string]any{"id": string(cur.ID), "type": cur.Type, "toId": string(cur.To.ID), "props": props}
+		if cur.External() {
+			patch = map[string]any{"id": string(cur.ID), "type": cur.Type, "target": cur.Target.String(), "props": props}
+		}
+		return g.emitUpdated(ctx, tx, w, d.Ref(), execution, map[string]any{"updateLink": patch})
 	})
 	return
 }

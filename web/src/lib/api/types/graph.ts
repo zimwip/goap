@@ -47,9 +47,12 @@ export interface Link {
   id?: string;
   type?: string;
   from?: NodeRef;
+  /** the node version of this graph; unset for a link to another source */
   to?: NodeRef;
   props?: Struct;
   changeId?: string;
+  /** the logical URL of a target in another source (ADR 0154), `to` unset */
+  target?: string;
 }
 
 /** An entry of the log of a change (ADR 0030): a fact, a journal record or an impact event. */
