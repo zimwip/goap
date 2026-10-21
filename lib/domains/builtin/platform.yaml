@@ -100,7 +100,7 @@ nodeTypes:
     attributes:
       - {name: name, label: Name, description: "Name of the role", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the role allows", type: string, widget: textarea, section: Identity, order: 2}
-  # the sources of the logical URLs (ADR 0153, SRC:<name>): a URL lnk:<source>/<type>/<key> whose source is no
+  # the sources of the logical URLs (ADR 0154, SRC:<name>): a URL lnk:<source>/<type>/<key> whose source is no
   # namespace of this graph names one of them; the kind picks the resolver the services plug (graph, files...)
   - name: Source
     description: "Where the things a logical URL names live: another graph, a directory of files..."

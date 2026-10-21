@@ -32,7 +32,7 @@ var forbidden = map[string][]string{
 	"contracts/builtins": {"engine/methodology", "engine/engine", "contracts/domain"},
 	"lib/adapter":        {"lib/mcpbuiltin", "lib/access"},
 	"contracts/domain":   {"contracts/risk", "engine/methodology", "contracts/journal", "contracts/decision", "contracts/verify", "contracts/criticality", "contracts/review"},
-	// A logical URL knows no graph (ADR 0153): the graph and its clients implement its resolvers.
+	// A logical URL knows no graph (ADR 0154): the graph and its clients implement its resolvers.
 	"contracts/lnk":         {"contracts/domain", "graph/graph", "lib/graphclient", "graph/graphsvc"},
 	"contracts/criticality": {"graph/graph", "engine/engine", "engine/methodology", "contracts/journal", "contracts/decision", "engine/condition", "lib/access"},
 	"contracts/verify":      {"graph/graph", "engine/engine", "engine/methodology", "contracts/risk", "contracts/journal", "contracts/decision", "engine/condition"},

@@ -18,7 +18,7 @@ import (
 	"github.com/zimwip/goap/lib/rpcerr"
 )
 
-// Federation is the resolver of the sources of kind lnk.KindGraph (ADR 0153): a namespace of another graph service,
+// Federation is the resolver of the sources of kind lnk.KindGraph (ADR 0154): a namespace of another graph service,
 // Source.Location its base URL. It reads a node by its key (GetNode), so a graph federates another with no RPC of its
 // own; the node it answers carries the name of the source it was read through (domain.Node.Source).
 type Federation struct {

@@ -8,7 +8,7 @@ import (
 )
 
 // Registry holds the sources a process knows and the resolvers of their kinds. The self resolver is always there: a
-// source no one declared is a namespace of this graph, of the same name, read by it (ADR 0153 §3).
+// source no one declared is a namespace of this graph, of the same name, read by it (ADR 0154 §3).
 type Registry struct {
 	mu        sync.RWMutex
 	sources   map[string]Source

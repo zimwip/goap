@@ -108,7 +108,7 @@ type Node struct {
 	Parents   []Version `json:"parents,omitempty"`
 	Reason    string    `json:"reason,omitempty"`
 	Namespace string    `json:"namespace,omitempty"`
-	// Source is the source the node was read from (ADR 0153), when it is not this graph: a node of another graph keeps
+	// Source is the source the node was read from (ADR 0154), when it is not this graph: a node of another graph keeps
 	// the name of the source that reads it. Empty: this graph, the source being the namespace (SourceName).
 	Source     string         `json:"source,omitempty"`
 	Key        string         `json:"key"`

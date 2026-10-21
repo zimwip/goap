@@ -1,4 +1,4 @@
-// Package lnk names what a link points to as a logical URL (ADR 0153): lnk:<source>/<type>/<key>.
+// Package lnk names what a link points to as a logical URL (ADR 0154): lnk:<source>/<type>/<key>.
 //
 // A source is a place things live in: a namespace of this graph (the self source), a namespace of another graph
 // (federation), a directory of files, anything a resolver knows how to read. A thing of a source is a type/key tuple:

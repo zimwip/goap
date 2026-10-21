@@ -10,7 +10,7 @@ import (
 	"github.com/zimwip/goap/contracts/lnk"
 )
 
-// Logical URLs (ADR 0153): every namespace of the graph is a self source of its name, read by the self resolver; the
+// Logical URLs (ADR 0154): every namespace of the graph is a self source of its name, read by the self resolver; the
 // other sources are platform@Source nodes, read by the resolver of their kind the composition plugs (Graph.Resolvers).
 
 // lnkState is the registry of the graph, built at its first use.
@@ -59,7 +59,7 @@ func (g *Graph) Resolve(ctx context.Context, u lnk.URL) (lnk.Target, error) {
 	return g.Lnk().Resolve(ctx, u)
 }
 
-// LinkURL is the logical URL of the target of a link (ADR 0153): the URL of the node it points to, whatever its version.
+// LinkURL is the logical URL of the target of a link (ADR 0154): the URL of the node it points to, whatever its version.
 func (g *Graph) LinkURL(ctx context.Context, l domain.Link) (lnk.URL, error) {
 	n, err := g.Node(ctx, l.To)
 	if err != nil {

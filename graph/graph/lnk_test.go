@@ -13,7 +13,7 @@ import (
 	"github.com/zimwip/goap/graph/graph/graphtest"
 )
 
-// TestSelfResolver: every namespace of the graph is a self source of its name (ADR 0153), a URL names a node by its
+// TestSelfResolver: every namespace of the graph is a self source of its name (ADR 0154), a URL names a node by its
 // type and key, a version pins one, and a node gives its URL back.
 func TestSelfResolver(t *testing.T) {
 	ctx := context.Background()

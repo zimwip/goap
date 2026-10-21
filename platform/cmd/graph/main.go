@@ -103,7 +103,7 @@ func main() {
 	g.EndUser = graphsvc.EndUser         // the person the events of the changes are for (ADR 0114)
 	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
 	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
-	g.Resolvers = graphsvc.Resolvers()   // the sources of the logical URLs beyond its namespaces (ADR 0153)
+	g.Resolvers = graphsvc.Resolvers()   // the sources of the logical URLs beyond its namespaces (ADR 0154)
 	// the events of the graph (changes, nodes, baselines) go through its outbox to the bus (ADR 0136)
 	outbox.Start(ctx, g.Observe(outbox.NATS(events)), log)
 	// the graph judges nodes by the types of the published domains (ADR 0012): the domain registry served here is the

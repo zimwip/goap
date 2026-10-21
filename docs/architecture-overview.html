@@ -273,7 +273,7 @@ footer { font-size: 13px; color: var(--muted); }
       <thead><tr><th>Binary</th><th>Module</th><th>Port</th><th>What it runs</th></tr></thead>
       <tbody>
         <tr data-binary="gateway" data-service="gateway"><td><code>gateway</code></td><td><span class="chip m-gateway">gateway</span></td><td class="num">:8080</td><td>HTTP entry: sign-in, sessions, routing by service</td></tr>
-        <tr data-binary="graph" data-service="graph"><td><code>graph</code></td><td><span class="chip m-graph">graph</span></td><td class="num">:8081</td><td>the graph, changes, the domain registry, the import registry; PostgreSQL; resolves the logical URLs of its sources, reading another graph service by key (ADR 0153)</td></tr>
+        <tr data-binary="graph" data-service="graph"><td><code>graph</code></td><td><span class="chip m-graph">graph</span></td><td class="num">:8081</td><td>the graph, changes, the domain registry, the import registry; PostgreSQL; resolves the logical URLs of its sources, reading another graph service by key (ADR 0154)</td></tr>
         <tr data-binary="registry" data-service="registry"><td><code>registry</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8082</td><td>the methodology registry; reads the graph and its domains, no database</td></tr>
         <tr data-binary="engine" data-service="engine"><td><code>engine</code></td><td><span class="chip m-engine">engine</span></td><td class="num">:8083</td><td>runs and plans processes; PostgreSQL; starts the sandboxes</td></tr>
         <tr data-binary="modelgw" data-service="modelgw"><td><code>modelgw</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8084</td><td>every LLM call and its ledger; PostgreSQL</td></tr>

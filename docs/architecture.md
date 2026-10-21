@@ -1145,7 +1145,7 @@ are a second line, a storage without any keeps the rules.
 - Secrets are never in environment variables in prod: `lib/platform/secrets` reads from Vault
   (KV v2, token auth in dev / Kubernetes auth in prod) with a fallback to the environment in dev.
 
-### 3.4a Logical URLs and federation ([ADR 0153](adr/0153-logical-urls-and-graph-federation.md))
+### 3.4a Logical URLs and federation ([ADR 0154](adr/0154-logical-urls-and-graph-federation.md))
 
 What a link points to can be named by a logical URL, `lnk:<source>/<type>/<key>` (`contracts/lnk`): a source is where
 things live (a namespace of this graph, a namespace of another graph service, a directory of files), the type and the

@@ -1,4 +1,4 @@
-# ADR 0153 — Logical URLs and the federation of graphs
+# ADR 0154 — Logical URLs and the federation of graphs
 
 **Status**: proposed; step 1 implemented · **Date**: 2026-10
 

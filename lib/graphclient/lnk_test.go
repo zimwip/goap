@@ -30,7 +30,7 @@ func (remote) GetNode(_ context.Context, req *connect.Request[graphv1.GetNodeReq
 	return connect.NewResponse(&graphv1.GetNodeResponse{View: &graphv1.NodeView{Node: n}}), nil
 }
 
-// TestFederation: a source of kind graph reads its nodes from another graph service by their key (ADR 0153).
+// TestFederation: a source of kind graph reads its nodes from another graph service by their key (ADR 0154).
 func TestFederation(t *testing.T) {
 	ctx := context.Background()
 	_, h := graphv1connect.NewGraphServiceHandler(remote{})
