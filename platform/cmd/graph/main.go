@@ -111,6 +111,9 @@ func main() {
 			platform.Fatal(log, "migrate smart tags", err)
 		}
 		repo = graph.NewPostgres(pool)
+		if err := graph.CheckReferences(ctx, stdlib.OpenDBFromPool(pool)); err != nil {
+			platform.Fatal(log, "database", err)
+		}
 		memory = false
 		domainStore = domainsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
 		smartTagStore = smarttagsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}

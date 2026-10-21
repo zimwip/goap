@@ -85,6 +85,10 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 				return stores{}, err
 			}
 		}
+		if err := graph.CheckReferences(ctx, db); err != nil {
+			db.Close()
+			return stores{}, fmt.Errorf("%s: %w (remove the file)", path, err)
+		}
 		// the local mode is the one process on its file: the locks the previous start left are dropped, so that
 		// its runs are resumed at once (ADR 0124)
 		processes := enginesvc.SQLStore{DB: db, Holder: enginesvc.NewHolder()}

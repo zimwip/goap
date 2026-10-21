@@ -1,7 +1,7 @@
 -- Graph schema (ADR 0054: the schema starts from zero, earlier migrations were folded into it). Every node version,
 -- link and branch membership is written by a change (change_id, NOT NULL, foreign key); every node version is owned
--- by an organisational unit (owner) and every node was created in a project (project), both the keys of nodes of
--- the structures the type catalogue tags: keys, not foreign keys, for the structures may live in another graph, the
+-- by an organisational unit (owner) and every node was created in a project (project), both logical URLs of nodes
+-- of the structures the type catalogue tags (lnk:<namespace>/<type>/<key>, no version): not foreign keys, for the structures may live in another graph, the
 -- platform graph (ADR 0154 §9); the guard checks them. pkg/graph enforces the same rules in Go whatever the storage
 -- (guardRepo): these constraints are a second line, not the only one. The foreign keys a bootstrap must satisfy in one
 -- transaction (its change and its baseline reference each other) are deferred to the commit.
@@ -41,7 +41,7 @@ CREATE TABLE branch (
     PRIMARY KEY (namespace, name)
 );
 
--- owner_org and project_id are the keys of an organisational unit and of a project (ADR 0054): never empty, resolved
+-- owner_org and project_id are the logical URLs of an organisational unit and of a project (ADR 0054, 0154 §9): never empty, resolved
 -- when the change is created (the project is named, never defaulted, and moves only through MoveChange, ADR 0091);
 -- pkg/graph checks they designate nodes of the tagged structures.
 CREATE TABLE change (
