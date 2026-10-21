@@ -1,12 +1,12 @@
 // Package lnk names what a link points to as a logical URL (ADR 0154): lnk:<source>/<type>/<key>.
 //
-// A source is a place things live in: a namespace of this graph (the self source), a namespace of another graph
-// (federation), a directory of files, anything a resolver knows how to read. A thing of a source is a type/key tuple:
+// A source is a place things live in: a namespace of a graph (this one, or another one: federation), a directory of
+// files, anything a resolver knows how to read. A thing of a source is a type/key tuple:
 // the type says what it is in the source (a node type of its domain, File, ...), the key which one. The namespace is a
 // property of the source, never of the URL: a node type alm@Requirement of this graph is lnk:alm/Requirement/<key>.
 //
 // The package is a leaf of the contracts: it knows no graph. A Resolver turns a URL into a Target (what it points to)
-// and a Target back into its URL; a Registry holds the sources and their resolvers, and always the self resolver.
+// and a Target back into its URL; a Registry holds the sources and their resolvers by kind.
 package lnk
 
 import (
@@ -25,7 +25,7 @@ const Scheme = "lnk"
 var (
 	// ErrInvalid: a malformed URL or source definition.
 	ErrInvalid = errors.New("invalid lnk")
-	// ErrUnknownSource: no source of that name, and the self resolver does not know it either.
+	// ErrUnknownSource: no source of that name, and no namespace of this graph either.
 	ErrUnknownSource = errors.New("unknown lnk source")
 	// ErrNoResolver: a source whose kind has no resolver in this process.
 	ErrNoResolver = errors.New("no resolver for the lnk source")

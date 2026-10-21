@@ -8,10 +8,8 @@ import (
 
 // Kinds of source: the kind picks the resolver that reads the source.
 const (
-	// KindSelf: a namespace of this graph, read by the self resolver. Every namespace of the graph is a self source of
-	// its own name without being declared.
-	KindSelf = "self"
-	// KindGraph: a namespace of another graph service (federation), Location its base URL.
+	// KindGraph: a namespace of a graph. Location is the base URL of the graph service; empty, the graph the registry
+	// belongs to. Every namespace of this graph is a graph source of its own name without being declared.
 	KindGraph = "graph"
 	// KindFiles: a directory of files, Location its root; the key of a thing is its path under the root.
 	KindFiles = "files"
@@ -22,10 +20,9 @@ const (
 type Source struct {
 	// Name is the source of the URLs (lnk:<name>/...).
 	Name string `json:"name"`
-	// Kind picks the resolver (KindSelf, KindGraph, KindFiles, or a kind a composition registers).
+	// Kind picks the resolver (KindGraph, KindFiles, or a kind a composition registers).
 	Kind string `json:"kind"`
-	// Namespace is the namespace of the graph the source reads (self and graph sources): a URL names no namespace.
-	// Empty for a self source: its name.
+	// Namespace is the namespace of the graph a graph source reads (a URL names no namespace); empty: its name.
 	Namespace string `json:"namespace,omitempty"`
 	// Location is where the source lives: the base URL of a graph service, the root directory of files...
 	Location string `json:"location,omitempty"`
@@ -52,7 +49,7 @@ func (s Source) Validate() error {
 	switch s.Kind {
 	case "":
 		return fmt.Errorf("source %q: no kind: %w", s.Name, ErrInvalid)
-	case KindGraph, KindFiles:
+	case KindFiles:
 		if s.Location == "" {
 			return fmt.Errorf("source %q of kind %s: no location: %w", s.Name, s.Kind, ErrInvalid)
 		}

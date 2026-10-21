@@ -8,7 +8,7 @@ import (
 )
 
 // SourceName is the source of the node (ADR 0154): the one it was read from (Source, set by a resolver reading
-// another graph), else the node's own namespace, the self source of this graph. Every working node has one.
+// another graph), else the node's own namespace, a source of this graph. Every working node has one.
 func (n Node) SourceName() string {
 	if n.Source != "" {
 		return n.Source

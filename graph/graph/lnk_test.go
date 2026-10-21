@@ -13,9 +13,9 @@ import (
 	"github.com/zimwip/goap/graph/graph/graphtest"
 )
 
-// TestSelfResolver: every namespace of the graph is a self source of its name (ADR 0154), a URL names a node by its
-// type and key, a version pins one, and a node gives its URL back.
-func TestSelfResolver(t *testing.T) {
+// TestGraphResolver: every namespace of the graph is a graph source of its name with no location (ADR 0154), a URL
+// names a node by its type and key, a version pins one, and a node gives its URL back.
+func TestGraphResolver(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	req, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Sign in"}})
@@ -106,9 +106,24 @@ func TestDeclaredSources(t *testing.T) {
 		t.Fatalf("remote = %+v, %v (source %+v)", r, err, asked)
 	}
 
+	// a graph source with no location is this graph, under another name
+	req, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: domain.NamespacePlatform, Key: domain.SourceKey("req"), Type: domain.TypeSource,
+		Properties: map[string]any{"kind": lnk.KindGraph, "namespace": "alm"}}); err != nil {
+		t.Fatal(err)
+	}
+	asked = lnk.Source{}
+	if r, err := g.Resolve(ctx, lnk.MustParse("lnk:req/Requirement/REQ-1")); err != nil || r.Node == nil || r.Node.ID != string(req.ID) ||
+		r.URL.String() != "lnk:req/Requirement/REQ-1" || asked.Name != "" {
+		t.Fatalf("local alias = %+v, %v (remote asked %+v)", r, err, asked)
+	}
+
 	// a malformed declaration is an error, not a fallback
 	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: domain.NamespacePlatform, Key: domain.SourceKey("broken"), Type: domain.TypeSource,
-		Properties: map[string]any{"kind": lnk.KindGraph}}); err != nil {
+		Properties: map[string]any{"kind": lnk.KindFiles}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.Resolve(ctx, lnk.MustParse("lnk:broken/Requirement/R")); !errors.Is(err, lnk.ErrInvalid) {

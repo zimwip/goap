@@ -1149,9 +1149,9 @@ are a second line, a storage without any keeps the rules.
 
 What a link points to can be named by a logical URL, `lnk:<source>/<type>/<key>` (`contracts/lnk`): a source is where
 things live (a namespace of this graph, a namespace of another graph service, a directory of files), the type and the
-key say which thing. Every namespace of the graph is a self source of its name (`graph.SelfResolver`, always there);
-other sources are `platform@Source` nodes (`SRC:<name>`, admin only), read by the resolver of their kind
-(`Graph.Resolvers`: `graphclient.Federation` for `graph`, `lnk.Files` for `files`). `Graph.Lnk()` is the registry,
+key say which thing. Every namespace of the graph is a `graph` source of its name with no location, read in process
+(`graph.Resolver`); other sources are `platform@Source` nodes (`SRC:<name>`, admin only), read by the resolver of their kind
+(`Graph.Resolvers`: `graphclient.Federation` for a `graph` source with a location, `lnk.Files` for `files`). `Graph.Lnk()` is the registry,
 `Graph.Resolve` reads a URL, `Node.URL()` / `Node.SourceName()` give a node's. Links still target node versions; their
 logical targets are step 2 of the ADR.
 

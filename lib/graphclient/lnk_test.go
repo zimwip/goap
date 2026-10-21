@@ -37,9 +37,7 @@ func TestFederation(t *testing.T) {
 	srv := httptest.NewServer(h)
 	defer srv.Close()
 
-	r := lnk.NewRegistry(lnk.ResolverFuncs{ResolveFunc: func(context.Context, lnk.Source, lnk.URL) (lnk.Target, error) {
-		return lnk.Target{}, lnk.ErrNotFound
-	}})
+	r := lnk.NewRegistry()
 	r.Register(lnk.KindGraph, &Federation{HTTP: srv.Client()})
 	if err := r.Declare(lnk.Source{Name: "acme", Kind: lnk.KindGraph, Namespace: "alm", Location: srv.URL + "/"}); err != nil {
 		t.Fatal(err)

@@ -58,9 +58,12 @@ func TestURLJSON(t *testing.T) {
 	}
 }
 
-// self is a self resolver over a map of namespaces.
-func self(nodes map[string]map[string]string) Resolver {
+// local is a graph resolver over a map of namespaces: a source with no location only.
+func local(nodes map[string]map[string]string) Resolver {
 	return ResolverFuncs{ResolveFunc: func(_ context.Context, src Source, u URL) (Target, error) {
+		if src.Location != "" {
+			return Target{}, ErrNoResolver
+		}
 		ns, ok := nodes[src.NamespaceOf()]
 		if !ok {
 			return Target{}, ErrUnknownSource
@@ -73,9 +76,15 @@ func self(nodes map[string]map[string]string) Resolver {
 	}}
 }
 
-func TestRegistrySelfFallback(t *testing.T) {
+func newRegistry(nodes map[string]map[string]string) *Registry {
+	r := NewRegistry()
+	r.Register(KindGraph, local(nodes))
+	return r
+}
+
+func TestRegistryGraphFallback(t *testing.T) {
 	ctx := context.Background()
-	r := NewRegistry(self(map[string]map[string]string{"alm": {"REQ-1": "alm@Requirement"}}))
+	r := newRegistry(map[string]map[string]string{"alm": {"REQ-1": "alm@Requirement"}})
 	got, err := r.Resolve(ctx, New("alm", "Requirement", "REQ-1"))
 	if err != nil || got.Node == nil || got.Node.ID != "id-REQ-1" || got.URL.String() != "lnk:alm/Requirement/REQ-1" {
 		t.Fatalf("Resolve = %+v, %v", got, err)
@@ -94,10 +103,10 @@ func TestRegistrySelfFallback(t *testing.T) {
 
 func TestRegistryDeclaredSources(t *testing.T) {
 	ctx := context.Background()
-	r := NewRegistry(self(nil))
-	// a declared source of another kind, and a self source under another name than its namespace
-	if err := r.Declare(Source{Name: "acme", Kind: KindGraph}); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("graph source without location: %v", err)
+	r := NewRegistry()
+	// a declared graph source elsewhere, under another name than its namespace
+	if err := r.Declare(Source{Name: "docs", Kind: KindFiles}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("files source without location: %v", err)
 	}
 	if err := r.Declare(Source{Name: "acme", Kind: KindGraph, Location: "https://acme.example/graph", Namespace: "alm"}); err != nil {
 		t.Fatal(err)
@@ -124,7 +133,7 @@ func TestRegistryDeclaredSources(t *testing.T) {
 	if src, err := r.Source(ctx, "docs"); err != nil || src.Kind != KindFiles {
 		t.Fatalf("Source(docs) = %+v, %v", src, err)
 	}
-	if src, err := r.Source(ctx, "alm"); err != nil || src.Kind != KindSelf || src.NamespaceOf() != "alm" {
+	if src, err := r.Source(ctx, "alm"); err != nil || src.Kind != KindGraph || src.Location != "" || src.NamespaceOf() != "alm" {
 		t.Fatalf("Source(alm) = %+v, %v", src, err)
 	}
 }
@@ -141,7 +150,7 @@ func TestFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(filepath.Dir(dir), "outside.md"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	r := NewRegistry(self(nil))
+	r := newRegistry(nil)
 	r.Register(KindFiles, Files{})
 	if err := r.Declare(Source{Name: "docs", Kind: KindFiles, Location: dir}); err != nil {
 		t.Fatal(err)

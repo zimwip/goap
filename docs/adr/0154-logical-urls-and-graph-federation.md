@@ -26,11 +26,13 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
    a root directory), the branch, and opaque parameters for the resolver. A source is declared by a `platform@Source`
    node (`SRC:<name>`, `platform` 2.8.0, `adminOnly`, lifecycle `config`: retired, it no longer resolves): what
    describes the enterprise is graph data (CLAUDE.md, rule 4), and only administrators say where the platform reads.
-3. **The self resolver is always there**: every namespace of the graph is a self source of its own name, with no
-   declaration (`lnk:alm/Requirement/REQ-1` is the node `REQ-1` of the namespace `alm`). A declared source of kind
-   `self` names a namespace (and a branch) under another name. A source no one declared falls back on the self source
-   of that name, which finds nothing when no such namespace holds the key. Resolving checks the type: the node's type,
-   or one it extends (`TypeCatalog.IsA`).
+3. **One kind for graphs, `graph`; this graph is the one with no location**: every namespace of the graph is a graph
+   source of its own name with no location, with no declaration (`lnk:alm/Requirement/REQ-1` is the node `REQ-1` of the
+   namespace `alm`). A declared `graph` source with no location names a namespace (and a branch) of this graph under
+   another name; with a location, a namespace of another graph service. A source no one declared falls back on the
+   namespace of that name, which finds nothing when no such namespace holds the key. Resolving checks the type: the
+   node's type, or one it extends (`TypeCatalog.IsA`). There is no separate kind for this graph: whether a graph is
+   read in process or over the network is where it lives, not what it is.
 4. **A resolver reads one kind of source** (`lnk.Resolver`): `Resolve(ctx, source, url) → Target` and `URLOf(ctx,
    source, target) → url`. One resolver serves every source of its kind (each graph service, each root directory): the
    call names the source. A `lnk.Target` is the level of abstraction every source shares: the kind of the target
@@ -39,29 +41,31 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
    point to things that are not nodes: a file by its path, a web document by its address.
 5. **A registry dispatches** (`lnk.Registry`): the sources declared in process, `Lookup` for the ones the graph declares,
    the resolvers by kind; the graph's is `Graph.Lnk()` (`Graph.Resolve`, `Graph.LinkURL`), built at its first use from
-   the self resolver (`graph.SelfResolver`), the `platform@Source` nodes on main and `Graph.Resolvers`, a seam the
+   the graph resolver (`graph.Resolver`: in process with no location, else the `graph` resolver of `Graph.Resolvers`),
+   the `platform@Source` nodes on main and `Graph.Resolvers`, a seam the
    compositions plug like the others (`graphsvc.Resolvers()`: `platform/cmd/graph`, `goap-dev`).
-6. **Kinds shipped**: `self`; `graph`, another graph service (`graphclient.Federation`: one client per location, the
+6. **Kinds shipped**: `graph`, this graph in process or another graph service (`graphclient.Federation`: one client per location, the
    node read by its key with `GetNode`, so federation needs no new RPC); `files`, a root directory
    (`lnk.Files`: the key is the slash path under the root, type `File` or `Directory`, read through an `os.Root`, never
    outside it). A new kind is a resolver registered under its name, nothing in the graph.
 7. **A working node carries its source**: `domain.Node.Source` names the source a node was read through when it is not
-   this graph (the federation resolver sets it); `Node.SourceName()` is that source, else the node's namespace, the
-   self source; `Node.URL()` its logical URL, `Node.Target()` the node as a target. Every node, read here or elsewhere,
+   this graph (the federation resolver sets it); `Node.SourceName()` is that source, else the node's namespace, a
+   source of this graph; `Node.URL()` its logical URL, `Node.Target()` the node as a target. Every node, read here or elsewhere,
    so has a URL with no lookup.
 
 ## Steps
 
 1. **Done (this ADR)**: the contract (`contracts/lnk`: URL, source, target, resolver, registry, the files resolver), the
-   self resolver and the declared sources in the graph, the federation resolver over the graph client, the source of a
+   graph resolver and the declared sources in the graph, the federation resolver over the graph client, the source of a
    node, the `platform@Source` type. Links are unchanged: `Graph.LinkURL` gives the logical URL of a link's target.
 2. **Logical targets of links.** A link's target becomes its URL: `Link.Target lnk.URL` (proto `Link.target`), the
-   writes taking a URL (`LinkWrite.Target`; a `NodeRef` still accepted, turned into its URL). Storage: `link.to_url`
-   (both dialects, indexed), `to_id` / `to_version` kept for a self target as the resolution the commit made (the
-   version the link was written against: the suspect links, the lineage and the in-links read stay as they are) and
-   null for any other source. A link set (ADR 0141) compares links by type and URL; a rebase or a merge no longer
-   re-points a link to a self node at a new version, since its URL did not change. A link of a draft to a node created
-   in the same change is the URL of that node's key (the draft reference goes).
+   writes taking a URL (`LinkWrite.Target`; a `NodeRef` still accepted, turned into its URL). A link to a node of a
+   graph source is always versioned (for now): its URL carries `?v=`, the version it was written against, so the
+   suspect links, the lineage, the rebase and the merge keep re-pointing it as they do today. Storage, greenfield (the
+   database starts from zero, no migration): `link.to_url` in `0001_schema.sql` of both dialects (indexed), `to_id` /
+   `to_version` kept for a target in this graph as the resolution of its URL (the in-links read stays as it is) and null
+   for any other source. A link set (ADR 0141) compares links by type and URL. A link of a draft to a node created in the
+   same change is the URL of that node's key (the draft reference goes), versioned at commit.
 3. **Resolution at read.** A view of a node (`NodeView.out`) resolves the URLs of its links in one batch per source
    (`Registry.ResolveAll`), a target not found or a source unreachable shown as such, never an error of the read;
    the web draws a target of another source with its source (a chip), opens a node of another graph read-only, and a
@@ -78,20 +82,21 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
 
 - A link may leave the graph: to another graph, a file, any source a resolver reads. The type/key tuple is the identity
   every source shares, the namespace being the source's.
-- Nothing changes for the links already written until step 2; step 2 needs a migration of `link` (both dialects) and
-  makes link identity logical: a link to a node no longer moves when the node gets a new version, which is what the
-  rebase and the merge have been doing by hand.
+- Nothing changes for the links already written until step 2, which changes the schema in place (greenfield, no
+  migration) and makes link identity logical while keeping graph targets versioned: floating links can come later,
+  by dropping the `?v=` of a URL, without another change of storage.
 - A target in another source can disappear or change without the graph knowing: its links are resolved when read and a
   missing target is a state of the link (step 3), not a broken foreign key. Integrity across sources is not checked at
   commit.
 - Keys become part of the public identity of a node: renaming a key breaks the URLs pointing to it, as it already broke
   imports and the references by key.
 
-## Open questions
+## Decided since
 
-- Pinned or floating by default: a link written in a change, should its URL keep the version it was written against
-  (`?v=`) or float to the version the reader's branch holds? Step 2 keeps both: the URL floats, the resolution recorded
-  at commit pins.
-- Should `files` sources be readable by the graph service at all in a distributed deployment, or only through a
-  connector of the MCP hub (the files of a unit, ADR 0019)? A `connector` kind resolving through the hub would follow
-  rule 5 (what is available comes from who).
+- **Graph links are versioned** (Thomas, 2026-10-21): a link to a node of a graph source always names its version, for
+  now. A floating link (a URL with no `?v=`, resolved to the version the reader's branch holds) is left for later.
+- **Files are a declared source with its resolver**: no source of files is implied; an administrator declares one, and
+  the resolver of its kind tells how its files are read. `lnk.Files` (an `os.Root` the service reads) is one such
+  resolver; a resolver may as well go through an MCP (a `mcp` kind calling a tool of the hub for the unit, the files
+  of a unit, ADR 0019), which follows rule 5 (what is available comes from who) in a distributed deployment.
+- **Storage is greenfield**: step 2 changes `0001_schema.sql` of both dialects, no migration.

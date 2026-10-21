@@ -7,32 +7,28 @@ import (
 	"sync"
 )
 
-// Registry holds the sources a process knows and the resolvers of their kinds. The self resolver is always there: a
-// source no one declared is a namespace of this graph, of the same name, read by it (ADR 0154 §3).
+// Registry holds the sources a process knows and the resolvers of their kinds. A source no one declared is the
+// namespace of the same name of this graph: a graph source with no location (ADR 0154 §3).
 type Registry struct {
 	mu        sync.RWMutex
 	sources   map[string]Source
 	resolvers map[string]Resolver
 	// Lookup, when set, finds a source not declared in process (the platform@Source nodes of the graph): found false
-	// lets the registry fall back on the self source.
+	// lets the registry fall back on the namespace of this graph.
 	Lookup func(ctx context.Context, name string) (Source, bool, error)
 }
 
-// NewRegistry returns a registry with the self resolver.
-func NewRegistry(self Resolver) *Registry {
-	r := &Registry{sources: map[string]Source{}, resolvers: map[string]Resolver{}}
-	r.Register(KindSelf, self)
-	return r
+// NewRegistry returns an empty registry: Register gives it the resolver of each kind, KindGraph first.
+func NewRegistry() *Registry {
+	return &Registry{sources: map[string]Source{}, resolvers: map[string]Resolver{}}
 }
 
-// Register gives a kind of source its resolver (a nil resolver removes it; the self resolver cannot be removed).
+// Register gives a kind of source its resolver (a nil resolver removes it).
 func (r *Registry) Register(kind string, res Resolver) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if res == nil {
-		if kind != KindSelf {
-			delete(r.resolvers, kind)
-		}
+		delete(r.resolvers, kind)
 		return
 	}
 	r.resolvers[kind] = res
@@ -49,7 +45,8 @@ func (r *Registry) Declare(src Source) error {
 	return nil
 }
 
-// Source returns the source of a name: a declared one, else one Lookup finds, else the self source of that name.
+// Source returns the source of a name: a declared one, else one Lookup finds, else the namespace of that name of this
+// graph (a graph source with no location).
 func (r *Registry) Source(ctx context.Context, name string) (Source, error) {
 	if !sourceRE.MatchString(name) {
 		return Source{}, fmt.Errorf("source %q: %w", name, ErrInvalid)
@@ -70,7 +67,7 @@ func (r *Registry) Source(ctx context.Context, name string) (Source, error) {
 			return src, nil
 		}
 	}
-	return Source{Name: name, Kind: KindSelf}, nil
+	return Source{Name: name, Kind: KindGraph}, nil
 }
 
 // Sources lists the sources declared in process.
