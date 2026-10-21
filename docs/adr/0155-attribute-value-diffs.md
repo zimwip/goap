@@ -1,4 +1,4 @@
-# ADR 0153 — Diffs of attribute values
+# ADR 0155 — Diffs of attribute values
 
 **Status**: accepted; implemented · **Date**: 2026-10
 
