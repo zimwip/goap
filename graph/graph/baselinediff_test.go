@@ -51,4 +51,18 @@ func testDiffBaselines(t *testing.T, repo Repo) {
 	if none := must[[]BaselineDiff](t)(g.DiffBaselines(ctx, res.ID, res.ID)); len(none) != 0 {
 		t.Fatalf("a baseline against itself: %v", none)
 	}
+	// from the empty state (ADR 0056: the baseline id ""), every node of the baseline is added
+	first := must[[]BaselineDiff](t)(g.DiffBaselines(ctx, "", f.base.ID))
+	keys := map[string]bool{}
+	for _, d := range first {
+		if d.Kind != DiffAdded || d.From != nil || d.To == nil {
+			t.Fatalf("diff from the empty state: %+v", d)
+		}
+		keys[d.Key] = true
+	}
+	for _, n := range []domain.Node{f.req, f.test} {
+		if !keys[n.Key] {
+			t.Fatalf("diff from the empty state misses %s: %v", n.Key, keys)
+		}
+	}
 }
