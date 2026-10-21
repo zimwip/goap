@@ -15,6 +15,7 @@ import (
 	"github.com/zimwip/goap/contracts/algo"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/events"
+	"github.com/zimwip/goap/lib/cache"
 	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/typecat"
 )
@@ -140,23 +141,17 @@ type Graph struct {
 
 	// booted is set once the roots of the structures are known to exist (Bootstrap).
 	booted atomic.Bool
+	// Caches bounds what the graph keeps in memory between calls (caches.go): a zero field takes DefaultCaches'.
+	Caches Caches
 	// states caches the whole states computed for baselines, headers their headers (ADR 0137, 0140).
-	states  stateCache
-	headers headerCache
-
-	// DraftCacheBytes bounds the memory the views of the changes kept between calls hold, estimated (ADR 0079 §2, 0153);
-	// DraftCacheTTL how long one is kept after it was last folded. 0: DefaultDraftCacheBytes, DefaultDraftCacheTTL.
-	DraftCacheBytes int64
-	DraftCacheTTL   time.Duration
-	// VersionCacheSize is the number of versions whose outgoing links are kept in memory (DefaultVersionCacheSize when
-	// 0): they never change once written (versioncache.go).
-	VersionCacheSize int
+	states  *cache.Cache[domain.BaselineID, map[domain.NodeID]domain.Version]
+	headers *cache.Cache[domain.BaselineID, domain.Baseline]
 	// versions caches the outgoing links of versions.
 	versions versionCache
-	// draftStates caches the drafts folded from the impact logs.
+	// draftStates caches the views of the changes folded from their logs.
 	draftStates draftCache
 	// validations caches the validation of the impacts of a change on a flow, by the log position it was computed at.
-	validations validationCache
+	validations *cache.Cache[validationKey, validationEntry]
 }
 
 // New returns a Graph backed by repo. Every transaction goes through the guard of the graph (guardRepo, ADR 0054),
@@ -164,6 +159,7 @@ type Graph struct {
 func New(repo Repo) *Graph {
 	g := &Graph{base: repo, now: func() time.Time { return time.Now().UTC() }, newID: func() string { return uuid.NewString() }}
 	g.repo = &ambientRepo{Repo: &guardRepo{Repo: repo, g: g}, g: g}
+	g.newCaches()
 	return g
 }
 

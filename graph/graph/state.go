@@ -5,7 +5,6 @@ import (
 	"errors"
 	"maps"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -18,31 +17,23 @@ import (
 // stores entries: a baseline is a header, and reading the state of some nodes is one indexed read per branch of the
 // chain of forks (CommittedVersions), whatever the length of the branches.
 
-// stateCache keeps the whole states computed for baselines: a state never changes once its baseline exists, so an
-// entry is never stale (an id written in a transaction that rolled back is never asked again). It is bounded.
-type stateCache struct {
-	mu    sync.Mutex
-	m     map[domain.BaselineID]map[domain.NodeID]domain.Version
-	order []domain.BaselineID
-}
+// The whole states computed for baselines are kept (Graph.states, a lib/cache): a state never changes once its
+// baseline exists, so an entry is never stale (an id written in a transaction that rolled back is never asked again).
+// A kept state is never changed: a reader of it copies it (keptState) or reads some nodes of it (lookupState). The
+// headers of baselines are kept the same way (Graph.headers): a header never changes once written.
 
-const stateCacheSize = 32
-
-func (c *stateCache) get(id domain.BaselineID) (map[domain.NodeID]domain.Version, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	s, ok := c.m[id]
+// keptState is a copy of the state kept for a baseline.
+func (g *Graph) keptState(id domain.BaselineID) (map[domain.NodeID]domain.Version, bool) {
+	s, ok := g.states.Get(id)
 	if !ok {
 		return nil, false
 	}
 	return maps.Clone(s), true
 }
 
-// lookup reads some nodes of a cached state, without copying it: absent ones are 0.
-func (c *stateCache) lookup(id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	s, ok := c.m[id]
+// lookupState reads some nodes of a kept state, without copying it: absent ones are 0.
+func (g *Graph) lookupState(id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, bool) {
+	s, ok := g.states.Get(id)
 	if !ok {
 		return nil, false
 	}
@@ -53,68 +44,14 @@ func (c *stateCache) lookup(id domain.BaselineID, ids []domain.NodeID) (map[doma
 	return out, true
 }
 
-func (c *stateCache) put(id domain.BaselineID, s map[domain.NodeID]domain.Version) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.m == nil {
-		c.m = map[domain.BaselineID]map[domain.NodeID]domain.Version{}
-	}
-	if _, ok := c.m[id]; !ok {
-		c.order = append(c.order, id)
-		if len(c.order) > stateCacheSize {
-			delete(c.m, c.order[0])
-			c.order = c.order[1:]
-		}
-	}
-	c.m[id] = maps.Clone(s)
-}
-
-// headerCache keeps the headers of baselines: a header never changes once written.
-type headerCache struct {
-	mu    sync.Mutex
-	m     map[domain.BaselineID]domain.Baseline
-	order []domain.BaselineID
-}
-
-const headerCacheSize = 4096
-
-func (c *headerCache) get(id domain.BaselineID) (domain.Baseline, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	b, ok := c.m[id]
-	return b, ok
-}
-
-func (c *headerCache) drop(id domain.BaselineID) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.m, id) // its place in order goes with the next eviction
-}
-
-func (c *headerCache) put(b domain.Baseline) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.m == nil {
-		c.m = map[domain.BaselineID]domain.Baseline{}
-	}
-	if _, ok := c.m[b.ID]; !ok {
-		c.order = append(c.order, b.ID)
-		if len(c.order) > headerCacheSize {
-			delete(c.m, c.order[0])
-			c.order = c.order[1:]
-		}
-	}
-	c.m[b.ID] = b
-}
-
 // header reads the header of a baseline, cached once the transaction that wrote it is over.
 func (t *guardTx) header(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
-	if b, ok := t.g.headers.get(id); ok {
+	if b, ok := t.g.headers.Get(id); ok {
 		return b, nil
 	}
 	b, err := t.Tx.BaselineHeader(ctx, id)
 	if err == nil && !t.newBaselines[id] {
-		t.g.headers.put(b)
+		t.g.headers.Put(b.ID, b)
 	}
 	return b, err
 }
@@ -133,11 +70,11 @@ func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domai
 		return map[domain.NodeID]domain.Version{}, nil
 	}
 	if ids == nil {
-		if s, ok := t.g.states.get(id); ok {
+		if s, ok := t.g.keptState(id); ok {
 			read.source = stateFromCache
 			return s, nil
 		}
-	} else if s, ok := t.g.states.lookup(id, ids); ok {
+	} else if s, ok := t.g.lookupState(id, ids); ok {
 		read.source = stateFromCache
 		for n, v := range s {
 			if v == 0 {
@@ -272,12 +209,12 @@ const selectBatch = 2000
 
 // nodesOf returns the whole state of a baseline.
 func (t *guardTx) nodesOf(ctx context.Context, id domain.BaselineID) (map[domain.NodeID]domain.Version, error) {
-	if s, ok := t.g.states.get(id); ok {
+	if s, ok := t.g.keptState(id); ok {
 		return s, nil
 	}
 	s, err := t.stateAt(ctx, id, nil)
 	if err == nil {
-		t.g.states.put(id, s)
+		t.g.states.Put(id, maps.Clone(s))
 	}
 	return s, err
 }

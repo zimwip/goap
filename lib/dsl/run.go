@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/contracts/algo"
+	"github.com/zimwip/goap/lib/cache"
 )
 
 // DefaultTimeout bounds a script execution.
@@ -146,33 +147,36 @@ func runScript(ctx context.Context, language, code string, obj any, lg scriptLog
 	return e.run(ctx, code, obj, lg, onReturn)
 }
 
-// compiledCache keeps the compiled form of a script by the hash of its source. Bounded: emptied once it holds
-// maxCompiled scripts (the scripts of the methodologies and domains in force are far fewer).
+// compiledCache keeps the compiled form of a script by the hash of its source (a lib/cache, scriptBounds; the scripts
+// of the methodologies and domains in force are far fewer).
 type compiledCache[T any] struct {
-	mu sync.Mutex
-	m  map[[32]byte]T
+	once sync.Once
+	m    *cache.Cache[[32]byte, compiledScript[T]]
 }
 
-const maxCompiled = 4096
+type compiledScript[T any] struct {
+	v     T
+	bytes int64 // estimated
+}
 
+// scriptBounds bound the compiled scripts of one engine.
+var scriptBounds = cache.Bounds{Bytes: 32 << 20, TTL: 10 * time.Minute}
+
+// get is the compiled form of code, built and kept on a miss; a compiled form is taken to hold four times its source
+// (an estimate).
 func (c *compiledCache[T]) get(code string, build func() (T, error)) (T, error) {
+	c.once.Do(func() {
+		c.m = cache.New(cache.Fixed(scriptBounds), func(_ [32]byte, s compiledScript[T]) int64 { return s.bytes })
+	})
 	key := sha256.Sum256([]byte(code))
-	c.mu.Lock()
-	v, ok := c.m[key]
-	c.mu.Unlock()
-	if ok {
-		return v, nil
+	if s, ok := c.m.Get(key); ok {
+		return s.v, nil
 	}
 	v, err := build()
 	if err != nil {
 		return v, err
 	}
-	c.mu.Lock()
-	if c.m == nil || len(c.m) >= maxCompiled {
-		c.m = map[[32]byte]T{}
-	}
-	c.m[key] = v
-	c.mu.Unlock()
+	c.m.Put(key, compiledScript[T]{v: v, bytes: 4 * int64(len(code))})
 	return v, nil
 }
 

@@ -6,24 +6,19 @@ import (
 	"sync"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/lib/cache"
 )
-
-// DefaultVersionCacheSize is the number of node versions whose outgoing links the graph keeps in memory.
-const DefaultVersionCacheSize = 65536
 
 // versionCache keeps what never changes once a version is written (ADR 0079, 0141): how it holds its links and the
 // links it holds. A commit or a merge of N nodes reads them for the versions it starts from: read once, in one batch,
 // they are not read again by the next operations on the same nodes. Only a version read by a transaction that did not
 // write it is kept (what a transaction wrote may roll back, its number then taken again). A purge deletes versions
 // (DeleteChange): it empties the cache, before and after its transaction, and a read that started before an emptying
-// is not kept (gen).
-//
-// Two generations of maps: an entry read is kept in cur; cur full, it becomes old and a new cur starts, an entry of old
-// read again moving to cur. What is read often stays, the rest goes, with no list to maintain.
+// is not kept (gen). The entries are a lib/cache (Caches.Versions).
 type versionCache struct {
-	mu       sync.Mutex
-	gen      uint64
-	cur, old map[domain.NodeRef]*versionEntry
+	mu      sync.Mutex // orders a write with an emptying
+	gen     uint64
+	entries *cache.Cache[domain.NodeRef, versionEntry]
 }
 
 // versionEntry is what is known of a version: that it exists, how it holds its links, the links it holds.
@@ -33,6 +28,16 @@ type versionEntry struct {
 	links    []domain.Link
 	hasLinks bool
 	exists   bool
+}
+
+func newVersionCache(bounds func() cache.Bounds) versionCache {
+	return versionCache{entries: cache.New(bounds, func(_ domain.NodeRef, e versionEntry) int64 {
+		n := int64(cache.StructBytes)
+		for _, l := range e.links {
+			n += cache.StructBytes + int64(len(l.ID)+len(l.Type)+len(l.From.ID)+len(l.To.ID)) + cache.Of(l.Properties)
+		}
+		return n
+	})}
 }
 
 func (c *versionCache) generation() uint64 {
@@ -46,52 +51,23 @@ func (c *versionCache) reset() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.gen++
-	c.cur, c.old = nil, nil
+	c.entries.Clear()
 }
 
-// entry is the entry of a version, moved to cur (under the lock).
-func (c *versionCache) entry(ref domain.NodeRef) *versionEntry {
-	if e, ok := c.cur[ref]; ok {
-		return e
-	}
-	if e, ok := c.old[ref]; ok {
-		delete(c.old, ref)
-		c.cur[ref] = e
-		return e
-	}
-	return nil
-}
-
-// update changes the entry of a version read at gen (nothing when the cache was emptied since), size the bound.
-func (c *versionCache) update(gen uint64, ref domain.NodeRef, size int, fn func(e *versionEntry)) {
+// update changes the entry of a version read at gen (nothing when the cache was emptied since).
+func (c *versionCache) update(gen uint64, ref domain.NodeRef, fn func(e *versionEntry)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if gen != c.gen {
 		return
 	}
-	if c.cur == nil {
-		c.cur = map[domain.NodeRef]*versionEntry{}
-	}
-	e := c.entry(ref)
-	if e == nil {
-		if len(c.cur) >= max(size/2, 1) {
-			c.old, c.cur = c.cur, map[domain.NodeRef]*versionEntry{}
-		}
-		e = &versionEntry{}
-		c.cur[ref] = e
-	}
-	fn(e)
+	c.entries.Update(ref, func(e versionEntry, _ bool) (versionEntry, bool) { fn(&e); return e, true })
 }
 
 // links are the links a version holds, when known (a copy).
 func (c *versionCache) links(ref domain.NodeRef) ([]domain.Link, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.cur == nil {
-		return nil, false
-	}
-	e := c.entry(ref)
-	if e == nil || !e.hasLinks || !e.exists {
+	e, ok := c.entries.Get(ref)
+	if !ok || !e.hasLinks || !e.exists {
 		return nil, false
 	}
 	return cloneLinks(e.links), true
@@ -99,13 +75,8 @@ func (c *versionCache) links(ref domain.NodeRef) ([]domain.Link, bool) {
 
 // set is how a version holds its links, when known.
 func (c *versionCache) set(ref domain.NodeRef) (LinkSet, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.cur == nil {
-		return LinkSet{}, false
-	}
-	e := c.entry(ref)
-	if e == nil || !e.hasSet {
+	e, ok := c.entries.Get(ref)
+	if !ok || !e.hasSet {
 		return LinkSet{}, false
 	}
 	return e.set, true
@@ -122,20 +93,13 @@ func cloneLinks(ls []domain.Link) []domain.Link {
 	return out
 }
 
-func (g *Graph) versionCacheSize() int {
-	if g.VersionCacheSize > 0 {
-		return g.VersionCacheSize
-	}
-	return DefaultVersionCacheSize
-}
-
 // fixed reports whether what the transaction reads of a version cannot change any more: an exact version it did not
 // write.
 func (t *guardTx) fixed(ref domain.NodeRef) bool { return ref.Version > 0 && !t.written[ref] }
 
 // known records that a version exists, read at gen.
 func (t *guardTx) known(gen uint64, ref domain.NodeRef) {
-	t.g.versions.update(gen, ref, t.g.versionCacheSize(), func(e *versionEntry) { e.exists = true })
+	t.g.versions.update(gen, ref, func(e *versionEntry) { e.exists = true })
 }
 
 // Node reads a version: an exact one the transaction did not write once per transaction (its origin may still be set,
@@ -188,7 +152,7 @@ func (t *guardTx) OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Li
 	// an empty set is kept only for a version known to exist: the links of a version not written yet are none until
 	// it is
 	kept := cloneLinks(ls)
-	t.g.versions.update(gen, ref, t.g.versionCacheSize(), func(e *versionEntry) {
+	t.g.versions.update(gen, ref, func(e *versionEntry) {
 		e.links, e.hasLinks = kept, true
 		e.exists = e.exists || len(kept) > 0
 	})
@@ -208,7 +172,7 @@ func (t *guardTx) LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, e
 	if err != nil {
 		return s, err
 	}
-	t.g.versions.update(gen, ref, t.g.versionCacheSize(), func(e *versionEntry) { e.set, e.hasSet, e.exists = s, true, true })
+	t.g.versions.update(gen, ref, func(e *versionEntry) { e.set, e.hasSet, e.exists = s, true, true })
 	return s, nil
 }
 
@@ -256,14 +220,13 @@ func (t *guardTx) prefetch(ctx context.Context, refs []domain.NodeRef) error {
 	for _, l := range ls {
 		held[l.From] = append(held[l.From], l) // in the order of their ids, as OutLinks reads them
 	}
-	size := t.g.versionCacheSize()
 	for _, r := range links {
 		s, ok := sets[r]
 		if !ok {
 			continue // no such version
 		}
 		kept := cloneLinks(held[r])
-		t.g.versions.update(gen, r, size, func(e *versionEntry) {
+		t.g.versions.update(gen, r, func(e *versionEntry) {
 			e.set, e.hasSet, e.links, e.hasLinks, e.exists = s, true, kept, true, true
 		})
 	}

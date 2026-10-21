@@ -1306,6 +1306,12 @@ of a state `graph.state.reads` (by `scope` whole / nodes and `source`: `cache` o
 `graph.state.chain` (the branches of the chain of forks selected on), `graph.state.entries` (the versions selected) and
 `graph.state.duration`, drawn by the row *Baseline states* of the dashboard.
 
+What a process keeps between calls is one kind of cache ([ADR 0156](adr/0156-one-cache.md), `lib/cache`), bounded by
+the estimated bytes of its entries and by a TTL counted from the last read, the least recently read evicted first. The
+graph keeps its change views, version links, baseline states and headers and impact validations in such caches
+(`Graph.Caches`); the registry and its client keep compiled methodologies there, the scripts engine its compiled
+scripts, and the gateway the state of its sessions.
+
 The gateway also exposes `GET /api/status` (availability and latency of each service), displayed in the
 IDE's status bar along with the user's running runs and their notifications.
 

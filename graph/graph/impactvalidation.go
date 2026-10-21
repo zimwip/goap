@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
-	"sync"
 
 	"github.com/zimwip/goap/contracts/domain"
 )
@@ -18,9 +17,6 @@ import (
 // A change's validations are computed per flow and kept by the position of the impact log they were computed at (the
 // same position that validates the draft cache): a view of an unchanged change runs no validator.
 
-// validationCacheSize bounds the (change, flow) entries kept.
-const validationCacheSize = 256
-
 type validationKey struct {
 	change domain.ChangeID
 	flow   string
@@ -29,36 +25,6 @@ type validationKey struct {
 type validationEntry struct {
 	seq int64
 	out map[domain.ChangeImpactID]*domain.ImpactValidation
-}
-
-type validationCache struct {
-	mu sync.Mutex
-	m  map[validationKey]validationEntry
-}
-
-func (c *validationCache) get(k validationKey, seq int64) (map[domain.ChangeImpactID]*domain.ImpactValidation, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	e, ok := c.m[k]
-	if !ok || e.seq != seq {
-		return nil, false
-	}
-	return e.out, true
-}
-
-func (c *validationCache) put(k validationKey, e validationEntry) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.m == nil {
-		c.m = map[validationKey]validationEntry{}
-	}
-	if _, ok := c.m[k]; !ok && len(c.m) >= validationCacheSize {
-		for old := range c.m { // arbitrary eviction: an entry is cheap to recompute
-			delete(c.m, old)
-			break
-		}
-	}
-	c.m[k] = e
 }
 
 // validationMessage is the readable text of a refusal: the error without the sentinel the graph wraps it with.
@@ -87,8 +53,8 @@ func (g *Graph) impactValidations(ctx context.Context, tx Tx, c domain.Change, f
 		return nil, err
 	}
 	key := validationKey{c.ID, flow}
-	if out, ok := g.validations.get(key, st.seq); ok {
-		return out, nil
+	if out, ok := g.validations.Get(key); ok && out.seq == st.seq {
+		return out.out, nil
 	}
 	seen, err := g.newFlowNodes(tx, c, flow).nodes(ctx)
 	if err != nil {
@@ -127,7 +93,7 @@ func (g *Graph) impactValidations(ctx context.Context, tx Tx, c domain.Change, f
 		}
 	}
 	if complete {
-		g.validations.put(key, validationEntry{seq: st.seq, out: out})
+		g.validations.Put(key, validationEntry{seq: st.seq, out: out})
 	}
 	return out, nil
 }

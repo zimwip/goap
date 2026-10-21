@@ -32,9 +32,9 @@ rule only half kept:
    of the log for one call: the call that needs it reads its entries and folds them once, uses it for what it does, and
    nothing of it is kept for the next call (stateless: the log is the state). The engine does the same when the graph
    sends no history (`withHistory`). The view of a change is kept between calls (`draftCache`, ADR 0079 §2), bounded in
-   memory and in time: `Graph.DraftCacheBytes` (default 64 MiB) of the estimated size of the views held
-   (`draftState.bytes`, counted as each event and fact is folded, `approxsize.go`; the least recently used go first, a
-   view larger than the bound is not kept) and `Graph.DraftCacheTTL` (default 5 minutes after it was last folded). A
+   memory and in time (a `lib/cache`, ADR 0156: `Graph.Caches.Drafts`, default 64 MiB of the estimated size of the
+   views held, `draftState.bytes`, counted as each event and fact is folded, `approxsize.go`; the least recently read go
+   first, a view larger than the bound is not kept; a view no one read for 5 minutes goes). A
    view read from the cache is still checked against the log (the entries after its position), so the bounds only
    decide what is folded again, never what is answered.
 3. **The guard reads headers.** The unit and the project of a change are read from its header (`ChangeHead`), never

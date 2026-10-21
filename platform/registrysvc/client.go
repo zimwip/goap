@@ -7,30 +7,37 @@ import (
 	"sync"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/zimwip/goap/contracts/domain"
 	registryv1 "github.com/zimwip/goap/contracts/gen/goap/registry/v1"
 	"github.com/zimwip/goap/contracts/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/engine/engine"
 	"github.com/zimwip/goap/engine/methodology"
+	"github.com/zimwip/goap/lib/cache"
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/domainpb"
 )
 
 // Client adapts the registry to engine.MethodologyPort. It builds the activable form of a version as the registry does
 // (Activate over the definition and the domains the registry says it compiles against); published versions are
-// immutable, so compiled methodologies are cached by name, version and those domains.
+// immutable, so compiled methodologies are cached by name, version and those domains (a lib/cache, CompiledBounds).
 type Client struct {
 	rpc   registryv1connect.RegistryServiceClient
-	mu    sync.Mutex
-	cache map[string]*methodology.Compiled
+	mu    sync.Mutex // one compile at a time
+	cache *cache.Cache[string, clientEntry]
+}
+
+type clientEntry struct {
+	c     *methodology.Compiled
+	bytes int64 // estimated
 }
 
 var _ engine.MethodologyPort = (*Client)(nil)
 
 // NewClient returns a registry client.
 func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *Client {
-	return &Client{rpc: registryv1connect.NewRegistryServiceClient(hc, baseURL, opts...), cache: map[string]*methodology.Compiled{}}
+	return &Client{rpc: registryv1connect.NewRegistryServiceClient(hc, baseURL, opts...), cache: cache.New(cache.Fixed(CompiledBounds), func(_ string, e clientEntry) int64 { return e.bytes })}
 }
 
 // List implements engine.MethodologyPort (latest published versions, the suspended ones left out).
@@ -76,14 +83,14 @@ func (c *Client) Methodology(ctx context.Context, ref string) (*methodology.Comp
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if m, ok := c.cache[k]; ok {
-		return m, nil
+	if e, ok := c.cache.Get(k); ok {
+		return e.c, nil
 	}
 	// the activable form the registry builds, by the same compilation of the same inputs (ADR 0126 step 6)
 	cm, err := Activate(FromPB(r.Msg.Methodology), ds)
 	if err != nil {
 		return nil, err
 	}
-	c.cache[k] = cm
+	c.cache.Put(k, clientEntry{c: cm, bytes: compiledBytes(proto.Size(r.Msg.Methodology))})
 	return cm, nil
 }

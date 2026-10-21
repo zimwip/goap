@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/lib/cache"
 )
 
 // scratchDrafts is the drafts of a change as one comparable text, from a from-scratch fold of its whole impact log.
@@ -137,7 +138,7 @@ func testDraftCacheRollbackAndSharedLog(t *testing.T, repo Repo) {
 		last = int64(es[len(es)-1].Seq)
 		return nil
 	})
-	if s := g.draftStates.get(c.ID, time.Hour); s == nil || s.seq != last {
+	if s := g.draftStates.get(c.ID); s == nil || s.seq != last {
 		t.Fatalf("cache at %v, committed log at %d", s, last)
 	}
 
@@ -197,47 +198,22 @@ func BenchmarkDraftRead(b *testing.B) {
 	}
 }
 
-// The cache of views is bounded: a view not folded for the TTL is dropped, the least recently used go first once the
-// views held pass the bound in bytes, and a view larger than the bound is not kept.
-func TestDraftCacheBounds(t *testing.T) {
-	now := time.Unix(1000, 0)
-	c := draftCache{now: func() time.Time { return now }}
-	b := cacheBounds{bytes: 1000, ttl: time.Minute}
-	view := func(id string, seq, bytes int64) *draftState {
-		return &draftState{change: domain.ChangeID(id), seq: seq, bytes: bytes}
+// The cache of views keeps the most advanced view of a change (its bounds are lib/cache's, tested there).
+func TestDraftCacheKeepsTheNewest(t *testing.T) {
+	c := newDraftCache(cache.Fixed(cache.Bounds{Bytes: 1 << 20, TTL: time.Hour}))
+	view := func(seq int64) *draftState { return &draftState{change: "a", seq: seq, bytes: 10} }
+	c.put(view(2))
+	c.put(view(1))
+	if s := c.get("a"); s == nil || s.seq != 2 {
+		t.Fatalf("an older view replaced a newer one: %+v", s)
 	}
-	c.put(view("a", 1, 400), b)
-	c.put(view("b", 1, 400), b)
-	if c.get("a", b.ttl) == nil || c.get("b", b.ttl) == nil {
-		t.Fatal("both views fit")
+	c.put(view(3))
+	if s := c.get("a"); s == nil || s.seq != 3 {
+		t.Fatalf("a newer view was not kept: %+v", s)
 	}
-	// a third passes the bound: the least recently used (a was read before b) goes
-	c.get("a", b.ttl)
-	c.put(view("c", 1, 400), b)
-	if c.get("b", b.ttl) != nil || c.get("a", b.ttl) == nil || c.get("c", b.ttl) == nil {
-		t.Fatalf("the least recently used view should have gone: %d bytes held", c.bytes)
-	}
-	if c.bytes != 800 {
-		t.Fatalf("bytes held %d, want 800", c.bytes)
-	}
-	// a view larger than the bound is not kept, and does not push the others out
-	c.put(view("big", 1, 2000), b)
-	if c.get("big", b.ttl) != nil || c.get("a", b.ttl) == nil {
-		t.Fatal("a view larger than the bound is not kept")
-	}
-	// a newer view replaces the one held and counts its own size
-	c.put(view("a", 2, 100), b)
-	if s := c.get("a", b.ttl); s == nil || s.seq != 2 || c.bytes != 500 {
-		t.Fatalf("replaced view: %+v, %d bytes", s, c.bytes)
-	}
-	// past the TTL a view is gone
-	now = now.Add(2 * time.Minute)
-	if c.get("a", b.ttl) != nil {
-		t.Fatal("an expired view is not returned")
-	}
-	c.put(view("d", 1, 10), b) // a put drops the expired ones
-	if c.get("c", b.ttl) != nil || c.bytes != 10 {
-		t.Fatalf("expired views held: %d bytes", c.bytes)
+	c.drop("a")
+	if c.get("a") != nil {
+		t.Fatal("a dropped view is still kept")
 	}
 }
 

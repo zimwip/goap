@@ -2,46 +2,20 @@ package graph
 
 import (
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/lib/cache"
 )
 
 // The sizes below are estimates of the memory a value holds, for the bounds of the caches (draftCache): the bytes of
 // its texts and a fixed cost per value, map entry and struct, not an exact count. They err high rather than low.
 
 const (
-	valueBytes  = 16  // a scalar or an interface
-	entryBytes  = 48  // a map entry or a slice element beyond its value
-	structBytes = 160 // the fixed fields of an event, a draft or an impact
+	valueBytes  = cache.WordBytes   // a scalar or an interface
+	entryBytes  = cache.SlotBytes   // a map entry or a slice element beyond its value
+	structBytes = cache.StructBytes // the fixed fields of an event, a draft or an impact
 )
 
 // approxSize estimates the memory a decoded JSON-like value holds.
-func approxSize(v any) int64 {
-	switch v := v.(type) {
-	case nil:
-		return valueBytes
-	case string:
-		return valueBytes + int64(len(v))
-	case map[string]any:
-		n := int64(valueBytes)
-		for k, x := range v {
-			n += entryBytes + int64(len(k)) + approxSize(x)
-		}
-		return n
-	case []any:
-		n := int64(valueBytes)
-		for _, x := range v {
-			n += entryBytes + approxSize(x)
-		}
-		return n
-	case []string:
-		n := int64(valueBytes)
-		for _, x := range v {
-			n += entryBytes + int64(len(x))
-		}
-		return n
-	default:
-		return valueBytes
-	}
-}
+func approxSize(v any) int64 { return cache.Of(v) }
 
 func draftSize(d *domain.Draft) int64 {
 	if d == nil {
