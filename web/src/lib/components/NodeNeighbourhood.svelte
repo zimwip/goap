@@ -19,11 +19,11 @@
   // reader picks (the deeper ones read on demand: parents of parents, children of children), a click recenters, a
   // double-click opens the node, a link selected shows both of its ends with its properties; below, the node's
   // change-stack and properties. Shared by the Baseline tab and the Graph pane of the node editor, which gives the
-  // world of its change (`world`: the neighbourhoods are read from it, not from a baseline).
+  // world of its change (`inChange`: the neighbourhoods are read in the world of that change, not in a baseline).
   import { graph, errorMessage } from '../api';
   import NodeGraph from './NodeGraph.svelte';
   import ChangeStackView from './ChangeStackView.svelte';
-  import { hoodIn, indexOf, type GraphIndex } from '../graphIndex';
+  import { indexOf } from '../graphIndex';
   import { openNode } from '../nodeEditors';
   import { typeCatalog } from '../stores/types.svelte';
 
@@ -38,7 +38,7 @@
     details = true,
     compact = false,
     fill = false,
-    world,
+    inChange,
   }: {
     baselineId: string;
     /** the namespace the baseline holds: a node of another one opens in its editor instead of recentering */
@@ -56,14 +56,13 @@
     compact?: boolean;
     /** the graph takes the height left in the editor (NodeGraph) */
     fill?: boolean;
-    /** the world of a change (its fork as it left it, its commits, its drafts): read in place of the baseline */
-    world?: GraphIndex;
+    /** the change whose world (its fork as it left it, its commits, its drafts) is read in place of the baseline */
+    inChange?: { changeId: string; flow?: string };
   } = $props();
 
   /** what the neighbourhoods are read from: the world given, else the baseline ('' : nothing to read) */
-  const source = $derived(world ? `world:${world.baselineId}` : baselineId);
-  const readHood = (b: string, id: string, signal?: AbortSignal): Promise<Read> =>
-    world ? Promise.resolve(hoodIn(world, id)) : graph.getNodeNeighbourhood(b, id, signal);
+  const source = $derived(inChange ? `change:${inChange.changeId}:${inChange.flow ?? ''}` : baselineId);
+  const readHood = (b: string, id: string, signal?: AbortSignal): Promise<Read> => graph.getNodeNeighbourhood(b, id, signal, inChange);
 
   const MAX_LEVELS = 4;
   /** the nodes read per level beyond the first (the graph shows at most 14 per column anyway) */

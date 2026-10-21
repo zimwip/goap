@@ -42,8 +42,8 @@
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
-  import { indexOf, loadChangeWorld, loadGraph, loadHead, type GraphIndex } from '../../graphIndex';
-  import { namespaceOf } from '../../namespace';
+  import { baselineHoods, changeHoods, hoodIndex, hoodOf, indexOf, type GraphIndex, type Hood } from '../../graphIndex';
+  import { MAIN_BRANCH, namespaceOf } from '../../namespace';
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { assistField, registerAssist } from '../../assist/registry.svelte';
   import { diffSummary } from '../../assist/changeScreen';
@@ -64,7 +64,10 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     tab.params.pane = pane; // remembered with the tab
   });
 
-  let head = $state<GraphIndex | undefined>();
+  /** the head of the node's namespace as read so far: the neighbourhoods read in it (the node's, then the ones of the
+   * nodes unfolded in its trees), never its whole state */
+  let headAt = $state<{ id: string; node: string; hoods: Hood[] } | undefined>();
+  const head = $derived(headAt ? hoodIndex(headAt.id, headAt.hoods) : undefined);
   let versions = $state<GraphNode[]>([]);
   let loading = $state(true);
   let error = $state('');
@@ -83,8 +86,6 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     flowName: string;
     /** the fork of the change: the versions its impacts start from */
     base: GraphIndex;
-    /** the world of the change: its fork as it left it, its commits, its drafts (GetChangeGraph world) */
-    index: GraphIndex;
     attached: NodeRef[];
     posts: PostVersions;
   }
@@ -99,6 +100,12 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   let flowAsked = $state({ change: untrack(() => tab.params.change) ?? '', flow: untrack(() => tab.params.flow) ?? '' });
   const workFlow = $derived(workId && flowAsked.change === workId ? flowAsked.flow : '');
   let work = $state<Work | undefined>();
+  /** the world of the change as read so far: the neighbourhoods read in it (its fork as it left it, its commits, its
+   * drafts; GetNodeNeighbourhood in the change), the node's then the ones of the nodes unfolded */
+  let worldHoods = $state<Hood[]>([]);
+  const worldIndex = $derived(work ? hoodIndex(work.change.baselineId ?? '', worldHoods) : undefined);
+  /** the neighbourhoods to read again when the world moves: the ones read so far, the node's first */
+  const readAgain = (hoods: Hood[]) => [...new Set([id, ...hoods.flatMap((h) => (h.node?.id ? [h.node.id] : []))])].slice(0, 20);
 
   // opened in a change (tab.params.change, set again when the tab is opened anew): that change becomes the one selected
   // in the context, which the editor then follows
@@ -142,7 +149,9 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
       versions = list.slice().sort((a, b) => (a.version ?? 0) - (b.version ?? 0));
       const namespace = namespaceOf(versions.at(-1)?.namespace ?? draftNode?.namespace);
       nodeNamespace = namespace;
-      head = await loadHead(namespace, signal);
+      const hid = (await graph.getBranch(namespace, MAIN_BRANCH, signal)).head?.id ?? '';
+      const again = headAt?.id === hid && headAt.node === id ? readAgain(headAt.hoods) : [id];
+      headAt = { id: hid, node: id, hoods: hid ? await Promise.all(again.map((n) => hoodOf(baselineHoods(hid), n, signal))) : [] };
       if (!changes.loaded) void refreshChanges();
     } catch (e) {
       if (!signal?.aborted) error = errorMessage(e);
@@ -152,7 +161,17 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   }
 
   /** the fork of a change (the empty state for the first change of a namespace, ADR 0056) */
-  const loadFork = (baselineId?: string): Promise<GraphIndex> => (baselineId ? loadGraph(baselineId) : Promise.resolve(indexOf('', [], [])));
+  const loadFork = async (baselineId?: string): Promise<GraphIndex> =>
+    baselineId ? hoodIndex(baselineId, [await hoodOf(baselineHoods(baselineId), id)]) : indexOf('', [], []);
+  /** the neighbourhoods of the world of the change: the node's, and the ones read so far when it is the same change */
+  let worldOf = '';
+  async function loadWorld(flow = '') {
+    const at = `${id} ${workId} ${flow}`;
+    const again = worldOf === at ? readAgain(worldHoods) : [id];
+    const hoods = await Promise.all(again.map((n) => hoodOf(changeHoods(workId, flow), n)));
+    worldOf = at;
+    return hoods;
+  }
 
   async function loadWork() {
     if (!workId) {
@@ -167,19 +186,21 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
         if (!change) throw new Error('unknown change');
         const attached = (change.nodes ?? []).filter((n) => n.pre?.id && !n.superseded).map((n) => n.pre!);
         const flowName = workFlow === 'main' ? 'main flow' : (bb.options?.find((o) => o.id === workFlow)?.option?.name ?? shortId(workFlow));
-        const [base, index, posts] = await Promise.all([loadFork(change.baselineId), loadChangeWorld(workId, change.baselineId ?? '', workFlow), loadPosts(change.nodes ?? [], true, { changeId: workId, flow: workFlow })]);
-        work = { change, flowName, base, index, attached, posts };
+        const [base, hoods, posts] = await Promise.all([loadFork(change.baselineId), loadWorld(workFlow), loadPosts(change.nodes ?? [], true, { changeId: workId, flow: workFlow })]);
+        worldHoods = hoods;
+        work = { change, flowName, base, attached, posts };
         return;
       }
       const change = (await graph.getChange(workId)).change;
       if (!change) throw new Error('unknown change');
-      const [base, index, attached, posts] = await Promise.all([
+      const [base, hoods, attached, posts] = await Promise.all([
         loadFork(change.baselineId),
-        loadChangeWorld(workId, change.baselineId ?? ''),
+        loadWorld(),
         graph.getChangeImpacts(workId),
         loadPosts(change.nodes ?? [], false, { changeId: workId }),
       ]);
-      work = { change, flowName: '', base, index, attached: attached.nodes ?? [], posts };
+      worldHoods = hoods;
+      work = { change, flowName: '', base, attached: attached.nodes ?? [], posts };
     } catch (e) {
       error = errorMessage(e);
       work = undefined;
@@ -215,7 +236,40 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   // --- derived ----------------------------------------------------------------------
   const stored = $derived(head?.nodes.get(id) ?? versions.at(-1) ?? (workId ? draftNode : undefined));
   /** the world the editor sees: the change's when one is followed, else the latest released versions */
-  const world = $derived(work?.index ?? head);
+  const world = $derived(worldIndex ?? head);
+
+  /** reads the neighbourhood of a node unfolded in a tree, in the world seen */
+  async function expand(nid: string) {
+    try {
+      if (work) {
+        const [w, f] = [workId, workFlow];
+        const h = await hoodOf(changeHoods(w, f), nid);
+        if (w === workId && f === workFlow) worldHoods = [...worldHoods, h];
+      } else if (headAt?.id) {
+        const at = headAt.id;
+        const h = await hoodOf(baselineHoods(at), nid);
+        if (headAt?.id === at) headAt = { ...headAt, hoods: [...headAt.hoods, h] };
+      }
+    } catch (e) {
+      error = errorMessage(e);
+    }
+  }
+
+  /** nodes picked from a search (the pickers of links and forms): the world read holds the node's neighbours only */
+  let picked = $state<GraphNode[]>([]);
+  let foundByKey = new Map<string, GraphNode>();
+  /** the nodes matching a text: the ones of the fork of the change (else of the head), and the ones the change creates */
+  async function searchNodes(query: string): Promise<GraphNode[]> {
+    const baselineId = work ? work.change.baselineId : head?.baselineId;
+    const found = baselineId ? ((await graph.listBaselineNodes({ baselineId, query, limit: 200 })).nodes ?? []) : [];
+    const q = query.trim().toLowerCase();
+    const created = (work?.change.nodes ?? [])
+      .filter((c) => c.intent === 'created' && c.post?.id && !c.superseded && (!q || `${c.key} ${c.type}`.toLowerCase().includes(q)))
+      .map((c): GraphNode => ({ id: c.post?.id, version: 0, key: c.key, type: c.type, namespace: work?.change.namespace }));
+    const out = [...created, ...found.filter((n) => !n.deleted)];
+    foundByKey = new Map(out.flatMap((n) => (n.key ? [[n.key, n] as const] : [])));
+    return out;
+  }
   /** the node in the world seen: as the change has it (a draft is version 0), else its latest released version */
   const inWorld = $derived(world?.nodes.get(id));
   const typeName = $derived(stored?.type ?? '');
@@ -372,7 +426,8 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   // fields standing for the outgoing links of their types.
   const typeForm = $derived(typeName ? typeCatalog.cat.type(typeName)?.form : undefined);
   const formIndex = $derived(world);
-  const keyOfId = (nid: string | undefined) => (nid ? (formIndex?.nodes.get(nid)?.key ?? head?.nodes.get(nid)?.key) : undefined);
+  const keyOfId = (nid: string | undefined) =>
+    nid ? (formIndex?.nodes.get(nid)?.key ?? head?.nodes.get(nid)?.key ?? picked.find((n) => n.id === nid)?.key) : undefined;
   const currentLinks = $derived<CurrentLink[]>(
     outLinks.flatMap((l) => {
       const to = keyOfId(l.to?.id);
@@ -382,13 +437,19 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   const formSource = $derived.by((): NodeSource => {
     const cat = typeCatalog.cat;
     return {
-      nodes: (formIndex?.list ?? [])
+      nodes: [...(formIndex?.list ?? []), ...picked.filter((p) => !formIndex?.nodes.has(p.id ?? ''))]
         .filter((n) => n.key && n.id !== id)
         .map((n) => ({ key: n.key!, type: n.type ?? '', state: n.state, namespace: n.namespace }))
         .sort((a, b) => a.key.localeCompare(b.key)),
       isA: (t, a) => t === a || cat.typesOf(t).includes(a),
       linkTypesFrom: () => (typeName ? cat.linksFrom(typeName).map((l) => l.ref ?? '').filter(Boolean) : []),
       linkLabel: (t) => cat.links.find((l) => l.ref === t)?.label ?? '',
+      search: async (q) =>
+        (await searchNodes(q)).filter((n) => n.key && n.id !== id).map((n) => ({ key: n.key!, type: n.type ?? '', state: n.state, namespace: n.namespace })),
+      remember: (o) => {
+        const n = foundByKey.get(o.key);
+        if (n && !picked.some((p) => p.key === n.key)) picked = [...picked, n];
+      },
     };
   });
   let formError = $state('');
@@ -396,7 +457,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     if (!typeForm) return;
     formError = '';
     const e = nodeEdit(typeForm, values, nodeProps, currentLinks);
-    const refOfKey = (k: string) => (formIndex?.list ?? []).find((n) => n.key === k);
+    const refOfKey = (k: string) => [...(formIndex?.list ?? []), ...picked].find((n) => n.key === k);
     const addLinks: LinkWrite[] = [];
     for (const l of e.add) {
       const n = refOfKey(l.to);
@@ -631,6 +692,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
             node={stored}
             links={outLinks}
             index={world}
+            search={searchNodes}
             readonly={!!stored.deleted}
             why="The node is deleted."
             busy={busy !== ''}
@@ -643,12 +705,12 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
               <section class="card">
                 <h3>Parents <span class="count">{world.in.get(id)?.length ?? 0}</span></h3>
                 <p class="hint">Nodes that link to this one{work ? ', as the change has them' : ''}.</p>
-                <NodeTree index={world} root={id} dir="in" onopen={(n) => openNeighbour(n)} />
+                <NodeTree index={world} root={id} dir="in" onopen={(n) => openNeighbour(n)} loaded={world.loaded} expand={(n) => void expand(n)} />
               </section>
               <section class="card">
                 <h3>Children <span class="count">{world.out.get(id)?.length ?? 0}</span></h3>
                 <p class="hint">Nodes this one links to{work ? ', as the change has them' : ''}.</p>
-                <NodeTree index={world} root={id} dir="out" onopen={(n) => openNeighbour(n)} />
+                <NodeTree index={world} root={id} dir="out" onopen={(n) => openNeighbour(n)} loaded={world.loaded} expand={(n) => void expand(n)} />
               </section>
             </div>
           {:else}
@@ -660,7 +722,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
               {#if graphNode !== id || graphLink}
                 <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
               {/if}
-              <NodeNeighbourhood baselineId={work.index.baselineId} world={work.index} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} details={false} compact fill {reload} />
+              <NodeNeighbourhood baselineId={work.change.baselineId ?? ''} inChange={{ changeId: work.change.id ?? '', flow: workFlow }} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} details={false} compact fill {reload} />
             </section>
           {:else if !work && head?.baselineId && head.nodes.has(id)}
             <section class="card neighbourhood">

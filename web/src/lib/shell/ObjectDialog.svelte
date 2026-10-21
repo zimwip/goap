@@ -2,11 +2,12 @@
   // Single global "New object" dialog, mounted once at the shell root.
   import { objectDialog, closeObjectDialog } from './objectDialogState.svelte';
   import { notify } from './workbench.svelte';
-  import { graph, errorMessage, type Struct } from '../api';
-  import { headGraph, createNodeItem, type HeadGraph } from '../graphEdit';
+  import { graph, errorMessage, nodeTitle, type GraphNode, type Struct } from '../api';
+  import { createNodeItem } from '../graphEdit';
+  import { MAIN_BRANCH } from '../namespace';
   import { typeCatalog } from '../stores/types.svelte';
   import FormRenderer from '../forms/FormRenderer.svelte';
-  import type { FormValues, NodeSource } from '../forms/types';
+  import type { FormValues, NodeOption, NodeSource } from '../forms/types';
   import { nodeWrite } from '../forms/nodeForm';
   import { committableBirthStates } from '../lifecycle';
 
@@ -34,23 +35,35 @@
   });
 
   const namespaceOf = (type: string) => (type.includes('@') ? type.slice(0, type.indexOf('@')) : '');
-  // the creation form of the type (ADR 0115 §10), its link fields offering the nodes at the head of the namespace
+  // the creation form of the type (ADR 0115 §10), its link fields searching the nodes at the head of the namespace
   const typeForm = $derived(objectDialog.open ? typeCatalog.cat.type(objectDialog.nodeType)?.form : undefined);
-  let head = $state<HeadGraph | undefined>();
+  /** the head of the namespace, its header only: the pickers search it, never read it whole */
+  const headOf = async (namespace: string) => (await graph.getBranch(namespace, MAIN_BRANCH)).head?.id ?? '';
+  let headId = $state('');
+  /** the nodes picked so far, kept so a choice stays shown once the search moved on */
+  let picked = $state<NodeOption[]>([]);
   $effect(() => {
-    head = undefined;
+    headId = '';
+    picked = [];
     if (!typeForm) return;
     let gone = false;
-    headGraph(namespaceOf(objectDialog.nodeType))
-      .then((h) => !gone && (head = h))
+    headOf(namespaceOf(objectDialog.nodeType))
+      .then((h) => !gone && (headId = h))
       .catch(() => undefined); // a namespace with no baseline yet: nothing to link to
     return () => (gone = true);
   });
+  const optionOf = (n: GraphNode): NodeOption => ({ key: n.key ?? '', type: n.type ?? '', title: nodeTitle(n), state: n.state, namespace: n.namespace });
   const formSource = $derived.by((): NodeSource => {
     const cat = typeCatalog.cat;
     const t = objectDialog.nodeType;
+    const b = headId;
     return {
-      nodes: (head?.nodes ?? []).filter((n) => n.key).map((n) => ({ key: n.key!, type: n.type ?? '', state: n.state, namespace: n.namespace })),
+      nodes: picked,
+      search: async (query) =>
+        b ? ((await graph.listBaselineNodes({ baselineId: b, query, limit: 200 })).nodes ?? []).filter((n) => n.key && !n.deleted).map(optionOf) : [],
+      remember: (n) => {
+        if (!picked.some((p) => p.key === n.key)) picked = [...picked, n];
+      },
       isA: (x, a) => x === a || cat.typesOf(x).includes(a),
       linkTypesFrom: () => cat.linksFrom(t).map((l) => l.ref ?? '').filter(Boolean),
       linkLabel: (l) => cat.links.find((x) => x.ref === l)?.label ?? '',
@@ -82,12 +95,12 @@
       // every node is created in a change (ADR 0076): one of the namespace of its type, applied on main
       const type = objectDialog.nodeType;
       const namespace = namespaceOf(type);
-      const h = head ?? (await headGraph(namespace));
+      const baselineId = headId || (await headOf(namespace));
       await graph.commitEdits({
         namespace,
         title: `Create ${key.trim()}`,
         intent: `Create the ${type} ${key.trim()}`,
-        baselineId: h.baselineId,
+        baselineId,
         methodology: objectDialog.methodology,
         edits: [{ ...createNodeItem(key.trim(), type, props, links), ...(birth && birth !== lifecycle?.initial ? { state: birth } : {}) }],
       });

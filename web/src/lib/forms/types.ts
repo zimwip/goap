@@ -70,6 +70,10 @@ export interface NodeSource {
   linkLabel?: (type: string) => string;
   /** the decision points a decision field may rule (a human task: those of the change) */
   decisions?: DecisionOption[];
+  /** finds the nodes matching a text beyond `nodes` (a page holding a part of its graph only: the graph searched) */
+  search?: (query: string) => Promise<NodeOption[]>;
+  /** told of a node picked from a search, so the page holds it from then on (`nodes`) */
+  remember?: (n: NodeOption) => void;
 }
 
 /** A decision point a decision field may rule. */

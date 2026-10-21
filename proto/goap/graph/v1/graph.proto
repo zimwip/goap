@@ -598,6 +598,11 @@ message ListBaselineLinksResponse {
 message GetNodeNeighbourhoodRequest {
   string baseline_id = 1;
   string node_id = 2;
+  // the neighbourhood in the world of this change (Graph.ChangeNodeNeighbourhood: its fork as it left it, its commits,
+  // its drafts), in place of a baseline: the cost follows the node, never the size of the world
+  string change_id = 3;
+  // flow or option of the change (empty: the active option, else the main flow)
+  string flow = 4;
 }
 
 message GetNodeNeighbourhoodResponse {

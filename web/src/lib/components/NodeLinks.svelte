@@ -12,6 +12,7 @@
     readonly = false,
     why = '',
     busy = false,
+    search,
     onadd,
     onremove,
     onopen,
@@ -25,6 +26,9 @@
     /** why the links cannot be changed now (shown when readonly) */
     why?: string;
     busy?: boolean;
+    /** finds the targets matching a text in the graph (the index holds the node's neighbours only); unset: the targets
+     * are picked from the index */
+    search?: (query: string) => Promise<GraphNode[]>;
     onadd: (type: string, to: NodeRef) => Promise<boolean> | boolean;
     onremove: (link: Link) => Promise<boolean> | boolean;
     onopen: (id: string) => void;
@@ -36,8 +40,29 @@
 
   const linkTypes = $derived(typeCatalog.cat.linksFrom(node.type));
   const chosen = $derived(linkTypes.find((l) => l.ref === type));
+  /** the nodes the search found for the text typed */
+  let found = $state<GraphNode[]>([]);
+  $effect(() => {
+    const q = filter.trim();
+    const find = search;
+    if (!find || !type) return;
+    let live = true;
+    const t = setTimeout(() => {
+      find(q)
+        .then((r) => {
+          if (live) found = r;
+        })
+        .catch(() => {
+          if (live) found = [];
+        });
+    }, 200);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  });
   const targets = $derived(
-    (index?.list ?? [])
+    (search ? found : (index?.list ?? []))
       .filter((n) => n.id !== node.id && !n.deleted && (!chosen || typeCatalog.cat.linkAccepts(chosen, n.type)))
       .filter((n) => !filter || `${n.key} ${n.type}`.toLowerCase().includes(filter.toLowerCase()))
       .sort((a, b) => (a.key ?? '').localeCompare(b.key ?? ''))
@@ -51,7 +76,7 @@
   };
 
   async function add() {
-    const t = index?.nodes.get(target);
+    const t = found.find((n) => n.id === target) ?? index?.nodes.get(target);
     if (!type || !t?.id) return;
     if (await onadd(type, { id: t.id, version: t.version })) target = '';
   }

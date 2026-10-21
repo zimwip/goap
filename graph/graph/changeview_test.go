@@ -3,6 +3,8 @@ package graph
 import (
 	"context"
 	"errors"
+	"fmt"
+	"maps"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -143,6 +145,7 @@ func testChangeWorld(t *testing.T, repo Repo) {
 		}
 	}
 	check(read(g.ChangeWorld), "Use PSP v2")
+	checkChangeHoods(t, g, c.ID)
 	// the graph a call on the change reads stays its reference baseline
 	if ref := read(g.ChangeGraph); ref.nodes["REQ-1"].Properties["title"] != "Use PSP v1" || ref.nodes["REQ-9"].ID != "" {
 		t.Fatalf("change graph: %+v", ref.nodes)
@@ -154,5 +157,51 @@ func testChangeWorld(t *testing.T, repo Repo) {
 	check(w, "Use PSP v2")
 	if w.nodes["REQ-1"].Version != f.req.Version+1 || w.nodes["REQ-9"].Version != 0 {
 		t.Fatalf("after the commit: REQ-1 v%d, REQ-9 v%d", w.nodes["REQ-1"].Version, w.nodes["REQ-9"].Version)
+	}
+	checkChangeHoods(t, g, c.ID)
+}
+
+// checkChangeHoods checks that the neighbourhood of every node of the world of a change, read by node
+// (ChangeNodeNeighbourhood), is the one the whole world holds (ChangeWorld): the same node at the same version, the
+// same links, the same neighbours at the same versions.
+func checkChangeHoods(t *testing.T, g *Graph, id domain.ChangeID) {
+	t.Helper()
+	ctx := context.Background()
+	nodes, links, err := g.ChangeWorld(ctx, id, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[domain.NodeID]domain.Node{}
+	for _, n := range nodes {
+		byID[n.ID] = n
+	}
+	for _, n := range nodes {
+		want := map[string]bool{}
+		for _, l := range links {
+			if l.From.ID == n.ID || l.To.ID == n.ID {
+				want[fmt.Sprintf("%s %s %s v%d", byID[l.From.ID].Key, l.Type, byID[l.To.ID].Key, byID[l.To.ID].Version)] = true
+			}
+		}
+		nb, err := g.ChangeNodeNeighbourhood(ctx, id, "", n.ID)
+		if err != nil {
+			t.Fatalf("%s: %v", n.Key, err)
+		}
+		if nb.Node.Version != n.Version || nb.Node.Properties["title"] != n.Properties["title"] {
+			t.Fatalf("%s: node v%d %v, want v%d %v", n.Key, nb.Node.Version, nb.Node.Properties, n.Version, n.Properties)
+		}
+		near := map[domain.NodeID]domain.Node{n.ID: nb.Node}
+		for _, m := range nb.Nodes {
+			if w, ok := byID[m.ID]; !ok || w.Version != m.Version {
+				t.Fatalf("%s: neighbour %s v%d, the world holds v%d", n.Key, m.Key, m.Version, w.Version)
+			}
+			near[m.ID] = m
+		}
+		got := map[string]bool{}
+		for _, l := range nb.Links {
+			got[fmt.Sprintf("%s %s %s v%d", near[l.From.ID].Key, l.Type, near[l.To.ID].Key, near[l.To.ID].Version)] = true
+		}
+		if !maps.Equal(got, want) {
+			t.Fatalf("%s: links %v, want %v", n.Key, got, want)
+		}
 	}
 }

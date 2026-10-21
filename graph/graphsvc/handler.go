@@ -390,7 +390,13 @@ func (h *Handler) ListBaselineLinks(ctx context.Context, r *connect.Request[grap
 }
 
 func (h *Handler) GetNodeNeighbourhood(ctx context.Context, r *connect.Request[graphv1.GetNodeNeighbourhoodRequest]) (*connect.Response[graphv1.GetNodeNeighbourhoodResponse], error) {
-	nb, err := h.Graph.NodeNeighbourhood(ctx, domain.BaselineID(r.Msg.BaselineId), domain.NodeID(r.Msg.NodeId))
+	var nb graph.Neighbourhood
+	var err error
+	if r.Msg.ChangeId != "" {
+		nb, err = h.Graph.ChangeNodeNeighbourhood(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, domain.NodeID(r.Msg.NodeId))
+	} else {
+		nb, err = h.Graph.NodeNeighbourhood(ctx, domain.BaselineID(r.Msg.BaselineId), domain.NodeID(r.Msg.NodeId))
+	}
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}

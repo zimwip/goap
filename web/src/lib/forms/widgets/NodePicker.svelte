@@ -1,5 +1,7 @@
 <script lang="ts">
-  // A search over the nodes a field may offer: type to filter by key, title or type, pick one.
+  // A search over the nodes a field may offer: type to filter by key, title or type, pick one. The choices are the
+  // nodes the page holds; with `search`, the nodes the graph finds for the text too (NodeSource.search), kept when
+  // `allow` takes them.
   import type { NodeOption } from '../types';
   import { typeName } from '../../stores/types.svelte';
 
@@ -9,18 +11,51 @@
     exclude = [],
     placeholder = 'Search a node…',
     disabled = false,
+    search,
+    allow = () => true,
     onpick,
-  }: { id?: string; choices: NodeOption[]; exclude?: string[]; placeholder?: string; disabled?: boolean; onpick: (n: NodeOption) => void } = $props();
+  }: {
+    id?: string;
+    choices: NodeOption[];
+    exclude?: string[];
+    placeholder?: string;
+    disabled?: boolean;
+    search?: (query: string) => Promise<NodeOption[]>;
+    allow?: (n: NodeOption) => boolean;
+    onpick: (n: NodeOption) => void;
+  } = $props();
 
   const LIMIT = 30;
   const listId = `np-${Math.random().toString(36).slice(2, 8)}`;
   let q = $state('');
   let open = $state(false);
   let active = $state(0);
+  /** the nodes the search found for the text typed */
+  let found = $state<NodeOption[]>([]);
+  $effect(() => {
+    const s = q.trim();
+    const find = search;
+    if (!find || !open) return;
+    let live = true;
+    const t = setTimeout(() => {
+      find(s)
+        .then((r) => {
+          if (live) found = r;
+        })
+        .catch(() => {
+          if (live) found = [];
+        });
+    }, 200);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  });
   const hits = $derived.by(() => {
     const s = q.trim().toLowerCase();
-    return choices
-      .filter((n) => !exclude.includes(n.key))
+    const seen = new Set<string>();
+    return [...choices, ...found.filter(allow)]
+      .filter((n) => !exclude.includes(n.key) && !seen.has(n.key) && (seen.add(n.key), true))
       .filter((n) => !s || `${n.key} ${n.title ?? ''} ${n.type}`.toLowerCase().includes(s))
       .slice(0, LIMIT);
   });
@@ -76,7 +111,7 @@
           </button>
         </li>
       {:else}
-        <li class="none">{choices.length ? 'No match.' : 'No node is allowed here.'}</li>
+        <li class="none">{choices.length || search ? 'No match.' : 'No node is allowed here.'}</li>
       {/each}
     </ul>
   {/if}

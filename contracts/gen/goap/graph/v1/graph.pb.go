@@ -2803,9 +2803,14 @@ func (x *ListBaselineLinksResponse) GetBaseline() *Baseline {
 }
 
 type GetNodeNeighbourhoodRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	BaselineId    string                 `protobuf:"bytes,1,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
-	NodeId        string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	BaselineId string                 `protobuf:"bytes,1,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	NodeId     string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	// the neighbourhood in the world of this change (Graph.ChangeNodeNeighbourhood: its fork as it left it, its commits,
+	// its drafts), in place of a baseline: the cost follows the node, never the size of the world
+	ChangeId string `protobuf:"bytes,3,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	// flow or option of the change (empty: the active option, else the main flow)
+	Flow          string `protobuf:"bytes,4,opt,name=flow,proto3" json:"flow,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2850,6 +2855,20 @@ func (x *GetNodeNeighbourhoodRequest) GetBaselineId() string {
 func (x *GetNodeNeighbourhoodRequest) GetNodeId() string {
 	if x != nil {
 		return x.NodeId
+	}
+	return ""
+}
+
+func (x *GetNodeNeighbourhoodRequest) GetChangeId() string {
+	if x != nil {
+		return x.ChangeId
+	}
+	return ""
+}
+
+func (x *GetNodeNeighbourhoodRequest) GetFlow() string {
+	if x != nil {
+		return x.Flow
 	}
 	return ""
 }
@@ -19558,11 +19577,13 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x05links\x18\x01 \x03(\v2\x13.goap.graph.v1.LinkR\x05links\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12.\n" +
 	"\x05types\x18\x03 \x03(\v2\x18.goap.graph.v1.TypeCountR\x05types\x123\n" +
-	"\bbaseline\x18\x04 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"W\n" +
+	"\bbaseline\x18\x04 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"\x88\x01\n" +
 	"\x1bGetNodeNeighbourhoodRequest\x12\x1f\n" +
 	"\vbaseline_id\x18\x01 \x01(\tR\n" +
 	"baselineId\x12\x17\n" +
-	"\anode_id\x18\x02 \x01(\tR\x06nodeId\"\xc7\x01\n" +
+	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12\x1b\n" +
+	"\tchange_id\x18\x03 \x01(\tR\bchangeId\x12\x12\n" +
+	"\x04flow\x18\x04 \x01(\tR\x04flow\"\xc7\x01\n" +
 	"\x1cGetNodeNeighbourhoodResponse\x12'\n" +
 	"\x04node\x18\x01 \x01(\v2\x13.goap.graph.v1.NodeR\x04node\x12)\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x13.goap.graph.v1.NodeR\x05nodes\x12)\n" +

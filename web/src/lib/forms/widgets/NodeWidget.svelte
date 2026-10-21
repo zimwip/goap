@@ -2,7 +2,7 @@
   // A node of the graph (or several), found by a search among those its constraints allow.
   import type { WidgetProps } from '../registry';
   import type { NodeOption } from '../types';
-  import { nodeChoices, strings } from '../validate';
+  import { nodeAllowed, nodeChoices, strings } from '../validate';
   import NodePicker from './NodePicker.svelte';
   import { typeName } from '../../stores/types.svelte';
 
@@ -13,6 +13,7 @@
   const byKey = $derived(new Map(source.nodes.map((n) => [n.key, n])));
 
   function pick(n: NodeOption) {
+    source.remember?.(n);
     onchange(multiple ? [...chosen, n.key] : n.key);
   }
   function drop(key: string) {
@@ -33,7 +34,7 @@
   </ul>
 {/if}
 {#if multiple || !chosen.length}
-  <NodePicker {id} {choices} exclude={chosen} placeholder={field.placeholder} {disabled} onpick={pick} />
+  <NodePicker {id} {choices} exclude={chosen} placeholder={field.placeholder} {disabled} search={source.search} allow={(n) => nodeAllowed(n, field.constraints, source)} onpick={pick} />
 {/if}
 
 <style>

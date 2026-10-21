@@ -321,6 +321,178 @@ func (g *Graph) NodeNeighbourhood(ctx context.Context, id domain.BaselineID, nod
 	return
 }
 
+// ChangeNodeNeighbourhood returns a node and its direct neighbours as a change sees them (its world, ChangeWorld): the
+// version of its fork the change left alone, the version it committed, or its draft (version 0), on the flow named
+// (else the active option, else the main flow). Like NodeNeighbourhood it reads the versions of the node and of its
+// neighbours only, never the whole world: the cost follows the node, not the namespace (ADR 0137). A link is kept when
+// its other end is in the world, at whatever version it names (the world is read by node).
+func (g *Graph) ChangeNodeNeighbourhood(ctx context.Context, id domain.ChangeID, flow string, nodeID domain.NodeID) (nb Neighbourhood, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		c, err := tx.Change(ctx, id)
+		if err != nil {
+			return err
+		}
+		flow := c.ResolveFlow(flow)
+		impacts, err := g.newFlowNodes(tx, c, flow).nodes(ctx)
+		if err != nil {
+			return err
+		}
+		reader, err := g.newDraftReader(ctx, tx, c, flow, impacts)
+		if err != nil {
+			return err
+		}
+		// what the change wrote over its fork (changeViewTx at ViewWritten): a draft is version 0, a version deleted
+		// leaves the world
+		over := map[domain.NodeID]domain.Version{}
+		gone := map[domain.NodeID]bool{}
+		for _, cn := range impacts {
+			if cn.Post == nil || cn.Review == domain.ReviewRejected {
+				continue
+			}
+			if cn.Post.IsDraft() {
+				over[cn.Post.ID] = 0
+				continue
+			}
+			n, err := tx.Node(ctx, *cn.Post)
+			if err != nil {
+				return err
+			}
+			if n.Deleted {
+				gone[n.ID] = true
+			} else {
+				over[n.ID] = n.Version
+			}
+		}
+		b, own, err := ownBranch(ctx, tx, c)
+		if err != nil {
+			return err
+		}
+		// world reads the versions some nodes have in the world of the change (absent: not in it)
+		world := func(ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+			var at map[domain.NodeID]domain.Version
+			if own {
+				at, err = branchVersions(ctx, tx, b, ids)
+			} else {
+				at, err = versionsAt(ctx, tx, c.BaselineID, ids)
+			}
+			if err != nil {
+				return nil, err
+			}
+			for _, nid := range ids {
+				if v, ok := over[nid]; ok {
+					at[nid] = v
+				} else if gone[nid] {
+					delete(at, nid)
+				}
+			}
+			return at, nil
+		}
+		at, err := world([]domain.NodeID{nodeID})
+		if err != nil {
+			return err
+		}
+		v, ok := at[nodeID]
+		if !ok {
+			return fmt.Errorf("node %s in the world of change %s: %w", nodeID, id, ErrNotFound)
+		}
+		ref := domain.NodeRef{ID: nodeID, Version: v}
+		if nb.Node, err = reader.node(ctx, tx, ref); err != nil {
+			return err
+		}
+		out, err := reader.outLinks(ctx, tx, ref)
+		if err != nil {
+			return err
+		}
+		// the links into the node: the stored ones, and the ones the drafts of the change hold
+		in, err := tx.LinksTo(ctx, nodeID)
+		if err != nil {
+			return err
+		}
+		drafts := make([]domain.NodeID, 0, len(over))
+		for nid, ver := range over {
+			if ver == 0 && nid != nodeID {
+				drafts = append(drafts, nid)
+			}
+		}
+		slices.Sort(drafts)
+		for _, nid := range drafts {
+			dl, err := reader.outLinks(ctx, tx, domain.NodeRef{ID: nid})
+			if err != nil {
+				return err
+			}
+			for _, l := range dl {
+				if !l.External() && l.To.ID == nodeID {
+					in = append(in, l)
+				}
+			}
+		}
+		var near []domain.NodeID
+		for _, l := range out {
+			if !l.External() {
+				near = append(near, l.To.ID)
+			}
+		}
+		for _, l := range in {
+			near = append(near, l.From.ID)
+		}
+		slices.Sort(near)
+		if at, err = world(slices.Compact(near)); err != nil {
+			return err
+		}
+		seen := map[domain.NodeID]bool{nodeID: true}
+		add := func(r domain.NodeRef) error {
+			if seen[r.ID] {
+				return nil
+			}
+			seen[r.ID] = true
+			n, err := reader.node(ctx, tx, r)
+			if err != nil {
+				return err
+			}
+			nb.Nodes = append(nb.Nodes, n)
+			return nil
+		}
+		for _, l := range out {
+			if l.External() {
+				nb.Links = append(nb.Links, l)
+				continue
+			}
+			to := l.To
+			if tv, ok := at[to.ID]; ok {
+				if tv != to.Version && tv != 0 && to.Version != 0 {
+					nb.Suspect = append(nb.Suspect, l.ID)
+				}
+				to.Version = tv
+			} else if to.IsDraft() {
+				continue // a draft the change no longer holds
+			}
+			if err := add(to); err != nil {
+				return err
+			}
+			nb.Links = append(nb.Links, l)
+		}
+		taken := map[domain.LinkID]bool{}
+		for _, l := range in {
+			if l.From.ID == nodeID || taken[l.ID] {
+				continue // a self link is already among the outgoing ones
+			}
+			if fv, ok := at[l.From.ID]; !ok || fv != l.From.Version {
+				continue // not the version of its source the world holds
+			}
+			if l.To.Version != 0 && v != 0 && l.To.Version != v {
+				nb.Suspect = append(nb.Suspect, l.ID)
+			}
+			taken[l.ID] = true
+			if err := add(l.From); err != nil {
+				return err
+			}
+			nb.Links = append(nb.Links, l)
+		}
+		return nil
+	})
+	return
+}
+
 // Namespaces returns the namespaces holding at least one node.
 func (g *Graph) Namespaces(ctx context.Context) (ns []string, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { ns, err = tx.Namespaces(ctx); return err })

@@ -45,7 +45,10 @@
 
   let nodes = $state<GraphNode[]>([]);
   /** every node of the reference baseline, whatever its namespace: a form's constraints say which it offers */
-  let baselineNodes = $state<GraphNode[]>([]);
+  /** the baseline of the change: a declared form's pickers search it, never read it whole */
+  let baselineId = $state('');
+  /** the nodes picked in a declared form, kept so a choice stays shown once the search moved on */
+  let picked = $state<NodeOption[]>([]);
   let changeImpacts = $state<ChangeImpact[]>([]);
   let loadError = $state('');
   let submitting = $state(false);
@@ -80,12 +83,13 @@
     const change = (await graph.getChange(id, signal)).change;
     changeImpacts = change?.nodes ?? [];
     namespace = change?.namespace ?? '';
-    const allNodes = change?.baselineId ? ((await graph.getBaselineGraph(change.baselineId, signal)).nodes ?? []) : [];
+    baselineId = change?.baselineId ?? '';
+    // a declared form searches the baseline; the other modes list it
+    const allNodes = baselineId && mode !== 'form' ? ((await graph.getBaselineGraph(baselineId, signal)).nodes ?? []) : [];
     // bind the picker to the change's declared namespace (its WHAT): a
     // change can only impact the nodes of its own domain, whatever else
     // the baseline holds.
     nodes = namespace ? allNodes.filter((n) => n.namespace === namespace) : allNodes;
-    baselineNodes = allNodes;
     attached = (await graph.getChangeImpacts(id, signal)).nodes ?? [];
     posts = await loadPosts(changeImpacts, false, { changeId: id });
     decisions = hasDecision(task?.form?.fields) ? await loadDecisions(id, signal) : undefined;
@@ -222,20 +226,25 @@
       decided: d.status === 'decided',
     }));
   }
+  const optionOf = (n: GraphNode): NodeOption => ({ key: n.key ?? '', type: n.type ?? '', title: nodeTitle(n), state: n.state, namespace: n.namespace });
   const formSource = $derived.by((): NodeSource => {
     const byKey = new Map<string, NodeOption>();
-    for (const n of baselineNodes) {
-      if (n.deleted || !n.key) continue;
-      byKey.set(n.key, { key: n.key, type: n.type ?? '', title: nodeTitle(n), state: n.state, namespace: n.namespace });
-    }
+    for (const n of picked) byKey.set(n.key, n);
+    const inChange = (o: NodeOption): NodeOption => (changeImpacts.some((c) => c.key === o.key && !c.superseded && c.review !== 'rejected') ? { ...o, inChange: true } : o);
     for (const cn of changeImpacts) {
       if (!cn.key || cn.superseded || cn.review === 'rejected') continue;
       const known = byKey.get(cn.key);
       byKey.set(cn.key, { ...(known ?? { key: cn.key, type: cn.type ?? '', namespace }), inChange: true });
     }
     const cat = typeCatalog.cat;
+    const b = baselineId;
     return {
       nodes: [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key)),
+      search: async (query) =>
+        b ? ((await graph.listBaselineNodes({ baselineId: b, query, limit: 200 })).nodes ?? []).filter((n) => n.key && !n.deleted).map((n) => inChange(optionOf(n))) : [],
+      remember: (n) => {
+        if (!picked.some((p) => p.key === n.key)) picked = [...picked, n];
+      },
       isA: (t, a) => t === a || cat.typesOf(t).includes(a),
       linkTypesFrom: (t) => cat.linksFrom(t).map((l) => l.ref ?? '').filter(Boolean),
       linkLabel: (t) => cat.links.find((l) => l.ref === t)?.label ?? '',

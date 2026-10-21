@@ -70,13 +70,11 @@ export const graph = {
       signal,
     ),
   /** A node of a baseline with its direct neighbours (both directions). */
-  getNodeNeighbourhood: (baselineId: string, nodeId: string, signal?: AbortSignal) =>
-    rpc<{ baselineId: string; nodeId: string }, { node?: GraphNode; nodes?: GraphNode[]; links?: Link[]; suspectLinkIds?: string[] }>(
-      GRAPH,
-      'GetNodeNeighbourhood',
-      { baselineId, nodeId },
-      signal,
-    ),
+  getNodeNeighbourhood: (baselineId: string, nodeId: string, signal?: AbortSignal, inChange?: { changeId: string; flow?: string }) =>
+    rpc<
+      { baselineId: string; nodeId: string; changeId?: string; flow?: string },
+      { node?: GraphNode; nodes?: GraphNode[]; links?: Link[]; suspectLinkIds?: string[] }
+    >(GRAPH, 'GetNodeNeighbourhood', { baselineId, nodeId, ...(inChange ? { changeId: inChange.changeId, flow: inChange.flow ?? '' } : {}) }, signal),
   /** The impact log of a change (ADR 0029): every operation on its change impacts, with its caller. */
   listChangeEvents: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { events?: ImpactEvent[] }>(GRAPH, 'ListChangeEvents', { changeId }, signal),

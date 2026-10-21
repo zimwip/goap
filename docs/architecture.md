@@ -678,9 +678,12 @@ which reads the editor from the type catalogue the IDE loads from the registry (
 are registered in `web/src/lib/views/nodeEditors.ts` (`agent`, `action`, `methodology`, `domain`, `unit`, `mcp`, ...).
 The default node editor (`NodeTab.svelte`) follows the change selected in the context (the working change of the
 header): it sees the graph through it, the nodes the change created, the versions it committed and the drafts it holds,
-the other nodes as its fork has them (`Graph.ChangeWorld`, `GetChangeGraph` with `world`: read by node, a link kept when
-its target node is in that world at whatever version it names; web `loadChangeWorld`, the *Graph* pane reads its
-neighbourhoods from it, `hoodIn`); the *Edit* of an impact and opening a node from a change select that change first,
+the other nodes as its fork has them, and it reads only what it shows: the node and its neighbours, more as the reader
+unfolds the tree (`Graph.ChangeNodeNeighbourhood`, `GetNodeNeighbourhood` with `change_id`: the change's impacts laid over
+its branch or its fork for those nodes only, a link kept when its target is in that world at the version it names; at the
+head `NodeNeighbourhood`; web `hoodIndex` / `baselineHoods` / `changeHoods`), and its link and form pickers search the
+baseline (`ListBaselineNodes`), as the *New object* dialog and the declared forms of human tasks do: no whole namespace
+is read to edit a node (`GetChangeGraph` with `world` stays for the readers of a whole world); the *Edit* of an impact and opening a node from a change select that change first,
 and with no change selected (*Latest version*, or none in the header) it shows the latest released versions.
 It may also give the **icon** and **color** its nodes are drawn with (`icon: database`, a name of the IDE's icon set,
 `color: "#b45309"`; inherited through `extends`, `def.NodeType.Icon` / `Color`, `TypeInfo.icon` / `color`): the compact graph

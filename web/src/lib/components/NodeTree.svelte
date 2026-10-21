@@ -11,6 +11,8 @@
     dir,
     onopen,
     seen = [],
+    loaded,
+    expand,
   }: {
     index: GraphIndex;
     root: string;
@@ -18,6 +20,10 @@
     onopen: (id: string) => void;
     /** ancestors on the path (cycle guard) */
     seen?: string[];
+    /** the nodes whose links the index holds all (an index of neighbourhoods, graphIndex.hoodIndex); unset: every node */
+    loaded?: Set<string>;
+    /** reads the neighbourhood of a node not loaded yet, when it is unfolded */
+    expand?: (id: string) => void;
   } = $props();
 
   let openIds = $state<string[]>([]);
@@ -29,8 +35,13 @@
       .sort((a, b) => (index.nodes.get(a.id)?.key ?? '').localeCompare(index.nodes.get(b.id)?.key ?? '')),
   );
 
-  const toggle = (id: string) => (openIds = openIds.includes(id) ? openIds.filter((x) => x !== id) : [...openIds, id]);
-  const more = (id: string) => (index[dir].get(id)?.length ?? 0) > 0;
+  const unread = (id: string) => !!loaded && !!expand && !loaded.has(id);
+  function toggle(id: string) {
+    if (openIds.includes(id)) return void (openIds = openIds.filter((x) => x !== id));
+    if (unread(id)) expand?.(id);
+    openIds = [...openIds, id];
+  }
+  const more = (id: string) => unread(id) || (index[dir].get(id)?.length ?? 0) > 0;
 </script>
 
 {#if entries.length}
@@ -52,7 +63,7 @@
           {#if cyc}<span class="hint" title="Already on this path">↺</span>{/if}
         </div>
         {#if openIds.includes(e.id) && !cyc && seen.length < 8}
-          <Self {index} root={e.id} {dir} {onopen} seen={[...seen, root]} />
+          <Self {index} root={e.id} {dir} {onopen} seen={[...seen, root]} {loaded} {expand} />
         {/if}
       </li>
     {/each}

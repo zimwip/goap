@@ -3,7 +3,7 @@
   // link types its constraints allow.
   import type { WidgetProps } from '../registry';
   import type { LinkValue, NodeOption } from '../types';
-  import { completeLinks, linkSources, linkTargets, linkTypes, newNodeTypes } from '../validate';
+  import { completeLinks, linkSources, linkTargets, linkTypes, newNodeTypes, nodeAllowed } from '../validate';
   import NodePicker from './NodePicker.svelte';
   import { typeName } from '../../stores/types.svelte';
 
@@ -24,6 +24,7 @@
 
   function add(n: NodeOption) {
     if (!current || !currentType) return;
+    source.remember?.(n);
     onchange([...links, { from: current, type: currentType, to: n.key } satisfies LinkValue]);
   }
   function drop(i: number) {
@@ -64,7 +65,7 @@
     {/if}
     <div class="grow">
       <NodePicker {id} choices={targets} exclude={links.filter((l) => l.from === current && l.type === currentType).map((l) => l.to ?? '')}
-        placeholder={field.placeholder ?? 'Search a target…'} {disabled} onpick={add} />
+        placeholder={field.placeholder ?? 'Search a target…'} {disabled} search={source.search} allow={(n) => nodeAllowed(n, field.constraints, source, 'to')} onpick={add} />
     </div>
   </div>
 {/if}
