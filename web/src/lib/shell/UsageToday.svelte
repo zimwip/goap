@@ -1,16 +1,19 @@
 <script lang="ts">
   // Header indicator of the person's LLM consumption today (local day), read from the gateway's ledger (ADR 0089):
   // one `UsageSummary` since midnight of the calls attributed to them, their own and those made on their behalf (ADR
-  // 0114), grouped by who acted, refreshed every minute while the page is visible and when the usage feed sees new
-  // calls. A click opens the Token usage dashboard on "Today".
+  // 0114), grouped by who acted, refreshed when a call is recorded for them (the event stream), every minute while the page is
+  // visible, and when the usage feed sees new calls. A click opens the Token usage dashboard on "Today".
   import Icon from './Icon.svelte';
   import { openUsage, usageState } from './usageState.svelte';
   import { models, errorMessage } from '../api';
   import { me } from '../stores/session.svelte';
   import { usage } from '../stores/usage.svelte';
+  import { keyOf, stamp, throttled } from '../flux/signals.svelte';
+  import { untrack } from 'svelte';
   import { compactTokens, directSplit, periodStart, type Totals } from '../tokenStats';
 
   const REFRESH_MS = 60_000;
+  const FOLLOW_MS = 5_000;
 
   let totals = $state<Totals | null>(null);
   let indirect = $state<Totals | null>(null);
@@ -44,13 +47,17 @@
     };
   });
 
-  // new calls seen by the feed (while the dashboard is open), or the dashboard closed: the figure follows
+  // a call recorded for the person (the event stream, `model.call`), new calls seen by the feed (while the dashboard is
+  // open), or the dashboard closed: the figure follows, at most once per FOLLOW_MS
+  const follow = throttled(() => void load(), FOLLOW_MS);
   $effect(() => {
+    void stamp(keyOf.usage);
     void usage.version;
     if (usageState.open) return;
-    const t = setTimeout(() => void load(), 400);
+    const t = setTimeout(() => untrack(follow.call), 400);
     return () => clearTimeout(t);
   });
+  $effect(() => follow.cancel);
 
   const n = (v: number) => Math.round(v).toLocaleString('en-US');
   const title = $derived(

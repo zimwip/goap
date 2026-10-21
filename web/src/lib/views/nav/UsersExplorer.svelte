@@ -76,7 +76,6 @@
       notify(`User ${s} created.`, 'ok');
       subject = '';
       adding = false;
-      await load();
     } catch (e) {
       error = errorMessage(e);
     } finally {

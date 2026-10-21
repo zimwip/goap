@@ -271,7 +271,7 @@ func (h *Hub) accept(subject string, v any, actor, command string) {
 		r.personalTo = h.personal[string(m.ChangeID)]
 	case domain.BaselineEvent:
 		ev.Kind, ev.Type = "baseline", "baseline.advanced"
-		ev.Id, ev.Branch = string(m.ID), m.Branch
+		ev.Id, ev.Branch, ev.Namespace = string(m.ID), m.Branch, m.Namespace
 		ev.Time = pbconv.Time(m.Time)
 	case domain.ChangeEvent:
 		c := m.Change

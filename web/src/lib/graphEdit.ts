@@ -1,6 +1,10 @@
 // Editing graph nodes the way the organisation explorer does: one change of a namespace applied on main.
+import { untrack } from 'svelte';
 import { graph, type NodeEdit, type GraphNode, type Link, type NodeRef, type Struct } from './api';
 import { MAIN_BRANCH } from './namespace';
+import { ownWrites } from './flux/commands';
+import { stream } from './flux/events.svelte';
+import { keyOf, stamp } from './flux/signals.svelte';
 
 export interface HeadGraph {
   baselineId: string;
@@ -15,8 +19,39 @@ export interface HeadGraph {
 export const RETIRED = 'retired';
 export const ACTIVE = 'active';
 
-/** The graph at the head of a namespace's main (the base of every change applied on it). */
+/** the heads read, per namespace, with what they were read at */
+const heads = new Map<string, { at: string; head: Promise<HeadGraph> }>();
+
+/** What a head read stands for: the namespace and every baseline as the events left them, and this client's writes. */
+const readAt = (namespace: string): string =>
+  untrack(() => `${stamp(keyOf.namespace(namespace))}/${stamp(keyOf.baselines)}/${ownWrites()}`);
+
+/**
+ * The graph at the head of a namespace's main (the base of every change applied on it). The views that show the
+ * organisation or the platform all read it: one read serves them until an event says the namespace or a baseline moved,
+ * or this client wrote to the graph (ADR 0053); while the event stream is down nothing vouches for it, so it is read
+ * each time. Each caller gets its own copy.
+ */
 export async function headGraph(namespace: string): Promise<HeadGraph> {
+  const at = readAt(namespace);
+  let held = heads.get(namespace);
+  if (!held || held.at !== at || stream.status !== 'open') {
+    const head = readHead(namespace);
+    held = { at, head };
+    heads.set(namespace, held);
+    head.catch(() => {
+      if (heads.get(namespace)?.head === head) heads.delete(namespace);
+    });
+  }
+  return structuredClone(await held.head);
+}
+
+/** Forgets the heads read (tests, a new session). */
+export function forgetHeads(): void {
+  heads.clear();
+}
+
+async function readHead(namespace: string): Promise<HeadGraph> {
   const b = await graph.getBranch(namespace, MAIN_BRANCH);
   const id = b.head?.id ?? b.branch?.head;
   if (!id) throw new Error(`${namespace} main has no baseline yet`);

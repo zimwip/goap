@@ -1261,7 +1261,10 @@ as a thin ordered event with resume by `(epoch, seq)`; the web reduces them into
 after a write. The events of a person (a personal change, a job, a model call attributed to them, preferences, a
 conversation) reach that person only; credentials events never reach the web. A stream reads the hub's history from its
 own cursor (`Hub.after`), so a burst (a git import writes thousands of nodes) never cuts it; only a client that stays
-more than `History` events behind is told `resync`, with the seq it goes on from. `Heartbeat` / `Leave` and the
+more than `History` events behind is told `resync`, with the seq it goes on from. The head graph of a namespace (`headGraph`,
+`web/src/lib/graphEdit.ts`), which the organisation and platform views all read, is read once and shared until an event
+moves the namespace or a baseline, or the client writes to the graph (`ownWrites`); a baseline event carries its
+namespace, so a fast-forward of main moves it too. `Heartbeat` / `Leave` and the
 `presence.*` events say who looks at which tab. `platform/cmd/events` follows `goap.>` on NATS (presence is relayed between replicas on `presence.>`); `goap-dev` feeds the hub in process.
 
 ### 3.7 Observability (OpenTelemetry)

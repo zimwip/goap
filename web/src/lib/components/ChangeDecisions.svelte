@@ -52,7 +52,6 @@
     error = '';
     try {
       await fn();
-      await load();
       onchange?.();
     } catch (e) {
       error = errorMessage(e);

@@ -6,7 +6,7 @@
 // Transport
 // ---------------------------------------------------------------------------
 
-import { COMMAND_HEADER, newCommandId } from '../flux/commands';
+import { COMMAND_HEADER, newCommandId, noteCommand } from '../flux/commands';
 import { AT_LEAST_HEADER, CHANGE_SEQ_HEADER, atLeastFor, notePositions } from '../flux/positions';
 
 const TOKEN_KEY = 'goap.token';
@@ -147,7 +147,10 @@ async function rpcOnce<TReq extends object, TRes>(service: string, method: strin
     throw new RpcError('unavailable', `Gateway unreachable: ${String(e)}`, 0);
   }
 
-  if (graph) notePositions(res.headers.get(CHANGE_SEQ_HEADER)); // where its writes left the logs, failed or not
+  if (graph) {
+    notePositions(res.headers.get(CHANGE_SEQ_HEADER)); // where its writes left the logs, failed or not
+    noteCommand(method);
+  }
   const text = await res.text();
   let data: unknown = undefined;
   if (text) {

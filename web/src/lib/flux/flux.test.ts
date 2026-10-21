@@ -85,6 +85,7 @@ describe('keysOf', () => {
       keyOf.branch('b'),
     ]);
     expect(keysOf(ev({ kind: 'baseline', branch: 'main' }))).toEqual([keyOf.baselines, keyOf.branch('main')]);
+    expect(keysOf(ev({ kind: 'baseline', namespace: 'organisation', branch: 'main' }))).toEqual([keyOf.baselines, keyOf.namespace('organisation'), keyOf.branch('main')]);
     expect(keysOf(ev({ kind: 'methodology', id: 'sdlc' }))).toEqual([keyOf.methodology('sdlc'), keyOf.methodologies]);
     expect(keysOf(ev({ kind: 'domain', id: 'alm' }))).toEqual([keyOf.domain('alm'), keyOf.domains]);
     expect(keysOf(ev({ kind: 'process', id: 'p' }))).toEqual([]);

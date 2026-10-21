@@ -136,7 +136,6 @@
       parent = '';
       waiting = false;
       adding = false;
-      await load();
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -195,7 +194,6 @@
       notify(`${moving.key} moved under ${target.key}.`, 'ok');
       moving = undefined;
       moveTarget = '';
-      await load();
     } catch (e) {
       error = errorMessage(e);
     } finally {

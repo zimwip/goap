@@ -119,7 +119,6 @@
     try {
       await applyOnMain(ns.organisation, `${on ? 'Stop' : 'Restart'} project ${key}`, `${on ? 'Stop' : 'Restart'} the project ${key}`, head.baselineId, [updateNodeItem(project, { stopped: on || null })]);
       notify(`Project ${key} ${on ? 'stopped' : 'restarted'}.`, 'ok');
-      await load();
     } catch (e) {
       error = errorMessage(e);
     }
@@ -136,7 +135,6 @@
       ]);
       notify(`Project ${key} updated.`, 'ok');
       editing = false;
-      await load();
     } catch (e) {
       error = errorMessage(e);
     } finally {

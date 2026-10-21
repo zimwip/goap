@@ -52,7 +52,6 @@
     error = '';
     try {
       await applyOnMain(ns.organisation, `Retire policy ${p.resource}/${p.action}`, 'Retire an access policy', baselineId, [retireNodeItem(n)]);
-      await load();
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -95,7 +94,6 @@
         createNodeItem(userKey(subject), nodeTypes.user, userProps(u), [{ type: linkTypes.memberOf, to: refOf(unit) }]),
       ]);
       uSubject = uName = uEmail = '';
-      await load();
     } catch (err) {
       uError = errorMessage(err);
     } finally {
@@ -109,7 +107,6 @@
     try {
       // a user is never deleted: the account is deactivated (lifecycle user, ADR 0076)
       await applyOnMain(ns.organisation, `Deactivate user ${u.subject}`, 'Deactivate a user', baselineId, [{ pre: refOf(n), state: 'deactivated', rationale: `Deactivate ${n.key}` }]);
-      await load();
     } catch (e) {
       error = errorMessage(e);
     }
@@ -140,7 +137,6 @@
       resource = '';
       action = '';
       policyEffect = 'allow';
-      await load();
     } catch (err) {
       addError = errorMessage(err);
     } finally {

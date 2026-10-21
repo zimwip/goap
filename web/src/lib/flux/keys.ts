@@ -13,7 +13,8 @@ export function keysOf(e: PlatformEvent): string[] {
     case 'node':
       return [keyOf.node(e.id), ...(e.namespace ? [keyOf.namespace(e.namespace)] : []), ...(e.changeId ? [keyOf.change(e.changeId)] : []), ...(e.branch ? [keyOf.branch(e.branch)] : [])];
     case 'baseline':
-      return [keyOf.baselines, ...(e.branch ? [keyOf.branch(e.branch)] : [])];
+      // a merge that fast-forwards main writes no node: its namespace moves all the same
+      return [keyOf.baselines, ...(e.namespace ? [keyOf.namespace(e.namespace)] : []), ...(e.branch ? [keyOf.branch(e.branch)] : [])];
     case 'methodology':
       return [keyOf.methodology(e.id), keyOf.methodologies];
     case 'domain':

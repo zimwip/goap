@@ -106,7 +106,6 @@
       await applyOnMain(ns.organisation, `Move ${key}`, `Move ${key} to ${fOrg}`, head.baselineId, [moveNodeItem(user, linkTypes.memberOf, orgLink, refOf(target))]);
       notify(`${key} moved to ${fOrg}.`, 'ok');
       moving = false;
-      await load();
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -131,7 +130,6 @@
       ]);
       notify(`User ${key} updated.`, 'ok');
       editing = false;
-      await load();
     } catch (e) {
       error = errorMessage(e);
     } finally {
