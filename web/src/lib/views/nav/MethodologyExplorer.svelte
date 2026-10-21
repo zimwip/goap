@@ -8,10 +8,10 @@
   import { methodologies, refreshMethodologies, groupedMethodologies } from '../../stores/catalog.svelte';
   import { getDraft, peekDraft, draftKey, type Draft } from '../../stores/drafts.svelte';
   import { openTab, tabsState, tabId } from '../../shell/tabs.svelte';
-  import { select, requestReveal } from '../../shell/workbench.svelte';
+  import { requestReveal } from '../../shell/workbench.svelte';
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { openObjectDialog } from '../../shell/objectDialogState.svelte';
-  import { formatDate, type MethodologySummary } from '../../api';
+  import { type MethodologySummary } from '../../api';
   import { walkSteps, type Section, type SectionItem } from '../../methodologyForm';
   import { typeCatalog, typeName } from '../../stores/types.svelte';
   import {
@@ -64,18 +64,6 @@
 
   function selectVersion(v: MethodologySummary, pin = false) {
     openTab(methodologySpec(v.name ?? '', v.version ?? ''), { pin });
-    select({
-      title: `${v.name} v${v.version}`,
-      subtitle: 'Methodology',
-      rows: [
-        ['Status', v.status ?? ''],
-        ['Description', v.description ?? ''],
-        ['Agents', (v.agents ?? []).map((a) => a.name).join(', ') || '—'],
-        ['Goals', (v.goals ?? []).map((g) => g.name).join(', ') || '—'],
-        ['Modified', formatDate(v.updatedAt)],
-        ['Published', formatDate(v.publishedAt)],
-      ],
-    });
   }
 
   function add(d: Draft, c: Collection) {

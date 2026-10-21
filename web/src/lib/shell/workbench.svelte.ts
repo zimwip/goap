@@ -1,8 +1,8 @@
 // Contributions of active editors to the workbench: toolbar actions,
-// field-highlight requests, selection for "Properties", notifications.
+// field-highlight requests, notifications.
 import { SvelteMap } from 'svelte/reactivity';
 import { tick } from 'svelte';
-import type { Properties, ToolbarAction } from './types';
+import type { ToolbarAction } from './types';
 import { parentPath } from '../methodologyForm';
 
 // --- contextual actions ------------------------------------------------------
@@ -79,14 +79,6 @@ export function useReveal(tabId: () => string, root: () => HTMLElement | undefin
     revealState.path = '';
     void tick().then(() => revealIn(el, path));
   });
-}
-
-// --- selection ---------------------------------------------------------------------
-
-export const selection = $state<{ current: Properties | undefined }>({ current: undefined });
-
-export function select(p: Properties | undefined): void {
-  selection.current = p;
 }
 
 // --- notifications -------------------------------------------------------------------

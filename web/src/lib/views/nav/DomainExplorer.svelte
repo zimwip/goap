@@ -7,8 +7,8 @@
   import { toggle, isOpen } from './expanded.svelte';
   import { domains, refreshDomains, groupedDomains, getDomainDraft, peekDomainDraft, domainKey } from '../../stores/domains.svelte';
   import { openTab, tabsState, tabId, closeWhere } from '../../shell/tabs.svelte';
-  import { select, notify } from '../../shell/workbench.svelte';
-  import { formatDate, type DomainSummary } from '../../api';
+  import { notify } from '../../shell/workbench.svelte';
+  import { type DomainSummary } from '../../api';
   import { domainSpec, openDomain, revealDomainPath, algorithmSpec, instanceSpec, openAlgorithm, openInstance, openEnum, openLifecycle, nodeTypeSpec, linkTypeSpec, enumSpec, openItemType, itemTypeSpec } from '../editors/domainTabs';
   import { ALGORITHM_USAGES, emptyAlgorithm, emptyInstance, freeName } from '../../algorithmForm';
   import type { AlgorithmUsage } from '../../dsl';
@@ -45,19 +45,6 @@
 
   function selectVersion(v: DomainSummary, pin = false) {
     openDomain(v.name ?? '', v.version ?? '', pin);
-    select({
-      title: `${v.name} v${v.version}`,
-      subtitle: 'Domain',
-      rows: [
-        ['Status', v.status ?? ''],
-        ['Description', v.description ?? ''],
-        ['Node types', String(v.nodeTypeCount ?? 0)],
-        ['Link types', String(v.linkTypeCount ?? 0)],
-        ['Item types', String(v.itemTypeCount ?? 0)],
-        ['Modified', formatDate(v.updatedAt)],
-        ['Published', formatDate(v.publishedAt)],
-      ],
-    });
   }
 
   function addNodeType(v: DomainSummary) {
