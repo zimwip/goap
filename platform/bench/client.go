@@ -115,6 +115,16 @@ func isConflict(err error) bool {
 type opKey struct{}
 
 // timed runs one call and records it under op; a call cut by the end of the run is not recorded.
+// shaped is timed for a call whose cost follows the links it handles: also recorded by that size (Metrics.Shaped).
+func shaped[T any](ctx context.Context, m *Metrics, op string, links int, call func(ctx context.Context) (T, error)) (T, error) {
+	start := time.Now()
+	out, err := timed(ctx, m, op, call)
+	if err == nil {
+		m.Shaped(ctx, op, time.Since(start), links)
+	}
+	return out, err
+}
+
 func timed[T any](ctx context.Context, m *Metrics, op string, call func(ctx context.Context) (T, error)) (T, error) {
 	start := time.Now()
 	out, err := call(context.WithValue(ctx, opKey{}, op))

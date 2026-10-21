@@ -202,7 +202,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlLinksFrom(refs)
 	check("sqlite LinksFrom", lite, q, a, `SELECT `+liteLinkCols+` FROM (`+liteHeld+`) l ORDER BY l.id`, []any{liteRefs})
 	linksTo := func(cols, target string) string {
-		return `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id FROM link WHERE ` + target + ` AND removes IS NULL), s(lid, nid, sv) AS ( SELECT id, from_id, from_version FROM t UNION ALL SELECT s.lid, v.node_id, v.version FROM s JOIN node_version v ON v.node_id = s.nid AND v.links_base = s.sv WHERE NOT EXISTS (SELECT 1 FROM link x WHERE x.from_id = v.node_id AND x.from_version = v.version AND x.removes = s.lid) ) SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.node_id = s.nid AND (v.links = s.sv OR (v.links IS NULL AND v.version = s.sv)) ORDER BY t.id, v.version`
+		return `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id FROM link WHERE ` + target + ` AND removes IS NULL), s(lid, nid, sv) AS ( SELECT id, from_id, from_version FROM t UNION ALL SELECT s.lid, v.node_id, v.version FROM s JOIN node_version v ON v.node_id = s.nid AND v.links_base = s.sv WHERE NOT EXISTS (SELECT 1 FROM link x WHERE x.from_id = v.node_id AND x.from_version = v.version AND x.removes = s.lid) ) SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.node_id = s.nid AND v.version = s.sv AND v.links IS NULL UNION ALL SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.links = s.sv AND v.node_id = s.nid ORDER BY 1, 4`
 	}
 	const pgToCols = `t.id::text, t.type, t.from_id::text, v.version, t.to_id::text, t.to_version, t.props, t.change_id::text`
 	const liteToCols = `t.id, t.type, t.from_id, v.version, t.to_id, t.to_version, t.props, t.change_id`
@@ -215,11 +215,11 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlLinksTo(ref)
 	check("sqlite InLinks", lite, q, a, linksTo(liteToCols, `to_id = ? AND to_version = ?`), []any{"n1", 3})
 	q, a = pg.sqlLinkSetOf(ref)
-	check("pg LinkSetOf", pg, q, a, `SELECT coalesce(links, version), coalesce(links_base, 0), links_depth FROM node_version WHERE node_id = $1 AND version = $2`, []any{"n1", 3})
+	check("pg LinkSetOf", pg, q, a, `SELECT coalesce(links, version), coalesce(links_base, 0), links_depth, links_seq FROM node_version WHERE node_id = $1 AND version = $2`, []any{"n1", 3})
 	q, a = pg.sqlLinkSetsOf(refs)
-	check("pg LinkSetsOf", pg, q, a, `SELECT v.node_id::text, v.version, coalesce(v.links, v.version), coalesce(v.links_base, 0), v.links_depth FROM node_version v JOIN unnest($1::uuid[], $2::int[]) AS r(id, version) ON r.id = v.node_id AND r.version = v.version`, pgRefs)
+	check("pg LinkSetsOf", pg, q, a, `SELECT v.node_id::text, v.version, coalesce(v.links, v.version), coalesce(v.links_base, 0), v.links_depth, v.links_seq FROM node_version v JOIN unnest($1::uuid[], $2::int[]) AS r(id, version) ON r.id = v.node_id AND r.version = v.version`, pgRefs)
 	q, a = lite.sqlLinkSetsOf(refs)
-	check("sqlite LinkSetsOf", lite, q, a, `SELECT v.node_id, v.version, coalesce(v.links, v.version), coalesce(v.links_base, 0), v.links_depth FROM node_version v JOIN json_each(?) r ON json_extract(r.value, '$[0]') = v.node_id AND json_extract(r.value, '$[1]') = v.version`, []any{liteRefs})
+	check("sqlite LinkSetsOf", lite, q, a, `SELECT v.node_id, v.version, coalesce(v.links, v.version), coalesce(v.links_base, 0), v.links_depth, v.links_seq FROM node_version v JOIN json_each(?) r ON json_extract(r.value, '$[0]') = v.node_id AND json_extract(r.value, '$[1]') = v.version`, []any{liteRefs})
 	linksInto := func(cols, refs string) string {
 		return strings.Replace(squash(linksTo(cols, "")), `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id FROM link WHERE AND removes IS NULL)`,
 			`WITH RECURSIVE r(id, version) AS (`+refs+`), t AS (SELECT l.id, l.type, l.from_id, l.from_version, l.to_id, l.to_version, l.props, l.change_id FROM link l JOIN r ON l.to_id = r.id AND l.to_version = r.version WHERE l.removes IS NULL)`, 1)

@@ -860,14 +860,14 @@ func (t *pgTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet)
 	if set.Base != 0 {
 		base = int(set.Base)
 	}
-	_, err := t.tx.Exec(ctx, dialectPG.sqlPutLinkSet(), string(from.ID), int(from.Version), of, base, set.Depth)
+	_, err := t.tx.Exec(ctx, dialectPG.sqlPutLinkSet(), string(from.ID), int(from.Version), of, base, set.Depth, set.Seq)
 	return mapErr(err, "link set")
 }
 
 func (t *pgTx) LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, error) {
 	var s LinkSet
 	q, args := dialectPG.sqlLinkSetOf(ref)
-	err := t.tx.QueryRow(ctx, q, args...).Scan(&s.Of, &s.Base, &s.Depth)
+	err := t.tx.QueryRow(ctx, q, args...).Scan(&s.Of, &s.Base, &s.Depth, &s.Seq)
 	return s, mapErr(err, "link set of "+ref.String())
 }
 
@@ -888,7 +888,7 @@ func (t *pgTx) LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[domai
 			v  int
 			s  LinkSet
 		)
-		if err := rows.Scan(&id, &v, &s.Of, &s.Base, &s.Depth); err != nil {
+		if err := rows.Scan(&id, &v, &s.Of, &s.Base, &s.Depth, &s.Seq); err != nil {
 			return nil, err
 		}
 		out[domain.NodeRef{ID: domain.NodeID(id), Version: domain.Version(v)}] = s

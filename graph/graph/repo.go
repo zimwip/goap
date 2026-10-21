@@ -207,11 +207,13 @@ type NodeChange struct {
 
 // LinkSet is how a node version holds its outgoing links (ADR 0141). Of is the version of the node whose rows they
 // are: the version itself when it wrote them, an earlier one whose set it shares as is. Base, for a version holding
-// its own rows, is the version whose set its rows are a delta over (0: a whole set), Depth how many deltas deep.
+// its own rows, is the version whose set its rows are a delta over (0: a whole set), Depth how many deltas deep, Seq
+// the order of the set among the sets of the node (putLinks; 0: unknown).
 type LinkSet struct {
 	Of    domain.Version
 	Base  domain.Version
 	Depth int
+	Seq   int
 }
 
 // CommittedVersion is the last version of a node committed on a branch (Tx.BranchCommits): Deleted when that version deletes the

@@ -779,14 +779,14 @@ func (t *sqliteTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set Link
 	if set.Base != 0 {
 		base = int(set.Base)
 	}
-	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlPutLinkSet(), string(from.ID), int(from.Version), of, base, set.Depth)
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlPutLinkSet(), string(from.ID), int(from.Version), of, base, set.Depth, set.Seq)
 	return sqliteErr(err, "link set")
 }
 
 func (t *sqliteTx) LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, error) {
 	var s LinkSet
 	q, args := dialectSQLite.sqlLinkSetOf(ref)
-	err := t.tx.QueryRowContext(ctx, q, args...).Scan(&s.Of, &s.Base, &s.Depth)
+	err := t.tx.QueryRowContext(ctx, q, args...).Scan(&s.Of, &s.Base, &s.Depth, &s.Seq)
 	return s, sqliteErr(err, "link set of "+ref.String())
 }
 
@@ -807,7 +807,7 @@ func (t *sqliteTx) LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[d
 			v  int
 			s  LinkSet
 		)
-		if err := rows.Scan(&id, &v, &s.Of, &s.Base, &s.Depth); err != nil {
+		if err := rows.Scan(&id, &v, &s.Of, &s.Base, &s.Depth, &s.Seq); err != nil {
 			return nil, err
 		}
 		out[domain.NodeRef{ID: domain.NodeID(id), Version: domain.Version(v)}] = s

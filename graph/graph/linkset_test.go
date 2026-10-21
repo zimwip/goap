@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"math/bits"
 	"slices"
 	"testing"
 
@@ -57,17 +58,17 @@ func testLinkSets(t *testing.T, repo Repo) {
 		}
 		return s
 	}
-	if s := set(h1); s != (LinkSet{Of: h1.Version}) {
+	if s := set(h1); s != (LinkSet{Of: h1.Version, Seq: 1}) {
 		t.Fatalf("the first version holds its links whole: %+v", s)
 	}
 	if s := set(h2); s.Of != h1.Version || s.Base != 0 {
 		t.Fatalf("an edit of the attributes shares the set of the version it was checked out from: %+v", s)
 	}
-	if s := set(h3); s.Of != h3.Version || s.Base != h1.Version || s.Depth != 1 {
-		t.Fatalf("a link added writes a delta over the set the version held: %+v", s)
+	if s := set(h3); s != (LinkSet{Of: h3.Version, Seq: 2}) {
+		t.Fatalf("a link added writes the second set, a power of two: whole: %+v", s)
 	}
-	if s := set(h4); s.Of != h4.Version || s.Base != h3.Version || s.Depth != 2 {
-		t.Fatalf("a link removed writes a delta: %+v", s)
+	if s := set(h4); s != (LinkSet{Of: h4.Version, Base: h3.Version, Depth: 1, Seq: 3}) {
+		t.Fatalf("a link removed writes the third set, a delta over the second: %+v", s)
 	}
 	out := func(n domain.Node) []domain.Link {
 		t.Helper()
@@ -105,8 +106,9 @@ func testLinkSets(t *testing.T, repo Repo) {
 	if !slices.Equal(froms, []domain.Version{h1.Version, h2.Version, h3.Version}) {
 		t.Fatalf("T-2 is entered from H %v, want v%d..v%d", froms, h1.Version, h3.Version)
 	}
-	// a delta too deep: the links written whole
-	h, whole := h4, false
+	// a set at each version: the next in order, a delta over the set of its order with its lowest bit cleared (skip
+	// deltas), a power of two whole, never deeper than the bits of its order
+	h, whole, prevSeq := h4, false, set(h4).Seq
 	for i := range maxLinkDepth {
 		ref := h.Ref()
 		to := must[domain.Node](t)(g.NodeByKey(ctx, "", fmt.Sprintf("T-%d", i%10)))
@@ -118,9 +120,23 @@ func testLinkSets(t *testing.T, repo Repo) {
 		if s.Depth > maxLinkDepth {
 			t.Fatalf("a set %d deltas deep", s.Depth)
 		}
-		whole = whole || s.Base == 0
+		if s.Seq != prevSeq+1 {
+			t.Fatalf("v%d writes the set of order %d after the one of order %d", h.Version, s.Seq, prevSeq)
+		}
+		prevSeq = s.Seq
+		if bits.OnesCount(uint(s.Seq)) == 1 {
+			if s.Base != 0 {
+				t.Fatalf("v%d, a set of order %d, a power of two, writes a delta: %+v", h.Version, s.Seq, s)
+			}
+			whole = true
+		} else if b := set(domain.Node{ID: h.ID, Version: s.Base}); b.Seq != s.Seq&(s.Seq-1) || s.Depth != b.Depth+1 {
+			t.Fatalf("v%d writes a delta over %+v, not over the set of order %d", h.Version, b, s.Seq&(s.Seq-1))
+		}
+		if bits.OnesCount(uint(s.Seq)) <= s.Depth {
+			t.Fatalf("v%d, a set of order %d, is %d deltas deep", h.Version, s.Seq, s.Depth)
+		}
 	}
 	if !whole {
-		t.Fatal("a delta too deep writes the links whole")
+		t.Fatal("a version numbered a power of two writes its links whole")
 	}
 }

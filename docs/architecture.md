@@ -149,7 +149,8 @@ a node that changes version carries its outgoing links forward; incoming links f
 nodes stay on the old version and become **suspect**. Baselines thus remain immutable. The links a
 version carries are held as a **link set** ([ADR 0141](adr/0141-the-links-of-a-version-are-a-set.md)):
 shared as is with an earlier version when unchanged, or written as a delta (added links, drop rows)
-over an earlier set, up to 16 deltas deep before the set is written whole.
+over an earlier set: the set of order k over the one of order `k & (k-1)` (skip deltas, written whole at each power of
+two), so a chain is as deep as the bits of its order and a node whose links grow never rewrites them every few sets.
 
 #### Version branches ([ADR 0009](adr/0009-branches-options-decisions.md))
 

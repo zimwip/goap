@@ -43,3 +43,27 @@ them all again, whether the change edited a property or added one link.
   the version's set (`linkWork`).
 - Reading the links of a version walks a chain of at most 16 sets, by the primary key of `node_version` and the
   `link_from` index; the entering links follow the deltas down (`node_version_links`, `node_version_links_base`).
+
+## Addendum (2026-10-21): skip deltas, and the entering links read in two parts
+
+A long run of the bench (2.5 M versions, hot nodes taking a fifth of the modifications and a third of those adding a
+link) showed the delta over the previous set going wrong for a node whose links grow. Each delta adds one row. Every
+`maxLinkDepth` sets the node writes its links whole, so its rows per version grow with its links. That run stored 20 M
+link rows for 4 M links written, 7.9 rows per version and rising. The changes touching such a node paid it at commit,
+and CommitChange's p95 went from 60 ms to 6 s while its p50 stayed flat.
+
+1. **The order of a set.** `node_version.links_seq` (migration 0019, `LinkSet.Seq`) is the order of a set among the
+   sets of its node. A new set follows the one held by the version it was checked out from, else the previous
+   version, so its order is that set's order plus one. A version sharing a set carries the set's order.
+2. **Skip deltas.** The set of order k is written as a delta over the set of order `k & (k-1)` (`baseSet`), found on
+   the chain of the set it follows. It is written whole when k is a power of two, when the chain does not reach that
+   set, or when the delta would have as many rows as the links.
+   - Its chain is as deep as the bits set in k, less one: at most 16 under 2^17 sets.
+   - Over K sets, a delta holds the changes of about log2(K)/2 sets.
+   - The node writes O(K log K) rows of changes plus its links at each power of two, instead of its links every 16 sets.
+   - The order, not the version number, picks the base. The versions sharing a set (an edit of the properties) would
+     otherwise leave the chain deep and the deltas long.
+3. **Entering links.** `linksToRest` joins the versions holding a set in two parts: the version whose set it is (by the
+   key of `node_version`), and the versions sharing it (`node_version_links`). One join with an `OR` read every version
+   of the source node for each set. On a node linked from a hot node, `InLinks` went from 1015 ms to 17 ms on the same
+   data. This is the 20-26 s p95 of GetNode and GetNodeNeighbourhood.
