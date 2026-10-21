@@ -3,6 +3,7 @@
   // is seen (internal/graphsvc.EnsureUser), not only by an administrator's hand. User extends OrgUnit (the
   // smallest organisational unit is a person), so it is assignable to a project the same way a team is
   // (ADR 0039): its Assignments pane is the meeting point with project.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import { session, me, adminRole, types as nodeTypes, links as linkTypes, ns, assignmentKey } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import type { Tab, ToolbarAction } from '../../shell/types';
@@ -148,7 +149,7 @@
       {#snippet children(active)}
         {#if active === 'overview'}
           <section class="card">
-            <div class="head"><Icon name="user" size={18} /><h2>{String(user.props?.['displayName'] ?? user.props?.['subject'] ?? key)}</h2></div>
+            <div class="head"><Icon name="user" size={18} /><h2>{String(user.props?.['displayName'] ?? user.props?.['subject'] ?? key)}</h2><EditorActions tabId={tab.id} /></div>
             {#if !editing}
               <dl class="kv">
                 <dt>Key</dt><dd><code>{key}</code></dd>

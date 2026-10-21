@@ -146,17 +146,17 @@
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: #9aa;
+    background: var(--text-3);
     flex: none;
   }
   .dot.ok {
-    background: #40c057;
+    background: var(--success);
   }
   .dot.degraded {
-    background: #fab005;
+    background: var(--warning);
   }
   .dot.down {
-    background: #fa5252;
+    background: var(--danger);
   }
   .svc {
     width: 100%;

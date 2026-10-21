@@ -3,6 +3,7 @@
   // code domain) and the form of the one picked from the parameters it declares. A run is done by the importer service
   // implementing it, through the change operations; a run is a job (ADR 0149), followed from the Jobs of the status bar
   // and the Jobs tab, where a click opens its detail.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import { imports, errorMessage, type Importer } from '../../api';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -97,6 +98,7 @@
   <div class="editor-head">
     <Icon name="database" size={18} />
     <h2>Import from a source{namespace ? ` into ${namespace}` : ''}</h2>
+    <EditorActions tabId={tab.id} />
   </div>
   <section class="card">
     {#if loading}

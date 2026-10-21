@@ -1,6 +1,6 @@
 <script lang="ts">
   // Header: product, search / command palette, stream status,
-  // today's LLM usage (opens the Token usage dashboard), user menu (profile, sign-out in local mode, access token with hs256, theme: a shortcut to the
+  // today's LLM usage (opens the Token usage dashboard), user menu (profile, sign-out in local mode, access token with hs256, theme: a three-state switch of the
   // preference, saved as it changes).
   import Icon, { type IconName } from './Icon.svelte';
   import { COMMANDS } from './commands';
@@ -20,12 +20,10 @@
   import { openSettings } from './settingsState.svelte';
   import type { Theme } from './layout.svelte';
   import { prefs, editPrefs } from '../stores/preferences.svelte';
-  import { openUsage } from './usageState.svelte';
   import { notifications, markRead, markAllRead, clearNotifications, type Notice } from '../stores/notifications.svelte';
   import { formatTime } from '../api';
   import Popover from './Popover.svelte';
-  import ProjectSelector from './ProjectSelector.svelte';
-  import WorkingChangeSelector from './WorkingChangeSelector.svelte';
+  import HeaderContext from './HeaderContext.svelte';
   import OnlineUsers from './OnlineUsers.svelte';
   import UsageToday from './UsageToday.svelte';
 
@@ -175,6 +173,13 @@
     e.preventDefault();
   }
 
+  // the theme of the profile menu: a three-state switch, saved as the preference
+  const THEMES: { value: Theme; label: string; icon: IconName }[] = [
+    { value: 'light', label: 'Light', icon: 'sun' },
+    { value: 'dark', label: 'Dark', icon: 'moon' },
+    { value: 'auto', label: 'System', icon: 'monitor' },
+  ];
+
   // --- user ---------------------------------------------------------------------
 
   let menuOpen = $state(false);
@@ -238,9 +243,10 @@
 </script>
 
 <header class="header">
-  <div class="brand"><span class="logo" aria-hidden="true">◆</span> GOAP</div>
-  <ProjectSelector />
-  <WorkingChangeSelector />
+  <div class="left">
+    <div class="brand"><span class="logo" aria-hidden="true">◆</span> GOAP</div>
+    <HeaderContext />
+  </div>
 
   <div class="search">
     <span class="sicon"><Icon name="search" size={14} /></span>
@@ -252,13 +258,14 @@
       aria-controls="search-results"
       aria-autocomplete="list"
       aria-label="Search for an object or a command"
-      placeholder="Search (Ctrl+P) — '&gt;' for commands"
+      placeholder="Search — '&gt;' for commands"
       bind:value={query}
       onfocus={() => (open = true)}
       onblur={() => setTimeout(() => (open = false), 150)}
       onkeydown={keydown}
       data-no-pin
     />
+    <kbd aria-hidden="true">Ctrl P</kbd>
     {#if open && results.length}
       <ul class="results" id="search-results" role="listbox">
         {#each results as r, i (r.key)}
@@ -363,24 +370,17 @@
             </form>
           {/if}
           <div class="theme">
-            <label for="theme">Theme</label>
-            <select id="theme" value={prefs.values.theme} onchange={(e) => void editPrefs({ theme: e.currentTarget.value as Theme })}>
-              <option value="auto">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
+            <span id="theme-label">Theme</span>
+            <div class="seg" role="radiogroup" aria-labelledby="theme-label">
+              {#each THEMES as t (t.value)}
+                {@const on = (prefs.values.theme ?? 'auto') === t.value}
+                <button type="button" role="radio" aria-checked={on} class:on onclick={() => void editPrefs({ theme: t.value })}>
+                  <Icon name={t.icon} size={13} />{t.label}
+                </button>
+              {/each}
+            </div>
           </div>
           <div class="menu-actions">
-            <button
-              type="button"
-              class="small settings-btn"
-              onclick={() => {
-                menuOpen = false;
-                openUsage();
-              }}
-            >
-              <Icon name="coins" size={13} />Token usage
-            </button>
             <button
               type="button"
               class="small settings-btn"
@@ -412,29 +412,42 @@
 </header>
 
 <style>
+  /* three columns: the brand and the context, the search centred, the permanent information */
   .header {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(160px, 440px) minmax(0, 1fr);
     align-items: center;
-    gap: 0.8rem;
-    height: 46px;
-    padding: 0 0.6rem 0 0.8rem;
+    gap: var(--space-3);
+    height: var(--header-h);
+    padding: 0 var(--space-3) 0 var(--space-4);
     flex: none;
-    background: var(--chrome-2);
+    position: relative;
+    z-index: 40;
+    background: var(--bg-panel-translucent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border);
   }
   .brand {
-    font-weight: 800;
-    letter-spacing: 0.06em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
     white-space: nowrap;
   }
   .logo {
     color: var(--accent);
   }
+  .left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+  }
   .search {
     position: relative;
-    flex: 1;
-    max-width: 560px;
-    margin: 0 auto;
+    min-width: 0;
   }
   .sicon {
     position: absolute;
@@ -446,8 +459,25 @@
   }
   .search input {
     padding-left: 1.8rem;
-    background: var(--surface);
+    padding-right: 3.6rem;
+    background: var(--bg-raised);
     height: 30px;
+  }
+  .search kbd {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+    color: var(--text-3);
+    pointer-events: none;
+  }
+  .search:focus-within kbd {
+    display: none;
   }
   .results {
     position: absolute;
@@ -490,6 +520,8 @@
   .right {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
     gap: 0.4rem;
   }
   .stream {
@@ -551,7 +583,7 @@
     border-radius: 8px;
     padding: 0 4px;
     background: var(--danger);
-    color: #fff;
+    color: var(--accent-fg);
     font-size: 10px;
     font-weight: 700;
     line-height: 15px;
@@ -653,7 +685,41 @@
     box-shadow: var(--shadow-pop);
   }
   .theme {
+    display: grid;
+    gap: 0.3rem;
     margin-top: 0.7rem;
+    font-size: var(--fs-sm);
+    color: var(--text-2);
+  }
+  .seg {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    background: var(--bg-raised);
+  }
+  .seg button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    min-height: 26px;
+    padding: 0 0.4rem;
+    border: none;
+    border-radius: calc(var(--radius-m) - 2px);
+    background: none;
+    color: var(--text-3);
+    font-size: var(--fs-sm);
+  }
+  .seg button:hover:not(:disabled) {
+    background: var(--hover);
+    color: var(--text);
+  }
+  .seg button.on {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow-s, 0 1px 2px rgb(0 0 0 / 0.2));
   }
   .menu-actions {
     display: flex;

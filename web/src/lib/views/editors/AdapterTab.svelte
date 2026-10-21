@@ -3,6 +3,7 @@
   // applied on main like every modification of the platform. It implements the tools of one MCP with the operations of
   // one connector, so the three are edited together here: the binding (MCP and connector, what each side offers), the
   // parameters an organisational unit sets, and the code. Units instantiate it from their MCP pane (ADR 0019).
+  import EditorActions from '../../shell/EditorActions.svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import RowTools from '../../components/RowTools.svelte';
@@ -166,6 +167,7 @@
       <Icon name="zap" size={18} />
       <h2>{isNew ? 'New adapter' : a.name}</h2>
       <span class="hint">adapter definition · platform</span>
+      <EditorActions tabId={tab.id} />
     </div>
     {#if error}<div class="alert">{error}</div>{/if}
     <p class="hint">Saving applies a change on the platform namespace: it is journaled and reviewable like any modification of the platform.</p>

@@ -1,5 +1,6 @@
 <script lang="ts">
   // Change tab: change items and applying to the baseline.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import {
     graph,
     engine,
@@ -1168,14 +1169,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
 {#if change}
   {@const ch = change}
-  <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} {writable} onchange={() => load(selected)} oncompare={() => (compareOpen = true)} />
-  {#if ch.lifecycle}
-    <ChangeLifecycleView lifecycle={ch.lifecycle} current={ch.state ?? ''} definition={lcDef} domain={lcDomain} loading={lcLoading} failure={lcFailure}>
-      {#if lcDef && lifecycleMovable(ch)}
-        <ChangeTransitions current={ch.state ?? ''} {offers} {pickable} busy={transitioning} refusal={transitionRefusal} onmove={(o, d) => void takeTransition(o, d)} />
-      {/if}
-    </ChangeLifecycleView>
-  {/if}
   {#if compareOpen && options.length}
     <CompareDialog
       changeId={ch.id ?? ''}
@@ -1188,16 +1181,28 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       onopennode={(s, d) => openNode({ id: d.node ?? '', key: d.key ?? '' }, { pin: true, change: ch.id ?? '', flow: s })}
     />
   {/if}
-  <!-- what the change waits for from people, one strip above every pane (ADR 0117, ADR 0152) -->
-  <ChangeAsks
-    changeId={selected}
-    {closed}
-    reviews={awaiting.map((n) => n.key ?? '')}
-    onreview={() => (pane = 'reviews')}
-    ondecisions={() => (pane = 'decisions')}
-    onopen={(id, pin) => openTab({ kind: 'run', params: { id } }, { pin })}
-  />
-  <EditorPanes {panes} bind:active={pane} label="Change sections">
+  <EditorPanes {panes} bind:active={pane} label="Change context" changeId={ch.id}>
+    {#snippet head()}
+      <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} {writable} onchange={() => load(selected)} oncompare={() => (compareOpen = true)} />
+      {#if ch.lifecycle}
+        <ChangeLifecycleView lifecycle={ch.lifecycle} current={ch.state ?? ''} definition={lcDef} domain={lcDomain} loading={lcLoading} failure={lcFailure}>
+          {#if lcDef && lifecycleMovable(ch)}
+            <ChangeTransitions current={ch.state ?? ''} {offers} {pickable} busy={transitioning} refusal={transitionRefusal} onmove={(o, d) => void takeTransition(o, d)} />
+          {/if}
+        </ChangeLifecycleView>
+      {/if}
+    {/snippet}
+    <!-- what the change waits for from people (ADR 0117, ADR 0152): in the context bar while it is docked, else above every pane -->
+    {#snippet aside()}
+      <ChangeAsks
+        changeId={selected}
+        {closed}
+        reviews={awaiting.map((n) => n.key ?? '')}
+        onreview={() => (pane = 'reviews')}
+        ondecisions={() => (pane = 'decisions')}
+        onopen={(id, pin) => openTab({ kind: 'run', params: { id } }, { pin })}
+      />
+    {/snippet}
     {#snippet children(active)}
       {#if active === 'overview'}
       <section class="card">
@@ -1221,6 +1226,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             {#if detachable(ch)}<button type="button" class="small" disabled={detaching} onclick={detachFromParent}>Detach</button>{/if}
             <button type="button" class="small danger" disabled={defBusy} onclick={abandon}>Abandon</button>
           {/if}
+          <EditorActions tabId={tab.id} />
         </div>
         {#if attachOpen && attachable(ch)}
           <AttachChange change={ch} oncancel={() => (attachOpen = false)} onattached={() => ((attachOpen = false), notify('Change attached.', 'ok'), load(selected))} />

@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>GOAP</title>
+    <!-- The forced theme (user menu, kept by the layout store) before the first paint: no flash of the other
+         theme. "auto" leaves the attribute unset, the stylesheet following the system. -->
+    <script>
+      try {
+        var t = JSON.parse(localStorage.getItem('goap.ide.layout') || '{}').theme;
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="app"></div>

@@ -230,16 +230,16 @@
   }
   .h1 {
     background: var(--ok);
-    color: #fff;
+    color: var(--accent-fg);
     opacity: 0.55;
   }
   .h2 {
     background: var(--warn);
-    color: #fff;
+    color: var(--accent-fg);
   }
   .h3 {
     background: var(--danger);
-    color: #fff;
+    color: var(--accent-fg);
   }
   .score {
     display: inline-block;

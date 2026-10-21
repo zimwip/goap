@@ -108,7 +108,7 @@
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview' },
     { id: 'types', label: 'Types', badge: ns || '—' },
-    ...SECTIONS.map((s) => ({ id: s, label: label(s), badge: f[s].length })),
+    ...SECTIONS.map((s) => ({ id: s, label: label(s), icon: icon(s), badge: f[s].length })),
   ]);
 
   // a reveal request (problems console, issue path…) opens the pane that holds the field
@@ -146,7 +146,7 @@
   {:else if d.loadError}
     <div class="alert">{d.loadError}</div>
   {:else}
-    <DraftHeader draft={d} icon="book" kind="Methodology" title={d.isNew ? 'New methodology' : d.label} dirty={d.dirty} />
+    <DraftHeader tabId={tab.id} draft={d} icon="book" kind="Methodology" title={d.isNew ? 'New methodology' : d.label} dirty={d.dirty} />
 
     {#if d.isNew}
       <fieldset class="plain" disabled={d.readonly}>

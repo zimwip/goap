@@ -7,6 +7,8 @@
   import type { Component } from 'svelte';
 
   let { welcome }: { welcome: Component } = $props();
+  // the height of the editor's scroll area, for what stays within it (the context column of EditorPanes)
+  let areaH = $state(0);
 
   const tab = $derived(activeTab());
   const view = $derived(tab ? editorView(tab.kind) : undefined);
@@ -29,7 +31,7 @@
   {#if tabsState.tabs.length}
     <TabBar />
   {/if}
-  <div class="content" role="tabpanel" aria-label={view?.tabTitle(tab!) ?? 'Home'} oninput={edited}>
+  <div class="content" role="tabpanel" aria-label={view?.tabTitle(tab!) ?? 'Home'} oninput={edited} bind:clientHeight={areaH} style:--area-h="{areaH}px">
     {#if tab && view}
       <div class="here"><Presence tabId={tab.id} max={5} /></div>
       {#key tab.id}
@@ -51,7 +53,7 @@
     flex-direction: column;
     height: 100%;
     min-width: 0;
-    background: var(--bg);
+    background: transparent;
   }
   .content {
     flex: 1;

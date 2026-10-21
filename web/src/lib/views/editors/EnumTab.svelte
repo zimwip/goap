@@ -1,5 +1,6 @@
 <script lang="ts">
   // "Enum" tab: a closed list of values of a domain that enum attributes refer to, edited in the draft of its domain.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -82,6 +83,7 @@
       <span class="hint">enum · {d.label}</span>
       <StatusBadge status={d.status} />
       {#if d.dirty}<span class="dirty" title="Unsaved changes">● modified</span>{/if}
+      <EditorActions tabId={tab.id} />
     </div>
     {#if d.error}<div class="alert">{d.error}</div>{/if}
     {#if d.readonly}
