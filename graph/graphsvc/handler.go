@@ -916,6 +916,25 @@ func (h *Handler) ImpactNodeCheckout(ctx context.Context, r *connect.Request[gra
 	return res(&graphv1.ImpactNodeCheckoutResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 
+// ImpactNodeCheckoutBatch checks out several nodes at once: the gate of the access nodes is asked for the type of each
+// inside the transaction of the checkout, which reads it anyway.
+func (h *Handler) ImpactNodeCheckoutBatch(ctx context.Context, r *connect.Request[graphv1.ImpactNodeCheckoutBatchRequest]) (*connect.Response[graphv1.ImpactNodeCheckoutBatchResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	by := authz.From(ctx).Subject
+	in := graph.CheckoutBatch{Gate: h.gateFunc(ctx)}
+	for _, n := range m.Nodes {
+		in.Nodes = append(in.Nodes, graph.NodeCheckout{Impact: domain.ChangeImpactID(n.ChangeImpactId), Node: domain.NodeID(n.NodeId), Key: n.Key,
+			Rationale: n.Rationale, Flow: m.Flow, Execution: m.Execution, ProducedBy: by})
+	}
+	out, err := h.Graph.ImpactNodeCheckoutBatch(ctx, domain.ChangeID(m.ChangeId), in)
+	resp := &graphv1.ImpactNodeCheckoutBatchResponse{}
+	for _, cn := range out {
+		resp.Nodes = append(resp.Nodes, pbconv.ChangeImpactToPB(cn))
+	}
+	return res(resp, err)
+}
+
 func (h *Handler) ImpactNodeUpdate(ctx context.Context, r *connect.Request[graphv1.ImpactNodeUpdateRequest]) (*connect.Response[graphv1.ImpactNodeUpdateResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg

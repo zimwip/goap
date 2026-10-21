@@ -259,8 +259,10 @@ func (g *Graph) ListChangeImpacts(ctx context.Context, id domain.ChangeID) (out 
 // the type of the node an operation touches reads, without copying the impacts of the change.
 func (g *Graph) ImpactType(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID) (typ string, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		if _, err := tx.ChangeHead(ctx, id); err != nil {
-			return err
+		if _, ok := memoHead(ctx, id); !ok {
+			if _, err := tx.ChangeHead(ctx, id); err != nil {
+				return err
+			}
 		}
 		st, err := g.draftState(ctx, tx, id)
 		if err != nil {

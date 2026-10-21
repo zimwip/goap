@@ -505,62 +505,104 @@ func (g *Graph) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in N
 		if err != nil {
 			return err
 		}
-		ref, err := g.checkoutTx(ctx, tx, w, in.Execution)
+		d, err := g.checkoutTx(ctx, tx, w, in.Execution)
 		if err != nil {
 			return err
 		}
+		ref := d.Ref()
 		cn = w.seenAs(&ref)
 		return nil
 	})
 	return
 }
 
-// checkoutTx is the checkout of the impact w selects, inside a transaction (see ImpactNodeCheckout).
-func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string) (domain.NodeRef, error) {
+// CheckoutBatch is the checkout of several nodes of a change at once (ImpactNodeCheckoutBatch).
+type CheckoutBatch struct {
+	Nodes []NodeCheckout
+	// Gate, when set, is asked for the type of each node checked out, before its draft stands: an error refuses the
+	// whole batch (the gate of the access nodes, MergeInput.Gate).
+	Gate func(typ string) error
+}
+
+// ImpactNodeCheckoutBatch checks out several nodes of a change in one transaction, all or none: each one as
+// ImpactNodeCheckout does, the change locked and read once. The change impacts come back in the order of the nodes.
+func (g *Graph) ImpactNodeCheckoutBatch(ctx context.Context, id domain.ChangeID, in CheckoutBatch) (out []domain.ChangeImpact, err error) {
+	if err := g.allow(ctx, id, operations.ImpactCheckout); err != nil {
+		return nil, err
+	}
+	if len(in.Nodes) == 0 {
+		return nil, invalidf("no node to check out")
+	}
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		out = make([]domain.ChangeImpact, 0, len(in.Nodes))
+		for _, n := range in.Nodes {
+			w, err := g.resolve(ctx, tx, id, checkoutTarget(n))
+			if err != nil {
+				return err
+			}
+			d, err := g.checkoutTx(ctx, tx, w, n.Execution)
+			if err != nil {
+				return err
+			}
+			if in.Gate != nil {
+				if err := in.Gate(d.Type); err != nil {
+					return err
+				}
+			}
+			ref := d.Ref()
+			out = append(out, w.seenAs(&ref))
+		}
+		return nil
+	})
+	return out, err
+}
+
+// checkoutTx is the checkout of the impact w selects, inside a transaction (see ImpactNodeCheckout): the draft it gives.
+func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string) (domain.Draft, error) {
 	id := w.c.ID
 	if own, err := g.ownDraftOf(ctx, tx, id, w.cn.ID, w.flow); err != nil {
-		return domain.NodeRef{}, err
+		return domain.Draft{}, err
 	} else if own != nil {
-		return domain.NodeRef{}, fmt.Errorf("%s is already checked out: %w", draftOf(w.cn), ErrConflict)
+		return domain.Draft{}, fmt.Errorf("%s is already checked out: %w", draftOf(w.cn), ErrConflict)
 	}
 	var d domain.Draft
 	var event string
 	var copied *domain.BaseCopy
 	if parent, err := g.seenDraft(ctx, tx, w.c, w.flow, w.cn.ID); err != nil {
-		return domain.NodeRef{}, err
+		return domain.Draft{}, err
 	} else if parent != nil {
 		d = g.forkDraft(w, *parent, execution)
 	} else {
 		base, err := w.base(ctx, tx)
 		if err != nil {
-			return domain.NodeRef{}, err
+			return domain.Draft{}, err
 		}
 		if base == nil && plannedCreation(w.cn) {
 			// a planned creation checked out: its first draft, bare (ADR 0076: the creation fulfils the plan)
 			if d, err = g.newDraft(ctx, tx, w, NodeCreate{Key: w.cn.Key, Type: w.cn.Type, Execution: execution}, nil); err != nil {
-				return domain.NodeRef{}, err
+				return domain.Draft{}, err
 			}
 			ref := d.Ref()
-			return ref, g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: w.cn.ID, Op: domain.ImpactCheckedOut, Flow: w.flow, Execution: execution, Post: &ref, Draft: &d})
+			return d, g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: w.cn.ID, Op: domain.ImpactCheckedOut, Flow: w.flow, Execution: execution, Post: &ref, Draft: &d})
 		}
 		if base == nil {
-			return domain.NodeRef{}, invalidf("change impact %s has no version to check out", w.cn.ID)
+			return domain.Draft{}, invalidf("change impact %s has no version to check out", w.cn.ID)
 		}
 		if domain.NamespaceOf(base.Namespace) != w.ns {
-			return domain.NodeRef{}, invalidf("node %s is in namespace %s, the change acts on %s", base.Key, domain.NamespaceOf(base.Namespace), w.ns)
+			return domain.Draft{}, invalidf("node %s is in namespace %s, the change acts on %s", base.Key, domain.NamespaceOf(base.Namespace), w.ns)
 		}
 		links, err := tx.OutLinks(ctx, base.Ref())
 		if err != nil {
-			return domain.NodeRef{}, err
+			return domain.Draft{}, err
 		}
 		event = g.newID()
 		d, copied = g.draftFrom(w, event, *base, links, execution)
 	}
 	ref := d.Ref()
 	if err := g.emit(ctx, tx, domain.ImpactEvent{ID: event, Change: id, Impact: w.cn.ID, Op: domain.ImpactCheckedOut, Flow: w.flow, Execution: execution, Post: &ref, Draft: &d, FromBase: copied}); err != nil {
-		return ref, err
+		return d, err
 	}
-	return ref, nil
+	return d, nil
 }
 
 // ImpactNodeUpdate edits the draft of a change impact: its properties (merged and validated) and its owner. No version

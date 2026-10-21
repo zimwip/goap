@@ -7,6 +7,7 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -495,13 +496,54 @@ func (g *Graph) Change(ctx context.Context, id domain.ChangeID) (c domain.Change
 }
 
 // ChangeHead reads the head of a change: neither its impacts nor its items (Tx.ChangeHead), what a check of who may act
-// on it reads (its unit, project, methodology) without folding its log.
+// on it reads (its unit, project, methodology) without folding its log. Under WithHeadMemo, a head read once is not
+// read again.
 func (g *Graph) ChangeHead(ctx context.Context, id domain.ChangeID) (c domain.Change, err error) {
+	if c, ok := memoHead(ctx, id); ok {
+		return c, nil
+	}
+	memo, _ := ctx.Value(headMemoKey{}).(*headMemo)
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err = tx.ChangeHead(ctx, id)
 		return err
 	})
+	if err == nil && memo != nil {
+		memo.mu.Lock()
+		memo.heads[id] = c
+		memo.mu.Unlock()
+	}
 	return
+}
+
+type headMemoKey struct{}
+
+// headMemo keeps the heads of the changes one request read (WithHeadMemo).
+type headMemo struct {
+	mu    sync.Mutex
+	heads map[domain.ChangeID]domain.Change
+}
+
+// memoHead is the head of a change the request read already (WithHeadMemo).
+func memoHead(ctx context.Context, id domain.ChangeID) (domain.Change, bool) {
+	memo, _ := ctx.Value(headMemoKey{}).(*headMemo)
+	if memo == nil {
+		return domain.Change{}, false
+	}
+	memo.mu.Lock()
+	defer memo.mu.Unlock()
+	c, ok := memo.heads[id]
+	return c, ok
+}
+
+// WithHeadMemo returns a context under which ChangeHead reads the head of a change once: the checks made before an
+// operation of one request (who may read the change, who may perform the operation) ask for the same head, and the
+// operation reads the change again in its own transaction. Meant for the life of one request, never across writes the
+// checks must see.
+func WithHeadMemo(ctx context.Context) context.Context {
+	if _, ok := ctx.Value(headMemoKey{}).(*headMemo); ok {
+		return ctx
+	}
+	return context.WithValue(ctx, headMemoKey{}, &headMemo{heads: map[domain.ChangeID]domain.Change{}})
 }
 
 // ChangeChecked is Change with the validation of each impact carrying a draft (ImpactValidation): what the change

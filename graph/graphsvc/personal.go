@@ -244,6 +244,8 @@ func (h *Handler) PersonalScope() connect.Interceptor {
 			who := h.Identity.Context(ctx, req.Header())
 			if msg, ok := req.Any().(proto.Message); ok {
 				if id := changeIDIn(req.Spec().Procedure, msg); id != "" {
+					// the checks before the operation (the operation authorizer, the handler's) read the same head
+					who = graph.WithHeadMemo(who)
 					if c, err := h.Graph.ChangeHead(who, id); err == nil && !h.mayRead(who, c) {
 						return nil, denyPersonal(id)
 					}
