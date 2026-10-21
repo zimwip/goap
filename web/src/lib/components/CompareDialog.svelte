@@ -10,7 +10,6 @@
   import {
     CATEGORY_LABEL,
     CATEGORIES,
-    clip,
     countByCategory,
     defaultSides,
     describeChange,
@@ -26,6 +25,7 @@
     type Sides,
   } from '../flowDiff';
   import Icon from '../shell/Icon.svelte';
+  import ValueDiff from './ValueDiff.svelte';
   import StatusBadge from './StatusBadge.svelte';
 
   let {
@@ -61,7 +61,6 @@
   let busy = $state('');
   let evaluating = $state('');
   let evaluation = $state('');
-  let expanded = $state<ReadonlySet<string>>(new Set());
   let panel = $state<HTMLDivElement>();
 
   const choices = $derived(scopeChoices(options));
@@ -131,11 +130,6 @@
   const select = (id: string) => act(`select:${id}`, () => graph.selectOption(changeId, id));
   const reject = (id: string) => act(`reject:${id}`, () => graph.rejectOption(changeId, id));
 
-  function toggleExpanded(id: string) {
-    const next = new Set(expanded);
-    if (!next.delete(id)) next.add(id);
-    expanded = next;
-  }
 
   const sideLabel = (s: string) => (s === MAIN_SCOPE ? 'Main flow' : nameOf(s));
   const keyOfChange = (d: ImpactDiff, i: number) => `${d.node}:${i}`;
@@ -240,20 +234,11 @@
                       <ul class="changes">
                         {#each d.changes ?? [] as c, i (keyOfChange(d, i))}
                           {@const l = describeChange(c)}
-                          {@const id = keyOfChange(d, i)}
-                          {@const o = clip(l.old ?? '')}
-                          {@const n = clip(l.new ?? '')}
-                          {@const open = expanded.has(id)}
                           <li class="change {l.op}">
                             <span class="op" aria-label={l.op}>{l.op === 'added' ? '+' : l.op === 'removed' ? '−' : '~'}</span>
                             <span class="name">{l.label}</span>
                             {#if l.old !== undefined || l.new !== undefined}
-                              <span class="vals">
-                                {#if l.old !== undefined}<code class="old">{open ? l.old : o.text}</code>{/if}
-                                {#if l.old !== undefined && l.new !== undefined}<span class="arrow">→</span>{/if}
-                                {#if l.new !== undefined}<code class="new">{open ? l.new : n.text}</code>{/if}
-                                {#if o.clipped || n.clipped}<button type="button" class="link small" onclick={() => toggleExpanded(id)}>{open ? 'less' : 'more'}</button>{/if}
-                              </span>
+                              <ValueDiff before={c.old} after={c.new} type={d.type} name={c.kind === 'property' ? c.name : undefined} mode={c.kind === 'link' ? 'json' : c.kind === 'property' ? undefined : 'value'} />
                             {/if}
                           </li>
                         {/each}
@@ -489,21 +474,6 @@
   }
   .name {
     font-weight: 600;
-  }
-  .vals {
-    display: inline-flex;
-    gap: 6px;
-    align-items: baseline;
-    flex-wrap: wrap;
-    min-width: 0;
-  }
-  .vals code {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .old {
-    text-decoration: line-through;
-    opacity: 0.8;
   }
   .identical {
     margin: 0;

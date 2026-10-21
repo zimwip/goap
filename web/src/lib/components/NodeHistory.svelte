@@ -8,6 +8,7 @@
   import { loadRaw, save } from '../shell/storage';
   import NodeBranchGraph from './NodeBranchGraph.svelte';
   import ChangeStackView from './ChangeStackView.svelte';
+  import ValueDiff from './ValueDiff.svelte';
 
   let { id, reloadKey = 0 }: { id: string; /** bump to reload */ reloadKey?: number } = $props();
 
@@ -71,10 +72,8 @@
     from: string;
     moved: boolean;
     /** properties added / changed / removed compared to the version it descends from */
-    diff: { key: string; before: string; after: string }[];
+    diff: { key: string; before: unknown; after: unknown }[];
   }
-
-  const text = (x: unknown) => (x === undefined || x === null ? '' : typeof x === 'string' ? x : JSON.stringify(x));
 
   const entries = $derived.by<Entry[]>(() => {
     const byVersion = new Map(versions.map((v) => [v.version ?? 0, v]));
@@ -85,7 +84,7 @@
       const diff = [...new Set([...Object.keys(before), ...Object.keys(after)])]
         .filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))
         .sort()
-        .map((k) => ({ key: k, before: text(before[k]), after: text(after[k]) }));
+        .map((k) => ({ key: k, before: before[k], after: after[k] }));
       const from = parent?.state ?? '';
       return { v, from, moved: !!parent && (v.state ?? '') !== from, diff: parent ? diff : [] };
     });
@@ -209,7 +208,7 @@
     <table class="diff">
       <tbody>
         {#each e.diff as d (d.key)}
-          <tr><th>{d.key}</th><td class="before">{d.before}</td><td class="arrow">→</td><td class="after">{d.after}</td></tr>
+          <tr><th>{d.key}</th><td><ValueDiff before={d.before} after={d.after} type={e.v.type} name={d.key} /></td></tr>
         {/each}
       </tbody>
     </table>
@@ -258,22 +257,18 @@
     background: var(--surface-2);
   }
   .diff {
-    width: auto;
+    width: 100%;
   }
   .diff th {
     text-align: left;
     font-family: var(--mono);
     padding-right: 0.8rem;
+    width: 1%;
+    white-space: nowrap;
   }
-  .diff .before {
-    color: var(--danger);
-    text-decoration: line-through;
-  }
-  .diff .after {
-    color: var(--ok);
-  }
-  .diff .arrow {
-    color: var(--muted);
+  .diff th,
+  .diff td {
+    vertical-align: top;
   }
   pre {
     margin: 0.4rem 0 0;

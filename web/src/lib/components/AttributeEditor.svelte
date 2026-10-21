@@ -1,9 +1,10 @@
 <script lang="ts">
-  // The attributes of a node type or link type: code, label, type, widget, enum, default, section, tooltip, and the
-  // property validators plugged on each one. What the user interface displays and edits a node from.
+  // The attributes of a node type or link type: code, label, type, widget, enum, default, section, tooltip, how a change
+  // of the value is shown (its diff), and the property validators plugged on each one. What the user interface displays and edits a node from.
   import { emptyAttribute, moveItem, type AttributeForm } from '../methodologyForm';
   import ValidatorList from './ValidatorList.svelte';
   import RowTools from './RowTools.svelte';
+  import { DIFF_MODES, defaultDiff } from '../valueDiff';
 
   let {
     attrs = $bindable(),
@@ -32,6 +33,13 @@
 
   const TYPES = ['', 'string', 'number', 'boolean', 'date', 'enum', 'json', 'code'];
   const WIDGETS = ['', 'text', 'textarea', 'dropdown', 'checkbox', 'date', 'directory', 'code'];
+  const DIFF_LABELS: Record<string, string> = {
+    value: 'value: old → new, whole',
+    words: 'words: the words changed',
+    lines: 'lines: line by line',
+    json: 'json: indented JSON, line by line',
+    code: 'code: line by line, highlighted',
+  };
 
   let open = $state<Record<string, boolean>>({});
 
@@ -88,6 +96,13 @@
             <div class="field">
               <label for="{ap}-def">Default</label>
               <input id="{ap}-def" type="text" bind:value={a.default} disabled={readonly} />
+            </div>
+            <div class="field">
+              <label for="{ap}-diff" title="How a change of the value is shown: in the history of a node, the diff of an impact, the comparison of baselines">Diff</label>
+              <select id="{ap}-diff" bind:value={a.diff} class:bad={bad(`${ap}.diff`)} data-path="{ap}.diff" disabled={readonly}>
+                <option value="">usual of the type ({defaultDiff({ type: a.type, widget: a.widget })})</option>
+                {#each DIFF_MODES as d (d)}<option value={d}>{DIFF_LABELS[d]}</option>{/each}
+              </select>
             </div>
           </div>
           <div class="field">

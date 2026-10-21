@@ -447,6 +447,9 @@ func (s Schema) checkAttributes(prefix string, add func(path, format string, arg
 			if a.Widget != "" && !slices.Contains(AttributeWidgets, a.Widget) {
 				add(p+".widget", "unknown widget %q (%s)", a.Widget, strings.Join(AttributeWidgets, ", "))
 			}
+			if a.Diff != "" && !slices.Contains(AttributeDiffs, a.Diff) {
+				add(p+".diff", "unknown diff %q (%s)", a.Diff, strings.Join(AttributeDiffs, ", "))
+			}
 			switch {
 			case a.Type == AttrEnum && a.Enum == "":
 				add(p+".enum", "an enum attribute names its enum")

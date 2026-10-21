@@ -277,7 +277,7 @@ func instancesFromPB(is []*registryv1.AlgorithmInstance) []algo.Instance {
 func attributesToPB(as []def.Attribute) []*registryv1.Attribute {
 	var out []*registryv1.Attribute
 	for _, a := range as {
-		out = append(out, &registryv1.Attribute{Name: a.Name, Label: a.Label, Description: a.Description, Type: a.Type, Widget: a.Widget,
+		out = append(out, &registryv1.Attribute{Name: a.Name, Label: a.Label, Description: a.Description, Type: a.Type, Widget: a.Widget, Diff: a.Diff,
 			Enum: a.Enum, DefaultValue: a.Default, Section: a.Section, Order: int32(a.Order), Tooltip: a.Tooltip, AsName: a.AsName, Validators: a.Validators})
 	}
 	return out
@@ -286,7 +286,7 @@ func attributesToPB(as []def.Attribute) []*registryv1.Attribute {
 func attributesFromPB(as []*registryv1.Attribute) []def.Attribute {
 	var out []def.Attribute
 	for _, a := range as {
-		out = append(out, def.Attribute{Name: a.Name, Label: a.Label, Description: a.Description, Type: a.Type, Widget: a.Widget,
+		out = append(out, def.Attribute{Name: a.Name, Label: a.Label, Description: a.Description, Type: a.Type, Widget: a.Widget, Diff: a.Diff,
 			Enum: a.Enum, Default: a.DefaultValue, Section: a.Section, Order: int(a.Order), Tooltip: a.Tooltip, AsName: a.AsName, Validators: nilIfNone(a.Validators)})
 	}
 	return out

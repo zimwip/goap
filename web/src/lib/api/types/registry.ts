@@ -95,8 +95,10 @@ export interface LinkTypeInfo {
   inverseLabel?: string;
 }
 
-export type AttributeType = 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'json';
-export type AttributeWidget = 'text' | 'textarea' | 'dropdown' | 'checkbox' | 'date' | 'directory';
+export type AttributeType = 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'json' | 'code';
+export type AttributeWidget = 'text' | 'textarea' | 'dropdown' | 'checkbox' | 'date' | 'directory' | 'code';
+/** How a change of a value is shown (valueDiff.ts). */
+export type AttributeDiff = 'value' | 'words' | 'lines' | 'json' | 'code';
 
 /** Defines a property of a node type or link type: its code and what the UI needs to display and edit it. */
 export interface Attribute {
@@ -108,6 +110,8 @@ export interface Attribute {
   type?: AttributeType | string;
   /** absent: the usual one of the type */
   widget?: AttributeWidget | string;
+  /** how a change of its value is shown; absent: the usual one of the type */
+  diff?: AttributeDiff | string;
   /** enum of the domain an enum attribute takes its values from */
   enum?: string;
   defaultValue?: string;

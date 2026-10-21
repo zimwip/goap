@@ -45,6 +45,7 @@
   import { diffSummary } from '../../assist/changeScreen';
   import { isCode, orderedAttributes, shownValue } from '../../attributes';
   import CodeView from '../../components/CodeView.svelte';
+  import ValueDiff from '../../components/ValueDiff.svelte';
 import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, removeFromChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
 
   import NotFound from '../../shell/NotFound.svelte';
@@ -192,6 +193,13 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   const nodeRules = $derived(typeCatalog.cat.type(typeName)?.nodeValidators ?? []);
   const attrOf = (k: string) => attrViews.find((a) => a.name === k);
   const propertyNames = $derived([...new Set([...attrViews.map((a) => a.name), ...declared, ...Object.keys(nodeProps)])]);
+  /** the properties whose diff against the stored value is open */
+  let diffOpen = $state<ReadonlySet<string>>(new Set());
+  function toggleDiff(k: string) {
+    const next = new Set(diffOpen);
+    if (!next.delete(k)) next.add(k);
+    diffOpen = next;
+  }
   const text = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
 
   const panes = $derived<Pane[]>([
@@ -521,6 +529,10 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
                           {#if text(nodeProps[k])}{shownValue(attrOf(k), nodeProps[k])}{:else}<span class="hint">—</span>{/if}
                           {#if changed}<span class="hint pending" title="Proposed in the working change"> (was {text(storedProps[k]) || 'empty'})</span>{/if}
                         {/if}
+                        {#if changed}
+                          <button type="button" class="link small" aria-expanded={diffOpen.has(k)} title="What the working change does to the value" onclick={() => toggleDiff(k)}>{diffOpen.has(k) ? 'hide diff' : 'diff'}</button>
+                          {#if diffOpen.has(k)}<div class="propdiff"><ValueDiff before={storedProps[k]} after={nodeProps[k]} attribute={attrOf(k)} /></div>{/if}
+                        {/if}
                       </td>
                     </tr>
                   {/each}
@@ -622,6 +634,9 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
 </div>
 
 <style>
+  .propdiff {
+    margin-top: 0.3rem;
+  }
   .head {
     display: flex;
     align-items: center;

@@ -3,7 +3,9 @@
   // Merging a branch into another by hand (ADR 0032 §2): what the merge does node by node, and a resolution for each
   // node changed on both sides. A node changed on one side only joins the target as is (no version written); a
   // resolved conflict writes one merge version (two parents) with the properties chosen here, or keeps the target.
+  // Each side shows what it did to the property from the common base (ValueDiff).
   import { graph, errorMessage, type JsonValue, type MergeCandidate, type MergePlan, type Resolution } from '../api';
+  import ValueDiff from './ValueDiff.svelte';
 
   let {
     namespace,
@@ -109,8 +111,8 @@
                   <tr>
                     <td class="mono">{k}</td>
                     <td class="muted">{show(c.base?.[k] as JsonValue)}</td>
-                    <td><label><input type="radio" bind:group={p.props[k]} value="ours" /> {show(c.oursProps?.[k] as JsonValue)}</label></td>
-                    <td><label><input type="radio" bind:group={p.props[k]} value="theirs" /> {show(c.theirsProps?.[k] as JsonValue)}</label></td>
+                    <td><label class="side"><input type="radio" bind:group={p.props[k]} value="ours" /> <ValueDiff before={c.base?.[k]} after={c.oursProps?.[k]} type={c.type} name={k} /></label></td>
+                    <td><label class="side"><input type="radio" bind:group={p.props[k]} value="theirs" /> <ValueDiff before={c.base?.[k]} after={c.theirsProps?.[k]} type={c.type} name={k} /></label></td>
                   </tr>
                 {/each}
               </tbody>
@@ -127,6 +129,11 @@
 </div>
 
 <style>
+  .side {
+    display: flex;
+    gap: 0.4rem;
+    align-items: baseline;
+  }
   .resolver {
     display: flex;
     flex-direction: column;

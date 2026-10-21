@@ -409,9 +409,9 @@ type Attribute struct {
 	Name        string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Label       string `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
 	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	// string | number | boolean | date | enum | json (empty: string)
+	// string | number | boolean | date | enum | json | code (empty: string)
 	Type string `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
-	// text | textarea | dropdown | checkbox | date (empty: the usual one of the type)
+	// text | textarea | dropdown | checkbox | date | directory | code (empty: the usual one of the type)
 	Widget string `protobuf:"bytes,5,opt,name=widget,proto3" json:"widget,omitempty"`
 	// enum of the domain an enum attribute takes its values from
 	Enum         string `protobuf:"bytes,6,opt,name=enum,proto3" json:"enum,omitempty"`
@@ -422,7 +422,9 @@ type Attribute struct {
 	// the attribute is the display name of the node
 	AsName bool `protobuf:"varint,11,opt,name=as_name,json=asName,proto3" json:"as_name,omitempty"`
 	// property_validator instances (ADR 0018), in call order
-	Validators    []string `protobuf:"bytes,12,rep,name=validators,proto3" json:"validators,omitempty"`
+	Validators []string `protobuf:"bytes,12,rep,name=validators,proto3" json:"validators,omitempty"`
+	// how a change of its value is shown: value | words | lines | json | code (empty: the usual one of the type)
+	Diff          string `protobuf:"bytes,13,opt,name=diff,proto3" json:"diff,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -539,6 +541,13 @@ func (x *Attribute) GetValidators() []string {
 		return x.Validators
 	}
 	return nil
+}
+
+func (x *Attribute) GetDiff() string {
+	if x != nil {
+		return x.Diff
+	}
+	return ""
 }
 
 // EnumValue is one value of an enum; the label defaults to the value.
@@ -9594,7 +9603,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x0eSearchProperty\x12\x1a\n" +
 	"\bproperty\x18\x01 \x01(\tR\bproperty\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\bR\x04text\x12\x14\n" +
-	"\x05facet\x18\x03 \x01(\bR\x05facet\"\xbf\x02\n" +
+	"\x05facet\x18\x03 \x01(\bR\x05facet\"\xd3\x02\n" +
 	"\tAttribute\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +
@@ -9610,7 +9619,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\aas_name\x18\v \x01(\bR\x06asName\x12\x1e\n" +
 	"\n" +
 	"validators\x18\f \x03(\tR\n" +
-	"validators\"7\n" +
+	"validators\x12\x12\n" +
+	"\x04diff\x18\r \x01(\tR\x04diff\"7\n" +
 	"\tEnumValue\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\"q\n" +

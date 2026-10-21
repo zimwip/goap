@@ -94,6 +94,8 @@ export interface AttributeForm {
   type: string;
   /** "" : the usual one of the type */
   widget: string;
+  /** how a change of the value is shown; "" : the usual one of the type */
+  diff: string;
   enum: string;
   default: string;
   section: string;
@@ -908,7 +910,7 @@ export function defaultLifecycle(name = ''): LifecycleForm {
   };
 }
 
-export const emptyAttribute = (name = ''): AttributeForm => ({ uid: newUid(), name, label: '', description: '', type: '', widget: '', enum: '', default: '', section: '', order: 0, tooltip: '', asName: false, validators: [] });
+export const emptyAttribute = (name = ''): AttributeForm => ({ uid: newUid(), name, label: '', description: '', type: '', widget: '', diff: '', enum: '', default: '', section: '', order: 0, tooltip: '', asName: false, validators: [] });
 
 export function attributeToForm(a: Attribute): AttributeForm {
   return {
@@ -918,6 +920,7 @@ export function attributeToForm(a: Attribute): AttributeForm {
     description: a.description ?? '',
     type: a.type ?? '',
     widget: a.widget ?? '',
+    diff: a.diff ?? '',
     enum: a.enum ?? '',
     default: a.defaultValue ?? '',
     section: a.section ?? '',
@@ -935,6 +938,7 @@ export function attributeFromForm(a: AttributeForm): Attribute {
   put(o, 'description', a.description.trim());
   put(o, 'type', a.type);
   put(o, 'widget', a.widget);
+  put(o, 'diff', a.diff);
   put(o, 'enum', a.type === 'enum' ? a.enum : '');
   put(o, 'defaultValue', a.default);
   put(o, 'section', a.section.trim());

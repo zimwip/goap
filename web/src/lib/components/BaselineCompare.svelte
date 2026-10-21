@@ -6,6 +6,7 @@
   import { changeLabel } from '../changeStack';
   import { openTab } from '../shell/tabs.svelte';
   import ChangeStackView from './ChangeStackView.svelte';
+  import ValueDiff from './ValueDiff.svelte';
   import { openNode } from '../nodeEditors';
 
   /** candidates: the baselines offered as "from" (the history the caller read), newest last */
@@ -41,7 +42,6 @@
     return () => ctrl.abort();
   });
 
-  const show = (v: unknown) => (v === undefined || v === null ? '—' : typeof v === 'string' ? v : JSON.stringify(v));
   function changedProps(d: BaselineDiff): string[] {
     const a = (d.from?.props ?? {}) as Record<string, JsonValue>;
     const b = (d.to?.props ?? {}) as Record<string, JsonValue>;
@@ -87,7 +87,7 @@
               <td>
                 {#if d.kind === 'changed'}
                   {#if d.from?.state !== d.to?.state}<div>state: {d.from?.state || '—'} → {d.to?.state || '—'}</div>{/if}
-                  {#each keys as k (k)}<div><code>{k}</code>: <span class="muted">{show(d.from?.props?.[k])}</span> → {show(d.to?.props?.[k])}</div>{/each}
+                  {#each keys as k (k)}<div class="prop"><code>{k}</code> <ValueDiff before={d.from?.props?.[k]} after={d.to?.props?.[k]} type={d.type} name={k} /></div>{/each}
                   {#if !keys.length && d.from?.state === d.to?.state}<span class="hint">links only</span>{/if}
                 {/if}
               </td>
@@ -102,6 +102,13 @@
 </section>
 
 <style>
+  .prop {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: baseline;
+    margin-bottom: 0.2rem;
+  }
   .compare {
     height: 100%;
     min-height: 0;
