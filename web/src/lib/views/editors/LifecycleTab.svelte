@@ -1,5 +1,6 @@
 <script lang="ts">
   // "Lifecycle" tab: states and transitions of one lifecycle of a domain, edited in the draft of its domain.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -68,6 +69,7 @@
       <span class="hint">lifecycle · {d.label}</span>
       <StatusBadge status={d.status} />
       {#if d.dirty}<span class="dirty" title="Unsaved changes">● modified</span>{/if}
+      <EditorActions tabId={tab.id} />
     </div>
     {#if d.error}<div class="alert">{d.error}</div>{/if}
     {#if d.readonly}

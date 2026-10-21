@@ -1,6 +1,6 @@
 <script lang="ts">
   // Header: product, search / command palette, stream status,
-  // today's LLM usage (opens the Token usage dashboard), user menu (profile, sign-out in local mode, access token with hs256, theme: a shortcut to the
+  // today's LLM usage (opens the Token usage dashboard), user menu (profile, sign-out in local mode, access token with hs256, theme: a three-state switch of the
   // preference, saved as it changes).
   import Icon, { type IconName } from './Icon.svelte';
   import { COMMANDS } from './commands';
@@ -18,9 +18,8 @@
   import { health, startHealth } from '../stores/status.svelte';
   import { openPlatformStatus } from './platformStatusState.svelte';
   import { openSettings } from './settingsState.svelte';
-  import { shownTheme, type Theme } from './layout.svelte';
+  import type { Theme } from './layout.svelte';
   import { prefs, editPrefs } from '../stores/preferences.svelte';
-  import { openUsage } from './usageState.svelte';
   import { notifications, markRead, markAllRead, clearNotifications, type Notice } from '../stores/notifications.svelte';
   import { formatTime } from '../api';
   import Popover from './Popover.svelte';
@@ -174,10 +173,12 @@
     e.preventDefault();
   }
 
-  // the theme toggle: the other one of the theme on screen, saved as the preference
-  function toggleTheme() {
-    void editPrefs({ theme: shownTheme() === 'dark' ? 'light' : 'dark' });
-  }
+  // the theme of the profile menu: a three-state switch, saved as the preference
+  const THEMES: { value: Theme; label: string; icon: IconName }[] = [
+    { value: 'light', label: 'Light', icon: 'sun' },
+    { value: 'dark', label: 'Dark', icon: 'moon' },
+    { value: 'auto', label: 'System', icon: 'monitor' },
+  ];
 
   // --- user ---------------------------------------------------------------------
 
@@ -288,15 +289,6 @@
   </div>
 
   <div class="right">
-    <button
-      type="button"
-      class="hbtn"
-      title={shownTheme() === 'dark' ? 'Light theme' : 'Dark theme'}
-      aria-label="Toggle light / dark theme"
-      onclick={toggleTheme}
-    >
-      <Icon name={shownTheme() === 'dark' ? 'sun' : 'moon'} size={15} />
-    </button>
     <UsageToday />
 
     <button
@@ -378,24 +370,17 @@
             </form>
           {/if}
           <div class="theme">
-            <label for="theme">Theme</label>
-            <select id="theme" value={prefs.values.theme} onchange={(e) => void editPrefs({ theme: e.currentTarget.value as Theme })}>
-              <option value="auto">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
+            <span id="theme-label">Theme</span>
+            <div class="seg" role="radiogroup" aria-labelledby="theme-label">
+              {#each THEMES as t (t.value)}
+                {@const on = (prefs.values.theme ?? 'auto') === t.value}
+                <button type="button" role="radio" aria-checked={on} class:on onclick={() => void editPrefs({ theme: t.value })}>
+                  <Icon name={t.icon} size={13} />{t.label}
+                </button>
+              {/each}
+            </div>
           </div>
           <div class="menu-actions">
-            <button
-              type="button"
-              class="small settings-btn"
-              onclick={() => {
-                menuOpen = false;
-                openUsage();
-              }}
-            >
-              <Icon name="coins" size={13} />Token usage
-            </button>
             <button
               type="button"
               class="small settings-btn"
@@ -463,18 +448,6 @@
   .search {
     position: relative;
     min-width: 0;
-  }
-  .hbtn {
-    display: inline-grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    min-height: 0;
-    color: var(--text-2);
-  }
-  .hbtn:hover:not(:disabled) {
-    color: var(--text);
   }
   .sicon {
     position: absolute;
@@ -712,7 +685,41 @@
     box-shadow: var(--shadow-pop);
   }
   .theme {
+    display: grid;
+    gap: 0.3rem;
     margin-top: 0.7rem;
+    font-size: var(--fs-sm);
+    color: var(--text-2);
+  }
+  .seg {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    background: var(--bg-raised);
+  }
+  .seg button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    min-height: 26px;
+    padding: 0 0.4rem;
+    border: none;
+    border-radius: calc(var(--radius-m) - 2px);
+    background: none;
+    color: var(--text-3);
+    font-size: var(--fs-sm);
+  }
+  .seg button:hover:not(:disabled) {
+    background: var(--hover);
+    color: var(--text);
+  }
+  .seg button.on {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow-s, 0 1px 2px rgb(0 0 0 / 0.2));
   }
   .menu-actions {
     display: flex;

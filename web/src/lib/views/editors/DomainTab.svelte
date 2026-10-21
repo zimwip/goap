@@ -3,6 +3,7 @@
   // algorithms have a tab each. Node types and link types are shared by the methodologies that
   // reference the domain. Saved and published on their own: no change,
   // impact or proposal is involved.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -92,6 +93,7 @@
       <h2>{d.isNew ? 'New domain' : d.label}</h2>
       <StatusBadge status={d.status} />
       {#if d.dirty}<span class="dirty" title="Unsaved changes">● modified</span>{/if}
+      <EditorActions tabId={tab.id} />
     </div>
     {#if d.remote}
   <div class="alert" role="alert">

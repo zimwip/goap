@@ -1,10 +1,10 @@
 <script lang="ts">
   // Navigation sidebar: the tool shown, then its content. The tools of the left area (named and counted) are listed
   // only while the person switches: the list folds back to the selection once a tool is picked, so navigation stays
-  // at hand without taking the height. Folded away (Ctrl+B), the activity bar's icons stand in for the sidebar.
+  // at hand without taking the height. Not pinned (Ctrl+B), the activity bar's icons stand in for the sidebar, which shows over the editor from them.
   import Icon from './Icon.svelte';
   import { panelView, viewsIn } from './registry';
-  import { layout, showTool } from './layout.svelte';
+  import { layout, nav, showTool } from './layout.svelte';
   import type { PanelView } from './types';
 
   const tools = $derived(viewsIn('left'));
@@ -13,6 +13,11 @@
   // the tools that call for attention while the list is folded
   const waiting = $derived(tools.filter((v) => v.id !== view?.id && v.badge?.()).length);
   let listing = $state(false);
+
+  function pin() {
+    layout.leftOpen = !layout.leftOpen;
+    nav.revealed = false;
+  }
 
   function pick(v: PanelView) {
     showTool('left', v.id);
@@ -44,8 +49,16 @@
         {#if !listing && waiting}<span class="dot" title="{waiting} other tool{waiting > 1 ? 's' : ''} call for attention"></span>{/if}
         <span class="chev" class:open={listing}><Icon name="chevronDown" size={12} /></span>
       </button>
-      <button type="button" class="ghost small icon" title="Hide the navigation (Ctrl+B)" aria-label="Hide the navigation" onclick={() => (layout.leftOpen = false)}>
-        <Icon name="x" size={14} />
+      <button
+        type="button"
+        class="ghost small icon"
+        class:on={layout.leftOpen}
+        aria-pressed={layout.leftOpen}
+        title={layout.leftOpen ? 'Unpin: the navigation hides by its rail (Ctrl+B)' : 'Pin the navigation beside the editor (Ctrl+B)'}
+        aria-label="Pin the navigation"
+        onclick={pin}
+      >
+        <Icon name="pin" size={14} />
       </button>
     </div>
     {#if listing}

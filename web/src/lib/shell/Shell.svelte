@@ -33,7 +33,7 @@
   import { assistantEnabled } from '../assistant/enabled';
   import { assistant, closePanel, openPanel } from '../stores/assistant.svelte';
   import StatusBar from './StatusBar.svelte';
-  import { layout, LIMITS, RAIL, toggleConsole } from './layout.svelte';
+  import { layout, LIMITS, RAIL, nav, toggleConsole } from './layout.svelte';
   import { activeTab, closeTab, startRouting } from './tabs.svelte';
   import { runTabAction, focusRequests } from './workbench.svelte';
   import { session } from '../stores/session.svelte';
@@ -107,6 +107,34 @@
     }
   }
 
+  // The navigation: docked when pinned on a wide screen, else shown over the editor from its rail while hovered,
+  // focused or asked for.
+  const leftDocked = $derived(layout.leftOpen && !narrow);
+  let lrail = $state<HTMLElement>();
+  let navTimer: ReturnType<typeof setTimeout> | undefined;
+  function navSoon() {
+    clearTimeout(navTimer);
+    navTimer = setTimeout(() => (nav.revealed = true), 160);
+  }
+  function navLeave() {
+    clearTimeout(navTimer);
+    navTimer = setTimeout(() => {
+      // kept while it holds the focus (a filter being typed, a menu open)
+      const el = document.activeElement;
+      if (lrail?.contains(el) && el !== document.body && el?.matches('input, textarea, select, [aria-expanded="true"]')) return;
+      nav.revealed = false;
+    }, 350);
+  }
+  function navFocusOut(e: FocusEvent) {
+    if (!lrail?.contains(e.relatedTarget as Node | null) && !lrail?.matches(':hover')) nav.revealed = false;
+  }
+  function navKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && nav.revealed) {
+      nav.revealed = false;
+      e.stopPropagation();
+    }
+  }
+
   // the side tool (Test, Properties, DSL Help), opened from the status bar
   const tool = $derived(layout.drawer ? panelView(layout.right) : undefined);
   function toolKey(e: KeyboardEvent) {
@@ -155,8 +183,26 @@
 <div class="shell" class:narrow>
   <Header />
   <div class="main">
-    {#if !layout.leftOpen}<ActivityBar side="left" />{/if}
-    {#if layout.leftOpen}
+    {#if !leftDocked}
+      <!-- the navigation's rail: hovering or focusing it shows the navigation over the editor -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="lrail"
+        bind:this={lrail}
+        onmouseenter={navSoon}
+        onmouseleave={navLeave}
+        onfocusin={() => (nav.revealed = true)}
+        onfocusout={navFocusOut}
+        onkeydown={navKey}
+      >
+        <ActivityBar side="left" />
+        {#if nav.revealed}
+          <div class="side left over" style:width="{Math.min(layout.leftWidth, sideMax)}px">
+            <NavSidebar />
+          </div>
+        {/if}
+      </div>
+    {:else}
       <div class="side left" style:width="{Math.min(layout.leftWidth, sideMax)}px">
         <NavSidebar />
       </div>
@@ -297,6 +343,23 @@
   .bottom {
     flex: none;
     min-height: 0;
+  }
+  .lrail {
+    flex: none;
+    position: relative;
+    display: flex;
+    height: 100%;
+  }
+  /* the navigation shown over the editor, by its rail */
+  .side.left.over {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 100%;
+    z-index: 25;
+    max-width: calc(100vw - 120px);
+    border-right: 1px solid var(--border);
+    box-shadow: var(--shadow);
   }
   .ctx-docked {
     flex: none;

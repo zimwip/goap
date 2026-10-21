@@ -1,6 +1,7 @@
 <script lang="ts">
   // Live execution viewer (process WatchEvents; falls back to
   // GetProcess every 2s if the stream fails).
+  import EditorActions from '../../shell/EditorActions.svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -292,6 +293,7 @@
       {#if traceUrl}
         <a class="trace" href={traceUrl} target="_blank" rel="noreferrer"><Icon name="external" size={13} /> Trace</a>
       {/if}
+      <EditorActions tabId={tab.id} />
     </div>
 
     <div class="top">

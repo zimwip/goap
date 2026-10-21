@@ -146,7 +146,7 @@
   {:else if d.loadError}
     <div class="alert">{d.loadError}</div>
   {:else}
-    <DraftHeader draft={d} icon="book" kind="Methodology" title={d.isNew ? 'New methodology' : d.label} dirty={d.dirty} />
+    <DraftHeader tabId={tab.id} draft={d} icon="book" kind="Methodology" title={d.isNew ? 'New methodology' : d.label} dirty={d.dirty} />
 
     {#if d.isNew}
       <fieldset class="plain" disabled={d.readonly}>

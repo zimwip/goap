@@ -52,7 +52,7 @@
 
 <div class="editor-page" bind:this={root}>
   {#if item}
-    <DraftHeader draft={d} path={`conditions[${index}]`} icon="branch" kind="Condition" title={item.name || '(unnamed)'} dirty={d.itemDirty('conditions', item.uid)} />
+    <DraftHeader tabId={tab.id} draft={d} path={`conditions[${index}]`} icon="branch" kind="Condition" title={item.name || '(unnamed)'} dirty={d.itemDirty('conditions', item.uid)} />
     <fieldset class="plain" disabled={d.readonly}>
       <section class="card">
         <div class="grid">

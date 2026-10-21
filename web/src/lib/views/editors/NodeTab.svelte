@@ -2,6 +2,7 @@
   // Node editor: one tab for a node, its information organized in panes —
   // details (properties), relations (parents, children, graph), lifecycle,
   // history. Modifications are proposals of a working change (created on demand).
+  import EditorActions from '../../shell/EditorActions.svelte';
   import { working, workIn } from '../../stores/workingChange.svelte';
   import {
     graph,
@@ -448,6 +449,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
       {/if}
     {/if}
     {#if stored?.deleted}<span class="tag bad">deleted</span>{/if}
+    <EditorActions tabId={tab.id} />
   </div>
   {#if error}<div class="alert">{error}</div>{/if}
   {#if inChange && canReview}

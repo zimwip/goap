@@ -1,13 +1,14 @@
 <script lang="ts">
-  // Toolbar: the contextual actions of the active editor, at the end of its tab row (the panel toggles are in the status bar):
-  // the primary ones and the first others as buttons, the rest in a "More" menu.
+  // The actions of an editor, in the editor itself (at the end of its heading): the primary ones and the first others
+  // as buttons, the rest in a "More" menu. The editor gives them with `provideActions`; the shortcuts run them too.
   import Icon from './Icon.svelte';
   import Popover from './Popover.svelte';
   import { tabActions } from './workbench.svelte';
-  import { tabsState } from './tabs.svelte';
   import type { ToolbarAction } from './types';
 
-  const actions = $derived<ToolbarAction[]>(tabActions.get(tabsState.active) ?? []);
+  let { tabId }: { tabId: string } = $props();
+
+  const actions = $derived<ToolbarAction[]>(tabActions.get(tabId) ?? []);
   const SHOWN = 2;
   const secondary = $derived(actions.filter((a) => !a.primary));
   const shown = $derived(actions.filter((a) => a.primary || secondary.indexOf(a) < SHOWN));
@@ -73,6 +74,9 @@
 <style>
   .toolbar {
     display: flex;
+    margin-left: auto;
+    flex: none;
+    max-width: 100%;
     align-items: center;
     min-width: 0;
     overflow: hidden;
@@ -93,8 +97,9 @@
     align-items: center;
     gap: 0.35rem;
     flex: none;
-    min-height: 28px;
-    padding: 0.1rem 0.65rem;
+    min-height: 26px;
+    padding: 0.1rem 0.6rem;
+    font-size: var(--fs-sm);
     white-space: nowrap;
   }
   .more {

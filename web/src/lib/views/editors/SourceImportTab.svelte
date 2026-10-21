@@ -2,6 +2,7 @@
   // "Import from a source" tab (ADR 0148): the importers the domain of a namespace declares (a git repository for the
   // code domain), the form of the one picked from the parameters it declares, and the runs. A run is done by the importer
   // service implementing it, through the change operations; a run is a job (ADR 0149), followed live from the job stream.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import { imports, errorMessage, type Importer } from '../../api';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -105,6 +106,7 @@
   <div class="editor-head">
     <Icon name="database" size={18} />
     <h2>Import from a source{namespace ? ` into ${namespace}` : ''}</h2>
+    <EditorActions tabId={tab.id} />
   </div>
   <section class="card">
     {#if loading}

@@ -1,5 +1,6 @@
 <script lang="ts">
   // Change tab: change items and applying to the baseline.
+  import EditorActions from '../../shell/EditorActions.svelte';
   import {
     graph,
     engine,
@@ -1225,6 +1226,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             {#if detachable(ch)}<button type="button" class="small" disabled={detaching} onclick={detachFromParent}>Detach</button>{/if}
             <button type="button" class="small danger" disabled={defBusy} onclick={abandon}>Abandon</button>
           {/if}
+          <EditorActions tabId={tab.id} />
         </div>
         {#if attachOpen && attachable(ch)}
           <AttachChange change={ch} oncancel={() => (attachOpen = false)} onattached={() => ((attachOpen = false), notify('Change attached.', 'ok'), load(selected))} />

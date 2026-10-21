@@ -2,13 +2,13 @@
   // Vertical activity bar: one icon per tool in the area.
   import Icon from './Icon.svelte';
   import { viewsIn } from './registry';
-  import { layout, toggleTool } from './layout.svelte';
+  import { layout, nav, toggleTool } from './layout.svelte';
 
   let { side }: { side: 'left' | 'right' } = $props();
 
   const views = $derived(viewsIn(side));
   const active = $derived(side === 'left' ? layout.left : layout.right);
-  const open = $derived(side === 'left' ? layout.leftOpen : layout.rightOpen);
+  const open = $derived(side === 'left' ? layout.leftOpen || nav.revealed : layout.drawer);
 
   function keydown(e: KeyboardEvent) {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
