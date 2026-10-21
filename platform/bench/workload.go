@@ -382,6 +382,7 @@ func (r *Runner) change(ctx context.Context, w *worker) {
 			}
 		}
 	}
+	r.Metrics.Change(ctx, len(edits), heldBy(edits))
 	var err error
 	if r.Config.Mode == ModeLifecycle {
 		err = r.lifecycle(ctx, w, edits)
@@ -405,6 +406,20 @@ func (r *Runner) change(ctx context.Context, w *worker) {
 	}
 	w.failed = 0
 	r.committed(w, edits)
+}
+
+// held is the number of links the node of an edit holds once the edit is written (the ones the bench wrote).
+func (e edit) held() int {
+	return len(e.n.out) + len(e.links)
+}
+
+// heldBy is the number of links the nodes of a change hold once it is written.
+func heldBy(edits []edit) int {
+	n := 0
+	for _, e := range edits {
+		n += e.held()
+	}
+	return n
 }
 
 func (r *Runner) committed(w *worker, edits []edit) {
@@ -452,7 +467,7 @@ func (r *Runner) commit(ctx context.Context, w *worker, edits []edit) error {
 		}
 		req.Edits = append(req.Edits, pe)
 	}
-	_, err := timed(ctx, r.Metrics, "CommitEdits", func(ctx context.Context) (*connect.Response[graphv1.CommitEditsResponse], error) {
+	_, err := shaped(ctx, r.Metrics, "CommitEdits", heldBy(edits), func(ctx context.Context) (*connect.Response[graphv1.CommitEditsResponse], error) {
 		return r.Clients.Graph.CommitEdits(ctx, connect.NewRequest(req))
 	})
 	return err
@@ -489,14 +504,14 @@ func (r *Runner) lifecycle(ctx context.Context, w *worker, edits []edit) error {
 			impacts = append(impacts, res.Msg.Node.GetId())
 			continue
 		}
-		res, err := timed(ctx, m, "ImpactNodeCheckout", func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeCheckoutResponse], error) {
+		res, err := shaped(ctx, m, "ImpactNodeCheckout", len(e.n.out), func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeCheckoutResponse], error) {
 			return g.ImpactNodeCheckout(ctx, connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: id, NodeId: e.n.id, Rationale: "bench: modified"}))
 		})
 		if err != nil {
 			return abandon(err)
 		}
 		imp := res.Msg.Node.GetId()
-		if _, err := timed(ctx, m, "ImpactNodeUpdate", func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeUpdateResponse], error) {
+		if _, err := shaped(ctx, m, "ImpactNodeUpdate", len(e.n.out), func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeUpdateResponse], error) {
 			return g.ImpactNodeUpdate(ctx, connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: id, ChangeImpactId: imp, Props: structOf(e.props)}))
 		}); err != nil {
 			return abandon(err)
@@ -520,12 +535,13 @@ func (r *Runner) lifecycle(ctx context.Context, w *worker, edits []edit) error {
 	}); err != nil {
 		return abandon(err)
 	}
-	if _, err := timed(ctx, m, "CommitChange", func(ctx context.Context) (*connect.Response[graphv1.CommitChangeResponse], error) {
+	held := heldBy(edits)
+	if _, err := shaped(ctx, m, "CommitChange", held, func(ctx context.Context) (*connect.Response[graphv1.CommitChangeResponse], error) {
 		return g.CommitChange(ctx, connect.NewRequest(&graphv1.CommitChangeRequest{ChangeId: id}))
 	}); err != nil {
 		return abandon(err)
 	}
-	if _, err := timed(ctx, m, "MergeChange", func(ctx context.Context) (*connect.Response[graphv1.MergeChangeResponse], error) {
+	if _, err := shaped(ctx, m, "MergeChange", held, func(ctx context.Context) (*connect.Response[graphv1.MergeChangeResponse], error) {
 		return g.MergeChange(ctx, connect.NewRequest(&graphv1.MergeChangeRequest{ChangeId: id}))
 	}); err != nil {
 		return err // committed: it stays, as a change waiting for its merge

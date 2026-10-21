@@ -11,40 +11,64 @@ import (
 // bound of the chain a read of the links of a version walks.
 const maxLinkDepth = 16
 
-// putLinks writes the outgoing links of a version written in the transaction (ADR 0141). When one of the versions like
-// (earlier versions of the node: the one it was checked out from first) holds the same links, the version shares its
-// set and writes no row; else, when the first of them is close enough, the version writes a delta over its set (the
-// links it adds, a row per link it drops) when that is at most half its links and the set is not too deep; else it
-// writes its links whole. A link it keeps keeps its id.
+// putLinks writes the outgoing links of a version written in the transaction (ADR 0141 and its addendum). When one of
+// the versions like (earlier versions of the node: the one it was checked out from first) holds the same links, the
+// version shares its set and writes no row. Else it writes a new set, the next in order after the one the first of like
+// holds (else the previous version): a delta (the links it adds, a row per link it drops) over the set baseSet picks
+// when that delta has fewer rows than its links, else its links whole. A link it keeps keeps its id.
 func (g *Graph) putLinks(ctx context.Context, tx Tx, n domain.Node, links []domain.Link, like ...domain.NodeRef) error {
 	from := n.Ref()
-	var (
-		delta       bool
-		base        LinkSet
-		adds, drops []domain.Link
-	)
+	var prev domain.NodeRef // the version the new set follows
 	for _, ref := range like {
 		if ref.ID != n.ID || ref.Version < 1 || ref.Version >= n.Version {
 			continue
+		}
+		if prev.ID == "" {
+			prev = ref
 		}
 		held, err := tx.OutLinks(ctx, ref)
 		if err != nil {
 			return err
 		}
-		set, err := tx.LinkSetOf(ctx, ref)
+		if a, d := diffLinks(held, links); len(a) == 0 && len(d) == 0 {
+			set, err := tx.LinkSetOf(ctx, ref)
+			if err != nil {
+				return err
+			}
+			return tx.PutLinkSet(ctx, from, LinkSet{Of: set.Of, Depth: set.Depth, Seq: set.Seq})
+		}
+	}
+	if prev.ID == "" && n.Version > 1 {
+		prev = domain.NodeRef{ID: n.ID, Version: n.Version - 1}
+	}
+	seq := 1
+	var (
+		delta       bool
+		base        LinkSet
+		adds, drops []domain.Link
+	)
+	if prev.ID != "" {
+		set, err := tx.LinkSetOf(ctx, prev)
 		if err != nil {
 			return err
 		}
-		a, d := diffLinks(held, links)
-		if len(a) == 0 && len(d) == 0 {
-			return tx.PutLinkSet(ctx, from, LinkSet{Of: set.Of, Depth: set.Depth})
-		}
-		if !delta && base.Of == 0 {
-			base, adds, drops = set, a, d
-			delta = set.Depth < maxLinkDepth && 2*(len(a)+len(d)) <= len(links)
+		seq = set.Seq + 1
+		if b, ok, err := baseSet(ctx, tx, prev, set, seq); err != nil {
+			return err
+		} else if ok && len(links) > 0 {
+			held, err := tx.OutLinks(ctx, domain.NodeRef{ID: n.ID, Version: b.Of})
+			if err != nil {
+				return err
+			}
+			if a, d := diffLinks(held, links); len(a)+len(d) < len(links) {
+				base, adds, drops, delta = b, a, d, true
+			}
 		}
 	}
 	if !delta {
+		if err := tx.PutLinkSet(ctx, from, LinkSet{Seq: seq}); err != nil {
+			return err
+		}
 		for _, l := range links {
 			l.From, l.ChangeID = from, n.ChangeID
 			if err := tx.PutLink(ctx, l); err != nil {
@@ -53,7 +77,7 @@ func (g *Graph) putLinks(ctx context.Context, tx Tx, n domain.Node, links []doma
 		}
 		return nil
 	}
-	if err := tx.PutLinkSet(ctx, from, LinkSet{Base: base.Of, Depth: base.Depth + 1}); err != nil {
+	if err := tx.PutLinkSet(ctx, from, LinkSet{Base: base.Of, Depth: base.Depth + 1, Seq: seq}); err != nil {
 		return err
 	}
 	for _, l := range adds {
@@ -69,6 +93,32 @@ func (g *Graph) putLinks(ctx context.Context, tx Tx, n domain.Node, links []doma
 		}
 	}
 	return nil
+}
+
+// baseSet is the set the set of order seq is a delta over (putLinks): the one of order seq with its lowest bit cleared,
+// found on the chain of the set prev holds (that set, then the set each is a delta over); none when that order is 0 (a
+// power of two writes its links whole) or the chain does not reach it.
+//
+// These are skip deltas: the chain of the set of order k is as deep as the bits set in k, less one, and over K sets a
+// delta holds the changes of about log2(K)/2 sets. A delta over the set prev holds would make a node whose links grow
+// write them whole every maxLinkDepth sets: rows in the size of its links at every few sets.
+func baseSet(ctx context.Context, tx Tx, prev domain.NodeRef, set LinkSet, seq int) (LinkSet, bool, error) {
+	want := seq & (seq - 1)
+	if want == 0 {
+		return LinkSet{}, false, nil
+	}
+	var err error
+	if set.Of != prev.Version { // prev shares the set of an earlier version: how that one holds it
+		if set, err = tx.LinkSetOf(ctx, domain.NodeRef{ID: prev.ID, Version: set.Of}); err != nil {
+			return set, false, err
+		}
+	}
+	for set.Seq > want && set.Base != 0 {
+		if set, err = tx.LinkSetOf(ctx, domain.NodeRef{ID: prev.ID, Version: set.Base}); err != nil {
+			return set, false, err
+		}
+	}
+	return set, set.Seq == want && set.Depth < maxLinkDepth, nil
 }
 
 // diffLinks compares the links a version holds with the ones a new version holds, by type, target and properties

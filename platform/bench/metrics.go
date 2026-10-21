@@ -34,6 +34,11 @@ type Metrics struct {
 	Totals   Totals
 	duration metric.Float64Histogram
 	size     metric.Int64Histogram
+	// shaped is the duration of the calls whose cost follows the size of what they handle, by that size (LinkClass):
+	// the links the node of a node call holds, the links the nodes of a change hold for a change call.
+	shaped      metric.Float64Histogram
+	changeEdits metric.Int64Histogram
+	changeLinks metric.Int64Histogram
 
 	mu     sync.Mutex
 	window map[string]*sample
@@ -65,6 +70,21 @@ func NewMetrics() (*Metrics, error) {
 	if m.size, err = meter.Int64Histogram("bench.response.size", metric.WithUnit("By"),
 		metric.WithDescription("Size of the body of an API answer"),
 		metric.WithExplicitBucketBoundaries(sizeBuckets...)); err != nil {
+		return nil, err
+	}
+	if m.shaped, err = meter.Float64Histogram("bench.op.shaped.duration", metric.WithUnit("s"),
+		metric.WithDescription("Duration of a call by the size of what it handles: links held by its node, or by the nodes of its change (attribute links)"),
+		metric.WithExplicitBucketBoundaries(latencyBuckets...)); err != nil {
+		return nil, err
+	}
+	if m.changeEdits, err = meter.Int64Histogram("bench.change.edits", metric.WithUnit("{node}"),
+		metric.WithDescription("Nodes a change writes"),
+		metric.WithExplicitBucketBoundaries(1, 2, 5, 10, 20, 50, 100, 200, 500)); err != nil {
+		return nil, err
+	}
+	if m.changeLinks, err = meter.Int64Histogram("bench.change.links", metric.WithUnit("{link}"),
+		metric.WithDescription("Links the nodes a change writes hold, once written"),
+		metric.WithExplicitBucketBoundaries(10, 100, 1000, 10000, 100000)); err != nil {
 		return nil, err
 	}
 	gauges := []struct {
@@ -103,6 +123,33 @@ func (m *Metrics) Observe(ctx context.Context, op string, d time.Duration, outco
 		s.errors++
 	}
 	m.mu.Unlock()
+}
+
+// LinkClass is the size class of a number of links held, the links attribute of bench.op.shaped.duration: an order of
+// magnitude, so a dashboard draws one line per class.
+func LinkClass(n int) string {
+	switch {
+	case n < 10:
+		return "0-9"
+	case n < 100:
+		return "10-99"
+	case n < 1000:
+		return "100-999"
+	case n < 10000:
+		return "1000-9999"
+	}
+	return "10000+"
+}
+
+// Shaped records a call by the size of what it handled (links held, LinkClass); Observe records it too.
+func (m *Metrics) Shaped(ctx context.Context, op string, d time.Duration, links int) {
+	m.shaped.Record(ctx, d.Seconds(), metric.WithAttributes(attribute.String("op", op), attribute.String("links", LinkClass(links))))
+}
+
+// Change records the shape of a change written: the nodes it writes and the links they hold.
+func (m *Metrics) Change(ctx context.Context, edits, links int) {
+	m.changeEdits.Record(ctx, int64(edits))
+	m.changeLinks.Record(ctx, int64(links))
 }
 
 // Size records the size of an answer.
