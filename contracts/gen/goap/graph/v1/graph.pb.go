@@ -907,8 +907,10 @@ type Change struct {
 	// the version of its methodology the change follows (ADR 0113): the latest published one when it was created, until
 	// it is upgraded; empty: the latest
 	MethodologyVersion string `protobuf:"bytes,24,opt,name=methodology_version,json=methodologyVersion,proto3" json:"methodology_version,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// the position of the log of the change its impacts and items were read at: the view the reader holds (ADR 0153)
+	Seq           int64 `protobuf:"varint,25,opt,name=seq,proto3" json:"seq,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Change) Reset() {
@@ -1093,6 +1095,13 @@ func (x *Change) GetMethodologyVersion() string {
 		return x.MethodologyVersion
 	}
 	return ""
+}
+
+func (x *Change) GetSeq() int64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
 }
 
 // A methodology of the guardian chain of a change, at the version in force when the chain was computed (ADR 0106).
@@ -6122,8 +6131,10 @@ func (x *CreateChangeResponse) GetChange() *Change {
 }
 
 type GetChangeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// read the change as its log stood at this position (its impacts, items and state); 0 or past the head: the head
+	AtSeq         int64 `protobuf:"varint,2,opt,name=at_seq,json=atSeq,proto3" json:"at_seq,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6163,6 +6174,13 @@ func (x *GetChangeRequest) GetId() string {
 		return x.Id
 	}
 	return ""
+}
+
+func (x *GetChangeRequest) GetAtSeq() int64 {
+	if x != nil {
+		return x.AtSeq
+	}
+	return 0
 }
 
 type GetChangeResponse struct {
@@ -19145,7 +19163,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04flow\x18\x0f \x01(\tR\x04flow\x127\n" +
 	"\n" +
 	"flow_event\x18\x10 \x01(\v2\x18.goap.graph.v1.FlowEventR\tflowEvent\x12C\n" +
-	"\x0edecision_event\x18\x11 \x01(\v2\x1c.goap.graph.v1.DecisionEventR\rdecisionEvent\"\xfc\x05\n" +
+	"\x0edecision_event\x18\x11 \x01(\v2\x1c.goap.graph.v1.DecisionEventR\rdecisionEvent\"\x8e\x06\n" +
 	"\x06Change\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
@@ -19173,7 +19191,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\tguardians\x18\x16 \x03(\v2\x1a.goap.graph.v1.GuardianRefR\tguardians\x12\x1d\n" +
 	"\n" +
 	"depends_on\x18\x17 \x03(\tR\tdependsOn\x12/\n" +
-	"\x13methodology_version\x18\x18 \x01(\tR\x12methodologyVersion\"I\n" +
+	"\x13methodology_version\x18\x18 \x01(\tR\x12methodologyVersion\x12\x10\n" +
+	"\x03seq\x18\x19 \x01(\x03R\x03seq\"I\n" +
 	"\vGuardianRef\x12 \n" +
 	"\vmethodology\x18\x01 \x01(\tR\vmethodology\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\"\xe5\x01\n" +
@@ -19601,9 +19620,10 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"project_id\x18\f \x01(\tR\tprojectId\x12/\n" +
 	"\x13methodology_version\x18\r \x01(\tR\x12methodologyVersion\"E\n" +
 	"\x14CreateChangeResponse\x12-\n" +
-	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\"\"\n" +
+	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\"9\n" +
 	"\x10GetChangeRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"B\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
+	"\x06at_seq\x18\x02 \x01(\x03R\x05atSeq\"B\n" +
 	"\x11GetChangeResponse\x12-\n" +
 	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\"\xe6\x01\n" +
 	"\x12ListChangesRequest\x12\x1c\n" +

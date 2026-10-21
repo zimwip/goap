@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/graphapi"
 )
 
 // The guard (ADR 0054) is the rule of the graph, in Go, whatever the storage: a database with constraints repeats
@@ -51,6 +52,12 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		// what the transaction folded of the logs it wrote is committed now: the next one folds only what follows
 		for _, st := range gt.drafts {
 			r.g.draftStates.put(st, r.g.draftCacheSize())
+		}
+		// the caller's watermark: where the writes left the log of each change (ADR 0153)
+		if w := graphapi.WatermarkOf(ctx); w != nil {
+			for id, seq := range gt.impactSeq {
+				w.Note(id, seq)
+			}
 		}
 	}
 	return err
@@ -200,6 +207,11 @@ func (t *guardTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change
 			t.reads = map[domain.ChangeID]domain.Change{}
 		}
 		t.reads[id] = copyChange(c)
+		st, err := t.g.draftState(ctx, t, id)
+		if err != nil {
+			return c, err
+		}
+		c.Seq = st.seq
 		return c, nil
 	}
 	c, ok := t.heads[id]
@@ -222,6 +234,7 @@ func (t *guardTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change
 	c.DependsOn = slices.Clone(c.DependsOn)
 	c.Items = slices.Clone(st.items)
 	c.Nodes = slices.Clone(st.impacts) // values the fold replaces, never edits
+	c.Seq = st.seq
 	return c, nil
 }
 
@@ -317,12 +330,13 @@ func (t *guardTx) needChange(id domain.ChangeID, what string) error {
 	return nil
 }
 
-// change reads the header of a change (cached for the transaction).
+// change reads the header of a change (cached for the transaction): its unit, its project, that it exists; never its
+// log, which the fold of the change holds.
 func (t *guardTx) change(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
 	if c, ok := t.headers[id]; ok {
 		return c, nil
 	}
-	c, err := t.Tx.Change(ctx, id)
+	c, err := t.Tx.ChangeHead(ctx, id)
 	if err != nil {
 		return c, err
 	}

@@ -82,6 +82,16 @@ func (g *Graph) workOn(ctx context.Context, tx Tx, id domain.ChangeID, flow stri
 	return w, nil
 }
 
+// reread takes the change and what the flow sees again from the view of the change, after a write of the operation
+// folded into it (ADR 0153): the branch, the flow and the types the work was opened on stand.
+func (g *Graph) reread(ctx context.Context, tx Tx, w *work) (err error) {
+	if w.c, err = changeOpen(ctx, tx, w.c.ID); err != nil {
+		return err
+	}
+	w.seen, err = g.newFlowNodes(tx, w.c, w.flow).nodes(ctx)
+	return err
+}
+
 // impact selects the change impact the operation works on, to edit it: one written in a state of the lifecycle of the
 // change that the change has left is frozen (ADR 0058).
 func (g *Graph) impact(ctx context.Context, tx Tx, w *work, id domain.ChangeImpactID) error {
@@ -261,7 +271,7 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 	}
 	// a creation is not recorded yet: the change is as it was read, unless the declaration activated a draft change
 	if !t.create || w.c.Status == domain.ChangeDraft {
-		if w, err = g.workOn(ctx, tx, id, t.Flow); err != nil {
+		if err := g.reread(ctx, tx, w); err != nil {
 			return nil, err
 		}
 	}
@@ -925,7 +935,10 @@ func (g *Graph) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in
 			if _, err := g.checkoutTx(ctx, tx, w, in.Execution); err != nil {
 				return err
 			}
-			if w, err = g.resolve(ctx, tx, id, target{Impact: w.cn.ID, Flow: in.Flow, Execution: in.Execution, transition: true}); err != nil {
+			if err := g.reread(ctx, tx, w); err != nil {
+				return err
+			}
+			if err := g.impact(ctx, tx, w, w.cn.ID); err != nil {
 				return err
 			}
 		}

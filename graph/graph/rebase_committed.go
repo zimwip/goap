@@ -33,13 +33,13 @@ func hasCommits(c domain.Change) bool {
 
 // uncommitted lists the change impacts whose draft holds a modification not committed yet (ADR 0102).
 func (g *Graph) uncommitted(ctx context.Context, tx Tx, c domain.Change) ([]string, error) {
-	rows, err := g.drafts(ctx, tx, c.ID)
+	draftOf, err := g.draftsOf(ctx, tx, c.ID)
 	if err != nil {
 		return nil, err
 	}
 	var out []string
 	for _, cn := range mainImpactsOf(c) {
-		if ok, err := g.draftModifies(ctx, tx, ownDraft(rows, cn.ID, "")); err != nil {
+		if ok, err := g.draftModifies(ctx, tx, draftOf(cn.ID, "")); err != nil {
 			return nil, err
 		} else if ok {
 			out = append(out, cn.Key)
@@ -109,7 +109,7 @@ func (g *Graph) unsettled(ctx context.Context, tx Tx, c domain.Change) ([]string
 	} else if len(open) > 0 {
 		out = append(out, fmt.Sprintf("%d open sub-change(s) (merge or abandon them)", len(open)))
 	}
-	rows, err := g.drafts(ctx, tx, c.ID)
+	draftOf, err := g.draftsOf(ctx, tx, c.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func (g *Graph) unsettled(ctx context.Context, tx Tx, c domain.Change) ([]string
 		if cn.Via != "" {
 			continue
 		}
-		modifies, err := g.draftModifies(ctx, tx, ownDraft(rows, cn.ID, ""))
+		modifies, err := g.draftModifies(ctx, tx, draftOf(cn.ID, ""))
 		if err != nil {
 			return nil, err
 		}
@@ -244,7 +244,7 @@ func (g *Graph) checkParentDrafts(ctx context.Context, tx Tx, c domain.Change) e
 	if err != nil {
 		return err
 	}
-	rows, err := g.drafts(ctx, tx, parent.ID)
+	draftOf, err := g.draftsOf(ctx, tx, parent.ID)
 	if err != nil {
 		return err
 	}
@@ -257,7 +257,7 @@ func (g *Graph) checkParentDrafts(ctx context.Context, tx Tx, c domain.Change) e
 		if !mine[nodeOf(cn)] {
 			continue
 		}
-		if ok, err := g.draftModifies(ctx, tx, ownDraft(rows, cn.ID, "")); err != nil {
+		if ok, err := g.draftModifies(ctx, tx, draftOf(cn.ID, "")); err != nil {
 			return err
 		} else if ok {
 			held = append(held, cn.Key)
@@ -614,7 +614,7 @@ func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitS
 		if c.Status != domain.ChangeDraft && c.Status != domain.ChangeActive {
 			return nil
 		}
-		rows, err := g.drafts(ctx, tx, id)
+		draftOf, err := g.draftsOf(ctx, tx, id)
 		if err != nil {
 			return err
 		}
@@ -622,7 +622,7 @@ func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitS
 			if cn.Review != domain.ReviewAccepted {
 				continue
 			}
-			if ok, err := g.draftModifies(ctx, tx, ownDraft(rows, cn.ID, "")); err != nil {
+			if ok, err := g.draftModifies(ctx, tx, draftOf(cn.ID, "")); err != nil {
 				return err
 			} else if ok {
 				st.ToCommit = append(st.ToCommit, cn.Key)

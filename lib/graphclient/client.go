@@ -5,6 +5,7 @@ package graphclient
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"connectrpc.com/connect"
@@ -33,7 +34,7 @@ type Client struct {
 // A request whose context carries no principal (a directory refreshing its snapshot in the background) goes as the
 // service client, a named principal with no role: the graph refuses anonymous requests (Handler.Identify).
 func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *Client {
-	return &Client{rpc: graphv1connect.NewGraphServiceClient(hc, baseURL, append([]connect.ClientOption{identity.Forward(), serviceIdentity()}, opts...)...)}
+	return &Client{rpc: graphv1connect.NewGraphServiceClient(hc, baseURL, append([]connect.ClientOption{identity.Forward(), serviceIdentity(), positions()}, opts...)...)}
 }
 
 // ClientPrincipal is the identity of a graph client acting for no one in particular.
@@ -46,6 +47,34 @@ func serviceIdentity() connect.ClientOption {
 				identity.SetHeaders(ClientPrincipal, req.Header())
 			}
 			return next(ctx, req)
+		}
+	}))
+}
+
+// positions carries the positions of the logs of the changes (ADR 0153): the ones the context requires of the reads
+// (graphapi.AtLeast) go with the request, the ones the writes reached come back into its watermark
+// (graphapi.WithWatermark).
+func positions() connect.ClientOption {
+	return connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			if m := graphapi.AllAtLeast(ctx); len(m) > 0 {
+				req.Header().Set(graphapi.HeaderAtLeast, graphapi.FormatPositions(m))
+			}
+			res, err := next(ctx, req)
+			w := graphapi.WatermarkOf(ctx)
+			if w == nil {
+				return res, err
+			}
+			v := ""
+			if res != nil {
+				v = res.Header().Get(graphapi.HeaderChangeSeq)
+			} else if ce := new(connect.Error); errors.As(err, &ce) {
+				v = ce.Meta().Get(graphapi.HeaderChangeSeq)
+			}
+			for id, seq := range graphapi.ParsePositions(v) {
+				w.Note(id, seq)
+			}
+			return res, err
 		}
 	}))
 }
@@ -400,6 +429,15 @@ func (c *Client) Changes(ctx context.Context) ([]domain.Change, error) {
 // Change implements engine.GraphPort.
 func (c *Client) Change(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
 	r, err := c.rpc.GetChange(ctx, connect.NewRequest(&graphv1.GetChangeRequest{Id: string(id)}))
+	if err != nil {
+		return domain.Change{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeFromPB(r.Msg.Change), nil
+}
+
+// ChangeAt reads a change as its log stood at a position (graph.Graph.ChangeAt, ADR 0153).
+func (c *Client) ChangeAt(ctx context.Context, id domain.ChangeID, seq int64) (domain.Change, error) {
+	r, err := c.rpc.GetChange(ctx, connect.NewRequest(&graphv1.GetChangeRequest{Id: string(id), AtSeq: seq}))
 	if err != nil {
 		return domain.Change{}, rpcerr.FromConnect(err)
 	}

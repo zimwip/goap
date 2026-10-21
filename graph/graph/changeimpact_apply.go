@@ -231,7 +231,7 @@ func (a *applier) walkChangeImpacts() (stuck []string, err error) {
 // version. Each move was authorized, guarded and acted when it was taken (ImpactNodeTransition).
 func (a *applier) walkTransitions(cp cpost, lc *domain.Lifecycle) error {
 	if a.events == nil {
-		evs, err := impactEvents(a.ctx, a.tx, a.change.ID)
+		evs, err := a.g.foldedEvents(a.ctx, a.tx, a.change.ID)
 		if err != nil {
 			return err
 		}

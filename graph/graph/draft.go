@@ -63,7 +63,7 @@ func (g *Graph) seenDrafts(ctx context.Context, tx Tx, c domain.Change, flow str
 		}
 		return out, nil
 	}
-	events, err := impactEvents(ctx, tx, c.ID)
+	events, err := g.foldedEvents(ctx, tx, c.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -380,14 +380,16 @@ func (g *Graph) ChangeNodeView(ctx context.Context, id domain.ChangeID, flow str
 // link of that id): what the gate of the access nodes asks before a link of a draft is edited (ADR 0079).
 func (g *Graph) LinkSourceType(ctx context.Context, id domain.ChangeID, link domain.LinkID) (typ string, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		rows, err := g.drafts(ctx, tx, id)
+		st, err := g.draftState(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		for _, d := range rows {
-			if _, ok := d.Link(link); ok {
-				typ = d.Type
-				return nil
+		for _, rows := range st.drafts {
+			for _, d := range rows {
+				if _, ok := d.Link(link); ok {
+					typ = d.Type
+					return nil
+				}
 			}
 		}
 		l, err := tx.Link(ctx, link)

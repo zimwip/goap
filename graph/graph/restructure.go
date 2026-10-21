@@ -208,31 +208,34 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 		if err != nil {
 			return out, err
 		}
-		for _, v := range vs {
-			in, err := tx.InLinks(ctx, v.Ref())
+		refs := make([]domain.NodeRef, len(vs))
+		for i, v := range vs {
+			refs[i] = v.Ref()
+		}
+		// the links entering every version of the source, in one read
+		in, err := tx.LinksInto(ctx, refs)
+		if err != nil {
+			return out, err
+		}
+		for _, l := range in {
+			if _, drafted := reader.get(l.From.ID); drafted {
+				continue // read through its draft below
+			}
+			cur, err := g.currentOf(ctx, tx, w, l.From.ID)
 			if err != nil {
 				return out, err
 			}
-			for _, l := range in {
-				if _, drafted := reader.get(l.From.ID); drafted {
-					continue // read through its draft below
-				}
-				cur, err := g.currentOf(ctx, tx, w, l.From.ID)
-				if err != nil {
-					return out, err
-				}
-				if cur == nil || cur.Ref() != l.From || cur.Deleted {
-					continue // a link of a version the flow no longer sees
-				}
-				composes := w.ix.composes(l.Type)
-				if srcSet[cur.ID] {
-					if composes {
-						return out, invalidf("%s is the parent of %s: merge or split nodes that are not parts of each other", cur.Key, s.Key)
-					}
-					continue
-				}
-				hold(*cur, l, s.ID)
+			if cur == nil || cur.Ref() != l.From || cur.Deleted {
+				continue // a link of a version the flow no longer sees
 			}
+			composes := w.ix.composes(l.Type)
+			if srcSet[cur.ID] {
+				if composes {
+					return out, invalidf("%s is the parent of %s: merge or split nodes that are not parts of each other", cur.Key, s.Key)
+				}
+				continue
+			}
+			hold(*cur, l, s.ID)
 		}
 		for _, d := range reader.sortedDrafts() {
 			for _, dl := range d.Links {
@@ -293,11 +296,11 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 		if err != nil {
 			return out, err
 		}
-		rows, err := g.drafts(ctx, tx, id)
+		own, err := g.ownDraftOf(ctx, tx, id, hw.cn.ID, hw.flow)
 		if err != nil {
 			return out, err
 		}
-		if ownDraft(rows, hw.cn.ID, hw.flow) == nil {
+		if own == nil {
 			if _, err := g.checkoutTx(ctx, tx, hw, execution); err != nil {
 				return out, err
 			}

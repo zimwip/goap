@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
 )
@@ -94,6 +95,15 @@ func (g *Graph) flush(ctx context.Context, tx Tx, s *impactStage) error {
 	}
 	// the fold holds the events already: it is now up to the entry
 	st.seq = entry.Seq
+	for i := len(st.events) - len(s.events); i < len(st.events); i++ {
+		st.events[i].Seq = int(entry.Seq)
+	}
+	for _, e := range s.events {
+		if p, ok := st.phases[e.Impact]; ok && e.StartsDraft() && e.Flow == "" {
+			p.Seq = entry.Seq
+			st.phases[e.Impact] = p
+		}
+	}
 	readLog(tx, st)
 	s.events = nil
 	return nil
@@ -230,7 +240,8 @@ func (g *Graph) ChangeEvents(ctx context.Context, id domain.ChangeID) (out []dom
 		if _, err := tx.Change(ctx, id); err != nil {
 			return err
 		}
-		out, err = impactEvents(ctx, tx, id)
+		out, err = g.foldedEvents(ctx, tx, id)
+		out = slices.Clone(out)
 		return err
 	})
 	return
