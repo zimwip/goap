@@ -1,6 +1,6 @@
 # ADR 0154 — Logical URLs and the federation of graphs
 
-**Status**: proposed; steps 1, 2 and 5 implemented, step 6 under way (§9.1 and §9.2 done) · **Date**: 2026-10
+**Status**: proposed; steps 1, 2, 5 and 6 implemented (§9.1 to §9.4) · **Date**: 2026-10
 
 ## Context
 
@@ -76,15 +76,29 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
    1. (done) the owner unit and the project of a version and of a change become keys of the platform graph
       (`node.project`, `node_version.owner`: text keys, no foreign key; `domain.Node.Owner` / `Project` and
       `Draft.Owner` are keys, the `owner` patch of a draft names the unit's key); the guard checks them through the
-      seam `Graph.StructureKeys(kind, key)` (the platform's directory, for a content graph), else against the
-      transaction (`guardTx.inStructure`);
+      seam `Graph.Directory` (`graph.StructureDirectory`: `StructureNode(kind, key)`, `StructureChain(kind, key)`;
+      the platform's organisation directory, `access.Directory`, for a content graph), else against the transaction
+      (`guardTx.inStructure`); a graph with a directory bootstraps no root, the platform holds them;
    2. (done) links may target URLs (step 2), so a content node may name a node of the platform graph (an owner, a
       project, a methodology) and the reverse;
-   3. the clients route by namespace (`graphclient.Router`: a namespace to the graph serving it, from the sources of
-      the platform; the engine, the hub, the registry and the gateway take it where they take a `graphclient.Client`
-      today), a change acting on one namespace (CLAUDE.md, rule 2) runs on one graph;
-   4. the deployment runs `graph-platform` and `graph-content` (compose services, one database each, the gateway
-      routing by namespace), `goap-dev` keeping both in one process over one database.
+   3. (done) the calls route by namespace, on the server rather than in each client: the platform graph is the one
+      graph its callers know (`GOAP_GRAPH_URL` unchanged for the gateway, the engine, the hub, the registry), and its
+      graph service sits behind `graphsvc.Router`, which forwards a unary call naming a namespace another graph holds
+      (a top-level `namespace` field), or a change that lives there (`change_id`, or the `id` of a call on a change:
+      this graph's `Graph.HasChange`, else asked to the other graphs and remembered), headers and body as they came;
+      a call naming neither is served here and tried on the other graphs when this one answers not found (a node read
+      by its id). A change acting on one namespace (CLAUDE.md, rule 2) runs on one graph. The routes are
+      configuration (`GOAP_GRAPH_ROUTES`, `ns1,ns2=url;ns3=url2`, `graphsvc.ParseRoutes`), not yet read from the
+      sources of the platform;
+   4. (done) the deployment runs `graph` (the platform graph, routing) and `graph-content` (compose services, one
+      database schema each; `GOAP_GRAPH_SPACE=content`, `GOAP_PLATFORM_GRAPH_URL`): the content graph reads its types
+      from the platform's domain registry (`domainclient`, reloaded on the domain events), runs no bootstrap and no
+      seed, serves the graph service only, and checks owners and projects through an `access.Directory` over the
+      platform graph's client, the heads it reads followed by `graphsnap.Heads` (kept until a `baseline.advanced`
+      event of main on the bus, else read at every use). `goap-dev` keeps one graph over one database.
+   What is left: the listings (changes, nodes by type, search) are each graph's own, not merged by the router; the
+   jobs, smart tags and source imports of the content namespaces still run on the platform graph; a streaming call is
+   served by the platform graph only; the routes do not yet come from the `platform@Source` nodes.
 
 ## Steps
 

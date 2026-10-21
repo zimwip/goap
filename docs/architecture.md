@@ -1127,7 +1127,7 @@ PostgreSQL; SQLite and the memory store run one transaction at a time), taken be
 
 Every `change_id` above is `NOT NULL` with a foreign key (deferred where the bootstrap needs it); `owner`, `project`,
 `owner_org` and `project_id` are non-empty keys of the structures, no foreign key, since the structures may live in
-another graph (the platform graph, ADR 0154 §9; the guard checks them through `Graph.StructureKeys`), and `graph/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054): the constraints
+another graph (the platform graph, ADR 0154 §9; the guard checks them through `Graph.Directory`, the platform's organisation directory in a content graph), and `graph/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054): the constraints
 are a second line, a storage without any keeps the rules.
 
 > Why PostgreSQL and not a graph database? The required traversals (neighborhood, impact propagation
@@ -1155,8 +1155,11 @@ key say which thing. Every namespace of the graph is a `graph` source of its nam
 (`Graph.Resolvers`: `graphclient.Federation` for a `graph` source with a location, `lnk.Files` for `files`). `Graph.Lnk()` is the registry,
 `Graph.Resolve` reads a URL, `Node.URL()` / `Node.SourceName()` give a node's. Sources are declared on the platform and resolved per project: a project maps the source names of its URLs to
 declared sources (`ProjectUnit.sources`, inherited, nearest wins), so its content can be stored elsewhere
-(`Graph.ResolveIn`, `Graph.ResolveFrom`); the platform and the content are to become two graph services (ADR §9). Links still target node versions; their
-logical targets are step 2 of the ADR.
+(`Graph.ResolveIn`, `Graph.ResolveFrom`); a link targets a node version of this graph or a URL of another source (`Link.Target`).
+The platform and the content are two graph services (ADR §9): the platform graph (`platform`, `organisation`, `methodology`)
+is the one its callers know and forwards the calls of the content namespaces (`GOAP_GRAPH_ROUTES`) or of a change held
+there to the content graph (`graphsvc.Router`); the content graph (`GOAP_GRAPH_SPACE=content`) reads its types and its
+organisation from the platform graph (`Graph.Directory`, `graphsnap.Heads`) and seeds nothing.
 
 ### 3.4b Node index and search ([ADR 0026](adr/0026-node-index-and-search.md))
 

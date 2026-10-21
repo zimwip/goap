@@ -18,10 +18,11 @@ import (
 // both were created in the root project. Everything else, seeds included, is an ordinary change after it.
 //
 // It is idempotent: a graph that has every root is left alone; a graph that has only some of them is refused. The
-// graph runs it before the first change it opens (CreateChange); services call it at start, before serving.
+// graph runs it before the first change it opens (CreateChange); services call it at start, before serving. A graph
+// whose structures live in another graph (Graph.Directory, ADR 0154 §9) creates none.
 func (g *Graph) Bootstrap(ctx context.Context) error {
-	if g.booted.Load() {
-		return nil
+	if g.booted.Load() || g.Directory != nil {
+		return nil // the roots are another graph's (ADR 0154 §9)
 	}
 	err := g.repo.InTx(ctx, func(tx Tx) error { return g.bootstrap(ctx, tx) })
 	if errors.Is(err, ErrConflict) {

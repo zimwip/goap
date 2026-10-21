@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/lib/typecat"
@@ -102,6 +103,16 @@ func (g *Graph) inStructure(n domain.Node, st domain.Structure) bool {
 func (g *Graph) structureNode(ctx context.Context, tx Tx, kind, key string) (domain.Node, error) {
 	st := g.Structure(kind)
 	what := map[string]string{domain.StructureOrganisation: "organisational unit", domain.StructureProject: "project"}[kind]
+	if g.Directory != nil {
+		n, ok, err := g.Directory.StructureNode(ctx, kind, key)
+		if err != nil {
+			return n, err
+		}
+		if !ok {
+			return n, fmt.Errorf("%s %q is not a %s of the platform: %w", what, key, kind, ErrInvalid)
+		}
+		return n, nil
+	}
 	id, err := tx.NodeIDByKey(ctx, st.Namespace, key)
 	if errors.Is(err, ErrNotFound) {
 		return domain.Node{}, fmt.Errorf("%s %q is not a node of namespace %s: %w", what, key, st.Namespace, ErrInvalid)
@@ -125,9 +136,21 @@ func (g *Graph) structureNode(ctx context.Context, tx Tx, kind, key string) (dom
 	return n, nil
 }
 
+// StructureDirectory reads the structures when another graph holds them (Graph.Directory, ADR 0154 §9).
+type StructureDirectory interface {
+	// StructureNode is the node of a structure of a kind by its key, retired or not; found false when there is none.
+	StructureNode(ctx context.Context, kind, key string) (n domain.Node, found bool, err error)
+	// StructureChain is a node of a structure followed by its ancestors, nearest first, the root last.
+	StructureChain(ctx context.Context, kind, key string) ([]string, error)
+}
+
 // within reports whether the node of a structure with key `key` is `ancestor` or below it, following the parent links
 // (child -> parent) of the latest versions on main.
 func (g *Graph) within(ctx context.Context, tx Tx, kind, key, ancestor string) (bool, error) {
+	if g.Directory != nil {
+		chain, err := g.Directory.StructureChain(ctx, kind, key)
+		return slices.Contains(chain, ancestor), err
+	}
 	st := g.Structure(kind)
 	seen := map[string]bool{}
 	for cur := key; cur != "" && !seen[cur]; {

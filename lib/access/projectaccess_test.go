@@ -99,6 +99,15 @@ func TestProjectSources(t *testing.T) {
 	if got := s.ProjectSources("PROJ-BAD"); got["alm"] != "content" || len(s.Problems) != 1 {
 		t.Errorf("bad: %v, problems %v", got, s.Problems)
 	}
+	if _, ok := s.StructureNode(domain.StructureProject, "PROJ-EU1"); !ok {
+		t.Error("StructureNode reads a project by its key")
+	}
+	if _, ok := s.StructureNode(domain.StructureOrganisation, "PROJ-EU1"); ok {
+		t.Error("a project is no unit")
+	}
+	if got := s.StructureChain(domain.StructureProject, "PROJ-EU1"); len(got) != 3 || got[2] != "PROJ-ROOT" {
+		t.Errorf("chain = %v", got)
+	}
 	p, err := access.ProjectFromProps(access.ProjectUnit{Name: "X", Sources: map[string]string{"alm": "content"}}.Props())
 	if err != nil || p.Sources["alm"] != "content" {
 		t.Errorf("round trip: %+v, %v", p, err)

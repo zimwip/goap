@@ -560,8 +560,8 @@ func (t *guardTx) verify(ctx context.Context) error {
 // inStructure checks that the node of a key exists (on any branch) and belongs to the structure of a kind: asked to
 // Graph.Structures when the structures live in another graph (ADR 0154 §9), else read in the transaction.
 func (t *guardTx) inStructure(ctx context.Context, kind, key, what string) error {
-	if t.g.StructureKeys != nil {
-		ok, err := t.g.StructureKeys(ctx, kind, key)
+	if t.g.Directory != nil {
+		_, ok, err := t.g.Directory.StructureNode(ctx, kind, key)
 		if err != nil {
 			return err
 		}

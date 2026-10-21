@@ -140,6 +140,8 @@ type Snapshot struct {
 	// structures are the organisation and the projects the snapshot was read with (ADR 0054)
 	structures domain.Structures
 	users      map[string]User
+	// keys are the nodes of each structure by their keys, retired ones included (StructureNode)
+	keys map[string]map[string]domain.Node
 	// units and projects are the hierarchies of the organisation (part_of) and of the projects (project_part_of,
 	// ADR 0039), resolved by domain.Hierarchy
 	units, projects *domain.Hierarchy
@@ -168,9 +170,20 @@ type assignment struct {
 // BuildSnapshot reads the users and policies of a baseline graph of the namespace of the structures st: the units and
 // projects are the nodes of their types (and subtypes), their hierarchies the parent links st names (ADR 0054).
 func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
+	keys := map[string]map[string]domain.Node{} // retired ones included: they still own the versions they owned
+	for _, n := range nodes {
+		for _, kind := range []string{domain.StructureOrganisation, domain.StructureProject} {
+			if st.In(kind, n.Type) {
+				if keys[kind] == nil {
+					keys[kind] = map[string]domain.Node{}
+				}
+				keys[kind][n.Key] = n
+			}
+		}
+	}
 	nodes, links = InForce(nodes, links)
 	s := &Snapshot{Baseline: id, structures: st, users: map[string]User{}, units: st.Hierarchy(domain.StructureOrganisation, nodes, links), projects: st.Hierarchy(domain.StructureProject, nodes, links),
-		projectMethods: map[string][]string{}, stopped: map[string]bool{}, sources: map[string]map[string]string{}}
+		projectMethods: map[string][]string{}, stopped: map[string]bool{}, sources: map[string]map[string]string{}, keys: keys}
 	org := domain.StructureOrganisation
 	byID := map[domain.NodeID]domain.Node{}
 	var crit []domain.Node
@@ -254,6 +267,22 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 func (s *Snapshot) RootProject() string { return s.structures.Project().Root }
 
 // HasProject reports whether a project of that key exists (as of the snapshot).
+// StructureNode is the node of a structure of the organisation (domain.StructureOrganisation or StructureProject) by
+// its key, retired or not: what may own a version, or hold a node (ADR 0154 §9: the graph.StructureDirectory of a
+// content graph).
+func (s *Snapshot) StructureNode(kind, key string) (domain.Node, bool) {
+	n, ok := s.keys[kind][key]
+	return n, ok
+}
+
+// StructureChain is a node of a structure followed by its ancestors, the root last (Chain, ProjectChain).
+func (s *Snapshot) StructureChain(kind, key string) []string {
+	if kind == domain.StructureProject {
+		return s.ProjectChain(key)
+	}
+	return s.Chain(key)
+}
+
 func (s *Snapshot) HasProject(key string) bool {
 	_, ok := s.projectMethods[key]
 	return ok
@@ -587,6 +616,25 @@ func (d *Directory) ProjectStopped(ctx context.Context, project string) (bool, e
 		return false, err
 	}
 	return snap.ProjectStopped(project), nil
+}
+
+// StructureNode and StructureChain read the structures for a graph that does not hold the organisation (the
+// graph.StructureDirectory of a content graph, ADR 0154 §9): Snapshot.StructureNode, Snapshot.StructureChain.
+func (d *Directory) StructureNode(ctx context.Context, kind, key string) (domain.Node, bool, error) {
+	snap, err := d.Snapshot(ctx)
+	if snap == nil {
+		return domain.Node{}, false, err
+	}
+	n, ok := snap.StructureNode(kind, key)
+	return n, ok, nil
+}
+
+func (d *Directory) StructureChain(ctx context.Context, kind, key string) ([]string, error) {
+	snap, err := d.Snapshot(ctx)
+	if snap == nil {
+		return nil, err
+	}
+	return snap.StructureChain(kind, key), nil
 }
 
 // ProjectSources is the source mapping in force on a project (Snapshot.ProjectSources).

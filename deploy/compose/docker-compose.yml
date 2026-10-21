@@ -77,7 +77,24 @@ services:
       # the job service (ADR 0149): the exports, the snapshot imports and the imports from a source are its jobs
       GOAP_JOBS_URL: http://jobs:8080
       GOAP_JOB_TOKEN: ${GOAP_JOB_TOKEN:-dev-job-token}
+      # the platform graph (ADR 0154 §9): the calls on the content namespaces go to the content graph
+      GOAP_GRAPH_ROUTES: alm,code=http://graph-content:8080
     ports: ["8081:8080"]
+
+  # the content graph (ADR 0154 §9): the domains' content and its changes, on a database of its own; the organisation,
+  # the projects and the domains are the platform graph's. Every caller goes through the platform graph.
+  graph-content:
+    <<: *service
+    entrypoint: ["/goap/graph"]
+    environment:
+      <<: *env
+      GOAP_GRAPH_SPACE: content
+      GOAP_PLATFORM_GRAPH_URL: http://graph:8080
+      GOAP_DB_DSN: postgres://content:content@postgres:5432/goap?sslmode=disable
+    depends_on:
+      <<: *deps
+      graph: {condition: service_started}
+    ports: ["8092:8080"]
 
   registry:
     <<: *service

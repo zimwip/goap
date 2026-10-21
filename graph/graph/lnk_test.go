@@ -307,7 +307,12 @@ func TestLinkTargets(t *testing.T) {
 			t.Fatalf("link to no node of this graph: %v", err)
 		}
 	}
-	t.Run("memory", func(t *testing.T) { run(t, graph.NewMemory()) })
+	bothRepos(t, run)
+}
+
+// bothRepos runs f on a fresh in-memory repository and a fresh SQLite one.
+func bothRepos(t *testing.T, f func(t *testing.T, repo graph.Repo)) {
+	t.Run("memory", func(t *testing.T) { f(t, graph.NewMemory()) })
 	t.Run("sqlite", func(t *testing.T) {
 		ctx := context.Background()
 		db, err := platform.OpenSQLite(ctx, filepath.Join(t.TempDir(), "goap.db"))
@@ -318,6 +323,6 @@ func TestLinkTargets(t *testing.T) {
 		if err := platform.MigrateSQLite(ctx, db, "graph", graph.SQLiteMigrations, "migrations_sqlite"); err != nil {
 			t.Fatal(err)
 		}
-		run(t, graph.NewSQLite(db))
+		f(t, graph.NewSQLite(db))
 	})
 }

@@ -77,11 +77,12 @@ type Graph struct {
 	// source to the declared source holding it there, inherited from the parent projects), plugged by the compositions
 	// from the organisation they read (graphsvc.ProjectSources). Unset: every project reads the sources as named.
 	ProjectSources func(ctx context.Context, project string) (map[string]string, error)
-	// StructureKeys, when set, tells whether a key is a node of the structure of a kind (a unit of the organisation, a
-	// project): the guard asks it for the owners and projects a transaction writes when the structures live in another
-	// graph, the platform graph (ADR 0154 §9). Unset: the guard reads them in the transaction.
-	StructureKeys func(ctx context.Context, kind, key string) (bool, error)
-	lnk           lnkState
+	// Directory, when set, is where the structures (the units of the organisation, the projects) are read: they live
+	// in another graph, the platform graph (ADR 0154 §9), and this one holds none (Bootstrap creates no root). The
+	// owners and projects a transaction writes, the scope of a change and the walks up a structure ask it. Unset: they
+	// are nodes of this graph, read in the transaction.
+	Directory StructureDirectory
+	lnk       lnkState
 	// Types returns the type catalogue in force (ADR 0012 §2, pkg/typecat): the graph judges the nodes by it and
 	// refuses the ones whose type or link type it does not resolve. Unset: an untyped graph (tests, tools).
 	Types func() TypeCatalog
@@ -499,6 +500,19 @@ func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, 
 		return nil
 	})
 	return c, err
+}
+
+// HasChange reports a change this graph holds (its header only; graphsvc.Router asks it to route a call, ADR 0154 §9).
+func (g *Graph) HasChange(ctx context.Context, id domain.ChangeID) (found bool, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		_, err := tx.ChangeHead(ctx, id)
+		found = err == nil
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	})
+	return
 }
 
 // Change returns a change with its items.
