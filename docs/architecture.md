@@ -75,7 +75,7 @@ and a page of the nodes of one type, text-filtered on the server; `GetNodeNeighb
 neighbours in both directions and the suspect links among them, `graph/graph/browse.go`). The IDE's Baseline explorer
 and tab navigate namespace → baseline → node type → paged nodes, and show the neighbour graph of the selected node.
 The statistics of the graph are read on demand, nothing stored (`graph/graph/stats.go`): `GetGraphOverview` sums what
-each namespace holds, `GetGraphStats` gives for one namespace the rows of the store counted by the database
+each namespace holds (those holding nodes and those of every domain in force, empty ones included), `GetGraphStats` gives for one namespace the rows of the store counted by the database
 (`Tx.StoreCounts`, one statement per measure in `sqlbuild.go`: nodes and versions per type, versions per reason and per
 node, link rows and drops, how versions hold their link sets, joins, baselines per kind, changes per status, tags, log
 entries per type) and the shape of the state at the head of a lasting branch, computed from that state (links within
