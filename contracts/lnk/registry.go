@@ -91,12 +91,29 @@ func (r *Registry) resolver(kind string) (Resolver, error) {
 	return res, nil
 }
 
+// Mapping is how a scope (a project, ADR 0154 §8) reads the sources its URLs name: the name of a URL's source to the
+// name of the source declared on the platform that holds it there. Not mapped (found false): the name itself.
+type Mapping func(name string) (to string, found bool)
+
 // Resolve reads what a URL points to, through the resolver of its source.
 func (r *Registry) Resolve(ctx context.Context, u URL) (Target, error) {
+	return r.ResolveIn(ctx, nil, u)
+}
+
+// ResolveIn reads what a URL points to in a scope: the source its mapping gives for the URL's source (none: that
+// source), read by the resolver of its kind. The target keeps the URL's own source: the mapping says where the thing
+// is stored, never what it is called.
+func (r *Registry) ResolveIn(ctx context.Context, m Mapping, u URL) (Target, error) {
 	if err := u.Validate(); err != nil {
 		return Target{}, err
 	}
-	src, err := r.Source(ctx, u.Source)
+	name := u.Source
+	if m != nil {
+		if to, ok := m(name); ok && to != "" {
+			name = to
+		}
+	}
+	src, err := r.Source(ctx, name)
 	if err != nil {
 		return Target{}, err
 	}
@@ -111,6 +128,7 @@ func (r *Registry) Resolve(ctx context.Context, u URL) (Target, error) {
 	if t.URL.IsZero() {
 		t.URL = u
 	}
+	t.URL.Source = u.Source
 	return t, nil
 }
 

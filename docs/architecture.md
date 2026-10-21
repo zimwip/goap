@@ -1152,7 +1152,9 @@ things live (a namespace of this graph, a namespace of another graph service, a 
 key say which thing. Every namespace of the graph is a `graph` source of its name with no location, read in process
 (`graph.Resolver`); other sources are `platform@Source` nodes (`SRC:<name>`, admin only), read by the resolver of their kind
 (`Graph.Resolvers`: `graphclient.Federation` for a `graph` source with a location, `lnk.Files` for `files`). `Graph.Lnk()` is the registry,
-`Graph.Resolve` reads a URL, `Node.URL()` / `Node.SourceName()` give a node's. Links still target node versions; their
+`Graph.Resolve` reads a URL, `Node.URL()` / `Node.SourceName()` give a node's. Sources are declared on the platform and resolved per project: a project maps the source names of its URLs to
+declared sources (`ProjectUnit.sources`, inherited, nearest wins), so its content can be stored elsewhere
+(`Graph.ResolveIn`, `Graph.ResolveFrom`); the platform and the content are to become two graph services (ADR §9). Links still target node versions; their
 logical targets are step 2 of the ADR.
 
 ### 3.4b Node index and search ([ADR 0026](adr/0026-node-index-and-search.md))

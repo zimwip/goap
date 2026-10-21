@@ -73,7 +73,11 @@ type Graph struct {
 	// Resolvers are the resolvers of the kinds of source (ADR 0154: lnk.KindGraph for the graphs with a location,
 	// lnk.KindFiles...), read once, at the first use of Lnk. Unset: the graph resolves its own namespaces only.
 	Resolvers map[string]lnk.Resolver
-	lnk       lnkState
+	// ProjectSources is the source mapping in force on a project, by its key (ADR 0154 §8: the name a URL gives a
+	// source to the declared source holding it there, inherited from the parent projects), plugged by the compositions
+	// from the organisation they read (graphsvc.ProjectSources). Unset: every project reads the sources as named.
+	ProjectSources func(ctx context.Context, project string) (map[string]string, error)
+	lnk            lnkState
 	// Types returns the type catalogue in force (ADR 0012 §2, pkg/typecat): the graph judges the nodes by it and
 	// refuses the ones whose type or link type it does not resolve. Unset: an untyped graph (tests, tools).
 	Types func() TypeCatalog

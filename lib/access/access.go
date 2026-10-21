@@ -147,6 +147,8 @@ type Snapshot struct {
 	projectMethods map[string][]string
 	// stopped are the projects flagged stopped (ADR 0138), by key
 	stopped map[string]bool
+	// sources are the source mappings the projects declare (ADR 0154 §8), by key
+	sources map[string]map[string]string
 	// assignments are the Assignment nodes (ADR 0039), resolved from their assigns_org/assigns_project links
 	assignments []assignment
 	// criticality are the policies of the criticality levels, by the unit that owns them and the level
@@ -168,7 +170,7 @@ type assignment struct {
 func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
 	nodes, links = InForce(nodes, links)
 	s := &Snapshot{Baseline: id, structures: st, users: map[string]User{}, units: st.Hierarchy(domain.StructureOrganisation, nodes, links), projects: st.Hierarchy(domain.StructureProject, nodes, links),
-		projectMethods: map[string][]string{}, stopped: map[string]bool{}}
+		projectMethods: map[string][]string{}, stopped: map[string]bool{}, sources: map[string]map[string]string{}}
 	org := domain.StructureOrganisation
 	byID := map[domain.NodeID]domain.Node{}
 	var crit []domain.Node
@@ -181,6 +183,11 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 			s.projectMethods[n.Key] = stringList(n.Properties["methodologies"])
 			if v, _ := n.Properties[PropStopped].(bool); v {
 				s.stopped[n.Key] = true
+			}
+			if m, err := sourceMap(n.Properties[PropSources]); err != nil {
+				s.Problems = append(s.Problems, fmt.Sprintf("%s: %v", n.Key, err))
+			} else if len(m) > 0 {
+				s.sources[n.Key] = m
 			}
 		}
 		switch n.Type {
@@ -376,6 +383,20 @@ func (s *Snapshot) ProjectStopped(project string) bool {
 	return false
 }
 
+// ProjectSources is the source mapping in force on a project (ADR 0154 §8): the mappings of its chain merged, the
+// nearest project naming a source winning; a project naming none takes its parents'.
+func (s *Snapshot) ProjectSources(project string) map[string]string {
+	out := map[string]string{}
+	for _, p := range s.ProjectChain(project) {
+		for k, v := range s.sources[p] {
+			if _, ok := out[k]; !ok {
+				out[k] = v
+			}
+		}
+	}
+	return out
+}
+
 // ProjectOf is the project a project names as its parent (project_part_of; "" for the root or an unknown key).
 func (s *Snapshot) ProjectOf(project string) string {
 	chain := s.ProjectChain(project)
@@ -566,6 +587,15 @@ func (d *Directory) ProjectStopped(ctx context.Context, project string) (bool, e
 		return false, err
 	}
 	return snap.ProjectStopped(project), nil
+}
+
+// ProjectSources is the source mapping in force on a project (Snapshot.ProjectSources).
+func (d *Directory) ProjectSources(ctx context.Context, project string) (map[string]string, error) {
+	snap, err := d.Snapshot(ctx)
+	if snap == nil {
+		return nil, err
+	}
+	return snap.ProjectSources(project), nil
 }
 
 // SubProjects returns a project and the projects below it, from the current snapshot (Snapshot.SubProjects).

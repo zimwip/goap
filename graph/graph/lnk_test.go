@@ -137,3 +137,52 @@ func TestDeclaredSources(t *testing.T) {
 		t.Fatal("a source follows its declaration: the moved root has no README")
 	}
 }
+
+// TestProjectSources: a project reads a source of its URLs where its mapping says (ADR 0154 §8), the URL keeping its
+// name; a project with no mapping reads the source as named, and a node resolves in the project it belongs to.
+func TestProjectSources(t *testing.T) {
+	ctx := context.Background()
+	var asked lnk.Source
+	g := graph.New(graph.NewMemory())
+	g.Resolvers = map[string]lnk.Resolver{
+		lnk.KindGraph: lnk.ResolverFuncs{ResolveFunc: func(_ context.Context, src lnk.Source, u lnk.URL) (lnk.Target, error) {
+			asked = src
+			return lnk.Target{Kind: lnk.TargetNode, Type: src.NamespaceOf() + "@" + u.Type, Key: u.Key, URL: lnk.New(src.Name, u.Type, u.Key)}, nil
+		}},
+	}
+	req, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := g.Node(ctx, domain.NodeRef{ID: req.Project})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: domain.NamespacePlatform, Key: domain.SourceKey("alm-eu"), Type: domain.TypeSource,
+		Properties: map[string]any{"kind": lnk.KindGraph, "namespace": "alm", "location": "https://eu.example/graph"}}); err != nil {
+		t.Fatal(err)
+	}
+	g.ProjectSources = func(_ context.Context, p string) (map[string]string, error) {
+		if p == "PROJ-EU" || p == project.Key {
+			return map[string]string{"alm": "alm-eu"}, nil
+		}
+		return nil, nil
+	}
+	u := lnk.MustParse("lnk:alm/Requirement/R-7")
+
+	got, err := g.ResolveIn(ctx, "PROJ-EU", u)
+	if err != nil || asked.Location != "https://eu.example/graph" || got.URL.String() != "lnk:alm/Requirement/R-7" {
+		t.Fatalf("mapped = %+v, %v (source %+v)", got, err, asked)
+	}
+	asked = lnk.Source{}
+	if _, err := g.ResolveIn(ctx, "PROJ-US", u); !lnk.IsNotFound(err) || asked.Name != "" {
+		t.Fatalf("unmapped = %v (source %+v), want this graph's alm", err, asked)
+	}
+	if got, err := g.ResolveIn(ctx, "PROJ-US", lnk.MustParse("lnk:alm/Requirement/REQ-1")); err != nil || got.Node == nil || got.Node.ID != string(req.ID) {
+		t.Fatalf("unmapped local = %+v, %v", got, err)
+	}
+	asked = lnk.Source{}
+	if _, err := g.ResolveFrom(ctx, req, u); err != nil || asked.Name != "alm-eu" {
+		t.Fatalf("from a node of %s: %v (source %+v)", project.Key, err, asked)
+	}
+}

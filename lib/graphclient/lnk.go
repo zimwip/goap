@@ -60,7 +60,7 @@ func (f *Federation) Resolve(ctx context.Context, src lnk.Source, u lnk.URL) (ln
 	if n.Deleted || lnk.BareType(n.Type) != u.Type {
 		return lnk.Target{}, fmt.Errorf("%s: %w", u, lnk.ErrNotFound)
 	}
-	n.Source = src.Name
+	n.Source = u.Source
 	t := n.Target()
 	t.URL = t.URL.At(u.Version)
 	return t, nil

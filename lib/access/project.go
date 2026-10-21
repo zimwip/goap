@@ -28,6 +28,10 @@ const (
 // PropStopped flags a stopped project (ADR 0138): it and its sub-projects take no new change.
 const PropStopped = "stopped"
 
+// PropSources is the source mapping of a project (ADR 0154 §8): the name of a source its URLs name to the name of the
+// source declared on the platform (a platform@Source node) that holds it for the project and its sub-projects.
+const PropSources = "sources"
+
 // ProjectUnit is a project or sub-project.
 type ProjectUnit struct {
 	Name          string
@@ -35,6 +39,8 @@ type ProjectUnit struct {
 	Kind          string
 	Status        string
 	Methodologies []string
+	// Sources maps the sources the project's URLs name to the declared sources holding them (ADR 0154 §8).
+	Sources map[string]string
 }
 
 // Props returns the properties of the ProjectUnit node.
@@ -48,6 +54,13 @@ func (p ProjectUnit) Props() map[string]any {
 	if len(p.Methodologies) > 0 {
 		m["methodologies"] = toAnyList(p.Methodologies)
 	}
+	if len(p.Sources) > 0 {
+		src := map[string]any{}
+		for k, v := range p.Sources {
+			src[k] = v
+		}
+		m[PropSources] = src
+	}
 	return m
 }
 
@@ -59,7 +72,33 @@ func ProjectFromProps(props map[string]any) (ProjectUnit, error) {
 		return p, fmt.Errorf("project: %w", err)
 	}
 	p.Methodologies = ms
+	src, err := sourceMap(props[PropSources])
+	if err != nil {
+		return p, fmt.Errorf("project: %w", err)
+	}
+	p.Sources = src
 	return p, nil
+}
+
+// sourceMap reads a source mapping: an object of names to names (ADR 0154 §8).
+func sourceMap(v any) (map[string]string, error) {
+	switch m := v.(type) {
+	case nil:
+		return nil, nil
+	case map[string]string:
+		return m, nil
+	case map[string]any:
+		out := make(map[string]string, len(m))
+		for k, x := range m {
+			s, ok := x.(string)
+			if !ok || k == "" || s == "" {
+				return nil, fmt.Errorf("%s: %q must name a source", PropSources, k)
+			}
+			out[k] = s
+		}
+		return out, nil
+	}
+	return nil, fmt.Errorf("%s: an object of source names, not %T", PropSources, v)
 }
 
 // AssignmentKey is the key of the Assignment node granting an org unit (or user) roles on a project.

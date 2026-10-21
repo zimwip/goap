@@ -1,5 +1,5 @@
 name: organisation
-version: 1.15.0
+version: 1.16.0
 description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units,
   mirrored by a hierarchy of projects (ADR 0039). Every node version, whatever its namespace, is owned by a unit and
@@ -137,6 +137,8 @@ nodeTypes:
       # ADR 0138: a stopped project (or one below a stopped project) takes no new change; stopping and restarting it is
       # its owner's (a structure type has no lifecycle: its root is bootstrapped)
       - {name: stopped, label: Stopped, description: "The project and its sub-projects take no new change", type: boolean, section: Identity, order: 6}
+      # ADR 0154 §8: the sources of the platform the project reads its URLs through, inherited by its sub-projects
+      - {name: sources, label: Sources, description: "Where the project's sources are stored: the name a URL gives a source to the source declared on the platform holding it (inherited by the sub-projects, the nearest wins)", type: json, widget: textarea, section: Storage, order: 7}
   # the meeting point of organisation and project (ADR 0039, same shape as Adapter): an organisational unit
   # (or a user, through subtyping) is assigned to a project with the roles it locally holds there — a subset
   # of the roles declared by the project's applicable methodologies. This is how the engine resolves "what

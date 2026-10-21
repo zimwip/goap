@@ -54,9 +54,47 @@ func (g *Graph) declaredSource(ctx context.Context, name string) (lnk.Source, bo
 	return src, true, nil
 }
 
-// Resolve reads what a logical URL points to.
+// Resolve reads what a logical URL points to, with no project: the sources as their names say.
 func (g *Graph) Resolve(ctx context.Context, u lnk.URL) (lnk.Target, error) {
 	return g.Lnk().Resolve(ctx, u)
+}
+
+// ResolveIn reads what a logical URL points to for a project (ADR 0154 §8): through the source mapping in force on it
+// (Graph.ProjectSources, the project's and its parents'), else as Resolve.
+func (g *Graph) ResolveIn(ctx context.Context, project string, u lnk.URL) (lnk.Target, error) {
+	m, err := g.mappingOf(ctx, project)
+	if err != nil {
+		return lnk.Target{}, err
+	}
+	return g.Lnk().ResolveIn(ctx, m, u)
+}
+
+// ResolveFrom reads what a logical URL points to for a node: in the project the node belongs to.
+func (g *Graph) ResolveFrom(ctx context.Context, from domain.Node, u lnk.URL) (lnk.Target, error) {
+	project := ""
+	if from.Project != "" {
+		p, err := g.Node(ctx, domain.NodeRef{ID: from.Project})
+		if err != nil {
+			return lnk.Target{}, fmt.Errorf("project of %s: %w", from.Key, err)
+		}
+		project = p.Key
+	}
+	return g.ResolveIn(ctx, project, u)
+}
+
+// mappingOf is the source mapping of a project, nil without one.
+func (g *Graph) mappingOf(ctx context.Context, project string) (lnk.Mapping, error) {
+	if g.ProjectSources == nil || project == "" {
+		return nil, nil
+	}
+	m, err := g.ProjectSources(ctx, project)
+	if err != nil || len(m) == 0 {
+		return nil, err
+	}
+	return func(name string) (string, bool) {
+		to, ok := m[name]
+		return to, ok
+	}, nil
 }
 
 // LinkURL is the logical URL of the target of a link (ADR 0154): the URL of the node it points to, whatever its version.
@@ -100,7 +138,7 @@ func (r Resolver) Resolve(ctx context.Context, src lnk.Source, u lnk.URL) (lnk.T
 		return lnk.Target{}, fmt.Errorf("%s: %w", u, lnk.ErrNotFound)
 	}
 	t := n.Target()
-	t.URL = lnk.New(src.Name, lnk.BareType(n.Type), n.Key).At(u.Version)
+	t.URL = lnk.New(u.Source, lnk.BareType(n.Type), n.Key).At(u.Version)
 	return t, nil
 }
 

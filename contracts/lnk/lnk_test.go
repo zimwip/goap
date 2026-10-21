@@ -181,3 +181,28 @@ func TestFiles(t *testing.T) {
 		t.Fatalf("URLOf outside the root: %v", err)
 	}
 }
+
+func TestResolveIn(t *testing.T) {
+	ctx := context.Background()
+	r := newRegistry(map[string]map[string]string{"alm": {"REQ-1": "alm@Requirement"}, "alm2": {"REQ-2": "alm2@Requirement"}})
+	if err := r.Declare(Source{Name: "alm-archive", Kind: KindGraph, Namespace: "alm2"}); err != nil {
+		t.Fatal(err)
+	}
+	m := Mapping(func(name string) (string, bool) {
+		if name == "alm" {
+			return "alm-archive", true
+		}
+		return "", false
+	})
+	// the mapping says where the source is stored; the target keeps the URL's own source
+	got, err := r.ResolveIn(ctx, m, New("alm", "Requirement", "REQ-2"))
+	if err != nil || got.URL.String() != "lnk:alm/Requirement/REQ-2" {
+		t.Fatalf("mapped = %+v, %v", got, err)
+	}
+	if _, err := r.ResolveIn(ctx, m, New("alm", "Requirement", "REQ-1")); !IsNotFound(err) {
+		t.Fatalf("mapped away: %v", err)
+	}
+	if _, err := r.ResolveIn(ctx, nil, New("alm", "Requirement", "REQ-1")); err != nil {
+		t.Fatalf("no mapping: %v", err)
+	}
+}

@@ -53,6 +53,37 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
    source of this graph; `Node.URL()` its logical URL, `Node.Target()` the node as a target. Every node, read here or elsewhere,
    so has a URL with no lookup.
 
+8. **Sources are declared on the platform, resolved per project.** A source is declared once, by a `platform@Source`
+   node; which declared source holds the things a project's URLs name is the project's: `organisation@ProjectUnit`
+   `sources` (`organisation` 1.16.0), an object of the name a URL gives a source to the declared source holding it
+   (`{"alm": "content-eu"}`), inherited by the sub-projects, the nearest project naming a source winning
+   (`access.Snapshot.ProjectSources`; a project naming none takes its parents', the root's a default, and a source no
+   project maps is read as named). A URL keeps its name wherever it is stored: the mapping says where, never what
+   (`lnk.Mapping`, `Registry.ResolveIn`: the target keeps the URL's source). A node belongs to a project, so its links
+   resolve in it (`Graph.ResolveFrom`, `Graph.ResolveIn(project, url)`). The graph reads the mappings through the seam
+   `Graph.ProjectSources`, plugged by the compositions from the organisation directory they already hold
+   (`access.Directory.ProjectSources`): read at boot, kept by following the head of the organisation (each read asks
+   for the head and reads the delta, ADR 0145), so a project edited is in force at the next resolution.
+9. **Two graph spaces.** The platform and the content are two graph services, two instances of the same binary on
+   their own databases: the **platform graph** holds what describes the enterprise and the platform (`platform`,
+   `organisation`, `methodology`), the **content graph** the domains' content (`alm`, `code`, ...). The domains stay
+   in the one domain registry (ADR 0125 §3), served by the platform graph, read by both. The content graph is a
+   source of the platform (a `platform@Source` of kind `graph` with the content graph's location, mapped by the root
+   project), so a project may put its content in another content graph (another database, another region) by
+   mapping its sources elsewhere. The content graph reads the organisation from the platform graph (its access
+   directory over `graphclient`, the platform graph's node events on the bus keeping it current) and builds its
+   in-memory directory of projects and sources at boot. What the split asks of the code, in order:
+   1. the owner unit and the project of a version and of a change become keys of the platform graph (`node.project_id`,
+      `node_version.owner_id` lose their foreign keys to `node`; the guard checks them against the directory instead
+      of the transaction);
+   2. links become URLs (step 2), so a content node may name a node of the platform graph (an owner, a project, a
+      methodology) and the reverse;
+   3. the clients route by namespace (`graphclient.Router`: a namespace to the graph serving it, from the sources of
+      the platform; the engine, the hub, the registry and the gateway take it where they take a `graphclient.Client`
+      today), a change acting on one namespace (CLAUDE.md, rule 2) runs on one graph;
+   4. the deployment runs `graph-platform` and `graph-content` (compose services, one database each, the gateway
+      routing by namespace), `goap-dev` keeping both in one process over one database.
+
 ## Steps
 
 1. **Done (this ADR)**: the contract (`contracts/lnk`: URL, source, target, resolver, registry, the files resolver), the
@@ -74,7 +105,10 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
    reference resolved like an adapter's, ADR 0061), the remote graph authorizing the reading graph as a `system:`
    principal `.For` the person (ADR 0114). Until then the federation client forwards the caller's identity, which only a
    graph of the same platform trusts.
-5. **The other readers of links**: the OKF export writes a link to another source as its URL, the snapshot import /
+5. **Per-project sources** (done): the mapping of §8, the seam `Graph.ProjectSources`, `Graph.ResolveIn` /
+   `ResolveFrom`.
+6. **Graph spaces**: the four moves of §9, each its own change.
+7. **The other readers of links**: the OKF export writes a link to another source as its URL, the snapshot import /
    export carries URLs (a snapshot of one graph imported in another keeps its links to the first), the index stores the
    URL of each link target, the git importer may point a `Symbol` to its file by URL instead of a node.
 
@@ -100,3 +134,4 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
   resolver; a resolver may as well go through an MCP (a `mcp` kind calling a tool of the hub for the unit, the files
   of a unit, ADR 0019), which follows rule 5 (what is available comes from who) in a distributed deployment.
 - **Storage is greenfield**: step 2 changes `0001_schema.sql` of both dialects, no migration.
+- **Sources declared on the platform, resolved per project; two graph spaces** (Thomas, 2026-10-21): §8 and §9.
