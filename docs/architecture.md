@@ -1308,7 +1308,7 @@ of a state `graph.state.reads` (by `scope` whole / nodes and `source`: `cache` o
 
 What a process keeps between calls is one kind of cache ([ADR 0156](adr/0156-one-cache.md), `lib/cache`), bounded by
 the estimated bytes of its entries and by a TTL counted from the last read, the least recently read evicted first. The
-graph keeps its change views, version links, baseline states and headers and impact validations in such caches
+graph keeps its change views, version links, baseline headers and impact validations in such caches
 (`Graph.Caches`); the registry and its client keep compiled methodologies there, the scripts engine its compiled
 scripts, and the gateway the state of its sessions.
 

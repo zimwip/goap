@@ -143,8 +143,7 @@ type Graph struct {
 	booted atomic.Bool
 	// Caches bounds what the graph keeps in memory between calls (caches.go): a zero field takes DefaultCaches'.
 	Caches Caches
-	// states caches the whole states computed for baselines, headers their headers (ADR 0137, 0140).
-	states  *cache.Cache[domain.BaselineID, map[domain.NodeID]domain.Version]
+	// headers caches the headers of baselines (ADR 0137, 0140).
 	headers *cache.Cache[domain.BaselineID, domain.Baseline]
 	// versions caches the outgoing links of versions.
 	versions versionCache

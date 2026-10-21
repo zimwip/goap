@@ -9,6 +9,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -549,10 +550,25 @@ func (t *pgTx) BranchCommits(ctx context.Context, namespace, branch string, upTo
 	return t.commits(ctx, namespace, branch, 0, upTo, ids)
 }
 
+// uuidIDs are the ids that can name a node here, whose node ids are uuids: an id that is none names no node, and
+// leaving it out keeps the cast of the list from failing.
+func uuidIDs(ids []domain.NodeID) []domain.NodeID {
+	out := make([]domain.NodeID, 0, len(ids))
+	for _, id := range ids {
+		if uuid.Validate(string(id)) == nil {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 func (t *pgTx) commits(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error) {
 	out := map[domain.NodeID]CommittedVersion{}
-	if ids != nil && len(ids) == 0 {
-		return out, nil
+	if ids != nil {
+		ids = uuidIDs(ids)
+		if len(ids) == 0 {
+			return out, nil
+		}
 	}
 	q, args := dialectPG.sqlCommittedVersions(namespace, branch, after, upTo, ids)
 	rows, err := t.tx.Query(ctx, q, args...)

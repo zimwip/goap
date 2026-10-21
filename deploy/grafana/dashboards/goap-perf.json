@@ -1610,7 +1610,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Reads of the state of a baseline (ADR 0143), by source: cache (a state computed before) or commits (the selection of the versions committed on the branch and the branches it was forked from). whole: the whole state, nodes: some nodes (commit, merge).",
+      "description": "Reads of the state of a baseline (ADR 0143), by source: commits (the selection of the versions committed on the branch and the branches it was forked from; the states are not cached, ADR 0156). whole: the whole state, nodes: some nodes (commit, merge).",
       "gridPos": {
         "h": 8,
         "w": 8,
