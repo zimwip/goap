@@ -17,6 +17,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/zimwip/goap/contracts/codetext"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/graph/graph"
 )
@@ -27,6 +28,8 @@ const Format = "goap.okf/v1"
 // BodyAttribute is an attribute of a node type rendered in the Markdown body rather than in the front matter.
 type BodyAttribute struct {
 	Name, Label string
+	// Code: the value is a code text (contracts/codetext), rendered as its fenced code block.
+	Code bool
 }
 
 // Options say how the nodes of a type are rendered; both are optional (nil: the defaults).
@@ -210,6 +213,11 @@ func renderNode(s graph.Snapshot, e *entry, byKey map[string]*entry, in []incomi
 		text := strings.TrimSpace(n.Properties[a.Name].(string))
 		if text == "" {
 			continue
+		}
+		if a.Code {
+			if v, err := codetext.Parse(text); err == nil {
+				text = strings.TrimSpace(codetext.Block(v))
+			}
 		}
 		fmt.Fprintf(&b, "\n## %s\n\n%s\n", oneLine(a.Label), text)
 	}

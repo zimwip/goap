@@ -447,6 +447,9 @@ func (t *TreeSitter) Parse(lang string, src []byte) (Source, error) {
 		out.Symbols = append(out.Symbols, s)
 	}
 	ownTexts(out.Symbols, src)
+	for i := range out.Symbols {
+		out.Symbols[i].Code = dedent(leadOf(src, out.Symbols[i].Start) + out.Symbols[i].Code)
+	}
 	assignRefs(out.Symbols, refs)
 	return out, nil
 }

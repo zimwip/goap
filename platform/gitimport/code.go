@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/zimwip/goap/contracts/codetext"
 	"github.com/zimwip/goap/contracts/domain"
 )
 
@@ -93,7 +94,7 @@ func (im *Importer) planCode(ctx context.Context, ops map[string]*op) error {
 				p.syms = append(p.syms, &symInfo{key: k, kind: s.Kind, name: s.Name, container: s.Container, file: f})
 				props := map[string]any{"name": s.Name, "kind": s.Kind, "container": s.Container, "language": p.lang, "signature": s.Signature, "digest": s.Digest}
 				if im.Code {
-					props["code"] = s.Code
+					props["code"] = codetext.Format(codetext.Value{Language: p.lang, Code: s.Code})
 				}
 				delete(held, k)
 				o := symOp(k, symbolType(s.Kind), f)

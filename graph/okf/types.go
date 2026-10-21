@@ -6,7 +6,7 @@ import (
 )
 
 // FromTypes derives the options from the type catalogue: the `asName` attribute names a node, the string attributes
-// edited as a text area are the body. A type the catalogue does not know keeps the defaults.
+// edited as a text area and the code attributes are the body. A type the catalogue does not know keeps the defaults.
 func FromTypes(lookup func(ref string) (*typecat.Type, bool)) Options {
 	return Options{
 		Name: func(typ string) string {
@@ -26,12 +26,13 @@ func FromTypes(lookup func(ref string) (*typecat.Type, bool)) Options {
 			}
 			var out []BodyAttribute
 			for _, a := range t.Attributes {
-				if a.Widget == def.WidgetTextarea && (a.Type == "" || a.Type == def.AttrString) {
+				code := a.Type == def.AttrCode
+				if code || a.Widget == def.WidgetTextarea && (a.Type == "" || a.Type == def.AttrString) {
 					label := a.Label
 					if label == "" {
 						label = a.Name
 					}
-					out = append(out, BodyAttribute{Name: a.Name, Label: label})
+					out = append(out, BodyAttribute{Name: a.Name, Label: label, Code: code})
 				}
 			}
 			return out

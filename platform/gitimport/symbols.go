@@ -123,6 +123,48 @@ func ownText(src []byte, start, end uint, held [][2]uint) []byte {
 	return []byte(strings.Join(kept, "\n"))
 }
 
+// leadOf is the indentation of the line a declaration starts at, src[line start:start], "" when something else than
+// spaces and tabs is before it on its line.
+func leadOf(src []byte, start uint) string {
+	i := int(start)
+	for i > 0 && (src[i-1] == ' ' || src[i-1] == '\t') {
+		i--
+	}
+	if i > 0 && src[i-1] != '\n' {
+		return ""
+	}
+	return string(src[i:start])
+}
+
+// dedent removes from the lines of a text the indentation they all share (the blank lines aside): the text of a
+// declaration given its first line's indentation (leadOf) reads as if it were declared at the top level.
+func dedent(s string) string {
+	lines := strings.Split(s, "\n")
+	common, first := "", true
+	for _, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		ind := l[:len(l)-len(strings.TrimLeft(l, " \t"))]
+		if first {
+			common, first = ind, false
+			continue
+		}
+		n := 0
+		for n < len(common) && n < len(ind) && common[n] == ind[n] {
+			n++
+		}
+		common = common[:n]
+	}
+	if common == "" {
+		return s
+	}
+	for i, l := range lines {
+		lines[i] = strings.TrimPrefix(l, common)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // capCode cuts a text to at most n bytes on a rune boundary, its spaces kept.
 func capCode(s string, n int) string {
 	if len(s) <= n {
