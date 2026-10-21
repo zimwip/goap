@@ -14,6 +14,7 @@ import (
 	"slices"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
@@ -577,6 +578,22 @@ func (d *Directory) Refresh(ctx context.Context) error {
 	}
 	_, err := d.Snapshot(ctx)
 	return err
+}
+
+// Subscriber is the bus a directory follows the platform graph on (platform.Events).
+type Subscriber interface {
+	Subscribe(subject string, fn func(data []byte)) error
+}
+
+// FollowAge is how long a following directory keeps a snapshot when no event came: a lost event is caught up then.
+const FollowAge = 30 * time.Second
+
+// FollowEvents makes the directory keep its snapshot until the platform graph's baseline events on bus say the
+// organisation moved (ADR 0154 §9: the platform delivers the policies to every service the same way). Called by every
+// composition with a bus; without one, the head is asked at each read.
+func (d *Directory) FollowEvents(bus Subscriber) error {
+	d.Follow = &graphsnap.Heads{MaxAge: FollowAge}
+	return bus.Subscribe(fmt.Sprintf(domain.SubjectBaselineAdvanced, domain.MainBranch), d.Moved)
 }
 
 // Moved takes a baseline event of the platform graph (a domain.BaselineEvent, subject domain.SubjectBaselineAdvanced):

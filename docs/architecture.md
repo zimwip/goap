@@ -1165,8 +1165,8 @@ listings are merged over every graph, each naming its source (the statistics gro
 `graphsnap.Heads`), holds no root and seeds nothing.
 
 
-The platform graph delivers the policies, the organisation and the projects to every graph, itself included, the
-same way: each graph's `access.Directory` reads them from the platform graph (in process, else its client) and keeps
+The platform graph delivers the policies, the organisation and the projects to every graph and every service, itself
+included, the same way (`Directory.FollowEvents`): each graph's `access.Directory` reads them from the platform graph (in process, else its client) and keeps
 its snapshot (`Directory.Follow`) until a baseline event of the organisation's namespace (`domain.BaselineEvent`
 carries its namespace) reaches `Directory.Moved`; a change of a policy is a commit on the platform graph, its outbox
 sends the event, every graph refreshes.

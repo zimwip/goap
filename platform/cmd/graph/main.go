@@ -34,7 +34,6 @@ import (
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/domainclient"
 	"github.com/zimwip/goap/lib/graphclient"
-	"github.com/zimwip/goap/lib/graphsnap"
 	"github.com/zimwip/goap/lib/identity"
 	"github.com/zimwip/goap/lib/jobkit"
 	"github.com/zimwip/goap/lib/llmcfg"
@@ -175,15 +174,13 @@ func main() {
 		// of this graph
 		source = graphclient.NewClient(platform.H2CClient(), platformURL, telemetry.ClientOptions()...)
 	}
-	directory := &access.Directory{Graph: source, Follow: &graphsnap.Heads{}}
+	directory := &access.Directory{Graph: source}
 	if events != nil {
-		// read once, then again when the organisation moves; a lost event is caught up after MaxAge
-		directory.Follow.MaxAge = 30 * time.Second
-		if err := events.Subscribe(fmt.Sprintf(domain.SubjectBaselineAdvanced, domain.MainBranch), directory.Moved); err != nil {
+		// read once, then again when the organisation moves; a lost event is caught up after access.FollowAge. No bus:
+		// the head is asked at each read
+		if err := directory.FollowEvents(events); err != nil {
 			platform.Fatal(log, "subscribe", err)
 		}
-	} else {
-		directory.Follow = nil // no bus: the head is asked at each read
 	}
 	if content {
 		g.Directory = directory

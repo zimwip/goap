@@ -54,7 +54,8 @@ func main() {
 	// administrator picks the models in the settings), once the graph has seeded the model configuration
 	go signOn(ctx, log, graphClient, svc)
 
-	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphClient, Reader: reader})
+	directory := &access.Directory{Graph: graphClient, Reader: reader}
+	iam, err := access.NewAuthorizer(directory)
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}
@@ -65,6 +66,13 @@ func main() {
 	// its events (a call recorded in the ledger, a quota exceeded) go through its outbox to the bus (ADR 0136)
 	events := platform.OptionalEvents(ctx, log)
 	defer events.Close()
+	// the policies, the organisation and the projects the platform graph delivers, read again when its baseline
+	// events say the organisation moved (ADR 0154 §9)
+	if events != nil {
+		if err := directory.FollowEvents(events); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+	}
 	outbox.Start(ctx, svc.Emit(outbox.NATS(events)), log)
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: svc, Authz: iam}, telemetry.HandlerOptions()...))
 	// the Anthropic endpoint where the Claude coding agent's sessions call the model, each call a row of the ledger

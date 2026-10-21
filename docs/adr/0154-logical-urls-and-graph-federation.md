@@ -191,5 +191,5 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
   keeps its snapshot (`Directory.Follow`, a `graphsnap.Heads` set on its `graphsnap.View`) until a baseline event of
   the organisation's namespace says it moved (`Directory.Moved`; `domain.BaselineEvent.Namespace`): changing a node of
   the organisation (a policy, a unit, an assignment) commits on the platform graph, whose outbox sends the event, and
-  every graph listening refreshes (`platform/cmd/graph` over NATS, `goap-dev` from its outbox in process; `MaxAge`
+  every graph and every service listening refreshes (`Directory.FollowEvents(bus)` in `platform/cmd/graph` and the services reading the organisation: gateway, engine, registry, MCP hub, model gateway, indexer, events, conversations, over NATS; `goap-dev` from its outbox in process; `MaxAge`
   30 s catches a lost event, no bus: the head asked at each read; `Refresh` reads again at once, the sign-in).

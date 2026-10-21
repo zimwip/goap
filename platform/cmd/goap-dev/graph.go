@@ -1,8 +1,6 @@
 package main
 
 import (
-	"time"
-
 	"github.com/zimwip/goap/contracts/criticality"
 	"github.com/zimwip/goap/contracts/decision"
 	"github.com/zimwip/goap/contracts/domain"
@@ -35,7 +33,7 @@ func buildGraph(e *env, st stores) (*graphPart, error) {
 	// the platform graph delivers the policies, the organisation and the projects to every graph, this one included, the
 	// same way (ADR 0154 §9): the directory keeps its snapshot until the baseline events of the graph (delivered in
 	// process by its outbox, buildPlatform) say the organisation moved
-	directory := &access.Directory{Graph: g, Reader: reader, Follow: &graphsnap.Heads{MaxAge: 30 * time.Second}}
+	directory := &access.Directory{Graph: g, Reader: reader, Follow: &graphsnap.Heads{MaxAge: access.FollowAge}}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
 		return nil, err

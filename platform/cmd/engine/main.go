@@ -5,12 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	triggerevents "github.com/zimwip/goap/contracts/events"
 	"os"
 	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	triggerevents "github.com/zimwip/goap/contracts/events"
 
 	"github.com/jackc/pgx/v5/stdlib"
 
@@ -88,7 +89,15 @@ func main() {
 	if platform.Env("GOAP_INTENT_RANKER", "lexical") == "llm" {
 		ranker = intent.LLMRanker{Client: models, Model: platform.Env("GOAP_INTENT_MODEL", "fast")}
 	}
-	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: graphclient.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), copts...)})
+	directory := &access.Directory{Graph: graphclient.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), copts...)}
+	// the policies, the organisation and the projects the platform graph delivers, read again when its baseline
+	// events say the organisation moved (ADR 0154 §9)
+	if events != nil {
+		if err := directory.FollowEvents(events); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+	}
+	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}

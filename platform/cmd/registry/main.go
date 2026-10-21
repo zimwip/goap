@@ -38,6 +38,13 @@ func main() {
 	store := registrysvc.NewGraphStore(graphClient).ShareReader(reader)
 	domains := domainclient.NewClient(platform.H2CClient(), graphURL, telemetry.ClientOptions()...)
 	directory := &access.Directory{Graph: graphClient, Reader: reader}
+	// the policies, the organisation and the projects the platform graph delivers, read again when its baseline
+	// events say the organisation moved (ADR 0154 §9)
+	if events != nil {
+		if err := directory.FollowEvents(events); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+	}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
