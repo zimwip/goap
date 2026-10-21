@@ -35,15 +35,16 @@
   const right = $derived(clamp(place.right, MARGIN, vw - SIZE - MARGIN));
   const bottom = $derived(clamp(place.bottom, MARGIN, vh - SIZE - MARGIN));
 
-  // the panel opens by the bubble: above it when there is room, else below, kept on screen
-  const panelW = $derived(Math.min(380, vw - 24));
-  const panelH = $derived(Math.min(520, vh - 140));
+  // the panel opens by the bubble: above it when there is room, else below, kept on screen; the person resizes it
+  // by its top-left corner (the browser keeps the size)
+  const SIZE_KEY = 'goap.ide.assistantPanel';
+  const MIN = { w: 300, h: 280 };
+  let size = $state(load(SIZE_KEY, { w: 380, h: 520 }));
+  const panelW = $derived(clamp(size.w, MIN.w, vw - 2 * MARGIN));
+  const panelH = $derived(clamp(size.h, MIN.h, vh - STATUS_BAR - 2 * MARGIN));
   const panelRight = $derived(clamp(right, MARGIN, vw - panelW - MARGIN));
-  const panelBottom = $derived.by(() => {
-    const above = bottom + SIZE + MARGIN;
-    const at = above + panelH <= vh - MARGIN ? above : bottom - panelH - MARGIN;
-    return clamp(at, MARGIN, vh - panelH - MARGIN);
-  });
+  const below = $derived(bottom + SIZE + MARGIN + panelH > vh - MARGIN);
+  const panelBottom = $derived(clamp(below ? bottom - panelH - MARGIN : bottom + SIZE + MARGIN, MARGIN, vh - panelH - MARGIN));
 
   // dragging: a press that moves more than a few pixels moves the bubble instead of opening it
   let drag: { x: number; y: number; right: number; bottom: number; moved: boolean } | undefined;
@@ -76,6 +77,36 @@
     place = { right: clamp(right + d[0], MARGIN, vw - SIZE - MARGIN), bottom: clamp(bottom + d[1], MARGIN, vh - SIZE - MARGIN) };
     save(KEY, place);
   }
+  let resizing: { x: number; y: number; w: number; h: number } | undefined;
+  function resizeDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    resizing = { x: e.clientX, y: e.clientY, w: panelW, h: panelH };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function resizeMove(e: PointerEvent) {
+    if (!resizing) return;
+    // the grip is at the corner away from the bubble: the top one above it, the bottom one below it
+    const dy = e.clientY - resizing.y;
+    size = { w: Math.round(resizing.w - (e.clientX - resizing.x)), h: Math.round(resizing.h + (below ? dy : -dy)) };
+  }
+  function resizeUp() {
+    if (!resizing) return;
+    resizing = undefined;
+    size = { w: panelW, h: panelH };
+    save(SIZE_KEY, size);
+  }
+  function resizeKey(e: KeyboardEvent) {
+    const step = e.shiftKey ? 80 : 20;
+    const v = below ? -step : step;
+    const d = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, v], ArrowDown: [0, -v] }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    e.stopPropagation();
+    size = { w: clamp(panelW + d[0], MIN.w, vw - 2 * MARGIN), h: clamp(panelH + d[1], MIN.h, vh - STATUS_BAR - 2 * MARGIN) };
+    save(SIZE_KEY, size);
+  }
+
   function home() {
     place = HOME;
     save(KEY, place);
@@ -142,6 +173,19 @@
       onkeydown={keydown}
     >
       <Assistant mode="panel" onclose={closePanel} onexpand={expand} />
+      <!-- the grip that resizes the panel (arrows from the keyboard) -->
+      <button
+        type="button"
+        class="grip"
+        class:below
+        title="Drag to resize (arrows from the keyboard)"
+        aria-label="Resize the assistant"
+        onpointerdown={resizeDown}
+        onpointermove={resizeMove}
+        onpointerup={resizeUp}
+        onpointercancel={resizeUp}
+        onkeydown={resizeKey}
+      ></button>
     </div>
   {/if}
   <button
@@ -169,6 +213,33 @@
 {/if}
 
 <style>
+  .grip {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 16px;
+    height: 16px;
+    min-height: 0;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius) 0 0 0;
+    background: linear-gradient(135deg, var(--border-strong) 0 2px, transparent 2px 5px, var(--border-strong) 5px 6px, transparent 6px);
+    cursor: nwse-resize;
+    touch-action: none;
+    z-index: 2;
+    opacity: 0.7;
+  }
+  .grip.below {
+    top: auto;
+    bottom: 0;
+    border-radius: 0 0 0 var(--radius);
+    transform: scaleY(-1);
+  }
+  .grip:hover:not(:disabled),
+  .grip:focus-visible {
+    opacity: 1;
+    background: linear-gradient(135deg, var(--accent) 0 2px, transparent 2px 5px, var(--accent) 5px 6px, transparent 6px);
+  }
   .launcher {
     position: fixed;
     touch-action: none;
@@ -196,8 +267,6 @@
   .panel {
     position: fixed;
     z-index: 75;
-    width: min(380px, calc(100vw - 24px));
-    height: min(520px, calc(100dvh - 140px));
     display: flex;
     flex-direction: column;
     background: var(--surface);
