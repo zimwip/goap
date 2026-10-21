@@ -1,13 +1,18 @@
 <script lang="ts">
-  // Toolbar: contextual actions of the active editor, then
-  // global actions and panel toggles.
+  // Toolbar: the contextual actions of the active editor, in the header (the panel toggles are in the status bar):
+  // the primary ones and the first others as buttons, the rest in a "More" menu.
   import Icon from './Icon.svelte';
+  import Popover from './Popover.svelte';
   import { tabActions } from './workbench.svelte';
   import { tabsState } from './tabs.svelte';
-  import { layout } from './layout.svelte';
   import type { ToolbarAction } from './types';
 
   const actions = $derived<ToolbarAction[]>(tabActions.get(tabsState.active) ?? []);
+  const SHOWN = 2;
+  const secondary = $derived(actions.filter((a) => !a.primary));
+  const shown = $derived(actions.filter((a) => a.primary || secondary.indexOf(a) < SHOWN));
+  const more = $derived(secondary.slice(SHOWN));
+  let moreOpen = $state(false);
 
   let running = $state('');
   async function run(a: ToolbarAction) {
@@ -22,7 +27,7 @@
 
 <div class="toolbar" role="toolbar" aria-label="Actions">
   <div class="group context">
-    {#each actions as a (a.id)}
+    {#each shown as a (a.id)}
       <button
         type="button"
         class="tb"
@@ -37,44 +42,39 @@
       </button>
     {/each}
   </div>
-  <div class="group global">
-    <button
-      type="button"
-      class="tb icon"
-      aria-pressed={layout.leftOpen}
-      title="Navigation panel (Ctrl+B)"
-      aria-label="Navigation panel"
-      onclick={() => (layout.leftOpen = !layout.leftOpen)}><Icon name="panelLeft" size={15} /></button
-    >
-    <button
-      type="button"
-      class="tb icon"
-      aria-pressed={layout.bottomOpen}
-      title="Console (Ctrl+J)"
-      aria-label="Console"
-      onclick={() => (layout.bottomOpen = !layout.bottomOpen)}><Icon name="panelBottom" size={15} /></button
-    >
-    <button
-      type="button"
-      class="tb icon"
-      aria-pressed={layout.rightOpen}
-      title="Right side panel"
-      aria-label="Right side panel"
-      onclick={() => (layout.rightOpen = !layout.rightOpen)}><Icon name="panelRight" size={15} /></button
-    >
-  </div>
+  {#if more.length}
+    <div class="more">
+      <button type="button" class="tb" aria-haspopup="menu" aria-expanded={moreOpen} title="More actions" aria-label="More actions" onclick={() => (moreOpen = !moreOpen)}>
+        <Icon name="more" size={14} />
+      </button>
+      <Popover bind:open={moreOpen} label="More actions" align="right" placement="below" width="220px">
+        <ul class="menu" role="menu">
+          {#each more as a (a.id)}
+            <li role="none">
+              <button
+                type="button"
+                role="menuitem"
+                class="mi"
+                class:danger={a.danger}
+                disabled={a.disabled || running === a.id}
+                title={`${a.title ?? a.label}${a.shortcut ? ` (${a.shortcut})` : ''}`}
+                onclick={() => ((moreOpen = false), run(a))}
+              >
+                {#if a.icon}<Icon name={a.icon} size={14} />{/if}{a.label}
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </Popover>
+    </div>
+  {/if}
 </div>
 
 <style>
   .toolbar {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    height: 34px;
-    padding: 0 0.5rem;
-    flex: none;
-    background: var(--chrome);
-    border-bottom: 1px solid var(--border);
+    min-width: 0;
     overflow: hidden;
   }
   .group {
@@ -84,7 +84,7 @@
     min-width: 0;
   }
   .context {
-    flex: 1;
+    gap: 6px;
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -93,31 +93,40 @@
     align-items: center;
     gap: 0.35rem;
     flex: none;
-    min-height: 24px;
-    padding: 0.1rem 0.5rem;
-    border-color: transparent;
-    background: transparent;
-    font-weight: 500;
-    font-size: 0.92rem;
+    min-height: 28px;
+    padding: 0.1rem 0.65rem;
     white-space: nowrap;
   }
-  .tb:hover:not(:disabled) {
+  .more {
+    position: relative;
+    display: flex;
+    margin-left: 6px;
+  }
+  .menu {
+    list-style: none;
+    margin: 0;
+    padding: 4px;
+  }
+  .mi {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    border: none;
+    background: none;
+    text-align: left;
+    font-weight: 400;
+    padding: 0.35rem 0.5rem;
+  }
+  .mi:hover:not(:disabled) {
     background: var(--hover);
   }
-  .tb.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-text);
+  .tb.danger:not(:hover) {
+    border-color: var(--border);
   }
-  .tb.primary:hover:not(:disabled) {
-    background: var(--accent);
-    filter: brightness(1.08);
-  }
-  .tb.icon {
-    padding: 0.1rem 0.35rem;
-    color: var(--muted);
-  }
-  .tb.icon[aria-pressed='true'] {
-    color: var(--text);
+  @media (max-width: 1100px) {
+    .tb:not(.primary) .lbl {
+      display: none;
+    }
   }
 </style>

@@ -50,6 +50,7 @@
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
 import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
+  import ProjectChanges from '../../components/ProjectChanges.svelte';
   import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, awaitingReview, writeNodeInChange, removeFromChange, removeManyFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
   import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { openTab } from '../../shell/tabs.svelte';
@@ -1168,14 +1169,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
 {#if change}
   {@const ch = change}
-  <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} {writable} onchange={() => load(selected)} oncompare={() => (compareOpen = true)} />
-  {#if ch.lifecycle}
-    <ChangeLifecycleView lifecycle={ch.lifecycle} current={ch.state ?? ''} definition={lcDef} domain={lcDomain} loading={lcLoading} failure={lcFailure}>
-      {#if lcDef && lifecycleMovable(ch)}
-        <ChangeTransitions current={ch.state ?? ''} {offers} {pickable} busy={transitioning} refusal={transitionRefusal} onmove={(o, d) => void takeTransition(o, d)} />
-      {/if}
-    </ChangeLifecycleView>
-  {/if}
   {#if compareOpen && options.length}
     <CompareDialog
       changeId={ch.id ?? ''}
@@ -1188,16 +1181,30 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       onopennode={(s, d) => openNode({ id: d.node ?? '', key: d.key ?? '' }, { pin: true, change: ch.id ?? '', flow: s })}
     />
   {/if}
-  <!-- what the change waits for from people, one strip above every pane (ADR 0117, ADR 0152) -->
-  <ChangeAsks
-    changeId={selected}
-    {closed}
-    reviews={awaiting.map((n) => n.key ?? '')}
-    onreview={() => (pane = 'reviews')}
-    ondecisions={() => (pane = 'decisions')}
-    onopen={(id, pin) => openTab({ kind: 'run', params: { id } }, { pin })}
-  />
-  <EditorPanes {panes} bind:active={pane} label="Change sections">
+  <EditorPanes {panes} bind:active={pane} label="Change context">
+    {#snippet head()}
+      <!-- the change among the open changes of its project, then its detail -->
+      {#if !ch.parentId}<ProjectChanges change={ch} />{/if}
+      <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} {writable} onchange={() => load(selected)} oncompare={() => (compareOpen = true)} />
+      {#if ch.lifecycle}
+        <ChangeLifecycleView lifecycle={ch.lifecycle} current={ch.state ?? ''} definition={lcDef} domain={lcDomain} loading={lcLoading} failure={lcFailure}>
+          {#if lcDef && lifecycleMovable(ch)}
+            <ChangeTransitions current={ch.state ?? ''} {offers} {pickable} busy={transitioning} refusal={transitionRefusal} onmove={(o, d) => void takeTransition(o, d)} />
+          {/if}
+        </ChangeLifecycleView>
+      {/if}
+    {/snippet}
+    <!-- what the change waits for from people (ADR 0117, ADR 0152): in the context column, by the assistant, else above every pane -->
+    {#snippet aside()}
+      <ChangeAsks
+        changeId={selected}
+        {closed}
+        reviews={awaiting.map((n) => n.key ?? '')}
+        onreview={() => (pane = 'reviews')}
+        ondecisions={() => (pane = 'decisions')}
+        onopen={(id, pin) => openTab({ kind: 'run', params: { id } }, { pin })}
+      />
+    {/snippet}
     {#snippet children(active)}
       {#if active === 'overview'}
       <section class="card">

@@ -17,6 +17,8 @@ interface LayoutState {
   bottomOpen: boolean;
   bottomHeight: number;
   theme: Theme;
+  /** sections of the navigation sidebar folded by the person */
+  navFolded: string[];
 }
 
 const DEFAULTS: LayoutState = {
@@ -30,6 +32,7 @@ const DEFAULTS: LayoutState = {
   bottomOpen: true,
   bottomHeight: 220,
   theme: 'auto',
+  navFolded: [],
 };
 
 /** What the browser keeps: how the workbench looks, not where the user was. */
@@ -41,6 +44,7 @@ const kept = (l: LayoutState) => ({
   bottomOpen: l.bottomOpen,
   bottomHeight: l.bottomHeight,
   theme: l.theme,
+  navFolded: l.navFolded,
 });
 
 export const layout: LayoutState = $state({ ...DEFAULTS, ...kept(load(KEY, DEFAULTS)) });
@@ -49,6 +53,14 @@ export const LIMITS = {
   side: { min: 180, max: 640 },
   bottom: { min: 100, max: 800 },
 };
+
+// the scheme the system prefers, followed while the page lives (the theme "auto" shows it)
+const system = $state({ light: typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: light)').matches });
+if (typeof matchMedia === 'function')
+  matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => (system.light = e.matches));
+
+/** The theme on screen: the one chosen, else the system's. */
+export const shownTheme = (): 'light' | 'dark' => (layout.theme === 'auto' ? (system.light ? 'light' : 'dark') : layout.theme);
 
 $effect.root(() => {
   $effect(() => {

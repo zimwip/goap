@@ -43,7 +43,7 @@
   --border-strong: #3d444d;
   --text: #e6edf3;
   --text-2: #9da7b3;
-  --text-3: #6e7781;
+  --text-3: #848d97;
   --accent: #4c8dff;
   --accent-strong: #2f7bff;
   --accent-fg: #ffffff;
@@ -87,7 +87,7 @@
     --border-strong: #b9c2cc;
     --text: #1f2630;
     --text-2: #59626d;
-    --text-3: #8a929c;
+    --text-3: #6e7781;
     --accent: #0969da;
     --accent-strong: #0550af;
     --accent-fg: #ffffff;
@@ -132,7 +132,7 @@
   --border-strong: #b9c2cc;
   --text: #1f2630;
   --text-2: #59626d;
-  --text-3: #8a929c;
+  --text-3: #6e7781;
   --accent: #0969da;
   --accent-strong: #0550af;
   --accent-fg: #ffffff;
@@ -506,6 +506,18 @@ button:disabled {
 .card > h3:first-child {
   margin-top: 0;
 }
+/* a card opening on its heading: the heading is the card's head row */
+.card > .editor-head:first-child {
+  margin: -0.75rem -0.9rem 0.75rem;
+  padding: 10px var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.card > .editor-head:first-child h2 {
+  font-size: var(--fs-m);
+}
+.card > .editor-head:first-child > svg {
+  color: var(--accent);
+}
 
 .alert {
   border-radius: var(--radius-sm);
@@ -546,6 +558,11 @@ th {
   letter-spacing: 0.05em;
   color: var(--text-3);
   font-weight: 600;
+}
+thead th {
+  background: var(--bg-inset);
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
 }
 tbody tr:last-child td {
   border-bottom: none;
@@ -626,7 +643,8 @@ td.num {
 
 /* Editors: common scrolling container. */
 .editor-page {
-  padding: 0.9rem 1.1rem 2rem;
+  /* the bottom keeps clear of the assistant's launcher, floating over the corner */
+  padding: 0.9rem 1.1rem 4.5rem;
 }
 .editor-head {
   display: flex;
@@ -689,7 +707,7 @@ fieldset.plain {
 .console-table th {
   position: sticky;
   top: 0;
-  background: var(--surface);
+  background: var(--bg-inset);
   z-index: 1;
   font-family: var(--font);
 }

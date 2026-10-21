@@ -18,7 +18,8 @@
   import { health, startHealth } from '../stores/status.svelte';
   import { openPlatformStatus } from './platformStatusState.svelte';
   import { openSettings } from './settingsState.svelte';
-  import type { Theme } from './layout.svelte';
+  import { layout, shownTheme, type Theme } from './layout.svelte';
+  import Toolbar from './Toolbar.svelte';
   import { prefs, editPrefs } from '../stores/preferences.svelte';
   import { openUsage } from './usageState.svelte';
   import { notifications, markRead, markAllRead, clearNotifications, type Notice } from '../stores/notifications.svelte';
@@ -175,6 +176,11 @@
     e.preventDefault();
   }
 
+  // the theme toggle: the other one of the theme on screen, saved as the preference
+  function toggleTheme() {
+    void editPrefs({ theme: shownTheme() === 'dark' ? 'light' : 'dark' });
+  }
+
   // --- user ---------------------------------------------------------------------
 
   let menuOpen = $state(false);
@@ -239,8 +245,11 @@
 
 <header class="header">
   <div class="brand"><span class="logo" aria-hidden="true">◆</span> GOAP</div>
-  <ProjectSelector />
-  <WorkingChangeSelector />
+  <!-- where the person works: on top of the navigation sidebar, here while it is folded away -->
+  {#if !layout.leftOpen}
+    <ProjectSelector />
+    <WorkingChangeSelector />
+  {/if}
 
   <div class="search">
     <span class="sicon"><Icon name="search" size={14} /></span>
@@ -282,7 +291,19 @@
     {/if}
   </div>
 
+  <span class="spacer"></span>
+  <Toolbar />
+
   <div class="right">
+    <button
+      type="button"
+      class="hbtn"
+      title={shownTheme() === 'dark' ? 'Light theme' : 'Dark theme'}
+      aria-label="Toggle light / dark theme"
+      onclick={toggleTheme}
+    >
+      <Icon name={shownTheme() === 'dark' ? 'sun' : 'moon'} size={15} />
+    </button>
     <UsageToday />
 
     <button
@@ -440,9 +461,24 @@
   }
   .search {
     position: relative;
-    flex: 1;
-    max-width: 560px;
-    margin: 0 auto;
+    flex: 1 1 260px;
+    min-width: 160px;
+    max-width: 420px;
+  }
+  .spacer {
+    flex: 1 1 0;
+  }
+  .hbtn {
+    display: inline-grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    min-height: 0;
+    color: var(--text-2);
+  }
+  .hbtn:hover:not(:disabled) {
+    color: var(--text);
   }
   .sicon {
     position: absolute;

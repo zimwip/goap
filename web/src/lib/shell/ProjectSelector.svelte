@@ -6,6 +6,8 @@
   import Popover from './Popover.svelte';
   import { project, refreshProjects, selectProject } from '../stores/project.svelte';
 
+  /** full width, in the navigation sidebar (else a chip of the header) */
+  let { block = false }: { block?: boolean } = $props();
   let open = $state(false);
 
   $effect(() => {
@@ -20,7 +22,7 @@
   }
 </script>
 
-<div class="item-wrap">
+<div class="item-wrap" class:block>
   <button type="button" class="proj" class:none={!project.current} aria-haspopup="dialog" aria-expanded={open} title={project.current ? `Active project: ${project.current}` : 'No project selected: pick the project you work in'} onclick={() => (open = !open)}>
     <Icon name="diff" size={14} />
     <span class="pl">{label}</span>
@@ -57,6 +59,17 @@
   .item-wrap {
     position: relative;
     display: flex;
+  }
+  .item-wrap.block {
+    display: block;
+  }
+  .block .proj {
+    width: 100%;
+  }
+  .block .pl {
+    flex: 1;
+    max-width: none;
+    text-align: left;
   }
   .proj {
     display: inline-flex;

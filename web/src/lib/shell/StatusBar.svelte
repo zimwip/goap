@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Status bar: my jobs (ADR 0149: imports, exports, live from the job stream), my running runs and token usage. Platform health/stream,
+  // Status bar: where the person is (stream, project, working change), then my jobs (ADR 0149: imports, exports, live from the job stream), my running runs and token usage. Platform health/stream,
   // identity, settings and notifications live in the header (one place
   // for each, no duplicates).
   import Icon from './Icon.svelte';
@@ -12,6 +12,10 @@
   import { activeJobs, jobList, onJobEnded, startJobs } from '../stores/jobs.svelte';
   import { fraction, jobTitle } from '../jobView';
   import { notify } from './workbench.svelte';
+  import { layout } from './layout.svelte';
+  import { live } from '../stores/live.svelte';
+  import { project } from '../stores/project.svelte';
+  import { working } from '../stores/workingChange.svelte';
 
   let runsOpen = $state(false);
   let jobsOpen = $state(false);
@@ -66,6 +70,15 @@
 </script>
 
 <footer class="status" aria-label="Status bar">
+  <span class="item where" class:down={live.status === 'stopped'} class:warn={live.status === 'retrying'}>
+    <span class="dot" aria-hidden="true"></span>{live.status === 'retrying' ? 'Reconnecting' : live.status === 'stopped' ? 'Offline' : 'Connected'}
+  </span>
+  <span class="item where" title="Active project">{project.current || 'no project'}</span>
+  {#if working.change}
+    <button type="button" class="item" title="The change you work in" onclick={() => openTab({ kind: 'change', params: { id: working.change?.id ?? '' } }, { pin: true })}
+      >change {working.change.title || shortId(working.change.id)}</button
+    >
+  {/if}
   <span class="grow"></span>
 
   <div class="item-wrap">
@@ -123,6 +136,17 @@
       {/if}
     </Popover>
   </div>
+
+  <span class="sep" aria-hidden="true"></span>
+  <button type="button" class="item" aria-pressed={layout.leftOpen} title="Navigation panel (Ctrl+B)" aria-label="Navigation panel" onclick={() => (layout.leftOpen = !layout.leftOpen)}
+    ><Icon name="panelLeft" size={13} /></button
+  >
+  <button type="button" class="item" aria-pressed={layout.bottomOpen} title="Console (Ctrl+J)" aria-label="Console" onclick={() => (layout.bottomOpen = !layout.bottomOpen)}
+    ><Icon name="panelBottom" size={13} /></button
+  >
+  <button type="button" class="item" aria-pressed={layout.rightOpen} title="Right side panel" aria-label="Right side panel" onclick={() => (layout.rightOpen = !layout.rightOpen)}
+    ><Icon name="panelRight" size={13} /></button
+  >
 </footer>
 
 <style>
@@ -165,6 +189,37 @@
   button.item:focus-visible {
     outline: 1px solid currentColor;
     outline-offset: -2px;
+  }
+  .where {
+    color: var(--text-3);
+    max-width: 22rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--success);
+  }
+  .warn .dot {
+    background: var(--warning);
+  }
+  .down .dot {
+    background: var(--danger);
+  }
+  .sep {
+    width: 1px;
+    margin: 5px 4px;
+    background: var(--border);
+  }
+  button.item[aria-pressed='true'] {
+    color: var(--text);
+  }
+  @media (max-width: 900px) {
+    .where:not(:first-child) {
+      display: none;
+    }
   }
   .spin {
     width: 10px;

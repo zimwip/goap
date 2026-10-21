@@ -1,12 +1,12 @@
 <script lang="ts">
-  // IDE shell: header, toolbar, activity bars, resizable panels,
+  // IDE shell: header (with the editor's actions), navigation sidebar, resizable panels,
   // editor area, and console. Content comes from the view
   // registry.
   import { onMount, type Component } from 'svelte';
   import Header from './Header.svelte';
-  import Toolbar from './Toolbar.svelte';
   import ActivityBar from './ActivityBar.svelte';
   import SidePanel from './SidePanel.svelte';
+  import NavSidebar from './NavSidebar.svelte';
   import EditorArea from './EditorArea.svelte';
   import BottomPanel from './BottomPanel.svelte';
   import Resizer from './Resizer.svelte';
@@ -99,12 +99,11 @@
 
 <div class="shell" class:narrow>
   <Header />
-  <Toolbar />
   <div class="main">
-    <ActivityBar side="left" />
+    {#if !layout.leftOpen}<ActivityBar side="left" />{/if}
     {#if layout.leftOpen}
       <div class="side left" style:width="{Math.min(layout.leftWidth, sideMax)}px">
-        <SidePanel side="left" />
+        <NavSidebar />
       </div>
       {#if !narrow}
         <Resizer
@@ -216,7 +215,7 @@
     max-width: calc(100% - 84px);
   }
   .narrow .side.left {
-    left: 42px;
+    left: 0;
     border-right: 1px solid var(--border);
   }
   .narrow .side.right {
