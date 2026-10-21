@@ -16,7 +16,7 @@ import (
 // winning, the compiled-in table where none does (ADR 0075 §3, design rule 3).
 func TestCriticalityPolicyResolution(t *testing.T) {
 	node := func(id, key, typ, owner string, props map[string]any) domain.Node {
-		return domain.Node{ID: domain.NodeID(id), Key: key, Type: typ, Namespace: "organisation", Properties: props, Owner: domain.NodeID(owner)}
+		return domain.Node{ID: domain.NodeID(id), Key: key, Type: typ, Namespace: "organisation", Properties: props, Owner: owner}
 	}
 	pol := func(id, owner string, l criticality.Level, p criticality.Policy) domain.Node {
 		return node(id, "CP-"+id, access.NodeTypeCriticalityPolicy, owner, access.CriticalityProps(l, p))
@@ -24,12 +24,12 @@ func TestCriticalityPolicyResolution(t *testing.T) {
 	nodes := []domain.Node{
 		node("1", "ORG-DEFAULT", access.NodeTypeOrgUnit, "", nil), node("2", "DEP", access.NodeTypeOrgUnit, "", nil), node("3", "TEAM", access.NodeTypeOrgUnit, "", nil),
 		node("4", "OTHER", access.NodeTypeOrgUnit, "", nil),
-		pol("10", "1", criticality.C3, criticality.Policy{Oracles: []string{"human", "tool"}, SignatoryRole: "ciso", MaxDerogation: 48 * time.Hour}),
-		pol("11", "2", criticality.C3, criticality.Policy{Oracles: []string{"human"}, SignatoryRole: "dep_head", MaxDerogation: 24 * time.Hour}),
-		pol("12", "4", criticality.C1, criticality.Policy{Oracles: []string{"human"}}),
+		pol("10", "ORG-DEFAULT", criticality.C3, criticality.Policy{Oracles: []string{"human", "tool"}, SignatoryRole: "ciso", MaxDerogation: 48 * time.Hour}),
+		pol("11", "DEP", criticality.C3, criticality.Policy{Oracles: []string{"human"}, SignatoryRole: "dep_head", MaxDerogation: 24 * time.Hour}),
+		pol("12", "OTHER", criticality.C1, criticality.Policy{Oracles: []string{"human"}}),
 		// a policy whose owner is no unit of the organisation, and one that names no level, are problems
 		pol("13", "99", criticality.C2, criticality.Policy{}),
-		node("14", "CP-bad", access.NodeTypeCriticalityPolicy, "1", map[string]any{"level": "C9"}),
+		node("14", "CP-bad", access.NodeTypeCriticalityPolicy, "ORG-DEFAULT", map[string]any{"level": "C9"}),
 	}
 	links := []domain.Link{
 		{Type: access.LinkPartOf, From: domain.NodeRef{ID: "2"}, To: domain.NodeRef{ID: "1"}},

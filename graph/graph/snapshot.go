@@ -106,7 +106,6 @@ func (g *Graph) ExportSnapshot(ctx context.Context, namespace, branch string, ba
 		}
 		out[l.From.ID] = append(out[l.From.ID], SnapshotLink{Type: l.Type, To: to, Properties: l.Properties})
 	}
-	owners := g.keyReader(ctx)
 	provenance := g.provenanceReader(ctx)
 	for _, n := range nodes {
 		if n.Deleted {
@@ -114,7 +113,7 @@ func (g *Graph) ExportSnapshot(ctx context.Context, namespace, branch string, ba
 		}
 		sn := SnapshotNode{Key: n.Key, Type: n.Type, State: n.State, Properties: n.Properties, Links: out[n.ID], Provenance: provenance(n)}
 		if n.Owner != "" {
-			sn.Owner = owners(n.Owner)
+			sn.Owner = n.Owner
 		}
 		slices.SortFunc(sn.Links, func(a, b SnapshotLink) int {
 			if c := strings.Compare(a.Type, b.Type); c != 0 {
@@ -126,22 +125,6 @@ func (g *Graph) ExportSnapshot(ctx context.Context, namespace, branch string, ba
 	}
 	slices.SortFunc(s.Nodes, func(a, b SnapshotNode) int { return strings.Compare(a.Key, b.Key) })
 	return s, nil
-}
-
-// keyReader returns the key of a node by its id, cached; "" when it cannot be read.
-func (g *Graph) keyReader(ctx context.Context) func(domain.NodeID) string {
-	cache := map[domain.NodeID]string{}
-	return func(id domain.NodeID) string {
-		if k, ok := cache[id]; ok {
-			return k
-		}
-		k := ""
-		if n, err := g.Node(ctx, domain.NodeRef{ID: id}); err == nil {
-			k = n.Key
-		}
-		cache[id] = k
-		return k
-	}
 }
 
 // provenanceReader returns the provenance of a version, reading the impacts and the model calls of each change once.
@@ -304,7 +287,6 @@ func (g *Graph) ImportSnapshot(ctx context.Context, in SnapshotImport) (res Snap
 	for _, n := range s.Nodes {
 		inSnapshot[n.Key] = true
 	}
-	owners := g.keyReader(ctx)
 	orgNS := g.Structure(domain.StructureOrganisation).Namespace
 	knownUnit := map[string]bool{}
 	unit := func(key string) bool {
@@ -345,7 +327,7 @@ func (g *Graph) ImportSnapshot(ctx context.Context, in SnapshotImport) (res Snap
 			}
 			p.node = &n
 			p.props = propsPatch(n.Properties, sn.Properties)
-			if owner != "" && owners(n.Owner) != owner {
+			if owner != "" && n.Owner != owner {
 				p.owner = owner
 			}
 			p.state = sn.State != "" && sn.State != n.State

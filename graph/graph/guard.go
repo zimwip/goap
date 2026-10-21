@@ -68,8 +68,8 @@ type guardTx struct {
 	g *Graph
 	// what the transaction wrote that names a change, a unit or a project, checked at its end
 	changeRefs map[domain.ChangeID]string
-	owners     map[domain.NodeID]string
-	projects   map[domain.NodeID]string
+	owners     map[string]string
+	projects   map[string]string
 	changes    map[domain.ChangeID]domain.Change
 	// newBaselines are the baselines the transaction wrote (their headers are not cached before it ends)
 	newBaselines map[domain.BaselineID]bool
@@ -347,20 +347,6 @@ func (t *guardTx) change(ctx context.Context, id domain.ChangeID) (domain.Change
 	return c, nil
 }
 
-// resolve returns the id of the node of a structure a change names by key; the node being written is its own
-// reference (the bootstrap).
-func (t *guardTx) resolve(ctx context.Context, kind, key string, self domain.Node) (domain.NodeID, error) {
-	st := t.g.Structure(kind)
-	if key == self.Key && st.Namespace == domain.NamespaceOf(self.Namespace) {
-		return self.ID, nil
-	}
-	id, err := t.Tx.NodeIDByKey(ctx, st.Namespace, key)
-	if errors.Is(err, ErrNotFound) {
-		return "", fmt.Errorf("node %s: %s %q of its change does not exist: %w", self.Key, kind, key, ErrInvalid)
-	}
-	return id, err
-}
-
 func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	what := "node " + n.Key + " v" + fmt.Sprint(n.Version)
 	if err := t.needChange(n.ChangeID, what); err != nil {
@@ -404,18 +390,14 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 			return err
 		}
 		if n.Owner == "" {
-			if n.Owner, err = t.resolve(ctx, domain.StructureOrganisation, c.OwnerOrg, n); err != nil {
-				return err
-			}
+			n.Owner = c.OwnerOrg
 		}
 		if n.Project == "" {
-			if n.Project, err = t.resolve(ctx, domain.StructureProject, c.ProjectID, n); err != nil {
-				return err
-			}
+			n.Project = c.ProjectID
 		}
 	}
 	if t.owners == nil {
-		t.owners, t.projects = map[domain.NodeID]string{}, map[domain.NodeID]string{}
+		t.owners, t.projects = map[string]string{}, map[string]string{}
 	}
 	t.owners[n.Owner] = what
 	t.projects[n.Project] = what
@@ -554,43 +536,51 @@ func (t *guardTx) verify(ctx context.Context) error {
 			return err
 		}
 	}
-	for id, what := range t.owners {
-		if err := t.inStructure(ctx, domain.StructureOrganisation, id, what+": owner"); err != nil {
+	for key, what := range t.owners {
+		if err := t.inStructure(ctx, domain.StructureOrganisation, key, what+": owner"); err != nil {
 			return err
 		}
 	}
-	for id, what := range t.projects {
-		if err := t.inStructure(ctx, domain.StructureProject, id, what+": project"); err != nil {
+	for key, what := range t.projects {
+		if err := t.inStructure(ctx, domain.StructureProject, key, what+": project"); err != nil {
 			return err
 		}
 	}
 	for _, c := range t.changes {
-		for _, ref := range []struct{ kind, key, what string }{
-			{domain.StructureOrganisation, c.OwnerOrg, "owner"},
-			{domain.StructureProject, c.ProjectID, "project"},
-		} {
-			st := t.g.Structure(ref.kind)
-			id, err := t.Tx.NodeIDByKey(ctx, st.Namespace, ref.key)
-			if errors.Is(err, ErrNotFound) {
-				return fmt.Errorf("change %s: %s %q is not a node of namespace %s: %w", c.ID, ref.what, ref.key, st.Namespace, ErrInvalid)
-			}
-			if err != nil {
-				return err
-			}
-			if err := t.inStructure(ctx, ref.kind, id, "change "+string(c.ID)+": "+ref.what); err != nil {
-				return err
-			}
+		if err := t.inStructure(ctx, domain.StructureOrganisation, c.OwnerOrg, "change "+string(c.ID)+": owner"); err != nil {
+			return err
+		}
+		if err := t.inStructure(ctx, domain.StructureProject, c.ProjectID, "change "+string(c.ID)+": project"); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-// inStructure checks that a node exists (on any branch) and belongs to the structure of a kind.
-func (t *guardTx) inStructure(ctx context.Context, kind string, id domain.NodeID, what string) error {
+// inStructure checks that the node of a key exists (on any branch) and belongs to the structure of a kind: asked to
+// Graph.Structures when the structures live in another graph (ADR 0154 §9), else read in the transaction.
+func (t *guardTx) inStructure(ctx context.Context, kind, key, what string) error {
+	if t.g.StructureKeys != nil {
+		ok, err := t.g.StructureKeys(ctx, kind, key)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("%s %q is not a %s of the platform: %w", what, key, kind, ErrInvalid)
+		}
+		return nil
+	}
 	st := t.g.Structure(kind)
+	id, err := t.Tx.NodeIDByKey(ctx, st.Namespace, key)
+	if errors.Is(err, ErrNotFound) {
+		return fmt.Errorf("%s %q is not a node of namespace %s: %w", what, key, st.Namespace, ErrInvalid)
+	}
+	if err != nil {
+		return err
+	}
 	vs, err := t.Tx.VersionRange(ctx, id, 0, 1)
 	if err == nil && len(vs) == 0 {
-		return fmt.Errorf("%s %s does not exist: %w", what, id, ErrInvalid)
+		return fmt.Errorf("%s %s does not exist: %w", what, key, ErrInvalid)
 	}
 	if err != nil {
 		return err

@@ -154,16 +154,12 @@ func TestProjectSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	project, err := g.Node(ctx, domain.NodeRef{ID: req.Project})
-	if err != nil {
-		t.Fatal(err)
-	}
 	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: domain.NamespacePlatform, Key: domain.SourceKey("alm-eu"), Type: domain.TypeSource,
 		Properties: map[string]any{"kind": lnk.KindGraph, "namespace": "alm", "location": "https://eu.example/graph"}}); err != nil {
 		t.Fatal(err)
 	}
 	g.ProjectSources = func(_ context.Context, p string) (map[string]string, error) {
-		if p == "PROJ-EU" || p == project.Key {
+		if p == "PROJ-EU" || p == req.Project {
 			return map[string]string{"alm": "alm-eu"}, nil
 		}
 		return nil, nil
@@ -183,6 +179,6 @@ func TestProjectSources(t *testing.T) {
 	}
 	asked = lnk.Source{}
 	if _, err := g.ResolveFrom(ctx, req, u); err != nil || asked.Name != "alm-eu" {
-		t.Fatalf("from a node of %s: %v (source %+v)", project.Key, err, asked)
+		t.Fatalf("from a node of %s: %v (source %+v)", req.Project, err, asked)
 	}
 }

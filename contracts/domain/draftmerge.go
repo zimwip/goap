@@ -239,7 +239,7 @@ func ApplyConflictEvent(pending []string, e ImpactEvent) []string {
 		for _, k := range p.Unset {
 			settle(ConflictProp(k))
 		}
-		if p.OwnerID != "" {
+		if p.Owner != "" {
 			settle(ConflictOwner)
 		}
 		for _, name := range []string{"addLink", "removeLink", "updateLink"} {

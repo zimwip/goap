@@ -95,12 +95,18 @@ func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Nod
 			s.defs[d.Name] = d
 		}
 	}
-	// an adapter instance is the unit's that owns it (ADR 0054: the owner of the version)
+	// an adapter instance is the unit's that owns it (ADR 0054: the owner of the version, a key)
+	units := map[string]domain.Node{}
+	for _, n := range byID {
+		if st.In(org, n.Type) {
+			units[n.Key] = n
+		}
+	}
 	for _, n := range nodes {
 		if n.Deleted || n.Namespace != st.Organisation().Namespace || n.Type != domain.TypeAdapter {
 			continue
 		}
-		unit, ok := byID[n.Owner]
+		unit, ok := units[n.Owner]
 		if !ok || !st.In(org, unit.Type) {
 			s.Problems = append(s.Problems, fmt.Sprintf("%s: its owner %s is not a unit of the organisation", n.Key, n.Owner))
 			continue

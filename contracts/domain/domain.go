@@ -119,13 +119,13 @@ type Node struct {
 	State string `json:"state,omitempty"`
 	// ChangeID is the change that wrote the version: every version has one (ADR 0049, 0054).
 	ChangeID ChangeID `json:"changeId,omitempty"`
-	// Owner is the organisational unit responsible for the version (a node of the organisation structure, ADR
-	// 0054): the unit holding the change that created the node, carried over by the next versions unless a change
-	// transfers it.
-	Owner NodeID `json:"owner,omitempty"`
-	// Project is the project the node was created in (a node of the project structure, ADR 0054): the project of the
-	// change that created it, the same for every version.
-	Project NodeID `json:"project,omitempty"`
+	// Owner is the key of the organisational unit responsible for the version (a node of the organisation structure,
+	// ADR 0054): the unit holding the change that created the node, carried over by the next versions unless a change
+	// transfers it. A key, never a node id: the organisation may live in another graph (ADR 0154 §9).
+	Owner string `json:"owner,omitempty"`
+	// Project is the key of the project the node was created in (a node of the project structure, ADR 0054): the
+	// project of the change that created it, the same for every version. A key, as Owner.
+	Project string `json:"project,omitempty"`
 	// ChangeImpact is the change impact that produced this version, Comment the acceptance
 	// comment (else the rationale): the origin of the version (ADR 0024).
 	ChangeImpact ChangeImpactID `json:"changeImpact,omitempty"`

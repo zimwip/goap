@@ -121,7 +121,7 @@ func NodeFromPB(n *graphv1.Node) domain.Node {
 		Deleted: n.Deleted, ChangeID: domain.ChangeID(n.ChangeId), CreatedAt: FromTime(n.CreatedAt),
 		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason, State: n.State,
 		ChangeImpact: domain.ChangeImpactID(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined,
-		Owner: domain.NodeID(n.Owner), Project: domain.NodeID(n.Project), Origins: refsFromPB(n.Origins)}
+		Owner: n.Owner, Project: n.Project, Origins: refsFromPB(n.Origins)}
 }
 
 func versionsFromPB(vs []int32) []domain.Version {

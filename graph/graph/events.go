@@ -315,28 +315,13 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 		if err != nil {
 			return nil, err
 		}
-		keys := map[domain.NodeID]string{}
-		keyOf := func(id domain.NodeID) string { // the project and owner of a version are nodes: the index holds their keys
-			if id == "" {
-				return ""
-			}
-			if k, ok := keys[id]; ok {
-				return k
-			}
-			k := string(id)
-			if u, err := tx.Node(ctx, domain.NodeRef{ID: id}); err == nil {
-				k = u.Key
-			}
-			keys[id] = k
-			return k
-		}
 		for _, ref := range ot.nodes {
 			n, err := tx.Node(ctx, ref)
 			if err != nil {
 				return nil, err
 			}
 			ev := domain.NodeEvent{ID: n.ID, Version: n.Version, Branch: domain.BranchOf(n.Branch), Namespace: domain.NamespaceOf(n.Namespace), Key: n.Key,
-				Type: n.Type, State: n.State, Deleted: n.Deleted, ChangeID: n.ChangeID, Time: n.CreatedAt, Project: keyOf(n.Project), Owner: keyOf(n.Owner)}
+				Type: n.Type, State: n.State, Deleted: n.Deleted, ChangeID: n.ChangeID, Time: n.CreatedAt, Project: n.Project, Owner: n.Owner}
 			ev.Text, ev.Facets = ix.searchable(n)
 			out = append(out, published{fmt.Sprintf(domain.SubjectNodeWritten, subjectToken(ev.Namespace), subjectToken(n.Type), n.ID), ev})
 		}

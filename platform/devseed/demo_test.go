@@ -56,7 +56,7 @@ func TestSeedsFollowTheDomains(t *testing.T) {
 	if err != nil || app.Type != "alm@Application" {
 		t.Fatalf("app = %+v, %v", app, err)
 	}
-	if app.Owner != unit.ID {
+	if app.Owner != unit.Key {
 		t.Fatalf("APP-1 must be owned by ORG-CHECKOUT across namespaces: %+v", app)
 	}
 	uv, _ := g.View(ctx, unit.Ref())
@@ -88,7 +88,7 @@ func TestSeedDemoHangsUnderTheRoot(t *testing.T) {
 	if len(v.Out) != 1 || v.Out[0].Type != access.LinkPartOf || v.Out[0].To.ID != def.ID {
 		t.Fatalf("ORG-ACME must be part_of ORG-DEFAULT: %+v", v.Out)
 	}
-	if acme.Owner != def.ID || acme.ChangeID == "" || acme.Project == "" {
+	if acme.Owner != def.Key || acme.ChangeID == "" || acme.Project == "" {
 		t.Fatalf("ORG-ACME is owned by the root unit, written by a change, created in a project: %+v", acme)
 	}
 	cs, err := g.Changes(ctx)
@@ -192,7 +192,7 @@ func TestSeedDemoProjectBoundToTheOrganisation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if need.Project != project.ID {
+	if need.Project != project.Key {
 		t.Fatalf("the alm data acts in the demo project: %q", need.Project)
 	}
 }

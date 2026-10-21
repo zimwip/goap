@@ -45,7 +45,7 @@ type NodeShape struct {
 	Key        string         `json:"key"`
 	Type       string         `json:"type"`
 	State      string         `json:"state,omitempty"`
-	Owner      NodeID         `json:"owner,omitempty"`
+	Owner      string         `json:"owner,omitempty"`
 	Properties map[string]any `json:"props,omitempty"`
 	Links      []LinkShape    `json:"links,omitempty"`
 }
@@ -70,7 +70,7 @@ type ImpactSide struct {
 	// Drafted is false for a planned impact: its node is not checked out, no draft exists.
 	Drafted bool   `json:"drafted"`
 	State   string `json:"state,omitempty"`
-	Owner   NodeID `json:"owner,omitempty"`
+	Owner   string `json:"owner,omitempty"`
 }
 
 // ImpactDiff is an impact that differs between the two flows. Changes is empty for an added or removed impact.

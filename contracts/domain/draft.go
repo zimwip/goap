@@ -40,7 +40,7 @@ type Draft struct {
 	Type  string `json:"type"`
 	State string `json:"state,omitempty"`
 	// Owner is the unit owning the next version; empty: carried over from its base, else the unit holding the change.
-	Owner      NodeID         `json:"owner,omitempty"`
+	Owner      string         `json:"owner,omitempty"`
 	Properties map[string]any `json:"props,omitempty"`
 	// Origins are the nodes the node derives from (merge and split, ADR 0077), set on a creation.
 	Origins []NodeRef `json:"origins,omitempty"`
@@ -122,10 +122,10 @@ func (d Draft) Link(id LinkID) (DraftLink, bool) {
 // draftPatch is the typed form of ImpactEvent.Patch for what changes a draft. The event keeps the free-form map (the
 // audit trail and PROV-O read it); the fold reads it through this shape, whatever the JSON decoding made of the numbers.
 type draftPatch struct {
-	Props   map[string]any `json:"props"`
-	Unset   []string       `json:"unset"`
-	OwnerID NodeID         `json:"ownerId"`
-	State   *struct {
+	Props map[string]any `json:"props"`
+	Unset []string       `json:"unset"`
+	Owner string         `json:"owner"`
+	State *struct {
 		From string `json:"from"`
 		To   string `json:"to"`
 	} `json:"state"`
@@ -155,7 +155,7 @@ func linksOf(one *patchLink, many []patchLink) []patchLink {
 	return append([]patchLink{*one}, many...)
 }
 
-// DraftDiff is the patch of an updated event that turns a draft into another (props, unset, ownerId, state, and the
+// DraftDiff is the patch of an updated event that turns a draft into another (props, unset, owner, state, and the
 // links as addLinks / updateLinks / removeLinks): the difference a rebase's merge makes to the version the change
 // committed (ADR 0144), what a reader shows. A link of to that from holds alike (type, target, properties) keeps the id
 // it has in from; nil when they hold the same.
@@ -181,7 +181,7 @@ func DraftDiff(from, to Draft) map[string]any {
 		p["unset"] = unset
 	}
 	if to.Owner != from.Owner {
-		p["ownerId"] = to.Owner
+		p["owner"] = to.Owner
 	}
 	if to.State != from.State {
 		p["state"] = map[string]any{"from": from.State, "to": to.State}
@@ -270,8 +270,8 @@ func applyDraft(d *Draft, e ImpactEvent) *Draft {
 				delete(n.Properties, k)
 			}
 		}
-		if p.OwnerID != "" {
-			n.Owner = p.OwnerID
+		if p.Owner != "" {
+			n.Owner = p.Owner
 		}
 		if p.State != nil {
 			n.State = p.State.To

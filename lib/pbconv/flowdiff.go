@@ -44,7 +44,7 @@ func impactSideFromPB(s *graphv1.ImpactSide) *domain.ImpactSide {
 		return nil
 	}
 	return &domain.ImpactSide{Impact: domain.ChangeImpactID(s.Impact), Flow: s.Flow, Intent: domain.NodeIntent(s.Intent), Review: domain.NodeReview(s.Review),
-		Drafted: s.Drafted, State: s.State, Owner: domain.NodeID(s.Owner)}
+		Drafted: s.Drafted, State: s.State, Owner: s.Owner}
 }
 
 // FlowDiffToPB converts the comparison of two flows of a change (ADR 0083).

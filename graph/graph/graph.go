@@ -77,7 +77,11 @@ type Graph struct {
 	// source to the declared source holding it there, inherited from the parent projects), plugged by the compositions
 	// from the organisation they read (graphsvc.ProjectSources). Unset: every project reads the sources as named.
 	ProjectSources func(ctx context.Context, project string) (map[string]string, error)
-	lnk            lnkState
+	// StructureKeys, when set, tells whether a key is a node of the structure of a kind (a unit of the organisation, a
+	// project): the guard asks it for the owners and projects a transaction writes when the structures live in another
+	// graph, the platform graph (ADR 0154 §9). Unset: the guard reads them in the transaction.
+	StructureKeys func(ctx context.Context, kind, key string) (bool, error)
+	lnk           lnkState
 	// Types returns the type catalogue in force (ADR 0012 §2, pkg/typecat): the graph judges the nodes by it and
 	// refuses the ones whose type or link type it does not resolve. Unset: an untyped graph (tests, tools).
 	Types func() TypeCatalog

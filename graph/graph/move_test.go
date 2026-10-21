@@ -109,11 +109,11 @@ func testMoveChange(t *testing.T, repo Repo) {
 	b := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, "PROJ-B"))
 	a := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, "PROJ-A"))
 	for _, key := range []string{"PRE-1", "POST-1"} {
-		if n := must[domain.Node](t)(g.NodeByKey(ctx, "", key)); n.Project != b.ID {
+		if n := must[domain.Node](t)(g.NodeByKey(ctx, "", key)); n.Project != b.Key {
 			t.Fatalf("%s commits in the project of the change: %s", key, n.Project)
 		}
 	}
-	if n := must[domain.Node](t)(g.NodeByKey(ctx, "", "OLD-1")); n.Project != a.ID {
+	if n := must[domain.Node](t)(g.NodeByKey(ctx, "", "OLD-1")); n.Project != a.Key {
 		t.Fatalf("a node keeps its project: %s", n.Project)
 	}
 	// a committed change moves no more

@@ -113,8 +113,7 @@ func (h *Handler) mayReadNode(ctx context.Context, n domain.Node) bool {
 	if n.Project == "" {
 		return h.worksOn(ctx, "")
 	}
-	project, err := h.Graph.Node(ctx, domain.NodeRef{ID: n.Project})
-	return err == nil && h.worksOn(ctx, project.Key)
+	return h.worksOn(ctx, n.Project)
 }
 
 func (h *Handler) TagVersion(ctx context.Context, r *connect.Request[graphv1.TagVersionRequest]) (*connect.Response[graphv1.TagVersionResponse], error) {
@@ -128,14 +127,8 @@ func (h *Handler) TagVersion(ctx context.Context, r *connect.Request[graphv1.Tag
 		return nil, rpcerr.ToConnect(err)
 	}
 	who := authz.From(ctx)
-	project := ""
-	if n.Project != "" {
-		if p, err := h.Graph.Node(ctx, domain.NodeRef{ID: n.Project}); err == nil {
-			project = p.Key
-		}
-	}
 	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
-		Resource: authz.Resource{Type: "tag", Namespace: n.Namespace, Org: who.Org, Owner: who.Subject, ProjectID: project}}); err != nil {
+		Resource: authz.Resource{Type: "tag", Namespace: n.Namespace, Org: who.Org, Owner: who.Subject, ProjectID: n.Project}}); err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
 	t, err := h.Graph.TagVersion(ctx, ref, r.Msg.Name)

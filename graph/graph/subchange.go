@@ -295,12 +295,12 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if err != nil {
 				return err
 			}
-			unit, err := tx.Node(ctx, domain.NodeRef{ID: pre.Owner})
+			if pre.Owner == parent.OwnerOrg {
+				continue // the unit holding the change owns it
+			}
+			unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, pre.Owner)
 			if err != nil {
 				return err
-			}
-			if unit.Key == parent.OwnerOrg {
-				continue // the unit holding the change owns it
 			}
 			if below, err := g.within(ctx, tx, domain.StructureOrganisation, unit.Key, parent.OwnerOrg); err != nil {
 				return err

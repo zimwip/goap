@@ -21,7 +21,7 @@ func testBootstrap(t *testing.T, repo Repo) {
 	org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootOrg(g)))
 	proj := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootProject(g)))
 	for _, n := range []domain.Node{org, proj} {
-		if n.Owner != org.ID || n.Project != proj.ID || n.ChangeID == "" {
+		if n.Owner != org.Key || n.Project != proj.Key || n.ChangeID == "" {
 			t.Fatalf("%s: owner %s project %s change %s", n.Key, n.Owner, n.Project, n.ChangeID)
 		}
 	}
@@ -79,7 +79,7 @@ func testGuardRefusesWritesOutsideAChange(t *testing.T, repo Repo) {
 		"a node version without a change": func(tx Tx) error { return tx.PutNode(ctx, node("N-1", "")) },
 		"a node version of a missing change": func(tx Tx) error {
 			return tx.PutNode(ctx, domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Key: "N-2", Type: "Note",
-				ChangeID: domain.ChangeID(g.newID()), Owner: org.ID, Project: proj.ID, CreatedAt: g.now()})
+				ChangeID: domain.ChangeID(g.newID()), Owner: org.Key, Project: proj.Key, CreatedAt: g.now()})
 		},
 		"a link without a change": func(tx Tx) error {
 			return tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: LinkProjectPartOf, From: proj.Ref(), To: proj.Ref()})
@@ -100,12 +100,12 @@ func testGuardRefusesWritesOutsideAChange(t *testing.T, repo Repo) {
 		},
 		"a version owned by a project": func(tx Tx) error {
 			n := node("N-3", org.ChangeID)
-			n.Owner, n.Project = proj.ID, proj.ID
+			n.Owner, n.Project = proj.Key, proj.Key
 			return tx.PutNode(ctx, n)
 		},
 		"a node created in a unit": func(tx Tx) error {
 			n := node("N-4", org.ChangeID)
-			n.Owner, n.Project = org.ID, org.ID
+			n.Owner, n.Project = org.Key, org.Key
 			return tx.PutNode(ctx, n)
 		},
 	} {
@@ -147,28 +147,28 @@ func testOwnerAndProjectOfNodes(t *testing.T, repo Repo) {
 	}})
 	team := must[domain.Node](t)(g.NodeByKey(ctx, ns, "TEAM"))
 	pa := must[domain.Node](t)(g.NodeByKey(ctx, ns, "PROJ-A"))
-	if team.Owner != root.ID || team.Project != rootProj.ID {
+	if team.Owner != root.Key || team.Project != rootProj.Key {
 		t.Fatalf("a change naming no unit: the root unit; the bootstrap names the root project: %+v", team)
 	}
 
 	commit(Commit{OwnerOrg: "TEAM", ProjectID: "PROJ-A", Edits: []NodeEdit{{Key: "NOTE", Type: "Note", Props: map[string]any{"title": "one"}}}})
 	note := must[domain.Node](t)(g.NodeByKey(ctx, ns, "NOTE"))
-	if note.Owner != team.ID || note.Project != pa.ID {
+	if note.Owner != team.Key || note.Project != pa.Key {
 		t.Fatalf("created by TEAM in PROJ-A: %+v", note)
 	}
 	// edited by a change of the root unit in the root project: still TEAM's, still created in PROJ-A
 	commit(Commit{ProjectID: "PROJ-ROOT", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Props: map[string]any{"title": "two"}}}})
 	note = must[domain.Node](t)(g.NodeByKey(ctx, ns, "NOTE"))
-	if note.Version != 2 || note.Owner != team.ID || note.Project != pa.ID {
+	if note.Version != 2 || note.Owner != team.Key || note.Project != pa.Key {
 		t.Fatalf("the next version keeps owner and project: %+v", note)
 	}
 	// transferred to the root unit
 	commit(Commit{ProjectID: "PROJ-ROOT", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Owner: rootOrg(g)}}})
 	note = must[domain.Node](t)(g.NodeByKey(ctx, ns, "NOTE"))
-	if note.Version != 3 || note.Owner != root.ID || note.Project != pa.ID {
+	if note.Version != 3 || note.Owner != root.Key || note.Project != pa.Key {
 		t.Fatalf("transferred to the root unit: %+v", note)
 	}
-	if v2 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: note.ID, Version: 2})); v2.Owner != team.ID {
+	if v2 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: note.ID, Version: 2})); v2.Owner != team.Key {
 		t.Fatalf("the earlier version stays TEAM's: %+v", v2)
 	}
 	// only a unit owns
@@ -236,8 +236,8 @@ func testStorageRequiresAChange(t *testing.T, repo Repo) {
 		return "?"
 	}
 	for name, q := range map[string]string{
-		"a version without a change": `INSERT INTO node_version (node_id, version, props, change_id, owner_id, created_at) VALUES (` + ph(1) + `, 99, '{}', NULL, ` + ph(2) + `, '2026-01-01T00:00:00Z')`,
-		"a version without an owner": `INSERT INTO node_version (node_id, version, props, change_id, owner_id, created_at) VALUES (` + ph(1) + `, 99, '{}', ` + ph(2) + `, NULL, '2026-01-01T00:00:00Z')`,
+		"a version without a change": `INSERT INTO node_version (node_id, version, props, change_id, owner, created_at) VALUES (` + ph(1) + `, 99, '{}', NULL, ` + ph(2) + `, '2026-01-01T00:00:00Z')`,
+		"a version without an owner": `INSERT INTO node_version (node_id, version, props, change_id, owner, created_at) VALUES (` + ph(1) + `, 99, '{}', ` + ph(2) + `, NULL, '2026-01-01T00:00:00Z')`,
 	} {
 		arg2 := any(string(org.ID))
 		if name == "a version without an owner" {
@@ -250,7 +250,7 @@ func testStorageRequiresAChange(t *testing.T, repo Repo) {
 	if err := exec(`INSERT INTO node_branch (node_id, version, branch, change_id) VALUES (`+ph(1)+`, 1, 'x', NULL)`, string(org.ID)); err == nil {
 		t.Error("a branch membership without a change: accepted by the database")
 	}
-	if err := exec(`INSERT INTO node_version (node_id, version, props, change_id, owner_id, created_at) VALUES (`+ph(1)+`, 99, '{}', `+ph(2)+`, `+ph(1)+`, '2026-01-01T00:00:00Z')`,
+	if err := exec(`INSERT INTO node_version (node_id, version, props, change_id, owner, created_at) VALUES (`+ph(1)+`, 99, '{}', `+ph(2)+`, `+ph(1)+`, '2026-01-01T00:00:00Z')`,
 		string(org.ID), g.newID()); err == nil {
 		t.Error("a version of a missing change: accepted by the database")
 	}

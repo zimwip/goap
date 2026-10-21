@@ -341,7 +341,7 @@ func stateStats(head domain.Baseline, nodes []domain.Node, links []domain.Link) 
 	}
 	types := map[string]*typeAcc{}
 	var outs, ins, degrees, versions, props []int
-	owners, projects := map[domain.NodeID]bool{}, map[domain.NodeID]bool{}
+	owners, projects := map[string]bool{}, map[string]bool{}
 	for _, id := range ids {
 		n := live[id]
 		o, i := out[id], in[id]

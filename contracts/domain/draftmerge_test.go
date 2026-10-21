@@ -54,7 +54,7 @@ func TestPendingConflicts(t *testing.T) {
 	log := []ImpactEvent{
 		rebased,
 		ev(ImpactUpdated, map[string]any{"props": map[string]any{"a": 1}}),
-		ev(ImpactUpdated, map[string]any{"ownerId": "U"}),
+		ev(ImpactUpdated, map[string]any{"owner": "U"}),
 		ev(ImpactTransitioned, map[string]any{"state": map[string]any{"from": "x", "to": "y"}}),
 		ev(ImpactUpdated, map[string]any{"removeLink": map[string]any{"id": "l", "type": "uses", "toId": "N"}}),
 		{Impact: "other", Op: ImpactUpdated, Patch: map[string]any{"resolved": true}},

@@ -1095,8 +1095,8 @@ cut halfway: failed, nothing: run again), so a step never writes twice. Core NAT
 `graph` model (simplified):
 
 ```sql
-node(id uuid, namespace, key text, type text, latest int, project_id → node)  -- the project it was created in
-node_version(node_id, version, props jsonb, deleted bool, change_id → change, owner_id → node, created_at, committed)  -- PK (node_id, version); committed: the order of its baseline (ADR 0140)
+node(id uuid, namespace, key text, type text, latest int, project text)  -- the key of the project it was created in (ADR 0154 §9)
+node_version(node_id, version, props jsonb, deleted bool, change_id → change, owner text, created_at, committed)  -- PK (node_id, version); committed: the order of its baseline (ADR 0140)
 link(id uuid, type, from_id, from_version, to_id, to_version, props jsonb, change_id → change)
 node_branch(node_id, version, branch, change_id → change, committed)  -- the branches a version joined besides the one it was written on (ADR 0032)
 baseline(id uuid, name, namespace, branch, parent_id, change_id, created_at, seq)  -- seq: the order of commits; its state is a selection (ADR 0143)
@@ -1125,8 +1125,9 @@ PostgreSQL; SQLite and the memory store run one transaction at a time), taken be
 (`changeOpen`, `Graph.changeTx`) and by the guard at every write naming a change; a branch head moves under
 `Tx.LockBranch` and only from the parent of the new baseline (`advanceBranch`). Reads take no lock.
 
-Every `change_id`, `owner_id` and `project_id` above is `NOT NULL` with a foreign key (deferred where the bootstrap
-needs it), and `graph/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054): the constraints
+Every `change_id` above is `NOT NULL` with a foreign key (deferred where the bootstrap needs it); `owner`, `project`,
+`owner_org` and `project_id` are non-empty keys of the structures, no foreign key, since the structures may live in
+another graph (the platform graph, ADR 0154 §9; the guard checks them through `Graph.StructureKeys`), and `graph/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054): the constraints
 are a second line, a storage without any keeps the rules.
 
 > Why PostgreSQL and not a graph database? The required traversals (neighborhood, impact propagation

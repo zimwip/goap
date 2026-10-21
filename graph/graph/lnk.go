@@ -71,15 +71,7 @@ func (g *Graph) ResolveIn(ctx context.Context, project string, u lnk.URL) (lnk.T
 
 // ResolveFrom reads what a logical URL points to for a node: in the project the node belongs to.
 func (g *Graph) ResolveFrom(ctx context.Context, from domain.Node, u lnk.URL) (lnk.Target, error) {
-	project := ""
-	if from.Project != "" {
-		p, err := g.Node(ctx, domain.NodeRef{ID: from.Project})
-		if err != nil {
-			return lnk.Target{}, fmt.Errorf("project of %s: %w", from.Key, err)
-		}
-		project = p.Key
-	}
-	return g.ResolveIn(ctx, project, u)
+	return g.ResolveIn(ctx, from.Project, u)
 }
 
 // mappingOf is the source mapping of a project, nil without one.

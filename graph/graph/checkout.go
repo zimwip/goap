@@ -477,7 +477,7 @@ func (g *Graph) newDraft(ctx context.Context, tx Tx, w *work, in NodeCreate, ori
 		if err != nil {
 			return d, err
 		}
-		d.Owner = unit.ID
+		d.Owner = unit.Key
 	}
 	for _, l := range in.Links {
 		dl, err := g.newDraftLink(ctx, tx, w, d, l)
@@ -600,7 +600,7 @@ func (g *Graph) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact
 			if err != nil {
 				return err
 			}
-			patch["owner"], patch["ownerId"] = in.Owner, string(unit.ID)
+			patch["owner"] = unit.Key
 		}
 		ref := d.Ref()
 		if err := g.emitUpdated(ctx, tx, w, ref, in.Execution, patch); err != nil {

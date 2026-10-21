@@ -23,8 +23,14 @@ type (
 // owner unit or repeats a level of its unit is a problem of the snapshot (the first one stays).
 func (s *Snapshot) readCriticality(nodes []domain.Node, byID map[domain.NodeID]domain.Node) {
 	s.criticality = map[string]map[criticalityLevel]criticalityPolicy{}
+	units := map[string]domain.Node{}
+	for _, n := range byID {
+		if s.structures.In(domain.StructureOrganisation, n.Type) {
+			units[n.Key] = n
+		}
+	}
 	for _, n := range nodes {
-		owner, ok := byID[n.Owner]
+		owner, ok := units[n.Owner]
 		if !ok || !s.structures.In(domain.StructureOrganisation, owner.Type) {
 			s.Problems = append(s.Problems, fmt.Sprintf("%s: its owner %s is not a unit of the organisation", n.Key, n.Owner))
 			continue

@@ -1,6 +1,6 @@
 # ADR 0154 — Logical URLs and the federation of graphs
 
-**Status**: proposed; step 1 implemented · **Date**: 2026-10
+**Status**: proposed; steps 1 and 5 implemented, step 6 under way (§9.1 done) · **Date**: 2026-10
 
 ## Context
 
@@ -73,9 +73,11 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
    mapping its sources elsewhere. The content graph reads the organisation from the platform graph (its access
    directory over `graphclient`, the platform graph's node events on the bus keeping it current) and builds its
    in-memory directory of projects and sources at boot. What the split asks of the code, in order:
-   1. the owner unit and the project of a version and of a change become keys of the platform graph (`node.project_id`,
-      `node_version.owner_id` lose their foreign keys to `node`; the guard checks them against the directory instead
-      of the transaction);
+   1. (done) the owner unit and the project of a version and of a change become keys of the platform graph
+      (`node.project`, `node_version.owner`: text keys, no foreign key; `domain.Node.Owner` / `Project` and
+      `Draft.Owner` are keys, the `owner` patch of a draft names the unit's key); the guard checks them through the
+      seam `Graph.StructureKeys(kind, key)` (the platform's directory, for a content graph), else against the
+      transaction (`guardTx.inStructure`);
    2. links become URLs (step 2), so a content node may name a node of the platform graph (an owner, a project, a
       methodology) and the reverse;
    3. the clients route by namespace (`graphclient.Router`: a namespace to the graph serving it, from the sources of

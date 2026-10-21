@@ -1,10 +1,10 @@
 -- Graph schema (ADR 0054: the schema starts from zero, earlier migrations were folded into it). Every node version,
 -- link and branch membership is written by a change (change_id, NOT NULL, foreign key); every node version is owned
--- by an organisational unit (owner_id) and every node was created in a project (project_id), both nodes of the
--- structures the type catalogue tags. pkg/graph enforces the same rules in Go whatever the storage (guardRepo):
--- these constraints are a second line, not the only one. The foreign keys a bootstrap must satisfy in one
--- transaction (the root unit owns itself, the root project was created in itself, each one references the other)
--- are deferred to the commit.
+-- by an organisational unit (owner) and every node was created in a project (project), both the keys of nodes of
+-- the structures the type catalogue tags: keys, not foreign keys, for the structures may live in another graph, the
+-- platform graph (ADR 0154 §9); the guard checks them. pkg/graph enforces the same rules in Go whatever the storage
+-- (guardRepo): these constraints are a second line, not the only one. The foreign keys a bootstrap must satisfy in one
+-- transaction (its change and its baseline reference each other) are deferred to the commit.
 
 CREATE TABLE baseline (
     id          uuid PRIMARY KEY,
@@ -76,7 +76,7 @@ CREATE TABLE node (
     type       text    NOT NULL,
     latest     integer NOT NULL,
     -- the project the node was created in
-    project_id uuid    NOT NULL REFERENCES node(id) DEFERRABLE INITIALLY DEFERRED,
+    project    text    NOT NULL CHECK (project <> ''),
     UNIQUE (namespace, key)
 );
 
@@ -87,7 +87,7 @@ CREATE TABLE node_version (
     deleted       boolean     NOT NULL DEFAULT false,
     change_id     uuid        NOT NULL REFERENCES change(id) DEFERRABLE INITIALLY DEFERRED,
     -- the organisational unit responsible for the version
-    owner_id      uuid        NOT NULL REFERENCES node(id) DEFERRABLE INITIALLY DEFERRED,
+    owner         text        NOT NULL CHECK (owner <> ''),
     created_at    timestamptz NOT NULL,
     branch        text        NOT NULL DEFAULT 'main',
     parents       integer[]   NOT NULL DEFAULT '{}',
