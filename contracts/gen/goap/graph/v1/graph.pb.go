@@ -18043,7 +18043,11 @@ type GetChangeGraphRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	ChangeId string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
 	// flow or option (empty: the active option, else the main flow; "main": the main flow)
-	Flow          string `protobuf:"bytes,2,opt,name=flow,proto3" json:"flow,omitempty"`
+	Flow string `protobuf:"bytes,2,opt,name=flow,proto3" json:"flow,omitempty"`
+	// the world the change sees, whatever its flow (Graph.ChangeWorld): the nodes of its fork it left alone, the
+	// versions it committed and its drafts, with the links whose target node is in it (at whatever version they name);
+	// false: the graph a call on the change reads (an option's, else the reference baseline)
+	World         bool `protobuf:"varint,3,opt,name=world,proto3" json:"world,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -18090,6 +18094,13 @@ func (x *GetChangeGraphRequest) GetFlow() string {
 		return x.Flow
 	}
 	return ""
+}
+
+func (x *GetChangeGraphRequest) GetWorld() bool {
+	if x != nil {
+		return x.World
+	}
+	return false
 }
 
 type GetChangeGraphResponse struct {
@@ -20738,10 +20749,11 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04flow\x18\x02 \x01(\tR\x04flow\x12\x14\n" +
 	"\x05level\x18\x03 \x01(\tR\x05level\"L\n" +
 	"\x15GetChangeViewResponse\x123\n" +
-	"\bbaseline\x18\x01 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"H\n" +
+	"\bbaseline\x18\x01 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"^\n" +
 	"\x15GetChangeGraphRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x12\n" +
-	"\x04flow\x18\x02 \x01(\tR\x04flow\"n\n" +
+	"\x04flow\x18\x02 \x01(\tR\x04flow\x12\x14\n" +
+	"\x05world\x18\x03 \x01(\bR\x05world\"n\n" +
 	"\x16GetChangeGraphResponse\x12)\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x13.goap.graph.v1.NodeR\x05nodes\x12)\n" +
 	"\x05links\x18\x02 \x03(\v2\x13.goap.graph.v1.LinkR\x05links\"\xf9\x03\n" +

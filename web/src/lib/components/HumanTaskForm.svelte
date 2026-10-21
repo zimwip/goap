@@ -382,7 +382,7 @@
       oncreate={createNode}
       onremove={removeNode}
       onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })}
-      onopennode={(r) => openNode(r.node, { pin: true, change: changeId })}
+      onopennode={(r, edit) => openNode(r.node, { pin: true, change: changeId, generic: edit, edit })}
       onadd={(id) => (extraNodes = [...extraNodes, id])}
     />
     <p class="hint">Edits are drafts awaiting a review: they are not accepted here (ADR 0079); a reviewer accepts them in the change.</p>

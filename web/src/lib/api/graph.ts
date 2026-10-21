@@ -49,6 +49,10 @@ export const graph = {
       { id },
       signal,
     ),
+  /** The world a change sees, whatever its flow (`world`, Graph.ChangeWorld): the nodes of its fork it left alone, the
+   * versions it committed and its drafts (version 0), with the links whose target node is in it. */
+  getChangeWorld: (changeId: string, flow = '', signal?: AbortSignal) =>
+    rpc<{ changeId: string; flow: string; world: boolean }, { nodes?: GraphNode[]; links?: Link[] }>(GRAPH, 'GetChangeGraph', { changeId, flow, world: true }, signal),
   /** A page of the nodes of a baseline (by type, text-filtered), with the node count of every type. */
   listBaselineNodes: (req: BaselineNodesQuery, signal?: AbortSignal) =>
     rpc<BaselineNodesQuery, { baseline?: Baseline; nodes?: GraphNode[]; total?: number; types?: TypeCount[] }>(

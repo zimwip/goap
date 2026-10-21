@@ -70,8 +70,8 @@
     onremovemany?: (rows: LifecycleRow[]) => Promise<boolean> | boolean;
     /** opens the history of a stored node */
     onhistory: (row: LifecycleRow) => void;
-    /** opens the node editor on a stored node */
-    onopennode: (row: LifecycleRow) => void;
+    /** opens the node editor on a node, seen through the change (`edit`: to edit it, the Edit of its row) */
+    onopennode: (row: LifecycleRow, edit?: boolean) => void;
     /** show each row as the change impact of its node: why, versions, review */
     impacts?: boolean;
     /** the flow the rows are the view of: 'main' or an option id (ADR 0032 §6) */
@@ -371,8 +371,8 @@
                   type="button"
                   class="small"
                   disabled={busy !== ''}
-                  title="Edit the properties"
-                  onclick={() => (editing === r.node.id ? (editing = '') : startEdit(r))}
+                  title={openable(r) ? 'Edit the node in its editor, which sees the graph through this change' : 'Edit the properties'}
+                  onclick={() => (openable(r) ? onopennode(r, true) : editing === r.node.id ? (editing = '') : startEdit(r))}
                 >
                   Edit
                 </button>

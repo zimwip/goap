@@ -31,7 +31,7 @@
   import { setContext, tick, untrack } from 'svelte';
   import { applicable, loadApplicable } from '../../stores/project.svelte';
   import { rootProject } from '../../stores/session.svelte';
-  import { isWorking, refreshWorking, stopWorking, workIn } from '../../stores/workingChange.svelte';
+  import { isWorking, refreshWorking, stopWorking, workable, workIn } from '../../stores/workingChange.svelte';
   import { registerAssist, revealTarget, type ToolImpl } from '../../assist/registry.svelte';
   import { changeSummary, impactEntities, stepEntities, transitionEntities, type ImpactFacts } from '../../assist/changeScreen';
   import { recordAction } from '../../assist/recorder';
@@ -667,6 +667,20 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     }
   }
 
+  /**
+   * Opens the node of a row in its editor, seen through this change: the change becomes the one selected in the context
+   * (the working change), which the node editor follows (its world: what the change created, the versions it made, the
+   * rest as its fork has it). `edit`: the Edit of the row, the default node editor on the edit of its properties. A
+   * closed change is not worked in: the node opens as released.
+   */
+  async function openInChange(r: LifecycleRow, edit = false) {
+    const c = change;
+    const n = { id: r.impact?.post?.id ?? r.node.id ?? '', key: r.node.key ?? '' };
+    if (!c?.id || !workable(c)) return void openNode(n, { pin: true, generic: edit, edit });
+    if (!isWorking(c.id) && !(await workIn(c))) return;
+    void openNode(n, { pin: true, change: c.id, flow: scope || MAIN_SCOPE, generic: edit, edit });
+  }
+
   /** Writes new values for some properties (and possibly the state) of a node of this change. */
   async function edit(row: LifecycleRow, patch: Record<string, unknown>, state?: string): Promise<boolean> {
     if (row.created) return write(`${row.node.id}:edit`, { key: row.node.key, type: row.node.type }, { props: patch, state }, `edit ${row.node.key}`);
@@ -984,7 +998,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         if (!r) return `The impact ${String(a.impactId)} is not in this change.`;
         if (r.created && !r.impact?.post?.id) return 'This node has no draft to open yet.';
         selectedImpact = String(a.impactId);
-        void openNode({ id: r.impact?.post?.id ?? r.node.id ?? '', key: r.node.key ?? '' }, { pin: true, change: change?.id ?? '', flow: scope || MAIN_SCOPE });
+        void openInChange(r);
       },
     },
     {
@@ -1454,7 +1468,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         onremovemany={removeNodes}
         onopenreviews={() => (pane = 'reviews')}
         onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })}
-        onopennode={(r) => openNode({ id: r.impact?.post?.id ?? r.node.id ?? '', key: r.node.key ?? '' }, { pin: true, change: ch.id ?? '', flow: scope || MAIN_SCOPE })}
+        onopennode={(r, edit) => void openInChange(r, edit)}
         onadd={addImpact}
       />
       </div>

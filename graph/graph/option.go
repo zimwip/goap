@@ -326,53 +326,77 @@ func (g *Graph) ChangeGraph(ctx context.Context, id domain.ChangeID, flow string
 			nodes, links, err = baselineGraphTx(ctx, tx, c.BaselineID)
 			return err
 		}
-		v, err := changeViewTx(ctx, g, tx, c, flow, ViewWritten)
-		if err != nil {
-			return err
-		}
-		seen, err := g.newFlowNodes(tx, c, flow).nodes(ctx)
-		if err != nil {
-			return err
-		}
-		reader, err := g.newDraftReader(ctx, tx, c, flow, seen)
-		if err != nil {
-			return err
-		}
-		base, err := tx.NodesIn(ctx, v.ParentID, "")
-		if err != nil {
-			return err
-		}
-		refs := map[domain.NodeRef]bool{}
-		for _, n := range base {
-			if v.Contains(n.Ref()) {
-				nodes = append(nodes, n)
-				refs[n.Ref()] = true
-			}
-		}
-		for nid, ver := range v.Nodes {
-			if r := (domain.NodeRef{ID: nid, Version: ver}); !refs[r] {
-				n, err := reader.node(ctx, tx, r)
-				if err != nil {
-					return err
-				}
-				nodes = append(nodes, n)
-			}
-		}
-		slices.SortFunc(nodes, func(a, b domain.Node) int { return strings.Compare(a.Key, b.Key) })
-		for _, n := range nodes {
-			out, err := reader.outLinks(ctx, tx, n.Ref())
-			if err != nil {
-				return err
-			}
-			for _, l := range out {
-				if l.To.IsDraft() || v.Contains(l.To) {
-					links = append(links, l)
-				}
-			}
-		}
-		return nil
+		nodes, links, err = viewGraphTx(ctx, g, tx, c, flow, false)
+		return err
 	})
 	return
+}
+
+// ChangeWorld is the graph as a change sees it, whatever its flow: the nodes of its fork it left alone, the versions
+// it committed on its branch and the drafts it holds (on the flow named, else the active option, else the main flow),
+// with the links between them. The world is read by node: a link is kept when its target node is in it, at whatever
+// version the link names (a node the change moved keeps the links that name the version it was checked out from).
+func (g *Graph) ChangeWorld(ctx context.Context, id domain.ChangeID, flow string) (nodes []domain.Node, links []domain.Link, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		c, err := tx.Change(ctx, id)
+		if err != nil {
+			return err
+		}
+		nodes, links, err = viewGraphTx(ctx, g, tx, c, c.ResolveFlow(flow), true)
+		return err
+	})
+	return
+}
+
+// viewGraphTx is the graph of the written view of a change on a flow (ChangeView at written): its nodes, the drafts
+// read through the change, and the links between them, to the exact version of the view (byNode: to the node, at any
+// version).
+func viewGraphTx(ctx context.Context, g *Graph, tx Tx, c domain.Change, flow string, byNode bool) (nodes []domain.Node, links []domain.Link, err error) {
+	v, err := changeViewTx(ctx, g, tx, c, flow, ViewWritten)
+	if err != nil {
+		return nil, nil, err
+	}
+	seen, err := g.newFlowNodes(tx, c, flow).nodes(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	reader, err := g.newDraftReader(ctx, tx, c, flow, seen)
+	if err != nil {
+		return nil, nil, err
+	}
+	base, err := tx.NodesIn(ctx, v.ParentID, "")
+	if err != nil {
+		return nil, nil, err
+	}
+	refs := map[domain.NodeRef]bool{}
+	for _, n := range base {
+		if v.Contains(n.Ref()) {
+			nodes = append(nodes, n)
+			refs[n.Ref()] = true
+		}
+	}
+	for nid, ver := range v.Nodes {
+		if r := (domain.NodeRef{ID: nid, Version: ver}); !refs[r] {
+			n, err := reader.node(ctx, tx, r)
+			if err != nil {
+				return nil, nil, err
+			}
+			nodes = append(nodes, n)
+		}
+	}
+	slices.SortFunc(nodes, func(a, b domain.Node) int { return strings.Compare(a.Key, b.Key) })
+	for _, n := range nodes {
+		out, err := reader.outLinks(ctx, tx, n.Ref())
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, l := range out {
+			if _, in := v.Nodes[l.To.ID]; (byNode && in) || l.To.IsDraft() || v.Contains(l.To) {
+				links = append(links, l)
+			}
+		}
+	}
+	return nodes, links, nil
 }
 
 // BlackboardFacet computes a facet of the blackboard of a change (domain.Blackboard.Facets) from the change as stored,
