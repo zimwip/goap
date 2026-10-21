@@ -1,5 +1,4 @@
-// The context bar's state: what the editor shown tells it (its sections, as icons with their counts) and whether it
-// is open while not pinned (revealed). Pinned is `layout.rightOpen`.
+// The context of the header: what the editor shown tells it (its sections, as icons with their counts).
 import type { Pane } from '../components/EditorPanes.svelte';
 import type { IconName } from './Icon.svelte';
 
@@ -15,13 +14,6 @@ export interface EditorContext {
 }
 
 export const editorContext = $state({ current: undefined as EditorContext | undefined });
-
-/** The bar opened over the editor while not pinned (hovered, focused, or asked for), and whether it is docked. */
-export const contextBar = $state({
-  revealed: false,
-  /** pinned on a wide screen: the bar, open, takes its place beside the editor */
-  docked: false,
-});
 
 export function publishContext(c: EditorContext): void {
   editorContext.current = c;

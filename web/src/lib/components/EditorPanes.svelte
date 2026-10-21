@@ -9,7 +9,7 @@
     tint?: string;
     /** tooltip of the tab */
     title?: string;
-    /** the icon of the section in the context bar (else the one of its id) */
+    /** the icon of the section in the header's context (else the one of its id) */
     icon?: import('../shell/Icon.svelte').IconName;
   }
 </script>
@@ -17,7 +17,7 @@
 <script lang="ts">
   // The IDE's multi-pane editor: a main object opens in one editor tab and its
   // information is organized in sections (panes). The active pane is remembered
-  // by the caller (e.g. in the tab params) through `active`. The sections are listed by the context bar on the right
+  // by the caller (e.g. in the tab params) through `active`. The sections are listed by the context of the header
   // (an icon each, with its count), never as tabs of the editor.
   import type { Snippet } from 'svelte';
   import { publishContext, withdrawContext } from '../shell/context.svelte';
@@ -35,7 +35,7 @@
     panes: Pane[];
     active: string;
     label?: string;
-    /** the change these are the sections of (the change editor): the context bar binds them to it */
+    /** the change these are the sections of (the change editor): the header's context binds them to it */
     changeId?: string;
     /** content on the right, above the pane (actions, working change…) */
     toolbar?: Snippet;
@@ -50,7 +50,7 @@
   const visible = $derived(panes.filter((p) => !p.hidden));
   const current = $derived(visible.find((p) => p.id === active)?.id ?? visible[0]?.id ?? '');
 
-  // the context bar shows what this editor holds, while it is shown
+  // the header's context shows what this editor holds, while it is shown
   const owner = Symbol('panes');
   $effect(() => {
     publishContext({ owner, label, panes: visible, active: current, pick: (id) => (active = id), changeId });

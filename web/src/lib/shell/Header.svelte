@@ -24,6 +24,7 @@
   import { notifications, markRead, markAllRead, clearNotifications, type Notice } from '../stores/notifications.svelte';
   import { formatTime } from '../api';
   import Popover from './Popover.svelte';
+  import HeaderContext from './HeaderContext.svelte';
   import OnlineUsers from './OnlineUsers.svelte';
   import UsageToday from './UsageToday.svelte';
 
@@ -283,7 +284,7 @@
     {/if}
   </div>
 
-  <span class="spacer"></span>
+  <HeaderContext />
 
   <div class="right">
     <button
@@ -452,12 +453,8 @@
   }
   .search {
     position: relative;
-    flex: 1 1 260px;
-    min-width: 160px;
-    max-width: 420px;
-  }
-  .spacer {
-    flex: 1 1 0;
+    flex: 0 1 300px;
+    min-width: 120px;
   }
   .hbtn {
     display: inline-grid;

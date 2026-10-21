@@ -6,10 +6,8 @@
   import Header from './Header.svelte';
   import ActivityBar from './ActivityBar.svelte';
   import NavSidebar from './NavSidebar.svelte';
-  import ContextBar from './ContextBar.svelte';
   import Icon from './Icon.svelte';
   import { panelView } from './registry';
-  import { contextBar } from './context.svelte';
   import EditorArea from './EditorArea.svelte';
   import BottomPanel from './BottomPanel.svelte';
   import Resizer from './Resizer.svelte';
@@ -33,7 +31,7 @@
   import { assistantEnabled } from '../assistant/enabled';
   import { assistant, closePanel, openPanel } from '../stores/assistant.svelte';
   import StatusBar from './StatusBar.svelte';
-  import { layout, LIMITS, RAIL, toggleConsole } from './layout.svelte';
+  import { layout, LIMITS, toggleConsole } from './layout.svelte';
   import { activeTab, closeTab, startRouting } from './tabs.svelte';
   import { runTabAction, focusRequests } from './workbench.svelte';
   import { session } from '../stores/session.svelte';
@@ -63,49 +61,6 @@
   const narrow = $derived(width < 1024);
   const sideMax = $derived(Math.max(LIMITS.side.min, Math.min(LIMITS.side.max, Math.floor(width * 0.4))));
   const bottomMax = $derived(Math.max(LIMITS.bottom.min, Math.min(LIMITS.bottom.max, height - 200)));
-
-  // The context bar: docked open when pinned on a wide screen, else a rail of icons that slides open over the editor
-  // while hovered or focused.
-  const docked = $derived(layout.rightOpen && !narrow);
-  $effect(() => {
-    contextBar.docked = docked;
-  });
-  const ctxMax = $derived(Math.min(LIMITS.context.max, sideMax));
-  const ctxWidth = $derived(Math.max(LIMITS.context.min, Math.min(layout.contextWidth, ctxMax)));
-  let rail = $state<HTMLElement>();
-  let hideTimer: ReturnType<typeof setTimeout> | undefined;
-  let showTimer: ReturnType<typeof setTimeout> | undefined;
-
-  function reveal() {
-    clearTimeout(hideTimer);
-    contextBar.revealed = true;
-  }
-  function revealSoon() {
-    clearTimeout(hideTimer);
-    clearTimeout(showTimer);
-    showTimer = setTimeout(reveal, 160);
-  }
-  function hideSoon() {
-    clearTimeout(showTimer);
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => {
-      // kept while it holds the focus (a selector open)
-      if (rail?.contains(document.activeElement)) return;
-      contextBar.revealed = false;
-    }, 350);
-  }
-  function leaveFocus(e: FocusEvent) {
-    if (!rail?.contains(e.relatedTarget as Node | null)) {
-      clearTimeout(showTimer);
-      contextBar.revealed = false;
-    }
-  }
-  function railKey(e: KeyboardEvent) {
-    if (e.key === 'Escape' && contextBar.revealed) {
-      contextBar.revealed = false;
-      e.stopPropagation();
-    }
-  }
 
   // the side tool (Test, Properties, DSL Help), opened from the status bar
   const tool = $derived(layout.drawer ? panelView(layout.right) : undefined);
@@ -213,38 +168,6 @@
         <div class="tool-body"><C /></div>
       </div>
     {/if}
-    {#if docked}
-      <Resizer
-        orientation="vertical"
-        value={ctxWidth}
-        min={LIMITS.context.min}
-        max={ctxMax}
-        invert
-        label="Context bar width"
-        onresize={(v) => (layout.contextWidth = v)}
-      />
-      <div class="ctx-docked" style:width="{ctxWidth}px">
-        <ContextBar open />
-      </div>
-    {:else}
-      <!-- the context bar's rail: hovering or focusing it slides the bar open over the editor -->
-      <div class="rail-slot" style:width="{RAIL}px">
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="rail"
-          class:open={contextBar.revealed}
-          bind:this={rail}
-          style:width="{contextBar.revealed ? ctxWidth : RAIL}px"
-          onmouseenter={revealSoon}
-          onmouseleave={hideSoon}
-          onfocusin={reveal}
-          onfocusout={leaveFocus}
-          onkeydown={railKey}
-        >
-          <ContextBar open={contextBar.revealed} />
-        </div>
-      </div>
-    {/if}
   </div>
   <StatusBar />
 </div>
@@ -298,33 +221,6 @@
     flex: none;
     min-height: 0;
   }
-  .ctx-docked {
-    flex: none;
-    height: 100%;
-    min-width: 0;
-  }
-  .rail-slot {
-    flex: none;
-    position: relative;
-    height: 100%;
-  }
-  /* the rail slides open over the editor, from the right edge */
-  .rail {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    z-index: 20;
-    transition: width 0.18s ease;
-  }
-  .rail.open {
-    box-shadow: var(--shadow);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .rail {
-      transition: none;
-    }
-  }
   .tool {
     display: flex;
     flex-direction: column;
@@ -369,7 +265,7 @@
     border-right: 1px solid var(--border);
   }
   .narrow .side.right {
-    right: 44px;
+    right: 0;
     border-left: 1px solid var(--border);
   }
 </style>
