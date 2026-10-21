@@ -191,6 +191,18 @@
     padding: 0.15rem;
     color: var(--text-3);
   }
+  /* the pin: slanted while the navigation hides by its rail, upright and accented while pinned */
+  .icon :global(svg) {
+    transform: rotate(45deg);
+    transition: transform var(--transition);
+  }
+  .icon.on {
+    color: var(--accent);
+    background: var(--accent-soft, var(--hover));
+  }
+  .icon.on :global(svg) {
+    transform: none;
+  }
   .body {
     flex: 1;
     min-height: 0;

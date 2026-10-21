@@ -119,10 +119,21 @@
     display: grid;
     place-items: center;
   }
-  .pin:hover:not(:disabled),
-  .pin.on {
+  .pin:hover:not(:disabled) {
     background: none;
+    color: var(--text);
+  }
+  /* the pin: slanted while the bar closes to its rail, upright and accented while pinned */
+  .pin :global(svg) {
+    transform: rotate(45deg);
+    transition: transform var(--transition);
+  }
+  .pin.on,
+  .pin.on:hover:not(:disabled) {
     color: var(--accent);
+  }
+  .pin.on :global(svg) {
+    transform: none;
   }
   .secs {
     padding: 6px 0;
