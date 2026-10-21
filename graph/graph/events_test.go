@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/lib/outbox"
 )
 
@@ -106,6 +107,52 @@ func TestObserveNodeAndBaselineEvents(t *testing.T) {
 		}
 		if advanced == 0 {
 			t.Fatalf("no baseline event: %v", sink.subj)
+		}
+	})
+}
+
+// The change.updated event of a write carries the position the write left the log of the change at, the one the writer
+// gets in its watermark; a write of the header alone carries none (ADR 0153).
+func TestChangeEventCarriesThePosition(t *testing.T) {
+	forEachRepo(t, func(t *testing.T, repo Repo) {
+		ctx := context.Background()
+		g := New(repo)
+		base, err := g.BranchHead(ctx, "", domain.MainBranch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "positions", BaselineID: base.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sink := &recSink{}
+		g.Observe(sink)
+		updated := func() []int64 {
+			var out []int64
+			for i, v := range sink.vals {
+				if e, ok := v.(domain.ChangeEvent); ok && e.Type == "change.updated" && sink.subj[i] == "goap.changed."+string(c.ID) {
+					out = append(out, e.Change.Seq)
+				}
+			}
+			sink.vals, sink.subj = nil, nil
+			return out
+		}
+		wctx, w := graphapi.WithWatermark(ctx)
+		note := domain.ChangeItem{Type: domain.TypeArtifact, Target: "note", Data: map[string]any{"text": "one"}}
+		if _, err := g.AddItems(wctx, c.ID, []domain.ChangeItem{note}); err != nil {
+			t.Fatal(err)
+		}
+		if got := updated(); len(got) != 1 || got[0] != w.Of(c.ID) || got[0] <= 0 {
+			t.Fatalf("the event carries %v, the write left the log at %d", got, w.Of(c.ID))
+		}
+		title := "renamed"
+		if _, err := g.UpdateChange(ctx, c.ID, ChangePatch{Title: &title}); err != nil {
+			t.Fatal(err)
+		}
+		for _, seq := range updated() {
+			if seq > w.Of(c.ID) {
+				t.Fatalf("a header write carries %d, past the last entry %d", seq, w.Of(c.ID))
+			}
 		}
 	})
 }

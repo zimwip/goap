@@ -233,6 +233,7 @@ func (h *Hub) accept(subject string, v any, actor, command string) {
 		ev.Kind = "change"
 		ev.Type = changeType(m.Type, subject)
 		ev.Id, ev.Namespace, ev.Branch, ev.Project, ev.ChangeId = string(c.ID), c.Namespace, c.Branch, c.ProjectID, string(c.ID)
+		ev.Version = c.Seq // the position the write left the log of the change at (ADR 0153), 0 when it wrote none
 		ev.Time = pbconv.Time(h.now())
 		if access.IsPersonal(c) {
 			h.personal[string(c.ID)] = access.PersonalSubjectOf(c)

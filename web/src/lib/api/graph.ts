@@ -1,4 +1,5 @@
 import { rpc } from './transport';
+import { notePosition } from '../flux/positions';
 import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
 import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeStack, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, GraphStats, NamespaceSummary, ItemTypeInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, PendingSettings, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SettingEdit, SharedNode, StackChange, Tag, TypeCount } from './types/graph';
@@ -117,8 +118,12 @@ export const graph = {
     signal?: AbortSignal,
     opts: { headerOnly?: boolean; status?: string[]; project?: string; query?: string; limit?: number; cursor?: string } = {},
   ) => rpc<typeof opts, { changes?: Change[]; nextCursor?: string; total?: number }>(GRAPH, 'ListChanges', opts, signal),
+  /** A change, read at least as far as its log is known here (ADR 0153); its position is noted for the next reads. */
   getChange: (id: string, signal?: AbortSignal) =>
-    rpc<{ id: string }, { change?: Change }>(GRAPH, 'GetChange', { id }, signal),
+    rpc<{ id: string }, { change?: Change }>(GRAPH, 'GetChange', { id }, signal).then((r) => {
+      if (r.change) notePosition(id, r.change.seq);
+      return r;
+    }),
   /** A branch and the header of its head (its nodes are not sent, ADR 0140). */
   getBranch: (namespace: string, name: string, signal?: AbortSignal) =>
     rpc<{ namespace: string; name: string; headerOnly: boolean }, { branch?: Branch; head?: Baseline }>(

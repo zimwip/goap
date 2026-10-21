@@ -314,3 +314,12 @@ func TestConversationEventsAreTheOwners(t *testing.T) {
 		}
 	}
 }
+
+// A change event carries, as its version, the position its write left the log of the change at (ADR 0153).
+func TestChangeEventPosition(t *testing.T) {
+	h := NewHub()
+	publish(t, h, "goap.changed.C1", domain.ChangeEvent{Type: "change.updated", Change: domain.Change{ID: "C1", Seq: 42}})
+	if ev := h.ring[0].ev; ev.Type != "change.updated" || ev.Version != 42 {
+		t.Fatalf("event %s at version %d, want change.updated at 42", ev.Type, ev.Version)
+	}
+}

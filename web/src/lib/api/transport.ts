@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { COMMAND_HEADER, newCommandId } from '../flux/commands';
+import { AT_LEAST_HEADER, CHANGE_SEQ_HEADER, atLeastFor, notePositions } from '../flux/positions';
 
 const TOKEN_KEY = 'goap.token';
 
@@ -22,12 +23,15 @@ export const JAEGER_URL = ((import.meta.env.VITE_GOAP_JAEGER_URL as string | und
 export class RpcError extends Error {
   readonly code: string;
   readonly status: number;
+  /** the domain reason finer than the code (`behind`, `nothing-to-commit`), empty when none */
+  readonly reason: string;
 
-  constructor(code: string, message: string, status: number) {
+  constructor(code: string, message: string, status: number, reason = '') {
     super(message);
     this.name = 'RpcError';
     this.code = code;
     this.status = status;
+    this.reason = reason;
   }
 }
 
@@ -97,15 +101,38 @@ export function reportUnauthorized(sent: string | null, status: number, message:
   for (const fn of unauthorizedListeners) fn(message);
 }
 
+/** the service whose answers carry the positions of the logs of the changes (ADR 0153) */
+const GRAPH_SERVICE = 'goap.graph.v1.GraphService';
+/** the header naming the domain reason of an error finer than its code (lib/rpcerr) */
+const REASON_HEADER = 'Goap-Error-Reason';
+/** the waits before reading again a change whose view is behind the position asked for, in ms */
+export const BEHIND_RETRIES = [50, 150, 400];
+
 export async function rpc<TReq extends object, TRes>(
   service: string,
   method: string,
   body: TReq,
   signal?: AbortSignal,
 ): Promise<TRes> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await rpcOnce<TReq, TRes>(service, method, body, signal);
+    } catch (e) {
+      // a view behind what the web already knows of the change (another replica): read it again shortly
+      if (!(e instanceof RpcError && e.reason === 'behind') || attempt >= BEHIND_RETRIES.length) throw e;
+      await new Promise((resolve) => setTimeout(resolve, BEHIND_RETRIES[attempt]));
+      if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+    }
+  }
+}
+
+async function rpcOnce<TReq extends object, TRes>(service: string, method: string, body: TReq, signal?: AbortSignal): Promise<TRes> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json', [COMMAND_HEADER]: newCommandId() };
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  const graph = service === GRAPH_SERVICE;
+  const atLeast = graph ? atLeastFor(body) : undefined;
+  if (atLeast) headers[AT_LEAST_HEADER] = atLeast;
 
   let res: Response;
   try {
@@ -120,6 +147,7 @@ export async function rpc<TReq extends object, TRes>(
     throw new RpcError('unavailable', `Gateway unreachable: ${String(e)}`, 0);
   }
 
+  if (graph) notePositions(res.headers.get(CHANGE_SEQ_HEADER)); // where its writes left the logs, failed or not
   const text = await res.text();
   let data: unknown = undefined;
   if (text) {
@@ -133,7 +161,12 @@ export async function rpc<TReq extends object, TRes>(
   if (!res.ok) {
     const err = (data ?? {}) as { code?: string; message?: string };
     reportUnauthorized(token, res.status, err.message ?? '');
-    throw new RpcError(err.code ?? (res.status === 401 ? 'unauthenticated' : 'unknown'), err.message ?? (text || res.statusText), res.status);
+    throw new RpcError(
+      err.code ?? (res.status === 401 ? 'unauthenticated' : 'unknown'),
+      err.message ?? (text || res.statusText),
+      res.status,
+      res.headers.get(REASON_HEADER) ?? '',
+    );
   }
   return (data ?? {}) as TRes;
 }

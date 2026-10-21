@@ -65,6 +65,9 @@ type observedTx struct {
 	purged  []domain.ChangeID
 	// raised are the events of the changes the operations of the transaction emitted (raise), in order
 	raised []published
+	// seq is, per change, the position the transaction left its log at (its last impact event or fact, ADR 0153),
+	// carried by the change.updated event so that a reader can require it of its next read
+	seq map[domain.ChangeID]int64
 }
 
 // raise emits an event of a change from the transaction that writes its fact (ADR 0136): stored in the outbox with
@@ -212,6 +215,12 @@ func (t *observedTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.L
 	e, err := t.Tx.AppendLog(ctx, e)
 	if err == nil {
 		t.touch(e.Change)
+		if strings.HasPrefix(e.Type, domain.LogImpact+".") || strings.HasPrefix(e.Type, domain.LogFact+".") {
+			if t.seq == nil {
+				t.seq = map[domain.ChangeID]int64{}
+			}
+			t.seq[e.Change] = e.Seq
+		}
 	}
 	return e, err
 }
@@ -300,6 +309,7 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 	for _, id := range ot.changes {
 		c := ot.headers[id]
 		c.ID = id
+		c.Seq = ot.seq[id] // 0: the transaction left the log where it was
 		out = append(out, published{fmt.Sprintf(domain.SubjectChangeTouched, id), domain.ChangeEvent{Type: "change.updated", Change: c}})
 	}
 	docs, err := g.changeDocs(ctx, tx, ot)

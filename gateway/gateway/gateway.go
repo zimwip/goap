@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/lib/identity"
 )
 
@@ -221,8 +222,8 @@ func Mount(e *echo.Echo, cfg Config) error {
 	if len(cfg.AllowOrigins) > 0 {
 		e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 			AllowOrigins:  cfg.AllowOrigins,
-			AllowHeaders:  []string{"Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms", "X-User-Agent", "X-Goap-Command"},
-			ExposeHeaders: []string{"Grpc-Status", "Grpc-Message"},
+			AllowHeaders:  []string{"Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms", "X-User-Agent", "X-Goap-Command", graphapi.HeaderAtLeast},
+			ExposeHeaders: []string{"Grpc-Status", "Grpc-Message", graphapi.HeaderChangeSeq, "Goap-Error-Reason"},
 			AllowMethods:  []string{http.MethodGet, http.MethodPost, http.MethodOptions},
 		}))
 	}

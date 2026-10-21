@@ -19,7 +19,7 @@ func (g *Graph) checkCommit(ctx context.Context, id domain.ChangeID) error {
 	var c domain.Change
 	var bb domain.Blackboard
 	var committed []domain.NodeView
-	var logs map[string]facetRead
+	var logs map[string][]domain.LogEntry
 	err := g.repo.InTx(ctx, func(tx Tx) (err error) {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err

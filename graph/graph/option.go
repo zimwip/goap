@@ -384,21 +384,29 @@ type BlackboardFacet func(c domain.Change, now time.Time) any
 type LogFacet struct {
 	Types []string
 	Fold  func(ctx context.Context, c domain.Change, entries []domain.LogEntry) (any, error)
-	// Folder, when set, folds the entries incrementally (ADR 0153): the graph keeps a folder per change and adds only
-	// the entries that followed, Fold is then not used.
-	Folder func() domain.LogFolder
 }
 
-// withLogFacets folds the log facets of the blackboard from what was read with it (outside any transaction).
-func (g *Graph) withLogFacets(ctx context.Context, bb domain.Blackboard, logs map[string]facetRead) (domain.Blackboard, error) {
-	for name, r := range logs {
-		var v any
-		var err error
-		if r.folder != nil {
-			v, err = r.folder.Value(ctx, bb.Change)
-		} else {
-			v, err = g.LogFacets[name].Fold(ctx, bb.Change, r.entries)
+// logEntries reads the entries of the log of a change each log facet folds. Nothing is kept between calls (a facet is
+// built for the call that reads it and used for what it does, ADR 0153): the log is the state, read each time.
+func (g *Graph) logEntries(ctx context.Context, tx Tx, id domain.ChangeID) (map[string][]domain.LogEntry, error) {
+	if len(g.LogFacets) == 0 {
+		return nil, nil
+	}
+	out := make(map[string][]domain.LogEntry, len(g.LogFacets))
+	for name, f := range g.LogFacets {
+		es, err := tx.Log(ctx, domain.LogFilter{Change: id, Types: f.Types})
+		if err != nil {
+			return nil, err
 		}
+		out[name] = es
+	}
+	return out, nil
+}
+
+// withLogFacets folds the log facets of the blackboard from the entries read with it (outside any transaction).
+func (g *Graph) withLogFacets(ctx context.Context, bb domain.Blackboard, entries map[string][]domain.LogEntry) (domain.Blackboard, error) {
+	for name, es := range entries {
+		v, err := g.LogFacets[name].Fold(ctx, bb.Change, es)
 		if err != nil {
 			return bb, err
 		}

@@ -153,8 +153,6 @@ type Graph struct {
 	versions versionCache
 	// draftStates caches the drafts folded from the impact logs.
 	draftStates draftCache
-	// facetLogs caches the entries the log facets fold (facetlog.go).
-	facetLogs facetLogCache
 	// validations caches the validation of the impacts of a change on a flow, by the log position it was computed at.
 	validations validationCache
 }
@@ -777,7 +775,7 @@ func (g *Graph) Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blac
 // BlackboardIn is the blackboard as seen by the process running on a flow
 // branch ("" = the main flow, see domain.Change.View).
 func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow string) (bb domain.Blackboard, err error) {
-	var logs map[string]facetRead
+	var logs map[string][]domain.LogEntry
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
