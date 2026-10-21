@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Toolbar: the contextual actions of the active editor, in the header (the panel toggles are in the status bar):
+  // Toolbar: the contextual actions of the active editor, at the end of its tab row (the panel toggles are in the status bar):
   // the primary ones and the first others as buttons, the rest in a "More" menu.
   import Icon from './Icon.svelte';
   import Popover from './Popover.svelte';

@@ -1,34 +1,30 @@
 <script lang="ts">
-  // The floating assistant (ADR 0087): a round bubble on every screen that opens the conversation as a compact panel,
-  // docked in the lower part of the context bar (which shows itself for it), floating by the bubble while there is
-  // no bar to hold it.
-  // Not rendered when the assistant alias has no model. It keeps clear of the right activity bar and tool panel, the
-  // console and the status bar, and gives way to the field helper (ADR 0086): they are never open together.
+  // The floating assistant (ADR 0087): a round bubble on every screen that opens the conversation as a compact panel
+  // by it. Not rendered when the assistant alias has no model. It keeps clear of the context bar and the side tool,
+  // the console and the status bar, and gives way to the field helper (ADR 0086): they are never open together.
   import { tick } from 'svelte';
   import Icon from '../shell/Icon.svelte';
   import Assistant from '../views/assistant/Assistant.svelte';
-  import { layout } from '../shell/layout.svelte';
+  import { layout, LIMITS, RAIL } from '../shell/layout.svelte';
   import { openTab } from '../shell/tabs.svelte';
   import { helper } from '../helper/helper.svelte';
   import { assistant, closePanel, openPanel } from '../stores/assistant.svelte';
   import { assistantEnabled } from './enabled';
   import { startCapture } from '../assist/capture';
   import { entityOfElement } from '../assist/registry.svelte';
-  import { dock, portal } from './dock.svelte';
   import { contextBar } from '../shell/context.svelte';
 
   // what is selected or focused on the page is remembered, for the assistant to use (ADR 0092)
   $effect(() => startCapture((el) => !!entityOfElement(el)));
 
   const enabled = $derived(assistantEnabled());
-  const docked = $derived(!!dock.el);
   let button = $state<HTMLButtonElement>();
   let returnFocus: Element | null = null;
 
-  // keep clear of the context bar (its edge, or the bar itself while it shows) and of what is docked at the bottom
-  const EDGE = 34;
+  // keep clear of the context bar (its rail, or the bar while open), of the side tool and of the console
   const STATUS_BAR = 24;
-  const right = $derived((contextBar.docked ? 0 : EDGE) + (contextBar.docked || contextBar.revealed ? layout.rightWidth : 0) + 12);
+  const ctx = $derived(contextBar.docked || contextBar.revealed ? Math.max(LIMITS.context.min, Math.min(layout.contextWidth, LIMITS.context.max)) : RAIL);
+  const right = $derived(ctx + (layout.drawer ? layout.rightWidth : 0) + 12);
   const bottom = $derived(STATUS_BAR + (layout.bottomOpen ? layout.bottomHeight : 0) + 12);
 
   // the helper and the panel never share the screen
@@ -74,21 +70,17 @@
   {#if assistant.panelOpen}
     <div
       class="panel"
-      class:docked
       role="dialog"
       aria-modal="false"
       aria-label="Assistant"
       tabindex="-1"
-      style:right={docked ? undefined : `${right}px`}
-      style:bottom={docked ? undefined : `${bottom + 52}px`}
+      style:right="{right}px"
+      style:bottom="{bottom + 52}px"
       onkeydown={keydown}
-      use:portal={dock.el}
     >
       <Assistant mode="panel" onclose={closePanel} onexpand={expand} />
     </div>
   {/if}
-  <!-- docked, the conversation closes from its own head: the bubble would cover its input -->
-  {#if !(docked && assistant.panelOpen)}
   <button
     type="button"
     data-assistant
@@ -104,7 +96,6 @@
   >
     <Icon name="chat" size={20} />
   </button>
-  {/if}
 {/if}
 
 <style>
@@ -140,13 +131,5 @@
     border-radius: var(--radius);
     box-shadow: var(--shadow-pop);
     overflow: hidden;
-  }
-  .panel.docked {
-    position: static;
-    width: auto;
-    height: auto;
-    flex: 1;
-    min-height: 0;
-    box-shadow: none;
   }
 </style>

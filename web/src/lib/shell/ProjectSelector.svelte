@@ -24,7 +24,7 @@
 
 <div class="item-wrap" class:block>
   <button type="button" class="proj" class:none={!project.current} aria-haspopup="dialog" aria-expanded={open} title={project.current ? `Active project: ${project.current}` : 'No project selected: pick the project you work in'} onclick={() => (open = !open)}>
-    <Icon name="diff" size={14} />
+    <Icon name="folder" size={14} />
     <span class="pl">{label}</span>
   </button>
   <Popover bind:open label="Project" align={block ? "right" : "left"} placement="below" width="260px">

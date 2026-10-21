@@ -1,6 +1,7 @@
 <script lang="ts">
   // Editor area: tabs and the active tab's editor.
   import TabBar from './TabBar.svelte';
+  import Toolbar from './Toolbar.svelte';
   import Presence from '../components/Presence.svelte';
   import { editorView } from './registry';
   import { tabsState, activeTab, pinTab, isDirty } from './tabs.svelte';
@@ -29,7 +30,11 @@
 
 <div class="area">
   {#if tabsState.tabs.length}
-    <TabBar />
+    <!-- the open tabs, then the actions of the one shown -->
+    <div class="tabrow">
+      <div class="tabs"><TabBar /></div>
+      <Toolbar />
+    </div>
   {/if}
   <div class="content" role="tabpanel" aria-label={view?.tabTitle(tab!) ?? 'Home'} oninput={edited} bind:clientHeight={areaH} style:--area-h="{areaH}px">
     {#if tab && view}
@@ -54,6 +59,30 @@
     height: 100%;
     min-width: 0;
     background: transparent;
+  }
+  .tabrow {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-panel-translucent);
+  }
+  .tabs {
+    flex: 1;
+    min-width: 0;
+  }
+  .tabs :global(.bar) {
+    border-bottom: none;
+    background: none;
+  }
+  .tabrow :global(.toolbar) {
+    flex: none;
+    max-width: 60%;
+    padding: 0 8px;
+  }
+  .tabrow :global(.toolbar .tb) {
+    min-height: 24px;
+    font-size: var(--fs-sm);
   }
   .content {
     flex: 1;

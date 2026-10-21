@@ -19,7 +19,6 @@
   import { openPlatformStatus } from './platformStatusState.svelte';
   import { openSettings } from './settingsState.svelte';
   import { shownTheme, type Theme } from './layout.svelte';
-  import Toolbar from './Toolbar.svelte';
   import { prefs, editPrefs } from '../stores/preferences.svelte';
   import { openUsage } from './usageState.svelte';
   import { notifications, markRead, markAllRead, clearNotifications, type Notice } from '../stores/notifications.svelte';
@@ -285,7 +284,6 @@
   </div>
 
   <span class="spacer"></span>
-  <Toolbar />
 
   <div class="right">
     <button

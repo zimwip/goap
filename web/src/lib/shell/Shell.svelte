@@ -8,8 +8,8 @@
   import NavSidebar from './NavSidebar.svelte';
   import ContextBar from './ContextBar.svelte';
   import Icon from './Icon.svelte';
+  import { panelView } from './registry';
   import { contextBar } from './context.svelte';
-  import { viewsIn } from './registry';
   import EditorArea from './EditorArea.svelte';
   import BottomPanel from './BottomPanel.svelte';
   import Resizer from './Resizer.svelte';
@@ -33,7 +33,7 @@
   import { assistantEnabled } from '../assistant/enabled';
   import { assistant, closePanel, openPanel } from '../stores/assistant.svelte';
   import StatusBar from './StatusBar.svelte';
-  import { layout, LIMITS, toggleConsole } from './layout.svelte';
+  import { layout, LIMITS, RAIL, toggleConsole } from './layout.svelte';
   import { activeTab, closeTab, startRouting } from './tabs.svelte';
   import { runTabAction, focusRequests } from './workbench.svelte';
   import { session } from '../stores/session.svelte';
@@ -64,45 +64,54 @@
   const sideMax = $derived(Math.max(LIMITS.side.min, Math.min(LIMITS.side.max, Math.floor(width * 0.4))));
   const bottomMax = $derived(Math.max(LIMITS.bottom.min, Math.min(LIMITS.bottom.max, height - 200)));
 
-  // The context bar: docked when pinned on a wide screen, else on the edge, shown over the editor while hovered,
-  // focused, asked for (an edge button) or holding the assistant's conversation.
+  // The context bar: docked open when pinned on a wide screen, else a rail of icons that slides open over the editor
+  // while hovered or focused.
   const docked = $derived(layout.rightOpen && !narrow);
   $effect(() => {
     contextBar.docked = docked;
   });
-  $effect(() => {
-    if (assistant.panelOpen && !docked) contextBar.revealed = true;
-  });
-  const shown = $derived(!docked && (contextBar.revealed || (layout.rightOpen && narrow)));
-  let overlay = $state<HTMLElement>();
+  const ctxMax = $derived(Math.min(LIMITS.context.max, sideMax));
+  const ctxWidth = $derived(Math.max(LIMITS.context.min, Math.min(layout.contextWidth, ctxMax)));
+  let rail = $state<HTMLElement>();
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
   let showTimer: ReturnType<typeof setTimeout> | undefined;
-  const edgeTools = $derived(viewsIn('right'));
 
-  function reveal(tool?: string) {
+  function reveal() {
     clearTimeout(hideTimer);
-    if (tool) layout.right = tool;
     contextBar.revealed = true;
   }
   function revealSoon() {
+    clearTimeout(hideTimer);
     clearTimeout(showTimer);
-    showTimer = setTimeout(() => reveal(), 180);
+    showTimer = setTimeout(reveal, 160);
   }
   function hideSoon() {
     clearTimeout(showTimer);
     clearTimeout(hideTimer);
     hideTimer = setTimeout(() => {
-      // kept while it holds the focus or the conversation
-      if (assistant.panelOpen || overlay?.contains(document.activeElement)) return;
+      // kept while it holds the focus (a selector open)
+      if (rail?.contains(document.activeElement)) return;
       contextBar.revealed = false;
-    }, 400);
+    }, 350);
   }
   function leaveFocus(e: FocusEvent) {
-    if (!overlay?.contains(e.relatedTarget as Node | null)) hideSoon();
-  }
-  function overlayKey(e: KeyboardEvent) {
-    if (e.key === 'Escape' && !assistant.panelOpen) {
+    if (!rail?.contains(e.relatedTarget as Node | null)) {
+      clearTimeout(showTimer);
       contextBar.revealed = false;
+    }
+  }
+  function railKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && contextBar.revealed) {
+      contextBar.revealed = false;
+      e.stopPropagation();
+    }
+  }
+
+  // the side tool (Test, Properties, DSL Help), opened from the status bar
+  const tool = $derived(layout.drawer ? panelView(layout.right) : undefined);
+  function toolKey(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      layout.drawer = false;
       e.stopPropagation();
     }
   }
@@ -181,41 +190,60 @@
         </div>
       {/if}
     </div>
+    {#if tool}
+      {@const C = tool.component}
+      {#if !narrow}
+        <Resizer
+          orientation="vertical"
+          value={Math.min(layout.rightWidth, sideMax)}
+          min={LIMITS.side.min}
+          max={sideMax}
+          invert
+          label="Side tool width"
+          onresize={(v) => (layout.rightWidth = v)}
+        />
+      {/if}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="side right tool" style:width="{Math.min(layout.rightWidth, sideMax)}px" onkeydown={toolKey}>
+        <div class="tool-head">
+          <Icon name={tool.icon} size={13} />
+          <span class="tool-title">{tool.title}</span>
+          <button type="button" class="ghost small" title="Close" aria-label="Close {tool.title}" onclick={() => (layout.drawer = false)}><Icon name="x" size={13} /></button>
+        </div>
+        <div class="tool-body"><C /></div>
+      </div>
+    {/if}
     {#if docked}
       <Resizer
         orientation="vertical"
-        value={Math.min(layout.rightWidth, sideMax)}
-        min={LIMITS.side.min}
-        max={sideMax}
+        value={ctxWidth}
+        min={LIMITS.context.min}
+        max={ctxMax}
         invert
         label="Context bar width"
-        onresize={(v) => (layout.rightWidth = v)}
+        onresize={(v) => (layout.contextWidth = v)}
       />
-      <div class="side right" style:width="{Math.min(layout.rightWidth, sideMax)}px">
-        <ContextBar />
+      <div class="ctx-docked" style:width="{ctxWidth}px">
+        <ContextBar open />
       </div>
     {:else}
-      <!-- the context bar's edge: hovering or focusing it shows the bar -->
-      <div class="edge" role="toolbar" aria-orientation="vertical" tabindex="-1" aria-label="Context bar" onmouseenter={revealSoon} onmouseleave={() => clearTimeout(showTimer)}>
-        <button type="button" title="Context" aria-label="Show the context" aria-expanded={shown} onclick={() => reveal()} onfocus={() => reveal()}><Icon name="target" size={16} /></button>
-        {#each edgeTools as v (v.id)}
-          <button type="button" title={v.title} aria-label={v.title} onclick={() => reveal(v.id)}><Icon name={v.icon} size={16} /></button>
-        {/each}
-      </div>
-      {#if shown}
+      <!-- the context bar's rail: hovering or focusing it slides the bar open over the editor -->
+      <div class="rail-slot" style:width="{RAIL}px">
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
-          class="side right over"
-          bind:this={overlay}
-          style:width="{Math.min(layout.rightWidth, sideMax)}px"
-          onmouseenter={() => clearTimeout(hideTimer)}
+          class="rail"
+          class:open={contextBar.revealed}
+          bind:this={rail}
+          style:width="{contextBar.revealed ? ctxWidth : RAIL}px"
+          onmouseenter={revealSoon}
           onmouseleave={hideSoon}
+          onfocusin={reveal}
           onfocusout={leaveFocus}
-          onkeydown={overlayKey}
+          onkeydown={railKey}
         >
-          <ContextBar />
+          <ContextBar open={contextBar.revealed} />
         </div>
-      {/if}
+      </div>
     {/if}
   </div>
   <StatusBar />
@@ -270,45 +298,62 @@
     flex: none;
     min-height: 0;
   }
-  .edge {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    width: 34px;
+  .ctx-docked {
     flex: none;
-    padding: 6px 0;
-    background: var(--bg-panel-translucent);
-    border-left: 1px solid var(--border);
+    height: 100%;
+    min-width: 0;
   }
-  .edge button {
-    width: 34px;
-    height: 34px;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    color: var(--text-3);
+  .rail-slot {
+    flex: none;
+    position: relative;
+    height: 100%;
   }
-  .edge button:hover:not(:disabled) {
-    background: transparent;
-    color: var(--text);
-  }
-  .edge button:focus-visible {
-    outline-offset: -2px;
-  }
-  /* the context bar shown over the editor, by its edge */
-  .side.right.over {
+  /* the rail slides open over the editor, from the right edge */
+  .rail {
     position: absolute;
     top: 0;
     bottom: 0;
-    right: 34px;
+    right: 0;
     z-index: 20;
-    max-width: calc(100% - 34px);
-    border-left: 1px solid var(--border);
+    transition: width 0.18s ease;
+  }
+  .rail.open {
     box-shadow: var(--shadow);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rail {
+      transition: none;
+    }
+  }
+  .tool {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+  }
+  .tool-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    flex: none;
+    padding: 0 4px 0 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-3);
+  }
+  .tool-title {
+    flex: 1;
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .tool-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
   }
   /* Narrow: side panels overlaid on the editor. */
   .narrow .side {
@@ -324,7 +369,7 @@
     border-right: 1px solid var(--border);
   }
   .narrow .side.right {
-    right: 34px;
+    right: 44px;
     border-left: 1px solid var(--border);
   }
 </style>

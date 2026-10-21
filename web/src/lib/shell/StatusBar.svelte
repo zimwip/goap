@@ -12,7 +12,8 @@
   import { activeJobs, jobList, onJobEnded, startJobs } from '../stores/jobs.svelte';
   import { fraction, jobTitle } from '../jobView';
   import { notify } from './workbench.svelte';
-  import { layout } from './layout.svelte';
+  import { layout, toggleTool } from './layout.svelte';
+  import { viewsIn } from './registry';
   import { live } from '../stores/live.svelte';
   import { project } from '../stores/project.svelte';
   import { working } from '../stores/workingChange.svelte';
@@ -46,6 +47,9 @@
     const t = setInterval(() => (now = Date.now()), 1000);
     return () => clearInterval(t);
   });
+
+  // the side tools (Test, Properties, DSL Help): each opens over the right of the editor
+  const tools = $derived(viewsIn('right'));
 
   const runs = $derived(myActiveRuns());
   const running = $derived(runs.some((p) => p.status === 'running'));
@@ -144,9 +148,14 @@
   <button type="button" class="item" aria-pressed={layout.bottomOpen} title="Console (Ctrl+J)" aria-label="Console" onclick={() => (layout.bottomOpen = !layout.bottomOpen)}
     ><Icon name="panelBottom" size={13} /></button
   >
-  <button type="button" class="item" aria-pressed={layout.rightOpen} title="Right side panel" aria-label="Right side panel" onclick={() => (layout.rightOpen = !layout.rightOpen)}
+  <button type="button" class="item" aria-pressed={layout.rightOpen} title="Keep the context bar open" aria-label="Pin the context bar" onclick={() => (layout.rightOpen = !layout.rightOpen)}
     ><Icon name="panelRight" size={13} /></button
   >
+  <span class="sep" aria-hidden="true"></span>
+  {#each tools as v (v.id)}
+    {@const on = layout.drawer && layout.right === v.id}
+    <button type="button" class="item" aria-pressed={on} title={v.title} onclick={() => toggleTool('right', v.id)}><Icon name={v.icon} size={12} />{v.title}</button>
+  {/each}
 </footer>
 
 <style>

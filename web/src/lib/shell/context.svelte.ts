@@ -1,7 +1,7 @@
-// The context bar's state: what the editor shown tells it (its sections, what waits on people) and whether it is
-// shown while not pinned (revealed). Pinned is `layout.rightOpen`; the tool of its lower part is `layout.right`.
-import type { Snippet } from 'svelte';
+// The context bar's state: what the editor shown tells it (its sections, as icons with their counts) and whether it
+// is open while not pinned (revealed). Pinned is `layout.rightOpen`.
 import type { Pane } from '../components/EditorPanes.svelte';
+import type { IconName } from './Icon.svelte';
 
 export interface EditorContext {
   /** who published it: only its owner takes it back */
@@ -12,16 +12,14 @@ export interface EditorContext {
   pick: (id: string) => void;
   /** the change the sections are of, when the editor is a change's */
   changeId?: string;
-  /** what the editor puts under its sections (what waits on people…) */
-  aside?: Snippet;
 }
 
 export const editorContext = $state({ current: undefined as EditorContext | undefined });
 
-/** The bar shown over the editor while not pinned (hovered, focused, or asked for), and whether it is docked. */
+/** The bar opened over the editor while not pinned (hovered, focused, or asked for), and whether it is docked. */
 export const contextBar = $state({
   revealed: false,
-  /** pinned on a wide screen: the bar takes its place beside the editor, which no longer repeats its sections */
+  /** pinned on a wide screen: the bar, open, takes its place beside the editor */
   docked: false,
 });
 
@@ -33,16 +31,38 @@ export function withdrawContext(owner: symbol): void {
   if (editorContext.current?.owner === owner) editorContext.current = undefined;
 }
 
-/** The sections of a change, for a change the editor does not show (they open its tab on that section). */
-export const CHANGE_SECTIONS: { id: string; label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'impacts', label: 'Impacts' },
-  { id: 'reviews', label: 'Reviews' },
-  { id: 'artifacts', label: 'Artifacts' },
-  { id: 'decisions', label: 'Decisions' },
-  { id: 'risks', label: 'Risks & actions' },
-  { id: 'verification', label: 'Verification' },
-  { id: 'derogations', label: 'Derogations' },
-  { id: 'changes', label: 'Changes' },
-  { id: 'audit', label: 'Audit' },
-];
+// the icon of a section by its id, shared by the editors (a pane may name its own)
+const PANE_ICONS: Record<string, IconName> = {
+  overview: 'app',
+  details: 'list',
+  impacts: 'diff',
+  reviews: 'check',
+  artifacts: 'file',
+  decisions: 'help',
+  risks: 'alert',
+  verification: 'shield',
+  derogations: 'key',
+  changes: 'branch',
+  audit: 'trace',
+  graph: 'graph',
+  issues: 'alert',
+  save: 'save',
+  types: 'database',
+  relations: 'node',
+  lifecycle: 'refresh',
+  history: 'clock',
+  mcp: 'zap',
+  members: 'user',
+  assignments: 'tag',
+};
+
+export const paneIcon = (p: Pane): IconName => p.icon ?? PANE_ICONS[p.id] ?? 'list';
+
+/** What the icon of a closed bar shows of a badge: its number, a mark, or nothing. */
+export function compactBadge(badge: string | number | undefined): string {
+  if (badge === undefined || badge === '') return '';
+  if (typeof badge === 'number') return badge > 99 ? '99+' : String(badge);
+  const n = /^\d+/.exec(badge)?.[0];
+  if (n) return Number(n) > 99 ? '99+' : n;
+  return badge === '!' ? badge : '';
+}

@@ -1,49 +1,16 @@
 <script lang="ts">
-  // The context bar (right): where the person works (project, working change), the context of what the editor shows
-  // (its sections, bound to the change shown or else to the working change, and what waits on people), then the side
-  // tools (the assistant's conversation, Test, Info, Help). Pinned, it is docked beside the editor; else it hides on
-  // the edge and shows over the editor while hovered or focused.
+  // The context bar (right), a menu: where the person works (project, working change), then the sections of the
+  // editor shown (bound to the change it shows), an icon each with its count. Closed, it is a rail of icons; open
+  // (hovered, focused, or pinned beside the editor), it slides out and each icon gets its label.
   import Icon from './Icon.svelte';
   import ProjectSelector from './ProjectSelector.svelte';
   import WorkingChangeSelector from './WorkingChangeSelector.svelte';
-  import { panelView, viewsIn } from './registry';
   import { layout } from './layout.svelte';
-  import { openTab } from './tabs.svelte';
-  import { CHANGE_SECTIONS, contextBar, editorContext } from './context.svelte';
-  import { working } from '../stores/workingChange.svelte';
-  import { assistant, closePanel, openPanel } from '../stores/assistant.svelte';
-  import { assistantEnabled } from '../assistant/enabled';
-  import { offerDock } from '../assistant/dock.svelte';
-  import { shortId } from '../api';
+  import { compactBadge, contextBar, editorContext, paneIcon } from './context.svelte';
 
-  const ASSISTANT = 'assistant';
+  let { open = false }: { open?: boolean } = $props();
+
   const ec = $derived(editorContext.current);
-  const w = $derived(working.change);
-  // the working change's sections, when the editor does not show that change
-  const workingSections = $derived(w && ec?.changeId !== w.id);
-  const enabled = $derived(assistantEnabled());
-
-  const tools = $derived([
-    ...(enabled ? [{ id: ASSISTANT, title: 'Assistant', icon: 'chat' as const }] : []),
-    ...viewsIn('right').map((v) => ({ id: v.id, title: v.title, icon: v.icon })),
-  ]);
-  const tool = $derived(tools.find((t) => t.id === layout.right) ?? tools[0]);
-  const view = $derived(tool && tool.id !== ASSISTANT ? panelView(tool.id) : undefined);
-
-  // the bubble opened the conversation: it shows here
-  $effect(() => {
-    if (assistant.panelOpen && enabled) layout.right = ASSISTANT;
-  });
-
-  function pick(id: string) {
-    layout.right = id;
-    if (id === ASSISTANT) openPanel();
-    else if (assistant.panelOpen) closePanel();
-  }
-
-  function openSection(changeId: string, pane: string) {
-    openTab({ kind: 'change', params: { id: changeId, pane } }, { pin: true });
-  }
 
   function pin() {
     layout.rightOpen = !layout.rightOpen;
@@ -60,92 +27,56 @@
   }
 </script>
 
-<aside class="ctx" aria-label="Context">
-  <header class="top">
-    <h2>Context</h2>
+<aside class="ctx" class:open aria-label="Context">
+  <div class="top">
     <button
       type="button"
-      class="ghost small icon"
+      class="pin"
       class:on={layout.rightOpen}
       aria-pressed={layout.rightOpen}
-      title={layout.rightOpen ? 'Unpin: the bar hides on the edge' : 'Pin the bar beside the editor'}
+      title={layout.rightOpen ? 'Unpin: the bar closes to its icons' : 'Pin the bar open beside the editor'}
       aria-label="Pin the context bar"
       onclick={pin}><Icon name="pin" size={14} /></button
     >
-  </header>
-
-  <div class="upper">
-    <section class="where" aria-label="Where you work">
-      <div class="ui-section-head">Project</div>
-      <ProjectSelector block />
-      <WorkingChangeSelector block />
-    </section>
-
-    {#if ec}
-      <section aria-label={ec.label}>
-        <div class="ui-section-head">{ec.label}</div>
-        <!-- svelte-ignore a11y_interactive_supports_focus -->
-        <div class="list" role="tablist" aria-label={ec.label} aria-orientation="vertical" onkeydown={keydown}>
-          {#each ec.panes as p (p.id)}
-            {@const on = ec.active === p.id}
-            <button
-              type="button"
-              role="tab"
-              id="ctx-tab-{p.id}"
-              class="ui-nav-item"
-              class:active={on}
-              aria-selected={on}
-              tabindex={on ? 0 : -1}
-              title={p.title}
-              onclick={() => ec.pick(p.id)}
-            >
-              {#if p.tint}<span class="tint" style="background: {p.tint}" aria-hidden="true"></span>{/if}
-              <span class="label">{p.label}</span>
-              {#if p.badge !== undefined && p.badge !== ''}<span class="count">{p.badge}</span>{/if}
-            </button>
-          {/each}
-        </div>
-      </section>
-      {#if contextBar.docked && ec.aside}<div class="aside">{@render ec.aside()}</div>{/if}
-    {/if}
-
-    {#if workingSections && w}
-      <section aria-label="Working change">
-        <div class="ui-section-head" title={w.title}>Working change · {w.title || shortId(w.id)}</div>
-        <ul class="list">
-          {#each CHANGE_SECTIONS as s (s.id)}
-            <li><button type="button" class="ui-nav-item" onclick={() => openSection(w.id ?? '', s.id)}><span class="label">{s.label}</span></button></li>
-          {/each}
-        </ul>
-      </section>
-    {/if}
+    <span class="title">Context</span>
   </div>
 
-  {#if tools.length}
-    <div class="tools">
-      <div class="strip" role="tablist" aria-label="Side tools">
-        {#each tools as t (t.id)}
-          {@const on = tool?.id === t.id}
-          <button type="button" role="tab" class:on aria-selected={on} title={t.title} onclick={() => pick(t.id)}>
-            <Icon name={t.icon} size={13} /><span class="tl">{t.title}</span>
+  <section class="where" aria-label="Where you work">
+    <ProjectSelector block />
+    <WorkingChangeSelector block />
+  </section>
+
+  {#if ec}
+    <section class="secs" aria-label={ec.label}>
+      <div class="head">{ec.label}</div>
+      <!-- svelte-ignore a11y_interactive_supports_focus -->
+      <div class="list" role="tablist" aria-label={ec.label} aria-orientation="vertical" onkeydown={keydown}>
+        {#each ec.panes as p (p.id)}
+          {@const on = ec.active === p.id}
+          {@const count = compactBadge(p.badge)}
+          <button
+            type="button"
+            role="tab"
+            id="ctx-tab-{p.id}"
+            class="sec"
+            class:on
+            aria-selected={on}
+            aria-controls="pane-{p.id}"
+            tabindex={on ? 0 : -1}
+            title={p.title ?? (p.badge !== undefined && p.badge !== '' ? `${p.label} · ${p.badge}` : p.label)}
+            onclick={() => ec.pick(p.id)}
+          >
+            <span class="ic">
+              <Icon name={paneIcon(p)} size={16} />
+              {#if count && !open}<span class="dot">{count}</span>{/if}
+              {#if p.tint}<span class="tint" style="background: {p.tint}" aria-hidden="true"></span>{/if}
+            </span>
+            <span class="label">{p.label}</span>
+            {#if p.badge !== undefined && p.badge !== ''}<span class="count">{p.badge}</span>{/if}
           </button>
         {/each}
       </div>
-      <div class="body" role="tabpanel" aria-label={tool?.title}>
-        {#if tool?.id === ASSISTANT}
-          <!-- the assistant's conversation docks here (its bubble opens it) -->
-          <div class="dock" use:offerDock></div>
-          {#if !assistant.panelOpen}
-            <div class="ui-empty">
-              <button type="button" class="ui-btn primary" onclick={openPanel}><Icon name="chat" size={14} />Ask the assistant</button>
-            </div>
-          {/if}
-        {:else if view}
-          {@const C = view.component}
-          <C />
-        {/if}
-      </div>
-    </div>
+    </section>
   {/if}
 </aside>
 
@@ -155,140 +86,173 @@
     flex-direction: column;
     height: 100%;
     min-width: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
     background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    scrollbar-width: thin;
   }
   .top {
     display: flex;
     align-items: center;
-    height: 32px;
-    padding: 0 0.3rem 0 0.8rem;
+    flex-direction: row-reverse;
+    height: 36px;
     flex: none;
-    border-bottom: 1px solid var(--border);
   }
-  h2 {
+  .title {
     flex: 1;
-    margin: 0;
+    padding-left: 0.8rem;
     font-size: var(--fs-xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
   }
-  .icon {
-    padding: 0.2rem;
+  .pin,
+  .sec {
+    border: none;
+    border-radius: 0;
+    background: none;
     color: var(--text-3);
+    padding: 0;
+    min-height: 0;
   }
-  .icon.on {
-    color: var(--accent);
-  }
-  .upper {
-    flex: 0 1 auto;
-    max-height: 58%;
-    overflow: auto;
-    padding: var(--space-2);
+  .pin {
+    width: 43px;
+    height: 36px;
+    flex: none;
     display: grid;
-    gap: var(--space-3);
-    align-content: start;
+    place-items: center;
+  }
+  .pin:hover:not(:disabled),
+  .pin.on {
+    background: none;
+    color: var(--accent);
   }
   .where {
     display: grid;
-    gap: 6px;
+    gap: 2px;
+    padding: 4px 0 8px;
+    border-bottom: 1px solid var(--border);
   }
-  .where .ui-section-head,
-  section > .ui-section-head {
-    padding: 0 0 4px 2px;
+  /* the selectors read as rows of the menu: their icon on the rail, their value beside it */
+  .where :global(.proj),
+  .where :global(.wc) {
+    width: 100%;
+    min-height: 36px;
+    gap: 13px;
+    padding: 0 10px 0 14px;
+    border: none;
+    border-left: 2px solid transparent;
+    border-radius: 0;
+    background: none;
+    white-space: nowrap;
+  }
+  .where :global(.proj:hover),
+  .where :global(.wc:hover:not(:disabled)) {
+    background: var(--hover);
+  }
+  .where :global(.proj.none),
+  .where :global(.wc.none) {
+    color: var(--text-3);
+  }
+  .secs {
+    padding: 6px 0;
+  }
+  .head {
+    height: 22px;
+    padding: 0 0.8rem;
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-3);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .open .head {
+    opacity: 1;
   }
   .list {
     display: grid;
-    gap: 1px;
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  }
+  .sec {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 36px;
+    padding: 0 10px 0 12px;
+    border-left: 2px solid transparent;
+    text-align: left;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .sec:hover:not(:disabled) {
+    background: var(--hover);
+    color: var(--text);
+  }
+  .sec.on {
+    color: var(--text);
+    border-left-color: var(--accent);
+    background: var(--accent-soft, var(--hover));
+  }
+  .sec:focus-visible,
+  .pin:focus-visible {
+    outline-offset: -2px;
+  }
+  .ic {
+    position: relative;
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+  }
+  .dot {
+    position: absolute;
+    top: -7px;
+    left: 7px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 9.5px;
+    font-weight: 700;
+    line-height: 15px;
+    text-align: center;
+  }
+  .tint {
+    position: absolute;
+    bottom: -2px;
+    right: -3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
   }
   .label {
     flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .tint {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
   }
   .count {
+    flex: none;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
     color: var(--text-3);
     font-family: var(--font-mono);
     font-size: var(--fs-xs);
   }
-  .ui-nav-item.active .count {
+  .sec.on .count {
     color: var(--accent);
-  }
-  .tools {
-    flex: 1 1 240px;
-    min-height: 200px;
-    display: flex;
-    flex-direction: column;
-    border-top: 1px solid var(--border);
-  }
-  .strip {
-    display: flex;
-    flex: none;
-    gap: 2px;
-    padding: 0 var(--space-2);
-    border-bottom: 1px solid var(--border);
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .strip button {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    min-height: 30px;
-    padding: 0 8px;
-    border: none;
-    border-radius: 0;
-    background: none;
-    color: var(--text-3);
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    white-space: nowrap;
-  }
-  .strip button:hover:not(:disabled) {
-    background: none;
-    color: var(--text);
-  }
-  .strip button.on {
-    color: var(--text);
-    box-shadow: inset 0 -2px 0 var(--accent);
-  }
-  .strip button:focus-visible {
-    outline-offset: -2px;
-  }
-  .body {
-    flex: 1;
-    min-height: 0;
-    overflow: auto;
-    display: flex;
-    flex-direction: column;
-  }
-  .dock {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-  .dock:empty {
-    display: none;
-  }
-  .dock :global(.panel) {
-    border: none;
-    border-radius: 0;
   }
 </style>
