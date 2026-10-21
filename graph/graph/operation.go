@@ -17,7 +17,7 @@ func (g *Graph) allow(ctx context.Context, id domain.ChangeID, op string) error 
 	if g.OperationAuthorizer == nil {
 		return nil
 	}
-	c, err := g.Change(ctx, id)
+	c, err := g.ChangeHead(ctx, id)
 	if err != nil {
 		return nil
 	}

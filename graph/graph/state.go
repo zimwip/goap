@@ -17,32 +17,8 @@ import (
 // stores entries: a baseline is a header, and reading the state of some nodes is one indexed read per branch of the
 // chain of forks (CommittedVersions), whatever the length of the branches.
 
-// The whole states computed for baselines are kept (Graph.states, a lib/cache): a state never changes once its
-// baseline exists, so an entry is never stale (an id written in a transaction that rolled back is never asked again).
-// A kept state is never changed: a reader of it copies it (keptState) or reads some nodes of it (lookupState). The
-// headers of baselines are kept the same way (Graph.headers): a header never changes once written.
-
-// keptState is a copy of the state kept for a baseline.
-func (g *Graph) keptState(id domain.BaselineID) (map[domain.NodeID]domain.Version, bool) {
-	s, ok := g.states.Get(id)
-	if !ok {
-		return nil, false
-	}
-	return maps.Clone(s), true
-}
-
-// lookupState reads some nodes of a kept state, without copying it: absent ones are 0.
-func (g *Graph) lookupState(id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, bool) {
-	s, ok := g.states.Get(id)
-	if !ok {
-		return nil, false
-	}
-	out := make(map[domain.NodeID]domain.Version, len(ids))
-	for _, n := range ids {
-		out[n] = s[n]
-	}
-	return out, true
-}
+// The headers of baselines are kept (Graph.headers, a lib/cache): a header never changes once written. The states are
+// not: a read of some nodes is one indexed selection, cheaper than keeping whole states for the rare whole reads.
 
 // header reads the header of a baseline, cached once the transaction that wrote it is over.
 func (t *guardTx) header(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
@@ -68,20 +44,6 @@ func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domai
 	}()
 	if id == "" {
 		return map[domain.NodeID]domain.Version{}, nil
-	}
-	if ids == nil {
-		if s, ok := t.g.keptState(id); ok {
-			read.source = stateFromCache
-			return s, nil
-		}
-	} else if s, ok := t.g.lookupState(id, ids); ok {
-		read.source = stateFromCache
-		for n, v := range s {
-			if v == 0 {
-				delete(s, n)
-			}
-		}
-		return s, nil
 	}
 	b, err := t.header(ctx, id)
 	if err != nil {
@@ -209,14 +171,7 @@ const selectBatch = 2000
 
 // nodesOf returns the whole state of a baseline.
 func (t *guardTx) nodesOf(ctx context.Context, id domain.BaselineID) (map[domain.NodeID]domain.Version, error) {
-	if s, ok := t.g.keptState(id); ok {
-		return s, nil
-	}
-	s, err := t.stateAt(ctx, id, nil)
-	if err == nil {
-		t.g.states.Put(id, maps.Clone(s))
-	}
-	return s, err
+	return t.stateAt(ctx, id, nil)
 }
 
 // Baseline reads a baseline with its state; the empty id is the empty state, what the first change of a namespace

@@ -1,26 +1,23 @@
 <script lang="ts">
   // "Import from a source" tab (ADR 0148): the importers the domain of a namespace declares (a git repository for the
-  // code domain), the form of the one picked from the parameters it declares, and the runs. A run is done by the importer
-  // service implementing it, through the change operations; a run is a job (ADR 0149), followed live from the job stream.
+  // code domain) and the form of the one picked from the parameters it declares. A run is done by the importer service
+  // implementing it, through the change operations; a run is a job (ADR 0149), followed from the Jobs of the status bar
+  // and the Jobs tab, where a click opens its detail.
   import EditorActions from '../../shell/EditorActions.svelte';
   import { imports, errorMessage, type Importer } from '../../api';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
-  import JobRow from '../../components/JobRow.svelte';
   import DirectoryChooser from '../../components/DirectoryChooser.svelte';
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { refreshBranches } from '../../stores/baselineTool.svelte';
-  import { jobList, onJobEnded, takeJob } from '../../stores/jobs.svelte';
-  import { isActive } from '../../jobView';
-  import { initialValues, isImportJob, jobSubject, paramFields, runParams, type ParamField } from '../../importSources';
+  import { onJobEnded, openJob, takeJob } from '../../stores/jobs.svelte';
+  import { initialValues, isImportJob, paramFields, runParams, type ParamField } from '../../importSources';
 
   let { tab }: { tab: Tab } = $props();
 
   const namespace = $derived(tab.params.ns ?? '');
 
   let importers = $state<Importer[]>([]);
-  const jobs = $derived(jobList().filter((j) => isImportJob(j, namespace)));
-  let now = $state(Date.now());
   let picked = $state('');
   let values = $state<Record<string, string | boolean>>({});
   let loading = $state(true);
@@ -58,13 +55,6 @@
 
   // a run that ends changed the branches
   $effect(() => onJobEnded((j) => isImportJob(j, namespace) && refreshBranches()));
-  // the clock of the runs going
-  $effect(() => {
-    if (!jobs.some(isActive)) return;
-    now = Date.now();
-    const t = setInterval(() => (now = Date.now()), 1000);
-    return () => clearInterval(t);
-  });
 
   async function start(): Promise<string | undefined> {
     if (!current) return 'Pick a source.';
@@ -78,6 +68,8 @@
     try {
       const { job } = await imports.start({ domain: current.domain ?? '', importer: current.name ?? '', params });
       takeJob(job);
+      // its progress is in the Jobs of the status bar; the detail shows it at once
+      openJob(job);
       notify(`Import started: ${current.label || current.name}.`, 'ok');
     } catch (e) {
       error = errorMessage(e);
@@ -189,16 +181,6 @@
       onclose={() => (choosing = '')}
     />
   {/if}
-  {#if jobs.length}
-    <section class="card">
-      <h3>Runs</h3>
-      <ul class="runs">
-        {#each jobs as j (j.id)}
-          <li><JobRow job={j} {now} detail={jobSubject(j)} /></li>
-        {/each}
-      </ul>
-    </section>
-  {/if}
 </div>
 
 <style>
@@ -209,14 +191,5 @@
   .with-chooser input {
     flex: 1;
     min-width: 0;
-  }
-  .runs {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-  .runs li {
-    padding: 0.5rem 0.2rem;
-    border-top: 1px solid var(--border);
   }
 </style>

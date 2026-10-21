@@ -130,7 +130,7 @@ func TestRun(t *testing.T) {
 			if mode == bench.ModeCommit {
 				want = append(want, "CommitEdits")
 			} else {
-				want = append(want, "CreateChange", "ImpactNodeCreate", "ImpactNodeCheckout", "ImpactLinkCreate", "ImpactNodeReviewBatch", "CommitChange", "MergeChange")
+				want = append(want, "CreateChange", "ImpactNodeCreate", "ImpactNodeCheckoutBatch", "ImpactLinkCreate", "ImpactNodeReviewBatch", "CommitChange", "MergeChange")
 			}
 			for _, op := range want {
 				if !ops[op] {

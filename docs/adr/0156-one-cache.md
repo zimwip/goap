@@ -35,7 +35,6 @@ for how long.
    |---|---|---|---|
    | Graph: views of changes | 64 MiB | 5 min | `Graph.Caches.Drafts` |
    | Graph: version links | 32 MiB | 5 min | `Graph.Caches.Versions` |
-   | Graph: baseline states | 64 MiB | 5 min | `Graph.Caches.States` |
    | Graph: baseline headers | 4 MiB | 5 min | `Graph.Caches.Headers` |
    | Graph: impact validations | 16 MiB | 5 min | `Graph.Caches.Validations` |
    | Compiled methodologies (registry and its client) | 64 MiB | 10 min | `registrysvc.CompiledBounds` |
@@ -50,6 +49,11 @@ for how long.
      Only an entry no request has named for the longest session is forgotten.
 3. **A new cache is a `lib/cache`.** It names its bounds and a size function. Nothing else keeps data between calls
    without bounds in bytes and time.
+
+4. **The states of baselines are not cached.** The cache of whole states was never hit under goap-bench: its node
+   reads were served from a whole state, and nothing read whole states (0 req/s from the cache, 243 from the commits).
+   A read of some nodes is one indexed selection (0.4 ms p50, 1.1 ms p95, one branch), so the cache was removed
+   (`graph.state.reads` keeps its `source` attribute, always `commits`).
 
 What is not a cache stays as it is:
 

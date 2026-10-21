@@ -10,15 +10,14 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// What the state of a baseline costs to read (ADR 0143): every read of a state says where it came from (the cache or the
-// selection of the versions committed), how many branches of the chain of forks it read and how many versions it found.
+// What the state of a baseline costs to read (ADR 0143): every read of a state says where it came from (the selection
+// of the versions committed: the states are not cached), how many branches of the chain of forks it read and how many
+// versions it found.
 // Prometheus: goap_graph_state_* (deploy/grafana/dashboards/goap-perf.json).
 
-// Sources of a state read: where the walk down the chain of baselines stopped.
-const (
-	stateFromCache   = "cache"   // a state computed before (the state cache)
-	stateFromCommits = "commits" // the selection of the versions committed (ADR 0143)
-)
+// stateFromCommits is the source of every state read: the selection of the versions committed (ADR 0143). The
+// attribute stays for the dashboards.
+const stateFromCommits = "commits"
 
 type stateMetrics struct {
 	reads    metric.Int64Counter

@@ -15,8 +15,7 @@ type Caches struct {
 	Drafts cache.Bounds
 	// Versions: how a version holds its links and the links it holds, which never change once written (versioncache.go).
 	Versions cache.Bounds
-	// States: the whole states of baselines (state.go, ADR 0143); Headers their headers.
-	States  cache.Bounds
+	// Headers: the headers of baselines (state.go).
 	Headers cache.Bounds
 	// Validations: the validations of the impacts of a change on a flow (impactvalidation.go).
 	Validations cache.Bounds
@@ -29,7 +28,6 @@ const DefaultCacheTTL = 5 * time.Minute
 var DefaultCaches = Caches{
 	Drafts:      cache.Bounds{Bytes: 64 << 20, TTL: DefaultCacheTTL},
 	Versions:    cache.Bounds{Bytes: 32 << 20, TTL: DefaultCacheTTL},
-	States:      cache.Bounds{Bytes: 64 << 20, TTL: DefaultCacheTTL},
 	Headers:     cache.Bounds{Bytes: 4 << 20, TTL: DefaultCacheTTL},
 	Validations: cache.Bounds{Bytes: 16 << 20, TTL: DefaultCacheTTL},
 }
@@ -51,23 +49,14 @@ func (g *Graph) boundsOf(pick func(Caches) cache.Bounds) func() cache.Bounds {
 func (g *Graph) newCaches() {
 	g.draftStates = newDraftCache(g.boundsOf(func(c Caches) cache.Bounds { return c.Drafts }))
 	g.versions = newVersionCache(g.boundsOf(func(c Caches) cache.Bounds { return c.Versions }))
-	g.states = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.States }), stateSize)
 	g.headers = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Headers }), headerSize)
 	g.validations = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Validations }), validationSize)
 }
 
-func stateSize(_ domain.BaselineID, s map[domain.NodeID]domain.Version) int64 {
-	n := int64(cache.SlotBytes)
-	for id := range s {
-		n += cache.SlotBytes + cache.WordBytes + int64(len(id))
-	}
-	return n
-}
-
 func headerSize(_ domain.BaselineID, b domain.Baseline) int64 {
 	n := cache.StructBytes + int64(len(b.ID)+len(b.Name)+len(b.Namespace)+len(b.Branch)+len(b.ParentID)+len(b.MergedFrom)+len(b.RebasedFrom)+len(b.ChangeID)+len(b.Kind))
-	if b.Nodes != nil {
-		n += stateSize(b.ID, b.Nodes)
+	for id := range b.Nodes {
+		n += cache.SlotBytes + cache.WordBytes + int64(len(id))
 	}
 	return n
 }
