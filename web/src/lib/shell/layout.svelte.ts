@@ -14,8 +14,12 @@ interface LayoutState {
   right: string;
   /** whether that tool is shown */
   drawer: boolean;
+  /** the context bar pinned open beside the editor */
+  rightOpen: boolean;
   /** the width of the side tool */
   rightWidth: number;
+  /** the width of the context bar, open */
+  contextWidth: number;
   bottom: string;
   bottomOpen: boolean;
   bottomHeight: number;
@@ -28,7 +32,9 @@ const DEFAULTS: LayoutState = {
   leftWidth: 280,
   right: 'tester',
   drawer: false,
+  rightOpen: false,
   rightWidth: 340,
+  contextWidth: 248,
   bottom: 'events',
   bottomOpen: true,
   bottomHeight: 220,
@@ -39,7 +45,9 @@ const DEFAULTS: LayoutState = {
 const kept = (l: LayoutState) => ({
   leftOpen: l.leftOpen,
   leftWidth: l.leftWidth,
+  rightOpen: l.rightOpen,
   rightWidth: l.rightWidth,
+  contextWidth: l.contextWidth,
   bottomOpen: l.bottomOpen,
   bottomHeight: l.bottomHeight,
   theme: l.theme,
@@ -47,7 +55,11 @@ const kept = (l: LayoutState) => ({
 
 export const layout: LayoutState = $state({ ...DEFAULTS, ...kept(load(KEY, DEFAULTS)) });
 
+/** The width of the context bar closed: its rail of icons. */
+export const RAIL = 44;
+
 export const LIMITS = {
+  context: { min: 200, max: 420 },
   side: { min: 180, max: 640 },
   bottom: { min: 100, max: 800 },
 };

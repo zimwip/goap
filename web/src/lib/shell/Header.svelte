@@ -242,7 +242,10 @@
 </script>
 
 <header class="header">
-  <div class="brand"><span class="logo" aria-hidden="true">◆</span> GOAP</div>
+  <div class="left">
+    <div class="brand"><span class="logo" aria-hidden="true">◆</span> GOAP</div>
+    <HeaderContext />
+  </div>
 
   <div class="search">
     <span class="sicon"><Icon name="search" size={14} /></span>
@@ -283,8 +286,6 @@
       </ul>
     {/if}
   </div>
-
-  <HeaderContext />
 
   <div class="right">
     <button
@@ -426,8 +427,10 @@
 </header>
 
 <style>
+  /* three columns: the brand and the context, the search centred, the permanent information */
   .header {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(160px, 440px) minmax(0, 1fr);
     align-items: center;
     gap: var(--space-3);
     height: var(--header-h);
@@ -451,10 +454,15 @@
   .logo {
     color: var(--accent);
   }
+  .left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+  }
   .search {
     position: relative;
-    flex: 0 1 300px;
-    min-width: 120px;
+    min-width: 0;
   }
   .hbtn {
     display: inline-grid;
@@ -539,6 +547,8 @@
   .right {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
     gap: 0.4rem;
   }
   .stream {

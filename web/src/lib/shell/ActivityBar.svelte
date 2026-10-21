@@ -8,7 +8,7 @@
 
   const views = $derived(viewsIn(side));
   const active = $derived(side === 'left' ? layout.left : layout.right);
-  const open = $derived(side === 'left' ? layout.leftOpen : layout.drawer);
+  const open = $derived(side === 'left' ? layout.leftOpen : layout.rightOpen);
 
   function keydown(e: KeyboardEvent) {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
