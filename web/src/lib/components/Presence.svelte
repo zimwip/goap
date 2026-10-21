@@ -36,7 +36,7 @@
     font-size: 0.58rem;
     font-weight: 600;
     line-height: 1;
-    color: #fff;
+    color: var(--accent-fg);
   }
   .presence > .av:first-child {
     margin-left: 0;

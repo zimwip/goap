@@ -179,7 +179,7 @@
     border: none;
     border-radius: 6px;
     background: var(--accent, #4a7cff);
-    color: #fff;
+    color: var(--accent-fg);
     font-weight: 600;
     cursor: pointer;
   }
@@ -227,8 +227,8 @@
     margin: 0;
     padding: 0.4rem 0.5rem;
     border-radius: 6px;
-    background: #fee;
-    color: #a00;
+    background: var(--danger-soft);
+    color: var(--danger);
     font-size: 0.85rem;
   }
   .hint {

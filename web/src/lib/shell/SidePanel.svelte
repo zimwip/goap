@@ -35,7 +35,7 @@
     flex-direction: column;
     height: 100%;
     min-width: 0;
-    background: var(--chrome);
+    background: var(--bg-panel);
   }
   header {
     display: flex;
@@ -48,11 +48,11 @@
   h2 {
     flex: 1;
     margin: 0;
-    font-size: 0.78rem;
+    font-size: var(--fs-xs);
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--muted);
+    letter-spacing: 0.08em;
+    color: var(--text-3);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

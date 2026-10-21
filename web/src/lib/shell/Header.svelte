@@ -252,13 +252,14 @@
       aria-controls="search-results"
       aria-autocomplete="list"
       aria-label="Search for an object or a command"
-      placeholder="Search (Ctrl+P) — '&gt;' for commands"
+      placeholder="Search — '&gt;' for commands"
       bind:value={query}
       onfocus={() => (open = true)}
       onblur={() => setTimeout(() => (open = false), 150)}
       onkeydown={keydown}
       data-no-pin
     />
+    <kbd aria-hidden="true">Ctrl P</kbd>
     {#if open && results.length}
       <ul class="results" id="search-results" role="listbox">
         {#each results as r, i (r.key)}
@@ -415,16 +416,23 @@
   .header {
     display: flex;
     align-items: center;
-    gap: 0.8rem;
-    height: 46px;
-    padding: 0 0.6rem 0 0.8rem;
+    gap: var(--space-3);
+    height: var(--header-h);
+    padding: 0 var(--space-3) 0 var(--space-4);
     flex: none;
-    background: var(--chrome-2);
+    position: relative;
+    z-index: 40;
+    background: var(--bg-panel-translucent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border);
   }
   .brand {
-    font-weight: 800;
-    letter-spacing: 0.06em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
     white-space: nowrap;
   }
   .logo {
@@ -446,8 +454,25 @@
   }
   .search input {
     padding-left: 1.8rem;
-    background: var(--surface);
+    padding-right: 3.6rem;
+    background: var(--bg-raised);
     height: 30px;
+  }
+  .search kbd {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+    color: var(--text-3);
+    pointer-events: none;
+  }
+  .search:focus-within kbd {
+    display: none;
   }
   .results {
     position: absolute;
@@ -551,7 +576,7 @@
     border-radius: 8px;
     padding: 0 4px;
     background: var(--danger);
-    color: #fff;
+    color: var(--accent-fg);
     font-size: 10px;
     font-weight: 700;
     line-height: 15px;

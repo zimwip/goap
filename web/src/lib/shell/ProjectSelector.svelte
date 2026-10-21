@@ -62,20 +62,23 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.25rem 0.55rem;
-    border: 1px solid var(--border, #8884);
-    border-radius: 6px;
-    background: transparent;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    background: var(--bg-raised);
     color: inherit;
     font: inherit;
+    font-family: var(--font-mono);
+    font-size: 12px;
     cursor: pointer;
   }
   .proj.none {
     border-style: dashed;
-    color: var(--muted, inherit);
+    background: transparent;
+    color: var(--muted);
   }
   .proj:hover {
-    background: var(--hover, #8882);
+    border-color: var(--border-strong);
   }
   .pl {
     max-width: 12rem;

@@ -46,8 +46,8 @@
     gap: 2px;
     width: 42px;
     flex: none;
-    padding: 4px 0;
-    background: var(--chrome-2);
+    padding: 6px 0;
+    background: var(--bg-panel-translucent);
   }
   .left {
     border-right: 1px solid var(--border);
@@ -64,15 +64,16 @@
     border: none;
     border-radius: 0;
     background: transparent;
-    color: var(--muted);
+    color: var(--text-3);
     padding: 0;
+    transition: color var(--transition);
   }
   button:hover:not(:disabled) {
     color: var(--text);
     background: transparent;
   }
   button.on {
-    color: var(--text);
+    color: var(--accent);
   }
   .left button.on {
     box-shadow: inset 2px 0 0 var(--accent);

@@ -129,10 +129,10 @@
   .status {
     display: flex;
     align-items: stretch;
-    height: 22px;
+    height: var(--status-h);
     flex: none;
-    background: var(--chrome-2);
-    color: var(--text);
+    background: var(--bg-panel);
+    color: var(--text-3);
     border-top: 1px solid var(--border);
     font-size: 12px;
     padding: 0 0.3rem;
@@ -153,12 +153,14 @@
     border-radius: 0;
     background: transparent;
     color: inherit;
-    font-size: 12px;
-    font-weight: 500;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 400;
     white-space: nowrap;
   }
   button.item:hover:not(:disabled) {
     background: var(--hover);
+    color: var(--text);
   }
   button.item:focus-visible {
     outline: 1px solid currentColor;

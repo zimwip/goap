@@ -51,7 +51,7 @@
     flex-direction: column;
     height: 100%;
     min-width: 0;
-    background: var(--bg);
+    background: transparent;
   }
   .content {
     flex: 1;

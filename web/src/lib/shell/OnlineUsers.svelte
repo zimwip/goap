@@ -89,7 +89,7 @@
     border-radius: 50%;
     font-size: 0.65rem;
     font-weight: 600;
-    color: #fff;
+    color: var(--accent-fg);
   }
   .main {
     display: flex;
