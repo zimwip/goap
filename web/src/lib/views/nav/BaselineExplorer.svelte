@@ -2,6 +2,7 @@
   // Baseline explorer: namespace → branches, open ones first. Selecting a branch opens its baseline tab
   // (BaselineTab.svelte), pinned. Branch management (open/merge/abandon/describe) is a right-click on the row, not
   // shown inline here or in the tab.
+  import { untrack } from 'svelte';
   import { isMeta } from '../../stores/session.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -55,9 +56,12 @@
     const t = activeTab();
     return t?.kind === 'baseline' ? t : undefined;
   });
+  /** the namespace of the baseline tab shown: the explorer moves to it when the tab shown changes, never back when the
+   * person picks another namespace while the tab stays (the namespace picked is not tracked here) */
+  const shownNamespace = $derived(shownTab?.params.namespace ?? '');
   $effect(() => {
-    const ns = shownTab?.params.namespace;
-    if (ns && ns !== baselineTool.namespace) selectNamespace(ns);
+    const ns = shownNamespace;
+    if (ns && ns !== untrack(() => baselineTool.namespace)) selectNamespace(ns);
   });
   const activeBranch = $derived(shownTab && shownTab.params.namespace === baselineTool.namespace ? shownTab.params.branch || MAIN_BRANCH : '');
 
