@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/typecat"
+	"github.com/zimwip/goap/platform/devseed"
 )
 
 // floorGraph returns a graph judged by the domains of the repository, with the admin-floor validator wired
@@ -163,5 +164,21 @@ func TestAdminFloorCountsWhatEnrichGrants(t *testing.T) {
 	g = setup(t, bob(access.User{Subject: "bob"}.Props(), access.DefaultOrg))
 	if err := deactivateAlice(t, g); !errors.Is(err, graph.ErrInvalid) {
 		t.Fatalf("a plain user must not count: %v", err)
+	}
+}
+
+// Before any user there is no administrator to lose: an organisation written then (the demo seeded at start,
+// GOAP_DEV_DEMO=1) is not refused, and the first user to sign in still becomes the administrator (ADR 0040).
+func TestAdminFloorAcceptsAGraphWithNoUser(t *testing.T) {
+	ctx := context.Background()
+	g := floorGraph(t)
+	if _, err := devseed.Demo(ctx, g); err != nil {
+		t.Fatalf("demo before any user: %v", err)
+	}
+	if err := graphsvc.EnsureUser(ctx, g, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.PlatformAssignmentKey(access.UserKey("alice"))); err != nil {
+		t.Fatalf("the first user's admin assignment: %v", err)
 	}
 }

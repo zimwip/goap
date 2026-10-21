@@ -45,7 +45,9 @@ func (AdminFloorValidator) Validate(ctx context.Context, q graphapi.ValidatorQue
 		}
 	}
 	snap := BuildSnapshot(st, "", nodes, links)
+	users := false
 	for _, n := range nodes {
+		users = users || n.Type == NodeTypeUser
 		if n.Type != NodeTypeUser || n.State != "active" {
 			continue
 		}
@@ -53,6 +55,11 @@ func (AdminFloorValidator) Validate(ctx context.Context, q graphapi.ValidatorQue
 		if err == nil && snap.Enrich(authz.Principal{Subject: u.Subject}).HasRole(RoleAdmin) {
 			return nil // at least one active administrator remains
 		}
+	}
+	if !users {
+		// no user yet (a node is never deleted, so none before either): there is no administrator to lose, and the
+		// first user to sign in becomes one (ADR 0040); the demo organisation seeded at start is such a change
+		return nil
 	}
 	return fmt.Errorf("this change would leave no active administrator: %w", graphapi.ErrInvalid)
 }
