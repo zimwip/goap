@@ -789,6 +789,9 @@ message NamespaceSummary {
   int32 types = 8;
   // the entries of the logs of its changes
   int32 log_entries = 9;
+  // the graph source holding it (ADR 0154 §9: a platform@Source of kind graph; the platform graph's own name for its
+  // namespaces), set by the platform graph when it lists every graph
+  string source = 10;
 }
 
 message GetGraphStatsRequest {

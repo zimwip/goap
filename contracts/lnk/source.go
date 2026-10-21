@@ -26,11 +26,27 @@ type Source struct {
 	Namespace string `json:"namespace,omitempty"`
 	// Location is where the source lives: the base URL of a graph service, the root directory of files...
 	Location string `json:"location,omitempty"`
+	// Namespaces are the namespaces a graph source with a location holds (ADR 0154 §9: the content graph): every call
+	// and every URL naming one of them goes to that graph, the source acting as its driver.
+	Namespaces []string `json:"namespaces,omitempty"`
 	// Branch is the branch of the graph the source reads (empty: main).
 	Branch      string `json:"branch,omitempty"`
 	Description string `json:"description,omitempty"`
 	// Params are what else the resolver of the kind needs, opaque to the registry.
 	Params map[string]any `json:"params,omitempty"`
+}
+
+// Holds reports whether a graph source with a location holds the namespace ns (Namespaces).
+func (s Source) Holds(ns string) bool {
+	if s.Kind != KindGraph || s.Location == "" {
+		return false
+	}
+	for _, n := range s.Namespaces {
+		if n == ns {
+			return true
+		}
+	}
+	return false
 }
 
 // NamespaceOf returns the namespace a source reads: its Namespace, else its name.

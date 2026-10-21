@@ -1,15 +1,16 @@
 <script lang="ts">
-  // The sources of the logical URLs (ADR 0154): where the things a URL lnk:<source>/<type>/<key> names live, another
-  // graph or a directory of files. Declared once on the platform (platform@Source nodes); each project then says which
-  // of them its URLs read (the project tab, "Sources"). Edits are staged like the other settings (a personal change of
-  // the platform namespace, saved from the dialog's Save bar).
+  // The sources of the platform (ADR 0154): the platform graph itself, the other graphs (the content graph: the
+  // namespaces it holds go to it) and the directories of files, each read by the driver its kind names. Declared once on
+  // the platform (platform@Source nodes, the first ones by the bootstrap); each project then says which of them its URLs
+  // read (the project tab, "Sources"). Edits are staged like the other settings (a personal change of the platform
+  // namespace, saved from the dialog's Save bar).
   import { errorMessage, type GraphNode } from '../../api';
   import { headGraph } from '../../graphEdit';
   import { ns } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import { stageRetire, stageUpsert } from '../../stores/pending.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
-  import { SOURCE_KINDS, SOURCE_TYPE, overlaySources, sourceKey, sourceProblem, sourceProps, type Source } from '../../sources';
+  import { PLATFORM_SOURCE, SOURCE_KINDS, SOURCE_TYPE, overlaySources, sourceKey, sourceProblem, sourceProps, sourceRole, type Source } from '../../sources';
 
   let applied = $state<GraphNode[]>([]);
   let loaded = $state(false);
@@ -39,7 +40,7 @@
     void load();
   });
 
-  const empty = (): Source => ({ name: '', description: '', kind: 'graph', namespace: '', location: '', branch: '', params: '' });
+  const empty = (): Source => ({ name: '', description: '', kind: 'graph', namespace: '', location: '', namespaces: '', branch: '', params: '' });
 
   function add() {
     form = empty();
@@ -75,7 +76,8 @@
     });
 
   async function remove(s: Source) {
-    if (!(await confirmDialog({ message: `Retire the source ${s.name}? The URLs naming it no longer resolve through it (a retired entry can be restored from the graph).`, danger: true }))) return;
+    const graph = s.kind === 'graph' && s.location ? ' The namespaces it holds are read from this graph again.' : '';
+    if (!(await confirmDialog({ message: `Retire the source ${s.name}? The URLs naming it no longer resolve through it.${graph} (A retired entry can be restored from the graph.)`, danger: true }))) return;
     await run(() => stageRetire(ns.platform, SOURCE_TYPE, sourceKey(s.name)));
   }
 
@@ -90,10 +92,11 @@
     <button type="button" class="small" onclick={add}>New source</button>
   </div>
   <p class="hint">
-    A logical URL <code>lnk:&lt;source&gt;/&lt;type&gt;/&lt;key&gt;</code> names a source. A source of kind <strong>graph</strong> is a namespace of a graph: of this one when it
-    has no location, of another graph service at its location otherwise. A source of kind <strong>files</strong> is a root directory. A name no source declares is the
-    namespace of that name of this graph, so nothing needs declaring to link inside it. Each project chooses which declared source holds the sources its URLs name
-    (project tab, <em>Sources</em>; inherited by its sub-projects).
+    The kind of a source is its driver. A source of kind <strong>graph</strong> with no location is this graph: <code>{PLATFORM_SOURCE}</code> holds the platform, the
+    organisation, the methodologies and every namespace no other graph holds. A source of kind <strong>graph</strong> at a location is another graph service: the
+    namespaces it holds (the content graph: <code>alm</code>, <code>code</code>…) are read and changed there, and the statistics list them. A source of kind
+    <strong>files</strong> is a root directory. A logical URL <code>lnk:&lt;source&gt;/&lt;type&gt;/&lt;key&gt;</code> names a source or a namespace; each project chooses
+    which declared source holds the sources its URLs name (project tab, <em>Sources</em>; inherited by its sub-projects).
   </p>
   {#if !loaded}
     <p class="muted">Loading…</p>
@@ -102,7 +105,7 @@
   {:else}
     <div class="scroll">
       <table>
-        <thead><tr><th>Source</th><th>Kind</th><th>Location</th><th></th></tr></thead>
+        <thead><tr><th>Source</th><th>Kind</th><th>Location</th><th>Holds</th><th></th></tr></thead>
         <tbody>
           {#each sources as s (s.name)}
             <tr class:dirty={s.pending}>
@@ -115,10 +118,11 @@
                 {#if s.location}<code>{s.location}</code>{:else}<span class="muted">this graph</span>{/if}
                 {#if where(s)}<div class="hint">{where(s)}</div>{/if}
               </td>
+              <td>{sourceRole(s)}</td>
               <td class="actions">
                 {#if s.pending}<span class="pending" title="Not saved yet">unsaved</span>{/if}
                 <button type="button" class="small" disabled={busy} onclick={() => edit(s)}>Edit</button>
-                <button type="button" class="small danger" disabled={busy} onclick={() => remove(s)}>Retire</button>
+                {#if s.name !== PLATFORM_SOURCE}<button type="button" class="small danger" disabled={busy} onclick={() => remove(s)}>Retire</button>{/if}
               </td>
             </tr>
           {/each}
@@ -153,6 +157,13 @@
         Location
         <input type="text" class="mono" bind:value={form.location} spellcheck="false" placeholder={form.kind === 'files' ? '/srv/docs' : 'empty: this graph; else https://graph.example'} />
       </label>
+      {#if form.kind === 'graph' && form.location.trim()}
+        <label>
+          Namespaces it holds
+          <input type="text" class="mono" bind:value={form.namespaces} spellcheck="false" placeholder="alm, code" />
+          <span class="hint">Their calls, their URLs and their statistics go to this graph.</span>
+        </label>
+      {/if}
       <label>Parameters <textarea rows="3" class="mono" bind:value={form.params} spellcheck="false" placeholder={'{}'}></textarea></label>
       {#if problem}<p class="hint over">{problem}</p>{/if}
       <div class="row">

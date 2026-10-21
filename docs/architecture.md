@@ -1157,9 +1157,12 @@ key say which thing. Every namespace of the graph is a `graph` source of its nam
 declared sources (`ProjectUnit.sources`, inherited, nearest wins), so its content can be stored elsewhere
 (`Graph.ResolveIn`, `Graph.ResolveFrom`); a link targets a node version of this graph or a URL of another source (`Link.Target`).
 The platform and the content are two graph services (ADR §9): the platform graph (`platform`, `organisation`, `methodology`)
-is the one its callers know and forwards the calls of the content namespaces (`GOAP_GRAPH_ROUTES`) or of a change held
-there to the content graph (`graphsvc.Router`); the content graph (`GOAP_GRAPH_SPACE=content`) reads its types and its
-organisation from the platform graph (`Graph.Directory`, `graphsnap.Heads`) and seeds nothing.
+is the one its callers know and forwards the calls of the content namespaces or of a change held there to the content
+graph (`graphsvc.Router`): the routes are the declared sources, a `platform@Source` of kind `graph` with a location and the
+`namespaces` it holds being the driver of those namespaces (`Graph.Sources`, `lnk.Source.Holds`), and the namespace
+listings are merged over every graph, each naming its source (the statistics group them). The content graph
+(`GOAP_GRAPH_SPACE=content`) reads its types and its organisation from the platform graph (`Graph.Directory`,
+`graphsnap.Heads`), holds no root and seeds nothing.
 
 ### 3.4b Node index and search ([ADR 0026](adr/0026-node-index-and-search.md))
 
@@ -1578,7 +1581,7 @@ Every composition (`goap-dev`, `platform/cmd/graph`) seeds the platform through 
    reload). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
    logs one warning, "change lifecycle and activity gating are not available in this composition".
 2. `Boot`: `Graph.Bootstrap` (roots), `SeedAccess` (default policies), `SeedBuiltins` (built-in MCPs, adapter definitions,
-   platform roles), `SeedModels` (`Options.Models`), `SeedProtectedAliases` (the `assistant` and `helper` aliases, ADR 0084), `SeedBehaviors` (the built-in `terse` LLM behaviour, disabled, ADR 0093), then `Options.Dev`. Each step is idempotent.
+   platform roles), `SeedModels` (`Options.Models`), `SeedProtectedAliases` (the `assistant` and `helper` aliases, ADR 0084), `SeedBehaviors` (the built-in `terse` LLM behaviour, disabled, ADR 0093), `SeedSources` (the source `platform` and `Options.Sources`, ADR 0154), then `Options.Dev`. Each step is idempotent.
 3. The registry then seeds the methodologies (`goap-dev`; `platform/cmd/registry` seeds them over RPC): they need the aliases of step 2.
 
 Development and demo data is not part of it (`platform/devseed`: `Demo` the ALM repository, `DocumentRepository` the
@@ -1588,8 +1591,9 @@ with `GOAP_GRAPH_SEED=dev`, the demo too with `GOAP_GRAPH_SEED=demo`. Otherwise 
 *Settings → Demo data → Load demo data* (RPC `GraphService.LoadDemoData`, `graphsvc.Handler.Demo` = `devseed.DemoLoader`,
 administrators only, idempotent). The demo is the organisation `ORG-ACME` and its teams, the project `PROJ-DEMO` (under
 `PROJ-ROOT`, methodology `sdlc`) bound to `ORG-ACME` by an assignment holding the roles of `sdlc`, and the ALM repository,
-written in `PROJ-DEMO`. `platform/cmd/graph` still bootstraps the roots
-before serving (a no-op for `Boot` afterwards). Platform services act as `authz.System(name, roles...)`
+written in `PROJ-DEMO`. `platform/cmd/graph` boots through its command `graph bootstrap` (run once, then it exits;
+compose's `graph-bootstrap` service before `graph`), the service itself only with `GOAP_GRAPH_BOOTSTRAP=1` or a memory
+store; a content graph boots nothing (ADR 0154 §9). Platform services act as `authz.System(name, roles...)`
 (`system:registry`, `system:graph`, `system:trigger:<key>`).
 
 **`goap-dev` wiring ([ADR 0073](adr/0073-goap-dev-builders-and-web-api-modules.md))**: `newApp(ctx, cfg, log)` strings one builder

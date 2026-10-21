@@ -112,8 +112,9 @@ nodeTypes:
       - {name: kind, label: Kind, description: "Kind of resolver reading it: graph, files, or one a service adds", type: string, section: Location, order: 3}
       - {name: namespace, label: Namespace, description: "Namespace of the graph it reads (graph sources; empty: its name)", type: string, section: Location, order: 4}
       - {name: location, label: Location, description: "Where it lives: the base URL of a graph service, the root directory of files", type: string, section: Location, order: 5}
-      - {name: branch, label: Branch, description: "Branch of the graph it reads (empty: main)", type: string, section: Location, order: 6}
-      - {name: params, label: Parameters, description: "What else its resolver needs", type: json, widget: textarea, section: Location, order: 7}
+      - {name: namespaces, label: Namespaces, description: "The namespaces a graph service at the location holds: their calls and their URLs go to it (a list of names)", type: json, widget: textarea, section: Location, order: 6}
+      - {name: branch, label: Branch, description: "Branch of the graph it reads (empty: main)", type: string, section: Location, order: 7}
+      - {name: params, label: Parameters, description: "What else its resolver needs", type: json, widget: textarea, section: Location, order: 8}
 lifecycles:
   # An entry of the platform configuration (an MCP, an adapter definition, an entry of the model gateway) is never
   # deleted (ADR 0076): it is retired, and its readers leave it out; every state is committable

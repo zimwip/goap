@@ -131,6 +131,16 @@ func TestDeclaredSources(t *testing.T) {
 		t.Fatalf("broken source: %v", err)
 	}
 
+	// a namespace another graph holds (the content graph, ADR 0154 §9) is read there, under its own name
+	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: domain.NamespacePlatform, Key: domain.SourceKey("content"), Type: domain.TypeSource,
+		Properties: map[string]any{"kind": lnk.KindGraph, "location": "http://content:8080", "namespaces": []any{"code"}}}); err != nil {
+		t.Fatal(err)
+	}
+	asked = lnk.Source{}
+	if _, err := g.Resolve(ctx, lnk.MustParse("lnk:code/File/main.go")); err != nil || asked.Location != "http://content:8080" || asked.NamespaceOf() != "code" {
+		t.Fatalf("held namespace: %v (source %+v)", err, asked)
+	}
+
 	if _, err := graphtest.Edit(ctx, g, docs.ID, map[string]any{"location": filepath.Join(dir, "none")}); err != nil {
 		t.Fatal(err)
 	}

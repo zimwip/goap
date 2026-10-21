@@ -6,6 +6,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/contracts/mcp"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/graph/graph/graphtest"
@@ -25,11 +26,12 @@ func bootModels() graphsvc.ModelsConfig {
 func TestBoot(t *testing.T) {
 	ctx := context.Background()
 	g := typedGraph(t)
-	r, err := graphsvc.Boot(ctx, g, graphsvc.Options{Models: bootModels()})
+	content := lnk.Source{Name: "content", Kind: lnk.KindGraph, Location: "http://graph-content:8080", Namespaces: []string{"alm"}}
+	r, err := graphsvc.Boot(ctx, g, graphsvc.Options{Models: bootModels(), Sources: []lnk.Source{content}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !r.Access || !r.Builtins || !r.Models {
+	if !r.Access || !r.Builtins || !r.Models || !r.Sources {
 		t.Fatalf("report = %+v", r)
 	}
 	for _, c := range []struct{ ns, key string }{
@@ -40,6 +42,8 @@ func TestBoot(t *testing.T) {
 		{domain.NamespacePlatform, adapter.DefKey(mcpbuiltin.AdapterDefs()[0].Name)},
 		{domain.NamespacePlatform, access.RoleKey(access.RoleAdmin)},
 		{domain.NamespacePlatform, llmcfg.ProviderKey("fake")},
+		{domain.NamespacePlatform, domain.SourceKey(graphsvc.PlatformSource)},
+		{domain.NamespacePlatform, domain.SourceKey("content")},
 	} {
 		if _, err := g.NodeByKey(ctx, c.ns, c.key); err != nil {
 			t.Fatalf("%s/%s: %v", c.ns, c.key, err)
@@ -53,7 +57,10 @@ func TestBoot(t *testing.T) {
 		t.Fatal("Boot seeded the demo")
 	}
 	cs, _ := g.Changes(ctx)
-	if again, err := graphsvc.Boot(ctx, g, graphsvc.Options{Models: bootModels()}); err != nil || again != (graphsvc.Report{}) {
+	if srcs, err := g.Sources(ctx); err != nil || len(srcs) != 2 || !srcs[0].Holds("alm") {
+		t.Fatalf("declared sources = %+v, %v", srcs, err)
+	}
+	if again, err := graphsvc.Boot(ctx, g, graphsvc.Options{Models: bootModels(), Sources: []lnk.Source{content}}); err != nil || again != (graphsvc.Report{}) {
 		t.Fatalf("second boot = %+v, %v", again, err)
 	}
 	if after, _ := g.Changes(ctx); len(after) != len(cs) {

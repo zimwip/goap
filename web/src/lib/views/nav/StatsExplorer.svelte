@@ -1,11 +1,13 @@
 <script lang="ts">
-  // "Statistics" tool: what every namespace of the graph holds (nodes, versions, links, changes), the totals above; a
+  // "Statistics" tool: what every namespace of every graph holds (nodes, versions, links, changes), the totals above,
+  // grouped by the graph source holding them (ADR 0154 §9: the platform graph lists the content graph's too); a
   // namespace opens its statistics tab (the shape of the state at the head of a branch, per type, the store).
   import Icon from '../../shell/Icon.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import { graph, errorMessage, type NamespaceSummary } from '../../api';
   import { fmt, num, overviewTotals } from '../../graphStats';
+  import { bySource } from '../../sources';
 
   let items = $state<NamespaceSummary[]>([]);
   let loading = $state(false);
@@ -29,6 +31,7 @@
   });
 
   const totals = $derived(overviewTotals(items));
+  const groups = $derived(bySource(items));
   const largest = $derived(Math.max(1, ...items.map((n) => num(n.nodes))));
 
   function open(namespace: string, pin = false) {
@@ -55,30 +58,33 @@
       <div><dt>Branches</dt><dd>{fmt(totals.branches)}</dd></div>
     </dl>
   {/if}
-  <ul class="list" aria-label="Namespaces">
-    {#each items as n (n.namespace)}
-      <li>
-        <button
-          type="button"
-          class="ns"
-          title="Open the statistics of {n.namespace}"
-          onclick={() => open(n.namespace ?? '')}
-          ondblclick={() => open(n.namespace ?? '', true)}
-        >
-          <span class="row">
-            <span class="name">{n.namespace}</span>
-            <span class="count">{fmt(n.nodes)} nodes</span>
-          </span>
-          <span class="bar" aria-hidden="true"><span style:width="{(100 * num(n.nodes)) / largest}%"></span></span>
-          <span class="detail">
-            {fmt(n.types)} types · {fmt(n.versions)} versions · {fmt(n.linkRows)} links · {fmt(n.changes)} changes
-          </span>
-        </button>
-      </li>
-    {:else}
-      {#if !loading && !error}<li class="empty pad">The graph holds no node yet.</li>{/if}
-    {/each}
-  </ul>
+  {#each groups as grp (grp.source)}
+    {#if groups.length > 1}<div class="source" title="The graph source holding these namespaces">{grp.source}</div>{/if}
+    <ul class="list" aria-label={`Namespaces of ${grp.source}`}>
+      {#each grp.items as n (n.namespace)}
+        <li>
+          <button
+            type="button"
+            class="ns"
+            title="Open the statistics of {n.namespace}"
+            onclick={() => open(n.namespace ?? '')}
+            ondblclick={() => open(n.namespace ?? '', true)}
+          >
+            <span class="row">
+              <span class="name">{n.namespace}</span>
+              <span class="count">{fmt(n.nodes)} nodes</span>
+            </span>
+            <span class="bar" aria-hidden="true"><span style:width="{(100 * num(n.nodes)) / largest}%"></span></span>
+            <span class="detail">
+              {fmt(n.types)} types · {fmt(n.versions)} versions · {fmt(n.linkRows)} links · {fmt(n.changes)} changes
+            </span>
+          </button>
+        </li>
+      {/each}
+    </ul>
+  {:else}
+    {#if !loading && !error}<p class="empty pad">The graph holds no node yet.</p>{/if}
+  {/each}
 </div>
 
 <style>
@@ -113,6 +119,14 @@
     list-style: none;
     margin: 0;
     padding: 0;
+  }
+  .source {
+    padding: 0.4rem 0.8rem 0.15rem;
+    font-size: 0.75em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
   }
   .ns {
     display: flex;

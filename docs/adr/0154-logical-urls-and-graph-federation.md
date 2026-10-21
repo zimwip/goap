@@ -87,18 +87,32 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
       (a top-level `namespace` field), or a change that lives there (`change_id`, or the `id` of a call on a change:
       this graph's `Graph.HasChange`, else asked to the other graphs and remembered), headers and body as they came;
       a call naming neither is served here and tried on the other graphs when this one answers not found (a node read
-      by its id). A change acting on one namespace (CLAUDE.md, rule 2) runs on one graph. The routes are
-      configuration (`GOAP_GRAPH_ROUTES`, `ns1,ns2=url;ns3=url2`, `graphsvc.ParseRoutes`), not yet read from the
-      sources of the platform;
+      by its id). A change acting on one namespace (CLAUDE.md, rule 2) runs on one graph. The routes are the declared
+      sources (addendum, 2026-10-21): the kind of a source is its driver, and a `platform@Source` of kind `graph` with a
+      location and `namespaces` (`lnk.Source.Namespaces`, `Holds`) is the graph holding them: the router routes their
+      calls there (`Router.Sources` = `Graph.Sources`, the declarations in force on main, read again when the head of
+      `platform` moves), a URL naming one of them is read there (`Graph.declaredSource`), and the namespace listings
+      (`GetGraphOverview`, `ListNamespaces`) are every graph's, merged by the router, each summary naming its source
+      (`NamespaceSummary.source`; the statistics of the web group them by source). The platform graph is the source
+      `platform` (`graphsvc.PlatformSource`: kind `graph`, no location), the one every namespace no other graph holds
+      belongs to;
    4. (done) the deployment runs `graph` (the platform graph, routing) and `graph-content` (compose services, one
       database schema each; `GOAP_GRAPH_SPACE=content`, `GOAP_PLATFORM_GRAPH_URL`): the content graph reads its types
       from the platform's domain registry (`domainclient`, reloaded on the domain events), runs no bootstrap and no
-      seed, serves the graph service only, and checks owners and projects through an `access.Directory` over the
+      seed (it holds no organisation nor project root), serves the graph service only, and checks owners and projects through an `access.Directory` over the
       platform graph's client, the heads it reads followed by `graphsnap.Heads` (kept until a `baseline.advanced`
       event of main on the bus, else read at every use). `goap-dev` keeps one graph over one database.
+      The bootstrap is a command of the graph (addendum): `graph bootstrap` runs `graphsvc.Boot` against the database
+      (the roots, the policies, the built-in MCPs, the models, the sources: `SeedSources` declares `platform` and the
+      graph sources of `GOAP_GRAPH_SOURCES`, `name=ns1,ns2@url;…`, each once, an edited or retired declaration staying
+      so; the dev seeds of `GOAP_GRAPH_SEED`), then exits; compose runs it as the one-shot service `graph-bootstrap`
+      before `graph`, at every `make up`. The graph service bootstraps nothing unless `GOAP_GRAPH_BOOTSTRAP=1` (the
+      performance stack) or its store is in memory; a content graph has nothing to bootstrap. `goap-dev` boots in
+      process as before.
    What is left: the listings (changes, nodes by type, search) are each graph's own, not merged by the router; the
    jobs, smart tags and source imports of the content namespaces still run on the platform graph; a streaming call is
-   served by the platform graph only; the routes do not yet come from the `platform@Source` nodes.
+   served by the platform graph only; a content graph reads no source declaration (its URLs to another graph name a
+   namespace of the platform graph only through the platform graph).
 
 ## Steps
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/lib/llmcfg"
 )
@@ -20,6 +21,9 @@ type Options struct {
 	// Dev, when set, runs last: the development or demo data of the composition (internal/devseed). The platform
 	// bootstrap never carries it, a production composition leaves it nil.
 	Dev func(ctx context.Context, g *graph.Graph) error
+	// Sources are the graph sources the bootstrap declares besides the platform graph's own (ADR 0154 §9: the content
+	// graph), each once: SeedSources.
+	Sources []lnk.Source
 	// Log receives the one-line warning about the hooks the composition lacks; the default logger when nil.
 	Log *slog.Logger
 }
@@ -33,7 +37,7 @@ type ModelsConfig struct {
 
 // Report says what Boot wrote.
 type Report struct {
-	Access, Builtins, Models, Aliases, Behaviors bool
+	Access, Builtins, Models, Aliases, Behaviors, Sources bool
 }
 
 // Boot is the platform bootstrap every composition runs, the same steps in the same order (ADR 0071). Ordering contract:
@@ -43,7 +47,8 @@ type Report struct {
 //     catalogue holding the domains Boot and Options.Dev write to (the registry seeds the domains: SeedDomains, then
 //     Types reload). Boot writes through those hooks: it never runs ahead of them.
 //  2. Boot: Graph.Bootstrap (the roots ORG-DEFAULT and PROJ-ROOT, ADR 0054), SeedAccess (the default policies),
-//     SeedBuiltins (the built-in MCPs, adapter definitions, roles), SeedModels (the model gateway configuration), SeedProtectedAliases (the assistant and helper aliases, ADR 0084), SeedBehaviors (the built-in LLM behaviour, enabled, ADR 0093), then
+//     SeedBuiltins (the built-in MCPs, adapter definitions, roles), SeedModels (the model gateway configuration), SeedProtectedAliases (the assistant and helper aliases, ADR 0084), SeedBehaviors (the built-in LLM behaviour, enabled, ADR 0093), SeedSources (the platform graph's source and
+//     Options.Sources, ADR 0154), then
 //     Options.Dev if any. Every step is idempotent, so a second call writes nothing.
 //  3. After Boot, the registry seeds the methodologies (Service.Seed): they need the model aliases of SeedModels.
 //
@@ -84,6 +89,9 @@ func Boot(ctx context.Context, g *graph.Graph, o Options) (Report, error) {
 	}
 	if r.Behaviors, err = SeedBehaviors(ctx, g); err != nil {
 		return r, fmt.Errorf("seed LLM behaviors: %w", err)
+	}
+	if r.Sources, err = SeedSources(ctx, g, o.Sources); err != nil {
+		return r, fmt.Errorf("seed sources: %w", err)
 	}
 	if o.Dev != nil {
 		if err := o.Dev(ctx, g); err != nil {

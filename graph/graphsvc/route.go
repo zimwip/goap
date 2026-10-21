@@ -19,6 +19,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	graphv1 "github.com/zimwip/goap/contracts/gen/goap/graph/v1"
 	"github.com/zimwip/goap/contracts/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/contracts/lnk"
 )
 
 // Two graph spaces (ADR 0154 §9): the platform graph serves the platform, the organisation and the methodologies, and
@@ -26,8 +27,10 @@ import (
 // Router is that forwarding, in front of the graph service of the platform graph: a unary call of the graph service
 // naming a namespace another graph holds (a top-level `namespace` field), or a change that lives there (`change_id`,
 // or the `id` of a call on a change), is passed as is, headers and body, to that graph; any other call is served here,
-// and passed to the other graphs in turn when this one answers not found (a node read by its id). The listings are
-// this graph's: the content graph lists its own.
+// and passed to the other graphs in turn when this one answers not found (a node read by its id). The graphs are the
+// declared sources (platform@Source of kind graph with a location and the namespaces it holds, lnk.Source.Holds): the
+// source is the driver of the namespaces it holds. The overview of the namespaces and their list are every graph's
+// (mergedListings), each namespace naming its source; the other listings are this graph's.
 
 // RouterMaxBody is the largest request body Router reads to route it; a larger one is served here.
 const RouterMaxBody = 16 << 20
@@ -36,8 +39,11 @@ const RouterMaxBody = 16 << 20
 type Router struct {
 	// Local serves the calls of this graph.
 	Local http.Handler
-	// Routes gives the base URL of the graph serving a namespace; a namespace it does not name is this graph's.
-	Routes map[string]string
+	// Sources are the declared sources (Graph.Sources): the graph sources with a location hold the namespaces they
+	// name; a namespace none holds is this graph's. Nil: every call is this graph's.
+	Sources func(ctx context.Context) ([]lnk.Source, error)
+	// LocalSource is the name of this graph's source in the listings it merges (the platform source).
+	LocalSource string
 	// Client calls the other graphs (the calls forwarded, and the lookup of a change).
 	Client connect.HTTPClient
 	// HasChange reports a change this graph holds; nil: none (every change named is looked up in the other graphs).
@@ -50,6 +56,10 @@ type Router struct {
 const forwardedPrefix = "X-Goap-"
 
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if m := r.method(req.URL.Path); m != nil && mergedListings[m.Name()] && r.Sources != nil && req.Method == http.MethodPost {
+		r.merge(w, req, m)
+		return
+	}
 	base, body, named, err := r.route(req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -71,7 +81,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	req.Body = io.NopCloser(bytes.NewReader(body))
 	r.Local.ServeHTTP(rec, req)
 	if rec.status == http.StatusNotFound {
-		for _, base := range r.bases() {
+		for _, base := range r.bases(req.Context()) {
 			other := &recorder{header: http.Header{}, status: http.StatusOK}
 			r.forward(other, req, base, body)
 			if other.status != http.StatusNotFound {
@@ -83,16 +93,44 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	rec.replay(w)
 }
 
-// bases are the base URLs of the other graphs, each once.
-func (r *Router) bases() []string {
-	var out []string
-	for _, b := range r.Routes {
-		if !slices.Contains(out, b) {
-			out = append(out, b)
+// graphs are the declared graph sources holding namespaces (lnk.Source.Holds), each location once.
+func (r *Router) graphs(ctx context.Context) ([]lnk.Source, error) {
+	if r.Sources == nil {
+		return nil, nil
+	}
+	all, err := r.Sources(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []lnk.Source
+	for _, src := range all {
+		if src.Kind == lnk.KindGraph && src.Location != "" && len(src.Namespaces) > 0 &&
+			!slices.ContainsFunc(out, func(o lnk.Source) bool { return o.Location == src.Location }) {
+			out = append(out, src)
 		}
 	}
-	slices.Sort(out)
+	return out, nil
+}
+
+// bases are the base URLs of the other graphs, each once.
+func (r *Router) bases(ctx context.Context) []string {
+	gs, _ := r.graphs(ctx)
+	out := make([]string, 0, len(gs))
+	for _, g := range gs {
+		out = append(out, g.Location)
+	}
 	return out
+}
+
+// baseOf is the base URL of the graph holding a namespace, "" for this graph.
+func (r *Router) baseOf(ctx context.Context, ns string) (string, error) {
+	gs, err := r.graphs(ctx)
+	for _, g := range gs {
+		if g.Holds(ns) {
+			return g.Location, nil
+		}
+	}
+	return "", err
 }
 
 // recorder keeps an answer to replay it, or to try another graph instead.
@@ -117,7 +155,7 @@ func (r *recorder) replay(w http.ResponseWriter) {
 // route is the base URL of the graph serving a call ("" for this graph), the body it read (nil: none read) and whether
 // the call names a namespace or a change (then its graph is known).
 func (r *Router) route(req *http.Request) (base string, body []byte, named bool, err error) {
-	if len(r.Routes) == 0 || req.Method != http.MethodPost || req.Header.Get("Content-Encoding") != "" {
+	if r.Sources == nil || req.Method != http.MethodPost || req.Header.Get("Content-Encoding") != "" {
 		return "", nil, false, nil
 	}
 	ct := req.Header.Get("Content-Type")
@@ -150,7 +188,8 @@ func (r *Router) route(req *http.Request) (base string, body []byte, named bool,
 	}
 	fields := msg.ProtoReflect()
 	if ns := stringField(fields, "namespace"); ns != "" {
-		return r.Routes[domain.NamespaceOf(ns)], body, true, nil
+		base, err = r.baseOf(req.Context(), domain.NamespaceOf(ns))
+		return base, body, true, err
 	}
 	id := stringField(fields, "change_id")
 	if id == "" && strings.Contains(string(method.Name()), "Change") {
@@ -200,7 +239,7 @@ func (r *Router) changeBase(req *http.Request, id domain.ChangeID) (string, erro
 			return "", nil
 		}
 	}
-	for _, base := range r.bases() {
+	for _, base := range r.bases(req.Context()) {
 		c := graphv1connect.NewGraphServiceClient(r.Client, base)
 		get := connect.NewRequest(&graphv1.GetChangeRequest{Id: string(id)})
 		for k, vs := range req.Header {
@@ -243,24 +282,107 @@ func (r *Router) forward(w http.ResponseWriter, req *http.Request, base string, 
 	_, _ = io.Copy(w, res.Body)
 }
 
-// ParseRoutes reads the routes of the namespaces other graphs hold: "ns1,ns2=url;ns3=url2" (each group the namespaces a
-// graph serves, then its base URL).
-func ParseRoutes(spec string) (map[string]string, error) {
-	out := map[string]string{}
-	for _, group := range strings.Split(spec, ";") {
-		group = strings.TrimSpace(group)
-		if group == "" {
+// mergedListings are the calls every graph answers, merged: the namespaces and their overview.
+var mergedListings = map[protoreflect.Name]bool{"GetGraphOverview": true, "ListNamespaces": true}
+
+// merge serves a listing every graph answers: this graph's answer, then each graph source's, a namespace listed once
+// (this graph first), each summary naming its source. A graph that does not answer is left out of the listing.
+func (r *Router) merge(w http.ResponseWriter, req *http.Request, m protoreflect.MethodDescriptor) {
+	body, err := io.ReadAll(io.LimitReader(req.Body, RouterMaxBody))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// the answers are decoded here: none compressed
+	req.Header.Del("Accept-Encoding")
+	req.Header.Del("Connect-Accept-Encoding")
+	ct := req.Header.Get("Content-Type")
+	local := &recorder{header: http.Header{}, status: http.StatusOK}
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	r.Local.ServeHTTP(local, req)
+	if local.status != http.StatusOK || (ct != "application/proto" && ct != "application/json") {
+		local.replay(w)
+		return
+	}
+	out, err := decodeAnswer(m, ct, local.body.Bytes())
+	if err != nil {
+		local.replay(w)
+		return
+	}
+	stamp(out, r.LocalSource)
+	gs, err := r.graphs(req.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	for _, g := range gs {
+		other := &recorder{header: http.Header{}, status: http.StatusOK}
+		r.forward(other, req, g.Location, body)
+		if other.status != http.StatusOK {
 			continue
 		}
-		names, base, ok := strings.Cut(group, "=")
-		if !ok || strings.TrimSpace(base) == "" {
-			return nil, errors.New("graph routes: want namespaces=url, got " + group)
+		if msg, err := decodeAnswer(m, ct, other.body.Bytes()); err == nil {
+			stamp(msg, g.Name)
+			mergeListing(out, msg)
 		}
-		for _, ns := range strings.Split(names, ",") {
-			if ns = strings.TrimSpace(ns); ns != "" {
-				out[ns] = strings.TrimSpace(base)
+	}
+	var b []byte
+	if ct == "application/json" {
+		b, err = protojson.Marshal(out)
+	} else {
+		b, err = proto.Marshal(out)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for k, vs := range local.header {
+		if k != "Content-Length" && k != "Content-Encoding" {
+			w.Header()[k] = vs
+		}
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(b)
+}
+
+func decodeAnswer(m protoreflect.MethodDescriptor, ct string, b []byte) (proto.Message, error) {
+	mt, err := protoregistry.GlobalTypes.FindMessageByName(m.Output().FullName())
+	if err != nil {
+		return nil, err
+	}
+	msg := mt.New().Interface()
+	if ct == "application/json" {
+		return msg, protojson.UnmarshalOptions{DiscardUnknown: true}.Unmarshal(b, msg)
+	}
+	return msg, proto.Unmarshal(b, msg)
+}
+
+// stamp names the source of the namespaces of an overview that name none.
+func stamp(msg proto.Message, source string) {
+	if o, ok := msg.(*graphv1.GetGraphOverviewResponse); ok {
+		for _, n := range o.Namespaces {
+			if n.Source == "" {
+				n.Source = source
 			}
 		}
 	}
-	return out, nil
+}
+
+// mergeListing adds to a listing the namespaces of another it does not list yet.
+func mergeListing(into, from proto.Message) {
+	switch o := into.(type) {
+	case *graphv1.GetGraphOverviewResponse:
+		for _, n := range from.(*graphv1.GetGraphOverviewResponse).Namespaces {
+			if !slices.ContainsFunc(o.Namespaces, func(x *graphv1.NamespaceSummary) bool { return x.Namespace == n.Namespace }) {
+				o.Namespaces = append(o.Namespaces, n)
+			}
+		}
+	case *graphv1.ListNamespacesResponse:
+		for _, n := range from.(*graphv1.ListNamespacesResponse).Namespaces {
+			if !slices.Contains(o.Namespaces, n) {
+				o.Namespaces = append(o.Namespaces, n)
+			}
+		}
+		slices.Sort(o.Namespaces)
+	}
 }

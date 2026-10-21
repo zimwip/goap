@@ -4286,7 +4286,10 @@ type NamespaceSummary struct {
 	// the node types holding nodes
 	Types int32 `protobuf:"varint,8,opt,name=types,proto3" json:"types,omitempty"`
 	// the entries of the logs of its changes
-	LogEntries    int32 `protobuf:"varint,9,opt,name=log_entries,json=logEntries,proto3" json:"log_entries,omitempty"`
+	LogEntries int32 `protobuf:"varint,9,opt,name=log_entries,json=logEntries,proto3" json:"log_entries,omitempty"`
+	// the graph source holding it (ADR 0154 §9: a platform@Source of kind graph; the platform graph's own name for its
+	// namespaces), set by the platform graph when it lists every graph
+	Source        string `protobuf:"bytes,10,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4382,6 +4385,13 @@ func (x *NamespaceSummary) GetLogEntries() int32 {
 		return x.LogEntries
 	}
 	return 0
+}
+
+func (x *NamespaceSummary) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
 }
 
 type GetGraphStatsRequest struct {
@@ -19474,7 +19484,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x18GetGraphOverviewResponse\x12?\n" +
 	"\n" +
 	"namespaces\x18\x01 \x03(\v2\x1f.goap.graph.v1.NamespaceSummaryR\n" +
-	"namespaces\"\x8a\x02\n" +
+	"namespaces\"\xa2\x02\n" +
 	"\x10NamespaceSummary\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x14\n" +
 	"\x05nodes\x18\x02 \x01(\x05R\x05nodes\x12\x1a\n" +
@@ -19485,7 +19495,9 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\bbranches\x18\a \x01(\x05R\bbranches\x12\x14\n" +
 	"\x05types\x18\b \x01(\x05R\x05types\x12\x1f\n" +
 	"\vlog_entries\x18\t \x01(\x05R\n" +
-	"logEntries\"L\n" +
+	"logEntries\x12\x16\n" +
+	"\x06source\x18\n" +
+	" \x01(\tR\x06source\"L\n" +
 	"\x14GetGraphStatsRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
 	"\x06branch\x18\x02 \x01(\tR\x06branch\"H\n" +

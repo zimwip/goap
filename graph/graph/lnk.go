@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -18,6 +20,12 @@ import (
 type lnkState struct {
 	once sync.Once
 	reg  *lnk.Registry
+
+	mu      sync.Mutex
+	head    domain.BaselineID // the head of the platform namespace the sources were read at
+	read    bool
+	sources []lnk.Source
+	broken  map[string]error // the declarations that declare no valid source, by name
 }
 
 // Lnk is the registry of the sources of the graph: the graph resolver, the other resolvers of Graph.Resolvers, the
@@ -35,23 +43,64 @@ func (g *Graph) Lnk() *lnk.Registry {
 	return g.lnk.reg
 }
 
-// declaredSource reads the platform@Source node of a name, in force on main.
+// declaredSource is the source of a name: the platform@Source node of that name in force on main, else, for the name of
+// a namespace a graph source holds (lnk.Source.Holds: the content graph, ADR 0154 §9), that namespace of that graph.
 func (g *Graph) declaredSource(ctx context.Context, name string) (lnk.Source, bool, error) {
-	n, err := g.NodeByKeyOn(ctx, domain.NamespacePlatform, domain.MainBranch, domain.SourceKey(name))
-	if errors.Is(err, ErrNotFound) {
-		return lnk.Source{}, false, nil
-	}
+	all, err := g.Sources(ctx)
 	if err != nil {
 		return lnk.Source{}, false, err
 	}
-	if n.Deleted || n.Type != domain.TypeSource || n.State == "retired" {
-		return lnk.Source{}, false, nil
+	g.lnk.mu.Lock()
+	broken := g.lnk.broken[name]
+	g.lnk.mu.Unlock()
+	if broken != nil {
+		return lnk.Source{}, false, broken // a malformed declaration is an error, not a fallback
 	}
-	src, err := domain.SourceOf(n)
+	for _, src := range all {
+		if src.Name == name {
+			return src, true, nil
+		}
+	}
+	for _, src := range all {
+		if src.Holds(name) {
+			return lnk.Source{Name: name, Kind: lnk.KindGraph, Namespace: name, Location: src.Location, Branch: src.Branch,
+				Description: src.Description, Params: src.Params}, true, nil
+		}
+	}
+	return lnk.Source{}, false, nil
+}
+
+// Sources are the sources the platform@Source nodes in force on main declare (ADR 0154), by name: read again when the
+// head of the platform namespace moved. A node that declares no valid source is left out (naming it is an error).
+func (g *Graph) Sources(ctx context.Context) ([]lnk.Source, error) {
+	head, err := g.BranchHead(ctx, domain.NamespacePlatform, domain.MainBranch)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+	g.lnk.mu.Lock()
+	defer g.lnk.mu.Unlock()
+	if g.lnk.read && g.lnk.head == head.ID {
+		return g.lnk.sources, nil
+	}
+	nodes, err := g.NodesOfType(ctx, domain.NamespacePlatform, domain.TypeSource)
 	if err != nil {
-		return lnk.Source{}, false, err
+		return nil, err
 	}
-	return src, true, nil
+	var out []lnk.Source
+	broken := map[string]error{}
+	for _, n := range nodes {
+		if n.Deleted || n.State == "retired" {
+			continue
+		}
+		if src, err := domain.SourceOf(n); err == nil {
+			out = append(out, src)
+		} else {
+			broken[strings.TrimPrefix(n.Key, domain.SourceKeyPrefix)] = err
+		}
+	}
+	slices.SortFunc(out, func(a, b lnk.Source) int { return strings.Compare(a.Name, b.Name) })
+	g.lnk.head, g.lnk.read, g.lnk.sources, g.lnk.broken = head.ID, true, out, broken
+	return out, nil
 }
 
 // Resolve reads what a logical URL points to, with no project: the sources as their names say.

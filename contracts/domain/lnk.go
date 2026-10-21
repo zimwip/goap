@@ -55,6 +55,16 @@ func SourceOf(n Node) (lnk.Source, error) {
 	}
 	src := lnk.Source{Name: name, Kind: str("kind"), Namespace: str("namespace"), Location: str("location"),
 		Branch: str("branch"), Description: str("description")}
+	switch ns := n.Properties["namespaces"].(type) {
+	case []string:
+		src.Namespaces = ns
+	case []any:
+		for _, v := range ns {
+			if s, ok := v.(string); ok && s != "" {
+				src.Namespaces = append(src.Namespaces, s)
+			}
+		}
+	}
 	if p, ok := n.Properties["params"].(map[string]any); ok {
 		src.Params = p
 	}
