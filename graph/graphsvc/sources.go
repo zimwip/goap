@@ -2,11 +2,13 @@ package graphsvc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/graph/graph"
 )
@@ -96,4 +98,36 @@ func ParseSources(spec string) ([]lnk.Source, error) {
 		out = append(out, s)
 	}
 	return out, nil
+}
+
+// PlatformSourceValidator keeps the platform graph's own source as the bootstrap declares it: the namespaces no other
+// graph holds are this graph's, so no change may edit, retarget or retire SRC:platform. Its creation must be the
+// declaration of this graph (kind graph, no location, no namespace held). Wired onto Graph.Validators (cmd/graph,
+// cmd/goap-dev).
+type PlatformSourceValidator struct{}
+
+// Types runs the validator whenever a change touches a source.
+func (PlatformSourceValidator) Types() []string { return []string{domain.TypeSource} }
+
+// Validate refuses any version of the platform source but its creation as this graph.
+func (PlatformSourceValidator) Validate(_ context.Context, _ graphapi.ValidatorQuery, impacted []graphapi.ValidatedNode) error {
+	key := domain.SourceKey(PlatformSource)
+	for _, v := range impacted {
+		if v.Post.Key != key {
+			continue
+		}
+		if v.Pre == nil {
+			s, err := domain.SourceOf(v.Post)
+			if err != nil || s.Kind != lnk.KindGraph || s.Location != "" || len(s.Namespaces) > 0 {
+				return fmt.Errorf("source %s is this graph: it is declared of kind graph, with no location and no namespace held: %w", PlatformSource, graphapi.ErrInvalid)
+			}
+			continue
+		}
+		pre, _ := json.Marshal(v.Pre.Properties)
+		post, _ := json.Marshal(v.Post.Properties)
+		if v.Post.State != v.Pre.State || string(pre) != string(post) {
+			return fmt.Errorf("source %s is the platform graph: it cannot be edited or retired: %w", PlatformSource, graphapi.ErrInvalid)
+		}
+	}
+	return nil
 }

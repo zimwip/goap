@@ -70,6 +70,7 @@
     form &&
     !problem &&
     run(async () => {
+      if (form!.name === PLATFORM_SOURCE) throw new Error(`The source ${PLATFORM_SOURCE} is the platform graph: it cannot be changed.`);
       if (!editing && sources.some((s) => s.name === form!.name)) throw new Error(`A source named ${form!.name} is already declared.`);
       await stageUpsert(ns.platform, SOURCE_TYPE, sourceKey(form!.name), sourceProps(form!));
       form = undefined;
@@ -93,7 +94,7 @@
   </div>
   <p class="hint">
     The kind of a source is its driver. A source of kind <strong>graph</strong> with no location is this graph: <code>{PLATFORM_SOURCE}</code> holds the platform, the
-    organisation, the methodologies and every namespace no other graph holds. A source of kind <strong>graph</strong> at a location is another graph service: the
+    organisation, the methodologies and every namespace no other graph holds; it is fixed. A source of kind <strong>graph</strong> at a location is another graph service: the
     namespaces it holds (the content graph: <code>alm</code>, <code>code</code>…) are read and changed there, and the statistics list them. A source of kind
     <strong>files</strong> is a root directory. A logical URL <code>lnk:&lt;source&gt;/&lt;type&gt;/&lt;key&gt;</code> names a source or a namespace; each project chooses
     which declared source holds the sources its URLs name (project tab, <em>Sources</em>; inherited by its sub-projects).
@@ -121,8 +122,12 @@
               <td>{sourceRole(s)}</td>
               <td class="actions">
                 {#if s.pending}<span class="pending" title="Not saved yet">unsaved</span>{/if}
-                <button type="button" class="small" disabled={busy} onclick={() => edit(s)}>Edit</button>
-                {#if s.name !== PLATFORM_SOURCE}<button type="button" class="small danger" disabled={busy} onclick={() => remove(s)}>Retire</button>{/if}
+                {#if s.name === PLATFORM_SOURCE}
+                  <span class="muted" title="The platform graph's own source is the bootstrap's: it cannot be edited or retired">fixed</span>
+                {:else}
+                  <button type="button" class="small" disabled={busy} onclick={() => edit(s)}>Edit</button>
+                  <button type="button" class="small danger" disabled={busy} onclick={() => remove(s)}>Retire</button>
+                {/if}
               </td>
             </tr>
           {/each}

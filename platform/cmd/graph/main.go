@@ -199,7 +199,7 @@ func main() {
 	// the history of a change (ADR 0109): no registry here, so no step relies on another for its standing
 	g.LogFacets = graphsvc.LogFacets(nil)
 	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, access.ProjectScopeValidator{}, access.ProjectOwnerValidator{},
-		llmcfg.ProtectedAliasValidator{}}
+		llmcfg.ProtectedAliasValidator{}, graphsvc.PlatformSourceValidator{}}
 	// the roles a methodology allows each operation to (ADR 0103, 0138), asked of the methodology registry: without
 	// them, an operation on a change would be the administrators' only
 	registry := registrysvc.NewClient(&http.Client{Timeout: 30 * time.Second}, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), telemetry.ClientOptions()...)

@@ -1581,7 +1581,7 @@ Every composition (`goap-dev`, `platform/cmd/graph`) seeds the platform through 
    reload). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
    logs one warning, "change lifecycle and activity gating are not available in this composition".
 2. `Boot`: `Graph.Bootstrap` (roots), `SeedAccess` (default policies), `SeedBuiltins` (built-in MCPs, adapter definitions,
-   platform roles), `SeedModels` (`Options.Models`), `SeedProtectedAliases` (the `assistant` and `helper` aliases, ADR 0084), `SeedBehaviors` (the built-in `terse` LLM behaviour, disabled, ADR 0093), `SeedSources` (the source `platform` and `Options.Sources`, ADR 0154), then `Options.Dev`. Each step is idempotent.
+   platform roles), `SeedModels` (`Options.Models`), `SeedProtectedAliases` (the `assistant` and `helper` aliases, ADR 0084), `SeedBehaviors` (the built-in `terse` LLM behaviour, disabled, ADR 0093), `SeedSources` (the source `platform`, fixed by `PlatformSourceValidator`, and `Options.Sources`, ADR 0154), then `Options.Dev`. Each step is idempotent.
 3. The registry then seeds the methodologies (`goap-dev`; `platform/cmd/registry` seeds them over RPC): they need the aliases of step 2.
 
 Development and demo data is not part of it (`platform/devseed`: `Demo` the ALM repository, `DocumentRepository` the

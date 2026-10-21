@@ -95,7 +95,8 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
       (`GetGraphOverview`, `ListNamespaces`) are every graph's, merged by the router, each summary naming its source
       (`NamespaceSummary.source`; the statistics of the web group them by source). The platform graph is the source
       `platform` (`graphsvc.PlatformSource`: kind `graph`, no location), the one every namespace no other graph holds
-      belongs to;
+      belongs to; its declaration is fixed (`graphsvc.PlatformSourceValidator` on `Graph.Validators`: created only as
+      this graph, then never edited nor retired);
    4. (done) the deployment runs `graph` (the platform graph, routing) and `graph-content` (compose services, one
       database schema each; `GOAP_GRAPH_SPACE=content`, `GOAP_PLATFORM_GRAPH_URL`): the content graph reads its types
       from the platform's domain registry (`domainclient`, reloaded on the domain events), runs no bootstrap and no
