@@ -16,7 +16,8 @@ import (
 
 // Graph is the part of the graph a snapshot reads.
 type Graph interface {
-	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
+	// BranchHeadHeader is the header of the head of a branch, never its state.
+	BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 }
 
@@ -65,7 +66,7 @@ func (r *Reader) of(namespace string) *nsState {
 
 // Head returns the commit at the head of namespace's main ("": none yet).
 func (r *Reader) Head(ctx context.Context, namespace string) (domain.BaselineID, error) {
-	b, err := r.Graph.BranchHead(ctx, namespace, domain.MainBranch)
+	b, err := r.Graph.BranchHeadHeader(ctx, namespace, domain.MainBranch)
 	if errors.Is(err, graphapi.ErrNotFound) {
 		return "", nil
 	}
@@ -145,7 +146,7 @@ func (v *View[T]) head(ctx context.Context, namespace string) (domain.BaselineID
 	if v.Heads == nil {
 		return v.Reader.Head(ctx, namespace)
 	}
-	b, err := v.Heads.Get(ctx, namespace, domain.MainBranch, v.Reader.Graph.BranchHead)
+	b, err := v.Heads.Get(ctx, namespace, domain.MainBranch, v.Reader.Graph.BranchHeadHeader)
 	if errors.Is(err, graphapi.ErrNotFound) {
 		return "", nil
 	}

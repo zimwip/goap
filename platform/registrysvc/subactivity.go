@@ -36,7 +36,7 @@ func (s *Service) SubChangeValidator(ctx context.Context, parent, child domain.C
 // activityWithin reports whether the Activity with key ref is ancestor or a descendant of it, walking up the
 // sub_activity links (parent -> child) of the head of the methodology namespace's main branch, suspect ones included.
 func activityWithin(ctx context.Context, g StoreGraph, ref, ancestor string) (bool, error) {
-	head, err := g.BranchHead(ctx, NamespaceMethodology, domain.MainBranch)
+	head, err := g.BranchHeadHeader(ctx, NamespaceMethodology, domain.MainBranch)
 	if err != nil {
 		return false, err
 	}

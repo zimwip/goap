@@ -801,6 +801,15 @@ func (c *Client) BranchHead(ctx context.Context, namespace, name string) (domain
 	return pbconv.BaselineFromPB(r.Msg.Head), nil
 }
 
+// BranchHeadHeader is the header of the head of a branch: its id and order, never its state.
+func (c *Client) BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Baseline, error) {
+	r, err := c.rpc.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Namespace: namespace, Name: name, HeaderOnly: true}))
+	if err != nil {
+		return domain.Baseline{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.BaselineFromPB(r.Msg.Head), nil
+}
+
 // TagVersion names a node version (ADR 0143 §6).
 func (c *Client) TagVersion(ctx context.Context, ref domain.NodeRef, name string) (domain.Tag, error) {
 	r, err := c.rpc.TagVersion(ctx, connect.NewRequest(&graphv1.TagVersionRequest{NodeId: string(ref.ID), Version: int32(ref.Version), Name: name}))

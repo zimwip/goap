@@ -11,7 +11,7 @@ import (
 // Heads keeps the heads of the branches of a graph another process holds, followed by its events (ADR 0154 §9: a
 // content graph reading the organisation of the platform graph, at every write it places): a head is asked once, then
 // again only once Moved says a main branch moved (the graph's baseline events), or past MaxAge (an event lost on the
-// way; 0: never). A reader of a graph whose BranchHead goes through Get reads that graph only when it changed.
+// way; 0: never). A reader of a graph whose BranchHeadHeader goes through Get reads that graph only when it changed.
 type Heads struct {
 	MaxAge time.Duration
 

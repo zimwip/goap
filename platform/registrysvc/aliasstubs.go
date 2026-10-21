@@ -84,7 +84,7 @@ func referencedAliases(m *methodology.Methodology) []string {
 // platform/main (an existing-but-broken alias, i.e. present with an empty target, still
 // counts as "exists" - don't re-stub it).
 func missingAliases(ctx context.Context, g StoreGraph, aliases []string) ([]string, error) {
-	head, err := g.BranchHead(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
+	head, err := g.BranchHeadHeader(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
 	if errors.Is(err, graphapi.ErrNotFound) {
 		return aliases, nil // no platform graph yet: every alias is "missing"
 	}
@@ -142,7 +142,7 @@ func hasPendingStub(ctx context.Context, g StoreGraph, alias string) (bool, erro
 // calls Graph.Commit (which auto-accepts) nor ImpactNodeReview/Apply: the change stays open and visible in the review queue
 // until an administrator reviews it.
 func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, methodologyName string) error {
-	head, err := g.BranchHead(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
+	head, err := g.BranchHeadHeader(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
 	if err != nil {
 		return err
 	}

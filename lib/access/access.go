@@ -127,7 +127,7 @@ func PolicyFromProps(props map[string]any) (authz.Policy, error) {
 
 // Graph is the part of the graph the directory reads.
 type Graph interface {
-	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
+	BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 	// Structures names the organisation and the projects (ADR 0054): the snapshot never names their types itself.
 	Structures(ctx context.Context) (domain.Structures, error)

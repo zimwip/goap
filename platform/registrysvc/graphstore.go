@@ -26,7 +26,7 @@ const TypeMethodologyVersion = "methodology@MethodologyVersion"
 
 // StoreGraph is what the store needs from the graph (*graph.Graph and the graph service client implement it).
 type StoreGraph interface {
-	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
+	BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 	// Commit runs a change of node edits (ADR 0024).
 	Commit(ctx context.Context, in graphapi.Commit) (graphapi.CommitResult, error)
@@ -413,7 +413,7 @@ func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*d
 		if err != nil || len(edits) == 0 {
 			return err
 		}
-		head, err := s.Graph.BranchHead(ctx, ns, domain.MainBranch)
+		head, err := s.Graph.BranchHeadHeader(ctx, ns, domain.MainBranch)
 		if err != nil {
 			return err
 		}
