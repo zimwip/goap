@@ -191,10 +191,6 @@ func (t *observedTx) current(id domain.ChangeID) *draftState { return currentDra
 
 func (t *observedTx) readLog(st *draftState) { readLog(t.Tx, st) }
 
-func (t *observedTx) read(id domain.ChangeID) *draftState { return viewDrafts(t.Tx, id) }
-
-func (t *observedTx) keepRead(st *draftState) { keepRead(t.Tx, st) }
-
 func (t *observedTx) PutChange(ctx context.Context, c domain.Change) error {
 	if err := t.Tx.PutChange(ctx, c); err != nil {
 		return err

@@ -51,6 +51,7 @@ func (g *Graph) PurgeChange(ctx context.Context, id domain.ChangeID) (domain.Cha
 			}
 			branch = own.Name
 		}
+		g.draftStates.drop(id)
 		if err := tx.DeleteChange(ctx, id, c.Namespace, branch); err != nil {
 			return err
 		}

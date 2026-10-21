@@ -144,11 +144,17 @@ type Graph struct {
 	states  stateCache
 	headers headerCache
 
+	// DraftCacheBytes bounds the memory the views of the changes kept between calls hold, estimated (ADR 0079 §2, 0153);
+	// DraftCacheTTL how long one is kept after it was last folded. 0: DefaultDraftCacheBytes, DefaultDraftCacheTTL.
+	DraftCacheBytes int64
+	DraftCacheTTL   time.Duration
 	// VersionCacheSize is the number of versions whose outgoing links are kept in memory (DefaultVersionCacheSize when
 	// 0): they never change once written (versioncache.go).
 	VersionCacheSize int
 	// versions caches the outgoing links of versions.
 	versions versionCache
+	// draftStates caches the drafts folded from the impact logs.
+	draftStates draftCache
 	// validations caches the validation of the impacts of a change on a flow, by the log position it was computed at.
 	validations validationCache
 }

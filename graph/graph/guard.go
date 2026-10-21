@@ -49,6 +49,10 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		r.g.versions.reset() // what the transaction deleted may have been read meanwhile
 	}
 	if err == nil {
+		// what the transaction folded of the logs it wrote is committed now: the next one folds only what follows
+		for _, st := range gt.drafts {
+			r.g.draftStates.put(st, r.g.draftCacheBounds())
+		}
 		// the caller's watermark: where the writes left the log of each change (ADR 0153)
 		if w := graphapi.WatermarkOf(ctx); w != nil {
 			for id, seq := range gt.impactSeq {
@@ -87,10 +91,8 @@ type guardTx struct {
 	// logged are the changes whose log the transaction appended to (the draft cache, ADR 0079, never publishes what a
 	// transaction that may roll back has seen of its own writes)
 	logged map[domain.ChangeID]bool
-	// drafts are the views of the changes the transaction wrote, as it sees them, views the views of the ones it only
-	// read: a view is built per call and kept for it only (ADR 0153)
+	// drafts are the folds of the logs the transaction appended to, as it sees them (never published to the draft cache)
 	drafts map[domain.ChangeID]*draftState
-	views  map[domain.ChangeID]*draftState
 	// impactSeq is, per change, the seq of the last impact event or fact the transaction appended (what the fold holds)
 	impactSeq map[domain.ChangeID]int64
 	// fresh is, per change whose lock the transaction holds, the fold it last read the log for: only its own appends can
@@ -308,17 +310,6 @@ func (t *guardTx) readLog(st *draftState) {
 		t.fresh = map[domain.ChangeID]*draftState{}
 	}
 	t.fresh[st.change] = st
-}
-
-func (t *guardTx) read(id domain.ChangeID) *draftState { return t.views[id] }
-
-func (t *guardTx) keepRead(s *draftState) {
-	if t.views == nil {
-		t.views = map[domain.ChangeID]*draftState{}
-	}
-	if v := t.views[s.change]; v == nil || v.seq < s.seq {
-		t.views[s.change] = s
-	}
 }
 
 func (t *guardTx) keepDrafts(s *draftState) {
