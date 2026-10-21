@@ -183,7 +183,7 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
   canonical form, `Graph.StructureRef` reads a URL or a bare key at the inputs; the guard and `scopeChange` resolve it
   (`structureNode`: the source must be the structure's namespace, the type one of the structure's, the key a node of
   it, through `Graph.Directory` in a content graph). What needs a key only (the authorizations, the engine's process,
-  the index, the events) takes `URL.Key`; the web reads them with `refKey` (`web/src/lib/lnk.ts`). Nothing migrates a database written before (greenfield): `graph.CheckReferences` refuses it at start (`goap-dev`, `platform/cmd/graph`), to be started from zero. A structure held by
+  the index, the events) takes `URL.Key`; the web reads them with `refKey` (`web/src/lib/lnk.ts`). Nothing migrates a database written before (greenfield): `graph.CheckReferences` refuses it at start (`platform/cmd/graph`), to be started from zero; `goap-dev` keeps such a local database aside (`goap.db.stale-<time>`) and starts from zero. A structure held by
   another source than its namespace is refused for now.
 - **The platform delivers the policies to every graph the same way** (Thomas, 2026-10-21): the policies, the
   organisation and the projects are read by every graph, the platform graph itself included, through one

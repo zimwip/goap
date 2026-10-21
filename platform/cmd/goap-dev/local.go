@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
@@ -63,31 +64,18 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 		return stores{graph: graph.NewMemory(), processes: engine.NewMemoryStore(), models: modelgw.NewMemoryStore(), prefs: prefssvc.NewMemoryStore(), convs: convsvc.NewMemoryStore(), creds: credsvc.NewMemoryStore(), mcp: mcpsvc.NewMemoryStore(), index: index.NewMemory(), domains: domainsvc.NewMemoryStore(), smartTags: smarttagsvc.NewMemoryStore(), jobs: jobsvc.NewMemoryStore(), close: func() {}}, nil
 	case "sqlite":
 		path := platform.Env("GOAP_SQLITE_PATH", filepath.Join(".goap", "goap.db"))
-		db, err := platform.OpenSQLite(ctx, path)
-		if err != nil {
-			return stores{}, err
-		}
-		for _, m := range []struct {
-			component string
-			fs        fs.FS
-		}{
-			{"graph", graph.SQLiteMigrations},
-			{"engine", enginesvc.SQLiteMigrations},
-			{"modelgw", modelgw.SQLiteMigrations}, {"preferences", prefssvc.SQLiteMigrations}, {"conversations", convsvc.SQLiteMigrations}, {"credentials", credsvc.SQLiteMigrations},
-			{"mcp", mcpsvc.SQLiteMigrations}, {"index", index.SQLiteMigrations},
-			// the domain registry (ADR 0125 §3), under the component name it had in the registry: a local database keeps its table
-			{"registry", domainsvc.SQLiteMigrations},
-			{"smarttags", smarttagsvc.SQLiteMigrations},
-			{"jobs", jobsvc.SQLiteMigrations},
-		} {
-			if err := platform.MigrateSQLite(ctx, db, m.component, m.fs, "migrations_sqlite"); err != nil {
-				db.Close()
-				return stores{}, err
+		db, err := openLocalDB(ctx, path)
+		if errors.Is(err, graph.ErrStaleReferences) {
+			// a database of an earlier schema of the references (nothing migrates it, ADR 0154 §9): the local mode
+			// keeps it aside and starts from zero rather than refuse to start
+			var aside string
+			if aside, err = setAside(path); err == nil {
+				log.Warn("local database written before the references became logical URLs: kept aside, starting from zero", "kept", aside)
+				db, err = openLocalDB(ctx, path)
 			}
 		}
-		if err := graph.CheckReferences(ctx, db); err != nil {
-			db.Close()
-			return stores{}, fmt.Errorf("%s: %w (remove the file)", path, err)
+		if err != nil {
+			return stores{}, err
 		}
 		// the local mode is the one process on its file: the locks the previous start left are dropped, so that
 		// its runs are resumed at once (ADR 0124)
@@ -110,6 +98,50 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 	default:
 		return stores{}, fmt.Errorf("GOAP_STORE must be memory or sqlite, got %q", kind)
 	}
+}
+
+// openLocalDB opens the local database and brings every component's schema up to date; a database holding references
+// written before they were logical URLs is refused (graph.ErrStaleReferences).
+func openLocalDB(ctx context.Context, path string) (*sql.DB, error) {
+	db, err := platform.OpenSQLite(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range []struct {
+		component string
+		fs        fs.FS
+	}{
+		{"graph", graph.SQLiteMigrations},
+		{"engine", enginesvc.SQLiteMigrations},
+		{"modelgw", modelgw.SQLiteMigrations}, {"preferences", prefssvc.SQLiteMigrations}, {"conversations", convsvc.SQLiteMigrations}, {"credentials", credsvc.SQLiteMigrations},
+		{"mcp", mcpsvc.SQLiteMigrations}, {"index", index.SQLiteMigrations},
+		// the domain registry (ADR 0125 §3), under the component name it had in the registry: a local database keeps its table
+		{"registry", domainsvc.SQLiteMigrations},
+		{"smarttags", smarttagsvc.SQLiteMigrations},
+		{"jobs", jobsvc.SQLiteMigrations},
+	} {
+		if err := platform.MigrateSQLite(ctx, db, m.component, m.fs, "migrations_sqlite"); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
+	if err := graph.CheckReferences(ctx, db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return db, nil
+}
+
+// setAside renames the database at path and its WAL files to <path>.stale-<time>, so that the next open starts from
+// zero; it answers the new name of the database.
+func setAside(path string) (string, error) {
+	aside := path + ".stale-" + time.Now().UTC().Format("20060102T150405Z")
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		if err := os.Rename(path+suffix, aside+suffix); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return "", err
+		}
+	}
+	return aside, nil
 }
 
 // localJWTSecret is the secret local sign-in (ADR 0042, on by default) signs its tokens with when none is
