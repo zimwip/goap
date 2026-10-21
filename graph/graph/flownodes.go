@@ -95,7 +95,7 @@ func (v *flowNodes) nodes(ctx context.Context) ([]domain.ChangeImpact, error) {
 		}
 		return domain.ImpactsSeenBy(v.c.Nodes, nil, nil, v.stale), nil
 	}
-	events, err := impactEvents(ctx, v.tx, v.c.ID)
+	events, err := v.g.foldedEvents(ctx, v.tx, v.c.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -140,17 +140,17 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 		stale[e] = true
 	}
 	isStale := func(e string) bool { return e != "" && stale[e] }
-	rows, err := g.drafts(ctx, tx, c.ID)
+	draftOf, err := g.draftsOf(ctx, tx, c.ID)
 	if err != nil {
 		return err
 	}
-	events, err := impactEvents(ctx, tx, c.ID)
+	events, err := g.foldedEvents(ctx, tx, c.ID)
 	if err != nil {
 		return err
 	}
 	var installs []domain.ImpactEvent
 	for _, cn := range c.Nodes {
-		fd, md := ownDraft(rows, cn.ID, f.ID), ownDraft(rows, cn.ID, "")
+		fd, md := draftOf(cn.ID, f.ID), draftOf(cn.ID, "")
 		switch {
 		case fd != nil:
 			if !acceptedOnFlow(c, nodeOf(cn), f.ID) {

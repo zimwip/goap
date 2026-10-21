@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -174,11 +175,11 @@ func (g *Graph) ImpactNodeResolve(ctx context.Context, id domain.ChangeID, impac
 		if err != nil {
 			return err
 		}
-		events, err := impactEvents(ctx, tx, id)
+		st, err := g.draftState(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		if len(domain.PendingConflicts(events, impact)) == 0 {
+		if len(st.conflicts[impact]) == 0 {
 			return fmt.Errorf("change impact %s (%s) has no conflict to settle: %w", impact, w.cn.Key, ErrConflict)
 		}
 		ref := d.Ref()
@@ -213,12 +214,12 @@ func (g *Graph) RebaseState(ctx context.Context, id domain.ChangeID) (st RebaseS
 			return err
 		}
 		st.Parent = c.ParentID
-		events, err := impactEvents(ctx, tx, c.ID)
+		view, err := g.draftState(ctx, tx, c.ID)
 		if err != nil {
 			return err
 		}
 		for _, cn := range c.Nodes {
-			if pending := domain.PendingConflicts(events, cn.ID); len(pending) > 0 {
+			if pending := slices.Clone(view.conflicts[cn.ID]); len(pending) > 0 {
 				st.Conflicts = append(st.Conflicts, ImpactConflicts{Impact: cn.ID, Key: cn.Key, Conflicts: pending})
 			}
 		}

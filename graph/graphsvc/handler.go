@@ -514,6 +514,10 @@ func (h *Handler) worksOn(ctx context.Context, project string) bool {
 }
 
 func (h *Handler) GetChange(ctx context.Context, r *connect.Request[graphv1.GetChangeRequest]) (*connect.Response[graphv1.GetChangeResponse], error) {
+	if r.Msg.AtSeq > 0 { // the change as its log stood then (ADR 0152)
+		c, err := h.Graph.ChangeAt(ctx, domain.ChangeID(r.Msg.Id), r.Msg.AtSeq)
+		return res(&graphv1.GetChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
+	}
 	c, err := h.Graph.ChangeChecked(ctx, domain.ChangeID(r.Msg.Id))
 	return res(&graphv1.GetChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }

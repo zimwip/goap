@@ -85,7 +85,7 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	}
 	graphHandler := &graphsvc.Handler{Graph: gp.g, Events: pp.indexSink, Jobs: jobs, Authz: authorizer, Floor: authorizer.Floor(), Projects: gp.directory.MayAccessProject, Stopped: gp.directory.ProjectStopped, Identity: ident,
 		Demo: devseed.DemoLoader(gp.directory)}
-	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
+	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), graphHandler.Positions(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: rp.reg, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	mount(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: rp.domains, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	// the smart tags (ADR 0143 §7): shared selections of node versions, in a store of their own

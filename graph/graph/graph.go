@@ -153,6 +153,8 @@ type Graph struct {
 	versions versionCache
 	// draftStates caches the drafts folded from the impact logs.
 	draftStates draftCache
+	// facetLogs caches the entries the log facets fold (facetlog.go).
+	facetLogs facetLogCache
 	// validations caches the validation of the impacts of a change on a flow, by the log position it was computed at.
 	validations validationCache
 }

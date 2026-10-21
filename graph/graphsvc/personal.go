@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
 	graphv1 "github.com/zimwip/goap/contracts/gen/goap/graph/v1"
+	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/pbconv"
@@ -187,6 +188,29 @@ func (h *Handler) Identify() connect.Interceptor {
 				return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("the caller is not identified"))
 			}
 			return next(who, req)
+		}
+	})
+}
+
+// Positions is the interceptor that carries the positions of the logs of the changes (ADR 0152): the reads of a request
+// must reach the ones its graphapi.HeaderAtLeast names, and its answer names in graphapi.HeaderChangeSeq the positions
+// its writes left the logs at, so that the caller can require them of its next reads.
+func (h *Handler) Positions() connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			for id, seq := range graphapi.ParsePositions(req.Header().Get(graphapi.HeaderAtLeast)) {
+				ctx = graphapi.AtLeast(ctx, id, seq)
+			}
+			ctx, w := graphapi.WithWatermark(ctx)
+			res, err := next(ctx, req)
+			if m := w.All(); len(m) > 0 {
+				if res != nil {
+					res.Header().Set(graphapi.HeaderChangeSeq, graphapi.FormatPositions(m))
+				} else if ce := new(connect.Error); errors.As(err, &ce) {
+					ce.Meta().Set(graphapi.HeaderChangeSeq, graphapi.FormatPositions(m))
+				}
+			}
+			return res, err
 		}
 	})
 }

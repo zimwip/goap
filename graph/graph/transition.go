@@ -2,7 +2,6 @@ package graph
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -235,52 +234,12 @@ func (g *Graph) checkGate(ctx context.Context, bb domain.Blackboard, t domain.Tr
 	return res, nil
 }
 
-// phases is the state each change impact was last written in, by replaying the journal of the transitions against
-// the impact log: the state before the first move is the one the first move leaves. A draft started (created, checked
-// out, installed by an adoption) sets it; an edit or a transition of the draft does not (ADR 0079).
-func (g *Graph) phases(ctx context.Context, tx Tx, c domain.Change) (map[domain.ChangeImpactID]phase, error) {
-	moves := c.StateMoves()
-	if len(moves) == 0 {
-		return nil, nil
-	}
-	entries, err := tx.Log(ctx, domain.LogFilter{Change: c.ID, Types: []string{domain.LogFact + ".", domain.LogImpact + "."}})
-	if err != nil {
-		return nil, err
-	}
-	at := map[domain.ItemID]domain.StateMove{}
-	for _, m := range moves {
-		at[m.Item] = m
-	}
-	state := moves[0].From
-	out := map[domain.ChangeImpactID]phase{}
-	for _, l := range entries {
-		switch {
-		case l.Type == domain.LogFact+"."+string(domain.TypeTransition):
-			var it domain.ChangeItem
-			if err := json.Unmarshal(l.Payload, &it); err != nil {
-				return nil, err
-			}
-			if m, ok := at[it.ID]; ok {
-				state = m.To
-			}
-		case len(l.Type) > len(domain.LogImpact) && l.Type[:len(domain.LogImpact)] == domain.LogImpact:
-			events, err := domain.ImpactEventsOf(l)
-			if err != nil {
-				return nil, err
-			}
-			for _, ev := range events {
-				if ev.StartsDraft() && ev.Flow == "" {
-					out[ev.Impact] = phase{State: state, Seq: l.Seq}
-				}
-			}
-		}
-	}
-	return out, nil
-}
-
+// phase is the state a change impact started its draft in, and where in the log (draftState.phaseOf).
 type phase struct {
 	State string
 	Seq   int64
+	// Before: started before the first move of the change, in the state that move left
+	Before bool
 }
 
 // frozen reports whether the impact was written in a state other than the current one: leaving a state freezes
@@ -289,11 +248,11 @@ func (g *Graph) frozen(ctx context.Context, tx Tx, c domain.Change, impact domai
 	if c.State == "" {
 		return false, "", nil
 	}
-	ph, err := g.phases(ctx, tx, c)
+	st, err := g.draftState(ctx, tx, c.ID)
 	if err != nil {
 		return false, "", err
 	}
-	p, ok := ph[impact]
+	p, ok := st.phaseOf(impact)
 	if !ok || p.State == c.State {
 		return false, p.State, nil
 	}
@@ -310,33 +269,24 @@ func (g *Graph) frozen(ctx context.Context, tx Tx, c domain.Change, impact domai
 // reopenPhase is made when a change goes back to a state it already occupied: what was written after it entered
 // the state, in a later phase, must be reviewed again.
 func (g *Graph) reopenPhase(ctx context.Context, tx Tx, c domain.Change, to string) error {
-	ph, err := g.phases(ctx, tx, c)
+	moves := c.StateMoves()
+	if len(moves) == 0 {
+		return nil
+	}
+	st, err := g.draftState(ctx, tx, c.ID)
 	if err != nil {
 		return err
 	}
 	// the last entry into the state, before the move just journaled (c does not hold it yet)
-	var entered string
-	for _, m := range c.StateMoves() {
+	var entered domain.ItemID
+	for _, m := range moves {
 		if m.To == to {
-			entered = string(m.Item)
+			entered = m.Item
 		}
 	}
-	var since int64
-	entries, err := tx.Log(ctx, domain.LogFilter{Change: c.ID, Types: []string{domain.LogFact + "." + string(domain.TypeTransition)}})
-	if err != nil {
-		return err
-	}
-	for _, l := range entries {
-		var it domain.ChangeItem
-		if err := json.Unmarshal(l.Payload, &it); err != nil {
-			return err
-		}
-		if string(it.ID) == entered {
-			since = l.Seq
-		}
-	}
+	since := st.moveSeq[entered]
 	for _, cn := range c.Nodes {
-		p, ok := ph[cn.ID]
+		p, ok := st.phaseOf(cn.ID)
 		if !ok || p.State == to || p.Seq < since || cn.Review != domain.ReviewAccepted {
 			continue
 		}

@@ -3,6 +3,7 @@ package graph
 import (
 	"container/list"
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"sync/atomic"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/graphapi"
 )
 
 // The drafts of a change are derived from its log, not stored (ADR 0079 §2): the fold of the impact events
@@ -53,13 +55,26 @@ type draftState struct {
 	// items are the items of the change, the facts of its log in their order (itemsOf): folded with the impact events,
 	// so that reading a change does not decode its facts again
 	items []domain.ChangeItem
+	// events are the impact events folded, in the order of the log: what a flow other than the main one sees, and what
+	// stale runs left, are read over them (domain.ImpactsSeenBy, DraftSeenBy) with no read of the log. Never modified.
+	events []domain.ImpactEvent
+	// phases are the state each change impact started its draft on the main flow in (ADR 0058 §4, 0079), folded with the
+	// moves of the change: before its first move an impact is in the state that move leaves (phase.Before)
+	phases map[domain.ChangeImpactID]phase
+	// moved: the change took a move (a transition fact of the main flow); first is the state its first move left, state
+	// the one its last move entered
+	moved        bool
+	first, state string
+	// moveSeq is the position of each move in the log
+	moveSeq map[domain.ItemID]int64
 	// frozen: a reader of the transaction still reads it (draftReader), so its next fold is a copy
 	frozen bool
 }
 
 // copy is a state the caller may fold in place (the values it holds are never modified, only replaced).
 func (s *draftState) copy() *draftState {
-	n := &draftState{change: s.change, seq: s.seq, impacts: slices.Clone(s.impacts), at: maps.Clone(s.at), drafts: maps.Clone(s.drafts), nodes: maps.Clone(s.nodes), conflicts: maps.Clone(s.conflicts), items: slices.Clip(s.items)}
+	n := &draftState{change: s.change, seq: s.seq, impacts: slices.Clone(s.impacts), at: maps.Clone(s.at), drafts: maps.Clone(s.drafts), nodes: maps.Clone(s.nodes), conflicts: maps.Clone(s.conflicts), items: slices.Clip(s.items), events: slices.Clip(s.events),
+		phases: maps.Clone(s.phases), moved: s.moved, first: s.first, state: s.state, moveSeq: maps.Clone(s.moveSeq)}
 	if n.at == nil {
 		n.at = map[domain.ChangeImpactID]int{}
 	}
@@ -90,8 +105,46 @@ func (s *draftState) draft(id domain.ChangeImpactID, flow string) (domain.Draft,
 	return domain.Draft{}, false
 }
 
+// fact folds an item of the change, at its position in the log, in place: a move of the main flow moves the phase.
+func (s *draftState) fact(it domain.ChangeItem, seq int64) {
+	s.items = append(s.items, it)
+	if it.Type != domain.TypeTransition || it.Flow != "" {
+		return
+	}
+	str := func(k string) string { v, _ := it.Data[k].(string); return v }
+	if !s.moved {
+		s.moved, s.first = true, str("from")
+	}
+	s.state = str("to")
+	if s.moveSeq == nil {
+		s.moveSeq = map[domain.ItemID]int64{}
+	}
+	s.moveSeq[it.ID] = seq
+	s.seq = seq
+}
+
+// phaseOf is the state a change impact started its draft in; false when the change never moved or the impact started
+// no draft on the main flow.
+func (s *draftState) phaseOf(id domain.ChangeImpactID) (phase, bool) {
+	p, ok := s.phases[id]
+	if !ok || !s.moved {
+		return phase{}, false
+	}
+	if p.Before {
+		p.State = s.first
+	}
+	return p, true
+}
+
 // apply folds an event in place: domain.ApplyImpactEvent, then domain.ApplyDraftEvent and domain.ApplyConflictEvent.
 func (s *draftState) apply(e domain.ImpactEvent) {
+	s.events = append(s.events, e)
+	if e.StartsDraft() && e.Flow == "" {
+		if s.phases == nil {
+			s.phases = map[domain.ChangeImpactID]phase{}
+		}
+		s.phases[e.Impact] = phase{State: s.state, Seq: int64(e.Seq), Before: !s.moved}
+	}
 	i, ok := s.at[e.Impact]
 	if !ok {
 		i = -1
@@ -263,8 +316,22 @@ func keepDrafts(tx Tx, s *draftState) {
 	}
 }
 
-// draftState folds the impact log of a change up to its last event as the transaction sees it.
+// draftState is the view of a change (ADR 0152): the fold of its log up to its last impact event or fact as the
+// transaction sees it, refused with ErrBehind when it does not reach the position the caller asks for
+// (graphapi.AtLeast).
 func (g *Graph) draftState(ctx context.Context, tx Tx, id domain.ChangeID) (*draftState, error) {
+	st, err := g.foldDrafts(ctx, tx, id)
+	if err != nil {
+		return nil, err
+	}
+	if want := graphapi.AtLeastOf(ctx, id); want > st.seq {
+		return nil, fmt.Errorf("change %s: its log is read up to %d, %d asked for: %w", id, st.seq, want, ErrBehind)
+	}
+	return st, nil
+}
+
+// foldDrafts folds the impact log of a change up to its last event as the transaction sees it.
+func (g *Graph) foldDrafts(ctx context.Context, tx Tx, id domain.ChangeID) (*draftState, error) {
 	if st := currentDrafts(tx, id); st != nil {
 		return st, nil // nothing can follow it: no need to ask the log
 	}
@@ -283,6 +350,29 @@ func (g *Graph) draftState(ctx context.Context, tx Tx, id domain.ChangeID) (*dra
 		readLog(tx, st)
 		return st, nil
 	}
+	// the transaction's own fold is folded on in place, any other copied first
+	next := st
+	if own := ownDrafts(tx, id); own == nil || own != st || st.frozen {
+		next = st.copy()
+	}
+	n, err := next.foldEntries(ctx, tx, entries)
+	if err != nil {
+		return nil, err
+	}
+	next.seq = entries[len(entries)-1].Seq
+	g.draftStates.folded.Add(int64(n))
+	readLog(tx, next)
+	if wroteLog(tx, id) {
+		keepDrafts(tx, next)
+	} else {
+		g.draftStates.put(next, g.draftCacheSize())
+	}
+	return next, nil
+}
+
+// foldEntries folds impact and fact entries of the log in place, in their order (a draft started after a move is in
+// the state the move entered), and returns the number of impact events folded.
+func (s *draftState) foldEntries(ctx context.Context, tx Tx, entries []domain.LogEntry) (int, error) {
 	var impacts, facts []domain.LogEntry
 	for _, l := range entries {
 		if strings.HasPrefix(l.Type, domain.LogFact+".") {
@@ -293,30 +383,56 @@ func (g *Graph) draftState(ctx context.Context, tx Tx, id domain.ChangeID) (*dra
 	}
 	events, err := decodeImpacts(ctx, tx, impacts)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	items, err := itemsOf(facts)
 	if err != nil {
+		return 0, err
+	}
+	f, k := 0, 0
+	for _, l := range entries {
+		if strings.HasPrefix(l.Type, domain.LogFact+".") {
+			s.fact(items[f], l.Seq)
+			f++
+			continue
+		}
+		for ; k < len(events) && int64(events[k].Seq) <= l.Seq; k++ {
+			s.apply(events[k])
+		}
+	}
+	for ; k < len(events); k++ {
+		s.apply(events[k])
+	}
+	if len(entries) > 0 {
+		s.seq = entries[len(entries)-1].Seq
+	}
+	return len(events), nil
+}
+
+// draftsOf is the lookup of the drafts of a change in its view: the draft of an impact on a flow (a copy), nil when it
+// has none.
+func (g *Graph) draftsOf(ctx context.Context, tx Tx, id domain.ChangeID) (func(domain.ChangeImpactID, string) *domain.Draft, error) {
+	st, err := g.draftState(ctx, tx, id)
+	if err != nil {
 		return nil, err
 	}
-	// the transaction's own fold is folded on in place, any other copied first
-	next := st
-	if own := ownDrafts(tx, id); own == nil || own != st || st.frozen {
-		next = st.copy()
+	return func(impact domain.ChangeImpactID, flow string) *domain.Draft {
+		d, ok := st.draft(impact, flow)
+		if !ok {
+			return nil
+		}
+		d = d.Clone()
+		return &d
+	}, nil
+}
+
+// foldedEvents is the impact log of a change as its fold holds it (shared: never modified).
+func (g *Graph) foldedEvents(ctx context.Context, tx Tx, id domain.ChangeID) ([]domain.ImpactEvent, error) {
+	st, err := g.draftState(ctx, tx, id)
+	if err != nil {
+		return nil, err
 	}
-	for _, e := range events {
-		next.apply(e)
-	}
-	next.items = append(next.items, items...)
-	next.seq = entries[len(entries)-1].Seq
-	g.draftStates.folded.Add(int64(len(events)))
-	readLog(tx, next)
-	if wroteLog(tx, id) {
-		keepDrafts(tx, next)
-	} else {
-		g.draftStates.put(next, g.draftCacheSize())
-	}
-	return next, nil
+	return slices.Clip(st.events), nil
 }
 
 func (g *Graph) draftCacheSize() int {

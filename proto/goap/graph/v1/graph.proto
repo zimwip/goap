@@ -368,6 +368,8 @@ message Change {
   // the version of its methodology the change follows (ADR 0113): the latest published one when it was created, until
   // it is upgraded; empty: the latest
   string methodology_version = 24;
+  // the position of the log of the change its impacts and items were read at: the view the reader holds (ADR 0152)
+  int64 seq = 25;
 }
 
 // A methodology of the guardian chain of a change, at the version in force when the chain was computed (ADR 0106).
@@ -1007,6 +1009,8 @@ message CreateChangeResponse {
 
 message GetChangeRequest {
   string id = 1;
+  // read the change as its log stood at this position (its impacts, items and state); 0 or past the head: the head
+  int64 at_seq = 2;
 }
 
 message GetChangeResponse {

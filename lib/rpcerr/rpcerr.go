@@ -20,7 +20,7 @@ var ErrNotFound = errors.New("not found")
 const reasonHeader = "Goap-Error-Reason"
 
 // reasons are the sentinels a Connect code does not tell apart, by the name they travel under.
-var reasons = map[string]error{"nothing-to-commit": graphapi.ErrNothingToCommit}
+var reasons = map[string]error{"nothing-to-commit": graphapi.ErrNothingToCommit, "behind": graphapi.ErrBehind}
 
 func withReason(err error, ce *connect.Error) error {
 	for name, sentinel := range reasons {
@@ -45,7 +45,7 @@ func ToConnect(err error) error {
 	case errors.Is(err, graphapi.ErrNotFound), errors.Is(err, ErrNotFound), errors.Is(err, review.ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, graphapi.ErrConflict), errors.Is(err, review.ErrConflict):
-		return connect.NewError(connect.CodeFailedPrecondition, err)
+		return withReason(err, connect.NewError(connect.CodeFailedPrecondition, err))
 	case errors.Is(err, graphapi.ErrInvalid), errors.Is(err, review.ErrInvalid):
 		return withReason(err, connect.NewError(connect.CodeInvalidArgument, err))
 	case errors.Is(err, context.Canceled):
