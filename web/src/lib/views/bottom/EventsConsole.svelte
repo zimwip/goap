@@ -1,34 +1,25 @@
 <script lang="ts">
-  // "Events" console: live WatchEvents stream.
+  // "Events" console: the platform event stream as it comes (ADR 0053), every kind the caller may see.
   import Icon from '../../shell/Icon.svelte';
-  import { live, clearEvents, processes } from '../../stores/live.svelte';
+  import { live, clearEvents, processes, type EventRow } from '../../stores/live.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { formatTime, shortId } from '../../api';
   import { rowClick } from '../../actions';
+  import { knownJobs, openJob } from '../../stores/jobs.svelte';
 
-  let type = $state('');
+  let kind = $state('');
   let filter = $state('');
   let follow = $state(true);
   let scroller = $state<HTMLDivElement>();
 
-  const TYPES = ['started', 'intent', 'step', 'waiting', 'completed', 'stuck', 'failed', 'log'];
-  const LABELS: Record<string, string> = {
-    started: 'started',
-    intent: 'intent',
-    step: 'step',
-    waiting: 'waiting',
-    completed: 'completed',
-    stuck: 'stuck',
-    failed: 'failed',
-    log: 'log',
-  };
+  const KINDS = ['process', 'change', 'node', 'baseline', 'job', 'model', 'methodology', 'domain', 'connector', 'conversation', 'preferences'];
 
   const q = $derived(filter.trim().toLowerCase());
   const rows = $derived(
     live.events.filter(
       (e) =>
-        (!type || e.type === type) &&
-        (!q || `${e.processId} ${e.agent} ${e.methodology} ${e.detail} ${e.type}`.toLowerCase().includes(q)),
+        (!kind || e.kind === kind) &&
+        (!q || `${e.type} ${e.id} ${e.changeId} ${e.processId} ${e.agent} ${e.methodology} ${e.actor} ${e.detail}`.toLowerCase().includes(q)),
     ),
   );
 
@@ -41,12 +32,25 @@
     const p = processes.get(pid);
     return p?.title || shortId(pid);
   }
+
+  /** The type without its kind: `node.written` reads `written` in the kind's column. */
+  const what = (e: EventRow): string => (e.type.startsWith(`${e.kind}.`) ? e.type.slice(e.kind.length + 1) : e.type);
+
+  /** Opens what a row is about: the run, the change, the job. */
+  function open(e: EventRow): void {
+    const job = e.kind === 'job' ? knownJobs.get(e.id) : undefined;
+    if (e.processId) openTab({ kind: 'run', params: { id: e.processId } });
+    else if (e.kind === 'change' && e.id) openTab({ kind: 'change', params: { id: e.id } });
+    else if (job) openJob(job);
+    else if (e.changeId) openTab({ kind: 'change', params: { id: e.changeId } });
+  }
+  const opens = (e: EventRow): boolean => !!(e.processId || e.changeId || (e.kind === 'change' && e.id) || (e.kind === 'job' && knownJobs.has(e.id)));
 </script>
 
 <div class="console-tools">
-  <select aria-label="Event type" bind:value={type} data-no-pin>
-    <option value="">All types</option>
-    {#each TYPES as t (t)}<option value={t}>{LABELS[t]}</option>{/each}
+  <select aria-label="Event kind" bind:value={kind} data-no-pin>
+    <option value="">All kinds</option>
+    {#each KINDS as k (k)}<option value={k}>{k}</option>{/each}
   </select>
   <input type="search" placeholder="Filter…" aria-label="Filter events" bind:value={filter} data-no-pin />
   <label class="check"><input type="checkbox" bind:checked={follow} /> Follow</label>
@@ -58,22 +62,28 @@
 <div
   class="console-scroll"
   bind:this={scroller}
-  use:rowClick={(row) => row.dataset.pid && openTab({ kind: 'run', params: { id: row.dataset.pid } })}
+  use:rowClick={(row) => {
+    const e = rows.find((r) => String(r.seq) === row.dataset.seq);
+    if (e) open(e);
+  }}
 >
   {#if rows.length}
     <table class="console-table">
-      <thead><tr><th>Time</th><th>Type</th><th>Process</th><th>Agent</th><th>Step / action</th></tr></thead>
+      <thead><tr><th>Time</th><th>Kind</th><th>Event</th><th>About</th><th>By</th><th>Detail</th></tr></thead>
       <tbody>
         {#each rows as e (e.seq)}
-          <tr class:clickable={!!e.processId} data-row data-pid={e.processId}>
+          <tr class:clickable={opens(e)} data-row data-seq={e.seq}>
             <td>{formatTime(e.time)}</td>
-            <td><span class="t t-{e.type}">{LABELS[e.type] ?? e.type}</span></td>
-            <td title={e.processId}>
+            <td class="k">{e.kind}</td>
+            <td><span class="t t-{what(e)}">{what(e)}</span></td>
+            <td title={e.processId || e.id}>
               {#if e.processId}
                 <button type="button" class="link" onclick={() => openTab({ kind: 'run', params: { id: e.processId } })}>{title(e.processId)}</button>
+              {:else}
+                {shortId(e.id)}
               {/if}
             </td>
-            <td>{e.agent}</td>
+            <td>{e.agent || e.actor}</td>
             <td class="wrap">{#if e.level}<span class="lvl lvl-{e.level}">{e.level}</span> {/if}{e.detail}</td>
           </tr>
         {/each}
@@ -88,10 +98,14 @@
   .t {
     font-weight: 600;
   }
-  .t-completed {
+  .t-completed,
+  .t-ended,
+  .t-applied {
     color: var(--ok);
   }
-  .t-failed {
+  .t-failed,
+  .t-lost,
+  .t-quota {
     color: var(--danger);
   }
   .t-stuck,
@@ -102,7 +116,8 @@
   .t-intent {
     color: var(--info);
   }
-  .t-log {
+  .t-log,
+  .k {
     color: var(--muted);
   }
 </style>

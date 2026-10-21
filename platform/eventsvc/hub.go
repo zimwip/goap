@@ -4,10 +4,13 @@
 package eventsvc
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +23,12 @@ import (
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/pbconv"
 	"github.com/zimwip/goap/lib/platform"
+	"github.com/zimwip/goap/mcp/mcpsvc"
 	"github.com/zimwip/goap/platform/convsvc"
+	"github.com/zimwip/goap/platform/jobsvc"
+	"github.com/zimwip/goap/platform/modelgw"
+	"github.com/zimwip/goap/platform/prefssvc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Defaults of the hub.
@@ -72,6 +80,13 @@ type procScope struct {
 }
 
 type subscriber struct {
+	// wake says the history grew: the stream reads what follows its cursor from the ring (Hub.after), so a burst of
+	// events (a git import commits thousands of nodes) never cuts it; it only falls behind the history when the
+	// client reads slower than the platform writes for longer than History events.
+	wake chan struct{}
+	// cursor is the seq of the last event the stream took from the ring.
+	cursor uint64
+	// ch carries the presence events, which are live only (not numbered, not kept); one that cannot keep up is cut.
 	ch       chan *record
 	overflow bool
 }
@@ -185,6 +200,36 @@ func (h *Hub) Ingest(subject string, data []byte, st platform.Stamp) {
 			return
 		}
 		v = m
+	case strings.HasPrefix(subject, "goap.job."):
+		var ev jobsvc.Event
+		if json.Unmarshal(data, &ev) != nil {
+			return
+		}
+		v = ev
+	case strings.HasPrefix(subject, "goap.mcp.connector."):
+		var ev mcpsvc.ConnectorEvent
+		if json.Unmarshal(data, &ev) != nil {
+			return
+		}
+		v = ev
+	case strings.HasPrefix(subject, "goap.model.call."):
+		var ev modelgw.CallRecorded
+		if json.Unmarshal(data, &ev) != nil {
+			return
+		}
+		v = ev
+	case strings.HasPrefix(subject, "goap.model.quota."):
+		var ev modelgw.QuotaExceeded
+		if json.Unmarshal(data, &ev) != nil {
+			return
+		}
+		v = ev
+	case strings.HasPrefix(subject, "goap.preferences."):
+		var ev prefssvc.Event
+		if json.Unmarshal(data, &ev) != nil {
+			return
+		}
+		v = ev
 	default:
 		return
 	}
@@ -226,7 +271,7 @@ func (h *Hub) accept(subject string, v any, actor, command string) {
 		r.personalTo = h.personal[string(m.ChangeID)]
 	case domain.BaselineEvent:
 		ev.Kind, ev.Type = "baseline", "baseline.advanced"
-		ev.Id, ev.Branch = string(m.ID), m.Branch
+		ev.Id, ev.Branch, ev.Namespace = string(m.ID), m.Branch, m.Namespace
 		ev.Time = pbconv.Time(m.Time)
 	case domain.ChangeEvent:
 		c := m.Change
@@ -264,10 +309,58 @@ func (h *Hub) accept(subject string, v any, actor, command string) {
 		ev.Kind, ev.Type = parts[2], strings.Join(parts[2:], ".")
 		ev.Id, ev.Namespace, ev.Label = m["name"], m["name"], m["version"]
 		ev.Time = pbconv.Time(h.now())
+	case jobsvc.Event:
+		// goap.job.<id>.<created|started|ended> (ADR 0149): the person's own, like a conversation; the label is the
+		// kind of the job, the namespace its target. Its progress travels on the job stream (GET /api/jobs/events).
+		if m.ID == "" || m.By == "" {
+			return
+		}
+		ev.Kind, ev.Type = "job", "job."+subject[strings.LastIndex(subject, ".")+1:]
+		ev.Id, ev.Label, ev.Namespace = m.ID, m.Kind, m.Target
+		ev.Time = h.timeOr(m.At)
+		r.personalTo = m.By
+	case mcpsvc.ConnectorEvent:
+		// goap.mcp.connector.<id>.<registered|lost|back>: what a connector is, never a secret
+		ev.Kind, ev.Type = "connector", "connector."+m.Event
+		ev.Id, ev.Label = m.Connector, m.Version
+		ev.Time = h.timeOr(m.At)
+	case modelgw.CallRecorded:
+		// goap.model.call.<seq>.recorded (ADR 0089): a row of the ledger, for the person it is attributed to (ADR 0114)
+		if r.personalTo = cmp.Or(m.EndUser, m.Subject); r.personalTo == "" {
+			return
+		}
+		ev.Kind, ev.Type = "model", "model.call"
+		ev.Id, ev.Label = strconv.FormatInt(m.Seq, 10), cmp.Or(m.Alias, m.Provider+"/"+m.Model)
+		ev.Project, ev.ChangeId = m.Project, m.ChangeID
+		ev.Time = h.timeOr(m.At)
+	case modelgw.QuotaExceeded:
+		if r.personalTo = cmp.Or(m.EndUser, m.Subject); r.personalTo == "" {
+			return
+		}
+		ev.Kind, ev.Type = "model", "model.quota"
+		ev.Id, ev.Label = strconv.FormatInt(m.Seq, 10), m.Provider+"/"+m.Model
+		ev.Time = h.timeOr(m.At)
+	case prefssvc.Event:
+		// goap.preferences.<subject>.<updated|reset> (ADR 0038): the other tabs of the person follow
+		if m.Subject == "" {
+			return
+		}
+		ev.Kind, ev.Type = "preferences", "preferences."+subject[strings.LastIndex(subject, ".")+1:]
+		ev.Id, ev.Label = m.Subject, strings.Join(m.Keys, ",")
+		ev.Time = h.timeOr(m.At)
+		r.personalTo = m.Subject
 	default:
 		return
 	}
 	h.emit(r)
+}
+
+// timeOr is the time of a payload, else now.
+func (h *Hub) timeOr(t time.Time) *timestamppb.Timestamp {
+	if t.IsZero() {
+		t = h.now()
+	}
+	return pbconv.Time(t)
 }
 
 func changeType(t, subject string) string {
@@ -292,10 +385,38 @@ func (h *Hub) emit(r *record) {
 	if n := h.history(); len(h.ring) > n {
 		h.ring = append(h.ring[:0:0], h.ring[len(h.ring)-n:]...)
 	}
-	h.deliver(r)
+	for _, s := range h.subs {
+		select {
+		case s.wake <- struct{}{}:
+		default: // already told
+		}
+	}
 }
 
-// deliver sends a record to every subscriber; one that cannot keep up is cut (it resyncs on reconnect).
+// after returns the events numbered after seq, or false when the history no longer holds them all.
+func (h *Hub) after(seq uint64) ([]*record, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.afterLocked(seq)
+}
+
+func (h *Hub) afterLocked(seq uint64) ([]*record, bool) {
+	if seq >= h.seq {
+		return nil, seq == h.seq
+	}
+	oldest := h.seq + 1
+	if len(h.ring) > 0 {
+		oldest = h.ring[0].ev.Seq
+	}
+	if seq+1 < oldest {
+		return nil, false
+	}
+	i := sort.Search(len(h.ring), func(i int) bool { return h.ring[i].ev.Seq > seq })
+	return append([]*record(nil), h.ring[i:]...), true
+}
+
+// deliver sends a presence record to every subscriber; one that cannot keep up is cut (it reconnects and starts
+// from a new snapshot).
 func (h *Hub) deliver(r *record) {
 	for id, s := range h.subs {
 		select {

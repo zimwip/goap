@@ -48,9 +48,34 @@ describe('signals', () => {
     vi.advanceTimersByTime(2);
     expect(stamp(k)).toBe(before + 1);
   });
+  it('still moves a key touched without pause, once per interval', () => {
+    vi.useFakeTimers();
+    const k = 'test:import';
+    const before = stamp(k);
+    for (let t = 0; t < 1000; t += 10) {
+      touchSoon(k, 100);
+      vi.advanceTimersByTime(10);
+    }
+    expect(stamp(k)).toBe(before + 10);
+  });
+  it('counts no key nobody reads', () => {
+    vi.useFakeTimers();
+    touch('test:unread');
+    touchSoon('test:unread2', 10);
+    vi.advanceTimersByTime(20);
+    const all = stamp('test:never');
+    expect(stamp('test:unread')).toBe(all);
+    expect(stamp('test:unread2')).toBe(all);
+  });
 });
 
 describe('keysOf', () => {
+  it('maps the events of the services to their signals', () => {
+    expect(keysOf(ev({ kind: 'job', id: 'J1' }))).toEqual([keyOf.job('J1'), keyOf.jobs]);
+    expect(keysOf(ev({ kind: 'model', id: '7' }))).toEqual([keyOf.usage]);
+    expect(keysOf(ev({ kind: 'connector', id: 'fs' }))).toEqual([keyOf.connectors]);
+    expect(keysOf(ev({ kind: 'preferences', id: 'alice' }))).toEqual([keyOf.preferences]);
+  });
   it('maps events to the signals they move', () => {
     expect(keysOf(ev({ kind: 'change', id: 'C1' }))).toEqual([keyOf.change('C1'), keyOf.changes]);
     expect(keysOf(ev({ kind: 'node', id: 'N1', namespace: 'alm', changeId: 'C1', branch: 'b' }))).toEqual([
@@ -60,6 +85,7 @@ describe('keysOf', () => {
       keyOf.branch('b'),
     ]);
     expect(keysOf(ev({ kind: 'baseline', branch: 'main' }))).toEqual([keyOf.baselines, keyOf.branch('main')]);
+    expect(keysOf(ev({ kind: 'baseline', namespace: 'organisation', branch: 'main' }))).toEqual([keyOf.baselines, keyOf.namespace('organisation'), keyOf.branch('main')]);
     expect(keysOf(ev({ kind: 'methodology', id: 'sdlc' }))).toEqual([keyOf.methodology('sdlc'), keyOf.methodologies]);
     expect(keysOf(ev({ kind: 'domain', id: 'alm' }))).toEqual([keyOf.domain('alm'), keyOf.domains]);
     expect(keysOf(ev({ kind: 'process', id: 'p' }))).toEqual([]);
@@ -96,6 +122,10 @@ describe('event stream', () => {
     expect(resync).toHaveBeenCalledTimes(2);
     expect(stream.epoch).toBe('e2');
     expect(stream.seq).toBe(0);
+    // the server goes on from the seq it names: the next connection resumes there
+    receive({ epoch: 'e2', seq: '40', type: 'resync' });
+    expect(resync).toHaveBeenCalledTimes(3);
+    expect(stream.seq).toBe(40);
     off();
   });
   it('starts over on another epoch', () => {

@@ -1,5 +1,5 @@
-// Live workbench data: global WatchEvents stream ("Events" console), known
-// processes and log lines. (The LLM calls are the gateway's ledger: `usage.svelte.ts`.) Every process
+// Live workbench data: the platform event stream as the "Events" console shows it (every kind: processes, changes,
+// nodes, baselines, jobs, model calls…), known processes and log lines. (The LLM calls are the gateway's ledger: `usage.svelte.ts`.) Every process
 // source (stream, GetProcess, ListProcesses) goes through `ingestProcess`.
 import { SvelteMap } from 'svelte/reactivity';
 import {
@@ -10,11 +10,19 @@ import {
   type WatchEvent,
 } from '../api';
 import type { StreamStatus } from '../stream';
-import { onKind, onResync, startEvents, stream, toWatchEvent } from '../flux/events.svelte';
+import { onKind, onPlatformEvent, onResync, startEvents, stream, toWatchEvent, type PlatformEvent } from '../flux/events.svelte';
 
 export interface EventRow {
   seq: number;
+  /** the kind of the event: `process`, `change`, `node`, `baseline`, `job`, `model`… */
+  kind: string;
   type: string;
+  /** what the event is about (a change, a node, a job…; the process of a process event) */
+  id: string;
+  /** the change it happened in, when there is one */
+  changeId: string;
+  /** who did it */
+  actor: string;
   time: string;
   processId: string;
   agent: string;
@@ -35,6 +43,8 @@ export interface LogRow {
 }
 
 const MAX_EVENTS = 1000;
+/** rows are added to the console at most this often: an import sends thousands of events */
+const FLUSH_MS = 100;
 const MAX_LOGS = 3000;
 
 class Live {
@@ -113,6 +123,59 @@ function describe(e: WatchEvent): string {
   return p.goal ? `goal ${p.goal}` : '';
 }
 
+let queued: EventRow[] = [];
+let flushTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Adds rows to the console, a burst at a time. */
+function addRow(row: Omit<EventRow, 'seq'>): void {
+  queued.push({ ...row, seq: ++seq });
+  flushTimer ??= setTimeout(() => {
+    flushTimer = undefined;
+    const rows = queued;
+    queued = [];
+    live.events = cap([...live.events, ...rows], MAX_EVENTS);
+  }, FLUSH_MS);
+}
+
+/** What a row says about an event that is not a process's. */
+function describePlatform(e: PlatformEvent): string {
+  switch (e.kind) {
+    case 'node':
+      return [e.namespace, e.version ? `v${e.version}` : '', e.branch && e.branch !== 'main' ? `on ${e.branch}` : ''].filter(Boolean).join(' ');
+    case 'baseline':
+      return e.branch;
+    case 'change':
+      return [e.project, e.namespace].filter(Boolean).join(' · ');
+    case 'job':
+      return [e.label, e.namespace].filter(Boolean).join(' · ');
+    case 'model':
+    case 'methodology':
+    case 'domain':
+    case 'connector':
+    case 'preferences':
+      return e.label;
+    default:
+      return e.label || e.namespace;
+  }
+}
+
+/** Records an event of the stream that is not a process's (those go through `ingestEvent`). */
+function recordPlatform(e: PlatformEvent): void {
+  if (e.kind === 'process') return;
+  addRow({
+    kind: e.kind,
+    type: e.type,
+    id: e.id,
+    changeId: e.changeId,
+    actor: e.actor,
+    time: e.time || new Date().toISOString(),
+    processId: '',
+    agent: '',
+    methodology: '',
+    detail: describePlatform(e),
+  });
+}
+
 const eventListeners = new Set<(e: WatchEvent) => void>();
 
 /** Subscription to global stream events (notifications…). */
@@ -129,17 +192,19 @@ export function ingestEvent(e: WatchEvent, record = true): void {
   for (const fn of eventListeners) fn(e);
   const pid = e.process?.id || e.log?.processId || '';
   const p = e.process ?? processes.get(pid);
-  const row: EventRow = {
-    seq: ++seq,
+  addRow({
+    kind: 'process',
     type: e.type ?? '',
+    id: pid,
+    changeId: p?.changeId ?? '',
+    actor: '',
     time: e.time || e.log?.time || new Date().toISOString(),
     processId: pid,
     agent: p?.agent ?? '',
     methodology: p?.methodology ?? '',
     detail: describe(e),
     level: e.log?.level,
-  };
-  live.events = cap([...live.events, row], MAX_EVENTS);
+  });
 }
 
 export async function refreshProcesses(): Promise<void> {
@@ -157,6 +222,7 @@ export async function refreshProcesses(): Promise<void> {
 }
 
 export function clearEvents(): void {
+  queued = [];
   live.events = [];
 }
 
@@ -172,6 +238,7 @@ export function clearLogs(): void {
 export function startLive(): () => void {
   const stopEvents = startEvents();
   const offProcess = onKind('process', (e) => ingestEvent(toWatchEvent(e)));
+  const offOthers = onPlatformEvent(recordPlatform);
   const offResync = onResync(() => void refreshProcesses());
   const stopStatus = $effect.root(() => {
     $effect(() => {
@@ -182,6 +249,7 @@ export function startLive(): () => void {
   void refreshProcesses();
   return () => {
     offProcess();
+    offOthers();
     offResync();
     stopStatus();
     stopEvents();

@@ -112,7 +112,6 @@
       await applyOnMain(ns.organisation, `Move ${key}`, `Move ${key} under ${fParent}`, head.baselineId, [moveNodeItem(unit, linkTypes.partOf, parentLink, refOf(target))]);
       notify(`${key} moved under ${fParent}.`, 'ok');
       moving = false;
-      await load();
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -133,7 +132,6 @@
       await applyOnMain(ns.organisation, `Move ${fMember}`, `Move ${fMember} to ${key}`, head.baselineId, [moveNodeItem(u, linkTypes.memberOf, currentLink(head, u, linkTypes.memberOf), refOf(unit))]);
       notify(`${fMember} moved to ${key}.`, 'ok');
       fMember = '';
-      await load();
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -170,7 +168,6 @@
         : flagged.map((n) => updateNodeItem(n, { [waitingProp()]: null }));
       await applyOnMain(ns.organisation, `Waiting unit ${on ? key : 'cleared'}`, on ? `New users wait in ${key}` : `New users join ${defaultOrg()}`, head.baselineId, edits);
       notify(on ? `New users now wait in ${key}.` : `New users now join ${defaultOrg()}.`, 'ok');
-      await load();
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -284,7 +281,6 @@
       await applyOnMain(ns.organisation, `Adapter ${a.mcp} of ${key}`, `${existing ? 'Update' : 'Create'} the adapter of ${a.mcp} for ${key}`, h.baselineId, existing ? [updateNodeItem(existing, props)] : [{ ...createNodeItem(akey, nodeTypes.adapter, props), owner: key }]);
       notify(`Adapter ${a.mcp} saved for ${key}.`, 'ok');
       editing = false;
-      await load();
     } catch (e) {
       fError = errorMessage(e);
     } finally {
@@ -300,7 +296,6 @@
       if (!existing) throw new Error('adapter node not found');
       await applyOnMain(ns.organisation, `Detach ${m} from ${key}`, `Retire the adapter of ${m} for ${key}`, h.baselineId, [retireNodeItem(existing)]);
       notify(`${m} detached from ${key}.`, 'ok');
-      await load();
     } catch (e) {
       error = errorMessage(e);
     }
@@ -371,7 +366,6 @@
       }
       notify(`Restrictions of ${m} saved for ${key}.`, 'ok');
       restricting = undefined;
-      await load();
     } catch (e) {
       rError = errorMessage(e);
     } finally {
