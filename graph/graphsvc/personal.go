@@ -192,7 +192,7 @@ func (h *Handler) Identify() connect.Interceptor {
 	})
 }
 
-// Positions is the interceptor that carries the positions of the logs of the changes (ADR 0152): the reads of a request
+// Positions is the interceptor that carries the positions of the logs of the changes (ADR 0153): the reads of a request
 // must reach the ones its graphapi.HeaderAtLeast names, and its answer names in graphapi.HeaderChangeSeq the positions
 // its writes left the logs at, so that the caller can require them of its next reads.
 func (h *Handler) Positions() connect.Interceptor {

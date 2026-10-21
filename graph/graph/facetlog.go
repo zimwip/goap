@@ -10,15 +10,22 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// The entries the log facets fold (LogFacet) are kept per change like its drafts (draftcache.go): a read asks the log
-// only for the entries after the last one kept, so that a blackboard of a change with a long history reads what happened
-// since the previous one, not the whole log. What a transaction that wrote the log read is not kept (it may roll back).
+// What the log facets fold (LogFacet) is kept per change like its drafts (draftcache.go): a read asks the log only for
+// the entries after the last one kept, so that a blackboard of a change with a long history reads what happened since
+// the previous one, not the whole log. A facet with a Folder keeps its folder, each entry decoded once (ADR 0153);
+// another keeps its entries. What a transaction that wrote the log read is not kept (it may roll back).
 
-// facetLog is the entries of each log facet of a change up to the position of each. Immutable once kept.
+// facetLog is what each log facet of a change folds, up to the position of each. Immutable once kept.
 type facetLog struct {
-	change  domain.ChangeID
-	seq     map[string]int64
-	entries map[string][]domain.LogEntry
+	change domain.ChangeID
+	seq    map[string]int64
+	reads  map[string]facetRead
+}
+
+// facetRead is what a log facet folds: its folder when it has one, else its entries (shared: never modified).
+type facetRead struct {
+	entries []domain.LogEntry
+	folder  domain.LogFolder
 }
 
 type facetLogCache struct {
@@ -65,30 +72,42 @@ func (c *facetLogCache) drop(id domain.ChangeID) {
 	}
 }
 
-// logEntries reads the entries of the log of a change each log facet folds: the ones kept, then the ones after them.
-// The lists returned are shared: never modified.
-func (g *Graph) logEntries(ctx context.Context, tx Tx, id domain.ChangeID) (map[string][]domain.LogEntry, error) {
+// logEntries reads what each log facet of a change folds: what is kept, extended by the entries after it.
+func (g *Graph) logEntries(ctx context.Context, tx Tx, id domain.ChangeID) (map[string]facetRead, error) {
 	if len(g.LogFacets) == 0 {
 		return nil, nil
 	}
 	kept := g.facetLogs.get(id)
-	next := &facetLog{change: id, seq: map[string]int64{}, entries: make(map[string][]domain.LogEntry, len(g.LogFacets))}
+	next := &facetLog{change: id, seq: map[string]int64{}, reads: make(map[string]facetRead, len(g.LogFacets))}
 	if kept != nil {
 		maps.Copy(next.seq, kept.seq)
-		maps.Copy(next.entries, kept.entries)
+		maps.Copy(next.reads, kept.reads)
 	}
 	for name, f := range g.LogFacets {
 		es, err := tx.Log(ctx, domain.LogFilter{Change: id, Types: f.Types, AfterSeq: next.seq[name]})
 		if err != nil {
 			return nil, err
 		}
+		r := next.reads[name]
+		if f.Folder != nil && r.folder == nil {
+			r.folder = f.Folder()
+		}
 		if len(es) > 0 {
-			next.entries[name] = append(slices.Clip(next.entries[name]), es...)
+			if r.folder != nil {
+				// the kept folder stays as it is: the entries go to a copy
+				r.folder = r.folder.Clone()
+				if err := r.folder.Add(es); err != nil {
+					return nil, err
+				}
+			} else {
+				r.entries = append(slices.Clip(r.entries), es...)
+			}
 			next.seq[name] = es[len(es)-1].Seq
 		}
+		next.reads[name] = r
 	}
 	if !wroteLog(tx, id) {
 		g.facetLogs.put(next, g.draftCacheSize())
 	}
-	return next.entries, nil
+	return next.reads, nil
 }

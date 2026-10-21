@@ -329,7 +329,7 @@ export interface Change {
   branch?: string;
   /** the version of its methodology the change follows: the latest published when it was created, until upgraded (ADR 0113) */
   methodologyVersion?: string;
-  /** position of the log of the change its impacts and items were read at, the view held (ADR 0152; int64: a string in JSON) */
+  /** position of the log of the change its impacts and items were read at, the view held (ADR 0153; int64: a string in JSON) */
   seq?: Int64;
   /** the methodologies framing the change, outermost first, its own last (ADR 0106) */
   guardians?: GuardianRef[];

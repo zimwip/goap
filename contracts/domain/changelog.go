@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"encoding/json"
 	"slices"
 	"strings"
@@ -139,4 +140,13 @@ func ImpactEntry(e ImpactEvent) (LogEntry, error) {
 	raw, err := marshalImpact(e)
 	return LogEntry{ID: e.ID, Change: e.Change, Type: LogImpact + "." + string(e.Op), Flow: e.Flow, Execution: e.Execution,
 		Subject: string(e.Impact), By: e.By, At: e.At, Causation: e.Causation, Payload: raw}, err
+}
+
+// LogFolder folds entries of the log of a change incrementally (ADR 0153): the entries that followed the ones added
+// are added, each decoded once, and Value reads what they give. Clone is a folder to add to, leaving this one as it is.
+// Value never modifies the folder.
+type LogFolder interface {
+	Add(entries []LogEntry) error
+	Clone() LogFolder
+	Value(ctx context.Context, c Change) (any, error)
 }

@@ -51,7 +51,7 @@ func serviceIdentity() connect.ClientOption {
 	}))
 }
 
-// positions carries the positions of the logs of the changes (ADR 0152): the ones the context requires of the reads
+// positions carries the positions of the logs of the changes (ADR 0153): the ones the context requires of the reads
 // (graphapi.AtLeast) go with the request, the ones the writes reached come back into its watermark
 // (graphapi.WithWatermark).
 func positions() connect.ClientOption {
@@ -435,7 +435,7 @@ func (c *Client) Change(ctx context.Context, id domain.ChangeID) (domain.Change,
 	return pbconv.ChangeFromPB(r.Msg.Change), nil
 }
 
-// ChangeAt reads a change as its log stood at a position (graph.Graph.ChangeAt, ADR 0152).
+// ChangeAt reads a change as its log stood at a position (graph.Graph.ChangeAt, ADR 0153).
 func (c *Client) ChangeAt(ctx context.Context, id domain.ChangeID, seq int64) (domain.Change, error) {
 	r, err := c.rpc.GetChange(ctx, connect.NewRequest(&graphv1.GetChangeRequest{Id: string(id), AtSeq: seq}))
 	if err != nil {

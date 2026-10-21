@@ -18,7 +18,7 @@ import (
 	"github.com/zimwip/goap/lib/graphclient"
 )
 
-// The positions of the log through the service (ADR 0152): a write answers where it left the log of the change, the
+// The positions of the log through the service (ADR 0153): a write answers where it left the log of the change, the
 // client puts it in the caller's watermark, a read requiring it is answered, one requiring more is refused as behind,
 // and the change is read as it stood at an earlier position.
 func TestPositionsThroughTheService(t *testing.T) {

@@ -384,12 +384,21 @@ type BlackboardFacet func(c domain.Change, now time.Time) any
 type LogFacet struct {
 	Types []string
 	Fold  func(ctx context.Context, c domain.Change, entries []domain.LogEntry) (any, error)
+	// Folder, when set, folds the entries incrementally (ADR 0153): the graph keeps a folder per change and adds only
+	// the entries that followed, Fold is then not used.
+	Folder func() domain.LogFolder
 }
 
-// withLogFacets folds the log facets of the blackboard from the entries read with it (outside any transaction).
-func (g *Graph) withLogFacets(ctx context.Context, bb domain.Blackboard, entries map[string][]domain.LogEntry) (domain.Blackboard, error) {
-	for name, es := range entries {
-		v, err := g.LogFacets[name].Fold(ctx, bb.Change, es)
+// withLogFacets folds the log facets of the blackboard from what was read with it (outside any transaction).
+func (g *Graph) withLogFacets(ctx context.Context, bb domain.Blackboard, logs map[string]facetRead) (domain.Blackboard, error) {
+	for name, r := range logs {
+		var v any
+		var err error
+		if r.folder != nil {
+			v, err = r.folder.Value(ctx, bb.Change)
+		} else {
+			v, err = g.LogFacets[name].Fold(ctx, bb.Change, r.entries)
+		}
 		if err != nil {
 			return bb, err
 		}

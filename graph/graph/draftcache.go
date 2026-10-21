@@ -316,7 +316,7 @@ func keepDrafts(tx Tx, s *draftState) {
 	}
 }
 
-// draftState is the view of a change (ADR 0152): the fold of its log up to its last impact event or fact as the
+// draftState is the view of a change (ADR 0153): the fold of its log up to its last impact event or fact as the
 // transaction sees it, refused with ErrBehind when it does not reach the position the caller asks for
 // (graphapi.AtLeast).
 func (g *Graph) draftState(ctx context.Context, tx Tx, id domain.ChangeID) (*draftState, error) {

@@ -88,7 +88,7 @@ type Change struct {
 	// Data is the free-form data of the change: the marks the services give it (the graph reads none, see
 	// DataAdministrative, "trigger").
 	Data map[string]any `json:"data,omitempty"`
-	// Seq is the position of the log of the change its impacts and items were read at (ADR 0152): the view of the
+	// Seq is the position of the log of the change its impacts and items were read at (ADR 0153): the view of the
 	// change the reader holds. Never stored.
 	Seq   int64        `json:"seq,omitempty"`
 	Items []ChangeItem `json:"items"`

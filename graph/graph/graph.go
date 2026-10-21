@@ -777,7 +777,7 @@ func (g *Graph) Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blac
 // BlackboardIn is the blackboard as seen by the process running on a flow
 // branch ("" = the main flow, see domain.Change.View).
 func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow string) (bb domain.Blackboard, err error) {
-	var logs map[string][]domain.LogEntry
+	var logs map[string]facetRead
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {

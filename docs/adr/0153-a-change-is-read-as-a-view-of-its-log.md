@@ -1,4 +1,4 @@
-# ADR 0152 — A change is read as a view of its log
+# ADR 0153 — A change is read as a view of its log
 
 **Status**: accepted; implemented · **Date**: 2026-10
 
@@ -29,7 +29,12 @@ rule only half kept:
    `walkTransitions`, `RebaseState`, `ImpactNodeResolve`, `ChangeEvents`, `draftsOf`); nothing on these paths reads the
    log whole.
 2. **The history read once.** The entries a log facet folds are kept per change like the view (`facetlog.go`): a read
-   asks the log only for the entries after the last one kept. What a transaction that wrote the log read is not kept.
+   asks the log only for the entries after the last one kept. A facet may fold incrementally (`LogFacet.Folder`, a
+   `domain.LogFolder`: `Add` the new entries, `Clone`, `Value` for a change): the cache keeps the folder, a read clones
+   it and adds only the entries after it, so each entry is decoded once. The history is such a facet
+   (`journal.FolderWith`, over `journal.Folder`, which `journal.Fold` runs too: one decoding, whole or in steps); the
+   step dependencies are applied by `Value`, on the history folded so far. What a transaction that wrote the log read
+   is not kept.
 3. **The guard reads headers.** The unit and the project of a change are read from its header (`ChangeHead`), never
    from its log.
 4. **Positions.** A change is read at a position, `Change.Seq` (proto `Change.seq`): the last impact event or fact its
@@ -55,5 +60,5 @@ rule only half kept:
   after the view, no decode of the facts or the impact events again.
 - The view holds the decoded impact events of the changes it caches (bounded by `DraftCacheSize`).
 - The web does not read the positions yet; the event stream (ADR 0053) keeps its own order.
-- The history facets are still folded whole by their `Fold` (journal.Fold) from the entries kept: an incremental
-  history fold is left to when it costs.
+- The history facet decodes each entry once; what it still does per read is the cascade of `current` over the runs
+  and steps folded (`journal.Folder.History`), linear in the steps, not in the log.

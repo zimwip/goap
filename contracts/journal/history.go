@@ -3,6 +3,7 @@ package journal
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -105,46 +106,74 @@ var impactMoves = []domain.ImpactOp{domain.ImpactUpdated, domain.ImpactTransitio
 // Fold is the history of the change whose log entries are given (in the order of the log; the other entries are
 // skipped). relies says which steps rely on which (the writes of a step relying on another never make the other stale).
 func Fold(entries []domain.LogEntry, relies Relies) (History, error) {
-	var h History
-	parent := map[string]string{} // process -> parent process
-	procOf := map[string]string{} // execution -> process
-	born := map[string]int64{}    // subject -> seq of its first appearance
-	var writes []writeOf
-	ended := map[string]int{}  // execution -> index of its step run
-	runIdx := map[string]int{} // process -> index of its run
+	f := NewFolder()
+	if err := f.Add(entries); err != nil {
+		return History{}, err
+	}
+	return f.History(relies), nil
+}
+
+// Folder folds the history of a change entry by entry (ADR 0153): each entry is decoded once, when it is added, and
+// History derives the runs and what stands from what was added. A folder kept between reads takes only the entries
+// that followed.
+type Folder struct {
+	h      History
+	parent map[string]string // process -> parent process
+	procOf map[string]string // execution -> process
+	born   map[string]int64  // subject -> seq of its first appearance
+	writes []writeOf
+	ended  map[string]int // execution -> index of its step run
+	runIdx map[string]int // process -> index of its run
+}
+
+// NewFolder is a folder of an empty log.
+func NewFolder() *Folder {
+	return &Folder{parent: map[string]string{}, procOf: map[string]string{}, born: map[string]int64{}, ended: map[string]int{}, runIdx: map[string]int{}}
+}
+
+// Clone is a folder the caller may add to, leaving this one as it is.
+func (f *Folder) Clone() *Folder {
+	return &Folder{h: History{Runs: slices.Clone(f.h.Runs), Steps: slices.Clone(f.h.Steps)}, parent: maps.Clone(f.parent),
+		procOf: maps.Clone(f.procOf), born: maps.Clone(f.born), writes: slices.Clip(f.writes), ended: maps.Clone(f.ended),
+		runIdx: maps.Clone(f.runIdx)}
+}
+
+// Add folds log entries that follow the ones added (in the order of the log; the other entries are skipped).
+func (f *Folder) Add(entries []domain.LogEntry) error {
+	h := &f.h
 	for _, e := range entries {
 		switch e.Stream() {
 		case StreamJournal:
 			var r Record
 			if err := json.Unmarshal(e.Payload, &r); err != nil {
-				return h, err
+				return err
 			}
 			if r.ParentProcessID != "" {
-				parent[r.ProcessID] = r.ParentProcessID
+				f.parent[r.ProcessID] = r.ParentProcessID
 			}
 			switch r.Kind {
 			case KindProcessStarted:
-				runIdx[r.ProcessID] = len(h.Runs)
+				f.runIdx[r.ProcessID] = len(h.Runs)
 				h.Runs = append(h.Runs, Run{Process: r.ProcessID, Parent: r.ParentProcessID, Methodology: r.Methodology, Agent: r.Agent,
 					Goal: r.Goal, Status: r.Status, Seq: e.Seq})
 			case KindProcessEnded:
-				if i, ok := runIdx[r.ProcessID]; ok {
+				if i, ok := f.runIdx[r.ProcessID]; ok {
 					h.Runs[i].Status = r.Status
 				}
 			case KindStepEnded:
 				exec, _ := r.Data["execution"].(string)
-				h.dropRunning(r.ActivityRef, r.ProcessID, ended)
-				ended[exec] = len(h.Steps)
-				procOf[exec] = r.ProcessID
+				h.dropRunning(r.ActivityRef, r.ProcessID, f.ended)
+				f.ended[exec] = len(h.Steps)
+				f.procOf[exec] = r.ProcessID
 				h.Steps = append(h.Steps, StepRun{Path: r.ActivityRef, Methodology: r.Methodology, Process: r.ProcessID, Action: r.Action,
 					Execution: exec, Outcome: OutcomeSucceeded, Seq: e.Seq, Subject: r.Subject, SubjectRef: r.SubjectRef, children: stringList(r.Data["children"])})
 			case KindAction:
-				procOf[r.ID] = r.ProcessID
+				f.procOf[r.ID] = r.ProcessID
 				if r.ActivityRef == "" {
 					continue
 				}
 				failed := r.Error != "" || (r.EffectsMet != nil && !*r.EffectsMet && r.Data["progress"] != true)
-				if i, ok := ended[r.ID]; ok {
+				if i, ok := f.ended[r.ID]; ok {
 					if failed {
 						h.Steps[i].Outcome, h.Steps[i].Error, h.Steps[i].Seq = OutcomeFailed, r.Error, e.Seq
 					}
@@ -154,16 +183,16 @@ func Fold(entries []domain.LogEntry, relies Relies) (History, error) {
 				if failed {
 					outcome = OutcomeFailed
 				}
-				h.dropRunning(r.ActivityRef, r.ProcessID, ended)
+				h.dropRunning(r.ActivityRef, r.ProcessID, f.ended)
 				h.Steps = append(h.Steps, StepRun{Path: r.ActivityRef, Methodology: r.Methodology, Process: r.ProcessID, Action: r.Action,
 					Execution: r.ID, Outcome: outcome, Error: r.Error, Seq: e.Seq, Subject: r.Subject, SubjectRef: r.SubjectRef})
 			}
 		case domain.LogImpact:
-			if _, ok := born[e.Subject]; !ok {
-				born[e.Subject] = e.Seq
+			if _, ok := f.born[e.Subject]; !ok {
+				f.born[e.Subject] = e.Seq
 			}
 			if slices.Contains(impactMoves, domain.ImpactOp(e.Type[len(domain.LogImpact)+1:])) {
-				writes = append(writes, writeOf{seq: e.Seq, subject: e.Subject, execution: e.Execution, id: e.ID})
+				f.writes = append(f.writes, writeOf{seq: e.Seq, subject: e.Subject, execution: e.Execution, id: e.ID})
 			}
 		case domain.LogFact:
 			var it struct {
@@ -178,21 +207,27 @@ func Fold(entries []domain.LogEntry, relies Relies) (History, error) {
 				continue // an item without key is never rewritten: a new one moves nothing a step saw
 			}
 			subject := it.Type + ":" + key
-			if _, ok := born[subject]; !ok {
-				born[subject] = e.Seq
+			if _, ok := f.born[subject]; !ok {
+				f.born[subject] = e.Seq
 				continue
 			}
-			writes = append(writes, writeOf{seq: e.Seq, subject: subject, execution: e.Execution, id: e.ID})
+			f.writes = append(f.writes, writeOf{seq: e.Seq, subject: subject, execution: e.Execution, id: e.ID})
 		}
 	}
+	return nil
+}
+
+// History is the history the entries added give, relies saying which steps rely on which. The folder is left as it is.
+func (f *Folder) History(relies Relies) History {
+	h := History{Runs: slices.Clone(f.h.Runs), Steps: slices.Clone(f.h.Steps)}
 	// a running step whose action is not over yet stays running; count the runs of each path
 	count := map[string]int{}
 	for i := range h.Steps {
 		count[h.Steps[i].Path]++
 		h.Steps[i].Runs = count[h.Steps[i].Path]
 	}
-	h.current(parent, procOf, born, writes, relies)
-	return h, nil
+	h.current(f.parent, f.procOf, f.born, f.writes, relies)
+	return h
 }
 
 // dropRunning removes the running entry of a step a process runs again: a step waiting for its sub-agent is run again
@@ -318,26 +353,49 @@ func stringList(v any) []string {
 type StepDependencies func(ctx context.Context, methodology string) map[string]map[string]bool
 
 // FoldWith is the fold of the history of a change whose steps rely on one another as deps says (nil: no step relies on
-// another), each methodology asked once per fold: what the graph plugs as the history facet of the blackboard
-// (graph.LogFacet with HistoryTypes) and the engine runs over the log it reads.
+// another), each methodology asked once per fold: what the engine runs over the log it reads.
 func FoldWith(deps StepDependencies) func(ctx context.Context, c domain.Change, entries []domain.LogEntry) (any, error) {
 	return func(ctx context.Context, c domain.Change, entries []domain.LogEntry) (any, error) {
-		var relies Relies
-		if deps != nil {
-			known := map[string]map[string]map[string]bool{}
-			relies = func(methodology, later, earlier string) bool {
-				d, ok := known[methodology]
-				if !ok {
-					ask := methodology
-					if methodology == c.Methodology {
-						ask = c.MethodologyRef() // the version the change follows (ADR 0113)
-					}
-					d = deps(ctx, ask)
-					known[methodology] = d
-				}
-				return d[later][earlier]
+		return Fold(entries, reliesOf(ctx, c, deps))
+	}
+}
+
+// FolderWith is the incremental fold of the history of a change (domain.LogFolder), steps relying on one another as deps
+// says: what the graph plugs as the history facet of the blackboard (graph.LogFacet with HistoryTypes), the folder kept
+// per change between two reads (ADR 0153).
+func FolderWith(deps StepDependencies) func() domain.LogFolder {
+	return func() domain.LogFolder { return historyFolder{f: NewFolder(), deps: deps} }
+}
+
+type historyFolder struct {
+	f    *Folder
+	deps StepDependencies
+}
+
+func (h historyFolder) Add(entries []domain.LogEntry) error { return h.f.Add(entries) }
+
+func (h historyFolder) Clone() domain.LogFolder { return historyFolder{f: h.f.Clone(), deps: h.deps} }
+
+func (h historyFolder) Value(ctx context.Context, c domain.Change) (any, error) {
+	return h.f.History(reliesOf(ctx, c, h.deps)), nil
+}
+
+// reliesOf is what deps says of the steps of the methodologies of a change, each asked once.
+func reliesOf(ctx context.Context, c domain.Change, deps StepDependencies) Relies {
+	if deps == nil {
+		return nil
+	}
+	known := map[string]map[string]map[string]bool{}
+	return func(methodology, later, earlier string) bool {
+		d, ok := known[methodology]
+		if !ok {
+			ask := methodology
+			if methodology == c.Methodology {
+				ask = c.MethodologyRef() // the version the change follows (ADR 0113)
 			}
+			d = deps(ctx, ask)
+			known[methodology] = d
 		}
-		return Fold(entries, relies)
+		return d[later][earlier]
 	}
 }
