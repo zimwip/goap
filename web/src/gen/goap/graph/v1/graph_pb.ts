@@ -1019,7 +1019,7 @@ export type Change = Message<"goap.graph.v1.Change"> & {
   methodologyVersion: string;
 
   /**
-   * the position of the log of the change its impacts and items were read at: the view the reader holds (ADR 0152)
+   * the position of the log of the change its impacts and items were read at: the view the reader holds (ADR 0153)
    *
    * @generated from field: int64 seq = 25;
    */
@@ -1158,7 +1158,7 @@ export type ChangeJson = {
   methodologyVersion?: string;
 
   /**
-   * the position of the log of the change its impacts and items were read at: the view the reader holds (ADR 0152)
+   * the position of the log of the change its impacts and items were read at: the view the reader holds (ADR 0153)
    *
    * @generated from field: int64 seq = 25;
    */

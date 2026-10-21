@@ -53,7 +53,7 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		for _, st := range gt.drafts {
 			r.g.draftStates.put(st, r.g.draftCacheSize())
 		}
-		// the caller's watermark: where the writes left the log of each change (ADR 0152)
+		// the caller's watermark: where the writes left the log of each change (ADR 0153)
 		if w := graphapi.WatermarkOf(ctx); w != nil {
 			for id, seq := range gt.impactSeq {
 				w.Note(id, seq)

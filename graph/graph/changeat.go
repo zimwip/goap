@@ -7,7 +7,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// A change is read as a view of its log (ADR 0152). The head view is the fold the operations share (draftState): every
+// A change is read as a view of its log (ADR 0153). The head view is the fold the operations share (draftState): every
 // operation takes it once at the start of its transaction, computes on it, appends its events and folds them into it
 // synchronously (emitEntry), so the view it leaves is at the position its writes reached, which the caller's watermark
 // records (graphapi.WithWatermark) and a later read may require (graphapi.AtLeast). A view bounded at a position is the

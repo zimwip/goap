@@ -11,7 +11,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// A change is read as a view of its log (ADR 0152): the fold of its impact events and facts up to a position, its seq.
+// A change is read as a view of its log (ADR 0153): the fold of its impact events and facts up to a position, its seq.
 // A write appends to the log and folds what it appended into the view at once, so the caller gets back the position its
 // write left the log at (its watermark) and may ask a later read to see at least that far (AtLeast): a read whose view
 // is behind is refused with ErrBehind rather than answered with an older state.

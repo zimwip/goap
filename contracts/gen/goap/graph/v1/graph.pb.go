@@ -907,7 +907,7 @@ type Change struct {
 	// the version of its methodology the change follows (ADR 0113): the latest published one when it was created, until
 	// it is upgraded; empty: the latest
 	MethodologyVersion string `protobuf:"bytes,24,opt,name=methodology_version,json=methodologyVersion,proto3" json:"methodology_version,omitempty"`
-	// the position of the log of the change its impacts and items were read at: the view the reader holds (ADR 0152)
+	// the position of the log of the change its impacts and items were read at: the view the reader holds (ADR 0153)
 	Seq           int64 `protobuf:"varint,25,opt,name=seq,proto3" json:"seq,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

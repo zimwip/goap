@@ -83,7 +83,7 @@ func (g *Graph) workOn(ctx context.Context, tx Tx, id domain.ChangeID, flow stri
 }
 
 // reread takes the change and what the flow sees again from the view of the change, after a write of the operation
-// folded into it (ADR 0152): the branch, the flow and the types the work was opened on stand.
+// folded into it (ADR 0153): the branch, the flow and the types the work was opened on stand.
 func (g *Graph) reread(ctx context.Context, tx Tx, w *work) (err error) {
 	if w.c, err = changeOpen(ctx, tx, w.c.ID); err != nil {
 		return err
