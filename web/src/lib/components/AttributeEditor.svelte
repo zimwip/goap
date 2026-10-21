@@ -30,8 +30,8 @@
     path: string;
   } = $props();
 
-  const TYPES = ['', 'string', 'number', 'boolean', 'date', 'enum', 'json'];
-  const WIDGETS = ['', 'text', 'textarea', 'dropdown', 'checkbox', 'date', 'directory'];
+  const TYPES = ['', 'string', 'number', 'boolean', 'date', 'enum', 'json', 'code'];
+  const WIDGETS = ['', 'text', 'textarea', 'dropdown', 'checkbox', 'date', 'directory', 'code'];
 
   let open = $state<Record<string, boolean>>({});
 

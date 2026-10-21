@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { orderedAttributes, parseValue as parseAttr, valueText, type AttributeView } from '../attributes';
+  import { isCode, orderedAttributes, parseValue as parseAttr, valueText, type AttributeView } from '../attributes';
+  import CodeValueEditor from './CodeValueEditor.svelte';
   import type { AttributeInfo } from '../api';
   import { assistField, registerAssist, type FieldSpec } from '../assist/registry.svelte';
   // Edition of the properties of a node: the attributes its type defines (laid out by section, edited with
@@ -124,6 +125,8 @@
           </select>
         {:else if a.widget === 'date'}
           <input id="np-{a.name}" use:assistField={helperField(a)} type="date" bind:value={draft[a.name]} />
+        {:else if isCode(a)}
+          <CodeValueEditor bind:value={draft[a.name]} id="np-{a.name}" label={a.label} />
         {:else if a.widget === 'textarea' || draft[a.name].length > 80 || draft[a.name].includes('\n')}
           <textarea id="np-{a.name}" use:assistField={helperField(a)} rows="4" bind:value={draft[a.name]}></textarea>
         {:else}

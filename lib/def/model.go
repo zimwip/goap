@@ -109,10 +109,13 @@ const (
 	AttrDate    = "date"
 	AttrEnum    = "enum"
 	AttrJSON    = "json"
+	// AttrCode is source text with its language (contracts/codetext): a front matter naming the language, then the
+	// text as a fenced code block. A plain string reads as code of no known language.
+	AttrCode = "code"
 )
 
 // AttributeTypes lists the attribute types.
-var AttributeTypes = []string{AttrString, AttrNumber, AttrBoolean, AttrDate, AttrEnum, AttrJSON}
+var AttributeTypes = []string{AttrString, AttrNumber, AttrBoolean, AttrDate, AttrEnum, AttrJSON, AttrCode}
 
 // Attribute widgets: how the user interface lets a value be edited.
 const (
@@ -124,10 +127,12 @@ const (
 	// WidgetDirectory is a directory on the machine of a service, a text field with a chooser: the parameter of an
 	// importer that reads a local directory (ADR 0148), listed by the service implementing it.
 	WidgetDirectory = "directory"
+	// WidgetCode edits source text with its language, highlighted (the usual widget of a code attribute).
+	WidgetCode = "code"
 )
 
 // AttributeWidgets lists the widgets.
-var AttributeWidgets = []string{WidgetText, WidgetTextarea, WidgetDropdown, WidgetCheckbox, WidgetDate, WidgetDirectory}
+var AttributeWidgets = []string{WidgetText, WidgetTextarea, WidgetDropdown, WidgetCheckbox, WidgetDate, WidgetDirectory, WidgetCode}
 
 // Attribute defines a property of a node type or a link type: the code that keys the value, and what the user
 // interface needs to display and edit it. Its validators are the property validator instances (ADR 0018)
@@ -176,6 +181,8 @@ func (a Attribute) DefaultWidget() string {
 		return WidgetCheckbox
 	case AttrDate:
 		return WidgetDate
+	case AttrCode:
+		return WidgetCode
 	}
 	return WidgetText
 }

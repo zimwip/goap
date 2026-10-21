@@ -1,5 +1,6 @@
 // CodeMirror 6 configuration: theme aligned with the application's CSS tokens
-// (light / dark), JavaScript syntax highlighting and `ctx` DSL completion.
+// (light / dark), JavaScript syntax highlighting and `ctx` DSL completion, and the
+// languages of the source text of code attributes (codeText.ts).
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, placeholder as placeholderExt } from '@codemirror/view';
 import { EditorState, Compartment, type Extension } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
@@ -22,10 +23,17 @@ import {
   type CompletionResult,
 } from '@codemirror/autocomplete';
 import { javascript, javascriptLanguage } from '@codemirror/lang-javascript';
+import { cpp } from '@codemirror/lang-cpp';
+import { go } from '@codemirror/lang-go';
+import { java } from '@codemirror/lang-java';
+import { python } from '@codemirror/lang-python';
+import { rust } from '@codemirror/lang-rust';
 import { tags as t } from '@lezer/highlight';
 import { DSL_FIELDS, DSL_FUNCTIONS, algorithmUsage, type DslFunction } from './dsl';
 
-export type CodeLanguage = 'javascript' | 'cel' | 'text';
+/** The languages of code attributes highlighted (the names the git importer gives them, CODE_LANGUAGES). */
+export type SourceLanguage = 'c' | 'cpp' | 'go' | 'java' | 'python' | 'rust' | 'typescript' | 'tsx';
+export type CodeLanguage = 'javascript' | 'cel' | 'text' | SourceLanguage;
 
 // --- theme ----------------------------------------------------------------------
 
@@ -129,6 +137,21 @@ export function languageExtension(lang: CodeLanguage, dsl: boolean | string): Ex
     case 'cel':
       // CEL has an expression syntax close to JavaScript: highlighting is good enough.
       return javascript();
+    case 'c':
+    case 'cpp':
+      return cpp();
+    case 'go':
+      return go();
+    case 'java':
+      return java();
+    case 'python':
+      return python();
+    case 'rust':
+      return rust();
+    case 'typescript':
+      return javascript({ typescript: true });
+    case 'tsx':
+      return javascript({ typescript: true, jsx: true });
     default:
       return [];
   }

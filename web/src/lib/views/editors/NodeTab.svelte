@@ -43,7 +43,8 @@
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { assistField, registerAssist } from '../../assist/registry.svelte';
   import { diffSummary } from '../../assist/changeScreen';
-  import { orderedAttributes, shownValue } from '../../attributes';
+  import { isCode, orderedAttributes, shownValue } from '../../attributes';
+  import CodeView from '../../components/CodeView.svelte';
 import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, removeFromChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
 
   import NotFound from '../../shell/NotFound.svelte';
@@ -513,8 +514,13 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
                     <tr class:changed>
                       <th title={attrOf(k)?.tooltip}>{attrOf(k)?.label ?? k}{#if attrOf(k)?.validators.length}<span class="hint" title={`Checked by ${attrOf(k)?.validators.join(', ')}`}> ✓</span>{/if}{#if !declared.includes(k)}<span class="hint" title={`Not declared by ${typeName}`}> *</span>{/if}</th>
                       <td>
-                        {#if text(nodeProps[k])}{shownValue(attrOf(k), nodeProps[k])}{:else}<span class="hint">—</span>{/if}
-                        {#if changed}<span class="hint pending" title="Proposed in the working change"> (was {text(storedProps[k]) || 'empty'})</span>{/if}
+                        {#if isCode(attrOf(k)) && typeof nodeProps[k] === 'string' && nodeProps[k]}
+                          <CodeView value={nodeProps[k] as string} label={attrOf(k)?.label} />
+                          {#if changed}<span class="hint pending" title="Proposed in the working change">(changed in the working change{text(storedProps[k]) ? '' : ', was empty'})</span>{/if}
+                        {:else}
+                          {#if text(nodeProps[k])}{shownValue(attrOf(k), nodeProps[k])}{:else}<span class="hint">—</span>{/if}
+                          {#if changed}<span class="hint pending" title="Proposed in the working change"> (was {text(storedProps[k]) || 'empty'})</span>{/if}
+                        {/if}
                       </td>
                     </tr>
                   {/each}

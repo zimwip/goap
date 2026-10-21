@@ -1,6 +1,7 @@
 // Attributes of a node type (the registry's definition, resolved by the catalogue): how a node's
 // properties are laid out, edited and shown.
 import type { AttributeInfo } from './api';
+import { parseCode } from './codeText';
 
 export interface AttributeView {
   name: string;
@@ -17,7 +18,7 @@ export interface AttributeView {
   validators: string[];
 }
 
-const WIDGETS: Record<string, string> = { enum: 'dropdown', boolean: 'checkbox', date: 'date' };
+const WIDGETS: Record<string, string> = { enum: 'dropdown', boolean: 'checkbox', date: 'date', code: 'code' };
 
 export function attributeView(a: AttributeInfo): AttributeView {
   const at = a.attribute ?? {};
@@ -64,6 +65,9 @@ export function shownValue(a: AttributeView | undefined, v: unknown): string {
   return t;
 }
 
+/** Is the attribute source text, shown and edited as code (codeText.ts)? */
+export const isCode = (a: AttributeView | undefined): boolean => !!a && (a.type === 'code' || a.widget === 'code');
+
 /** The value typed in the form, converted to what the type of the attribute holds. An empty entry stays empty. */
 export function parseValue(a: AttributeView, raw: string): unknown {
   if (raw === '') return '';
@@ -80,6 +84,12 @@ export function parseValue(a: AttributeView, raw: string): unknown {
         return JSON.parse(raw);
       } catch {
         throw new Error(`“${a.label}” expects JSON: ${raw} is not valid`);
+      }
+    case 'code':
+      try {
+        parseCode(raw);
+      } catch (e) {
+        throw new Error(`“${a.label}” expects a code text: ${e instanceof Error ? e.message : String(e)}`);
       }
   }
   return raw;

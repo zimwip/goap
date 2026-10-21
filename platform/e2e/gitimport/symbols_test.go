@@ -243,7 +243,7 @@ func (p *Point) check() {
 			t.Errorf("%s: type %q, want %s", k, nodes[k].Type, typ)
 		}
 	}
-	if code, _ := nodes[newPoint].Properties["code"].(string); code != "func NewPoint(x, y int) *Point { return &Point{X: x, Y: y} }" {
+	if code, _ := nodes[newPoint].Properties["code"].(string); code != "---\nlanguage: go\n---\n```go\nfunc NewPoint(x, y int) *Point { return &Point{X: x, Y: y} }\n```\n" {
 		t.Errorf("code of NewPoint: %q", code)
 	}
 	if n := nodes[shapes].Properties["name"]; n != "shapes" {

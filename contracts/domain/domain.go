@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strconv"
 	"time"
+
+	"github.com/zimwip/goap/contracts/codetext"
 )
 
 // NodeID is the stable identity of a node across all its versions.
@@ -290,7 +292,7 @@ type AttributeCheck struct {
 }
 
 // Check checks a value against the type of its attribute (the attribute types of lib/def: number, boolean, date, enum,
-// string). A missing or empty value is accepted (requiring one is the job of a validator), and so is any value of an
+// string, code). A missing or empty value is accepted (requiring one is the job of a validator), and so is any value of an
 // attribute that names no type.
 func (a AttributeCheck) Check(v any) error {
 	if v == nil || v == "" {
@@ -332,6 +334,14 @@ func (a AttributeCheck) Check(v any) error {
 	case "string":
 		if _, ok := v.(string); !ok {
 			return fmt.Errorf("a string is expected, got %v", v)
+		}
+	case "code":
+		s, ok := v.(string)
+		if !ok {
+			return fmt.Errorf("a code text is expected, got %v", v)
+		}
+		if err := codetext.Check(s); err != nil {
+			return fmt.Errorf("not a code text: %w", err)
 		}
 	}
 	return nil

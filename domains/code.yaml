@@ -1,5 +1,5 @@
 name: code
-version: 1.4.0
+version: 1.5.0
 description: >
   Source code held in git repositories (ADR 0147): a repository, its directories and its files as of the last commit
   imported. The git importer (platform/gitimport: the importer `git` below, served by importer-git, ADR 0148; the
@@ -94,7 +94,7 @@ nodeTypes:
       - {name: language, label: Language, description: Language of its file, type: string, section: Source, order: 4}
       - {name: signature, label: Signature, description: First line of its text, type: string, section: Source, order: 5}
       - {name: digest, label: Digest, description: Digest of its text, type: string, section: Source, order: 6}
-      - {name: code, label: Code, description: "Source text of the declaration (cut at 64 KiB; the digest is of the whole text)", type: string, widget: textarea, section: Source, order: 7}
+      - {name: code, label: Code, description: "Source text of the declaration with its language (a code text: front matter, then the fenced block; cut at 64 KiB; the digest is of the whole text)", type: code, section: Source, order: 7}
     lifecycle: presence
     search: [{property: name, text: true}, {property: signature, text: true}, {property: kind, facet: true}, {property: language, facet: true}]
   # the declarations by what they are; a namespace, a module or a macro stays a Symbol
