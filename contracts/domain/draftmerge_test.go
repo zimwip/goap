@@ -7,7 +7,7 @@ import (
 
 func TestMergeDrafts(t *testing.T) {
 	to := func(id NodeID, v Version) NodeRef { return NodeRef{ID: id, Version: v} }
-	base := Draft{Key: "K", State: "draft", Owner: "U1",
+	base := Draft{Key: "K", State: "draft", Owner: unitURL("U1"),
 		Properties: map[string]any{"title": "t", "size": float64(1), "gone": "x", "both": "b"},
 		Links:      []DraftLink{{ID: "l1", Type: "uses", To: to("A", 1)}, {ID: "l2", Type: "uses", To: to("B", 1)}, {ID: "l3", Type: "uses", To: to("C", 1)}}}
 	ours := base.Clone()
@@ -22,7 +22,7 @@ func TestMergeDrafts(t *testing.T) {
 	theirs.Properties["both"] = "t"
 	theirs.Properties["new"] = "n"
 	theirs.State = "done"
-	theirs.Owner = "U2"
+	theirs.Owner = unitURL("U2")
 	theirs.Links = []DraftLink{{ID: "x1", Type: "uses", To: to("A", 3)}, {ID: "x2", Type: "uses", To: to("B", 3)}, {ID: "x5", Type: "uses", To: to("E", 1)}} // C removed, A moved, E added
 
 	got, conflicts := MergeDrafts(base, ours, theirs)
@@ -33,7 +33,7 @@ func TestMergeDrafts(t *testing.T) {
 	if !reflect.DeepEqual(got.Properties, wantProps) {
 		t.Fatalf("props = %v", got.Properties)
 	}
-	if got.State != "review" || got.Owner != "U2" {
+	if got.State != "review" || got.Owner != unitURL("U2") {
 		t.Fatalf("state %q owner %q", got.State, got.Owner)
 	}
 	wantLinks := []DraftLink{{ID: "l1", Type: "uses", To: to("A", 3)}, {ID: "l2", Type: "uses", To: to("B", 2)}, {ID: "l4", Type: "uses", To: to("D", 1)}, {Type: "uses", To: to("E", 1)}}
@@ -54,7 +54,7 @@ func TestPendingConflicts(t *testing.T) {
 	log := []ImpactEvent{
 		rebased,
 		ev(ImpactUpdated, map[string]any{"props": map[string]any{"a": 1}}),
-		ev(ImpactUpdated, map[string]any{"ownerId": "U"}),
+		ev(ImpactUpdated, map[string]any{"owner": "lnk:organisation/OrgUnit/U"}),
 		ev(ImpactTransitioned, map[string]any{"state": map[string]any{"from": "x", "to": "y"}}),
 		ev(ImpactUpdated, map[string]any{"removeLink": map[string]any{"id": "l", "type": "uses", "toId": "N"}}),
 		{Impact: "other", Op: ImpactUpdated, Patch: map[string]any{"resolved": true}},

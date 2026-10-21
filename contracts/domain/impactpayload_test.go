@@ -33,7 +33,7 @@ func TestImpactPayloadLeavesTheEnvelopeToTheColumns(t *testing.T) {
 }
 
 func TestCheckoutOfAVersionStoresItsBase(t *testing.T) {
-	base := Node{ID: "n1", Version: 3, Key: "K", Type: "alm@Requirement", State: "draft", Owner: "u1", Properties: map[string]any{"title": strings.Repeat("x", 500)}}
+	base := Node{ID: "n1", Version: 3, Key: "K", Type: "alm@Requirement", State: "draft", Owner: unitURL("u1"), Properties: map[string]any{"title": strings.Repeat("x", 500)}}
 	links := []Link{{ID: "l1", From: base.Ref(), To: NodeRef{ID: "n2", Version: 1}, Type: "alm@refines"}, {ID: "l2", From: base.Ref(), To: NodeRef{ID: "n3", Version: 2}, Type: "alm@refines"}}
 	cp := &BaseCopy{Drafted: []NodeRef{{ID: "n3", Version: 2}}}
 	e := ImpactEvent{ID: "e1", Change: "c1", Impact: "i1", Op: ImpactCheckedOut, Execution: "x1", FromBase: cp}

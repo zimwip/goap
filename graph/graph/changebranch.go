@@ -67,7 +67,7 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 		}
 	}
 	res, err := g.mergeBranchTx(ctx, tx, MergeRequest{From: own.Name, Into: own.Parent, Title: "merge " + c.Title,
-		Namespace: c.Namespace, Resolutions: resolutions, OwnerOrg: c.OwnerOrg, ProjectID: c.ProjectID})
+		Namespace: c.Namespace, Resolutions: resolutions, OwnerOrg: c.OwnerOrg.String(), ProjectID: c.ProjectID.String()})
 	if err != nil {
 		return c, err
 	}
@@ -197,24 +197,34 @@ func (g *Graph) NodeByKeyOn(ctx context.Context, namespace, branch, key string) 
 		if err != nil {
 			return err
 		}
-		for name, hops := domain.BranchOf(branch), 0; hops < 64; hops++ {
-			if n, err = tx.LatestOn(ctx, id, name); err == nil {
-				return nil
-			} else if !errors.Is(err, ErrNotFound) {
-				return err
-			}
-			if name == domain.MainBranch {
-				break
-			}
-			b, err := tx.Branch(ctx, namespace, name)
-			if err != nil {
-				return err
-			}
-			name = domain.BranchOf(b.Parent)
+		n, err = latestOnTx(ctx, tx, namespace, branch, id)
+		if errors.Is(err, ErrNotFound) {
+			return fmt.Errorf("node key %q on branch %s: %w", key, branch, ErrNotFound)
 		}
-		return fmt.Errorf("node key %q on branch %s: %w", key, branch, ErrNotFound)
+		return err
 	})
 	return
+}
+
+// latestOnTx is the latest version of a node on a branch of a namespace: written or joined there, else on the branch
+// it was forked from, up to main.
+func latestOnTx(ctx context.Context, tx Tx, namespace, branch string, id domain.NodeID) (domain.Node, error) {
+	for name, hops := domain.BranchOf(branch), 0; hops < 64; hops++ {
+		if n, err := tx.LatestOn(ctx, id, name); err == nil {
+			return n, nil
+		} else if !errors.Is(err, ErrNotFound) {
+			return n, err
+		}
+		if name == domain.MainBranch {
+			break
+		}
+		b, err := tx.Branch(ctx, namespace, name)
+		if err != nil {
+			return domain.Node{}, err
+		}
+		name = domain.BranchOf(b.Parent)
+	}
+	return domain.Node{}, fmt.Errorf("node %s on branch %s: %w", id, branch, ErrNotFound)
 }
 
 // fastForward commits a change whose target has not moved, for the nodes its branch changed, since its branch was

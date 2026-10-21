@@ -53,7 +53,7 @@ func testSnapshotExportImport(t *testing.T, repo Repo) {
 		t.Fatalf("import as a change: %+v", res)
 	}
 	c := must[domain.Change](t)(g.Change(ctx, res.Change))
-	if c.Status != domain.ChangeActive || c.ProjectID != "PROJ-ROOT" {
+	if c.Status != domain.ChangeActive || c.ProjectID.Key != "PROJ-ROOT" {
 		t.Fatalf("the change stays open for review: %+v", c)
 	}
 	if latest := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID})); latest.Version != f.req.Version {

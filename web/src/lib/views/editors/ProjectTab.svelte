@@ -10,6 +10,7 @@
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import AssignmentsPane from '../../components/AssignmentsPane.svelte';
+  import ProjectSources from '../../components/ProjectSources.svelte';
   import { errorMessage } from '../../api';
   import { headGraph, findNode, applyOnMain, updateNodeItem, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
@@ -25,7 +26,7 @@
   let head = $state<HeadGraph>();
   let loading = $state(false);
   let error = $state('');
-  let pane = $state(tab.params.pane === 'assignments' ? 'assignments' : 'overview');
+  let pane = $state(tab.params.pane === 'assignments' || tab.params.pane === 'sources' ? tab.params.pane : 'overview');
 
   const project = $derived(head ? findNode(head, ns.organisation, nodeTypes.projectUnit, key) : undefined);
   const nodeById = $derived(new Map((head?.nodes ?? []).map((n) => [n.id ?? '', n])));
@@ -87,6 +88,7 @@
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview' },
     { id: 'assignments', label: 'Assignments' },
+    { id: 'sources', label: 'Sources' },
   ]);
 
   // ---- overview edit form ---------------------------------------------------------
@@ -241,6 +243,8 @@
               {/if}
             </section>
           {/if}
+        {:else if active === 'sources' && head}
+          <ProjectSources {head} {project} onChanged={load} />
         {:else if head}
           <AssignmentsPane {head} fixedProject={key} autoOpen={tab.params.newAssignment === '1'} onChanged={load} />
         {/if}

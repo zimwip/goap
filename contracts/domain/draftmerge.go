@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"slices"
 	"sort"
+
+	"github.com/zimwip/goap/contracts/lnk"
 )
 
 // Rebasing a committed branch (ADR 0101, 0103: rebaseCommittedTx): a node changed both on the change's branch and on the
@@ -83,7 +85,13 @@ func merge3[T comparable](base, ours, theirs T) (T, bool) {
 	return ours, true
 }
 
-func linkKey(l DraftLink) string { return ConflictLink(l.Type, l.To.ID) }
+// linkKey names a link by its type and its target: the node, or the URL with no version of a target in another source.
+func linkKey(l DraftLink) string {
+	if l.External() {
+		return ConflictLink(l.Type, NodeID(l.Target.Logical().String()))
+	}
+	return ConflictLink(l.Type, l.To.ID)
+}
 
 func linksByKey(ls []DraftLink) map[string]DraftLink {
 	out := map[string]DraftLink{}
@@ -99,7 +107,7 @@ func sameLink(a DraftLink, aok bool, b DraftLink, bok bool) bool {
 	if aok != bok {
 		return false
 	}
-	return !aok || (a.To.Version == b.To.Version && sameValue(a.Properties, true, b.Properties, true))
+	return !aok || (a.To.Version == b.To.Version && a.Target == b.Target && sameValue(a.Properties, true, b.Properties, true))
 }
 
 // mergeLinks merges the outgoing links: ours in their order (the ones theirs changed or removed updated), then the ones
@@ -145,7 +153,7 @@ func mergeLinks(base, ours, theirs []DraftLink) ([]DraftLink, []string) {
 		case !decided:
 			out = append(out, l)
 		case t != nil:
-			l.To, l.Properties = t.To, cloneProps(t.Properties)
+			l.To, l.Target, l.Properties = t.To, t.Target, cloneProps(t.Properties)
 			out = append(out, l)
 		}
 	}
@@ -158,7 +166,7 @@ func mergeLinks(base, ours, theirs []DraftLink) ([]DraftLink, []string) {
 	sort.Strings(added)
 	for _, k := range added {
 		t := *take[k]
-		out = append(out, DraftLink{Type: t.Type, To: t.To, Properties: cloneProps(t.Properties)})
+		out = append(out, DraftLink{Type: t.Type, To: t.To, Target: t.Target, Properties: cloneProps(t.Properties)})
 	}
 	return out, conflicts
 }
@@ -239,13 +247,18 @@ func ApplyConflictEvent(pending []string, e ImpactEvent) []string {
 		for _, k := range p.Unset {
 			settle(ConflictProp(k))
 		}
-		if p.OwnerID != "" {
+		if !p.Owner.IsZero() {
 			settle(ConflictOwner)
 		}
 		for _, name := range []string{"addLink", "removeLink", "updateLink"} {
 			l, _ := e.Patch[name].(map[string]any)
 			typ, _ := l["type"].(string)
 			to, _ := l["toId"].(string)
+			if u, _ := l["target"].(string); to == "" && u != "" {
+				if t, err := lnk.Parse(u); err == nil {
+					to = t.Logical().String()
+				}
+			}
 			if typ != "" && to != "" {
 				settle(ConflictLink(typ, NodeID(to)))
 			}
@@ -290,7 +303,7 @@ func DraftChanged(base *Draft, d Draft) bool {
 			return true
 		}
 	}
-	if (d.Owner != "" && d.Owner != base.Owner) || d.State != base.State {
+	if (!d.Owner.IsZero() && d.Owner != base.Owner) || d.State != base.State {
 		return true
 	}
 	if len(base.Links) != len(d.Links) {

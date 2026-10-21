@@ -106,7 +106,7 @@ func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.
 	if projectID == "" && r.Msg.ChangeId != "" {
 		// a run on an existing change works where the change does (ADR 0091), not where the caller's token points
 		if c, err := h.Engine.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); err == nil {
-			projectID = c.ProjectID
+			projectID = c.ProjectID.Key
 		}
 	}
 	if projectID == "" {
@@ -179,7 +179,7 @@ func (h *Handler) ListStartingPoints(ctx context.Context, r *connect.Request[eng
 	}
 	projectID := r.Msg.ProjectId
 	if projectID == "" {
-		projectID = ch.ProjectID
+		projectID = ch.ProjectID.Key
 	}
 	if projectID == "" {
 		projectID = authz.From(ctx).Project

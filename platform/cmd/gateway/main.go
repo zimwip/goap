@@ -101,6 +101,15 @@ func main() {
 	// who a caller is comes from the User nodes of the graph as well as from its token
 	graphClient := graphclient.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
 	directory := &access.Directory{Graph: graphClient}
+	events := platform.OptionalEvents(ctx, log)
+	defer events.Close()
+	// the policies, the organisation and the projects the platform graph delivers, read again when its baseline
+	// events say the organisation moved (ADR 0154 §9)
+	if events != nil {
+		if err := directory.FollowEvents(events); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+	}
 	cfg.Enrich = directory.Enrich
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {

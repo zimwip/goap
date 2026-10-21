@@ -11,6 +11,7 @@ import { notify } from '../shell/workbench.svelte';
 import { editPrefs, prefs } from './preferences.svelte';
 import { project, selectProject } from './project.svelte';
 import { rootProject } from './session.svelte';
+import { refKey } from '../lnk';
 
 export interface WorkingChange {
   id: string;
@@ -29,7 +30,7 @@ export const workable = (c?: Pick<Change, 'status'>): boolean => !!c && c.status
 const asWorking = (c: Change): WorkingChange => ({
   id: c.id ?? '',
   title: c.title || c.id || '',
-  projectId: c.projectId || rootProject(),
+  projectId: refKey(c.projectId) || rootProject(),
   namespace: c.namespace ?? '',
   status: c.status ?? '',
 });
@@ -102,7 +103,7 @@ async function restore(projectKey: string, id: string): Promise<void> {
   try {
     const c = (await graph.getChange(id)).change;
     if (call !== restoring) return;
-    if (c && workable(c) && (c.projectId || rootProject()) === projectKey) working.change = asWorking(c);
+    if (c && workable(c) && (refKey(c.projectId) || rootProject()) === projectKey) working.change = asWorking(c);
     else {
       working.change = undefined;
       remember(projectKey, '');

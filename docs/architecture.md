@@ -1095,9 +1095,9 @@ cut halfway: failed, nothing: run again), so a step never writes twice. Core NAT
 `graph` model (simplified):
 
 ```sql
-node(id uuid, namespace, key text, type text, latest int, project_id → node)  -- the project it was created in
-node_version(node_id, version, props jsonb, deleted bool, change_id → change, owner_id → node, created_at, committed)  -- PK (node_id, version); committed: the order of its baseline (ADR 0140)
-link(id uuid, type, from_id, from_version, to_id, to_version, props jsonb, change_id → change)
+node(id uuid, namespace, key text, type text, latest int, project text)  -- the project it was created in, a logical URL without version (ADR 0154 §9)
+node_version(node_id, version, props jsonb, deleted bool, change_id → change, owner text, created_at, committed)  -- owner: a logical URL without version (ADR 0154 §9); PK (node_id, version); committed: the order of its baseline (ADR 0140)
+link(id uuid, type, from_id, from_version, to_id, to_version, to_url, props jsonb, change_id → change)  -- to_url: a target in another source (ADR 0154), to_id / to_version null then
 node_branch(node_id, version, branch, change_id → change, committed)  -- the branches a version joined besides the one it was written on (ADR 0032)
 baseline(id uuid, name, namespace, branch, parent_id, change_id, created_at, seq)  -- seq: the order of commits; its state is a selection (ADR 0143)
 branch(namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at)  -- PK (namespace, name)
@@ -1125,8 +1125,9 @@ PostgreSQL; SQLite and the memory store run one transaction at a time), taken be
 (`changeOpen`, `Graph.changeTx`) and by the guard at every write naming a change; a branch head moves under
 `Tx.LockBranch` and only from the parent of the new baseline (`advanceBranch`). Reads take no lock.
 
-Every `change_id`, `owner_id` and `project_id` above is `NOT NULL` with a foreign key (deferred where the bootstrap
-needs it), and `graph/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054): the constraints
+Every `change_id` above is `NOT NULL` with a foreign key (deferred where the bootstrap needs it); `owner`, `project`,
+`owner_org` and `project_id` are non-empty logical URLs of nodes of the structures (`lnk:<namespace>/<type>/<key>`, no version: a reference to a node is a link; `Graph.StructureURL` the canonical form, `Graph.StructureRef` reads a URL or a bare key), no foreign key, since the structures may live in
+another graph (the platform graph, ADR 0154 §9; the guard checks them through `Graph.Directory`, the platform's organisation directory in a content graph), and `graph/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054): the constraints
 are a second line, a storage without any keeps the rules.
 
 > Why PostgreSQL and not a graph database? The required traversals (neighborhood, impact propagation
@@ -1144,6 +1145,31 @@ are a second line, a storage without any keeps the rules.
   via `org_id` in all tables (organisation units of the graph).
 - Secrets are never in environment variables in prod: `lib/platform/secrets` reads from Vault
   (KV v2, token auth in dev / Kubernetes auth in prod) with a fallback to the environment in dev.
+
+### 3.4a Logical URLs and federation ([ADR 0154](adr/0154-logical-urls-and-graph-federation.md))
+
+What a link points to can be named by a logical URL, `lnk:<source>/<type>/<key>` (`contracts/lnk`): a source is where
+things live (a namespace of this graph, a namespace of another graph service, a directory of files), the type and the
+key say which thing. Every namespace of the graph is a `graph` source of its name with no location, read in process
+(`graph.Resolver`); other sources are `platform@Source` nodes (`SRC:<name>`, admin only), read by the resolver of their kind
+(`Graph.Resolvers`: `graphclient.Federation` for a `graph` source with a location, `lnk.Files` for `files`). `Graph.Lnk()` is the registry,
+`Graph.Resolve` reads a URL, `Node.URL()` / `Node.SourceName()` give a node's. Sources are declared on the platform and resolved per project: a project maps the source names of its URLs to
+declared sources (`ProjectUnit.sources`, inherited, nearest wins), so its content can be stored elsewhere
+(`Graph.ResolveIn`, `Graph.ResolveFrom`); a link targets a node version of this graph or a URL of another source (`Link.Target`).
+The platform and the content are two graph services (ADR §9): the platform graph (`platform`, `organisation`, `methodology`)
+is the one its callers know and forwards the calls of the content namespaces or of a change held there to the content
+graph (`graphsvc.Router`): the routes are the declared sources, a `platform@Source` of kind `graph` with a location and the
+`namespaces` it holds being the driver of those namespaces (`Graph.Sources`, `lnk.Source.Holds`), and the namespace
+listings are merged over every graph, each naming its source (the statistics group them). The content graph
+(`GOAP_GRAPH_SPACE=content`) reads its types and its organisation from the platform graph (`Graph.Directory`,
+`graphsnap.Heads`), holds no root and seeds nothing.
+
+
+The platform graph delivers the policies, the organisation and the projects to every graph and every service, itself
+included, the same way (`Directory.FollowEvents`): each graph's `access.Directory` reads them from the platform graph (in process, else its client) and keeps
+its snapshot (`Directory.Follow`) until a baseline event of the organisation's namespace (`domain.BaselineEvent`
+carries its namespace) reaches `Directory.Moved`; a change of a policy is a commit on the platform graph, its outbox
+sends the event, every graph refreshes.
 
 ### 3.4b Node index and search ([ADR 0026](adr/0026-node-index-and-search.md))
 
@@ -1568,7 +1594,7 @@ Every composition (`goap-dev`, `platform/cmd/graph`) seeds the platform through 
    reload). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
    logs one warning, "change lifecycle and activity gating are not available in this composition".
 2. `Boot`: `Graph.Bootstrap` (roots), `SeedAccess` (default policies), `SeedBuiltins` (built-in MCPs, adapter definitions,
-   platform roles), `SeedModels` (`Options.Models`), `SeedProtectedAliases` (the `assistant` and `helper` aliases, ADR 0084), `SeedBehaviors` (the built-in `terse` LLM behaviour, disabled, ADR 0093), then `Options.Dev`. Each step is idempotent.
+   platform roles), `SeedModels` (`Options.Models`), `SeedProtectedAliases` (the `assistant` and `helper` aliases, ADR 0084), `SeedBehaviors` (the built-in `terse` LLM behaviour, disabled, ADR 0093), `SeedSources` (the source `platform`, fixed by `PlatformSourceValidator`, and `Options.Sources`, ADR 0154), then `Options.Dev`. Each step is idempotent.
 3. The registry then seeds the methodologies (`goap-dev`; `platform/cmd/registry` seeds them over RPC): they need the aliases of step 2.
 
 Development and demo data is not part of it (`platform/devseed`: `Demo` the ALM repository, `DocumentRepository` the
@@ -1578,8 +1604,9 @@ with `GOAP_GRAPH_SEED=dev`, the demo too with `GOAP_GRAPH_SEED=demo`. Otherwise 
 *Settings → Demo data → Load demo data* (RPC `GraphService.LoadDemoData`, `graphsvc.Handler.Demo` = `devseed.DemoLoader`,
 administrators only, idempotent). The demo is the organisation `ORG-ACME` and its teams, the project `PROJ-DEMO` (under
 `PROJ-ROOT`, methodology `sdlc`) bound to `ORG-ACME` by an assignment holding the roles of `sdlc`, and the ALM repository,
-written in `PROJ-DEMO`. `platform/cmd/graph` still bootstraps the roots
-before serving (a no-op for `Boot` afterwards). Platform services act as `authz.System(name, roles...)`
+written in `PROJ-DEMO`. `platform/cmd/graph` boots through its command `graph bootstrap` (run once, then it exits;
+compose's `graph-bootstrap` service before `graph`), the service itself only with `GOAP_GRAPH_BOOTSTRAP=1` or a memory
+store; a content graph boots nothing (ADR 0154 §9). Platform services act as `authz.System(name, roles...)`
 (`system:registry`, `system:graph`, `system:trigger:<key>`).
 
 **`goap-dev` wiring ([ADR 0073](adr/0073-goap-dev-builders-and-web-api-modules.md))**: `newApp(ctx, cfg, log)` strings one builder

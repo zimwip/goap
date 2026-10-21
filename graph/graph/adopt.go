@@ -69,7 +69,7 @@ func (g *Graph) SetChangeMethodology(ctx context.Context, id domain.ChangeID, me
 			lifecycle, initial = lc.Name, lc.Initial
 		}
 	}
-	guardians, err := g.guardianChain(ctx, NewChange{Methodology: methodology, ParentID: c.ParentID, ProjectID: c.ProjectID}, version)
+	guardians, err := g.guardianChain(ctx, NewChange{Methodology: methodology, ParentID: c.ParentID, ProjectID: c.ProjectID.String()}, version)
 	if err != nil {
 		return c, err
 	}

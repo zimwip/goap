@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/lib/typecat"
 )
 
@@ -98,10 +100,81 @@ func (g *Graph) inStructure(n domain.Node, st domain.Structure) bool {
 	return domain.NamespaceOf(n.Namespace) == st.Namespace && g.isA(n.Type, st.Type)
 }
 
-// structureNode resolves the key of a node of a structure: it must exist, live on main and be of the structure.
-func (g *Graph) structureNode(ctx context.Context, tx Tx, kind, key string) (domain.Node, error) {
+// StructureURL is the logical URL of the node of a structure by its key (ADR 0154 §9): the structure's namespace as
+// its source, the structure's type. What an owner or a project is stored as: a reference to a node is a link.
+func (g *Graph) StructureURL(kind, key string) lnk.URL {
+	st := g.Structure(kind)
+	return lnk.New(st.Namespace, lnk.BareType(st.Type), key)
+}
+
+// StructureRef reads what an input names as a node of a structure: its logical URL, or its bare key (the structure's
+// URL of that key). A reference names the node whatever its version: the version of a URL is dropped. "": none.
+func (g *Graph) StructureRef(kind, s string) (lnk.URL, error) {
+	if s == "" {
+		return lnk.URL{}, nil
+	}
+	if !lnk.IsURL(s) {
+		return g.StructureURL(kind, s), nil
+	}
+	u, err := lnk.Parse(s)
+	if err != nil {
+		return lnk.URL{}, fmt.Errorf("%v: %w", err, ErrInvalid)
+	}
+	return u.Logical(), nil
+}
+
+// structureNode resolves the URL of a node of a structure: it must name the structure's source (its namespace, held
+// here or by Graph.Directory) and a type of the structure, and the node must exist, live on main and be of that type.
+func (g *Graph) structureNode(ctx context.Context, tx Tx, kind string, u lnk.URL) (domain.Node, error) {
 	st := g.Structure(kind)
 	what := map[string]string{domain.StructureOrganisation: "organisational unit", domain.StructureProject: "project"}[kind]
+	switch {
+	case u.IsZero():
+		return domain.Node{}, fmt.Errorf("no %s named: %w", what, ErrInvalid)
+	case u.Source != st.Namespace:
+		return domain.Node{}, fmt.Errorf("%s %s: a %s is read in the source %s: %w", what, u, kind, st.Namespace, ErrInvalid)
+	case !g.isA(st.Namespace+"@"+u.Type, st.Type):
+		return domain.Node{}, fmt.Errorf("%s %s: %s is not a type of the %s: %w", what, u, u.Type, kind, ErrInvalid)
+	}
+	n, err := g.structureByKey(ctx, tx, kind, u.Key)
+	if err != nil {
+		return n, err
+	}
+	if !g.isA(n.Type, st.Namespace+"@"+u.Type) {
+		return domain.Node{}, fmt.Errorf("%s %s is a %s: %w", what, u, n.Type, ErrInvalid)
+	}
+	return n, nil
+}
+
+// resolveStructure reads what an input names as a node of a structure (its URL or its key, StructureRef) and resolves
+// it (structureNode): the node, and the URL a reference to it is stored as, the structure's own (one spelling per node,
+// so that two references to it compare equal).
+func (g *Graph) resolveStructure(ctx context.Context, tx Tx, kind, s string) (lnk.URL, domain.Node, error) {
+	u, err := g.StructureRef(kind, s)
+	if err != nil {
+		return lnk.URL{}, domain.Node{}, err
+	}
+	n, err := g.structureNode(ctx, tx, kind, u)
+	if err != nil {
+		return lnk.URL{}, n, err
+	}
+	return g.StructureURL(kind, n.Key), n, nil
+}
+
+// structureByKey reads the node of a structure by its key.
+func (g *Graph) structureByKey(ctx context.Context, tx Tx, kind, key string) (domain.Node, error) {
+	st := g.Structure(kind)
+	what := map[string]string{domain.StructureOrganisation: "organisational unit", domain.StructureProject: "project"}[kind]
+	if g.Directory != nil {
+		n, ok, err := g.Directory.StructureNode(ctx, kind, key)
+		if err != nil {
+			return n, err
+		}
+		if !ok {
+			return n, fmt.Errorf("%s %q is not a %s of the platform: %w", what, key, kind, ErrInvalid)
+		}
+		return n, nil
+	}
 	id, err := tx.NodeIDByKey(ctx, st.Namespace, key)
 	if errors.Is(err, ErrNotFound) {
 		return domain.Node{}, fmt.Errorf("%s %q is not a node of namespace %s: %w", what, key, st.Namespace, ErrInvalid)
@@ -125,9 +198,22 @@ func (g *Graph) structureNode(ctx context.Context, tx Tx, kind, key string) (dom
 	return n, nil
 }
 
-// within reports whether the node of a structure with key `key` is `ancestor` or below it, following the parent links
-// (child -> parent) of the latest versions on main.
-func (g *Graph) within(ctx context.Context, tx Tx, kind, key, ancestor string) (bool, error) {
+// StructureDirectory reads the structures when another graph holds them (Graph.Directory, ADR 0154 §9).
+type StructureDirectory interface {
+	// StructureNode is the node of a structure of a kind by its key, retired or not; found false when there is none.
+	StructureNode(ctx context.Context, kind, key string) (n domain.Node, found bool, err error)
+	// StructureChain is a node of a structure followed by its ancestors, nearest first, the root last.
+	StructureChain(ctx context.Context, kind, key string) ([]string, error)
+}
+
+// within reports whether the node of a structure `u` is `of` or below it, following the parent links (child -> parent)
+// of the latest versions on main. Both name nodes of the structure (structureNode checked them).
+func (g *Graph) within(ctx context.Context, tx Tx, kind string, u, of lnk.URL) (bool, error) {
+	key, ancestor := u.Key, of.Key
+	if g.Directory != nil {
+		chain, err := g.Directory.StructureChain(ctx, kind, key)
+		return slices.Contains(chain, ancestor), err
+	}
 	st := g.Structure(kind)
 	seen := map[string]bool{}
 	for cur := key; cur != "" && !seen[cur]; {
@@ -167,17 +253,21 @@ func (g *Graph) within(ctx context.Context, tx Tx, kind, key, ancestor string) (
 // unit; a project is never defaulted (a sub-change inherited its parent's already, a root change names its own, ADR
 // 0091). Both must designate live nodes of their structures; nothing is left empty.
 func (g *Graph) scopeChange(ctx context.Context, tx Tx, c *domain.Change) error {
-	if c.OwnerOrg == "" {
-		c.OwnerOrg = g.Structure(domain.StructureOrganisation).Root
+	if c.OwnerOrg.IsZero() {
+		c.OwnerOrg = g.StructureURL(domain.StructureOrganisation, g.Structure(domain.StructureOrganisation).Root)
 	}
-	if c.ProjectID == "" {
+	if c.ProjectID.IsZero() {
 		return fmt.Errorf("a change names the project it acts in: %w", ErrInvalid)
 	}
-	if _, err := g.structureNode(ctx, tx, domain.StructureOrganisation, c.OwnerOrg); err != nil {
+	unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, c.OwnerOrg)
+	if err != nil {
 		return fmt.Errorf("owner of the change: %w", err)
 	}
-	if _, err := g.structureNode(ctx, tx, domain.StructureProject, c.ProjectID); err != nil {
+	project, err := g.structureNode(ctx, tx, domain.StructureProject, c.ProjectID)
+	if err != nil {
 		return fmt.Errorf("project of the change: %w", err)
 	}
+	// one spelling per node (resolveStructure)
+	c.OwnerOrg, c.ProjectID = g.StructureURL(domain.StructureOrganisation, unit.Key), g.StructureURL(domain.StructureProject, project.Key)
 	return nil
 }

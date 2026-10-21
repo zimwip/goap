@@ -2,11 +2,11 @@
 -- text, timestamps are fixed-width RFC 3339 UTC text (sortable), booleans are integers.
 -- Graph schema (ADR 0054: the schema starts from zero, earlier migrations were folded into it). Every node version,
 -- link and branch membership is written by a change (change_id, NOT NULL, foreign key); every node version is owned
--- by an organisational unit (owner_id) and every node was created in a project (project_id), both nodes of the
--- structures the type catalogue tags. pkg/graph enforces the same rules in Go whatever the storage (guardRepo):
--- these constraints are a second line, not the only one. The foreign keys a bootstrap must satisfy in one
--- transaction (the root unit owns itself, the root project was created in itself, each one references the other)
--- are deferred to the commit.
+-- by an organisational unit (owner) and every node was created in a project (project), both logical URLs of nodes
+-- of the structures the type catalogue tags (lnk:<namespace>/<type>/<key>, no version): not foreign keys, for the structures may live in another graph, the
+-- platform graph (ADR 0154 §9); the guard checks them. pkg/graph enforces the same rules in Go whatever the storage
+-- (guardRepo): these constraints are a second line, not the only one. The foreign keys a bootstrap must satisfy in one
+-- transaction (its change and its baseline reference each other) are deferred to the commit.
 
 CREATE TABLE baseline (
     id          text PRIMARY KEY,
@@ -43,7 +43,7 @@ CREATE TABLE branch (
     PRIMARY KEY (namespace, name)
 );
 
--- owner_org and project_id are the keys of an organisational unit and of a project (ADR 0054): never empty, resolved
+-- owner_org and project_id are the logical URLs of an organisational unit and of a project (ADR 0054, 0154 §9): never empty, resolved
 -- when the change is created (the project is named, never defaulted, and moves only through MoveChange, ADR 0091);
 -- pkg/graph checks they designate nodes of the tagged structures.
 CREATE TABLE change (
@@ -76,7 +76,7 @@ CREATE TABLE node (
     type       text    NOT NULL,
     latest     integer NOT NULL,
     -- the project the node was created in
-    project_id text    NOT NULL REFERENCES node(id) DEFERRABLE INITIALLY DEFERRED,
+    project    text    NOT NULL CHECK (project <> ''),
     UNIQUE (namespace, key)
 );
 
@@ -87,7 +87,7 @@ CREATE TABLE node_version (
     deleted       integer     NOT NULL DEFAULT 0,
     change_id     text        NOT NULL REFERENCES change(id) DEFERRABLE INITIALLY DEFERRED,
     -- the organisational unit responsible for the version
-    owner_id      text        NOT NULL REFERENCES node(id) DEFERRABLE INITIALLY DEFERRED,
+    owner         text        NOT NULL CHECK (owner <> ''),
     created_at    text        NOT NULL,
     branch        text        NOT NULL DEFAULT 'main',
     parents       text        NOT NULL DEFAULT '[]',
@@ -108,15 +108,20 @@ CREATE TABLE link (
     type         text    NOT NULL,
     from_id      text    NOT NULL,
     from_version integer NOT NULL,
-    to_id        text    NOT NULL,
-    to_version   integer NOT NULL,
+    -- the target: a node version of this graph (to_id, to_version), or the logical URL of a target in another source
+    -- (to_url, ADR 0154), never both
+    to_id        text   ,
+    to_version   integer,
+    to_url       text    NOT NULL DEFAULT '',
     props        text    NOT NULL DEFAULT '{}',
     change_id    text    NOT NULL REFERENCES change(id) DEFERRABLE INITIALLY DEFERRED,
     FOREIGN KEY (from_id, from_version) REFERENCES node_version(node_id, version),
-    FOREIGN KEY (to_id, to_version) REFERENCES node_version(node_id, version)
+    FOREIGN KEY (to_id, to_version) REFERENCES node_version(node_id, version),
+    CHECK ((to_id IS NULL AND to_version IS NULL) = (to_url <> ''))
 );
-CREATE INDEX link_from ON link (from_id, from_version);
-CREATE INDEX link_to ON link (to_id, to_version);
+CREATE INDEX link_from ON link (from_id, from_version, type);
+CREATE INDEX link_to ON link (to_id, to_version, type);
+CREATE INDEX link_url ON link (to_url) WHERE to_url <> '';
 CREATE INDEX link_change ON link (change_id);
 
 -- ADR 0032: a node version is written on one branch (node_version.branch, never changed) and may join other branches:

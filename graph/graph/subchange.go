@@ -8,6 +8,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/events"
+	"github.com/zimwip/goap/contracts/lnk"
 )
 
 // requirement is a number of outgoing links of one type a node must have: what the parent of a structure (ADR 0054)
@@ -184,7 +185,7 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 	if in.Goal == "" && (in.Methodology == "" || in.Methodology == parent.Methodology) {
 		c.Goal = parent.Goal
 	}
-	if c.OwnerOrg == "" {
+	if c.OwnerOrg.IsZero() {
 		c.OwnerOrg = parent.OwnerOrg
 	} else if c.OwnerOrg != parent.OwnerOrg {
 		ok, err := g.within(ctx, tx, domain.StructureOrganisation, c.OwnerOrg, parent.OwnerOrg)
@@ -195,7 +196,7 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 			return fmt.Errorf("unit %s is not part of %s, the unit of the parent change: %w", c.OwnerOrg, parent.OwnerOrg, ErrInvalid)
 		}
 	}
-	if c.ProjectID == "" {
+	if c.ProjectID.IsZero() {
 		c.ProjectID = parent.ProjectID
 	} else if c.ProjectID != parent.ProjectID {
 		ok, err := g.within(ctx, tx, domain.StructureProject, c.ProjectID, parent.ProjectID)
@@ -270,16 +271,17 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 		if err != nil {
 			return err
 		}
-		have := map[string]bool{}
+		have := map[lnk.URL]bool{}
 		for _, sc := range existing {
 			have[sc.OwnerOrg] = true
 		}
 		type group struct {
-			org, name string
-			nodes     []domain.ChangeImpact
+			org   lnk.URL
+			name  string
+			nodes []domain.ChangeImpact
 		}
 		var groups []*group
-		byOrg := map[string]*group{}
+		byOrg := map[lnk.URL]*group{}
 		seen, err := g.newFlowNodes(tx, parent, "").nodes(ctx) // the change impacts of the main flow: stored and derived from items
 		if err != nil {
 			return err
@@ -295,23 +297,23 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if err != nil {
 				return err
 			}
-			unit, err := tx.Node(ctx, domain.NodeRef{ID: pre.Owner})
+			if pre.Owner == parent.OwnerOrg {
+				continue // the unit holding the change owns it
+			}
+			unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, pre.Owner)
 			if err != nil {
 				return err
 			}
-			if unit.Key == parent.OwnerOrg {
-				continue // the unit holding the change owns it
-			}
-			if below, err := g.within(ctx, tx, domain.StructureOrganisation, unit.Key, parent.OwnerOrg); err != nil {
+			if below, err := g.within(ctx, tx, domain.StructureOrganisation, pre.Owner, parent.OwnerOrg); err != nil {
 				return err
 			} else if !below {
 				continue // owned outside the unit holding the change: nothing to delegate to
 			}
-			gr := byOrg[unit.Key]
+			gr := byOrg[pre.Owner]
 			if gr == nil {
 				name, _ := unit.Properties["name"].(string)
-				gr = &group{org: unit.Key, name: firstNonEmpty(name, unit.Key)}
-				byOrg[unit.Key] = gr
+				gr = &group{org: pre.Owner, name: firstNonEmpty(name, unit.Key)}
+				byOrg[pre.Owner] = gr
 				groups = append(groups, gr)
 			}
 			gr.nodes = append(gr.nodes, cn)
@@ -320,7 +322,7 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if have[gr.org] {
 				continue
 			}
-			in := NewChange{Title: parent.Title + " / " + gr.name, Intent: parent.Intent, Methodology: parent.Methodology, ParentID: id, OwnerOrg: gr.org}
+			in := NewChange{Title: parent.Title + " / " + gr.name, Intent: parent.Intent, Methodology: parent.Methodology, ParentID: id, OwnerOrg: gr.org.String()}
 			sub := domain.Change{ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Status: domain.ChangeDraft,
 				ParentID: id, OwnerOrg: gr.org, CreatedAt: g.now()}
 			if err := g.prepareSubChange(ctx, tx, &sub, &in); err != nil {

@@ -520,6 +520,15 @@ func (g *Graph) draftLinkTargetType(ctx context.Context, tx Tx, w *work, to doma
 // newDraftLink builds the outgoing link a draft gains: the type and the ends are checked, the target (an exact version,
 // or the draft of a node of the change) is pointed to the draft of the node when it was checked out from that version.
 func (g *Graph) newDraftLink(ctx context.Context, tx Tx, w *work, from domain.Draft, l LinkWrite) (domain.DraftLink, error) {
+	if l.To.ID == "" && !l.Target.IsZero() && l.Type != "" {
+		ext, err := g.targetOf(ctx, tx, w, from, &l)
+		if err != nil {
+			return domain.DraftLink{}, err
+		}
+		if ext != nil {
+			return *ext, nil
+		}
+	}
 	if l.Type == "" || l.To.ID == "" {
 		return domain.DraftLink{}, invalidf("a link needs a type and a target")
 	}

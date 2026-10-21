@@ -95,6 +95,9 @@ type View[T any] struct {
 	Suspects bool
 	// Build makes the view of the states of the namespaces, in the order of Namespaces.
 	Build func(states []State) T
+	// Heads, when set, keeps the heads the view was built from until its owner says they moved (Heads.Moved, on the
+	// baseline events of the graph): the view follows the graph's events instead of asking for the heads at each Get.
+	Heads *Heads
 
 	// building serializes the Gets, which read the graph; mu guards only the view built, so that Peek never waits for
 	// a read of the graph: Peek is called inside a transaction of the graph (a facet of the blackboard), and the
@@ -113,7 +116,7 @@ func (v *View[T]) Get(ctx context.Context) (T, []domain.BaselineID, error) {
 	cur, have, built := v.last()
 	ids := make([]domain.BaselineID, len(v.Namespaces))
 	for i, ns := range v.Namespaces {
-		id, err := v.Reader.Head(ctx, ns)
+		id, err := v.head(ctx, ns)
 		if err != nil {
 			return cur, built, err
 		}
@@ -135,6 +138,18 @@ func (v *View[T]) Get(ctx context.Context) (T, []domain.BaselineID, error) {
 	v.cur, v.ids, v.have = cur, ids, true
 	v.mu.Unlock()
 	return cur, ids, nil
+}
+
+// head is the commit at the head of namespace's main: the one Heads keeps, else asked.
+func (v *View[T]) head(ctx context.Context, namespace string) (domain.BaselineID, error) {
+	if v.Heads == nil {
+		return v.Reader.Head(ctx, namespace)
+	}
+	b, err := v.Heads.Get(ctx, namespace, domain.MainBranch, v.Reader.Graph.BranchHead)
+	if errors.Is(err, graphapi.ErrNotFound) {
+		return "", nil
+	}
+	return b.ID, err
 }
 
 func (v *View[T]) last() (T, bool, []domain.BaselineID) {

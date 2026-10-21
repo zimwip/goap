@@ -8,14 +8,17 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/lib/graphsnap"
 )
 
@@ -140,6 +143,8 @@ type Snapshot struct {
 	// structures are the organisation and the projects the snapshot was read with (ADR 0054)
 	structures domain.Structures
 	users      map[string]User
+	// keys are the nodes of each structure by their keys, retired ones included (StructureNode)
+	keys map[string]map[string]domain.Node
 	// units and projects are the hierarchies of the organisation (part_of) and of the projects (project_part_of,
 	// ADR 0039), resolved by domain.Hierarchy
 	units, projects *domain.Hierarchy
@@ -147,6 +152,8 @@ type Snapshot struct {
 	projectMethods map[string][]string
 	// stopped are the projects flagged stopped (ADR 0138), by key
 	stopped map[string]bool
+	// sources are the source mappings the projects declare (ADR 0154 §8), by key
+	sources map[string]map[string]string
 	// assignments are the Assignment nodes (ADR 0039), resolved from their assigns_org/assigns_project links
 	assignments []assignment
 	// criticality are the policies of the criticality levels, by the unit that owns them and the level
@@ -166,9 +173,20 @@ type assignment struct {
 // BuildSnapshot reads the users and policies of a baseline graph of the namespace of the structures st: the units and
 // projects are the nodes of their types (and subtypes), their hierarchies the parent links st names (ADR 0054).
 func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
+	keys := map[string]map[string]domain.Node{} // retired ones included: they still own the versions they owned
+	for _, n := range nodes {
+		for _, kind := range []string{domain.StructureOrganisation, domain.StructureProject} {
+			if st.In(kind, n.Type) {
+				if keys[kind] == nil {
+					keys[kind] = map[string]domain.Node{}
+				}
+				keys[kind][n.Key] = n
+			}
+		}
+	}
 	nodes, links = InForce(nodes, links)
 	s := &Snapshot{Baseline: id, structures: st, users: map[string]User{}, units: st.Hierarchy(domain.StructureOrganisation, nodes, links), projects: st.Hierarchy(domain.StructureProject, nodes, links),
-		projectMethods: map[string][]string{}, stopped: map[string]bool{}}
+		projectMethods: map[string][]string{}, stopped: map[string]bool{}, sources: map[string]map[string]string{}, keys: keys}
 	org := domain.StructureOrganisation
 	byID := map[domain.NodeID]domain.Node{}
 	var crit []domain.Node
@@ -181,6 +199,11 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 			s.projectMethods[n.Key] = stringList(n.Properties["methodologies"])
 			if v, _ := n.Properties[PropStopped].(bool); v {
 				s.stopped[n.Key] = true
+			}
+			if m, err := sourceMap(n.Properties[PropSources]); err != nil {
+				s.Problems = append(s.Problems, fmt.Sprintf("%s: %v", n.Key, err))
+			} else if len(m) > 0 {
+				s.sources[n.Key] = m
 			}
 		}
 		switch n.Type {
@@ -247,6 +270,22 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 func (s *Snapshot) RootProject() string { return s.structures.Project().Root }
 
 // HasProject reports whether a project of that key exists (as of the snapshot).
+// StructureNode is the node of a structure of the organisation (domain.StructureOrganisation or StructureProject) by
+// its key, retired or not: what may own a version, or hold a node (ADR 0154 §9: the graph.StructureDirectory of a
+// content graph).
+func (s *Snapshot) StructureNode(kind, key string) (domain.Node, bool) {
+	n, ok := s.keys[kind][key]
+	return n, ok
+}
+
+// StructureChain is a node of a structure followed by its ancestors, the root last (Chain, ProjectChain).
+func (s *Snapshot) StructureChain(kind, key string) []string {
+	if kind == domain.StructureProject {
+		return s.ProjectChain(key)
+	}
+	return s.Chain(key)
+}
+
 func (s *Snapshot) HasProject(key string) bool {
 	_, ok := s.projectMethods[key]
 	return ok
@@ -376,6 +415,20 @@ func (s *Snapshot) ProjectStopped(project string) bool {
 	return false
 }
 
+// ProjectSources is the source mapping in force on a project (ADR 0154 §8): the mappings of its chain merged, the
+// nearest project naming a source winning; a project naming none takes its parents'.
+func (s *Snapshot) ProjectSources(project string) map[string]string {
+	out := map[string]string{}
+	for _, p := range s.ProjectChain(project) {
+		for k, v := range s.sources[p] {
+			if _, ok := out[k]; !ok {
+				out[k] = v
+			}
+		}
+	}
+	return out
+}
+
 // ProjectOf is the project a project names as its parent (project_part_of; "" for the root or an unknown key).
 func (s *Snapshot) ProjectOf(project string) string {
 	chain := s.ProjectChain(project)
@@ -495,9 +548,15 @@ type Directory struct {
 	Graph Graph
 	// Reader is the reader of the graph of the process the directory shares (nil: its own).
 	Reader *graphsnap.Reader
+	// Follow, when set, keeps the snapshot until the platform says the organisation moved (ADR 0154 §9: the platform
+	// graph delivers the policies, the organisation and the projects to every graph, itself included, the same way):
+	// Moved, given the baseline events of the platform graph, forgets the head; Follow.MaxAge catches a lost event.
+	// Nil: the head is asked at each read.
+	Follow *graphsnap.Heads
 
-	mu    sync.Mutex
-	cache *graphsnap.View[*Snapshot]
+	mu        sync.Mutex
+	cache     *graphsnap.View[*Snapshot]
+	namespace string // of the structures, once read
 }
 
 // Snapshot returns the current snapshot. A graph without any baseline yields an empty one; when the graph
@@ -514,8 +573,47 @@ func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
 // Refresh reads the snapshot of the head after a write the next calls must see (a user just declared at sign-in, ADR
 // 0042): every read asks for the head, so it only tells whether the graph answers.
 func (d *Directory) Refresh(ctx context.Context) error {
+	if d.Follow != nil {
+		d.Follow.Moved()
+	}
 	_, err := d.Snapshot(ctx)
 	return err
+}
+
+// Subscriber is the bus a directory follows the platform graph on (platform.Events).
+type Subscriber interface {
+	Subscribe(subject string, fn func(data []byte)) error
+}
+
+// FollowAge is how long a following directory keeps a snapshot when no event came: a lost event is caught up then.
+const FollowAge = 30 * time.Second
+
+// FollowEvents makes the directory keep its snapshot until the platform graph's baseline events on bus say the
+// organisation moved (ADR 0154 §9: the platform delivers the policies to every service the same way). Called by every
+// composition with a bus; without one, the head is asked at each read.
+func (d *Directory) FollowEvents(bus Subscriber) error {
+	d.Follow = &graphsnap.Heads{MaxAge: FollowAge}
+	return bus.Subscribe(fmt.Sprintf(domain.SubjectBaselineAdvanced, domain.MainBranch), d.Moved)
+}
+
+// Moved takes a baseline event of the platform graph (a domain.BaselineEvent, subject domain.SubjectBaselineAdvanced):
+// a commit on the main branch of the organisation's namespace (a policy, a unit, an assignment, a project changed)
+// makes a following directory read the snapshot again at its next use. Other events are left alone.
+func (d *Directory) Moved(data []byte) {
+	if d.Follow == nil {
+		return
+	}
+	var ev domain.BaselineEvent
+	if json.Unmarshal(data, &ev) != nil {
+		d.Follow.Moved() // unreadable: read again rather than miss a change
+		return
+	}
+	d.mu.Lock()
+	ns := d.namespace
+	d.mu.Unlock()
+	if ev.Branch == domain.MainBranch && (ev.Namespace == "" || ns == "" || ev.Namespace == ns) {
+		d.Follow.Moved()
+	}
 }
 
 // snapshots returns the cache of the head of the namespace of the structures, asking the graph for them first (ADR
@@ -534,9 +632,11 @@ func (d *Directory) snapshots(ctx context.Context) (*graphsnap.View[*Snapshot], 
 		if r == nil {
 			r = graphsnap.NewReader(d.Graph)
 		}
-		d.cache = graphsnap.One(r, st.Organisation().Namespace, true, func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
+		d.namespace = st.Organisation().Namespace
+		d.cache = graphsnap.One(r, d.namespace, true, func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
 			return BuildSnapshot(st, id, nodes, links)
 		})
+		d.cache.Heads = d.Follow
 	}
 	return d.cache, nil
 }
@@ -566,6 +666,34 @@ func (d *Directory) ProjectStopped(ctx context.Context, project string) (bool, e
 		return false, err
 	}
 	return snap.ProjectStopped(project), nil
+}
+
+// StructureNode and StructureChain read the structures for a graph that does not hold the organisation (the
+// graph.StructureDirectory of a content graph, ADR 0154 §9): Snapshot.StructureNode, Snapshot.StructureChain.
+func (d *Directory) StructureNode(ctx context.Context, kind, key string) (domain.Node, bool, error) {
+	snap, err := d.Snapshot(ctx)
+	if snap == nil {
+		return domain.Node{}, false, err
+	}
+	n, ok := snap.StructureNode(kind, key)
+	return n, ok, nil
+}
+
+func (d *Directory) StructureChain(ctx context.Context, kind, key string) ([]string, error) {
+	snap, err := d.Snapshot(ctx)
+	if snap == nil {
+		return nil, err
+	}
+	return snap.StructureChain(kind, key), nil
+}
+
+// ProjectSources is the source mapping in force on a project (Snapshot.ProjectSources).
+func (d *Directory) ProjectSources(ctx context.Context, project string) (map[string]string, error) {
+	snap, err := d.Snapshot(ctx)
+	if snap == nil {
+		return nil, err
+	}
+	return snap.ProjectSources(project), nil
 }
 
 // SubProjects returns a project and the projects below it, from the current snapshot (Snapshot.SubProjects).
@@ -675,4 +803,16 @@ func (a *Authorizer) Authorize(ctx context.Context, req authz.Request) (bool, er
 		return ok, err
 	}
 	return c.Authorize(ctx, req)
+}
+
+// UnitURL is the logical URL of a unit of the built-in organisation by its key (ADR 0154 §9): what a version, a change
+// or an adapter holding it is stored as. For the seeds and tests of the built-in organisation, as DefaultOrg; the graph
+// spells it from its structures (Graph.StructureURL).
+func UnitURL(key string) lnk.URL {
+	return lnk.New(NamespaceOrganisation, lnk.BareType(NodeTypeOrgUnit), key)
+}
+
+// ProjectURL is the logical URL of a project of the built-in organisation by its key (ADR 0154 §9), as UnitURL.
+func ProjectURL(key string) lnk.URL {
+	return lnk.New(NamespaceOrganisation, lnk.BareType(NodeTypeProjectUnit), key)
 }

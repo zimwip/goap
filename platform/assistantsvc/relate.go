@@ -47,7 +47,7 @@ func (t *turn) relateChange(ctx context.Context, attach bool, a args) (any, erro
 	if err != nil {
 		return nil, err
 	}
-	params := map[string]any{"changeId": id, "project": ch.ProjectID}
+	params := map[string]any{"changeId": id, "project": ch.ProjectID.Key}
 	var label string
 	if attach {
 		parentID := a.str("parent")

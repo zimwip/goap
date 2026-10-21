@@ -1,6 +1,9 @@
 package graphapi
 
-import "github.com/zimwip/goap/contracts/domain"
+import (
+	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/lnk"
+)
 
 // NodeCreate is a node ImpactNodeCreate creates.
 type NodeCreate struct {
@@ -50,10 +53,13 @@ type NodeUpdate struct {
 }
 
 // LinkWrite is an outgoing link of a draft: to an exact node version, or, with Version 0, to the draft of a node the
-// change holds (resolved to the version commit writes for it).
+// change holds (resolved to the version commit writes for it); or, with To zero, to the logical URL Target (ADR 0154):
+// a node of this graph (the version the URL names, else the one the change sees), else a target in another source,
+// kept as its URL (a node of another graph names its version).
 type LinkWrite struct {
 	Type       string
 	To         domain.NodeRef
+	Target     lnk.URL
 	Properties map[string]any
 }
 

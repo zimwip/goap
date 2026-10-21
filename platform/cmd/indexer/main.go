@@ -40,6 +40,13 @@ func main() {
 	hc := platform.H2CClient()
 	graphURL := platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")
 	directory := &access.Directory{Graph: graphclient.NewClient(hc, graphURL, telemetry.ClientOptions()...)}
+	// the policies, the organisation and the projects the platform graph delivers, read again when its baseline
+	// events say the organisation moved (ADR 0154 §9)
+	if events != nil {
+		if err := directory.FollowEvents(events); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+	}
 	iam, err := access.NewAuthorizer(directory)
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)

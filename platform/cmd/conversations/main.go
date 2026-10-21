@@ -47,13 +47,21 @@ func main() {
 	hc := platform.H2CClient()
 	copts := append(telemetry.ClientOptions(), identity.Forward())
 	graphClient := graphclient.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
+	directory := &access.Directory{Graph: graphClient}
+	// the policies, the organisation and the projects the platform graph delivers, read again when its baseline
+	// events say the organisation moved (ADR 0154 §9)
+	if events != nil {
+		if err := directory.FollowEvents(events); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+	}
 	registryURL := platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082")
 	assistant := &assistantsvc.Service{
 		Convs:         convs,
 		Model:         modelgw.NewClient(hc, platform.Env("GOAP_MODELGW_URL", "http://localhost:8084"), copts...),
 		Graph:         graphClient,
 		Methodologies: registrysvc.NewClient(hc, registryURL, copts...),
-		Projects:      assistantsvc.Directory{Directory: &access.Directory{Graph: graphClient}},
+		Projects:      assistantsvc.Directory{Directory: directory},
 		Engine: assistantsvc.EngineClient{API: enginev1connect.NewEngineServiceClient(hc, platform.Env("GOAP_ENGINE_URL", "http://localhost:8083"), copts...),
 			Views: registryv1connect.NewRegistryServiceClient(hc, registryURL, copts...)},
 		Log: log,

@@ -10,6 +10,7 @@
   import { rootProject } from '../stores/session.svelte';
   import { stopWorking, workIn, workable, working } from '../stores/workingChange.svelte';
   import { openTab } from './tabs.svelte';
+  import { refKey } from '../lnk';
 
   /** full width, in the navigation sidebar (else a chip of the header) */
   let { block = false }: { block?: boolean } = $props();
@@ -20,7 +21,7 @@
   });
 
   // the open changes of the active project, the most recent first as the catalog lists them
-  const offered = $derived(project.current ? changes.items.filter((c) => workable(c) && (c.projectId || rootProject()) === project.current) : []);
+  const offered = $derived(project.current ? changes.items.filter((c) => workable(c) && (refKey(c.projectId) || rootProject()) === project.current) : []);
   const w = $derived(working.change);
   const label = $derived(w ? w.title || shortId(w.id) : project.current ? 'No working change' : 'No change');
 

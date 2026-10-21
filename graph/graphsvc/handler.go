@@ -110,11 +110,10 @@ func (h *Handler) mayReadNode(ctx context.Context, n domain.Node) bool {
 	case access.NamespaceOrganisation, domain.NamespacePlatform, domain.NamespaceMethodology:
 		return !authz.From(ctx).Anonymous()
 	}
-	if n.Project == "" {
+	if n.Project.IsZero() {
 		return h.worksOn(ctx, "")
 	}
-	project, err := h.Graph.Node(ctx, domain.NodeRef{ID: n.Project})
-	return err == nil && h.worksOn(ctx, project.Key)
+	return h.worksOn(ctx, n.Project.Key)
 }
 
 func (h *Handler) TagVersion(ctx context.Context, r *connect.Request[graphv1.TagVersionRequest]) (*connect.Response[graphv1.TagVersionResponse], error) {
@@ -128,14 +127,8 @@ func (h *Handler) TagVersion(ctx context.Context, r *connect.Request[graphv1.Tag
 		return nil, rpcerr.ToConnect(err)
 	}
 	who := authz.From(ctx)
-	project := ""
-	if n.Project != "" {
-		if p, err := h.Graph.Node(ctx, domain.NodeRef{ID: n.Project}); err == nil {
-			project = p.Key
-		}
-	}
 	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
-		Resource: authz.Resource{Type: "tag", Namespace: n.Namespace, Org: who.Org, Owner: who.Subject, ProjectID: project}}); err != nil {
+		Resource: authz.Resource{Type: "tag", Namespace: n.Namespace, Org: who.Org, Owner: who.Subject, ProjectID: n.Project.Key}}); err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
 	t, err := h.Graph.TagVersion(ctx, ref, r.Msg.Name)
@@ -276,7 +269,7 @@ func (h *Handler) ListChangeLog(ctx context.Context, r *connect.Request[graphv1.
 // checkPrompts is nil when the caller may read the prompts of the model calls of the change.
 func (h *Handler) checkPrompts(ctx context.Context, c domain.Change) error {
 	return authz.Check(ctx, h.Authz, authz.Request{Subject: authz.From(ctx), Action: "inspect",
-		Resource: authz.Resource{Type: "prompt", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: c.ProjectID}})
+		Resource: authz.Resource{Type: "prompt", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg.Key, ProjectID: c.ProjectID.Key}})
 }
 
 // ExportChangeProvenance is the whole log of a change as PROV-O provenance (ADR 0057).
@@ -477,7 +470,7 @@ func (h *Handler) mayRead(ctx context.Context, c domain.Change) bool {
 	if access.IsPersonal(c) {
 		return access.IsPersonalTo(c, subjectOf(ctx))
 	}
-	return h.worksOn(ctx, c.ProjectID)
+	return h.worksOn(ctx, c.ProjectID.Key)
 }
 
 // readable answers mayRead for the changes of one answer, asking once per project.
@@ -487,10 +480,10 @@ func (h *Handler) readable(ctx context.Context) func(domain.Change) bool {
 		if access.IsPersonal(c) {
 			return access.IsPersonalTo(c, subjectOf(ctx))
 		}
-		ok, done := seen[c.ProjectID]
+		ok, done := seen[c.ProjectID.Key]
 		if !done {
-			ok = h.worksOn(ctx, c.ProjectID)
-			seen[c.ProjectID] = ok
+			ok = h.worksOn(ctx, c.ProjectID.Key)
+			seen[c.ProjectID.Key] = ok
 		}
 		return ok
 	}
@@ -808,7 +801,26 @@ func (h *Handler) gateLink(ctx context.Context, change, link string) error {
 func linkWrites(ls []*graphv1.NodeLinkWrite) []graph.LinkWrite {
 	var out []graph.LinkWrite
 	for _, l := range ls {
-		out = append(out, graph.LinkWrite{Type: l.Type, To: pbconv.RefFromPB(l.To), Properties: pbconv.Map(l.Props)})
+		u, _ := pbconv.TargetFromPB(l.Target) // checked by checkTargets
+		out = append(out, graph.LinkWrite{Type: l.Type, To: pbconv.RefFromPB(l.To), Target: u, Properties: pbconv.Map(l.Props)})
+	}
+	return out
+}
+
+// checkTargets refuses a link write whose target URL does not parse.
+func checkTargets(targets ...string) error {
+	for _, t := range targets {
+		if _, err := pbconv.TargetFromPB(t); err != nil {
+			return connect.NewError(connect.CodeInvalidArgument, err)
+		}
+	}
+	return nil
+}
+
+func targetsOf(ls []*graphv1.NodeLinkWrite) []string {
+	out := make([]string, len(ls))
+	for i, l := range ls {
+		out[i] = l.Target
 	}
 	return out
 }
@@ -824,10 +836,13 @@ func (h *Handler) ImpactNodeCreate(ctx context.Context, r *connect.Request[graph
 	}
 	who := authz.From(ctx)
 	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
-		Resource: authz.Resource{Type: "object", Name: m.Type, Namespace: c.Namespace, Org: c.OwnerOrg, Owner: who.Subject, ProjectID: c.ProjectID}}); err != nil {
+		Resource: authz.Resource{Type: "object", Name: m.Type, Namespace: c.Namespace, Org: c.OwnerOrg.Key, Owner: who.Subject, ProjectID: c.ProjectID.Key}}); err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
 	if err := h.gateAccess(ctx, m.Type); err != nil {
+		return nil, err
+	}
+	if err := checkTargets(targetsOf(m.Links)...); err != nil {
 		return nil, err
 	}
 	cn, err := h.Graph.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: m.Key, Type: m.Type, Properties: pbconv.Map(m.Props), Owner: m.Owner, Rationale: m.Rationale,
@@ -854,7 +869,7 @@ func createSpec(s *graphv1.NodeCreateSpec, flow, execution, by string) graph.Nod
 func (h *Handler) checkCreate(ctx context.Context, c domain.Change, typ string) error {
 	who := authz.From(ctx)
 	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
-		Resource: authz.Resource{Type: "object", Name: typ, Namespace: c.Namespace, Org: c.OwnerOrg, Owner: who.Subject, ProjectID: c.ProjectID}}); err != nil {
+		Resource: authz.Resource{Type: "object", Name: typ, Namespace: c.Namespace, Org: c.OwnerOrg.Key, Owner: who.Subject, ProjectID: c.ProjectID.Key}}); err != nil {
 		return rpcerr.ToConnect(err)
 	}
 	return h.gateAccess(ctx, typ)
@@ -952,8 +967,12 @@ func (h *Handler) ImpactLinkCreate(ctx context.Context, r *connect.Request[graph
 	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, ""); err != nil {
 		return nil, err
 	}
+	if err := checkTargets(m.Target); err != nil {
+		return nil, err
+	}
+	u, _ := pbconv.TargetFromPB(m.Target)
 	l, err := h.Graph.ImpactLinkCreate(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId),
-		graph.LinkWrite{Type: m.Type, To: pbconv.RefFromPB(m.To), Properties: pbconv.Map(m.Props)}, m.Flow, m.Execution)
+		graph.LinkWrite{Type: m.Type, To: pbconv.RefFromPB(m.To), Target: u, Properties: pbconv.Map(m.Props)}, m.Flow, m.Execution)
 	return res(&graphv1.ImpactLinkCreateResponse{Link: pbconv.LinkToPB(l)}, err)
 }
 
@@ -1576,5 +1595,5 @@ func (h *Handler) checkCriticality(ctx context.Context, id domain.ChangeID, data
 		return nil
 	}
 	return authz.Check(ctx, h.Authz, authz.Request{Subject: authz.From(ctx), Action: "lower-criticality",
-		Resource: authz.Resource{Type: "change", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: c.ProjectID}})
+		Resource: authz.Resource{Type: "change", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg.Key, ProjectID: c.ProjectID.Key}})
 }

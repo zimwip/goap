@@ -245,7 +245,7 @@ func TestChangeTools(t *testing.T) {
 	created := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/create", map[string]any{"title": "Refunds by voucher", "intent": "Customers may be refunded by voucher",
 		"namespace": "alm", "methodology": "sdlc"})["change"].(map[string]any)
 	id := created["id"].(string)
-	if created["unit"] != "ORG-CHECKOUT" || created["namespace"] != "alm" || created["methodology"] != "sdlc" {
+	if created["unit"] != access.UnitURL("ORG-CHECKOUT").String() || created["namespace"] != "alm" || created["methodology"] != "sdlc" {
 		t.Fatalf("change = %v", created)
 	}
 	// the tools work on the change of the calling process by default
@@ -815,19 +815,19 @@ func TestChangeCreateAndMoveProject(t *testing.T) {
 	args := map[string]any{"title": "t", "intent": "i", "namespace": "alm"}
 	alice := as("alice", "ORG-CHECKOUT", "contributor")
 	c := p.call(t, alice, "ORG-CHECKOUT", "goap-change/create", args)["change"].(map[string]any)
-	if c["project"] != access.DefaultProject {
+	if c["project"] != access.ProjectURL(access.DefaultProject).String() {
 		t.Fatalf("no active project: %v", c["project"])
 	}
 	active := authz.With(context.Background(), authz.Principal{Subject: "alice", Org: "ORG-CHECKOUT", Project: "PROJ-MV", Roles: []string{"contributor"}})
-	if c = p.call(t, active, "ORG-CHECKOUT", "goap-change/create", args)["change"].(map[string]any); c["project"] != "PROJ-MV" {
+	if c = p.call(t, active, "ORG-CHECKOUT", "goap-change/create", args)["change"].(map[string]any); c["project"] != access.ProjectURL("PROJ-MV").String() {
 		t.Fatalf("active project: %v", c["project"])
 	}
 	named := map[string]any{"title": "t", "intent": "i", "namespace": "alm", "project": access.DefaultProject}
-	if c = p.call(t, active, "ORG-CHECKOUT", "goap-change/create", named)["change"].(map[string]any); c["project"] != access.DefaultProject {
+	if c = p.call(t, active, "ORG-CHECKOUT", "goap-change/create", named)["change"].(map[string]any); c["project"] != access.ProjectURL(access.DefaultProject).String() {
 		t.Fatalf("named project: %v", c["project"])
 	}
 	moved := p.call(t, alice, "ORG-CHECKOUT", "goap-change/move", map[string]any{"change": c["id"], "project": "PROJ-MV"})["change"].(map[string]any)
-	if moved["project"] != "PROJ-MV" {
+	if moved["project"] != access.ProjectURL("PROJ-MV").String() {
 		t.Fatalf("moved: %v", moved)
 	}
 	// a change depends on another (ADR 0108): added, read, removed

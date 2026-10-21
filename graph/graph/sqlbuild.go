@@ -78,6 +78,9 @@ func (d dialect) cols(cs ...sqlCol) string {
 		if c.uuid {
 			out[i] = d.id(c.name)
 		}
+		if c.or != "" {
+			out[i] = "coalesce(" + out[i] + ", " + c.or + ")"
+		}
 	}
 	return strings.Join(out, ", ")
 }
@@ -86,16 +89,24 @@ func (d dialect) cols(cs ...sqlCol) string {
 type sqlCol struct {
 	name string
 	uuid bool
+	// or is the value of a nullable column read as null ("" none: not nullable)
+	or string
 }
 
 func sc(name string) sqlCol { return sqlCol{name: name} }
 func su(name string) sqlCol { return sqlCol{name: name, uuid: true} }
 
+// The target of a link: a node version of this graph (to_id, to_version, null for a link to another source), its URL
+// (to_url, empty for a node of this graph; ADR 0154).
+func linkTo(prefix string) []sqlCol {
+	return []sqlCol{{name: prefix + "to_id", uuid: true, or: "''"}, {name: prefix + "to_version", or: "0"}}
+}
+
 // nodeCols is the select list of a node version (the order sqliteScanNode and scanNode read).
 func (d dialect) nodeCols() string {
 	return d.cols(su("n.id"), sc("v.version"), sc("n.namespace"), sc("n.key"), sc("n.type"), sc("v.props"), sc("v.deleted"), su("v.change_id"),
 		sc("v.created_at"), sc("v.branch"), sc("v.parents"), sc("v.reason"), sc("v.state"), su("v.change_impact"), sc("v.comment"),
-		sc("v.execution"), su("v.owner_id"), su("n.project_id"), sc("v.origins"))
+		sc("v.execution"), sc("v.owner"), sc("n.project"), sc("v.origins"))
 }
 
 const nodeFrom = ` FROM node n JOIN node_version v ON v.node_id = n.id`
@@ -308,15 +319,38 @@ func (d dialect) outerJoin() string {
 // version, sv a set), minus those a row of the chain drops. Its columns are the link's, unqualified. A set is a delta
 // exactly when it is deep (links_depth > 0): asked so, the next set of the chain is read by its key (node_version_pkey),
 // never by the index of the bases (links_base IS NOT NULL would let the planner scan every delta of the table).
-func (d dialect) heldLinks(n int) string {
+func (d dialect) heldLinks(n int) string { return d.heldLinksWhere(n, "") }
+
+// heldLinksOfType is heldLinks keeping the links of the types at placeholder m: a drop row has the type of the link it
+// drops, so the filter keeps the drops of the links it keeps, and each set of the chain is read by
+// (from_id, from_version, type) (link_from).
+func (d dialect) heldLinksOfType(n, m int) string {
+	in, _ := d.textList("l.type", m, nil)
+	return d.heldLinksWhere(n, " AND "+in)
+}
+
+// textList is col in the texts at placeholder n, and the argument it takes.
+func (d dialect) textList(col string, n int, list []string) (string, any) {
+	if list == nil {
+		list = []string{}
+	}
+	if d.pg {
+		return col + ` = ANY(` + d.ph(n) + `::text[])`, list
+	}
+	b, _ := json.Marshal(list)
+	return col + ` IN (SELECT value FROM json_each(` + d.ph(n) + `))`, string(b)
+}
+
+// heldLinksWhere is heldLinks with more conditions on the rows of the sets (and, of the links of the chain).
+func (d dialect) heldLinksWhere(n int, and string) string {
 	return `WITH RECURSIVE r(id, version) AS (` + d.refsRows(n) + `),
 		c(nid, rv, sv) AS (
 			SELECT v.node_id, v.version, coalesce(v.links, v.version) FROM node_version v JOIN r ON r.id = v.node_id AND r.version = v.version
 			UNION ALL
 			SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_depth > 0
 		),
-		h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes FROM c` + d.outerJoin() + `link l ON l.from_id = c.nid AND l.from_version = c.sv)
-		SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id FROM h
+		h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes, l.to_url FROM c` + d.outerJoin() + `link l ON l.from_id = c.nid AND l.from_version = c.sv` + and + `)
+		SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id, h.to_url FROM h
 		WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
 }
 
@@ -324,11 +358,21 @@ func (d dialect) heldLinks(n int) string {
 // version holding it (ADR 0141), by id then version: the rows naming the target (t), the sets holding each (s: the set
 // of the row, then the deltas over a set holding it that do not drop it), the versions holding those sets.
 func (d dialect) sqlLinksTo(ref domain.NodeRef) (string, []any) {
+	return d.sqlLinksToOfType(ref, nil)
+}
+
+// sqlLinksToOfType is sqlLinksTo keeping the links of some types (nil: every type), read by (to_id, to_version,
+// type) (link_to).
+func (d dialect) sqlLinksToOfType(ref domain.NodeRef, types []string) (string, []any) {
 	target, args := `to_id = `+d.ph(1), []any{string(ref.ID)}
 	if ref.Version != 0 {
 		target, args = target+` AND to_version = `+d.ph(2), append(args, int(ref.Version))
 	}
-	return `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id FROM link
+	if types != nil {
+		in, arg := d.textList("type", len(args)+1, types)
+		target, args = target+` AND `+in, append(args, arg)
+	}
+	return `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id, to_url FROM link
 			WHERE ` + target + ` AND removes IS NULL),
 		` + d.linksToRest(), args
 }
@@ -337,7 +381,7 @@ func (d dialect) sqlLinksTo(ref domain.NodeRef) (string, []any) {
 func (d dialect) sqlLinksInto(refs []domain.NodeRef) (string, []any) {
 	args, _ := d.refsArgs(refs)
 	return `WITH RECURSIVE r(id, version) AS (` + d.refsRows(1) + `),
-		t AS (SELECT l.id, l.type, l.from_id, l.from_version, l.to_id, l.to_version, l.props, l.change_id FROM link l
+		t AS (SELECT l.id, l.type, l.from_id, l.from_version, l.to_id, l.to_version, l.props, l.change_id, l.to_url FROM link l
 			JOIN r ON l.to_id = r.id AND l.to_version = r.version WHERE l.removes IS NULL),
 		` + d.linksToRest(), args
 }
@@ -348,7 +392,7 @@ func (d dialect) sqlLinksInto(refs []domain.NodeRef) (string, []any) {
 // The versions holding a set are the version whose set it is and those sharing it, read in two parts (by the key of
 // node_version, by node_version_links): one join on either would read every version of the node for each set.
 func (d dialect) linksToRest() string {
-	cols := d.cols(su("t.id"), sc("t.type"), su("t.from_id"), sc("v.version"), su("t.to_id"), sc("t.to_version"), sc("t.props"), su("t.change_id"))
+	cols := d.cols(su("t.id"), sc("t.type"), su("t.from_id"), sc("v.version"), su("t.to_id"), sc("t.to_version"), sc("t.props"), su("t.change_id"), sc("t.to_url"))
 	return `s(lid, nid, sv) AS (
 			SELECT id, from_id, from_version FROM t
 			UNION ALL
@@ -401,7 +445,7 @@ func (d dialect) sqlPutLinkSet() string {
 
 // linkCols is the select list of a link.
 func (d dialect) linkCols() string {
-	return d.cols(su("id"), sc("type"), su("from_id"), sc("from_version"), su("to_id"), sc("to_version"), sc("props"), su("change_id"))
+	return d.cols(append(append([]sqlCol{su("id"), sc("type"), su("from_id"), sc("from_version")}, linkTo("")...), sc("props"), su("change_id"), sc("to_url"))...)
 }
 
 const branchColsText = `namespace, name, parent, %s, %s, origin, status, created_at, description, intent, %s, ephemeral, fork_seq`
@@ -722,8 +766,8 @@ func (d dialect) sqlDeleteChange() string { return `DELETE FROM change WHERE id 
 
 // The columns of the inserts both repositories run, in the order of their arguments.
 var (
-	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "origins", "committed"}
-	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id", "removes"}
+	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner", "origins", "committed"}
+	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id", "removes", "to_url"}
 	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "kind", "rebased_from", "seq"}
 	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "causation", "at", "payload"}
 )
@@ -809,13 +853,20 @@ func (d dialect) sqlNodeTypeCounts(refs []domain.NodeRef, q NodeQuery) (string, 
 
 // qualifiedLinkCols is the select list of a link read as the alias l.
 func (d dialect) qualifiedLinkCols() string {
-	return d.cols(su("l.id"), sc("l.type"), su("l.from_id"), sc("l.from_version"), su("l.to_id"), sc("l.to_version"), sc("l.props"), su("l.change_id"))
+	return d.cols(append(append([]sqlCol{su("l.id"), sc("l.type"), su("l.from_id"), sc("l.from_version")}, linkTo("l.")...), sc("l.props"), su("l.change_id"), sc("l.to_url"))...)
 }
 
 // sqlLinksFrom reads the links leaving the versions refs, by id.
 func (d dialect) sqlLinksFrom(refs []domain.NodeRef) (string, []any) {
 	args, _ := d.refsArgs(refs)
 	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinks(1) + `) l ORDER BY l.id`, args
+}
+
+// sqlLinksFromOfType is sqlLinksFrom keeping the links of some types.
+func (d dialect) sqlLinksFromOfType(refs []domain.NodeRef, types []string) (string, []any) {
+	args, n := d.refsArgs(refs)
+	_, arg := d.textList("", n, types)
+	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksOfType(1, n) + `) l ORDER BY l.id`, append(args, arg)
 }
 
 // linkRefsWhere selects the links between two of the versions refs matching the text of q.

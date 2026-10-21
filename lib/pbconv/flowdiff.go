@@ -7,6 +7,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/domain"
 	graphv1 "github.com/zimwip/goap/contracts/gen/goap/graph/v1"
+	"github.com/zimwip/goap/contracts/lnk"
 )
 
 // value is a JSON value as a protobuf Value (nil: absent).
@@ -36,7 +37,7 @@ func impactSideToPB(s *domain.ImpactSide) *graphv1.ImpactSide {
 		return nil
 	}
 	return &graphv1.ImpactSide{Impact: string(s.Impact), Flow: s.Flow, Intent: string(s.Intent), Review: string(s.Review), Drafted: s.Drafted,
-		State: s.State, Owner: string(s.Owner)}
+		State: s.State, Owner: s.Owner.String()}
 }
 
 func impactSideFromPB(s *graphv1.ImpactSide) *domain.ImpactSide {
@@ -44,7 +45,7 @@ func impactSideFromPB(s *graphv1.ImpactSide) *domain.ImpactSide {
 		return nil
 	}
 	return &domain.ImpactSide{Impact: domain.ChangeImpactID(s.Impact), Flow: s.Flow, Intent: domain.NodeIntent(s.Intent), Review: domain.NodeReview(s.Review),
-		Drafted: s.Drafted, State: s.State, Owner: domain.NodeID(s.Owner)}
+		Drafted: s.Drafted, State: s.State, Owner: lnk.Of(s.Owner)}
 }
 
 // FlowDiffToPB converts the comparison of two flows of a change (ADR 0083).

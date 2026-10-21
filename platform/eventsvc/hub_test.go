@@ -15,6 +15,7 @@ import (
 	eventsv1 "github.com/zimwip/goap/contracts/gen/goap/events/v1"
 	"github.com/zimwip/goap/contracts/gen/goap/events/v1/eventsv1connect"
 	"github.com/zimwip/goap/engine/engine"
+	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/identity"
 	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/platform/convsvc"
@@ -92,7 +93,7 @@ func TestVisibility(t *testing.T) {
 	publish(t, h, "goap.process.p1.started", engine.ProcessEvent{Event: "started", Time: time.Now(),
 		Process: &engine.Process{ID: "p1", Methodology: "sdlc", Initiator: authz.Principal{Subject: "alice"}}})
 	publish(t, h, "goap.process.p1.log", engine.ProcessEvent{Event: "log", Time: time.Now(), Log: &engine.LogLine{ProcessID: "p1", Message: "hi"}})
-	publish(t, h, "goap.change.C1.created", domain.ChangeEvent{Type: "change.created", Change: domain.Change{ID: "C1", OwnerOrg: "USR:alice"}})
+	publish(t, h, "goap.change.C1.created", domain.ChangeEvent{Type: "change.created", Change: domain.Change{ID: "C1", OwnerOrg: access.UnitURL("USR:alice")}})
 	publish(t, h, "goap.node.alm.x.n1.written", func() domain.NodeEvent { e := node("n1"); e.ChangeID = "C1"; return e }())
 	publish(t, h, "goap.node.alm.x.n2.written", node("n2"))
 

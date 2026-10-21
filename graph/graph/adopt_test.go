@@ -31,7 +31,7 @@ func testSetChangeMethodology(t *testing.T, repo Repo) {
 		t.Fatalf("an unknown methodology: %v", err)
 	}
 	g.MethodologyGate = func(_ context.Context, ch domain.Change, m string) error {
-		if ch.ProjectID != "PROJ-ROOT" || m != "m" {
+		if ch.ProjectID.Key != "PROJ-ROOT" || m != "m" {
 			return fmt.Errorf("%s does not apply: %w", m, ErrInvalid)
 		}
 		return nil

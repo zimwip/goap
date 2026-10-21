@@ -104,7 +104,7 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 			!strings.HasPrefix(full.Nodes[0].Rationale, "upgrade ") || len(full.Nodes[0].DerivedFrom) != 1 {
 			t.Fatalf("change impacts not copied: %+v", full.Nodes)
 		}
-		orgs[s.OwnerOrg] = s
+		orgs[s.OwnerOrg.Key] = s
 	}
 	if _, ok := orgs["ORG-T1"]; !ok || len(orgs) != 2 {
 		t.Fatalf("orgs = %v", orgs)
@@ -254,12 +254,12 @@ func TestProjectSelfLinkTerminates(t *testing.T) {
 		t.Fatal(err)
 	}
 	within := func(tx Tx, key, ancestor string) (bool, error) {
-		return g.within(ctx, tx, domain.StructureProject, key, ancestor)
+		return g.within(ctx, tx, domain.StructureProject, g.StructureURL(domain.StructureProject, key), g.StructureURL(domain.StructureProject, ancestor))
 	}
 	done := make(chan error, 1)
 	go func() {
 		done <- g.repo.InTx(ctx, func(tx Tx) error {
-			if _, err := g.structureNode(ctx, tx, domain.StructureProject, "PROJ-ROOT"); err != nil {
+			if _, err := g.structureNode(ctx, tx, domain.StructureProject, g.StructureURL(domain.StructureProject, "PROJ-ROOT")); err != nil {
 				return fmt.Errorf("root project must check out: %w", err)
 			}
 			if ok, err := within(tx, "PROJ-ROOT", "PROJ-ROOT"); err != nil || !ok {
@@ -322,7 +322,7 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 		t.Fatalf("a change naming no project: %v", err)
 	}
 	// a unit named by none is the root unit
-	if c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", BaselineID: base.ID}); err != nil || c.ProjectID != rootProject(g) || c.OwnerOrg != rootOrg(g) {
+	if c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", BaselineID: base.ID}); err != nil || c.ProjectID.Key != rootProject(g) || c.OwnerOrg.Key != rootOrg(g) {
 		t.Fatalf("a change naming no unit is held by the root unit: %+v %v", c, err)
 	}
 	// a node of the organisation that is not a project is refused
@@ -343,11 +343,11 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 	// within (a descendant) is accepted
 	if sub, err := g.CreateChange(ctx, NewChange{Title: "x", ParentID: parent.ID, ProjectID: "PROJ-A1"}); err != nil {
 		t.Fatalf("project within the parent project: %v", err)
-	} else if sub.ProjectID != "PROJ-A1" {
+	} else if sub.ProjectID.Key != "PROJ-A1" {
 		t.Fatalf("sub.ProjectID = %q", sub.ProjectID)
 	}
 	// unset: inherited from the parent
-	if sub, err := g.CreateChange(ctx, NewChange{Title: "x", ParentID: parent.ID}); err != nil || sub.ProjectID != "PROJ-A" {
+	if sub, err := g.CreateChange(ctx, NewChange{Title: "x", ParentID: parent.ID}); err != nil || sub.ProjectID.Key != "PROJ-A" {
 		t.Fatalf("project inherited from the parent: %+v, %v", sub, err)
 	}
 }

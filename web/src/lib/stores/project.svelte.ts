@@ -8,6 +8,7 @@ import { errorMessage, getToken, nodeTitle, switchProject as reissueToken, type 
 import { applicableMethodologies } from '../projectRoles';
 import { notify } from '../shell/workbench.svelte';
 import { refreshIdentity, session, types as nodeTypes, ns, rootProject } from './session.svelte';
+import { refKey } from '../lnk';
 
 export interface ProjectOption {
   key: string;
@@ -83,7 +84,7 @@ export async function loadApplicable(of?: string): Promise<void> {
 
 /** Whether a change belongs to the active project; with none selected, every change does (a change with no project
  * is the root project's). */
-export const inActiveProject = (projectId?: string): boolean => !project.current || (projectId || rootProject()) === project.current;
+export const inActiveProject = (projectId?: string): boolean => !project.current || (refKey(projectId) || rootProject()) === project.current;
 
 // the project is the identity's claim ('' for none): follows every token the identity comes from
 $effect.root(() => {

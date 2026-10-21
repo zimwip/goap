@@ -69,3 +69,47 @@ func TestApplicableMethodologies(t *testing.T) {
 		t.Error("HasProject")
 	}
 }
+
+// The source mapping of a project is its own merged over its ancestors', the nearest naming a source winning (ADR 0154
+// §8); a malformed mapping is a problem of the snapshot, not a mapping.
+func TestProjectSources(t *testing.T) {
+	node := func(id, key string, sources any) domain.Node {
+		props := map[string]any{}
+		if sources != nil {
+			props[access.PropSources] = sources
+		}
+		return domain.Node{ID: domain.NodeID(id), Key: key, Type: access.NodeTypeProjectUnit, Namespace: "organisation", Properties: props}
+	}
+	lnk := func(from, to string) domain.Link {
+		return domain.Link{Type: access.LinkProjectPartOf, From: domain.NodeRef{ID: domain.NodeID(from)}, To: domain.NodeRef{ID: domain.NodeID(to)}}
+	}
+	nodes := []domain.Node{
+		node("1", "PROJ-ROOT", map[string]any{"alm": "content", "code": "content"}),
+		node("2", "PROJ-EU", map[string]any{"alm": "content-eu"}), node("3", "PROJ-EU1", nil),
+		node("4", "PROJ-BAD", map[string]any{"alm": 3}),
+	}
+	links := []domain.Link{lnk("1", "1"), lnk("2", "1"), lnk("3", "2"), lnk("4", "1")}
+	s := access.BuildSnapshot(typecat.Builtin().Structures(), "b", nodes, links)
+	if got := s.ProjectSources("PROJ-EU1"); got["alm"] != "content-eu" || got["code"] != "content" || len(got) != 2 {
+		t.Errorf("PROJ-EU1: %v", got)
+	}
+	if got := s.ProjectSources("PROJ-ROOT"); got["alm"] != "content" {
+		t.Errorf("root: %v", got)
+	}
+	if got := s.ProjectSources("PROJ-BAD"); got["alm"] != "content" || len(s.Problems) != 1 {
+		t.Errorf("bad: %v, problems %v", got, s.Problems)
+	}
+	if _, ok := s.StructureNode(domain.StructureProject, "PROJ-EU1"); !ok {
+		t.Error("StructureNode reads a project by its key")
+	}
+	if _, ok := s.StructureNode(domain.StructureOrganisation, "PROJ-EU1"); ok {
+		t.Error("a project is no unit")
+	}
+	if got := s.StructureChain(domain.StructureProject, "PROJ-EU1"); len(got) != 3 || got[2] != "PROJ-ROOT" {
+		t.Errorf("chain = %v", got)
+	}
+	p, err := access.ProjectFromProps(access.ProjectUnit{Name: "X", Sources: map[string]string{"alm": "content"}}.Props())
+	if err != nil || p.Sources["alm"] != "content" {
+		t.Errorf("round trip: %+v, %v", p, err)
+	}
+}

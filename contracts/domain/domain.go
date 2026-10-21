@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/contracts/codetext"
+	"github.com/zimwip/goap/contracts/lnk"
 )
 
 // NodeID is the stable identity of a node across all its versions.
@@ -104,10 +105,13 @@ type Node struct {
 	Version Version `json:"version"`
 	Branch  string  `json:"branch,omitempty"`
 	// Joined lists the other branches the version is part of (filled by Versions only).
-	Joined     []string       `json:"joined,omitempty"`
-	Parents    []Version      `json:"parents,omitempty"`
-	Reason     string         `json:"reason,omitempty"`
-	Namespace  string         `json:"namespace,omitempty"`
+	Joined    []string  `json:"joined,omitempty"`
+	Parents   []Version `json:"parents,omitempty"`
+	Reason    string    `json:"reason,omitempty"`
+	Namespace string    `json:"namespace,omitempty"`
+	// Source is the source the node was read from (ADR 0154), when it is not this graph: a node of another graph keeps
+	// the name of the source that reads it. Empty: this graph, the source being the namespace (SourceName).
+	Source     string         `json:"source,omitempty"`
 	Key        string         `json:"key"`
 	Type       string         `json:"type"`
 	Properties map[string]any `json:"props,omitempty"`
@@ -116,13 +120,14 @@ type Node struct {
 	State string `json:"state,omitempty"`
 	// ChangeID is the change that wrote the version: every version has one (ADR 0049, 0054).
 	ChangeID ChangeID `json:"changeId,omitempty"`
-	// Owner is the organisational unit responsible for the version (a node of the organisation structure, ADR
-	// 0054): the unit holding the change that created the node, carried over by the next versions unless a change
-	// transfers it.
-	Owner NodeID `json:"owner,omitempty"`
+	// Owner is the organisational unit responsible for the version (a node of the organisation structure, ADR 0054):
+	// the unit holding the change that created the node, carried over by the next versions unless a change transfers
+	// it. A logical URL with no version (lnk:<namespace>/<unit type>/<key>, ADR 0154 §9): a reference to a node is a
+	// link, resolved like one, never a node id; the organisation may live in another graph.
+	Owner lnk.URL `json:"owner,omitzero"`
 	// Project is the project the node was created in (a node of the project structure, ADR 0054): the project of the
-	// change that created it, the same for every version.
-	Project NodeID `json:"project,omitempty"`
+	// change that created it, the same for every version. A logical URL, as Owner.
+	Project lnk.URL `json:"project,omitzero"`
 	// ChangeImpact is the change impact that produced this version, Comment the acceptance
 	// comment (else the rationale): the origin of the version (ADR 0024).
 	ChangeImpact ChangeImpactID `json:"changeImpact,omitempty"`
@@ -157,12 +162,27 @@ type LinkID string
 
 // Link is a typed relation between two exact node versions.
 type Link struct {
-	ID         LinkID         `json:"id"`
-	Type       string         `json:"type"`
-	From       NodeRef        `json:"from"`
-	To         NodeRef        `json:"to"`
+	ID   LinkID  `json:"id"`
+	Type string  `json:"type"`
+	From NodeRef `json:"from"`
+	// To is the version of a node of this graph the link points to; zero for a link to another source (Target).
+	To NodeRef `json:"to"`
+	// Target is the logical URL of a target in another source (ADR 0154: another graph, a file...), with To zero; empty
+	// for a link to a node of this graph, whose URL is the node's (Graph.LinkURL).
+	Target     lnk.URL        `json:"target,omitzero"`
 	Properties map[string]any `json:"props,omitempty"`
 	ChangeID   ChangeID       `json:"changeId,omitempty"`
+}
+
+// External reports a link to another source (ADR 0154): its target is a URL, not a node of this graph.
+func (l Link) External() bool { return l.To.IsZero() && !l.Target.IsZero() }
+
+// Points is where the link points to: its URL when it leaves the graph, else the node version.
+func (l Link) Points() string {
+	if l.External() {
+		return l.Target.String()
+	}
+	return l.To.String()
 }
 
 // BaselineID identifies a baseline.

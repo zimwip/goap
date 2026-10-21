@@ -1,0 +1,167 @@
+package lnk
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+)
+
+// Registry holds the sources a process knows and the resolvers of their kinds. A source no one declared is the
+// namespace of the same name of this graph: a graph source with no location (ADR 0154 §3).
+type Registry struct {
+	mu        sync.RWMutex
+	sources   map[string]Source
+	resolvers map[string]Resolver
+	// Lookup, when set, finds a source not declared in process (the platform@Source nodes of the graph): found false
+	// lets the registry fall back on the namespace of this graph.
+	Lookup func(ctx context.Context, name string) (Source, bool, error)
+}
+
+// NewRegistry returns an empty registry: Register gives it the resolver of each kind, KindGraph first.
+func NewRegistry() *Registry {
+	return &Registry{sources: map[string]Source{}, resolvers: map[string]Resolver{}}
+}
+
+// Register gives a kind of source its resolver (a nil resolver removes it).
+func (r *Registry) Register(kind string, res Resolver) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if res == nil {
+		delete(r.resolvers, kind)
+		return
+	}
+	r.resolvers[kind] = res
+}
+
+// Declare adds or replaces a source.
+func (r *Registry) Declare(src Source) error {
+	if err := src.Validate(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sources[src.Name] = src
+	return nil
+}
+
+// Source returns the source of a name: a declared one, else one Lookup finds, else the namespace of that name of this
+// graph (a graph source with no location).
+func (r *Registry) Source(ctx context.Context, name string) (Source, error) {
+	if !sourceRE.MatchString(name) {
+		return Source{}, fmt.Errorf("source %q: %w", name, ErrInvalid)
+	}
+	r.mu.RLock()
+	src, ok := r.sources[name]
+	lookup := r.Lookup
+	r.mu.RUnlock()
+	if ok {
+		return src, nil
+	}
+	if lookup != nil {
+		src, ok, err := lookup(ctx, name)
+		if err != nil {
+			return Source{}, err
+		}
+		if ok {
+			return src, nil
+		}
+	}
+	return Source{Name: name, Kind: KindGraph}, nil
+}
+
+// Sources lists the sources declared in process.
+func (r *Registry) Sources() []Source {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]Source, 0, len(r.sources))
+	for _, s := range r.sources {
+		out = append(out, s)
+	}
+	return out
+}
+
+func (r *Registry) resolver(kind string) (Resolver, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	res, ok := r.resolvers[kind]
+	if !ok {
+		return nil, fmt.Errorf("kind %q: %w", kind, ErrNoResolver)
+	}
+	return res, nil
+}
+
+// Mapping is how a scope (a project, ADR 0154 §8) reads the sources its URLs name: the name of a URL's source to the
+// name of the source declared on the platform that holds it there. Not mapped (found false): the name itself.
+type Mapping func(name string) (to string, found bool)
+
+// Resolve reads what a URL points to, through the resolver of its source.
+func (r *Registry) Resolve(ctx context.Context, u URL) (Target, error) {
+	return r.ResolveIn(ctx, nil, u)
+}
+
+// ResolveIn reads what a URL points to in a scope: the source its mapping gives for the URL's source (none: that
+// source), read by the resolver of its kind. The target keeps the URL's own source: the mapping says where the thing
+// is stored, never what it is called.
+func (r *Registry) ResolveIn(ctx context.Context, m Mapping, u URL) (Target, error) {
+	if err := u.Validate(); err != nil {
+		return Target{}, err
+	}
+	name := u.Source
+	if m != nil {
+		if to, ok := m(name); ok && to != "" {
+			name = to
+		}
+	}
+	src, err := r.Source(ctx, name)
+	if err != nil {
+		return Target{}, err
+	}
+	res, err := r.resolver(src.Kind)
+	if err != nil {
+		return Target{}, fmt.Errorf("%s: %w", u, err)
+	}
+	t, err := res.Resolve(ctx, src, u)
+	if err != nil {
+		return Target{}, err
+	}
+	if t.URL.IsZero() {
+		t.URL = u
+	}
+	t.URL.Source = u.Source
+	return t, nil
+}
+
+// ResolveString parses a URL and resolves it.
+func (r *Registry) ResolveString(ctx context.Context, s string) (Target, error) {
+	u, err := Parse(s)
+	if err != nil {
+		return Target{}, err
+	}
+	return r.Resolve(ctx, u)
+}
+
+// URLOf gives the URL of a thing of a source.
+func (r *Registry) URLOf(ctx context.Context, source string, t Target) (URL, error) {
+	src, err := r.Source(ctx, source)
+	if err != nil {
+		return URL{}, err
+	}
+	res, err := r.resolver(src.Kind)
+	if err != nil {
+		return URL{}, err
+	}
+	u, err := res.URLOf(ctx, src, t)
+	if err != nil {
+		return URL{}, err
+	}
+	if u.Source != src.Name {
+		return URL{}, fmt.Errorf("resolver of %s gave %s: %w", src.Name, u, ErrInvalid)
+	}
+	return u, u.Validate()
+}
+
+// IsNotFound reports a target the source does not have, or a source nobody knows.
+func IsNotFound(err error) bool {
+	return errors.Is(err, ErrNotFound) || errors.Is(err, ErrUnknownSource)
+}

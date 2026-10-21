@@ -7,6 +7,7 @@
   import type { MoveChoices } from '../changeProject';
   import { loadMoveOffer, moveChangeTo } from '../changeMove';
   import { rootProject } from '../stores/session.svelte';
+  import { refKey } from '../lnk';
 
   let { change, onmoved, oncancel }: { change: Change; onmoved: () => void; oncancel: () => void } = $props();
 
@@ -15,7 +16,7 @@
   let busy = $state(false);
   let error = $state('');
 
-  const current = $derived(change.projectId || rootProject());
+  const current = $derived(refKey(change.projectId) || rootProject());
 
   $effect(() => {
     const ch = change;

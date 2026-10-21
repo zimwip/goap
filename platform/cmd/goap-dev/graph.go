@@ -28,8 +28,12 @@ func buildGraph(e *env, st stores) (*graphPart, error) {
 	g.EndUser = graphsvc.EndUser         // the person the events of the changes are for (ADR 0114)
 	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
 	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
+	g.Resolvers = graphsvc.Resolvers()   // the sources of the logical URLs beyond its namespaces (ADR 0154)
 	reader := graphsnap.NewReader(g)
-	directory := &access.Directory{Graph: g, Reader: reader}
+	// the platform graph delivers the policies, the organisation and the projects to every graph, this one included, the
+	// same way (ADR 0154 §9): the directory keeps its snapshot until the baseline events of the graph (delivered in
+	// process by its outbox, buildPlatform) say the organisation moved
+	directory := &access.Directory{Graph: g, Reader: reader, Follow: &graphsnap.Heads{MaxAge: access.FollowAge}}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
 		return nil, err
@@ -38,11 +42,12 @@ func buildGraph(e *env, st stores) (*graphPart, error) {
 	g.ChangeAuthorizer = graphsvc.ChangeTransitionAuthorizer(authorizer)
 	g.ProjectMoveGate = graphsvc.ProjectMoveGate(authorizer, directory)
 	g.MethodologyGate = graphsvc.MethodologyGate(directory)
+	g.ProjectSources = directory.ProjectSources // where each project reads the sources of its URLs (ADR 0154 §8)
 	g.ItemAuthorizer = graphsvc.ItemAuthorizer(authorizer, directory.CriticalityResolver())
 	g.SeatAuthorizer = graphsvc.SeatAuthorizer(authorizer)
 	g.ItemPolicy = criticality.ItemPolicy(directory.CriticalityResolver()) // the oracle and the lifetime a level accepts (ADR 0075 §3)
 	g.Facets = map[string]graph.BlackboardFacet{domain.FacetCriticalityPolicy: directory.CriticalityFacet()}
 	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, access.ProjectScopeValidator{}, access.ProjectOwnerValidator{},
-		llmcfg.ProtectedAliasValidator{}}
+		llmcfg.ProtectedAliasValidator{}, graphsvc.PlatformSourceValidator{}}
 	return &graphPart{g: g, reader: reader, directory: directory, authorizer: authorizer}, nil
 }

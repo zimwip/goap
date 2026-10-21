@@ -545,7 +545,7 @@ func (c Change) create(ctx context.Context, who authz.Principal, a args) (map[st
 			return nil, err
 		}
 		ch, err := c.p.Graph.CreateChange(ctx, graphapi.NewChange{Title: title, Intent: intent, Methodology: a.str("methodology"), Namespace: p.Namespace,
-			ParentID: parent, OwnerOrg: cmp.Or(a.str("unit"), p.OwnerOrg), ProjectID: p.ProjectID, Data: data})
+			ParentID: parent, OwnerOrg: cmp.Or(a.str("unit"), p.OwnerOrg.String()), ProjectID: p.ProjectID.String(), Data: data})
 		if err != nil {
 			return nil, err
 		}

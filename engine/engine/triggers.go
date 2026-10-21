@@ -82,7 +82,7 @@ func (ev TriggerEvent) activation() map[string]any {
 		}
 		out["change"] = map[string]any{"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
 			"methodology": c.Methodology, "goal": c.Goal, "baseline": string(c.BaselineID), "items": int64(len(c.Items)), "data": data,
-			"state": c.State, "parent": string(c.ParentID), "project": c.ProjectID}
+			"state": c.State, "parent": string(c.ParentID), "project": c.ProjectID.Key}
 	}
 	if p := ev.Process; p != nil {
 		out["process"] = map[string]any{"id": p.ID, "agent": p.Agent, "goal": p.Goal, "status": string(p.Status),

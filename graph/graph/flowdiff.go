@@ -125,6 +125,10 @@ func (g *Graph) flowImpactShapes(ctx context.Context, tx Tx, c domain.Change, fl
 				return nil, err
 			}
 			for _, l := range links {
+				if l.External() {
+					is.shape.Links = append(is.shape.Links, domain.LinkShape{Type: l.Type, To: domain.NodeID(l.Target.Logical().String()), ToKey: l.Target.String(), Properties: l.Properties})
+					continue
+				}
 				is.shape.Links = append(is.shape.Links, domain.LinkShape{Type: l.Type, To: l.To.ID, ToKey: keyOf(l.To), Properties: l.Properties})
 			}
 			is.side.State, is.side.Owner = n.State, n.Owner

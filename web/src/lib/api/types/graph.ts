@@ -34,7 +34,7 @@ export interface GraphNode {
   execution?: string;
   /** the branches the version joined besides the one it was written on (ADR 0032; filled by listNodeVersions) */
   joined?: string[];
-  /** id of the organisational unit owning the version, and of the project the node was created in (ADR 0054) */
+  /** the organisational unit owning the version and the project the node was created in (ADR 0054): logical URLs with no version, lnk:<namespace>/<type>/<key> (ADR 0154 §9; refKey gives the key) */
   owner?: string;
   project?: string;
   /** this view is the draft a change holds of the node (version 0): the node has no version until the change commits (ADR 0079) */
@@ -47,9 +47,12 @@ export interface Link {
   id?: string;
   type?: string;
   from?: NodeRef;
+  /** the node version of this graph; unset for a link to another source */
   to?: NodeRef;
   props?: Struct;
   changeId?: string;
+  /** the logical URL of a target in another source (ADR 0154), `to` unset */
+  target?: string;
 }
 
 /** An entry of the log of a change (ADR 0030): a fact, a journal record or an impact event. */
@@ -335,10 +338,10 @@ export interface Change {
   guardians?: GuardianRef[];
   /** the changes whose work reaches the branch it merges into before it merges (ADR 0108) */
   dependsOn?: string[];
-  /** sub-change: parent change and responsible OrgUnit key */
+  /** sub-change: parent change; the responsible unit, a logical URL (ADR 0154 §9) */
   parentId?: string;
   ownerOrg?: string;
-  /** key of the project the change acts in (ADR 0054) */
+  /** the project the change acts in (ADR 0054), a logical URL (ADR 0154 §9) */
   projectId?: string;
   title?: string;
   intent?: string;

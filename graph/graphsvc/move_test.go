@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	graphv1 "github.com/zimwip/goap/contracts/gen/goap/graph/v1"
 	"github.com/zimwip/goap/contracts/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/graph/graphsvc"
 	"github.com/zimwip/goap/lib/access"
@@ -101,10 +102,10 @@ func TestProjectMoveGate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := e.g.MoveChange(dev, c.ID, "PROJ-Y"); err != nil || got.ProjectID != "PROJ-Y" {
+	if got, err := e.g.MoveChange(dev, c.ID, "PROJ-Y"); err != nil || got.ProjectID.Key != "PROJ-Y" {
 		t.Fatalf("X to Y: %+v, %v", got, err)
 	}
-	if got, _ := e.g.Change(dev, sub.ID); got.ProjectID != "PROJ-Y" {
+	if got, _ := e.g.Change(dev, sub.ID); got.ProjectID.Key != "PROJ-Y" {
 		t.Fatalf("sub-change at %s", got.ProjectID)
 	}
 
@@ -124,12 +125,12 @@ func TestProjectMoveGate(t *testing.T) {
 		t.Fatalf("Y to W without access: %v", err)
 	}
 	// ... which an administrator has
-	if got, err := e.g.MoveChange(admin, c.ID, "PROJ-W"); err != nil || got.ProjectID != "PROJ-W" {
+	if got, err := e.g.MoveChange(admin, c.ID, "PROJ-W"); err != nil || got.ProjectID.Key != "PROJ-W" {
 		t.Fatalf("admin Y to W: %+v, %v", got, err)
 	}
 	// a change with no methodology moves wherever the caller works
 	free := e.change(t, "PROJ-X", "")
-	if got, err := e.g.MoveChange(dev, free.ID, "PROJ-Z"); err != nil || got.ProjectID != "PROJ-Z" {
+	if got, err := e.g.MoveChange(dev, free.ID, "PROJ-Z"); err != nil || got.ProjectID.Key != "PROJ-Z" {
 		t.Fatalf("no methodology: %+v, %v", got, err)
 	}
 	// a sub-change of another methodology holds the family back
@@ -140,7 +141,7 @@ func TestProjectMoveGate(t *testing.T) {
 	if _, err := e.g.MoveChange(dev, p.ID, "PROJ-Y"); !errors.Is(err, graph.ErrInvalid) {
 		t.Fatalf("a sub-change of m2: %v", err)
 	}
-	if got, _ := e.g.Change(dev, p.ID); got.ProjectID != "PROJ-X" {
+	if got, _ := e.g.Change(dev, p.ID); got.ProjectID.Key != "PROJ-X" {
 		t.Fatalf("a refused family stays: %s", got.ProjectID)
 	}
 }
@@ -191,20 +192,20 @@ func TestMoveChangeRPC(t *testing.T) {
 		}
 		return out.Msg.Change
 	}
-	if c := create(dev, ""); c.ProjectId != "PROJ-X" {
+	if c := create(dev, ""); lnk.Of(c.ProjectId).Key != "PROJ-X" {
 		t.Fatalf("the active project of the caller: %s", c.ProjectId)
 	}
-	if c := create(authz.Principal{Subject: "dev", Org: "team-a"}, ""); c.ProjectId != access.DefaultProject {
+	if c := create(authz.Principal{Subject: "dev", Org: "team-a"}, ""); lnk.Of(c.ProjectId).Key != access.DefaultProject {
 		t.Fatalf("an empty claim is the root project: %s", c.ProjectId)
 	}
 	c := create(dev, "PROJ-Y")
-	if c.ProjectId != "PROJ-Y" {
+	if lnk.Of(c.ProjectId).Key != "PROJ-Y" {
 		t.Fatalf("the project of the request: %s", c.ProjectId)
 	}
 	mv := connect.NewRequest(&graphv1.MoveChangeRequest{ChangeId: c.Id, ProjectId: "PROJ-X"})
 	as(dev, mv)
 	moved, err := cl.MoveChange(ctx, mv)
-	if err != nil || moved.Msg.Change.ProjectId != "PROJ-X" {
+	if err != nil || lnk.Of(moved.Msg.Change.ProjectId).Key != "PROJ-X" {
 		t.Fatalf("move: %v %+v", err, moved)
 	}
 	bad := connect.NewRequest(&graphv1.MoveChangeRequest{ChangeId: c.Id, ProjectId: "PROJ-Z"})

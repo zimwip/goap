@@ -44,9 +44,9 @@ type NewChange struct {
 	BranchIntent domain.OptionIntent
 	// ParentID makes the change a sub-change of another one (see prepareSubChange).
 	ParentID domain.ChangeID
-	// OwnerOrg is the key of the unit responsible for the change (empty: the default organisation).
+	// OwnerOrg names the unit responsible for the change, its logical URL or its key (empty: the default organisation).
 	OwnerOrg string
-	// ProjectID is the key of the project this change acts in and its new nodes belong to (ADR 0039, 0091). A
+	// ProjectID names the project this change acts in (its logical URL or its key) and its new nodes belong to (ADR 0039, 0091). A
 	// change cannot be created without one: a sub-change inherits it from its parent when unset (and must stay
 	// within the parent's project when set), any other change names it, and an empty one is refused with
 	// ErrInvalid. The edges resolve a caller's active project (empty: the root project), the graph does not.
@@ -89,13 +89,13 @@ func (f ChangesFilter) Match(c domain.Change) bool {
 	if f.Namespace != "" && c.Namespace != f.Namespace {
 		return false
 	}
-	if f.OwnerOrg != "" && c.OwnerOrg != f.OwnerOrg {
+	if f.OwnerOrg != "" && !c.OwnerOrg.Names(f.OwnerOrg) {
 		return false
 	}
 	if len(f.Status) > 0 && !slices.Contains(f.Status, c.Status) {
 		return false
 	}
-	if f.Project != "" && c.ProjectID != f.Project {
+	if f.Project != "" && !c.ProjectID.Names(f.Project) {
 		return false
 	}
 	if f.Parent != "" && c.ParentID != f.Parent {

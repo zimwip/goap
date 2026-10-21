@@ -18,10 +18,11 @@ import (
 // both were created in the root project. Everything else, seeds included, is an ordinary change after it.
 //
 // It is idempotent: a graph that has every root is left alone; a graph that has only some of them is refused. The
-// graph runs it before the first change it opens (CreateChange); services call it at start, before serving.
+// graph runs it before the first change it opens (CreateChange); services call it at start, before serving. A graph
+// whose structures live in another graph (Graph.Directory, ADR 0154 §9) creates none.
 func (g *Graph) Bootstrap(ctx context.Context) error {
-	if g.booted.Load() {
-		return nil
+	if g.booted.Load() || g.Directory != nil {
+		return nil // the roots are another graph's (ADR 0154 §9)
 	}
 	err := g.repo.InTx(ctx, func(tx Tx) error { return g.bootstrap(ctx, tx) })
 	if errors.Is(err, ErrConflict) {
@@ -77,7 +78,7 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 		bases[st.Namespace] = base
 		c := &domain.Change{ID: domain.ChangeID(g.newID()), Title: "Bootstrap", Namespace: st.Namespace, Status: domain.ChangeApplied,
 			Intent:     "Create the roots of the structures every change and node version is placed in (ADR 0054)",
-			BaselineID: base.ID, Branch: domain.MainBranch, OwnerOrg: org.Root, ProjectID: proj.Root, CreatedAt: now}
+			BaselineID: base.ID, Branch: domain.MainBranch, OwnerOrg: g.StructureURL(org.Kind, org.Root), ProjectID: g.StructureURL(proj.Kind, proj.Root), CreatedAt: now}
 		if err := tx.PutChange(ctx, *c); err != nil {
 			return err
 		}
@@ -87,7 +88,7 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 		c := changes[st.Namespace]
 		n := domain.Node{ID: ids[st.Kind], Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Namespace: st.Namespace,
 			Key: st.Root, Type: st.Type, Properties: maps.Clone(st.Bootstrap), ChangeID: c.ID, Comment: c.Intent,
-			Owner: ids[domain.StructureOrganisation], Project: ids[domain.StructureProject], CreatedAt: now}
+			Owner: g.StructureURL(org.Kind, org.Root), Project: g.StructureURL(proj.Kind, proj.Root), CreatedAt: now}
 		if err := tx.PutNode(ctx, n); err != nil {
 			return err
 		}

@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/lib/typecat"
 )
 
@@ -364,7 +365,7 @@ func stateStats(head domain.Baseline, nodes []domain.Node, links []domain.Link) 
 	}
 	types := map[string]*typeAcc{}
 	var outs, ins, degrees, versions, props []int
-	owners, projects := map[domain.NodeID]bool{}, map[domain.NodeID]bool{}
+	owners, projects := map[lnk.URL]bool{}, map[lnk.URL]bool{}
 	for _, id := range ids {
 		n := live[id]
 		o, i := out[id], in[id]
@@ -383,10 +384,10 @@ func stateStats(head domain.Baseline, nodes []domain.Node, links []domain.Link) 
 			s.Isolated++
 			t.isolated++
 		}
-		if n.Owner != "" {
+		if !n.Owner.IsZero() {
 			owners[n.Owner] = true
 		}
-		if n.Project != "" {
+		if !n.Project.IsZero() {
 			projects[n.Project] = true
 		}
 	}

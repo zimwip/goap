@@ -192,7 +192,7 @@ func (c *Client) ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in gr
 	req := &graphv1.ImpactNodeCreateRequest{ChangeId: string(id), Key: in.Key, Type: in.Type, Props: pbconv.Struct(in.Properties), Owner: in.Owner,
 		Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution}
 	for _, l := range in.Links {
-		req.Links = append(req.Links, &graphv1.NodeLinkWrite{Type: l.Type, To: pbconv.RefToPB(l.To), Props: pbconv.Struct(l.Properties)})
+		req.Links = append(req.Links, &graphv1.NodeLinkWrite{Type: l.Type, To: pbconv.RefToPB(l.To), Target: pbconv.TargetToPB(l.Target), Props: pbconv.Struct(l.Properties)})
 	}
 	r, err := c.rpc.ImpactNodeCreate(ctx, connect.NewRequest(req))
 	if err != nil {
@@ -208,7 +208,7 @@ func nameToPB(n graphapi.NodeName) *graphv1.NodeName {
 func specToPB(c graphapi.NodeCreate) *graphv1.NodeCreateSpec {
 	s := &graphv1.NodeCreateSpec{Key: c.Key, Type: c.Type, Props: pbconv.Struct(c.Properties), Owner: c.Owner, Rationale: c.Rationale}
 	for _, l := range c.Links {
-		s.Links = append(s.Links, &graphv1.NodeLinkWrite{Type: l.Type, To: pbconv.RefToPB(l.To), Props: pbconv.Struct(l.Properties)})
+		s.Links = append(s.Links, &graphv1.NodeLinkWrite{Type: l.Type, To: pbconv.RefToPB(l.To), Target: pbconv.TargetToPB(l.Target), Props: pbconv.Struct(l.Properties)})
 	}
 	return s
 }
@@ -290,7 +290,7 @@ func (c *Client) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impac
 
 // ImpactLinkCreate implements engine.GraphPort.
 func (c *Client) ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l graphapi.LinkWrite, flow, execution string) (domain.Link, error) {
-	r, err := c.rpc.ImpactLinkCreate(ctx, connect.NewRequest(&graphv1.ImpactLinkCreateRequest{ChangeId: string(id), ChangeImpactId: string(impact), Type: l.Type, To: pbconv.RefToPB(l.To),
+	r, err := c.rpc.ImpactLinkCreate(ctx, connect.NewRequest(&graphv1.ImpactLinkCreateRequest{ChangeId: string(id), ChangeImpactId: string(impact), Type: l.Type, To: pbconv.RefToPB(l.To), Target: pbconv.TargetToPB(l.Target),
 		Props: pbconv.Struct(l.Properties), Flow: flow, Execution: execution}))
 	if err != nil {
 		return domain.Link{}, rpcerr.FromConnect(err)

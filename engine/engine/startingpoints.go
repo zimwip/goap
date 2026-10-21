@@ -134,7 +134,7 @@ func (e *Engine) StartingPoints(ctx context.Context, changeID domain.ChangeID, o
 	}
 	project := opts.Project
 	if project == "" {
-		project = ch.ProjectID
+		project = ch.ProjectID.Key
 	}
 	all, err := e.Store.List(ctx)
 	if err != nil {

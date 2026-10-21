@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/lib/access"
 )
 
 // On a change, attach_change and detach_change record proposals; accepted, they attach or detach the change as the
 // person (ADR 0106).
 func TestAttachAndDetachProposals(t *testing.T) {
 	e := newEnv(t, call(ToolAttachChange, `{"parent":"CHG-R","rationale":"it ships with R1"}`), `{"message":"proposed"}`)
-	e.graph.changes["CHG-R"] = domain.Change{ID: "CHG-R", Title: "R1", Methodology: "release-based", ProjectID: "PROJ-A", Status: domain.ChangeActive}
+	e.graph.changes["CHG-R"] = domain.Change{ID: "CHG-R", Title: "R1", Methodology: "release-based", ProjectID: access.ProjectURL("PROJ-A"), Status: domain.ChangeActive}
 	if _, _, err := e.send("put it in R1", changeCtx("CHG-D")); err != nil {
 		t.Fatal(err)
 	}

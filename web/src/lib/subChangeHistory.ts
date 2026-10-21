@@ -80,7 +80,7 @@ function describe(
       const what = [
         ...Object.keys((p["props"] as object) ?? {}),
         ...((p["unset"] as string[]) ?? []),
-        ...(p["ownerId"] ? ["owner"] : []),
+        ...(p["owner"] ? ["owner"] : []),
         ...(p["addLink"] || p["removeLink"] || p["updateLink"]
           ? ["links"]
           : []),

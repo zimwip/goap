@@ -2,9 +2,10 @@ package accesse2e
 
 import (
 	"context"
-	"github.com/zimwip/goap/graph/graphsvc"
 	"testing"
 	"time"
+
+	"github.com/zimwip/goap/graph/graphsvc"
 
 	"github.com/zimwip/goap/contracts/criticality"
 	"github.com/zimwip/goap/contracts/domain"
@@ -16,7 +17,7 @@ import (
 // winning, the compiled-in table where none does (ADR 0075 §3, design rule 3).
 func TestCriticalityPolicyResolution(t *testing.T) {
 	node := func(id, key, typ, owner string, props map[string]any) domain.Node {
-		return domain.Node{ID: domain.NodeID(id), Key: key, Type: typ, Namespace: "organisation", Properties: props, Owner: domain.NodeID(owner)}
+		return domain.Node{ID: domain.NodeID(id), Key: key, Type: typ, Namespace: "organisation", Properties: props, Owner: access.UnitURL(owner)}
 	}
 	pol := func(id, owner string, l criticality.Level, p criticality.Policy) domain.Node {
 		return node(id, "CP-"+id, access.NodeTypeCriticalityPolicy, owner, access.CriticalityProps(l, p))
@@ -24,12 +25,12 @@ func TestCriticalityPolicyResolution(t *testing.T) {
 	nodes := []domain.Node{
 		node("1", "ORG-DEFAULT", access.NodeTypeOrgUnit, "", nil), node("2", "DEP", access.NodeTypeOrgUnit, "", nil), node("3", "TEAM", access.NodeTypeOrgUnit, "", nil),
 		node("4", "OTHER", access.NodeTypeOrgUnit, "", nil),
-		pol("10", "1", criticality.C3, criticality.Policy{Oracles: []string{"human", "tool"}, SignatoryRole: "ciso", MaxDerogation: 48 * time.Hour}),
-		pol("11", "2", criticality.C3, criticality.Policy{Oracles: []string{"human"}, SignatoryRole: "dep_head", MaxDerogation: 24 * time.Hour}),
-		pol("12", "4", criticality.C1, criticality.Policy{Oracles: []string{"human"}}),
+		pol("10", "ORG-DEFAULT", criticality.C3, criticality.Policy{Oracles: []string{"human", "tool"}, SignatoryRole: "ciso", MaxDerogation: 48 * time.Hour}),
+		pol("11", "DEP", criticality.C3, criticality.Policy{Oracles: []string{"human"}, SignatoryRole: "dep_head", MaxDerogation: 24 * time.Hour}),
+		pol("12", "OTHER", criticality.C1, criticality.Policy{Oracles: []string{"human"}}),
 		// a policy whose owner is no unit of the organisation, and one that names no level, are problems
 		pol("13", "99", criticality.C2, criticality.Policy{}),
-		node("14", "CP-bad", access.NodeTypeCriticalityPolicy, "1", map[string]any{"level": "C9"}),
+		node("14", "CP-bad", access.NodeTypeCriticalityPolicy, "ORG-DEFAULT", map[string]any{"level": "C9"}),
 	}
 	links := []domain.Link{
 		{Type: access.LinkPartOf, From: domain.NodeRef{ID: "2"}, To: domain.NodeRef{ID: "1"}},
@@ -52,7 +53,7 @@ func TestCriticalityPolicyResolution(t *testing.T) {
 	if p := s.CriticalityPolicy("OTHER", criticality.C1); p.Accepts("tool") {
 		t.Errorf("OTHER holds its own C1: %+v", p)
 	}
-	c := domain.Change{OwnerOrg: "TEAM"}
+	c := domain.Change{OwnerOrg: access.UnitURL("TEAM")}
 	if p := s.CriticalityOf(c, criticality.C3); p.SignatoryRole != "dep_head" {
 		t.Errorf("a change is resolved from its unit: %+v", p)
 	}
@@ -76,7 +77,7 @@ func TestCriticalityPolicyFromTheGraph(t *testing.T) {
 	ctx := context.Background()
 	g, _ := setup(t)
 	dir := &access.Directory{Graph: g}
-	if p := dir.CriticalityFacet()(domain.Change{OwnerOrg: "TEAM"}, time.Time{}).(criticality.Policy); !p.Accepts("tool") {
+	if p := dir.CriticalityFacet()(domain.Change{OwnerOrg: access.UnitURL("TEAM")}, time.Time{}).(criticality.Policy); !p.Accepts("tool") {
 		t.Fatalf("before any snapshot: %+v", p)
 	}
 	if err := g.Bootstrap(ctx); err != nil {
@@ -96,7 +97,7 @@ func TestCriticalityPolicyFromTheGraph(t *testing.T) {
 	if err != nil || len(s.Problems) != 0 {
 		t.Fatalf("snapshot: %v %v", err, s.Problems)
 	}
-	c := domain.Change{OwnerOrg: "TEAM", Data: map[string]any{domain.DataCriticality: "C2"}}
+	c := domain.Change{OwnerOrg: access.UnitURL("TEAM"), Data: map[string]any{domain.DataCriticality: "C2"}}
 	if p := s.CriticalityOf(c, criticality.C2); p.SignatoryRole != "dep_head" || p.MaxDerogation != 12*time.Hour || p.Accepts("tool") {
 		t.Fatalf("resolved: %+v", p)
 	}

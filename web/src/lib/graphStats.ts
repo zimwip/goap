@@ -78,7 +78,7 @@ export function spread(d: Distribution | undefined): string {
 }
 
 /** The totals of the overview, every namespace added up. */
-export function overviewTotals(ns: NamespaceSummary[]): Required<Omit<NamespaceSummary, 'namespace' | 'types'>> {
+export function overviewTotals(ns: NamespaceSummary[]): Required<Omit<NamespaceSummary, 'namespace' | 'types' | 'source'>> {
   const t = { nodes: 0, versions: 0, linkRows: 0, changes: 0, baselines: 0, branches: 0, logEntries: 0 };
   for (const n of ns) {
     t.nodes += num(n.nodes);

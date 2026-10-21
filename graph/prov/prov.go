@@ -213,7 +213,7 @@ func (b *builder) change(c domain.Change) {
 	set(n, "goap:methodology", c.Methodology)
 	set(n, "goap:namespace", c.Namespace)
 	set(n, "goap:status", string(c.Status))
-	set(n, "goap:project", c.ProjectID)
+	set(n, "goap:project", c.ProjectID.String())
 	set(n, "goap:goal", c.Goal)
 	if len(c.Data) > 0 {
 		n["goap:data"] = c.Data
@@ -223,10 +223,11 @@ func (b *builder) change(c domain.Change) {
 	if c.ParentID != "" {
 		add(n, "goap:partOf", ref(changeIRI(c.ParentID)))
 	}
-	if c.OwnerOrg != "" {
-		unit := iri("unit", c.OwnerOrg)
+	if !c.OwnerOrg.IsZero() {
+		unit := iri("unit", c.OwnerOrg.Key)
 		u := b.node(unit, "prov:Agent", "prov:Organization")
-		set(u, "label", c.OwnerOrg)
+		set(u, "label", c.OwnerOrg.Key)
+		set(u, "goap:url", c.OwnerOrg.String())
 		add(n, "prov:wasAssociatedWith", ref(unit))
 	}
 	// the state the change started from (the empty state of a namespace's first change has no baseline, ADR 0056)

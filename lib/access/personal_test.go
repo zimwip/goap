@@ -17,11 +17,11 @@ func TestPersonalUnit(t *testing.T) {
 	if access.PersonalSubject("USR:alice") != "alice" || access.PersonalSubject("ORG-DEFAULT") != "" {
 		t.Fatal("PersonalSubject")
 	}
-	c := domain.Change{OwnerOrg: access.PersonalUnit("alice")}
+	c := domain.Change{OwnerOrg: access.UnitURL(access.PersonalUnit("alice"))}
 	if !access.IsPersonal(c) || !access.IsPersonalTo(c, "alice") || access.IsPersonalTo(c, "bob") || access.IsPersonalTo(c, "") {
 		t.Fatal("change personality")
 	}
-	if access.IsPersonal(domain.Change{OwnerOrg: "ORG-DEFAULT"}) {
+	if access.IsPersonal(domain.Change{OwnerOrg: access.UnitURL("ORG-DEFAULT")}) {
 		t.Fatal("a shared change is not personal")
 	}
 }

@@ -144,7 +144,7 @@ footer { font-size: 13px; color: var(--muted); }
       <div class="tier">
         <div class="mod m-contracts" data-module="contracts"><h3>contracts <span>depends on nothing</span></h3>
           <p>Protos' generated Go (<code>gen</code>), the pure model, and the graph's contract <code>graphapi</code>: the port the engine and the built-in MCPs call.</p>
-          <div class="pk">gen · domain · graphapi · authz · mcp · llm · journal · operations · risk · assess · verify · review</div></div>
+          <div class="pk">gen · domain · graphapi · lnk · authz · mcp · llm · journal · operations · risk · assess · verify · review</div></div>
       </div>
     </div>
     <div class="rule"><span class="chip m-contracts">contracts</span>←<span class="chip m-lib">lib</span>←<span class="chip m-graph">graph</span>/<span class="chip m-engine">engine</span>/<span class="chip m-mcp">mcp</span>/<span class="chip m-gateway">gateway</span>←<span class="chip m-platform">platform</span></div>
@@ -156,7 +156,7 @@ footer { font-size: 13px; color: var(--muted); }
     <div class="fig">
       <svg viewBox="0 0 940 600" role="img" aria-labelledby="rt-t rt-d">
         <title id="rt-t">Runtime services and flows</title>
-        <desc id="rt-d">The browser calls the gateway, which routes to graph, registry, engine, MCP hub and model gateway. The engine calls graph, registry, model gateway, MCP hub and its sandbox. The MCP hub calls connectors. Every service publishes its events on NATS through its outbox: the graph its changes, nodes and baselines (and the methodology registry's, carried by its commits), the engine its processes, the conversations, the hub, the model gateway, the preferences and the credentials theirs; the event stream, the indexer and the engine read them, and the event stream pushes them to the browser. The long runs (an import from a source, a snapshot import, an export) are jobs of the job service: the graph creates them for the person, workers (the graph itself, the importer services) claim and report on them, and the browser follows them over Server-Sent Events through the gateway; an import writes its changes through the graph.</desc>
+        <desc id="rt-d">The browser calls the gateway, which routes to graph, registry, engine, MCP hub and model gateway. The graph (the platform graph) forwards the calls on the content namespaces to the content graph, which reads the organisation, the projects and the domains from it; the platform graph delivers the policies, the organisation and the projects to every graph and every service (gateway, engine, registry, MCP hub, model gateway, indexer, event stream, conversations), itself included, the same way: each keeps them until the platform's baseline events on NATS say the organisation moved. The engine calls graph, registry, model gateway, MCP hub and its sandbox. The MCP hub calls connectors. Every service publishes its events on NATS through its outbox: the graph its changes, nodes and baselines (and the methodology registry's, carried by its commits), the engine its processes, the conversations, the hub, the model gateway, the preferences and the credentials theirs; the event stream, the indexer and the engine read them, and the event stream pushes them to the browser. The long runs (an import from a source, a snapshot import, an export) are jobs of the job service: the graph creates them for the person, workers (the graph itself, the importer services) claim and report on them, and the browser follows them over Server-Sent Events through the gateway; an import writes its changes through the graph.</desc>
         <defs>
           <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
         </defs>
@@ -201,6 +201,13 @@ footer { font-size: 13px; color: var(--muted); }
         <text class="lbl" x="130" y="294">methodology</text>
         <path class="w" d="M520 276V300H845V280" marker-end="url(#a)"/>
         <text class="lbl" x="700" y="294">llm actions</text>
+        <!-- two graph spaces (ADR 0154 §9): the platform graph forwards the calls on the content namespaces to the content
+             graph, which reads the organisation, the projects and the domains from it -->
+        <g class="m-graph"><rect class="box" x="20" y="96" width="190" height="56" rx="6"/>
+          <text class="t" x="115" y="118" text-anchor="middle">graph-content</text>
+          <text class="s" x="115" y="136" text-anchor="middle">the domains' content · :8092</text></g>
+        <path class="w" d="M240 210V124H214" marker-start="url(#a)" marker-end="url(#a)"/>
+        <text class="lbl" x="246" y="196">content ns</text>
         <!-- registry stores its nodes through the graph, reads domains -->
         <path class="w" d="M180 236H206" marker-end="url(#a)"/>
 
@@ -273,7 +280,9 @@ footer { font-size: 13px; color: var(--muted); }
       <thead><tr><th>Binary</th><th>Module</th><th>Port</th><th>What it runs</th></tr></thead>
       <tbody>
         <tr data-binary="gateway" data-service="gateway"><td><code>gateway</code></td><td><span class="chip m-gateway">gateway</span></td><td class="num">:8080</td><td>HTTP entry: sign-in, sessions, routing by service</td></tr>
-        <tr data-binary="graph" data-service="graph"><td><code>graph</code></td><td><span class="chip m-graph">graph</span></td><td class="num">:8081</td><td>the graph, changes, the domain registry, the import registry; PostgreSQL</td></tr>
+        <tr data-binary="graph" data-service="graph"><td><code>graph</code></td><td><span class="chip m-graph">graph</span></td><td class="num">:8081</td><td>the platform graph: platform, organisation, methodologies, their changes, the domain registry, the import registry; PostgreSQL; resolves the logical URLs of its sources, reading another graph service by key, and forwards the calls on the namespaces of the declared graph sources (<code>platform@Source</code> of kind <code>graph</code>, the content graph) to them and merges the namespace listings of every graph (ADR 0154)</td></tr>
+        <tr data-service="graph-bootstrap"><td><code>graph-bootstrap</code></td><td><span class="chip m-graph">graph</span></td><td class="num">–</td><td>the same binary run once as <code>graph bootstrap</code> before the graph service: the platform bootstrap (roots of the organisation and the projects, default policies, built-in MCPs, models, the sources of <code>GOAP_GRAPH_SOURCES</code>, dev seeds), then it exits; a content graph has nothing to bootstrap (ADR 0154 §9)</td></tr>
+        <tr data-service="graph-content"><td><code>graph-content</code></td><td><span class="chip m-graph">graph</span></td><td class="num">:8092</td><td>the same binary as the content graph (<code>GOAP_GRAPH_SPACE=content</code>): the domains' content (<code>alm</code>, <code>code</code>) and their changes, on a database of its own; reads the organisation, the projects and the domains from the platform graph, its policies refreshed by the platform's baseline events, as the platform graph refreshes its own (ADR 0154 §9)</td></tr>
         <tr data-binary="registry" data-service="registry"><td><code>registry</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8082</td><td>the methodology registry; reads the graph and its domains, no database</td></tr>
         <tr data-binary="engine" data-service="engine"><td><code>engine</code></td><td><span class="chip m-engine">engine</span></td><td class="num">:8083</td><td>runs and plans processes; PostgreSQL; starts the sandboxes</td></tr>
         <tr data-binary="modelgw" data-service="modelgw"><td><code>modelgw</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8084</td><td>every LLM call and its ledger; PostgreSQL</td></tr>

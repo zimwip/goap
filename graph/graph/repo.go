@@ -71,6 +71,11 @@ type Tx interface {
 	// of a node, one per version holding it, by id then version.
 	LinksFrom(ctx context.Context, refs []domain.NodeRef) ([]domain.Link, error)
 	LinksTo(ctx context.Context, id domain.NodeID) ([]domain.Link, error)
+	// LinksFromOfType is LinksFrom keeping the links of some types, and LinksToOfType LinksTo for the links entering a
+	// version (any version when ref.Version is 0) of some types: a hop of a navigation, read by the indexes of the
+	// links by source or target and type, never the whole sets.
+	LinksFromOfType(ctx context.Context, refs []domain.NodeRef, types []string) ([]domain.Link, error)
+	LinksToOfType(ctx context.Context, ref domain.NodeRef, types []string) ([]domain.Link, error)
 	// NodePage reads the page q asks of the node versions refs (a state), ordered by key, and LinkPage the page of the
 	// links between two of them, by type then id: the filter, the counts and the page are the store's, only the page
 	// is read (ADR 0140). q.Limit is set; q.Change is the caller's.

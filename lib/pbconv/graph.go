@@ -11,6 +11,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	graphv1 "github.com/zimwip/goap/contracts/gen/goap/graph/v1"
 	"github.com/zimwip/goap/contracts/graphapi"
+	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/lib/typecat"
 )
 
@@ -86,7 +87,7 @@ func NodeToPB(n domain.Node) *graphv1.Node {
 		Deleted: n.Deleted, ChangeId: string(n.ChangeID), CreatedAt: Time(n.CreatedAt),
 		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason, State: n.State,
 		ChangeImpact: string(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined,
-		Owner: string(n.Owner), Project: string(n.Project), Draft: n.IsDraft(), Origins: refsToPB(n.Origins)}
+		Owner: n.Owner.String(), Project: n.Project.String(), Draft: n.IsDraft(), Origins: refsToPB(n.Origins)}
 }
 
 func refsToPB(rs []domain.NodeRef) []*graphv1.NodeRef {
@@ -121,7 +122,7 @@ func NodeFromPB(n *graphv1.Node) domain.Node {
 		Deleted: n.Deleted, ChangeID: domain.ChangeID(n.ChangeId), CreatedAt: FromTime(n.CreatedAt),
 		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason, State: n.State,
 		ChangeImpact: domain.ChangeImpactID(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined,
-		Owner: domain.NodeID(n.Owner), Project: domain.NodeID(n.Project), Origins: refsFromPB(n.Origins)}
+		Owner: lnk.Of(n.Owner), Project: lnk.Of(n.Project), Origins: refsFromPB(n.Origins)}
 }
 
 func versionsFromPB(vs []int32) []domain.Version {
@@ -149,11 +150,34 @@ func NodesFromPB(ns []*graphv1.Node) []domain.Node {
 }
 
 func LinkToPB(l domain.Link) *graphv1.Link {
+	if l.External() {
+		return &graphv1.Link{Id: string(l.ID), Type: l.Type, From: RefToPB(l.From), Target: l.Target.String(), Props: Struct(l.Properties), ChangeId: string(l.ChangeID)}
+	}
 	return &graphv1.Link{Id: string(l.ID), Type: l.Type, From: RefToPB(l.From), To: RefToPB(l.To), Props: Struct(l.Properties), ChangeId: string(l.ChangeID)}
 }
 
 func LinkFromPB(l *graphv1.Link) domain.Link {
-	return domain.Link{ID: domain.LinkID(l.Id), Type: l.Type, From: RefFromPB(l.From), To: RefFromPB(l.To), Properties: Map(l.Props), ChangeID: domain.ChangeID(l.ChangeId)}
+	out := domain.Link{ID: domain.LinkID(l.Id), Type: l.Type, From: RefFromPB(l.From), To: RefFromPB(l.To), Properties: Map(l.Props), ChangeID: domain.ChangeID(l.ChangeId)}
+	if l.Target != "" {
+		out.Target, _ = lnk.Parse(l.Target) // a server's URL: parsed once when written
+	}
+	return out
+}
+
+// TargetFromPB reads the target URL of a link write: empty is none.
+func TargetFromPB(s string) (lnk.URL, error) {
+	if s == "" {
+		return lnk.URL{}, nil
+	}
+	return lnk.Parse(s)
+}
+
+// TargetToPB is the target URL of a link write, empty when none.
+func TargetToPB(u lnk.URL) string {
+	if u.IsZero() {
+		return ""
+	}
+	return u.String()
 }
 
 func LinksToPB(ls []domain.Link) []*graphv1.Link {
@@ -297,9 +321,9 @@ func ItemsFromPB(its []*graphv1.ChangeItem) []domain.ChangeItem {
 }
 
 func ChangeToPB(c domain.Change) *graphv1.Change {
-	return &graphv1.Change{Id: string(c.ID), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentId: string(c.ParentID), OwnerOrg: c.OwnerOrg, Status: string(c.Status),
+	return &graphv1.Change{Id: string(c.ID), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentId: string(c.ParentID), OwnerOrg: c.OwnerOrg.String(), Status: string(c.Status),
 		BaselineId: string(c.BaselineID), ResultBaselineId: string(c.ResultBaselineID), Data: Struct(c.Data), Items: ItemsToPB(c.Items), CreatedAt: Time(c.CreatedAt),
-		Branch: domain.BranchOf(c.Branch), Nodes: ChangeImpactsToPB(c.Nodes), ProjectId: c.ProjectID, Lifecycle: c.Lifecycle, State: c.State, Guardians: guardiansToPB(c.Guardians),
+		Branch: domain.BranchOf(c.Branch), Nodes: ChangeImpactsToPB(c.Nodes), ProjectId: c.ProjectID.String(), Lifecycle: c.Lifecycle, State: c.State, Guardians: guardiansToPB(c.Guardians),
 		DependsOn: changeIDsToPB(c.DependsOn), MethodologyVersion: c.MethodologyVersion, Seq: c.Seq}
 }
 
@@ -307,9 +331,9 @@ func ChangeFromPB(c *graphv1.Change) domain.Change {
 	if c == nil {
 		return domain.Change{}
 	}
-	return domain.Change{ID: domain.ChangeID(c.Id), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentID: domain.ChangeID(c.ParentId), OwnerOrg: c.OwnerOrg, Status: domain.ChangeStatus(c.Status),
+	return domain.Change{ID: domain.ChangeID(c.Id), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentID: domain.ChangeID(c.ParentId), OwnerOrg: lnk.Of(c.OwnerOrg), Status: domain.ChangeStatus(c.Status),
 		BaselineID: domain.BaselineID(c.BaselineId), ResultBaselineID: domain.BaselineID(c.ResultBaselineId), Data: Map(c.Data), Items: ItemsFromPB(c.Items), CreatedAt: FromTime(c.CreatedAt),
-		Branch: c.Branch, Nodes: ChangeImpactsFromPB(c.Nodes), ProjectID: c.ProjectId, Lifecycle: c.Lifecycle, State: c.State, Guardians: guardiansFromPB(c.Guardians),
+		Branch: c.Branch, Nodes: ChangeImpactsFromPB(c.Nodes), ProjectID: lnk.Of(c.ProjectId), Lifecycle: c.Lifecycle, State: c.State, Guardians: guardiansFromPB(c.Guardians),
 		DependsOn: ChangeIDsFromPB(c.DependsOn), MethodologyVersion: c.MethodologyVersion, Seq: c.Seq}
 }
 

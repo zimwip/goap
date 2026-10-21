@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/lib/outbox"
 )
 
@@ -220,7 +221,7 @@ func scanNode(row pgx.Row) (domain.Node, error) {
 	}
 	n.ID, n.Version, n.Properties, n.ChangeID = domain.NodeID(id), domain.Version(version), props(p), domain.ChangeID(str(change))
 	n.ChangeImpact = domain.ChangeImpactID(str(cnode))
-	n.Owner, n.Project = domain.NodeID(owner), domain.NodeID(project)
+	n.Owner, n.Project = lnk.Of(owner), lnk.Of(project)
 	return n, nil
 }
 
@@ -448,12 +449,17 @@ func (t *pgTx) queryLinks(ctx context.Context, q string, args ...any) ([]domain.
 		var fv, tv int
 		var p []byte
 		var change *string
-		if err := rows.Scan(&id, &l.Type, &from, &fv, &to, &tv, &p, &change); err != nil {
+		var url string
+		if err := rows.Scan(&id, &l.Type, &from, &fv, &to, &tv, &p, &change, &url); err != nil {
 			return nil, err
 		}
 		l.ID, l.Properties, l.ChangeID = domain.LinkID(id), props(p), domain.ChangeID(str(change))
 		l.From = domain.NodeRef{ID: domain.NodeID(from), Version: domain.Version(fv)}
-		l.To = domain.NodeRef{ID: domain.NodeID(to), Version: domain.Version(tv)}
+		if to != "" {
+			l.To = domain.NodeRef{ID: domain.NodeID(to), Version: domain.Version(tv)}
+		} else if l.Target, err = lnk.Parse(url); err != nil {
+			return nil, fmt.Errorf("link %s: %w", id, err)
+		}
 		out = append(out, l)
 	}
 	return out, rows.Err()
@@ -807,7 +813,7 @@ func (t *pgTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain
 
 func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 	if n.Version == 1 {
-		if _, err := t.tx.Exec(ctx, `INSERT INTO node (id, namespace, key, type, latest, project_id) VALUES ($1, $2, $3, $4, 1, $5)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type, nullUUID(string(n.Project))); err != nil {
+		if _, err := t.tx.Exec(ctx, `INSERT INTO node (id, namespace, key, type, latest, project) VALUES ($1, $2, $3, $4, 1, $5)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type, n.Project.String()); err != nil {
 			return mapErr(err, "node "+n.Key)
 		}
 	} else {
@@ -824,7 +830,7 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 		parents[i] = int32(pv)
 	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node_version", nodeVersionColumns, ""),
-		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), originsJSON(n.Origins), n.Committed)
+		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Owner.String(), originsJSON(n.Origins), n.Committed)
 	return mapErr(err, "node "+n.Ref().String())
 }
 
@@ -857,14 +863,16 @@ func (t *pgTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, error) 
 }
 
 func (t *pgTx) PutLink(ctx context.Context, l domain.Link) error {
+	to, tv, url := linkTarget(l)
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("link", linkColumns, ""),
-		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), string(l.To.ID), int(l.To.Version), jsonb(l.Properties), nullUUID(string(l.ChangeID)), nil)
+		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), to, tv, jsonb(l.Properties), nullUUID(string(l.ChangeID)), nil, url)
 	return mapErr(err, "link")
 }
 
 func (t *pgTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, l domain.Link) error {
+	to, tv, url := linkTarget(l)
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("link", linkColumns, ""),
-		string(row), l.Type, string(from.ID), int(from.Version), string(l.To.ID), int(l.To.Version), jsonb(l.Properties), nullUUID(string(l.ChangeID)), string(l.ID))
+		string(row), l.Type, string(from.ID), int(from.Version), to, tv, jsonb(l.Properties), nullUUID(string(l.ChangeID)), string(l.ID), url)
 	return mapErr(err, "link")
 }
 
@@ -1176,6 +1184,19 @@ func (t *pgTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, 
 
 func (t *pgTx) LinksFrom(ctx context.Context, refs []domain.NodeRef) ([]domain.Link, error) {
 	q, args := dialectPG.sqlLinksFrom(refs)
+	return t.queryLinks(ctx, q, args...)
+}
+
+func (t *pgTx) LinksFromOfType(ctx context.Context, refs []domain.NodeRef, types []string) ([]domain.Link, error) {
+	q, args := dialectPG.sqlLinksFromOfType(refs, types)
+	return t.queryLinks(ctx, q, args...)
+}
+
+func (t *pgTx) LinksToOfType(ctx context.Context, ref domain.NodeRef, types []string) ([]domain.Link, error) {
+	if types == nil {
+		types = []string{}
+	}
+	q, args := dialectPG.sqlLinksToOfType(ref, types)
 	return t.queryLinks(ctx, q, args...)
 }
 

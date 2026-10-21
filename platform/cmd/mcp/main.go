@@ -61,7 +61,8 @@ func main() {
 	if secret, u := platform.Env("GOAP_MODEL_PROXY_SECRET", ""), platform.Env("GOAP_MODEL_PROXY_URL", ""); secret != "" && u != "" {
 		svc.Models = &mcpsvc.ModelEndpoint{URL: u, Secret: []byte(secret)}
 	}
-	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphClient, Reader: reader})
+	directory := &access.Directory{Graph: graphClient, Reader: reader}
+	iam, err := access.NewAuthorizer(directory)
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}
@@ -81,6 +82,13 @@ func main() {
 	// connectors whose lease ran out
 	events := platform.OptionalEvents(ctx, log)
 	defer events.Close()
+	// the policies, the organisation and the projects the platform graph delivers, read again when its baseline
+	// events say the organisation moved (ADR 0154 §9)
+	if events != nil {
+		if err := directory.FollowEvents(events); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+	}
 	outbox.Start(ctx, svc.Emit(outbox.NATS(events)), log)
 	go svc.Watch(ctx, 0)
 	svc.KeepRegistered(ctx, connectors)

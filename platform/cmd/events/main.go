@@ -23,7 +23,15 @@ func main() {
 	}
 	defer bus.Close()
 	hc := platform.H2CClient()
-	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: graphclient.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)})
+	directory := &access.Directory{Graph: graphclient.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)}
+	// the policies, the organisation and the projects the platform graph delivers, read again when its baseline
+	// events say the organisation moved (ADR 0154 §9)
+	if bus != nil {
+		if err := directory.FollowEvents(bus); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+	}
+	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}

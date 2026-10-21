@@ -168,10 +168,10 @@ func (s *Service) runnable(ctx context.Context, p authz.Principal, project, chan
 		if err != nil {
 			return c, err
 		}
-		if ch.ProjectID != "" {
-			c.project = ch.ProjectID
+		if !ch.ProjectID.IsZero() {
+			c.project = ch.ProjectID.Key
 		}
-		cv := &changeView{ID: string(ch.ID), Title: clip(ch.Title, 200), Methodology: ch.Methodology, Namespace: ch.Namespace, Project: ch.ProjectID,
+		cv := &changeView{ID: string(ch.ID), Title: clip(ch.Title, 200), Methodology: ch.Methodology, Namespace: ch.Namespace, Project: ch.ProjectID.Key,
 			Status: string(ch.Status), Lifecycle: ch.Lifecycle, State: ch.State}
 		c.change = cv
 		active, err := s.Engine.Active(authz.With(ctx, p))
@@ -544,7 +544,7 @@ func (s *Service) Confirm(ctx context.Context, in ConfirmInput) (convsvc.Message
 		if !startable(ch.Status) {
 			return convsvc.Message{}, fmt.Errorf("%w: change %q is %s", ErrStale, changeID, ch.Status)
 		}
-		project = ch.ProjectID
+		project = ch.ProjectID.Key
 	}
 	p.Project = project
 	ctx = authz.With(ctx, p)

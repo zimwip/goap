@@ -119,7 +119,7 @@ func (t *turn) frame(ctx context.Context) Frame {
 		if err != nil {
 			t.changeNote = err.Error()
 		} else {
-			t.changeMethodology, t.changeProject = ch.Methodology, ch.ProjectID
+			t.changeMethodology, t.changeProject = ch.Methodology, ch.ProjectID.Key
 			t.changeOK = true
 		}
 	}

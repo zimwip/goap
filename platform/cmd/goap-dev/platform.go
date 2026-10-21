@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/events"
 	"github.com/zimwip/goap/engine/engine"
 	"github.com/zimwip/goap/graph/indexersvc"
@@ -62,7 +64,15 @@ func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platfor
 	indexer.Republish = func(ctx context.Context) (int, error) { return g.Republish(ctx, indexSink) }
 	// the events of the graph go through its outbox (ADR 0136), delivered in process: to the index, the event stream of
 	// the web and the triggers (late bound: they need the engine)
-	relay := g.Observe(outbox.Sinks{indexSink,
+	relay := g.Observe(outbox.Sinks{
+		// the organisation moved: the directory reads its snapshot again (ADR 0154 §9)
+		outbox.SinkFunc(func(_ context.Context, m outbox.Message) error {
+			if m.Subject == baselineMain {
+				gp.directory.Moved(m.Data)
+			}
+			return nil
+		}),
+		indexSink,
 		outbox.SinkFunc(func(ctx context.Context, m outbox.Message) error {
 			rp.bus.Ingest(m.Subject, m.Data, platform.StampOf(ctx))
 			return nil
@@ -130,3 +140,6 @@ func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platfor
 	models := &modelgw.AnthropicProxy{Service: gw, Secret: []byte(proxySecret)}
 	return &platformPart{gw: gw, indexer: indexer, indexSink: indexSink, hub: hub, connectors: connectors, connToken: connectorToken, models: models}, nil
 }
+
+// baselineMain is the subject of the baseline events of the main branches.
+var baselineMain = fmt.Sprintf(domain.SubjectBaselineAdvanced, domain.MainBranch)

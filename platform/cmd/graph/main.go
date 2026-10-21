@@ -32,6 +32,8 @@ import (
 	"github.com/zimwip/goap/graph/smarttagsvc"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/def"
+	"github.com/zimwip/goap/lib/domainclient"
+	"github.com/zimwip/goap/lib/graphclient"
 	"github.com/zimwip/goap/lib/identity"
 	"github.com/zimwip/goap/lib/jobkit"
 	"github.com/zimwip/goap/lib/llmcfg"
@@ -74,7 +76,27 @@ func main() {
 	verify.Register()
 	log := platform.Logger("graph")
 	defer telemetry.Setup(context.Background(), log, "graph")(context.Background())
+	// two graph spaces (ADR 0154 §9): the platform graph (the default) holds the platform, the organisation and the
+	// methodologies, serves the domain registry and forwards the calls on the namespaces of GOAP_GRAPH_ROUTES to the
+	// graphs holding them; a content graph (GOAP_GRAPH_SPACE=content) holds the domains' content and reads the
+	// organisation, the projects and the domains from the platform graph at GOAP_PLATFORM_GRAPH_URL
+	content := platform.Env("GOAP_GRAPH_SPACE", "platform") == "content"
+	platformURL := os.Getenv("GOAP_PLATFORM_GRAPH_URL")
+	if content && platformURL == "" {
+		platform.Fatal(log, "graph space", fmt.Errorf("a content graph needs GOAP_PLATFORM_GRAPH_URL"))
+	}
+	// `graph bootstrap` (ADR 0154 §9): the platform bootstrap of graphsvc.Boot (the roots of the organisation and the
+	// projects, the default policies, the built-in MCPs, the models, the sources of GOAP_GRAPH_SOURCES, the dev seeds of
+	// GOAP_GRAPH_SEED) run once against the database, then the command exits; the service itself bootstraps nothing
+	// unless GOAP_GRAPH_BOOTSTRAP=1 (and always on a memory store, which no other process reaches). A content graph has
+	// nothing to bootstrap: its roots are the platform graph's.
+	bootstrapOnly := len(os.Args) > 1 && os.Args[1] == "bootstrap"
+	sources, err := graphsvc.ParseSources(os.Getenv("GOAP_GRAPH_SOURCES"))
+	if err != nil {
+		platform.Fatal(log, "graph sources", err)
+	}
 	var repo graph.Repo = graph.NewMemory()
+	memory := true
 	var domainStore domainsvc.Store = domainsvc.NewMemoryStore()
 	var smartTagStore smarttagsvc.Store = smarttagsvc.NewMemoryStore()
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
@@ -89,6 +111,10 @@ func main() {
 			platform.Fatal(log, "migrate smart tags", err)
 		}
 		repo = graph.NewPostgres(pool)
+		if err := graph.CheckReferences(ctx, stdlib.OpenDBFromPool(pool)); err != nil {
+			platform.Fatal(log, "database", err)
+		}
+		memory = false
 		domainStore = domainsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
 		smartTagStore = smarttagsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
 		srv.Readiness(pool.Ping)
@@ -103,6 +129,7 @@ func main() {
 	g.EndUser = graphsvc.EndUser         // the person the events of the changes are for (ADR 0114)
 	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
 	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
+	g.Resolvers = graphsvc.Resolvers()   // the sources of the logical URLs beyond its namespaces (ADR 0154)
 	// the events of the graph (changes, nodes, baselines) go through its outbox to the bus (ADR 0136)
 	outbox.Start(ctx, g.Observe(outbox.NATS(events)), log)
 	// the graph judges nodes by the types of the published domains (ADR 0012): the domain registry served here is the
@@ -117,9 +144,22 @@ func main() {
 			log.Error("type catalogue", "domain", r.Domain.Name, "err", err)
 		}
 	}
+	if content {
+		// the domains are the platform graph's: read from its registry, reloaded on its events
+		types = typecat.NewLive(domainclient.NewClient(platform.H2CClient(), platformURL, telemetry.ClientOptions()...).Domains)
+		for _, subject := range []string{"goap.registry.domain.published", "goap.registry.domain.deleted"} {
+			if err := events.Subscribe(subject, func([]byte) {
+				if err := types.Reload(context.Background()); err != nil {
+					log.Error("type catalogue", "err", err)
+				}
+			}); err != nil {
+				platform.Fatal(log, "subscribe", err)
+			}
+		}
+	}
 	g.Types = func() graph.TypeCatalog { return types.Get() }
 	// every start publishes the domain versions of GOAP_DOMAINS_DIR not stored yet (ADR 0113)
-	if dir := platform.Env("GOAP_DOMAINS_DIR", "domains"); dir != "" {
+	if dir := platform.Env("GOAP_DOMAINS_DIR", "domains"); dir != "" && !content {
 		system := authz.With(ctx, authz.System("graph", access.RoleAdmin))
 		if doms, err := domains.SeedDomains(system, dir); err != nil {
 			log.Error("import domains", "dir", dir, "err", err)
@@ -127,13 +167,27 @@ func main() {
 			log.Info("domains imported", "dir", dir, "domains", doms)
 		}
 	}
-	// the roots of the organisation and of the projects, before serving (ADR 0054): the structures are tagged by the
-	// built-in organisation domain, known before the catalogue loads the others (graphsvc.Boot repeats it, a no-op)
-	if err := g.Bootstrap(ctx); err != nil {
-		platform.Fatal(log, "bootstrap", err)
+	// the hooks of the graph are set before the seeds start (they run in the background, and write through them).
+	// The platform graph delivers the policies, the organisation and the projects to every graph, itself included, the
+	// same way (ADR 0154 §9): a directory over the platform graph (this one in process, else its client) keeps its
+	// snapshot until the platform's baseline events say the organisation moved
+	var source access.Graph = g
+	if content {
+		// the organisation and the projects are the platform graph's: its directory places the changes and the versions
+		// of this graph
+		source = graphclient.NewClient(platform.H2CClient(), platformURL, telemetry.ClientOptions()...)
 	}
-	// the hooks of the graph are set before the seeds start (they run in the background, and write through them)
-	directory := &access.Directory{Graph: g}
+	directory := &access.Directory{Graph: source}
+	if events != nil {
+		// read once, then again when the organisation moves; a lost event is caught up after access.FollowAge. No bus:
+		// the head is asked at each read
+		if err := directory.FollowEvents(events); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+	}
+	if content {
+		g.Directory = directory
+	}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
@@ -142,6 +196,7 @@ func main() {
 	g.ChangeAuthorizer = graphsvc.ChangeTransitionAuthorizer(authorizer)
 	g.ProjectMoveGate = graphsvc.ProjectMoveGate(authorizer, directory)
 	g.MethodologyGate = graphsvc.MethodologyGate(directory)
+	g.ProjectSources = directory.ProjectSources // where each project reads the sources of its URLs (ADR 0154 §8)
 	g.ItemAuthorizer = graphsvc.ItemAuthorizer(authorizer, directory.CriticalityResolver())
 	g.SeatAuthorizer = graphsvc.SeatAuthorizer(authorizer)
 	g.ItemPolicy = criticality.ItemPolicy(directory.CriticalityResolver()) // the oracle and the lifetime a level accepts (ADR 0075 §3)
@@ -149,7 +204,7 @@ func main() {
 	// the history of a change (ADR 0109): no registry here, so no step relies on another for its standing
 	g.LogFacets = graphsvc.LogFacets(nil)
 	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, access.ProjectScopeValidator{}, access.ProjectOwnerValidator{},
-		llmcfg.ProtectedAliasValidator{}}
+		llmcfg.ProtectedAliasValidator{}, graphsvc.PlatformSourceValidator{}}
 	// the roles a methodology allows each operation to (ADR 0103, 0138), asked of the methodology registry: without
 	// them, an operation on a change would be the administrators' only
 	registry := registrysvc.NewClient(&http.Client{Timeout: 30 * time.Second}, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), telemetry.ClientOptions()...)
@@ -180,27 +235,66 @@ func main() {
 			return err
 		}
 	}
-	go loadTypes(ctx, log, types, need, func() {
+	opts.Sources = sources
+	boot := func() error {
 		// the model gateway configuration (providers, models, aliases) is graph data: seeded when the graph has none
 		var err error
 		if opts.Models, err = modelgw.BootConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), platform.NewSecrets()); err != nil {
 			log.Error("models config", "err", err)
 		}
 		// the same bootstrap as every composition (ADR 0071), once the type catalogue holds the domains the seeds write to
-		if r, err := graphsvc.Boot(ctx, g, opts); err != nil {
-			log.Error("boot", "err", err)
-		} else {
-			log.Info("platform bootstrapped", "access", r.Access, "builtins", r.Builtins, "models", r.Models)
+		r, err := graphsvc.Boot(ctx, g, opts)
+		if err == nil {
+			log.Info("platform bootstrapped", "access", r.Access, "builtins", r.Builtins, "models", r.Models, "sources", r.Sources)
 		}
-	})
+		return err
+	}
+	switch {
+	case bootstrapOnly && content:
+		log.Info("a content graph holds no roots nor platform data: nothing to bootstrap")
+		return
+	case bootstrapOnly:
+		loadTypes(ctx, log, types, need, func() {
+			if err := boot(); err != nil {
+				platform.Fatal(log, "boot", err)
+			}
+		})
+		// the events of the bootstrap stay in the outbox: the service delivers them
+		return
+	case content:
+		// nothing to seed: the platform graph holds the platform data
+		go loadTypes(ctx, log, types, nil, func() {})
+	case memory || platform.Env("GOAP_GRAPH_BOOTSTRAP", "") == "1":
+		go loadTypes(ctx, log, types, need, func() {
+			if err := boot(); err != nil {
+				log.Error("boot", "err", err)
+			}
+		})
+	default:
+		// bootstrapped by `graph bootstrap`; the catalogue is loaded all the same
+		go loadTypes(ctx, log, types, nil, func() {})
+	}
 	domains.Authz = authorizer
 	// the job service (ADR 0149): the exports, the snapshot imports and the imports from a source are its jobs; this
 	// process creates them with the services' token and runs the graph's kinds as a worker
 	jobs := jobkit.NewClient(platform.H2CClient(), platform.Env("GOAP_JOBS_URL", "http://localhost:8091"), os.Getenv("GOAP_JOB_TOKEN"), telemetry.ClientOptions()...)
 	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor(), Projects: directory.MayAccessProject, Stopped: directory.ProjectStopped,
-		Jobs: jobs, Demo: devseed.DemoLoader(directory)} // the "Load demo data" setting; the alm domain must be published
+		Jobs: jobs}
+	path, graphService := graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), graphHandler.Positions(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...)
+	if content {
+		// the jobs, the domain registry, the smart tags and the imports are the platform graph's (a job of a content
+		// namespace, a smart tag of its versions: steps to come of ADR 0154)
+		srv.Mount(path, graphService)
+		if err := srv.Run(); err != nil {
+			platform.Fatal(log, "server", err)
+		}
+		return
+	}
+	graphHandler.Demo = devseed.DemoLoader(directory) // the "Load demo data" setting; the alm domain must be published
 	go (&jobkit.Worker{Queue: jobs, ID: jobkit.WorkerID("graph"), Kinds: graphHandler.JobRunners(), Log: log}).Run(ctx)
-	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), graphHandler.Positions(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
+	// the calls on the namespaces other graphs hold go to them, the declared graph sources driving them (ADR 0154 §9)
+	graphService = &graphsvc.Router{Local: graphService, Sources: g.Sources, LocalSource: graphsvc.PlatformSource, Client: platform.H2CClient(), HasChange: g.HasChange}
+	srv.Mount(path, graphService)
 	srv.Mount(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: domains}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	smartTags := &smarttagsvc.Service{Store: smartTagStore, Exists: smarttagsvc.VersionsExist(g.Node)}
 	srv.Mount(smarttagv1connect.NewSmartTagServiceHandler(&smarttagsvc.Handler{Service: smartTags}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))

@@ -24,6 +24,7 @@ type ChangePage struct {
 // outside the transaction.
 func (g *Graph) ChangesPage(ctx context.Context, f ChangesFilter, limit int, cursor string, keep func(domain.Change) bool) (p ChangePage, err error) {
 	limit = pageLimit(limit)
+	f = g.scopeFilter(f)
 	var heads []domain.Change
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		heads, err = tx.ChangeHeads(ctx, f)

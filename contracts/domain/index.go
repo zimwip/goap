@@ -49,12 +49,15 @@ type NodeEvent struct {
 // tells which node versions became the head of the branch. Only a baseline of main
 // carries it (the index follows main); the baseline of another branch names itself.
 type BaselineEvent struct {
-	ID      BaselineID         `json:"id"`
-	Branch  string             `json:"branch"`
-	Parent  BaselineID         `json:"parent,omitempty"`
-	Set     map[NodeID]Version `json:"set,omitempty"`
-	Removed []NodeID           `json:"removed,omitempty"`
-	Time    time.Time          `json:"time"`
+	ID BaselineID `json:"id"`
+	// Namespace is the namespace of the baseline: a reader of one namespace (the policies of the organisation, ADR
+	// 0154 §9) follows its events only.
+	Namespace string             `json:"namespace,omitempty"`
+	Branch    string             `json:"branch"`
+	Parent    BaselineID         `json:"parent,omitempty"`
+	Set       map[NodeID]Version `json:"set,omitempty"`
+	Removed   []NodeID           `json:"removed,omitempty"`
+	Time      time.Time          `json:"time"`
 }
 
 // ChangeDocEvent is what the index needs to know of a change (ADR 0095): the header fields it searches and filters on

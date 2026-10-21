@@ -93,6 +93,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import NotFound from '../../shell/NotFound.svelte';
   import { loadMethodology, published } from '../../stores/catalog.svelte';
   import { goalInfo } from '../../changeGoal';
+  import { refKey } from '../../lnk';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -373,7 +374,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   let pointsMethodology = $state('');
   const methodologyChoices = $derived(change && !change.methodology ? (applicable.names ?? []) : []);
   $effect(() => {
-    if (change && !change.methodology) untrack(() => void loadApplicable(change?.projectId || rootProject()));
+    if (change && !change.methodology) untrack(() => void loadApplicable(refKey(change?.projectId) || rootProject()));
   });
   $effect(() => {
     void selected;
@@ -1088,7 +1089,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
                   status: change.status,
                   lifecycle: change.lifecycle,
                   state: change.state,
-                  project: change.projectId,
+                  project: refKey(change.projectId),
                   methodology: change.methodology,
                   namespace: change.namespace,
                   parentId: change.parentId,
@@ -1269,8 +1270,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         <dl class="meta">
           <dt>ID</dt><dd><code>{ch.id}</code></dd>
           {#if ch.namespace}<dt>Namespace</dt><dd>{ch.namespace}</dd>{/if}
-          {#if ch.projectId}<dt>Project</dt><dd><code>{ch.projectId}</code></dd>{/if}
-          {#if ch.ownerOrg}<dt>Owner unit</dt><dd><code>{ch.ownerOrg}</code></dd>{/if}
+          {#if ch.projectId}<dt>Project</dt><dd><code title={ch.projectId}>{refKey(ch.projectId)}</code></dd>{/if}
+          {#if ch.ownerOrg}<dt>Owner unit</dt><dd><code title={ch.ownerOrg}>{refKey(ch.ownerOrg)}</code></dd>{/if}
           {#if ch.parentId}
             <dt>Parent change</dt>
             <dd><button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: ch.parentId ?? '' } })}>{shortId(ch.parentId)}</button></dd>
@@ -1286,7 +1287,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
                 </select>
                 <button type="button" class="small primary" disabled={!adoptMethodology || adopting} onclick={() => void adopt()}>Follow it</button>
               {:else if applicable.names}
-                <span class="hint">None: the project {ch.projectId || rootProject()} names no methodology to choose from.</span>
+                <span class="hint">None: the project {refKey(ch.projectId) || rootProject()} names no methodology to choose from.</span>
               {:else}
                 <span class="hint">None yet: reading the methodologies of the project…</span>
               {/if}
@@ -1526,7 +1527,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
               {#each subs as s (s.id)}
                 <li>
                   <button type="button" class="link" onclick={() => openTab({ kind: 'change', params: { id: s.id ?? '' } })}>{s.title || shortId(s.id)}</button>
-                  {#if s.ownerOrg}<code>{s.ownerOrg}</code>{/if}
+                  {#if s.ownerOrg}<code title={s.ownerOrg}>{refKey(s.ownerOrg)}</code>{/if}
                   <StatusBadge status={s.status} />
                 </li>
               {/each}

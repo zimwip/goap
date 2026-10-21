@@ -169,7 +169,7 @@ func (t *turn) searchChanges(ctx context.Context, a args) (any, error) {
 	}
 	var hits []changeHit
 	for _, c := range cs {
-		if !slices.Contains(projects, c.ProjectID) || (access.IsPersonal(c) && !access.IsPersonalTo(c, t.p.Subject)) {
+		if !slices.Contains(projects, c.ProjectID.Key) || (access.IsPersonal(c) && !access.IsPersonalTo(c, t.p.Subject)) {
 			continue
 		}
 		score := searchScore(words, c)
@@ -177,7 +177,7 @@ func (t *turn) searchChanges(ctx context.Context, a args) (any, error) {
 			continue
 		}
 		hits = append(hits, changeHit{ChangeID: string(c.ID), Title: clip(c.Title, 200), Intent: clip(c.Intent, 200), Status: string(c.Status),
-			State: c.State, Methodology: c.Methodology, Project: c.ProjectID, Score: score})
+			State: c.State, Methodology: c.Methodology, Project: c.ProjectID.Key, Score: score})
 	}
 	slices.SortStableFunc(hits, func(x, y changeHit) int {
 		if x.Score != y.Score {
