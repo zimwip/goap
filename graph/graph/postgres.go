@@ -1171,6 +1171,19 @@ func (t *pgTx) LinksFrom(ctx context.Context, refs []domain.NodeRef) ([]domain.L
 	return t.queryLinks(ctx, q, args...)
 }
 
+func (t *pgTx) LinksFromOfType(ctx context.Context, refs []domain.NodeRef, types []string) ([]domain.Link, error) {
+	q, args := dialectPG.sqlLinksFromOfType(refs, types)
+	return t.queryLinks(ctx, q, args...)
+}
+
+func (t *pgTx) LinksToOfType(ctx context.Context, ref domain.NodeRef, types []string) ([]domain.Link, error) {
+	if types == nil {
+		types = []string{}
+	}
+	q, args := dialectPG.sqlLinksToOfType(ref, types)
+	return t.queryLinks(ctx, q, args...)
+}
+
 func (t *pgTx) LinksTo(ctx context.Context, id domain.NodeID) ([]domain.Link, error) {
 	q, args := dialectPG.sqlLinksTo(domain.NodeRef{ID: id})
 	return t.queryLinks(ctx, q, args...)

@@ -119,8 +119,8 @@ CREATE TABLE link (
     FOREIGN KEY (to_id, to_version) REFERENCES node_version(node_id, version),
     CHECK ((to_id IS NULL AND to_version IS NULL) = (to_url <> ''))
 );
-CREATE INDEX link_from ON link (from_id, from_version);
-CREATE INDEX link_to ON link (to_id, to_version);
+CREATE INDEX link_from ON link (from_id, from_version, type);
+CREATE INDEX link_to ON link (to_id, to_version, type);
 CREATE INDEX link_url ON link (to_url) WHERE to_url <> '';
 CREATE INDEX link_change ON link (change_id);
 

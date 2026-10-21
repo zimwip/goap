@@ -1029,6 +1029,26 @@ func (t *memTx) LinksFrom(_ context.Context, refs []domain.NodeRef) ([]domain.Li
 	return out, nil
 }
 
+func (t *memTx) LinksFromOfType(ctx context.Context, refs []domain.NodeRef, types []string) ([]domain.Link, error) {
+	ls, _ := t.LinksFrom(ctx, refs)
+	return ofTypes(ls, types), nil
+}
+
+func (t *memTx) LinksToOfType(_ context.Context, ref domain.NodeRef, types []string) ([]domain.Link, error) {
+	var out []domain.Link
+	for _, l := range ofTypes(t.entering(ref.ID, nil), types) {
+		if ref.Version == 0 || l.To.Version == ref.Version {
+			out = append(out, l)
+		}
+	}
+	return out, nil
+}
+
+// ofTypes keeps the links of some types.
+func ofTypes(ls []domain.Link, types []string) []domain.Link {
+	return slices.DeleteFunc(ls, func(l domain.Link) bool { return !slices.Contains(types, l.Type) })
+}
+
 func (t *memTx) LinksTo(_ context.Context, id domain.NodeID) ([]domain.Link, error) {
 	return t.entering(id, nil), nil
 }

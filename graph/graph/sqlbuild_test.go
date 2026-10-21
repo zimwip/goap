@@ -201,6 +201,12 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg LinksFrom", pg, q, a, `SELECT `+pgLinkCols+` FROM (`+pgHeld+`) l ORDER BY l.id`, pgRefs)
 	q, a = lite.sqlLinksFrom(refs)
 	check("sqlite LinksFrom", lite, q, a, `SELECT `+liteLinkCols+` FROM (`+liteHeld+`) l ORDER BY l.id`, []any{liteRefs})
+	pgTyped := strings.Replace(pgHeld, `l.from_version = c.sv)`, `l.from_version = c.sv AND l.type = ANY($3::text[]))`, 1)
+	liteTyped := strings.Replace(liteHeld, `l.from_version = c.sv)`, `l.from_version = c.sv AND l.type IN (SELECT value FROM json_each(?)))`, 1)
+	q, a = pg.sqlLinksFromOfType(refs, []string{"child"})
+	check("pg LinksFromOfType", pg, q, a, `SELECT `+pgLinkCols+` FROM (`+pgTyped+`) l ORDER BY l.id`, append(pgRefs, []string{"child"}))
+	q, a = lite.sqlLinksFromOfType(refs, []string{"child"})
+	check("sqlite LinksFromOfType", lite, q, a, `SELECT `+liteLinkCols+` FROM (`+liteTyped+`) l ORDER BY l.id`, []any{liteRefs, `["child"]`})
 	linksTo := func(cols, target string) string {
 		return `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id, to_url FROM link WHERE ` + target + ` AND removes IS NULL), s(lid, nid, sv) AS ( SELECT id, from_id, from_version FROM t UNION ALL SELECT s.lid, v.node_id, v.version FROM s JOIN node_version v ON v.node_id = s.nid AND v.links_base = s.sv WHERE NOT EXISTS (SELECT 1 FROM link x WHERE x.from_id = v.node_id AND x.from_version = v.version AND x.removes = s.lid) ) SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.node_id = s.nid AND v.version = s.sv AND v.links IS NULL UNION ALL SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.links = s.sv AND v.node_id = s.nid ORDER BY 1, 4`
 	}
@@ -214,6 +220,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg InLinks", pg, q, a, linksTo(pgToCols, `to_id = $1 AND to_version = $2`), []any{"n1", 3})
 	q, a = lite.sqlLinksTo(ref)
 	check("sqlite InLinks", lite, q, a, linksTo(liteToCols, `to_id = ? AND to_version = ?`), []any{"n1", 3})
+	q, a = pg.sqlLinksToOfType(ref, []string{"child"})
+	check("pg LinksToOfType", pg, q, a, linksTo(pgToCols, `to_id = $1 AND to_version = $2 AND type = ANY($3::text[])`), []any{"n1", 3, []string{"child"}})
+	q, a = lite.sqlLinksToOfType(ref, []string{"child"})
+	check("sqlite LinksToOfType", lite, q, a, linksTo(liteToCols, `to_id = ? AND to_version = ? AND type IN (SELECT value FROM json_each(?))`), []any{"n1", 3, `["child"]`})
 	q, a = pg.sqlLinkSetOf(ref)
 	check("pg LinkSetOf", pg, q, a, `SELECT coalesce(links, version), coalesce(links_base, 0), links_depth, links_seq FROM node_version WHERE node_id = $1 AND version = $2`, []any{"n1", 3})
 	q, a = pg.sqlLinkSetsOf(refs)

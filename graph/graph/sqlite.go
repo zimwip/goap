@@ -1112,6 +1112,19 @@ func (t *sqliteTx) LinksFrom(ctx context.Context, refs []domain.NodeRef) ([]doma
 	return t.queryLinks(ctx, q, args...)
 }
 
+func (t *sqliteTx) LinksFromOfType(ctx context.Context, refs []domain.NodeRef, types []string) ([]domain.Link, error) {
+	q, args := dialectSQLite.sqlLinksFromOfType(refs, types)
+	return t.queryLinks(ctx, q, args...)
+}
+
+func (t *sqliteTx) LinksToOfType(ctx context.Context, ref domain.NodeRef, types []string) ([]domain.Link, error) {
+	if types == nil {
+		types = []string{}
+	}
+	q, args := dialectSQLite.sqlLinksToOfType(ref, types)
+	return t.queryLinks(ctx, q, args...)
+}
+
 func (t *sqliteTx) LinksTo(ctx context.Context, id domain.NodeID) ([]domain.Link, error) {
 	q, args := dialectSQLite.sqlLinksTo(domain.NodeRef{ID: id})
 	return t.queryLinks(ctx, q, args...)

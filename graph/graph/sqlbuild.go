@@ -319,14 +319,37 @@ func (d dialect) outerJoin() string {
 // version, sv a set), minus those a row of the chain drops. Its columns are the link's, unqualified. A set is a delta
 // exactly when it is deep (links_depth > 0): asked so, the next set of the chain is read by its key (node_version_pkey),
 // never by the index of the bases (links_base IS NOT NULL would let the planner scan every delta of the table).
-func (d dialect) heldLinks(n int) string {
+func (d dialect) heldLinks(n int) string { return d.heldLinksWhere(n, "") }
+
+// heldLinksOfType is heldLinks keeping the links of the types at placeholder m: a drop row has the type of the link it
+// drops, so the filter keeps the drops of the links it keeps, and each set of the chain is read by
+// (from_id, from_version, type) (link_from).
+func (d dialect) heldLinksOfType(n, m int) string {
+	in, _ := d.textList("l.type", m, nil)
+	return d.heldLinksWhere(n, " AND "+in)
+}
+
+// textList is col in the texts at placeholder n, and the argument it takes.
+func (d dialect) textList(col string, n int, list []string) (string, any) {
+	if list == nil {
+		list = []string{}
+	}
+	if d.pg {
+		return col + ` = ANY(` + d.ph(n) + `::text[])`, list
+	}
+	b, _ := json.Marshal(list)
+	return col + ` IN (SELECT value FROM json_each(` + d.ph(n) + `))`, string(b)
+}
+
+// heldLinksWhere is heldLinks with more conditions on the rows of the sets (and, of the links of the chain).
+func (d dialect) heldLinksWhere(n int, and string) string {
 	return `WITH RECURSIVE r(id, version) AS (` + d.refsRows(n) + `),
 		c(nid, rv, sv) AS (
 			SELECT v.node_id, v.version, coalesce(v.links, v.version) FROM node_version v JOIN r ON r.id = v.node_id AND r.version = v.version
 			UNION ALL
 			SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_depth > 0
 		),
-		h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes, l.to_url FROM c` + d.outerJoin() + `link l ON l.from_id = c.nid AND l.from_version = c.sv)
+		h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes, l.to_url FROM c` + d.outerJoin() + `link l ON l.from_id = c.nid AND l.from_version = c.sv` + and + `)
 		SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id, h.to_url FROM h
 		WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
 }
@@ -335,9 +358,19 @@ func (d dialect) heldLinks(n int) string {
 // version holding it (ADR 0141), by id then version: the rows naming the target (t), the sets holding each (s: the set
 // of the row, then the deltas over a set holding it that do not drop it), the versions holding those sets.
 func (d dialect) sqlLinksTo(ref domain.NodeRef) (string, []any) {
+	return d.sqlLinksToOfType(ref, nil)
+}
+
+// sqlLinksToOfType is sqlLinksTo keeping the links of some types (nil: every type), read by (to_id, to_version,
+// type) (link_to).
+func (d dialect) sqlLinksToOfType(ref domain.NodeRef, types []string) (string, []any) {
 	target, args := `to_id = `+d.ph(1), []any{string(ref.ID)}
 	if ref.Version != 0 {
 		target, args = target+` AND to_version = `+d.ph(2), append(args, int(ref.Version))
+	}
+	if types != nil {
+		in, arg := d.textList("type", len(args)+1, types)
+		target, args = target+` AND `+in, append(args, arg)
 	}
 	return `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id, to_url FROM link
 			WHERE ` + target + ` AND removes IS NULL),
@@ -827,6 +860,13 @@ func (d dialect) qualifiedLinkCols() string {
 func (d dialect) sqlLinksFrom(refs []domain.NodeRef) (string, []any) {
 	args, _ := d.refsArgs(refs)
 	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinks(1) + `) l ORDER BY l.id`, args
+}
+
+// sqlLinksFromOfType is sqlLinksFrom keeping the links of some types.
+func (d dialect) sqlLinksFromOfType(refs []domain.NodeRef, types []string) (string, []any) {
+	args, n := d.refsArgs(refs)
+	_, arg := d.textList("", n, types)
+	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksOfType(1, n) + `) l ORDER BY l.id`, append(args, arg)
 }
 
 // linkRefsWhere selects the links between two of the versions refs matching the text of q.
