@@ -80,15 +80,15 @@ func testMoveChange(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if moved.ID != c.ID || moved.ProjectID != "PROJ-B" {
+	if moved.ID != c.ID || moved.ProjectID.Key != "PROJ-B" {
 		t.Fatalf("moved = %+v", moved)
 	}
-	if got := must[domain.Change](t)(g.Change(ctx, sub.ID)); got.ProjectID != "PROJ-B" {
+	if got := must[domain.Change](t)(g.Change(ctx, sub.ID)); got.ProjectID.Key != "PROJ-B" {
 		t.Fatalf("the sub-change follows its parent: %s", got.ProjectID)
 	}
 	for _, id := range []domain.ChangeID{c.ID, sub.ID} {
 		moves, entries := projectMoves(t, g, id)
-		if len(moves) != 1 || moves[0].From != "PROJ-A" || moves[0].To != "PROJ-B" || entries[0].Subject != HeaderProjectID || entries[0].By != "mover" {
+		if len(moves) != 1 || moves[0].From != "lnk:organisation/ProjectUnit/PROJ-A" || moves[0].To != "lnk:organisation/ProjectUnit/PROJ-B" || entries[0].Subject != HeaderProjectID || entries[0].By != "mover" {
 			t.Fatalf("log of %s: %+v %+v", id, moves, entries)
 		}
 	}
@@ -109,11 +109,11 @@ func testMoveChange(t *testing.T, repo Repo) {
 	b := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, "PROJ-B"))
 	a := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, "PROJ-A"))
 	for _, key := range []string{"PRE-1", "POST-1"} {
-		if n := must[domain.Node](t)(g.NodeByKey(ctx, "", key)); n.Project != b.Key {
+		if n := must[domain.Node](t)(g.NodeByKey(ctx, "", key)); n.Project.Key != b.Key {
 			t.Fatalf("%s commits in the project of the change: %s", key, n.Project)
 		}
 	}
-	if n := must[domain.Node](t)(g.NodeByKey(ctx, "", "OLD-1")); n.Project != a.Key {
+	if n := must[domain.Node](t)(g.NodeByKey(ctx, "", "OLD-1")); n.Project.Key != a.Key {
 		t.Fatalf("a node keeps its project: %s", n.Project)
 	}
 	// a committed change moves no more
@@ -135,7 +135,7 @@ func testMoveChangeRefusals(t *testing.T, repo Repo) {
 		if _, err := g.MoveChange(ctx, id, project); !errors.Is(err, want) {
 			t.Fatalf("%s: %v, want %v", what, err, want)
 		}
-		if got := must[domain.Change](t)(g.Change(ctx, id)); got.ProjectID == project && project != "PROJ-A" {
+		if got := must[domain.Change](t)(g.Change(ctx, id)); got.ProjectID.Key == project && project != "PROJ-A" {
 			t.Fatalf("%s: the change moved", what)
 		}
 	}

@@ -220,7 +220,7 @@ func scanNode(row pgx.Row) (domain.Node, error) {
 	}
 	n.ID, n.Version, n.Properties, n.ChangeID = domain.NodeID(id), domain.Version(version), props(p), domain.ChangeID(str(change))
 	n.ChangeImpact = domain.ChangeImpactID(str(cnode))
-	n.Owner, n.Project = owner, project
+	n.Owner, n.Project = lnk.Of(owner), lnk.Of(project)
 	return n, nil
 }
 
@@ -797,7 +797,7 @@ func (t *pgTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain
 
 func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 	if n.Version == 1 {
-		if _, err := t.tx.Exec(ctx, `INSERT INTO node (id, namespace, key, type, latest, project) VALUES ($1, $2, $3, $4, 1, $5)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type, n.Project); err != nil {
+		if _, err := t.tx.Exec(ctx, `INSERT INTO node (id, namespace, key, type, latest, project) VALUES ($1, $2, $3, $4, 1, $5)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type, n.Project.String()); err != nil {
 			return mapErr(err, "node "+n.Key)
 		}
 	} else {
@@ -814,7 +814,7 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 		parents[i] = int32(pv)
 	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node_version", nodeVersionColumns, ""),
-		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Owner, originsJSON(n.Origins), n.Committed)
+		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Owner.String(), originsJSON(n.Origins), n.Committed)
 	return mapErr(err, "node "+n.Ref().String())
 }
 

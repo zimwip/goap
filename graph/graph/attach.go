@@ -90,7 +90,7 @@ func (g *Graph) DetachChange(ctx context.Context, id domain.ChangeID) (domain.Ch
 	if err := g.allow(ctx, c.ParentID, operations.ChangeDetach); err != nil {
 		return c, err
 	}
-	chain, err := g.guardianChain(ctx, NewChange{Methodology: c.Methodology, ProjectID: c.ProjectID}, c.MethodologyVersion)
+	chain, err := g.guardianChain(ctx, NewChange{Methodology: c.Methodology, ProjectID: c.ProjectID.String()}, c.MethodologyVersion)
 	if err != nil {
 		return c, err
 	}

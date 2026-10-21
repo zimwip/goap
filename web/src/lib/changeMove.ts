@@ -8,6 +8,7 @@ import { ns, rootProject } from './stores/session.svelte';
 import { refreshChanges } from './stores/catalog.svelte';
 import { notify } from './shell/workbench.svelte';
 import type { Change } from './api';
+import { refKey } from './lnk';
 
 /** The projects a change may move to (the server stays the authority). */
 export async function loadMoveOffer(ch: Pick<Change, 'methodology' | 'projectId'>): Promise<MoveChoices> {
@@ -15,7 +16,7 @@ export async function loadMoveOffer(ch: Pick<Change, 'methodology' | 'projectId'
   const head = await headGraph(ns.organisation);
   return moveChoices({
     methodology: ch.methodology,
-    current: ch.projectId || rootProject(),
+    current: refKey(ch.projectId) || rootProject(),
     projects: project.options,
     applicable: (key) => applicableMethodologies(head, key),
   });

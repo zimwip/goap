@@ -19,7 +19,7 @@ func (d platformDirectory) StructureNode(_ context.Context, kind, key string) (d
 	if _, ok := d[kind][key]; !ok {
 		return domain.Node{}, false, nil
 	}
-	return domain.Node{Key: key}, true, nil
+	return domain.Node{Key: key, Namespace: "organisation", Type: map[string]string{domain.StructureOrganisation: "organisation@OrgUnit", domain.StructureProject: "organisation@ProjectUnit"}[kind]}, true, nil
 }
 
 func (d platformDirectory) StructureChain(_ context.Context, kind, key string) ([]string, error) {
@@ -78,7 +78,7 @@ func TestContentGraph(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if n.Owner != "ORG-SALES" || n.Project != "PROJ-CRM" {
+		if n.Owner.Key != "ORG-SALES" || n.Project.Key != "PROJ-CRM" {
 			t.Fatalf("owner %q, project %q", n.Owner, n.Project)
 		}
 	})

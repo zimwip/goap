@@ -158,7 +158,7 @@ func TestStartProjectOfTheChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	c, err := g.Change(ctx, p.ChangeID)
-	if err != nil || c.ProjectID != st.Project().Root || p.Project != st.Project().Root {
+	if err != nil || c.ProjectID.Key != st.Project().Root || p.Project != st.Project().Root {
 		t.Fatalf("no project: change in %q, run in %q, %v", c.ProjectID, p.Project, err)
 	}
 

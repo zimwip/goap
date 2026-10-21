@@ -21,7 +21,7 @@ func testBootstrap(t *testing.T, repo Repo) {
 	org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootOrg(g)))
 	proj := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootProject(g)))
 	for _, n := range []domain.Node{org, proj} {
-		if n.Owner != org.Key || n.Project != proj.Key || n.ChangeID == "" {
+		if n.Owner.Key != org.Key || n.Project.Key != proj.Key || n.ChangeID == "" {
 			t.Fatalf("%s: owner %s project %s change %s", n.Key, n.Owner, n.Project, n.ChangeID)
 		}
 	}
@@ -29,7 +29,7 @@ func testBootstrap(t *testing.T, repo Repo) {
 		t.Fatalf("roots: %+v %+v", org, proj)
 	}
 	c := must[domain.Change](t)(g.Change(ctx, org.ChangeID))
-	if c.Status != domain.ChangeApplied || c.OwnerOrg != rootOrg(g) || c.ProjectID != rootProject(g) || c.ResultBaselineID == "" {
+	if c.Status != domain.ChangeApplied || c.OwnerOrg.Key != rootOrg(g) || c.ProjectID.Key != rootProject(g) || c.ResultBaselineID == "" {
 		t.Fatalf("bootstrap change: %+v", c)
 	}
 	head := must[domain.Baseline](t)(g.BranchHead(ctx, NamespaceOrganisation, domain.MainBranch))
@@ -79,33 +79,33 @@ func testGuardRefusesWritesOutsideAChange(t *testing.T, repo Repo) {
 		"a node version without a change": func(tx Tx) error { return tx.PutNode(ctx, node("N-1", "")) },
 		"a node version of a missing change": func(tx Tx) error {
 			return tx.PutNode(ctx, domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Key: "N-2", Type: "Note",
-				ChangeID: domain.ChangeID(g.newID()), Owner: org.Key, Project: proj.Key, CreatedAt: g.now()})
+				ChangeID: domain.ChangeID(g.newID()), Owner: g.StructureURL(domain.StructureOrganisation, org.Key), Project: g.StructureURL(domain.StructureProject, proj.Key), CreatedAt: g.now()})
 		},
 		"a link without a change": func(tx Tx) error {
 			return tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: LinkProjectPartOf, From: proj.Ref(), To: proj.Ref()})
 		},
 		"a branch membership without a change": func(tx Tx) error { return tx.JoinBranch(ctx, org.Ref(), "elsewhere", "", 0) },
 		"a change without a unit": func(tx Tx) error {
-			return tx.PutChange(ctx, domain.Change{ID: domain.ChangeID(g.newID()), Title: "x", Status: domain.ChangeDraft, ProjectID: rootProject(g)})
+			return tx.PutChange(ctx, domain.Change{ID: domain.ChangeID(g.newID()), Title: "x", Status: domain.ChangeDraft, ProjectID: g.StructureURL(domain.StructureProject, rootProject(g))})
 		},
 		"a change held by a project": func(tx Tx) error {
 			c := boot
-			c.ID, c.OwnerOrg = domain.ChangeID(g.newID()), rootProject(g)
+			c.ID, c.OwnerOrg = domain.ChangeID(g.newID()), g.StructureURL(domain.StructureOrganisation, rootProject(g))
 			return tx.PutChange(ctx, c)
 		},
 		"a change acting in a unit": func(tx Tx) error {
 			c := boot
-			c.ID, c.ProjectID = domain.ChangeID(g.newID()), rootOrg(g)
+			c.ID, c.ProjectID = domain.ChangeID(g.newID()), g.StructureURL(domain.StructureProject, rootOrg(g))
 			return tx.PutChange(ctx, c)
 		},
 		"a version owned by a project": func(tx Tx) error {
 			n := node("N-3", org.ChangeID)
-			n.Owner, n.Project = proj.Key, proj.Key
+			n.Owner, n.Project = g.StructureURL(domain.StructureOrganisation, proj.Key), g.StructureURL(domain.StructureProject, proj.Key)
 			return tx.PutNode(ctx, n)
 		},
 		"a node created in a unit": func(tx Tx) error {
 			n := node("N-4", org.ChangeID)
-			n.Owner, n.Project = org.Key, org.Key
+			n.Owner, n.Project = g.StructureURL(domain.StructureOrganisation, org.Key), g.StructureURL(domain.StructureProject, org.Key)
 			return tx.PutNode(ctx, n)
 		},
 	} {
@@ -147,28 +147,28 @@ func testOwnerAndProjectOfNodes(t *testing.T, repo Repo) {
 	}})
 	team := must[domain.Node](t)(g.NodeByKey(ctx, ns, "TEAM"))
 	pa := must[domain.Node](t)(g.NodeByKey(ctx, ns, "PROJ-A"))
-	if team.Owner != root.Key || team.Project != rootProj.Key {
+	if team.Owner.Key != root.Key || team.Project.Key != rootProj.Key {
 		t.Fatalf("a change naming no unit: the root unit; the bootstrap names the root project: %+v", team)
 	}
 
 	commit(Commit{OwnerOrg: "TEAM", ProjectID: "PROJ-A", Edits: []NodeEdit{{Key: "NOTE", Type: "Note", Props: map[string]any{"title": "one"}}}})
 	note := must[domain.Node](t)(g.NodeByKey(ctx, ns, "NOTE"))
-	if note.Owner != team.Key || note.Project != pa.Key {
+	if note.Owner.Key != team.Key || note.Project.Key != pa.Key {
 		t.Fatalf("created by TEAM in PROJ-A: %+v", note)
 	}
 	// edited by a change of the root unit in the root project: still TEAM's, still created in PROJ-A
 	commit(Commit{ProjectID: "PROJ-ROOT", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Props: map[string]any{"title": "two"}}}})
 	note = must[domain.Node](t)(g.NodeByKey(ctx, ns, "NOTE"))
-	if note.Version != 2 || note.Owner != team.Key || note.Project != pa.Key {
+	if note.Version != 2 || note.Owner.Key != team.Key || note.Project.Key != pa.Key {
 		t.Fatalf("the next version keeps owner and project: %+v", note)
 	}
 	// transferred to the root unit
 	commit(Commit{ProjectID: "PROJ-ROOT", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Owner: rootOrg(g)}}})
 	note = must[domain.Node](t)(g.NodeByKey(ctx, ns, "NOTE"))
-	if note.Version != 3 || note.Owner != root.Key || note.Project != pa.Key {
+	if note.Version != 3 || note.Owner.Key != root.Key || note.Project.Key != pa.Key {
 		t.Fatalf("transferred to the root unit: %+v", note)
 	}
-	if v2 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: note.ID, Version: 2})); v2.Owner != team.Key {
+	if v2 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: note.ID, Version: 2})); v2.Owner.Key != team.Key {
 		t.Fatalf("the earlier version stays TEAM's: %+v", v2)
 	}
 	// only a unit owns
@@ -200,7 +200,7 @@ func testChangeNeedsAProject(t *testing.T, repo Repo) {
 		t.Fatalf("a merge naming no project: %v", err)
 	}
 	parent := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "p", BaselineID: base.ID, ProjectID: rootProject(g), OwnBranch: true}))
-	if parent.ProjectID != rootProject(g) {
+	if parent.ProjectID.Key != rootProject(g) {
 		t.Fatalf("project = %s", parent.ProjectID)
 	}
 	sub := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "s", ParentID: parent.ID}))

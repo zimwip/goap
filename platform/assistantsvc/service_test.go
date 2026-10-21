@@ -78,7 +78,7 @@ func (g *fakeGraph) CreateChange(ctx context.Context, in graph.NewChange) (domai
 	}
 	g.created = append(g.created, in)
 	g.who = append(g.who, authz.From(ctx))
-	return domain.Change{ID: "CHG-NEW", Title: in.Title, Methodology: in.Methodology, ProjectID: in.ProjectID}, nil
+	return domain.Change{ID: "CHG-NEW", Title: in.Title, Methodology: in.Methodology, ProjectID: access.ProjectURL(in.ProjectID)}, nil
 }
 
 func (g *fakeGraph) ListChanges(_ context.Context, f graph.ChangesFilter) ([]domain.Change, error) {
@@ -174,11 +174,11 @@ func newEnv(t *testing.T, answers ...string) *env {
 	e := &env{
 		model: &fakeModel{answers: answers, aliases: []modelgw.AliasEntry{{Alias: Alias, Target: "fake/echo"}}},
 		graph: &fakeGraph{changes: map[domain.ChangeID]domain.Change{
-			"CHG-1":    {ID: "CHG-1", Title: "Existing", ProjectID: "PROJ-A", Status: domain.ChangeDraft},
-			"CHG-MINE": {ID: "CHG-MINE", Title: "Mine", OwnerOrg: access.PersonalUnit("u1")},
-			"CHG-HERS": {ID: "CHG-HERS", Title: "Hers", OwnerOrg: access.PersonalUnit("u2")},
-			"CHG-D":    {ID: "CHG-D", Title: "Delivery", Methodology: "delivery", Namespace: "alm", ProjectID: "PROJ-A", Status: domain.ChangeActive, State: "design"},
-			"CHG-DONE": {ID: "CHG-DONE", Title: "Done", Methodology: "delivery", Namespace: "alm", ProjectID: "PROJ-A", Status: domain.ChangeApplied},
+			"CHG-1":    {ID: "CHG-1", Title: "Existing", ProjectID: access.ProjectURL("PROJ-A"), Status: domain.ChangeDraft},
+			"CHG-MINE": {ID: "CHG-MINE", Title: "Mine", OwnerOrg: access.UnitURL(access.PersonalUnit("u1"))},
+			"CHG-HERS": {ID: "CHG-HERS", Title: "Hers", OwnerOrg: access.UnitURL(access.PersonalUnit("u2"))},
+			"CHG-D":    {ID: "CHG-D", Title: "Delivery", Methodology: "delivery", Namespace: "alm", ProjectID: access.ProjectURL("PROJ-A"), Status: domain.ChangeActive, State: "design"},
+			"CHG-DONE": {ID: "CHG-DONE", Title: "Done", Methodology: "delivery", Namespace: "alm", ProjectID: access.ProjectURL("PROJ-A"), Status: domain.ChangeApplied},
 		}},
 		convs: &convsvc.Service{Store: convsvc.NewMemoryStore()},
 		user:  authz.Principal{Subject: "u1", Project: "PROJ-A"},

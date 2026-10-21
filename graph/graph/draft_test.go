@@ -106,7 +106,7 @@ func testCommitWritesOneVersionPerDraft(t *testing.T, repo Repo) {
 		cn  domain.ChangeImpact
 	}{{"TST-A", a}, {"TST-B", b}} {
 		n := must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, d.key))
-		if n.Version != 1 || len(n.Parents) != 0 || n.Reason != domain.ReasonCreate || n.ID != d.cn.Post.ID || res.Nodes[n.ID] != 1 || n.Owner == "" || n.Project == "" {
+		if n.Version != 1 || len(n.Parents) != 0 || n.Reason != domain.ReasonCreate || n.ID != d.cn.Post.ID || res.Nodes[n.ID] != 1 || n.Owner.IsZero() || n.Project.IsZero() {
 			t.Fatalf("%s: %+v", d.key, n)
 		}
 		if g.versionCount(ctx, n.ID) != 1 {

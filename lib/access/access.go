@@ -16,6 +16,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/lib/graphsnap"
 )
 
@@ -753,4 +754,16 @@ func (a *Authorizer) Authorize(ctx context.Context, req authz.Request) (bool, er
 		return ok, err
 	}
 	return c.Authorize(ctx, req)
+}
+
+// UnitURL is the logical URL of a unit of the built-in organisation by its key (ADR 0154 §9): what a version, a change
+// or an adapter holding it is stored as. For the seeds and tests of the built-in organisation, as DefaultOrg; the graph
+// spells it from its structures (Graph.StructureURL).
+func UnitURL(key string) lnk.URL {
+	return lnk.New(NamespaceOrganisation, lnk.BareType(NodeTypeOrgUnit), key)
+}
+
+// ProjectURL is the logical URL of a project of the built-in organisation by its key (ADR 0154 §9), as UnitURL.
+func ProjectURL(key string) lnk.URL {
+	return lnk.New(NamespaceOrganisation, lnk.BareType(NodeTypeProjectUnit), key)
 }

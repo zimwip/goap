@@ -23,6 +23,7 @@
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
+  import { refKey } from '../../lnk';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -61,7 +62,7 @@
   const ownNodes = $derived.by(() => {
     const m = new Map<string, string>();
     for (const a of head?.nodes ?? []) {
-      if (a.type === nodeTypes.adapter && a.namespace === ns.organisation && unit && a.owner === unit.key) m.set(String(a.props?.['mcp'] ?? ''), a.key ?? '');
+      if (a.type === nodeTypes.adapter && a.namespace === ns.organisation && unit && refKey(a.owner) === unit.key) m.set(String(a.props?.['mcp'] ?? ''), a.key ?? '');
     }
     return m;
   });

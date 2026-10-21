@@ -30,7 +30,7 @@ func (s *Snapshot) readCriticality(nodes []domain.Node, byID map[domain.NodeID]d
 		}
 	}
 	for _, n := range nodes {
-		owner, ok := units[n.Owner]
+		owner, ok := units[n.Owner.Key]
 		if !ok || !s.structures.In(domain.StructureOrganisation, owner.Type) {
 			s.Problems = append(s.Problems, fmt.Sprintf("%s: its owner %s is not a unit of the organisation", n.Key, n.Owner))
 			continue
@@ -109,7 +109,7 @@ func (s *Snapshot) CriticalityPolicy(unit string, l criticality.Level) criticali
 
 // CriticalityOf is the policy of the criticality level l for a change: resolved from the unit that holds it.
 func (s *Snapshot) CriticalityOf(c domain.Change, l criticality.Level) criticality.Policy {
-	return s.CriticalityPolicy(c.OwnerOrg, l)
+	return s.CriticalityPolicy(c.OwnerOrg.Key, l)
 }
 
 // CriticalityResolver is the criticality.Resolver of the directory: it reads the current snapshot (the compiled-in table

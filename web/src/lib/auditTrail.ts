@@ -4,6 +4,7 @@
 // ADR 0017). Each entry says when, who, on which flow and through which action run. A change is a flow of events:
 // flow branches fork from it (a relaunch, alternatives to compare), and are merged back (adopted) or dropped
 // (discarded); the entries carry these marks so the trail can be drawn as branches.
+import { refKey } from "./lnk";
 import { foldReviews, tally } from "./reviews";
 import { isEphemeralBranch } from "./namespace";
 import {
@@ -546,7 +547,7 @@ export function buildTrail(
         change.intent,
         change.methodology ? `methodology ${change.methodology}` : "",
         change.namespace ? `namespace ${change.namespace}` : "",
-        change.ownerOrg ? `held by ${change.ownerOrg}` : "",
+        change.ownerOrg ? `held by ${refKey(change.ownerOrg)}` : "",
       ]
         .filter(Boolean)
         .join(" · "),

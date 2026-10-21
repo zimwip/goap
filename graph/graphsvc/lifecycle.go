@@ -44,7 +44,7 @@ func ChangeTransitionAuthorizer(a authz.Authorizer) graph.ChangeTransitionAuthor
 			}
 		}
 		return authz.Check(ctx, a, authz.Request{Subject: who, Action: action,
-			Resource: authz.Resource{Type: typ, ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: c.ProjectID}})
+			Resource: authz.Resource{Type: typ, ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg.Key, ProjectID: c.ProjectID.Key}})
 	}
 }
 
@@ -58,7 +58,7 @@ func SeatAuthorizer(a authz.Authorizer) graph.SeatAuthorizer {
 			return nil
 		}
 		return authz.Check(ctx, a, authz.Request{Subject: who, Action: "sit",
-			Resource: authz.Resource{Type: "decision", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: c.ProjectID, Roles: []string{role}}})
+			Resource: authz.Resource{Type: "decision", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg.Key, ProjectID: c.ProjectID.Key, Roles: []string{role}}})
 	}
 }
 
@@ -79,7 +79,7 @@ func ItemAuthorizer(a authz.Authorizer, resolve criticality.Resolver) graph.Item
 			return err
 		}
 		if err := authz.Check(ctx, a, authz.Request{Subject: who, Action: action,
-			Resource: authz.Resource{Type: typ, ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: c.ProjectID}}); err != nil {
+			Resource: authz.Resource{Type: typ, ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg.Key, ProjectID: c.ProjectID.Key}}); err != nil {
 			return err
 		}
 		if p.SubjectField != "" {
@@ -95,7 +95,7 @@ func ItemAuthorizer(a authz.Authorizer, resolve criticality.Resolver) graph.Item
 				lvl := criticality.Of(c.Data)
 				if role := resolve(ctx, c, lvl).SignatoryRole; role != "" {
 					if err := authz.Check(ctx, a, authz.Request{Subject: who, Action: "sign-role",
-						Resource: authz.Resource{Type: "derogation", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: c.ProjectID, Roles: []string{role}}}); err != nil {
+						Resource: authz.Resource{Type: "derogation", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg.Key, ProjectID: c.ProjectID.Key, Roles: []string{role}}}); err != nil {
 						return fmt.Errorf("a derogation on a %s change is signed by the role %s: %w", lvl, role, err)
 					}
 				}
@@ -136,7 +136,7 @@ func OperationAuthorizer(a authz.Authorizer, roles OperationRoles) graph.Operati
 			allowed = []string{noRole}
 		}
 		if err := authz.Check(ctx, a, authz.Request{Subject: who, Action: "perform",
-			Resource: authz.Resource{Type: "operation", ID: string(c.ID), Name: op, Org: c.OwnerOrg, ProjectID: c.ProjectID, Roles: allowed}}); err != nil {
+			Resource: authz.Resource{Type: "operation", ID: string(c.ID), Name: op, Org: c.OwnerOrg.Key, ProjectID: c.ProjectID.Key, Roles: allowed}}); err != nil {
 			return fmt.Errorf("%s on change %s needs one of the roles %v of methodology %s: %w", op, c.ID, allowed, c.Methodology, err)
 		}
 		return nil

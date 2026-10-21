@@ -10,6 +10,7 @@
 package lnk
 
 import (
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"net/url"
@@ -112,6 +113,23 @@ func (u *URL) UnmarshalText(b []byte) error {
 	return nil
 }
 
+// Value stores the URL as its text in a column (database/sql), the empty text for none.
+func (u URL) Value() (driver.Value, error) { return u.String(), nil }
+
+// Scan reads a URL from the text of a column (database/sql); an empty or NULL value is the zero URL.
+func (u *URL) Scan(v any) error {
+	switch x := v.(type) {
+	case nil:
+		*u = URL{}
+		return nil
+	case string:
+		return u.UnmarshalText([]byte(x))
+	case []byte:
+		return u.UnmarshalText(x)
+	}
+	return fmt.Errorf("scan %T into a URL: %w", v, ErrInvalid)
+}
+
 // Parse reads lnk:<source>/<type>/<key>[?v=<version>].
 func Parse(s string) (URL, error) {
 	rest, ok := strings.CutPrefix(s, Scheme+":")
@@ -158,6 +176,29 @@ func MustParse(s string) URL {
 		panic(err)
 	}
 	return u
+}
+
+// Of reads the text of a URL as stored or carried (a field of a protocol message, a column): the zero URL for an
+// empty or malformed text, which the reader treats as no reference.
+func Of(s string) URL {
+	u, err := Parse(s)
+	if err != nil {
+		return URL{}
+	}
+	return u
+}
+
+// Names reports whether a text names the thing of the URL: its URL (any version) or, the source and type left to
+// the reader's context, its bare key (a filter, an input naming a unit or a project by key).
+func (u URL) Names(s string) bool {
+	if s == "" || u.IsZero() {
+		return false
+	}
+	if s == u.Key {
+		return true
+	}
+	p, err := Parse(s)
+	return err == nil && p.Logical() == u.Logical()
 }
 
 // IsURL reports a text that has the scheme of a logical URL (well formed or not).

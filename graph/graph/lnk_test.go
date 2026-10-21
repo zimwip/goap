@@ -170,7 +170,7 @@ func TestProjectSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	g.ProjectSources = func(_ context.Context, p string) (map[string]string, error) {
-		if p == "PROJ-EU" || p == req.Project {
+		if p == "PROJ-EU" || p == req.Project.Key {
 			return map[string]string{"alm": "alm-eu"}, nil
 		}
 		return nil, nil

@@ -242,7 +242,7 @@ func (e *Engine) start(ctx context.Context, req StartRequest, instance string) (
 		}
 		// a run works where its change does (ADR 0091): the roles it checks are held on the project of the change,
 		// which a move may have changed since the caller's token was issued
-		p.Project = bb.Change.ProjectID
+		p.Project = bb.Change.ProjectID.Key
 		// and with the version of the methodology its change follows (ADR 0113)
 		if p.Methodology != "" && p.Methodology == bb.Change.Methodology {
 			p.MethodologyVersion = bb.Change.MethodologyVersion
@@ -578,7 +578,7 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 	}
 	// the run works where its change does: the roles it checks are held on that project (ADR 0043)
 	if p.Project == "" {
-		p.Project = c.ProjectID
+		p.Project = c.ProjectID.Key
 	}
 	return c.ID, nil
 }
@@ -1416,8 +1416,8 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 			return bb, err
 		}
 		bb.Vars = p.Vars
-		p.Org = bb.Change.OwnerOrg
-		p.Project = bb.Change.ProjectID
+		p.Org = bb.Change.OwnerOrg.Key
+		p.Project = bb.Change.ProjectID.Key
 	}
 	bb.Supertypes = e.supertypesOf(m)
 	res := m.Conditions.Evaluate(bb)

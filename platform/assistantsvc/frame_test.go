@@ -188,15 +188,15 @@ func searchEnv(t *testing.T, arguments string) (*env, searchRecorded) {
 	e.svc.Projects = subProjectsOf{fakeProjects: fp, subs: map[string][]string{"PROJ-A": {"PROJ-A1", "PROJ-A2"}}}
 	long := strings.Repeat("payment ", 60)
 	e.graph.changes = map[domain.ChangeID]domain.Change{
-		"C1": {ID: "C1", Title: "Payment gateway upgrade", Intent: "Upgrade the payment provider. " + long, ProjectID: "PROJ-A", Status: domain.ChangeDraft, Methodology: "delivery", State: "design"},
-		"C2": {ID: "C2", Title: "Fix login", Intent: "the payment page login fails", ProjectID: "PROJ-A", Status: domain.ChangeActive},
-		"C3": {ID: "C3", Title: "Payment upgrade", ProjectID: "PROJ-A", Status: domain.ChangeApplied},
-		"C4": {ID: "C4", Title: "Payment upgrade", ProjectID: "PROJ-B", Status: domain.ChangeActive},
-		"C5": {ID: "C5", Title: "Upgrade docs", ProjectID: "PROJ-A1", Status: domain.ChangeCommitted},
-		"C6": {ID: "C6", Title: "Payment", ProjectID: "PROJ-A2", Status: domain.ChangeActive},
-		"C7": {ID: "C7", Title: "Payment upgrade", ProjectID: "PROJ-A", Status: domain.ChangeDraft, OwnerOrg: access.PersonalUnit("u2")},
-		"C8": {ID: "C8", Title: "Payment upgrade notes", ProjectID: "PROJ-A", Status: domain.ChangeDraft, OwnerOrg: access.PersonalUnit("u1")},
-		"C9": {ID: "C9", Title: "Unrelated", Intent: "nothing to see", ProjectID: "PROJ-A", Status: domain.ChangeDraft},
+		"C1": {ID: "C1", Title: "Payment gateway upgrade", Intent: "Upgrade the payment provider. " + long, ProjectID: access.ProjectURL("PROJ-A"), Status: domain.ChangeDraft, Methodology: "delivery", State: "design"},
+		"C2": {ID: "C2", Title: "Fix login", Intent: "the payment page login fails", ProjectID: access.ProjectURL("PROJ-A"), Status: domain.ChangeActive},
+		"C3": {ID: "C3", Title: "Payment upgrade", ProjectID: access.ProjectURL("PROJ-A"), Status: domain.ChangeApplied},
+		"C4": {ID: "C4", Title: "Payment upgrade", ProjectID: access.ProjectURL("PROJ-B"), Status: domain.ChangeActive},
+		"C5": {ID: "C5", Title: "Upgrade docs", ProjectID: access.ProjectURL("PROJ-A1"), Status: domain.ChangeCommitted},
+		"C6": {ID: "C6", Title: "Payment", ProjectID: access.ProjectURL("PROJ-A2"), Status: domain.ChangeActive},
+		"C7": {ID: "C7", Title: "Payment upgrade", ProjectID: access.ProjectURL("PROJ-A"), Status: domain.ChangeDraft, OwnerOrg: access.UnitURL(access.PersonalUnit("u2"))},
+		"C8": {ID: "C8", Title: "Payment upgrade notes", ProjectID: access.ProjectURL("PROJ-A"), Status: domain.ChangeDraft, OwnerOrg: access.UnitURL(access.PersonalUnit("u1"))},
+		"C9": {ID: "C9", Title: "Unrelated", Intent: "nothing to see", ProjectID: access.ProjectURL("PROJ-A"), Status: domain.ChangeDraft},
 	}
 	if _, _, err := e.send("find it", inProject("PROJ-A")); err != nil {
 		t.Fatal(err)

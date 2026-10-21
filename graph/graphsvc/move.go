@@ -29,12 +29,12 @@ func ProjectMoveGate(a authz.Authorizer, d *access.Directory) graph.ProjectMoveG
 		}
 		for _, c := range family {
 			if !who.System() {
-				for _, project := range []string{c.ProjectID, to} {
+				for _, project := range []string{c.ProjectID.Key, to} {
 					if snap != nil && !snap.MayAccessProject(who, project) {
 						return fmt.Errorf("you may not work on project %s: %w", project, authz.ErrForbidden)
 					}
 					if err := authz.Check(ctx, a, authz.Request{Subject: who, Action: "move",
-						Resource: authz.Resource{Type: "change", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: project}}); err != nil {
+						Resource: authz.Resource{Type: "change", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg.Key, ProjectID: project}}); err != nil {
 						return fmt.Errorf("moving change %s on project %s: %w", c.ID, project, err)
 					}
 				}
@@ -42,7 +42,7 @@ func ProjectMoveGate(a authz.Authorizer, d *access.Directory) graph.ProjectMoveG
 			if snap == nil || c.Methodology == "" {
 				continue
 			}
-			for _, project := range []string{c.ProjectID, to} {
+			for _, project := range []string{c.ProjectID.Key, to} {
 				if !slices.Contains(snap.ApplicableMethodologies(project), c.Methodology) {
 					return fmt.Errorf("methodology %s of change %s does not apply to project %s (a change moves between projects that both apply its methodology): %w",
 						c.Methodology, c.ID, project, graph.ErrInvalid)
@@ -65,7 +65,7 @@ func MethodologyGate(d *access.Directory) graph.MethodologyGate {
 		if err != nil {
 			return fmt.Errorf("the organisation cannot be read: %w", err)
 		}
-		if !slices.Contains(snap.ApplicableMethodologies(c.ProjectID), methodology) {
+		if !slices.Contains(snap.ApplicableMethodologies(c.ProjectID.Key), methodology) {
 			return fmt.Errorf("methodology %s does not apply to project %s, the project of change %s: %w", methodology, c.ProjectID, c.ID, graph.ErrInvalid)
 		}
 		return nil

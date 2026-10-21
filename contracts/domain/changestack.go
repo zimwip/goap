@@ -4,6 +4,8 @@ import (
 	"slices"
 	"sort"
 	"time"
+
+	"github.com/zimwip/goap/contracts/lnk"
 )
 
 // The change-stack (ADR 0133): a node version and a baseline are the application of the changes that led to them. The
@@ -57,7 +59,7 @@ type StackChange struct {
 	Title  string       `json:"title,omitempty"`
 	Status ChangeStatus `json:"status,omitempty"`
 	// OwnerOrg is the unit holding the change, for the edges deciding who may read its title (a personal change).
-	OwnerOrg string `json:"ownerOrg,omitempty"`
+	OwnerOrg lnk.URL `json:"ownerOrg,omitzero"`
 }
 
 // ChangeStack is the stack of changes producing a node version or a baseline: the changes, oldest first, and the

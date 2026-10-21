@@ -232,7 +232,7 @@ func (h *Hub) accept(subject string, v any, actor, command string) {
 		c := m.Change
 		ev.Kind = "change"
 		ev.Type = changeType(m.Type, subject)
-		ev.Id, ev.Namespace, ev.Branch, ev.Project, ev.ChangeId = string(c.ID), c.Namespace, c.Branch, c.ProjectID, string(c.ID)
+		ev.Id, ev.Namespace, ev.Branch, ev.Project, ev.ChangeId = string(c.ID), c.Namespace, c.Branch, c.ProjectID.Key, string(c.ID)
 		ev.Time = pbconv.Time(h.now())
 		if access.IsPersonal(c) {
 			h.personal[string(c.ID)] = access.PersonalSubjectOf(c)

@@ -70,7 +70,7 @@ func TestPersonalChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := created.Msg.Change.Id
-	if got := created.Msg.Change.OwnerOrg; got != "USR:alice" {
+	if got := created.Msg.Change.OwnerOrg; got != access.UnitURL("USR:alice").String() {
 		t.Fatalf("owner = %q", got)
 	}
 

@@ -377,6 +377,17 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (c domain.Change
 }
 
 func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, error) {
+	// the unit and the project are references to nodes: logical URLs (ADR 0154 §9), a bare key naming the node of its
+	// structure
+	owner, err := g.StructureRef(domain.StructureOrganisation, in.OwnerOrg)
+	if err != nil {
+		return domain.Change{}, fmt.Errorf("owner of the change: %w", err)
+	}
+	project, err := g.StructureRef(domain.StructureProject, in.ProjectID)
+	if err != nil {
+		return domain.Change{}, fmt.Errorf("project of the change: %w", err)
+	}
+	in.OwnerOrg, in.ProjectID = owner.String(), project.String()
 	// a change whose methodology names a lifecycle starts in its initial state (ADR 0058); the registry, asked in the
 	// transaction of the creation, may read the graph
 	var lifecycle, initial, goal string
@@ -425,7 +436,7 @@ func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, 
 			return domain.Change{}, err
 		}
 		child := domain.Change{Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, MethodologyVersion: version, Namespace: domain.NamespaceOf(in.Namespace),
-			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, Data: in.Data}
+			ParentID: in.ParentID, OwnerOrg: owner, ProjectID: project, Data: in.Data}
 		if err := g.SubChangeValidator(ctx, parent, child); err != nil {
 			return domain.Change{}, err
 		}
@@ -435,7 +446,7 @@ func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, 
 		c = domain.Change{
 			ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, MethodologyVersion: version, Namespace: domain.NamespaceOf(in.Namespace),
 			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
-			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID,
+			ParentID: in.ParentID, OwnerOrg: owner, ProjectID: project,
 		}
 		c.Lifecycle, c.State, c.Goal, c.Guardians = lifecycle, initial, goal, guardians
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
@@ -553,8 +564,21 @@ func (g *Graph) Changes(ctx context.Context) (cs []domain.Change, err error) {
 	return
 }
 
+// scopeFilter names the unit and the project of a filter by their URLs, as the changes store them (ADR 0154 §9): a
+// filter may name them by key.
+func (g *Graph) scopeFilter(f ChangesFilter) ChangesFilter {
+	if u, err := g.StructureRef(domain.StructureOrganisation, f.OwnerOrg); err == nil && !u.IsZero() {
+		f.OwnerOrg = u.String()
+	}
+	if u, err := g.StructureRef(domain.StructureProject, f.Project); err == nil && !u.IsZero() {
+		f.Project = u.String()
+	}
+	return f
+}
+
 // ListChanges lists the changes matching a filter, in no particular order (the caller sorts and caps).
 func (g *Graph) ListChanges(ctx context.Context, f ChangesFilter) (out []domain.Change, err error) {
+	f = g.scopeFilter(f)
 	// the filter reads the heads; only the changes it keeps are read whole, unless the heads are asked for
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		heads, err := tx.ChangeHeads(ctx, f)

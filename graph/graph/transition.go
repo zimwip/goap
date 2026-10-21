@@ -337,7 +337,11 @@ func (g *Graph) guardianChain(ctx context.Context, in NewChange, version string)
 		return nil, nil
 	}
 	if in.ParentID == "" {
-		return g.Lifecycles.Guardians(ctx, domain.MethodologyRef(in.Methodology, version), in.ProjectID)
+		project, err := g.StructureRef(domain.StructureProject, in.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		return g.Lifecycles.Guardians(ctx, domain.MethodologyRef(in.Methodology, version), project.Key)
 	}
 	parent, err := g.Change(ctx, in.ParentID)
 	if err != nil {

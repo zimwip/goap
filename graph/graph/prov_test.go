@@ -101,7 +101,7 @@ func testProvenanceExport(t *testing.T, repo Repo) {
 	has(change, "@type", "prov:Activity")
 	has(change, "goap:intent", "move to PSP v2")
 	has(change, "prov:used", "urn:goap:baseline:"+string(c.BaselineID))
-	has(change, "prov:wasAssociatedWith", "urn:goap:unit:"+c.OwnerOrg)
+	has(change, "prov:wasAssociatedWith", "urn:goap:unit:"+c.OwnerOrg.Key)
 
 	e1 := node("urn:goap:execution:e1")
 	has(e1, "@type", "prov:Activity")

@@ -3,10 +3,12 @@ package domain
 import (
 	"reflect"
 	"testing"
+
+	"github.com/zimwip/goap/contracts/lnk"
 )
 
 func TestDiffShapes(t *testing.T) {
-	base := NodeShape{Key: "REQ-1", Type: "Requirement", State: "draft", Owner: "ORG-A",
+	base := NodeShape{Key: "REQ-1", Type: "Requirement", State: "draft", Owner: unitURL("ORG-A"),
 		Properties: map[string]any{"title": "Use PSP", "n": float64(1), "tags": []any{"a"}},
 		Links:      []LinkShape{{Type: "satisfies", To: "n1", ToKey: "NEED-1"}}}
 
@@ -21,7 +23,7 @@ func TestDiffShapes(t *testing.T) {
 		t.Fatalf("equivalent shapes: %+v", d)
 	}
 
-	right := NodeShape{Key: "REQ-1", Type: "Requirement", State: "approved", Owner: "ORG-B",
+	right := NodeShape{Key: "REQ-1", Type: "Requirement", State: "approved", Owner: unitURL("ORG-B"),
 		Properties: map[string]any{"title": "Use Stripe", "n": float64(1), "extra": "x"},
 		Links: []LinkShape{
 			{Type: "satisfies", To: "n1", ToKey: "NEED-1", Properties: map[string]any{"w": 2}},
@@ -30,7 +32,7 @@ func TestDiffShapes(t *testing.T) {
 	got := DiffShapes(base, right)
 	want := []FieldChange{
 		{Kind: FieldState, Op: OpChanged, Old: "draft", New: "approved"},
-		{Kind: FieldOwner, Op: OpChanged, Old: "ORG-A", New: "ORG-B"},
+		{Kind: FieldOwner, Op: OpChanged, Old: "lnk:organisation/OrgUnit/ORG-A", New: "lnk:organisation/OrgUnit/ORG-B"},
 		{Kind: FieldProperty, Name: "extra", Op: OpAdded, New: "x"},
 		{Kind: FieldProperty, Name: "tags", Op: OpRemoved, Old: []any{"a"}},
 		{Kind: FieldProperty, Name: "title", Op: OpChanged, Old: "Use PSP", New: "Use Stripe"},
@@ -48,7 +50,7 @@ func TestDiffShapes(t *testing.T) {
 	}
 
 	// a state or an owner set from nothing, a link removed
-	got = DiffShapes(NodeShape{Links: base.Links}, NodeShape{State: "draft", Owner: "ORG-A"})
+	got = DiffShapes(NodeShape{Links: base.Links}, NodeShape{State: "draft", Owner: unitURL("ORG-A")})
 	if len(got) != 3 || got[0].Op != OpAdded || got[1].Op != OpAdded || got[2].Op != OpRemoved || got[2].Target != "NEED-1" {
 		t.Fatalf("set from nothing: %+v", got)
 	}
@@ -60,3 +62,6 @@ func TestFlowDiffCounts(t *testing.T) {
 		t.Fatalf("counts: %v", c)
 	}
 }
+
+// unitURL is the URL of a unit of the built-in organisation (ADR 0154 §9).
+func unitURL(key string) lnk.URL { return lnk.New("organisation", "OrgUnit", key) }

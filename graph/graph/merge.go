@@ -481,11 +481,19 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	if title == "" {
 		title = fmt.Sprintf("merge %s into %s", in.From, plan.Into)
 	}
+	owner, err := g.StructureRef(domain.StructureOrganisation, in.OwnerOrg)
+	if err != nil {
+		return res, err
+	}
+	project, err := g.StructureRef(domain.StructureProject, in.ProjectID)
+	if err != nil {
+		return res, err
+	}
 	// the merge is a change of the platform (journal): one change impact per merged node, whose
 	// version records the origin; the merge versions are written here, not proposed
 	c := domain.Change{ID: domain.ChangeID(g.newID()), Title: title, Intent: title, Status: domain.ChangeActive,
 		Namespace: domain.NamespaceOf(in.Namespace), BaselineID: plan.IntoHead, Branch: plan.Into, CreatedAt: g.now(),
-		Data: map[string]any{"merge": map[string]any{"from": in.From, "into": plan.Into}}, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID}
+		Data: map[string]any{"merge": map[string]any{"from": in.From, "into": plan.Into}}, OwnerOrg: owner, ProjectID: project}
 	if err := g.scopeChange(ctx, tx, &c); err != nil {
 		return res, err
 	}

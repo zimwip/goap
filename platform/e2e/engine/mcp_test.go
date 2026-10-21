@@ -165,7 +165,7 @@ func TestToolActionOnlyWhereTheOrganizationBindsTheMCP(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := bb.Change
-	if c.OwnerOrg != "acme" || p.Org != "acme" {
+	if c.OwnerOrg.Key != "acme" || p.Org != "acme" {
 		t.Fatalf("org: change %q process %q", c.OwnerOrg, p.Org)
 	}
 	if arts := c.ItemsOfType(domain.TypeArtifact); len(arts) != 1 || arts[0].Target != "doc" || arts[0].Data["tool"] != "document-repository/read" {

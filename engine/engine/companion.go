@@ -249,7 +249,7 @@ func (e *Engine) companionRun(ctx context.Context, m *methodology.Compiled, key,
 	who := authz.System(key).For(eventUser(event)) // a consequence of what the end user did (ADR 0114)
 	who.Org = "system"
 	p, err := e.Start(authz.With(ctx, who), StartRequest{Methodology: m.Name(), Agent: agent, Goal: goal, ChangeID: changeID,
-		OwnerOrg: bb.Change.OwnerOrg, Trigger: key, Title: bb.Change.Title, Vars: map[string]any{"event": event},
+		OwnerOrg: bb.Change.OwnerOrg.Key, Trigger: key, Title: bb.Change.Title, Vars: map[string]any{"event": event},
 		Intent: fmt.Sprintf("%s: %s", intent, bb.Change.Intent)})
 	if err != nil {
 		return err

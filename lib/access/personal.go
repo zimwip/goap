@@ -30,10 +30,10 @@ func PersonalSubject(key string) string {
 }
 
 // IsPersonal reports whether the change is held by a personal unit.
-func IsPersonal(c domain.Change) bool { return IsPersonalUnit(c.OwnerOrg) }
+func IsPersonal(c domain.Change) bool { return IsPersonalUnit(c.OwnerOrg.Key) }
 
 // PersonalSubjectOf returns the subject a personal change belongs to ("" for a change that is not personal).
-func PersonalSubjectOf(c domain.Change) string { return PersonalSubject(c.OwnerOrg) }
+func PersonalSubjectOf(c domain.Change) string { return PersonalSubject(c.OwnerOrg.Key) }
 
 // IsPersonalTo reports whether the change is personal to the subject.
 func IsPersonalTo(c domain.Change, subject string) bool {

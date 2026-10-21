@@ -476,11 +476,11 @@ func (g *Graph) newDraft(ctx context.Context, tx Tx, w *work, in NodeCreate, ori
 		return d, err
 	}
 	if in.Owner != "" {
-		unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, in.Owner)
+		unit, _, err := g.resolveStructure(ctx, tx, domain.StructureOrganisation, in.Owner)
 		if err != nil {
 			return d, err
 		}
-		d.Owner = unit.Key
+		d.Owner = unit
 	}
 	for _, l := range in.Links {
 		dl, err := g.newDraftLink(ctx, tx, w, d, l)
@@ -599,11 +599,11 @@ func (g *Graph) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact
 			patch["props"] = in.Properties
 		}
 		if in.Owner != "" {
-			unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, in.Owner)
+			unit, _, err := g.resolveStructure(ctx, tx, domain.StructureOrganisation, in.Owner)
 			if err != nil {
 				return err
 			}
-			patch["owner"] = unit.Key
+			patch["owner"] = unit.String()
 		}
 		ref := d.Ref()
 		if err := g.emitUpdated(ctx, tx, w, ref, in.Execution, patch); err != nil {

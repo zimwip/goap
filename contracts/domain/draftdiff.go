@@ -3,6 +3,8 @@ package domain
 import (
 	"slices"
 	"strings"
+
+	"github.com/zimwip/goap/contracts/lnk"
 )
 
 // The difference between two flows of a change (ADR 0083): each flow sees its change impacts through drafts (ADR 0079),
@@ -45,7 +47,7 @@ type NodeShape struct {
 	Key        string         `json:"key"`
 	Type       string         `json:"type"`
 	State      string         `json:"state,omitempty"`
-	Owner      string         `json:"owner,omitempty"`
+	Owner      lnk.URL        `json:"owner,omitzero"`
 	Properties map[string]any `json:"props,omitempty"`
 	Links      []LinkShape    `json:"links,omitempty"`
 }
@@ -68,9 +70,9 @@ type ImpactSide struct {
 	Intent NodeIntent     `json:"intent"`
 	Review NodeReview     `json:"review"`
 	// Drafted is false for a planned impact: its node is not checked out, no draft exists.
-	Drafted bool   `json:"drafted"`
-	State   string `json:"state,omitempty"`
-	Owner   string `json:"owner,omitempty"`
+	Drafted bool    `json:"drafted"`
+	State   string  `json:"state,omitempty"`
+	Owner   lnk.URL `json:"owner,omitzero"`
 }
 
 // ImpactDiff is an impact that differs between the two flows. Changes is empty for an added or removed impact.
@@ -114,7 +116,7 @@ func DiffShapes(left, right NodeShape) []FieldChange {
 		out = append(out, FieldChange{Kind: FieldState, Op: changeOp(left.State == "", right.State == ""), Old: left.State, New: right.State})
 	}
 	if left.Owner != right.Owner {
-		out = append(out, FieldChange{Kind: FieldOwner, Op: changeOp(left.Owner == "", right.Owner == ""), Old: string(left.Owner), New: string(right.Owner)})
+		out = append(out, FieldChange{Kind: FieldOwner, Op: changeOp(left.Owner.IsZero(), right.Owner.IsZero()), Old: left.Owner.String(), New: right.Owner.String()})
 	}
 	names := map[string]bool{}
 	for k := range left.Properties {

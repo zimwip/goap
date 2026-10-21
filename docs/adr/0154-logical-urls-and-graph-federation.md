@@ -175,3 +175,13 @@ per namespace (`NodeIDByKey(namespace, key)`), and a type already belongs to the
   of a unit, ADR 0019), which follows rule 5 (what is available comes from who) in a distributed deployment.
 - **Storage is greenfield**: step 2 changes `0001_schema.sql` of both dialects, no migration.
 - **Sources declared on the platform, resolved per project; two graph spaces** (Thomas, 2026-10-21): §8 and §9.
+- **References to nodes are logical URLs** (Thomas, 2026-10-21): the owner and the project of a node version, the
+  owner unit and the project of a change are URLs of the nodes of the structures, with no version
+  (`lnk:<namespace>/<type>/<key>`: `domain.Node.Owner` / `Project`, `Change.OwnerOrg` / `ProjectID` are `lnk.URL`,
+  stored as their text, `lnk.URL` a `driver.Valuer` / `sql.Scanner`): a reference to a node is a link, resolved like
+  one (the URL with no version resolves to the version in force, not a version). `Graph.StructureURL(kind, key)` is the
+  canonical form, `Graph.StructureRef` reads a URL or a bare key at the inputs; the guard and `scopeChange` resolve it
+  (`structureNode`: the source must be the structure's namespace, the type one of the structure's, the key a node of
+  it, through `Graph.Directory` in a content graph). What needs a key only (the authorizations, the engine's process,
+  the index, the events) takes `URL.Key`; the web reads them with `refKey` (`web/src/lib/lnk.ts`). A structure held by
+  another source than its namespace is refused for now.

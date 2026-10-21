@@ -127,7 +127,7 @@ func draftView(d *domain.Draft) map[string]any {
 	if d.Base != nil {
 		base = int(d.Base.Version)
 	}
-	return map[string]any{"key": d.Key, "type": d.Type, "state": d.State, "props": props, "owner": string(d.Owner), "links": links, "base": base, "new": d.Base == nil}
+	return map[string]any{"key": d.Key, "type": d.Type, "state": d.State, "props": props, "owner": d.Owner.String(), "links": links, "base": base, "new": d.Base == nil}
 }
 
 // childOf is the node a link of a draft to a part of it targets as the flow sees it: the draft of the child, else the

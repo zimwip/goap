@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/lnk"
 )
 
 // ProjectMoveGate is asked before a change moves to another project (ADR 0091), outside any transaction (it reads the
@@ -26,19 +27,26 @@ const HeaderProjectID = "projectId"
 // when it commits. The guardian chain of each moved change is computed again for the new project (ADR 0106). Each moved
 // change logs a change.updated entry with a projectId field {from, to} (and a guardians field when its chain changed),
 // by the caller. It returns the change as moved.
-func (g *Graph) MoveChange(ctx context.Context, id domain.ChangeID, project string) (domain.Change, error) {
-	if project == "" {
+func (g *Graph) MoveChange(ctx context.Context, id domain.ChangeID, to string) (domain.Change, error) {
+	project, err := g.StructureRef(domain.StructureProject, to) // its URL or its key (ADR 0154 §9)
+	if err != nil {
+		return domain.Change{}, fmt.Errorf("move change %s: %w", id, err)
+	}
+	if project.IsZero() {
 		return domain.Change{}, fmt.Errorf("move change %s: a project is required: %w", id, ErrInvalid)
 	}
 	var family []domain.Change
 	if err := g.repo.InTx(ctx, func(tx Tx) (err error) {
+		if project, _, err = g.resolveStructure(ctx, tx, domain.StructureProject, project.String()); err != nil {
+			return fmt.Errorf("target project: %w", err)
+		}
 		family, err = g.movable(ctx, tx, id, project)
 		return err
 	}); err != nil {
 		return domain.Change{}, err
 	}
 	if g.ProjectMoveGate != nil {
-		if err := g.ProjectMoveGate(ctx, family, project); err != nil {
+		if err := g.ProjectMoveGate(ctx, family, project.Key); err != nil {
 			return domain.Change{}, err
 		}
 	}
@@ -46,12 +54,12 @@ func (g *Graph) MoveChange(ctx context.Context, id domain.ChangeID, project stri
 	var rootChain []domain.GuardianRef
 	if root := family[0]; g.Lifecycles != nil && root.Methodology != "" {
 		var err error
-		if rootChain, err = g.Lifecycles.Guardians(ctx, root.MethodologyRef(), project); err != nil {
+		if rootChain, err = g.Lifecycles.Guardians(ctx, root.MethodologyRef(), project.Key); err != nil {
 			return domain.Change{}, err
 		}
 	}
 	var moved domain.Change
-	err := g.changeTx(ctx, id, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		again, err := g.movable(ctx, tx, id, project)
 		if err != nil {
 			return err
@@ -101,7 +109,7 @@ func (g *Graph) MoveChange(ctx context.Context, id domain.ChangeID, project stri
 
 // movable checks the rules of the graph for a move and returns the change followed by the open sub-changes under it,
 // parents first.
-func (g *Graph) movable(ctx context.Context, tx Tx, id domain.ChangeID, project string) ([]domain.Change, error) {
+func (g *Graph) movable(ctx context.Context, tx Tx, id domain.ChangeID, project lnk.URL) ([]domain.Change, error) {
 	c, err := tx.Change(ctx, id)
 	if err != nil {
 		return nil, err

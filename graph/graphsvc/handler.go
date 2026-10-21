@@ -110,10 +110,10 @@ func (h *Handler) mayReadNode(ctx context.Context, n domain.Node) bool {
 	case access.NamespaceOrganisation, domain.NamespacePlatform, domain.NamespaceMethodology:
 		return !authz.From(ctx).Anonymous()
 	}
-	if n.Project == "" {
+	if n.Project.IsZero() {
 		return h.worksOn(ctx, "")
 	}
-	return h.worksOn(ctx, n.Project)
+	return h.worksOn(ctx, n.Project.Key)
 }
 
 func (h *Handler) TagVersion(ctx context.Context, r *connect.Request[graphv1.TagVersionRequest]) (*connect.Response[graphv1.TagVersionResponse], error) {
@@ -128,7 +128,7 @@ func (h *Handler) TagVersion(ctx context.Context, r *connect.Request[graphv1.Tag
 	}
 	who := authz.From(ctx)
 	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
-		Resource: authz.Resource{Type: "tag", Namespace: n.Namespace, Org: who.Org, Owner: who.Subject, ProjectID: n.Project}}); err != nil {
+		Resource: authz.Resource{Type: "tag", Namespace: n.Namespace, Org: who.Org, Owner: who.Subject, ProjectID: n.Project.Key}}); err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
 	t, err := h.Graph.TagVersion(ctx, ref, r.Msg.Name)
@@ -269,7 +269,7 @@ func (h *Handler) ListChangeLog(ctx context.Context, r *connect.Request[graphv1.
 // checkPrompts is nil when the caller may read the prompts of the model calls of the change.
 func (h *Handler) checkPrompts(ctx context.Context, c domain.Change) error {
 	return authz.Check(ctx, h.Authz, authz.Request{Subject: authz.From(ctx), Action: "inspect",
-		Resource: authz.Resource{Type: "prompt", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: c.ProjectID}})
+		Resource: authz.Resource{Type: "prompt", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg.Key, ProjectID: c.ProjectID.Key}})
 }
 
 // ExportChangeProvenance is the whole log of a change as PROV-O provenance (ADR 0057).
@@ -470,7 +470,7 @@ func (h *Handler) mayRead(ctx context.Context, c domain.Change) bool {
 	if access.IsPersonal(c) {
 		return access.IsPersonalTo(c, subjectOf(ctx))
 	}
-	return h.worksOn(ctx, c.ProjectID)
+	return h.worksOn(ctx, c.ProjectID.Key)
 }
 
 // readable answers mayRead for the changes of one answer, asking once per project.
@@ -480,10 +480,10 @@ func (h *Handler) readable(ctx context.Context) func(domain.Change) bool {
 		if access.IsPersonal(c) {
 			return access.IsPersonalTo(c, subjectOf(ctx))
 		}
-		ok, done := seen[c.ProjectID]
+		ok, done := seen[c.ProjectID.Key]
 		if !done {
-			ok = h.worksOn(ctx, c.ProjectID)
-			seen[c.ProjectID] = ok
+			ok = h.worksOn(ctx, c.ProjectID.Key)
+			seen[c.ProjectID.Key] = ok
 		}
 		return ok
 	}
@@ -841,7 +841,7 @@ func (h *Handler) ImpactNodeCreate(ctx context.Context, r *connect.Request[graph
 	}
 	who := authz.From(ctx)
 	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
-		Resource: authz.Resource{Type: "object", Name: m.Type, Namespace: c.Namespace, Org: c.OwnerOrg, Owner: who.Subject, ProjectID: c.ProjectID}}); err != nil {
+		Resource: authz.Resource{Type: "object", Name: m.Type, Namespace: c.Namespace, Org: c.OwnerOrg.Key, Owner: who.Subject, ProjectID: c.ProjectID.Key}}); err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
 	if err := h.gateAccess(ctx, m.Type); err != nil {
@@ -874,7 +874,7 @@ func createSpec(s *graphv1.NodeCreateSpec, flow, execution, by string) graph.Nod
 func (h *Handler) checkCreate(ctx context.Context, c domain.Change, typ string) error {
 	who := authz.From(ctx)
 	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
-		Resource: authz.Resource{Type: "object", Name: typ, Namespace: c.Namespace, Org: c.OwnerOrg, Owner: who.Subject, ProjectID: c.ProjectID}}); err != nil {
+		Resource: authz.Resource{Type: "object", Name: typ, Namespace: c.Namespace, Org: c.OwnerOrg.Key, Owner: who.Subject, ProjectID: c.ProjectID.Key}}); err != nil {
 		return rpcerr.ToConnect(err)
 	}
 	return h.gateAccess(ctx, typ)
@@ -1581,5 +1581,5 @@ func (h *Handler) checkCriticality(ctx context.Context, id domain.ChangeID, data
 		return nil
 	}
 	return authz.Check(ctx, h.Authz, authz.Request{Subject: authz.From(ctx), Action: "lower-criticality",
-		Resource: authz.Resource{Type: "change", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: c.ProjectID}})
+		Resource: authz.Resource{Type: "change", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg.Key, ProjectID: c.ProjectID.Key}})
 }

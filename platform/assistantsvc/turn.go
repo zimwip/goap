@@ -532,7 +532,7 @@ func (t *turn) createChange(ctx context.Context, a args) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("the change was not created: %w", err)
 	}
-	res := map[string]any{"changeId": string(ch.ID), "title": ch.Title, "project": ch.ProjectID, "methodology": ch.Methodology}
+	res := map[string]any{"changeId": string(ch.ID), "title": ch.Title, "project": ch.ProjectID.Key, "methodology": ch.Methodology}
 	t.actions = append(t.actions, convsvc.Action{"type": ToolCreateChange,
 		"args":   map[string]any{"title": title, "intent": intent, "methodology": method, "project": t.project},
 		"result": res})
@@ -550,7 +550,7 @@ func (t *turn) openChange(ctx context.Context, a args) (any, error) {
 	if err != nil || (access.IsPersonal(ch) && !access.IsPersonalTo(ch, t.p.Subject)) {
 		return nil, fmt.Errorf("change %q does not exist or is not visible to you", id)
 	}
-	res := map[string]any{"changeId": string(ch.ID), "title": ch.Title, "project": ch.ProjectID, "status": string(ch.Status)}
+	res := map[string]any{"changeId": string(ch.ID), "title": ch.Title, "project": ch.ProjectID.Key, "status": string(ch.Status)}
 	t.actions = append(t.actions, convsvc.Action{"type": ToolOpenChange, "args": map[string]any{"changeId": id}, "result": res})
 	// the turn now works on that change: the next rounds get its tools (frame.go)
 	t.opened = id

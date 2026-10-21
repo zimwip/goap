@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/lnk"
 )
 
 // Statistics of the graph (the graph statistics view): what the store holds for a namespace, counted by the database,
@@ -341,7 +342,7 @@ func stateStats(head domain.Baseline, nodes []domain.Node, links []domain.Link) 
 	}
 	types := map[string]*typeAcc{}
 	var outs, ins, degrees, versions, props []int
-	owners, projects := map[string]bool{}, map[string]bool{}
+	owners, projects := map[lnk.URL]bool{}, map[lnk.URL]bool{}
 	for _, id := range ids {
 		n := live[id]
 		o, i := out[id], in[id]
@@ -360,10 +361,10 @@ func stateStats(head domain.Baseline, nodes []domain.Node, links []domain.Link) 
 			s.Isolated++
 			t.isolated++
 		}
-		if n.Owner != "" {
+		if !n.Owner.IsZero() {
 			owners[n.Owner] = true
 		}
-		if n.Project != "" {
+		if !n.Project.IsZero() {
 			projects[n.Project] = true
 		}
 	}

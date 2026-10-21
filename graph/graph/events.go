@@ -321,7 +321,7 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 				return nil, err
 			}
 			ev := domain.NodeEvent{ID: n.ID, Version: n.Version, Branch: domain.BranchOf(n.Branch), Namespace: domain.NamespaceOf(n.Namespace), Key: n.Key,
-				Type: n.Type, State: n.State, Deleted: n.Deleted, ChangeID: n.ChangeID, Time: n.CreatedAt, Project: n.Project, Owner: n.Owner}
+				Type: n.Type, State: n.State, Deleted: n.Deleted, ChangeID: n.ChangeID, Time: n.CreatedAt, Project: n.Project.Key, Owner: n.Owner.Key}
 			ev.Text, ev.Facets = ix.searchable(n)
 			out = append(out, published{fmt.Sprintf(domain.SubjectNodeWritten, subjectToken(ev.Namespace), subjectToken(n.Type), n.ID), ev})
 		}
@@ -384,7 +384,7 @@ func (g *Graph) changeDocs(ctx context.Context, tx Tx, ot *observedTx) ([]publis
 			}
 		}
 		ev := domain.ChangeDocEvent{ID: c.ID, Title: c.Title, Intent: c.Intent, Goal: c.Goal, Methodology: c.Methodology, Namespace: c.Namespace,
-			Status: c.Status, State: c.State, ProjectID: c.ProjectID, OwnerOrg: c.OwnerOrg, ParentID: c.ParentID, Branch: c.Branch, CreatedAt: c.CreatedAt}
+			Status: c.Status, State: c.State, ProjectID: c.ProjectID.Key, OwnerOrg: c.OwnerOrg.Key, ParentID: c.ParentID, Branch: c.Branch, CreatedAt: c.CreatedAt}
 		// the first impacts only: a write of an impact must not read every impact of a big change (an import)
 		var err error
 		if ev.Impacts, err = tx.ChangeImpactKeys(ctx, id, maxIndexedImpacts); err != nil {

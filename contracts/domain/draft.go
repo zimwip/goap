@@ -47,7 +47,7 @@ type Draft struct {
 	Type  string `json:"type"`
 	State string `json:"state,omitempty"`
 	// Owner is the unit owning the next version; empty: carried over from its base, else the unit holding the change.
-	Owner      string         `json:"owner,omitempty"`
+	Owner      lnk.URL        `json:"owner,omitzero"`
 	Properties map[string]any `json:"props,omitempty"`
 	// Origins are the nodes the node derives from (merge and split, ADR 0077), set on a creation.
 	Origins []NodeRef `json:"origins,omitempty"`
@@ -131,7 +131,7 @@ func (d Draft) Link(id LinkID) (DraftLink, bool) {
 type draftPatch struct {
 	Props map[string]any `json:"props"`
 	Unset []string       `json:"unset"`
-	Owner string         `json:"owner"`
+	Owner lnk.URL        `json:"owner"`
 	State *struct {
 		From string `json:"from"`
 		To   string `json:"to"`
@@ -189,7 +189,7 @@ func DraftDiff(from, to Draft) map[string]any {
 		p["unset"] = unset
 	}
 	if to.Owner != from.Owner {
-		p["owner"] = to.Owner
+		p["owner"] = to.Owner.String()
 	}
 	if to.State != from.State {
 		p["state"] = map[string]any{"from": from.State, "to": to.State}
@@ -282,7 +282,7 @@ func applyDraft(d *Draft, e ImpactEvent) *Draft {
 				delete(n.Properties, k)
 			}
 		}
-		if p.Owner != "" {
+		if !p.Owner.IsZero() {
 			n.Owner = p.Owner
 		}
 		if p.State != nil {

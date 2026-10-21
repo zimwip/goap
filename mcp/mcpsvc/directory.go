@@ -106,7 +106,7 @@ func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Nod
 		if n.Deleted || n.Namespace != st.Organisation().Namespace || n.Type != domain.TypeAdapter {
 			continue
 		}
-		unit, ok := units[n.Owner]
+		unit, ok := units[n.Owner.Key]
 		if !ok || !st.In(org, unit.Type) {
 			s.Problems = append(s.Problems, fmt.Sprintf("%s: its owner %s is not a unit of the organisation", n.Key, n.Owner))
 			continue

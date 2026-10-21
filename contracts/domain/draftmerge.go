@@ -247,7 +247,7 @@ func ApplyConflictEvent(pending []string, e ImpactEvent) []string {
 		for _, k := range p.Unset {
 			settle(ConflictProp(k))
 		}
-		if p.Owner != "" {
+		if !p.Owner.IsZero() {
 			settle(ConflictOwner)
 		}
 		for _, name := range []string{"addLink", "removeLink", "updateLink"} {
@@ -303,7 +303,7 @@ func DraftChanged(base *Draft, d Draft) bool {
 			return true
 		}
 	}
-	if (d.Owner != "" && d.Owner != base.Owner) || d.State != base.State {
+	if (!d.Owner.IsZero() && d.Owner != base.Owner) || d.State != base.State {
 		return true
 	}
 	if len(base.Links) != len(d.Links) {

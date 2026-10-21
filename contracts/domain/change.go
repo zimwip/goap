@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zimwip/goap/contracts/lnk"
 )
 
 // ChangeID identifies a Change.
@@ -54,18 +56,18 @@ type Change struct {
 	// Namespace the change acts on: only its nodes can be linked to the change.
 	Namespace string `json:"namespace,omitempty"`
 	// ParentID is set on a sub-change: a part of the parent change, split along an
-	// organisational boundary. OwnerOrg is the key of the unit of the organisation structure
-	// responsible for it (ADR 0054): the unit holding the change, resolved when the change is
-	// created (a sub-change inherits its parent's, else the root unit) and never empty once
-	// stored. It decides which MCP adapters its actions resolve (ADR 0019) and owns the nodes
-	// the change creates.
+	// organisational boundary. OwnerOrg is the unit of the organisation structure responsible
+	// for it (ADR 0054): the unit holding the change, resolved when the change is created (a
+	// sub-change inherits its parent's, else the root unit) and never empty once stored. It
+	// decides which MCP adapters its actions resolve (ADR 0019) and owns the nodes the change
+	// creates. A logical URL with no version (ADR 0154 §9): a reference to a node is a link.
 	ParentID ChangeID `json:"parentId,omitempty"`
-	OwnerOrg string   `json:"ownerOrg,omitempty"`
-	// ProjectID is the key of the project (project structure, ADR 0039, 0054) the change acts in,
-	// named when the change is created (a sub-change inherits its parent's; none is defaulted, ADR 0091)
-	// and never empty once stored: the nodes the change creates are created in it. It changes only through
-	// Graph.MoveChange, before the change commits (existing nodes keep their project).
-	ProjectID string `json:"projectId,omitempty"`
+	OwnerOrg lnk.URL  `json:"ownerOrg,omitzero"`
+	// ProjectID is the project (project structure, ADR 0039, 0054) the change acts in, a logical URL
+	// as OwnerOrg, named when the change is created (a sub-change inherits its parent's; none is
+	// defaulted, ADR 0091) and never empty once stored: the nodes the change creates are created in it.
+	// It changes only through Graph.MoveChange, before the change commits (existing nodes keep their project).
+	ProjectID lnk.URL `json:"projectId,omitzero"`
 	// Lifecycle names the lifecycle the change follows (ADR 0058), set by CreateChange from its methodology, and State
 	// is the state it is in; both are empty when the methodology names no lifecycle. State is moved only by
 	// TransitionChange, which journals it as a KindTransition item.

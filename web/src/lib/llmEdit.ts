@@ -5,6 +5,7 @@ import { graph, isDraft, type CatalogModel, type LlmBehavior, type LlmProvider, 
 import { headGraph } from './graphEdit';
 import { ns, isUserKey } from './stores/session.svelte';
 import { pending, stageEdits, stageRetire, stageUpsert, stagedOfType } from './stores/pending.svelte';
+import { refKey } from './lnk';
 
 export const PROVIDER_TYPE = 'platform@LlmProvider';
 export const MODEL_TYPE = 'platform@LlmModel';
@@ -221,7 +222,7 @@ export interface AliasProposal {
 /** The alias impacts other people (or the platform) proposed and left open: shown with Accept / Decline. */
 export async function listAliasProposals(): Promise<AliasProposal[]> {
   const out: AliasProposal[] = [];
-  const open = (await graph.listChanges(undefined, { headerOnly: true })).changes?.filter((c) => c.namespace === ns.platform && (c.status === 'draft' || c.status === 'active') && !isUserKey(c.ownerOrg)) ?? [];
+  const open = (await graph.listChanges(undefined, { headerOnly: true })).changes?.filter((c) => c.namespace === ns.platform && (c.status === 'draft' || c.status === 'active') && !isUserKey(refKey(c.ownerOrg))) ?? [];
   for (const ch of open) {
     if (!ch.id) continue;
     const board = (await graph.getBlackboard(ch.id, '')).change;

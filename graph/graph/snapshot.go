@@ -112,8 +112,8 @@ func (g *Graph) ExportSnapshot(ctx context.Context, namespace, branch string, ba
 			continue
 		}
 		sn := SnapshotNode{Key: n.Key, Type: n.Type, State: n.State, Properties: n.Properties, Links: out[n.ID], Provenance: provenance(n)}
-		if n.Owner != "" {
-			sn.Owner = n.Owner
+		if !n.Owner.IsZero() {
+			sn.Owner = n.Owner.String()
 		}
 		slices.SortFunc(sn.Links, func(a, b SnapshotLink) int {
 			if c := strings.Compare(a.Type, b.Type); c != 0 {
@@ -289,15 +289,16 @@ func (g *Graph) ImportSnapshot(ctx context.Context, in SnapshotImport) (res Snap
 	}
 	orgNS := g.Structure(domain.StructureOrganisation).Namespace
 	knownUnit := map[string]bool{}
-	unit := func(key string) bool {
-		if key == "" {
+	unit := func(owner string) bool {
+		u, err := g.StructureRef(domain.StructureOrganisation, owner) // a URL, or the key of a snapshot of before (ADR 0154 §9)
+		if err != nil || u.IsZero() || u.Source != orgNS {
 			return false
 		}
-		if ok, seen := knownUnit[key]; seen {
+		if ok, seen := knownUnit[u.Key]; seen {
 			return ok
 		}
-		_, err := g.NodeByKey(ctx, orgNS, key)
-		knownUnit[key] = err == nil
+		_, err = g.NodeByKey(ctx, orgNS, u.Key)
+		knownUnit[u.Key] = err == nil
 		return err == nil
 	}
 	warn := func(format string, args ...any) { res.Warnings = append(res.Warnings, fmt.Sprintf(format, args...)) }
@@ -327,7 +328,7 @@ func (g *Graph) ImportSnapshot(ctx context.Context, in SnapshotImport) (res Snap
 			}
 			p.node = &n
 			p.props = propsPatch(n.Properties, sn.Properties)
-			if owner != "" && n.Owner != owner {
+			if owner != "" && !n.Owner.Names(owner) {
 				p.owner = owner
 			}
 			p.state = sn.State != "" && sn.State != n.State
