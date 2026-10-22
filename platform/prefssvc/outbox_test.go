@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"slices"
 	"sync"
 	"testing"
@@ -22,6 +23,13 @@ func pending(t *testing.T, st prefssvc.Store) []outbox.Message {
 	return ms
 }
 
+// sameJSON compares two JSON documents by value: PostgreSQL keeps a payload as jsonb, which gives it back in its own
+// spacing.
+func sameJSON(a, b []byte) bool {
+	var x, y any
+	return json.Unmarshal(a, &x) == nil && json.Unmarshal(b, &y) == nil && reflect.DeepEqual(x, y)
+}
+
 // The store writes the events with the document, and none when the write is refused or there is nothing to delete.
 func TestStoreOutbox(t *testing.T) {
 	ctx := context.Background()
@@ -36,7 +44,7 @@ func TestStoreOutbox(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			if ms := pending(t, st); len(ms) != 1 || ms[0].Subject != m.Subject || string(ms[0].Data) != string(m.Data) {
+			if ms := pending(t, st); len(ms) != 1 || ms[0].Subject != m.Subject || !sameJSON(ms[0].Data, m.Data) {
 				t.Fatalf("pending = %+v", ms)
 			}
 			refused := errors.New("refused")
