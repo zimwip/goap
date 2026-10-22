@@ -19,11 +19,11 @@ interface LayoutState {
   right: string;
   /** whether that tool is shown */
   drawer: boolean;
-  /** the context bar pinned open beside the editor */
+  /** the Assistant bar pinned open beside the editor */
   rightOpen: boolean;
   /** the width of the side tool */
   rightWidth: number;
-  /** the width of the context bar, open */
+  /** the width of the Assistant bar, open */
   contextWidth: number;
   bottom: string;
   bottomOpen: boolean;
@@ -40,7 +40,7 @@ const DEFAULTS: LayoutState = {
   drawer: false,
   rightOpen: false,
   rightWidth: 340,
-  contextWidth: 248,
+  contextWidth: 380,
   bottom: 'events',
   bottomOpen: true,
   bottomHeight: 220,
@@ -61,11 +61,11 @@ const kept = (l: LayoutState) => ({
 
 export const layout: LayoutState = $state({ ...DEFAULTS, ...kept(load(KEY, DEFAULTS)) });
 
-/** The width of the context bar closed: its rail of icons. */
+/** The width of the Assistant bar closed: its rail of icons. */
 export const RAIL = 44;
 
 export const LIMITS = {
-  context: { min: 200, max: 420 },
+  context: { min: 300, max: 900 },
   side: { min: 180, max: 640 },
   bottom: { min: 100, max: 800 },
 };

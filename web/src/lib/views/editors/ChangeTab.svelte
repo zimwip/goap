@@ -1199,7 +1199,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       onopennode={(s, d) => openNode({ id: d.node ?? '', key: d.key ?? '' }, { pin: true, change: ch.id ?? '', flow: s })}
     />
   {/if}
-  <EditorPanes {panes} bind:active={pane} label="Change context" changeId={ch.id}>
+  <EditorPanes {panes} bind:active={pane} label="Change context">
     {#snippet head()}
       <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} {writable} onchange={() => load(selected)} oncompare={() => (compareOpen = true)} />
       {#if ch.lifecycle}
@@ -1210,7 +1210,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         </ChangeLifecycleView>
       {/if}
     {/snippet}
-    <!-- what the change waits for from people (ADR 0117, ADR 0152): in the context bar while it is docked, else above every pane -->
+    <!-- what the change waits for from people (ADR 0117, ADR 0152): above every pane -->
     {#snippet aside()}
       <ChangeAsks
         changeId={selected}
