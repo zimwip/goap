@@ -1210,6 +1210,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     {#snippet aside()}
       <ChangeAsks
         changeId={selected}
+        focus={tab.params.task ?? ''}
         {closed}
         reviews={awaiting.map((n) => n.key ?? '')}
         onreview={() => (pane = 'reviews')}

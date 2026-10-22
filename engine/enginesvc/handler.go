@@ -494,16 +494,72 @@ func (h *Handler) GetChangeAsks(ctx context.Context, r *connect.Request[enginev1
 	}
 	out := &enginev1.GetChangeAsksResponse{}
 	for _, a := range asks {
-		if a.MayAnswer && a.ProcessID != "" {
-			if act := answerPermission(a.Kind); act != "" {
-				a.MayAnswer = h.loadAuthorized(ctx, a.ProcessID, act) == nil
-			}
-		}
-		out.Asks = append(out.Asks, &enginev1.ChangeAsk{Id: a.ID, Kind: a.Kind, Title: a.Title, Detail: a.Detail, ProcessId: a.ProcessID,
-			Agent: a.Agent, Step: a.Step, Action: a.Action, Roles: a.Roles, Owner: a.Owner, Since: pbconv.Time(a.Since),
-			MayAnswer: a.MayAnswer, Point: a.Point, Question: a.Question})
+		out.Asks = append(out.Asks, h.askToPB(ctx, a))
 	}
 	return connect.NewResponse(out), nil
+}
+
+// ListAsks serves what the open changes of a project wait for from people (ADR 0158), or of every project when none is
+// named: the changes the caller may read (a personal change is its subject's only, a change of a project is read with
+// the permission to read its runs there), the latest created first, then the asks of each, judged like GetChangeAsks.
+func (h *Handler) ListAsks(ctx context.Context, r *connect.Request[enginev1.ListAsksRequest]) (*connect.Response[enginev1.ListAsksResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	who := authz.From(ctx)
+	changes, err := h.Engine.Graph.ListChanges(ctx, graphapi.ChangesFilter{
+		Status:      []domain.ChangeStatus{domain.ChangeDraft, domain.ChangeActive, domain.ChangeCommitted},
+		HeadersOnly: true,
+		Project:     r.Msg.ProjectId,
+	})
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	sort.SliceStable(changes, func(i, j int) bool { return changes[i].CreatedAt.After(changes[j].CreatedAt) })
+	readable := map[string]bool{}
+	byID := map[domain.ChangeID]domain.Change{}
+	var ids []domain.ChangeID
+	for _, ch := range changes {
+		if access.IsPersonal(ch) && !access.IsPersonalTo(ch, who.Subject) {
+			continue
+		}
+		project := ch.ProjectID.Key
+		ok, seen := readable[project]
+		if !seen {
+			res := authz.Resource{Type: "process", Name: ch.Methodology, Org: who.Org, Owner: who.Subject, ProjectID: project}
+			ok = authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "read", Resource: res}) == nil
+			readable[project] = ok
+		}
+		if ok {
+			byID[ch.ID] = ch
+			ids = append(ids, ch.ID)
+		}
+	}
+	asks, err := h.Engine.Asks(ctx, ids)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &enginev1.ListAsksResponse{}
+	for _, id := range ids {
+		ch := byID[id]
+		for _, a := range asks[id] {
+			pb := h.askToPB(ctx, a)
+			pb.ChangeId, pb.ChangeTitle, pb.ProjectId = string(ch.ID), ch.Title, ch.ProjectID.Key
+			out.Asks = append(out.Asks, pb)
+		}
+	}
+	return connect.NewResponse(out), nil
+}
+
+// askToPB is an ask as the RPCs answer it, whether the caller may answer an ask of a run asking also the permission the
+// call answering it checks on the run.
+func (h *Handler) askToPB(ctx context.Context, a engine.Ask) *enginev1.ChangeAsk {
+	if a.MayAnswer && a.ProcessID != "" {
+		if act := answerPermission(a.Kind); act != "" {
+			a.MayAnswer = h.loadAuthorized(ctx, a.ProcessID, act) == nil
+		}
+	}
+	return &enginev1.ChangeAsk{Id: a.ID, Kind: a.Kind, Title: a.Title, Detail: a.Detail, ProcessId: a.ProcessID,
+		Agent: a.Agent, Step: a.Step, Action: a.Action, Roles: a.Roles, Owner: a.Owner, Since: pbconv.Time(a.Since),
+		MayAnswer: a.MayAnswer, Point: a.Point, Question: a.Question}
 }
 
 // answerPermission is the permission on the run the call answering an ask of that kind checks ("" for none: the

@@ -352,6 +352,10 @@ export interface ChangeAsk {
   mayAnswer?: boolean;
   point?: string;
   question?: string;
+  /** the change waiting, its title and project (ListAsks) */
+  changeId?: string;
+  changeTitle?: string;
+  projectId?: string;
 }
 
 export interface ChangeStateResponse {

@@ -80,6 +80,9 @@ export const engine = {
   /** What a change waits for from people, with whom each ask is addressed to and whether the caller may answer it (ADR 0117). */
   getChangeAsks: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { asks?: ChangeAsk[] }>(ENGINE, 'GetChangeAsks', { changeId }, signal),
+  /** What the open changes of a project (empty: of every project the caller reads) wait for from people, each ask naming its change (ADR 0158). */
+  listAsks: (projectId = '', signal?: AbortSignal) =>
+    rpc<{ projectId?: string }, { asks?: ChangeAsk[] }>(ENGINE, 'ListAsks', projectId ? { projectId } : {}, signal),
   /** How the assessment of each subject of a change reads now: the states its methodology declares, else the defaults (ADR 0116). */
   getAssessmentStates: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { states?: AssessmentState[] }>(ENGINE, 'GetAssessmentStates', { changeId }, signal),

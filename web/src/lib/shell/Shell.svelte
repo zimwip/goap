@@ -39,11 +39,15 @@
   import { session } from '../stores/session.svelte';
   import { isPending } from '../stores/pending.svelte';
   import { loadSettingsState } from '../stores/settings.svelte';
+  import { followTasks } from '../stores/tasks.svelte';
 
   let { welcome }: { welcome: Component } = $props();
 
   // the address says which tab is shown: follow it from the moment the views are registered
   onMount(startRouting);
+
+  // the person's tasks are counted on the Tasks tool whatever the tool shown (ADR 0158)
+  $effect(() => (session.loaded ? followTasks() : undefined));
 
   // the preferences are graph data of the signed-in user: read them once the identity is known (and again when it changes)
   $effect(() => {

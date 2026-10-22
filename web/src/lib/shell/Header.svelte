@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Header: product, search / command palette, stream status,
+  // Header: product, the switch of the modes (ADR 0158), the context, search / command palette, stream status,
   // today's LLM usage (opens the Token usage dashboard), user menu (profile, sign-out in local mode, access token with hs256, theme: a three-state switch of the
   // preference, saved as it changes).
   import Icon, { type IconName } from './Icon.svelte';
@@ -24,6 +24,7 @@
   import { formatTime } from '../api';
   import Popover from './Popover.svelte';
   import HeaderContext from './HeaderContext.svelte';
+  import ModeSwitch from './ModeSwitch.svelte';
   import OnlineUsers from './OnlineUsers.svelte';
   import UsageToday from './UsageToday.svelte';
 
@@ -245,6 +246,7 @@
 <header class="header">
   <div class="left">
     <div class="brand"><span class="logo" aria-hidden="true">◆</span> GOAP</div>
+    <ModeSwitch />
     <HeaderContext />
   </div>
 
