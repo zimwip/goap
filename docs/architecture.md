@@ -1593,12 +1593,17 @@ person does (`shell/mode.svelte.ts`, `ModeSwitch.svelte`): **project** (the proj
 **change** (the working change; enabled only while one is selected), and for administrators **navigation** (the graph
 and its history) and **administration** (domains, methodologies, projects, organisation); each mode shows its own left
 tools (`TOOL_MODES`, a tool not listed shows in every mode), a tool asked for from elsewhere takes the person to a mode
-showing it. The **Tasks** tool (`views/nav/TasksExplorer.svelte`, `stores/tasks.svelte.ts`, `web/src/lib/tasks.ts`)
+showing it, and keeps its workspace: the tool selected, the view filling the editor space and the editors open are put
+aside when the person switches mode and shown again as they were left on coming back (`switchTo`, `swapTabs`). The left
+bar selects the tool: a navigation tool shows its navigation beside the editors (a second click hides it, Ctrl+B), a
+tool flagged `fill` (`PanelView.fill`, `layout.full`) builds its view in the editor space instead and opens no
+navigation, until a tab is opened. The **Tasks** tool is one, a dashboard of areas (`views/tasks/TasksDashboard.svelte`,
+`stores/tasks.svelte.ts`, `web/src/lib/tasks.ts`; a page and project mode open on it), that
 reads the asks of the open changes in one call (engine `ListAsks`: the open changes of a project, or of every project
 the caller reads, at most the hundred latest, each ask naming its change; `Engine.Asks`) and lists the person's tasks
 across changes (held by them, or addressed to them alone and held by nobody), the tasks available to them (they may
 answer them, nobody holds them, they did not turn them down), the tasks of the working change, of the changes open in an
-editor and, in project mode, of the project. Who holds a human task (an input or an approval) is the engine's, seen by
+editor and of the project. Who holds a human task (an input or an approval) is the engine's, seen by
 everyone (`HumanTask.Assignee` / `AssignedBy` / `AssignedAt` / `Declined`, `engine/engine/assign.go`, journal kind
 `task`): `AcceptTask` (one who may answer it, nobody holding it), `RejectTask` (the holder gives it back, one it is
 offered to declines it), `AssignTask` (permission `task:assign` on the project of the run: by the default rules the

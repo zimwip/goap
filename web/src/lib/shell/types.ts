@@ -47,6 +47,11 @@ export interface PanelView extends BaseView {
   component: Component;
   /** badge (counter) shown on the icon or tab */
   badge?: () => string | number | undefined;
+  /**
+   * A left tool that builds its own view in the editor space, filling it, rather than a navigation (a dashboard): its
+   * icon shows it over the editors and never opens the navigation side; opening a tab goes back to the editors.
+   */
+  fill?: boolean;
 }
 
 /** Editor type: a component that receives the tab, plus hooks. */

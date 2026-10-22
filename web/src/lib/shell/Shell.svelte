@@ -33,7 +33,7 @@
   import { assistantEnabled } from '../assistant/enabled';
   import { assistant, closePanel, openPanel } from '../stores/assistant.svelte';
   import StatusBar from './StatusBar.svelte';
-  import { layout, LIMITS, RAIL, nav, toggleConsole } from './layout.svelte';
+  import { layout, LIMITS, RAIL, toggleConsole, toggleNavigation } from './layout.svelte';
   import { activeTab, closeTab, startRouting } from './tabs.svelte';
   import { runTabAction, focusRequests } from './workbench.svelte';
   import { session } from '../stores/session.svelte';
@@ -111,29 +111,18 @@
     }
   }
 
-  // The navigation: docked when pinned on a wide screen, else shown over the editor from its rail once a tool is
-  // clicked (or the rail focused), while the pointer or the focus stays on it.
-  const leftDocked = $derived(layout.leftOpen && !narrow);
-  let lrail = $state<HTMLElement>();
-  let navTimer: ReturnType<typeof setTimeout> | undefined;
-  function navLeave() {
-    clearTimeout(navTimer);
-    navTimer = setTimeout(() => {
-      // kept while it holds the focus (a filter being typed, a menu open)
-      const el = document.activeElement;
-      if (lrail?.contains(el) && el !== document.body && el?.matches('input, textarea, select, [aria-expanded="true"]')) return;
-      nav.revealed = false;
-    }, 350);
-  }
-  function navFocusOut(e: FocusEvent) {
-    if (!lrail?.contains(e.relatedTarget as Node | null) && !lrail?.matches(':hover')) nav.revealed = false;
-  }
+  // The left side: the bar selecting the tool, then the navigation of a navigation tool, shown beside the editors (over
+  // them on a narrow screen); a tool filling the editor space has none (ADR 0158).
+  const navShown = $derived(layout.leftOpen && !layout.full);
   function navKey(e: KeyboardEvent) {
-    if (e.key === 'Escape' && nav.revealed) {
-      nav.revealed = false;
+    if (e.key === 'Escape' && narrow) {
+      layout.leftOpen = false;
       e.stopPropagation();
     }
   }
+
+  // the left tool filling the editor space (ADR 0158: the dashboard of the tasks), never the navigation side
+  const filling = $derived(layout.full ? panelView(layout.full) : undefined);
 
   // the side tool (Test, Properties, DSL Help), opened from the status bar
   const tool = $derived(layout.drawer ? panelView(layout.right) : undefined);
@@ -160,7 +149,7 @@
       toggleConsole();
     } else if (mod && !e.shiftKey && k === 'b') {
       e.preventDefault();
-      layout.leftOpen = !layout.leftOpen;
+      toggleNavigation();
     } else if (mod && e.shiftKey && k === 'f') {
       e.preventDefault();
       openSearch();
@@ -183,27 +172,10 @@
 <div class="shell" class:narrow>
   <Header />
   <div class="main">
-    {#if !leftDocked}
-      <!-- the navigation's rail: a click on a tool (or the focus) shows the navigation over the editor; leaving it hides it -->
+    <ActivityBar side="left" />
+    {#if navShown}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="lrail"
-        bind:this={lrail}
-        onmouseenter={() => clearTimeout(navTimer)}
-        onmouseleave={navLeave}
-        onfocusin={() => (nav.revealed = true)}
-        onfocusout={navFocusOut}
-        onkeydown={navKey}
-      >
-        <ActivityBar side="left" />
-        {#if nav.revealed}
-          <div class="side left over" style:width="{Math.min(layout.leftWidth, sideMax)}px">
-            <NavSidebar />
-          </div>
-        {/if}
-      </div>
-    {:else}
-      <div class="side left" style:width="{Math.min(layout.leftWidth, sideMax)}px">
+      <div class="side left" style:width="{Math.min(layout.leftWidth, sideMax)}px" onkeydown={navKey}>
         <NavSidebar />
       </div>
       {#if !narrow}
@@ -219,7 +191,14 @@
     {/if}
     <div class="center">
       <div class="editor">
-        <EditorArea {welcome} />
+        <!-- a tool filling the editor space (a dashboard) shows over the editors, kept as they are below it -->
+        <div class="fill-host" hidden={!!filling}>
+          <EditorArea {welcome} />
+        </div>
+        {#if filling}
+          {@const F = filling.component}
+          <section class="fill" aria-label={filling.title}><F /></section>
+        {/if}
       </div>
       {#if layout.bottomOpen}
         <Resizer
@@ -340,26 +319,20 @@
     flex: 1;
     min-height: 0;
   }
+  .fill-host {
+    height: 100%;
+  }
+  .fill-host[hidden] {
+    display: none;
+  }
+  .fill {
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+  }
   .bottom {
     flex: none;
     min-height: 0;
-  }
-  .lrail {
-    flex: none;
-    position: relative;
-    display: flex;
-    height: 100%;
-  }
-  /* the navigation shown over the editor, by its rail */
-  .side.left.over {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 100%;
-    z-index: 25;
-    max-width: calc(100vw - 120px);
-    border-right: 1px solid var(--border);
-    box-shadow: var(--shadow);
   }
   .ctx-docked {
     flex: none;
@@ -428,7 +401,7 @@
     max-width: calc(100% - 84px);
   }
   .narrow .side.left {
-    left: 0;
+    left: 42px;
     border-right: 1px solid var(--border);
   }
   .narrow .side.right {

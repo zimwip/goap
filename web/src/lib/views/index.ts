@@ -29,7 +29,7 @@ import UserTab from './editors/UserTab.svelte';
 import McpTab from './editors/McpTab.svelte';
 import TriggersExplorer from './nav/TriggersExplorer.svelte';
 import ProcessesExplorer from './nav/ProcessesExplorer.svelte';
-import TasksExplorer from './nav/TasksExplorer.svelte';
+import TasksDashboard from './tasks/TasksDashboard.svelte';
 import { mine as myTasks, tasks as taskList } from '../stores/tasks.svelte';
 import AssistantTab from './assistant/AssistantTab.svelte';
 
@@ -73,8 +73,9 @@ import DslHelpPanel from './right/DslHelpPanel.svelte';
 
 // --- navigation (left) -------------------------------------------------------------
 
-// the tasks of a person, of the working change, of the project (ADR 0158): the badge counts the person's own
-registerView({ id: 'tasks', zone: 'left', title: 'Tasks', icon: 'check', component: TasksExplorer, order: 0.5, badge: () => myTasks().length || undefined });
+// the tasks of a person, of the working change, of the project (ADR 0158): a dashboard filling the editor space, no
+// navigation; the badge counts the person's own
+registerView({ id: 'tasks', zone: 'left', title: 'Tasks', icon: 'check', component: TasksDashboard, order: 0.5, fill: true, badge: () => myTasks().length || undefined });
 registerView({ id: 'methodologies', zone: 'left', title: 'Methodologies', icon: 'book', component: MethodologyExplorer, order: 1 });
 registerView({ id: 'domains', zone: 'left', title: 'Domains', icon: 'graph', component: DomainExplorer, order: 1.5 });
 registerView({ id: 'processes', zone: 'left', title: 'My processes', icon: 'runs', component: ProcessesExplorer, order: 2.2 });

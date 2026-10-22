@@ -1,6 +1,6 @@
 # ADR 0158 — Modes of the front, and tasks in the context of their change
 
-**Status**: accepted (first step implemented) · **Date**: 2026-10
+**Status**: accepted (first three steps implemented) · **Date**: 2026-10
 
 ## Context
 
@@ -48,7 +48,7 @@ A task is work on a change. It only makes sense in the view of that change.
 - The header switch and the modes (`web/src/lib/shell/mode.svelte.ts`, `ModeSwitch.svelte`): each mode shows its left
   tools (`TOOL_MODES`); change mode is enabled only while a change is worked in, and a page opens in it when one is;
   navigation and administration are offered to administrators only.
-- The Tasks tool (`views/nav/TasksExplorer.svelte`): my tasks, the working change's, those of the changes open in an
+- The Tasks tool (now the dashboard of the third step): my tasks, the working change's, those of the changes open in an
   editor, the project's in project mode. The engine reads the asks of the open changes at once (`ListAsks`,
   `Engine.Asks`).
 - Picking a task works on it: its change becomes the working change, change mode, the change tab opened on the task.
@@ -67,9 +67,27 @@ A task is work on a change. It only makes sense in the view of that change.
   administrators and owners of that project or of a project above it (`isProjectAdmin` over the project chain) and the
   platform administrators. `ListTaskCandidates` keeps the people who may answer it among those given (the web offers
   the users of the organisation).
-- A dedicated screen per task (`views/editors/TaskTab.svelte`, tab `task`, opened from the Tasks tool and from the strip
+- A dedicated screen per task (`views/editors/TaskTab.svelte`, tab `task`, opened from the Tasks dashboard and from the strip
   of the change): its change, whom it is for, who holds it and who gave it, accept, give back or turn down with a
   reason, answer in place; the assignment section shows only with `mayAssign`.
+
+## Implementation (third step): the shell, the dashboard and the workspace of a mode
+
+- The shell has four areas: on the left the tools and their navigation, on the right the context bar and the side
+  tools, the console at the bottom and the editor space. The left bar is a **tool selector**, not a pinnable panel: a
+  navigation tool shows its navigation beside the editors (a second click on its icon, Ctrl+B or the head of the
+  navigation hides it), with no rail shown over the editors and no pin (`shell/layout.svelte.ts`: `toggleTool`,
+  `toggleNavigation`; `NavSidebar.svelte` only names the tool). The right side keeps its contextual bar.
+- A tool may build its own view instead of a navigation (`PanelView.fill`): it fills the editor space and never opens
+  the navigation side (`layout.full`, shown by `Shell.svelte` over the editors, which stay as they are below it);
+  opening a tab, or picking a navigation tool, gives the space back to the editors; a second click on its icon too.
+- The Tasks tool is such a view, a dashboard of areas (`views/tasks/TasksDashboard.svelte`): *My tasks*, *Available to
+  you*, *This change* (the working change), *Open in an editor* and the *Project*, each a list with Accept / Give back
+  and the task screen. A page opens on it, and so does project mode the first time it is entered (`ModeInfo.view`).
+- Each mode keeps its workspace (`mode.svelte.ts`: `switchTo`, `swapTabs` of `tabs.svelte.ts`): the tool selected, the
+  view filling the editor space and the editors open. Switching mode puts the current workspace aside and shows the
+  one of the mode entered as it was left (its default tool and view the first time); nothing is closed, the editors of
+  a mode come back with it.
 
 Not yet: the editors of a change other than the working one, or outside change mode, are not read only; the
 editors of navigation and administration still open from anywhere (search, commands, links); a notification to the

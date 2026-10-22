@@ -1,26 +1,19 @@
 <script lang="ts">
-  // Vertical activity bar: one icon per tool in the area.
+  // Vertical activity bar: one icon per tool in the area. On the left it selects the tool: its navigation beside the
+  // editors, or the view it builds in the editor space (ADR 0158).
   import Icon from './Icon.svelte';
   import { viewsIn } from './registry';
-  import { layout, nav, toggleTool } from './layout.svelte';
+  import { layout, toggleTool } from './layout.svelte';
   import { mode, toolInMode } from './mode.svelte';
+  import type { PanelView } from './types';
 
   let { side }: { side: 'left' | 'right' } = $props();
 
   // the left tools of the mode the person is in (ADR 0158)
   const views = $derived(side === 'left' ? viewsIn(side).filter((v) => toolInMode(v.id, mode.current)) : viewsIn(side));
-  const active = $derived(side === 'left' ? layout.left : layout.right);
-  const open = $derived(side === 'left' ? layout.leftOpen || nav.revealed : layout.drawer);
-
-  // the navigation shown over the editor follows the tool hovered; closed, a click opens it
-  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
-  function hover(id: string) {
-    clearTimeout(hoverTimer);
-    if (side !== 'left' || !nav.revealed || layout.left === id) return;
-    hoverTimer = setTimeout(() => {
-      if (nav.revealed) layout.left = id;
-    }, 120);
-  }
+  /** whether a tool is the one shown */
+  const shown = (v: PanelView): boolean =>
+    side === 'right' ? layout.drawer && layout.right === v.id : v.fill ? layout.full === v.id : !layout.full && layout.leftOpen && layout.left === v.id;
 
   function keydown(e: KeyboardEvent) {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
@@ -34,7 +27,7 @@
 
 <div class="bar {side}" role="toolbar" aria-orientation="vertical" tabindex="-1" aria-label={side === 'left' ? 'Navigation tools' : 'Side tools'} onkeydown={keydown}>
   {#each views as v (v.id)}
-    {@const on = open && active === v.id}
+    {@const on = shown(v)}
     {@const badge = v.badge?.()}
     <button
       type="button"
@@ -43,8 +36,6 @@
       aria-label={v.title}
       aria-pressed={on}
       onclick={() => toggleTool(side, v.id)}
-      onmouseenter={() => hover(v.id)}
-      onmouseleave={() => clearTimeout(hoverTimer)}
     >
       <Icon name={v.icon} size={20} />
       {#if badge}<span class="badge">{badge}</span>{/if}

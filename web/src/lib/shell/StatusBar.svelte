@@ -13,7 +13,7 @@
   import { activeJobs, closeJob, jobDetail, jobList, onJobEnded, startJobs } from '../stores/jobs.svelte';
   import { fraction, jobTitle } from '../jobView';
   import { notify } from './workbench.svelte';
-  import { layout, toggleTool } from './layout.svelte';
+  import { layout, toggleNavigation, toggleTool } from './layout.svelte';
   import { viewsIn } from './registry';
   import { live } from '../stores/live.svelte';
 
@@ -135,7 +135,7 @@
   </div>
 
   <span class="sep" aria-hidden="true"></span>
-  <button type="button" class="item" aria-pressed={layout.leftOpen} title="Navigation panel (Ctrl+B)" aria-label="Navigation panel" onclick={() => (layout.leftOpen = !layout.leftOpen)}
+  <button type="button" class="item" aria-pressed={layout.leftOpen && !layout.full} title="Navigation panel (Ctrl+B)" aria-label="Navigation panel" onclick={toggleNavigation}
     ><Icon name="panelLeft" size={13} /></button
   >
   <button type="button" class="item" aria-pressed={layout.bottomOpen} title="Console (Ctrl+J)" aria-label="Console" onclick={() => (layout.bottomOpen = !layout.bottomOpen)}

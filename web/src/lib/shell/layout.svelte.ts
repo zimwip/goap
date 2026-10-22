@@ -1,14 +1,18 @@
 // Layout state: active tools, panel sizes and collapse, theme. Sizes, collapse and theme persist in
 // localStorage; which tool is active does not (a new page opens on the default ones).
 import { load, save } from './storage';
+import { panelView } from './registry';
 
 const KEY = 'goap.ide.layout';
 
 export type Theme = 'auto' | 'light' | 'dark';
 
 interface LayoutState {
+  /** the navigation tool of the left side */
   left: string;
-  /** the navigation pinned beside the editor (else it shows over the editor from its rail) */
+  /** the left tool filling the editor space (a `fill` view), '' while the editors are shown */
+  full: string;
+  /** the navigation of the left tool shown beside the editors (hidden: the tool bar only) */
   leftOpen: boolean;
   leftWidth: number;
   /** the side tool shown (Test, Properties, DSL Help), opened from the status bar */
@@ -29,7 +33,8 @@ interface LayoutState {
 
 const DEFAULTS: LayoutState = {
   left: 'methodologies',
-  leftOpen: false,
+  full: '',
+  leftOpen: true,
   leftWidth: 280,
   right: 'tester',
   drawer: false,
@@ -76,14 +81,19 @@ $effect.root(() => {
   });
 });
 
-/** The navigation shown over the editor while not pinned (its rail hovered or focused, or a tool asked for). */
-export const nav = $state({ revealed: false });
+/** Whether a left tool fills the editor space rather than showing a navigation. */
+export const fills = (id: string): boolean => !!panelView(id)?.fill;
 
-/** Click on a tool's icon: on the left, selects the tool and shows the navigation; on the right, opens or closes it. */
+/**
+ * Click on a tool's icon. On the left, the bar selects a tool: a navigation tool shows its navigation beside the editors
+ * (a second click on it hides the navigation), a tool filling the editor space shows there with no navigation (a second
+ * click gives the space back to the editors). On the right, opens or closes the side tool.
+ */
 export function toggleTool(side: 'left' | 'right', id: string): void {
-  if (side === 'left') {
-    layout.left = id;
-    if (!layout.leftOpen) nav.revealed = true;
+  if (side === 'left' && fills(id)) layout.full = layout.full === id ? '' : id;
+  else if (side === 'left') {
+    if (layout.left === id && layout.leftOpen && !layout.full) layout.leftOpen = false;
+    else selectNavigation(id);
   } else if (layout.right === id && layout.drawer) layout.drawer = false;
   else {
     layout.right = id;
@@ -91,11 +101,17 @@ export function toggleTool(side: 'left' | 'right', id: string): void {
   }
 }
 
+/** Shows a navigation tool beside the editors (taking the space back from a tool filling it). */
+function selectNavigation(id: string): void {
+  layout.left = id;
+  layout.leftOpen = true;
+  layout.full = '';
+}
+
 export function showTool(side: 'left' | 'right' | 'bottom', id: string): void {
-  if (side === 'left') {
-    layout.left = id;
-    if (!layout.leftOpen) nav.revealed = true;
-  } else if (side === 'right') {
+  if (side === 'left' && fills(id)) layout.full = id;
+  else if (side === 'left') selectNavigation(id);
+  else if (side === 'right') {
     layout.right = id;
     layout.drawer = true;
   } else {
@@ -106,4 +122,10 @@ export function showTool(side: 'left' | 'right' | 'bottom', id: string): void {
 
 export function toggleConsole(): void {
   layout.bottomOpen = !layout.bottomOpen;
+}
+
+/** Shows or hides the navigation of the left tool (Ctrl+B); over a tool filling the editor space, shows it with the editors. */
+export function toggleNavigation(): void {
+  if (layout.full) selectNavigation(layout.left);
+  else layout.leftOpen = !layout.leftOpen;
 }
