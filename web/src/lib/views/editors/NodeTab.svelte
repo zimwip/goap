@@ -26,7 +26,8 @@
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import NodeTree from '../../components/NodeTree.svelte';
-  import GraphExplorer from '../../components/GraphExplorer.svelte';
+  import NodeNeighbourhood, { emptyNeighbourhood } from '../../components/NodeNeighbourhood.svelte';
+  import NodeQuery from '../../components/NodeQuery.svelte';
   import LifecycleDiagram from '../../components/LifecycleDiagram.svelte';
   import NodeHistory from '../../components/NodeHistory.svelte';
   import NodeTags from '../../components/NodeTags.svelte';
@@ -75,6 +76,11 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   let busy = $state('');
   let editing = $state(false);
   let reload = $state(0);
+  /** the Graph pane: the node at its center and the link it shows, in the head baseline (as in the Baseline tab) */
+  let graphNode = $state('');
+  let graphLink = $state<Link | undefined>();
+  /** the nodes the Graph pane shows around its center: its filter, its query's answer (NodeQuery) */
+  let graphKeep = $state<((n: GraphNode) => boolean) | undefined>();
   /** the draft view of a node no version exists of yet (created by the working change, ADR 0079) */
   let draftNode = $state<GraphNode | undefined>();
 
@@ -210,6 +216,8 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   $effect(() => {
     void id;
     void stamp(keyOf.node(id)); // a new version of the node, by anyone
+    graphNode = id;
+    graphLink = undefined;
     const ctrl = new AbortController();
     void loadNode(ctrl.signal);
     return () => ctrl.abort();
@@ -233,6 +241,15 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
 
   // --- derived ----------------------------------------------------------------------
   const stored = $derived(head?.nodes.get(id) ?? versions.at(-1) ?? (workId ? draftNode : undefined));
+  /** the neighbourhood the Graph pane read for its center, and the center's key (the query's `n`) */
+  let graphHood = $state(emptyNeighbourhood());
+  const graphKey = $derived(graphHood.center?.key ?? stored?.key ?? '');
+  /** a node of the Graph pane's query picked: the pane centers on it (another namespace opens it) */
+  function pickInGraph(n: GraphNode) {
+    if ((n.namespace ?? '') !== (stored?.namespace ?? '')) return void openNode(n, { pin: true });
+    graphLink = undefined;
+    graphNode = n.id ?? '';
+  }
   /** the world the editor sees: the change's when one is followed, else the latest released versions */
   const world = $derived(worldIndex ?? head);
 
@@ -710,9 +727,21 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
             <p class="empty">{work ? 'This node is not in the world of the selected change.' : 'This node is not in the current graph (deleted, or only created by a change: select that change to see it).'}</p>
           {/if}
         {:else if active === 'graph'}
-          {#if (work && inWorld) || (!work && head?.baselineId && head.nodes.has(id))}
+          {#if work && inWorld}
             <section class="card neighbourhood">
-              <GraphExplorer root={stored} />
+              {#if graphNode !== id || graphLink}
+                <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
+              {/if}
+              <NodeQuery view={{ changeId: work.change.id ?? '', flow: workFlow }} from={graphNode} fromKey={graphKey} bind:keep={graphKeep} onpick={pickInGraph} />
+              <NodeNeighbourhood baselineId={work.change.baselineId ?? ''} inChange={{ changeId: work.change.id ?? '', flow: workFlow }} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} bind:hood={graphHood} keep={graphKeep} details={false} compact fill {reload} />
+            </section>
+          {:else if !work && head?.baselineId && head.nodes.has(id)}
+            <section class="card neighbourhood">
+              {#if graphNode !== id || graphLink}
+                <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
+              {/if}
+              <NodeQuery view={branchView(stored.namespace ?? '', head.baselineId)} from={graphNode} fromKey={graphKey} bind:keep={graphKeep} onpick={pickInGraph} />
+              <NodeNeighbourhood baselineId={head.baselineId} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} bind:hood={graphHood} keep={graphKeep} details={false} compact fill {reload} />
             </section>
           {:else}
             <p class="empty">{work ? 'This node is not in the world of the selected change.' : 'This node is not in the current graph (deleted, or only created by a change: select that change to see it).'}</p>

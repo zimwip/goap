@@ -71,11 +71,12 @@ would ignore the views and need keeping in sync.
    examples. The nodes and links the rows name replace what the canvas showed, as one neighbourhood whose nodes are not
    expanded yet (each can be expanded from there); the rows are a table under it, a cell naming a node selects it, a double click opens it. A context move runs the query
    again (`web/src/lib/graphQuery.ts`).
-7. **The Graph pane of a node is a Graph explorer restricted to the node** (`components/GraphExplorer.svelte` with a
-   `root`; the tab is the same component without one): the same canvas and side panel, starting from the node and its
-   neighbours; its text box filters the nodes shown (key, name, type) instead of searching; its query starts from the
-   node (`n`, bound by `bind`, in the node's namespace, examples of their own) and filters what is shown: the nodes the
-   rows name, and the node, with the links read between them.
+7. **The Graph pane of a node keeps its compact view and gains a filter and a query** (`components/NodeQuery.svelte`
+   above `NodeNeighbourhood.svelte`): the icons and colours of the types and the depth presets (1 to 4 hops) stay; a text
+   box filters the nodes shown (key, name, type); a query starts from the node (`n`, bound by `bind`, in the view the
+   pane reads, examples of their own) and narrows what is shown to the nodes its rows name (`NodeNeighbourhood`'s
+   `keep`: the center always kept, a link kept while both its ends are), its rows a table above the graph (a node of a
+   row recenters the pane, a double click opens it).
 
 ## Consequences
 

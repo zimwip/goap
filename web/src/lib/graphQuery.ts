@@ -63,14 +63,12 @@ export function cellNodes(c: Cell): string[] {
   return [];
 }
 
-/** The answer of a query as a neighbourhood of the explorer: its nodes and links, none of them expanded; the node it
- * started from (the root of a node's explorer) shown with them. */
-export function queryHood(res: QueryResult, root?: GraphNode): Hood {
-  const nodes = res.nodes ?? [];
-  return { nodes: root?.id && !nodes.some((n) => n.id === root.id) ? [root, ...nodes] : nodes, links: res.links ?? [] };
+/** The answer of a query as a neighbourhood of the explorer: its nodes and links, none of them expanded. */
+export function queryHood(res: QueryResult): Hood {
+  return { nodes: res.nodes ?? [], links: res.links ?? [] };
 }
 
-/** Whether a node matches the filter of the explorer: a part of its key, label or type, ignoring case. */
+/** Whether a node matches the filter of a node's Graph pane: a part of its key, label or type, ignoring case. */
 export function matchesFilter(n: GraphNode, text: string): boolean {
   const t = text.trim().toLowerCase();
   return !t || [n.key, nodeLabel(n), n.type].some((s) => (s ?? '').toLowerCase().includes(t));
@@ -94,7 +92,7 @@ export const QUERY_EXAMPLES: { label: string; query: string }[] = [
   { label: 'Optional match', query: 'MATCH (r:Requirement)\nOPTIONAL MATCH (r)<-[:verifies]-(t)\nRETURN r.key, collect(t.key) AS tests' },
 ];
 
-/** Example queries of a node's explorer: each starts from the node, `n`. */
+/** Example queries of a node's Graph pane: each starts from the node, `n`. */
 export const NODE_QUERY_EXAMPLES: { label: string; query: string }[] = [
   { label: 'Its neighbours', query: 'MATCH (n)-[l]-(m)\nRETURN m' },
   { label: 'Two hops, one type', query: 'MATCH p = (n)-[*1..2]-(m:Requirement)\nRETURN p' },
