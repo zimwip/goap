@@ -37,6 +37,23 @@ type TriggerEvent struct {
 	Fields map[string]domain.HeaderValue `json:"fields,omitempty"`
 	// EndUser is the person whose action raised a change event (domain.ChangeEvent.EndUser, ADR 0114).
 	EndUser string `json:"endUser,omitempty"`
+	// Branch and Nodes: the branch a change.committed, change.rebased or change.merged event left node versions on, and
+	// those versions (event.branch, event.nodes; ADR 0159).
+	Branch string             `json:"branch,omitempty"`
+	Nodes  []domain.EventNode `json:"nodes,omitempty"`
+}
+
+// projectKey is the key of the project the event is about: its change's, else its process's ("" for none, or no event).
+func (ev *TriggerEvent) projectKey() string {
+	switch {
+	case ev == nil:
+		return ""
+	case ev.Change != nil && ev.Change.ProjectID.Key != "":
+		return ev.Change.ProjectID.Key
+	case ev.Process != nil:
+		return ev.Process.Project
+	}
+	return ""
 }
 
 // endUser is the person the runs an event sets off act for (ADR 0114): the one who raised a change event, else the end
@@ -91,6 +108,13 @@ func (ev TriggerEvent) activation() map[string]any {
 	if ev.Methodology != "" {
 		out["methodology"] = map[string]any{"name": ev.Methodology, "version": ev.Version}
 	}
+	out["branch"] = ev.Branch
+	nodes := make([]any, len(ev.Nodes))
+	for i, n := range ev.Nodes {
+		nodes[i] = map[string]any{"id": string(n.ID), "version": int64(n.Version), "namespace": n.Namespace, "key": n.Key,
+			"type": n.Type, "state": n.State, "deleted": n.Deleted}
+	}
+	out["nodes"] = nodes
 	if len(ev.Items) > 0 {
 		items := make([]any, len(ev.Items))
 		for i, it := range ev.Items {
@@ -498,6 +522,8 @@ func (t *TriggerManager) start(ctx context.Context, key string, s TriggerState, 
 			return nil, err
 		}
 		req.BaselineID = b
+		// the new change acts in the project of the event (ADR 0159): what reacts to a change is about that project
+		req.ProjectID = ev.projectKey()
 	}
 	if def.Supersede && req.ChangeID != "" {
 		t.Engine.supersedeRuns(ctx, req.ChangeID, key, who.Subject)

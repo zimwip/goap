@@ -75,8 +75,8 @@ Verification happens on the way up and validation on the way down (the V&V of th
 - **What a project takes in is the project methodology's choice, stated as conditions on the Request** (its state,
   its attributes, the version), never a rule of the platform. Example, automatic backlog feeding (still the
   project's act, by its own trigger): an event trigger of the project methodology on the applied changes of `intake`
-  (filter `event.nodes.exists(n, n.type == "intake@Request" && n.state == "accepted")`, or a declared
-  `request.accepted`) drafts a Need reframing each accepted Request of the project's chain (`coverage: full`, to be
+  (`change.merged` into main, filter `event.nodes.exists(n, n.type == "intake@Request" && n.state ==
+  "accepted")`) drafts a Need reframing each accepted Request of the project's chain (`coverage: full`, to be
   reworded) into the backlog. The steps of the project process carry the same kind of conditions (a scoped condition
   over the Needs and the Requests they reframe, ADR 0109: every reframed Request `accepted` before the scope's gate),
   so only a request in the right state starts a task at the project level. Another methodology may take in
@@ -165,12 +165,13 @@ commits (ADR 0157). Triage and validation tasks open in the context of their req
   - the payload of a declared event carries the URLs (signal item data), and the closing change finds them there;
   - the assistant's `register_request` and an `intake` importer.
 - Gaps found in the code (2026-10):
-  - `change.applied` carries no nodes (`engine.TriggerEvent`): the backlog trigger cannot filter on the state of a
-    committed Request. Either add the committed nodes (type, key, state, version) to the event, or `request-management`
-    emits `request.accepted` from its decision (works today).
-  - A trigger with `target: new_change` creates its change in the run's project, else the root project
-    (`Engine.resolveChange`): the closing change of a request must act in the request's project. A trigger takes its
-    project from the event (`event.change.project`, or a project named in the signal's data).
+  - Done: every commit, rebase and merge names the branch and the node versions it left there (`change.committed`, and
+    the new `change.rebased` and `change.merged`: `domain.ChangeEvent.Branch` / `Nodes`, `domain.EventNode`; CEL
+    `event.branch`, `event.nodes`), so the backlog trigger filters on a committed Request (`event.nodes.exists(n,
+    n.type == "intake@Request" && n.state == "accepted")`). The events stay events of the change: only a change
+    modifies the graph.
+  - Done: a trigger with `target: new_change` creates its change in the project of the event's change, else of its
+    process (`TriggerEvent.projectKey`), no longer in the root project.
   - Conditions of the project change see the linked Requests only within one graph (`BlackboardIn` hydrates the
     neighbours of a local target, any namespace, and skips `External()` links). Across graphs, the Need's conditions
     on the Request state need the external targets resolved into the blackboard (ADR 0154: resolution at read, not

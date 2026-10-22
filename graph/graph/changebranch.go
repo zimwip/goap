@@ -76,6 +76,7 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 	if err := g.commit(ctx, tx, c, own, res.Change.ID, res.Baseline.ID); err != nil {
 		return c, err
 	}
+	g.raiseMerged(ctx, tx, c, own.Parent, &res.Baseline, res.merged)
 	g.raiseApplied(ctx, tx, c, res.Baseline)
 	return c, tx.PutChange(ctx, c)
 }
@@ -264,6 +265,7 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		if err := g.moveFork(ctx, tx, c.ID, &own, to); err != nil {
 			return false, err
 		}
+		g.raiseRebased(ctx, tx, c.ID, own.Name, nil)
 		if c, err = tx.Change(ctx, c.ID); err != nil {
 			return false, err
 		}
@@ -310,6 +312,9 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		if err := g.commit(ctx, tx, c, own, c.ID, ""); err != nil {
 			return false, err
 		}
+		if err := g.raiseMergedRefs(ctx, tx, c, target, nil, moves); err != nil {
+			return false, err
+		}
 		return true, tx.PutChange(ctx, c)
 	}
 	// a fast-forward, not a merge (the target did not move since the fork): name it after the change, not "merge …"
@@ -323,6 +328,9 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	}
 	c.ResultBaselineID = res.ID
 	if err := g.commit(ctx, tx, c, own, c.ID, res.ID); err != nil {
+		return false, err
+	}
+	if err := g.raiseMergedRefs(ctx, tx, c, target, &res, moves); err != nil {
 		return false, err
 	}
 	g.raiseApplied(ctx, tx, c, res)
