@@ -1782,9 +1782,13 @@ provider, or gateway WebSocket) are analyzed in the ADR but not built.
 
 ### 3.9 The assistant in the web ([ADR 0088](adr/0088-assistant-web-interface.md))
 
-One conversation view (`views/assistant/Assistant.svelte`) is shown as the **assistant tab** and as the **floating
-panel** opened by a round launcher (`assistant/Launcher.svelte`, mounted once in `Shell.svelte`; `Ctrl+Shift+A`, the
-command "Ask the assistant"). The state is `stores/assistant.svelte.ts`: conversations of the caller (newest first), the
+One conversation view (`views/assistant/Assistant.svelte`) is shown as the **assistant tab** and in the **Assistant
+bar** on the right of the shell (`shell/AssistantBar.svelte`: closed, a rail with its pin, the assistant and the latest
+discussions; a click opens it over the editor, pinned it is docked beside it, resized by its left edge either way; open,
+it lists the discussions above the conversation; `Ctrl+Shift+A`, the command "Ask the assistant"). The bar holds only the
+assistant and its discussions: the sections of an editor are the tabs of the editor (`components/EditorPanes.svelte`:
+header, tab strip with the editor's tools, detail). The round floating launcher (`assistant/Launcher.svelte`) is no longer
+mounted; its design is kept for another use. The state is `stores/assistant.svelte.ts`: conversations of the caller (newest first), the
 current one and its messages, the draft; `send` collects the layered context (`assistant/context.ts`, ADR 0092: focus, screen, app, zoomed on the focused element, capped
 as the server caps it; never a form value) and the tools the open screen offers (`assist/registry.svelte.ts` `describeTools`,
 descriptors in `assist/catalog.ts`) and calls `assistant.v1.Send`, then polls `GetConversation` (every 0.5 s for the first 12
@@ -1800,9 +1804,9 @@ focus provider, tools (implementations of the catalog, run through the screen's 
 fields (`use:assistField`, shared with the helper of ADR 0086); `assist/capture.ts` keeps the selection and focus from before
 the person went to the assistant, `assist/recorder.ts` the last action. The
 current conversation is kept in memory only (ADR 0052): a new page opens the most recent one. The whole interface depends
-on `aliasFlags.assistantEnabled`: without a model for the `assistant` alias the launcher is not rendered, the commands
-are hidden and the tab explains it with a link to the model catalog. The launcher stays clear of the right activity bar,
-tool panel, console and status bar, and gives way to the field helper (they are never open together).
+on `aliasFlags.assistantEnabled`: without a model for the `assistant` alias the bar lists no discussion, the commands
+are hidden and the bar and the tab explain it with a link to the model catalog. The bar gives way to the field helper
+(they are never open together).
 
 ## 4. Format of a methodology
 

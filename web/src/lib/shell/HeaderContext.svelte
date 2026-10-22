@@ -1,6 +1,6 @@
 <script lang="ts">
   // The context, in the header: where the person works (project, working change, the option of it worked on). The sections of the editor shown
-  // are in the context bar on the right.
+  // are the tabs of the editor.
   import ProjectSelector from './ProjectSelector.svelte';
   import WorkingChangeSelector from './WorkingChangeSelector.svelte';
   import OptionSelector from './OptionSelector.svelte';

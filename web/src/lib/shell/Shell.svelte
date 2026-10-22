@@ -6,10 +6,9 @@
   import Header from './Header.svelte';
   import ActivityBar from './ActivityBar.svelte';
   import NavSidebar from './NavSidebar.svelte';
-  import ContextBar from './ContextBar.svelte';
+  import AssistantBar from './AssistantBar.svelte';
   import Icon from './Icon.svelte';
   import { panelView } from './registry';
-  import { contextBar } from './context.svelte';
   import EditorArea from './EditorArea.svelte';
   import BottomPanel from './BottomPanel.svelte';
   import Resizer from './Resizer.svelte';
@@ -29,9 +28,11 @@
   import { openSearch } from './searchOverlay.svelte.ts';
   import HelperBubble from '../helper/HelperBubble.svelte';
   import { canOpenHelper, closeHelper, openHelper } from '../helper/helper.svelte';
-  import Launcher from '../assistant/Launcher.svelte';
   import { assistantEnabled } from '../assistant/enabled';
   import { assistant, closePanel, openPanel } from '../stores/assistant.svelte';
+  import { helper } from '../helper/helper.svelte';
+  import { startCapture } from '../assist/capture';
+  import { entityOfElement } from '../assist/registry.svelte';
   import StatusBar from './StatusBar.svelte';
   import { layout, LIMITS, RAIL, toggleConsole, toggleNavigation } from './layout.svelte';
   import { activeTab, closeTab, startRouting } from './tabs.svelte';
@@ -68,41 +69,39 @@
   const sideMax = $derived(Math.max(LIMITS.side.min, Math.min(LIMITS.side.max, Math.floor(width * 0.4))));
   const bottomMax = $derived(Math.max(LIMITS.bottom.min, Math.min(LIMITS.bottom.max, height - 200)));
 
-  // The context bar (right) is a rail of icons with its pin at the top. Pinned on a wide screen, it is docked beside the
-  // editor; else a click on an icon (or the focus) opens it over the editor and it closes once the pointer and the focus
-  // left it. The left side is no such bar: its activity bar selects the tool (ADR 0158).
-  const HIDE_DELAY = 350;
-
-  /** Whether the focus is on something the person is working with in the bar (a filter typed, a menu open). */
-  function busy(bar: HTMLElement | undefined): boolean {
-    const el = document.activeElement;
-    return !!bar?.contains(el) && el !== document.body && !!el?.matches('input, textarea, select, [aria-expanded="true"]');
-  }
-
-  // The context bar (right): open, its rail slides out over the editor with the labels.
+  // The Assistant bar (right): the assistant and the discussions going on. Closed, a rail of icons with its pin at the
+  // top; pinned on a wide screen, it is docked beside the editor; else a click on an icon opens it over the editor until
+  // it is closed (its button, Esc, a click outside it). Either way it is resized by its left edge. The left side is no
+  // such bar: its activity bar selects the tool (ADR 0158). The floating bubble of `assistant/Launcher.svelte` is no
+  // longer mounted: its design is kept for another use.
   const docked = $derived(layout.rightOpen && !narrow);
-  $effect(() => {
-    contextBar.docked = docked;
-  });
-  const ctxMax = $derived(Math.min(LIMITS.context.max, sideMax));
+  const revealed = $derived(!docked && assistant.panelOpen);
+  const ctxMax = $derived(Math.max(LIMITS.context.min, Math.min(LIMITS.context.max, width - 360)));
   const ctxWidth = $derived(Math.max(LIMITS.context.min, Math.min(layout.contextWidth, ctxMax)));
   let rail = $state<HTMLElement>();
-  let hideTimer: ReturnType<typeof setTimeout> | undefined;
-  function ctxLeave() {
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => {
-      if (!busy(rail)) contextBar.revealed = false;
-    }, HIDE_DELAY);
-  }
-  function ctxFocusOut(e: FocusEvent) {
-    if (!rail?.contains(e.relatedTarget as Node | null) && !rail?.matches(':hover')) contextBar.revealed = false;
-  }
   function ctxKey(e: KeyboardEvent) {
-    if (e.key === 'Escape' && contextBar.revealed) {
-      contextBar.revealed = false;
+    if (e.key === 'Escape' && revealed && !e.defaultPrevented) {
+      closePanel();
       e.stopPropagation();
     }
   }
+  // a press outside the bar opened over the editor closes it (not one in a dialog it opened, nor one of the shortcuts)
+  function outside(e: PointerEvent) {
+    if (!revealed || !rail || rail.contains(e.target as Node)) return;
+    const t = e.target as HTMLElement | null;
+    if (t?.closest('[role="dialog"], .modal, [data-assistant], .ctxmenu, .toasts')) return;
+    closePanel();
+  }
+
+  // what is selected or focused on the page is remembered, for the assistant to use (ADR 0092)
+  $effect(() => startCapture((el) => !!entityOfElement(el)));
+  // the helper and the assistant never share the screen (ADR 0086)
+  $effect(() => {
+    if (helper.open) closePanel();
+  });
+  $effect(() => {
+    if (!assistantEnabled()) closePanel();
+  });
 
   // The left side: the bar selecting the tool, then the navigation of a navigation tool, shown beside the editors (over
   // them on a narrow screen); a tool filling the editor space has none (ADR 0158).
@@ -151,7 +150,8 @@
       if (canOpenHelper()) void openHelper();
     } else if (mod && e.shiftKey && !e.altKey && k === 'a') {
       e.preventDefault();
-      if (assistant.panelOpen) closePanel();
+      if (docked) assistant.focus++;
+      else if (assistant.panelOpen) closePanel();
       else if (assistantEnabled()) (closeHelper(), openPanel());
     } else if (mod && (k === 'p' || k === 'k')) {
       e.preventDefault();
@@ -160,7 +160,7 @@
   }
 </script>
 
-<svelte:window bind:innerWidth={width} bind:innerHeight={height} onkeydown={keydown} onbeforeunload={beforeUnload} />
+<svelte:window bind:innerWidth={width} bind:innerHeight={height} onkeydown={keydown} onbeforeunload={beforeUnload} onpointerdown={outside} />
 
 <div class="shell" class:narrow>
   <Header />
@@ -238,30 +238,31 @@
         min={LIMITS.context.min}
         max={ctxMax}
         invert
-        label="Context bar width"
+        label="Assistant bar width"
         onresize={(v) => (layout.contextWidth = v)}
       />
       <div class="ctx-docked" style:width="{ctxWidth}px">
-        <ContextBar open />
+        <AssistantBar open docked />
       </div>
     {:else}
-      <!-- the context bar's rail: a click on a section (or the focus) slides the bar open over the editor; leaving it hides it -->
+      <!-- the Assistant bar's rail: a click on an icon slides the bar open over the editor -->
       <div class="rail-slot" style:width="{RAIL}px">
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="rail"
-          class:open={contextBar.revealed}
-          bind:this={rail}
-          style:width="{contextBar.revealed ? ctxWidth : RAIL}px"
-          onmouseenter={() => clearTimeout(hideTimer)}
-          onmouseleave={ctxLeave}
-          onfocusin={(e) => {
-            if (!(e.target as HTMLElement).matches('.pin')) contextBar.revealed = true;
-          }}
-          onfocusout={ctxFocusOut}
-          onkeydown={ctxKey}
-        >
-          <ContextBar open={contextBar.revealed} />
+        <div class="rail" class:open={revealed} bind:this={rail} style:width="{revealed ? ctxWidth : RAIL}px" onkeydown={ctxKey}>
+          {#if revealed}
+            <div class="rail-grip">
+              <Resizer
+                orientation="vertical"
+                value={ctxWidth}
+                min={LIMITS.context.min}
+                max={ctxMax}
+                invert
+                label="Assistant bar width"
+                onresize={(v) => (layout.contextWidth = v)}
+              />
+            </div>
+          {/if}
+          <AssistantBar open={revealed} />
         </div>
       </div>
     {/if}
@@ -282,7 +283,6 @@
 <PlatformStatusModal />
 <SearchOverlay />
 <HelperBubble />
-<Launcher />
 
 <style>
   .shell {
@@ -350,6 +350,14 @@
   }
   .rail.open {
     box-shadow: var(--shadow);
+  }
+  .rail-grip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1;
+    display: flex;
   }
   @media (prefers-reduced-motion: reduce) {
     .rail {

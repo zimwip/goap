@@ -1,6 +1,7 @@
 <script lang="ts">
-  // The conversational assistant (ADR 0087): one conversation view, shown as a tab or as the compact floating panel.
-  import { tick } from 'svelte';
+  // The conversational assistant (ADR 0087): one conversation view, shown as a tab, in the Assistant bar on the right
+  // (`side`: the discussions listed above the conversation) or as the compact floating panel.
+  import { tick, type Snippet } from 'svelte';
   import Icon from '../../shell/Icon.svelte';
   import VoiceButton from '../../voice/VoiceButton.svelte';
   import { openSettings } from '../../shell/settingsState.svelte';
@@ -32,7 +33,27 @@
     mode = 'tab',
     onclose,
     onexpand,
-  }: { mode?: 'panel' | 'tab'; onclose?: () => void; onexpand?: () => void } = $props();
+    lead,
+  }: {
+    mode?: 'panel' | 'tab' | 'side';
+    onclose?: () => void;
+    onexpand?: () => void;
+    /** what comes first in the bar of the view (the pin of the Assistant bar) */
+    lead?: Snippet;
+  } = $props();
+  const compact = $derived(mode !== 'tab');
+
+  /** When a conversation was last written, shortly. */
+  function when(at?: string): string {
+    if (!at) return '';
+    const d = new Date(at);
+    if (Number.isNaN(d.getTime())) return '';
+    const mins = Math.round((Date.now() - d.getTime()) / 60000);
+    if (mins < 1) return 'now';
+    if (mins < 60) return `${mins} min`;
+    if (mins < 24 * 60) return `${Math.round(mins / 60)} h`;
+    return d.toLocaleDateString();
+  }
 
   let input = $state<HTMLTextAreaElement>();
   let scroller = $state<HTMLDivElement>();
@@ -114,8 +135,9 @@
   }
 </script>
 
-<div class="assistant {mode}" data-assistant>
+<div class="assistant {mode}" class:compact data-assistant>
   <div class="bar">
+    {#if lead}{@render lead()}{/if}
     <strong class="title"><Icon name="chat" size={15} /> Assistant</strong>
     <span class="ai-badge" title={AI_DISCLOSURE}>AI</span>
     <span class="grow"></span>
@@ -124,10 +146,10 @@
         <Icon name="plus" size={12} />{#if mode === 'tab'} New conversation{/if}
       </button>
     {/if}
-    {#if mode === 'panel' && onexpand}
+    {#if compact && onexpand}
       <button type="button" class="ghost small" title="Open in a tab" aria-label="Open in a tab" onclick={onexpand}><Icon name="external" size={13} /></button>
     {/if}
-    {#if mode === 'panel' && onclose}
+    {#if compact && onclose}
       <button type="button" class="ghost small" title="Close (Esc)" aria-label="Close the assistant" onclick={onclose}><Icon name="x" size={13} /></button>
     {/if}
   </div>
@@ -139,14 +161,40 @@
       <button type="button" class="link" onclick={() => openSettings('catalog')}>Open the model catalog</button>
     </div>
   {:else}
-    <div class="picker">
-      <label class="sr" for="as-conv-{mode}">Conversation</label>
-      <select id="as-conv-{mode}" value={assistant.currentId} onchange={pick}>
-        <option value="">New conversation</option>
-        {#each assistant.conversations as c (c.id)}
-          <option value={c.id}>{c.title || 'Untitled'}</option>
-        {/each}
-      </select>
+    {#if mode === 'side'}
+      <!-- the discussions going on, newest first: a click opens one -->
+      <nav class="discussions" aria-label="Discussions">
+        <div class="disc-head">Discussions</div>
+        {#if !assistant.conversations.length}
+          <p class="muted none">No discussion yet.</p>
+        {:else}
+          <ul>
+            {#each assistant.conversations as c (c.id)}
+              {@const on = c.id === assistant.currentId}
+              <li>
+                <button type="button" class="disc" class:on aria-current={on ? 'true' : undefined} title={c.title || 'Untitled'} onclick={() => void openConversation(c.id)}>
+                  <span class="disc-title">{c.title || 'Untitled'}</span>
+                  {#if on && pending}<span class="disc-live" title="The assistant is answering" aria-label="answering"></span>{/if}
+                  <span class="disc-when">{when(c.updatedAt ?? c.createdAt)}</span>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </nav>
+    {/if}
+    <div class="picker" class:bare={mode === 'side' && !current}>
+      {#if mode === 'side'}
+        <span class="current-title">{current ? current.title || 'Untitled' : 'New conversation'}</span>
+      {:else}
+        <label class="sr" for="as-conv-{mode}">Conversation</label>
+        <select id="as-conv-{mode}" value={assistant.currentId} onchange={pick}>
+          <option value="">New conversation</option>
+          {#each assistant.conversations as c (c.id)}
+            <option value={c.id}>{c.title || 'Untitled'}</option>
+          {/each}
+        </select>
+      {/if}
       {#if current}
         {#if renaming}
           <!-- svelte-ignore a11y_autofocus -->
@@ -287,8 +335,88 @@
     min-height: 0;
     font-size: 14px;
   }
-  .assistant.panel {
+  .assistant.compact {
     font-size: 13px;
+  }
+  .discussions {
+    flex: none;
+    max-height: 32%;
+    overflow: auto;
+    border-bottom: 1px solid var(--border);
+    padding: 0.3rem 0;
+    scrollbar-width: thin;
+  }
+  .disc-head {
+    padding: 0.15rem 0.7rem 0.3rem;
+    font-size: var(--fs-xs, 11px);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-3, var(--muted));
+  }
+  .discussions ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .none {
+    margin: 0;
+    padding: 0 0.7rem 0.3rem;
+  }
+  .disc {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: 100%;
+    min-height: 0;
+    padding: 0.3rem 0.7rem;
+    border: none;
+    border-left: 2px solid transparent;
+    border-radius: 0;
+    background: none;
+    color: var(--text-2, var(--text));
+    text-align: left;
+    font-weight: 400;
+  }
+  .disc:hover:not(:disabled) {
+    background: var(--hover);
+    color: var(--text);
+  }
+  .disc.on {
+    border-left-color: var(--accent);
+    background: var(--accent-soft, var(--hover));
+    color: var(--text);
+    font-weight: 500;
+  }
+  .disc-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .disc-live {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .disc-when {
+    flex: none;
+    font-size: var(--fs-xs, 11px);
+    color: var(--text-3, var(--muted));
+  }
+  .current-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .picker.bare {
+    color: var(--text-3, var(--muted));
   }
   .bar {
     display: flex;

@@ -141,7 +141,7 @@
   <button type="button" class="item" aria-pressed={layout.bottomOpen} title="Console (Ctrl+J)" aria-label="Console" onclick={() => (layout.bottomOpen = !layout.bottomOpen)}
     ><Icon name="panelBottom" size={13} /></button
   >
-  <button type="button" class="item" aria-pressed={layout.rightOpen} title="Keep the context bar open" aria-label="Pin the context bar" onclick={() => (layout.rightOpen = !layout.rightOpen)}
+  <button type="button" class="item" aria-pressed={layout.rightOpen} title="Keep the Assistant bar open" aria-label="Pin the Assistant bar" onclick={() => (layout.rightOpen = !layout.rightOpen)}
     ><Icon name="panelRight" size={13} /></button
   >
   <span class="sep" aria-hidden="true"></span>
