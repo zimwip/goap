@@ -2,7 +2,7 @@
   // CodeMirror 6 code editor bound to a string (`bind:value`). CodeMirror
   // is loaded on demand (separate bundle chunk).
   import { onMount } from 'svelte';
-  import type { CodeLanguage } from '../codemirror';
+  import type { CodeLanguage, TextCompletions } from '../codemirror';
 
   type CM = typeof import('../codemirror');
 
@@ -20,6 +20,8 @@
     id,
     bad = false,
     path,
+    complete,
+    onrun,
   }: {
     value?: string;
     language?: CodeLanguage;
@@ -37,6 +39,10 @@
     bad?: boolean;
     /** path of validation issues */
     path?: string;
+    /** completion of the text at the cursor, whatever the language (the query boxes) */
+    complete?: (text: string, pos: number, explicit: boolean) => TextCompletions | null;
+    /** run on Ctrl+Enter */
+    onrun?: () => void;
   } = $props();
 
   let host: HTMLDivElement;
@@ -65,7 +71,7 @@
   });
 
   function create(mod: CM) {
-    const { EditorView, EditorState, Compartment, baseExtensions, languageExtension } = mod;
+    const { EditorView, EditorState, Compartment, baseExtensions, languageExtension, completionFrom, runKey } = mod;
     lang = new Compartment();
     ro = new Compartment();
     view = new EditorView({
@@ -73,7 +79,9 @@
       state: EditorState.create({
         doc: value,
         extensions: [
+          onrun ? runKey(() => onrun?.()) : [],
           baseExtensions({ lineNumbers, placeholder, wrap }),
+          complete ? completionFrom((text, pos, explicit) => complete?.(text, pos, explicit) ?? null) : [],
           lang.of(languageExtension(language, dsl)),
           ro.of(readonlyExt(readonly)),
           EditorView.contentAttributes.of({
