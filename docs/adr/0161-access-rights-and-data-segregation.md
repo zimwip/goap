@@ -143,8 +143,7 @@ Phase 4 is independent of 2 and 3.
   other through `tree`.
 - Administrators lose the implicit read of every project's content; support work goes through an Assignment.
 - Every read path that returns nodes goes through the view reader; a new one that does not is a leak.
-
-## Open
-
-- A personal node whose creator leaves: proposed, it passes to its responsible unit as `private`, by an administrative
-  task.
+- **Personal nodes are personal.** When their creator leaves, nothing passes to anyone: the nodes whose every version
+  is `personal` are deleted, with their versions and the links they hold. It is the one exception to "a node is never
+  deleted" (ADR 0079): no one else ever read them, and no one else could link to them. A node that once left
+  `personal` is shared and is kept whole, its earlier personal versions included.
