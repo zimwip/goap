@@ -183,6 +183,9 @@ func (g *Graph) ViewNode(ctx context.Context, v View, id domain.NodeID, key stri
 		if err != nil {
 			return err
 		}
+		if err := w.preloadIn(ctx, tx, ref); err != nil {
+			return err
+		}
 		nv, err = viewIn(ctx, tx, w.reader, ref)
 		return err
 	})
@@ -309,6 +312,33 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID) 
 		nb.Links = append(nb.Links, l)
 	}
 	return nb, nil
+}
+
+// preloadIn gives the reader the stored links entering the version of a node it will read (the one a draft was
+// checked out from for a draft) from the versions of their sources the world holds (entering), rather than from every
+// version of every source that ever held one.
+func (w *world) preloadIn(ctx context.Context, tx Tx, ref domain.NodeRef) error {
+	if d, ok := w.reader.get(ref.ID); ok && ref.IsDraft() && d.Base != nil {
+		ref = *d.Base
+	}
+	if ref.IsDraft() {
+		return nil
+	}
+	links, err := w.entering(ctx, tx, ref.ID)
+	if err != nil {
+		return err
+	}
+	in := []domain.Link{}
+	for _, l := range links {
+		if l.To == ref {
+			in = append(in, l)
+		}
+	}
+	if w.reader.in == nil {
+		w.reader.in = map[domain.NodeRef][]domain.Link{}
+	}
+	w.reader.in[ref] = in
+	return nil
 }
 
 // entering reads the stored links entering a node from the versions of their sources the world holds: the sources
