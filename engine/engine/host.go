@@ -248,21 +248,17 @@ func (h *Host) Node(ctx context.Context, key string) (dsl.Node, error) {
 	return toDSL(nv.Node), nil
 }
 
-// Nodes implements dsl.Host: the nodes of a type in the process's view, read a page at a time.
+// Nodes implements dsl.Host: the nodes of a type in the process's view, in one read.
 func (h *Host) Nodes(ctx context.Context, nodeType string) ([]dsl.Node, error) {
-	out := []dsl.Node{}
-	for offset := 0; ; offset += graphapi.MaxBrowseLimit {
-		page, err := h.e.Graph.ViewNodes(ctx, viewOf(h.process), graphapi.NodeQuery{Type: nodeType, Offset: offset, Limit: graphapi.MaxBrowseLimit})
-		if err != nil {
-			return nil, err
-		}
-		for _, n := range page.Nodes {
-			out = append(out, toDSL(n))
-		}
-		if len(page.Nodes) == 0 || offset+len(page.Nodes) >= page.Total {
-			return out, nil
-		}
+	nodes, err := h.e.Graph.ViewNodesOfType(ctx, viewOf(h.process), nodeType)
+	if err != nil {
+		return nil, err
 	}
+	out := make([]dsl.Node, 0, len(nodes))
+	for _, n := range nodes {
+		out = append(out, toDSL(n))
+	}
+	return out, nil
 }
 
 // Links implements dsl.Host: the links of a node of the process's view, with their other end.

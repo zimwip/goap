@@ -151,7 +151,7 @@ var funcs = template.FuncMap{
 	"json": func(v any) string { b, _ := json.Marshal(v); return string(b) },
 }
 
-// PromptGraph is the graph a prompt template reads: the nodes of the change's namespace in its view, read page by page
+// PromptGraph is the graph a prompt template reads: the nodes of the change's namespace in its view, read in one go
 // the first time the template asks for them, never when it does not (ADR 0157).
 type PromptGraph struct {
 	ctx       context.Context
@@ -166,18 +166,10 @@ type PromptGraph struct {
 // Nodes are the nodes of the view (`{{ range .Baseline.Nodes }}`).
 func (b *PromptGraph) Nodes() ([]domain.Node, error) {
 	b.once.Do(func() {
-		for offset := 0; ; offset += graphapi.MaxBrowseLimit {
-			page, err := b.g.ViewNodes(b.ctx, b.view, graphapi.NodeQuery{Offset: offset, Limit: graphapi.MaxBrowseLimit})
-			if err != nil {
-				b.err = err
-				return
-			}
-			b.nodes = append(b.nodes, page.Nodes...)
-			if len(page.Nodes) == 0 || offset+len(page.Nodes) >= page.Total {
-				break
-			}
+		var nodes []domain.Node
+		if nodes, b.err = b.g.ViewNodesOfType(b.ctx, b.view, ""); b.err == nil {
+			b.nodes = filterNamespace(nodes, b.namespace)
 		}
-		b.nodes = filterNamespace(b.nodes, b.namespace)
 	})
 	return b.nodes, b.err
 }

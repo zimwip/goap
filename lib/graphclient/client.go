@@ -1024,3 +1024,16 @@ func (c *Client) ViewNodes(ctx context.Context, v graphapi.View, q graphapi.Node
 	}
 	return page, nil
 }
+
+// ViewNodesOfType reads every node of a type a view holds (ADR 0157).
+func (c *Client) ViewNodesOfType(ctx context.Context, v graphapi.View, typ string) ([]domain.Node, error) {
+	r, err := c.rpc.ListViewNodes(ctx, connect.NewRequest(&graphv1.ListViewNodesRequest{View: pbconv.GraphViewToPB(v), Type: typ}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	out := make([]domain.Node, 0, len(r.Msg.Nodes))
+	for _, n := range r.Msg.Nodes {
+		out = append(out, pbconv.NodeFromPB(n))
+	}
+	return out, nil
+}

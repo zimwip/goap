@@ -372,6 +372,14 @@ func (h *Handler) ListBaselineNodes(ctx context.Context, r *connect.Request[grap
 	return connect.NewResponse(out), nil
 }
 
+func (h *Handler) ListViewNodes(ctx context.Context, r *connect.Request[graphv1.ListViewNodesRequest]) (*connect.Response[graphv1.ListViewNodesResponse], error) {
+	nodes, err := h.Graph.ViewNodesOfType(ctx, pbconv.GraphViewFromPB(r.Msg.View), r.Msg.Type)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	return connect.NewResponse(&graphv1.ListViewNodesResponse{Nodes: pbconv.NodesToPB(nodes)}), nil
+}
+
 func (h *Handler) ListBaselineLinks(ctx context.Context, r *connect.Request[graphv1.ListBaselineLinksRequest]) (*connect.Response[graphv1.ListBaselineLinksResponse], error) {
 	id := domain.BaselineID(r.Msg.BaselineId)
 	b, err := h.Graph.BaselineHeader(ctx, id) // the header: the page is what is sent

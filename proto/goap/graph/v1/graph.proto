@@ -24,6 +24,8 @@ service GraphService {
   rpc GetBaselineDelta(GetBaselineDeltaRequest) returns (GetBaselineDeltaResponse);
   // Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
   rpc ListBaselineNodes(ListBaselineNodesRequest) returns (ListBaselineNodesResponse);
+  // every node of a type a view holds (ADR 0157): the explicit read of a whole type a script or a template asks for
+  rpc ListViewNodes(ListViewNodesRequest) returns (ListViewNodesResponse);
   rpc ListBaselineLinks(ListBaselineLinksRequest) returns (ListBaselineLinksResponse);
   rpc GetNodeNeighbourhood(GetNodeNeighbourhoodRequest) returns (GetNodeNeighbourhoodResponse);
   // What a view holds of some nodes (ADR 0157): their versions in it, read by node; the index keeps the hits of a
@@ -575,6 +577,17 @@ message ListBaselineNodesRequest {
   // the nodes the impacts of this change act on, at their version in the baseline: the answer and its cost follow
   // the change, not the size of the baseline (ADR 0140); empty: every node of the baseline
   string change_id = 7;
+}
+
+message ListViewNodesRequest {
+  // required
+  View view = 1;
+  // qualified node type, exactly (not its subtypes); empty: every node of the view
+  string type = 2;
+}
+
+message ListViewNodesResponse {
+  repeated Node nodes = 1;
 }
 
 message TypeCount {

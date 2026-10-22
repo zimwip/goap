@@ -118,7 +118,7 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	if err != nil {
 		return err
 	}
-	existing, err := g.ViewNodesOfType(ctx, orgMain, access.NodeTypeUser)
+	existing, err := g.ViewNodes(ctx, orgMain, graph.NodeQuery{Type: access.NodeTypeUser, Limit: 1})
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	// commits it usable right away, with no separate admin step needed for every single new user.
 	user.State = "active"
 	edits := []graph.NodeEdit{user}
-	if len(existing) == 0 {
+	if existing.Total == 0 {
 		// the first user: grant admin through a platform Assignment created in the same commit (ToKey
 		// resolves to the User node above, ADR 0047)
 		asg := access.Assignment{Roles: []string{access.RoleAdmin}, Description: "First user becomes administrator"}

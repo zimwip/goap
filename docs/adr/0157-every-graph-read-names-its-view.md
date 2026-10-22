@@ -124,8 +124,10 @@ version it started with (ADR 0113).
   `graphapi.ForkNode`. `readGraph` is gone. Whole reads left, explicit: the self-improvement observer (the
   methodology namespace) and `goap-admin`'s listings of the organisation.
 
-- Defaults removed (step 5): `Graph.NodesOfType` is gone; `Graph.ViewNodesOfType(view, type)` reads a type in a
-  view a page at a time (the sources of `Graph.Lnk`, the sign-in bookkeeping at the head of main of the organisation);
+- Defaults removed (step 5): `Graph.NodesOfType` is gone; `Graph.ViewNodesOfType(view, type)` reads a whole type
+  in a view in one read of the state (port `ViewNodesOfType`, RPC `ListViewNodes`; paging it cost a read of the state
+  per page: 3.5 s for 8421 nodes on SQLite, 0.29 s in one read, `BenchmarkViewReads`) (the sources of `Graph.Lnk`, the units of the sign-in bookkeeping, a script's `ctx.nodes`, the prompt templates; the
+  first-user check counts a page of one);
   validators keep the `ValidatorQuery` of the commit they judge. `TagVersion` at version 0 needs a `view`
   (`TagVersionRequest.view`) and tags the version it holds. `Graph.NodeByKey` stays for identity checks of the seeds
   (does a key exist), never to read a node's content.

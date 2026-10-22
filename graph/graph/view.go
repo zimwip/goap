@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 
@@ -330,24 +331,27 @@ func (g *Graph) ViewNodes(ctx context.Context, v View, q NodeQuery) (page NodePa
 	return page, err
 }
 
-// ViewNodesOfType returns the nodes of a type (that type exactly, not its subtypes) a view holds, read a page at a
-// time (ADR 0157): what an existence check or a seed reads, in the view it names.
-func (g *Graph) ViewNodesOfType(ctx context.Context, v View, typ string) ([]domain.Node, error) {
-	var out []domain.Node
-	for offset := 0; ; offset += MaxBrowseLimit {
-		page, err := g.ViewNodes(ctx, v, NodeQuery{Type: typ, Offset: offset, Limit: MaxBrowseLimit})
+// ViewNodesOfType returns the nodes of a type (that type exactly, not its subtypes; empty: every node) a view holds
+// (ADR 0157): an explicit read of a whole type, what a script's ctx.nodes, a prompt template or an existence check asks
+// for. One transaction and one read of the state, however many nodes come back.
+func (g *Graph) ViewNodesOfType(ctx context.Context, v View, typ string) (out []domain.Node, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		w, err := g.openWorld(ctx, tx, v)
 		if err != nil {
-			return nil, err
+			return err
+		}
+		page, err := w.page(ctx, tx, NodeQuery{Type: typ, Limit: math.MaxInt32})
+		if err != nil {
+			return err
 		}
 		for _, n := range page.Nodes {
-			if n.Type == typ {
+			if typ == "" || n.Type == typ {
 				out = append(out, n)
 			}
 		}
-		if len(page.Nodes) == 0 || offset+len(page.Nodes) >= page.Total {
-			return out, nil
-		}
-	}
+		return nil
+	})
+	return out, err
 }
 
 // page is a page of the nodes of the world.
@@ -431,7 +435,7 @@ func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error)
 			}
 		}
 	}
-	extra := pageNodes(written, NodeQuery{Type: q.Type, Text: q.Text, IncludeDeleted: q.IncludeDeleted, Limit: MaxBrowseLimit})
+	extra := pageNodes(written, NodeQuery{Type: q.Type, Text: q.Text, IncludeDeleted: q.IncludeDeleted, Limit: max(q.Offset+q.Limit, MaxBrowseLimit)})
 	all := append(page.Nodes, extra.Nodes...)
 	slices.SortFunc(all, func(a, b domain.Node) int { return strings.Compare(a.Key, b.Key) })
 	counts := map[string]int{}

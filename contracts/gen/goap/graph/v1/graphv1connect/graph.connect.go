@@ -53,6 +53,9 @@ const (
 	// GraphServiceListBaselineNodesProcedure is the fully-qualified name of the GraphService's
 	// ListBaselineNodes RPC.
 	GraphServiceListBaselineNodesProcedure = "/goap.graph.v1.GraphService/ListBaselineNodes"
+	// GraphServiceListViewNodesProcedure is the fully-qualified name of the GraphService's
+	// ListViewNodes RPC.
+	GraphServiceListViewNodesProcedure = "/goap.graph.v1.GraphService/ListViewNodes"
 	// GraphServiceListBaselineLinksProcedure is the fully-qualified name of the GraphService's
 	// ListBaselineLinks RPC.
 	GraphServiceListBaselineLinksProcedure = "/goap.graph.v1.GraphService/ListBaselineLinks"
@@ -368,6 +371,8 @@ type GraphServiceClient interface {
 	GetBaselineDelta(context.Context, *connect.Request[v1.GetBaselineDeltaRequest]) (*connect.Response[v1.GetBaselineDeltaResponse], error)
 	// Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
 	ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error)
+	// every node of a type a view holds (ADR 0157): the explicit read of a whole type a script or a template asks for
+	ListViewNodes(context.Context, *connect.Request[v1.ListViewNodesRequest]) (*connect.Response[v1.ListViewNodesResponse], error)
 	ListBaselineLinks(context.Context, *connect.Request[v1.ListBaselineLinksRequest]) (*connect.Response[v1.ListBaselineLinksResponse], error)
 	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
 	// What a view holds of some nodes (ADR 0157): their versions in it, read by node; the index keeps the hits of a
@@ -626,6 +631,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceListBaselineNodesProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ListBaselineNodes")),
+			connect.WithClientOptions(opts...),
+		),
+		listViewNodes: connect.NewClient[v1.ListViewNodesRequest, v1.ListViewNodesResponse](
+			httpClient,
+			baseURL+GraphServiceListViewNodesProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListViewNodes")),
 			connect.WithClientOptions(opts...),
 		),
 		listBaselineLinks: connect.NewClient[v1.ListBaselineLinksRequest, v1.ListBaselineLinksResponse](
@@ -1259,6 +1270,7 @@ type graphServiceClient struct {
 	getBaselineGraph        *connect.Client[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse]
 	getBaselineDelta        *connect.Client[v1.GetBaselineDeltaRequest, v1.GetBaselineDeltaResponse]
 	listBaselineNodes       *connect.Client[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse]
+	listViewNodes           *connect.Client[v1.ListViewNodesRequest, v1.ListViewNodesResponse]
 	listBaselineLinks       *connect.Client[v1.ListBaselineLinksRequest, v1.ListBaselineLinksResponse]
 	getNodeNeighbourhood    *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
 	resolveView             *connect.Client[v1.ResolveViewRequest, v1.ResolveViewResponse]
@@ -1402,6 +1414,11 @@ func (c *graphServiceClient) GetBaselineDelta(ctx context.Context, req *connect.
 // ListBaselineNodes calls goap.graph.v1.GraphService.ListBaselineNodes.
 func (c *graphServiceClient) ListBaselineNodes(ctx context.Context, req *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error) {
 	return c.listBaselineNodes.CallUnary(ctx, req)
+}
+
+// ListViewNodes calls goap.graph.v1.GraphService.ListViewNodes.
+func (c *graphServiceClient) ListViewNodes(ctx context.Context, req *connect.Request[v1.ListViewNodesRequest]) (*connect.Response[v1.ListViewNodesResponse], error) {
+	return c.listViewNodes.CallUnary(ctx, req)
 }
 
 // ListBaselineLinks calls goap.graph.v1.GraphService.ListBaselineLinks.
@@ -1935,6 +1952,8 @@ type GraphServiceHandler interface {
 	GetBaselineDelta(context.Context, *connect.Request[v1.GetBaselineDeltaRequest]) (*connect.Response[v1.GetBaselineDeltaResponse], error)
 	// Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
 	ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error)
+	// every node of a type a view holds (ADR 0157): the explicit read of a whole type a script or a template asks for
+	ListViewNodes(context.Context, *connect.Request[v1.ListViewNodesRequest]) (*connect.Response[v1.ListViewNodesResponse], error)
 	ListBaselineLinks(context.Context, *connect.Request[v1.ListBaselineLinksRequest]) (*connect.Response[v1.ListBaselineLinksResponse], error)
 	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
 	// What a view holds of some nodes (ADR 0157): their versions in it, read by node; the index keeps the hits of a
@@ -2189,6 +2208,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceListBaselineNodesProcedure,
 		svc.ListBaselineNodes,
 		connect.WithSchema(graphServiceMethods.ByName("ListBaselineNodes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListViewNodesHandler := connect.NewUnaryHandler(
+		GraphServiceListViewNodesProcedure,
+		svc.ListViewNodes,
+		connect.WithSchema(graphServiceMethods.ByName("ListViewNodes")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceListBaselineLinksHandler := connect.NewUnaryHandler(
@@ -2827,6 +2852,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetBaselineDeltaHandler.ServeHTTP(w, r)
 		case GraphServiceListBaselineNodesProcedure:
 			graphServiceListBaselineNodesHandler.ServeHTTP(w, r)
+		case GraphServiceListViewNodesProcedure:
+			graphServiceListViewNodesHandler.ServeHTTP(w, r)
 		case GraphServiceListBaselineLinksProcedure:
 			graphServiceListBaselineLinksHandler.ServeHTTP(w, r)
 		case GraphServiceGetNodeNeighbourhoodProcedure:
@@ -3072,6 +3099,10 @@ func (UnimplementedGraphServiceHandler) GetBaselineDelta(context.Context, *conne
 
 func (UnimplementedGraphServiceHandler) ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListBaselineNodes is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListViewNodes(context.Context, *connect.Request[v1.ListViewNodesRequest]) (*connect.Response[v1.ListViewNodesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListViewNodes is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ListBaselineLinks(context.Context, *connect.Request[v1.ListBaselineLinksRequest]) (*connect.Response[v1.ListBaselineLinksResponse], error) {

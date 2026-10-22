@@ -3,9 +3,12 @@ package graph
 import (
 	"context"
 	"errors"
+	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/lib/platform"
 )
 
 // A branch view reads a baseline (ADR 0157): its head when it names none, the one it names else; the node, its
@@ -98,4 +101,90 @@ func testBranchView(t *testing.T, repo Repo) {
 	if _, err := g.ViewNode(ctx, View{Namespace: f.req.Namespace, Branch: domain.MainBranch}, "", "REQ-404"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("a key the view does not hold: %v", err)
 	}
+}
+
+// BenchmarkViewReads measures the reads of ADR 0157 on SQLite over a tree of 8421 nodes, in a branch view and in the
+// view of a change holding 20 drafts, against the whole reads they replace (BaselineGraph, ChangeGraph).
+func BenchmarkViewReads(b *testing.B) {
+	ctx := context.Background()
+	db, err := platform.OpenSQLite(ctx, filepath.Join(b.TempDir(), "goap.db"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+	if err := platform.MigrateSQLite(ctx, db, "graph", SQLiteMigrations, "migrations_sqlite"); err != nil {
+		b.Fatal(err)
+	}
+	g := New(NewSQLite(db))
+	root := tree(b, g, 3, 20, 0)
+	head, err := g.BranchHead(ctx, "", domain.MainBranch)
+	if err != nil {
+		b.Fatal(err)
+	}
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "bench", BaselineID: head.ID, OwnBranch: true})
+	if err != nil {
+		b.Fatal(err)
+	}
+	for i := range 20 {
+		key := fmt.Sprintf("R.%d", i)
+		imp, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Key: key, Rationale: "bench"})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if _, err := g.edit(ctx, c.ID, imp.ID, edit{Properties: map[string]any{"title": "edited " + key}}); err != nil {
+			b.Fatal(err)
+		}
+	}
+	mid, err := g.NodeByKey(ctx, "", "R.3")
+	if err != nil {
+		b.Fatal(err)
+	}
+	views := []struct {
+		name string
+		v    View
+	}{{"branch", View{Namespace: root.Namespace, Branch: domain.MainBranch}}, {"change", View{Change: c.ID}}}
+	for _, vw := range views {
+		b.Run(vw.name+"/ViewNode", func(b *testing.B) {
+			for b.Loop() {
+				if _, err := g.ViewNode(ctx, vw.v, "", "R.3.7"); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+		b.Run(vw.name+"/ViewNeighbourhood", func(b *testing.B) {
+			for b.Loop() {
+				if nb, err := g.ViewNeighbourhood(ctx, vw.v, mid.ID); err != nil || len(nb.Links) != 21 {
+					b.Fatal(len(nb.Links), err)
+				}
+			}
+		})
+		b.Run(vw.name+"/ViewNodes-page", func(b *testing.B) {
+			for b.Loop() {
+				if _, err := g.ViewNodes(ctx, vw.v, NodeQuery{Text: "R.3.7", Limit: 50}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+		b.Run(vw.name+"/ViewNodesOfType", func(b *testing.B) {
+			for b.Loop() {
+				if ns, err := g.ViewNodesOfType(ctx, vw.v, "Item"); err != nil || len(ns) != 8421 {
+					b.Fatal(len(ns), err)
+				}
+			}
+		})
+	}
+	b.Run("branch/BaselineGraph", func(b *testing.B) {
+		for b.Loop() {
+			if _, _, err := g.BaselineGraph(ctx, head.ID); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("change/ChangeGraph", func(b *testing.B) {
+		for b.Loop() {
+			if _, _, err := g.ChangeGraph(ctx, c.ID, ""); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 }
