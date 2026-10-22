@@ -1,6 +1,7 @@
 package cypher
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -45,6 +46,34 @@ func TestParseRanges(t *testing.T) {
 	}
 }
 
+func TestParseOptionalAndExists(t *testing.T) {
+	q, err := Parse("MATCH (n:A) OPTIONAL MATCH (n)-[:t]->(m) WHERE EXISTS { (m)<--(x:B) WHERE x.k = 1 } AND NOT (n)-->(:C) RETURN n, m")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(q.Matches) != 2 || q.Matches[0].Optional || !q.Matches[1].Optional {
+		t.Fatalf("matches: %+v", q.Matches)
+	}
+	cs := Conjuncts(q.Matches[1].Where)
+	ex, ok := cs[0].(Exists)
+	if !ok || len(ex.Patterns) != 1 || ex.Where == nil || len(ex.Patterns[0].Nodes) != 2 {
+		t.Fatalf("exists: %#v", cs[0])
+	}
+	not, ok := cs[1].(Unary)
+	if pp, isEx := not.X.(Exists); !ok || !isEx || pp.Where != nil || pp.Patterns[0].Nodes[1].Labels[0] != "C" {
+		t.Fatalf("pattern predicate: %#v", cs[1])
+	}
+	if got := Vars(cs[0]); !slices.Equal(got, []string{"m", "x"}) {
+		t.Fatalf("vars: %v", got)
+	}
+	if got := Declared(cs[0]); !slices.Equal(got, []string{"m", "x"}) {
+		t.Fatalf("declared: %v", got)
+	}
+	if _, err := Eval(ex, MapScope{}); err == nil {
+		t.Fatal("EXISTS evaluated with no graph")
+	}
+}
+
 func TestParseRefuses(t *testing.T) {
 	for _, src := range []string{
 		"CREATE (n) RETURN n",
@@ -52,7 +81,8 @@ func TestParseRefuses(t *testing.T) {
 		"MATCH (n) DETACH DELETE n",
 		"MATCH (n) WITH n RETURN n",
 		"UNWIND [1] AS x MATCH (n) RETURN n",
-		"OPTIONAL MATCH (n) RETURN n",
+		"MATCH (n) WHERE EXISTS { MATCH (n)-->(m) RETURN m } RETURN n",
+		"MATCH (n) WHERE EXISTS { (n)-->(m) WHERE (m)-->() } RETURN n",
 		"MATCH (n) RETURN n UNION MATCH (m) RETURN m",
 		"MATCH (n {key: $k}) RETURN n",
 		"MATCH (n) RETURN [x IN [1] | x]",

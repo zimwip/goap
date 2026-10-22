@@ -49,6 +49,13 @@ func TestQueryViewRPC(t *testing.T) {
 	if row[0].(map[string]any)["$node"] != res.Msg.Nodes[0].Id || row[1] != access.DefaultOrg {
 		t.Fatalf("row: %v", row)
 	}
+	// a node bound before the match: the node a person queries from
+	req := connect.NewRequest(&graphv1.QueryViewRequest{View: view, Query: "MATCH (n) RETURN n.key", Bind: map[string]string{"n": res.Msg.Nodes[0].Id}})
+	identity.SetHeaders(authz.Principal{Subject: "alice"}, req.Header())
+	bound, err := cl.QueryView(ctx, req)
+	if err != nil || len(bound.Msg.Rows) != 1 || bound.Msg.Rows[0].AsSlice()[0] != access.DefaultOrg {
+		t.Fatalf("bind: %+v %v", bound, err)
+	}
 	if _, err := query("MATCH (u:OrgUnit) DELETE u"); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("a write: %v", err)
 	}

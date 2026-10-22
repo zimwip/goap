@@ -79,8 +79,8 @@ export const graph = {
       signal,
     ),
   /** A read query in the subset of openCypher over a view (ADR 0160): anchored MATCH patterns, WHERE, RETURN. */
-  queryView: (view: GraphView, query: string, signal?: AbortSignal) =>
-    rpc<{ view: GraphView; query: string }, QueryResult>(GRAPH, 'QueryView', { view, query }, signal),
+  queryView: (view: GraphView, query: string, bind?: Record<string, string>, signal?: AbortSignal) =>
+    rpc<{ view: GraphView; query: string; bind?: Record<string, string> }, QueryResult>(GRAPH, 'QueryView', { view, query, bind }, signal),
   /** The impact log of a change (ADR 0029): every operation on its change impacts, with its caller. */
   listChangeEvents: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { events?: ImpactEvent[] }>(GRAPH, 'ListChangeEvents', { changeId }, signal),

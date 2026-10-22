@@ -11,10 +11,11 @@ import (
 	"github.com/zimwip/goap/lib/cypher"
 )
 
-// A read query in the subset of openCypher (ADR 0160) over a view: MATCH patterns, WHERE, RETURN. A pattern starts from
-// an anchor (a variable an earlier pattern bound, a key or an id, else the nodes of a label, read a page at a time) and
-// grows a hop at a time through the neighbourhoods of the view, each reading the link types its relationship names
-// (ViewNeighbourhoodOf). Nothing reads a namespace whole: the anchors, the hops and the rows are capped.
+// A read query in the subset of openCypher (ADR 0160) over a view: MATCH and OPTIONAL MATCH patterns, WHERE, EXISTS,
+// RETURN. A pattern starts from an anchor (a variable bound already, a key or an id, else the nodes of a label, read a
+// page at a time) and grows a hop at a time through the neighbourhoods of the view, each reading the link types its
+// relationship names (ViewNeighbourhoodOf). Nothing reads a namespace whole: the anchors, the hops and the rows are
+// capped.
 
 // Caps of a query, overridden by QueryOptions.
 const (
@@ -26,15 +27,21 @@ const (
 	QueryMaxAnchors = 500
 	// QueryMaxDepth is the most hops of a variable length relationship (`*`: 1 to QueryMaxDepth).
 	QueryMaxDepth = 6
+	// queryMaxRuns is the most times a query runs to learn what its caller reads (QueryOptions.Visible).
+	queryMaxRuns = 4
 )
 
 // QueryOptions bound a query and say what a caller may read.
 type QueryOptions struct {
 	// MaxRows, MaxReads, MaxAnchors: zero takes the default cap.
 	MaxRows, MaxReads, MaxAnchors int
-	// Visible tells whether the caller reads a node (nil: every node): a row naming or passing through a node it may
-	// not read is dropped before RETURN. It is asked after the read, outside its transaction (an access check reads the
-	// graph, and nothing in a graph transaction may wait on such a read).
+	// Bind binds variables to nodes before the match (the node a person queries from, `n`): a node the view does not
+	// hold is ErrNotFound.
+	Bind map[string]domain.NodeID
+	// Visible tells whether the caller reads a node (nil: every node): a node it may not read is not in the graph the
+	// query sees (no pattern, EXISTS or OPTIONAL MATCH meets it). It is asked outside the read's transaction (an access
+	// check reads the graph, and nothing in a graph transaction may wait on such a read): the query runs once, the
+	// nodes it met are asked, and it runs again in the same baseline when one of them is hidden.
 	Visible func(domain.Node) bool
 }
 
@@ -72,84 +79,120 @@ func (g *Graph) QueryView(ctx context.Context, v View, src string, opts QueryOpt
 	if opts.MaxAnchors <= 0 {
 		opts.MaxAnchors = QueryMaxAnchors
 	}
-	run := &queryRun{g: g, ctx: ctx, q: q, opts: opts, nodes: map[domain.NodeID]*qNode{}, hoods: map[string][]qHop{},
-		links: map[domain.LinkID]domain.Link{}}
-	if err := run.prepare(); err != nil {
-		return QueryResult{}, fmt.Errorf("%w: %w", ErrInvalid, err)
-	}
-	var res QueryResult
-	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.openWorld(ctx, tx, v)
-		if err != nil {
-			return err
-		}
-		run.tx, run.w = tx, w
-		res.Baseline = w.baseline
-		return run.match()
-	})
-	if err != nil && !errors.Is(err, errQueryStop) {
-		var ee *cypher.EvalError
-		if errors.As(err, &ee) {
-			return QueryResult{}, fmt.Errorf("%w: %w", ErrInvalid, err)
-		}
-		return QueryResult{}, err
-	}
-	run.hide()
-	cols, rows, err := cypher.Project(q.Return, run.vars, run.rows)
+	plan, err := planQuery(q, opts)
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	res.Columns, res.Truncated, res.Notes, res.Reads = cols, run.truncated, run.notes, run.reads
-	res.Rows = make([][]any, len(rows))
-	for i, row := range rows {
-		res.Rows[i] = make([]any, len(row))
-		for j, v := range row {
-			res.Rows[i][j] = run.export(v)
-		}
+	var vis map[domain.NodeID]bool // what the caller reads, learnt run after run
+	if opts.Visible != nil {
+		vis = map[domain.NodeID]bool{}
 	}
-	res.Nodes, res.Links = run.exported()
-	return res, nil
+	reads := 0
+	for attempt := 1; ; attempt++ {
+		run := &queryRun{g: g, ctx: ctx, plan: plan, opts: opts, vis: vis, nodes: map[domain.NodeID]*qNode{},
+			hoods: map[string][]qHop{}, links: map[domain.LinkID]domain.Link{}}
+		if attempt == 1 && vis != nil {
+			run.vis = nil // the first run sees every node, to learn which ones the caller reads
+		}
+		var res QueryResult
+		err = g.repo.InTx(ctx, func(tx Tx) error {
+			w, err := g.openWorld(ctx, tx, v)
+			if err != nil {
+				return err
+			}
+			run.tx, run.w = tx, w
+			res.Baseline = w.baseline
+			return run.match()
+		})
+		reads += run.reads
+		if err != nil && !errors.Is(err, errQueryStop) {
+			var ee *cypher.EvalError
+			if errors.As(err, &ee) {
+				return QueryResult{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+			}
+			return QueryResult{}, err
+		}
+		if vis != nil {
+			met := run.pending
+			if run.vis == nil {
+				met = map[domain.NodeID]domain.Node{}
+				for id, n := range run.nodes {
+					met[id] = n.n
+				}
+			}
+			hidden := false
+			for id, n := range met {
+				ok := opts.Visible(n)
+				vis[id] = ok
+				hidden = hidden || !ok || run.vis != nil // a node met for the first time was left out of this run
+			}
+			if hidden && attempt < queryMaxRuns {
+				if !v.IsChange() && v.Baseline == "" {
+					v.Baseline = res.Baseline // the next run reads the same state
+				}
+				continue
+			}
+			if hidden && len(run.pending) > 0 {
+				run.truncated = true
+				run.note("some nodes met late were left out: anchor the query more narrowly")
+			}
+		}
+		cols, rows, err := cypher.Project(plan.q.Return, plan.vars, run.rows)
+		if err != nil {
+			return QueryResult{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+		}
+		res.Columns, res.Truncated, res.Notes, res.Reads = cols, run.truncated, run.notes, reads
+		res.Rows = make([][]any, len(rows))
+		for i, row := range rows {
+			res.Rows[i] = make([]any, len(row))
+			for j, v := range row {
+				res.Rows[i][j] = run.export(v)
+			}
+		}
+		res.Nodes, res.Links = run.exported()
+		return res, nil
+	}
 }
 
-// errQueryStop ends a match early: a cap, or the rows a streaming RETURN keeps.
-var errQueryStop = errors.New("query stopped")
+// errQueryStop ends a match early: a cap, or the rows a streaming RETURN keeps; errFound ends the match of an EXISTS
+// at its first witness.
+var (
+	errQueryStop = errors.New("query stopped")
+	errFound     = errors.New("found")
+)
 
-type queryRun struct {
-	g    *Graph
-	ctx  context.Context
-	tx   Tx
-	w    *world
-	q    *cypher.Query
-	opts QueryOptions
+// queryPlan is a query made ready to match: its clauses, the conditions each checks, the EXISTS of its RETURN.
+type queryPlan struct {
+	q       *cypher.Query
+	clauses []qClause
+	all     []queryCond // the conditions of the MATCH clauses, checked again on each row
+	vars    []string    // the variables of the patterns, in order: RETURN *
+	late    []cypher.Exists
+	stream  int // the rows to bind before stopping (-1: all)
+}
 
+// qClause is a MATCH or an OPTIONAL MATCH: its patterns, the conditions checked while it matches (those of the MATCH
+// clauses up to it, and its own WHERE for an OPTIONAL MATCH) and the variables it binds.
+type qClause struct {
 	patterns []cypher.Pattern
+	optional bool
+	own      []queryCond
 	conds    []queryCond
-	vars     []string
-	stream   int // the rows to bind before stopping (-1: all)
-
-	nodes map[domain.NodeID]*qNode // the nodes read, by id
-	hoods map[string][]qHop        // the hops read, by node and link types
-	links map[domain.LinkID]domain.Link
-	reads int
-
-	rows      []cypher.MapScope
-	touched   [][]*qNode // the nodes each row names or passes through
-	active    []*qTrail  // the trails of the patterns being matched
-	truncated bool
-	notes     []string
-
-	outNodes map[domain.NodeID]bool
-	outLinks map[domain.LinkID]bool
+	binds    []string
 }
 
-// queryCond is a conjunct of a WHERE with the variables it reads, checked as soon as they are bound.
+// queryCond is a condition with the variables it reads, checked as soon as they are bound.
 type queryCond struct {
 	expr cypher.Expr
 	vars []string
 }
 
-// prepare flattens the patterns, splits the WHERE clauses and checks the variables they read.
-func (r *queryRun) prepare() error {
+// existsVar names the value an EXISTS of RETURN or ORDER BY takes in a row.
+func existsVar(i int) string { return fmt.Sprintf("$exists%d", i) }
+
+// planQuery splits the clauses and their WHERE, checks the variables they read and takes the EXISTS out of RETURN.
+func planQuery(q *cypher.Query, opts QueryOptions) (*queryPlan, error) {
+	p := &queryPlan{q: q}
 	kinds := map[string]string{}
 	declare := func(name, kind string) error {
 		if name == "" {
@@ -162,63 +205,163 @@ func (r *queryRun) prepare() error {
 			return nil
 		}
 		kinds[name] = kind
-		r.vars = append(r.vars, name)
+		p.vars = append(p.vars, name)
 		return nil
 	}
-	for _, m := range r.q.Matches {
-		for _, p := range m.Patterns {
-			for i, n := range p.Nodes {
-				if err := declare(n.Var, "node"); err != nil {
-					return err
+	for name := range opts.Bind {
+		if err := declare(name, "node"); err != nil {
+			return nil, err
+		}
+	}
+	slices.Sort(p.vars)
+	// conds reads a WHERE: each conjunct with the variables of the query it reads (those an EXISTS binds itself apart)
+	conds := func(where cypher.Expr) ([]queryCond, error) {
+		var out []queryCond
+		for _, c := range cypher.Conjuncts(where) {
+			if err := defined(c, kinds); err != nil {
+				return nil, err
+			}
+			var vars []string
+			for _, v := range cypher.Vars(c) {
+				if _, ok := kinds[v]; ok {
+					vars = append(vars, v)
 				}
-				if i < len(p.Rels) {
-					if err := declare(p.Rels[i].Var, "relationship"); err != nil {
-						return err
+			}
+			out = append(out, queryCond{expr: c, vars: vars})
+		}
+		return out, nil
+	}
+	var mandatory []queryCond
+	for _, m := range q.Matches {
+		cl := qClause{patterns: m.Patterns, optional: m.Optional}
+		for _, pt := range m.Patterns {
+			for i, n := range pt.Nodes {
+				if _, ok := kinds[n.Var]; !ok && n.Var != "" {
+					cl.binds = append(cl.binds, n.Var)
+				}
+				if err := declare(n.Var, "node"); err != nil {
+					return nil, err
+				}
+				if i < len(pt.Rels) {
+					if v := pt.Rels[i].Var; v != "" && !slices.Contains(cl.binds, v) {
+						cl.binds = append(cl.binds, v)
+					}
+					if err := declare(pt.Rels[i].Var, "relationship"); err != nil {
+						return nil, err
 					}
 				}
 			}
-			if err := declare(p.Var, "path"); err != nil {
-				return err
+			if pt.Var != "" {
+				cl.binds = append(cl.binds, pt.Var)
 			}
-			r.patterns = append(r.patterns, p)
+			if err := declare(pt.Var, "path"); err != nil {
+				return nil, err
+			}
+		}
+		if m.Optional { // its WHERE reads what is bound by it or before it
+			own, err := conds(m.Where)
+			if err != nil {
+				return nil, err
+			}
+			cl.own = own
+		}
+		p.clauses = append(p.clauses, cl)
+	}
+	for i, m := range q.Matches { // a MATCH's WHERE may read any variable of the query
+		if m.Optional {
+			continue
+		}
+		cs, err := conds(m.Where)
+		if err != nil {
+			return nil, err
+		}
+		p.clauses[i].own = cs
+		mandatory = append(mandatory, cs...)
+	}
+	var upTo []queryCond
+	for i := range p.clauses {
+		cl := &p.clauses[i]
+		if !cl.optional {
+			upTo = append(upTo, cl.own...)
+			cl.conds = slices.Clone(upTo)
+		} else {
+			cl.conds = append(slices.Clone(upTo), cl.own...)
 		}
 	}
-	for _, m := range r.q.Matches {
-		for _, c := range cypher.Conjuncts(m.Where) {
-			vars := cypher.Vars(c)
-			for _, v := range vars {
-				if _, ok := kinds[v]; !ok {
-					return fmt.Errorf("variable %s is not defined", v)
-				}
+	p.all = mandatory
+	// the EXISTS of RETURN and ORDER BY are matched with the row, their values variables of it
+	late := func(e cypher.Expr) cypher.Expr {
+		return cypher.Rewrite(e, func(x cypher.Expr) cypher.Expr {
+			if ex, ok := x.(cypher.Exists); ok {
+				p.late = append(p.late, ex)
+				return cypher.Var{Name: existsVar(len(p.late) - 1)}
 			}
-			r.conds = append(r.conds, queryCond{expr: c, vars: vars})
-		}
+			return x
+		})
 	}
 	aliases := map[string]bool{}
-	for _, it := range r.q.Return.Items {
-		for _, v := range cypher.Vars(it.Expr) {
-			if _, ok := kinds[v]; !ok {
-				return fmt.Errorf("variable %s is not defined", v)
-			}
+	ret := &q.Return
+	for i, it := range ret.Items {
+		if err := defined(it.Expr, kinds); err != nil {
+			return nil, err
 		}
+		ret.Items[i].Expr = late(it.Expr)
 		aliases[it.Name] = true
 	}
-	for _, s := range r.q.Return.Order {
+	for i, s := range ret.Order {
 		for _, v := range cypher.Vars(s.Expr) {
-			if _, ok := kinds[v]; !ok && !aliases[v] {
-				return fmt.Errorf("variable %s is not defined", v)
+			if _, ok := kinds[v]; !ok && !aliases[v] && !slices.Contains(cypher.Declared(s.Expr), v) {
+				return nil, fmt.Errorf("variable %s is not defined", v)
 			}
 		}
+		ret.Order[i].Expr = late(s.Expr)
 	}
-	if _, _, err := cypher.Bounds(r.q.Return); err != nil {
-		return err
+	if _, _, err := cypher.Bounds(*ret); err != nil {
+		return nil, err
 	}
-	r.stream = -1
-	// rows dropped after the read (Visible) would leave fewer than the LIMIT: the match then goes on to its caps
-	if n, ok := cypher.Streams(r.q.Return); ok && r.opts.Visible == nil {
-		r.stream = n
+	p.stream = -1
+	// rows a hidden node leaves out are found by the next run: the first one goes on to its caps
+	if n, ok := cypher.Streams(*ret); ok && opts.Visible == nil {
+		p.stream = n
+	}
+	return p, nil
+}
+
+// defined refuses an expression reading a variable no pattern binds (the patterns of its EXISTS included).
+func defined(e cypher.Expr, kinds map[string]string) error {
+	local := cypher.Declared(e)
+	for _, v := range cypher.Vars(e) {
+		if _, ok := kinds[v]; !ok && !slices.Contains(local, v) {
+			return fmt.Errorf("variable %s is not defined", v)
+		}
 	}
 	return nil
+}
+
+type queryRun struct {
+	g    *Graph
+	ctx  context.Context
+	tx   Tx
+	w    *world
+	plan *queryPlan
+	opts QueryOptions
+
+	conds []queryCond // the conditions bind checks: those of the clause, or of the EXISTS, being matched
+
+	vis     map[domain.NodeID]bool        // what the caller reads (nil: every node)
+	pending map[domain.NodeID]domain.Node // the nodes met that vis does not know yet, left out of this run
+
+	nodes map[domain.NodeID]*qNode // the nodes read, by id
+	hoods map[string][]qHop        // the hops read, by node and link types
+	links map[domain.LinkID]domain.Link
+	reads int
+
+	rows      []cypher.MapScope
+	truncated bool
+	notes     []string
+
+	outNodes map[domain.NodeID]bool
+	outLinks map[domain.LinkID]bool
 }
 
 func (r *queryRun) note(format string, a ...any) {
@@ -248,47 +391,141 @@ func (r *queryRun) read() error {
 }
 
 func (r *queryRun) match() error {
-	return r.pattern(0, cypher.MapScope{}, map[domain.LinkID]bool{})
+	b := cypher.MapScope{}
+	names := make([]string, 0, len(r.opts.Bind))
+	for name := range r.opts.Bind {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		id := r.opts.Bind[name]
+		ns, err := r.byID(id)
+		if err != nil {
+			return err
+		}
+		if len(ns) == 0 {
+			return fmt.Errorf("node %s is not in the view: %w", id, ErrNotFound)
+		}
+		b[name] = ns[0]
+	}
+	return r.clause(0, b)
 }
 
-// pattern matches the patterns from i on, then binds a row.
-func (r *queryRun) pattern(i int, b cypher.MapScope, used map[domain.LinkID]bool) error {
-	if i == len(r.patterns) {
-		for _, c := range r.conds { // every condition once more: the ones no binding checked (constants)
-			ok, err := r.holds(c.expr, b)
-			if err != nil || !ok {
+// clause matches the clauses from i on, then binds a row; an OPTIONAL MATCH that matches nothing binds its variables
+// to null.
+func (r *queryRun) clause(i int, b cypher.MapScope) error {
+	if i == len(r.plan.clauses) {
+		return r.emit(b)
+	}
+	cl := r.plan.clauses[i]
+	saved := r.conds
+	r.conds = cl.conds
+	defer func() { r.conds = saved }()
+	found := false
+	err := r.patterns(cl.patterns, 0, b, map[domain.LinkID]bool{}, func() error {
+		if cl.optional {
+			for _, c := range cl.own { // the ones no binding checked (read before the clause, or constants)
+				if ok, err := r.holds(c.expr, b); err != nil || !ok {
+					return err
+				}
+			}
+		}
+		found = true
+		r.conds = saved
+		defer func() { r.conds = cl.conds }()
+		return r.clause(i+1, b)
+	})
+	if err != nil || found || !cl.optional {
+		return err
+	}
+	r.conds = nil // the nulls are checked with the row (emit)
+	var undos []func()
+	defer func() {
+		for _, u := range slices.Backward(undos) {
+			u()
+		}
+	}()
+	for _, v := range cl.binds {
+		if _, ok := b[v]; ok {
+			continue
+		}
+		ok, undo, err := r.bind(v, nil, b)
+		if err != nil || !ok {
+			return err
+		}
+		undos = append(undos, undo)
+	}
+	return r.clause(i+1, b)
+}
+
+// emit binds a row: the conditions once more (the ones no binding checked), the EXISTS of RETURN.
+func (r *queryRun) emit(b cypher.MapScope) error {
+	for _, c := range r.plan.all {
+		ok, err := r.holds(c.expr, b)
+		if err != nil || !ok {
+			return err
+		}
+	}
+	if len(r.rows) >= r.opts.MaxRows {
+		return r.stop("stopped after %d rows", r.opts.MaxRows)
+	}
+	row := make(cypher.MapScope, len(b)+len(r.plan.late))
+	for k, v := range b {
+		row[k] = v
+	}
+	for i, ex := range r.plan.late {
+		ok, err := r.exists(ex, b)
+		if err != nil {
+			return err
+		}
+		row[existsVar(i)] = ok
+	}
+	r.rows = append(r.rows, row)
+	if r.plan.stream >= 0 && len(r.rows) >= r.plan.stream {
+		return errQueryStop
+	}
+	return nil
+}
+
+// exists matches the patterns of an EXISTS in a row: true at the first witness. The variables the row binds are
+// those of the row, the others local to it.
+func (r *queryRun) exists(ex cypher.Exists, b cypher.MapScope) (bool, error) {
+	var conds []queryCond
+	for _, c := range cypher.Conjuncts(ex.Where) {
+		conds = append(conds, queryCond{expr: c, vars: cypher.Vars(c)})
+	}
+	sub := make(cypher.MapScope, len(b))
+	for k, v := range b {
+		sub[k] = v
+	}
+	saved := r.conds
+	r.conds = conds
+	defer func() { r.conds = saved }()
+	err := r.patterns(ex.Patterns, 0, sub, map[domain.LinkID]bool{}, func() error {
+		for _, c := range conds {
+			if ok, err := r.holds(c.expr, sub); err != nil || !ok {
 				return err
 			}
 		}
-		if len(r.rows) >= r.opts.MaxRows {
-			return r.stop("stopped after %d rows", r.opts.MaxRows)
-		}
-		row := make(cypher.MapScope, len(b))
-		for k, v := range b {
-			row[k] = v
-		}
-		r.rows = append(r.rows, row)
-		var nodes []*qNode
-		for _, t := range r.active {
-			nodes = append(nodes, t.nodes...)
-			for _, m := range t.mids {
-				nodes = append(nodes, m...)
-			}
-		}
-		r.touched = append(r.touched, nodes)
-		if r.stream >= 0 && len(r.rows) >= r.stream {
-			return errQueryStop
-		}
-		return nil
+		return errFound
+	})
+	if errors.Is(err, errFound) {
+		return true, nil
 	}
-	p := r.patterns[i]
+	return false, err
+}
+
+// patterns matches the patterns of a clause from i on, then goes on with cont.
+func (r *queryRun) patterns(ps []cypher.Pattern, i int, b cypher.MapScope, used map[domain.LinkID]bool, cont func() error) error {
+	if i == len(ps) {
+		return cont()
+	}
+	p := ps[i]
 	at, cands, err := r.anchor(p, b)
 	if err != nil {
 		return err
 	}
 	tr := &qTrail{nodes: make([]*qNode, len(p.Nodes)), rels: make([][]domain.Link, len(p.Rels)), mids: make([][]*qNode, len(p.Rels))}
-	r.active = append(r.active, tr)
-	defer func() { r.active = r.active[:len(r.active)-1] }()
 	for _, n := range cands {
 		ok, undo, err := r.bindNode(p.Nodes[at], n, b)
 		if err != nil {
@@ -301,14 +538,14 @@ func (r *queryRun) pattern(i int, b cypher.MapScope, used map[domain.LinkID]bool
 		err = r.right(p, at, tr, b, used, func() error {
 			return r.left(p, at, tr, b, used, func() error {
 				if p.Var == "" {
-					return r.pattern(i+1, b, used)
+					return r.patterns(ps, i+1, b, used, cont)
 				}
 				ok, undo, err := r.bind(p.Var, tr.path(r), b)
 				if err != nil || !ok {
 					return err
 				}
 				defer undo()
-				return r.pattern(i+1, b, used)
+				return r.patterns(ps, i+1, b, used, cont)
 			})
 		})
 		undo()
@@ -319,43 +556,15 @@ func (r *queryRun) pattern(i int, b cypher.MapScope, used map[domain.LinkID]bool
 	return nil
 }
 
-// hide drops the rows naming or passing through a node the caller may not read (QueryOptions.Visible), asked once per
-// node, after the read.
-func (r *queryRun) hide() {
-	if r.opts.Visible == nil {
-		return
-	}
-	seen := map[domain.NodeID]bool{}
-	visible := func(n *qNode) bool {
-		ok, known := seen[n.n.ID]
-		if !known {
-			ok = r.opts.Visible(n.n)
-			seen[n.n.ID] = ok
-		}
-		return ok
-	}
-	kept := r.rows[:0]
-	for i, row := range r.rows {
-		ok := true
-		for _, n := range r.touched[i] {
-			if n != nil && !visible(n) {
-				ok = false
-				break
-			}
-		}
-		if ok {
-			kept = append(kept, row)
-		}
-	}
-	r.rows = kept
-}
-
 // anchor picks the node pattern a pattern starts from and its candidate nodes: a variable already bound, else a key
 // or an id, else the nodes of a label (narrowed by the text of a WHERE on it).
 func (r *queryRun) anchor(p cypher.Pattern, b cypher.MapScope) (int, []*qNode, error) {
 	for i, n := range p.Nodes {
 		if v, ok := b[n.Var]; ok && n.Var != "" {
-			return i, []*qNode{v.(*qNode)}, nil
+			if q, ok := v.(*qNode); ok {
+				return i, []*qNode{q}, nil
+			}
+			return i, nil, nil // null (an OPTIONAL MATCH that matched nothing): no node
 		}
 	}
 	for i, n := range p.Nodes {
@@ -504,12 +713,27 @@ func (r *queryRun) nodeAt(ref domain.NodeRef) ([]*qNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []*qNode{r.keep(n)}, nil
+	if q := r.keep(n); q != nil {
+		return []*qNode{q}, nil
+	}
+	return nil, nil
 }
 
+// keep notes a node read, nil for a node the caller does not read (or not known yet: the next run asks for it).
 func (r *queryRun) keep(n domain.Node) *qNode {
 	if q, ok := r.nodes[n.ID]; ok {
 		return q
+	}
+	if r.vis != nil {
+		if ok, known := r.vis[n.ID]; !ok {
+			if !known {
+				if r.pending == nil {
+					r.pending = map[domain.NodeID]domain.Node{}
+				}
+				r.pending[n.ID] = n
+			}
+			return nil
+		}
 	}
 	q := &qNode{n: n}
 	r.nodes[n.ID] = q
@@ -544,7 +768,9 @@ func (r *queryRun) ofLabel(n cypher.NodePattern) ([]*qNode, error) {
 				r.note("only the first %d nodes of %s were read (of %d): narrow the anchor with a key or a WHERE on a property", r.opts.MaxAnchors, label, page.Total)
 				break
 			}
-			out = append(out, r.keep(node))
+			if q := r.keep(node); q != nil {
+				out = append(out, q)
+			}
 		}
 	}
 	return out, nil
@@ -625,9 +851,17 @@ func bound(vars []string, b cypher.MapScope) bool {
 }
 
 func (r *queryRun) holds(e cypher.Expr, b cypher.MapScope) (bool, error) {
-	v, err := cypher.Eval(e, b)
+	v, err := cypher.Eval(e, liveScope{b, r})
 	return cypher.Truthy(v), err
 }
+
+// liveScope is a row being matched: its variables, and the graph its EXISTS match in.
+type liveScope struct {
+	cypher.MapScope
+	r *queryRun
+}
+
+func (s liveScope) Exists(x cypher.Exists) (bool, error) { return s.r.exists(x, s.MapScope) }
 
 // qTrail is what a pattern bound so far: its nodes, the links of each relationship (several for a variable length
 // one, from its left node to its right one) and the nodes between them.
@@ -800,7 +1034,9 @@ func (r *queryRun) hops(n *qNode, types []string) ([]qHop, error) {
 	}
 	near := map[domain.NodeID]*qNode{}
 	for _, m := range nb.Nodes {
-		near[m.ID] = r.keep(m)
+		if q := r.keep(m); q != nil {
+			near[m.ID] = q
+		}
 	}
 	near[n.n.ID] = n
 	var hs []qHop

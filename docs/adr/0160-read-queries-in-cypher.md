@@ -23,8 +23,12 @@ would ignore the views and need keeping in sync.
    `STARTS WITH`, `ENDS WITH`, `CONTAINS`, `IS [NOT] NULL`, `AND OR XOR NOT`, arithmetic, `CASE`, label tests (`n:Label`),
    the functions `id type labels keys properties nodes relationships length size head last toLower toUpper trim
    toString toInteger toFloat abs coalesce` and the aggregates `count collect sum avg min max`.
+   - `OPTIONAL MATCH` (its own `WHERE`; nothing matched keeps the row, its variables null), `EXISTS { pattern [WHERE …] }`
+     and pattern predicates (`(r)<-[:verifies]-()`), in `WHERE` and in `RETURN` / `ORDER BY`, negated with `NOT`: a
+     variable the row binds is the row's, the others are local to the `EXISTS`.
    - Refused, with the position: writes (`CREATE`, `MERGE`, `SET`, `DELETE`, `REMOVE`), `WITH`, `UNWIND`, `CALL`, `UNION`,
-     `OPTIONAL MATCH`, parameters, comprehensions, quantifiers, patterns in expressions, `EXISTS` subqueries.
+     parameters, comprehensions, quantifiers, `EXISTS` over a query (`EXISTS { MATCH … RETURN … }`) and an `EXISTS`
+     inside an `EXISTS`.
 2. **The parser is generated from the grammar.** `lib/cypher/Cypher.g4` is the openCypher grammar (release M23, Apache
    2.0); ANTLR 4.13.1, the version of the Go runtime the modules already require through CEL, generates
    `lib/cypher/parser` (`make cypher`, `.\make.ps1 cypher`: `go generate ./cypher/` in `lib`, Java needed, the tool
@@ -41,7 +45,12 @@ would ignore the views and need keeping in sync.
    namespace). The conditions of the WHERE are checked as soon as their variables are bound, so a filter prunes the walk.
    A label matches the type, a type extending it, and names its namespace or not (`Requirement` matches
    `alm@Requirement`). A node's `key`, `type`, `state`, `id`, `version`, `namespace`, `owner` and `project` are its own
-   fields; any other name is a property. A relationship is used once per match.
+   fields; any other name is a property. A relationship is used once per clause. The clauses match in order: an
+   `OPTIONAL MATCH` checks its own `WHERE` while it matches (a `MATCH`'s `WHERE` may read any variable of the query), and
+   binds its variables to null when nothing matched; a later pattern anchored on a null variable matches nothing. An
+   `EXISTS` is matched for the row, at its first witness, through the same hops and caps; the ones of `RETURN` and `ORDER
+   BY` are matched with the row, their values variables of it. `QueryOptions.Bind` binds variables to nodes before the
+   match (RPC `bind`: the node a person queries from, `n`).
 4. **Caps, never a whole read.** At most `QueryMaxReads` (2000) reads (neighbourhoods and pages), `QueryMaxAnchors`
    (500) nodes per label anchor, `QueryMaxRows` (2000) rows bound and `QueryMaxDepth` (6) hops for a variable length
    relationship (`*` is read as `*1..6`, said in the notes). A cap stops the match: the answer keeps the rows found,
@@ -50,15 +59,23 @@ would ignore the views and need keeping in sync.
 5. **RPC `GraphService.QueryView`** (`view`, `query`): the columns, the rows as JSON lists (a node, a link and a path
    are objects naming them, `{"$node": id}`, `{"$link": id}`, `{"$path": {nodes, links}}`), the nodes and links they
    name, `truncated`, `notes`, `reads`, the baseline read. The router sends it to the graph holding the view's namespace
-   (its `view`). Outside a change, a row naming or passing through a node the caller may not read (`mayReadNode`, ADR
-   0138) is dropped before `RETURN`; the check runs after the read, outside its transaction, since an access check reads
-   the graph and nothing in a graph transaction may wait on such a read (a query that checks it then reads to its caps
-   rather than stopping at its `LIMIT`). Through a change the nodes are the change's (`PersonalScope`). `GetNodeNeighbourhood` takes `link_types` too.
+   (its `view`). Outside a change, a node the caller may not read (`mayReadNode`, ADR 0138) is not in the graph the query
+   sees: no pattern, `EXISTS` or `OPTIONAL MATCH` meets it, so `NOT EXISTS` says nothing of it. The check cannot run in
+   the read's transaction (an access check reads the graph, and nothing in a graph transaction may wait on such a read):
+   the query runs once seeing every node, the nodes it met are asked after it, and when one is hidden it runs again in
+   the same baseline without the hidden nodes (`queryMaxRuns` 4; a node met for the first time in a later run is left
+   out until asked, and the answer says so). A caller who reads everything it met gets the first run (a query that
+   checks then reads to its caps rather than stopping at its `LIMIT`). Through a change the nodes are the change's (`PersonalScope`). `GetNodeNeighbourhood` takes `link_types` too.
 6. **The Graph explorer has a query box.** *Query* opens it: the text (Ctrl+Enter runs it), the namespace whose context
    view it reads (the working change on its option for the namespace it acts on, the head of main for the others),
    examples. The nodes and links the rows name replace what the canvas showed, as one neighbourhood whose nodes are not
    expanded yet (each can be expanded from there); the rows are a table under it, a cell naming a node selects it, a double click opens it. A context move runs the query
    again (`web/src/lib/graphQuery.ts`).
+7. **The Graph pane of a node is a Graph explorer restricted to the node** (`components/GraphExplorer.svelte` with a
+   `root`; the tab is the same component without one): the same canvas and side panel, starting from the node and its
+   neighbours; its text box filters the nodes shown (key, name, type) instead of searching; its query starts from the
+   node (`n`, bound by `bind`, in the node's namespace, examples of their own) and filters what is shown: the nodes the
+   rows name, and the node, with the links read between them.
 
 ## Consequences
 
@@ -71,6 +88,5 @@ would ignore the views and need keeping in sync.
 
 - A label anchor reads its type exactly, not its subtypes (the catalogue lists no subtypes); a subtype is matched as a
   later node only.
-- `OPTIONAL MATCH`, `WITH`, `UNWIND`, parameters, `EXISTS { … }` and pattern predicates (a negative pattern such as
-  "requirements no test verifies" needs one of them).
+- `WITH`, `UNWIND`, parameters, `EXISTS` over a query, `COUNT { … }`.
 - An anchor from the index (`Search`), the assistant and the `goap-graph` tools calling the query.

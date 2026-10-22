@@ -37,6 +37,12 @@ type Scope interface {
 	Lookup(name string) (any, bool)
 }
 
+// ExistsScope is a Scope that matches patterns: Eval asks it for an EXISTS.
+type ExistsScope interface {
+	Scope
+	Exists(x Exists) (bool, error)
+}
+
 // MapScope is a Scope over a map.
 type MapScope map[string]any
 
@@ -60,6 +66,12 @@ func Eval(e Expr, s Scope) (any, error) {
 		return nil, nil
 	case Lit:
 		return x.Value, nil
+	case Exists:
+		es, ok := s.(ExistsScope)
+		if !ok {
+			return nil, errorf("EXISTS and patterns are read in MATCH … WHERE and RETURN only")
+		}
+		return es.Exists(x)
 	case Var:
 		v, ok := s.Lookup(x.Name)
 		if !ok {

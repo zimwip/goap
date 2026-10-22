@@ -1,9 +1,12 @@
 // Package cypher reads the read-only subset of openCypher the graph answers (ADR 0160): a query is parsed by the parser
 // generated from the openCypher grammar (Cypher.g4, `make cypher`, package parser), then turned into the small tree of
-// this file, refusing what the subset leaves out (writes, WITH, UNWIND, CALL, UNION, OPTIONAL MATCH, parameters,
-// comprehensions, subqueries). Expressions are evaluated by Eval over values and the entities a caller binds (nodes,
-// relationships, paths); matching a pattern is the caller's (graph/graph's query, over a view).
+// this file, refusing what the subset leaves out (writes, WITH, UNWIND, CALL, UNION, parameters, comprehensions,
+// subqueries other than EXISTS { pattern }). Expressions are evaluated by Eval over values and the entities a caller binds (nodes,
+// relationships, paths); matching a pattern is the caller's (graph/graph's query, over a view), EXISTS included: Eval
+// asks its scope (ExistsScope).
 package cypher
+
+import "slices"
 
 // Query is a read query: one or more MATCH clauses, then RETURN.
 type Query struct {
@@ -11,8 +14,10 @@ type Query struct {
 	Return  Return
 }
 
-// Match is a MATCH clause: its patterns and its WHERE (nil: none).
+// Match is a MATCH clause: its patterns and its WHERE (nil: none). An OPTIONAL MATCH keeps the rows it matches nothing
+// for, its variables null.
 type Match struct {
+	Optional bool
 	Patterns []Pattern
 	Where    Expr
 }
@@ -135,6 +140,12 @@ type (
 		Thens   []Expr
 		Else    Expr
 	}
+	// Exists is `EXISTS { pattern [WHERE …] }` or a pattern predicate (`(a)-[:T]->(:B)`): true when the patterns match,
+	// the variables already bound being those of the row, the others local to it.
+	Exists struct {
+		Patterns []Pattern
+		Where    Expr
+	}
 )
 
 func (Lit) expr()       {}
@@ -150,6 +161,7 @@ func (List) expr()      {}
 func (Map) expr()       {}
 func (Call) expr()      {}
 func (Case) expr()      {}
+func (Exists) expr()    {}
 
 // Vars are the variables an expression reads.
 func Vars(e Expr) []string {
@@ -200,10 +212,188 @@ func Vars(e Expr) []string {
 				walk(x.Thens[i])
 			}
 			walk(x.Else)
+		case Exists:
+			for _, p := range x.Patterns {
+				for _, v := range PatternVars(p) {
+					walk(Var{Name: v})
+				}
+				for _, pe := range patternExprs(p) {
+					walk(pe)
+				}
+			}
+			walk(x.Where)
 		}
 	}
 	walk(e)
 	return out
+}
+
+// PatternVars are the variables a pattern names: its nodes, its relationships and the path.
+func PatternVars(p Pattern) []string {
+	var out []string
+	add := func(v string) {
+		if v != "" && !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
+	for i, n := range p.Nodes {
+		add(n.Var)
+		if i < len(p.Rels) {
+			add(p.Rels[i].Var)
+		}
+	}
+	add(p.Var)
+	return out
+}
+
+// patternExprs are the property values of a pattern.
+func patternExprs(p Pattern) []Expr {
+	var out []Expr
+	for _, n := range p.Nodes {
+		for _, e := range n.Props {
+			out = append(out, e)
+		}
+	}
+	for _, r := range p.Rels {
+		for _, e := range r.Props {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// Declared are the variables the EXISTS of an expression name in their patterns: bound there when the row has not.
+func Declared(e Expr) []string {
+	var out []string
+	Walk(e, func(x Expr) bool {
+		if ex, ok := x.(Exists); ok {
+			for _, p := range ex.Patterns {
+				for _, v := range PatternVars(p) {
+					if !slices.Contains(out, v) {
+						out = append(out, v)
+					}
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// HasExists reports an expression holding an EXISTS anywhere.
+func HasExists(e Expr) bool {
+	found := false
+	Walk(e, func(x Expr) bool {
+		if _, ok := x.(Exists); ok {
+			found = true
+		}
+		return !found
+	})
+	return found
+}
+
+// children are the expressions an expression holds (an EXISTS: its WHERE and its property values).
+func children(e Expr) []Expr {
+	switch x := e.(type) {
+	case Prop:
+		return []Expr{x.X}
+	case Index:
+		return []Expr{x.X, x.I}
+	case Slice:
+		return []Expr{x.X, x.From, x.To}
+	case Unary:
+		return []Expr{x.X}
+	case Binary:
+		return []Expr{x.L, x.R}
+	case IsNull:
+		return []Expr{x.X}
+	case HasLabels:
+		return []Expr{x.X}
+	case List:
+		return x.Items
+	case Map:
+		return x.Values
+	case Call:
+		return x.Args
+	case Case:
+		out := []Expr{x.Subject}
+		for i := range x.Whens {
+			out = append(out, x.Whens[i], x.Thens[i])
+		}
+		return append(out, x.Else)
+	case Exists:
+		var out []Expr
+		for _, p := range x.Patterns {
+			out = append(out, patternExprs(p)...)
+		}
+		return append(out, x.Where)
+	}
+	return nil
+}
+
+// Walk visits an expression and what it holds, depth first, while visit answers true.
+func Walk(e Expr, visit func(Expr) bool) {
+	if e == nil || !visit(e) {
+		return
+	}
+	for _, c := range children(e) {
+		Walk(c, visit)
+	}
+}
+
+// Rewrite rebuilds an expression bottom up, each expression replaced by what f answers (itself to keep it); an EXISTS
+// is replaced as a whole, what it holds left alone.
+func Rewrite(e Expr, f func(Expr) Expr) Expr {
+	if e == nil {
+		return nil
+	}
+	rw := func(x Expr) Expr { return Rewrite(x, f) }
+	list := func(xs []Expr) []Expr {
+		if xs == nil {
+			return nil
+		}
+		out := make([]Expr, len(xs))
+		for i, x := range xs {
+			out[i] = rw(x)
+		}
+		return out
+	}
+	switch x := e.(type) {
+	case Prop:
+		x.X = rw(x.X)
+		e = x
+	case Index:
+		x.X, x.I = rw(x.X), rw(x.I)
+		e = x
+	case Slice:
+		x.X, x.From, x.To = rw(x.X), rw(x.From), rw(x.To)
+		e = x
+	case Unary:
+		x.X = rw(x.X)
+		e = x
+	case Binary:
+		x.L, x.R = rw(x.L), rw(x.R)
+		e = x
+	case IsNull:
+		x.X = rw(x.X)
+		e = x
+	case HasLabels:
+		x.X = rw(x.X)
+		e = x
+	case List:
+		x.Items = list(x.Items)
+		e = x
+	case Map:
+		x.Values = list(x.Values)
+		e = x
+	case Call:
+		x.Args = list(x.Args)
+		e = x
+	case Case:
+		x.Subject, x.Whens, x.Thens, x.Else = rw(x.Subject), list(x.Whens), list(x.Thens), rw(x.Else)
+		e = x
+	}
+	return f(e)
 }
 
 // Conjuncts splits an expression on its top-level ANDs (nil: none).

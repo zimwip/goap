@@ -26,7 +26,7 @@
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import NodeTree from '../../components/NodeTree.svelte';
-  import NodeNeighbourhood from '../../components/NodeNeighbourhood.svelte';
+  import GraphExplorer from '../../components/GraphExplorer.svelte';
   import LifecycleDiagram from '../../components/LifecycleDiagram.svelte';
   import NodeHistory from '../../components/NodeHistory.svelte';
   import NodeTags from '../../components/NodeTags.svelte';
@@ -75,9 +75,6 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   let busy = $state('');
   let editing = $state(false);
   let reload = $state(0);
-  /** the Graph pane: the node at its center and the link it shows, in the head baseline (as in the Baseline tab) */
-  let graphNode = $state('');
-  let graphLink = $state<Link | undefined>();
   /** the draft view of a node no version exists of yet (created by the working change, ADR 0079) */
   let draftNode = $state<GraphNode | undefined>();
 
@@ -213,8 +210,6 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   $effect(() => {
     void id;
     void stamp(keyOf.node(id)); // a new version of the node, by anyone
-    graphNode = id;
-    graphLink = undefined;
     const ctrl = new AbortController();
     void loadNode(ctrl.signal);
     return () => ctrl.abort();
@@ -715,19 +710,9 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
             <p class="empty">{work ? 'This node is not in the world of the selected change.' : 'This node is not in the current graph (deleted, or only created by a change: select that change to see it).'}</p>
           {/if}
         {:else if active === 'graph'}
-          {#if work && inWorld}
+          {#if (work && inWorld) || (!work && head?.baselineId && head.nodes.has(id))}
             <section class="card neighbourhood">
-              {#if graphNode !== id || graphLink}
-                <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
-              {/if}
-              <NodeNeighbourhood baselineId={work.change.baselineId ?? ''} inChange={{ changeId: work.change.id ?? '', flow: workFlow }} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} details={false} compact fill {reload} />
-            </section>
-          {:else if !work && head?.baselineId && head.nodes.has(id)}
-            <section class="card neighbourhood">
-              {#if graphNode !== id || graphLink}
-                <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
-              {/if}
-              <NodeNeighbourhood baselineId={head.baselineId} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} details={false} compact fill {reload} />
+              <GraphExplorer root={stored} />
             </section>
           {:else}
             <p class="empty">{work ? 'This node is not in the world of the selected change.' : 'This node is not in the current graph (deleted, or only created by a change: select that change to see it).'}</p>

@@ -101,14 +101,7 @@ func buildQuery(ctx parser.IOC_QueryContext) *Query {
 			refuse(rc, "CALL")
 		}
 		m := rc.OC_Match()
-		if m.OPTIONAL() != nil {
-			refuse(m, "OPTIONAL MATCH")
-		}
-		match := Match{}
-		pat := m.OC_Pattern()
-		for _, pp := range pat.AllOC_PatternPart() {
-			match.Patterns = append(match.Patterns, buildPatternPart(pp))
-		}
+		match := Match{Optional: m.OPTIONAL() != nil, Patterns: buildPattern(m.OC_Pattern())}
 		if w := m.OC_Where(); w != nil {
 			match.Where = buildExpr(w.OC_Expression())
 		}
@@ -128,21 +121,57 @@ func firstWord(ctx antlr.ParserRuleContext) string {
 	return strings.ToUpper(strings.Fields(ctx.GetText() + " ")[0])
 }
 
-func buildPatternPart(pp parser.IOC_PatternPartContext) Pattern {
-	var p Pattern
-	if v := pp.OC_Variable(); v != nil {
-		p.Var = symbolic(v.OC_SymbolicName())
+func buildPattern(pat parser.IOC_PatternContext) []Pattern {
+	var out []Pattern
+	for _, pp := range pat.AllOC_PatternPart() {
+		out = append(out, buildPatternPart(pp))
 	}
+	return out
+}
+
+func buildPatternPart(pp parser.IOC_PatternPartContext) Pattern {
 	el := pp.OC_AnonymousPatternPart().OC_PatternElement()
 	for el.OC_PatternElement() != nil { // ( pattern )
 		el = el.OC_PatternElement()
 	}
-	p.Nodes = append(p.Nodes, buildNode(el.OC_NodePattern()))
-	for _, ch := range el.AllOC_PatternElementChain() {
+	p := buildChain(el.OC_NodePattern(), el.AllOC_PatternElementChain())
+	if v := pp.OC_Variable(); v != nil {
+		p.Var = symbolic(v.OC_SymbolicName())
+	}
+	return p
+}
+
+func buildChain(first parser.IOC_NodePatternContext, chain []parser.IOC_PatternElementChainContext) Pattern {
+	p := Pattern{Nodes: []NodePattern{buildNode(first)}}
+	for _, ch := range chain {
 		p.Rels = append(p.Rels, buildRel(ch.OC_RelationshipPattern()))
 		p.Nodes = append(p.Nodes, buildNode(ch.OC_NodePattern()))
 	}
 	return p
+}
+
+// buildExists reads a pattern predicate (`(a)-->(:B)`) or `EXISTS { pattern [WHERE …] }`; an EXISTS holds no other.
+func buildExists(a parser.IOC_AtomContext) Expr {
+	var ex Exists
+	if pp := a.OC_PatternPredicate(); pp != nil {
+		rp := pp.OC_RelationshipsPattern()
+		ex.Patterns = []Pattern{buildChain(rp.OC_NodePattern(), rp.AllOC_PatternElementChain())}
+	} else {
+		sq := a.OC_ExistentialSubquery()
+		if sq.OC_RegularQuery() != nil {
+			refuse(sq, "EXISTS over a query (write EXISTS { pattern WHERE … })")
+		}
+		ex.Patterns = buildPattern(sq.OC_Pattern())
+		if w := sq.OC_Where(); w != nil {
+			ex.Where = buildExpr(w.OC_Expression())
+		}
+	}
+	for _, c := range children(ex) {
+		if HasExists(c) {
+			refuse(a, "an EXISTS or a pattern inside an EXISTS")
+		}
+	}
+	return ex
 }
 
 func buildNode(np parser.IOC_NodePatternContext) NodePattern {
@@ -502,7 +531,7 @@ func buildAtom(a parser.IOC_AtomContext) Expr {
 	case a.OC_Quantifier() != nil:
 		refuse(a, "a quantifier (all, any, none, single)")
 	case a.OC_PatternPredicate() != nil, a.OC_ExistentialSubquery() != nil:
-		refuse(a, "a pattern in an expression")
+		return buildExists(a)
 	case a.OC_ParenthesizedExpression() != nil:
 		return buildExpr(a.OC_ParenthesizedExpression().OC_Expression())
 	case a.OC_FunctionInvocation() != nil:

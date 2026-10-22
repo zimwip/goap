@@ -420,6 +420,12 @@ func (h *Handler) GetNodeNeighbourhood(ctx context.Context, r *connect.Request[g
 func (h *Handler) QueryView(ctx context.Context, r *connect.Request[graphv1.QueryViewRequest]) (*connect.Response[graphv1.QueryViewResponse], error) {
 	view := pbconv.GraphViewFromPB(r.Msg.View)
 	var opts graph.QueryOptions
+	for name, id := range r.Msg.Bind {
+		if opts.Bind == nil {
+			opts.Bind = map[string]domain.NodeID{}
+		}
+		opts.Bind[name] = domain.NodeID(id)
+	}
 	if !view.IsChange() {
 		seen := map[string]bool{}
 		opts.Visible = func(n domain.Node) bool {

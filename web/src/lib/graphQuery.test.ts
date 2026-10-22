@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cellNodes, cellOf, queryHood, querySummary, valueText } from './graphQuery';
+import { cellNodes, cellOf, matchesFilter, queryHood, querySummary, valueText } from './graphQuery';
 import { hoodIndex } from './graphIndex';
 import type { QueryResult } from './api';
 
@@ -40,5 +40,14 @@ describe('graph query cells', () => {
     expect(index.out.get('n1')?.length).toBe(1);
     expect(index.loaded.size).toBe(0);
     expect(querySummary({ ...res, truncated: true })).toBe('1 row · 2 nodes · 1 links · 3 reads · stopped by a cap');
+  });
+
+  it('keeps the root of a node explorer in the answer, and filters the nodes shown', () => {
+    const root = { id: 'n0', key: 'APP-1', type: 'alm@Application' };
+    expect(queryHood(res, root).nodes?.map((n) => n.id)).toEqual(['n0', 'n1', 'n2']);
+    expect(queryHood(res, res.nodes![0]).nodes?.length).toBe(2);
+    expect(matchesFilter(res.nodes![0], 'pay')).toBe(true);
+    expect(matchesFilter(res.nodes![1], 'need')).toBe(true);
+    expect(matchesFilter(res.nodes![1], 'pay')).toBe(false);
   });
 });

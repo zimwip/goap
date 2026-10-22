@@ -75,13 +75,50 @@ func testQueryView(t *testing.T, repo Repo) {
 	if err != nil || len(res.Rows) != 0 {
 		t.Fatalf("visible: %+v %v", res.Rows, err)
 	}
+	// OPTIONAL MATCH keeps the rows it matches nothing for, its variables null; its WHERE is its own
+	if res = run(main, "MATCH (r:Requirement) OPTIONAL MATCH (r)<-[:verifies]-(t) RETURN r.key, t.key"); rows(res) != "REQ-1TST-1" {
+		t.Fatalf("optional: %q", rows(res))
+	}
+	if res = run(main, "MATCH (n:Need) OPTIONAL MATCH (n)<-[:verifies]-(t) RETURN n.key, t.key, t IS NULL AS none"); rows(res) != "NEED-1<nil> true" {
+		t.Fatalf("optional null: %q", rows(res))
+	}
+	if res = run(main, "MATCH (r:Requirement) OPTIONAL MATCH (r)<-[:verifies]-(t) WHERE t.key = 'TST-9' RETURN r.key, t"); rows(res) != "REQ-1<nil>" {
+		t.Fatalf("optional where: %q", rows(res))
+	}
+	if res = run(main, "MATCH (n:Need) OPTIONAL MATCH (n)<-[:verifies]-(t) MATCH (t)-->(x) RETURN x"); len(res.Rows) != 0 {
+		t.Fatalf("after a null: %+v", res.Rows)
+	}
+	// EXISTS and pattern predicates: in WHERE, negated, in RETURN
+	for q, want := range map[string]string{
+		"MATCH (r:Requirement) WHERE EXISTS { (r)<-[:verifies]-(:TestCase) } RETURN r.key":                    "REQ-1",
+		"MATCH (r:Requirement) WHERE NOT (r)<-[:verifies]-() RETURN r.key":                                    "",
+		"MATCH (n:Need) WHERE NOT EXISTS { (n)<-[:verifies]-(t) WHERE t.key STARTS WITH 'TST' } RETURN n.key": "NEED-1",
+		"MATCH (r:Requirement) RETURN r.key, EXISTS { (r)-[:satisfies]->(n:Need) } AS covered":                "REQ-1true",
+		"MATCH (n:Need) RETURN n.key, (n)-->() AS out ORDER BY out":                                           "NEED-1false",
+	} {
+		if res = run(main, q); rows(res) != want {
+			t.Fatalf("%s: %q", q, rows(res))
+		}
+	}
+	// a node bound before the match: the node a person queries from
+	res, err = g.QueryView(ctx, main, "MATCH (n)-[l]-(m) RETURN type(l), m.key ORDER BY m.key", QueryOptions{Bind: map[string]domain.NodeID{"n": f.req.ID}})
+	if err != nil || rows(res) != "satisfiesNEED-1;verifiesTST-1" {
+		t.Fatalf("bind: %+v %v", res.Rows, err)
+	}
+	// a node the caller may not read is not in the graph it sees: NOT EXISTS and OPTIONAL MATCH do not meet it either
+	hide := QueryOptions{Visible: func(n domain.Node) bool { return n.Key != "TST-1" }}
+	res, err = g.QueryView(ctx, main, "MATCH (r:Requirement) WHERE NOT (r)<-[:verifies]-() OPTIONAL MATCH (r)--(x) RETURN r.key, x.key", hide)
+	if err != nil || rows(res) != "REQ-1NEED-1" {
+		t.Fatalf("hidden: %+v %v", res.Rows, err)
+	}
 	// caps: the reads stop the match, and say so
 	res, err = g.QueryView(ctx, main, "MATCH (t:TestCase)-[*1..3]-(x) RETURN x", QueryOptions{MaxReads: 2})
 	if err != nil || !res.Truncated || len(res.Notes) == 0 {
 		t.Fatalf("cap: %+v %v", res, err)
 	}
 	// refused: no anchor, a write, an unknown variable, a view missing
-	for _, bad := range []string{"MATCH (n) RETURN n", "MATCH (n:Need) DELETE n", "MATCH (n:Need) RETURN m", "MATCH (a:Need)-[*1..9]-(b) RETURN b"} {
+	for _, bad := range []string{"MATCH (n) RETURN n", "MATCH (n:Need) DELETE n", "MATCH (n:Need) RETURN m", "MATCH (a:Need)-[*1..9]-(b) RETURN b",
+		"MATCH (n:Need) WHERE EXISTS { (n)--(x) WHERE y.key = 'a' } RETURN n", "MATCH (n:Need) OPTIONAL MATCH (n)--(x) WHERE z.key = 'a' MATCH (z:Need) RETURN n"} {
 		if _, err := g.QueryView(ctx, main, bad, QueryOptions{}); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("%s: %v", bad, err)
 		}

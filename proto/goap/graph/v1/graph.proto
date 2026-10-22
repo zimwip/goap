@@ -667,8 +667,10 @@ message GetNodeNeighbourhoodResponse {
 message QueryViewRequest {
   // the view the query reads (ADR 0157); required
   View view = 1;
-  // the query: MATCH … [WHERE …] RETURN … (ADR 0160)
+  // the query: MATCH … [OPTIONAL MATCH …] [WHERE …] RETURN … (ADR 0160)
   string query = 2;
+  // variables bound to nodes before the match, by node id: the node a person queries from (`n`)
+  map<string, string> bind = 3;
 }
 
 message QueryViewResponse {
