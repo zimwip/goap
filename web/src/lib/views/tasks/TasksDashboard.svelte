@@ -71,8 +71,8 @@
   </li>
 {/snippet}
 
-{#snippet area(title: string, icon: IconName, n: number, body: Snippet, hint = '')}
-  <section class="ui-card area" aria-label={title}>
+{#snippet area(title: string, icon: IconName, n: number, body: Snippet, hint = '', wide = false)}
+  <section class="ui-card area" class:wide aria-label={title}>
     <h2 class="ui-card-head" title={hint || undefined}><Icon name={icon} size={14} /><span class="name">{title}</span><span class="count">{n}</span></h2>
     <div class="area-body">{@render body()}</div>
   </section>
@@ -87,7 +87,7 @@
     {#if !tasks.loaded}<span class="hint">Reading the tasks…</span>{/if}
     <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" onclick={() => void reloadTasks()}><Icon name="refresh" size={14} /></button>
     {#if tabsState.tabs.length}
-      <button type="button" class="small" title="Back to the editors open ({tabsState.tabs.length})" onclick={() => (layout.full = '')}><Icon name="file" size={13} />Editors</button>
+      <button type="button" class="small editors" title="Back to the editors open ({tabsState.tabs.length})" onclick={() => (layout.full = '')}><Icon name="file" size={13} />Editors</button>
     {/if}
   </header>
   {#if tasks.error}<div class="alert">{tasks.error}</div>{/if}
@@ -111,27 +111,26 @@
     {/snippet}
     {@render area('Available to you', 'bell', offered.length, offeredBody, 'Tasks you may answer that nobody holds')}
 
-    {#if working.change}
-      {@const wc = working.change}
-      {#snippet currentBody()}
-        {#if current.length}
-          <ul class="list">{#each current as a (a.id)}{@render row(a, false)}{/each}</ul>
-        {:else if tasks.loaded}
-          <p class="empty">“{wc.title}” waits for no one.</p>
-        {/if}
-      {/snippet}
-      {@render area(`This change: ${wc.title}`, 'diff', current.length, currentBody, 'The working change')}
-    {/if}
+    {#snippet currentBody()}
+      {#if !working.change}
+        <p class="empty">No working change: work on a task, or pick a change to work in from the header.</p>
+      {:else if current.length}
+        <ul class="list">{#each current as a (a.id)}{@render row(a, false)}{/each}</ul>
+      {:else if tasks.loaded}
+        <p class="empty">“{working.change.title}” waits for no one.</p>
+      {/if}
+    {/snippet}
+    {@render area(working.change ? `This change: ${working.change.title}` : 'This change', 'diff', current.length, currentBody, 'The working change')}
 
-    {#if opened.length}
-      {#snippet openedBody()}
-        {#each opened as g (g.id)}
-          <h3 title={g.id}><Icon name="diff" size={12} />{g.title}</h3>
-          <ul class="list">{#each g.asks as a (a.id)}{@render row(a, false)}{/each}</ul>
-        {/each}
-      {/snippet}
-      {@render area('Open in an editor', 'file', count(opened), openedBody, 'The changes open in a tab, other than the working one')}
-    {/if}
+    {#snippet openedBody()}
+      {#each opened as g (g.id)}
+        <h3 title={g.id}><Icon name="diff" size={12} />{g.title}</h3>
+        <ul class="list">{#each g.asks as a (a.id)}{@render row(a, false)}{/each}</ul>
+      {:else}
+        <p class="empty">No other change open in an editor waits on a person.</p>
+      {/each}
+    {/snippet}
+    {@render area('Open in an editor', 'file', count(opened), openedBody, 'The changes open in a tab, other than the working one')}
 
     {#snippet projectBody()}
       {#each ofProject as g (g.changeId)}
@@ -141,21 +140,33 @@
         {#if tasks.loaded}<p class="empty">No open change of the project waits on a person.</p>{/if}
       {/each}
     {/snippet}
-    {@render area(projectLabel ? `Project: ${projectLabel}` : 'Project', 'folder', count(ofProject), projectBody, 'Every open change of the project waiting on a person')}
+    {@render area(projectLabel ? `Project: ${projectLabel}` : 'Project', 'folder', count(ofProject), projectBody, 'Every open change of the project waiting on a person', true)}
   </div>
 </div>
 
 <style>
+  /* the areas share the height of the editor space in rows of equal height, each list scrolling in its box */
   .dashboard {
+    container: dashboard / inline-size;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
     max-width: 1600px;
     margin: 0 auto;
     padding: var(--space-4) var(--space-5) var(--space-5);
+    box-sizing: border-box;
   }
   header {
+    flex: none;
     display: flex;
     align-items: center;
     gap: 0.5rem;
     margin-bottom: var(--space-4);
+  }
+  .editors {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
   }
   .heading {
     flex: 1;
@@ -170,16 +181,31 @@
     font-size: var(--fs-sm);
   }
   .areas {
+    flex: 1;
+    min-height: 0;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+    grid-template-columns: 1fr;
+    grid-auto-rows: minmax(240px, 1fr);
     gap: var(--space-4);
-    align-items: start;
+  }
+  @container dashboard (min-width: 760px) {
+    .areas {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .area.wide {
+      grid-column: span 2;
+    }
+  }
+  @container dashboard (min-width: 1200px) {
+    .areas {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
   }
   .area {
     margin: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    max-height: 60vh;
   }
   h2.ui-card-head {
     margin: 0;

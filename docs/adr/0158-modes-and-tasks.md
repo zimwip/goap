@@ -82,8 +82,9 @@ A task is work on a change. It only makes sense in the view of that change.
   the navigation side (`layout.full`, shown by `Shell.svelte` over the editors, which stay as they are below it);
   opening a tab, or picking a navigation tool, gives the space back to the editors; a second click on its icon too.
 - The Tasks tool is such a view, a dashboard of areas (`views/tasks/TasksDashboard.svelte`): *My tasks*, *Available to
-  you*, *This change* (the working change), *Open in an editor* and the *Project*, each a list with Accept / Give back
-  and the task screen. A page opens on it, and so does project mode the first time it is entered (`ModeInfo.view`).
+  you*, *This change* (the working change), *Open in an editor* and the *Project*, each a box of the same height on a
+  grid (three columns, two or one on a narrower space) whose list scrolls inside it, with Accept / Give back and the
+  task screen. A page opens on it, and so does project mode the first time it is entered (`ModeInfo.view`).
 - Each mode keeps its workspace (`mode.svelte.ts`: `switchTo`, `swapTabs` of `tabs.svelte.ts`): the tool selected, the
   view filling the editor space and the editors open. Switching mode puts the current workspace aside and shows the
   one of the mode entered as it was left (its default tool and view the first time); nothing is closed, the editors of
