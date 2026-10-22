@@ -7,8 +7,8 @@
     /** counter or short text shown next to the label */
     badge?: string | number;
     hidden?: boolean;
-    /** a colour marking the pane as following a scope (a small dot before the label) */
-    tint?: string;
+    /** how many things in the pane wait for the person (to review, to decide…): a notification counter on the tab */
+    attention?: number;
     /** tooltip of the tab */
     title?: string;
     /** the icon of the tab (else the one of its id) */
@@ -80,9 +80,10 @@
           onkeydown={(e) => onkey(e, i)}
         >
           <Icon name={paneIcon(p)} size={13} />
-          {#if p.tint}<span class="tint" style="background: {p.tint}" aria-hidden="true"></span>{/if}
           <span class="label">{p.label}</span>
-          {#if p.badge !== undefined && p.badge !== ''}<span class="badge">{p.badge}</span>{/if}
+          <!-- a pane waiting for the person shows how many things wait, else its plain count -->
+          {#if p.attention}<span class="attention" aria-label="{p.attention} waiting for you">{p.attention > 99 ? '99+' : p.attention}</span>
+          {:else if p.badge !== undefined && p.badge !== ''}<span class="badge">{p.badge}</span>{/if}
         </button>
       {/each}
     </div>
@@ -147,11 +148,18 @@
   .tabs button:focus-visible {
     outline-offset: -2px;
   }
-  .tint {
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
+  /* a notification: something in the pane waits for the person */
+  .attention {
+    min-width: 17px;
+    height: 17px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--danger, #d9363e);
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 17px;
+    text-align: center;
   }
   .badge {
     border-radius: 999px;
