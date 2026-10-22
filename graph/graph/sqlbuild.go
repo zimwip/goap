@@ -857,8 +857,14 @@ func (d dialect) byteOrder(col string) string {
 func (d dialect) nodeRefsWhere(refs []domain.NodeRef, q NodeQuery) (string, []any, int) {
 	args, n := d.refsArgs(refs)
 	args = append(args, likePattern(q.Text), q.IncludeDeleted)
-	return nodeFrom + d.refsJoin("r", "v.node_id", "v.version", 1) + ` WHERE ` + d.textMatch(n, "v.props", "n.key", "n.type") +
-		` AND (` + d.ph(n+1) + ` OR NOT v.deleted)`, args, n + 2
+	where := nodeFrom + d.refsJoin("r", "v.node_id", "v.version", 1) + ` WHERE ` + d.textMatch(n, "v.props", "n.key", "n.type") +
+		` AND (` + d.ph(n+1) + ` OR NOT v.deleted)`
+	n += 2
+	if q.Projects != nil { // the reach of the caller (ADR 0161 §5)
+		in, arg := d.textList("n.project", n, q.Projects)
+		where, args, n = where+` AND `+in, append(args, arg), n+1
+	}
+	return where, args, n
 }
 
 // sqlNodePage reads the page of q of the node versions refs, ordered by key.
@@ -909,8 +915,16 @@ func (d dialect) sqlLinksFromInto(refs []domain.NodeRef, to domain.NodeID) (stri
 func (d dialect) linkRefsWhere(refs []domain.NodeRef, q LinkQuery) (string, []any, int) {
 	args, n := d.refsArgs(refs)
 	args = append(args, likePattern(q.Text))
+	if q.Projects == nil {
+		return ` FROM (` + d.heldLinks(1) + `) l` + d.refsJoin("t", "l.to_id", "l.to_version", 1) +
+			` WHERE ` + d.textMatch(n, "l.props", "l.type"), args, n + 1
+	}
+	// the reach of the caller (ADR 0161 §5): both ends of a link are nodes of its projects
+	from, fa := d.textList("nf.project", n+1, q.Projects)
+	to, ta := d.textList("nt.project", n+2, q.Projects)
 	return ` FROM (` + d.heldLinks(1) + `) l` + d.refsJoin("t", "l.to_id", "l.to_version", 1) +
-		` WHERE ` + d.textMatch(n, "l.props", "l.type"), args, n + 1
+		` JOIN node nf ON nf.id = l.from_id JOIN node nt ON nt.id = l.to_id` +
+		` WHERE ` + d.textMatch(n, "l.props", "l.type") + ` AND ` + from + ` AND ` + to, append(args, fa, ta), n + 3
 }
 
 // sqlLinkPage reads the page of q of the links between two of the versions refs, by type then id.

@@ -1,6 +1,6 @@
 # ADR 0161 — Access rights and data segregation: roles as action lists, projects own the data, the lifecycle opens it
 
-**Status**: proposed · **Date**: 2026-10 ·
+**Status**: accepted, phase 1 implemented · **Date**: 2026-10 ·
 Builds on ADR 0039 (projects, Assignments), ADR 0043 / 0047 (project and platform roles), ADR 0054 (owner and project
 of a version), ADR 0103 (operation catalogue), ADR 0138 (deny by default), ADR 0157 (every read names its view).
 Revises ADR 0138 §2 (the `owner` / `admin` flags become built-in roles).
@@ -126,7 +126,10 @@ only when both hold. A role never widens reach; reach never grants an action.
 
 1. **Close the gap.** The read filter in the view reader with the project rule only; neighbourhoods, pages, type lists
    and links filtered, counts after the filter; `system:` acting for a person reads as that person; a change writes
-   only nodes its project owns.
+   only nodes its project owns. *Done:* `Graph.ReachOf` / `Reach` (`graph/graph/reach.go`), `graphsvc.ReachOf` /
+   `Reader` / `OwnedWrites`, `access.Snapshot.ReachableProjects`. The reach is the projects `MayAccessProject` allows,
+   so a platform role still reads every project until phase 4 takes the content out of the admin floor; the open
+   namespaces (organisation, platform, methodology) are read whole and administered, not owned.
 2. **Creator, editor, scopes.** `Node.Creator`, `Node.Editor`, `node_version.visibility` stamped at commit (both
    dialects), `visibility:` on lifecycle states and node types, `node:share`, the reach set, the index fields; the
    rename to `Responsible`.

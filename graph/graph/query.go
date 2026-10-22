@@ -87,6 +87,10 @@ func (g *Graph) QueryView(ctx context.Context, v View, src string, opts QueryOpt
 	if opts.Visible != nil {
 		vis = map[domain.NodeID]bool{}
 	}
+	reach, err := g.reachOf(ctx)
+	if err != nil {
+		return QueryResult{}, err
+	}
 	reads := 0
 	for attempt := 1; ; attempt++ {
 		run := &queryRun{g: g, ctx: ctx, plan: plan, opts: opts, vis: vis, nodes: map[domain.NodeID]*qNode{},
@@ -96,7 +100,7 @@ func (g *Graph) QueryView(ctx context.Context, v View, src string, opts QueryOpt
 		}
 		var res QueryResult
 		err = g.repo.InTx(ctx, func(tx Tx) error {
-			w, err := g.openWorld(ctx, tx, v)
+			w, err := g.openWorld(ctx, tx, v, reach)
 			if err != nil {
 				return err
 			}
@@ -712,6 +716,9 @@ func (r *queryRun) nodeAt(ref domain.NodeRef) ([]*qNode, error) {
 	n, err := r.w.node(r.ctx, r.tx, ref)
 	if err != nil {
 		return nil, err
+	}
+	if !r.w.sees(n) {
+		return nil, nil
 	}
 	if q := r.keep(n); q != nil {
 		return []*qNode{q}, nil

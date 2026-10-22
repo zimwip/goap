@@ -1165,6 +1165,18 @@ func (t *memTx) NodePage(ctx context.Context, refs []domain.NodeRef, q NodeQuery
 }
 
 func (t *memTx) LinkPage(ctx context.Context, refs []domain.NodeRef, q LinkQuery) (LinkPage, error) {
+	if q.Projects != nil {
+		nodes, err := t.NodesAt(ctx, refs, "")
+		if err != nil {
+			return LinkPage{}, err
+		}
+		refs = refs[:0:0]
+		for _, n := range nodes {
+			if inProjects(n, q.Projects) {
+				refs = append(refs, n.Ref())
+			}
+		}
+	}
 	in := map[domain.NodeRef]bool{}
 	for _, r := range refs {
 		in[r] = true

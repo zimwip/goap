@@ -543,6 +543,22 @@ func (s *Snapshot) MayAccessProject(p authz.Principal, project string) bool {
 	return len(s.PlatformRoles(chain)) > 0 || len(s.ProjectRoles(chain, projects)) > 0 || p.HasRole(RoleAdmin)
 }
 
+// ReachableProjects are the keys of the projects whose nodes a principal reads (ADR 0161 §5, phase 1: the projects it
+// may access, MayAccessProject), sorted: the reach the graph's view reader keeps. Empty for an anonymous principal.
+func (s *Snapshot) ReachableProjects(p authz.Principal) []string {
+	if p.Anonymous() {
+		return nil
+	}
+	var out []string
+	for k := range s.projectMethods {
+		if s.MayAccessProject(p, k) {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // Directory reads the snapshot of the head of the main branch (a graphsnap.View, ADR 0145).
 type Directory struct {
 	Graph Graph
@@ -657,6 +673,15 @@ func (d *Directory) MayAccessProject(ctx context.Context, p authz.Principal, pro
 		return false, err
 	}
 	return s.MayAccessProject(p, project), nil
+}
+
+// ReachableProjects are the projects whose nodes a principal reads (Snapshot.ReachableProjects).
+func (d *Directory) ReachableProjects(ctx context.Context, p authz.Principal) ([]string, error) {
+	s, err := d.Snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.ReachableProjects(p), nil
 }
 
 // ProjectStopped tells whether a project takes no new change (Snapshot.ProjectStopped).

@@ -79,6 +79,12 @@ type Graph struct {
 	// source to the declared source holding it there, inherited from the parent projects), plugged by the compositions
 	// from the organisation they read (graphsvc.ProjectSources). Unset: every project reads the sources as named.
 	ProjectSources func(ctx context.Context, project string) (map[string]string, error)
+	// ReachOf, when set, is what the caller of a read of the current graph reads (ADR 0161 §5): the view reader keeps
+	// the nodes of its reach only, and the links between them. Unset: every read sees everything (tests, tools).
+	ReachOf ReachOf
+	// OwnedWrites, when set, makes a change check out only the nodes its project (or one below it) owns, in the
+	// namespaces it names (ADR 0161 §3). Unset: a change writes the nodes of any project.
+	OwnedWrites OwnedWrites
 	// Directory, when set, is where the structures (the units of the organisation, the projects) are read: they live
 	// in another graph, the platform graph (ADR 0154 §9), and this one holds none (Bootstrap creates no root). The
 	// owners and projects a transaction writes, the scope of a change and the walks up a structure ask it. Unset: they

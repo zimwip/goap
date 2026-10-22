@@ -94,6 +94,11 @@ func (g *Graph) ExportSnapshot(ctx context.Context, namespace, branch string, ba
 	if err != nil {
 		return s, err
 	}
+	reach, err := g.reachOf(ctx)
+	if err != nil {
+		return s, err
+	}
+	nodes, links = reach.Keep(nodes, links) // what the caller reads only (ADR 0161 §5)
 	keys := map[domain.NodeID]string{}
 	for _, n := range nodes {
 		keys[n.ID] = n.Key
