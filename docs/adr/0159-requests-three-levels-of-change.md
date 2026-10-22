@@ -27,8 +27,8 @@ Verification happens on the way up and validation on the way down (the V&V of th
 ```text
  level 1  intake           Request ──(qualified, accepted)──────────────────────────► closed
                              ▲                                                         ▲
-                             │ aggregates (lnk URL, ?v=)                               │ request.fulfilled
- level 2  project           Scope ──(agreed: gate, freeze)──► released ───────────────┘
+                             │ reframes (Need → lnk URL ?v=, part, coverage)           │ request.fulfilled
+ level 2  project           Need ∈ Scope ──(agreed: gate, freeze)──► released ────────┘
                              │ integrates (sub-changes)          ▲
                              ▼                                    │ change.applied (from: integrated)
  level 3  system            sdlc change ──(verified: build, tests, gates)──► merged into the project change
@@ -51,36 +51,42 @@ Verification happens on the way up and validation on the way down (the V&V of th
   `register_request`, a proposal like `start_agent`), an event trigger, an importer of `intake` (ADR 0148: a mail
   box, a ticket system).
 
-### 2. Level 2: the project change, an aggregate of request versions
+### 2. Level 2: the project change, needs reframing request versions
 
 - A project methodology (the role `release-based` plays today, ADR 0106) acts on the namespace of the system the
-  project changes (`alm`). Its content is an aggregating node (`alm@Scope`, or a release / initiative: the name is a
-  domain choice) that **links the Request versions it takes in**: links of type `alm@aggregates` whose target is the
-  logical URL of the version, `lnk:intake/Request/REQ-12?v=3` (ADR 0154: a node of this graph naming its version).
-  The link names the version that was agreed: a request edited later is a new version, seen as a change of what was
+  project changes (`alm`).
+- **Taking a request in reframes it as a Need.** The project does not aggregate the raw Request: its change creates
+  an `alm@Need` (the project's words for what it will do) linked to the Request version it reframes by
+  `alm@reframes`, whose target is the logical URL of the version, `lnk:intake/Request/REQ-12?v=3` (ADR 0154: a node of
+  this graph naming its version). The link's attributes (ADR 0055) say **what is scoped from here**: `part` (the part
+  of the request this need takes), `coverage` (`full` | `partial`), `rationale`. One request may be reframed by
+  several needs (split across releases or projects), one need may reframe several requests (duplicates merged). The
+  link names the version that was taken in: a request edited later is a new version, seen as a change of what was
   asked, never a silent change of the scope.
-- The agreement is a gate (ADR 0132) with a board, whose `freezes` lock the scope (`types: [alm@Scope]`). A request
-  taken in is moved to `planned` by level 1 (the project change raises `request.planned`, §4); the project change
-  never writes the `intake` namespace itself (one namespace per change).
-- **The project pulls, the request never points to a project.** The links go from the project's aggregates to the
-  Request versions, so they belong to the project's versions (outgoing links belong to the source, `apply.go`) and
-  are written by the project change: scoping is a decision of the project, made in its change and reviewed there. A
-  Request holds no link to a release; it learns it was taken in through `request.planned` (§4), and a request asked
-  for by several projects is several links to it, one per project, none on it.
+- **The project pulls, the request never points to a project.** The links go from the project's Needs to the Request
+  versions, so they belong to the project's versions (outgoing links belong to the source, `apply.go`) and are
+  written by the project change: scoping is a decision of the project, made in its change and reviewed there. A
+  Request holds no link to a project or a release; it learns it was taken in through `request.planned` (§4), and a
+  request taken in by several projects is reframed by a need in each, nothing written on it.
+- **Backlog and release scope aggregate Needs.** The backlog (`alm@Backlog`) and each release scope (`alm@Scope`, or
+  a release / initiative: the name is a domain choice) link the Needs they hold (`alm@aggregates`). A Need is **not
+  scoped yet** (in the backlog only) or **scoped** in a release (the scope links it, the backlog link dropped in the
+  same change). The trace reads Requirement → Need → Request version (`alm@satisfies`, then `alm@reframes`).
 - **What a project takes in is the project methodology's choice, stated as conditions on the Request** (its state,
-  its attributes, the version linked), never a rule of the platform. Example, automatic backlog feeding (still the project's act, by its own trigger): an event
-  trigger of the project methodology on the applied changes of `intake` (filter `event.nodes.exists(n, n.type ==
-  "intake@Request" && n.state == "accepted")`, or a declared `request.accepted`) adds each accepted Request of the
-  project's chain to the project's backlog, an aggregate of the same kind (`alm@Backlog`, links to the Request
-  versions). A Request is then either **not scoped yet** (in the backlog only) or **scoped** in a release (its scope
-  links it, the backlog link dropped in the same change). The steps of the project process carry the same kind of
-  conditions (a scoped condition over the linked Requests, ADR 0109: `all:` linked Requests `accepted` before the
-  scope's gate), so only a request in the right state starts a task at the project level. Another methodology may
-  take in `qualified` requests into a provisional scope: same mechanism, other conditions.
+  its attributes, the version), never a rule of the platform. Example, automatic backlog feeding (still the
+  project's act, by its own trigger): an event trigger of the project methodology on the applied changes of `intake`
+  (filter `event.nodes.exists(n, n.type == "intake@Request" && n.state == "accepted")`, or a declared
+  `request.accepted`) drafts a Need reframing each accepted Request of the project's chain (`coverage: full`, to be
+  reworded) into the backlog. The steps of the project process carry the same kind of conditions (a scoped condition
+  over the Needs and the Requests they reframe, ADR 0109: every reframed Request `accepted` before the scope's gate),
+  so only a request in the right state starts a task at the project level. Another methodology may take in
+  `qualified` requests into a provisional scope: same mechanism, other conditions.
+- The agreement is a gate (ADR 0132) with a board, whose `freezes` lock the scope and its Needs (`types: [alm@Scope,
+  alm@Need]`). The project change never writes the `intake` namespace itself (one namespace per change).
 - `integrates: [sdlc]` (ADR 0106, `exclusive` when the project wants every delivery to land through it): its process
-  creates the level-3 changes as sub-changes, one per piece of work it plans, and its guardian governs them. Their
-  `alm@Need` / `alm@Requirement` nodes link the Request versions they answer (`derived_from`, same URL form), so the
-  trace goes from a requirement back to the words of the requester.
+  creates the level-3 changes as sub-changes, one per piece of work it plans, and its guardian governs them. They
+  write the Requirements satisfying the Needs, so the trace goes from a requirement back to the words of the
+  requester.
 
 ### 3. Level 3: the changes acting on the system
 
@@ -92,10 +98,12 @@ The `sdlc` changes, unchanged. They are sub-changes of the project change, merge
 - A level-3 change merged into the project change is `change.applied` seen `from: integrated` (ADR 0106 `on:`). The
   project methodology reacts: it marks what that sub-change delivered on its scope.
 - The project change, merged into main (released), raises its declared event `request.fulfilled` (ADR 0110: an
-  `events:` declaration, `emits` on the releasing action), a signal item whose data lists the URLs of the Request
-  versions of the scope. Likewise `request.planned` at the agreement.
+  `events:` declaration, `emits` on the releasing action), a signal item whose data lists, per Request version
+  reframed by the Needs of the scope, the Needs delivered and their `coverage`. Likewise `request.planned` at the
+  agreement.
 - `request-management` declares an event trigger on `request.fulfilled` (and `request.planned`), `target:
-  new_change`: a short change of namespace `intake` that moves each Request to `fulfilled`, then runs **validation**
+  new_change`: a short change of namespace `intake` that moves to `fulfilled` each Request whose reframing Needs are
+  all delivered (a `partial` coverage keeps it `planned` until the rest is), then runs **validation**
   with the requester (a human step: does what was delivered answer the request?) before `closed`. A refusal reopens
   the request (`qualified`), which a project takes in again as a new version. Event triggers are global
   (`TriggerManager.Handle`, `DeclaredEvents`), so the two methodologies know each other only by an event name and a
@@ -127,15 +135,16 @@ commits (ADR 0157). Triage and validation tasks open in the context of their req
 
 - A request is graph data: searchable, linkable, versioned, auditable; the change log of its change says who
   qualified, decided and closed it. ADR 0033 §3's `request` fact is not needed.
-- The trace from the spark to the system is links between versions (Request ← Scope, Request ← Need / Requirement),
+- The trace from the spark to the system is links between versions (Request ← Need, with what is scoped; Need ← Scope; Need ← Requirement),
   and the closing of a request is the effect of an event, so each level can be replaced (another project methodology,
   another intake) without touching the others.
 - Nothing new in the graph or the engine, as far as this ADR goes: a domain, two methodologies, links to URLs and
   declared events. To check while implementing:
   - a link from a node of `alm` to a version of a node of `intake` (ADR 0154 step 2: a local target with a version);
-    the link type `alm@aggregates` declares `toTypes: [intake@Request]` across domains;
+    the link type `alm@reframes` declares `toTypes: [intake@Request]` across domains, with its attributes;
   - the payload of a declared event carries the URLs (signal item data), and the closing change finds them there;
   - the assistant's `register_request` and an `intake` importer.
 - To check: the event of an applied change carries the type and state of the nodes it committed (the filter of the
   backlog trigger), else `request-management` declares `request.accepted`.
-- Not decided: how a request shared by two projects is fulfilled (by both, or by the first).
+- A request reframed in several projects is fulfilled when every Need reframing it is delivered (§4); whether one
+  project may decline its part and leave the request fulfilled by the others is the intake methodology's rule.
