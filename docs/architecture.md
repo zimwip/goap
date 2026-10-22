@@ -1653,8 +1653,8 @@ ADR 0054, so the root exists; the check stays as a guard): creating the `User` n
 leave a permanently broken one on that race (no `member_of`, no admin) — worse, one that makes every later
 subject see the namespace as "already has a `User`" and never get the first-admin bootstrap either. Once the
 org is confirmed, it links the new `User` `member_of` it and grants `Roles: ["admin"]` when it is the first
-`User` node the namespace has ever held; the existence check (`g.NodesOfType`) reads *live* state
-(`tx.LatestNodes`), not a baseline snapshot — `EnsureUser` writes by import (`ImpactNodeCreate`/`Link`, outside of
+`User` node the namespace has ever held; the existence check (`g.ViewNodesOfType`, the head of main of the organisation, ADR 0157) reads the state
+its last change left, not an older baseline — `EnsureUser` writes by import (`ImpactNodeCreate`/`Link`, outside of
 any change), which does not itself advance a baseline, so a baseline-scoped read would miss every user but
 the ones incidentally folded in by some unrelated later change. A benign race between two simultaneous first
 connections can only ever grant admin to more than one subject, never to none. `pkg/graph.Commit` (the
