@@ -517,11 +517,14 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 		return res, err
 	}
 	// a rebase that met no conflict commits its merges: the branch holds the work brought up to date
+	var wrote []domain.Node
 	if len(res.Impacts) > 0 && !res.Changed() {
-		if _, err := g.commitOnBranch(ctx, tx, c.ID, "", true); err != nil {
+		var err error
+		if _, wrote, err = g.commitOnBranch(ctx, tx, c.ID, "", true); err != nil {
 			return res, err
 		}
 	}
+	g.raiseRebased(ctx, tx, c.ID, own.Name, wrote)
 	return res, nil
 }
 

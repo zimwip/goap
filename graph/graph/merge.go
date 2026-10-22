@@ -451,6 +451,8 @@ type MergeResult struct {
 	Change   domain.Change   `json:"change"`
 	Baseline domain.Baseline `json:"baseline"`
 	Plan     MergePlan       `json:"plan"`
+	// merged are the versions the merge wrote or joined on the target (change.merged, ADR 0159)
+	merged []domain.Node
 }
 
 // MergeBranch merges branch From into Into: a merge change with one change
@@ -654,6 +656,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		phases[1] = append(phases[1], domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactReviewed, By: "graph.merge", Review: &review, Causation: cause})
 		phases[2] = append(phases[2], written...)
 		phases[3] = append(phases[3], domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, By: "graph.merge", Committed: &m.next, Baseline: res.Baseline.ID, Branch: domain.BranchOf(plan.Into)})
+		res.merged = append(res.merged, n)
 		if n.Deleted {
 			delete(target, n.ID)
 			continue
@@ -732,6 +735,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	if err := tx.PutChange(ctx, c); err != nil {
 		return res, err
 	}
+	g.raiseMerged(ctx, tx, c, plan.Into, &res.Baseline, res.merged)
 	g.raiseApplied(ctx, tx, c, res.Baseline)
 	res.Change = c
 	fb.Status = domain.BranchMerged
