@@ -637,13 +637,13 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   const commits = $derived(commitButtons(commitInfo, closed));
   const committedOnBranch = $derived(!!commitInfo?.commits);
   const panes = $derived<Pane[]>([
-    { id: 'overview', label: 'Overview', badge: stuckNotCommittable ? '!' : undefined },
-    { id: 'impacts', label: 'Impacts', tint: scopeTint, title: scopeTabTitle(options, scope), badge: awaiting.length ? `${awaiting.length} to review` : view?.nodes?.length || undefined },
-    { id: 'reviews', label: 'Reviews', tint: scopeTint, title: scopeTabTitle(options, scope), badge: foldReviews(change?.items ?? []).filter((r) => r.status === 'open' && (r.flow ?? '') === (scope === MAIN_SCOPE ? '' : scope)).length || undefined },
-    { id: 'artifacts', label: 'Artifacts', tint: scopeTint, title: scopeTabTitle(options, scope), badge: artifacts.length || undefined },
-    { id: 'decisions', label: 'Decisions', badge: pendingDecisions || undefined },
+    { id: 'overview', label: 'Overview', attention: stuckNotCommittable ? 1 : undefined, title: stuckNotCommittable ? 'Overview · nodes left in a state that cannot commit' : undefined },
+    { id: 'impacts', label: 'Impacts', title: scopeTabTitle(options, scope), badge: view?.nodes?.length || undefined, attention: awaiting.length || undefined },
+    { id: 'reviews', label: 'Reviews', title: scopeTabTitle(options, scope), attention: foldReviews(change?.items ?? []).filter((r) => r.status === 'open' && (r.flow ?? '') === (scope === MAIN_SCOPE ? '' : scope)).length || undefined },
+    { id: 'artifacts', label: 'Artifacts', title: scopeTabTitle(options, scope), badge: artifacts.length || undefined },
+    { id: 'decisions', label: 'Decisions', attention: pendingDecisions || undefined },
     { id: 'risks', label: 'Risks & actions', badge: riskRegister(change?.items ?? []).filter(liveRisk).length || undefined },
-    { id: 'verification', label: 'Verification', badge: verifications(change?.items ?? []).filter((v) => v.open).length || undefined },
+    { id: 'verification', label: 'Verification', attention: verifications(change?.items ?? []).filter((v) => v.open).length || undefined },
     { id: 'derogations', label: 'Derogations', badge: derogationRegister(change?.items ?? []).filter(openDerogation).length || undefined },
     { id: 'dependencies', label: 'Dependencies', badge: subs.length + ancestors.length + (change?.dependsOn?.length ?? 0) || undefined },
     { id: 'audit', label: 'Audit' },
@@ -1199,7 +1199,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       onopennode={(s, d) => openNode({ id: d.node ?? '', key: d.key ?? '' }, { pin: true, change: ch.id ?? '', flow: s })}
     />
   {/if}
-  <EditorPanes {panes} bind:active={pane} label="Change context" changeId={ch.id}>
+  <EditorPanes {panes} bind:active={pane} label="Change context">
     {#snippet head()}
       <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} {writable} onchange={() => load(selected)} oncompare={() => (compareOpen = true)} />
       {#if ch.lifecycle}
@@ -1210,7 +1210,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         </ChangeLifecycleView>
       {/if}
     {/snippet}
-    <!-- what the change waits for from people (ADR 0117, ADR 0152): in the context bar while it is docked, else above every pane -->
+    <!-- what the change waits for from people (ADR 0117, ADR 0152): above every pane -->
     {#snippet aside()}
       <ChangeAsks
         changeId={selected}

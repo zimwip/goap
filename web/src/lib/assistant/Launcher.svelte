@@ -1,5 +1,6 @@
 <script lang="ts">
-  // The floating assistant (ADR 0087): a round bubble on every screen that opens the conversation as a compact panel
+  // Not mounted any more (the assistant lives in the Assistant bar, `shell/AssistantBar.svelte`): the design of this
+  // floating bubble is kept for another use. The floating assistant (ADR 0087): a round bubble on every screen that opens the conversation as a compact panel
   // by it. Not rendered when the assistant alias has no model. It sits in the bottom-right corner, above the status
   // bar, and the person moves it where they like by dragging it (Alt+arrows from the keyboard); the browser keeps the
   // place. It gives way to the field helper (ADR 0086): they are never open together.
