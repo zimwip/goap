@@ -5,7 +5,7 @@ MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: perf perf-up perf-run perf-capture perf-analysis perf-analysis-down perf-down perf-reset help all build test test-wasm tidy web-test test-pg lint eval generate tools up urls down reset logs dev dev-backend dev-web dev-reset web runner-image images claude-agent-runner
+.PHONY: perf perf-up perf-run perf-capture perf-analysis perf-analysis-down perf-down perf-reset help all build test test-wasm tidy web-test test-pg lint eval generate cypher tools up urls down reset logs dev dev-backend dev-web dev-reset web runner-image images claude-agent-runner
 
 .DEFAULT_GOAL := help
 
@@ -27,6 +27,9 @@ generate: ## regenerate connect-rpc code and the web's TypeScript (web/src/gen) 
 	buf lint
 	buf generate
 	go generate ./contracts/operations/
+
+cypher: ## regenerate the Cypher parser of lib/cypher from its grammar (ANTLR, needs Java; ADR 0160)
+	cd lib && go generate ./cypher/
 
 build: ## build all services into bin/
 	@mkdir -p bin

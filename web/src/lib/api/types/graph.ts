@@ -180,6 +180,20 @@ export interface ImpactEvent {
  * The graph refuses a read of the current graph naming none; only the reads of the history name versions. */
 export type GraphView = ViewJson;
 
+/** What a read query answered (ADR 0160, RPC QueryView): the columns, the rows (JSON values; a node, a link and a path
+ * are objects naming them, `{$node: id}`, `{$link: id}`, `{$path: {nodes, links}}`), the nodes and links they name,
+ * whether a cap stopped the match and why. */
+export interface QueryResult {
+  columns?: string[];
+  rows?: unknown[][];
+  nodes?: GraphNode[];
+  links?: Link[];
+  truncated?: boolean;
+  notes?: string[];
+  reads?: number;
+  baselineId?: string;
+}
+
 export interface BaselineNodesQuery {
   /** the view paged: a baseline, or a change with what it wrote laid over its fork */
   view: GraphView;
