@@ -125,7 +125,27 @@ level.
 - **The coupling is events and URLs**: declared events (ADR 0110), event triggers and `on:` (ADR 0036 §3, 0106),
   links to logical URLs (ADR 0154). Replacing one level touches neither of the others.
 
-### 6. Views and modes
+### 6. Across graphs: no shadow node, no distributed transaction
+
+`intake` and the project's namespace may live in two graphs (ADR 0154 §9, federation). Then:
+
+- **The pointed graph is never written by the pointing one.** The Need's link is a URL kept on the Need's version
+  (`link.to_url`); the intake graph holds no copy of it and no shadow node. Since the URL names a version, it never
+  drifts: a Request edited later is a newer version the project sees as such (`?v=3` against a head at 5), never a
+  link silently pointing at other content.
+- **What the Request side must know, it records itself, from the events.** `request.planned` / `request.fulfilled`
+  carry the URLs of the Need versions; the intake change they start writes on the Request what it learns (its state,
+  and if wanted a link back `intake@taken_in_by` to the Need version's URL). That is intake's own fact, in its own
+  transaction, not a mirror kept in sync.
+- **"Who points to me" is a read, not data.** The back links across graphs are a query of the index (the external
+  links indexed by their target URL, a federated search), eventually consistent; nothing depends on it to be correct.
+- **Each graph commits alone; the chain is a saga.** The outbox delivers each event at least once, in order (ADR
+  0136); the reactions are idempotent (the event id, and the version in the URL: moving a Request already
+  `fulfilled` for that Need is a no-op). A step undone on one side is a new event, not a rollback: a Request
+  withdrawn raises `request.withdrawn`, and the project marks the Needs reframing it as suspect. The window where
+  the Request says `accepted` while a project already scoped it is accepted, and shown as such.
+
+### 7. Views and modes
 
 In project mode (ADR 0158 draft) a project shows its inbox: the Requests of its chain at the head of main, by state.
 A request is edited only in its change (change mode), and a draft request exists only in that change's view until it
@@ -144,7 +164,18 @@ commits (ADR 0157). Triage and validation tasks open in the context of their req
     the link type `alm@reframes` declares `toTypes: [intake@Request]` across domains, with its attributes;
   - the payload of a declared event carries the URLs (signal item data), and the closing change finds them there;
   - the assistant's `register_request` and an `intake` importer.
-- To check: the event of an applied change carries the type and state of the nodes it committed (the filter of the
-  backlog trigger), else `request-management` declares `request.accepted`.
+- Gaps found in the code (2026-10):
+  - `change.applied` carries no nodes (`engine.TriggerEvent`): the backlog trigger cannot filter on the state of a
+    committed Request. Either add the committed nodes (type, key, state, version) to the event, or `request-management`
+    emits `request.accepted` from its decision (works today).
+  - A trigger with `target: new_change` creates its change in the run's project, else the root project
+    (`Engine.resolveChange`): the closing change of a request must act in the request's project. A trigger takes its
+    project from the event (`event.change.project`, or a project named in the signal's data).
+  - Conditions of the project change see the linked Requests only within one graph (`BlackboardIn` hydrates the
+    neighbours of a local target, any namespace, and skips `External()` links). Across graphs, the Need's conditions
+    on the Request state need the external targets resolved into the blackboard (ADR 0154: resolution at read, not
+    done yet).
+  - The back links across graphs need the index to hold the external links by target URL (`graph/index` indexes
+    nodes and changes, not links).
 - A request reframed in several projects is fulfilled when every Need reframing it is delivered (§4); whether one
   project may decline its part and leave the request fulfilled by the others is the intake methodology's rule.
