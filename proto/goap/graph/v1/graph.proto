@@ -28,6 +28,10 @@ service GraphService {
   rpc ListViewNodes(ListViewNodesRequest) returns (ListViewNodesResponse);
   rpc ListBaselineLinks(ListBaselineLinksRequest) returns (ListBaselineLinksResponse);
   rpc GetNodeNeighbourhood(GetNodeNeighbourhoodRequest) returns (GetNodeNeighbourhoodResponse);
+  // A read query in the subset of openCypher (ADR 0160) over a view: anchored MATCH patterns grown a hop at a time,
+  // WHERE, RETURN; never a namespace whole (capped reads, anchors and rows). INVALID_ARGUMENT for a query the subset
+  // does not read or a pattern with no anchor.
+  rpc QueryView(QueryViewRequest) returns (QueryViewResponse);
   // What a view holds of some nodes (ADR 0157): their versions in it, read by node; the index keeps the hits of a
   // search the views asked hold.
   rpc ResolveView(ResolveViewRequest) returns (ResolveViewResponse);
@@ -646,6 +650,9 @@ message GetNodeNeighbourhoodRequest {
   // its commits, its drafts); the cost follows the node, never the size of the world; required
   View view = 1;
   string node_id = 2;
+  // keeps the links of these types only, read by type (empty: every type); a type naming no namespace is also read
+  // in the namespace of the view
+  repeated string link_types = 3;
 }
 
 message GetNodeNeighbourhoodResponse {
@@ -655,6 +662,33 @@ message GetNodeNeighbourhoodResponse {
   repeated Link links = 3;
   // ids of the links whose target changed since they were created
   repeated string suspect_link_ids = 4;
+}
+
+message QueryViewRequest {
+  // the view the query reads (ADR 0157); required
+  View view = 1;
+  // the query: MATCH … [OPTIONAL MATCH …] [WHERE …] RETURN … (ADR 0160)
+  string query = 2;
+  // variables bound to nodes before the match, by node id: the node a person queries from (`n`)
+  map<string, string> bind = 3;
+}
+
+message QueryViewResponse {
+  repeated string columns = 1;
+  // one list per row; a node, a link and a path are objects naming them: {"$node": id}, {"$link": id},
+  // {"$path": {"nodes": [ids], "links": [ids]}}
+  repeated google.protobuf.ListValue rows = 2;
+  // the nodes and links the rows name (a link's ends with it)
+  repeated Node nodes = 3;
+  repeated Link links = 4;
+  // a cap stopped the match: the rows are those found until then
+  bool truncated = 5;
+  // which cap, and how the query was read
+  repeated string notes = 6;
+  // the reads the query made (neighbourhoods and pages)
+  int32 reads = 7;
+  // the baseline the view read (a change view: its fork)
+  string baseline_id = 8;
 }
 
 // An operation on the change impacts of a change (ADR 0029).

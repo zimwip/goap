@@ -3,6 +3,7 @@
   // the namespace it acts on, the head of main for the others, contextView.ts), read a neighbourhood at a time: it
   // starts from the organisation, or from what a search finds, and grows as the person expands the nodes. It never reads
   // a namespace whole. Laid out by a force simulation (d3-force); select a node to see its links, expand it, open it.
+  // A read query (ADR 0160, a subset of openCypher) runs in the view of a namespace and lays what it found in the graph.
   import { isMeta, ns as nsNames, defaultOrg } from '../../stores/session.svelte';
   import { typeCatalog } from '../../stores/types.svelte';
   import { working } from '../../stores/workingChange.svelte';
@@ -11,8 +12,11 @@
   import type { Tab } from '../../shell/types';
   import { graph as graphApi, errorMessage, type GraphNode } from '../../api';
   import { openNode } from '../../nodeEditors';
-  import { contextView, searchView, viewHoods, type ContextView } from '../../contextView';
+  import { contextView, graphView, searchView, viewHoods, type ContextView } from '../../contextView';
   import { hoodIndex, hoodOf, type Hood } from '../../graphIndex';
+  import { cellNodes, cellOf, nodeLabel, queryHood, querySummary, QUERY_EXAMPLES, valueText } from '../../graphQuery';
+  import { namespaceOf } from '../../namespace';
+  import type { QueryResult } from '../../api';
 
   let { tab }: { tab: Tab } = $props();
   void untrack(() => tab);
@@ -92,14 +96,67 @@
     }
   }
 
-  /** Reads again what is shown when the context moves: the neighbourhoods read, in the new view. */
+  /** Reads again what is shown when the context moves: the query, else the neighbourhoods read, in the new view. */
   async function reread() {
     const ids = Object.values(hoods)
       .flatMap((h) => (h.node ? [h.node] : []))
       .slice(0, 200);
     hoods = {};
-    if (ids.length) await expand(ids);
+    if (result) await runQuery();
+    else if (ids.length) await expand(ids);
     else await startFromOrganisation();
+  }
+
+  // the query: its text, the namespace whose view it reads, what it answered
+  const QUERY_HOOD = 'query:';
+  let queryOpen = $state(false);
+  let queryText = $state(QUERY_EXAMPLES[0].query);
+  let queryNs = $state('');
+  let result = $state<QueryResult | null>(null);
+  let queryError = $state('');
+  let querying = $state(false);
+  const queryNamespaces = $derived(namespaces.filter((n) => !isMeta(n)));
+  $effect(() => {
+    // the namespace the working change acts on, else the first of the content
+    if (queryNs && namespaces.includes(queryNs)) return;
+    const w = working.change ? namespaceOf(working.change.namespace ?? '') : '';
+    queryNs = w && namespaces.includes(w) ? w : (queryNamespaces[0] ?? namespaces[0] ?? '');
+  });
+
+  /** Runs the query in the view of its namespace and shows what it found in place of the graph, to expand from. */
+  async function runQuery() {
+    if (!queryText.trim() || !queryNs) return;
+    querying = true;
+    queryError = '';
+    try {
+      const res = await graphApi.queryView(graphView(await viewOf(queryNs)), queryText);
+      result = res;
+      selected = '';
+      hoods = res.nodes?.length ? { [QUERY_HOOD]: queryHood(res) } : {};
+      for (const n of res.nodes ?? []) if (n.namespace && shown[n.namespace] === false) shown[n.namespace] = true;
+    } catch (e) {
+      queryError = errorMessage(e);
+    } finally {
+      querying = false;
+    }
+  }
+  function clearQuery() {
+    result = null;
+    queryError = '';
+    const next = { ...hoods };
+    delete next[QUERY_HOOD];
+    hoods = next;
+  }
+  function queryKey(e: KeyboardEvent) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      void runQuery();
+    }
+  }
+  /** Selects the first node a cell names in the canvas. */
+  function pick(v: unknown) {
+    const id = cellNodes(cellOf(v, result ?? {})).find((i) => view.byId.has(i));
+    if (id) selected = id;
   }
   $effect(() => {
     void contextKey;
@@ -258,7 +315,8 @@
     <h2>Graph explorer</h2>
     <button type="button" class="small" onclick={() => void startFromOrganisation()} disabled={loading}>Start from the organisation</button>
     <input type="search" placeholder="Find a node to start from (key, name, type)…" bind:value={filter} aria-label="Find a node" />
-    <button type="button" class="small" onclick={() => (hoods = {})} disabled={loading}>Clear</button>
+    <button type="button" class="small" class:primary={queryOpen} aria-pressed={queryOpen} onclick={() => (queryOpen = !queryOpen)}>Query</button>
+    <button type="button" class="small" onclick={() => ((hoods = {}), (result = null))} disabled={loading}>Clear</button>
     <button type="button" class="small" onclick={() => void reread()} disabled={loading}>{loading ? 'Loading…' : 'Reload'}</button>
     <span class="hint" title="The working change of the header is seen on its option for the namespace it acts on; the other namespaces at the head of main">
       {working.change ? `seen in ${working.change.title}` : 'head of main'}
@@ -270,8 +328,48 @@
     {/each}
     <span class="hint">{view.nodes.length} nodes · {view.links.length} links{view.truncated ? ` (first ${MAX})` : ''}</span>
   </div>
+  {#if queryOpen}
+    <div class="query">
+      <textarea
+        class="mono"
+        rows="4"
+        spellcheck="false"
+        bind:value={queryText}
+        onkeydown={queryKey}
+        aria-label="Query (a subset of openCypher)"
+        placeholder="MATCH (r:Requirement)-[:satisfies]->(n) WHERE n.title CONTAINS 'pay' RETURN r, n"
+      ></textarea>
+      <div class="query-side">
+        <label>
+          In
+          <select bind:value={queryNs} aria-label="Namespace the query reads">
+            {#each namespaces as n (n)}<option value={n}>{n}</option>{/each}
+          </select>
+        </label>
+        <select
+          aria-label="Examples"
+          onchange={(e) => {
+            const s = e.currentTarget as HTMLSelectElement;
+            if (s.value) queryText = s.value;
+            s.selectedIndex = 0;
+          }}
+        >
+          <option value="">Examples…</option>
+          {#each QUERY_EXAMPLES as x (x.label)}<option value={x.query}>{x.label}</option>{/each}
+        </select>
+        <div class="row">
+          <button type="button" class="small primary" onclick={() => void runQuery()} disabled={querying || !queryText.trim()}>{querying ? 'Running…' : 'Run'}</button>
+          {#if result}<button type="button" class="small" onclick={clearQuery}>Clear result</button>{/if}
+        </div>
+        <span class="hint" title="Read-only MATCH … WHERE … RETURN; a pattern starts from a label, a key or an id; hops, anchors and rows are capped (ADR 0160)">
+          Ctrl+Enter runs it, in the view of the context
+        </span>
+      </div>
+    </div>
+    {#if queryError}<div class="alert mono">{queryError}</div>{/if}
+  {/if}
   {#if error}<div class="alert">{error}</div>{/if}
-  <div class="body">
+  <div class="body" class:with-results={!!result}>
     <div class="canvas" role="presentation" bind:clientWidth={cw} bind:clientHeight={ch} onwheel={wheel} onpointerdown={down} onpointermove={move} onpointerup={() => (drag = null)}>
       <svg width="100%" height="100%" aria-label="Graph explorer">
         <g transform="translate({tx},{ty}) scale({scale})">
@@ -354,6 +452,45 @@
       {/if}
     </aside>
   </div>
+  {#if result}
+    <div class="results">
+      <p class="hint">
+        {querySummary(result)}
+        {#each result.notes ?? [] as n (n)}<br />{n}{/each}
+      </p>
+      {#if result.rows?.length}
+        <table>
+          <thead><tr>{#each result.columns ?? [] as c, i (i)}<th class="mono">{c}</th>{/each}</tr></thead>
+          <tbody>
+            {#each result.rows as row, r (r)}
+              <tr>
+                {#each row as v, i (i)}
+                  {@const c = cellOf(v, result)}
+                  <td>
+                    {#if c.kind === 'node'}
+                      <button
+                        type="button"
+                        class="link"
+                        onclick={() => pick(v)}
+                        ondblclick={() => c.node && void openNode(c.node)}
+                        title={c.node ? `${c.node.key} · ${c.node.type}` : c.id}>{nodeLabel(c.node, c.id)}</button
+                      >
+                    {:else if c.kind === 'value'}
+                      <span class="mono">{valueText(v, result)}</span>
+                    {:else}
+                      <button type="button" class="link" onclick={() => pick(v)}>{valueText(v, result)}</button>
+                    {/if}
+                  </td>
+                {/each}
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {:else}
+        <p class="hint">No row.</p>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -377,6 +514,45 @@
     flex: 1;
     min-width: 160px;
   }
+  .query {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .query textarea {
+    flex: 1;
+    min-width: 260px;
+    resize: vertical;
+    font-size: 0.9em;
+  }
+  .query-side {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 200px;
+  }
+  .results {
+    flex: none;
+    margin-top: 8px;
+    max-height: 32vh;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px 8px;
+  }
+  .results table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.9em;
+  }
+  .results th,
+  .results td {
+    text-align: left;
+    padding: 2px 8px 2px 0;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
   .ns {
     display: flex;
     gap: 12px;
@@ -399,6 +575,9 @@
     grid-template-columns: minmax(0, 1fr) 300px;
     gap: 8px;
     min-height: 480px;
+  }
+  .body.with-results {
+    min-height: 280px;
   }
   @media (max-width: 900px) {
     .body {

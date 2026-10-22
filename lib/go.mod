@@ -29,7 +29,6 @@ require (
 
 require (
 	cel.dev/expr v0.25.2 // indirect
-	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.6.1 // indirect
 	github.com/casbin/govaluate v1.3.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -72,6 +71,7 @@ require (
 )
 
 require (
+	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/fastschema/qjs v0.0.6
 	github.com/zimwip/goap/contracts v0.0.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.71.0

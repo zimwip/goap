@@ -1580,7 +1580,11 @@ for the working change, both ways). Together they are the **context view** every
 for the namespace the working change acts on, the change on that option; for the others, and with no working change, the
 head of main. A screen reads of it only what it shows (a neighbourhood, a page of a search; `viewHoods`, `searchView`):
 the node tab, the pickers, the *New object* dialog, the human tasks (the nodes of their change, `lifecycle.changeNodes`,
-the rest searched) and the Graph explorer (a neighbourhood at a time, from the organisation or a node found); the
+the rest searched) and the Graph explorer (a neighbourhood at a time, from the organisation or a node found, or what a
+read query found: a subset of openCypher, `OPTIONAL MATCH` and `EXISTS` included, `GraphService.QueryView`, anchored
+patterns grown a hop at a time through the neighbourhoods of the view, capped, ADR 0160, `lib/cypher` generated from the
+openCypher grammar; the Graph pane of a node keeps its compact view with a filter and a query starting from the node, `NodeQuery.svelte`);
+the
 Baseline explorer is the exception, it shows the commit the person picks. Every such read names its view to the graph (ADR 0157: `graphView`
 of the context view, `branchView` for a baseline of a branch, `forkView` for a change's fork): the graph refuses a read of
 the current graph naming no branch and no change, and assumes no branch; a search of a change view is the server's, the

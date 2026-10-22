@@ -62,6 +62,8 @@ const (
 	// GraphServiceGetNodeNeighbourhoodProcedure is the fully-qualified name of the GraphService's
 	// GetNodeNeighbourhood RPC.
 	GraphServiceGetNodeNeighbourhoodProcedure = "/goap.graph.v1.GraphService/GetNodeNeighbourhood"
+	// GraphServiceQueryViewProcedure is the fully-qualified name of the GraphService's QueryView RPC.
+	GraphServiceQueryViewProcedure = "/goap.graph.v1.GraphService/QueryView"
 	// GraphServiceResolveViewProcedure is the fully-qualified name of the GraphService's ResolveView
 	// RPC.
 	GraphServiceResolveViewProcedure = "/goap.graph.v1.GraphService/ResolveView"
@@ -375,6 +377,10 @@ type GraphServiceClient interface {
 	ListViewNodes(context.Context, *connect.Request[v1.ListViewNodesRequest]) (*connect.Response[v1.ListViewNodesResponse], error)
 	ListBaselineLinks(context.Context, *connect.Request[v1.ListBaselineLinksRequest]) (*connect.Response[v1.ListBaselineLinksResponse], error)
 	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
+	// A read query in the subset of openCypher (ADR 0160) over a view: anchored MATCH patterns grown a hop at a time,
+	// WHERE, RETURN; never a namespace whole (capped reads, anchors and rows). INVALID_ARGUMENT for a query the subset
+	// does not read or a pattern with no anchor.
+	QueryView(context.Context, *connect.Request[v1.QueryViewRequest]) (*connect.Response[v1.QueryViewResponse], error)
 	// What a view holds of some nodes (ADR 0157): their versions in it, read by node; the index keeps the hits of a
 	// search the views asked hold.
 	ResolveView(context.Context, *connect.Request[v1.ResolveViewRequest]) (*connect.Response[v1.ResolveViewResponse], error)
@@ -649,6 +655,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceGetNodeNeighbourhoodProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("GetNodeNeighbourhood")),
+			connect.WithClientOptions(opts...),
+		),
+		queryView: connect.NewClient[v1.QueryViewRequest, v1.QueryViewResponse](
+			httpClient,
+			baseURL+GraphServiceQueryViewProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("QueryView")),
 			connect.WithClientOptions(opts...),
 		),
 		resolveView: connect.NewClient[v1.ResolveViewRequest, v1.ResolveViewResponse](
@@ -1273,6 +1285,7 @@ type graphServiceClient struct {
 	listViewNodes           *connect.Client[v1.ListViewNodesRequest, v1.ListViewNodesResponse]
 	listBaselineLinks       *connect.Client[v1.ListBaselineLinksRequest, v1.ListBaselineLinksResponse]
 	getNodeNeighbourhood    *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
+	queryView               *connect.Client[v1.QueryViewRequest, v1.QueryViewResponse]
 	resolveView             *connect.Client[v1.ResolveViewRequest, v1.ResolveViewResponse]
 	listNamespaces          *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
 	getGraphOverview        *connect.Client[v1.GetGraphOverviewRequest, v1.GetGraphOverviewResponse]
@@ -1429,6 +1442,11 @@ func (c *graphServiceClient) ListBaselineLinks(ctx context.Context, req *connect
 // GetNodeNeighbourhood calls goap.graph.v1.GraphService.GetNodeNeighbourhood.
 func (c *graphServiceClient) GetNodeNeighbourhood(ctx context.Context, req *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error) {
 	return c.getNodeNeighbourhood.CallUnary(ctx, req)
+}
+
+// QueryView calls goap.graph.v1.GraphService.QueryView.
+func (c *graphServiceClient) QueryView(ctx context.Context, req *connect.Request[v1.QueryViewRequest]) (*connect.Response[v1.QueryViewResponse], error) {
+	return c.queryView.CallUnary(ctx, req)
 }
 
 // ResolveView calls goap.graph.v1.GraphService.ResolveView.
@@ -1956,6 +1974,10 @@ type GraphServiceHandler interface {
 	ListViewNodes(context.Context, *connect.Request[v1.ListViewNodesRequest]) (*connect.Response[v1.ListViewNodesResponse], error)
 	ListBaselineLinks(context.Context, *connect.Request[v1.ListBaselineLinksRequest]) (*connect.Response[v1.ListBaselineLinksResponse], error)
 	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
+	// A read query in the subset of openCypher (ADR 0160) over a view: anchored MATCH patterns grown a hop at a time,
+	// WHERE, RETURN; never a namespace whole (capped reads, anchors and rows). INVALID_ARGUMENT for a query the subset
+	// does not read or a pattern with no anchor.
+	QueryView(context.Context, *connect.Request[v1.QueryViewRequest]) (*connect.Response[v1.QueryViewResponse], error)
 	// What a view holds of some nodes (ADR 0157): their versions in it, read by node; the index keeps the hits of a
 	// search the views asked hold.
 	ResolveView(context.Context, *connect.Request[v1.ResolveViewRequest]) (*connect.Response[v1.ResolveViewResponse], error)
@@ -2226,6 +2248,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceGetNodeNeighbourhoodProcedure,
 		svc.GetNodeNeighbourhood,
 		connect.WithSchema(graphServiceMethods.ByName("GetNodeNeighbourhood")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceQueryViewHandler := connect.NewUnaryHandler(
+		GraphServiceQueryViewProcedure,
+		svc.QueryView,
+		connect.WithSchema(graphServiceMethods.ByName("QueryView")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceResolveViewHandler := connect.NewUnaryHandler(
@@ -2858,6 +2886,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceListBaselineLinksHandler.ServeHTTP(w, r)
 		case GraphServiceGetNodeNeighbourhoodProcedure:
 			graphServiceGetNodeNeighbourhoodHandler.ServeHTTP(w, r)
+		case GraphServiceQueryViewProcedure:
+			graphServiceQueryViewHandler.ServeHTTP(w, r)
 		case GraphServiceResolveViewProcedure:
 			graphServiceResolveViewHandler.ServeHTTP(w, r)
 		case GraphServiceListNamespacesProcedure:
@@ -3111,6 +3141,10 @@ func (UnimplementedGraphServiceHandler) ListBaselineLinks(context.Context, *conn
 
 func (UnimplementedGraphServiceHandler) GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetNodeNeighbourhood is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) QueryView(context.Context, *connect.Request[v1.QueryViewRequest]) (*connect.Response[v1.QueryViewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.QueryView is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ResolveView(context.Context, *connect.Request[v1.ResolveViewRequest]) (*connect.Response[v1.ResolveViewResponse], error) {

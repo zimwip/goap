@@ -195,19 +195,43 @@ func (g *Graph) ViewNode(ctx context.Context, v View, id domain.NodeID, key stri
 // ViewNeighbourhood returns a node as a view holds it, with its direct neighbours: the nodes and the links between
 // them, read node by node (ADR 0137, 0157). A link is kept when its other end is in the world, at whatever version it
 // names; it is suspect when it names a version of its target the world does not hold.
-func (g *Graph) ViewNeighbourhood(ctx context.Context, v View, nodeID domain.NodeID) (nb Neighbourhood, err error) {
+func (g *Graph) ViewNeighbourhood(ctx context.Context, v View, nodeID domain.NodeID) (Neighbourhood, error) {
+	return g.ViewNeighbourhoodOf(ctx, v, nodeID, nil)
+}
+
+// ViewNeighbourhoodOf is ViewNeighbourhood keeping the links of some types (nil: every type): a hop of a navigation,
+// which reads those link types only, by the indexes of the links by source or target and type (a query's hop, ADR
+// 0160). A type is matched as written or, unqualified, qualified by the namespace of the view.
+func (g *Graph) ViewNeighbourhoodOf(ctx context.Context, v View, nodeID domain.NodeID, types []string) (nb Neighbourhood, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.openWorld(ctx, tx, v)
 		if err != nil {
 			return err
 		}
-		nb, err = w.neighbourhood(ctx, tx, nodeID)
+		nb, err = w.neighbourhood(ctx, tx, nodeID, w.linkTypes(types))
 		return err
 	})
 	return
 }
 
-func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID) (nb Neighbourhood, err error) {
+// linkTypes are the link types asked as the store holds them: as written, and an unqualified one also qualified by
+// the namespace of the world (nil stays nil: every type).
+func (w *world) linkTypes(types []string) []string {
+	if types == nil {
+		return nil
+	}
+	out := []string{}
+	for _, t := range types {
+		out = append(out, t)
+		if !strings.Contains(t, "@") {
+			out = append(out, w.namespace+"@"+t)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID, types []string) (nb Neighbourhood, err error) {
 	at, err := w.at(ctx, tx, []domain.NodeID{nodeID})
 	if err != nil {
 		return nb, err
@@ -220,17 +244,28 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID) 
 	if nb.Node, err = w.node(ctx, tx, ref); err != nil {
 		return nb, err
 	}
+	keep := func(l domain.Link) bool { return types == nil || slices.Contains(types, l.Type) }
 	// Outgoing links belong to the source version: all of them are the node's. Incoming links may target any version
 	// of the node (suspect links): keep those whose source is at the version the world holds. The drafts of a change
-	// hold links into the node too.
-	out, err := w.reader.outLinks(ctx, tx, ref)
+	// hold links into the node too. A hop of some types reads those types only (LinksFromOfType / LinksToOfType).
+	var out, in []domain.Link
+	switch {
+	case types == nil || ref.IsDraft():
+		out, err = w.reader.outLinks(ctx, tx, ref)
+	case len(types) > 0:
+		out, err = tx.LinksFromOfType(ctx, []domain.NodeRef{ref}, types)
+	}
 	if err != nil {
 		return nb, err
 	}
-	in, err := w.entering(ctx, tx, nodeID)
+	if types == nil || len(types) > 0 {
+		in, err = w.entering(ctx, tx, nodeID)
+	}
 	if err != nil {
 		return nb, err
 	}
+	out = slices.DeleteFunc(out, func(l domain.Link) bool { return !keep(l) })
+	in = slices.DeleteFunc(in, func(l domain.Link) bool { return !keep(l) })
 	for _, d := range w.drafts() {
 		if d == nodeID {
 			continue
@@ -240,7 +275,7 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID) 
 			return nb, err
 		}
 		for _, l := range dl {
-			if !l.External() && l.To.ID == nodeID {
+			if !l.External() && l.To.ID == nodeID && keep(l) {
 				in = append(in, l)
 			}
 		}

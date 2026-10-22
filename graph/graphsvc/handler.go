@@ -399,13 +399,57 @@ func (h *Handler) ListBaselineLinks(ctx context.Context, r *connect.Request[grap
 }
 
 func (h *Handler) GetNodeNeighbourhood(ctx context.Context, r *connect.Request[graphv1.GetNodeNeighbourhoodRequest]) (*connect.Response[graphv1.GetNodeNeighbourhoodResponse], error) {
-	nb, err := h.Graph.ViewNeighbourhood(ctx, pbconv.GraphViewFromPB(r.Msg.View), domain.NodeID(r.Msg.NodeId))
+	var types []string // nil: every type
+	if len(r.Msg.LinkTypes) > 0 {
+		types = r.Msg.LinkTypes
+	}
+	nb, err := h.Graph.ViewNeighbourhoodOf(ctx, pbconv.GraphViewFromPB(r.Msg.View), domain.NodeID(r.Msg.NodeId), types)
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
 	out := &graphv1.GetNodeNeighbourhoodResponse{Node: pbconv.NodeToPB(nb.Node), Nodes: pbconv.NodesToPB(nb.Nodes), Links: pbconv.LinksToPB(nb.Links)}
 	for _, l := range nb.Suspect {
 		out.SuspectLinkIds = append(out.SuspectLinkIds, string(l))
+	}
+	return connect.NewResponse(out), nil
+}
+
+// QueryView runs a read query in a view (ADR 0160). Outside a change, a row naming or passing through a node the caller
+// may not read (mayReadNode) is dropped, checked after the read; through a change, the nodes are the change's
+// (PersonalScope).
+func (h *Handler) QueryView(ctx context.Context, r *connect.Request[graphv1.QueryViewRequest]) (*connect.Response[graphv1.QueryViewResponse], error) {
+	view := pbconv.GraphViewFromPB(r.Msg.View)
+	var opts graph.QueryOptions
+	for name, id := range r.Msg.Bind {
+		if opts.Bind == nil {
+			opts.Bind = map[string]domain.NodeID{}
+		}
+		opts.Bind[name] = domain.NodeID(id)
+	}
+	if !view.IsChange() {
+		seen := map[string]bool{}
+		opts.Visible = func(n domain.Node) bool {
+			key := n.Namespace + "\x00" + n.Project.Key
+			ok, known := seen[key]
+			if !known {
+				ok = h.mayReadNode(ctx, n)
+				seen[key] = ok
+			}
+			return ok
+		}
+	}
+	res, err := h.Graph.QueryView(ctx, view, r.Msg.Query, opts)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	out := &graphv1.QueryViewResponse{Columns: res.Columns, Nodes: pbconv.NodesToPB(res.Nodes), Links: pbconv.LinksToPB(res.Links),
+		Truncated: res.Truncated, Notes: res.Notes, Reads: int32(res.Reads), BaselineId: string(res.Baseline)}
+	for _, row := range res.Rows {
+		lv, err := structpb.NewList(row)
+		if err != nil {
+			return nil, rpcerr.ToConnect(fmt.Errorf("row of the query: %w", err))
+		}
+		out.Rows = append(out.Rows, lv)
 	}
 	return connect.NewResponse(out), nil
 }

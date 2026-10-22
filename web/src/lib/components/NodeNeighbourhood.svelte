@@ -41,6 +41,7 @@
     compact = false,
     fill = false,
     inChange,
+    keep,
   }: {
     baselineId: string;
     /** the namespace the baseline holds: a node of another one opens in its editor instead of recentering */
@@ -62,6 +63,8 @@
     fill?: boolean;
     /** the change whose world (its fork as it left it, its commits, its drafts) is read in place of the baseline */
     inChange?: { changeId: string; flow?: string };
+    /** the nodes shown around the center (a filter, a query's answer); unset: every one */
+    keep?: (n: GraphNode) => boolean;
   } = $props();
 
   /** what the neighbourhoods are read from: the world given, else the baseline ('' : nothing to read) */
@@ -168,6 +171,10 @@
     };
     add({ node: center, nodes: hood.neighbours, links: hood.links });
     if (depth > 1) for (const id of frontiers(depth).flat()) add(reads.get(id) ?? {});
+    if (keep) {
+      for (const [id, n] of nodes) if (id !== center.id && !keep(n)) nodes.delete(id);
+      for (const [id, l] of links) if (!nodes.has(l.from?.id ?? '') || !nodes.has(l.to?.id ?? '')) links.delete(id);
+    }
     return indexOf(baselineId, [...nodes.values()], [...links.values()]);
   });
   const suspect = $derived(new Set([...hood.suspect, ...[...reads.values()].flatMap((r) => r.suspectLinkIds ?? [])]));

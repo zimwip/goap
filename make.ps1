@@ -55,6 +55,8 @@ function Generate {
     Run go generate ./contracts/operations/
 }
 
+function Cypher { InDir lib { Run go generate ./cypher/ } }
+
 function Build {
     New-Item -ItemType Directory -Force bin | Out-Null
     foreach ($s in $Services) { Run go build -o "bin/$s$Exe" "./platform/cmd/$s" }
@@ -228,6 +230,7 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   tools             install code generators (and air)
   generate          regenerate connect-rpc code and the web's TypeScript (web/src/gen) from proto/,
                     and the catalogue of operations
+  cypher            regenerate the Cypher parser of lib/cypher from its grammar (ANTLR, needs Java; ADR 0160)
   build             build all services into bin\
   test              go test of every module of the go.work
   test-wasm         every go test with the scripts run by the wasm JavaScript engine (GOAP_JS_ENGINE=wasm)
@@ -266,6 +269,7 @@ switch ($Target) {
     'all'              { Generate; Build; Test }
     'tools'            { Tools }
     'generate'         { Generate }
+    'cypher'           { Cypher }
     'build'            { Build }
     'test'             { Test }
     'test-wasm'        { TestWasm }
