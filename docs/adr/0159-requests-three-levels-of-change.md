@@ -62,8 +62,13 @@ Verification happens on the way up and validation on the way down (the V&V of th
 - The agreement is a gate (ADR 0132) with a board, whose `freezes` lock the scope (`types: [alm@Scope]`). A request
   taken in is moved to `planned` by level 1 (the project change raises `request.planned`, §4); the project change
   never writes the `intake` namespace itself (one namespace per change).
+- **The project pulls, the request never points to a project.** The links go from the project's aggregates to the
+  Request versions, so they belong to the project's versions (outgoing links belong to the source, `apply.go`) and
+  are written by the project change: scoping is a decision of the project, made in its change and reviewed there. A
+  Request holds no link to a release; it learns it was taken in through `request.planned` (§4), and a request asked
+  for by several projects is several links to it, one per project, none on it.
 - **What a project takes in is the project methodology's choice, stated as conditions on the Request** (its state,
-  its attributes, the version linked), never a rule of the platform. Example, automatic backlog feeding: an event
+  its attributes, the version linked), never a rule of the platform. Example, automatic backlog feeding (still the project's act, by its own trigger): an event
   trigger of the project methodology on the applied changes of `intake` (filter `event.nodes.exists(n, n.type ==
   "intake@Request" && n.state == "accepted")`, or a declared `request.accepted`) adds each accepted Request of the
   project's chain to the project's backlog, an aggregate of the same kind (`alm@Backlog`, links to the Request
