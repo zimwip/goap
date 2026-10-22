@@ -1,10 +1,11 @@
 <script lang="ts">
   // Navigation sidebar: the tool shown, then its content. The tools of the left area (named and counted) are listed
   // only while the person switches: the list folds back to the selection once a tool is picked, so navigation stays
-  // at hand without taking the height. Not pinned (Ctrl+B), the activity bar's icons stand in for the sidebar, which shows over the editor from them.
+  // at hand without taking the height. The activity bar's icons stay beside it and hold its pin (Ctrl+B); not pinned, the
+  // sidebar shows over the editor from them.
   import Icon from './Icon.svelte';
   import { panelView, viewsIn } from './registry';
-  import { layout, nav, showTool } from './layout.svelte';
+  import { layout, showTool } from './layout.svelte';
   import { mode, toolInMode } from './mode.svelte';
   import type { PanelView } from './types';
 
@@ -15,11 +16,6 @@
   // the tools that call for attention while the list is folded
   const waiting = $derived(tools.filter((v) => v.id !== view?.id && v.badge?.()).length);
   let listing = $state(false);
-
-  function pin() {
-    layout.leftOpen = !layout.leftOpen;
-    nav.revealed = false;
-  }
 
   function pick(v: PanelView) {
     showTool('left', v.id);
@@ -50,17 +46,6 @@
         {#if viewBadge}<span class="count">{viewBadge}</span>{/if}
         {#if !listing && waiting}<span class="dot" title="{waiting} other tool{waiting > 1 ? 's' : ''} call for attention"></span>{/if}
         <span class="chev" class:open={listing}><Icon name="chevronDown" size={12} /></span>
-      </button>
-      <button
-        type="button"
-        class="ghost small icon"
-        class:on={layout.leftOpen}
-        aria-pressed={layout.leftOpen}
-        title={layout.leftOpen ? 'Unpin: the navigation hides by its rail (Ctrl+B)' : 'Pin the navigation beside the editor (Ctrl+B)'}
-        aria-label="Pin the navigation"
-        onclick={pin}
-      >
-        <Icon name="pin" size={14} />
       </button>
     </div>
     {#if listing}
@@ -188,22 +173,6 @@
   .ui-nav-item.active .count {
     border-color: var(--accent);
     color: var(--accent);
-  }
-  .icon {
-    padding: 0.15rem;
-    color: var(--text-3);
-  }
-  /* the pin: slanted while the navigation hides by its rail, upright and accented while pinned */
-  .icon :global(svg) {
-    transform: rotate(45deg);
-    transition: transform var(--transition);
-  }
-  .icon.on {
-    color: var(--accent);
-    background: var(--accent-soft, var(--hover));
-  }
-  .icon.on :global(svg) {
-    transform: none;
   }
   .body {
     flex: 1;

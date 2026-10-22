@@ -1,7 +1,8 @@
 <script lang="ts">
   // The context bar (right), a menu: the sections of the editor shown (bound to the change it shows; the project and
-  // the working change are in the header), an icon each with its count. Closed, it is a rail of icons; open
-  // (hovered, focused, or pinned beside the editor), it slides out and each icon gets its label.
+  // the working change are in the header), an icon each with its count. Closed, it is a rail of icons with its pin at the
+  // top; open (a section clicked, the focus, or pinned beside the editor), it slides out and each icon gets its label.
+  // Open over the editor, it follows the section hovered, as the navigation follows the tool hovered.
   import Icon from './Icon.svelte';
   import { layout } from './layout.svelte';
   import { compactBadge, contextBar, editorContext, paneIcon } from './context.svelte';
@@ -13,6 +14,20 @@
   function pin() {
     layout.rightOpen = !layout.rightOpen;
     contextBar.revealed = false;
+  }
+
+  function pick(id: string) {
+    if (!contextBar.docked) contextBar.revealed = true;
+    ec?.pick(id);
+  }
+
+  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+  function hover(id: string) {
+    clearTimeout(hoverTimer);
+    if (contextBar.docked || !contextBar.revealed || ec?.active === id) return;
+    hoverTimer = setTimeout(() => {
+      if (contextBar.revealed && !contextBar.docked) ec?.pick(id);
+    }, 120);
   }
 
   function keydown(e: KeyboardEvent) {
@@ -57,7 +72,9 @@
             aria-controls="pane-{p.id}"
             tabindex={on ? 0 : -1}
             title={p.title ?? (p.badge !== undefined && p.badge !== '' ? `${p.label} · ${p.badge}` : p.label)}
-            onclick={() => ec.pick(p.id)}
+            onclick={() => pick(p.id)}
+            onmouseenter={() => hover(p.id)}
+            onmouseleave={() => clearTimeout(hoverTimer)}
           >
             <span class="ic">
               <Icon name={paneIcon(p)} size={16} />
