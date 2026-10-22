@@ -42,6 +42,10 @@ service EngineService {
   // What a change waits for from people (ADR 0117): the tasks its runs wait on a person for and the decision points
   // only a person settles, each with whom it is addressed to and whether the caller may answer it.
   rpc GetChangeAsks(GetChangeAsksRequest) returns (GetChangeAsksResponse);
+  // What the open changes of a project (or of every project the caller reads) wait for from people, change by change
+  // (ADR 0158): the tasks of a project, and those of a person across changes. Read like GetChangeAsks; at most the
+  // hundred most recent open changes.
+  rpc ListAsks(ListAsksRequest) returns (ListAsksResponse);
   // How a condition of the run's world state got its value: its CEL formula, the value of each part of it and
   // of the blackboard variables it reads, against the change of the run.
   rpc ExplainCondition(ExplainConditionRequest) returns (ExplainConditionResponse);
@@ -601,6 +605,16 @@ message GetChangeAsksResponse {
   repeated ChangeAsk asks = 1;
 }
 
+message ListAsksRequest {
+  // the key of the project (empty: every project the caller reads)
+  string project_id = 1;
+}
+
+message ListAsksResponse {
+  // the asks of each change, the oldest first; the changes waiting on nothing are left out
+  repeated ChangeAsk asks = 1;
+}
+
 // ChangeAsk is one thing a change waits for from a person (ADR 0117).
 message ChangeAsk {
   // stable while the ask stands
@@ -624,6 +638,10 @@ message ChangeAsk {
   // the decision point and its question
   string point = 13;
   string question = 14;
+  // the change waiting, its title and project (ListAsks)
+  string change_id = 15;
+  string change_title = 16;
+  string project_id = 17;
 }
 
 message GetAssessmentStatesRequest {

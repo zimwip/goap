@@ -10,6 +10,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/graphapi"
 )
 
 // What a change waits for from people (ADR 0117): every task a run of the change waits on a person for, and the
@@ -53,11 +54,55 @@ type Ask struct {
 
 // ChangeAsks lists what the change waits for from people, the oldest first, judged for the caller of ctx.
 func (e *Engine) ChangeAsks(ctx context.Context, changeID domain.ChangeID) ([]Ask, error) {
-	who := authz.From(ctx)
 	all, err := e.Store.List(ctx)
 	if err != nil {
 		return nil, err
 	}
+	bb, err := e.blackboard(ctx, changeID, "")
+	if err != nil {
+		return nil, err
+	}
+	return e.asksOf(ctx, changeID, all, domain.DecisionPointsOf(bb))
+}
+
+// MaxAskedChanges bounds the changes Asks reads (the most recent first): each costs a read of its blackboard.
+const MaxAskedChanges = 100
+
+// Asks lists what each of the changes waits for from people (ADR 0158: the tasks of a person, of a project), judged
+// for the caller of ctx: one read of the runs for all of them, the decision points of each change from its blackboard
+// (without its history, which no ask reads). At most MaxAskedChanges changes are read; a change gone since it was
+// listed is left out.
+func (e *Engine) Asks(ctx context.Context, changes []domain.ChangeID) (map[domain.ChangeID][]Ask, error) {
+	if len(changes) > MaxAskedChanges {
+		changes = changes[:MaxAskedChanges]
+	}
+	all, err := e.Store.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[domain.ChangeID][]Ask, len(changes))
+	for _, id := range changes {
+		bb, err := e.Graph.BlackboardIn(ctx, id, "")
+		if errors.Is(err, graphapi.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		asks, err := e.asksOf(ctx, id, all, domain.DecisionPointsOf(bb))
+		if err != nil {
+			return nil, err
+		}
+		if len(asks) > 0 {
+			out[id] = asks
+		}
+	}
+	return out, nil
+}
+
+// asksOf is what a change waits for: the asks of its runs among all, then of its decision points, the oldest first.
+func (e *Engine) asksOf(ctx context.Context, changeID domain.ChangeID, all []*Process, points []domain.DecisionPoint) ([]Ask, error) {
+	who := authz.From(ctx)
 	out := []Ask{}
 	for _, p := range all {
 		if p.ChangeID != changeID {
@@ -71,11 +116,7 @@ func (e *Engine) ChangeAsks(ctx context.Context, changeID domain.ChangeID) ([]As
 			out = append(out, a)
 		}
 	}
-	bb, err := e.blackboard(ctx, changeID, "")
-	if err != nil {
-		return nil, err
-	}
-	out = append(out, decisionAsks(domain.DecisionPointsOf(bb))...)
+	out = append(out, decisionAsks(points)...)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Since.Before(out[j].Since) })
 	return out, nil
 }

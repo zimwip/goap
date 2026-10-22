@@ -3,10 +3,12 @@
   import Icon from './Icon.svelte';
   import { viewsIn } from './registry';
   import { layout, nav, toggleTool } from './layout.svelte';
+  import { mode, toolInMode } from './mode.svelte';
 
   let { side }: { side: 'left' | 'right' } = $props();
 
-  const views = $derived(viewsIn(side));
+  // the left tools of the mode the person is in (ADR 0158)
+  const views = $derived(side === 'left' ? viewsIn(side).filter((v) => toolInMode(v.id, mode.current)) : viewsIn(side));
   const active = $derived(side === 'left' ? layout.left : layout.right);
   const open = $derived(side === 'left' ? layout.leftOpen || nav.revealed : layout.drawer);
 

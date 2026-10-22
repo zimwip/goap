@@ -1,6 +1,6 @@
 # ADR 0158 — Modes of the front, and tasks in the context of their change
 
-**Status**: proposed · **Date**: 2026-10
+**Status**: accepted (first step implemented) · **Date**: 2026-10
 
 ## Context
 
@@ -42,3 +42,17 @@ A task is work on a change. It only makes sense in the view of that change.
   only.
 - The task lists need a read of the tasks of a person across changes (`GetChangeAsks` is per change today, ADR 0117).
 - Navigation and administration leave the everyday shell, which shows less to people who are not administrators.
+
+## Implementation (first step)
+
+- The header switch and the modes (`web/src/lib/shell/mode.svelte.ts`, `ModeSwitch.svelte`): each mode shows its left
+  tools (`TOOL_MODES`); change mode is enabled only while a change is worked in, and a page opens in it when one is;
+  navigation and administration are offered to administrators only.
+- The Tasks tool (`views/nav/TasksExplorer.svelte`): my tasks, the working change's, those of the changes open in an
+  editor, the project's in project mode. The engine reads the asks of the open changes at once (`ListAsks`,
+  `Engine.Asks`). Accepting a task is kept in the person's preferences for now: personal, not seen by others.
+- Picking a task works on it: its change becomes the working change, change mode, the change tab opened on the task.
+
+Not yet: the editors of a change other than the working one, or outside change mode, are not read only; the
+editors of navigation and administration still open from anywhere (search, commands, links); a shared acceptance of a
+task (a claim others see).

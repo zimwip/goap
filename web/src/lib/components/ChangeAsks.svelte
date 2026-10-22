@@ -3,6 +3,7 @@
   // counts what waits for the person looking at it and for whom else; unfolded, it lists what the person may answer,
   // answered in place (the panel of the run's task, the answer to a question), then what waits for someone else and
   // whom. Nothing waiting, or the asks unreadable: no strip. The engine gathers the asks and says who may answer each.
+  import { tick, untrack } from 'svelte';
   import { engine, errorMessage, graph, shortId, type ChangeAsk, type Process } from '../api';
   import { processes, ingestProcess } from '../stores/live.svelte';
   import { me } from '../stores/session.svelte';
@@ -18,8 +19,11 @@
     onreview,
     ondecisions,
     onopen,
+    focus = '',
   }: {
     changeId: string;
+    /** the ask picked from a list of tasks (ADR 0158): the strip opens on it */
+    focus?: string;
     closed?: boolean;
     /** keys of the impacts awaiting their review */
     reviews?: string[];
@@ -59,6 +63,15 @@
   });
 
   const groups = $derived(groupAsks(asks));
+  // a task picked elsewhere opens the strip on it, once it is read, and shows it
+  let shown = '';
+  let root = $state<HTMLElement>();
+  $effect(() => {
+    if (!focus || focus === shown || !asks.some((a) => a.id === focus)) return;
+    shown = focus;
+    untrack(() => (open = true));
+    void tick().then(() => root?.querySelector('.ask.focus')?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  });
   const subject = $derived(me());
   const chips = $derived(attentionChips(groups, closed ? 0 : reviews.length, subject));
   const forMe = $derived(chips.some((c) => c.mine));
@@ -82,7 +95,7 @@
 </script>
 
 {#if chips.length}
-  <section class="asks" class:mine={forMe} aria-label="What the change waits for">
+  <section class="asks" class:mine={forMe} aria-label="What the change waits for" bind:this={root}>
     <button type="button" class="strip" aria-expanded={open} onclick={() => (open = !open)}>
       <strong>Waiting on people</strong>
       {#each chips as c (c.label)}<span class="chip" class:mine={c.mine}>{c.label}</span>{/each}
@@ -95,7 +108,7 @@
       <h3>Waiting for you <span class="count">{groups.mine.length + (closed ? 0 : reviews.length)}</span></h3>
       {#each groups.mine as a, i (a.id)}
         {@const run = runOf(a)}
-        <details class="ask mine" open={i < 3}>
+        <details class="ask mine" class:focus={a.id === focus} open={i < 3 || a.id === focus}>
           <summary>
             <span class="kind">{askKind(a)}</span>
             <strong>{a.title || a.action}</strong>
@@ -159,6 +172,11 @@
   }
   .asks.mine {
     border-color: var(--accent);
+  }
+  .ask.focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
   }
   .strip {
     display: flex;

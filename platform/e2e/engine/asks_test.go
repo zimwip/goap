@@ -7,6 +7,7 @@ import (
 	"github.com/zimwip/goap/engine/engine"
 
 	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/contracts/domain"
 )
 
 func TestChangeAsksAddressTheRoleAndTellWhoMayAnswer(t *testing.T) {
@@ -38,6 +39,12 @@ func TestChangeAsksAddressTheRoleAndTellWhoMayAnswer(t *testing.T) {
 		t.Fatalf("the release manager answers it: %+v %v", asks, err)
 	}
 
+	// across changes (ADR 0158): the same ask, under its change; a change gone is left out
+	byChange, err := e.Asks(rm, []domain.ChangeID{p.ChangeID, "CH-gone"})
+	if err != nil || len(byChange) != 1 || len(byChange[p.ChangeID]) != 1 || !byChange[p.ChangeID][0].MayAnswer {
+		t.Fatalf("the asks of the change, by change: %+v %v", byChange, err)
+	}
+
 	if _, err := e.Approve(rm, p.ID, true, "go"); err != nil {
 		t.Fatal(err)
 	}
@@ -46,5 +53,8 @@ func TestChangeAsksAddressTheRoleAndTellWhoMayAnswer(t *testing.T) {
 	}
 	if asks, err = e.ChangeAsks(dev, p.ChangeID); err != nil || len(asks) != 0 {
 		t.Fatalf("nothing is asked once approved: %+v %v", asks, err)
+	}
+	if byChange, err = e.Asks(dev, []domain.ChangeID{p.ChangeID}); err != nil || len(byChange) != 0 {
+		t.Fatalf("a change waiting on nothing is left out: %+v %v", byChange, err)
 	}
 }

@@ -20,6 +20,8 @@ export interface Prefs {
   usageScope: 'mine' | 'platform';
   /** the working change last selected in each project, by project key (stores/workingChange.svelte.ts) */
   workingChanges: Record<string, string>;
+  /** the tasks the person accepted (ADR 0158), by `taskKey` of stores/tasks.svelte.ts */
+  acceptedTasks: string[];
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -30,6 +32,7 @@ export const DEFAULT_PREFS: Prefs = {
   usagePeriod: '7d',
   usageScope: 'mine',
   workingChanges: {},
+  acceptedTasks: [],
 };
 
 export const prefs = $state({
@@ -50,6 +53,7 @@ function normalize(raw: Record<string, unknown> | undefined): Prefs {
   if (raw.usageScope === 'mine' || raw.usageScope === 'platform') p.usageScope = raw.usageScope;
   if (raw.workingChanges && typeof raw.workingChanges === 'object' && !Array.isArray(raw.workingChanges))
     p.workingChanges = Object.fromEntries(Object.entries(raw.workingChanges).filter((e): e is [string, string] => typeof e[1] === 'string' && !!e[1]));
+  if (Array.isArray(raw.acceptedTasks)) p.acceptedTasks = raw.acceptedTasks.filter((k): k is string => typeof k === 'string' && !!k).slice(0, 500);
   return p;
 }
 

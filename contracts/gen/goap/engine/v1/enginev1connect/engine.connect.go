@@ -81,6 +81,8 @@ const (
 	// EngineServiceGetChangeAsksProcedure is the fully-qualified name of the EngineService's
 	// GetChangeAsks RPC.
 	EngineServiceGetChangeAsksProcedure = "/goap.engine.v1.EngineService/GetChangeAsks"
+	// EngineServiceListAsksProcedure is the fully-qualified name of the EngineService's ListAsks RPC.
+	EngineServiceListAsksProcedure = "/goap.engine.v1.EngineService/ListAsks"
 	// EngineServiceExplainConditionProcedure is the fully-qualified name of the EngineService's
 	// ExplainCondition RPC.
 	EngineServiceExplainConditionProcedure = "/goap.engine.v1.EngineService/ExplainCondition"
@@ -146,6 +148,10 @@ type EngineServiceClient interface {
 	// What a change waits for from people (ADR 0117): the tasks its runs wait on a person for and the decision points
 	// only a person settles, each with whom it is addressed to and whether the caller may answer it.
 	GetChangeAsks(context.Context, *connect.Request[v1.GetChangeAsksRequest]) (*connect.Response[v1.GetChangeAsksResponse], error)
+	// What the open changes of a project (or of every project the caller reads) wait for from people, change by change
+	// (ADR 0158): the tasks of a project, and those of a person across changes. Read like GetChangeAsks; at most the
+	// hundred most recent open changes.
+	ListAsks(context.Context, *connect.Request[v1.ListAsksRequest]) (*connect.Response[v1.ListAsksResponse], error)
 	// How a condition of the run's world state got its value: its CEL formula, the value of each part of it and
 	// of the blackboard variables it reads, against the change of the run.
 	ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error)
@@ -280,6 +286,12 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(engineServiceMethods.ByName("GetChangeAsks")),
 			connect.WithClientOptions(opts...),
 		),
+		listAsks: connect.NewClient[v1.ListAsksRequest, v1.ListAsksResponse](
+			httpClient,
+			baseURL+EngineServiceListAsksProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("ListAsks")),
+			connect.WithClientOptions(opts...),
+		),
 		explainCondition: connect.NewClient[v1.ExplainConditionRequest, v1.ExplainConditionResponse](
 			httpClient,
 			baseURL+EngineServiceExplainConditionProcedure,
@@ -355,6 +367,7 @@ type engineServiceClient struct {
 	getChangeState      *connect.Client[v1.GetChangeStateRequest, v1.GetChangeStateResponse]
 	getAssessmentStates *connect.Client[v1.GetAssessmentStatesRequest, v1.GetAssessmentStatesResponse]
 	getChangeAsks       *connect.Client[v1.GetChangeAsksRequest, v1.GetChangeAsksResponse]
+	listAsks            *connect.Client[v1.ListAsksRequest, v1.ListAsksResponse]
 	explainCondition    *connect.Client[v1.ExplainConditionRequest, v1.ExplainConditionResponse]
 	listProcesses       *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
 	checkAgents         *connect.Client[v1.CheckAgentsRequest, v1.CheckAgentsResponse]
@@ -446,6 +459,11 @@ func (c *engineServiceClient) GetChangeAsks(ctx context.Context, req *connect.Re
 	return c.getChangeAsks.CallUnary(ctx, req)
 }
 
+// ListAsks calls goap.engine.v1.EngineService.ListAsks.
+func (c *engineServiceClient) ListAsks(ctx context.Context, req *connect.Request[v1.ListAsksRequest]) (*connect.Response[v1.ListAsksResponse], error) {
+	return c.listAsks.CallUnary(ctx, req)
+}
+
 // ExplainCondition calls goap.engine.v1.EngineService.ExplainCondition.
 func (c *engineServiceClient) ExplainCondition(ctx context.Context, req *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error) {
 	return c.explainCondition.CallUnary(ctx, req)
@@ -527,6 +545,10 @@ type EngineServiceHandler interface {
 	// What a change waits for from people (ADR 0117): the tasks its runs wait on a person for and the decision points
 	// only a person settles, each with whom it is addressed to and whether the caller may answer it.
 	GetChangeAsks(context.Context, *connect.Request[v1.GetChangeAsksRequest]) (*connect.Response[v1.GetChangeAsksResponse], error)
+	// What the open changes of a project (or of every project the caller reads) wait for from people, change by change
+	// (ADR 0158): the tasks of a project, and those of a person across changes. Read like GetChangeAsks; at most the
+	// hundred most recent open changes.
+	ListAsks(context.Context, *connect.Request[v1.ListAsksRequest]) (*connect.Response[v1.ListAsksResponse], error)
 	// How a condition of the run's world state got its value: its CEL formula, the value of each part of it and
 	// of the blackboard variables it reads, against the change of the run.
 	ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error)
@@ -657,6 +679,12 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(engineServiceMethods.ByName("GetChangeAsks")),
 		connect.WithHandlerOptions(opts...),
 	)
+	engineServiceListAsksHandler := connect.NewUnaryHandler(
+		EngineServiceListAsksProcedure,
+		svc.ListAsks,
+		connect.WithSchema(engineServiceMethods.ByName("ListAsks")),
+		connect.WithHandlerOptions(opts...),
+	)
 	engineServiceExplainConditionHandler := connect.NewUnaryHandler(
 		EngineServiceExplainConditionProcedure,
 		svc.ExplainCondition,
@@ -745,6 +773,8 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceGetAssessmentStatesHandler.ServeHTTP(w, r)
 		case EngineServiceGetChangeAsksProcedure:
 			engineServiceGetChangeAsksHandler.ServeHTTP(w, r)
+		case EngineServiceListAsksProcedure:
+			engineServiceListAsksHandler.ServeHTTP(w, r)
 		case EngineServiceExplainConditionProcedure:
 			engineServiceExplainConditionHandler.ServeHTTP(w, r)
 		case EngineServiceListProcessesProcedure:
@@ -834,6 +864,10 @@ func (UnimplementedEngineServiceHandler) GetAssessmentStates(context.Context, *c
 
 func (UnimplementedEngineServiceHandler) GetChangeAsks(context.Context, *connect.Request[v1.GetChangeAsksRequest]) (*connect.Response[v1.GetChangeAsksResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.GetChangeAsks is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) ListAsks(context.Context, *connect.Request[v1.ListAsksRequest]) (*connect.Response[v1.ListAsksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ListAsks is not implemented"))
 }
 
 func (UnimplementedEngineServiceHandler) ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error) {

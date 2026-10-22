@@ -5,9 +5,11 @@
   import Icon from './Icon.svelte';
   import { panelView, viewsIn } from './registry';
   import { layout, nav, showTool } from './layout.svelte';
+  import { mode, toolInMode } from './mode.svelte';
   import type { PanelView } from './types';
 
-  const tools = $derived(viewsIn('left'));
+  // the tools of the mode the person is in (ADR 0158)
+  const tools = $derived(viewsIn('left').filter((v) => toolInMode(v.id, mode.current)));
   const view = $derived(panelView(layout.left));
   const viewBadge = $derived(view?.badge?.());
   // the tools that call for attention while the list is folded
