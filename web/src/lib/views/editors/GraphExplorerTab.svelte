@@ -19,6 +19,7 @@
   import type { QueryResult } from '../../api';
   import CodeEditor from '../../components/CodeEditor.svelte';
   import { cypherSuggestions } from '../../cypherComplete';
+  import { graphExplorer, takeGraphRequest } from '../../stores/graphExplorer.svelte';
 
   let { tab }: { tab: Tab } = $props();
   void untrack(() => tab);
@@ -106,7 +107,7 @@
     hoods = {};
     if (result) await runQuery();
     else if (ids.length) await expand(ids);
-    else await startFromOrganisation();
+    else if (graphExplorer.taken >= graphExplorer.seq) await startFromOrganisation(); // a request of the Graph tool decides
   }
 
   // the query: its text, the namespace whose view it reads, what it answered
@@ -174,6 +175,25 @@
         namespaces = all;
       })
       .catch((e) => (error = errorMessage(e)));
+  });
+
+  // what the Graph tool of the navigation asks, once the namespaces are known (a query reads the view of one)
+  $effect(() => {
+    void graphExplorer.seq;
+    if (!namespaces.length) return;
+    const r = untrack(takeGraphRequest);
+    if (!r) return;
+    untrack(() => {
+      if (r.kind === 'organisation') {
+        filter = '';
+        void startFromOrganisation();
+      } else if (r.kind === 'find') filter = r.text;
+      else {
+        queryOpen = true;
+        if (r.text) queryText = r.text;
+        if (r.run) void runQuery();
+      }
+    });
   });
 
   // the search: a page of the nodes matching the text in each namespace shown, in its view

@@ -71,6 +71,9 @@ would ignore the views and need keeping in sync.
    examples. The nodes and links the rows name replace what the canvas showed, as one neighbourhood whose nodes are not
    expanded yet (each can be expanded from there); the rows are a table under it, a cell naming a node selects it, a double click opens it. A context move runs the query
    again (`web/src/lib/graphQuery.ts`).
+   The *Graph explorer* tool of the navigation (`views/nav/GraphTool.svelte`) is its way in: it opens the tab, starts
+   from the organisation or from a node found, opens the query box or runs an example (`stores/graphExplorer.svelte.ts`:
+   a request the tab takes once).
 7. **The Graph pane of a node keeps its compact view and gains a filter and a query** (`components/NodeQuery.svelte`
    above `NodeNeighbourhood.svelte`): the icons and colours of the types and the depth presets (1 to 4 hops) stay; a text
    box filters the nodes shown (key, name, type); a query starts from the node (`n`, bound by `bind`, in the view the

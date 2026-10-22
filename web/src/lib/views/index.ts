@@ -15,6 +15,7 @@ import './nodeEditors';
 
 import MethodologyExplorer from './nav/MethodologyExplorer.svelte';
 import DomainExplorer from './nav/DomainExplorer.svelte';
+import GraphTool from './nav/GraphTool.svelte';
 import BaselineExplorer from './nav/BaselineExplorer.svelte';
 import ChangesExplorer from './nav/ChangesExplorer.svelte';
 import AccessExplorer from './nav/AccessExplorer.svelte';
@@ -74,6 +75,7 @@ registerView({ id: 'domains', zone: 'left', title: 'Domains', icon: 'graph', com
 registerView({ id: 'processes', zone: 'left', title: 'My processes', icon: 'runs', component: ProcessesExplorer, order: 2.2 });
 registerView({ id: 'triggers', zone: 'left', title: 'Triggers', icon: 'clock', component: TriggersExplorer, order: 2.5 });
 registerView({ id: 'baselines', zone: 'left', title: 'Baseline', icon: 'database', component: BaselineExplorer, order: 3 });
+registerView({ id: 'graph', zone: 'left', title: 'Graph explorer', icon: 'network', component: GraphTool, order: 3.2 });
 registerView({
   id: 'changes',
   zone: 'left',
@@ -417,7 +419,7 @@ registerView({
   id: 'graphExplorer',
   zone: 'editor',
   title: 'Graph explorer',
-  icon: 'graph',
+  icon: 'network',
   component: GraphExplorerTab,
   key: () => 'main',
   tabTitle: () => 'Graph explorer',
