@@ -47,6 +47,16 @@ type Ask struct {
 	Since time.Time `json:"since"`
 	// MayAnswer tells whether the caller may answer it (the same rules as the call answering it).
 	MayAnswer bool `json:"mayAnswer"`
+	// Assignee holds the task (ADR 0158): only they answer it, besides whoever may reassign it; AssignedBy gave it to
+	// them (themselves when they accepted it) at AssignedAt.
+	Assignee   string    `json:"assignee,omitempty"`
+	AssignedBy string    `json:"assignedBy,omitempty"`
+	AssignedAt time.Time `json:"assignedAt,omitempty"`
+	// Declined tells the caller turned the task down; MayAccept that they may take it (nobody holds it and they may
+	// answer it), MayAssign that they may give it to someone (an administrator of the project).
+	Declined  bool `json:"declined,omitempty"`
+	MayAccept bool `json:"mayAccept,omitempty"`
+	MayAssign bool `json:"mayAssign,omitempty"`
 	// Point and Question name the decision point and its question.
 	Point    string `json:"point,omitempty"`
 	Question string `json:"question,omitempty"`
@@ -195,6 +205,20 @@ func (e *Engine) processAsk(ctx context.Context, p *Process, who authz.Principal
 	case errors.Is(allowed, authz.ErrForbidden):
 	default:
 		return a, false, allowed
+	}
+	if assignable(p) {
+		me := who.EndUser()
+		a.Assignee, a.AssignedBy, a.AssignedAt = t.Assignee, t.AssignedBy, t.AssignedAt
+		a.Declined = slices.Contains(t.Declined, me)
+		may, err := e.mayAssign(ctx, p, who)
+		if err != nil {
+			return a, false, err
+		}
+		a.MayAssign = may
+		a.MayAccept = a.MayAnswer && t.Assignee == ""
+		if t.Assignee != "" && t.Assignee != me && !may {
+			a.MayAnswer = false // held by someone else
+		}
 	}
 	return a, true, nil
 }

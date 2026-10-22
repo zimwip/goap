@@ -10,6 +10,8 @@
   import { stamp, keyOf } from '../flux/signals.svelte';
   import { addressee, answeredInPlace, askKind, attentionChips, groupAsks, waitingFor } from '../changeAsks';
   import PendingTask from './PendingTask.svelte';
+  import { openTask } from '../stores/tasks.svelte';
+  import { holderLabel } from '../tasks';
   import IntentDialogue from '../views/editors/IntentDialogue.svelte';
 
   let {
@@ -113,8 +115,9 @@
             <span class="kind">{askKind(a)}</span>
             <strong>{a.title || a.action}</strong>
             <span class="hint">
-              {#if a.step}{a.step} · {/if}for {addressee(a, subject)}{#if waitingFor(a.since)} · waiting {waitingFor(a.since)}{/if}
+              {#if a.step}{a.step} · {/if}for {addressee(a, subject)}{#if holderLabel(a, subject)}{` · held by ${holderLabel(a, subject)}`}{/if}{#if waitingFor(a.since)}{` · waiting ${waitingFor(a.since)}`}{/if}
             </span>
+            {#if a.processId}<button type="button" class="link small" title="Accept, turn down{a.mayAssign ? ', give to someone' : ''}" onclick={(e) => (e.preventDefault(), openTask({ ...a, changeId }, true))}>task</button>{/if}
             {#if a.processId}<button type="button" class="link small" onclick={(e) => (e.preventDefault(), onopen(a.processId ?? ''))}>run {run?.agent || shortId(a.processId)}</button>{/if}
           </summary>
           {#if a.detail && a.kind !== 'input'}<p class="hint">{a.detail}</p>{/if}
@@ -151,8 +154,9 @@
           <li>
             <span class="kind">{askKind(a)}</span>
             {a.title || a.action}
-            <span class="hint">for {addressee(a, subject)}{#if waitingFor(a.since)} · waiting {waitingFor(a.since)}{/if}</span>
+            <span class="hint">for {addressee(a, subject)}{#if holderLabel(a, subject)}{` · held by ${holderLabel(a, subject)}`}{/if}{#if waitingFor(a.since)}{` · waiting ${waitingFor(a.since)}`}{/if}</span>
             {#if a.processId}<button type="button" class="link small" onclick={() => onopen(a.processId ?? '')}>run</button>{/if}
+            {#if a.processId}<button type="button" class="link small" title="Who holds it{a.mayAssign ? ', give it to someone' : ''}" onclick={() => openTask({ ...a, changeId }, true)}>task</button>{/if}
           </li>
         {/each}
       </ul>

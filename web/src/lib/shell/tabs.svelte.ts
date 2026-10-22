@@ -6,6 +6,7 @@ import { editorView } from './registry';
 import { currentRoute, navigate, onRoute } from './router';
 import type { Tab, TabSpec } from './types';
 import { confirmDialog } from './confirmState.svelte';
+import { layout } from './layout.svelte';
 
 interface TabsState {
   tabs: Tab[];
@@ -74,6 +75,8 @@ export function isDirty(tab: Tab): boolean {
 
 export function activate(id: string): void {
   if (!findTab(id)) return;
+  // a tab shown takes the editor space back from a tool filling it
+  layout.full = '';
   if (tabsState.active && tabsState.active !== id) {
     const i = history.indexOf(tabsState.active);
     if (i >= 0) history.splice(i, 1);
@@ -192,4 +195,20 @@ export function moveTab(from: number, to: number): void {
   if (from === to || from < 0 || to < 0 || from >= tabsState.tabs.length || to >= tabsState.tabs.length) return;
   const [t] = tabsState.tabs.splice(from, 1);
   tabsState.tabs.splice(to, 0, t);
+}
+
+/** The tabs of a mode, put aside while another mode is shown (ADR 0158). */
+export interface TabSet {
+  tabs: Tab[];
+  active: string;
+  history: string[];
+}
+
+/** Puts the tabs shown aside and shows others instead (none: no tab), as they were left. */
+export function swapTabs(next?: TabSet): TabSet {
+  const out: TabSet = { tabs: tabsState.tabs, active: tabsState.active, history: history.splice(0) };
+  tabsState.tabs = next?.tabs ?? [];
+  tabsState.active = next?.active ?? '';
+  history.push(...(next?.history ?? []));
+  return out;
 }

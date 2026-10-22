@@ -1,6 +1,6 @@
 // Global commands (search's ">" palette and keyboard shortcuts).
 import type { IconName } from './Icon.svelte';
-import { layout, showTool, toggleConsole } from './layout.svelte';
+import { layout, showTool, toggleConsole, toggleNavigation } from './layout.svelte';
 import { activeTab, closeAll, closeTab, openTab } from './tabs.svelte';
 import { focusRequests, runTabAction } from './workbench.svelte';
 import { openSearch } from './searchOverlay.svelte.ts';
@@ -47,7 +47,7 @@ export const COMMANDS: Command[] = [
     label: 'Show / hide navigation',
     icon: 'panelLeft',
     shortcut: 'Ctrl+B',
-    run: () => (layout.leftOpen = !layout.leftOpen),
+    run: toggleNavigation,
   },
   {
     id: 'test',

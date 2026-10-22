@@ -181,6 +181,11 @@ export interface HumanTask {
   step?: number;
   /** the step of a process the task belongs to: what to do and how (ADR 0034, ADR 0035 §2) */
   context?: StepContext;
+  /** kinds "input" and "approval": the person holding the task (ADR 0158), who gave it to them and when, the people who turned it down */
+  assignee?: string;
+  assignedBy?: string;
+  assignedAt?: string;
+  declined?: string[];
 }
 
 /** The step of a process a task or an action carries out. */
@@ -356,6 +361,14 @@ export interface ChangeAsk {
   changeId?: string;
   changeTitle?: string;
   projectId?: string;
+  /** the person holding the task (ADR 0158), who gave it to them and when */
+  assignee?: string;
+  assignedBy?: string;
+  assignedAt?: string;
+  /** the caller turned it down, may accept it (nobody holds it and they may answer it), may assign it */
+  declined?: boolean;
+  mayAccept?: boolean;
+  mayAssign?: boolean;
 }
 
 export interface ChangeStateResponse {

@@ -624,6 +624,9 @@ func (e *Engine) submit(ctx context.Context, id string, items []ItemInput, value
 	if err := e.maySubmit(ctx, p, m, authz.From(ctx)); err != nil {
 		return nil, err
 	}
+	if err := e.holds(ctx, p, authz.From(ctx)); err != nil {
+		return nil, err
+	}
 	action, known := m.Action(p.Pending.Action)
 	i := p.Pending.Step
 	waitedOn := p.Pending.Action
@@ -1275,6 +1278,9 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 	}
 	if !ok {
 		return nil, fmt.Errorf("%q lacks %s: %w", approver.Subject, p.Pending.Permission, authz.ErrForbidden)
+	}
+	if err := e.holds(ctx, p, approver); err != nil {
+		return nil, err
 	}
 	m, err := e.methodologyOf(ctx, p)
 	if err != nil {

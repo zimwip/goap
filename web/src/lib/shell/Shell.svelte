@@ -33,7 +33,7 @@
   import { assistantEnabled } from '../assistant/enabled';
   import { assistant, closePanel, openPanel } from '../stores/assistant.svelte';
   import StatusBar from './StatusBar.svelte';
-  import { layout, LIMITS, RAIL, nav, toggleConsole } from './layout.svelte';
+  import { layout, LIMITS, RAIL, toggleConsole, toggleNavigation } from './layout.svelte';
   import { activeTab, closeTab, startRouting } from './tabs.svelte';
   import { runTabAction, focusRequests } from './workbench.svelte';
   import { session } from '../stores/session.svelte';
@@ -68,9 +68,9 @@
   const sideMax = $derived(Math.max(LIMITS.side.min, Math.min(LIMITS.side.max, Math.floor(width * 0.4))));
   const bottomMax = $derived(Math.max(LIMITS.bottom.min, Math.min(LIMITS.bottom.max, height - 200)));
 
-  // Both side bars work alike: a rail of icons with its pin at the top. Pinned on a wide screen, the bar is docked beside
-  // the editor; else a click on an icon (or the focus) opens it over the editor, it follows the icon hovered while open,
-  // and it closes once the pointer and the focus left it.
+  // The context bar (right) is a rail of icons with its pin at the top. Pinned on a wide screen, it is docked beside the
+  // editor; else a click on an icon (or the focus) opens it over the editor and it closes once the pointer and the focus
+  // left it. The left side is no such bar: its activity bar selects the tool (ADR 0158).
   const HIDE_DELAY = 350;
 
   /** Whether the focus is on something the person is working with in the bar (a filter typed, a menu open). */
@@ -104,25 +104,18 @@
     }
   }
 
-  // The navigation (left): open, the tool shown appears beside its rail.
-  const leftDocked = $derived(layout.leftOpen && !narrow);
-  let lrail = $state<HTMLElement>();
-  let navTimer: ReturnType<typeof setTimeout> | undefined;
-  function navLeave() {
-    clearTimeout(navTimer);
-    navTimer = setTimeout(() => {
-      if (!busy(lrail)) nav.revealed = false;
-    }, HIDE_DELAY);
-  }
-  function navFocusOut(e: FocusEvent) {
-    if (!lrail?.contains(e.relatedTarget as Node | null) && !lrail?.matches(':hover')) nav.revealed = false;
-  }
+  // The left side: the bar selecting the tool, then the navigation of a navigation tool, shown beside the editors (over
+  // them on a narrow screen); a tool filling the editor space has none (ADR 0158).
+  const navShown = $derived(layout.leftOpen && !layout.full);
   function navKey(e: KeyboardEvent) {
-    if (e.key === 'Escape' && nav.revealed) {
-      nav.revealed = false;
+    if (e.key === 'Escape' && narrow) {
+      layout.leftOpen = false;
       e.stopPropagation();
     }
   }
+
+  // the left tool filling the editor space (ADR 0158: the dashboard of the tasks), never the navigation side
+  const filling = $derived(layout.full ? panelView(layout.full) : undefined);
 
   // the side tool (Test, Properties, DSL Help), opened from the status bar
   const tool = $derived(layout.drawer ? panelView(layout.right) : undefined);
@@ -149,7 +142,7 @@
       toggleConsole();
     } else if (mod && !e.shiftKey && k === 'b') {
       e.preventDefault();
-      layout.leftOpen = !layout.leftOpen;
+      toggleNavigation();
     } else if (mod && e.shiftKey && k === 'f') {
       e.preventDefault();
       openSearch();
@@ -172,34 +165,11 @@
 <div class="shell" class:narrow>
   <Header />
   <div class="main">
-    {#if !leftDocked}
-      <!-- the navigation's rail: a click on a tool (or the focus) shows the navigation over the editor; leaving it hides it -->
+    <ActivityBar side="left" />
+    {#if navShown}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="lrail"
-        bind:this={lrail}
-        onmouseenter={() => clearTimeout(navTimer)}
-        onmouseleave={navLeave}
-        onfocusin={(e) => {
-          if (!(e.target as HTMLElement).matches('.pin')) nav.revealed = true;
-        }}
-        onfocusout={navFocusOut}
-        onkeydown={navKey}
-      >
-        <ActivityBar side="left" />
-        {#if nav.revealed}
-          <div class="side left over" style:width="{Math.min(layout.leftWidth, sideMax)}px">
-            <NavSidebar />
-          </div>
-        {/if}
-      </div>
-    {:else}
-      <!-- pinned: the rail stays, its pin at the top, the navigation docked beside it -->
-      <div class="lrail">
-        <ActivityBar side="left" />
-        <div class="side left" style:width="{Math.min(layout.leftWidth, sideMax)}px">
-          <NavSidebar />
-        </div>
+      <div class="side left" style:width="{Math.min(layout.leftWidth, sideMax)}px" onkeydown={navKey}>
+        <NavSidebar />
       </div>
       {#if !narrow}
         <Resizer
@@ -214,7 +184,14 @@
     {/if}
     <div class="center">
       <div class="editor">
-        <EditorArea {welcome} />
+        <!-- a tool filling the editor space (a dashboard) shows over the editors, kept as they are below it -->
+        <div class="fill-host" hidden={!!filling}>
+          <EditorArea {welcome} />
+        </div>
+        {#if filling}
+          {@const F = filling.component}
+          <section class="fill" aria-label={filling.title}><F /></section>
+        {/if}
       </div>
       {#if layout.bottomOpen}
         <Resizer
@@ -337,26 +314,20 @@
     flex: 1;
     min-height: 0;
   }
+  .fill-host {
+    height: 100%;
+  }
+  .fill-host[hidden] {
+    display: none;
+  }
+  .fill {
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+  }
   .bottom {
     flex: none;
     min-height: 0;
-  }
-  .lrail {
-    flex: none;
-    position: relative;
-    display: flex;
-    height: 100%;
-  }
-  /* the navigation shown over the editor, by its rail */
-  .side.left.over {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 100%;
-    z-index: 25;
-    max-width: calc(100vw - 120px);
-    border-right: 1px solid var(--border);
-    box-shadow: var(--shadow);
   }
   .ctx-docked {
     flex: none;
@@ -425,7 +396,7 @@
     max-width: calc(100% - 84px);
   }
   .narrow .side.left {
-    left: 0;
+    left: 42px;
     border-right: 1px solid var(--border);
   }
   .narrow .side.right {

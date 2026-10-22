@@ -557,9 +557,66 @@ func (h *Handler) askToPB(ctx context.Context, a engine.Ask) *enginev1.ChangeAsk
 			a.MayAnswer = h.loadAuthorized(ctx, a.ProcessID, act) == nil
 		}
 	}
-	return &enginev1.ChangeAsk{Id: a.ID, Kind: a.Kind, Title: a.Title, Detail: a.Detail, ProcessId: a.ProcessID,
+	out := &enginev1.ChangeAsk{Id: a.ID, Kind: a.Kind, Title: a.Title, Detail: a.Detail, ProcessId: a.ProcessID,
 		Agent: a.Agent, Step: a.Step, Action: a.Action, Roles: a.Roles, Owner: a.Owner, Since: pbconv.Time(a.Since),
-		MayAnswer: a.MayAnswer, Point: a.Point, Question: a.Question}
+		MayAnswer: a.MayAnswer, Point: a.Point, Question: a.Question,
+		Assignee: a.Assignee, AssignedBy: a.AssignedBy, Declined: a.Declined, MayAccept: a.MayAccept && a.MayAnswer, MayAssign: a.MayAssign}
+	if !a.AssignedAt.IsZero() {
+		out.AssignedAt = pbconv.Time(a.AssignedAt)
+	}
+	return out
+}
+
+// AcceptTask makes the human task of a run the caller's (ADR 0158): read like the run, answered by the engine's rules.
+func (h *Handler) AcceptTask(ctx context.Context, r *connect.Request[enginev1.AcceptTaskRequest]) (*connect.Response[enginev1.AcceptTaskResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "read"); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.AcceptTask(ctx, r.Msg.ProcessId)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&enginev1.AcceptTaskResponse{Process: ProcessToPB(p)}), nil
+}
+
+// RejectTask turns down the human task of a run (ADR 0158): its holder gives it back, one it is offered to declines it.
+func (h *Handler) RejectTask(ctx context.Context, r *connect.Request[enginev1.RejectTaskRequest]) (*connect.Response[enginev1.RejectTaskResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "read"); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.RejectTask(ctx, r.Msg.ProcessId, r.Msg.Reason)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&enginev1.RejectTaskResponse{Process: ProcessToPB(p)}), nil
+}
+
+// AssignTask gives the human task of a run to someone, or takes it back (ADR 0158): task:assign on the project of the
+// run, checked by the engine.
+func (h *Handler) AssignTask(ctx context.Context, r *connect.Request[enginev1.AssignTaskRequest]) (*connect.Response[enginev1.AssignTaskResponse], error) {
+	p, err := h.Engine.AssignTask(h.principal(ctx, r.Header()), r.Msg.ProcessId, r.Msg.Assignee)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&enginev1.AssignTaskResponse{Process: ProcessToPB(p)}), nil
+}
+
+// maxTaskCandidates bounds the subjects ListTaskCandidates judges.
+const maxTaskCandidates = 500
+
+// ListTaskCandidates keeps those of the subjects given who may answer the human task of a run (ADR 0158): whom the
+// caller, holding task:assign, may give it to.
+func (h *Handler) ListTaskCandidates(ctx context.Context, r *connect.Request[enginev1.ListTaskCandidatesRequest]) (*connect.Response[enginev1.ListTaskCandidatesResponse], error) {
+	if len(r.Msg.Subjects) > maxTaskCandidates {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("at most %d subjects", maxTaskCandidates))
+	}
+	out, err := h.Engine.TaskCandidates(h.principal(ctx, r.Header()), r.Msg.ProcessId, r.Msg.Subjects)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&enginev1.ListTaskCandidatesResponse{Subjects: out}), nil
 }
 
 // answerPermission is the permission on the run the call answering an ask of that kind checks ("" for none: the
@@ -849,7 +906,11 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 	if t := p.Pending; t != nil {
 		out.Pending = &enginev1.HumanTask{Kind: t.Kind, Permission: t.Permission, Action: t.Action, Description: t.Description,
 			Instructions: t.Instructions, NodeTypes: t.NodeTypes, Step: int32(t.Step), ChildProcessId: t.ChildProcessID, FlowId: t.FlowID,
-			Context: stepContextToPB(t.Context), Conditions: t.Conditions, Form: pbconv.FormToPB(t.Form)}
+			Context: stepContextToPB(t.Context), Conditions: t.Conditions, Form: pbconv.FormToPB(t.Form),
+			Assignee: t.Assignee, AssignedBy: t.AssignedBy, Declined: t.Declined}
+		if !t.AssignedAt.IsZero() {
+			out.Pending.AssignedAt = pbconv.Time(t.AssignedAt)
+		}
 		for _, i := range t.Issues {
 			out.Pending.Issues = append(out.Pending.Issues, &enginev1.BoardIssue{Item: string(i.Item), Culprit: string(i.Culprit), Code: i.Code, Message: i.Message, Severity: i.Severity})
 		}

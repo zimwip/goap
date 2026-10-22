@@ -2,10 +2,13 @@
 // Project mode navigates the project, its open changes and their tasks; change mode works in the working change, the
 // only mode meant to write the graph; navigation (the graph and its history) and administration (domains,
 // methodologies, projects, organisation) are for administrators. A mode is a choice of the person in this page: it is
-// not remembered (a new page starts in change mode when a change is worked in, else in project mode).
+// not remembered (a new page starts in change mode when a change is worked in, else in project mode). Each mode keeps
+// its workspace: the tool selected and the editors open; switching mode puts the workspace of the one left aside and
+// shows the one of the mode entered as it was left (its tool and its view the first time), nothing is closed.
 import { untrack } from 'svelte';
 import type { IconName } from './Icon.svelte';
 import { layout } from './layout.svelte';
+import { swapTabs, type TabSet } from './tabs.svelte';
 import { can } from '../stores/session.svelte';
 import { working } from '../stores/workingChange.svelte';
 
@@ -19,13 +22,15 @@ export interface ModeInfo {
   hint: string;
   /** administrators only */
   admin?: boolean;
-  /** the left tool shown when the mode is entered */
+  /** the navigation tool shown when the mode is entered */
   tool: string;
+  /** a tool filling the editor space shown when the person enters the mode the first time (a dashboard) */
+  view?: string;
 }
 
 export const MODES: ModeInfo[] = [
-  { id: 'project', label: 'Project', icon: 'folder', hint: 'Browse the project, its open changes and their tasks', tool: 'tasks' },
-  { id: 'change', label: 'Change', icon: 'diff', hint: 'Work in the working change: the only mode that modifies the graph', tool: 'tasks' },
+  { id: 'project', label: 'Project', icon: 'folder', hint: 'Browse the project, its open changes and their tasks', tool: 'changes', view: 'tasks' },
+  { id: 'change', label: 'Change', icon: 'diff', hint: 'Work in the working change: the only mode that modifies the graph', tool: 'changes' },
   { id: 'navigation', label: 'Navigation', icon: 'branch', hint: 'The graph and its history: baselines, diffs and versions', admin: true, tool: 'baselines' },
   { id: 'admin', label: 'Admin', icon: 'settings', hint: 'Domains, methodologies, projects and the organisation', admin: true, tool: 'methodologies' },
 ];
@@ -69,14 +74,39 @@ export const offeredModes = (): ModeInfo[] => MODES.filter((m) => !m.admin || ca
 /** Whether a left tool shows in a mode. */
 export const toolInMode = (tool: string, m: Mode = mode.current): boolean => TOOL_MODES[tool]?.includes(m) ?? true;
 
-/** Enters a mode (false when it cannot be entered now), showing its tool unless the one shown belongs to it too. */
+/** The workspace of a mode put aside: its tools and its editors. */
+interface Workspace {
+  left: string;
+  full: string;
+  tabs: TabSet;
+}
+
+/** the workspaces of the modes not shown */
+const aside = new Map<Mode, Workspace>();
+
+/** Shows mode m in place of the current one: the workspace shown is put aside, the one of m shown as it was left. */
+function switchTo(m: Mode): void {
+  const from = mode.current;
+  if (from === m) return;
+  const back = aside.get(m);
+  aside.delete(m);
+  aside.set(from, { left: layout.left, full: layout.full, tabs: swapTabs(back?.tabs) });
+  mode.current = m;
+  layout.left = back?.left ?? modeInfo(m).tool;
+  if (!toolInMode(layout.left, m)) layout.left = modeInfo(m).tool;
+  layout.full = back ? back.full : (modeInfo(m).view ?? '');
+}
+
+/** Enters a mode (false when it cannot be entered now), with its workspace as the person left it. */
 export function setMode(m: Mode): boolean {
   if (!modeEnabled(m)) return false;
   chosen = true;
-  mode.current = m;
-  if (!toolInMode(layout.left, m)) layout.left = modeInfo(m).tool;
+  switchTo(m);
   return true;
 }
+
+// a page opens on the view of its first mode (the tasks): a tab the address names takes the space back
+untrack(() => (layout.full = modeInfo(mode.current).view ?? ''));
 
 $effect.root(() => {
   // the mode follows what the person may do: no working change any more, back to the project; the rights of an
@@ -89,6 +119,11 @@ $effect.root(() => {
   $effect(() => {
     if (working.change && !chosen) untrack(() => (mode.current = 'change'));
   });
+  // a tool filling the editor space belongs to the mode too: another mode gives the space back to the editors
+  $effect(() => {
+    const m = mode.current;
+    if (layout.full && !toolInMode(layout.full, m)) untrack(() => (layout.full = ''));
+  });
   // the left tool shown belongs to the mode: a tool asked for elsewhere (a command, a link) takes the person to a mode
   // that shows it, the current one staying when none may be entered (a page opens on the default tool of the layout)
   $effect(() => {
@@ -97,8 +132,12 @@ $effect.root(() => {
     if (toolInMode(tool, m)) return;
     untrack(() => {
       const other = chosen ? MODES.find((x) => toolInMode(tool, x.id) && modeEnabled(x.id)) : undefined;
-      if (other) mode.current = other.id;
-      else layout.left = modeInfo(m).tool;
+      if (other) {
+        // the tool asked for is shown in the workspace of that mode
+        switchTo(other.id);
+        layout.left = tool;
+        layout.full = '';
+      } else layout.left = modeInfo(m).tool;
     });
   });
 });

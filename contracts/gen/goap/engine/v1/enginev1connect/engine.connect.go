@@ -83,6 +83,18 @@ const (
 	EngineServiceGetChangeAsksProcedure = "/goap.engine.v1.EngineService/GetChangeAsks"
 	// EngineServiceListAsksProcedure is the fully-qualified name of the EngineService's ListAsks RPC.
 	EngineServiceListAsksProcedure = "/goap.engine.v1.EngineService/ListAsks"
+	// EngineServiceAcceptTaskProcedure is the fully-qualified name of the EngineService's AcceptTask
+	// RPC.
+	EngineServiceAcceptTaskProcedure = "/goap.engine.v1.EngineService/AcceptTask"
+	// EngineServiceRejectTaskProcedure is the fully-qualified name of the EngineService's RejectTask
+	// RPC.
+	EngineServiceRejectTaskProcedure = "/goap.engine.v1.EngineService/RejectTask"
+	// EngineServiceAssignTaskProcedure is the fully-qualified name of the EngineService's AssignTask
+	// RPC.
+	EngineServiceAssignTaskProcedure = "/goap.engine.v1.EngineService/AssignTask"
+	// EngineServiceListTaskCandidatesProcedure is the fully-qualified name of the EngineService's
+	// ListTaskCandidates RPC.
+	EngineServiceListTaskCandidatesProcedure = "/goap.engine.v1.EngineService/ListTaskCandidates"
 	// EngineServiceExplainConditionProcedure is the fully-qualified name of the EngineService's
 	// ExplainCondition RPC.
 	EngineServiceExplainConditionProcedure = "/goap.engine.v1.EngineService/ExplainCondition"
@@ -152,6 +164,14 @@ type EngineServiceClient interface {
 	// (ADR 0158): the tasks of a project, and those of a person across changes. Read like GetChangeAsks; at most the
 	// hundred most recent open changes.
 	ListAsks(context.Context, *connect.Request[v1.ListAsksRequest]) (*connect.Response[v1.ListAsksResponse], error)
+	// Who holds a human task (input or approval) of a run (ADR 0158): the caller accepts it (one who may answer it, nobody
+	// holding it), turns it down (its holder gives it back, one it is offered to declines it), or gives it to someone who
+	// may answer it (task:assign on the project of the run: an administrator of it or of a project above it; an empty
+	// assignee takes it back). ListTaskCandidates keeps those of the subjects given who may answer it (task:assign).
+	AcceptTask(context.Context, *connect.Request[v1.AcceptTaskRequest]) (*connect.Response[v1.AcceptTaskResponse], error)
+	RejectTask(context.Context, *connect.Request[v1.RejectTaskRequest]) (*connect.Response[v1.RejectTaskResponse], error)
+	AssignTask(context.Context, *connect.Request[v1.AssignTaskRequest]) (*connect.Response[v1.AssignTaskResponse], error)
+	ListTaskCandidates(context.Context, *connect.Request[v1.ListTaskCandidatesRequest]) (*connect.Response[v1.ListTaskCandidatesResponse], error)
 	// How a condition of the run's world state got its value: its CEL formula, the value of each part of it and
 	// of the blackboard variables it reads, against the change of the run.
 	ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error)
@@ -292,6 +312,30 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(engineServiceMethods.ByName("ListAsks")),
 			connect.WithClientOptions(opts...),
 		),
+		acceptTask: connect.NewClient[v1.AcceptTaskRequest, v1.AcceptTaskResponse](
+			httpClient,
+			baseURL+EngineServiceAcceptTaskProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("AcceptTask")),
+			connect.WithClientOptions(opts...),
+		),
+		rejectTask: connect.NewClient[v1.RejectTaskRequest, v1.RejectTaskResponse](
+			httpClient,
+			baseURL+EngineServiceRejectTaskProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("RejectTask")),
+			connect.WithClientOptions(opts...),
+		),
+		assignTask: connect.NewClient[v1.AssignTaskRequest, v1.AssignTaskResponse](
+			httpClient,
+			baseURL+EngineServiceAssignTaskProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("AssignTask")),
+			connect.WithClientOptions(opts...),
+		),
+		listTaskCandidates: connect.NewClient[v1.ListTaskCandidatesRequest, v1.ListTaskCandidatesResponse](
+			httpClient,
+			baseURL+EngineServiceListTaskCandidatesProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("ListTaskCandidates")),
+			connect.WithClientOptions(opts...),
+		),
 		explainCondition: connect.NewClient[v1.ExplainConditionRequest, v1.ExplainConditionResponse](
 			httpClient,
 			baseURL+EngineServiceExplainConditionProcedure,
@@ -368,6 +412,10 @@ type engineServiceClient struct {
 	getAssessmentStates *connect.Client[v1.GetAssessmentStatesRequest, v1.GetAssessmentStatesResponse]
 	getChangeAsks       *connect.Client[v1.GetChangeAsksRequest, v1.GetChangeAsksResponse]
 	listAsks            *connect.Client[v1.ListAsksRequest, v1.ListAsksResponse]
+	acceptTask          *connect.Client[v1.AcceptTaskRequest, v1.AcceptTaskResponse]
+	rejectTask          *connect.Client[v1.RejectTaskRequest, v1.RejectTaskResponse]
+	assignTask          *connect.Client[v1.AssignTaskRequest, v1.AssignTaskResponse]
+	listTaskCandidates  *connect.Client[v1.ListTaskCandidatesRequest, v1.ListTaskCandidatesResponse]
 	explainCondition    *connect.Client[v1.ExplainConditionRequest, v1.ExplainConditionResponse]
 	listProcesses       *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
 	checkAgents         *connect.Client[v1.CheckAgentsRequest, v1.CheckAgentsResponse]
@@ -464,6 +512,26 @@ func (c *engineServiceClient) ListAsks(ctx context.Context, req *connect.Request
 	return c.listAsks.CallUnary(ctx, req)
 }
 
+// AcceptTask calls goap.engine.v1.EngineService.AcceptTask.
+func (c *engineServiceClient) AcceptTask(ctx context.Context, req *connect.Request[v1.AcceptTaskRequest]) (*connect.Response[v1.AcceptTaskResponse], error) {
+	return c.acceptTask.CallUnary(ctx, req)
+}
+
+// RejectTask calls goap.engine.v1.EngineService.RejectTask.
+func (c *engineServiceClient) RejectTask(ctx context.Context, req *connect.Request[v1.RejectTaskRequest]) (*connect.Response[v1.RejectTaskResponse], error) {
+	return c.rejectTask.CallUnary(ctx, req)
+}
+
+// AssignTask calls goap.engine.v1.EngineService.AssignTask.
+func (c *engineServiceClient) AssignTask(ctx context.Context, req *connect.Request[v1.AssignTaskRequest]) (*connect.Response[v1.AssignTaskResponse], error) {
+	return c.assignTask.CallUnary(ctx, req)
+}
+
+// ListTaskCandidates calls goap.engine.v1.EngineService.ListTaskCandidates.
+func (c *engineServiceClient) ListTaskCandidates(ctx context.Context, req *connect.Request[v1.ListTaskCandidatesRequest]) (*connect.Response[v1.ListTaskCandidatesResponse], error) {
+	return c.listTaskCandidates.CallUnary(ctx, req)
+}
+
 // ExplainCondition calls goap.engine.v1.EngineService.ExplainCondition.
 func (c *engineServiceClient) ExplainCondition(ctx context.Context, req *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error) {
 	return c.explainCondition.CallUnary(ctx, req)
@@ -549,6 +617,14 @@ type EngineServiceHandler interface {
 	// (ADR 0158): the tasks of a project, and those of a person across changes. Read like GetChangeAsks; at most the
 	// hundred most recent open changes.
 	ListAsks(context.Context, *connect.Request[v1.ListAsksRequest]) (*connect.Response[v1.ListAsksResponse], error)
+	// Who holds a human task (input or approval) of a run (ADR 0158): the caller accepts it (one who may answer it, nobody
+	// holding it), turns it down (its holder gives it back, one it is offered to declines it), or gives it to someone who
+	// may answer it (task:assign on the project of the run: an administrator of it or of a project above it; an empty
+	// assignee takes it back). ListTaskCandidates keeps those of the subjects given who may answer it (task:assign).
+	AcceptTask(context.Context, *connect.Request[v1.AcceptTaskRequest]) (*connect.Response[v1.AcceptTaskResponse], error)
+	RejectTask(context.Context, *connect.Request[v1.RejectTaskRequest]) (*connect.Response[v1.RejectTaskResponse], error)
+	AssignTask(context.Context, *connect.Request[v1.AssignTaskRequest]) (*connect.Response[v1.AssignTaskResponse], error)
+	ListTaskCandidates(context.Context, *connect.Request[v1.ListTaskCandidatesRequest]) (*connect.Response[v1.ListTaskCandidatesResponse], error)
 	// How a condition of the run's world state got its value: its CEL formula, the value of each part of it and
 	// of the blackboard variables it reads, against the change of the run.
 	ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error)
@@ -685,6 +761,30 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(engineServiceMethods.ByName("ListAsks")),
 		connect.WithHandlerOptions(opts...),
 	)
+	engineServiceAcceptTaskHandler := connect.NewUnaryHandler(
+		EngineServiceAcceptTaskProcedure,
+		svc.AcceptTask,
+		connect.WithSchema(engineServiceMethods.ByName("AcceptTask")),
+		connect.WithHandlerOptions(opts...),
+	)
+	engineServiceRejectTaskHandler := connect.NewUnaryHandler(
+		EngineServiceRejectTaskProcedure,
+		svc.RejectTask,
+		connect.WithSchema(engineServiceMethods.ByName("RejectTask")),
+		connect.WithHandlerOptions(opts...),
+	)
+	engineServiceAssignTaskHandler := connect.NewUnaryHandler(
+		EngineServiceAssignTaskProcedure,
+		svc.AssignTask,
+		connect.WithSchema(engineServiceMethods.ByName("AssignTask")),
+		connect.WithHandlerOptions(opts...),
+	)
+	engineServiceListTaskCandidatesHandler := connect.NewUnaryHandler(
+		EngineServiceListTaskCandidatesProcedure,
+		svc.ListTaskCandidates,
+		connect.WithSchema(engineServiceMethods.ByName("ListTaskCandidates")),
+		connect.WithHandlerOptions(opts...),
+	)
 	engineServiceExplainConditionHandler := connect.NewUnaryHandler(
 		EngineServiceExplainConditionProcedure,
 		svc.ExplainCondition,
@@ -775,6 +875,14 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceGetChangeAsksHandler.ServeHTTP(w, r)
 		case EngineServiceListAsksProcedure:
 			engineServiceListAsksHandler.ServeHTTP(w, r)
+		case EngineServiceAcceptTaskProcedure:
+			engineServiceAcceptTaskHandler.ServeHTTP(w, r)
+		case EngineServiceRejectTaskProcedure:
+			engineServiceRejectTaskHandler.ServeHTTP(w, r)
+		case EngineServiceAssignTaskProcedure:
+			engineServiceAssignTaskHandler.ServeHTTP(w, r)
+		case EngineServiceListTaskCandidatesProcedure:
+			engineServiceListTaskCandidatesHandler.ServeHTTP(w, r)
 		case EngineServiceExplainConditionProcedure:
 			engineServiceExplainConditionHandler.ServeHTTP(w, r)
 		case EngineServiceListProcessesProcedure:
@@ -868,6 +976,22 @@ func (UnimplementedEngineServiceHandler) GetChangeAsks(context.Context, *connect
 
 func (UnimplementedEngineServiceHandler) ListAsks(context.Context, *connect.Request[v1.ListAsksRequest]) (*connect.Response[v1.ListAsksResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ListAsks is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) AcceptTask(context.Context, *connect.Request[v1.AcceptTaskRequest]) (*connect.Response[v1.AcceptTaskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.AcceptTask is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) RejectTask(context.Context, *connect.Request[v1.RejectTaskRequest]) (*connect.Response[v1.RejectTaskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.RejectTask is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) AssignTask(context.Context, *connect.Request[v1.AssignTaskRequest]) (*connect.Response[v1.AssignTaskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.AssignTask is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) ListTaskCandidates(context.Context, *connect.Request[v1.ListTaskCandidatesRequest]) (*connect.Response[v1.ListTaskCandidatesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ListTaskCandidates is not implemented"))
 }
 
 func (UnimplementedEngineServiceHandler) ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error) {
