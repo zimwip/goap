@@ -10,7 +10,7 @@
   function title(m: (typeof modes)[number], enabled: boolean): string {
     if (m.id === 'change' && !enabled) return 'Change mode: select a working change first';
     if (m.id === 'change' && working.change) return `${m.hint} (${working.change.title})`;
-    return `${m.label} mode: ${m.hint}`;
+    return `${m.id === 'admin' ? 'Administration' : m.label} mode: ${m.hint}`;
   }
 
   function keydown(e: KeyboardEvent) {
@@ -40,7 +40,7 @@
       onclick={() => setMode(m.id)}
     >
       <Icon name={m.icon} size={14} />
-      <span class="ml">{m.label}</span>
+      {#if on}<span class="ml">{m.label}</span>{/if}
     </button>
   {/each}
 </div>
@@ -60,7 +60,7 @@
     align-items: center;
     gap: 0.3rem;
     min-height: 24px;
-    padding: 0 0.5rem;
+    padding: 0 0.45rem;
     border: none;
     border-radius: calc(var(--radius-m) - 2px);
     background: none;
@@ -85,8 +85,8 @@
   button.admin:not(.admin + .admin) {
     margin-left: 4px;
   }
-  /* a narrow header: the modes by their icons (their name in the tooltip) */
-  @media (max-width: 1280px) {
+  /* the modes by their icons, the one the person is in named too (their names in the tooltips); a narrow header: icons only */
+  @media (max-width: 1100px) {
     .ml {
       display: none;
     }

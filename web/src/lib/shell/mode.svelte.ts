@@ -27,7 +27,7 @@ export const MODES: ModeInfo[] = [
   { id: 'project', label: 'Project', icon: 'folder', hint: 'Browse the project, its open changes and their tasks', tool: 'tasks' },
   { id: 'change', label: 'Change', icon: 'diff', hint: 'Work in the working change: the only mode that modifies the graph', tool: 'tasks' },
   { id: 'navigation', label: 'Navigation', icon: 'branch', hint: 'The graph and its history: baselines, diffs and versions', admin: true, tool: 'baselines' },
-  { id: 'admin', label: 'Administration', icon: 'settings', hint: 'Domains, methodologies, projects and the organisation', admin: true, tool: 'methodologies' },
+  { id: 'admin', label: 'Admin', icon: 'settings', hint: 'Domains, methodologies, projects and the organisation', admin: true, tool: 'methodologies' },
 ];
 
 /**

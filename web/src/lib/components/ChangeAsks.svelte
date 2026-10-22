@@ -3,7 +3,7 @@
   // counts what waits for the person looking at it and for whom else; unfolded, it lists what the person may answer,
   // answered in place (the panel of the run's task, the answer to a question), then what waits for someone else and
   // whom. Nothing waiting, or the asks unreadable: no strip. The engine gathers the asks and says who may answer each.
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { engine, errorMessage, graph, shortId, type ChangeAsk, type Process } from '../api';
   import { processes, ingestProcess } from '../stores/live.svelte';
   import { me } from '../stores/session.svelte';
@@ -63,9 +63,14 @@
   });
 
   const groups = $derived(groupAsks(asks));
-  // a task picked elsewhere opens the strip on it, once it is read
+  // a task picked elsewhere opens the strip on it, once it is read, and shows it
+  let shown = '';
+  let root = $state<HTMLElement>();
   $effect(() => {
-    if (focus && asks.some((a) => a.id === focus)) untrack(() => (open = true));
+    if (!focus || focus === shown || !asks.some((a) => a.id === focus)) return;
+    shown = focus;
+    untrack(() => (open = true));
+    void tick().then(() => root?.querySelector('.ask.focus')?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
   });
   const subject = $derived(me());
   const chips = $derived(attentionChips(groups, closed ? 0 : reviews.length, subject));
@@ -90,7 +95,7 @@
 </script>
 
 {#if chips.length}
-  <section class="asks" class:mine={forMe} aria-label="What the change waits for">
+  <section class="asks" class:mine={forMe} aria-label="What the change waits for" bind:this={root}>
     <button type="button" class="strip" aria-expanded={open} onclick={() => (open = !open)}>
       <strong>Waiting on people</strong>
       {#each chips as c (c.label)}<span class="chip" class:mine={c.mine}>{c.label}</span>{/each}

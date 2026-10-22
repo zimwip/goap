@@ -1588,7 +1588,17 @@ the
 Baseline explorer is the exception, it shows the commit the person picks. Every such read names its view to the graph (ADR 0157: `graphView`
 of the context view, `branchView` for a baseline of a branch, `forkView` for a change's fork): the graph refuses a read of
 the current graph naming no branch and no change, and assumes no branch; a search of a change view is the server's, the
-nodes it creates and its drafts included. The choice of project persists the choice locally (`goap-dev`, with no token to reissue, keeps a
+nodes it creates and its drafts included. Modes (ADR 0158): a switch in the header, before the context, picks what the
+person does (`shell/mode.svelte.ts`, `ModeSwitch.svelte`): **project** (the project, its open changes and their tasks),
+**change** (the working change; enabled only while one is selected), and for administrators **navigation** (the graph
+and its history) and **administration** (domains, methodologies, projects, organisation); each mode shows its own left
+tools (`TOOL_MODES`, a tool not listed shows in every mode), a tool asked for from elsewhere takes the person to a mode
+showing it. The **Tasks** tool (`views/nav/TasksExplorer.svelte`, `stores/tasks.svelte.ts`, `web/src/lib/tasks.ts`)
+reads the asks of the open changes in one call (engine `ListAsks`: the open changes of a project, or of every project
+the caller reads, at most the hundred latest, each ask naming its change; `Engine.Asks`) and lists the person's tasks
+across changes (accepted, kept in their preferences, or addressed to them alone), the tasks of the working change, of the
+changes open in an editor and, in project mode, of the project; working on a task makes its change the working change,
+enters change mode and opens the change on it (the change tab's `task` param unfolds its asks on it). The choice of project persists the choice locally (`goap-dev`, with no token to reissue, keeps a
 fixed `GOAP_DEV_PROJECT` env var instead, like `GOAP_DEV_ORG`). Assignment has no nav entry of its own: an
 "Assignments" pane on the Organisation, Project and User editors (one `AssignmentsPane.svelte`,
 parametrized by which side is fixed) offers a "+ Assignment" action, and each explorer's context menu
