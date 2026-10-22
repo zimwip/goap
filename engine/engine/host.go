@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/contracts/llm"
 	"github.com/zimwip/goap/contracts/mcp"
 	"github.com/zimwip/goap/engine/methodology"
@@ -49,11 +51,6 @@ type Host struct {
 	spawned   []string          // their processes, in call order
 	waitingOn string            // child process blocking the action
 	calls     int
-
-	graphOnce sync.Once
-	nodes     []domain.Node
-	links     []domain.Link
-	graphErr  error
 }
 
 var _ dsl.Host = (*Host)(nil)
@@ -238,67 +235,61 @@ func (h *Host) RunAgent(ctx context.Context, name, intentText string) (dsl.Agent
 	return h.e.runChild(h.e.as(ctx, h.process), h, key, name, intentText)
 }
 
-func (h *Host) graph(ctx context.Context) ([]domain.Node, []domain.Link, error) {
-	h.graphOnce.Do(func() {
-		h.nodes, h.links, h.graphErr = readGraph(ctx, h.e.Graph, h.process.ChangeID, h.process.Flow, h.process.BaselineID)
-	})
-	return h.nodes, h.links, h.graphErr
-}
-
 func toDSL(n domain.Node) dsl.Node {
 	return dsl.Node{ID: string(n.ID), Version: int(n.Version), Key: n.Key, Type: n.Type, Props: n.Properties}
 }
 
-// Node implements dsl.Host (reference baseline).
+// Node implements dsl.Host: the node of the process's view (ADR 0157).
 func (h *Host) Node(ctx context.Context, key string) (dsl.Node, error) {
-	nodes, _, err := h.graph(ctx)
-	if err != nil {
-		return dsl.Node{}, err
+	nv, err := h.e.Graph.ViewNode(ctx, viewOf(h.process), "", key)
+	if err != nil || nv.Deleted {
+		return dsl.Node{}, fmt.Errorf("node %q not in %s: %w", key, viewOf(h.process), cmp.Or(err, graphapi.ErrNotFound))
 	}
-	for _, n := range nodes {
-		if n.Key == key {
-			return toDSL(n), nil
-		}
-	}
-	return dsl.Node{}, fmt.Errorf("node %q not in the reference baseline", key)
+	return toDSL(nv.Node), nil
 }
 
-// Nodes implements dsl.Host.
+// Nodes implements dsl.Host: the nodes of a type in the process's view, read a page at a time.
 func (h *Host) Nodes(ctx context.Context, nodeType string) ([]dsl.Node, error) {
-	nodes, _, err := h.graph(ctx)
-	if err != nil {
-		return nil, err
-	}
 	out := []dsl.Node{}
-	for _, n := range nodes {
-		if nodeType == "" || n.Type == nodeType {
+	for offset := 0; ; offset += graphapi.MaxBrowseLimit {
+		page, err := h.e.Graph.ViewNodes(ctx, viewOf(h.process), graphapi.NodeQuery{Type: nodeType, Offset: offset, Limit: graphapi.MaxBrowseLimit})
+		if err != nil {
+			return nil, err
+		}
+		for _, n := range page.Nodes {
 			out = append(out, toDSL(n))
 		}
+		if len(page.Nodes) == 0 || offset+len(page.Nodes) >= page.Total {
+			return out, nil
+		}
 	}
-	return out, nil
 }
 
-// Links implements dsl.Host.
+// Links implements dsl.Host: the links of a node of the process's view, with their other end.
 func (h *Host) Links(ctx context.Context, key, direction, linkType string) ([]dsl.Link, error) {
-	nodes, links, err := h.graph(ctx)
+	v := viewOf(h.process)
+	nv, err := h.e.Graph.ViewNode(ctx, v, "", key)
 	if err != nil {
 		return nil, err
 	}
-	byRef := map[domain.NodeRef]domain.Node{}
-	for _, n := range nodes {
-		byRef[n.Ref()] = n
+	nb, err := h.e.Graph.ViewNeighbourhood(ctx, v, nv.ID)
+	if err != nil {
+		return nil, err
+	}
+	byID := map[domain.NodeID]domain.Node{nb.Node.ID: nb.Node}
+	for _, n := range nb.Nodes {
+		byID[n.ID] = n
 	}
 	end := func(r domain.NodeRef) dsl.LinkEnd {
-		n := byRef[r]
+		n := byID[r.ID]
 		return dsl.LinkEnd{ID: string(r.ID), Version: int(r.Version), Key: n.Key, Type: n.Type}
 	}
 	out := []dsl.Link{}
-	for _, l := range links {
-		if linkType != "" && l.Type != linkType {
+	for _, l := range nb.Links {
+		if linkType != "" && l.Type != linkType || l.External() {
 			continue
 		}
-		from, to := byRef[l.From], byRef[l.To]
-		if (direction != "in" && from.Key == key) || (direction != "out" && to.Key == key) {
+		if (direction != "in" && l.From.ID == nv.ID) || (direction != "out" && l.To.ID == nv.ID) {
 			out = append(out, dsl.Link{ID: string(l.ID), Type: l.Type, From: end(l.From), To: end(l.To)})
 		}
 	}

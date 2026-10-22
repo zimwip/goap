@@ -101,14 +101,11 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 	if err != nil {
 		return nil, err
 	}
-	// the pre version of a change impact is the released one: the reference baseline, whatever option is active
-	nodes, _, err := e.Graph.BaselineGraph(ctx, bb.Change.BaselineID)
-	if err != nil {
-		return nil, err
-	}
-	baseline := map[string]domain.NodeRef{}
-	for _, n := range nodes {
-		baseline[n.Key] = n.Ref()
+	// the pre version of a change impact is the released one: the version of the fork, whatever option is active, read
+	// by key (ADR 0157)
+	fork := func(key string) (domain.NodeRef, bool, error) {
+		n, ok, err := graphapi.ForkNode(ctx, e.Graph, bb, p.Flow, key)
+		return n.Ref(), ok, err
 	}
 	byKey := map[string]domain.ChangeImpactID{} // stored change impacts, then the ones this script declares
 	posts := map[domain.ChangeImpactID]domain.NodeRef{}
@@ -187,8 +184,8 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				return *cn.Post, nil
 			}
 		}
-		if ref, ok := baseline[s]; ok {
-			return ref, nil
+		if ref, ok, err := fork(s); err != nil || ok {
+			return ref, err
 		}
 		return domain.NodeRef{}, fmt.Errorf("unknown node %q", s)
 	}
@@ -262,7 +259,10 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			}
 			cn := domain.ChangeImpact{Intent: domain.NodeIntent(op.Intent), Key: op.Key, Type: qualify(op.Type), Rationale: op.Rationale, ProducedBy: producedBy, Execution: execution, Flow: p.Flow}
 			if cn.Intent == domain.IntentModified {
-				ref, ok := baseline[op.Key]
+				ref, ok, err := fork(op.Key)
+				if err != nil {
+					return declared, fail(err)
+				}
 				if !ok {
 					return declared, fail(fmt.Errorf("unknown node %q in the reference baseline", op.Key))
 				}

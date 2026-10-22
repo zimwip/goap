@@ -237,7 +237,7 @@ func (h *Handler) CallTool(ctx context.Context, r *connect.Request[mcpv1.CallToo
 	if err != nil {
 		return nil, err
 	}
-	ctx = mcp.WithCall(ctx, mcp.CallContext{Change: r.Msg.ChangeId, Process: r.Msg.ProcessId})
+	ctx = mcp.WithCall(ctx, mcp.CallContext{Change: r.Msg.ChangeId, Process: r.Msg.ProcessId, Flow: r.Msg.Flow})
 	res, err := h.Service.Call(ctx, org, r.Msg.Name, pbconv.Map(r.Msg.Arguments))
 	var te *ToolError
 	if errors.As(err, &te) {

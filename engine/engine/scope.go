@@ -16,7 +16,9 @@ type ProcessRef struct {
 	ID          string
 	Methodology string
 	ChangeID    domain.ChangeID
-	Initiator   authz.Principal
+	// Flow is the flow of the change the process runs on: the view of the graph reads of its tool calls (ADR 0157).
+	Flow      string
+	Initiator authz.Principal
 	// Org is the organisation holding the change (a unit key): its adapters decide which MCPs are bound.
 	Org string
 	// Project is the project of the change: the roles its Assignments grant are the ones that count (ADR 0043).
@@ -102,7 +104,7 @@ func (s AuthzScope) CallTool(ctx context.Context, p ProcessRef, name string, arg
 		return nil, errors.New("no MCP hub configured")
 	}
 	// the built-in connectors act on the change of the process by default (ADR 0028)
-	call := mcp.WithCall(s.As(ctx, p), mcp.CallContext{Change: string(p.ChangeID), Process: p.ID})
+	call := mcp.WithCall(s.As(ctx, p), mcp.CallContext{Change: string(p.ChangeID), Process: p.ID, Flow: p.Flow})
 	return s.Hub.CallTool(call, p.Org, name, args)
 }
 
@@ -153,7 +155,7 @@ func (e *Engine) scope() Scope {
 
 // ref is the snapshot of p the scope works with.
 func (e *Engine) ref(p *Process) ProcessRef {
-	return ProcessRef{ID: p.ID, Methodology: p.Methodology, ChangeID: p.ChangeID, Initiator: p.Initiator,
+	return ProcessRef{ID: p.ID, Methodology: p.Methodology, ChangeID: p.ChangeID, Flow: p.Flow, Initiator: p.Initiator,
 		Org: p.Org, Project: p.Project}
 }
 

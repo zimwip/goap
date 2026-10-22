@@ -116,11 +116,12 @@ func ActionSystem(withTools bool) string {
 
 // PromptData is exposed to prompt templates.
 type PromptData struct {
-	Change    domain.Change
-	Goal      string
-	Action    methodology.Action
-	Vars      map[string]any
-	Baseline  struct{ Nodes []domain.Node }
+	Change domain.Change
+	Goal   string
+	Action methodology.Action
+	Vars   map[string]any
+	// Baseline is the graph of the change as its view holds it, read when a template ranges over it (ADR 0157).
+	Baseline  *PromptGraph
 	Artifacts []ItemView
 	// ChangeImpacts are the nodes the change acts on (ADR 0024), as the process sees them.
 	ChangeImpacts []ChangeImpactView
@@ -148,6 +149,37 @@ type ItemView struct {
 
 var funcs = template.FuncMap{
 	"json": func(v any) string { b, _ := json.Marshal(v); return string(b) },
+}
+
+// PromptGraph is the graph a prompt template reads: the nodes of the change's namespace in its view, read page by page
+// the first time the template asks for them, never when it does not (ADR 0157).
+type PromptGraph struct {
+	ctx       context.Context
+	g         GraphPort
+	view      graphapi.View
+	namespace string
+	once      sync.Once
+	nodes     []domain.Node
+	err       error
+}
+
+// Nodes are the nodes of the view (`{{ range .Baseline.Nodes }}`).
+func (b *PromptGraph) Nodes() ([]domain.Node, error) {
+	b.once.Do(func() {
+		for offset := 0; ; offset += graphapi.MaxBrowseLimit {
+			page, err := b.g.ViewNodes(b.ctx, b.view, graphapi.NodeQuery{Offset: offset, Limit: graphapi.MaxBrowseLimit})
+			if err != nil {
+				b.err = err
+				return
+			}
+			b.nodes = append(b.nodes, page.Nodes...)
+			if len(page.Nodes) == 0 || offset+len(page.Nodes) >= page.Total {
+				break
+			}
+		}
+		b.nodes = filterNamespace(b.nodes, b.namespace)
+	})
+	return b.nodes, b.err
 }
 
 // filterNamespace keeps only the nodes of the given namespace: a change acts
@@ -181,11 +213,10 @@ func RenderPrompt(ctx context.Context, ac ActionContext) (string, error) {
 	if item, ok := ac.Blackboard.Vars["item"].(map[string]any); ok && ac.Action.IsScoped() {
 		d.Subject, d.Vars = item, actionVars(ac)
 	}
-	nodes, _, err := readGraph(ctx, ac.Graph, ac.Blackboard.Change.ID, ac.Process.Flow, ac.Blackboard.Change.BaselineID)
-	if err != nil {
-		return "", err
+	d.Baseline = &PromptGraph{ctx: ctx, g: ac.Graph, view: graphapi.View{Change: ac.Blackboard.Change.ID, Flow: ac.Process.Flow}, namespace: ac.Blackboard.Change.Namespace}
+	if ac.Blackboard.Change.ID == "" {
+		d.Baseline.view = viewOf(ac.Process)
 	}
-	d.Baseline.Nodes = filterNamespace(nodes, ac.Blackboard.Change.Namespace)
 	for _, it := range ac.Blackboard.Change.Items {
 		if it.Type == domain.TypeArtifact {
 			d.Artifacts = append(d.Artifacts, ItemView{ChangeItem: it})
@@ -755,27 +786,6 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	}
 	allowed, forward, declare := set("linkTypes"), set("forward"), set("declare")
 	layer, _ := ac.Action.Params["layer"].(string)
-	nodes, links, err := readGraph(ctx, ac.Graph, ac.Blackboard.Change.ID, ac.Process.Flow, ac.Blackboard.Change.BaselineID)
-	if err != nil {
-		return ActionResult{}, err
-	}
-	byRef := map[domain.NodeRef]domain.Node{}
-	for _, n := range nodes {
-		byRef[n.Ref()] = n
-	}
-	type edge struct {
-		typ  string
-		next domain.NodeRef
-	}
-	adjacent := map[domain.NodeRef][]edge{}
-	for _, l := range links {
-		if len(allowed) == 0 || allowed[l.Type] {
-			adjacent[l.To] = append(adjacent[l.To], edge{l.Type, l.From})
-		}
-		if forward[l.Type] {
-			adjacent[l.From] = append(adjacent[l.From], edge{l.Type, l.To})
-		}
-	}
 	declared := func(n domain.Node) bool {
 		if len(declare) == 0 {
 			return true
@@ -787,11 +797,15 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 		}
 		return declare[n.Type]
 	}
+	// the walk reads the change's view node by node (ADR 0157): the neighbourhood of each node it reaches, never the
+	// whole graph
+	view := graphapi.View{Change: ac.Blackboard.Change.ID, Flow: ac.Process.Flow}
 	type entry struct {
-		ref   domain.NodeRef
+		id    domain.NodeID
+		key   string
 		depth int
 	}
-	seen := map[domain.NodeRef]bool{}
+	seen := map[domain.NodeID]bool{}
 	var queue []entry
 	// the nodes the change modifies are the seeds; a node the change already acts on is not declared again; each
 	// propagated node of a declared type is declared as an impact
@@ -799,9 +813,9 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 		if cn.Pre == nil {
 			continue
 		}
-		seen[*cn.Pre] = true
+		seen[cn.Pre.ID] = true
 		if cn.Intent == domain.IntentModified {
-			queue = append(queue, entry{ref: *cn.Pre})
+			queue = append(queue, entry{id: cn.Pre.ID, key: cn.Key})
 		}
 	}
 	var ops []dsl.NodeOp
@@ -811,17 +825,34 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 		if e.depth >= maxDepth {
 			continue
 		}
-		for _, l := range adjacent[e.ref] {
-			if seen[l.next] {
+		nb, err := ac.Graph.ViewNeighbourhood(ctx, view, e.id)
+		if err != nil {
+			return ActionResult{}, err
+		}
+		byID := map[domain.NodeID]domain.Node{}
+		for _, n := range nb.Nodes {
+			byID[n.ID] = n
+		}
+		for _, l := range nb.Links {
+			var next domain.NodeID
+			switch {
+			case l.To.ID == e.id && (len(allowed) == 0 || allowed[l.Type]):
+				next = l.From.ID // an impact on the target of a link propagates to its source
+			case l.From.ID == e.id && forward[l.Type]:
+				next = l.To.ID
+			default:
 				continue
 			}
-			seen[l.next] = true
-			n := byRef[l.next]
+			n, ok := byID[next]
+			if !ok || seen[next] || n.Deleted || n.Namespace != ac.Blackboard.Change.Namespace {
+				continue
+			}
+			seen[next] = true
 			if declared(n) {
 				ops = append(ops, dsl.NodeOp{Op: "declare", Ref: fmt.Sprintf("#p%d", len(ops)), Intent: string(domain.IntentModified), Key: n.Key,
-					Rationale: fmt.Sprintf("propagated (depth %d): %s %s %s", e.depth+1, n.Key, l.typ, byRef[e.ref].Key)})
+					Rationale: fmt.Sprintf("propagated (depth %d): %s %s %s", e.depth+1, n.Key, l.Type, e.key)})
 			}
-			queue = append(queue, entry{ref: l.next, depth: e.depth + 1})
+			queue = append(queue, entry{id: next, key: n.Key, depth: e.depth + 1})
 		}
 	}
 	data := map[string]any{"propagated": len(ops), "maxDepth": maxDepth}

@@ -57,6 +57,11 @@ type Port interface {
 	DiscardFlow(ctx context.Context, id domain.ChangeID, flow, by string) (domain.Flow, error)
 	// ValidateBoard checks the consistency of the blackboard seen from a flow.
 	ValidateBoard(ctx context.Context, id domain.ChangeID, flow string) ([]domain.BoardIssue, error)
+	// ViewNode, ViewNeighbourhood and ViewNodes read the current graph in a view (ADR 0157): a node by id or, with no
+	// id, by key; a node with its direct neighbours; a page of nodes. They never read a namespace whole.
+	ViewNode(ctx context.Context, v View, id domain.NodeID, key string) (domain.NodeView, error)
+	ViewNeighbourhood(ctx context.Context, v View, id domain.NodeID) (Neighbourhood, error)
+	ViewNodes(ctx context.Context, v View, q NodeQuery) (NodePage, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 	// ChangeGraph is the graph a call on a change reads: the active option's (or the option flow names), else the
 	// reference baseline of the change (ADR 0032 §6).

@@ -1,6 +1,8 @@
 package graphapi
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -61,4 +63,31 @@ type ViewState struct {
 	// MainHead: a branch view of main at its head, the versions the index flags as heads of main.
 	MainHead bool
 	Versions map[domain.NodeID]domain.Version
+}
+
+// ForkNode reads a node by key as a change was forked from it (ADR 0157), from the blackboard of the change on a flow:
+// the version an impact of the change checked out (hydrated by the blackboard), none for a node the change creates,
+// else the version the change's view holds of a node it does not act on, read by key. found is false for a node the
+// fork does not hold.
+func ForkNode(ctx context.Context, g Port, bb domain.Blackboard, flow, key string) (n domain.Node, found bool, err error) {
+	for _, cn := range bb.Change.Nodes {
+		if cn.Key != key || cn.Superseded {
+			continue
+		}
+		if cn.Pre == nil {
+			return domain.Node{}, false, nil
+		}
+		if nv, ok := bb.Nodes[*cn.Pre]; ok {
+			return nv.Node, !nv.Deleted, nil
+		}
+		return domain.Node{ID: cn.Pre.ID, Version: cn.Pre.Version, Key: key, Type: cn.Type}, true, nil
+	}
+	nv, err := g.ViewNode(ctx, View{Change: bb.Change.ID, Flow: flow}, "", key)
+	if errors.Is(err, ErrNotFound) {
+		return domain.Node{}, false, nil
+	}
+	if err != nil {
+		return domain.Node{}, false, err
+	}
+	return nv.Node, !nv.Deleted, nil
 }

@@ -200,6 +200,8 @@ message CallToolRequest {
   // the change and the process the call runs for (read by the built-in connectors, ADR 0028)
   string change_id = 4;
   string process_id = 5;
+  // the flow of the change the process runs on (ADR 0157: the view of the graph reads of the call)
+  string flow = 6;
 }
 
 message CallToolResponse {

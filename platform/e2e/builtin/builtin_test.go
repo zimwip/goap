@@ -267,6 +267,26 @@ func TestChangeTools(t *testing.T) {
 	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/link", map[string]any{"from": "REQ-9", "type": "alm@satisfies", "to": "NEED-2"})
 	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/note", map[string]any{"text": "voucher refunds need finance approval", "type": "question"})
 
+	// goap-graph reads the change of the calling process (ADR 0157): its drafts over its fork; a branch named reads main
+	if got := keys(p.call(t, ctx, "", "goap-graph/glob", map[string]any{"namespace": "alm", "pattern": "REQ-9"})["nodes"]); !slices.Equal(got, []string{"REQ-9"}) {
+		t.Fatalf("glob in the change = %v", got)
+	}
+	if n := p.call(t, ctx, "", "goap-graph/read", map[string]any{"namespace": "alm", "key": "REQ-2"})["node"].(map[string]any); n["properties"].(map[string]any)["priority"] != "high" {
+		t.Fatalf("REQ-2 in the change = %v", n)
+	}
+	if out := p.call(t, ctx, "", "goap-graph/links", map[string]any{"namespace": "alm", "key": "REQ-9", "direction": "out"})["out"].([]any); len(out) != 1 || out[0].(map[string]any)["key"] != "NEED-2" {
+		t.Fatalf("links of REQ-9 in the change = %v", out)
+	}
+	if got := keys(p.call(t, ctx, "", "goap-graph/glob", map[string]any{"namespace": "alm", "pattern": "REQ-9", "branch": "main"})["nodes"]); len(got) != 0 {
+		t.Fatalf("glob on main = %v", got)
+	}
+	if got := keys(p.call(t, as("alice", "ORG-CHECKOUT", "contributor"), "", "goap-graph/grep", map[string]any{"namespace": "alm", "pattern": "voucher", "change": id})["nodes"]); !slices.Equal(got, []string{"REQ-9"}) {
+		t.Fatalf("grep in the change named = %v", got)
+	}
+	if _, err := p.hub.Call(ctx, "", "goap-graph/read", map[string]any{"namespace": "organisation", "key": "REQ-9", "change": id}); err == nil {
+		t.Fatal("a change read in another namespace")
+	}
+
 	read := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/read", nil)
 	nodes := read["nodes"].([]any)
 	if len(nodes) != 2 {

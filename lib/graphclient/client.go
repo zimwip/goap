@@ -975,3 +975,52 @@ func (c *Client) ViewDrafts(ctx context.Context, v graphapi.View, text string, l
 	}
 	return out, nil
 }
+
+// ViewNode reads a node as a view holds it, by id or, with no id, by key (ADR 0157).
+func (c *Client) ViewNode(ctx context.Context, v graphapi.View, id domain.NodeID, key string) (domain.NodeView, error) {
+	req := &graphv1.GetNodeRequest{View: pbconv.GraphViewToPB(v), Key: key}
+	if id != "" {
+		req.Key, req.Ref = "", &graphv1.NodeRef{Id: string(id)}
+	}
+	r, err := c.rpc.GetNode(ctx, connect.NewRequest(req))
+	if err != nil {
+		return domain.NodeView{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ViewFromPB(r.Msg.View), nil
+}
+
+// ViewNeighbourhood reads a node as a view holds it, with its direct neighbours (ADR 0157).
+func (c *Client) ViewNeighbourhood(ctx context.Context, v graphapi.View, id domain.NodeID) (graphapi.Neighbourhood, error) {
+	r, err := c.rpc.GetNodeNeighbourhood(ctx, connect.NewRequest(&graphv1.GetNodeNeighbourhoodRequest{View: pbconv.GraphViewToPB(v), NodeId: string(id)}))
+	if err != nil {
+		return graphapi.Neighbourhood{}, rpcerr.FromConnect(err)
+	}
+	nb := graphapi.Neighbourhood{Node: pbconv.NodeFromPB(r.Msg.Node)}
+	for _, n := range r.Msg.Nodes {
+		nb.Nodes = append(nb.Nodes, pbconv.NodeFromPB(n))
+	}
+	for _, l := range r.Msg.Links {
+		nb.Links = append(nb.Links, pbconv.LinkFromPB(l))
+	}
+	for _, id := range r.Msg.SuspectLinkIds {
+		nb.Suspect = append(nb.Suspect, domain.LinkID(id))
+	}
+	return nb, nil
+}
+
+// ViewNodes reads a page of the nodes of a view (ADR 0157).
+func (c *Client) ViewNodes(ctx context.Context, v graphapi.View, q graphapi.NodeQuery) (graphapi.NodePage, error) {
+	r, err := c.rpc.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{View: pbconv.GraphViewToPB(v), Type: q.Type,
+		Query: q.Text, Offset: int32(q.Offset), Limit: int32(q.Limit), IncludeDeleted: q.IncludeDeleted, ChangeId: string(q.Change)}))
+	if err != nil {
+		return graphapi.NodePage{}, rpcerr.FromConnect(err)
+	}
+	page := graphapi.NodePage{Total: int(r.Msg.Total), Baseline: domain.BaselineID(r.Msg.GetBaseline().GetId())}
+	for _, n := range r.Msg.Nodes {
+		page.Nodes = append(page.Nodes, pbconv.NodeFromPB(n))
+	}
+	for _, t := range r.Msg.Types {
+		page.Types = append(page.Types, graphapi.TypeCount{Type: t.Type, Count: int(t.Count)})
+	}
+	return page, nil
+}

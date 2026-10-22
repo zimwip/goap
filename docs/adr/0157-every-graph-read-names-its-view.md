@@ -1,6 +1,6 @@
 # ADR 0157 — Every graph read names its view
 
-**Status**: accepted; steps 1 to 3 implemented · **Date**: 2026-10
+**Status**: accepted; steps 1 to 4 implemented · **Date**: 2026-10
 
 ## Context
 
@@ -109,6 +109,20 @@ version it started with (ADR 0113).
   port `indexersvc.Views`). The drafts of a change view, which the index has no document of, come from the graph
   (`Graph.ViewDrafts`, `index.Query.Extra`). Web: the search overlay searches *In the context* (the views of the
   context per namespace) or the history.
+
+- Engine and tools (step 4): `graphapi.Port` reads views itself, `ViewNode` / `ViewNeighbourhood` / `ViewNodes`
+  (the browse shapes `NodeQuery`, `NodePage`, `Neighbourhood` moved to `contracts/graphapi`, aliases in the graph;
+  `graphclient` over `GetNode`, `GetNodeNeighbourhood`, `ListBaselineNodes`), instead of one `Read(view)` object.
+  A tool call carries the flow of its process (`mcp.CallContext.Flow`, `InvokeRequest.flow`, `CallToolRequest.flow`,
+  `engine.ProcessRef.Flow`). The `goap-graph` tools take `change`, `flow`, `branch` and `baseline`: the change named,
+  else the calling process's when it acts on the namespace, else the branch (default main) at the baseline (default
+  its head); `glob` / `grep` page the view with a text filter taken from the pattern (`maxScan` nodes at most, then
+  `truncated`). `goap-change/tag` reads a branch. The engine reads the process's view (`viewOf`): the DSL host
+  (`ctx.node`, `ctx.nodes`, `ctx.links`), `graph.propagate` (a neighbourhood per node it reaches) and the prompt
+  templates (`.Baseline.Nodes`, read page by page only when a template asks, `PromptGraph`); the reads of the fork
+  (the pre version of an impact, the nodes a form names, `goap-change` `base`) go by key through
+  `graphapi.ForkNode`. `readGraph` is gone. Whole reads left, explicit: the self-improvement observer (the
+  methodology namespace) and `goap-admin`'s listings of the organisation.
 
 ## Steps
 

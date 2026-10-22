@@ -24,11 +24,11 @@ func (e *Engine) formItems(ctx context.Context, p *Process, m *methodology.Compi
 	if err != nil {
 		return nil, nil, err
 	}
-	nodes, _, err := e.Graph.BaselineGraph(ctx, bb.Change.BaselineID)
-	if err != nil {
-		return nil, nil, err
-	}
-	env, impacted := formEnv(bb, nodes)
+	// the nodes the form names are read by key as the change was forked from them (ADR 0157)
+	env, impacted := formEnv(bb, func(key string) (domain.Node, bool) {
+		n, ok, err := graphapi.ForkNode(ctx, e.Graph, bb, p.Flow, key)
+		return n, ok && err == nil
+	})
 	clean, issues := form.Validate(*action.Form, values, env)
 	if len(issues) > 0 {
 		return nil, nil, errors.Join(graphapi.ErrInvalid, fmt.Errorf("the form of %s: %w", action.Name, issues))
@@ -96,14 +96,16 @@ func (e *Engine) runFormCode(ctx context.Context, p *Process, m *methodology.Com
 	return res.Items, res.Nodes, nil
 }
 
-// formEnv resolves the node keys of a form: the nodes of the reference baseline, then the nodes the change writes or
+// formEnv resolves the node keys of a form: the nodes of the fork (read by key), then the nodes the change writes or
 // creates (in the change); impacted holds the keys of the nodes the change has an impact on.
-func formEnv(bb domain.Blackboard, baseline []domain.Node) (form.Env, map[string]bool) {
+func formEnv(bb domain.Blackboard, fork func(key string) (domain.Node, bool)) (form.Env, map[string]bool) {
 	known := map[string]form.Node{}
-	for _, n := range baseline {
-		if !n.Deleted {
-			known[n.Key] = form.Node{Key: n.Key, Type: n.Type, State: n.State, Namespace: n.Namespace}
+	read := func(key string) (form.Node, bool) {
+		n, ok := fork(key)
+		if !ok {
+			return form.Node{}, false
 		}
+		return form.Node{Key: n.Key, Type: n.Type, State: n.State, Namespace: n.Namespace}, true
 	}
 	impacted := map[string]bool{}
 	for _, cn := range bb.Change.Nodes {
@@ -111,7 +113,10 @@ func formEnv(bb domain.Blackboard, baseline []domain.Node) (form.Env, map[string
 			continue
 		}
 		impacted[cn.Key] = true
-		n := known[cn.Key]
+		n, ok := known[cn.Key]
+		if !ok {
+			n, _ = read(cn.Key)
+		}
 		n.Key, n.InChange = cn.Key, true
 		if n.Type == "" {
 			n.Type = cn.Type
@@ -134,7 +139,12 @@ func formEnv(bb domain.Blackboard, baseline []domain.Node) (form.Env, map[string
 		points[d.ID] = form.Decision{ID: d.ID, Question: d.Question, Options: d.Options, Decided: !d.Pending()}
 	}
 	env := form.Env{
-		Node: func(k string) (form.Node, bool) { n, ok := known[k]; return n, ok },
+		Node: func(k string) (form.Node, bool) {
+			if n, ok := known[k]; ok {
+				return n, true
+			}
+			return read(k)
+		},
 		IsA: func(typ, super string) bool {
 			return typ == super || slices.Contains(bb.Supertypes[typ], super)
 		},
