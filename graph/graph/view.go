@@ -330,6 +330,26 @@ func (g *Graph) ViewNodes(ctx context.Context, v View, q NodeQuery) (page NodePa
 	return page, err
 }
 
+// ViewNodesOfType returns the nodes of a type (that type exactly, not its subtypes) a view holds, read a page at a
+// time (ADR 0157): what an existence check or a seed reads, in the view it names.
+func (g *Graph) ViewNodesOfType(ctx context.Context, v View, typ string) ([]domain.Node, error) {
+	var out []domain.Node
+	for offset := 0; ; offset += MaxBrowseLimit {
+		page, err := g.ViewNodes(ctx, v, NodeQuery{Type: typ, Offset: offset, Limit: MaxBrowseLimit})
+		if err != nil {
+			return nil, err
+		}
+		for _, n := range page.Nodes {
+			if n.Type == typ {
+				out = append(out, n)
+			}
+		}
+		if len(page.Nodes) == 0 || offset+len(page.Nodes) >= page.Total {
+			return out, nil
+		}
+	}
+}
+
 // page is a page of the nodes of the world.
 func (w *world) page(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error) {
 	if w.change != nil {

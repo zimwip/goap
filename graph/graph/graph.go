@@ -191,24 +191,6 @@ func (g *Graph) NodeByKey(ctx context.Context, namespace, key string) (n domain.
 	return
 }
 
-// NodesOfType returns the latest nodes of a type in a namespace, live on main (existence checks, e.g. ADR
-// 0040's first-user bootstrap): what the last change applied on main wrote, read from the versions themselves.
-func (g *Graph) NodesOfType(ctx context.Context, namespace, typ string) (ns []domain.Node, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
-		all, err := tx.LatestNodes(ctx, namespace, domain.MainBranch)
-		if err != nil {
-			return err
-		}
-		for _, n := range all {
-			if n.Type == typ && !n.Deleted {
-				ns = append(ns, n)
-			}
-		}
-		return nil
-	})
-	return
-}
-
 // OutLinksOf returns the outgoing links of a node version.
 func (g *Graph) OutLinksOf(ctx context.Context, ref domain.NodeRef) (ls []domain.Link, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { ls, err = tx.OutLinks(ctx, ref); return err })

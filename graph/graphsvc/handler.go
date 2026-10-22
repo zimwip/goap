@@ -110,6 +110,17 @@ func (h *Handler) mayReadNode(ctx context.Context, n domain.Node) bool {
 func (h *Handler) TagVersion(ctx context.Context, r *connect.Request[graphv1.TagVersionRequest]) (*connect.Response[graphv1.TagVersionResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	ref := domain.NodeRef{ID: domain.NodeID(r.Msg.NodeId), Version: domain.Version(r.Msg.Version)}
+	if ref.Version <= 0 {
+		// no version named: the one the view holds, never a latest anywhere (ADR 0157)
+		if r.Msg.View == nil {
+			return nil, rpcerr.ToConnect(fmt.Errorf("tag %s: name a version or a view: %w", ref.ID, graph.ErrNoView))
+		}
+		nv, err := h.Graph.ViewNode(ctx, pbconv.GraphViewFromPB(r.Msg.View), ref.ID, "")
+		if err != nil {
+			return nil, rpcerr.ToConnect(err)
+		}
+		ref.Version = nv.Version
+	}
 	n, err := h.Graph.Node(ctx, ref)
 	if err == nil && !h.mayReadNode(ctx, n) {
 		err = fmt.Errorf("node %s: %w", ref, graph.ErrNotFound)

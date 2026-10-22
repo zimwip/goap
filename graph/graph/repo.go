@@ -16,6 +16,7 @@ var (
 	ErrConflict = graphapi.ErrConflict
 	ErrInvalid  = graphapi.ErrInvalid
 	ErrBehind   = graphapi.ErrBehind
+	ErrNoView   = graphapi.ErrNoView
 )
 
 // Repo is the persistence primitive implemented by storage backends.

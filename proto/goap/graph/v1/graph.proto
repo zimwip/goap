@@ -487,8 +487,11 @@ message Tag {
 
 message TagVersionRequest {
   string node_id = 1;
+  // the version named; 0: the one the view holds (a branch view: a draft has no version to tag, ADR 0157)
   int32 version = 2;
   string name = 3;
+  // required with version 0
+  View view = 4;
 }
 
 message TagVersionResponse {

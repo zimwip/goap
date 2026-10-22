@@ -118,7 +118,7 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	if err != nil {
 		return err
 	}
-	existing, err := g.NodesOfType(ctx, access.NamespaceOrganisation, access.NodeTypeUser)
+	existing, err := g.ViewNodesOfType(ctx, orgMain, access.NodeTypeUser)
 	if err != nil {
 		return err
 	}
@@ -148,13 +148,17 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	return SeedChange(System(ctx), g, access.NamespaceOrganisation, "User "+subject, edits)
 }
 
+// orgMain is the head of main of the organisation, the view the sign-in bookkeeping reads (ADR 0157): what the last
+// change applied there wrote.
+var orgMain = graph.View{Namespace: access.NamespaceOrganisation, Branch: domain.MainBranch}
+
 // NewUserUnit returns the organisational unit new users join (ADR 0042): the waiting unit, an OrgUnit an
 // administrator created and flagged `waiting` (access.PropWaitingUnit) at their discretion, or
 // g.Structure(domain.StructureOrganisation).Root when none is flagged. Should several units carry the flag (two concurrent changes each moving it), the
 // smallest key wins, so the answer stays deterministic until someone clears the extra one. Read against live
 // state, like the rest of EnsureUser: a flag moved by a change is seen at once.
 func NewUserUnit(ctx context.Context, g *graph.Graph) (domain.Node, error) {
-	units, err := g.NodesOfType(ctx, access.NamespaceOrganisation, access.NodeTypeOrgUnit)
+	units, err := g.ViewNodesOfType(ctx, orgMain, access.NodeTypeOrgUnit)
 	if err != nil {
 		return domain.Node{}, err
 	}

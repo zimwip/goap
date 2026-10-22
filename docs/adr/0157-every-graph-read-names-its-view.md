@@ -1,6 +1,6 @@
 # ADR 0157 — Every graph read names its view
 
-**Status**: accepted; steps 1 to 4 implemented · **Date**: 2026-10
+**Status**: accepted; implemented · **Date**: 2026-10
 
 ## Context
 
@@ -123,6 +123,12 @@ version it started with (ADR 0113).
   (the pre version of an impact, the nodes a form names, `goap-change` `base`) go by key through
   `graphapi.ForkNode`. `readGraph` is gone. Whole reads left, explicit: the self-improvement observer (the
   methodology namespace) and `goap-admin`'s listings of the organisation.
+
+- Defaults removed (step 5): `Graph.NodesOfType` is gone; `Graph.ViewNodesOfType(view, type)` reads a type in a
+  view a page at a time (the sources of `Graph.Lnk`, the sign-in bookkeeping at the head of main of the organisation);
+  validators keep the `ValidatorQuery` of the commit they judge. `TagVersion` at version 0 needs a `view`
+  (`TagVersionRequest.view`) and tags the version it holds. `Graph.NodeByKey` stays for identity checks of the seeds
+  (does a key exist), never to read a node's content.
 
 ## Steps
 
