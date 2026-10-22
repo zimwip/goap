@@ -1,5 +1,6 @@
 <script lang="ts">
-  // Vertical activity bar: one icon per tool in the area.
+  // Vertical activity bar: the pin, then one icon per tool in the area. The pin stays at the top of the rail whether the
+  // navigation is pinned or not, as on the context bar.
   import Icon from './Icon.svelte';
   import { viewsIn } from './registry';
   import { layout, nav, toggleTool } from './layout.svelte';
@@ -22,6 +23,11 @@
     }, 120);
   }
 
+  function pin() {
+    layout.leftOpen = !layout.leftOpen;
+    nav.revealed = false;
+  }
+
   function keydown(e: KeyboardEvent) {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     const buttons = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('button')];
@@ -33,6 +39,17 @@
 </script>
 
 <div class="bar {side}" role="toolbar" aria-orientation="vertical" tabindex="-1" aria-label={side === 'left' ? 'Navigation tools' : 'Side tools'} onkeydown={keydown}>
+  {#if side === 'left'}
+    <button
+      type="button"
+      class="pin"
+      class:pinned={layout.leftOpen}
+      aria-pressed={layout.leftOpen}
+      title={layout.leftOpen ? 'Unpin: the navigation hides by its rail (Ctrl+B)' : 'Pin the navigation beside the editor (Ctrl+B)'}
+      aria-label="Pin the navigation"
+      onclick={pin}><Icon name="pin" size={14} /></button
+    >
+  {/if}
   {#each views as v (v.id)}
     {@const on = open && active === v.id}
     {@const badge = v.badge?.()}
@@ -60,7 +77,7 @@
     gap: 2px;
     width: 42px;
     flex: none;
-    padding: 6px 0;
+    padding: 0 0 6px;
     background: var(--bg-panel-translucent);
   }
   .left {
@@ -94,6 +111,21 @@
   }
   .right button.on {
     box-shadow: inset -2px 0 0 var(--accent);
+  }
+  /* the pin: slanted while the navigation hides by its rail, upright and accented while pinned (as on the context bar) */
+  .pin {
+    height: 36px;
+  }
+  .pin :global(svg) {
+    transform: rotate(45deg);
+    transition: transform var(--transition);
+  }
+  .pin.pinned,
+  .pin.pinned:hover:not(:disabled) {
+    color: var(--accent);
+  }
+  .pin.pinned :global(svg) {
+    transform: none;
   }
   button:focus-visible {
     outline-offset: -2px;
