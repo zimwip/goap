@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -92,6 +94,15 @@ func testChangeViewOfAFlow(t *testing.T, repo Repo) {
 	if _, seen := flowView.Nodes[w.tst.Post.ID]; seen || !mainView.Contains(*w.tst.Post) {
 		t.Fatalf("TST-2: flow %v, main %v", flowView.Nodes, mainView.Nodes)
 	}
+	// the view of the flow (ADR 0157): its draft, its pages
+	if nv := must[domain.NodeView](t)(g.ViewNode(ctx, View{Change: c.ID, Flow: w.flow}, "", w.f.req.Key)); nv.Properties["title"] != "B" {
+		t.Fatalf("the view of the flow reads %v", nv.Properties)
+	}
+	flowNodes, _, err := g.ChangeWorld(ctx, c.ID, w.flow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkViewPages(t, g, View{Change: c.ID, Flow: w.flow}, flowNodes)
 	// accepted: nothing of the flow is reviewed yet
 	if a := must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, w.flow, ViewAccepted)); !a.Contains(pre) {
 		t.Fatalf("flow accepted view: %v", a.Nodes)
@@ -203,5 +214,64 @@ func checkChangeHoods(t *testing.T, g *Graph, id domain.ChangeID) {
 		if !maps.Equal(got, want) {
 			t.Fatalf("%s: links %v, want %v", n.Key, got, want)
 		}
+		// the node read alone, by id and by key (ADR 0157)
+		for _, by := range []struct {
+			id  domain.NodeID
+			key string
+		}{{n.ID, ""}, {"", n.Key}} {
+			nv, err := g.ViewNode(ctx, View{Change: id}, by.id, by.key)
+			if err != nil {
+				t.Fatalf("%s: view node: %v", n.Key, err)
+			}
+			if nv.ID != n.ID || nv.Version != n.Version || nv.Properties["title"] != n.Properties["title"] {
+				t.Fatalf("%s: view node v%d %v, want v%d %v", n.Key, nv.Version, nv.Properties, n.Version, n.Properties)
+			}
+		}
 	}
+	checkViewPages(t, g, View{Change: id}, nodes)
+}
+
+// checkViewPages checks that the pages of a view (ViewNodes), one node at a time and whole, are the nodes the view
+// holds, ordered by key, with the counts of their types.
+func checkViewPages(t *testing.T, g *Graph, v View, nodes []domain.Node) {
+	t.Helper()
+	ctx := context.Background()
+	want := slices.Clone(nodes)
+	slices.SortFunc(want, func(a, b domain.Node) int { return strings.Compare(a.Key, b.Key) })
+	types := map[string]int{}
+	for _, n := range want {
+		types[n.Type]++
+	}
+	key := func(n domain.Node) string { return fmt.Sprintf("%s v%d", n.Key, n.Version) }
+	whole := must[NodePage](t)(g.ViewNodes(ctx, v, NodeQuery{}))
+	if whole.Total != len(want) || !slices.Equal(mapSlice(whole.Nodes, key), mapSlice(want, key)) {
+		t.Fatalf("%s: page %v (total %d), want %v", v, mapSlice(whole.Nodes, key), whole.Total, mapSlice(want, key))
+	}
+	got := map[string]int{}
+	for _, tc := range whole.Types {
+		got[tc.Type] = tc.Count
+	}
+	if !maps.Equal(got, types) {
+		t.Fatalf("%s: types %v, want %v", v, got, types)
+	}
+	for i, n := range want {
+		p := must[NodePage](t)(g.ViewNodes(ctx, v, NodeQuery{Offset: i, Limit: 1}))
+		if len(p.Nodes) != 1 || key(p.Nodes[0]) != key(n) || p.Total != len(want) {
+			t.Fatalf("%s: page %d %v (total %d), want %s", v, i, mapSlice(p.Nodes, key), p.Total, key(n))
+		}
+	}
+	for typ, count := range types {
+		p := must[NodePage](t)(g.ViewNodes(ctx, v, NodeQuery{Type: typ}))
+		if p.Total != count || len(p.Nodes) != count {
+			t.Fatalf("%s: %d nodes of %s, want %d", v, p.Total, typ, count)
+		}
+	}
+}
+
+func mapSlice[T, U any](in []T, f func(T) U) []U {
+	out := make([]U, 0, len(in))
+	for _, x := range in {
+		out = append(out, f(x))
+	}
+	return out
 }

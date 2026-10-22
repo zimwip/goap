@@ -8,6 +8,7 @@ import (
 // The requests and answers of the graph's operations are its contract, pkg/graphapi; these names keep the graph's own
 // code and its tests reading as before.
 type (
+	View                = graphapi.View
 	NewChange           = graphapi.NewChange
 	ChangePatch         = graphapi.ChangePatch
 	ChangesFilter       = graphapi.ChangesFilter
