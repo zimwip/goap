@@ -898,6 +898,7 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 			return err
 		}
 		// a draft reference is hydrated from the draft the flow sees (ADR 0079), any other from the stored version
+		var near []domain.NodeRef
 		for _, r := range c.ReferencedNodes() {
 			v, err := viewIn(ctx, tx, reader, r)
 			if err != nil {
@@ -908,38 +909,23 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 			}
 			bb.Nodes[r] = v
 			for _, l := range v.Out {
-				if l.External() {
-					continue
-				}
-				if err := neighbor(ctx, tx, reader, bb.Neighbors, l.To); err != nil {
-					return err
+				if !l.External() {
+					near = append(near, l.To)
 				}
 			}
 			for _, l := range v.In {
-				if err := neighbor(ctx, tx, reader, bb.Neighbors, l.From); err != nil {
-					return err
-				}
+				near = append(near, l.From)
 			}
 		}
-		return nil
+		// the neighbours in one batch, not one read each
+		bb.Neighbors, err = reader.nodes(ctx, tx, near)
+		return err
 	})
 	if err != nil {
 		return
 	}
 	// the facets folded from the log (the history, ADR 0109), outside the transaction
 	return g.withLogFacets(ctx, bb, logs)
-}
-
-func neighbor(ctx context.Context, tx Tx, reader *draftReader, into map[domain.NodeRef]domain.Node, r domain.NodeRef) error {
-	if _, ok := into[r]; ok {
-		return nil
-	}
-	n, err := reader.node(ctx, tx, r)
-	if err != nil {
-		return err
-	}
-	into[r] = n
-	return nil
 }
 
 // validStatusMove is the change status machine: draft → active → committed → applied (committing and integrating are
@@ -1010,10 +996,18 @@ func (g *Graph) NodeChanges(ctx context.Context, node domain.NodeID, before int6
 		if len(page) > limit {
 			page, next = page[:limit], page[limit-1].Seq
 		}
+		ids := make([]domain.ChangeID, len(page))
+		for i, p := range page {
+			ids[i] = p.Change
+		}
+		heads, err := changeHeads(ctx, tx, ids)
+		if err != nil {
+			return err
+		}
 		for i := len(page) - 1; i >= 0; i-- {
-			c, err := tx.ChangeHead(ctx, page[i].Change)
-			if err != nil {
-				return err
+			c, ok := heads[page[i].Change]
+			if !ok {
+				return fmt.Errorf("change %s: %w", page[i].Change, ErrNotFound)
 			}
 			out = append(out, c)
 		}

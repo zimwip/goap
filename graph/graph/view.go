@@ -82,6 +82,10 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View, reach *Reach) (*wo
 	// what the change wrote over its fork (changeViewTx at ViewWritten): a draft is version 0, a version deleted leaves
 	// the world
 	w.over, w.gone = map[domain.NodeID]domain.Version{}, map[domain.NodeID]bool{}
+	posts, err := storedPosts(ctx, tx, w.impacts, false)
+	if err != nil {
+		return nil, err
+	}
 	for _, cn := range w.impacts {
 		if cn.Post == nil || cn.Review == domain.ReviewRejected {
 			continue
@@ -90,10 +94,7 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View, reach *Reach) (*wo
 			w.over[cn.Post.ID] = 0
 			continue
 		}
-		n, err := tx.Node(ctx, *cn.Post)
-		if err != nil {
-			return nil, err
-		}
+		n := posts[*cn.Post]
 		if n.Deleted {
 			w.gone[n.ID] = true
 		} else {
@@ -311,17 +312,38 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID, 
 			}
 		}
 	}
-	var near []domain.NodeID
+	var ends []domain.NodeID
 	for _, l := range out {
 		if !l.External() {
-			near = append(near, l.To.ID)
+			ends = append(ends, l.To.ID)
 		}
 	}
 	for _, l := range in {
-		near = append(near, l.From.ID)
+		ends = append(ends, l.From.ID)
 	}
-	slices.Sort(near)
-	if at, err = w.at(ctx, tx, slices.Compact(near)); err != nil {
+	slices.Sort(ends)
+	if at, err = w.at(ctx, tx, slices.Compact(ends)); err != nil {
+		return nb, err
+	}
+	// the neighbours are read in one batch (one statement for the stored ones), never one by one: a hub has thousands
+	var refs []domain.NodeRef
+	for _, l := range out {
+		if l.External() {
+			continue
+		}
+		if tv, ok := at[l.To.ID]; ok {
+			refs = append(refs, domain.NodeRef{ID: l.To.ID, Version: tv})
+		} else if !l.To.IsDraft() {
+			refs = append(refs, l.To)
+		}
+	}
+	for _, l := range in {
+		if fv, ok := at[l.From.ID]; ok && fv == l.From.Version && l.From.ID != nodeID {
+			refs = append(refs, l.From)
+		}
+	}
+	near, err := w.reader.nodes(ctx, tx, refs)
+	if err != nil {
 		return nb, err
 	}
 	// a neighbour the caller does not read is left out with the links to it (ADR 0161 §5: no stub)
@@ -330,9 +352,12 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID, 
 		if v, ok := seen[r.ID]; ok {
 			return v, nil
 		}
-		n, err := w.node(ctx, tx, r)
-		if err != nil {
-			return false, err
+		n, ok := near[r]
+		if !ok {
+			var err error
+			if n, err = w.node(ctx, tx, r); err != nil {
+				return false, err
+			}
 		}
 		seen[r.ID] = w.sees(n)
 		if seen[r.ID] {

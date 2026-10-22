@@ -49,13 +49,14 @@ func diffBaselines(ctx context.Context, tx Tx, from, to domain.BaselineID) ([]Ba
 			ids = append(ids, id)
 		}
 	}
+	heads, err := changeHeads(ctx, tx, gap.changes)
+	if err != nil {
+		return nil, err
+	}
 	for _, id := range gap.changes {
-		c, err := tx.ChangeHead(ctx, id)
-		if isNotFound(err) {
+		c, ok := heads[id]
+		if !ok {
 			continue
-		}
-		if err != nil {
-			return nil, err
 		}
 		cns, err := tx.ChangeImpacts(ctx, id)
 		if err != nil {

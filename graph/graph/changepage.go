@@ -68,6 +68,10 @@ func (g *Graph) ChangesPage(ctx context.Context, f ChangesFilter, limit int, cur
 		return p, nil
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
+		// the headers of the page are the ones just matched: each change reads its log only, not its header again
+		if gt, ok := tx.(*guardTx); ok {
+			gt.knowHeads(page)
+		}
 		for _, h := range page {
 			c, err := tx.Change(ctx, h.ID)
 			if err != nil {

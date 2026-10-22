@@ -76,6 +76,10 @@ func changeViewTx(ctx context.Context, g *Graph, tx Tx, c domain.Change, flow, l
 	if err != nil {
 		return base, err
 	}
+	posts, err := storedPosts(ctx, tx, impacts, level == ViewAccepted)
+	if err != nil {
+		return base, err
+	}
 	for _, cn := range impacts {
 		if cn.Post == nil || cn.Review == domain.ReviewRejected || (level == ViewAccepted && cn.Review != domain.ReviewAccepted) {
 			continue
@@ -84,10 +88,7 @@ func changeViewTx(ctx context.Context, g *Graph, tx Tx, c domain.Change, flow, l
 			nodes[cn.Post.ID] = 0 // the draft the flow holds (ADR 0079): Version 0
 			continue
 		}
-		n, err := tx.Node(ctx, *cn.Post)
-		if err != nil {
-			return base, err
-		}
+		n := posts[*cn.Post]
 		if n.Deleted {
 			delete(nodes, n.ID)
 		} else {
