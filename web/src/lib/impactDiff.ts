@@ -76,9 +76,9 @@ export async function loadImpactDiff(changeId: string, impact: ChangeImpact, flo
   const pre = impact.pre?.id ? impact.pre : undefined;
   const post = impact.committed?.id ? impact.committed : impact.post?.id ? impact.post : undefined;
   const [before, after] = await Promise.all([
-    pre ? graph.getNode(pre, signal).then((r) => r.view) : undefined,
+    pre ? graph.getNodeWithLinks(pre, signal).then((r) => r.view) : undefined,
     // a draft is read through the change (ADR 0079); a committed version is read as it is
-    post ? graph.getNode(post, signal, post.version ? undefined : scope).then((r) => r.view) : undefined,
+    post ? graph.getNodeWithLinks(post, signal, post.version ? undefined : scope).then((r) => r.view) : undefined,
   ]);
   if (!after) return { base: before?.node, changes: [] };
   const raw = nodeChanges(before, after);

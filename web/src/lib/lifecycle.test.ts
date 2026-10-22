@@ -67,6 +67,7 @@ describe('the edit flow never reviews (ADR 0079)', () => {
       impactNodeReview: rec('review', { node: drafted }),
       getBlackboard: rec('blackboard', { change: { nodes: [drafted] } }),
       getNode: vi.fn(async () => ({ view: { node: { id: 'n1', draft: true }, out: [{ id: 'l1', type: 'refines', to: { id: 'n2' } }] } })),
+      getNodeWithLinks: vi.fn(async () => ({ view: { node: { id: 'n1', draft: true }, out: [{ id: 'l1', type: 'refines', to: { id: 'n2' } }] } })),
     });
   });
 

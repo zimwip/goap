@@ -8,6 +8,8 @@
   let {
     node,
     links,
+    total,
+    onmore,
     index,
     readonly = false,
     why = '',
@@ -18,8 +20,12 @@
     onopen,
   }: {
     node: GraphNode;
-    /** the outgoing links of the version shown */
+    /** the outgoing links of the version shown, a page of them when total says more */
     links: Link[];
+    /** the number of outgoing links of the version (unset: links holds them all) */
+    total?: number;
+    /** reads the next page of the links */
+    onmore?: () => void;
     /** the graph the targets are picked from (the working change's baseline, else the current graph) */
     index?: GraphIndex;
     readonly?: boolean;
@@ -83,7 +89,7 @@
 </script>
 
 <section class="card">
-  <h3>Links <span class="count">{links.length}</span></h3>
+  <h3>Links <span class="count">{total ?? links.length}</span></h3>
   <p class="hint">Outgoing links of this version. Adding or removing one writes the next version of the node in the working change.</p>
   {#if links.length}
     <table>
@@ -104,6 +110,9 @@
         {/each}
       </tbody>
     </table>
+    {#if total !== undefined && total > links.length && onmore}
+      <button type="button" class="small" disabled={busy} onclick={onmore}>Show more ({total - links.length} left)</button>
+    {/if}
   {:else}
     <p class="empty">No outgoing link.</p>
   {/if}

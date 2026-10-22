@@ -2,6 +2,7 @@
 package graphsvc
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -77,20 +78,96 @@ func res[T any](m *T, err error) (*connect.Response[T], error) {
 }
 
 func (h *Handler) GetNode(ctx context.Context, r *connect.Request[graphv1.GetNodeRequest]) (*connect.Response[graphv1.GetNodeResponse], error) {
-	ref := pbconv.RefFromPB(r.Msg.Ref)
+	v, err := h.readNode(ctx, r.Msg.Ref, r.Msg.Key, r.Msg.View)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	// a page of each direction: a hub's thousands of links are read with ListNodeLinks
+	limit := browseLimit(r.Msg.LinkLimit)
+	out, outTotal, outTypes := linkPage(v.Out, "", 0, limit)
+	in, inTotal, inTypes := linkPage(v.In, "", 0, limit)
+	v.Out, v.In = out, in
+	pv := pbconv.ViewToPB(v)
+	pv.OutTotal, pv.InTotal, pv.OutTypes, pv.InTypes = int32(outTotal), int32(inTotal), typeCountsToPB(outTypes), typeCountsToPB(inTypes)
+	return connect.NewResponse(&graphv1.GetNodeResponse{View: pv}), nil
+}
+
+// ListNodeLinks reads a page of the links of a node read as GetNode reads it.
+func (h *Handler) ListNodeLinks(ctx context.Context, r *connect.Request[graphv1.ListNodeLinksRequest]) (*connect.Response[graphv1.ListNodeLinksResponse], error) {
+	v, err := h.readNode(ctx, r.Msg.Ref, r.Msg.Key, r.Msg.View)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	links := v.Out
+	if r.Msg.Incoming {
+		links = v.In
+	}
+	page, total, _ := linkPage(links, r.Msg.Type, int(r.Msg.Offset), browseLimit(r.Msg.Limit))
+	return connect.NewResponse(&graphv1.ListNodeLinksResponse{Links: pbconv.LinksToPB(page), Total: int32(total)}), nil
+}
+
+// readNode reads a node as GetNode does: a version named is the history (no view), else the node as the view holds it
+// (ADR 0157: a change's draft, else the version its world holds); one the caller may not read is not found.
+func (h *Handler) readNode(ctx context.Context, pref *graphv1.NodeRef, key string, pview *graphv1.View) (domain.NodeView, error) {
+	ref := pbconv.RefFromPB(pref)
+	view := pbconv.GraphViewFromPB(pview)
 	var v domain.NodeView
 	var err error
-	view := pbconv.GraphViewFromPB(r.Msg.View)
-	if r.Msg.Key == "" && ref.Version > 0 {
-		v, err = h.Graph.View(ctx, ref) // a version named: the history, no view
+	if key == "" && ref.Version > 0 {
+		v, err = h.Graph.View(ctx, ref)
 	} else {
-		// the node as the view holds it (ADR 0157): a change's draft, else the version its world holds
-		v, err = h.Graph.ViewNode(ctx, view, ref.ID, r.Msg.Key)
+		v, err = h.Graph.ViewNode(ctx, view, ref.ID, key)
 	}
 	if err == nil && !view.IsChange() && !h.mayReadNode(ctx, v.Node) {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("node %s: not found", v.ID))
+		err = fmt.Errorf("node %s: %w", v.ID, graph.ErrNotFound)
 	}
-	return res(&graphv1.GetNodeResponse{View: pbconv.ViewToPB(v)}, err)
+	return v, err
+}
+
+// browseLimit is a page size asked: 0 the default page, at most the largest.
+func browseLimit(n int32) int {
+	if n <= 0 {
+		return defaultLinkPage
+	}
+	return min(int(n), graph.MaxBrowseLimit)
+}
+
+// defaultLinkPage is the links of each direction GetNode answers when the caller names no limit.
+const defaultLinkPage = 100
+
+// linkPage orders links by type then id and answers the page asked of those of a type (empty: every type), their
+// number, and the count of each type.
+func linkPage(links []domain.Link, typ string, offset, limit int) (page []domain.Link, total int, types []graph.TypeCount) {
+	sorted := slices.Clone(links)
+	slices.SortStableFunc(sorted, func(a, b domain.Link) int {
+		return cmp.Or(strings.Compare(a.Type, b.Type), strings.Compare(string(a.ID), string(b.ID)))
+	})
+	counts := map[string]int{}
+	var kept []domain.Link
+	for _, l := range sorted {
+		counts[l.Type]++
+		if typ == "" || l.Type == typ {
+			kept = append(kept, l)
+		}
+	}
+	for t, n := range counts {
+		types = append(types, graph.TypeCount{Type: t, Count: n})
+	}
+	slices.SortFunc(types, func(a, b graph.TypeCount) int { return strings.Compare(a.Type, b.Type) })
+	offset = max(offset, 0)
+	if offset < len(kept) {
+		page = kept[offset:min(offset+limit, len(kept))]
+	}
+	return page, len(kept), types
+}
+
+// typeCountsToPB converts counts per type.
+func typeCountsToPB(cs []graph.TypeCount) []*graphv1.TypeCount {
+	out := make([]*graphv1.TypeCount, 0, len(cs))
+	for _, c := range cs {
+		out = append(out, &graphv1.TypeCount{Type: c.Type, Count: int32(c.Count)})
+	}
+	return out
 }
 
 // mayReadNode tells whether the caller reads a node outside a change (ADR 0138): those who work on its project; the

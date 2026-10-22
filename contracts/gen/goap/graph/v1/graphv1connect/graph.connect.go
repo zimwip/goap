@@ -35,6 +35,9 @@ const (
 const (
 	// GraphServiceGetNodeProcedure is the fully-qualified name of the GraphService's GetNode RPC.
 	GraphServiceGetNodeProcedure = "/goap.graph.v1.GraphService/GetNode"
+	// GraphServiceListNodeLinksProcedure is the fully-qualified name of the GraphService's
+	// ListNodeLinks RPC.
+	GraphServiceListNodeLinksProcedure = "/goap.graph.v1.GraphService/ListNodeLinks"
 	// GraphServiceListBaselinesProcedure is the fully-qualified name of the GraphService's
 	// ListBaselines RPC.
 	GraphServiceListBaselinesProcedure = "/goap.graph.v1.GraphService/ListBaselines"
@@ -361,6 +364,7 @@ const (
 type GraphServiceClient interface {
 	// Domain axis
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)
+	ListNodeLinks(context.Context, *connect.Request[v1.ListNodeLinksRequest]) (*connect.Response[v1.ListNodeLinksResponse], error)
 	ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error)
 	// Tags (ADR 0143 §6) name one exact node version; not unique, a name may label several versions.
 	TagVersion(context.Context, *connect.Request[v1.TagVersionRequest]) (*connect.Response[v1.TagVersionResponse], error)
@@ -595,6 +599,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceGetNodeProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("GetNode")),
+			connect.WithClientOptions(opts...),
+		),
+		listNodeLinks: connect.NewClient[v1.ListNodeLinksRequest, v1.ListNodeLinksResponse](
+			httpClient,
+			baseURL+GraphServiceListNodeLinksProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListNodeLinks")),
 			connect.WithClientOptions(opts...),
 		),
 		listBaselines: connect.NewClient[v1.ListBaselinesRequest, v1.ListBaselinesResponse](
@@ -1275,6 +1285,7 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 // graphServiceClient implements GraphServiceClient.
 type graphServiceClient struct {
 	getNode                 *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
+	listNodeLinks           *connect.Client[v1.ListNodeLinksRequest, v1.ListNodeLinksResponse]
 	listBaselines           *connect.Client[v1.ListBaselinesRequest, v1.ListBaselinesResponse]
 	tagVersion              *connect.Client[v1.TagVersionRequest, v1.TagVersionResponse]
 	listTags                *connect.Client[v1.ListTagsRequest, v1.ListTagsResponse]
@@ -1392,6 +1403,11 @@ type graphServiceClient struct {
 // GetNode calls goap.graph.v1.GraphService.GetNode.
 func (c *graphServiceClient) GetNode(ctx context.Context, req *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error) {
 	return c.getNode.CallUnary(ctx, req)
+}
+
+// ListNodeLinks calls goap.graph.v1.GraphService.ListNodeLinks.
+func (c *graphServiceClient) ListNodeLinks(ctx context.Context, req *connect.Request[v1.ListNodeLinksRequest]) (*connect.Response[v1.ListNodeLinksResponse], error) {
+	return c.listNodeLinks.CallUnary(ctx, req)
 }
 
 // ListBaselines calls goap.graph.v1.GraphService.ListBaselines.
@@ -1958,6 +1974,7 @@ func (c *graphServiceClient) RepublishIndex(ctx context.Context, req *connect.Re
 type GraphServiceHandler interface {
 	// Domain axis
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)
+	ListNodeLinks(context.Context, *connect.Request[v1.ListNodeLinksRequest]) (*connect.Response[v1.ListNodeLinksResponse], error)
 	ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error)
 	// Tags (ADR 0143 §6) name one exact node version; not unique, a name may label several versions.
 	TagVersion(context.Context, *connect.Request[v1.TagVersionRequest]) (*connect.Response[v1.TagVersionResponse], error)
@@ -2188,6 +2205,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceGetNodeProcedure,
 		svc.GetNode,
 		connect.WithSchema(graphServiceMethods.ByName("GetNode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListNodeLinksHandler := connect.NewUnaryHandler(
+		GraphServiceListNodeLinksProcedure,
+		svc.ListNodeLinks,
+		connect.WithSchema(graphServiceMethods.ByName("ListNodeLinks")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceListBaselinesHandler := connect.NewUnaryHandler(
@@ -2866,6 +2889,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		switch r.URL.Path {
 		case GraphServiceGetNodeProcedure:
 			graphServiceGetNodeHandler.ServeHTTP(w, r)
+		case GraphServiceListNodeLinksProcedure:
+			graphServiceListNodeLinksHandler.ServeHTTP(w, r)
 		case GraphServiceListBaselinesProcedure:
 			graphServiceListBaselinesHandler.ServeHTTP(w, r)
 		case GraphServiceTagVersionProcedure:
@@ -3101,6 +3126,10 @@ type UnimplementedGraphServiceHandler struct{}
 
 func (UnimplementedGraphServiceHandler) GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetNode is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListNodeLinks(context.Context, *connect.Request[v1.ListNodeLinksRequest]) (*connect.Response[v1.ListNodeLinksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListNodeLinks is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error) {

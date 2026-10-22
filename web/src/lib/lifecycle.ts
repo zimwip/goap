@@ -130,8 +130,8 @@ export async function writeNodeInChange(
     for (const l of w.addLinks ?? []) await graph.impactLinkCreate(changeId, id, l, flow);
     if (w.removeLinks?.length) {
       // the ids name links of the version the caller read, or of the draft view; the draft carries copies of the former
-      const out = (await graph.getNode(cn!.post!, undefined, scope)).view?.out ?? [];
-      const read = target.pre ? ((await graph.getNode(target.pre)).view?.out ?? []) : [];
+      const out = (await graph.getNodeWithLinks(cn!.post!, undefined, scope)).view?.out ?? [];
+      const read = target.pre ? ((await graph.getNodeWithLinks(target.pre)).view?.out ?? []) : [];
       for (const lid of w.removeLinks) {
         const was = out.find((l) => l.id === lid) ?? read.find((l) => l.id === lid);
         const copy = out.find((l) => l.id === lid) ?? out.find((l) => was && l.type === was.type && l.to?.id === was.to?.id);

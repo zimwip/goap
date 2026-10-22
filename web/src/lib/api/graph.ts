@@ -2,12 +2,15 @@ import { rpc } from './transport';
 import { notePosition } from '../flux/positions';
 import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
-import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeStack, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, GraphStats, GraphView, NamespaceSummary, QueryResult, ItemTypeInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, PendingSettings, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SettingEdit, SharedNode, StackChange, Tag, TypeCount } from './types/graph';
+import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeStack, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, GraphStats, GraphView, NamespaceSummary, NodeView, QueryResult, ItemTypeInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, PendingSettings, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SettingEdit, SharedNode, StackChange, Tag, TypeCount } from './types/graph';
 
 import type { LoadDemoDataResponseJson } from '../../gen/goap/graph/v1/graph_pb';
 import type { Job } from './jobs';
 
 const GRAPH = 'goap.graph.v1.GraphService';
+
+/** The largest page of links the graph service answers. */
+const MAX_LINK_PAGE = 500;
 
 export const GRAPH_SERVICE = GRAPH;
 
@@ -286,16 +289,42 @@ export const graph = {
   /** A node version with its outgoing and incoming links (the history: no view), or at version 0 the node as a view
    * holds it (ADR 0157; required then): in a change view a draft reference `{id, version: 0}` reads the draft the change
    * holds (draft: true, version 0, its links with their ids), a node without a draft the version its world holds. */
-  getNode: (ref: NodeRef, signal?: AbortSignal, view?: GraphView) =>
-    rpc<{ ref: NodeRef; view?: GraphView }, { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; notCommittable?: boolean } }>(
+  getNode: (ref: NodeRef, signal?: AbortSignal, view?: GraphView, linkLimit?: number) =>
+    rpc<{ ref: NodeRef; view?: GraphView; linkLimit?: number }, { view?: NodeView }>(
       GRAPH,
       'GetNode',
-      { ref, ...(view ? { view } : {}) },
+      { ref, ...(view ? { view } : {}), ...(linkLimit ? { linkLimit } : {}) },
       signal,
     ),
+  /** A page of the links of a node read as getNode reads it (by type then id): outgoing, or entering with `incoming`. */
+  listNodeLinks: (ref: NodeRef, q: { incoming?: boolean; type?: string; offset?: number; limit?: number }, signal?: AbortSignal, view?: GraphView) =>
+    rpc<{ ref: NodeRef; view?: GraphView; incoming?: boolean; type?: string; offset?: number; limit?: number }, { links?: Link[]; total?: number }>(
+      GRAPH,
+      'ListNodeLinks',
+      { ref, ...(view ? { view } : {}), ...q },
+      signal,
+    ),
+  /** getNode with every link of both directions: the pages getNode does not answer read with listNodeLinks (what a
+   * diff of two versions or a link to remove by id needs; a view of the node reads a page). */
+  getNodeWithLinks: async (ref: NodeRef, signal?: AbortSignal, view?: GraphView): Promise<{ view?: NodeView }> => {
+    const r = await graph.getNode(ref, signal, view, MAX_LINK_PAGE);
+    const v = r.view;
+    if (!v?.node?.id) return r;
+    const at = { id: v.node.id, version: ref.version };
+    for (const incoming of [false, true]) {
+      const links = (incoming ? (v.in ??= []) : (v.out ??= []));
+      const total = (incoming ? v.inTotal : v.outTotal) ?? 0;
+      while (links.length < total) {
+        const p = await graph.listNodeLinks(at, { incoming, offset: links.length, limit: MAX_LINK_PAGE }, signal, view);
+        if (!p.links?.length) break;
+        links.push(...p.links);
+      }
+    }
+    return r;
+  },
   /** A node by key as a view holds it (ADR 0157; a node a change created is found by the key of its draft). */
   getNodeByKey: (key: string, view: GraphView, signal?: AbortSignal) =>
-    rpc<{ key: string; view: GraphView }, { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; notCommittable?: boolean } }>(
+    rpc<{ key: string; view: GraphView }, { view?: NodeView }>(
       GRAPH,
       'GetNode',
       { key, view },

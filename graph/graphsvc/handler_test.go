@@ -440,3 +440,58 @@ func TestTagVersionInAView(t *testing.T) {
 		t.Fatalf("tag in the head of main = %v, %v", out, err)
 	}
 }
+
+// GetNode answers a page of each direction of a node's links with the totals and the counts per type; ListNodeLinks
+// reads the rest (a hub's thousands of links never travel at once).
+func TestGetNodePagesItsLinks(t *testing.T) {
+	ctx := authz.With(context.Background(), authz.Principal{Subject: "u"})
+	g := graph.New(graph.NewMemory())
+	g.Caller = graphsvc.Caller
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Graph: g, Authz: authz.AllowAll{}}
+	target, err := graphtest.Import(ctx, g, graphtest.Node{Key: "T", Type: "Requirement"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var links []graph.LinkWrite
+	for i := range 130 {
+		typ := "refines"
+		if i%2 == 1 {
+			typ = "traces"
+		}
+		links = append(links, graph.LinkWrite{Type: typ, To: target.Ref(), Properties: map[string]any{"i": i}})
+	}
+	hub, err := graphtest.Import(ctx, g, graphtest.Node{Key: "H", Type: "Requirement", Links: links})
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := &graphv1.View{Namespace: hub.Namespace, Branch: domain.MainBranch}
+	req := connect.NewRequest(&graphv1.GetNodeRequest{View: view, Key: "H"})
+	req.Header().Set(identity.HeaderSubject, "u")
+	r, err := h.GetNode(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := r.Msg.View
+	if len(v.Out) != 100 || v.OutTotal != 130 || len(v.OutTypes) != 2 || v.OutTypes[0].Count != 65 || v.Out[0].Type != "refines" {
+		t.Fatalf("first page: %d links of %d, types %v", len(v.Out), v.OutTotal, v.OutTypes)
+	}
+	list := func(m *graphv1.ListNodeLinksRequest) *graphv1.ListNodeLinksResponse {
+		t.Helper()
+		r := connect.NewRequest(m)
+		r.Header().Set(identity.HeaderSubject, "u")
+		out, err := h.ListNodeLinks(ctx, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out.Msg
+	}
+	if p := list(&graphv1.ListNodeLinksRequest{View: view, Key: "H", Offset: 100}); len(p.Links) != 30 || p.Total != 130 {
+		t.Fatalf("the rest: %d of %d", len(p.Links), p.Total)
+	}
+	if p := list(&graphv1.ListNodeLinksRequest{View: view, Key: "H", Type: "traces", Limit: 10}); len(p.Links) != 10 || p.Total != 65 || p.Links[0].Type != "traces" {
+		t.Fatalf("a type: %d of %d", len(p.Links), p.Total)
+	}
+	if p := list(&graphv1.ListNodeLinksRequest{View: view, Key: "T", Incoming: true, Limit: 500}); len(p.Links) != 130 || p.Total != 130 {
+		t.Fatalf("entering: %d of %d", len(p.Links), p.Total)
+	}
+}

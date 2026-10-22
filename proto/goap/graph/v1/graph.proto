@@ -12,6 +12,7 @@ import "goap/jobs/v1/jobs.proto";
 service GraphService {
   // Domain axis
   rpc GetNode(GetNodeRequest) returns (GetNodeResponse);
+  rpc ListNodeLinks(ListNodeLinksRequest) returns (ListNodeLinksResponse);
   rpc ListBaselines(ListBaselinesRequest) returns (ListBaselinesResponse);
   // Tags (ADR 0143 §6) name one exact node version; not unique, a name may label several versions.
   rpc TagVersion(TagVersionRequest) returns (TagVersionResponse);
@@ -316,6 +317,12 @@ message NodeView {
   repeated Link in = 4;
   // the node has a lifecycle and its state is flagged notCommittable (ADR 0078)
   bool not_committable = 5;
+  // GetNode answers a page of each direction (out, in: the first, by type then id): the number of links in each, and
+  // per type; the rest is read with ListNodeLinks. Zero elsewhere (a blackboard carries every link).
+  int32 out_total = 6;
+  int32 in_total = 7;
+  repeated TypeCount out_types = 8;
+  repeated TypeCount in_types = 9;
 }
 
 message Baseline {
@@ -472,10 +479,34 @@ message GetNodeRequest {
   string key = 2;
   // the view of a read by key or at version 0 (ADR 0157); required then
   View view = 3;
+  // the links of each direction answered (0: 100, at most 500), the first by type then id; the totals and the counts
+  // per type say what ListNodeLinks reads beyond them
+  int32 link_limit = 4;
 }
 
 message GetNodeResponse {
   NodeView view = 1;
+}
+
+// ListNodeLinks reads a page of the links of a node read as GetNode reads it (the same ref, key and view).
+message ListNodeLinksRequest {
+  NodeRef ref = 1;
+  string key = 2;
+  View view = 3;
+  // the entering links (false: the outgoing ones)
+  bool incoming = 4;
+  // the links of this type only (empty: every type)
+  string type = 5;
+  int32 offset = 6;
+  // at most 500 (0: 100)
+  int32 limit = 7;
+}
+
+message ListNodeLinksResponse {
+  // by type then id
+  repeated Link links = 1;
+  // the links of that direction and type (all pages)
+  int32 total = 2;
 }
 
 

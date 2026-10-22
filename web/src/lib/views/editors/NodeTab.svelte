@@ -393,6 +393,16 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     inChange && row?.impact?.post?.id ? row.impact.post : inWorld?.id ? { id: inWorld.id, version: inWorld.version } : stored?.id ? { id: stored.id, version: stored.version } : undefined,
   );
   let outLinks = $state<Link[]>([]);
+  /** the number of outgoing links of the version shown (outLinks may be a page of them) */
+  let outTotal = $state<number | undefined>();
+  const moreLinks = async () => {
+    const ref = shownRef;
+    if (!ref?.id) return;
+    const view = isDraft(ref) && workId ? { changeId: workId, flow: workFlow } : undefined;
+    const p = await graph.listNodeLinks({ id: ref.id, version: ref.version }, { offset: outLinks.length, limit: 100 }, undefined, view);
+    outLinks = [...outLinks, ...(p.links ?? [])];
+    outTotal = p.total;
+  };
   let nodeChanges = $state<Change[]>([]);
   /** the cursor of the older page of the node's changes (ADR 0140: a page at a time); undefined: none */
   let olderChanges = $state<string | undefined>();
@@ -409,10 +419,12 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     void stamp(keyOf.node(id));
     if (!ref?.id) return;
     const ctrl = new AbortController();
-    graph
-      .getNode({ id: ref.id, version: ref.version }, ctrl.signal, isDraft(ref) && workId ? { changeId: workId, flow: workFlow } : undefined)
-      .then((r) => (outLinks = r.view?.out ?? []))
-      .catch(() => (outLinks = []));
+    const view = isDraft(ref) && workId ? { changeId: workId, flow: workFlow } : undefined;
+    // a page of the links (a hub holds thousands); a node edited through its type's form reads them all, its link
+    // fields standing for them
+    (typeForm ? graph.getNodeWithLinks(ref, ctrl.signal, view) : graph.getNode({ id: ref.id, version: ref.version }, ctrl.signal, view))
+      .then((r) => ((outLinks = r.view?.out ?? []), (outTotal = r.view?.outTotal)))
+      .catch(() => ((outLinks = []), (outTotal = undefined)));
     return () => ctrl.abort();
   });
   $effect(() => {
@@ -701,6 +713,8 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
           <NodeLinks
             node={stored}
             links={outLinks}
+            total={outTotal}
+            onmore={moreLinks}
             index={world}
             search={searchNodes}
             readonly={!!stored.deleted}

@@ -220,6 +220,20 @@ export interface BaselineLinksQuery {
   limit?: number;
 }
 
+/** A node and its links as GetNode answers them: a page of each direction (by type then id), with the number of links in
+ * each and per type; the rest is read with listNodeLinks (graph.getNodeWithLinks reads them all). */
+export interface NodeView {
+  node?: GraphNode;
+  latest?: number;
+  out?: Link[];
+  in?: Link[];
+  notCommittable?: boolean;
+  outTotal?: number;
+  inTotal?: number;
+  outTypes?: TypeCount[];
+  inTypes?: TypeCount[];
+}
+
 export interface TypeCount {
   type?: string;
   count?: number;

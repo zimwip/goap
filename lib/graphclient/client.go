@@ -978,7 +978,7 @@ func (c *Client) ViewDrafts(ctx context.Context, v graphapi.View, text string, l
 
 // ViewNode reads a node as a view holds it, by id or, with no id, by key (ADR 0157).
 func (c *Client) ViewNode(ctx context.Context, v graphapi.View, id domain.NodeID, key string) (domain.NodeView, error) {
-	req := &graphv1.GetNodeRequest{View: pbconv.GraphViewToPB(v), Key: key}
+	req := &graphv1.GetNodeRequest{View: pbconv.GraphViewToPB(v), Key: key, LinkLimit: maxLinkPage}
 	if id != "" {
 		req.Key, req.Ref = "", &graphv1.NodeRef{Id: string(id)}
 	}
@@ -986,8 +986,31 @@ func (c *Client) ViewNode(ctx context.Context, v graphapi.View, id domain.NodeID
 	if err != nil {
 		return domain.NodeView{}, rpcerr.FromConnect(err)
 	}
-	return pbconv.ViewFromPB(r.Msg.View), nil
+	// the port's view holds every link: the pages GetNode did not answer
+	pv := r.Msg.View
+	at := &graphv1.NodeRef{Id: pv.GetNode().GetId()}
+	for _, d := range []struct {
+		incoming bool
+		links    *[]*graphv1.Link
+		total    int32
+	}{{false, &pv.Out, pv.OutTotal}, {true, &pv.In, pv.InTotal}} {
+		for int32(len(*d.links)) < d.total {
+			p, err := c.rpc.ListNodeLinks(ctx, connect.NewRequest(&graphv1.ListNodeLinksRequest{Ref: at, View: req.View, Incoming: d.incoming,
+				Offset: int32(len(*d.links)), Limit: maxLinkPage}))
+			if err != nil {
+				return domain.NodeView{}, rpcerr.FromConnect(err)
+			}
+			if len(p.Msg.Links) == 0 {
+				break
+			}
+			*d.links = append(*d.links, p.Msg.Links...)
+		}
+	}
+	return pbconv.ViewFromPB(pv), nil
 }
+
+// maxLinkPage is the largest page of links the graph service answers.
+const maxLinkPage = 500
 
 // ViewNeighbourhood reads a node as a view holds it, with its direct neighbours (ADR 0157).
 func (c *Client) ViewNeighbourhood(ctx context.Context, v graphapi.View, id domain.NodeID) (graphapi.Neighbourhood, error) {
