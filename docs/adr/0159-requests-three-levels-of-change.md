@@ -62,6 +62,16 @@ Verification happens on the way up and validation on the way down (the V&V of th
 - The agreement is a gate (ADR 0132) with a board, whose `freezes` lock the scope (`types: [alm@Scope]`). A request
   taken in is moved to `planned` by level 1 (the project change raises `request.planned`, §4); the project change
   never writes the `intake` namespace itself (one namespace per change).
+- **What a project takes in is the project methodology's choice, stated as conditions on the Request** (its state,
+  its attributes, the version linked), never a rule of the platform. Example, automatic backlog feeding: an event
+  trigger of the project methodology on the applied changes of `intake` (filter `event.nodes.exists(n, n.type ==
+  "intake@Request" && n.state == "accepted")`, or a declared `request.accepted`) adds each accepted Request of the
+  project's chain to the project's backlog, an aggregate of the same kind (`alm@Backlog`, links to the Request
+  versions). A Request is then either **not scoped yet** (in the backlog only) or **scoped** in a release (its scope
+  links it, the backlog link dropped in the same change). The steps of the project process carry the same kind of
+  conditions (a scoped condition over the linked Requests, ADR 0109: `all:` linked Requests `accepted` before the
+  scope's gate), so only a request in the right state starts a task at the project level. Another methodology may
+  take in `qualified` requests into a provisional scope: same mechanism, other conditions.
 - `integrates: [sdlc]` (ADR 0106, `exclusive` when the project wants every delivery to land through it): its process
   creates the level-3 changes as sub-changes, one per piece of work it plans, and its guardian governs them. Their
   `alm@Need` / `alm@Requirement` nodes link the Request versions they answer (`derived_from`, same URL form), so the
@@ -121,5 +131,6 @@ commits (ADR 0157). Triage and validation tasks open in the context of their req
     the link type `alm@aggregates` declares `toTypes: [intake@Request]` across domains;
   - the payload of a declared event carries the URLs (signal item data), and the closing change finds them there;
   - the assistant's `register_request` and an `intake` importer.
-- Not decided: whether level 2 can take in a request that is only `qualified` (a provisional scope), and how a request
-  shared by two projects is fulfilled (by both, or by the first).
+- To check: the event of an applied change carries the type and state of the nodes it committed (the filter of the
+  backlog trigger), else `request-management` declares `request.accepted`.
+- Not decided: how a request shared by two projects is fulfilled (by both, or by the first).
