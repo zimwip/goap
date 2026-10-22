@@ -26,6 +26,9 @@ service GraphService {
   rpc ListBaselineNodes(ListBaselineNodesRequest) returns (ListBaselineNodesResponse);
   rpc ListBaselineLinks(ListBaselineLinksRequest) returns (ListBaselineLinksResponse);
   rpc GetNodeNeighbourhood(GetNodeNeighbourhoodRequest) returns (GetNodeNeighbourhoodResponse);
+  // What a view holds of some nodes (ADR 0157): their versions in it, read by node; the index keeps the hits of a
+  // search the views asked hold.
+  rpc ResolveView(ResolveViewRequest) returns (ResolveViewResponse);
   // The namespaces holding at least one node.
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
   // The statistics of the graph: what every namespace holds (the overview of the graph statistics view).
@@ -605,6 +608,21 @@ message ListBaselineLinksResponse {
   repeated TypeCount types = 3;
   // the header of the baseline: its nodes are not sent
   Baseline baseline = 4;
+}
+
+message ResolveViewRequest {
+  View view = 1;
+  repeated string node_ids = 2;
+}
+
+message ResolveViewResponse {
+  string namespace = 1;
+  // the baseline the view reads (a change view: its fork)
+  string baseline_id = 2;
+  // a branch view of main at its head
+  bool main_head = 3;
+  // the version of each node asked the view holds (0: a change's draft); a node it does not hold is absent
+  map<string, int32> versions = 4;
 }
 
 message GetNodeNeighbourhoodRequest {

@@ -391,6 +391,23 @@ func (h *Handler) GetNodeNeighbourhood(ctx context.Context, r *connect.Request[g
 	return connect.NewResponse(out), nil
 }
 
+// ResolveView answers what a view holds of some nodes (ADR 0157): the index keeps the hits a view holds.
+func (h *Handler) ResolveView(ctx context.Context, r *connect.Request[graphv1.ResolveViewRequest]) (*connect.Response[graphv1.ResolveViewResponse], error) {
+	ids := make([]domain.NodeID, len(r.Msg.NodeIds))
+	for i, id := range r.Msg.NodeIds {
+		ids[i] = domain.NodeID(id)
+	}
+	st, err := h.Graph.ViewVersions(ctx, pbconv.GraphViewFromPB(r.Msg.View), ids)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	out := &graphv1.ResolveViewResponse{Namespace: st.Namespace, BaselineId: string(st.Baseline), MainHead: st.MainHead, Versions: map[string]int32{}}
+	for id, v := range st.Versions {
+		out.Versions[string(id)] = int32(v)
+	}
+	return connect.NewResponse(out), nil
+}
+
 // IsAdminOnlyType tells whether a node type is written by platform administrators only (ADR 0068).
 func (h *Handler) IsAdminOnlyType(ctx context.Context, r *connect.Request[graphv1.IsAdminOnlyTypeRequest]) (*connect.Response[graphv1.IsAdminOnlyTypeResponse], error) {
 	adminOnly, err := h.Graph.AdminOnlyType(ctx, r.Msg.Type)

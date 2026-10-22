@@ -67,6 +67,28 @@ func testBranchView(t *testing.T, repo Repo) {
 	if _, err := g.ViewNode(ctx, View{Change: c.ID, Namespace: "x"}, f.req.ID, ""); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a view naming a change and a branch: %v", err)
 	}
+	// what a view holds of some nodes (the index keeps the hits a view holds)
+	ids := []domain.NodeID{f.req.ID, f.need.ID}
+	st := must[ViewState](t)(g.ViewVersions(ctx, View{Namespace: f.req.Namespace, Branch: domain.MainBranch}, ids))
+	if !st.MainHead || st.Baseline != after.ID || st.Versions[f.req.ID] != f.req.Version+1 || st.Versions[f.need.ID] != f.need.Version {
+		t.Fatalf("head of main: %+v", st)
+	}
+	st = must[ViewState](t)(g.ViewVersions(ctx, View{Namespace: f.req.Namespace, Branch: domain.MainBranch, Baseline: before}, ids))
+	if st.MainHead || st.Versions[f.req.ID] != f.req.Version {
+		t.Fatalf("an older baseline: %+v", st)
+	}
+	d := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "next", BaselineID: after.ID}))
+	must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, d.ID, NodeCheckout{Node: f.need.ID, Rationale: "draft"}))
+	st = must[ViewState](t)(g.ViewVersions(ctx, View{Change: d.ID}, ids))
+	if st.MainHead || st.Versions[f.need.ID] != 0 || st.Versions[f.req.ID] != f.req.Version+1 || st.Baseline != after.ID {
+		t.Fatalf("a change: %+v", st)
+	}
+	if ds := must[[]domain.Node](t)(g.ViewDrafts(ctx, View{Change: d.ID}, "PAY", 10)); len(ds) != 1 || ds[0].Key != "NEED-1" || ds[0].Version != 0 {
+		t.Fatalf("the drafts of a change: %+v", ds)
+	}
+	if ds := must[[]domain.Node](t)(g.ViewDrafts(ctx, View{Change: d.ID}, "nothing", 10)); len(ds) != 0 {
+		t.Fatalf("no draft matches: %+v", ds)
+	}
 	// a branch is never assumed, and a baseline is read on its own branch only
 	for _, v := range []View{{Baseline: before}, {Namespace: f.req.Namespace}, {Namespace: f.req.Namespace, Branch: "other", Baseline: before}} {
 		if _, err := g.ViewNode(ctx, v, f.req.ID, ""); !errors.Is(err, ErrInvalid) {

@@ -1,6 +1,6 @@
 # ADR 0157 — Every graph read names its view
 
-**Status**: accepted; steps 1 and 2 implemented · **Date**: 2026-10
+**Status**: accepted; steps 1 to 3 implemented · **Date**: 2026-10
 
 ## Context
 
@@ -101,6 +101,14 @@ version it started with (ADR 0113).
 - The router and the personal scope read the change and the namespace of a request's `view` too.
 - Tests: `view_test.go` (`TestBranchView`), `checkChangeHoods` / `checkViewPages` in `changeview_test.go`, on every
   repository.
+
+- Index (step 3): `SearchRequest.views` (one per namespace) or `history` (every version, refined by `main`, which
+  alone is refused); a search of nodes naming neither is refused, a search of changes needs none. The namespaces are
+  the views'; when every view is the head of main the index's own flag selects, else `index.Query.Select` keeps a
+  hit whose version is the one its view holds (`Graph.ViewVersions`, RPC `ResolveView`, `graphclient.ViewVersions`;
+  port `indexersvc.Views`). The drafts of a change view, which the index has no document of, come from the graph
+  (`Graph.ViewDrafts`, `index.Query.Extra`). Web: the search overlay searches *In the context* (the views of the
+  context per namespace) or the history.
 
 ## Steps
 

@@ -425,3 +425,55 @@ func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error)
 	}
 	return out, nil
 }
+
+// ViewVersions answers what a view holds of some nodes (ADR 0157): their versions in it, read by node, and whether it
+// is the head of main. The index keeps the hits of a search a view holds with it.
+func (g *Graph) ViewVersions(ctx context.Context, v View, ids []domain.NodeID) (st ViewState, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		w, err := g.openWorld(ctx, tx, v)
+		if err != nil {
+			return err
+		}
+		st.Namespace, st.Baseline = w.namespace, w.baseline
+		if w.change == nil && domain.BranchOf(v.Branch) == domain.MainBranch {
+			if v.Baseline == "" {
+				st.MainHead = true
+			} else if head, err := branchHeadHeader(ctx, tx, w.namespace, domain.MainBranch); err != nil {
+				return err
+			} else {
+				st.MainHead = head.ID == v.Baseline
+			}
+		}
+		st.Versions, err = w.at(ctx, tx, ids)
+		return err
+	})
+	return st, err
+}
+
+// ViewDrafts returns the drafts a change view holds whose key, type or a string property contains the text
+// (case-insensitive; empty: all), at most limit, by key: the nodes the index has no document of yet (ADR 0157). A branch
+// view holds none.
+func (g *Graph) ViewDrafts(ctx context.Context, v View, text string, limit int) (out []domain.Node, err error) {
+	text = strings.ToLower(strings.TrimSpace(text))
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		w, err := g.openWorld(ctx, tx, v)
+		if err != nil || w.change == nil {
+			return err
+		}
+		for _, id := range w.drafts() {
+			n, err := w.node(ctx, tx, domain.NodeRef{ID: id})
+			if err != nil {
+				return err
+			}
+			if text == "" || nodeMatches(n, text) {
+				out = append(out, n)
+			}
+		}
+		return nil
+	})
+	slices.SortFunc(out, func(a, b domain.Node) int { return strings.Compare(a.Key, b.Key) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, err
+}

@@ -4,13 +4,15 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { View, ViewJson } from "../../graph/v1/graph_pb";
+import { file_goap_graph_v1_graph } from "../../graph/v1/graph_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file goap/index/v1/index.proto.
  */
 export const file_goap_index_v1_index: GenFile = /*@__PURE__*/
-  fileDesc("Chlnb2FwL2luZGV4L3YxL2luZGV4LnByb3RvEg1nb2FwLmluZGV4LnYxIisKC0ZhY2V0RmlsdGVyEgwKBG5hbWUYASABKAkSDgoGdmFsdWVzGAIgAygJIicKC0RvY3VtZW50UmVmEgwKBGtpbmQYASABKAkSCgoCaWQYAiABKAki7wMKDVNlYXJjaFJlcXVlc3QSDAoEdGV4dBgBIAEoCRINCgVraW5kcxgCIAMoCRINCgV0eXBlcxgDIAMoCRISCgpuYW1lc3BhY2VzGAQgAygJEg4KBnN0YXRlcxgFIAMoCRIQCghicmFuY2hlcxgGIAMoCRIRCgRtYWluGAcgASgISACIAQESMQoNZmFjZXRfZmlsdGVycxgIIAMoCzIaLmdvYXAuaW5kZXgudjEuRmFjZXRGaWx0ZXISDgoGZmFjZXRzGAkgAygJEg0KBWxpbWl0GAogASgFEg4KBm9mZnNldBgLIAEoBRIQCghwcm9qZWN0cxgMIAMoCRIbChNpbmNsdWRlX3N1YnByb2plY3RzGA0gASgIEhMKC293bmVyX3VuaXRzGA4gAygJEhAKCHN0YXR1c2VzGA8gAygJEhUKDW1ldGhvZG9sb2dpZXMYECADKAkSEgoKcm9vdHNfb25seRgRIAEoCBIMCgRtb2RlGBIgASgJEhsKDm1pbl9zaW1pbGFyaXR5GBMgASgBSAGIAQESDwoHc25pcHBldBgUIAEoCBIuCgpzaW1pbGFyX3RvGBUgASgLMhouZ29hcC5pbmRleC52MS5Eb2N1bWVudFJlZkIHCgVfbWFpbkIRCg9fbWluX3NpbWlsYXJpdHkijQEKCkNoYW5nZUluZm8SEQoJY2hhbmdlX2lkGAEgASgJEg0KBXRpdGxlGAIgASgJEg4KBnN0YXR1cxgDIAEoCRISCgpwcm9qZWN0X2lkGAQgASgJEhMKC21ldGhvZG9sb2d5GAUgASgJEhEKCW93bmVyX29yZxgGIAEoCRIRCglwYXJlbnRfaWQYByABKAki/wIKA0hpdBIMCgRraW5kGAEgASgJEgoKAmlkGAIgASgJEg8KB3ZlcnNpb24YAyABKAUSEQoJbmFtZXNwYWNlGAQgASgJEgwKBHR5cGUYBSABKAkSCwoDa2V5GAYgASgJEg0KBXN0YXRlGAcgASgJEg4KBmJyYW5jaBgIIAEoCRIMCgRtYWluGAkgASgIEg8KB2RlbGV0ZWQYCiABKAgSDwoHcHJvamVjdBgLIAEoCRISCgpvd25lcl91bml0GAwgASgJEi4KBmZhY2V0cxgNIAMoCzIeLmdvYXAuaW5kZXgudjEuSGl0LkZhY2V0c0VudHJ5Eg0KBXNjb3JlGA4gASgBEhIKCnNpbWlsYXJpdHkYDyABKAESDwoHc25pcHBldBgQIAEoCRIpCgZjaGFuZ2UYESABKAsyGS5nb2FwLmluZGV4LnYxLkNoYW5nZUluZm8aLQoLRmFjZXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIqCgpGYWNldENvdW50Eg0KBXZhbHVlGAEgASgJEg0KBWNvdW50GAIgASgFIkYKC0ZhY2V0UmVzdWx0EgwKBG5hbWUYASABKAkSKQoGY291bnRzGAIgAygLMhkuZ29hcC5pbmRleC52MS5GYWNldENvdW50IpIBCg5TZWFyY2hSZXNwb25zZRIgCgRoaXRzGAEgAygLMhIuZ29hcC5pbmRleC52MS5IaXQSDQoFdG90YWwYAiABKAUSKgoGZmFjZXRzGAMgAygLMhouZ29hcC5pbmRleC52MS5GYWNldFJlc3VsdBIQCghzZW1hbnRpYxgEIAEoCBIRCgl0cnVuY2F0ZWQYBSABKAgiEAoOUmVpbmRleFJlcXVlc3QiIwoPUmVpbmRleFJlc3BvbnNlEhAKCHZlcnNpb25zGAEgASgFIg8KDVN0YXR1c1JlcXVlc3QijQEKDlN0YXR1c1Jlc3BvbnNlEhAKCHNlbWFudGljGAEgASgIEg0KBXN0b3JlGAIgASgJEhUKDW5vZGVzX2luZGV4ZWQYAyABKAMSGgoSYmFzZWxpbmVzX2ZvbGxvd2VkGAQgASgDEg4KBmVycm9ycxgFIAEoAxIXCg9jaGFuZ2VzX2luZGV4ZWQYBiABKAMy5gEKDEluZGV4U2VydmljZRJFCgZTZWFyY2gSHC5nb2FwLmluZGV4LnYxLlNlYXJjaFJlcXVlc3QaHS5nb2FwLmluZGV4LnYxLlNlYXJjaFJlc3BvbnNlEkgKB1JlaW5kZXgSHS5nb2FwLmluZGV4LnYxLlJlaW5kZXhSZXF1ZXN0Gh4uZ29hcC5pbmRleC52MS5SZWluZGV4UmVzcG9uc2USRQoGU3RhdHVzEhwuZ29hcC5pbmRleC52MS5TdGF0dXNSZXF1ZXN0Gh0uZ29hcC5pbmRleC52MS5TdGF0dXNSZXNwb25zZUKxAQoRY29tLmdvYXAuaW5kZXgudjFCCkluZGV4UHJvdG9QAVo6Z2l0aHViLmNvbS96aW13aXAvZ29hcC9jb250cmFjdHMvZ2VuL2dvYXAvaW5kZXgvdjE7aW5kZXh2MaICA0dJWKoCDUdvYXAuSW5kZXguVjHKAg1Hb2FwXEluZGV4XFYx4gIZR29hcFxJbmRleFxWMVxHUEJNZXRhZGF0YeoCD0dvYXA6OkluZGV4OjpWMWIGcHJvdG8z");
+  fileDesc("Chlnb2FwL2luZGV4L3YxL2luZGV4LnByb3RvEg1nb2FwLmluZGV4LnYxIisKC0ZhY2V0RmlsdGVyEgwKBG5hbWUYASABKAkSDgoGdmFsdWVzGAIgAygJIicKC0RvY3VtZW50UmVmEgwKBGtpbmQYASABKAkSCgoCaWQYAiABKAkipAQKDVNlYXJjaFJlcXVlc3QSDAoEdGV4dBgBIAEoCRINCgVraW5kcxgCIAMoCRINCgV0eXBlcxgDIAMoCRISCgpuYW1lc3BhY2VzGAQgAygJEg4KBnN0YXRlcxgFIAMoCRIQCghicmFuY2hlcxgGIAMoCRIRCgRtYWluGAcgASgISACIAQESMQoNZmFjZXRfZmlsdGVycxgIIAMoCzIaLmdvYXAuaW5kZXgudjEuRmFjZXRGaWx0ZXISDgoGZmFjZXRzGAkgAygJEg0KBWxpbWl0GAogASgFEg4KBm9mZnNldBgLIAEoBRIQCghwcm9qZWN0cxgMIAMoCRIbChNpbmNsdWRlX3N1YnByb2plY3RzGA0gASgIEhMKC293bmVyX3VuaXRzGA4gAygJEhAKCHN0YXR1c2VzGA8gAygJEhUKDW1ldGhvZG9sb2dpZXMYECADKAkSEgoKcm9vdHNfb25seRgRIAEoCBIMCgRtb2RlGBIgASgJEhsKDm1pbl9zaW1pbGFyaXR5GBMgASgBSAGIAQESDwoHc25pcHBldBgUIAEoCBIuCgpzaW1pbGFyX3RvGBUgASgLMhouZ29hcC5pbmRleC52MS5Eb2N1bWVudFJlZhIiCgV2aWV3cxgWIAMoCzITLmdvYXAuZ3JhcGgudjEuVmlldxIPCgdoaXN0b3J5GBcgASgIQgcKBV9tYWluQhEKD19taW5fc2ltaWxhcml0eSKNAQoKQ2hhbmdlSW5mbxIRCgljaGFuZ2VfaWQYASABKAkSDQoFdGl0bGUYAiABKAkSDgoGc3RhdHVzGAMgASgJEhIKCnByb2plY3RfaWQYBCABKAkSEwoLbWV0aG9kb2xvZ3kYBSABKAkSEQoJb3duZXJfb3JnGAYgASgJEhEKCXBhcmVudF9pZBgHIAEoCSL/AgoDSGl0EgwKBGtpbmQYASABKAkSCgoCaWQYAiABKAkSDwoHdmVyc2lvbhgDIAEoBRIRCgluYW1lc3BhY2UYBCABKAkSDAoEdHlwZRgFIAEoCRILCgNrZXkYBiABKAkSDQoFc3RhdGUYByABKAkSDgoGYnJhbmNoGAggASgJEgwKBG1haW4YCSABKAgSDwoHZGVsZXRlZBgKIAEoCBIPCgdwcm9qZWN0GAsgASgJEhIKCm93bmVyX3VuaXQYDCABKAkSLgoGZmFjZXRzGA0gAygLMh4uZ29hcC5pbmRleC52MS5IaXQuRmFjZXRzRW50cnkSDQoFc2NvcmUYDiABKAESEgoKc2ltaWxhcml0eRgPIAEoARIPCgdzbmlwcGV0GBAgASgJEikKBmNoYW5nZRgRIAEoCzIZLmdvYXAuaW5kZXgudjEuQ2hhbmdlSW5mbxotCgtGYWNldHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIioKCkZhY2V0Q291bnQSDQoFdmFsdWUYASABKAkSDQoFY291bnQYAiABKAUiRgoLRmFjZXRSZXN1bHQSDAoEbmFtZRgBIAEoCRIpCgZjb3VudHMYAiADKAsyGS5nb2FwLmluZGV4LnYxLkZhY2V0Q291bnQikgEKDlNlYXJjaFJlc3BvbnNlEiAKBGhpdHMYASADKAsyEi5nb2FwLmluZGV4LnYxLkhpdBINCgV0b3RhbBgCIAEoBRIqCgZmYWNldHMYAyADKAsyGi5nb2FwLmluZGV4LnYxLkZhY2V0UmVzdWx0EhAKCHNlbWFudGljGAQgASgIEhEKCXRydW5jYXRlZBgFIAEoCCIQCg5SZWluZGV4UmVxdWVzdCIjCg9SZWluZGV4UmVzcG9uc2USEAoIdmVyc2lvbnMYASABKAUiDwoNU3RhdHVzUmVxdWVzdCKNAQoOU3RhdHVzUmVzcG9uc2USEAoIc2VtYW50aWMYASABKAgSDQoFc3RvcmUYAiABKAkSFQoNbm9kZXNfaW5kZXhlZBgDIAEoAxIaChJiYXNlbGluZXNfZm9sbG93ZWQYBCABKAMSDgoGZXJyb3JzGAUgASgDEhcKD2NoYW5nZXNfaW5kZXhlZBgGIAEoAzLmAQoMSW5kZXhTZXJ2aWNlEkUKBlNlYXJjaBIcLmdvYXAuaW5kZXgudjEuU2VhcmNoUmVxdWVzdBodLmdvYXAuaW5kZXgudjEuU2VhcmNoUmVzcG9uc2USSAoHUmVpbmRleBIdLmdvYXAuaW5kZXgudjEuUmVpbmRleFJlcXVlc3QaHi5nb2FwLmluZGV4LnYxLlJlaW5kZXhSZXNwb25zZRJFCgZTdGF0dXMSHC5nb2FwLmluZGV4LnYxLlN0YXR1c1JlcXVlc3QaHS5nb2FwLmluZGV4LnYxLlN0YXR1c1Jlc3BvbnNlQrEBChFjb20uZ29hcC5pbmRleC52MUIKSW5kZXhQcm90b1ABWjpnaXRodWIuY29tL3ppbXdpcC9nb2FwL2NvbnRyYWN0cy9nZW4vZ29hcC9pbmRleC92MTtpbmRleHYxogIDR0lYqgINR29hcC5JbmRleC5WMcoCDUdvYXBcSW5kZXhcVjHiAhlHb2FwXEluZGV4XFYxXEdQQk1ldGFkYXRh6gIPR29hcDo6SW5kZXg6OlYxYgZwcm90bzM", [file_goap_graph_v1_graph]);
 
 /**
  * @generated from message goap.index.v1.FacetFilter
@@ -149,7 +151,8 @@ export type SearchRequest = Message<"goap.index.v1.SearchRequest"> & {
   branches: string[];
 
   /**
-   * true: heads of main only (a change always is), false: not on main, absent: all
+   * with history: true the heads of main only, false not on main, absent every version; without history it is
+   * refused (the views say what is read)
    *
    * @generated from field: optional bool main = 7;
    */
@@ -252,6 +255,22 @@ export type SearchRequest = Message<"goap.index.v1.SearchRequest"> & {
    * @generated from field: goap.index.v1.DocumentRef similar_to = 21;
    */
   similarTo?: DocumentRef | undefined;
+
+  /**
+   * the views the nodes are searched in (ADR 0157), one per namespace: a hit of a node is kept when its version is
+   * the one its namespace's view holds (a change's drafts are not indexed). A search of nodes names its views, or
+   * history.
+   *
+   * @generated from field: repeated goap.graph.v1.View views = 22;
+   */
+  views: View[];
+
+  /**
+   * every version of the nodes (the history), refined by main; in place of views
+   *
+   * @generated from field: bool history = 23;
+   */
+  history: boolean;
 };
 
 /**
@@ -301,7 +320,8 @@ export type SearchRequestJson = {
   branches?: string[];
 
   /**
-   * true: heads of main only (a change always is), false: not on main, absent: all
+   * with history: true the heads of main only, false not on main, absent every version; without history it is
+   * refused (the views say what is read)
    *
    * @generated from field: optional bool main = 7;
    */
@@ -404,6 +424,22 @@ export type SearchRequestJson = {
    * @generated from field: goap.index.v1.DocumentRef similar_to = 21;
    */
   similarTo?: DocumentRefJson;
+
+  /**
+   * the views the nodes are searched in (ADR 0157), one per namespace: a hit of a node is kept when its version is
+   * the one its namespace's view holds (a change's drafts are not indexed). A search of nodes names its views, or
+   * history.
+   *
+   * @generated from field: repeated goap.graph.v1.View views = 22;
+   */
+  views?: ViewJson[];
+
+  /**
+   * every version of the nodes (the history), refined by main; in place of views
+   *
+   * @generated from field: bool history = 23;
+   */
+  history?: boolean;
 };
 
 /**

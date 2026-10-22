@@ -60,6 +60,7 @@ func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platfor
 	// needs an "embed" alias. The graph is published again at start: an index kept in SQLite catches up, a new one fills.
 	indexer := indexersvc.New(st.index, gw, gp.authorizer, e.log)
 	indexer.Access = gp.directory // the projects a caller may see, and a project with its sub-projects (ADR 0095)
+	indexer.Views = g             // what the views a search names hold (ADR 0157)
 	indexSink := indexersvc.NewSink(e.ctx, indexer)
 	indexer.Republish = func(ctx context.Context) (int, error) { return g.Republish(ctx, indexSink) }
 	// the events of the graph go through its outbox (ADR 0136), delivered in process: to the index, the event stream of

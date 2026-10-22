@@ -51,3 +51,14 @@ func (v View) String() string {
 	}
 	return fmt.Sprintf("%s/%s", v.Namespace, v.Branch)
 }
+
+// ViewState is what a view holds of some nodes (Graph.ViewVersions): its namespace, the baseline it reads (a change
+// view: its fork), whether it is the head of main, and the version of each node asked that it holds (0: a change's
+// draft; absent: not in it).
+type ViewState struct {
+	Namespace string
+	Baseline  domain.BaselineID
+	// MainHead: a branch view of main at its head, the versions the index flags as heads of main.
+	MainHead bool
+	Versions map[domain.NodeID]domain.Version
+}

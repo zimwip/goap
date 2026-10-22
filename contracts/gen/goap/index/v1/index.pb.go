@@ -7,6 +7,7 @@
 package indexv1
 
 import (
+	v1 "github.com/zimwip/goap/contracts/gen/goap/graph/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -143,7 +144,8 @@ type SearchRequest struct {
 	States []string `protobuf:"bytes,5,rep,name=states,proto3" json:"states,omitempty"`
 	// branch of the node version, or the one the change is applied to
 	Branches []string `protobuf:"bytes,6,rep,name=branches,proto3" json:"branches,omitempty"`
-	// true: heads of main only (a change always is), false: not on main, absent: all
+	// with history: true the heads of main only, false not on main, absent every version; without history it is
+	// refused (the views say what is read)
 	Main *bool `protobuf:"varint,7,opt,name=main,proto3,oneof" json:"main,omitempty"`
 	// filters on declared facets
 	FacetFilters []*FacetFilter `protobuf:"bytes,8,rep,name=facet_filters,json=facetFilters,proto3" json:"facet_filters,omitempty"`
@@ -173,7 +175,13 @@ type SearchRequest struct {
 	Snippet bool `protobuf:"varint,20,opt,name=snippet,proto3" json:"snippet,omitempty"`
 	// the documents nearest to this one, by its stored embedding (no text query, no embedding call); the document
 	// itself is excluded and every other filter holds. Fails with NOT_FOUND when it does not exist or is not visible.
-	SimilarTo     *DocumentRef `protobuf:"bytes,21,opt,name=similar_to,json=similarTo,proto3" json:"similar_to,omitempty"`
+	SimilarTo *DocumentRef `protobuf:"bytes,21,opt,name=similar_to,json=similarTo,proto3" json:"similar_to,omitempty"`
+	// the views the nodes are searched in (ADR 0157), one per namespace: a hit of a node is kept when its version is
+	// the one its namespace's view holds (a change's drafts are not indexed). A search of nodes names its views, or
+	// history.
+	Views []*v1.View `protobuf:"bytes,22,rep,name=views,proto3" json:"views,omitempty"`
+	// every version of the nodes (the history), refined by main; in place of views
+	History       bool `protobuf:"varint,23,opt,name=history,proto3" json:"history,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -353,6 +361,20 @@ func (x *SearchRequest) GetSimilarTo() *DocumentRef {
 		return x.SimilarTo
 	}
 	return nil
+}
+
+func (x *SearchRequest) GetViews() []*v1.View {
+	if x != nil {
+		return x.Views
+	}
+	return nil
+}
+
+func (x *SearchRequest) GetHistory() bool {
+	if x != nil {
+		return x.History
+	}
+	return false
 }
 
 // What a hit of kind change adds.
@@ -1018,13 +1040,13 @@ var File_goap_index_v1_index_proto protoreflect.FileDescriptor
 
 const file_goap_index_v1_index_proto_rawDesc = "" +
 	"\n" +
-	"\x19goap/index/v1/index.proto\x12\rgoap.index.v1\"9\n" +
+	"\x19goap/index/v1/index.proto\x12\rgoap.index.v1\x1a\x19goap/graph/v1/graph.proto\"9\n" +
 	"\vFacetFilter\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06values\x18\x02 \x03(\tR\x06values\"1\n" +
 	"\vDocumentRef\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\xc3\x05\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\x88\x06\n" +
 	"\rSearchRequest\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x14\n" +
 	"\x05kinds\x18\x02 \x03(\tR\x05kinds\x12\x14\n" +
@@ -1052,7 +1074,9 @@ const file_goap_index_v1_index_proto_rawDesc = "" +
 	"\x0emin_similarity\x18\x13 \x01(\x01H\x01R\rminSimilarity\x88\x01\x01\x12\x18\n" +
 	"\asnippet\x18\x14 \x01(\bR\asnippet\x129\n" +
 	"\n" +
-	"similar_to\x18\x15 \x01(\v2\x1a.goap.index.v1.DocumentRefR\tsimilarToB\a\n" +
+	"similar_to\x18\x15 \x01(\v2\x1a.goap.index.v1.DocumentRefR\tsimilarTo\x12)\n" +
+	"\x05views\x18\x16 \x03(\v2\x13.goap.graph.v1.ViewR\x05views\x12\x18\n" +
+	"\ahistory\x18\x17 \x01(\bR\ahistoryB\a\n" +
 	"\x05_mainB\x11\n" +
 	"\x0f_min_similarity\"\xd2\x01\n" +
 	"\n" +
@@ -1148,26 +1172,28 @@ var file_goap_index_v1_index_proto_goTypes = []any{
 	(*StatusRequest)(nil),   // 10: goap.index.v1.StatusRequest
 	(*StatusResponse)(nil),  // 11: goap.index.v1.StatusResponse
 	nil,                     // 12: goap.index.v1.Hit.FacetsEntry
+	(*v1.View)(nil),         // 13: goap.graph.v1.View
 }
 var file_goap_index_v1_index_proto_depIdxs = []int32{
 	0,  // 0: goap.index.v1.SearchRequest.facet_filters:type_name -> goap.index.v1.FacetFilter
 	1,  // 1: goap.index.v1.SearchRequest.similar_to:type_name -> goap.index.v1.DocumentRef
-	12, // 2: goap.index.v1.Hit.facets:type_name -> goap.index.v1.Hit.FacetsEntry
-	3,  // 3: goap.index.v1.Hit.change:type_name -> goap.index.v1.ChangeInfo
-	5,  // 4: goap.index.v1.FacetResult.counts:type_name -> goap.index.v1.FacetCount
-	4,  // 5: goap.index.v1.SearchResponse.hits:type_name -> goap.index.v1.Hit
-	6,  // 6: goap.index.v1.SearchResponse.facets:type_name -> goap.index.v1.FacetResult
-	2,  // 7: goap.index.v1.IndexService.Search:input_type -> goap.index.v1.SearchRequest
-	8,  // 8: goap.index.v1.IndexService.Reindex:input_type -> goap.index.v1.ReindexRequest
-	10, // 9: goap.index.v1.IndexService.Status:input_type -> goap.index.v1.StatusRequest
-	7,  // 10: goap.index.v1.IndexService.Search:output_type -> goap.index.v1.SearchResponse
-	9,  // 11: goap.index.v1.IndexService.Reindex:output_type -> goap.index.v1.ReindexResponse
-	11, // 12: goap.index.v1.IndexService.Status:output_type -> goap.index.v1.StatusResponse
-	10, // [10:13] is the sub-list for method output_type
-	7,  // [7:10] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	13, // 2: goap.index.v1.SearchRequest.views:type_name -> goap.graph.v1.View
+	12, // 3: goap.index.v1.Hit.facets:type_name -> goap.index.v1.Hit.FacetsEntry
+	3,  // 4: goap.index.v1.Hit.change:type_name -> goap.index.v1.ChangeInfo
+	5,  // 5: goap.index.v1.FacetResult.counts:type_name -> goap.index.v1.FacetCount
+	4,  // 6: goap.index.v1.SearchResponse.hits:type_name -> goap.index.v1.Hit
+	6,  // 7: goap.index.v1.SearchResponse.facets:type_name -> goap.index.v1.FacetResult
+	2,  // 8: goap.index.v1.IndexService.Search:input_type -> goap.index.v1.SearchRequest
+	8,  // 9: goap.index.v1.IndexService.Reindex:input_type -> goap.index.v1.ReindexRequest
+	10, // 10: goap.index.v1.IndexService.Status:input_type -> goap.index.v1.StatusRequest
+	7,  // 11: goap.index.v1.IndexService.Search:output_type -> goap.index.v1.SearchResponse
+	9,  // 12: goap.index.v1.IndexService.Reindex:output_type -> goap.index.v1.ReindexResponse
+	11, // 13: goap.index.v1.IndexService.Status:output_type -> goap.index.v1.StatusResponse
+	11, // [11:14] is the sub-list for method output_type
+	8,  // [8:11] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_goap_index_v1_index_proto_init() }

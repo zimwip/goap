@@ -1,3 +1,4 @@
+import type { GraphView } from './graph';
 // Document index types (ADR 0026, 0095): lexical, semantic and hybrid search over the nodes and the changes of the
 // graph, filtered by type, project, owner, status and methodology, with facets and nearest-document search. JSON of the
 // proto3 messages of goap.index.v1 (camelCase, zero values omitted).
@@ -61,8 +62,12 @@ export interface NodeSearchRequest {
   /** Lifecycle state of the node, or of the change. */
   states?: string[];
   branches?: string[];
-  /** true: heads of main only; false: not on main; absent: every branch. */
+  /** With `history`: true the heads of main only, false not on main, absent every version. */
   main?: boolean;
+  /** The views the nodes are searched in (ADR 0157), one per namespace; a search of nodes names its views, or history. */
+  views?: GraphView[];
+  /** Every version of the nodes (refined by `main`), in place of views. */
+  history?: boolean;
   facetFilters?: { name: string; values: string[] }[];
   /** Facets to count: kind, namespace, type, state, branch, main, project, owner, status, methodology, or a declared one. */
   facets?: string[];

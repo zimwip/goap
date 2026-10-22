@@ -938,3 +938,40 @@ func (c *Client) DecisionPoints(ctx context.Context, id domain.ChangeID) ([]doma
 	}
 	return out, nil
 }
+
+// ViewVersions answers what a view holds of some nodes (ADR 0157).
+func (c *Client) ViewVersions(ctx context.Context, v graphapi.View, ids []domain.NodeID) (graphapi.ViewState, error) {
+	req := &graphv1.ResolveViewRequest{View: pbconv.GraphViewToPB(v)}
+	for _, id := range ids {
+		req.NodeIds = append(req.NodeIds, string(id))
+	}
+	r, err := c.rpc.ResolveView(ctx, connect.NewRequest(req))
+	if err != nil {
+		return graphapi.ViewState{}, rpcerr.FromConnect(err)
+	}
+	st := graphapi.ViewState{Namespace: r.Msg.Namespace, Baseline: domain.BaselineID(r.Msg.BaselineId), MainHead: r.Msg.MainHead,
+		Versions: map[domain.NodeID]domain.Version{}}
+	for id, v := range r.Msg.Versions {
+		st.Versions[domain.NodeID(id)] = domain.Version(v)
+	}
+	return st, nil
+}
+
+// ViewDrafts returns the drafts a change view holds matching a text, at most limit (ADR 0157): the version 0 nodes of a
+// page of the view.
+func (c *Client) ViewDrafts(ctx context.Context, v graphapi.View, text string, limit int) ([]domain.Node, error) {
+	if !v.IsChange() {
+		return nil, nil
+	}
+	r, err := c.rpc.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{View: pbconv.GraphViewToPB(v), Query: text, Limit: 500}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	var out []domain.Node
+	for _, n := range r.Msg.Nodes {
+		if n.Version == 0 && (limit <= 0 || len(out) < limit) {
+			out = append(out, pbconv.NodeFromPB(n))
+		}
+	}
+	return out, nil
+}

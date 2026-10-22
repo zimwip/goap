@@ -59,6 +59,9 @@ const (
 	// GraphServiceGetNodeNeighbourhoodProcedure is the fully-qualified name of the GraphService's
 	// GetNodeNeighbourhood RPC.
 	GraphServiceGetNodeNeighbourhoodProcedure = "/goap.graph.v1.GraphService/GetNodeNeighbourhood"
+	// GraphServiceResolveViewProcedure is the fully-qualified name of the GraphService's ResolveView
+	// RPC.
+	GraphServiceResolveViewProcedure = "/goap.graph.v1.GraphService/ResolveView"
 	// GraphServiceListNamespacesProcedure is the fully-qualified name of the GraphService's
 	// ListNamespaces RPC.
 	GraphServiceListNamespacesProcedure = "/goap.graph.v1.GraphService/ListNamespaces"
@@ -367,6 +370,9 @@ type GraphServiceClient interface {
 	ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error)
 	ListBaselineLinks(context.Context, *connect.Request[v1.ListBaselineLinksRequest]) (*connect.Response[v1.ListBaselineLinksResponse], error)
 	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
+	// What a view holds of some nodes (ADR 0157): their versions in it, read by node; the index keeps the hits of a
+	// search the views asked hold.
+	ResolveView(context.Context, *connect.Request[v1.ResolveViewRequest]) (*connect.Response[v1.ResolveViewResponse], error)
 	// The namespaces holding at least one node.
 	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
 	// The statistics of the graph: what every namespace holds (the overview of the graph statistics view).
@@ -632,6 +638,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceGetNodeNeighbourhoodProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("GetNodeNeighbourhood")),
+			connect.WithClientOptions(opts...),
+		),
+		resolveView: connect.NewClient[v1.ResolveViewRequest, v1.ResolveViewResponse](
+			httpClient,
+			baseURL+GraphServiceResolveViewProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ResolveView")),
 			connect.WithClientOptions(opts...),
 		),
 		listNamespaces: connect.NewClient[v1.ListNamespacesRequest, v1.ListNamespacesResponse](
@@ -1249,6 +1261,7 @@ type graphServiceClient struct {
 	listBaselineNodes       *connect.Client[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse]
 	listBaselineLinks       *connect.Client[v1.ListBaselineLinksRequest, v1.ListBaselineLinksResponse]
 	getNodeNeighbourhood    *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
+	resolveView             *connect.Client[v1.ResolveViewRequest, v1.ResolveViewResponse]
 	listNamespaces          *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
 	getGraphOverview        *connect.Client[v1.GetGraphOverviewRequest, v1.GetGraphOverviewResponse]
 	getGraphStats           *connect.Client[v1.GetGraphStatsRequest, v1.GetGraphStatsResponse]
@@ -1399,6 +1412,11 @@ func (c *graphServiceClient) ListBaselineLinks(ctx context.Context, req *connect
 // GetNodeNeighbourhood calls goap.graph.v1.GraphService.GetNodeNeighbourhood.
 func (c *graphServiceClient) GetNodeNeighbourhood(ctx context.Context, req *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error) {
 	return c.getNodeNeighbourhood.CallUnary(ctx, req)
+}
+
+// ResolveView calls goap.graph.v1.GraphService.ResolveView.
+func (c *graphServiceClient) ResolveView(ctx context.Context, req *connect.Request[v1.ResolveViewRequest]) (*connect.Response[v1.ResolveViewResponse], error) {
+	return c.resolveView.CallUnary(ctx, req)
 }
 
 // ListNamespaces calls goap.graph.v1.GraphService.ListNamespaces.
@@ -1919,6 +1937,9 @@ type GraphServiceHandler interface {
 	ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error)
 	ListBaselineLinks(context.Context, *connect.Request[v1.ListBaselineLinksRequest]) (*connect.Response[v1.ListBaselineLinksResponse], error)
 	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
+	// What a view holds of some nodes (ADR 0157): their versions in it, read by node; the index keeps the hits of a
+	// search the views asked hold.
+	ResolveView(context.Context, *connect.Request[v1.ResolveViewRequest]) (*connect.Response[v1.ResolveViewResponse], error)
 	// The namespaces holding at least one node.
 	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
 	// The statistics of the graph: what every namespace holds (the overview of the graph statistics view).
@@ -2180,6 +2201,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceGetNodeNeighbourhoodProcedure,
 		svc.GetNodeNeighbourhood,
 		connect.WithSchema(graphServiceMethods.ByName("GetNodeNeighbourhood")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceResolveViewHandler := connect.NewUnaryHandler(
+		GraphServiceResolveViewProcedure,
+		svc.ResolveView,
+		connect.WithSchema(graphServiceMethods.ByName("ResolveView")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceListNamespacesHandler := connect.NewUnaryHandler(
@@ -2804,6 +2831,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceListBaselineLinksHandler.ServeHTTP(w, r)
 		case GraphServiceGetNodeNeighbourhoodProcedure:
 			graphServiceGetNodeNeighbourhoodHandler.ServeHTTP(w, r)
+		case GraphServiceResolveViewProcedure:
+			graphServiceResolveViewHandler.ServeHTTP(w, r)
 		case GraphServiceListNamespacesProcedure:
 			graphServiceListNamespacesHandler.ServeHTTP(w, r)
 		case GraphServiceGetGraphOverviewProcedure:
@@ -3051,6 +3080,10 @@ func (UnimplementedGraphServiceHandler) ListBaselineLinks(context.Context, *conn
 
 func (UnimplementedGraphServiceHandler) GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetNodeNeighbourhood is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ResolveView(context.Context, *connect.Request[v1.ResolveViewRequest]) (*connect.Response[v1.ResolveViewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ResolveView is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error) {
