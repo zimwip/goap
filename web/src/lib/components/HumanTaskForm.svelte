@@ -22,6 +22,7 @@
     loadPosts,
     nodeTypeNames,
     reopenable,
+    nodeInChange,
     writeNodeInChange,
     removeFromChange,
     changeNodes,
@@ -164,10 +165,17 @@
   const move = (row: LifecycleRow, t: LifecycleTransition) =>
     row.node.id ? write(`${row.node.id}:${t.name}`, { pre: { id: row.node.id, version: row.node.version } }, { state: t.to }, `${t.name} ${row.node.key}`) : Promise.resolve(false);
 
-  function edit(row: LifecycleRow, patch: Record<string, unknown>, state?: string): Promise<boolean> {
-    if (row.created) return write(`${row.node.id}:edit`, { key: row.node.key, type: row.node.type }, { props: patch, state }, `edit ${row.node.key}`);
-    if (!row.node.id) return Promise.resolve(false);
-    return write(`${row.node.id}:edit`, { pre: { id: row.node.id, version: row.node.version } }, { props: patch }, `edit ${row.node.key}`);
+  /** Opens a node of this change in the node editor, seen through the change; the Edit of a row: the standard node
+   * editor, a creation only planned given its draft first. */
+  async function openInChange(row: LifecycleRow, edit = false) {
+    if (!changeId) return;
+    try {
+      const n = await nodeInChange(changeId, row);
+      if (n.id !== (row.impact?.post?.id ?? row.node.id)) void reload(changeId);
+      void openNode(n, { pin: true, change: changeId, generic: edit });
+    } catch (e) {
+      error = errorMessage(e);
+    }
   }
 
   function createNode(key: string, type: string, state: string, init?: { props: Record<string, unknown>; links: LinkWrite[] }): Promise<boolean> {
@@ -411,14 +419,13 @@
       candidates={lcCandidates}
       busy={moving}
       onmove={move}
-      onedit={edit}
       types={typeNames}
       {lifecycleOf}
       keys={takenKeys}
       oncreate={createNode}
       onremove={removeNode}
       onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })}
-      onopennode={(r, edit) => openNode(r.node, { pin: true, change: changeId, generic: edit, edit })}
+      onopennode={(r, edit) => void openInChange(r, edit)}
       bind:filter
       onadd={addNode}
     />

@@ -51,7 +51,7 @@
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
 import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
-  import { changeNodes, lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, awaitingReview, writeNodeInChange, removeFromChange, removeManyFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
+  import { changeNodes, lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, awaitingReview, nodeInChange, writeNodeInChange, removeFromChange, removeManyFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
   import { forkView } from '../../graphIndex';
   import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { openTab } from '../../shell/tabs.svelte';
@@ -669,22 +669,26 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   /**
    * Opens the node of a row in its editor, seen through this change: the change becomes the one selected in the context
    * (the working change), which the node editor follows (its world: what the change created, the versions it made, the
-   * rest as its fork has it). `edit`: the Edit of the row, the default node editor on the edit of its properties. A
-   * closed change is not worked in: the node opens as released.
+   * rest as its fork has it). `edit`: the Edit of the row, the standard node editor whatever its type names, where the
+   * node's properties, links and lifecycle are edited in the change; a creation only planned is given its draft first.
+   * A closed change is not worked in: the node opens as released.
    */
   async function openInChange(r: LifecycleRow, edit = false) {
     const c = change;
-    const n = { id: r.impact?.post?.id ?? r.node.id ?? '', key: r.node.key ?? '' };
-    if (!c?.id || !workable(c)) return void openNode(n, { pin: true, generic: edit, edit });
+    if (!c?.id || !workable(c)) return void openNode({ id: r.impact?.post?.id ?? r.node.id ?? '', key: r.node.key ?? '' }, { pin: true, generic: edit });
     if (!isWorking(c.id) && !(await workIn(c))) return;
-    void openNode(n, { pin: true, change: c.id, flow: scope || MAIN_SCOPE, generic: edit, edit });
-  }
-
-  /** Writes new values for some properties (and possibly the state) of a node of this change. */
-  async function edit(row: LifecycleRow, patch: Record<string, unknown>, state?: string): Promise<boolean> {
-    if (row.created) return write(`${row.node.id}:edit`, { key: row.node.key, type: row.node.type }, { props: patch, state }, `edit ${row.node.key}`);
-    if (!row.node.id) return false;
-    return write(`${row.node.id}:edit`, { pre: { id: row.node.id, version: row.node.version } }, { props: patch }, `edit ${row.node.key}`);
+    const flow = scope || MAIN_SCOPE;
+    moving = `${r.node.id}:open`;
+    error = '';
+    try {
+      const n = await nodeInChange(c.id, r, flow);
+      if (n.id !== (r.impact?.post?.id ?? r.node.id)) void load(c.id);
+      void openNode(n, { pin: true, change: c.id, flow, generic: edit });
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      moving = '';
+    }
   }
 
   /** Declares that the change (on the scope) impacts a node of its baseline, and why: a planned change impact. */
@@ -1459,7 +1463,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         disabled={!writable}
         busy={moving}
         onmove={move}
-        onedit={edit}
         types={typeNames}
         {lifecycleOf}
         keys={takenKeys}
