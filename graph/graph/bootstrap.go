@@ -93,7 +93,7 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 			return err
 		}
 		if st.SelfParent {
-			if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: st.Parent, From: n.Ref(), To: n.Ref(), ChangeID: c.ID}); err != nil {
+			if err := tx.PutLinks(ctx, []domain.Link{{ID: domain.LinkID(g.newID()), Type: st.Parent, From: n.Ref(), To: n.Ref(), ChangeID: c.ID}}); err != nil {
 				return err
 			}
 		}

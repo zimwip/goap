@@ -140,3 +140,23 @@ func testLinkSets(t *testing.T, repo Repo) {
 		t.Fatal("a version numbered a power of two writes its links whole")
 	}
 }
+
+func TestLinkSetInSeveralStatements(t *testing.T) { forEachRepo(t, testLinkSetInSeveralStatements) }
+
+// testLinkSetInSeveralStatements: a set larger than one statement writes is written whole, in several.
+func testLinkSetInSeveralStatements(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	g := New(repo)
+	n := linkRowsPerInsert + linkRowsPerInsert/2
+	edits := []NodeEdit{{Key: "H", Type: "Need"}, {Key: "T", Type: "Need"}}
+	for i := range n {
+		edits[0].Links = append(edits[0].Links, LinkEdit{Type: "refines", ToKey: "T", Props: map[string]any{"i": i}})
+	}
+	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "hub", By: "t", Edits: edits}); err != nil {
+		t.Fatal(err)
+	}
+	h := must[domain.Node](t)(g.NodeByKey(ctx, "", "H"))
+	if ls := must[[]domain.Link](t)(g.OutLinksOf(ctx, h.Ref())); len(ls) != n {
+		t.Fatalf("%d links read, %d written", len(ls), n)
+	}
+}

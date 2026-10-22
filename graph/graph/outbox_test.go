@@ -188,7 +188,8 @@ func TestCommitCarriesTheWritersEvents(t *testing.T) {
 			t.Fatal(err)
 		}
 		i := slices.Index(sink.subs, ev.Subject)
-		if i < 1 || !strings.HasSuffix(sink.subs[i-1], ".applied") || sink.data[i] != `{"name":"N-1"}` {
+		// PostgreSQL stores a payload as jsonb, which spaces it its own way
+		if i < 1 || !strings.HasSuffix(sink.subs[i-1], ".applied") || strings.ReplaceAll(sink.data[i], " ", "") != `{"name":"N-1"}` {
 			t.Fatalf("carried event not after change.applied: %d %q", i, sink.data[max(i, 0)])
 		}
 		n := len(sink.subs)

@@ -224,7 +224,7 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID) 
 	if err != nil {
 		return nb, err
 	}
-	in, err := tx.LinksTo(ctx, nodeID)
+	in, err := w.entering(ctx, tx, nodeID)
 	if err != nil {
 		return nb, err
 	}
@@ -309,6 +309,31 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID) 
 		nb.Links = append(nb.Links, l)
 	}
 	return nb, nil
+}
+
+// entering reads the stored links entering a node from the versions of their sources the world holds: the sources
+// first, then the links their versions hold into the node, so a source with a long history costs one version, not one
+// row per version holding the link. A source the world holds as a draft is left to the drafts' links.
+func (w *world) entering(ctx context.Context, tx Tx, nodeID domain.NodeID) ([]domain.Link, error) {
+	sources, err := tx.LinkSources(ctx, nodeID)
+	if err != nil || len(sources) == 0 {
+		return nil, err
+	}
+	slices.Sort(sources)
+	at, err := w.at(ctx, tx, sources)
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]domain.NodeRef, 0, len(at))
+	for _, id := range sources {
+		if v := at[id]; v != 0 {
+			refs = append(refs, domain.NodeRef{ID: id, Version: v})
+		}
+	}
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	return tx.LinksFromInto(ctx, refs, nodeID)
 }
 
 // ViewNodes returns a page of the nodes of a view ordered by key, matching q (ADR 0157): for a branch view the page of

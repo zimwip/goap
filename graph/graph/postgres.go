@@ -862,11 +862,18 @@ func (t *pgTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, error) 
 	return ls[0], nil
 }
 
-func (t *pgTx) PutLink(ctx context.Context, l domain.Link) error {
-	to, tv, url := linkTarget(l)
-	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("link", linkColumns, ""),
-		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), to, tv, jsonb(l.Properties), nullUUID(string(l.ChangeID)), nil, url)
-	return mapErr(err, "link")
+func (t *pgTx) PutLinks(ctx context.Context, ls []domain.Link) error {
+	for rows := range slices.Chunk(ls, linkRowsPerInsert) {
+		args := make([]any, 0, len(rows)*len(linkColumns))
+		for _, l := range rows {
+			to, tv, url := linkTarget(l)
+			args = append(args, string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), to, tv, jsonb(l.Properties), nullUUID(string(l.ChangeID)), nil, url)
+		}
+		if _, err := t.tx.Exec(ctx, dialectPG.sqlInsertRows("link", linkColumns, len(rows)), args...); err != nil {
+			return mapErr(err, "link")
+		}
+	}
+	return nil
 }
 
 func (t *pgTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, l domain.Link) error {
@@ -941,8 +948,12 @@ func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 }
 
 func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
+	payload := []byte(e.Payload)
+	if len(payload) == 0 {
+		payload = []byte("null") // an entry with no payload: the column holds JSON, never NULL
+	}
 	err := t.tx.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
-		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, []byte(e.Payload)).Scan(&e.Seq)
+		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload).Scan(&e.Seq)
 	return e, mapErr(err, "log entry "+e.Type)
 }
 
@@ -1197,6 +1208,24 @@ func (t *pgTx) LinksToOfType(ctx context.Context, ref domain.NodeRef, types []st
 		types = []string{}
 	}
 	q, args := dialectPG.sqlLinksToOfType(ref, types)
+	return t.queryLinks(ctx, q, args...)
+}
+
+func (t *pgTx) LinkSources(ctx context.Context, id domain.NodeID) ([]domain.NodeID, error) {
+	q, args := dialectPG.sqlLinkSources(id)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.NodeID, error) {
+		var id string
+		err := r.Scan(&id)
+		return domain.NodeID(id), err
+	})
+}
+
+func (t *pgTx) LinksFromInto(ctx context.Context, refs []domain.NodeRef, to domain.NodeID) ([]domain.Link, error) {
+	q, args := dialectPG.sqlLinksFromInto(refs, to)
 	return t.queryLinks(ctx, q, args...)
 }
 
