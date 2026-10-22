@@ -576,6 +576,21 @@ stopped project, or one below it, takes no new change) and moves it. `access.Pro
 write of an Assignment or a project at commit against the state it started from, `ProjectOwnerValidator` keeps an
 owner on a project that had one; the graph handler reads a node or a change only for who may access its project.
 
+**Reach and owned writes** ([ADR 0161](adr/0161-access-rights-and-data-segregation.md), phase 1): what a caller
+reads of the current graph is decided once, in the view reader (`graph/graph/view.go`, `reach.go`), never per
+handler: `Graph.ReachOf` (`graphsvc.ReachOf(directory.ReachableProjects)`, plugged by `platform/cmd/graph` and
+`goap-dev`) gives the projects whose nodes the caller reads (`access.Snapshot.ReachableProjects`: the projects
+`MayAccessProject` allows) and the namespaces read whole (organisation, platform, methodology). `ViewNode`,
+`ViewNeighbourhood`, `ViewNodes`, `ViewNodesOfType`, `QueryView`, `BaselineNodes` / `BaselineLinks` and
+`ExportSnapshot` leave out the nodes out of reach and every link touching one (no stub), the pages and counts filtered
+in the store (`NodeQuery.Projects` / `LinkQuery.Projects`, `n.project IN …`); `GetBaselineGraph`, `GetBaselineDelta`
+and `DiffBaselines` keep what `Reach.Keep` / `Sees` keep. A platform service acting for a person (`OnBehalfOf`) reads
+as that person (`graphsvc.Reader`); a service acting by itself, or an in-process call naming no principal, reads
+everything. A change checks out a stored node only when its project, or one above the node's, owns it
+(`Graph.OwnedWrites` = `graphsvc.OwnedWrites`: every namespace but the open ones; `checkOwned`, `authz.ErrForbidden`).
+The creator, the editor, the visibility scopes of the lifecycle states and the roles as action lists are the next
+phases of the ADR.
+
 **Roles** ([ADR 0035](adr/0035-methods-roles-operations-documents.md) §2, [ADR 0043](adr/0043-project-scoped-roles-admin-flag.md)):
 a methodology declares its roles (`methodology@Role` nodes, ADR 0039); its processes and methods assign them RACI
 style (`roles: {responsible, accountable, consulted, informed}` on a process, a method or a step; a process and a method

@@ -270,7 +270,14 @@ func (h *Handler) GetBaselineGraph(ctx context.Context, r *connect.Request[graph
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
+	reach, err := h.Graph.Reach(ctx)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	all := nodes
+	nodes, links = reach.Keep(slices.Clone(all), links) // what the caller reads only (ADR 0161 §5)
 	suspects, err := h.Graph.SuspectLinks(ctx, id)
+	_, suspects = reach.Keep(all, suspects)
 	return res(&graphv1.GetBaselineGraphResponse{Baseline: pbconv.BaselineToPB(b), Nodes: pbconv.NodesToPB(nodes),
 		Links: pbconv.LinksToPB(links), SuspectLinks: pbconv.LinksToPB(suspects)}, err)
 }
@@ -281,6 +288,11 @@ func (h *Handler) GetBaselineDelta(ctx context.Context, r *connect.Request[graph
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
+	reach, err := h.Graph.Reach(ctx)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	d.Nodes, d.Links = reach.Keep(d.Nodes, d.Links) // what the caller reads only (ADR 0161 §5)
 	removed := make([]string, len(d.Removed))
 	for i, id := range d.Removed {
 		removed[i] = string(id)
@@ -636,10 +648,11 @@ func (h *Handler) readable(ctx context.Context) func(domain.Change) bool {
 	}
 }
 
-// worksOn tells whether the caller works on a project: a platform service acting by itself does; a person when
-// Projects says so (a platform administrator or reader, a role or a flag of an Assignment on it or above it).
+// worksOn tells whether the caller works on a project: a platform service acting by itself does; a person, or a
+// service acting for one, when Projects says so (a platform administrator or reader, a role or a flag of an
+// Assignment on it or above it).
 func (h *Handler) worksOn(ctx context.Context, project string) bool {
-	who := authz.From(ctx)
+	who := Reader(authz.From(ctx)) // a service acting for a person works where that person does (ADR 0161 §5)
 	if who.System() {
 		return true
 	}
@@ -1419,8 +1432,15 @@ func (h *Handler) MergeBranch(ctx context.Context, r *connect.Request[graphv1.Me
 
 func (h *Handler) DiffBaselines(ctx context.Context, r *connect.Request[graphv1.DiffBaselinesRequest]) (*connect.Response[graphv1.DiffBaselinesResponse], error) {
 	ds, err := h.Graph.DiffBaselines(ctx, domain.BaselineID(r.Msg.From), domain.BaselineID(r.Msg.To))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	reach, err := h.Graph.Reach(ctx)
 	out := &graphv1.DiffBaselinesResponse{}
 	for _, d := range ds {
+		if (d.From != nil && !reach.Sees(*d.From)) || (d.To != nil && !reach.Sees(*d.To)) {
+			continue // a node the caller does not read (ADR 0161 §5)
+		}
 		pb := &graphv1.BaselineDiff{Node: string(d.Node), Key: d.Key, Type: d.Type, Kind: d.Kind}
 		if d.From != nil {
 			pb.From = pbconv.NodeToPB(*d.From)

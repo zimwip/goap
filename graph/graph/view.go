@@ -31,16 +31,24 @@ type world struct {
 	over   map[domain.NodeID]domain.Version
 	gone   map[domain.NodeID]bool
 	reader *draftReader
+	// reach is what the caller reads (nil: everything), vis what it was found to read of the nodes met
+	reach *Reach
+	vis   map[domain.NodeID]bool
+	// projects is the reach as the stores filter a page (nil: every node)
+	projects []string
 }
 
-// openWorld opens a view in a transaction.
-func (g *Graph) openWorld(ctx context.Context, tx Tx, v View) (*world, error) {
+// openWorld opens a view in a transaction, read by a caller of some reach (nil: everything; asked of g.reachOf before
+// the transaction).
+func (g *Graph) openWorld(ctx context.Context, tx Tx, v View, reach *Reach) (*world, error) {
 	if err := v.Check(); err != nil {
 		return nil, err
 	}
-	w := &world{view: v, reader: &draftReader{byNode: map[domain.NodeID]domain.Draft{}}}
+	w := &world{view: v, reader: &draftReader{byNode: map[domain.NodeID]domain.Draft{}}, vis: map[domain.NodeID]bool{}}
 	if !v.IsChange() {
 		w.baseline, w.namespace = v.Baseline, domain.NamespaceOf(v.Namespace)
+		w.reach = reach.in(w.namespace)
+		w.projects = g.projectsOf(w.reach)
 		if w.baseline == "" {
 			head, err := branchHeadHeader(ctx, tx, w.namespace, v.Branch)
 			if err != nil {
@@ -63,6 +71,8 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View) (*world, error) {
 		return nil, err
 	}
 	w.change, w.flow, w.baseline, w.namespace = &c, c.ResolveFlow(v.Flow), c.BaselineID, domain.NamespaceOf(c.Namespace)
+	w.reach = reach.in(w.namespace)
+	w.projects = g.projectsOf(w.reach)
 	if w.impacts, err = g.newFlowNodes(tx, c, w.flow).nodes(ctx); err != nil {
 		return nil, err
 	}
@@ -161,6 +171,13 @@ func (w *world) ref(ctx context.Context, tx Tx, id domain.NodeID, key string) (d
 		return domain.NodeRef{}, err
 	}
 	v, ok := at[id]
+	if ok && w.reach != nil {
+		n, err := w.node(ctx, tx, domain.NodeRef{ID: id, Version: v})
+		if err != nil {
+			return domain.NodeRef{}, err
+		}
+		ok = w.sees(n)
+	}
 	if !ok {
 		what := string(id)
 		if key != "" {
@@ -174,8 +191,12 @@ func (w *world) ref(ctx context.Context, tx Tx, id domain.NodeID, key string) (d
 // ViewNode reads a node as a view holds it, by id or, when id is empty, by key: with its links, the latest version of
 // the node anywhere for reference (ADR 0157).
 func (g *Graph) ViewNode(ctx context.Context, v View, id domain.NodeID, key string) (nv domain.NodeView, err error) {
+	reach, err := g.reachOf(ctx)
+	if err != nil {
+		return nv, err
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.openWorld(ctx, tx, v)
+		w, err := g.openWorld(ctx, tx, v, reach)
 		if err != nil {
 			return err
 		}
@@ -186,7 +207,10 @@ func (g *Graph) ViewNode(ctx context.Context, v View, id domain.NodeID, key stri
 		if err := w.preloadIn(ctx, tx, ref); err != nil {
 			return err
 		}
-		nv, err = viewIn(ctx, tx, w.reader, ref)
+		if nv, err = viewIn(ctx, tx, w.reader, ref); err != nil {
+			return err
+		}
+		nv.Out, nv.In, err = w.keepLinks(ctx, tx, nv.Out, nv.In)
 		return err
 	})
 	return
@@ -203,8 +227,12 @@ func (g *Graph) ViewNeighbourhood(ctx context.Context, v View, nodeID domain.Nod
 // which reads those link types only, by the indexes of the links by source or target and type (a query's hop, ADR
 // 0160). A type is matched as written or, unqualified, qualified by the namespace of the view.
 func (g *Graph) ViewNeighbourhoodOf(ctx context.Context, v View, nodeID domain.NodeID, types []string) (nb Neighbourhood, err error) {
+	reach, err := g.reachOf(ctx)
+	if err != nil {
+		return nb, err
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.openWorld(ctx, tx, v)
+		w, err := g.openWorld(ctx, tx, v, reach)
 		if err != nil {
 			return err
 		}
@@ -243,6 +271,9 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID, 
 	ref := domain.NodeRef{ID: nodeID, Version: v}
 	if nb.Node, err = w.node(ctx, tx, ref); err != nil {
 		return nb, err
+	}
+	if !w.sees(nb.Node) {
+		return Neighbourhood{}, fmt.Errorf("node %s in %s: %w", nodeID, w.view, ErrNotFound)
 	}
 	keep := func(l domain.Link) bool { return types == nil || slices.Contains(types, l.Type) }
 	// Outgoing links belong to the source version: all of them are the node's. Incoming links may target any version
@@ -293,18 +324,21 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID, 
 	if at, err = w.at(ctx, tx, slices.Compact(near)); err != nil {
 		return nb, err
 	}
+	// a neighbour the caller does not read is left out with the links to it (ADR 0161 §5: no stub)
 	seen := map[domain.NodeID]bool{nodeID: true}
-	add := func(r domain.NodeRef) error {
-		if seen[r.ID] {
-			return nil
+	add := func(r domain.NodeRef) (bool, error) {
+		if v, ok := seen[r.ID]; ok {
+			return v, nil
 		}
-		seen[r.ID] = true
 		n, err := w.node(ctx, tx, r)
 		if err != nil {
-			return err
+			return false, err
 		}
-		nb.Nodes = append(nb.Nodes, n)
-		return nil
+		seen[r.ID] = w.sees(n)
+		if seen[r.ID] {
+			nb.Nodes = append(nb.Nodes, n)
+		}
+		return seen[r.ID], nil
 	}
 	for _, l := range out {
 		if l.External() {
@@ -312,16 +346,20 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID, 
 			continue
 		}
 		to := l.To
+		suspect := false
 		if tv, ok := at[to.ID]; ok {
-			if tv != to.Version && tv != 0 && to.Version != 0 {
-				nb.Suspect = append(nb.Suspect, l.ID)
-			}
+			suspect = tv != to.Version && tv != 0 && to.Version != 0
 			to.Version = tv
 		} else if to.IsDraft() {
 			continue // a draft the change no longer holds
 		}
-		if err := add(to); err != nil {
+		if ok, err := add(to); err != nil {
 			return nb, err
+		} else if !ok {
+			continue
+		}
+		if suspect {
+			nb.Suspect = append(nb.Suspect, l.ID)
 		}
 		nb.Links = append(nb.Links, l)
 	}
@@ -337,13 +375,15 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID, 
 		if fv, ok := at[l.From.ID]; !ok || fv != l.From.Version {
 			continue // not the version of its source the world holds
 		}
+		if ok, err := add(l.From); err != nil {
+			return nb, err
+		} else if !ok {
+			continue
+		}
 		if l.To.Version != 0 && v != 0 && l.To.Version != v {
 			nb.Suspect = append(nb.Suspect, l.ID)
 		}
 		taken[l.ID] = true
-		if err := add(l.From); err != nil {
-			return nb, err
-		}
 		nb.Links = append(nb.Links, l)
 	}
 	return nb, nil
@@ -405,12 +445,16 @@ func (w *world) entering(ctx context.Context, tx Tx, nodeID domain.NodeID) ([]do
 // its baseline (BaselineNodes); for a change view the page of its fork with what the change wrote laid over it (its
 // commits, its drafts, the nodes it created), read for those nodes only.
 func (g *Graph) ViewNodes(ctx context.Context, v View, q NodeQuery) (page NodePage, err error) {
+	reach, err := g.reachOf(ctx)
+	if err != nil {
+		return page, err
+	}
 	if q.Limit <= 0 || q.Limit > MaxBrowseLimit {
 		q.Limit = MaxBrowseLimit
 	}
 	q.Offset = max(q.Offset, 0)
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.openWorld(ctx, tx, v)
+		w, err := g.openWorld(ctx, tx, v, reach)
 		if err != nil {
 			return err
 		}
@@ -425,8 +469,12 @@ func (g *Graph) ViewNodes(ctx context.Context, v View, q NodeQuery) (page NodePa
 // (ADR 0157): an explicit read of a whole type, what a script's ctx.nodes, a prompt template or an existence check asks
 // for. One transaction and one read of the state, however many nodes come back.
 func (g *Graph) ViewNodesOfType(ctx context.Context, v View, typ string) (out []domain.Node, err error) {
+	reach, err := g.reachOf(ctx)
+	if err != nil {
+		return nil, err
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.openWorld(ctx, tx, v)
+		w, err := g.openWorld(ctx, tx, v, reach)
 		if err != nil {
 			return err
 		}
@@ -444,8 +492,9 @@ func (g *Graph) ViewNodesOfType(ctx context.Context, v View, typ string) (out []
 	return out, err
 }
 
-// page is a page of the nodes of the world.
+// page is a page of the nodes of the world the caller reads.
 func (w *world) page(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error) {
+	q.Projects = w.projects
 	if w.change != nil {
 		return w.nodes(ctx, tx, q)
 	}
@@ -501,7 +550,9 @@ func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error)
 		if err != nil {
 			return NodePage{}, err
 		}
-		written = append(written, n)
+		if w.sees(n) {
+			written = append(written, n)
+		}
 	}
 
 	// the fork, the nodes the change wrote left out, paged with room for them
@@ -543,8 +594,12 @@ func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error)
 // ViewVersions answers what a view holds of some nodes (ADR 0157): their versions in it, read by node, and whether it
 // is the head of main. The index keeps the hits of a search a view holds with it.
 func (g *Graph) ViewVersions(ctx context.Context, v View, ids []domain.NodeID) (st ViewState, err error) {
+	reach, err := g.reachOf(ctx)
+	if err != nil {
+		return st, err
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.openWorld(ctx, tx, v)
+		w, err := g.openWorld(ctx, tx, v, reach)
 		if err != nil {
 			return err
 		}
@@ -568,9 +623,13 @@ func (g *Graph) ViewVersions(ctx context.Context, v View, ids []domain.NodeID) (
 // (case-insensitive; empty: all), at most limit, by key: the nodes the index has no document of yet (ADR 0157). A branch
 // view holds none.
 func (g *Graph) ViewDrafts(ctx context.Context, v View, text string, limit int) (out []domain.Node, err error) {
+	reach, err := g.reachOf(ctx)
+	if err != nil {
+		return nil, err
+	}
 	text = strings.ToLower(strings.TrimSpace(text))
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.openWorld(ctx, tx, v)
+		w, err := g.openWorld(ctx, tx, v, reach)
 		if err != nil || w.change == nil {
 			return err
 		}

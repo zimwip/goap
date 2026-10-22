@@ -45,6 +45,16 @@ func TestMayAccessProject(t *testing.T) {
 			t.Errorf("%s on %s = %v, want %v", c.who.Subject, c.project, got, c.want)
 		}
 	}
+	// the reach of the view reader is the projects one may access (ADR 0161 §5, phase 1)
+	if got := strings.Join(s.ReachableProjects(dev), ","); got != "PROJ-A,PROJ-A1" {
+		t.Errorf("reach of dev: %s", got)
+	}
+	if got := len(s.ReachableProjects(admin)); got != 4 {
+		t.Errorf("reach of an administrator: %d projects, want 4 (phase 1 keeps the platform roles' access)", got)
+	}
+	if got := s.ReachableProjects(authz.Principal{}); got != nil {
+		t.Errorf("reach of no one: %v", got)
+	}
 }
 
 // The methodologies of a project are its own and those of its ancestors, nearest first, without repeats; a project that

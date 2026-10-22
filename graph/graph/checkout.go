@@ -594,6 +594,9 @@ func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string
 		if domain.NamespaceOf(base.Namespace) != w.ns {
 			return domain.Draft{}, invalidf("node %s is in namespace %s, the change acts on %s", base.Key, domain.NamespaceOf(base.Namespace), w.ns)
 		}
+		if err := g.checkOwned(ctx, tx, w.c, *base); err != nil {
+			return domain.Draft{}, err
+		}
 		links, err := tx.OutLinks(ctx, base.Ref())
 		if err != nil {
 			return domain.Draft{}, err

@@ -18,7 +18,10 @@ type NodeQuery struct {
 	IncludeDeleted bool
 	// Change keeps the nodes the impacts of that change act on, at their version in the baseline: they are read node
 	// by node, so the answer and its cost follow the change, not the size of the baseline.
-	Change        domain.ChangeID
+	Change domain.ChangeID
+	// Projects keeps the nodes of these projects, as the nodes store them (nil: every project): the reach of the
+	// caller (ADR 0161 §5), set by the graph's view reader, never by a caller.
+	Projects      []string
 	Offset, Limit int
 }
 
