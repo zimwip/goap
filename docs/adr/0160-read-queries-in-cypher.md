@@ -78,6 +78,16 @@ would ignore the views and need keeping in sync.
    `keep`: the center always kept, a link kept while both its ends are), its rows a table above the graph (a node of a
    row recenters the pane, a double click opens it).
 
+8. **The query boxes complete from the registry** (`web/src/lib/cypherComplete.ts`, pure; a CodeMirror editor,
+   `CodeEditor` `complete` / `onrun`, `completionFrom` and `runKey` of `codemirror.ts`). After `(x:` the node types;
+   after `[:` (or `|`) the link types the node on the left holds, its outgoing ones then its entering ones, only the
+   entering ones behind `<-`; after `]->(x:` the node types the link reaches first (its sources behind `<-`), read from
+   the link's types, else from those the node on the left holds; after `x.` and in `{` the attributes of the variable's
+   type (the node's own fields after them, a link's `type` and `id`). A variable's type is its label anywhere in the
+   query, else the bound one (`n`, the node of the Graph pane). A type of the namespace read is named bare, another
+   escaped with its namespace (`` `code@File` ``); a link whose end names the type ranks before one whose end is open.
+   Elsewhere the keywords, the functions and the variables of the query (Ctrl+Space when nothing is typed).
+
 ## Consequences
 
 - A question about the shape of the graph is one query, answered in the same view as every other read.

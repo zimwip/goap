@@ -5,7 +5,7 @@
   // a namespace whole. Laid out by a force simulation (d3-force); select a node to see its links, expand it, open it.
   // A read query (ADR 0160, a subset of openCypher) runs in the view of a namespace and lays what it found in the graph.
   import { isMeta, ns as nsNames, defaultOrg } from '../../stores/session.svelte';
-  import { typeCatalog } from '../../stores/types.svelte';
+  import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { working } from '../../stores/workingChange.svelte';
   import { untrack } from 'svelte';
   import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY, type SimulationNodeDatum, type SimulationLinkDatum } from 'd3-force';
@@ -17,6 +17,8 @@
   import { cellNodes, cellOf, nodeLabel, queryHood, querySummary, QUERY_EXAMPLES, valueText } from '../../graphQuery';
   import { namespaceOf } from '../../namespace';
   import type { QueryResult } from '../../api';
+  import CodeEditor from '../../components/CodeEditor.svelte';
+  import { cypherSuggestions } from '../../cypherComplete';
 
   let { tab }: { tab: Tab } = $props();
   void untrack(() => tab);
@@ -147,12 +149,9 @@
     delete next[QUERY_HOOD];
     hoods = next;
   }
-  function queryKey(e: KeyboardEvent) {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      void runQuery();
-    }
-  }
+  // the query's completion: the types and links of the registry, as the namespace it reads names them
+  void loadTypes();
+  const completeQuery = (text: string, pos: number, explicit: boolean) => cypherSuggestions(text, pos, { cat: typeCatalog.cat, namespace: queryNs }, explicit);
   /** Selects the first node a cell names in the canvas. */
   function pick(v: unknown) {
     const id = cellNodes(cellOf(v, result ?? {})).find((i) => view.byId.has(i));
@@ -330,15 +329,19 @@
   </div>
   {#if queryOpen}
     <div class="query">
-      <textarea
-        class="mono"
-        rows="4"
-        spellcheck="false"
-        bind:value={queryText}
-        onkeydown={queryKey}
-        aria-label="Query (a subset of openCypher)"
-        placeholder="MATCH (r:Requirement)-[:satisfies]->(n) WHERE n.title CONTAINS 'pay' RETURN r, n"
-      ></textarea>
+      <div class="query-text">
+        <CodeEditor
+          bind:value={queryText}
+          lineNumbers={false}
+          wrap
+          minHeight="5.5rem"
+          maxHeight="16rem"
+          label="Query (a subset of openCypher)"
+          placeholder="MATCH (r:Requirement)-[:satisfies]->(n) WHERE n.title CONTAINS 'pay' RETURN r, n"
+          complete={completeQuery}
+          onrun={() => void runQuery()}
+        />
+      </div>
       <div class="query-side">
         <label>
           In
@@ -362,7 +365,7 @@
           {#if result}<button type="button" class="small" onclick={clearQuery}>Clear result</button>{/if}
         </div>
         <span class="hint" title="Read-only MATCH … WHERE … RETURN; a pattern starts from a label, a key or an id; hops, anchors and rows are capped (ADR 0160)">
-          Ctrl+Enter runs it, in the view of the context
+          Ctrl+Space suggests, Ctrl+Enter runs it, in the view of the context
         </span>
       </div>
     </div>
@@ -520,11 +523,9 @@
     margin-top: 6px;
     flex-wrap: wrap;
   }
-  .query textarea {
+  .query-text {
     flex: 1;
     min-width: 260px;
-    resize: vertical;
-    font-size: 0.9em;
   }
   .query-side {
     display: flex;

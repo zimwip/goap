@@ -2,7 +2,7 @@
 // (light / dark), JavaScript syntax highlighting and `ctx` DSL completion, and the
 // languages of the source text of code attributes (codeText.ts).
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, placeholder as placeholderExt } from '@codemirror/view';
-import { EditorState, Compartment, type Extension } from '@codemirror/state';
+import { EditorState, Compartment, Prec, type Extension } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import {
   HighlightStyle,
@@ -180,6 +180,33 @@ export function baseExtensions(opts: { lineNumbers: boolean; placeholder?: strin
     EditorState.tabSize.of(opts.lineNumbers ? 4 : 2),
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...foldKeymap, ...completionKeymap, indentWithTab]),
   ];
+}
+
+/** What a completion function answers: where the word starts and what may stand there (cypherComplete.ts). */
+export interface TextCompletions {
+  from: number;
+  options: { label: string; kind: string; detail?: string; info?: string; boost?: number }[];
+}
+
+const COMPLETION_TYPES: Record<string, string> = { type: 'class', link: 'interface', property: 'property', keyword: 'keyword', variable: 'variable', function: 'function' };
+
+/** Completion from a function of the text and the cursor, whatever the language (`explicit`: asked with Ctrl+Space). */
+export function completionFrom(fn: (text: string, pos: number, explicit: boolean) => TextCompletions | null): Extension {
+  const source = (c: CompletionContext): CompletionResult | null => {
+    const r = fn(c.state.doc.toString(), c.pos, c.explicit);
+    if (!r || !r.options.length) return null;
+    return {
+      from: r.from,
+      options: r.options.map((o) => ({ label: o.label, type: COMPLETION_TYPES[o.kind] ?? 'text', detail: o.detail, info: o.info, boost: o.boost })),
+      validFor: /^`?[\w@]*`?$/,
+    };
+  };
+  return EditorState.languageData.of(() => [{ autocomplete: source }]);
+}
+
+/** Runs `run` on Mod-Enter (the query boxes), before any other binding of the key. */
+export function runKey(run: () => void): Extension {
+  return Prec.highest(keymap.of([{ key: 'Mod-Enter', run: () => (run(), true) }]));
 }
 
 // --- highlighting outside an editor ------------------------------------------------

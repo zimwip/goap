@@ -746,7 +746,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
               {#if graphNode !== id || graphLink}
                 <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
               {/if}
-              <NodeQuery view={{ changeId: work.change.id ?? '', flow: workFlow }} from={graphNode} fromKey={graphKey} bind:keep={graphKeep} onpick={pickInGraph} />
+              <NodeQuery view={{ changeId: work.change.id ?? '', flow: workFlow }} from={graphNode} fromKey={graphKey} fromType={graphHood.center?.type ?? typeName} namespace={stored.namespace ?? ''} bind:keep={graphKeep} onpick={pickInGraph} />
               <NodeNeighbourhood baselineId={work.change.baselineId ?? ''} inChange={{ changeId: work.change.id ?? '', flow: workFlow }} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} bind:hood={graphHood} keep={graphKeep} details={false} compact fill {reload} />
             </section>
           {:else if !work && head?.baselineId && head.nodes.has(id)}
@@ -754,7 +754,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
               {#if graphNode !== id || graphLink}
                 <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
               {/if}
-              <NodeQuery view={branchView(stored.namespace ?? '', head.baselineId)} from={graphNode} fromKey={graphKey} bind:keep={graphKeep} onpick={pickInGraph} />
+              <NodeQuery view={branchView(stored.namespace ?? '', head.baselineId)} from={graphNode} fromKey={graphKey} fromType={graphHood.center?.type ?? typeName} namespace={stored.namespace ?? ''} bind:keep={graphKeep} onpick={pickInGraph} />
               <NodeNeighbourhood baselineId={head.baselineId} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} bind:hood={graphHood} keep={graphKeep} details={false} compact fill {reload} />
             </section>
           {:else}

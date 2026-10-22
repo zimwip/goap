@@ -5,11 +5,16 @@
   import { graph as graphApi, errorMessage, type GraphNode, type GraphView, type QueryResult } from '../api';
   import { cellOf, matchesFilter, nodeLabel, querySummary, NODE_QUERY_EXAMPLES, valueText } from '../graphQuery';
   import { openNode } from '../nodeEditors';
+  import { cypherSuggestions } from '../cypherComplete';
+  import { loadTypes, typeCatalog } from '../stores/types.svelte';
+  import CodeEditor from './CodeEditor.svelte';
 
   let {
     view,
     from,
     fromKey,
+    fromType = '',
+    namespace = '',
     keep = $bindable(),
     onpick,
   }: {
@@ -18,6 +23,10 @@
     /** the node at the center, the query's `n` */
     from: string;
     fromKey: string;
+    /** its type, what `n` is to the completion */
+    fromType?: string;
+    /** the namespace the pane reads: its types are named bare */
+    namespace?: string;
     /** the nodes the pane shows (unset: every one) */
     keep?: (n: GraphNode) => boolean;
     /** a node of a row picked: the pane centers on it */
@@ -56,12 +65,10 @@
       running = false;
     }
   }
-  function key(e: KeyboardEvent) {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      void run();
-    }
-  }
+  // the query's completion: the registry's types and links, `n` being the node's type
+  void loadTypes();
+  const complete = (q: string, pos: number, explicit: boolean) =>
+    cypherSuggestions(q, pos, { cat: typeCatalog.cat, namespace, bound: fromType ? { n: fromType } : {} }, explicit);
 </script>
 
 <div class="bar">
@@ -71,15 +78,19 @@
 </div>
 {#if open}
   <div class="query">
-    <textarea
-      class="mono"
-      rows="3"
-      spellcheck="false"
-      bind:value={text}
-      onkeydown={key}
-      aria-label="Query (a subset of openCypher)"
-      placeholder="MATCH (n)-[l]-(m) WHERE m.title CONTAINS 'pay' RETURN m"
-    ></textarea>
+    <div class="text">
+      <CodeEditor
+        bind:value={text}
+        lineNumbers={false}
+        wrap
+        minHeight="4.5rem"
+        maxHeight="12rem"
+        label="Query (a subset of openCypher)"
+        placeholder="MATCH (n)-[l]-(m) WHERE m.title CONTAINS 'pay' RETURN m"
+        {complete}
+        onrun={() => void run()}
+      />
+    </div>
     <div class="side">
       <span class="hint">From <span class="mono">n</span> = {fromKey}</span>
       <select
@@ -94,7 +105,7 @@
         {#each NODE_QUERY_EXAMPLES as x (x.label)}<option value={x.query}>{x.label}</option>{/each}
       </select>
       <button type="button" class="small primary" onclick={() => void run()} disabled={running || !text.trim()}>{running ? 'Running…' : 'Run'}</button>
-      <span class="hint" title="Read-only MATCH, OPTIONAL MATCH, WHERE (EXISTS, patterns), RETURN; hops and rows are capped (ADR 0160)">Ctrl+Enter runs it</span>
+      <span class="hint" title="Read-only MATCH, OPTIONAL MATCH, WHERE (EXISTS, patterns), RETURN; hops and rows are capped (ADR 0160)">Ctrl+Space suggests, Ctrl+Enter runs it</span>
     </div>
   </div>
   {#if error}<div class="alert mono">{error}</div>{/if}
@@ -149,11 +160,9 @@
     flex-wrap: wrap;
     margin-bottom: 6px;
   }
-  .query textarea {
+  .query .text {
     flex: 1;
     min-width: 260px;
-    resize: vertical;
-    font-size: 0.9em;
   }
   .side {
     display: flex;
