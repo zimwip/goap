@@ -60,7 +60,7 @@
     return {
       nodes: picked,
       search: async (query) =>
-        b ? ((await graph.listBaselineNodes({ baselineId: b, query, limit: 200 })).nodes ?? []).filter((n) => n.key && !n.deleted).map(optionOf) : [],
+        b ? ((await graph.listBaselineNodes({ view: { namespace: namespaceOf(t), branch: MAIN_BRANCH, baselineId: b }, query, limit: 200 })).nodes ?? []).filter((n) => n.key && !n.deleted).map(optionOf) : [],
       remember: (n) => {
         if (!picked.some((p) => p.key === n.key)) picked = [...picked, n];
       },

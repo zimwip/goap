@@ -43,7 +43,7 @@
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
-  import { baselineHoods, changeHoods, hoodIndex, hoodOf, indexOf, type GraphIndex, type Hood } from '../../graphIndex';
+  import { baselineHoods, branchView, changeHoods, forkView, hoodIndex, hoodOf, indexOf, type GraphIndex, type Hood } from '../../graphIndex';
   import { MAIN_BRANCH, namespaceOf } from '../../namespace';
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { assistField, registerAssist } from '../../assist/registry.svelte';
@@ -154,7 +154,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
       nodeNamespace = namespace;
       const hid = (await graph.getBranch(namespace, MAIN_BRANCH, signal)).head?.id ?? '';
       const again = headAt?.id === hid && headAt.node === id ? readAgain(headAt.hoods) : [id];
-      headAt = { id: hid, node: id, hoods: hid ? await Promise.all(again.map((n) => hoodOf(baselineHoods(hid), n, signal))) : [] };
+      headAt = { id: hid, node: id, hoods: hid ? await Promise.all(again.map((n) => hoodOf(baselineHoods(branchView(namespace, hid)), n, signal))) : [] };
       if (!changes.loaded) void refreshChanges();
     } catch (e) {
       if (!signal?.aborted) error = errorMessage(e);
@@ -164,8 +164,8 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   }
 
   /** the fork of a change (the empty state for the first change of a namespace, ADR 0056) */
-  const loadFork = async (baselineId?: string): Promise<GraphIndex> =>
-    baselineId ? hoodIndex(baselineId, [await hoodOf(baselineHoods(baselineId), id)]) : indexOf('', [], []);
+  const loadFork = async (c: Change): Promise<GraphIndex> =>
+    c.baselineId ? hoodIndex(c.baselineId, [await hoodOf(baselineHoods(await forkView(c)), id)]) : indexOf('', [], []);
   /** the neighbourhoods of the world of the change: the node's, and the ones read so far when it is the same change */
   let worldOf = '';
   async function loadWorld(flow = '') {
@@ -189,7 +189,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
         if (!change) throw new Error('unknown change');
         const attached = (change.nodes ?? []).filter((n) => n.pre?.id && !n.superseded).map((n) => n.pre!);
         const flowName = workFlow === 'main' ? 'main flow' : (bb.options?.find((o) => o.id === workFlow)?.option?.name ?? shortId(workFlow));
-        const [base, hoods, posts] = await Promise.all([loadFork(change.baselineId), loadWorld(workFlow), loadPosts(change.nodes ?? [], true, { changeId: workId, flow: workFlow })]);
+        const [base, hoods, posts] = await Promise.all([loadFork(change), loadWorld(workFlow), loadPosts(change.nodes ?? [], true, { changeId: workId, flow: workFlow })]);
         worldHoods = hoods;
         work = { change, flowName, base, attached, posts };
         return;
@@ -197,7 +197,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
       const change = (await graph.getChange(workId)).change;
       if (!change) throw new Error('unknown change');
       const [base, hoods, attached, posts] = await Promise.all([
-        loadFork(change.baselineId),
+        loadFork(change),
         loadWorld(),
         graph.getChangeImpacts(workId),
         loadPosts(change.nodes ?? [], false, { changeId: workId }),
@@ -250,7 +250,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
         if (w === workId && f === workFlow) worldHoods = [...worldHoods, h];
       } else if (headAt?.id) {
         const at = headAt.id;
-        const h = await hoodOf(baselineHoods(at), nid);
+        const h = await hoodOf(baselineHoods(branchView(nodeNamespace, at)), nid);
         if (headAt?.id === at) headAt = { ...headAt, hoods: [...headAt.hoods, h] };
       }
     } catch (e) {
@@ -261,15 +261,11 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   /** nodes picked from a search (the pickers of links and forms): the world read holds the node's neighbours only */
   let picked = $state<GraphNode[]>([]);
   let foundByKey = new Map<string, GraphNode>();
-  /** the nodes matching a text: the ones of the fork of the change (else of the head), and the ones the change creates */
+  /** the nodes matching a text in the view (ADR 0157): the world of the working change on its option, else the head */
   async function searchNodes(query: string): Promise<GraphNode[]> {
-    const baselineId = work ? work.change.baselineId : head?.baselineId;
-    const found = baselineId ? ((await graph.listBaselineNodes({ baselineId, query, limit: 200 })).nodes ?? []) : [];
-    const q = query.trim().toLowerCase();
-    const created = (work?.change.nodes ?? [])
-      .filter((c) => c.intent === 'created' && c.post?.id && !c.superseded && (!q || `${c.key} ${c.type}`.toLowerCase().includes(q)))
-      .map((c): GraphNode => ({ id: c.post?.id, version: 0, key: c.key, type: c.type, namespace: work?.change.namespace }));
-    const out = [...created, ...found.filter((n) => !n.deleted)];
+    const view = work ? { changeId: work.change.id, flow: workFlow } : head?.baselineId ? branchView(nodeNamespace, head.baselineId) : undefined;
+    const found = view ? ((await graph.listBaselineNodes({ view, query, limit: 200 })).nodes ?? []) : [];
+    const out = found.filter((n) => !n.deleted);
     foundByKey = new Map(out.flatMap((n) => (n.key ? [[n.key, n] as const] : [])));
     return out;
   }

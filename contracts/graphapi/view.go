@@ -10,8 +10,8 @@ import (
 // change on a flow (its pending work over the branch it forked from). Only the reads of the history (a node's versions,
 // a diff, a change-stack) name versions instead.
 type View struct {
-	// Namespace and Branch name a lasting branch (Branch empty: main); Baseline one of its baselines (empty: its head
-	// when the read starts).
+	// Namespace and Branch name a lasting branch, both required: no branch is assumed; Baseline one of its baselines
+	// (empty: its head when the read starts).
 	Namespace string
 	Branch    string
 	Baseline  domain.BaselineID
@@ -22,17 +22,17 @@ type View struct {
 }
 
 // ErrNoView refuses a read of the current graph that names no view.
-var ErrNoView = fmt.Errorf("no view: name a branch and a baseline, or a change and its option: %w", ErrInvalid)
+var ErrNoView = fmt.Errorf("no view: name a branch (its namespace and its name) and optionally a baseline, or a change and its option: %w", ErrInvalid)
 
 // IsChange tells a change view.
 func (v View) IsChange() bool { return v.Change != "" }
 
-// Check refuses a view that names neither a change nor a branch (a namespace, or a baseline), or both.
+// Check refuses a view that names neither a change nor a branch (its namespace and its name), or both.
 func (v View) Check() error {
 	switch {
 	case v.Change != "" && (v.Namespace != "" || v.Branch != "" || v.Baseline != ""):
 		return fmt.Errorf("a view names a change or a branch, not both: %w", ErrInvalid)
-	case v.Change == "" && v.Namespace == "" && v.Baseline == "":
+	case v.Change == "" && (v.Namespace == "" || v.Branch == ""):
 		return ErrNoView
 	}
 	return nil
@@ -46,12 +46,8 @@ func (v View) String() string {
 		}
 		return fmt.Sprintf("change %s", v.Change)
 	}
-	b := v.Branch
-	if b == "" {
-		b = domain.MainBranch
-	}
 	if v.Baseline != "" {
-		return fmt.Sprintf("%s/%s at %s", v.Namespace, b, v.Baseline)
+		return fmt.Sprintf("%s/%s at %s", v.Namespace, v.Branch, v.Baseline)
 	}
-	return fmt.Sprintf("%s/%s", v.Namespace, b)
+	return fmt.Sprintf("%s/%s", v.Namespace, v.Branch)
 }

@@ -1576,7 +1576,10 @@ for the namespace the working change acts on, the change on that option; for the
 head of main. A screen reads of it only what it shows (a neighbourhood, a page of a search; `viewHoods`, `searchView`):
 the node tab, the pickers, the *New object* dialog, the human tasks (the nodes of their change, `lifecycle.changeNodes`,
 the rest searched) and the Graph explorer (a neighbourhood at a time, from the organisation or a node found); the
-Baseline explorer is the exception, it shows the commit the person picks. The choice of project persists the choice locally (`goap-dev`, with no token to reissue, keeps a
+Baseline explorer is the exception, it shows the commit the person picks. Every such read names its view to the graph (ADR 0157: `graphView`
+of the context view, `branchView` for a baseline of a branch, `forkView` for a change's fork): the graph refuses a read of
+the current graph naming no branch and no change, and assumes no branch; a search of a change view is the server's, the
+nodes it creates and its drafts included. The choice of project persists the choice locally (`goap-dev`, with no token to reissue, keeps a
 fixed `GOAP_DEV_PROJECT` env var instead, like `GOAP_DEV_ORG`). Assignment has no nav entry of its own: an
 "Assignments" pane on the Organisation, Project and User editors (one `AssignmentsPane.svelte`,
 parametrized by which side is fixed) offers a "+ Assignment" action, and each explorer's context menu

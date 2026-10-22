@@ -41,7 +41,8 @@ type NodePage struct {
 	// Total is the number of nodes matching the query (all pages).
 	Total int
 	// Types counts the nodes of each type matching the text filter (the type filter aside), sorted by type.
-	Types []TypeCount
+	Types    []TypeCount // Baseline is the baseline the page was read at (a change view: its fork).
+	Baseline domain.BaselineID
 }
 
 // BaselineNodes returns a page of the nodes of a baseline, ordered by key: the store filters, counts and reads the page
@@ -239,7 +240,11 @@ type Neighbourhood struct {
 // NodeNeighbourhood returns a node of a baseline with its direct neighbours; it reads the versions of the node and of
 // its neighbours in the baseline, never its whole state (ADR 0137).
 func (g *Graph) NodeNeighbourhood(ctx context.Context, id domain.BaselineID, nodeID domain.NodeID) (Neighbourhood, error) {
-	return g.ViewNeighbourhood(ctx, View{Baseline: id}, nodeID)
+	b, err := g.BaselineHeader(ctx, id)
+	if err != nil {
+		return Neighbourhood{}, err
+	}
+	return g.ViewNeighbourhood(ctx, View{Namespace: b.Namespace, Branch: b.Branch, Baseline: id}, nodeID)
 }
 
 // ChangeNodeNeighbourhood returns a node and its direct neighbours as a change sees them (its world, ChangeWorld): the

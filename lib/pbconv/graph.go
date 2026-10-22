@@ -74,6 +74,20 @@ func RefFromPB(r *graphv1.NodeRef) domain.NodeRef {
 	return domain.NodeRef{ID: domain.NodeID(r.Id), Version: domain.Version(r.Version)}
 }
 
+// GraphViewFromPB reads the view of a read (ADR 0157); none is the zero view, which the graph refuses.
+func GraphViewFromPB(v *graphv1.View) graphapi.View {
+	if v == nil {
+		return graphapi.View{}
+	}
+	return graphapi.View{Namespace: v.Namespace, Branch: v.Branch, Baseline: domain.BaselineID(v.BaselineId),
+		Change: domain.ChangeID(v.ChangeId), Flow: v.Flow}
+}
+
+// GraphViewToPB writes the view of a read (ADR 0157).
+func GraphViewToPB(v graphapi.View) *graphv1.View {
+	return &graphv1.View{Namespace: v.Namespace, Branch: v.Branch, BaselineId: string(v.Baseline), ChangeId: string(v.Change), Flow: v.Flow}
+}
+
 func RefPtrFromPB(r *graphv1.NodeRef) *domain.NodeRef {
 	if r == nil || r.Id == "" {
 		return nil

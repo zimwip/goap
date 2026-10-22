@@ -233,6 +233,20 @@ message RepublishIndexResponse {
   int32 versions = 1;
 }
 
+// View is what a read of the current graph is scoped to (ADR 0157): a lasting branch at one of its baselines, or a
+// change on a flow (its fork, its commits and the drafts of that flow). A read of the current graph naming none is
+// refused (INVALID_ARGUMENT); only the reads of the history name versions instead.
+message View {
+  // a lasting branch (empty: main) of a namespace, at one of its baselines (empty: its head when the read starts; a
+  // baseline alone names its namespace)
+  string namespace = 1;
+  string branch = 2;
+  string baseline_id = 3;
+  // a change on a flow ("main" or an option id; empty: the active option, else the main flow), in place of a branch
+  string change_id = 4;
+  string flow = 5;
+}
+
 message NodeRef {
   string id = 1;
   int32 version = 2;
@@ -442,16 +456,13 @@ message ImpactValidation {
 
 
 message GetNodeRequest {
-  // version 0 = latest (with change_id: the draft the change holds of the node, if any, ADR 0079)
+  // a version of a node (history: no view), or with version 0 the node as the view holds it (a node a change holds a
+  // draft of is read through the draft, version 0, ADR 0079)
   NodeRef ref = 1;
-  // alternative to ref: latest version of the node with this key
+  // alternative to ref: the node with this key as the view holds it
   string key = 2;
-  // namespace of key (required with a type catalogue)
-  string namespace = 3;
-  // read the node as this change sees it on a flow ("" = the main flow, else the active option): a node the change holds a
-  // draft of is read through the draft (a draft reference: version 0), others as the stored version (ADR 0079)
-  string change_id = 4;
-  string flow = 5;
+  // the view of a read by key or at version 0 (ADR 0157); required then
+  View view = 3;
 }
 
 message GetNodeResponse {
@@ -545,7 +556,8 @@ message GetBaselineDeltaResponse {
 }
 
 message ListBaselineNodesRequest {
-  string baseline_id = 1;
+  // the view paged (ADR 0157): a baseline, or a change with what it wrote laid over its fork; required
+  View view = 1;
   // qualified node type ("alm@Requirement"); empty: every type
   string type = 2;
   // case-insensitive text matched against the key, the type and the string properties
@@ -596,13 +608,10 @@ message ListBaselineLinksResponse {
 }
 
 message GetNodeNeighbourhoodRequest {
-  string baseline_id = 1;
+  // the view the node is read in (ADR 0157): a baseline, or the world of a change on a flow (its fork as it left it,
+  // its commits, its drafts); the cost follows the node, never the size of the world; required
+  View view = 1;
   string node_id = 2;
-  // the neighbourhood in the world of this change (Graph.ChangeNodeNeighbourhood: its fork as it left it, its commits,
-  // its drafts), in place of a baseline: the cost follows the node, never the size of the world
-  string change_id = 3;
-  // flow or option of the change (empty: the active option, else the main flow)
-  string flow = 4;
 }
 
 message GetNodeNeighbourhoodResponse {

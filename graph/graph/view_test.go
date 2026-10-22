@@ -30,9 +30,8 @@ func testBranchView(t *testing.T, repo Repo) {
 		base  domain.BaselineID
 		title string
 	}{
-		{"head", View{Namespace: f.req.Namespace}, after.ID, "Use PSP v2"},
-		{"pinned", View{Namespace: f.req.Namespace, Baseline: before}, before, "Use PSP v1"},
-		{"baseline only", View{Baseline: before}, before, "Use PSP v1"},
+		{"head", View{Namespace: f.req.Namespace, Branch: domain.MainBranch}, after.ID, "Use PSP v2"},
+		{"pinned", View{Namespace: f.req.Namespace, Branch: domain.MainBranch, Baseline: before}, before, "Use PSP v1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			nodes, links, err := g.BaselineGraph(ctx, tc.base)
@@ -68,7 +67,13 @@ func testBranchView(t *testing.T, repo Repo) {
 	if _, err := g.ViewNode(ctx, View{Change: c.ID, Namespace: "x"}, f.req.ID, ""); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a view naming a change and a branch: %v", err)
 	}
-	if _, err := g.ViewNode(ctx, View{Namespace: f.req.Namespace}, "", "REQ-404"); !errors.Is(err, ErrNotFound) {
+	// a branch is never assumed, and a baseline is read on its own branch only
+	for _, v := range []View{{Baseline: before}, {Namespace: f.req.Namespace}, {Namespace: f.req.Namespace, Branch: "other", Baseline: before}} {
+		if _, err := g.ViewNode(ctx, v, f.req.ID, ""); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("%s: %v", v, err)
+		}
+	}
+	if _, err := g.ViewNode(ctx, View{Namespace: f.req.Namespace, Branch: domain.MainBranch}, "", "REQ-404"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("a key the view does not hold: %v", err)
 	}
 }

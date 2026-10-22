@@ -39,9 +39,9 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View) (*world, error) {
 	}
 	w := &world{view: v, reader: &draftReader{byNode: map[domain.NodeID]domain.Draft{}}}
 	if !v.IsChange() {
-		w.baseline, w.namespace = v.Baseline, v.Namespace
+		w.baseline, w.namespace = v.Baseline, domain.NamespaceOf(v.Namespace)
 		if w.baseline == "" {
-			head, err := branchHeadHeader(ctx, tx, v.Namespace, v.Branch)
+			head, err := branchHeadHeader(ctx, tx, w.namespace, v.Branch)
 			if err != nil {
 				return nil, err
 			}
@@ -51,11 +51,10 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View) (*world, error) {
 			if err != nil {
 				return nil, err
 			}
-			if w.namespace == "" {
-				w.namespace = h.Namespace
+			if h.Namespace != w.namespace || h.Branch != v.Branch {
+				return nil, fmt.Errorf("baseline %s is of %s/%s, not of %s: %w", w.baseline, h.Namespace, h.Branch, v, ErrInvalid)
 			}
 		}
-		w.namespace = domain.NamespaceOf(w.namespace)
 		return w, nil
 	}
 	c, err := tx.Change(ctx, v.Change)
@@ -324,31 +323,39 @@ func (g *Graph) ViewNodes(ctx context.Context, v View, q NodeQuery) (page NodePa
 		if err != nil {
 			return err
 		}
-		if w.change == nil {
-			if q.Change != "" {
-				nodes, err := changeNodesIn(ctx, tx, w.baseline, q.Change)
-				page = pageNodes(nodes, q)
-				return err
-			}
-			if w.baseline == "" {
-				return nil
-			}
-			b, err := tx.Baseline(ctx, w.baseline)
-			if err != nil || len(b.Nodes) == 0 {
-				return err
-			}
-			page, err = tx.NodePage(ctx, refsOf(b.Nodes), q)
-			return err
-		}
-		page, err = w.nodes(ctx, tx, q)
+		page, err = w.page(ctx, tx, q)
+		page.Baseline = w.baseline
 		return err
 	})
 	return page, err
 }
 
+// page is a page of the nodes of the world.
+func (w *world) page(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error) {
+	if w.change != nil {
+		return w.nodes(ctx, tx, q)
+	}
+	if q.Change != "" {
+		nodes, err := changeNodesIn(ctx, tx, w.baseline, q.Change)
+		return pageNodes(nodes, q), err
+	}
+	if w.baseline == "" {
+		return NodePage{}, nil
+	}
+	b, err := tx.Baseline(ctx, w.baseline)
+	if err != nil || len(b.Nodes) == 0 {
+		return NodePage{}, err
+	}
+	return tx.NodePage(ctx, refsOf(b.Nodes), q)
+}
+
 // nodes is the page of a change view: the fork's nodes the change left alone, paged by the store, merged with the
 // nodes the change holds another version of (read node by node).
 func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error) {
+	if q.Change != "" { // the nodes the impacts of a change act on, as the fork has them
+		nodes, err := changeNodesIn(ctx, tx, w.baseline, q.Change)
+		return pageNodes(nodes, q), err
+	}
 	// the nodes of the world the change wrote: their versions in it
 	var mine []domain.NodeID
 	if w.own {
@@ -382,9 +389,7 @@ func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error)
 		}
 		written = append(written, n)
 	}
-	if q.Change != "" { // the nodes of a change, as this world has them
-		return pageNodes(written, q), nil
-	}
+
 	// the fork, the nodes the change wrote left out, paged with room for them
 	var page NodePage
 	if w.baseline != "" {

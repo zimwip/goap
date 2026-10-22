@@ -23,7 +23,7 @@ func (remote) GetNode(_ context.Context, req *connect.Request[graphv1.GetNodeReq
 	switch {
 	case m.GetRef() != nil && m.GetRef().GetId() == "n1":
 		v = m.GetRef().GetVersion()
-	case m.GetKey() != "REQ-1" || m.GetNamespace() != "alm":
+	case m.GetKey() != "REQ-1" || m.GetView().GetNamespace() != "alm":
 		return nil, connect.NewError(connect.CodeNotFound, nil)
 	}
 	n := &graphv1.Node{Id: "n1", Version: v, Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement"}

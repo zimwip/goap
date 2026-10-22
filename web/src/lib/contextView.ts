@@ -1,9 +1,9 @@
 // The view the front works on (one for every screen): the working change of the header, on the option selected there,
 // for the namespace it acts on; else, and for every other namespace, the head of its main branch. A screen reads of it
 // only what it shows (a node's neighbourhood, a page of a search), never a namespace whole.
-import { graph, type ChangeImpact, type GraphNode } from './api';
+import { graph, type ChangeImpact, type GraphNode, type GraphView } from './api';
 import { MAIN_SCOPE } from './changeScope';
-import { baselineHoods, changeHoods, type HoodLoader } from './graphIndex';
+import { baselineHoods, branchView, changeHoods, type HoodLoader } from './graphIndex';
 import { MAIN_BRANCH, namespaceOf } from './namespace';
 import { working } from './stores/workingChange.svelte';
 
@@ -15,9 +15,12 @@ export interface ContextView {
   changeId?: string;
   /** its option: '' the main flow */
   flow?: string;
-  /** the impacts of the change (the nodes it creates are not in its baseline) */
+  /** the impacts of the change */
   impacts?: ChangeImpact[];
 }
+
+/** The view a read of the graph names (ADR 0157): the change on its option, else the baseline. */
+export const graphView = (v: ContextView): GraphView => (v.changeId ? { changeId: v.changeId, flow: v.flow ?? '' } : branchView(v.namespace, v.baselineId));
 
 /** The view of a namespace now. */
 export async function contextView(namespace: string, signal?: AbortSignal): Promise<ContextView> {
@@ -32,18 +35,14 @@ export async function contextView(namespace: string, signal?: AbortSignal): Prom
 }
 
 /** The neighbourhoods of a view. */
-export const viewHoods = (v: ContextView): HoodLoader => (v.changeId ? changeHoods(v.changeId, v.flow) : baselineHoods(v.baselineId));
+export const viewHoods = (v: ContextView): HoodLoader => (v.changeId ? changeHoods(v.changeId, v.flow) : baselineHoods(graphView(v)));
 
 /** A key of the view: it changes when the view does. */
 export const viewKey = (v: ContextView): string => (v.changeId ? `change:${v.changeId}:${v.flow ?? ''}` : `baseline:${v.baselineId}`);
 
-/** The nodes of a view matching a text (a page of them): its baseline searched by the server, and the nodes the change
- * creates (the version 0 of their draft). */
+/** The nodes of a view matching a text (a page of them), searched by the server in the view: a change's drafts and the
+ * nodes it creates included. */
 export async function searchView(v: ContextView, query: string, limit = 200, signal?: AbortSignal): Promise<GraphNode[]> {
-  const found = v.baselineId ? ((await graph.listBaselineNodes({ baselineId: v.baselineId, query, limit }, signal)).nodes ?? []) : [];
-  const q = query.trim().toLowerCase();
-  const created = (v.impacts ?? [])
-    .filter((c) => c.intent === 'created' && (c.flow ?? '') === (v.flow ?? '') && c.post?.id && !c.superseded && c.review !== 'rejected' && (!q || `${c.key} ${c.type}`.toLowerCase().includes(q)))
-    .map((c): GraphNode => ({ id: c.post?.id, version: 0, key: c.key, type: c.type, namespace: v.namespace }));
-  return [...created, ...found.filter((n) => !n.deleted)].slice(0, limit);
+  const found = (await graph.listBaselineNodes({ view: graphView(v), query, limit }, signal)).nodes ?? [];
+  return found.filter((n) => !n.deleted);
 }

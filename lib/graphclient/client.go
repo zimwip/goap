@@ -85,7 +85,7 @@ func positions() connect.ClientOption {
 // finding it proves it was created, and not finding it reports why it could not be.
 func (c *Client) DeclareUser(ctx context.Context, subject string) error {
 	ctx = authz.With(ctx, authz.Principal{Subject: subject})
-	_, err := c.rpc.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{Namespace: access.NamespaceOrganisation, Key: access.UserKey(subject)}))
+	_, err := c.rpc.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{View: &graphv1.View{Namespace: access.NamespaceOrganisation, Branch: domain.MainBranch}, Key: access.UserKey(subject)}))
 	return rpcerr.FromConnect(err)
 }
 

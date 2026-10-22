@@ -77,27 +77,18 @@ func res[T any](m *T, err error) (*connect.Response[T], error) {
 }
 
 func (h *Handler) GetNode(ctx context.Context, r *connect.Request[graphv1.GetNodeRequest]) (*connect.Response[graphv1.GetNodeResponse], error) {
-	if r.Msg.ChangeId != "" {
-		// as the change sees it (ADR 0079): the draft it holds of the node, else the stored version
-		change := domain.ChangeID(r.Msg.ChangeId)
-		if r.Msg.Key != "" {
-			v, err := h.Graph.ChangeNodeViewByKey(ctx, change, r.Msg.Flow, r.Msg.Namespace, r.Msg.Key)
-			return res(&graphv1.GetNodeResponse{View: pbconv.ViewToPB(v)}, err)
-		}
-		v, err := h.Graph.ChangeNodeView(ctx, change, r.Msg.Flow, pbconv.RefFromPB(r.Msg.Ref))
-		return res(&graphv1.GetNodeResponse{View: pbconv.ViewToPB(v)}, err)
-	}
 	ref := pbconv.RefFromPB(r.Msg.Ref)
-	if r.Msg.Key != "" {
-		n, err := h.Graph.NodeByKey(ctx, r.Msg.Namespace, r.Msg.Key)
-		if err != nil {
-			return nil, rpcerr.ToConnect(err)
-		}
-		ref = n.Ref()
+	var v domain.NodeView
+	var err error
+	view := pbconv.GraphViewFromPB(r.Msg.View)
+	if r.Msg.Key == "" && ref.Version > 0 {
+		v, err = h.Graph.View(ctx, ref) // a version named: the history, no view
+	} else {
+		// the node as the view holds it (ADR 0157): a change's draft, else the version its world holds
+		v, err = h.Graph.ViewNode(ctx, view, ref.ID, r.Msg.Key)
 	}
-	v, err := h.Graph.View(ctx, ref)
-	if err == nil && !h.mayReadNode(ctx, v.Node) {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("node %s: not found", ref.ID))
+	if err == nil && !view.IsChange() && !h.mayReadNode(ctx, v.Node) {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("node %s: not found", v.ID))
 	}
 	return res(&graphv1.GetNodeResponse{View: pbconv.ViewToPB(v)}, err)
 }
@@ -354,13 +345,12 @@ func (h *Handler) ListChangeEvents(ctx context.Context, r *connect.Request[graph
 }
 
 func (h *Handler) ListBaselineNodes(ctx context.Context, r *connect.Request[graphv1.ListBaselineNodesRequest]) (*connect.Response[graphv1.ListBaselineNodesResponse], error) {
-	id := domain.BaselineID(r.Msg.BaselineId)
-	b, err := h.Graph.BaselineHeader(ctx, id) // the header: the page is what is sent
+	page, err := h.Graph.ViewNodes(ctx, pbconv.GraphViewFromPB(r.Msg.View), graph.NodeQuery{Type: r.Msg.Type, Text: r.Msg.Query,
+		IncludeDeleted: r.Msg.IncludeDeleted, Change: domain.ChangeID(r.Msg.ChangeId), Offset: int(r.Msg.Offset), Limit: int(r.Msg.Limit)})
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	page, err := h.Graph.BaselineNodes(ctx, id, graph.NodeQuery{Type: r.Msg.Type, Text: r.Msg.Query,
-		IncludeDeleted: r.Msg.IncludeDeleted, Change: domain.ChangeID(r.Msg.ChangeId), Offset: int(r.Msg.Offset), Limit: int(r.Msg.Limit)})
+	b, err := h.Graph.BaselineHeader(ctx, page.Baseline) // the header: the page is what is sent
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
@@ -390,13 +380,7 @@ func (h *Handler) ListBaselineLinks(ctx context.Context, r *connect.Request[grap
 }
 
 func (h *Handler) GetNodeNeighbourhood(ctx context.Context, r *connect.Request[graphv1.GetNodeNeighbourhoodRequest]) (*connect.Response[graphv1.GetNodeNeighbourhoodResponse], error) {
-	var nb graph.Neighbourhood
-	var err error
-	if r.Msg.ChangeId != "" {
-		nb, err = h.Graph.ChangeNodeNeighbourhood(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, domain.NodeID(r.Msg.NodeId))
-	} else {
-		nb, err = h.Graph.NodeNeighbourhood(ctx, domain.BaselineID(r.Msg.BaselineId), domain.NodeID(r.Msg.NodeId))
-	}
+	nb, err := h.Graph.ViewNeighbourhood(ctx, pbconv.GraphViewFromPB(r.Msg.View), domain.NodeID(r.Msg.NodeId))
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}

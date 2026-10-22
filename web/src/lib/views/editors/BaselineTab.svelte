@@ -131,6 +131,8 @@
   const headId = $derived([...own].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))[0]?.id ?? '');
   /** the baseline shown in the panels below: whichever row was clicked in the history graph, or the branch's head */
   const shownId = $derived(tab.params.baseline || headId);
+  /** the branch of the baseline shown (a row of a forked lane is of its own branch): a read names it (ADR 0157) */
+  const shownBranch = $derived(baselines.find((b) => b.id === shownId)?.branch || branchName);
   /** the branch's fork point: anchors the graph even before it has a baseline of its own */
   const forkBaseline = $derived(branches.find((b) => b.name === branchName)?.forkBaseline);
 
@@ -205,8 +207,8 @@
 
   $effect(() => {
     void reload;
-    const req = { baselineId: shownId, type, query, offset, limit: size };
-    if (!req.baselineId) {
+    const req = { view: { namespace, branch: shownBranch, baselineId: shownId }, type, query, offset, limit: size };
+    if (!shownId) {
       baseline = undefined;
       types = [];
       nodes = [];
@@ -583,7 +585,7 @@
       </div>
 
       <section class="card neighbours">
-        <NodeNeighbourhood baselineId={shownId} namespace={baseline?.namespace ?? namespace} bind:node={selectedNode} bind:link={selectedLink} bind:hood {reload} />
+        <NodeNeighbourhood baselineId={shownId} branch={shownBranch} namespace={baseline?.namespace ?? namespace} bind:node={selectedNode} bind:link={selectedLink} bind:hood {reload} />
       </section>
     </div>
   </div>

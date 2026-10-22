@@ -2,7 +2,7 @@ import { rpc } from './transport';
 import { notePosition } from '../flux/positions';
 import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
-import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeStack, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, GraphStats, NamespaceSummary, ItemTypeInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, PendingSettings, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SettingEdit, SharedNode, StackChange, Tag, TypeCount } from './types/graph';
+import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeStack, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, GraphStats, GraphView, NamespaceSummary, ItemTypeInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, PendingSettings, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SettingEdit, SharedNode, StackChange, Tag, TypeCount } from './types/graph';
 
 import type { LoadDemoDataResponseJson } from '../../gen/goap/graph/v1/graph_pb';
 import type { Job } from './jobs';
@@ -53,7 +53,8 @@ export const graph = {
    * versions it committed and its drafts (version 0), with the links whose target node is in it. */
   getChangeWorld: (changeId: string, flow = '', signal?: AbortSignal) =>
     rpc<{ changeId: string; flow: string; world: boolean }, { nodes?: GraphNode[]; links?: Link[] }>(GRAPH, 'GetChangeGraph', { changeId, flow, world: true }, signal),
-  /** A page of the nodes of a baseline (by type, text-filtered), with the node count of every type. */
+  /** A page of the nodes of a view (by type, text-filtered; ADR 0157), with the node count of every type; `baseline` is
+   * the one read (a change view: its fork). */
   listBaselineNodes: (req: BaselineNodesQuery, signal?: AbortSignal) =>
     rpc<BaselineNodesQuery, { baseline?: Baseline; nodes?: GraphNode[]; total?: number; types?: TypeCount[] }>(
       GRAPH,
@@ -69,12 +70,14 @@ export const graph = {
       req,
       signal,
     ),
-  /** A node of a baseline with its direct neighbours (both directions). */
-  getNodeNeighbourhood: (baselineId: string, nodeId: string, signal?: AbortSignal, inChange?: { changeId: string; flow?: string }) =>
-    rpc<
-      { baselineId: string; nodeId: string; changeId?: string; flow?: string },
-      { node?: GraphNode; nodes?: GraphNode[]; links?: Link[]; suspectLinkIds?: string[] }
-    >(GRAPH, 'GetNodeNeighbourhood', { baselineId, nodeId, ...(inChange ? { changeId: inChange.changeId, flow: inChange.flow ?? '' } : {}) }, signal),
+  /** A node as a view holds it, with its direct neighbours (both directions; ADR 0157). */
+  getNodeNeighbourhood: (view: GraphView, nodeId: string, signal?: AbortSignal) =>
+    rpc<{ view: GraphView; nodeId: string }, { node?: GraphNode; nodes?: GraphNode[]; links?: Link[]; suspectLinkIds?: string[] }>(
+      GRAPH,
+      'GetNodeNeighbourhood',
+      { view, nodeId },
+      signal,
+    ),
   /** The impact log of a change (ADR 0029): every operation on its change impacts, with its caller. */
   listChangeEvents: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { events?: ImpactEvent[] }>(GRAPH, 'ListChangeEvents', { changeId }, signal),
@@ -277,21 +280,24 @@ export const graph = {
     rpc<{ namespace: string; from: string; into: string }, { plan?: MergePlan }>(GRAPH, 'PlanMerge', { namespace, from, into }, signal),
   getSharedNodes: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { nodes?: SharedNode[] }>(GRAPH, 'GetSharedNodes', { changeId }, signal),
-  /** A node version with its outgoing and incoming links (version 0: the latest). With a scope, the node as that change
-   * sees it on a flow (ADR 0079): a draft reference `{id, version: 0}` reads the draft the change holds (draft: true,
-   * version 0, its links with their ids), a node without a draft its stored version; a key is resolved through the
-   * change first (a node the change created has no key on main). */
-  getNode: (ref: NodeRef, signal?: AbortSignal, scope?: { changeId: string; flow?: string }) =>
-    rpc<
-      { ref: NodeRef; changeId?: string; flow?: string },
-      { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; notCommittable?: boolean } }
-    >(GRAPH, 'GetNode', { ref, ...(scope ? { changeId: scope.changeId, flow: scope.flow ?? '' } : {}) }, signal),
-  /** A node of a change by key, as the change sees it (ADR 0079). */
-  getChangeNodeByKey: (key: string, namespace: string, scope: { changeId: string; flow?: string }, signal?: AbortSignal) =>
-    rpc<
-      { key: string; namespace: string; changeId: string; flow: string },
-      { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; notCommittable?: boolean } }
-    >(GRAPH, 'GetNode', { key, namespace, changeId: scope.changeId, flow: scope.flow ?? '' }, signal),
+  /** A node version with its outgoing and incoming links (the history: no view), or at version 0 the node as a view
+   * holds it (ADR 0157; required then): in a change view a draft reference `{id, version: 0}` reads the draft the change
+   * holds (draft: true, version 0, its links with their ids), a node without a draft the version its world holds. */
+  getNode: (ref: NodeRef, signal?: AbortSignal, view?: GraphView) =>
+    rpc<{ ref: NodeRef; view?: GraphView }, { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; notCommittable?: boolean } }>(
+      GRAPH,
+      'GetNode',
+      { ref, ...(view ? { view } : {}) },
+      signal,
+    ),
+  /** A node by key as a view holds it (ADR 0157; a node a change created is found by the key of its draft). */
+  getNodeByKey: (key: string, view: GraphView, signal?: AbortSignal) =>
+    rpc<{ key: string; view: GraphView }, { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; notCommittable?: boolean } }>(
+      GRAPH,
+      'GetNode',
+      { key, view },
+      signal,
+    ),
   /** A page of the versions of a node, all branches, by version (ADR 0140): the latest `limit` (default 50) below the
    * version `before`; `next` is the `before` of the older page (absent: none). */
   listNodeVersions: (id: string, signal?: AbortSignal, page: { before?: number; limit?: number } = {}) =>

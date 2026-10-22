@@ -1,6 +1,6 @@
 # ADR 0157 — Every graph read names its view
 
-**Status**: proposed · **Date**: 2026-10
+**Status**: accepted; steps 1 and 2 implemented · **Date**: 2026-10
 
 ## Context
 
@@ -32,8 +32,10 @@ version it started with (ADR 0113).
 ## Decision
 
 1. **A view is a branch and a baseline.** `graphapi.View` (proto `goap.graph.v1.View`) is one of:
-   - `{namespace, branch, baseline_id}`: a lasting branch at one of its baselines. An empty baseline means the head of
-     the branch when the read starts. The answer names the baseline it read, so the next read can pin it.
+   - `{namespace, branch, baseline_id}`: a lasting branch at one of its baselines. The namespace and the branch are
+     both required: no branch is assumed, the caller (the front) names main when it means main. An empty baseline
+     means the head of the branch when the read starts, the only default. A baseline is read on its own branch only
+     (one of another branch is refused). The answer names the baseline it read, so the next read can pin it.
    - `{change_id, flow}`: a change on an option (`main` or an option id). It resolves to the change's branch and its
      pending work: its fork, its commits and the drafts of that flow (`ChangeWorld`, ADR 0140). The namespace is the
      change's.
@@ -42,7 +44,8 @@ version it started with (ADR 0113).
    - the working change on the option selected there, for the namespace it acts on;
    - for every other namespace, and when no change is selected, the head of main.
 
-2. **Every read of the current graph takes a view, and refuses a request without one** (`InvalidArgument`, "no view").
+2. **Every read of the current graph takes a view, and refuses a request without one** (`InvalidArgument`, "no view"):
+   a view names a branch (namespace and name) or a change, never neither.
    - The reads concerned: node by key or id, neighbourhood, search page, links page, blackboard, change graph, stats,
      export and the index search.
    - Reads at an explicit version stay as they are, because they are history: `ListNodeVersions`, `GetNode` with a
@@ -88,13 +91,25 @@ version it started with (ADR 0113).
   through `ViewOf`, which is what the web does today.
 - History stays version-based, and it is the only place where versions are chosen.
 
+## Implementation
+
+- `graphapi.View` (`Check`, `ErrNoView`), proto `goap.graph.v1.View`, `pbconv.GraphViewFromPB` / `GraphViewToPB`.
+- `graph/graph/view.go`: `openWorld` and the `world` reader; `Graph.ViewNode`, `ViewNeighbourhood`, `ViewNodes`.
+  `NodeNeighbourhood` and `ChangeNodeNeighbourhood` delegate to it. A page of a change view merges the page of its fork
+  (the nodes it changed left out) with the nodes it wrote; `NodeQuery.Change` there is the nodes its impacts act on as
+  the fork has them.
+- The router and the personal scope read the change and the namespace of a request's `view` too.
+- Tests: `view_test.go` (`TestBranchView`), `checkChangeHoods` / `checkViewPages` in `changeview_test.go`, on every
+  repository.
+
 ## Steps
 
 1. `graphapi.View`, proto `View`, and `Graph.ViewOf` with the reader. Its tests run against every view kind on
    memory, SQLite and PostgreSQL, comparing it with `ChangeWorld` and `BaselineGraph`.
-2. RPCs: `GetNode`, `GetNodeNeighbourhood`, `ListBaselineNodes` / `ListBaselineLinks` (renamed `SearchNodes` /
-   `SearchLinks`, view-scoped), `GetBlackboard`, `GetChangeGraph`, `GetGraphStats`, `ExportGraph`; a missing view is
-   refused. Then graphclient and the web transport (`contextView.ts` builds the `View`).
+2. RPCs: `GetNode` (by key or at version 0), `GetNodeNeighbourhood` and `ListBaselineNodes` take `view` and refuse a
+   missing one; `GetBlackboard`, `GetChangeGraph`, `GetGraphStats` and `ExportGraph` already name a change or a branch.
+   Then graphclient and the web transport (`contextView.ts` builds the `View`, `graphIndex.ts` `branchView` /
+   `forkView`). Done; the RPCs kept their names.
 3. Index `Search` by view.
 4. Engine port `Read`, the `goap-graph` and `goap-change` tools.
 5. Remove the latest-on-main defaults (`GetNode` by key, `TagVersion` at version 0, `NodesOfType`).
