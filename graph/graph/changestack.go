@@ -207,7 +207,8 @@ func mergedInto(ctx context.Context, tx Tx) func(domain.ChangeID) []domain.Chang
 		if out, ok := cache[id]; ok || depth > 64 {
 			return out
 		}
-		subs, err := tx.SubChanges(ctx, id)
+		// the headers alone: their status and order are what counts, not their impacts
+		subs, err := tx.ChangeHeads(ctx, ChangesFilter{Parent: id})
 		if err != nil {
 			return nil
 		}
@@ -228,15 +229,15 @@ func mergedInto(ctx context.Context, tx Tx) func(domain.ChangeID) []domain.Chang
 
 // stackChanges names the changes of a stack; a change the graph no longer holds (purged) keeps its id alone.
 func stackChanges(ctx context.Context, tx Tx, ids []domain.ChangeID) ([]domain.StackChange, error) {
+	heads, err := changeHeads(ctx, tx, ids)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]domain.StackChange, 0, len(ids))
 	for _, id := range ids {
 		sc := domain.StackChange{ID: id}
-		c, err := tx.ChangeHead(ctx, id)
-		switch {
-		case err == nil:
+		if c, ok := heads[id]; ok {
 			sc.Parent, sc.Title, sc.Status, sc.OwnerOrg = c.ParentID, c.Title, c.Status, c.OwnerOrg
-		case !isNotFound(err):
-			return nil, err
 		}
 		out = append(out, sc)
 	}

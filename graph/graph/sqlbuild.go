@@ -593,6 +593,20 @@ func (d dialect) sqlChangeHeads(cols string, f ChangesFilter) (string, []any) {
 			q += " AND EXISTS (SELECT 1 FROM json_each(change.depends_on) WHERE value = " + d.ph(len(args)) + ")"
 		}
 	}
+	if len(f.IDs) > 0 {
+		list := make([]string, len(f.IDs))
+		for i, id := range f.IDs {
+			list[i] = string(id)
+		}
+		if d.pg {
+			args = append(args, list)
+			q += " AND id = ANY(" + d.ph(len(args)) + "::uuid[])"
+		} else {
+			b, _ := json.Marshal(list)
+			args = append(args, string(b))
+			q += " AND id IN (SELECT value FROM json_each(" + d.ph(len(args)) + "))"
+		}
+	}
 	return q + d.orderBy("created_at", ""), args
 }
 

@@ -591,6 +591,15 @@ everything. A change checks out a stored node only when its project, or one abov
 The creator, the editor, the visibility scopes of the lifecycle states and the roles as action lists are the next
 phases of the ADR.
 
+**Batched reads**: a read of the current graph reads what it meets in batches, never one row per element, so its
+round trips do not grow with the links of a hub or the length of a history (`graph/graph/batchread.go`): the
+neighbours of a node (`ViewNeighbourhood`, and so each hop of `QueryView`) and of the blackboard's nodes through
+`draftReader.nodes` (the drafts from the fold, the stored versions in one `Tx.NodesAt`), the posts of a change's
+impacts (`storedPosts`: `openWorld`, `changeViewTx`), the headers of the changes of a history (`changeHeads`:
+`ChangesFilter.IDs` in one `ChangeHeads`; `NodeChanges`, `stackChanges`, `diffBaselines`), the headers of a page of
+`ChangesPage` given to the transaction (`guardTx.knowHeads`). `TestReadsAreBatched` counts the single-row reads of
+these paths over a hub; a new read path meeting several nodes or changes goes through these helpers.
+
 **Roles** ([ADR 0035](adr/0035-methods-roles-operations-documents.md) §2, [ADR 0043](adr/0043-project-scoped-roles-admin-flag.md)):
 a methodology declares its roles (`methodology@Role` nodes, ADR 0039); its processes and methods assign them RACI
 style (`roles: {responsible, accountable, consulted, informed}` on a process, a method or a step; a process and a method

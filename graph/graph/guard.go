@@ -239,6 +239,22 @@ func (t *guardTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change
 	return c, nil
 }
 
+// knowHeads gives the transaction the headers of changes read in one statement (a page of a listing), so that reading
+// those changes reads their logs only. A store that reads its changes whole (no changeHeader) ignores them.
+func (t *guardTx) knowHeads(cs []domain.Change) {
+	if _, ok := t.Tx.(changeHeaderReader); !ok {
+		return
+	}
+	if t.heads == nil {
+		t.heads = map[domain.ChangeID]domain.Change{}
+	}
+	for _, c := range cs {
+		if _, ok := t.heads[c.ID]; !ok {
+			t.heads[c.ID] = c
+		}
+	}
+}
+
 // copyChange is a copy of a change its reader may edit.
 func copyChange(c domain.Change) domain.Change {
 	c.Data = maps.Clone(c.Data)
