@@ -246,6 +246,14 @@ type HumanTask struct {
 	// Conditions a TaskCondition waits for, or that would unblock a TaskUnblock ("name" when expected true, "!name"
 	// when expected false).
 	Conditions []string `json:"conditions,omitempty"`
+	// Assignee is the person holding a TaskInput or TaskApproval (ADR 0158): who accepted it, or was given it by an
+	// administrator of the project. While it is held, only they answer it, besides whoever may reassign it. Empty:
+	// anyone it is addressed to. AssignedBy and AssignedAt say who gave it and when.
+	Assignee   string    `json:"assignee,omitempty"`
+	AssignedBy string    `json:"assignedBy,omitempty"`
+	AssignedAt time.Time `json:"assignedAt,omitempty"`
+	// Declined are the people who turned the task down: it is no longer offered to them (they may still accept it).
+	Declined []string `json:"declined,omitempty"`
 }
 
 // WaitsForConditions reports whether the process waits for conditions established outside it (TaskCondition).

@@ -1,24 +1,27 @@
 <script lang="ts">
-  // "Tasks" tool (ADR 0158): what the open changes wait for from people, as the person's work. Listed at three levels:
-  // the person's tasks across changes (accepted, or addressed to them alone), the tasks of the working change, the
-  // tasks of the changes open in an editor; in project mode, the tasks of every change of the project. Picking a task
-  // works on it: its change becomes the working change and the front enters change mode on it.
+  // "Tasks" tool (ADR 0158): what the open changes wait for from people, as the person's work. Listed at four levels:
+  // the person's tasks across changes (held by them, or addressed to them alone), the tasks available to them (they may
+  // answer them, nobody holds them), the tasks of the working change and of the changes open in an editor; in project
+  // mode, the tasks of every change of the project. Picking a task works on it: its change becomes the working change
+  // and the front enters change mode on it. Each task has its screen (who it is for, who holds it, accept, turn down,
+  // give to someone for an administrator of its project).
   import Icon from '../../shell/Icon.svelte';
-  import { type ChangeAsk } from '../../api';
+  import { errorMessage, type ChangeAsk } from '../../api';
   import { tabsState } from '../../shell/tabs.svelte';
   import { mode } from '../../shell/mode.svelte';
+  import { notify } from '../../shell/workbench.svelte';
   import { me } from '../../stores/session.svelte';
   import { project } from '../../stores/project.svelte';
   import { working } from '../../stores/workingChange.svelte';
-  import { accept, accepted, followTasks, reloadTasks, tasks, workOnTask } from '../../stores/tasks.svelte';
-  import { acceptable, byChange, isMine, myTasks, taskKey, tasksOf } from '../../tasks';
+  import { accept, followTasks, openTask, reject, reloadTasks, tasks, workOnTask } from '../../stores/tasks.svelte';
+  import { availableTasks, byChange, heldByOther, holderLabel, isMine, myTasks, taskKey, tasksOf } from '../../tasks';
   import { addressee, askKind, waitingFor } from '../../changeAsks';
 
   $effect(() => followTasks());
 
   const subject = $derived(me());
-  const acc = $derived(accepted());
-  const mine = $derived(myTasks(tasks.asks, subject, acc));
+  const mine = $derived(myTasks(tasks.asks, subject));
+  const offered = $derived(availableTasks(tasks.asks, subject));
   const current = $derived(working.change ? tasksOf(tasks.asks, working.change.id) : []);
   /** the changes open in an editor, other than the working one */
   const opened = $derived(
@@ -29,10 +32,12 @@
   const ofProject = $derived(mode.current === 'project' ? byChange(tasks.asks, project.current || undefined) : []);
 
   let busy = $state('');
-  async function work(a: ChangeAsk) {
-    busy = a.id ?? '';
+  async function run(a: ChangeAsk, what: () => Promise<unknown>) {
+    busy = taskKey(a);
     try {
-      await workOnTask(a);
+      await what();
+    } catch (e) {
+      notify(errorMessage(e), 'error');
     } finally {
       busy = '';
     }
@@ -40,21 +45,25 @@
 </script>
 
 {#snippet row(a: ChangeAsk, showChange: boolean)}
-  {@const own = isMine(a, subject, acc)}
-  <li class:own>
-    <button type="button" class="task" disabled={!!busy} title="Work on this task: its change becomes the working change" onclick={() => void work(a)}>
+  {@const own = isMine(a, subject)}
+  {@const holder = holderLabel(a, subject)}
+  <li class:own class:held={heldByOther(a, subject)}>
+    <button type="button" class="task" disabled={!!busy} title="Work on this task: its change becomes the working change" onclick={() => void run(a, () => workOnTask(a))}>
       <span class="line1">
         <span class="kind">{askKind(a)}</span>
         <span class="title">{a.title || a.action || a.id}</span>
       </span>
       <span class="line2">
-        {#if showChange}<span class="change"><Icon name="diff" size={11} />{a.changeTitle || a.changeId}</span> · {/if}for {addressee(a, subject)}{#if waitingFor(a.since)} · {waitingFor(a.since)}{/if}
+        {#if showChange}<span class="change"><Icon name="diff" size={11} />{a.changeTitle || a.changeId}</span>{' · '}{/if}{#if holder}held by {holder}{:else}for {addressee(a, subject)}{/if}{#if waitingFor(a.since)}{` · ${waitingFor(a.since)}`}{/if}{#if a.declined}{' · turned down'}{/if}
       </span>
     </button>
-    {#if acceptable(a, subject, acc)}
-      <button type="button" class="ghost small take" title="Accept this task: it joins your tasks" onclick={() => accept(a)}>Accept</button>
-    {:else if own && a.roles?.length}
-      <button type="button" class="ghost small take" title="Give this task back: it leaves your tasks" onclick={() => accept(a, false)}>Give back</button>
+    {#if a.mayAccept && !a.declined}
+      <button type="button" class="ghost small take" disabled={!!busy} title="Accept this task: it becomes yours, the others no longer answer it" onclick={() => void run(a, () => accept(a))}>Accept</button>
+    {:else if own && a.assignee}
+      <button type="button" class="ghost small take" disabled={!!busy} title="Give this task back: it is offered again to the others" onclick={() => void run(a, () => reject(a))}>Give back</button>
+    {/if}
+    {#if a.processId}
+      <button type="button" class="ghost small icon" title="Open the task: who it is for, who holds it{a.mayAssign ? ', give it to someone' : ''}" aria-label="Open the task" onclick={() => openTask(a, true)}><Icon name="more" size={13} /></button>
     {/if}
   </li>
 {/snippet}
@@ -71,7 +80,16 @@
     {#if mine.length}
       <ul class="list">{#each mine as a (taskKey(a))}{@render row(a, true)}{/each}</ul>
     {:else if tasks.loaded}
-      <p class="empty">Nothing is addressed to you alone. Accept a task below to make it yours.</p>
+      <p class="empty">You hold no task. Accept one of those available to you to make it yours.</p>
+    {/if}
+  </section>
+
+  <section aria-label="Tasks available to you">
+    <h3 class="ui-section-head" title="Tasks you may answer that nobody holds">Available to you <span class="count">{offered.length}</span></h3>
+    {#if offered.length}
+      <ul class="list">{#each offered as a (taskKey(a))}{@render row(a, true)}{/each}</ul>
+    {:else if tasks.loaded}
+      <p class="empty">No other task of the open changes is yours to answer.</p>
     {/if}
   </section>
 
@@ -178,6 +196,13 @@
   }
   .list li.own {
     box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .list li.held .title {
+    color: var(--text-2);
+  }
+  .icon {
+    flex: none;
+    padding: 0.1rem 0.2rem;
   }
   .task {
     flex: 1;

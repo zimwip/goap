@@ -50,9 +50,27 @@ A task is work on a change. It only makes sense in the view of that change.
   navigation and administration are offered to administrators only.
 - The Tasks tool (`views/nav/TasksExplorer.svelte`): my tasks, the working change's, those of the changes open in an
   editor, the project's in project mode. The engine reads the asks of the open changes at once (`ListAsks`,
-  `Engine.Asks`). Accepting a task is kept in the person's preferences for now: personal, not seen by others.
+  `Engine.Asks`).
 - Picking a task works on it: its change becomes the working change, change mode, the change tab opened on the task.
 
+## Implementation (second step): who holds a task
+
+- Every task the person may act on is shown: *Available to you* lists, in every mode, the tasks they may answer that
+  nobody holds and they did not turn down, besides *My tasks*.
+- Accepting a task is shared, held by the engine on the pending task of the run (`HumanTask.Assignee`, `AssignedBy`,
+  `AssignedAt`, `Declined`; `engine/engine/assign.go`): `AcceptTask` makes it the caller's when they may answer it and
+  nobody holds it; `RejectTask` gives it back (its holder) or declines it (one it is offered to), and it is no longer
+  offered to them; while it is held, only its holder submits or approves it, besides whoever may reassign it. Each
+  decision is a `task` record of the journal of the change.
+- Reassignment: `AssignTask` gives the task to a person who may answer it (judged as that person on the project of the
+  run), or takes it back; it needs `task:assign` on the project of the run, which the default rules grant the
+  administrators and owners of that project or of a project above it (`isProjectAdmin` over the project chain) and the
+  platform administrators. `ListTaskCandidates` keeps the people who may answer it among those given (the web offers
+  the users of the organisation).
+- A dedicated screen per task (`views/editors/TaskTab.svelte`, tab `task`, opened from the Tasks tool and from the strip
+  of the change): its change, whom it is for, who holds it and who gave it, accept, give back or turn down with a
+  reason, answer in place; the assignment section shows only with `mayAssign`.
+
 Not yet: the editors of a change other than the working one, or outside change mode, are not read only; the
-editors of navigation and administration still open from anywhere (search, commands, links); a shared acceptance of a
-task (a claim others see).
+editors of navigation and administration still open from anywhere (search, commands, links); a notification to the
+person given a task; the conditions, unblock and decision asks are not held (anyone they are for answers them).

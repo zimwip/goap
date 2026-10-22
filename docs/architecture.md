@@ -1596,8 +1596,17 @@ tools (`TOOL_MODES`, a tool not listed shows in every mode), a tool asked for fr
 showing it. The **Tasks** tool (`views/nav/TasksExplorer.svelte`, `stores/tasks.svelte.ts`, `web/src/lib/tasks.ts`)
 reads the asks of the open changes in one call (engine `ListAsks`: the open changes of a project, or of every project
 the caller reads, at most the hundred latest, each ask naming its change; `Engine.Asks`) and lists the person's tasks
-across changes (accepted, kept in their preferences, or addressed to them alone), the tasks of the working change, of the
-changes open in an editor and, in project mode, of the project; working on a task makes its change the working change,
+across changes (held by them, or addressed to them alone and held by nobody), the tasks available to them (they may
+answer them, nobody holds them, they did not turn them down), the tasks of the working change, of the changes open in an
+editor and, in project mode, of the project. Who holds a human task (an input or an approval) is the engine's, seen by
+everyone (`HumanTask.Assignee` / `AssignedBy` / `AssignedAt` / `Declined`, `engine/engine/assign.go`, journal kind
+`task`): `AcceptTask` (one who may answer it, nobody holding it), `RejectTask` (the holder gives it back, one it is
+offered to declines it), `AssignTask` (permission `task:assign` on the project of the run: by the default rules the
+administrators and owners of that project or of a project above it, `isProjectAdmin`, and the platform administrators;
+to a person who may answer it, empty to take it back), `ListTaskCandidates`; while a task is held only its holder submits
+or approves it, besides whoever may reassign it (`Engine.holds`); an ask carries `assignee`, `declined`, `mayAccept`,
+`mayAssign`. Each task has its screen (`views/editors/TaskTab.svelte`, tab `task`: accept, turn down, answer, give to
+someone); working on a task makes its change the working change,
 enters change mode and opens the change on it (the change tab's `task` param unfolds its asks on it). The choice of project persists the choice locally (`goap-dev`, with no token to reissue, keeps a
 fixed `GOAP_DEV_PROJECT` env var instead, like `GOAP_DEV_ORG`). Assignment has no nav entry of its own: an
 "Assignments" pane on the Organisation, Project and User editors (one `AssignmentsPane.svelte`,

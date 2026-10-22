@@ -48,6 +48,9 @@ const (
 	// KindUnblock records a person's decision on a run waiting for conditions or stuck (ADR 0036 §3): retry or
 	// abandon.
 	KindUnblock = "unblock"
+	// KindTask records who holds a human task of a run (ADR 0158): a person accepting it, turning it down or giving it
+	// back, a project administrator assigning it to someone.
+	KindTask = "task"
 )
 
 // Record is one entry of the execution journal of a change.

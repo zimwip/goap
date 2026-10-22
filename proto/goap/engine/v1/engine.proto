@@ -46,6 +46,14 @@ service EngineService {
   // (ADR 0158): the tasks of a project, and those of a person across changes. Read like GetChangeAsks; at most the
   // hundred most recent open changes.
   rpc ListAsks(ListAsksRequest) returns (ListAsksResponse);
+  // Who holds a human task (input or approval) of a run (ADR 0158): the caller accepts it (one who may answer it, nobody
+  // holding it), turns it down (its holder gives it back, one it is offered to declines it), or gives it to someone who
+  // may answer it (task:assign on the project of the run: an administrator of it or of a project above it; an empty
+  // assignee takes it back). ListTaskCandidates keeps those of the subjects given who may answer it (task:assign).
+  rpc AcceptTask(AcceptTaskRequest) returns (AcceptTaskResponse);
+  rpc RejectTask(RejectTaskRequest) returns (RejectTaskResponse);
+  rpc AssignTask(AssignTaskRequest) returns (AssignTaskResponse);
+  rpc ListTaskCandidates(ListTaskCandidatesRequest) returns (ListTaskCandidatesResponse);
   // How a condition of the run's world state got its value: its CEL formula, the value of each part of it and
   // of the blackboard variables it reads, against the change of the run.
   rpc ExplainCondition(ExplainConditionRequest) returns (ExplainConditionResponse);
@@ -194,6 +202,12 @@ message HumanTask {
   // kind "input": the form the person fills in, when the action declares one (ADR 0115, pkg/form.Form as JSON); its
   // values go to SubmitHumanInput.form
   google.protobuf.Struct form = 16;
+  // kinds "input" and "approval": the person holding the task (ADR 0158), who gave it to them and when, and the people
+  // who turned it down
+  string assignee = 17;
+  string assigned_by = 18;
+  google.protobuf.Timestamp assigned_at = 19;
+  repeated string declined = 20;
 }
 
 // The conflicts a rebase left on a change before it commits (ADR 0101).
@@ -642,6 +656,45 @@ message ChangeAsk {
   string change_id = 15;
   string change_title = 16;
   string project_id = 17;
+  // the person holding the task (ADR 0158), who gave it to them and when
+  string assignee = 18;
+  string assigned_by = 19;
+  google.protobuf.Timestamp assigned_at = 20;
+  // the caller turned it down, may accept it (nobody holds it and they may answer it), may assign it
+  bool declined = 21;
+  bool may_accept = 22;
+  bool may_assign = 23;
+}
+
+message AcceptTaskRequest {
+  string process_id = 1;
+}
+message AcceptTaskResponse {
+  Process process = 1;
+}
+message RejectTaskRequest {
+  string process_id = 1;
+  string reason = 2;
+}
+message RejectTaskResponse {
+  Process process = 1;
+}
+message AssignTaskRequest {
+  string process_id = 1;
+  // the subject of the person given the task; empty: nobody holds it
+  string assignee = 2;
+}
+message AssignTaskResponse {
+  Process process = 1;
+}
+message ListTaskCandidatesRequest {
+  string process_id = 1;
+  // the subjects to judge (at most 500)
+  repeated string subjects = 2;
+}
+message ListTaskCandidatesResponse {
+  // those who may answer the task, in the order given
+  repeated string subjects = 1;
 }
 
 message GetAssessmentStatesRequest {

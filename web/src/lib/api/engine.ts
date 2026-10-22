@@ -83,6 +83,17 @@ export const engine = {
   /** What the open changes of a project (empty: of every project the caller reads) wait for from people, each ask naming its change (ADR 0158). */
   listAsks: (projectId = '', signal?: AbortSignal) =>
     rpc<{ projectId?: string }, { asks?: ChangeAsk[] }>(ENGINE, 'ListAsks', projectId ? { projectId } : {}, signal),
+  /** Makes the human task of a run the caller's (ADR 0158): they may answer it and nobody holds it. */
+  acceptTask: (processId: string) => rpc<{ processId: string }, { process?: Process }>(ENGINE, 'AcceptTask', { processId }),
+  /** Turns the human task of a run down: its holder gives it back, one it is offered to declines it (ADR 0158). */
+  rejectTask: (processId: string, reason = '') =>
+    rpc<{ processId: string; reason: string }, { process?: Process }>(ENGINE, 'RejectTask', { processId, reason }),
+  /** Gives the human task of a run to someone who may answer it, or takes it back (empty assignee): an administrator of the project (ADR 0158). */
+  assignTask: (processId: string, assignee: string) =>
+    rpc<{ processId: string; assignee: string }, { process?: Process }>(ENGINE, 'AssignTask', { processId, assignee }),
+  /** Those of the subjects who may answer the human task of a run: whom it may be given to (ADR 0158). */
+  listTaskCandidates: (processId: string, subjects: string[], signal?: AbortSignal) =>
+    rpc<{ processId: string; subjects: string[] }, { subjects?: string[] }>(ENGINE, 'ListTaskCandidates', { processId, subjects }, signal),
   /** How the assessment of each subject of a change reads now: the states its methodology declares, else the defaults (ADR 0116). */
   getAssessmentStates: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { states?: AssessmentState[] }>(ENGINE, 'GetAssessmentStates', { changeId }, signal),

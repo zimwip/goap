@@ -30,7 +30,7 @@ import McpTab from './editors/McpTab.svelte';
 import TriggersExplorer from './nav/TriggersExplorer.svelte';
 import ProcessesExplorer from './nav/ProcessesExplorer.svelte';
 import TasksExplorer from './nav/TasksExplorer.svelte';
-import { mine as myTasks } from '../stores/tasks.svelte';
+import { mine as myTasks, tasks as taskList } from '../stores/tasks.svelte';
 import AssistantTab from './assistant/AssistantTab.svelte';
 
 import MethodologyTab from './editors/MethodologyTab.svelte';
@@ -52,6 +52,7 @@ import MethodTab from './editors/MethodTab.svelte';
 import StepTab from './editors/StepTab.svelte';
 import GraphExplorerTab from './editors/GraphExplorerTab.svelte';
 import RunTab from './editors/RunTab.svelte';
+import TaskTab from './editors/TaskTab.svelte';
 import ChangeTab from './editors/ChangeTab.svelte';
 import PoliciesTab from './editors/PoliciesTab.svelte';
 import ImportTab from './editors/ImportTab.svelte';
@@ -319,6 +320,24 @@ registerView({
   tabTitle: (t) => `${t.params.namespace} · ${t.params.branch || 'main'}`,
   tabIcon: () => 'database',
   tooltip: (t) => `Baseline of ${t.params.namespace}, branch ${t.params.branch || 'main'}${t.params.baseline ? ` at ${shortId(t.params.baseline)}` : ' (head)'}`,
+});
+
+// the screen of a task (ADR 0158): accept, turn down, answer, give to someone for an administrator of the project
+registerView({
+  id: 'task',
+  zone: 'editor',
+  title: 'Task',
+  icon: 'check',
+  component: TaskTab,
+  key: (p) => `${p.change ?? ''}|${p.id ?? ''}`,
+  tabTitle: (t) => {
+    const a = taskList.asks.find((x) => x.changeId === t.params.change && x.id === t.params.id);
+    return a?.title || a?.action || 'Task';
+  },
+  tooltip: (t) => {
+    const a = taskList.asks.find((x) => x.changeId === t.params.change && x.id === t.params.id);
+    return a ? `Task “${a.title || a.action}” — ${a.changeTitle || t.params.change}` : `Task of change ${t.params.change}`;
+  },
 });
 
 registerView({
