@@ -7,42 +7,22 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/graphapi"
 )
 
 // Browsing a baseline without shipping it whole: the IDE lists the node types of a baseline, pages through the
 // nodes of one type with a text filter, and shows the neighbourhood of a selected node.
 
 // MaxBrowseLimit caps the page size of BaselineNodes.
-const MaxBrowseLimit = 500
+const MaxBrowseLimit = graphapi.MaxBrowseLimit
 
-// NodeQuery selects a page of the nodes of a baseline.
-type NodeQuery struct {
-	// Type keeps the nodes of this qualified type (empty: every type).
-	Type string
-	// Text keeps the nodes whose key, type or a string property contains it (case-insensitive).
-	Text string
-	// IncludeDeleted keeps the tombstones.
-	IncludeDeleted bool
-	// Change keeps the nodes the impacts of that change act on, at their version in the baseline: they are read node
-	// by node, so the answer and its cost follow the change, not the size of the baseline.
-	Change        domain.ChangeID
-	Offset, Limit int
-}
-
-// TypeCount is the number of nodes of a type in a baseline.
-type TypeCount struct {
-	Type  string
-	Count int
-}
-
-// NodePage is a page of the nodes of a baseline.
-type NodePage struct {
-	Nodes []domain.Node
-	// Total is the number of nodes matching the query (all pages).
-	Total int
-	// Types counts the nodes of each type matching the text filter (the type filter aside), sorted by type.
-	Types []TypeCount
-}
+// The shapes of a browse belong to the graph's contract (ADR 0157: the port reads a view a page at a time).
+type (
+	NodeQuery     = graphapi.NodeQuery
+	TypeCount     = graphapi.TypeCount
+	NodePage      = graphapi.NodePage
+	Neighbourhood = graphapi.Neighbourhood
+)
 
 // BaselineNodes returns a page of the nodes of a baseline, ordered by key: the store filters, counts and reads the page
 // over the versions of the state (ADR 0140); with q.Change, the nodes of that change only.
@@ -223,23 +203,14 @@ func nodeMatches(n domain.Node, text string) bool {
 	return false
 }
 
-// Neighbourhood is a node of a baseline and the nodes it is linked to.
-type Neighbourhood struct {
-	Node domain.Node
-	// Nodes are the neighbours: the targets of its outgoing links (at the baseline's version, or the linked one for a
-	// node the baseline does not hold, such as a node of another namespace) and the sources of its incoming links
-	// held by the baseline.
-	Nodes []domain.Node
-	// Links are the links between Node and its neighbours.
-	Links []domain.Link
-	// Suspect are the links whose target changed since they were created (the baseline holds another version).
-	Suspect []domain.LinkID
-}
-
 // NodeNeighbourhood returns a node of a baseline with its direct neighbours; it reads the versions of the node and of
 // its neighbours in the baseline, never its whole state (ADR 0137).
 func (g *Graph) NodeNeighbourhood(ctx context.Context, id domain.BaselineID, nodeID domain.NodeID) (Neighbourhood, error) {
-	return g.ViewNeighbourhood(ctx, View{Baseline: id}, nodeID)
+	b, err := g.BaselineHeader(ctx, id)
+	if err != nil {
+		return Neighbourhood{}, err
+	}
+	return g.ViewNeighbourhood(ctx, View{Namespace: b.Namespace, Branch: b.Branch, Baseline: id}, nodeID)
 }
 
 // ChangeNodeNeighbourhood returns a node and its direct neighbours as a change sees them (its world, ChangeWorld): the

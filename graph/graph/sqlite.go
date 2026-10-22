@@ -765,11 +765,18 @@ func (t *sqliteTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, err
 	return ls[0], nil
 }
 
-func (t *sqliteTx) PutLink(ctx context.Context, l domain.Link) error {
-	to, tv, url := linkTarget(l)
-	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("link", linkColumns, ""),
-		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), to, tv, string(jsonb(l.Properties)), nullUUID(string(l.ChangeID)), nil, url)
-	return sqliteErr(err, "link")
+func (t *sqliteTx) PutLinks(ctx context.Context, ls []domain.Link) error {
+	for rows := range slices.Chunk(ls, linkRowsPerInsert) {
+		args := make([]any, 0, len(rows)*len(linkColumns))
+		for _, l := range rows {
+			to, tv, url := linkTarget(l)
+			args = append(args, string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), to, tv, string(jsonb(l.Properties)), nullUUID(string(l.ChangeID)), nil, url)
+		}
+		if _, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsertRows("link", linkColumns, len(rows)), args...); err != nil {
+			return sqliteErr(err, "link")
+		}
+	}
+	return nil
 }
 
 func (t *sqliteTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, l domain.Link) error {
@@ -1122,6 +1129,21 @@ func (t *sqliteTx) LinksToOfType(ctx context.Context, ref domain.NodeRef, types 
 		types = []string{}
 	}
 	q, args := dialectSQLite.sqlLinksToOfType(ref, types)
+	return t.queryLinks(ctx, q, args...)
+}
+
+func (t *sqliteTx) LinkSources(ctx context.Context, id domain.NodeID) ([]domain.NodeID, error) {
+	q, args := dialectSQLite.sqlLinkSources(id)
+	ids, err := t.ids(ctx, q, args...)
+	out := make([]domain.NodeID, len(ids))
+	for i, id := range ids {
+		out[i] = domain.NodeID(id)
+	}
+	return out, err
+}
+
+func (t *sqliteTx) LinksFromInto(ctx context.Context, refs []domain.NodeRef, to domain.NodeID) ([]domain.Link, error) {
+	q, args := dialectSQLite.sqlLinksFromInto(refs, to)
 	return t.queryLinks(ctx, q, args...)
 }
 

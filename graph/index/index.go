@@ -166,6 +166,11 @@ type Query struct {
 	// SimilarTo ranks the documents nearest to an existing one by its stored embedding (no text, no embedding call). It
 	// excludes the document itself (every version of a node) and honours the filter.
 	SimilarTo *Ref
+	// Select keeps the candidates a view holds (ADR 0157), before the authorization; nil keeps them all.
+	Select Authorizer
+	// Extra are candidates the store has no document of (the drafts of a change view, ADR 0157), ranked after the
+	// others; a candidate of the same node already found is not added again.
+	Extra []Hit
 }
 
 // FacetCount is one value of a facet and the number of hits holding it.
@@ -314,11 +319,28 @@ func (s *Searcher) Search(ctx context.Context, q Query) (Result, error) {
 		}
 	}
 	hits := fuse(lists)
+	if len(q.Extra) > 0 {
+		found := map[domain.NodeID]bool{}
+		for _, h := range hits {
+			found[h.ID] = true
+		}
+		for _, h := range q.Extra {
+			if !found[h.ID] && q.Filter.matches(h) {
+				hits = append(hits, h)
+			}
+		}
+	}
 	if self != nil {
 		hits = slices.DeleteFunc(hits, func(h Hit) bool { return kindOf(h.Kind) == kindOf(self.Kind) && h.ID == self.ID })
 	}
 	if len(hits) > PoolSize {
 		hits, res.Truncated = hits[:PoolSize], true
+	}
+	if q.Select != nil {
+		var err error
+		if hits, err = q.Select(ctx, hits); err != nil {
+			return res, err
+		}
 	}
 	if s.Authorize != nil {
 		var err error

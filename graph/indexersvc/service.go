@@ -14,6 +14,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/contracts/llm"
 	"github.com/zimwip/goap/graph/index"
 	"github.com/zimwip/goap/lib/access"
@@ -33,6 +34,13 @@ type Access interface {
 	SubProjects(ctx context.Context, project string) ([]string, error)
 }
 
+// Views answers what a view holds of some nodes (ADR 0157): graph.Graph in process, graphclient.Client over RPC.
+type Views interface {
+	ViewVersions(ctx context.Context, v graphapi.View, ids []domain.NodeID) (graphapi.ViewState, error)
+	// ViewDrafts are the drafts a change view holds matching a text: the index has no document of them.
+	ViewDrafts(ctx context.Context, v graphapi.View, text string, limit int) ([]domain.Node, error)
+}
+
 // Service ties the store, the indexer and the searcher.
 type Service struct {
 	Store   index.Store
@@ -47,6 +55,9 @@ type Service struct {
 	// Access decides which projects a caller may see and expands "a project and its sub-projects"; set it before
 	// serving. Nil: no project check (tests, and a deployment with no organisation to ask).
 	Access Access
+	// Views resolves the views a search of nodes names (ADR 0157); set it before serving. Nil: a search naming views
+	// is refused (only the history is searched).
+	Views Views
 
 	embed    *Embedder
 	nodes    atomic.Int64

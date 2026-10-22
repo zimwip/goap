@@ -207,6 +207,14 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg LinksFromOfType", pg, q, a, `SELECT `+pgLinkCols+` FROM (`+pgTyped+`) l ORDER BY l.id`, append(pgRefs, []string{"child"}))
 	q, a = lite.sqlLinksFromOfType(refs, []string{"child"})
 	check("sqlite LinksFromOfType", lite, q, a, `SELECT `+liteLinkCols+` FROM (`+liteTyped+`) l ORDER BY l.id`, []any{liteRefs, `["child"]`})
+	q, a = pg.sqlLinksFromInto(refs, "n1")
+	check("pg LinksFromInto", pg, q, a, `SELECT `+pgLinkCols+` FROM (`+strings.Replace(pgHeld, `l.from_version = c.sv)`, `l.from_version = c.sv AND l.to_id = $3)`, 1)+`) l ORDER BY l.id`, append(pgRefs, "n1"))
+	q, a = lite.sqlLinksFromInto(refs, "n1")
+	check("sqlite LinksFromInto", lite, q, a, `SELECT `+liteLinkCols+` FROM (`+strings.Replace(liteHeld, `l.from_version = c.sv)`, `l.from_version = c.sv AND l.to_id = ?)`, 1)+`) l ORDER BY l.id`, []any{liteRefs, "n1"})
+	q, a = pg.sqlLinkSources("n1")
+	check("pg LinkSources", pg, q, a, `SELECT DISTINCT from_id::text FROM link WHERE to_id = $1 AND removes IS NULL`, []any{"n1"})
+	q, a = lite.sqlLinkSources("n1")
+	check("sqlite LinkSources", lite, q, a, `SELECT DISTINCT from_id FROM link WHERE to_id = ? AND removes IS NULL`, []any{"n1"})
 	linksTo := func(cols, target string) string {
 		return `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id, to_url FROM link WHERE ` + target + ` AND removes IS NULL), s(lid, nid, sv) AS ( SELECT id, from_id, from_version FROM t UNION ALL SELECT s.lid, v.node_id, v.version FROM s JOIN node_version v ON v.node_id = s.nid AND v.links_base = s.sv WHERE NOT EXISTS (SELECT 1 FROM link x WHERE x.from_id = v.node_id AND x.from_version = v.version AND x.removes = s.lid) ) SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.node_id = s.nid AND v.version = s.sv AND v.links IS NULL UNION ALL SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.links = s.sv AND v.node_id = s.nid ORDER BY 1, 4`
 	}
@@ -379,6 +387,8 @@ func TestSQLBuildersGolden(t *testing.T) {
 	linkCols := []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id"}
 	checkSQL(t, "pg insert link", pg, pg.sqlInsert("link", linkCols, ""), `INSERT INTO link (id, type, from_id, from_version, to_id, to_version, props, change_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`)
 	checkSQL(t, "sqlite insert link", lite, lite.sqlInsert("link", linkCols, ""), `INSERT INTO link (id, type, from_id, from_version, to_id, to_version, props, change_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+	checkSQL(t, "pg insert link rows", pg, pg.sqlInsertRows("link", []string{"id", "type"}, 2), `INSERT INTO link (id, type) VALUES ($1, $2), ($3, $4)`)
+	checkSQL(t, "sqlite insert link rows", lite, lite.sqlInsertRows("link", []string{"id", "type"}, 2), `INSERT INTO link (id, type) VALUES (?, ?), (?, ?)`)
 	baselineCols := []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "depth", "gap", "kind"}
 	checkSQL(t, "pg insert baseline", pg, pg.sqlInsert("baseline", baselineCols, ""), `INSERT INTO baseline (id, name, parent_id, merged_from, change_id, created_at, branch, namespace, depth, gap, kind) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`)
 	checkSQL(t, "sqlite insert baseline", lite, lite.sqlInsert("baseline", baselineCols, ""), `INSERT INTO baseline (id, name, parent_id, merged_from, change_id, created_at, branch, namespace, depth, gap, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)

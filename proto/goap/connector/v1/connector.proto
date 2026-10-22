@@ -60,6 +60,9 @@ message InvokeRequest {
   // and a short-lived token of this call (lib/modeltoken), naming the person, the change and the process; never logged
   string model_url = 8;
   string model_token = 9;
+  // the flow of the change the calling process runs on ("main" or an option; empty: the change's active option): the
+  // view a graph read of the call is in (ADR 0157)
+  string flow = 10;
 }
 
 message InvokeResponse {

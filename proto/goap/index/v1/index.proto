@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package goap.index.v1;
 
+import "goap/graph/v1/graph.proto";
+
 // IndexService is the document index (ADR 0026, 0095): lexical, semantic and hybrid search over the nodes and the
 // changes of the graph, filtered by type, project, owner, status and methodology, with facets and nearest-document
 // search. Fed by the node, baseline and change-document events of the graph service.
@@ -39,7 +41,8 @@ message SearchRequest {
   repeated string states = 5;
   // branch of the node version, or the one the change is applied to
   repeated string branches = 6;
-  // true: heads of main only (a change always is), false: not on main, absent: all
+  // with history: true the heads of main only, false not on main, absent every version; without history it is
+  // refused (the views say what is read)
   optional bool main = 7;
   // filters on declared facets
   repeated FacetFilter facet_filters = 8;
@@ -70,6 +73,12 @@ message SearchRequest {
   // the documents nearest to this one, by its stored embedding (no text query, no embedding call); the document
   // itself is excluded and every other filter holds. Fails with NOT_FOUND when it does not exist or is not visible.
   DocumentRef similar_to = 21;
+  // the views the nodes are searched in (ADR 0157), one per namespace: a hit of a node is kept when its version is
+  // the one its namespace's view holds (a change's drafts are not indexed). A search of nodes names its views, or
+  // history.
+  repeated goap.graph.v1.View views = 22;
+  // every version of the nodes (the history), refined by main; in place of views
+  bool history = 23;
 }
 
 // What a hit of kind change adds.

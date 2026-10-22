@@ -219,7 +219,7 @@ export async function changeNodes(changeId: string, baselineId: string, signal?:
   if (!baselineId) return [];
   const out: GraphNode[] = [];
   for (;;) {
-    const r = await graph.listBaselineNodes({ baselineId, changeId, includeDeleted: true, offset: out.length, limit: 500 }, signal);
+    const r = await graph.listBaselineNodes({ view: { changeId }, changeId, includeDeleted: true, offset: out.length, limit: 500 }, signal);
     out.push(...(r.nodes ?? []));
     if (!r.nodes?.length || out.length >= (r.total ?? 0)) return out;
   }

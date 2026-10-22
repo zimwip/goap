@@ -275,8 +275,11 @@ type InvokeRequest struct {
 	ProcessId string `protobuf:"bytes,7,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
 	// for a connector that calls_models, when the hub knows the gateway: the base URL of its Anthropic Messages endpoint
 	// and a short-lived token of this call (lib/modeltoken), naming the person, the change and the process; never logged
-	ModelUrl      string `protobuf:"bytes,8,opt,name=model_url,json=modelUrl,proto3" json:"model_url,omitempty"`
-	ModelToken    string `protobuf:"bytes,9,opt,name=model_token,json=modelToken,proto3" json:"model_token,omitempty"`
+	ModelUrl   string `protobuf:"bytes,8,opt,name=model_url,json=modelUrl,proto3" json:"model_url,omitempty"`
+	ModelToken string `protobuf:"bytes,9,opt,name=model_token,json=modelToken,proto3" json:"model_token,omitempty"`
+	// the flow of the change the calling process runs on ("main" or an option; empty: the change's active option): the
+	// view a graph read of the call is in (ADR 0157)
+	Flow          string `protobuf:"bytes,10,opt,name=flow,proto3" json:"flow,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -374,6 +377,13 @@ func (x *InvokeRequest) GetModelToken() string {
 	return ""
 }
 
+func (x *InvokeRequest) GetFlow() string {
+	if x != nil {
+		return x.Flow
+	}
+	return ""
+}
+
 type InvokeResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Result *structpb.Struct       `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
@@ -456,7 +466,7 @@ const file_goap_connector_v1_connector_proto_rawDesc = "" +
 	"\fcalls_models\x18\a \x01(\bR\vcallsModels\"\x11\n" +
 	"\x0fDescribeRequest\"H\n" +
 	"\x10DescribeResponse\x124\n" +
-	"\x04info\x18\x01 \x01(\v2 .goap.connector.v1.ConnectorInfoR\x04info\"\xab\x03\n" +
+	"\x04info\x18\x01 \x01(\v2 .goap.connector.v1.ConnectorInfoR\x04info\"\xbf\x03\n" +
 	"\rInvokeRequest\x12\x1c\n" +
 	"\toperation\x18\x01 \x01(\tR\toperation\x125\n" +
 	"\targuments\x18\x02 \x01(\v2\x17.google.protobuf.StructR\targuments\x12/\n" +
@@ -468,7 +478,9 @@ const file_goap_connector_v1_connector_proto_rawDesc = "" +
 	"process_id\x18\a \x01(\tR\tprocessId\x12\x1b\n" +
 	"\tmodel_url\x18\b \x01(\tR\bmodelUrl\x12\x1f\n" +
 	"\vmodel_token\x18\t \x01(\tR\n" +
-	"modelToken\x1a:\n" +
+	"modelToken\x12\x12\n" +
+	"\x04flow\x18\n" +
+	" \x01(\tR\x04flow\x1a:\n" +
 	"\fSecretsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"r\n" +

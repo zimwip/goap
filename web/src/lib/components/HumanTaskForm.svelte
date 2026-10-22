@@ -117,13 +117,13 @@
   // change can only impact the nodes of its own domain, whatever else the baseline holds)
   $effect(() => {
     const q = filter.trim();
-    const b = baselineId;
+    const id = changeId;
     const ns = namespace;
-    if (!b || mode === 'form' || mode === 'review') return;
+    if (!id || mode === 'form' || mode === 'review') return;
     const ctrl = new AbortController();
     const t = setTimeout(() => {
       graph
-        .listBaselineNodes({ baselineId: b, query: q, limit: 200 }, ctrl.signal)
+        .listBaselineNodes({ view: { changeId: id }, query: q, limit: 200 }, ctrl.signal)
         .then((r) => !ctrl.signal.aborted && (found = (r.nodes ?? []).filter((n) => !ns || n.namespace === ns)))
         .catch(() => undefined);
     }, 250);
@@ -268,7 +268,7 @@
     return {
       nodes: [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key)),
       search: async (query) =>
-        b ? ((await graph.listBaselineNodes({ baselineId: b, query, limit: 200 })).nodes ?? []).filter((n) => n.key && !n.deleted).map((n) => inChange(optionOf(n))) : [],
+        b && changeId ? ((await graph.listBaselineNodes({ view: { changeId }, query, limit: 200 })).nodes ?? []).filter((n) => n.key && !n.deleted).map((n) => inChange(optionOf(n))) : [],
       remember: (n) => {
         if (!picked.some((p) => p.key === n.key)) picked = [...picked, n];
       },

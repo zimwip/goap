@@ -7,13 +7,16 @@ import (
 	"io"
 	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
+	graphv1 "github.com/zimwip/goap/contracts/gen/goap/graph/v1"
 	indexv1 "github.com/zimwip/goap/contracts/gen/goap/index/v1"
+	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/graph/graph/graphtest"
 	"github.com/zimwip/goap/graph/index"
@@ -249,7 +252,7 @@ func TestSearchHandler(t *testing.T) {
 		return r.Msg, nil
 	}
 	// a project and its sub-projects, resolved by the server
-	r, err := call("alice", &indexv1.SearchRequest{Text: "password", Mode: "lexical", Kinds: []string{"node"}, Projects: []string{"P1"}, IncludeSubprojects: true})
+	r, err := call("alice", &indexv1.SearchRequest{Text: "password", Mode: "lexical", Kinds: []string{"node"}, Projects: []string{"P1"}, IncludeSubprojects: true, History: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +264,7 @@ func TestSearchHandler(t *testing.T) {
 	if fmt.Sprint(got) != "[REQ-1 REQ-3]" {
 		t.Fatalf("with sub-projects: %v", got)
 	}
-	r, _ = call("alice", &indexv1.SearchRequest{Text: "password", Mode: "lexical", Kinds: []string{"node"}, Projects: []string{"P1"}})
+	r, _ = call("alice", &indexv1.SearchRequest{Text: "password", Mode: "lexical", Kinds: []string{"node"}, Projects: []string{"P1"}, History: true})
 	if r.Total != 1 || r.Hits[0].Key != "REQ-1" || r.Hits[0].Project != "P1" {
 		t.Fatalf("exact project: %+v", r)
 	}
@@ -281,10 +284,12 @@ func TestSearchHandler(t *testing.T) {
 		code connect.Code
 	}{
 		"kind":        {&indexv1.SearchRequest{Kinds: []string{"file"}}, connect.CodeInvalidArgument},
-		"mode":        {&indexv1.SearchRequest{Text: "x", Mode: "fuzzy"}, connect.CodeInvalidArgument},
-		"floor":       {&indexv1.SearchRequest{Text: "x", MinSimilarity: ptr(2.0)}, connect.CodeInvalidArgument},
-		"similar_id":  {&indexv1.SearchRequest{SimilarTo: &indexv1.DocumentRef{Kind: "node"}}, connect.CodeInvalidArgument},
-		"unknown doc": {&indexv1.SearchRequest{SimilarTo: &indexv1.DocumentRef{Kind: "node", Id: "nope"}}, connect.CodeNotFound},
+		"mode":        {&indexv1.SearchRequest{Text: "x", Mode: "fuzzy", History: true}, connect.CodeInvalidArgument},
+		"floor":       {&indexv1.SearchRequest{Text: "x", MinSimilarity: ptr(2.0), History: true}, connect.CodeInvalidArgument},
+		"similar_id":  {&indexv1.SearchRequest{SimilarTo: &indexv1.DocumentRef{Kind: "node"}, History: true}, connect.CodeInvalidArgument},
+		"unknown doc": {&indexv1.SearchRequest{SimilarTo: &indexv1.DocumentRef{Kind: "node", Id: "nope"}, History: true}, connect.CodeNotFound},
+		"no view":     {&indexv1.SearchRequest{Text: "x"}, connect.CodeInvalidArgument},
+		"main alone":  {&indexv1.SearchRequest{Text: "x", Main: ptr(true)}, connect.CodeInvalidArgument},
 	} {
 		if _, err := call("alice", c.m); connect.CodeOf(err) != c.code {
 			t.Errorf("%s: %v", name, err)
@@ -293,15 +298,15 @@ func TestSearchHandler(t *testing.T) {
 	// semantic search without an embedding model is a failed precondition; hybrid still answers
 	text := New(index.NewMemory(), nil, nil, quietLog())
 	th := &Handler{Service: text, Identity: identity.Extractor{}}
-	if _, err := th.Search(context.Background(), connect.NewRequest(&indexv1.SearchRequest{Text: "x", Mode: "semantic"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+	if _, err := th.Search(context.Background(), connect.NewRequest(&indexv1.SearchRequest{Text: "x", Mode: "semantic", History: true})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("semantic: %v", err)
 	}
-	res, err := th.Search(context.Background(), connect.NewRequest(&indexv1.SearchRequest{Text: "x"}))
+	res, err := th.Search(context.Background(), connect.NewRequest(&indexv1.SearchRequest{Text: "x", History: true}))
 	if err != nil || res.Msg.Semantic {
 		t.Fatalf("hybrid degrades: %v %+v", err, res)
 	}
 	// similar_to by the document of a node
-	sim, err := call("", &indexv1.SearchRequest{SimilarTo: &indexv1.DocumentRef{Kind: "node", Id: "n1"}, Kinds: []string{"node", "change"}, MinSimilarity: ptr(0.0)})
+	sim, err := call("", &indexv1.SearchRequest{SimilarTo: &indexv1.DocumentRef{Kind: "node", Id: "n1"}, Kinds: []string{"node", "change"}, MinSimilarity: ptr(0.0), History: true})
 	if err != nil || len(sim.Hits) == 0 {
 		t.Fatalf("%v %+v", err, sim)
 	}
@@ -313,3 +318,60 @@ func TestSearchHandler(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// views holds the versions of a view by node; a branch view of main at its head is the head of main.
+type views map[string]map[domain.NodeID]domain.Version
+
+func (vs views) ViewVersions(_ context.Context, v graphapi.View, ids []domain.NodeID) (graphapi.ViewState, error) {
+	if v.IsChange() {
+		return graphapi.ViewState{Namespace: "docs", Baseline: "B1", Versions: vs[string(v.Change)]}, nil
+	}
+	if err := v.Check(); err != nil {
+		return graphapi.ViewState{}, err
+	}
+	return graphapi.ViewState{Namespace: v.Namespace, Baseline: "B2", MainHead: v.Branch == domain.MainBranch && v.Baseline == ""}, nil
+}
+
+func (vs views) ViewDrafts(_ context.Context, v graphapi.View, text string, _ int) ([]domain.Node, error) {
+	if v.Change != "C1" || !strings.Contains("password draft", text) {
+		return nil, nil
+	}
+	return []domain.Node{{ID: "n6", Namespace: "docs", Type: "docs@Requirement", Key: "REQ-6"}}, nil
+}
+
+// A search of nodes in views (ADR 0157): the head of main is the index's flag; a change view keeps the versions it
+// holds.
+func TestSearchInViews(t *testing.T) {
+	svc := seedAccess(t)
+	// REQ-1 has a second version, written by change C1 on its branch
+	publish(t, svc, fmt.Sprintf(domain.SubjectNodeWritten, "docs", "docs@Requirement", "n1"),
+		domain.NodeEvent{ID: "n1", Version: 2, Namespace: "docs", Type: "docs@Requirement", Key: "REQ-1", Branch: "change-C1", Project: "P1", Text: map[string]string{"title": "password reset by mail"}})
+	if err := svc.Store.SetMain(context.Background(), map[domain.NodeID]domain.Version{"n1": 1, "n2": 1, "n3": 1, "n4": 1, "n5": 1}, nil); err != nil {
+		t.Fatal(err)
+	}
+	svc.Views = views{"C1": {"n1": 2, "n3": 1, "n6": 0}}
+	h := &Handler{Service: svc, Identity: identity.Extractor{}}
+	search := func(v *graphv1.View) []string {
+		t.Helper()
+		r, err := h.Search(context.Background(), connect.NewRequest(&indexv1.SearchRequest{Text: "password", Mode: "lexical", Kinds: []string{"node"}, Limit: 50,
+			Views: []*graphv1.View{v}}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, x := range r.Msg.Hits {
+			got = append(got, fmt.Sprintf("%s v%d", x.Key, x.Version))
+		}
+		slices.Sort(got)
+		return got
+	}
+	if got := fmt.Sprint(search(&graphv1.View{Namespace: "docs", Branch: "main"})); got != "[REQ-1 v1 REQ-2 v1 REQ-3 v1 REQ-5 v1 SEC-1 v1]" {
+		t.Fatalf("head of main: %s", got)
+	}
+	if got := fmt.Sprint(search(&graphv1.View{ChangeId: "C1"})); got != "[REQ-1 v2 REQ-3 v1 REQ-6 v0]" {
+		t.Fatalf("change C1: %s", got)
+	}
+	if got := search(&graphv1.View{Namespace: "other", Branch: "main"}); len(got) != 0 {
+		t.Fatalf("another namespace: %v", got)
+	}
+}

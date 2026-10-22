@@ -52,6 +52,7 @@
 import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import { changeNodes, lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, awaitingReview, writeNodeInChange, removeFromChange, removeManyFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
+  import { forkView } from '../../graphIndex';
   import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
@@ -233,7 +234,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     candidatesOf = baselineId;
     if (!baselineId) return void (candidateNodes = []);
     try {
-      const r = await graph.listBaselineNodes({ baselineId, query, limit: 200 }, ctrl.signal);
+      const r = await graph.listBaselineNodes({ view: await forkView(change ?? {}, ctrl.signal), query, limit: 200 }, ctrl.signal);
       if (!ctrl.signal.aborted) candidateNodes = r.nodes ?? [];
     } catch (e) {
       if (!ctrl.signal.aborted) error = errorMessage(e);

@@ -50,7 +50,7 @@ func forward[T any](ctx context.Context, msg *T) *connect.Request[T] {
 func (c *Client) CallTool(ctx context.Context, org, name string, args map[string]any) (any, error) {
 	call := mcp.CallFrom(ctx)
 	r, err := c.rpc.CallTool(ctx, forward(ctx, &mcpv1.CallToolRequest{Unit: org, Name: name, Arguments: pbconv.Struct(args),
-		ChangeId: call.Change, ProcessId: call.Process}))
+		ChangeId: call.Change, ProcessId: call.Process, Flow: call.Flow}))
 	if err != nil {
 		return nil, err
 	}

@@ -98,7 +98,7 @@ func testCheckoutEditAccept(t *testing.T, repo Repo) {
 	}
 	// a version never changes once written
 	if err := g.repo.InTx(ctx, func(tx Tx) error {
-		return tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: "x", From: committed.Ref(), To: committed.Ref(), ChangeID: c.ID})
+		return tx.PutLinks(ctx, []domain.Link{{ID: domain.LinkID(g.newID()), Type: "x", From: committed.Ref(), To: committed.Ref(), ChangeID: c.ID}})
 	}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a link added to a written version: %v", err)
 	}

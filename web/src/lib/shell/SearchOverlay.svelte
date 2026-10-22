@@ -2,7 +2,10 @@
   // Node search overlay: hybrid full-text / semantic search over the nodes of the graph (node index, ADR 0026)
   // with facets. It covers the workbench while it is open and closes as soon as a node is chosen.
   import { can } from '../stores/session.svelte';
-  import { nodeIndex, errorMessage, type NodeHit, type NodeSearchRequest, type NodeSearchResult, type IndexStatus } from '../api';
+  import { graph, nodeIndex, errorMessage, type GraphView, type NodeHit, type NodeSearchRequest, type NodeSearchResult, type IndexStatus } from '../api';
+  import { MAIN_SCOPE } from '../changeScope';
+  import { MAIN_BRANCH, namespaceOf } from '../namespace';
+  import { working } from '../stores/workingChange.svelte';
   import Icon from './Icon.svelte';
   import { openNode } from '../nodeEditors';
   import { notify } from './workbench.svelte';
@@ -10,6 +13,7 @@
 
   const PAGE = 25;
   const BUILTIN = ['type', 'namespace', 'state', 'branch'] as const;
+  /** context: the views the front works in (ADR 0157); all / off: the history, every version or those not on main */
   type Scope = 'main' | 'all' | 'off';
 
   let text = $state('');
@@ -28,10 +32,21 @@
 
   const admin = $derived(can.administer);
 
-  function request(): NodeSearchRequest {
+  /** the namespaces of the graph, read once: the views of a search in the context */
+  let namespaces: string[] | undefined;
+  /** the view of each namespace: the working change on its option for its own, the head of main for the others */
+  async function contextViews(): Promise<GraphView[]> {
+    namespaces ??= (await graph.listNamespaces()).namespaces ?? [];
+    const w = working.change;
+    const flow = working.option === MAIN_SCOPE ? '' : working.option;
+    return namespaces.map((ns) => (w && namespaceOf(w.namespace) === ns ? { changeId: w.id, flow } : { namespace: ns, branch: MAIN_BRANCH }));
+  }
+
+  async function request(): Promise<NodeSearchRequest> {
     const req: NodeSearchRequest = { kinds: ['node'], text: text.trim(), facets: [...BUILTIN, ...declared], limit: PAGE, offset: page * PAGE };
-    if (scope === 'main') req.main = true;
-    else if (scope === 'off') req.main = false;
+    if (scope === 'main') req.views = await contextViews();
+    else req.history = true;
+    if (scope === 'off') req.main = false;
     const sel = (n: string) => selected[n] ?? [];
     if (sel('type').length) req.types = sel('type');
     if (sel('namespace').length) req.namespaces = sel('namespace');
@@ -49,7 +64,7 @@
     loading = true;
     error = '';
     try {
-      const r = await nodeIndex.search(request(), ctl.signal);
+      const r = await nodeIndex.search(await request(), ctl.signal);
       // facets the node types declare show up on the hits: count them from the next request on
       const names = new Set(declared);
       for (const h of r.hits ?? []) for (const k of Object.keys(h.facets ?? {})) names.add(k);
@@ -177,9 +192,9 @@
           autocomplete="off"
         />
         <select bind:value={scope} aria-label="Scope">
-          <option value="main">Heads of main</option>
-          <option value="all">Every branch</option>
-          <option value="off">Not on main (in progress)</option>
+          <option value="main">In the context</option>
+          <option value="all">History: every version</option>
+          <option value="off">History: not on main</option>
         </select>
         {#if admin}
           <button type="button" class="small" onclick={reindex} disabled={reindexing} title="Empty the index and publish the graph again">

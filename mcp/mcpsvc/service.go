@@ -348,7 +348,7 @@ func (s *Service) Call(ctx context.Context, org, name string, args map[string]an
 	}
 	call := func(ctx context.Context, op string, args map[string]any) (map[string]any, error) {
 		resp, err := s.Invoker.Invoke(ctx, reg.Endpoint, &connectorv1.InvokeRequest{Operation: op, Arguments: pbconv.Struct(args),
-			Config: pbconv.Struct(config), Secrets: secrets, OrgId: a.Unit, ChangeId: cc.Change, ProcessId: cc.Process,
+			Config: pbconv.Struct(config), Secrets: secrets, OrgId: a.Unit, ChangeId: cc.Change, ProcessId: cc.Process, Flow: cc.Flow,
 			ModelUrl: cc.ModelURL, ModelToken: cc.ModelToken})
 		if err != nil {
 			transport = fmt.Errorf("connector %s: %w: %w", alg.Connector, ErrUnavailable, err)

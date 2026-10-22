@@ -54,7 +54,8 @@ func main() {
 	// embeddings: the model gateway, alias "embed"; without one the index is text only
 	var embedder = modelgw.NewClient(hc, platform.Env("GOAP_MODELGW_URL", "http://localhost:8084"), telemetry.ClientOptions()...)
 	svc := indexersvc.New(store, embedder, iam, log)
-	svc.Access = directory // the projects a caller may see, and a project with its sub-projects (ADR 0095)
+	svc.Access = directory                                                        // the projects a caller may see, and a project with its sub-projects (ADR 0095)
+	svc.Views = graphclient.NewClient(hc, graphURL, telemetry.ClientOptions()...) // what the views a search names hold (ADR 0157)
 	graphRPC := graphv1connect.NewGraphServiceClient(hc, graphURL, telemetry.ClientOptions()...)
 	svc.Republish = func(ctx context.Context) (int, error) {
 		req := connect.NewRequest(&graphv1.RepublishIndexRequest{})

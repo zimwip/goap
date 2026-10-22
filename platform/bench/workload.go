@@ -447,7 +447,7 @@ func (r *Runner) committed(w *worker, edits []edit) {
 // resolve reads the id and latest version of a node created by the bench.
 func (r *Runner) resolve(ctx context.Context, n *node) error {
 	res, err := timed(ctx, r.Metrics, "resolve.GetNode", func(ctx context.Context) (*connect.Response[graphv1.GetNodeResponse], error) {
-		return r.Clients.Graph.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{Namespace: Namespace, Key: n.key}))
+		return r.Clients.Graph.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{View: &graphv1.View{Namespace: Namespace, Branch: "main"}, Key: n.key}))
 	})
 	if err != nil {
 		return err
@@ -625,16 +625,16 @@ func (r *Runner) probeOnce(ctx context.Context, rnd *rand.Rand) {
 	head := br.Msg.Head.GetId()
 	if n := sampled; n != nil {
 		if v, err := timed(ctx, m, "GetNode", func(ctx context.Context) (*connect.Response[graphv1.GetNodeResponse], error) {
-			return g.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{Namespace: Namespace, Key: n.key}))
+			return g.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{View: &graphv1.View{Namespace: Namespace, Branch: "main"}, Key: n.key}))
 		}); err == nil {
 			_, _ = timed(ctx, m, "GetNodeNeighbourhood", func(ctx context.Context) (*connect.Response[graphv1.GetNodeNeighbourhoodResponse], error) {
-				return g.GetNodeNeighbourhood(ctx, connect.NewRequest(&graphv1.GetNodeNeighbourhoodRequest{BaselineId: head, NodeId: v.Msg.View.GetNode().GetId()}))
+				return g.GetNodeNeighbourhood(ctx, connect.NewRequest(&graphv1.GetNodeNeighbourhoodRequest{View: &graphv1.View{Namespace: Namespace, Branch: "main", BaselineId: head}, NodeId: v.Msg.View.GetNode().GetId()}))
 			})
 		}
 	}
 	if n := r.sampleNode(rnd, true); n != nil {
 		if v, err := timed(ctx, m, "hot.GetNode", func(ctx context.Context) (*connect.Response[graphv1.GetNodeResponse], error) {
-			return g.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{Namespace: Namespace, Key: n.key}))
+			return g.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{View: &graphv1.View{Namespace: Namespace, Branch: "main"}, Key: n.key}))
 		}); err == nil {
 			id := v.Msg.View.GetNode().GetId()
 			_, _ = timed(ctx, m, "ListNodeVersions", func(ctx context.Context) (*connect.Response[graphv1.ListNodeVersionsResponse], error) {
@@ -649,10 +649,10 @@ func (r *Runner) probeOnce(ctx context.Context, rnd *rand.Rand) {
 	// size of the graph (ADR 0140)
 	change := br.Msg.Head.GetChangeId()
 	_, _ = timed(ctx, m, "ListBaselineNodes", func(ctx context.Context) (*connect.Response[graphv1.ListBaselineNodesResponse], error) {
-		return g.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{BaselineId: head, ChangeId: change, Type: TypeName(rnd.IntN(max(r.types, 1))), Limit: 100}))
+		return g.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{View: &graphv1.View{Namespace: Namespace, Branch: "main", BaselineId: head}, ChangeId: change, Type: TypeName(rnd.IntN(max(r.types, 1))), Limit: 100}))
 	})
 	_, _ = timed(ctx, m, "search.ListBaselineNodes", func(ctx context.Context) (*connect.Response[graphv1.ListBaselineNodesResponse], error) {
-		return g.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{BaselineId: head, ChangeId: change, Query: fmt.Sprintf("w%02d-%07d", rnd.IntN(max(r.Config.Workers, 1)), rnd.IntN(1000)), Limit: 50}))
+		return g.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{View: &graphv1.View{Namespace: Namespace, Branch: "main", BaselineId: head}, ChangeId: change, Query: fmt.Sprintf("w%02d-%07d", rnd.IntN(max(r.Config.Workers, 1)), rnd.IntN(1000)), Limit: 50}))
 	})
 	if parent := br.Msg.Head.GetParentId(); parent != "" {
 		_, _ = timed(ctx, m, "DiffBaselines", func(ctx context.Context) (*connect.Response[graphv1.DiffBaselinesResponse], error) {
@@ -692,7 +692,7 @@ func structOf(m map[string]any) *structpb.Struct {
 func (r *Runner) WaitReady(ctx context.Context, d time.Duration) error {
 	deadline := time.Now().Add(d)
 	for {
-		_, err := r.Clients.Graph.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{Namespace: access.NamespaceOrganisation, Key: access.DefaultProject}))
+		_, err := r.Clients.Graph.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{View: &graphv1.View{Namespace: access.NamespaceOrganisation, Branch: "main"}, Key: access.DefaultProject}))
 		if err == nil {
 			return nil
 		}

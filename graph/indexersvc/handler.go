@@ -12,8 +12,10 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	indexv1 "github.com/zimwip/goap/contracts/gen/goap/index/v1"
 	"github.com/zimwip/goap/contracts/gen/goap/index/v1/indexv1connect"
+	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/graph/index"
 	"github.com/zimwip/goap/lib/identity"
+	"github.com/zimwip/goap/lib/pbconv"
 	"github.com/zimwip/goap/lib/rpcerr"
 )
 
@@ -36,8 +38,11 @@ func (h *Handler) Search(ctx context.Context, r *connect.Request[indexv1.SearchR
 		}
 	}
 	q := index.Query{Text: m.Text, Facets: m.Facets, Limit: int(m.Limit), Offset: int(m.Offset), Mode: m.Mode, MinSimilarity: m.MinSimilarity, Snippet: m.Snippet,
-		Filter: index.Filter{Kind: m.Kinds, Namespace: m.Namespaces, Type: m.Types, State: m.States, Branch: m.Branches, Main: m.Main,
+		Filter: index.Filter{Kind: m.Kinds, Namespace: m.Namespaces, Type: m.Types, State: m.States, Branch: m.Branches,
 			Project: m.Projects, Owner: m.OwnerUnits, Status: m.Statuses, Methodology: m.Methodologies, RootsOnly: m.RootsOnly}}
+	if err := h.inViews(ctx, m, &q); err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
 	if m.IncludeSubprojects && len(m.Projects) > 0 && h.Service.Access != nil {
 		var all []string
 		for _, p := range m.Projects {
@@ -119,4 +124,97 @@ func (h *Handler) Reindex(ctx context.Context, r *connect.Request[indexv1.Reinde
 func (h *Handler) Status(context.Context, *connect.Request[indexv1.StatusRequest]) (*connect.Response[indexv1.StatusResponse], error) {
 	semantic, store, nodes, baselines, changes, errs := h.Service.Status()
 	return connect.NewResponse(&indexv1.StatusResponse{Semantic: semantic, Store: store, NodesIndexed: nodes, BaselinesFollowed: baselines, ChangesIndexed: changes, Errors: errs}), nil
+}
+
+// inViews scopes a search of nodes to the views it names (ADR 0157), one per namespace: the namespaces are theirs, and
+// a hit of a node is kept when its version is the one its view holds (the heads of main when every view is one, the
+// index's own flag). A search of nodes names its views, or the history (every version, refined by main); a search of
+// changes only names neither.
+func (h *Handler) inViews(ctx context.Context, m *indexv1.SearchRequest, q *index.Query) error {
+	if len(m.Kinds) > 0 && !slices.Contains(m.Kinds, index.KindNode) {
+		return nil
+	}
+	switch {
+	case m.History && len(m.Views) > 0:
+		return fmt.Errorf("a search names views or the history, not both: %w", graphapi.ErrInvalid)
+	case m.History:
+		q.Filter.Main = m.Main
+		return nil
+	case m.Main != nil:
+		return fmt.Errorf("main refines a search of the history: %w", graphapi.ErrInvalid)
+	case len(m.Views) == 0:
+		return graphapi.ErrNoView
+	case h.Service.Views == nil:
+		return fmt.Errorf("this index resolves no view: %w", graphapi.ErrInvalid)
+	}
+	views := map[string]graphapi.View{}
+	heads := map[string]bool{}
+	every := true
+	var namespaces []string
+	for _, pv := range m.Views {
+		v := pbconv.GraphViewFromPB(pv)
+		st, err := h.Service.Views.ViewVersions(ctx, v, nil)
+		if err != nil {
+			return err
+		}
+		if _, dup := views[st.Namespace]; dup {
+			return fmt.Errorf("two views of namespace %s: %w", st.Namespace, graphapi.ErrInvalid)
+		}
+		views[st.Namespace], heads[st.Namespace] = v, st.MainHead
+		every = every && st.MainHead
+		if len(m.Namespaces) == 0 || slices.Contains(m.Namespaces, st.Namespace) {
+			namespaces = append(namespaces, st.Namespace)
+		}
+	}
+	if len(namespaces) == 0 {
+		namespaces = []string{"\x00"} // the namespaces asked have no view: nothing
+	}
+	q.Filter.Namespace = namespaces
+	// the drafts of the change views: the index has no document of them
+	for _, v := range views {
+		if !v.IsChange() || m.SimilarTo != nil {
+			continue
+		}
+		drafts, err := h.Service.Views.ViewDrafts(ctx, v, m.Text, index.PoolSize)
+		if err != nil {
+			return err
+		}
+		for _, n := range drafts {
+			q.Extra = append(q.Extra, index.Hit{Kind: index.KindNode, ID: n.ID, Namespace: n.Namespace, Type: n.Type, Key: n.Key, State: n.State,
+				Branch: n.Branch, Project: n.Project.Key, Owner: n.Owner.Key})
+		}
+	}
+	if every {
+		yes := true
+		q.Filter.Main = &yes
+		return nil
+	}
+	q.Select = func(ctx context.Context, hits []index.Hit) ([]index.Hit, error) {
+		ids := map[string][]domain.NodeID{}
+		for _, x := range hits {
+			if x.Kind != index.KindChange && !heads[x.Namespace] {
+				ids[x.Namespace] = append(ids[x.Namespace], x.ID)
+			}
+		}
+		held := map[string]map[domain.NodeID]domain.Version{}
+		for ns, nodes := range ids {
+			slices.Sort(nodes)
+			st, err := h.Service.Views.ViewVersions(ctx, views[ns], slices.Compact(nodes))
+			if err != nil {
+				return nil, err
+			}
+			held[ns] = st.Versions
+		}
+		return slices.DeleteFunc(hits, func(x index.Hit) bool {
+			switch {
+			case x.Kind == index.KindChange:
+				return false
+			case heads[x.Namespace]:
+				return !x.Main
+			}
+			v, ok := held[x.Namespace][x.ID]
+			return !ok || v != x.Version
+		}), nil
+	}
+	return nil
 }

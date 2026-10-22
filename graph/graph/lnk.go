@@ -82,7 +82,7 @@ func (g *Graph) Sources(ctx context.Context) ([]lnk.Source, error) {
 	if g.lnk.read && g.lnk.head == head.ID {
 		return g.lnk.sources, nil
 	}
-	nodes, err := g.NodesOfType(ctx, domain.NamespacePlatform, domain.TypeSource)
+	nodes, err := g.ViewNodesOfType(ctx, View{Namespace: domain.NamespacePlatform, Branch: domain.MainBranch, Baseline: head.ID}, domain.TypeSource)
 	if err != nil {
 		return nil, err
 	}

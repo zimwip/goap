@@ -23,13 +23,15 @@
   import { graph, errorMessage } from '../api';
   import NodeGraph from './NodeGraph.svelte';
   import ChangeStackView from './ChangeStackView.svelte';
-  import { indexOf } from '../graphIndex';
+  import { branchView, indexOf } from '../graphIndex';
+  import { MAIN_BRANCH } from '../namespace';
   import { openNode } from '../nodeEditors';
   import { typeCatalog } from '../stores/types.svelte';
 
   let {
     baselineId,
     namespace,
+    branch = MAIN_BRANCH,
     node = $bindable(''),
     link = $bindable(),
     hood = $bindable(emptyNeighbourhood()),
@@ -43,6 +45,8 @@
     baselineId: string;
     /** the namespace the baseline holds: a node of another one opens in its editor instead of recentering */
     namespace: string;
+    /** the branch of the baseline (ADR 0157: always named; main unless said) */
+    branch?: string;
     /** the node at the center */
     node?: string;
     /** the link shown, if any */
@@ -62,7 +66,7 @@
 
   /** what the neighbourhoods are read from: the world given, else the baseline ('' : nothing to read) */
   const source = $derived(inChange ? `change:${inChange.changeId}:${inChange.flow ?? ''}` : baselineId);
-  const readHood = (b: string, id: string, signal?: AbortSignal): Promise<Read> => graph.getNodeNeighbourhood(b, id, signal, inChange);
+  const readHood = (b: string, id: string, signal?: AbortSignal): Promise<Read> => graph.getNodeNeighbourhood(inChange ?? branchView(namespace, b, branch), id, signal);
 
   const MAX_LEVELS = 4;
   /** the nodes read per level beyond the first (the graph shows at most 14 per column anyway) */

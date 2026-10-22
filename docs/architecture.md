@@ -1581,7 +1581,10 @@ for the namespace the working change acts on, the change on that option; for the
 head of main. A screen reads of it only what it shows (a neighbourhood, a page of a search; `viewHoods`, `searchView`):
 the node tab, the pickers, the *New object* dialog, the human tasks (the nodes of their change, `lifecycle.changeNodes`,
 the rest searched) and the Graph explorer (a neighbourhood at a time, from the organisation or a node found); the
-Baseline explorer is the exception, it shows the commit the person picks. The choice of project persists the choice locally (`goap-dev`, with no token to reissue, keeps a
+Baseline explorer is the exception, it shows the commit the person picks. Every such read names its view to the graph (ADR 0157: `graphView`
+of the context view, `branchView` for a baseline of a branch, `forkView` for a change's fork): the graph refuses a read of
+the current graph naming no branch and no change, and assumes no branch; a search of a change view is the server's, the
+nodes it creates and its drafts included. The choice of project persists the choice locally (`goap-dev`, with no token to reissue, keeps a
 fixed `GOAP_DEV_PROJECT` env var instead, like `GOAP_DEV_ORG`). Assignment has no nav entry of its own: an
 "Assignments" pane on the Organisation, Project and User editors (one `AssignmentsPane.svelte`,
 parametrized by which side is fixed) offers a "+ Assignment" action, and each explorer's context menu
@@ -1655,8 +1658,8 @@ ADR 0054, so the root exists; the check stays as a guard): creating the `User` n
 leave a permanently broken one on that race (no `member_of`, no admin) — worse, one that makes every later
 subject see the namespace as "already has a `User`" and never get the first-admin bootstrap either. Once the
 org is confirmed, it links the new `User` `member_of` it and grants `Roles: ["admin"]` when it is the first
-`User` node the namespace has ever held; the existence check (`g.NodesOfType`) reads *live* state
-(`tx.LatestNodes`), not a baseline snapshot — `EnsureUser` writes by import (`ImpactNodeCreate`/`Link`, outside of
+`User` node the namespace has ever held; the existence check (`g.ViewNodesOfType`, the head of main of the organisation, ADR 0157) reads the state
+its last change left, not an older baseline — `EnsureUser` writes by import (`ImpactNodeCreate`/`Link`, outside of
 any change), which does not itself advance a baseline, so a baseline-scoped read would miss every user but
 the ones incidentally folded in by some unrelated later change. A benign race between two simultaneous first
 connections can only ever grant admin to more than one subject, never to none. `pkg/graph.Commit` (the

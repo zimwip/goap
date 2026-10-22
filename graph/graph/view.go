@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 
@@ -39,9 +40,9 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View) (*world, error) {
 	}
 	w := &world{view: v, reader: &draftReader{byNode: map[domain.NodeID]domain.Draft{}}}
 	if !v.IsChange() {
-		w.baseline, w.namespace = v.Baseline, v.Namespace
+		w.baseline, w.namespace = v.Baseline, domain.NamespaceOf(v.Namespace)
 		if w.baseline == "" {
-			head, err := branchHeadHeader(ctx, tx, v.Namespace, v.Branch)
+			head, err := branchHeadHeader(ctx, tx, w.namespace, v.Branch)
 			if err != nil {
 				return nil, err
 			}
@@ -51,11 +52,10 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View) (*world, error) {
 			if err != nil {
 				return nil, err
 			}
-			if w.namespace == "" {
-				w.namespace = h.Namespace
+			if h.Namespace != w.namespace || h.Branch != v.Branch {
+				return nil, fmt.Errorf("baseline %s is of %s/%s, not of %s: %w", w.baseline, h.Namespace, h.Branch, v, ErrInvalid)
 			}
 		}
-		w.namespace = domain.NamespaceOf(w.namespace)
 		return w, nil
 	}
 	c, err := tx.Change(ctx, v.Change)
@@ -224,7 +224,7 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID) 
 	if err != nil {
 		return nb, err
 	}
-	in, err := tx.LinksTo(ctx, nodeID)
+	in, err := w.entering(ctx, tx, nodeID)
 	if err != nil {
 		return nb, err
 	}
@@ -311,6 +311,31 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID) 
 	return nb, nil
 }
 
+// entering reads the stored links entering a node from the versions of their sources the world holds: the sources
+// first, then the links their versions hold into the node, so a source with a long history costs one version, not one
+// row per version holding the link. A source the world holds as a draft is left to the drafts' links.
+func (w *world) entering(ctx context.Context, tx Tx, nodeID domain.NodeID) ([]domain.Link, error) {
+	sources, err := tx.LinkSources(ctx, nodeID)
+	if err != nil || len(sources) == 0 {
+		return nil, err
+	}
+	slices.Sort(sources)
+	at, err := w.at(ctx, tx, sources)
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]domain.NodeRef, 0, len(at))
+	for _, id := range sources {
+		if v := at[id]; v != 0 {
+			refs = append(refs, domain.NodeRef{ID: id, Version: v})
+		}
+	}
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	return tx.LinksFromInto(ctx, refs, nodeID)
+}
+
 // ViewNodes returns a page of the nodes of a view ordered by key, matching q (ADR 0157): for a branch view the page of
 // its baseline (BaselineNodes); for a change view the page of its fork with what the change wrote laid over it (its
 // commits, its drafts, the nodes it created), read for those nodes only.
@@ -324,31 +349,62 @@ func (g *Graph) ViewNodes(ctx context.Context, v View, q NodeQuery) (page NodePa
 		if err != nil {
 			return err
 		}
-		if w.change == nil {
-			if q.Change != "" {
-				nodes, err := changeNodesIn(ctx, tx, w.baseline, q.Change)
-				page = pageNodes(nodes, q)
-				return err
-			}
-			if w.baseline == "" {
-				return nil
-			}
-			b, err := tx.Baseline(ctx, w.baseline)
-			if err != nil || len(b.Nodes) == 0 {
-				return err
-			}
-			page, err = tx.NodePage(ctx, refsOf(b.Nodes), q)
-			return err
-		}
-		page, err = w.nodes(ctx, tx, q)
+		page, err = w.page(ctx, tx, q)
+		page.Baseline = w.baseline
 		return err
 	})
 	return page, err
 }
 
+// ViewNodesOfType returns the nodes of a type (that type exactly, not its subtypes; empty: every node) a view holds
+// (ADR 0157): an explicit read of a whole type, what a script's ctx.nodes, a prompt template or an existence check asks
+// for. One transaction and one read of the state, however many nodes come back.
+func (g *Graph) ViewNodesOfType(ctx context.Context, v View, typ string) (out []domain.Node, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		w, err := g.openWorld(ctx, tx, v)
+		if err != nil {
+			return err
+		}
+		page, err := w.page(ctx, tx, NodeQuery{Type: typ, Limit: math.MaxInt32})
+		if err != nil {
+			return err
+		}
+		for _, n := range page.Nodes {
+			if typ == "" || n.Type == typ {
+				out = append(out, n)
+			}
+		}
+		return nil
+	})
+	return out, err
+}
+
+// page is a page of the nodes of the world.
+func (w *world) page(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error) {
+	if w.change != nil {
+		return w.nodes(ctx, tx, q)
+	}
+	if q.Change != "" {
+		nodes, err := changeNodesIn(ctx, tx, w.baseline, q.Change)
+		return pageNodes(nodes, q), err
+	}
+	if w.baseline == "" {
+		return NodePage{}, nil
+	}
+	b, err := tx.Baseline(ctx, w.baseline)
+	if err != nil || len(b.Nodes) == 0 {
+		return NodePage{}, err
+	}
+	return tx.NodePage(ctx, refsOf(b.Nodes), q)
+}
+
 // nodes is the page of a change view: the fork's nodes the change left alone, paged by the store, merged with the
 // nodes the change holds another version of (read node by node).
 func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error) {
+	if q.Change != "" { // the nodes the impacts of a change act on, as the fork has them
+		nodes, err := changeNodesIn(ctx, tx, w.baseline, q.Change)
+		return pageNodes(nodes, q), err
+	}
 	// the nodes of the world the change wrote: their versions in it
 	var mine []domain.NodeID
 	if w.own {
@@ -382,9 +438,7 @@ func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error)
 		}
 		written = append(written, n)
 	}
-	if q.Change != "" { // the nodes of a change, as this world has them
-		return pageNodes(written, q), nil
-	}
+
 	// the fork, the nodes the change wrote left out, paged with room for them
 	var page NodePage
 	if w.baseline != "" {
@@ -406,7 +460,7 @@ func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error)
 			}
 		}
 	}
-	extra := pageNodes(written, NodeQuery{Type: q.Type, Text: q.Text, IncludeDeleted: q.IncludeDeleted, Limit: MaxBrowseLimit})
+	extra := pageNodes(written, NodeQuery{Type: q.Type, Text: q.Text, IncludeDeleted: q.IncludeDeleted, Limit: max(q.Offset+q.Limit, MaxBrowseLimit)})
 	all := append(page.Nodes, extra.Nodes...)
 	slices.SortFunc(all, func(a, b domain.Node) int { return strings.Compare(a.Key, b.Key) })
 	counts := map[string]int{}
@@ -419,4 +473,56 @@ func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error)
 		out.Nodes = all[q.Offset:min(q.Offset+q.Limit, len(all))]
 	}
 	return out, nil
+}
+
+// ViewVersions answers what a view holds of some nodes (ADR 0157): their versions in it, read by node, and whether it
+// is the head of main. The index keeps the hits of a search a view holds with it.
+func (g *Graph) ViewVersions(ctx context.Context, v View, ids []domain.NodeID) (st ViewState, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		w, err := g.openWorld(ctx, tx, v)
+		if err != nil {
+			return err
+		}
+		st.Namespace, st.Baseline = w.namespace, w.baseline
+		if w.change == nil && domain.BranchOf(v.Branch) == domain.MainBranch {
+			if v.Baseline == "" {
+				st.MainHead = true
+			} else if head, err := branchHeadHeader(ctx, tx, w.namespace, domain.MainBranch); err != nil {
+				return err
+			} else {
+				st.MainHead = head.ID == v.Baseline
+			}
+		}
+		st.Versions, err = w.at(ctx, tx, ids)
+		return err
+	})
+	return st, err
+}
+
+// ViewDrafts returns the drafts a change view holds whose key, type or a string property contains the text
+// (case-insensitive; empty: all), at most limit, by key: the nodes the index has no document of yet (ADR 0157). A branch
+// view holds none.
+func (g *Graph) ViewDrafts(ctx context.Context, v View, text string, limit int) (out []domain.Node, err error) {
+	text = strings.ToLower(strings.TrimSpace(text))
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		w, err := g.openWorld(ctx, tx, v)
+		if err != nil || w.change == nil {
+			return err
+		}
+		for _, id := range w.drafts() {
+			n, err := w.node(ctx, tx, domain.NodeRef{ID: id})
+			if err != nil {
+				return err
+			}
+			if text == "" || nodeMatches(n, text) {
+				out = append(out, n)
+			}
+		}
+		return nil
+	})
+	slices.SortFunc(out, func(a, b domain.Node) int { return strings.Compare(a.Key, b.Key) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, err
 }

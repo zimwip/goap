@@ -82,7 +82,7 @@ func testGuardRefusesWritesOutsideAChange(t *testing.T, repo Repo) {
 				ChangeID: domain.ChangeID(g.newID()), Owner: g.StructureURL(domain.StructureOrganisation, org.Key), Project: g.StructureURL(domain.StructureProject, proj.Key), CreatedAt: g.now()})
 		},
 		"a link without a change": func(tx Tx) error {
-			return tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: LinkProjectPartOf, From: proj.Ref(), To: proj.Ref()})
+			return tx.PutLinks(ctx, []domain.Link{{ID: domain.LinkID(g.newID()), Type: LinkProjectPartOf, From: proj.Ref(), To: proj.Ref()}})
 		},
 		"a branch membership without a change": func(tx Tx) error { return tx.JoinBranch(ctx, org.Ref(), "elsewhere", "", 0) },
 		"a change without a unit": func(tx Tx) error {
@@ -310,12 +310,12 @@ func testGuardKeepsVersionsImmutable(t *testing.T, repo Repo) {
 		if err := tx.PutNode(ctx, node); err != nil {
 			return err
 		}
-		return tx.PutLink(ctx, link)
+		return tx.PutLinks(ctx, []domain.Link{link})
 	}); err != nil {
 		t.Fatalf("a version and its links are written together: %v", err)
 	}
 	if err := write(func(tx Tx) error {
-		return tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: "refines", From: node.Ref(), To: node.Ref(), ChangeID: boot.ID})
+		return tx.PutLinks(ctx, []domain.Link{{ID: domain.LinkID(g.newID()), Type: "refines", From: node.Ref(), To: node.Ref(), ChangeID: boot.ID}})
 	}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a link added to a version written earlier: %v", err)
 	}

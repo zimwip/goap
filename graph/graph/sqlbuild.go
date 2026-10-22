@@ -607,7 +607,7 @@ func (d dialect) sqlOpenChangeIDs() string {
 }
 
 // sqlNodeChangePage reads the last limit changes that have an impact on a node, each with the order of its first one,
-// whose order is below before (0: any), newest first.
+// whose order is below before (0: any), newest first: from the index change_impact_node (node_id, seq, change_id) alone.
 func (d dialect) sqlNodeChangePage(node domain.NodeID, before int64, limit int) (string, []any) {
 	q, args := `SELECT `+d.id("change_id")+`, min(seq) FROM change_impact WHERE node_id = `+d.ph(1)+` GROUP BY change_id`, []any{string(node)}
 	if before > 0 {
@@ -682,6 +682,30 @@ func (d dialect) sqlInsert(table string, columns []string, tail string) string {
 		ps[i] = d.ph(i + 1)
 	}
 	return `INSERT INTO ` + table + ` (` + strings.Join(columns, ", ") + `) VALUES (` + strings.Join(ps, ", ") + `)` + tail
+}
+
+// linkRowsPerInsert is the number of links one statement writes: ten arguments each, well under the limits of both
+// databases (PostgreSQL 65535, SQLite 32766).
+const linkRowsPerInsert = 1000
+
+// sqlInsertRows inserts n rows of the columns, their arguments row after row.
+func (d dialect) sqlInsertRows(table string, columns []string, n int) string {
+	var b strings.Builder
+	b.WriteString(`INSERT INTO ` + table + ` (` + strings.Join(columns, ", ") + `) VALUES `)
+	for r := range n {
+		if r > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteByte('(')
+		for c := range columns {
+			if c > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(d.ph(r*len(columns) + c + 1))
+		}
+		b.WriteByte(')')
+	}
+	return b.String()
 }
 
 // sqlPutTag inserts a tag (ADR 0143 §6), its arguments in the order of the columns.
@@ -867,6 +891,18 @@ func (d dialect) sqlLinksFromOfType(refs []domain.NodeRef, types []string) (stri
 	args, n := d.refsArgs(refs)
 	_, arg := d.textList("", n, types)
 	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksOfType(1, n) + `) l ORDER BY l.id`, append(args, arg)
+}
+
+// sqlLinkSources reads the nodes a link row names a node as its target from (link_to), each once.
+func (d dialect) sqlLinkSources(id domain.NodeID) (string, []any) {
+	return `SELECT DISTINCT ` + d.id("from_id") + ` FROM link WHERE to_id = ` + d.ph(1) + ` AND removes IS NULL`, []any{string(id)}
+}
+
+// sqlLinksFromInto is sqlLinksFrom keeping the links into a node: a drop row has the target of the link it drops, so
+// the filter keeps the drops of the links it keeps.
+func (d dialect) sqlLinksFromInto(refs []domain.NodeRef, to domain.NodeID) (string, []any) {
+	args, n := d.refsArgs(refs)
+	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksWhere(1, " AND l.to_id = "+d.ph(n)) + `) l ORDER BY l.id`, append(args, string(to))
 }
 
 // linkRefsWhere selects the links between two of the versions refs matching the text of q.

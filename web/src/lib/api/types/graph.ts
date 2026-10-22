@@ -1,7 +1,7 @@
 // Graph types (proto3 JSON).
 
 import type { Int64, Struct } from './common';
-import type { ChangeStackJson, StackChangeJson, VersionStepJson, BaselineStepJson, GraphStatsJson, NamespaceSummaryJson, DistributionJson, NodeTypeStatsJson, LinkTypeStatsJson } from '../../../gen/goap/graph/v1/graph_pb';
+import type { ChangeStackJson, StackChangeJson, VersionStepJson, BaselineStepJson, GraphStatsJson, NamespaceSummaryJson, DistributionJson, NodeTypeStatsJson, LinkTypeStatsJson, ViewJson } from '../../../gen/goap/graph/v1/graph_pb';
 
 // --- graph ------------------------------------------------------------------
 
@@ -175,8 +175,14 @@ export interface ImpactEvent {
   patch?: Record<string, unknown>;
 }
 
+/** What a read of the current graph is scoped to (ADR 0157): a lasting branch (`namespace`, `branch`, empty: main) at one
+ * of its baselines (empty: its head; a baseline alone names its namespace), or a change on a flow (`changeId`, `flow`).
+ * The graph refuses a read of the current graph naming none; only the reads of the history name versions. */
+export type GraphView = ViewJson;
+
 export interface BaselineNodesQuery {
-  baselineId: string;
+  /** the view paged: a baseline, or a change with what it wrote laid over its fork */
+  view: GraphView;
   /** qualified node type; empty: every type */
   type?: string;
   /** matched against the key, the type and the string properties */

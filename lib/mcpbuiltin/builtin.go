@@ -64,7 +64,10 @@ func list(desc string) map[string]any {
 // argument descriptions shared by several tools
 var (
 	argNamespace = str("namespace of the graph (alm, organisation, platform, ...)")
-	argBaseline  = str("baseline to read (default: the head of the main branch of the namespace)")
+	argBaseline  = str("baseline of the branch to read (default: its head)")
+	argBranch    = str("lasting branch to read (default: main); a change of the namespace is read instead when one is named or the calling process works on one")
+	argOfChange  = str("change to read (default: the change the calling process works on, when it acts on the namespace): its drafts over the branch it forked from")
+	argFlow      = str("option of the change to read (default: its active option; main: the main flow)")
 	argLimit     = num("maximum number of results (default 50)")
 	argChange    = str("change id (default: the change the calling process works on)")
 	argRationale = str("why the change does this")
@@ -73,23 +76,23 @@ var (
 // Defs returns the definitions of the built-in MCPs.
 func Defs() []mcp.Def {
 	return []mcp.Def{
-		{Name: Graph, Description: "Read the versioned graph: nodes, their links and baselines (built in, read-only).", Tools: []mcp.Tool{
+		{Name: Graph, Description: "Read the versioned graph in a view: a branch at a baseline (default: the head of main), or the change the calling process works on (built in, read-only).", Tools: []mcp.Tool{
 			{Name: "read", ReadOnly: true, Description: "Read a node by key: type, version, properties and links.",
-				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "baseline": argBaseline}, "namespace", "key")},
+				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "baseline": argBaseline, "branch": argBranch, "change": argOfChange, "flow": argFlow}, "namespace", "key")},
 			{Name: "glob", ReadOnly: true, Description: "List the nodes whose key matches a glob pattern (REQ-*), optionally of one type.",
 				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "pattern": str("glob on the key (default *)"),
-					"type": str("node type, <namespace>@<Type>"), "baseline": argBaseline, "limit": argLimit}, "namespace")},
+					"type": str("node type, <namespace>@<Type>"), "baseline": argBaseline, "branch": argBranch, "change": argOfChange, "flow": argFlow, "limit": argLimit}, "namespace")},
 			{Name: "grep", ReadOnly: true, Description: "Search the nodes whose properties match a regular expression.",
 				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "pattern": str("regular expression (RE2)"),
 					"type": str("node type, <namespace>@<Type>"), "property": str("search this property only"),
-					"ignoreCase": boolean("case-insensitive match"), "baseline": argBaseline, "limit": argLimit}, "namespace", "pattern")},
+					"ignoreCase": boolean("case-insensitive match"), "baseline": argBaseline, "branch": argBranch, "change": argOfChange, "flow": argFlow, "limit": argLimit}, "namespace", "pattern")},
 			{Name: "links", ReadOnly: true, Description: "List the links of a node, with the key and type of the other end.",
 				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"),
-					"direction": str("in, out or both (default)"), "type": str("link type, <namespace>@<link>"), "baseline": argBaseline}, "namespace", "key")},
+					"direction": str("in, out or both (default)"), "type": str("link type, <namespace>@<link>"), "baseline": argBaseline, "branch": argBranch, "change": argOfChange, "flow": argFlow}, "namespace", "key")},
 			{Name: "baselines", ReadOnly: true, Description: "List the baselines of a namespace, the head of main first.",
 				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "limit": argLimit}, "namespace")},
 			{Name: "tags", ReadOnly: true, Description: "List the tags naming versions of a node (key), or the versions a tag name labels in a namespace (name). A tag names one exact version; follow its links to read what it stands for.",
-				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "name": str("name of the tag")}, "namespace")},
+				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "name": str("name of the tag"), "baseline": argBaseline, "branch": argBranch, "change": argOfChange, "flow": argFlow}, "namespace")},
 		}},
 		{Name: Change, Description: "Work on a change, the blackboard every modification of the graph goes through (built in).", Tools: []mcp.Tool{
 			{Name: "create", Description: "Open a change on the head of main of a namespace: its intent (why), unit (who) and methodology (how); with parent, a sub-change forked from the parent's branch, in its namespace and project.",
@@ -111,9 +114,9 @@ func Defs() []mcp.Def {
 				InputSchema: schemaObj(map[string]any{"change": argChange, "add": list("ids of changes it now depends on"), "remove": list("ids of changes it no longer depends on")})},
 			{Name: "upgrade", Description: "Move an open change to another version of its methodology (by default the latest published one): a change otherwise keeps the version it was created with. Its lifecycle and state must exist in that version.",
 				InputSchema: schemaObj(map[string]any{"change": argChange, "version": str("version of the methodology (default: the latest published one)")})},
-			{Name: "tag", Description: "Name one exact version of a node (a release, a configuration): by default the version at the head of main. Not unique: a name may label several versions.",
-				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "version": map[string]any{"type": "integer", "description": "version to name (default: the one at the head of main)"},
-					"name": str("name of the tag")}, "namespace", "key", "name")},
+			{Name: "tag", Description: "Name one exact version of a node (a release, a configuration): by default the version a branch holds (the head of main unless named). Not unique: a name may label several versions.",
+				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "version": map[string]any{"type": "integer", "description": "version to name (default: the one the branch holds)"},
+					"name": str("name of the tag"), "branch": str("lasting branch to read the node in (default: main)"), "baseline": argBaseline}, "namespace", "key", "name")},
 			{Name: "dependencies", ReadOnly: true, Description: "Read the dependencies of a change (satisfied or what each waits for), the open changes depending on it, and the order its open sub-changes merge in.",
 				InputSchema: schemaObj(map[string]any{"change": argChange})},
 			{Name: "read", ReadOnly: true, Description: "Read a change: status, items, the nodes it acts on and their review.",

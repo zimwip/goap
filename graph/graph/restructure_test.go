@@ -477,7 +477,7 @@ func testRestructureGateReadsTheGraph(t *testing.T, repo Repo) {
 	asked := map[string]int{}
 	gate := func(typ string) error {
 		asked[typ]++
-		_, err := g.NodesOfType(ctx, "docs", "Item") // a read of the graph, as the access snapshot does
+		_, err := g.ViewNodesOfType(ctx, View{Namespace: "docs", Branch: domain.MainBranch}, "docs@Item") // a read of the graph, as the access snapshot does
 		return err
 	}
 	done := make(chan error, 1)

@@ -58,7 +58,7 @@ func testBrowseBaseline(t *testing.T, repo Repo) {
 	if page.Total != 12 || len(page.Nodes) != 2 || page.Nodes[0].Key != "REQ-10" {
 		t.Fatalf("page = total %d, %d nodes", page.Total, len(page.Nodes))
 	}
-	if len(page.Types) != 2 || page.Types[0] != (TypeCount{"Req", 12}) || page.Types[1] != (TypeCount{"Test", 2}) {
+	if len(page.Types) != 2 || page.Types[0] != (TypeCount{Type: "Req", Count: 12}) || page.Types[1] != (TypeCount{Type: "Test", Count: 2}) {
 		t.Fatalf("types = %v", page.Types)
 	}
 	page, err = g.BaselineNodes(ctx, b.ID, NodeQuery{Text: "LOGIN"})

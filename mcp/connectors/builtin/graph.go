@@ -1,9 +1,11 @@
 package builtin
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path"
 	"regexp"
 	"sort"
@@ -11,36 +13,53 @@ import (
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
 	connectorv1 "github.com/zimwip/goap/contracts/gen/goap/connector/v1"
+	"github.com/zimwip/goap/contracts/graphapi"
+	"github.com/zimwip/goap/contracts/mcp"
 	"github.com/zimwip/goap/lib/mcpbuiltin"
 	"github.com/zimwip/goap/mcp/connectorkit"
 )
 
-// Graph is the goap-graph connector: reads of the versioned graph, as of the head of the main branch
-// of a namespace or of a given baseline. Nodes of a type the caller may not read are left out.
+// Graph is the goap-graph connector: reads of the versioned graph in a view (ADR 0157): the change the call names or
+// the calling process works on when it acts on the namespace, else a lasting branch at a baseline (default: the head of
+// main). It reads node by node and page by page, never a namespace whole. Nodes of a type the caller may not read are
+// left out.
 type Graph struct{ p Ports }
 
 var _ connectorkit.Connector = Graph{}
 
-var graphOps = []op{
-	{"read", "Read a node by key: {node, out, in}", schema(map[string]string{"namespace": "string", "key": "string", "baseline": "string"}, "namespace", "key")},
-	{"glob", "List the nodes whose key matches a glob: {nodes, truncated}", schema(map[string]string{"namespace": "string", "pattern": "string", "type": "string", "baseline": "string", "limit": "integer"}, "namespace")},
-	{"grep", "Search the nodes whose properties match a regular expression: {nodes, truncated}", schema(map[string]string{"namespace": "string", "pattern": "string", "type": "string", "property": "string", "ignoreCase": "boolean", "baseline": "string", "limit": "integer"}, "namespace", "pattern")},
-	{"links", "List the links of a node: {links}", schema(map[string]string{"namespace": "string", "key": "string", "direction": "string", "type": "string", "baseline": "string"}, "namespace", "key")},
-	{"baselines", "List the baselines of a namespace: {head, baselines}", schema(map[string]string{"namespace": "string", "limit": "integer"}, "namespace")},
-	{"tags", "List the tags of a node, or the versions a tag name labels: {tags}", schema(map[string]string{"namespace": "string", "key": "string", "name": "string"}, "namespace")},
+// viewArgs are the arguments naming the view of a read.
+var viewArgs = map[string]string{"baseline": "string", "branch": "string", "change": "string", "flow": "string"}
+
+func withView(props map[string]string) map[string]string {
+	out := maps.Clone(props)
+	maps.Copy(out, viewArgs)
+	return out
 }
+
+var graphOps = []op{
+	{"read", "Read a node by key: {view, node, out, in}", schema(withView(map[string]string{"namespace": "string", "key": "string"}), "namespace", "key")},
+	{"glob", "List the nodes whose key matches a glob: {view, nodes, truncated}", schema(withView(map[string]string{"namespace": "string", "pattern": "string", "type": "string", "limit": "integer"}), "namespace")},
+	{"grep", "Search the nodes whose properties match a regular expression: {view, nodes, truncated}", schema(withView(map[string]string{"namespace": "string", "pattern": "string", "type": "string", "property": "string", "ignoreCase": "boolean", "limit": "integer"}), "namespace", "pattern")},
+	{"links", "List the links of a node: {view, links}", schema(withView(map[string]string{"namespace": "string", "key": "string", "direction": "string", "type": "string"}), "namespace", "key")},
+	{"baselines", "List the baselines of a namespace: {head, baselines}", schema(map[string]string{"namespace": "string", "limit": "integer"}, "namespace")},
+	{"tags", "List the tags of a node, or the versions a tag name labels: {tags}", schema(withView(map[string]string{"namespace": "string", "key": "string", "name": "string"}), "namespace")},
+}
+
+// maxScan caps the nodes a glob or a grep looks at: past it the answer is truncated.
+const maxScan = 5000
 
 // Info implements connectorkit.Connector.
 func (Graph) Info() *connectorv1.ConnectorInfo {
 	return info(mcpbuiltin.Graph, "The versioned graph of the platform, read for the caller (built in).", graphOps)
 }
 
-// view is the graph of a baseline as the caller may see it.
-type view struct {
-	baseline domain.BaselineID
-	nodes    []domain.Node
-	byRef    map[domain.NodeRef]domain.Node
-	links    []domain.Link
+// reader reads one view for the caller.
+type reader struct {
+	c    Graph
+	ctx  context.Context
+	ns   string
+	view graphapi.View
+	r    *readable
 }
 
 // readable filters the nodes by the read authorization of their type (decided once per type).
@@ -63,8 +82,9 @@ func (r *readable) ok(ns, typ string) bool {
 	return r.seen[typ]
 }
 
-// view reads the graph of the baseline the call names, else of the head of main of the namespace.
-func (c Graph) view(ctx context.Context, a args) (*view, error) {
+// reader opens the view the call names: the change named, else the calling process's, when it acts on the namespace;
+// else the branch named (default main) at the baseline named (default its head).
+func (c Graph) reader(ctx context.Context, a args) (*reader, error) {
 	who, err := caller(ctx)
 	if err != nil {
 		return nil, err
@@ -73,44 +93,67 @@ func (c Graph) view(ctx context.Context, a args) (*view, error) {
 	if err != nil {
 		return nil, err
 	}
-	id := domain.BaselineID(a.str("baseline"))
-	if id == "" {
-		head, err := c.p.Graph.BranchHead(ctx, ns, domain.MainBranch)
+	v := graphapi.View{Namespace: ns, Branch: cmp.Or(a.str("branch"), domain.MainBranch), Baseline: domain.BaselineID(a.str("baseline"))}
+	id, named, flow := a.str("change"), a.str("change") != "", a.str("flow")
+	if call := mcp.CallFrom(ctx); !named && a.str("branch") == "" && a.str("baseline") == "" {
+		id, flow = call.Change, cmp.Or(flow, call.Flow)
+	}
+	if id != "" {
+		ch, err := c.p.Graph.Change(ctx, domain.ChangeID(id))
 		if err != nil {
-			return nil, fmt.Errorf("head of main of %s: %w", ns, err)
+			return nil, err
 		}
-		id = head.ID
-	}
-	nodes, links, err := c.p.Graph.BaselineGraph(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	r := &readable{ctx: ctx, a: c.p.Authz, who: who, seen: map[string]bool{}}
-	v := &view{baseline: id, byRef: map[domain.NodeRef]domain.Node{}}
-	for _, n := range nodes {
-		if n.Namespace == ns && !n.Deleted && r.ok(n.Namespace, n.Type) {
-			v.nodes = append(v.nodes, n)
-			v.byRef[n.Ref()] = n
+		switch {
+		case ch.Namespace == ns:
+			v = graphapi.View{Change: ch.ID, Flow: flow}
+		case named:
+			return nil, fmt.Errorf("change %s acts on %s, not on %s: %w", id, ch.Namespace, ns, graphapi.ErrInvalid)
 		}
 	}
-	sort.Slice(v.nodes, func(i, j int) bool { return v.nodes[i].Key < v.nodes[j].Key })
-	for _, l := range links {
-		_, from := v.byRef[l.From]
-		_, to := v.byRef[l.To]
-		if from || to {
-			v.links = append(v.links, l)
-		}
-	}
-	return v, nil
+	return &reader{c: c, ctx: ctx, ns: ns, view: v, r: &readable{ctx: ctx, a: c.p.Authz, who: who, seen: map[string]bool{}}}, nil
 }
 
-func (v *view) node(key string) (domain.Node, bool) {
-	for _, n := range v.nodes {
-		if n.Key == key {
-			return n, true
+func (r *reader) readable(n domain.Node) bool {
+	return !n.Deleted && r.r.ok(n.Namespace, n.Type)
+}
+
+// node reads a node of the view by key.
+func (r *reader) node(key string) (domain.NodeView, error) {
+	nv, err := r.c.p.Graph.ViewNode(r.ctx, r.view, "", key)
+	if err == nil && !r.readable(nv.Node) {
+		err = graphapi.ErrNotFound
+	}
+	if err != nil {
+		return domain.NodeView{}, fmt.Errorf("no node %s in %s: %w", key, r.view, err)
+	}
+	return nv, nil
+}
+
+// scan pages through the nodes of the view matching a type and a text (a superset of what the caller keeps), keeping
+// those keep accepts, up to limit (truncated past it, or past maxScan nodes looked at).
+func (r *reader) scan(typ, text string, limit int, keep func(domain.Node) (map[string]any, bool)) ([]map[string]any, bool, error) {
+	hits := []map[string]any{}
+	for offset := 0; offset < maxScan; offset += graphapi.MaxBrowseLimit {
+		page, err := r.c.p.Graph.ViewNodes(r.ctx, r.view, graphapi.NodeQuery{Type: typ, Text: text, Offset: offset, Limit: graphapi.MaxBrowseLimit})
+		if err != nil {
+			return nil, false, err
+		}
+		for _, n := range page.Nodes {
+			if !r.readable(n) {
+				continue
+			}
+			if h, ok := keep(n); ok {
+				if len(hits) == limit {
+					return hits, true, nil
+				}
+				hits = append(hits, h)
+			}
+		}
+		if offset+len(page.Nodes) >= page.Total || len(page.Nodes) == 0 {
+			return hits, false, nil
 		}
 	}
-	return domain.Node{}, false
+	return hits, true, nil
 }
 
 func summary(n domain.Node) map[string]any {
@@ -126,38 +169,54 @@ func summary(n domain.Node) map[string]any {
 	return out
 }
 
-// linkView is a link seen from one of its ends: the type and the key and type of the other end.
-func (v *view) linkView(l domain.Link, from bool) map[string]any {
-	other := l.To
-	if !from {
-		other = l.From
+// links reads the links of a node, seen from it: the type and the key and type of the other end.
+func (r *reader) links(n domain.Node, direction, typ string) (out, in []map[string]any, err error) {
+	nb, err := r.c.p.Graph.ViewNeighbourhood(r.ctx, r.view, n.ID)
+	if err != nil {
+		return nil, nil, err
 	}
-	out := map[string]any{"type": l.Type}
-	if n, ok := v.byRef[other]; ok {
-		out["key"], out["nodeType"] = n.Key, n.Type
-	} else {
-		out["id"] = other.ID // another namespace, or a type the caller may not read
+	byID := map[domain.NodeID]domain.Node{}
+	for _, m := range nb.Nodes {
+		byID[m.ID] = m
 	}
-	if len(l.Properties) > 0 {
-		out["properties"] = l.Properties
+	view := func(l domain.Link, other domain.NodeID) map[string]any {
+		v := map[string]any{"type": l.Type}
+		if m, ok := byID[other]; ok && m.Namespace == r.ns && r.readable(m) {
+			v["key"], v["nodeType"] = m.Key, m.Type
+		} else if l.External() {
+			v["target"] = l.Target.String()
+		} else {
+			v["id"] = other // another namespace, or a type the caller may not read
+		}
+		if len(l.Properties) > 0 {
+			v["properties"] = l.Properties
+		}
+		return v
 	}
-	return out
-}
-
-func (v *view) linksOf(n domain.Node, direction, typ string) (out, in []map[string]any) {
 	out, in = []map[string]any{}, []map[string]any{}
-	for _, l := range v.links {
+	for _, l := range nb.Links {
 		if typ != "" && l.Type != typ {
 			continue
 		}
-		if l.From == n.Ref() && direction != "in" {
-			out = append(out, v.linkView(l, true))
+		if l.From.ID == n.ID && direction != "in" {
+			out = append(out, view(l, l.To.ID))
 		}
-		if l.To == n.Ref() && direction != "out" {
-			in = append(in, v.linkView(l, false))
+		if l.To.ID == n.ID && direction != "out" {
+			in = append(in, view(l, l.From.ID))
 		}
 	}
-	return out, in
+	return out, in, nil
+}
+
+// globText is the longest literal run of a glob: the text filter of the scan (a superset of the keys matching it).
+func globText(pattern string) string {
+	best := ""
+	for _, part := range regexp.MustCompile(`[*?\\[\]]+`).Split(pattern, -1) {
+		if len(part) > len(best) {
+			best = part
+		}
+	}
+	return best
 }
 
 // Invoke implements connectorkit.Connector.
@@ -166,101 +225,86 @@ func (c Graph) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ m
 	if op == "baselines" {
 		return c.baselines(ctx, a)
 	}
-	v, err := c.view(ctx, a)
+	r, err := c.reader(ctx, a)
 	if err != nil {
 		return nil, err
 	}
 	switch op {
 	case "tags":
-		return c.tags(ctx, v, a)
-	case "read":
+		return c.tags(r, a)
+	case "read", "links":
 		key, err := a.required("key")
 		if err != nil {
 			return nil, err
 		}
-		n, ok := v.node(key)
-		if !ok {
-			return nil, fmt.Errorf("no node %s in %s (baseline %s)", key, a.str("namespace"), v.baseline)
+		nv, err := r.node(key)
+		if err != nil {
+			return nil, err
 		}
-		out, in := v.linksOf(n, "", "")
-		return result(map[string]any{"baseline": v.baseline, "node": map[string]any{"key": n.Key, "type": n.Type, "version": n.Version,
-			"state": n.State, "properties": n.Properties}, "out": out, "in": in})
+		direction, typ := a.str("direction"), a.str("type")
+		if op == "read" {
+			direction, typ = "", ""
+		}
+		out, in, err := r.links(nv.Node, direction, typ)
+		if err != nil {
+			return nil, err
+		}
+		res := map[string]any{"view": r.view.String(), "out": out, "in": in}
+		if op == "read" {
+			n := nv.Node
+			res["node"] = map[string]any{"key": n.Key, "type": n.Type, "version": n.Version, "state": n.State, "properties": n.Properties}
+		}
+		return result(res)
 	case "glob":
-		pattern := a.str("pattern")
-		if pattern == "" {
-			pattern = "*"
-		}
+		pattern := cmp.Or(a.str("pattern"), "*")
 		if _, err := path.Match(pattern, ""); err != nil {
 			return nil, fmt.Errorf("pattern %q: %w", pattern, err)
 		}
-		var hits []map[string]any
-		for _, n := range v.nodes {
-			if ok, _ := path.Match(pattern, n.Key); ok && (a.str("type") == "" || n.Type == a.str("type")) {
-				hits = append(hits, summary(n))
-			}
+		hits, truncated, err := r.scan(a.str("type"), globText(pattern), a.limit(), func(n domain.Node) (map[string]any, bool) {
+			ok, _ := path.Match(pattern, n.Key)
+			return summary(n), ok
+		})
+		if err != nil {
+			return nil, err
 		}
-		return limited(v, hits, a.limit())
+		return result(map[string]any{"view": r.view.String(), "nodes": hits, "truncated": truncated})
 	case "grep":
 		expr, err := a.required("pattern")
 		if err != nil {
 			return nil, err
 		}
-		if a.boolean("ignoreCase") {
-			expr = "(?i)" + expr
-		}
 		re, err := regexp.Compile(expr)
 		if err != nil {
 			return nil, fmt.Errorf("pattern: %w", err)
 		}
-		var hits []map[string]any
-		for _, n := range v.nodes {
-			if a.str("type") != "" && n.Type != a.str("type") {
-				continue
-			}
+		text, _ := re.LiteralPrefix()
+		if a.boolean("ignoreCase") {
+			re = regexp.MustCompile("(?i)" + expr)
+		}
+		hits, truncated, err := r.scan(a.str("type"), text, a.limit(), func(n domain.Node) (map[string]any, bool) {
 			matches := map[string]any{}
 			for name, val := range n.Properties {
 				if p := a.str("property"); p != "" && name != p {
 					continue
 				}
-				if s := text(val); re.MatchString(s) {
+				if s := propText(val); re.MatchString(s) {
 					matches[name] = s
 				}
 			}
-			if len(matches) > 0 {
-				h := summary(n)
-				h["matches"] = matches
-				hits = append(hits, h)
-			}
-		}
-		return limited(v, hits, a.limit())
-	case "links":
-		key, err := a.required("key")
+			h := summary(n)
+			h["matches"] = matches
+			return h, len(matches) > 0
+		})
 		if err != nil {
 			return nil, err
 		}
-		n, ok := v.node(key)
-		if !ok {
-			return nil, fmt.Errorf("no node %s in %s (baseline %s)", key, a.str("namespace"), v.baseline)
-		}
-		out, in := v.linksOf(n, a.str("direction"), a.str("type"))
-		return result(map[string]any{"baseline": v.baseline, "out": out, "in": in})
+		return result(map[string]any{"view": r.view.String(), "nodes": hits, "truncated": truncated})
 	}
 	return nil, unknown(op)
 }
 
-func limited(v *view, hits []map[string]any, limit int) (map[string]any, error) {
-	if hits == nil {
-		hits = []map[string]any{}
-	}
-	truncated := len(hits) > limit
-	if truncated {
-		hits = hits[:limit]
-	}
-	return result(map[string]any{"baseline": v.baseline, "nodes": hits, "truncated": truncated})
-}
-
-// text is the searchable text of a property value.
-func text(v any) string {
+// propText is the searchable text of a property value.
+func propText(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
@@ -268,32 +312,33 @@ func text(v any) string {
 	return string(b)
 }
 
-// tags lists the tags of a node (key) or of a name, each with the key of the node it names when the caller reads it
-// (ADR 0143 §6).
-func (c Graph) tags(ctx context.Context, v *view, a args) (map[string]any, error) {
+// tags lists the tags of a node (key) or of a name, each with the key of the node it names when the view holds it and
+// the caller reads it (ADR 0143 §6).
+func (c Graph) tags(r *reader, a args) (map[string]any, error) {
 	f := domain.TagFilter{Namespace: a.str("namespace"), Name: a.str("name")}
+	keys := map[domain.NodeID]domain.Node{}
 	if key := a.str("key"); key != "" {
-		n, ok := v.node(key)
-		if !ok {
-			return nil, fmt.Errorf("no node %s in %s (baseline %s)", key, a.str("namespace"), v.baseline)
+		nv, err := r.node(key)
+		if err != nil {
+			return nil, err
 		}
-		f.Node = n.ID
+		f.Node, keys[nv.ID] = nv.ID, nv.Node
 	} else if f.Name == "" {
 		return nil, fmt.Errorf(`argument "key" or "name" is required`)
 	}
-	ts, err := c.p.Graph.Tags(ctx, f)
+	ts, err := c.p.Graph.Tags(r.ctx, f)
 	if err != nil {
 		return nil, err
-	}
-	keys := map[domain.NodeID]domain.Node{}
-	for _, n := range v.nodes {
-		keys[n.ID] = n
 	}
 	list := []map[string]any{}
 	for _, t := range ts {
 		n, ok := keys[t.Node]
 		if !ok {
-			continue // a node the caller may not read
+			nv, err := c.p.Graph.ViewNode(r.ctx, r.view, t.Node, "")
+			if err != nil || !r.readable(nv.Node) {
+				continue // a node the view does not hold, or the caller may not read
+			}
+			n, keys[t.Node] = nv.Node, nv.Node
 		}
 		list = append(list, map[string]any{"name": t.Name, "key": n.Key, "type": n.Type, "version": t.Version, "by": t.By, "createdAt": t.CreatedAt})
 	}

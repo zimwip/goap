@@ -1255,8 +1255,10 @@ type CallToolRequest struct {
 	Name      string           `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Arguments *structpb.Struct `protobuf:"bytes,3,opt,name=arguments,proto3" json:"arguments,omitempty"`
 	// the change and the process the call runs for (read by the built-in connectors, ADR 0028)
-	ChangeId      string `protobuf:"bytes,4,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
-	ProcessId     string `protobuf:"bytes,5,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	ChangeId  string `protobuf:"bytes,4,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	ProcessId string `protobuf:"bytes,5,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	// the flow of the change the process runs on (ADR 0157: the view of the graph reads of the call)
+	Flow          string `protobuf:"bytes,6,opt,name=flow,proto3" json:"flow,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1322,6 +1324,13 @@ func (x *CallToolRequest) GetChangeId() string {
 func (x *CallToolRequest) GetProcessId() string {
 	if x != nil {
 		return x.ProcessId
+	}
+	return ""
+}
+
+func (x *CallToolRequest) GetFlow() string {
+	if x != nil {
+		return x.Flow
 	}
 	return ""
 }
@@ -1468,14 +1477,15 @@ const file_goap_mcp_v1_mcp_proto_rawDesc = "" +
 	"\x04unit\x18\x01 \x01(\tR\x04unit\"P\n" +
 	"\x11ListToolsResponse\x12'\n" +
 	"\x05tools\x18\x01 \x03(\v2\x11.goap.mcp.v1.ToolR\x05tools\x12\x12\n" +
-	"\x04mcps\x18\x02 \x03(\tR\x04mcps\"\xac\x01\n" +
+	"\x04mcps\x18\x02 \x03(\tR\x04mcps\"\xc0\x01\n" +
 	"\x0fCallToolRequest\x12\x12\n" +
 	"\x04unit\x18\x01 \x01(\tR\x04unit\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x125\n" +
 	"\targuments\x18\x03 \x01(\v2\x17.google.protobuf.StructR\targuments\x12\x1b\n" +
 	"\tchange_id\x18\x04 \x01(\tR\bchangeId\x12\x1d\n" +
 	"\n" +
-	"process_id\x18\x05 \x01(\tR\tprocessId\"t\n" +
+	"process_id\x18\x05 \x01(\tR\tprocessId\x12\x12\n" +
+	"\x04flow\x18\x06 \x01(\tR\x04flow\"t\n" +
 	"\x10CallToolResponse\x12/\n" +
 	"\x06result\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x06result\x12\x19\n" +
 	"\bis_error\x18\x02 \x01(\bR\aisError\x12\x14\n" +

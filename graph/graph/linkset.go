@@ -69,22 +69,13 @@ func (g *Graph) putLinks(ctx context.Context, tx Tx, n domain.Node, links []doma
 		if err := tx.PutLinkSet(ctx, from, LinkSet{Seq: seq}); err != nil {
 			return err
 		}
-		for _, l := range links {
-			l.From, l.ChangeID = from, n.ChangeID
-			if err := tx.PutLink(ctx, l); err != nil {
-				return err
-			}
-		}
-		return nil
+		return tx.PutLinks(ctx, stamped(links, from, n.ChangeID))
 	}
 	if err := tx.PutLinkSet(ctx, from, LinkSet{Base: base.Of, Depth: base.Depth + 1, Seq: seq}); err != nil {
 		return err
 	}
-	for _, l := range adds {
-		l.From, l.ChangeID = from, n.ChangeID
-		if err := tx.PutLink(ctx, l); err != nil {
-			return err
-		}
+	if err := tx.PutLinks(ctx, stamped(adds, from, n.ChangeID)); err != nil {
+		return err
 	}
 	for _, l := range drops {
 		l.ChangeID = n.ChangeID
@@ -93,6 +84,16 @@ func (g *Graph) putLinks(ctx context.Context, tx Tx, n domain.Node, links []doma
 		}
 	}
 	return nil
+}
+
+// stamped are links leaving a version written by a change: copies, the caller's untouched.
+func stamped(links []domain.Link, from domain.NodeRef, change domain.ChangeID) []domain.Link {
+	out := make([]domain.Link, len(links))
+	for i, l := range links {
+		l.From, l.ChangeID = from, change
+		out[i] = l
+	}
+	return out
 }
 
 // baseSet is the set the set of order seq is a delta over (putLinks): the one of order seq with its lowest bit cleared,

@@ -13,13 +13,13 @@ import (
 // call too. *graph.Graph implements it in-process, graphclient.Client over RPC.
 type GraphPort = graphapi.Port
 
-// readGraph is the graph a process reads: the graph of its change on its flow (the active option when it runs on
-// the main flow), else the baseline it started from.
-func readGraph(ctx context.Context, g GraphPort, change domain.ChangeID, flow string, baseline domain.BaselineID) ([]domain.Node, []domain.Link, error) {
-	if change != "" {
-		return g.ChangeGraph(ctx, change, flow)
+// viewOf is the view a process reads the graph in (ADR 0157): its change on its flow (the active option when it runs on
+// the main flow), else the main branch of its namespace at the baseline it started from.
+func viewOf(p *Process) graphapi.View {
+	if p.ChangeID != "" {
+		return graphapi.View{Change: p.ChangeID, Flow: p.Flow}
 	}
-	return g.BaselineGraph(ctx, baseline)
+	return graphapi.View{Namespace: p.Namespace, Branch: domain.MainBranch, Baseline: p.BaselineID}
 }
 
 // MethodologyPort resolves methodologies (the registry): the latest

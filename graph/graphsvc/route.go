@@ -187,6 +187,9 @@ func (r *Router) route(req *http.Request) (base string, body []byte, named bool,
 		return "", body, true, nil // the service answers the malformed request
 	}
 	fields := msg.ProtoReflect()
+	if v := viewField(fields); v != nil { // the view a read names (ADR 0157)
+		fields = v
+	}
 	if ns := stringField(fields, "namespace"); ns != "" {
 		base, err = r.baseOf(req.Context(), domain.NamespaceOf(ns))
 		return base, body, true, err
@@ -213,6 +216,15 @@ func (r *Router) method(path string) protoreflect.MethodDescriptor {
 		return nil
 	}
 	return sd.Methods().ByName(protoreflect.Name(name))
+}
+
+// viewField is the view a request names (ADR 0157), nil when none.
+func viewField(m protoreflect.Message) protoreflect.Message {
+	f := m.Descriptor().Fields().ByName("view")
+	if f == nil || f.Kind() != protoreflect.MessageKind || f.Message().FullName() != "goap.graph.v1.View" || !m.Has(f) {
+		return nil
+	}
+	return m.Get(f).Message()
 }
 
 func stringField(m protoreflect.Message, name protoreflect.Name) string {

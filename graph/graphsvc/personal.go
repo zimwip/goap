@@ -118,7 +118,7 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	if err != nil {
 		return err
 	}
-	existing, err := g.NodesOfType(ctx, access.NamespaceOrganisation, access.NodeTypeUser)
+	existing, err := g.ViewNodes(ctx, orgMain, graph.NodeQuery{Type: access.NodeTypeUser, Limit: 1})
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	// commits it usable right away, with no separate admin step needed for every single new user.
 	user.State = "active"
 	edits := []graph.NodeEdit{user}
-	if len(existing) == 0 {
+	if existing.Total == 0 {
 		// the first user: grant admin through a platform Assignment created in the same commit (ToKey
 		// resolves to the User node above, ADR 0047)
 		asg := access.Assignment{Roles: []string{access.RoleAdmin}, Description: "First user becomes administrator"}
@@ -148,13 +148,17 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	return SeedChange(System(ctx), g, access.NamespaceOrganisation, "User "+subject, edits)
 }
 
+// orgMain is the head of main of the organisation, the view the sign-in bookkeeping reads (ADR 0157): what the last
+// change applied there wrote.
+var orgMain = graph.View{Namespace: access.NamespaceOrganisation, Branch: domain.MainBranch}
+
 // NewUserUnit returns the organisational unit new users join (ADR 0042): the waiting unit, an OrgUnit an
 // administrator created and flagged `waiting` (access.PropWaitingUnit) at their discretion, or
 // g.Structure(domain.StructureOrganisation).Root when none is flagged. Should several units carry the flag (two concurrent changes each moving it), the
 // smallest key wins, so the answer stays deterministic until someone clears the extra one. Read against live
 // state, like the rest of EnsureUser: a flag moved by a change is seen at once.
 func NewUserUnit(ctx context.Context, g *graph.Graph) (domain.Node, error) {
-	units, err := g.NodesOfType(ctx, access.NamespaceOrganisation, access.NodeTypeOrgUnit)
+	units, err := g.ViewNodesOfType(ctx, orgMain, access.NodeTypeOrgUnit)
 	if err != nil {
 		return domain.Node{}, err
 	}
@@ -243,7 +247,7 @@ func (h *Handler) PersonalScope() connect.Interceptor {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			who := h.Identity.Context(ctx, req.Header())
 			if msg, ok := req.Any().(proto.Message); ok {
-				if id := changeIDIn(req.Spec().Procedure, msg); id != "" {
+				for _, id := range changeIDsIn(req.Spec().Procedure, msg) {
 					// the checks before the operation (the operation authorizer, the handler's) read the same head
 					who = graph.WithHeadMemo(who)
 					if c, err := h.Graph.ChangeHead(who, id); err == nil && !h.mayRead(who, c) {
@@ -256,18 +260,24 @@ func (h *Handler) PersonalScope() connect.Interceptor {
 	})
 }
 
-// changeIDIn returns the change a request names.
-func changeIDIn(procedure string, msg proto.Message) domain.ChangeID {
-	fields := msg.ProtoReflect().Descriptor().Fields()
+// changeIDsIn returns the changes a request names: its change_id (id for GetChange and UpdateChange) and the change of
+// the view it reads (ADR 0157).
+func changeIDsIn(procedure string, msg proto.Message) []domain.ChangeID {
+	m := msg.ProtoReflect()
 	name := protoreflect.Name("change_id")
 	if strings.HasSuffix(procedure, "/GetChange") || strings.HasSuffix(procedure, "/UpdateChange") {
 		name = "id"
 	}
-	fd := fields.ByName(name)
-	if fd == nil || fd.Kind() != protoreflect.StringKind || fd.IsList() {
-		return ""
+	var out []domain.ChangeID
+	if id := stringField(m, name); id != "" {
+		out = append(out, domain.ChangeID(id))
 	}
-	return domain.ChangeID(msg.ProtoReflect().Get(fd).String())
+	if v := viewField(m); v != nil {
+		if id := stringField(v, "change_id"); id != "" {
+			out = append(out, domain.ChangeID(id))
+		}
+	}
+	return out
 }
 
 // visibleTo reports whether the caller may see a change: every change but the personal ones of others.

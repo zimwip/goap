@@ -7,9 +7,12 @@ import "context"
 // sets Change and Process, the hub sets Unit, and ModelURL / ModelToken for a connector that calls a model by itself
 // (ADR 0123 §6: the gateway endpoint its calls go to, so they are rows of the ledger).
 type CallContext struct {
-	Unit       string `json:"unit,omitempty"`
-	Change     string `json:"change,omitempty"`
-	Process    string `json:"process,omitempty"`
+	Unit    string `json:"unit,omitempty"`
+	Change  string `json:"change,omitempty"`
+	Process string `json:"process,omitempty"`
+	// Flow is the flow of the change the process runs on (empty: the change's active option), the view of the graph
+	// reads of the call (ADR 0157).
+	Flow       string `json:"flow,omitempty"`
 	ModelURL   string `json:"-"`
 	ModelToken string `json:"-"`
 }
@@ -27,6 +30,9 @@ func WithCall(ctx context.Context, c CallContext) context.Context {
 	}
 	if c.Process == "" {
 		c.Process = cur.Process
+	}
+	if c.Flow == "" {
+		c.Flow = cur.Flow
 	}
 	if c.ModelURL == "" {
 		c.ModelURL, c.ModelToken = cur.ModelURL, cur.ModelToken

@@ -74,9 +74,9 @@ func (f *Federation) URLOf(_ context.Context, src lnk.Source, t lnk.Target) (lnk
 	return lnk.New(src.Name, lnk.BareType(t.Type), t.Key), nil
 }
 
-// nodeByKey reads the latest version of a node by its key, or the version v of it.
+// nodeByKey reads a node by its key at the head of main of its namespace, or the version v of it.
 func (c *Client) nodeByKey(ctx context.Context, namespace, key string, v int) (domain.Node, error) {
-	res, err := c.rpc.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{Namespace: namespace, Key: key}))
+	res, err := c.rpc.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{View: &graphv1.View{Namespace: namespace, Branch: domain.MainBranch}, Key: key}))
 	if err != nil {
 		return domain.Node{}, rpcerr.FromConnect(err)
 	}

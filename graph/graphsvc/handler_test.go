@@ -416,3 +416,27 @@ func must(t *testing.T, g *graph.Graph, key string) domain.Node {
 	}
 	return n
 }
+
+// A tag with no version names the one its view holds; with neither it is refused (ADR 0157).
+func TestTagVersionInAView(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	g.Caller = graphsvc.Caller
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Graph: g, Authz: authz.AllowAll{}}
+	req1, err := graphtest.Import(ctx, g, graphtest.Node{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "one"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tag := func(m *graphv1.TagVersionRequest) (*connect.Response[graphv1.TagVersionResponse], error) {
+		r := connect.NewRequest(m)
+		r.Header().Set(identity.HeaderSubject, "u")
+		return h.TagVersion(ctx, r)
+	}
+	if _, err := tag(&graphv1.TagVersionRequest{NodeId: string(req1.ID), Name: "x"}); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("a tag naming no version nor view: %v", err)
+	}
+	out, err := tag(&graphv1.TagVersionRequest{NodeId: string(req1.ID), Name: "x", View: &graphv1.View{Namespace: req1.Namespace, Branch: domain.MainBranch}})
+	if err != nil || out.Msg.Tag.Version != int32(req1.Version) {
+		t.Fatalf("tag in the head of main = %v, %v", out, err)
+	}
+}

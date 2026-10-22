@@ -85,7 +85,7 @@ func positions() connect.ClientOption {
 // finding it proves it was created, and not finding it reports why it could not be.
 func (c *Client) DeclareUser(ctx context.Context, subject string) error {
 	ctx = authz.With(ctx, authz.Principal{Subject: subject})
-	_, err := c.rpc.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{Namespace: access.NamespaceOrganisation, Key: access.UserKey(subject)}))
+	_, err := c.rpc.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{View: &graphv1.View{Namespace: access.NamespaceOrganisation, Branch: domain.MainBranch}, Key: access.UserKey(subject)}))
 	return rpcerr.FromConnect(err)
 }
 
@@ -935,6 +935,105 @@ func (c *Client) DecisionPoints(ctx context.Context, id domain.ChangeID) ([]doma
 	var out []domain.DecisionPoint
 	for _, d := range r.Msg.Points {
 		out = append(out, pbconv.DecisionPointFromPB(d))
+	}
+	return out, nil
+}
+
+// ViewVersions answers what a view holds of some nodes (ADR 0157).
+func (c *Client) ViewVersions(ctx context.Context, v graphapi.View, ids []domain.NodeID) (graphapi.ViewState, error) {
+	req := &graphv1.ResolveViewRequest{View: pbconv.GraphViewToPB(v)}
+	for _, id := range ids {
+		req.NodeIds = append(req.NodeIds, string(id))
+	}
+	r, err := c.rpc.ResolveView(ctx, connect.NewRequest(req))
+	if err != nil {
+		return graphapi.ViewState{}, rpcerr.FromConnect(err)
+	}
+	st := graphapi.ViewState{Namespace: r.Msg.Namespace, Baseline: domain.BaselineID(r.Msg.BaselineId), MainHead: r.Msg.MainHead,
+		Versions: map[domain.NodeID]domain.Version{}}
+	for id, v := range r.Msg.Versions {
+		st.Versions[domain.NodeID(id)] = domain.Version(v)
+	}
+	return st, nil
+}
+
+// ViewDrafts returns the drafts a change view holds matching a text, at most limit (ADR 0157): the version 0 nodes of a
+// page of the view.
+func (c *Client) ViewDrafts(ctx context.Context, v graphapi.View, text string, limit int) ([]domain.Node, error) {
+	if !v.IsChange() {
+		return nil, nil
+	}
+	r, err := c.rpc.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{View: pbconv.GraphViewToPB(v), Query: text, Limit: 500}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	var out []domain.Node
+	for _, n := range r.Msg.Nodes {
+		if n.Version == 0 && (limit <= 0 || len(out) < limit) {
+			out = append(out, pbconv.NodeFromPB(n))
+		}
+	}
+	return out, nil
+}
+
+// ViewNode reads a node as a view holds it, by id or, with no id, by key (ADR 0157).
+func (c *Client) ViewNode(ctx context.Context, v graphapi.View, id domain.NodeID, key string) (domain.NodeView, error) {
+	req := &graphv1.GetNodeRequest{View: pbconv.GraphViewToPB(v), Key: key}
+	if id != "" {
+		req.Key, req.Ref = "", &graphv1.NodeRef{Id: string(id)}
+	}
+	r, err := c.rpc.GetNode(ctx, connect.NewRequest(req))
+	if err != nil {
+		return domain.NodeView{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ViewFromPB(r.Msg.View), nil
+}
+
+// ViewNeighbourhood reads a node as a view holds it, with its direct neighbours (ADR 0157).
+func (c *Client) ViewNeighbourhood(ctx context.Context, v graphapi.View, id domain.NodeID) (graphapi.Neighbourhood, error) {
+	r, err := c.rpc.GetNodeNeighbourhood(ctx, connect.NewRequest(&graphv1.GetNodeNeighbourhoodRequest{View: pbconv.GraphViewToPB(v), NodeId: string(id)}))
+	if err != nil {
+		return graphapi.Neighbourhood{}, rpcerr.FromConnect(err)
+	}
+	nb := graphapi.Neighbourhood{Node: pbconv.NodeFromPB(r.Msg.Node)}
+	for _, n := range r.Msg.Nodes {
+		nb.Nodes = append(nb.Nodes, pbconv.NodeFromPB(n))
+	}
+	for _, l := range r.Msg.Links {
+		nb.Links = append(nb.Links, pbconv.LinkFromPB(l))
+	}
+	for _, id := range r.Msg.SuspectLinkIds {
+		nb.Suspect = append(nb.Suspect, domain.LinkID(id))
+	}
+	return nb, nil
+}
+
+// ViewNodes reads a page of the nodes of a view (ADR 0157).
+func (c *Client) ViewNodes(ctx context.Context, v graphapi.View, q graphapi.NodeQuery) (graphapi.NodePage, error) {
+	r, err := c.rpc.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{View: pbconv.GraphViewToPB(v), Type: q.Type,
+		Query: q.Text, Offset: int32(q.Offset), Limit: int32(q.Limit), IncludeDeleted: q.IncludeDeleted, ChangeId: string(q.Change)}))
+	if err != nil {
+		return graphapi.NodePage{}, rpcerr.FromConnect(err)
+	}
+	page := graphapi.NodePage{Total: int(r.Msg.Total), Baseline: domain.BaselineID(r.Msg.GetBaseline().GetId())}
+	for _, n := range r.Msg.Nodes {
+		page.Nodes = append(page.Nodes, pbconv.NodeFromPB(n))
+	}
+	for _, t := range r.Msg.Types {
+		page.Types = append(page.Types, graphapi.TypeCount{Type: t.Type, Count: int(t.Count)})
+	}
+	return page, nil
+}
+
+// ViewNodesOfType reads every node of a type a view holds (ADR 0157).
+func (c *Client) ViewNodesOfType(ctx context.Context, v graphapi.View, typ string) ([]domain.Node, error) {
+	r, err := c.rpc.ListViewNodes(ctx, connect.NewRequest(&graphv1.ListViewNodesRequest{View: pbconv.GraphViewToPB(v), Type: typ}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	out := make([]domain.Node, 0, len(r.Msg.Nodes))
+	for _, n := range r.Msg.Nodes {
+		out = append(out, pbconv.NodeFromPB(n))
 	}
 	return out, nil
 }

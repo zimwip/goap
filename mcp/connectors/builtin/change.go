@@ -41,7 +41,7 @@ var changeOps = []op{
 	{"detach", "Detach a sub-change from the change integrating it, a root change again: {change}", schema(map[string]string{"change": "string"})},
 	{"depend", "Add or remove changes this change depends on: {change, add: [ids], remove: [ids]}", schema(map[string]string{"change": "string", "add": "array", "remove": "array"})},
 	{"upgrade", "Move an open change to another version of its methodology (default: the latest): {change}", schema(map[string]string{"change": "string", "version": "string"})},
-	{"tag", "Name one exact version of a node (default: the version at the head of main): {tag}", schema(map[string]string{"namespace": "string", "key": "string", "version": "integer", "name": "string"}, "namespace", "key", "name")},
+	{"tag", "Name one exact version of a node (default: the version a branch holds, the head of main unless named): {tag}", schema(map[string]string{"namespace": "string", "key": "string", "version": "integer", "name": "string", "branch": "string", "baseline": "string"}, "namespace", "key", "name")},
 	{"dependencies", "Read the dependencies of a change, its dependents and the merge order of its sub-changes: {change}", schema(map[string]string{"change": "string"})},
 	{"read", "Read a change: {change, nodes, items}", schema(map[string]string{"change": "string"})},
 	{"list", "List changes, the latest first: {changes, truncated}", schema(map[string]string{"namespace": "string", "unit": "string", "status": "string", "limit": "integer"})},
@@ -711,9 +711,6 @@ type working struct {
 	ctx context.Context
 	who authz.Principal
 	bb  domain.Blackboard
-
-	baseNodes []domain.Node
-	baseRead  bool
 }
 
 // impact returns the change impact of a node as the flow the call works on sees it (the main flow, or the active
@@ -747,21 +744,9 @@ func (w *working) impacts() []map[string]any {
 	return out
 }
 
-// base returns a node of the reference baseline of the change.
+// base returns a node as the change was forked from it (ADR 0157): read by key, never the whole baseline.
 func (w *working) base(key string) (domain.Node, bool, error) {
-	if !w.baseRead {
-		nodes, _, err := w.c.p.Graph.BaselineGraph(w.ctx, w.bb.Change.BaselineID)
-		if err != nil {
-			return domain.Node{}, false, err
-		}
-		w.baseNodes, w.baseRead = nodes, true
-	}
-	for _, n := range w.baseNodes {
-		if n.Key == key && (w.bb.Change.Namespace == "" || n.Namespace == w.bb.Change.Namespace) && !n.Deleted {
-			return n, true, nil
-		}
-	}
-	return domain.Node{}, false, nil
+	return graphapi.ForkNode(w.ctx, w.c.p.Graph, w.bb, "", key)
 }
 
 func (w *working) declare(imp domain.ChangeImpact) (domain.ChangeImpact, error) {
@@ -1052,7 +1037,8 @@ func (c Change) derogate(ctx context.Context, bb domain.Blackboard, a args) (map
 	return result(map[string]any{"derogation": items[0]})
 }
 
-// tag names one exact version of a node (ADR 0143 §6): the one at the head of main unless version names another.
+// tag names one exact version of a node (ADR 0143 §6): the one a branch holds (default: the head of main) unless version
+// names another.
 func (c Change) tag(ctx context.Context, a args) (map[string]any, error) {
 	key, err := a.required("key")
 	if err != nil {
@@ -1062,14 +1048,16 @@ func (c Change) tag(ctx context.Context, a args) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	v, err := Graph(c).view(ctx, args{"namespace": a.str("namespace")})
+	// a tag names a committed version: read in a branch (default main) at a baseline (default its head), never a draft
+	r, err := Graph(c).reader(ctx, args{"namespace": a.str("namespace"), "branch": cmp.Or(a.str("branch"), domain.MainBranch), "baseline": a.str("baseline")})
 	if err != nil {
 		return nil, err
 	}
-	n, ok := v.node(key)
-	if !ok {
-		return nil, fmt.Errorf("no node %s in %s", key, a.str("namespace"))
+	nv, err := r.node(key)
+	if err != nil {
+		return nil, err
 	}
+	n := nv.Node
 	ref := n.Ref()
 	switch ver := a["version"].(type) {
 	case float64:
