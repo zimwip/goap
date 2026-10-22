@@ -500,6 +500,183 @@
       }
     },
     {
+      "type": "xychart",
+      "title": "Write rate against the versions in the graph",
+      "id": 40,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Versions and changes committed per second (slope over 2 minutes), with the versions already written on the x axis instead of time: how the write rate falls as the graph grows",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(goap_bench_versions{service_name=\"goap-bench\"})",
+          "legendFormat": "versions in the graph",
+          "refId": "A",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(deriv(goap_bench_versions{service_name=\"goap-bench\"}[2m]))",
+          "legendFormat": "versions/s",
+          "refId": "B",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(deriv(goap_bench_changes{service_name=\"goap-bench\"}[2m]))",
+          "legendFormat": "changes/s",
+          "refId": "C",
+          "range": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "Time",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "versions in the graph": 0,
+              "versions/s": 1,
+              "changes/s": 2
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "type": "exclude",
+            "match": "any",
+            "filters": [
+              {
+                "fieldName": "versions in the graph",
+                "config": {
+                  "id": "isNull",
+                  "options": {}
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "show": "points",
+            "pointSize": {
+              "fixed": 3
+            },
+            "lineWidth": 1,
+            "fillOpacity": 50,
+            "axisPlacement": "auto",
+            "axisLabel": "per second"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "versions in the graph"
+            },
+            "properties": [
+              {
+                "id": "custom.axisLabel",
+                "value": "versions in the graph"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "mapping": "manual",
+        "series": [
+          {
+            "frame": {
+              "matcher": {
+                "id": "byIndex",
+                "options": 0
+              }
+            },
+            "x": {
+              "matcher": {
+                "id": "byName",
+                "options": "versions in the graph"
+              }
+            },
+            "y": {
+              "matcher": {
+                "id": "byName",
+                "options": "versions/s"
+              }
+            },
+            "name": {
+              "fixed": "versions/s"
+            }
+          },
+          {
+            "frame": {
+              "matcher": {
+                "id": "byIndex",
+                "options": 0
+              }
+            },
+            "x": {
+              "matcher": {
+                "id": "byName",
+                "options": "versions in the graph"
+              }
+            },
+            "y": {
+              "matcher": {
+                "id": "byName",
+                "options": "changes/s"
+              }
+            },
+            "name": {
+              "fixed": "changes/s"
+            }
+          }
+        ],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    },
+    {
       "type": "row",
       "title": "Writes: latency seen by the client",
       "id": 10,
@@ -508,7 +685,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 13
+        "y": 22
       }
     },
     {
@@ -524,7 +701,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 23
       },
       "targets": [
         {
@@ -581,7 +758,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 14
+        "y": 23
       },
       "targets": [
         {
@@ -638,7 +815,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 22
+        "y": 31
       },
       "targets": [
         {
@@ -742,7 +919,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 22
+        "y": 31
       },
       "targets": [
         {
@@ -795,7 +972,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 39
       }
     },
     {
@@ -811,7 +988,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 31
+        "y": 40
       },
       "targets": [
         {
@@ -868,7 +1045,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 31
+        "y": 40
       },
       "targets": [
         {
@@ -921,7 +1098,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 48
       }
     },
     {
@@ -937,7 +1114,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 40
+        "y": 49
       },
       "targets": [
         {
@@ -994,7 +1171,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 40
+        "y": 49
       },
       "targets": [
         {
@@ -1051,7 +1228,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 48
+        "y": 57
       },
       "targets": [
         {
@@ -1108,7 +1285,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 48
+        "y": 57
       },
       "targets": [
         {
@@ -1165,7 +1342,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 48
+        "y": 57
       },
       "targets": [
         {
@@ -1265,7 +1442,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 65
       }
     },
     {
@@ -1281,7 +1458,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 57
+        "y": 66
       },
       "targets": [
         {
@@ -1375,7 +1552,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 57
+        "y": 66
       },
       "targets": [
         {
@@ -1432,7 +1609,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 57
+        "y": 66
       },
       "targets": [
         {
@@ -1489,7 +1666,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 65
+        "y": 74
       },
       "targets": [
         {
@@ -1546,7 +1723,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 65
+        "y": 74
       },
       "targets": [
         {
@@ -1599,7 +1776,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 73
+        "y": 82
       }
     },
     {
@@ -1615,7 +1792,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 74
+        "y": 83
       },
       "targets": [
         {
@@ -1672,7 +1849,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 74
+        "y": 83
       },
       "targets": [
         {
@@ -1739,7 +1916,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 82
+        "y": 91
       },
       "targets": [
         {
@@ -1796,7 +1973,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 82
+        "y": 91
       },
       "targets": [
         {
@@ -1859,7 +2036,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 90
+        "y": 99
       }
     },
     {
@@ -1875,7 +2052,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 91
+        "y": 100
       },
       "targets": [
         {
@@ -1932,7 +2109,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 91
+        "y": 100
       },
       "targets": [
         {
@@ -1989,7 +2166,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 91
+        "y": 100
       },
       "targets": [
         {
