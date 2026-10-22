@@ -140,10 +140,18 @@ func BenchmarkViewReads(b *testing.B) {
 		b.Fatal(err)
 	}
 	views := []struct {
-		name string
-		v    View
-	}{{"branch", View{Namespace: root.Namespace, Branch: domain.MainBranch}}, {"change", View{Change: c.ID}}}
+		name  string
+		v     View
+		reach bool
+	}{{"branch", View{Namespace: root.Namespace, Branch: domain.MainBranch}, false}, {"change", View{Change: c.ID}, false},
+		// the same reads by a caller of a reach holding every node (ADR 0161 §5): what the filter costs
+		{"branch-reach", View{Namespace: root.Namespace, Branch: domain.MainBranch}, true}, {"change-reach", View{Change: c.ID}, true}}
+	reach := &Reach{Projects: map[string]bool{"PROJ-ROOT": true}}
 	for _, vw := range views {
+		g.ReachOf = nil
+		if vw.reach {
+			g.ReachOf = func(context.Context) (*Reach, error) { return reach, nil }
+		}
 		b.Run(vw.name+"/ViewNode", func(b *testing.B) {
 			for b.Loop() {
 				if _, err := g.ViewNode(ctx, vw.v, "", "R.3.7"); err != nil {
@@ -173,6 +181,7 @@ func BenchmarkViewReads(b *testing.B) {
 			}
 		})
 	}
+	g.ReachOf = nil
 	b.Run("branch/BaselineGraph", func(b *testing.B) {
 		for b.Loop() {
 			if _, _, err := g.BaselineGraph(ctx, head.ID); err != nil {
