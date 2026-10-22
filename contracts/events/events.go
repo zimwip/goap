@@ -15,8 +15,14 @@ const (
 	// integrating it, a detachment from it.
 	ChangeTransitioned = "change.transitioned"
 	ChangeCommitted    = "change.committed"
-	ChangeAttached     = "change.attached"
-	ChangeDetached     = "change.detached"
+	// ChangeMerged: a change merged into the branch it was forked from (a sub-change into its parent's, a root change
+	// into a lasting branch); like change.committed it names the branch and the node versions it left there (ADR 0159).
+	ChangeMerged = "change.merged"
+	// ChangeRebased: the branch of a change was moved onto the head of what it is forked from, with the node versions
+	// the commit of its merges wrote (ADR 0159).
+	ChangeRebased  = "change.rebased"
+	ChangeAttached = "change.attached"
+	ChangeDetached = "change.detached"
 	// ChangeEdited: a field of the header was edited (title, intent, goal, data), the fields in event.fields
 	// (ADR 0110).
 	ChangeEdited         = "change.edited"
@@ -36,7 +42,7 @@ const ChangePurged = "change.purged"
 // (TRIGGER_EVENTS in web/src/lib/api/types/registry.ts), checked against this list by a test.
 var All = []string{
 	ChangeCreated, ChangeApplied, ChangeItemAdded, ChangeSignal,
-	ChangeTransitioned, ChangeCommitted, ChangeAttached, ChangeDetached, ChangeEdited,
+	ChangeTransitioned, ChangeCommitted, ChangeMerged, ChangeRebased, ChangeAttached, ChangeDetached, ChangeEdited,
 	ProcessCompleted, ProcessFailed, ProcessStuck, ProcessAttached,
 	StepCompleted, MethodologyPublished,
 }

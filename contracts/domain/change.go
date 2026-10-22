@@ -153,6 +153,28 @@ type ChangeEvent struct {
 	// EndUser is the person whose action raised the event, directly or from one consequence to the next
 	// (authz.Principal.EndUser of the writer, ADR 0114): what the event sets off is attributed to them.
 	EndUser string `json:"endUser,omitempty"`
+	// Branch is the branch a change.committed event committed on, the one a change.merged event merged into (ADR 0159).
+	Branch string `json:"branch,omitempty"`
+	// Nodes are the node versions a change.committed or change.merged event left on Branch (ADR 0159): the versions
+	// the commit wrote, the versions the merge wrote or joined there.
+	Nodes []EventNode `json:"nodes,omitempty"`
+}
+
+// EventNode is a node version an event of a change names (ADR 0159): enough for a filter or a reaction to select on
+// (type, state) and to read it (id and version).
+type EventNode struct {
+	ID        NodeID  `json:"id"`
+	Version   Version `json:"version"`
+	Namespace string  `json:"namespace,omitempty"`
+	Key       string  `json:"key,omitempty"`
+	Type      string  `json:"type,omitempty"`
+	State     string  `json:"state,omitempty"`
+	Deleted   bool    `json:"deleted,omitempty"`
+}
+
+// EventNodeOf is the version n as an event names it.
+func EventNodeOf(n Node) EventNode {
+	return EventNode{ID: n.ID, Version: n.Version, Namespace: n.Namespace, Key: n.Key, Type: n.Type, State: n.State, Deleted: n.Deleted}
 }
 
 // EditedFields returns the fields of the header a person reads that differ between two versions of a change: title,

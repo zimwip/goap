@@ -592,11 +592,11 @@ func (t *memTx) Link(_ context.Context, id domain.LinkID) (domain.Link, error) {
 	return t.st.links[i], nil
 }
 
-func (t *memTx) PutLink(_ context.Context, l domain.Link) error {
+func (t *memTx) PutLinks(_ context.Context, ls []domain.Link) error {
 	if err := t.write(); err != nil {
 		return err
 	}
-	t.st.links = append(t.st.links, l)
+	t.st.links = append(t.st.links, ls...)
 	return nil
 }
 
@@ -1134,6 +1134,21 @@ func (t *memTx) LinksToOfType(_ context.Context, ref domain.NodeRef, types []str
 // ofTypes keeps the links of some types.
 func ofTypes(ls []domain.Link, types []string) []domain.Link {
 	return slices.DeleteFunc(ls, func(l domain.Link) bool { return !slices.Contains(types, l.Type) })
+}
+
+func (t *memTx) LinkSources(_ context.Context, id domain.NodeID) ([]domain.NodeID, error) {
+	var out []domain.NodeID
+	for _, l := range t.st.links {
+		if l.To.ID == id && !slices.Contains(out, l.From.ID) {
+			out = append(out, l.From.ID)
+		}
+	}
+	return out, nil
+}
+
+func (t *memTx) LinksFromInto(ctx context.Context, refs []domain.NodeRef, to domain.NodeID) ([]domain.Link, error) {
+	ls, _ := t.LinksFrom(ctx, refs)
+	return slices.DeleteFunc(ls, func(l domain.Link) bool { return l.To.ID != to }), nil
 }
 
 func (t *memTx) LinksTo(_ context.Context, id domain.NodeID) ([]domain.Link, error) {

@@ -30,6 +30,8 @@ export const EVENT_LABELS: Record<string, string> = {
   'change.signal': 'change.signal — signal emitted on a change',
   'change.transitioned': 'change.transitioned — change moved in its lifecycle',
   'change.committed': 'change.committed — change committed on its branch',
+  'change.merged': 'change.merged — change merged into the branch it was forked from',
+  'change.rebased': 'change.rebased — change brought onto the head of the branch it was forked from',
   'change.attached': 'change.attached — change attached to a change integrating it',
   'change.detached': 'change.detached — change detached from the change integrating it',
   'change.edited': 'change.edited — a field of the change header (title, description, goal) was edited',

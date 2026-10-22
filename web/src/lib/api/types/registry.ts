@@ -407,6 +407,8 @@ export const TRIGGER_EVENTS = [
   'change.signal',
   'change.transitioned',
   'change.committed',
+  'change.merged',
+  'change.rebased',
   'change.attached',
   'change.detached',
   'change.edited',

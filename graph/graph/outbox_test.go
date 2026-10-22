@@ -88,7 +88,7 @@ func TestGraphEmitsTheEventsOfAChange(t *testing.T) {
 		if _, err := g.apply(ctx, c.ID, ""); err != nil {
 			t.Fatal(err)
 		}
-		want := []string{events.ChangeCreated, events.ChangeEdited, events.ChangeItemAdded, events.ChangeSignal, events.ChangeCommitted, events.ChangeApplied}
+		want := []string{events.ChangeCreated, events.ChangeEdited, events.ChangeItemAdded, events.ChangeSignal, events.ChangeCommitted, events.ChangeMerged, events.ChangeApplied}
 		if got := sink.types(c.ID); !slices.Equal(got, want) {
 			t.Fatalf("events %v, want %v", got, want)
 		}
@@ -102,9 +102,50 @@ func TestGraphEmitsTheEventsOfAChange(t *testing.T) {
 			if ev.Type == events.ChangeApplied && (ev.Baseline == nil || ev.Baseline.Nodes != nil) {
 				t.Fatalf("applied baseline %+v", ev.Baseline)
 			}
+			// a commit and a merge name the branch and the node versions they left there (ADR 0159)
+			if ev.Type == events.ChangeCommitted || ev.Type == events.ChangeMerged {
+				wantBranch := domain.MainBranch
+				if ev.Type == events.ChangeCommitted {
+					wantBranch = ev.Baseline.Branch
+				}
+				if ev.Branch != wantBranch || wantBranch == "" || len(ev.Nodes) != 1 || ev.Nodes[0].Key != "N-1" || ev.Nodes[0].Type != "Item" || ev.Nodes[0].Version < 1 {
+					t.Fatalf("%s: branch %q (want %q), nodes %+v", ev.Type, ev.Branch, wantBranch, ev.Nodes)
+				}
+			}
 		}
 		if !strings.HasPrefix(sink.ids[0], OutboxOrigin+":") || sink.ids[0] == sink.ids[1] {
 			t.Fatalf("event ids %v", sink.ids)
+		}
+
+		// a change whose target moved on other nodes is rebased (its fork moved), then merged
+		a, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "a", Intent: "i", OwnBranch: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "b", Intent: "i", OwnBranch: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, ch := range []domain.Change{a, b} {
+			cn, err := g.ImpactNodeCreate(ctx, ch.ID, NodeCreate{Key: []string{"N-A", "N-B"}[i], Type: "Item", Rationale: "r"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := g.acceptImpact(ctx, ch.ID, cn.ID, ""); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := g.CommitChange(ctx, ch.ID, ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, ch := range []domain.Change{a, b} {
+			if _, err := g.IntegrateChange(ctx, ch.ID, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		want = []string{events.ChangeCreated, events.ChangeCommitted, events.ChangeRebased, events.ChangeMerged, events.ChangeApplied}
+		if got := sink.types(b.ID); !slices.Equal(got, want) {
+			t.Fatalf("events of the rebased change %v, want %v", got, want)
 		}
 
 		// a write refused emits nothing; a purge emits change.purged
@@ -188,7 +229,8 @@ func TestCommitCarriesTheWritersEvents(t *testing.T) {
 			t.Fatal(err)
 		}
 		i := slices.Index(sink.subs, ev.Subject)
-		if i < 1 || !strings.HasSuffix(sink.subs[i-1], ".applied") || sink.data[i] != `{"name":"N-1"}` {
+		// PostgreSQL stores a payload as jsonb, which spaces it its own way
+		if i < 1 || !strings.HasSuffix(sink.subs[i-1], ".applied") || strings.ReplaceAll(sink.data[i], " ", "") != `{"name":"N-1"}` {
 			t.Fatalf("carried event not after change.applied: %d %q", i, sink.data[max(i, 0)])
 		}
 		n := len(sink.subs)

@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
-	"github.com/zimwip/goap/contracts/events"
 	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/contracts/operations"
 )
@@ -115,13 +114,12 @@ func (g *Graph) commitTx(ctx context.Context, id domain.ChangeID, baselineName s
 				return err
 			}
 		}
-		if *result, err = g.commitOnBranch(ctx, tx, id, baselineName, false); err != nil {
+		if *result, _, err = g.commitOnBranch(ctx, tx, id, baselineName, false); err != nil {
 			return err
 		}
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
 		}
-		g.raiseBaseline(ctx, tx, events.ChangeCommitted, c, *result)
 		return nil
 	})
 }
@@ -173,28 +171,28 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 // changes. A rebase (mechanical) writes its merges and checks nothing of what they mean (ADR 0146): the lifecycle moves
 // and the validators judged the work of each side when it was committed. The branch of a change holds no baseline (ADR 0140): the header returned is the commit as an event tells it,
 // its order the commit of the versions written, stored nowhere.
-func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, mechanical bool) (domain.Baseline, error) {
+func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, mechanical bool) (domain.Baseline, []domain.Node, error) {
 	a, own, err := g.newApplier(ctx, tx, id)
 	if err != nil {
-		return domain.Baseline{}, err
+		return domain.Baseline{}, nil, err
 	}
 	c := a.change
 	if err := a.prepareChangeImpacts(); err != nil {
-		return domain.Baseline{}, err
+		return domain.Baseline{}, nil, err
 	}
 	reverted, err := a.revertWithdrawn(own)
 	if err != nil {
-		return domain.Baseline{}, err
+		return domain.Baseline{}, nil, err
 	}
-	if len(a.cposts) == 0 && reverted == 0 {
-		return domain.Baseline{}, fmt.Errorf("change %s: no accepted change impact modifies a node, and nothing it committed is withdrawn: %w", id, ErrNothingToCommit)
+	if len(a.cposts) == 0 && len(reverted) == 0 {
+		return domain.Baseline{}, nil, fmt.Errorf("change %s: no accepted change impact modifies a node, and nothing it committed is withdrawn: %w", id, ErrNothingToCommit)
 	}
 	if !mechanical {
 		if _, err := a.walkChangeImpacts(); err != nil {
-			return domain.Baseline{}, err
+			return domain.Baseline{}, nil, err
 		}
 		if err := g.runNodeValidators(ctx, tx, a.target, a.cposts); err != nil {
-			return domain.Baseline{}, err
+			return domain.Baseline{}, nil, err
 		}
 	}
 	if baselineName == "" {
@@ -202,7 +200,10 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 	}
 	result := domain.Baseline{Name: baselineName, Namespace: c.Namespace, Branch: a.branch, ParentID: own.ForkBaseline, ChangeID: c.ID, Kind: domain.BaselineCommit,
 		Seq: endCommit(tx, a.branch), CreatedAt: g.now()}
-	if reverted > 0 {
+	switch {
+	case mechanical:
+		result.Kind = domain.BaselineRebase
+	case len(reverted) > 0:
 		result.Kind = domain.BaselineRevert
 	}
 	// each version the change applied has committed on its own branch; it commits again on the branch it is integrated into
@@ -214,35 +215,48 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 	}
 	// one entry for the commit (ADR 0144)
 	if err := g.emit(ctx, tx, committed...); err != nil {
-		return domain.Baseline{}, err
+		return domain.Baseline{}, nil, err
 	}
 	// the change stays open (ADR 0102): it is edited and committed again until it is merged
 	if c, err = tx.Change(ctx, id); err != nil {
-		return domain.Baseline{}, err
+		return domain.Baseline{}, nil, err
 	}
 	if c.Status == domain.ChangeDraft {
 		c.Status = domain.ChangeActive
 	}
-	return result, tx.PutChange(ctx, c)
+	if err := tx.PutChange(ctx, c); err != nil {
+		return domain.Baseline{}, nil, err
+	}
+	// a commit names the versions it wrote (ADR 0159); the commit of a rebase is told by the rebase (change.rebased)
+	wrote := make([]domain.Node, 0, len(a.cposts)+len(reverted))
+	for _, cp := range a.cposts {
+		wrote = append(wrote, cp.post)
+	}
+	wrote = append(wrote, reverted...)
+	if !mechanical {
+		g.raiseCommitted(ctx, tx, c, result, wrote)
+	}
+	return result, wrote, nil
 }
 
 // revertWithdrawn writes, on the branch of a change, a revert of every node the branch changed that no change impact
 // holds any more (withdrawn after its commit, ADR 0102): a version with the properties and links of the version the
 // branch was forked from (a deletion for a node the fork does not hold), which the branch reads as that version (ADR
-// 0140); it returns how many.
-func (a *applier) revertWithdrawn(own domain.Branch) (int, error) {
+// 0140); it returns the versions it wrote.
+func (a *applier) revertWithdrawn(own domain.Branch) ([]domain.Node, error) {
 	ids, fork, err := a.g.withdrawnSince(a.ctx, a.tx, a.change)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
+	var wrote []domain.Node
 	for _, id := range ids {
 		latest, err := a.tx.LatestOn(a.ctx, id, a.branch)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		next, err := nextVersion(a.ctx, a.tx, id)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		n := domain.Node{ID: id, Version: next, Branch: a.branch, Namespace: latest.Namespace, Key: latest.Key, Type: latest.Type, ChangeID: a.change.ID,
 			Reason: domain.ReasonRevert, Parents: []domain.Version{latest.Version}, Owner: latest.Owner, Project: latest.Project,
@@ -253,11 +267,11 @@ func (a *applier) revertWithdrawn(own domain.Branch) (int, error) {
 		if inFork {
 			src, err := a.tx.Node(a.ctx, domain.NodeRef{ID: id, Version: v})
 			if err != nil {
-				return 0, err
+				return nil, err
 			}
 			n.Properties, n.State, n.Owner, n.Origins = cloneMap(src.Properties), src.State, src.Owner, slices.Clone(src.Origins)
 			if links, err = a.tx.OutLinks(a.ctx, src.Ref()); err != nil {
-				return 0, err
+				return nil, err
 			}
 			like = []domain.NodeRef{src.Ref(), latest.Ref()} // the set of the fork's version, shared as is (ADR 0141)
 			a.target.set(id, v)
@@ -266,13 +280,14 @@ func (a *applier) revertWithdrawn(own domain.Branch) (int, error) {
 			a.target.remove(id)
 		}
 		if err := a.tx.PutNode(a.ctx, n); err != nil {
-			return 0, err
+			return nil, err
 		}
 		if err := a.g.putLinks(a.ctx, a.tx, n, links, like...); err != nil {
-			return 0, err
+			return nil, err
 		}
+		wrote = append(wrote, n)
 	}
-	return len(ids), nil
+	return wrote, nil
 }
 
 // advanceBranch moves the head of a branch to a baseline built on it (main is created on first use). The head moves only

@@ -9,6 +9,7 @@ import (
 
 	"github.com/zimwip/goap/engine/engine"
 
+	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/llm"
 	"github.com/zimwip/goap/engine/methodology"
 	"github.com/zimwip/goap/graph/graph"
@@ -227,5 +228,80 @@ func TestSupersedingTriggerCancelsTheRunAtWork(t *testing.T) {
 	}
 	if cancelled != 1 || completed != 1 || calls != 2 {
 		t.Fatalf("cancelled %d, completed %d, %d model calls: the first run is cancelled, the second one writes", cancelled, completed, calls)
+	}
+}
+
+const commitTriggerYAML = `
+name: noted
+version: 1.0.0
+namespace: alm
+conditions:
+  - {name: noted, expr: 'artifacts.exists(a, a.target == "note")'}
+actions:
+  - {name: note, kind: llm, model: default, prompt: Write the note, effects: {noted: true}}
+goals:
+  - {name: noted, pre: {noted: true}}
+agents:
+  - name: writer
+    planner: goap
+    goals: [noted]
+    triggers:
+      - {name: on_need, type: event, event: change.committed, filter: 'event.nodes.exists(n, n.type == "alm@Need" && n.state == "accepted")', goal: noted, enabled: true}
+`
+
+// A commit names the node versions it wrote, which a trigger filters on, and the change a trigger creates for an event
+// acts in the project of the event's change (ADR 0159).
+func TestTriggerFiltersOnCommittedNodesAndKeepsTheProject(t *testing.T) {
+	ctx := context.Background()
+	e := stagedEngine(t)
+	m, err := methodology.Parse([]byte(commitTriggerYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Methodologies.(engine.StaticMethodologies)["noted"] = c
+	e.Executors[methodology.KindLLM] = engine.LLMExecutor{Client: llm.ClientFunc(func(ctx context.Context, r llm.Request) (llm.Response, error) {
+		return llm.Response{Text: `{"items":[{"type":"artifact","target":"note","data":{"text":"done"}}]}`}, nil
+	})}
+	tm := &engine.TriggerManager{Engine: e}
+	if err := tm.Reload(ctx); err != nil {
+		t.Fatal(err)
+	}
+	src, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: "Source", Intent: "commit a need", Namespace: "alm", ProjectID: testProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fired := func() []*engine.Process {
+		e.Drain()
+		var out []*engine.Process
+		all, _ := e.Store.List(ctx)
+		for _, p := range all {
+			if p.Trigger != "" {
+				out = append(out, p)
+			}
+		}
+		return out
+	}
+	// a commit of another type or state fires nothing
+	tm.Handle(ctx, engine.TriggerEventOf(domain.ChangeEvent{Type: "change.committed", Change: src, Branch: "b",
+		Nodes: []domain.EventNode{{ID: "n1", Version: 1, Key: "N-1", Type: "alm@Need", State: "draft"}}}))
+	if runs := fired(); len(runs) != 0 {
+		t.Fatalf("no run for a need not accepted: %+v", runs)
+	}
+	tm.Handle(ctx, engine.TriggerEventOf(domain.ChangeEvent{Type: "change.committed", Change: src, Branch: "b",
+		Nodes: []domain.EventNode{{ID: "n1", Version: 2, Key: "N-1", Type: "alm@Need", State: "accepted"}}}))
+	runs := fired()
+	if len(runs) != 1 || runs[0].ChangeID == "" || runs[0].ChangeID == src.ID {
+		t.Fatalf("one run on a new change: %+v", runs)
+	}
+	got, err := e.Graph.Change(ctx, runs[0].ChangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ProjectID.Key != testProject {
+		t.Fatalf("the new change acts in the project of the event, %q: %q", testProject, got.ProjectID.Key)
 	}
 }

@@ -143,10 +143,69 @@ func checkCarried(evs []graphapi.CarriedEvent) error {
 	return nil
 }
 
-// raiseBaseline is raise with the header of the baseline the event names.
-func (g *Graph) raiseBaseline(ctx context.Context, tx Tx, typ string, c domain.Change, b domain.Baseline) {
+// raiseCommitted emits change.committed (ADR 0159): c committed on the branch of b (its header: the state is not
+// carried), writing the versions nodes.
+func (g *Graph) raiseCommitted(ctx context.Context, tx Tx, c domain.Change, b domain.Baseline, nodes []domain.Node) {
 	b.Nodes = nil
-	g.raise(ctx, tx, typ, c, func(ev *domain.ChangeEvent) { ev.Baseline = &b })
+	g.raise(ctx, tx, events.ChangeCommitted, c, func(ev *domain.ChangeEvent) {
+		ev.Baseline, ev.Branch, ev.Nodes = &b, domain.BranchOf(b.Branch), eventNodes(nodes)
+	})
+}
+
+// raiseRebased emits change.rebased (ADR 0159): the branch of change id was moved onto the head of what it is forked
+// from, the versions nodes the commit of its merges wrote there (none when only its fork moved, or while a conflict
+// waits for its resolution).
+func (g *Graph) raiseRebased(ctx context.Context, tx Tx, id domain.ChangeID, branch string, nodes []domain.Node) {
+	if _, ok := tx.(*observedTx); !ok {
+		return
+	}
+	c, err := tx.Change(ctx, id)
+	if err != nil {
+		return
+	}
+	g.raise(ctx, tx, events.ChangeRebased, c, func(ev *domain.ChangeEvent) {
+		ev.Branch, ev.Nodes = domain.BranchOf(branch), eventNodes(nodes)
+	})
+}
+
+// raiseMerged emits change.merged (ADR 0159): c merged into branch into, leaving there the versions nodes (written or
+// joined by the merge), b the baseline it left when the branch keeps one (nil: the branch of a change).
+func (g *Graph) raiseMerged(ctx context.Context, tx Tx, c domain.Change, into string, b *domain.Baseline, nodes []domain.Node) {
+	if b != nil {
+		h := *b
+		h.Nodes = nil
+		b = &h
+	}
+	g.raise(ctx, tx, events.ChangeMerged, c, func(ev *domain.ChangeEvent) {
+		ev.Baseline, ev.Branch, ev.Nodes = b, domain.BranchOf(into), eventNodes(nodes)
+	})
+}
+
+// raiseMergedRefs is raiseMerged with the versions read by reference.
+func (g *Graph) raiseMergedRefs(ctx context.Context, tx Tx, c domain.Change, into string, b *domain.Baseline, refs []domain.NodeRef) error {
+	if _, ok := tx.(*observedTx); !ok {
+		return nil
+	}
+	var nodes []domain.Node
+	if len(refs) > 0 {
+		var err error
+		if nodes, err = tx.NodesAt(ctx, refs, ""); err != nil {
+			return err
+		}
+	}
+	g.raiseMerged(ctx, tx, c, into, b, nodes)
+	return nil
+}
+
+func eventNodes(nodes []domain.Node) []domain.EventNode {
+	if len(nodes) == 0 {
+		return nil
+	}
+	out := make([]domain.EventNode, len(nodes))
+	for i, n := range nodes {
+		out[i] = domain.EventNodeOf(n)
+	}
+	return out
 }
 func (t *observedTx) index(id domain.ChangeID) {
 	if id != "" && !slices.Contains(t.indexed, id) {

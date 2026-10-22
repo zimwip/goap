@@ -29,7 +29,7 @@ func ChangeEvents(fn func(ctx context.Context, ev domain.ChangeEvent)) outbox.Si
 // TriggerEventOf converts a change event.
 func TriggerEventOf(ev domain.ChangeEvent) TriggerEvent {
 	c := ev.Change
-	return TriggerEvent{Type: ev.Type, Change: &c, Items: ev.Items, Fields: ev.Fields, EndUser: ev.EndUser}
+	return TriggerEvent{Type: ev.Type, Change: &c, Items: ev.Items, Fields: ev.Fields, EndUser: ev.EndUser, Branch: ev.Branch, Nodes: ev.Nodes}
 }
 
 // WatchProcesses feeds process events of the broker to the trigger manager (OnProcess). It returns when ctx is done.

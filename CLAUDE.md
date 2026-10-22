@@ -161,7 +161,8 @@ Design rules that follow, to keep the whole consistent:
   `raiseItems`, `raiseApplied`, collected by `observedTx` with `change.updated`, the index documents, the nodes and the
   baselines; `Graph.Observe(sink)` returns the relay, nil sink: no outbox): `change.created` (`CreateChange`,
   `SplitByOwner`), `edited`, `attached`, `detached`, `item_added` and `signal` (`AddItems`), `committed`
-  (`CommitChange`), `transitioned`, `applied` (wherever a change commits), `purged`. There is no
+  (`CommitChange`; every event of a commit, rebase or merge names `branch` and `nodes`, ADR 0159), `rebased`, `merged`
+  (every merge, sub-change included), `transitioned`, `applied` (wherever a change lands on a lasting branch), `purged`. There is no
   `engine.EventingGraph`, no `graphsvc.Handler.publish`; `goap-dev` delivers the relay in process (index, `eventsvc.Hub`,
   `engine.ChangeEvents` to the triggers), `platform/cmd/graph` to NATS. A new write of a change raises its event in its
   transaction. The engine writes its process events with the process (`EventStore.PutEmitting`, `MemoryStore` and

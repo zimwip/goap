@@ -421,14 +421,16 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	return nil
 }
 
-func (t *guardTx) PutLink(ctx context.Context, l domain.Link) error {
-	if err := t.needChange(l.ChangeID, "link "+l.Type); err != nil {
-		return err
+func (t *guardTx) PutLinks(ctx context.Context, ls []domain.Link) error {
+	for _, l := range ls {
+		if err := t.needChange(l.ChangeID, "link "+l.Type); err != nil {
+			return err
+		}
+		if !t.written[l.From] {
+			return fmt.Errorf("link %s: version %s is not written by this transaction, a version never changes (ADR 0079): %w", l.Type, l.From, ErrConflict)
+		}
 	}
-	if !t.written[l.From] {
-		return fmt.Errorf("link %s: version %s is not written by this transaction, a version never changes (ADR 0079): %w", l.Type, l.From, ErrConflict)
-	}
-	return t.Tx.PutLink(ctx, l)
+	return t.Tx.PutLinks(ctx, ls)
 }
 
 func (t *guardTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, l domain.Link) error {

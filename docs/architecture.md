@@ -711,7 +711,7 @@ declared on the agent (`agents[].triggers`):
 | Field | Role |
 |---|---|
 | `type` | `event` or `schedule` |
-| `event` + `filter` | `change.created`, `change.edited`, `change.attached`, `change.detached`, `change.item_added`, `change.signal`, `change.committed`, `change.transitioned`, `change.applied`, `process.completed`, `process.failed`, `process.stuck`, `process.attached`, `step.completed`, `methodology.published` (`contracts/events.All`); CEL filter on `event` (`event.change.*`, `event.process.*`, `event.items` for `change.signal`'s payload) |
+| `event` + `filter` | `change.created`, `change.edited`, `change.attached`, `change.detached`, `change.item_added`, `change.signal`, `change.committed`, `change.rebased`, `change.merged`, `change.transitioned`, `change.applied`, `process.completed`, `process.failed`, `process.stuck`, `process.attached`, `step.completed`, `methodology.published` (`contracts/events.All`); CEL filter on `event` (`event.change.*`, `event.process.*`, `event.items` for `change.signal`'s payload, `event.branch` and `event.nodes` (`{id, version, namespace, key, type, state, deleted}`) for `change.committed` / `rebased` / `merged`, ADR 0159); an event trigger's new change acts in the project of the event's change |
 | `schedule` | cron expression (5 fields, UTC) |
 | `goal`, `intent` | targeted goal (otherwise identification is limited to the agent) and intent text |
 | `target` | `new_change` (new change on the latest baseline) or `event_change` (the event's change) |
@@ -753,8 +753,13 @@ Events cross the integration relation too ([ADR 0106](adr/0106-methodologies-int
 takes `from: self | integrated | integrator | dependency`, and the engine relays an event of a change to its parent, to
 its open sub-changes and to the open changes depending on it ([ADR 0108](adr/0108-dependencies-between-changes.md))
 (`Engine.relay`), waking the subscribed processes of their methodologies on their own change with
-`vars.event.relation`; the graph publishes `change.transitioned`, `change.committed`, `change.attached` and
-`change.detached` for that coupling.
+`vars.event.relation`; the graph publishes `change.transitioned`, `change.committed`, `change.rebased`,
+`change.merged`, `change.attached` and `change.detached` for that coupling. A commit, a rebase and a merge each name the
+branch and the node versions they left there ([ADR 0159](adr/0159-requests-three-levels-of-change.md): `branch`,
+`nodes` of `domain.ChangeEvent`, `domain.EventNode`): `change.committed` the versions a commit wrote on the change's
+branch, `change.rebased` the versions the commit of a rebase's merges wrote (none when only the fork moved),
+`change.merged` (every merge: a sub-change into its parent's branch, a root change into a lasting one, before
+`change.applied`) the versions it wrote or joined on the target.
 **Reactive activities** ([ADR 0110](adr/0110-reactive-activities-review-of-the-description.md)): any activity of a
 methodology (a process, a step of a process or of a method, a method, an action) may declare `on:` (the same
 subscriptions, `from` included). On each matching event of a change of its methodology the engine runs it on that change

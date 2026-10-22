@@ -188,3 +188,49 @@ func BenchmarkViewReads(b *testing.B) {
 		}
 	})
 }
+
+func TestViewEnteringBySource(t *testing.T) { forEachRepo(t, testViewEnteringBySource) }
+
+// testViewEnteringBySource: a node's entering links in a view come from the version of each source the view holds,
+// once, however many versions of the source held them; a link the source no longer holds is gone.
+func testViewEnteringBySource(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	g := New(repo)
+	commit := func(e ...NodeEdit) {
+		t.Helper()
+		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "edit", By: "t", Edits: e}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	commit(NodeEdit{Key: "T", Type: "Need"}, NodeEdit{Key: "U", Type: "Need"},
+		NodeEdit{Key: "H", Type: "Need", Links: []LinkEdit{{Type: "refines", ToKey: "T"}, {Type: "refines", ToKey: "U"}}})
+	for i := range 4 { // versions of the source sharing its links
+		h := must[domain.Node](t)(g.NodeByKey(ctx, "", "H"))
+		ref := h.Ref()
+		commit(NodeEdit{Pre: &ref, Props: map[string]any{"title": fmt.Sprint(i)}})
+	}
+	h := must[domain.Node](t)(g.NodeByKey(ctx, "", "H"))
+	var toU domain.LinkID
+	for _, l := range must[[]domain.Link](t)(g.OutLinksOf(ctx, h.Ref())) {
+		if l.Type == "refines" && l.To.ID != "" && l.To.ID != h.ID {
+			if u := must[domain.Node](t)(g.NodeByKey(ctx, "", "U")); l.To.ID == u.ID {
+				toU = l.ID
+			}
+		}
+	}
+	ref := h.Ref()
+	commit(NodeEdit{Pre: &ref, RemoveLinks: []domain.LinkID{toU}})
+	h = must[domain.Node](t)(g.NodeByKey(ctx, "", "H"))
+	v := View{Namespace: h.Namespace, Branch: domain.MainBranch}
+	tv := must[domain.NodeView](t)(g.ViewNode(ctx, v, "", "T"))
+	if len(tv.In) != 1 || tv.In[0].From != h.Ref() {
+		t.Fatalf("T is entered once, from the version of H the view holds (%s): %+v", h.Ref(), tv.In)
+	}
+	if uv := must[domain.NodeView](t)(g.ViewNode(ctx, v, "", "U")); len(uv.In) != 0 {
+		t.Fatalf("U is no longer entered: %+v", uv.In)
+	}
+	nb := must[Neighbourhood](t)(g.ViewNeighbourhood(ctx, v, tv.ID))
+	if len(nb.Links) != 1 || nb.Links[0].From != h.Ref() {
+		t.Fatalf("the neighbourhood of T: %+v", nb.Links)
+	}
+}

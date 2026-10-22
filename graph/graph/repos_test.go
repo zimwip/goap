@@ -69,7 +69,7 @@ func seedNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) {
 			return err
 		}
 		for _, l := range in.Links {
-			if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, From: n.Ref(), To: l.To, Properties: l.Properties, ChangeID: c.ID}); err != nil {
+			if err := tx.PutLinks(ctx, []domain.Link{{ID: domain.LinkID(g.newID()), Type: l.Type, From: n.Ref(), To: l.To, Properties: l.Properties, ChangeID: c.ID}}); err != nil {
 				return err
 			}
 		}

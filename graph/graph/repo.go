@@ -77,6 +77,11 @@ type Tx interface {
 	// links by source or target and type, never the whole sets.
 	LinksFromOfType(ctx context.Context, refs []domain.NodeRef, types []string) ([]domain.Link, error)
 	LinksToOfType(ctx context.Context, ref domain.NodeRef, types []string) ([]domain.Link, error)
+	// LinkSources are the nodes a link row names a node as its target from, each once (the rows a version wrote, not
+	// the versions holding them); LinksFromInto the links the versions refs hold into that node. Together they read the
+	// links entering a node in a state by its sources, at the cost of its sources rather than of their histories.
+	LinkSources(ctx context.Context, id domain.NodeID) ([]domain.NodeID, error)
+	LinksFromInto(ctx context.Context, refs []domain.NodeRef, to domain.NodeID) ([]domain.Link, error)
 	// NodePage reads the page q asks of the node versions refs (a state), ordered by key, and LinkPage the page of the
 	// links between two of them, by type then id: the filter, the counts and the page are the store's, only the page
 	// is read (ADR 0140). q.Limit is set; q.Change is the caller's.
@@ -134,9 +139,9 @@ type Tx interface {
 	// PutNode writes a node version. A version is written once and never changes (ADR 0079): the working state of a
 	// node in a change is a draft, the version is written when the change commits.
 	PutNode(ctx context.Context, n domain.Node) error
-	// PutLink writes a link of the set of a version written in the same transaction (ADR 0141); Link reads one, as
-	// leaving the version that wrote it.
-	PutLink(ctx context.Context, l domain.Link) error
+	// PutLinks writes links of the sets of versions written in the same transaction (ADR 0141), a whole set in a few
+	// statements; Link reads one, as leaving the version that wrote it.
+	PutLinks(ctx context.Context, ls []domain.Link) error
 	Link(ctx context.Context, id domain.LinkID) (domain.Link, error)
 	// PutLinkSet says how a version written in the same transaction holds its links (ADR 0141): the set of an earlier
 	// version of the node as is (Of), or its own rows as a delta over the set of one (Base); a version left alone
