@@ -24,6 +24,7 @@
     reopenable,
     writeNodeInChange,
     removeFromChange,
+    changeNodes,
     type LifecycleRow,
     type PostVersions,
   } from '../lifecycle';
@@ -43,8 +44,12 @@
     task?.form ? 'form' : /select/i.test(action) ? 'select' : /review|revue|valid|approv/i.test(action) ? 'review' : 'nodes',
   );
 
+  /** the nodes of the baseline the change acts on (never the whole baseline) */
   let nodes = $state<GraphNode[]>([]);
-  /** every node of the reference baseline, whatever its namespace: a form's constraints say which it offers */
+  /** the nodes of the baseline matching what the person looks for, searched by the server as they type */
+  let found = $state<GraphNode[]>([]);
+  /** the nodes added to the rows from the search */
+  let added = $state<GraphNode[]>([]);
   /** the baseline of the change: a declared form's pickers search it, never read it whole */
   let baselineId = $state('');
   /** the nodes picked in a declared form, kept so a choice stays shown once the search moved on */
@@ -84,12 +89,9 @@
     changeImpacts = change?.nodes ?? [];
     namespace = change?.namespace ?? '';
     baselineId = change?.baselineId ?? '';
-    // a declared form searches the baseline; the other modes list it
-    const allNodes = baselineId && mode !== 'form' ? ((await graph.getBaselineGraph(baselineId, signal)).nodes ?? []) : [];
-    // bind the picker to the change's declared namespace (its WHAT): a
-    // change can only impact the nodes of its own domain, whatever else
-    // the baseline holds.
-    nodes = namespace ? allNodes.filter((n) => n.namespace === namespace) : allNodes;
+    // of the baseline, only the nodes the change acts on; the rest is searched (a declared form's pickers, the selection,
+    // the nodes to take on)
+    nodes = mode === 'form' ? [] : await changeNodes(id, baselineId, signal);
     attached = (await graph.getChangeImpacts(id, signal)).nodes ?? [];
     posts = await loadPosts(changeImpacts, false, { changeId: id });
     decisions = hasDecision(task?.form?.fields) ? await loadDecisions(id, signal) : undefined;
@@ -111,16 +113,34 @@
     return () => ctrl.abort();
   });
 
-  const lcRows = $derived(lifecycleRows(typeCatalog.cat, nodes, attached, changeImpacts, posts, extraNodes));
+  // the search of the baseline: the selection and the nodes to take on, bound to the change's namespace (its WHAT: a
+  // change can only impact the nodes of its own domain, whatever else the baseline holds)
+  $effect(() => {
+    const q = filter.trim();
+    const b = baselineId;
+    const ns = namespace;
+    if (!b || mode === 'form' || mode === 'review') return;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      graph
+        .listBaselineNodes({ baselineId: b, query: q, limit: 200 }, ctrl.signal)
+        .then((r) => !ctrl.signal.aborted && (found = (r.nodes ?? []).filter((n) => !ns || n.namespace === ns)))
+        .catch(() => undefined);
+    }, 250);
+    return () => (clearTimeout(t), ctrl.abort());
+  });
+
+  const lcRows = $derived(lifecycleRows(typeCatalog.cat, [...nodes, ...added], attached, changeImpacts, posts, extraNodes));
   /** the action may restrict node creation/edition to a subset of the namespace's types */
   const allowedTypes = $derived(task?.nodeTypes?.length ? new Set(task.nodeTypes) : undefined);
   const lcCandidates = $derived(
-    reopenable(nodes, lcRows, namespace).filter((n) => !allowedTypes || allowedTypes.has(n.type ?? '')),
+    reopenable(found, lcRows, namespace).filter((n) => !allowedTypes || allowedTypes.has(n.type ?? '')),
   );
   const typeNames = $derived(nodeTypeNames(typeCatalog.cat, namespace).filter((t) => !allowedTypes || allowedTypes.has(t)));
   const lifecycleOf = $derived(lifecycleResolver(typeCatalog.cat));
   const takenKeys = $derived([
     ...nodes.map((n) => n.key ?? ''),
+    ...found.map((n) => n.key ?? ''),
     ...changeImpacts.filter((n) => n.intent === 'created' && !n.superseded && n.review !== 'rejected').map((n) => n.key ?? ''),
   ]);
 
@@ -174,13 +194,20 @@
   }
 
 
+  /** Adds a node found by the search to the rows. */
+  function addNode(id: string) {
+    const n = found.find((x) => x.id === id);
+    if (n && !added.some((x) => x.id === id)) added = [...added, n];
+    extraNodes = [...extraNodes, id];
+  }
+
   /** a change impact awaiting a decision: written directly, on the main flow, not replaced */
   const isPending = (n: ChangeImpact) => n.review === 'proposed' && !n.flow && !n.superseded;
   const pendingNodes = $derived(changeImpacts.filter(isPending));
 
   const q = $derived(filter.trim().toLowerCase());
   const shownNodes = $derived(
-    nodes
+    found
       .filter((n) => !n.deleted)
       .filter((n) => !q || `${n.key} ${n.type} ${nodeTitle(n)}`.toLowerCase().includes(q)),
   );
@@ -392,7 +419,8 @@
       onremove={removeNode}
       onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })}
       onopennode={(r, edit) => openNode(r.node, { pin: true, change: changeId, generic: edit, edit })}
-      onadd={(id) => (extraNodes = [...extraNodes, id])}
+      bind:filter
+      onadd={addNode}
     />
     <p class="hint">Edits are drafts awaiting a review: they are not accepted here (ADR 0079); a reviewer accepts them in the change.</p>
     <div class="row" style="margin-top: 0.75rem">

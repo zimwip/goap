@@ -1,15 +1,18 @@
 <script lang="ts">
-  // Graph explorer (ADR 0036 §4): the whole graph as it is — the head of main of every namespace (organisation,
-  // platform, methodology, and the domains' data), with the links between them — laid out by a force simulation
-  // (d3-force). Filter by namespace or text, start from the organisation (units, users, and what they own), select a
-  // node to see its neighbourhood, focus on it, or open it in its editor.
-  import { isMeta, ns as nsNames, types as nodeTypes } from '../../stores/session.svelte';
+  // Graph explorer (ADR 0036 §4): the graph as the context has it (the working change on the option of the header for
+  // the namespace it acts on, the head of main for the others, contextView.ts), read a neighbourhood at a time: it
+  // starts from the organisation, or from what a search finds, and grows as the person expands the nodes. It never reads
+  // a namespace whole. Laid out by a force simulation (d3-force); select a node to see its links, expand it, open it.
+  import { isMeta, ns as nsNames, defaultOrg } from '../../stores/session.svelte';
   import { typeCatalog } from '../../stores/types.svelte';
+  import { working } from '../../stores/workingChange.svelte';
   import { untrack } from 'svelte';
   import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY, type SimulationNodeDatum, type SimulationLinkDatum } from 'd3-force';
   import type { Tab } from '../../shell/types';
-  import { graph as graphApi, errorMessage, type GraphNode, type Link } from '../../api';
+  import { graph as graphApi, errorMessage, type GraphNode } from '../../api';
   import { openNode } from '../../nodeEditors';
+  import { contextView, searchView, viewHoods, type ContextView } from '../../contextView';
+  import { hoodIndex, hoodOf, type Hood } from '../../graphIndex';
 
   let { tab }: { tab: Tab } = $props();
   void untrack(() => tab);
@@ -28,48 +31,112 @@
     target: N | string;
   }
 
-  let all = $state<{ nodes: GraphNode[]; links: Link[] }>({ nodes: [], links: [] });
+  /** the neighbourhoods read, by node id */
+  let hoods = $state<Record<string, Hood>>({});
   let namespaces = $state<string[]>([]);
   let shown = $state<Record<string, boolean>>({});
-  let loading = $state(true);
+  let loading = $state(false);
   let error = $state('');
   let filter = $state('');
-  let focusOn = $state<{ id: string; depth: number } | null>(null);
-  let preset = $state<'all' | 'organisation' | 'ownership'>('all');
+  let hits = $state<GraphNode[]>([]);
   const MAX = 2500;
 
-  async function load() {
+  /** the view of each namespace, read once per context (working change and option) */
+  let views = new Map<string, Promise<ContextView>>();
+  const contextKey = $derived(`${working.change?.id ?? ''} ${working.option}`);
+  const viewOf = (namespace: string) => {
+    let v = views.get(namespace);
+    if (!v) views.set(namespace, (v = contextView(namespace)));
+    return v;
+  };
+
+  /** Reads the neighbourhoods of nodes (their namespace's view), up to the cap. */
+  async function expand(nodes: GraphNode[]) {
+    const todo = nodes.filter((n) => n.id && !hoods[n.id]).slice(0, Math.max(0, MAX - Object.keys(hoods).length));
+    if (!todo.length) return [];
     loading = true;
     error = '';
     try {
-      const ns = (await graphApi.listNamespaces()).namespaces ?? [];
-      const heads = await Promise.all(ns.map((n) => graphApi.getBranch(n, 'main').catch(() => ({ head: undefined }))));
-      const graphs = await Promise.all(heads.map((h) => (h.head?.id ? graphApi.getBaselineGraph(h.head.id) : Promise.resolve({ nodes: [], links: [] }))));
-      const nodes = new Map<string, GraphNode>();
-      const links: Link[] = [];
-      for (const g of graphs) {
-        for (const n of g.nodes ?? []) if (n.id && !n.deleted && n.props?.removed !== true) nodes.set(n.id, n);
-        links.push(...(g.links ?? []));
-      }
-      all = { nodes: [...nodes.values()], links };
-      namespaces = [...new Set(all.nodes.map((n) => n.namespace ?? ''))].sort();
-      shown = Object.fromEntries(namespaces.map((n) => [n, !isMeta(n)]));
+      const read = await Promise.all(todo.map(async (n) => [n.id!, await hoodOf(viewHoods(await viewOf(n.namespace ?? '')), n.id!)] as const));
+      const next = { ...hoods };
+      for (const [id, h] of read) next[id] = h;
+      hoods = next;
+      return read.map(([, h]) => h);
     } catch (e) {
       error = errorMessage(e);
+      return [];
     } finally {
       loading = false;
     }
   }
+
+  /** Expands a node and, `depth` times, the neighbours reached. */
+  async function grow(from: GraphNode[], depth: number) {
+    let front = from;
+    for (let d = 0; d < depth && front.length; d++) {
+      const read = await expand(front);
+      front = read.flatMap((h) => h.nodes ?? []).filter((n) => !isMeta(n.namespace));
+    }
+  }
+
+  /** Starts from the root of the organisation, two levels around it. */
+  async function startFromOrganisation() {
+    hoods = {};
+    hits = [];
+    try {
+      const v = await viewOf(nsNames.organisation);
+      const root = (await searchView(v, defaultOrg(), 20)).find((n) => n.key === defaultOrg());
+      if (root) await grow([root], 2);
+    } catch (e) {
+      error = errorMessage(e);
+    }
+  }
+
+  /** Reads again what is shown when the context moves: the neighbourhoods read, in the new view. */
+  async function reread() {
+    const ids = Object.values(hoods)
+      .flatMap((h) => (h.node ? [h.node] : []))
+      .slice(0, 200);
+    hoods = {};
+    if (ids.length) await expand(ids);
+    else await startFromOrganisation();
+  }
   $effect(() => {
-    void load();
+    void contextKey;
+    untrack(() => {
+      views = new Map();
+      void reread();
+    });
+  });
+  $effect(() => {
+    graphApi
+      .listNamespaces()
+      .then((r) => {
+        const all = (r.namespaces ?? []).sort();
+        // shown first: a checkbox bound to no value would write false back
+        shown = Object.fromEntries(all.map((n) => [n, untrack(() => shown[n]) ?? !isMeta(n)]));
+        namespaces = all;
+      })
+      .catch((e) => (error = errorMessage(e)));
   });
 
-  function applyPreset(p: typeof preset) {
-    preset = p;
-    focusOn = null;
-    if (p === 'all') shown = Object.fromEntries(namespaces.map((n) => [n, !isMeta(n)]));
-    else shown = Object.fromEntries(namespaces.map((n) => [n, n === nsNames.organisation || (p === 'ownership' && !isMeta(n) && n !== nsNames.platform)]));
-  }
+  // the search: a page of the nodes matching the text in each namespace shown, in its view
+  $effect(() => {
+    const q = filter.trim();
+    void contextKey;
+    if (!q) return void (hits = []);
+    const spaces = namespaces.filter((n) => shown[n]);
+    let live = true;
+    const t = setTimeout(async () => {
+      try {
+        const found = await Promise.all(spaces.map(async (n) => searchView(await viewOf(n), q, 20)));
+        if (live) hits = found.flat();
+      } catch (e) {
+        if (live) error = errorMessage(e);
+      }
+    }, 250);
+    return () => ((live = false), clearTimeout(t));
+  });
 
   const labelOf = (n: GraphNode) => {
     const p = (n.props ?? {}) as Record<string, unknown>;
@@ -78,40 +145,11 @@
 
   // the nodes and links to draw, laid out
   const view = $derived.by(() => {
-    const q = filter.trim().toLowerCase();
-    // the organisation presets show its structure: units, users, adapters (not the access rules)
-    let nodes = all.nodes.filter((n) => shown[n.namespace ?? ''] && (preset === 'all' || n.type !== nodeTypes.policy));
+    const index = hoodIndex('', Object.values(hoods));
+    let nodes = index.list.filter((n) => !n.deleted && n.props?.removed !== true && (shown[n.namespace ?? ''] ?? true));
     const ids = new Set(nodes.map((n) => n.id ?? ''));
-    let links = all.links.filter((l) => ids.has(l.from?.id ?? '') && ids.has(l.to?.id ?? '') && l.from?.id !== l.to?.id);
-    if (preset === 'ownership') {
-      // the units and users, and the nodes linked to them (owner, member_of)
-      const org = new Set(nodes.filter((n) => n.namespace === nsNames.organisation).map((n) => n.id ?? ''));
-      const keep = new Set(org);
-      for (const l of links) {
-        if (org.has(l.to?.id ?? '')) keep.add(l.from?.id ?? '');
-        if (org.has(l.from?.id ?? '')) keep.add(l.to?.id ?? '');
-      }
-      nodes = nodes.filter((n) => keep.has(n.id ?? ''));
-    }
-    if (focusOn) {
-      const around = new Set([focusOn.id]);
-      for (let d = 0; d < focusOn.depth; d++) {
-        for (const l of links) {
-          if (around.has(l.from?.id ?? '')) around.add(l.to?.id ?? '');
-          if (around.has(l.to?.id ?? '')) around.add(l.from?.id ?? '');
-        }
-      }
-      nodes = nodes.filter((n) => around.has(n.id ?? ''));
-    }
-    if (q) {
-      const hit = new Set(nodes.filter((n) => `${n.key} ${labelOf(n)} ${n.type}`.toLowerCase().includes(q)).map((n) => n.id ?? ''));
-      // the hits and their neighbours
-      for (const l of links) {
-        if (hit.has(l.from?.id ?? '')) hit.add(l.to?.id ?? '');
-        if (hit.has(l.to?.id ?? '')) hit.add(l.from?.id ?? '');
-      }
-      nodes = nodes.filter((n) => hit.has(n.id ?? ''));
-    }
+    let links = [...index.out.values()].flat().filter((l) => ids.has(l.from?.id ?? '') && ids.has(l.to?.id ?? '') && l.from?.id !== l.to?.id);
+    const loaded = index.loaded;
     const truncated = nodes.length > MAX;
     nodes = nodes.slice(0, MAX);
     const keep = new Set(nodes.map((n) => n.id ?? ''));
@@ -139,7 +177,7 @@
       .force('collide', forceCollide<N>().radius((d) => radius(d) + 3))
       .stop();
     for (let i = 0; i < 260; i++) sim.tick();
-    return { nodes: ns, links: ls, byId, truncated };
+    return { nodes: ns, links: ls, byId, truncated, loaded };
   });
 
   const radius = (n: N) => 4 + Math.min(10, Math.sqrt(n.degree) * 1.8);
@@ -218,26 +256,24 @@
 <div class="editor-page explorer-page">
   <div class="bar">
     <h2>Graph explorer</h2>
-    <div class="presets" role="tablist" aria-label="Presets">
-      <button type="button" class="small" class:primary={preset === 'all'} onclick={() => applyPreset('all')}>Everything</button>
-      <button type="button" class="small" class:primary={preset === 'organisation'} onclick={() => applyPreset('organisation')}>Organisation</button>
-      <button type="button" class="small" class:primary={preset === 'ownership'} onclick={() => applyPreset('ownership')}>Organisation and what it owns</button>
-    </div>
-    <input type="search" placeholder="Find a node (key, name, type)…" bind:value={filter} aria-label="Find a node" />
-    <button type="button" class="small" onclick={() => load()} disabled={loading}>{loading ? 'Loading…' : 'Reload'}</button>
+    <button type="button" class="small" onclick={() => void startFromOrganisation()} disabled={loading}>Start from the organisation</button>
+    <input type="search" placeholder="Find a node to start from (key, name, type)…" bind:value={filter} aria-label="Find a node" />
+    <button type="button" class="small" onclick={() => (hoods = {})} disabled={loading}>Clear</button>
+    <button type="button" class="small" onclick={() => void reread()} disabled={loading}>{loading ? 'Loading…' : 'Reload'}</button>
+    <span class="hint" title="The working change of the header is seen on its option for the namespace it acts on; the other namespaces at the head of main">
+      {working.change ? `seen in ${working.change.title}` : 'head of main'}
+    </span>
   </div>
   <div class="ns">
     {#each namespaces as n (n)}
-      <label><input type="checkbox" bind:checked={shown[n]} /> <i style="background: {colour(n)}"></i>{n}
-        <span class="hint">{all.nodes.filter((x) => x.namespace === n).length}</span></label>
+      <label><input type="checkbox" bind:checked={shown[n]} /> <i style="background: {colour(n)}"></i>{n}</label>
     {/each}
-    <span class="hint">{view.nodes.length} nodes · {view.links.length} links{view.truncated ? ` (first ${MAX}: filter to see more)` : ''}{focusOn ? ' · focused' : ''}</span>
-    {#if focusOn}<button type="button" class="link" onclick={() => (focusOn = null)}>show all</button>{/if}
+    <span class="hint">{view.nodes.length} nodes · {view.links.length} links{view.truncated ? ` (first ${MAX})` : ''}</span>
   </div>
   {#if error}<div class="alert">{error}</div>{/if}
   <div class="body">
     <div class="canvas" role="presentation" bind:clientWidth={cw} bind:clientHeight={ch} onwheel={wheel} onpointerdown={down} onpointermove={move} onpointerup={() => (drag = null)}>
-      <svg width="100%" height="100%" aria-label="Graph of every namespace">
+      <svg width="100%" height="100%" aria-label="Graph explorer">
         <g transform="translate({tx},{ty}) scale({scale})">
           {#each view.links as l (l.id)}
             {@const s = l.source as N}
@@ -262,6 +298,7 @@
               tabindex="-1"
               onclick={() => (selected = selected === n.id ? '' : n.id)}
               ondblclick={() => void openNode(n.node)}
+              class:unread={!view.loaded.has(n.id)}
               onpointerenter={() => (hovered = n.id)}
               onpointerleave={() => (hovered = '')}
               onkeydown={(e) => e.key === 'Enter' && void openNode(n.node)}
@@ -283,8 +320,8 @@
         {#if sel.node.state}<p class="hint">state {sel.node.state}</p>{/if}
         <div class="row">
           <button type="button" class="small primary" onclick={() => void openNode(sel.node)}>Open</button>
-          <button type="button" class="small" onclick={() => (focusOn = { id: sel.id, depth: 1 })}>Focus</button>
-          <button type="button" class="small" onclick={() => (focusOn = { id: sel.id, depth: 2 })}>Focus ×2</button>
+          <button type="button" class="small" disabled={loading || view.loaded.has(sel.id)} onclick={() => void grow([sel.node], 1)}>Expand</button>
+          <button type="button" class="small" disabled={loading} onclick={() => void grow([sel.node], 2)}>Expand ×2</button>
         </div>
         <ul class="nb">
           {#each selLinks as x, i (i)}
@@ -297,11 +334,22 @@
             <li class="hint">No link.</li>
           {/each}
         </ul>
+      {:else if hits.length}
+        <h4>Found</h4>
+        <ul class="nb">
+          {#each hits as h (h.id)}
+            <li>
+              <button type="button" class="link" onclick={() => void grow([h], 1).then(() => (selected = h.id ?? ''))}>{labelOf(h)}</button>
+              <span class="hint">{shortType(h.type ?? '')}</span>
+            </li>
+          {/each}
+        </ul>
       {:else}
         <p class="hint">
-          Every namespace at the head of main, and the links between them. Click a node to see its neighbourhood, double-click
-          to open it; wheel to zoom, drag to pan. "Organisation and what it owns" shows the units, the users, and the nodes
-          they own or belong to.
+          The graph as the context has it: the working change on its option for the namespace it acts on, the head of
+          main for the others. It grows a neighbourhood at a time: start from the organisation or from a node found,
+          click a node to see its links, expand it to read its neighbours (a dashed node is not expanded yet), double-click
+          to open it; wheel to zoom, drag to pan.
         </p>
       {/if}
     </aside>
@@ -328,10 +376,6 @@
   .bar input[type='search'] {
     flex: 1;
     min-width: 160px;
-  }
-  .presets {
-    display: flex;
-    gap: 4px;
   }
   .ns {
     display: flex;
@@ -393,6 +437,10 @@
   .gnode {
     cursor: pointer;
     outline: none;
+  }
+  .gnode.unread circle {
+    stroke-dasharray: 2 2;
+    stroke: var(--muted);
   }
   .gnode.dim {
     opacity: 0.2;

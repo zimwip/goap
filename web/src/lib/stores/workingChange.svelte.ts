@@ -6,7 +6,9 @@
 // last working change of each project (ADR 0038), so a reload or another device finds it again. The assistant reads
 // it from the context of each turn (app.change, ADR 0092): it is the change its turns work on.
 import { untrack } from 'svelte';
-import { graph, errorMessage, type Change } from '../api';
+import { graph, errorMessage, type Change, type Flow } from '../api';
+import { stamp, keyOf } from '../flux/signals.svelte';
+import { MAIN_SCOPE } from '../changeScope';
 import { notify } from '../shell/workbench.svelte';
 import { editPrefs, prefs } from './preferences.svelte';
 import { project, selectProject } from './project.svelte';
@@ -22,7 +24,42 @@ export interface WorkingChange {
   status: string;
 }
 
-export const working = $state({ change: undefined as WorkingChange | undefined });
+/** The working change, and the option of it the person works on (ADR 0032 §6): 'main' (the main flow, the default) or
+ * the id of an open option. The option is the change's active option, so what the person sees and what the graph
+ * calls naming no flow (the assistant's, the engine's) go to the same flow; the open options are offered in the header. */
+export const working = $state({ change: undefined as WorkingChange | undefined, option: MAIN_SCOPE, options: [] as Flow[] });
+
+/** The open options of a change (neither selected nor rejected nor discarded). */
+const openOptions = (fs: Flow[]): Flow[] => fs.filter((f) => f.option && f.status !== 'discarded' && f.optionStatus !== 'rejected' && f.optionStatus !== 'selected');
+
+/** Reads the options of the working change and the one it works on. */
+async function readOptions(id: string): Promise<void> {
+  try {
+    const r = await graph.listOptions(id);
+    if (working.change?.id !== id) return;
+    working.options = openOptions(r.options ?? []);
+    const active = r.active && working.options.some((o) => o.id === r.active) ? r.active : MAIN_SCOPE;
+    working.option = active;
+  } catch {
+    if (working.change?.id === id) (working.options = []), (working.option = MAIN_SCOPE);
+  }
+}
+
+/** Works on an option of the working change ('main': the main flow): it becomes the change's active option. */
+export async function workOnOption(option: string): Promise<boolean> {
+  const w = working.change;
+  if (!w) return false;
+  const o = option || MAIN_SCOPE;
+  if (o === working.option) return true;
+  try {
+    await graph.activateOption(w.id, o);
+    if (working.change?.id === w.id) working.option = o;
+    return true;
+  } catch (e) {
+    notify(errorMessage(e), 'error');
+    return false;
+  }
+}
 
 /** A change is worked in until it commits or is abandoned. */
 export const workable = (c?: Pick<Change, 'status'>): boolean => !!c && c.status !== 'applied' && c.status !== 'abandoned';
@@ -116,6 +153,16 @@ async function restore(projectKey: string, id: string): Promise<void> {
 // the working change belongs to the active project: a project switch (from the header, the assistant, another tab's
 // token) leaves it and takes back the one of the new project, once the preferences are read
 $effect.root(() => {
+  // the options of the working change, read again when it moves (an option opened, activated, decided elsewhere)
+  $effect(() => {
+    const id = working.change?.id ?? '';
+    if (!id) {
+      untrack(() => ((working.options = []), (working.option = MAIN_SCOPE)));
+      return;
+    }
+    void stamp(keyOf.change(id));
+    untrack(() => void readOptions(id));
+  });
   $effect(() => {
     if (!prefs.loaded) return;
     const p = project.current;

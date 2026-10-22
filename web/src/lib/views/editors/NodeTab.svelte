@@ -6,7 +6,8 @@
   // rest as it stands in the fork of the change; with no change selected, the latest released versions. Modifications
   // are proposals of that change (created on demand).
   import EditorActions from '../../shell/EditorActions.svelte';
-  import { stopWorking, working, workIn, workInId } from '../../stores/workingChange.svelte';
+  import { stopWorking, working, workIn, workInId, workOnOption } from '../../stores/workingChange.svelte';
+  import { MAIN_SCOPE } from '../../changeScope';
   import {
     graph,
     errorMessage,
@@ -95,10 +96,9 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   const workId = $derived(working.change && (!nodeNamespace || namespaceOf(working.change.namespace) === nodeNamespace) ? working.change.id : '');
   /** the change the tab was opened in (an Edit of an impact, a link), selected in the context when the tab opens it */
   let asked = $state('');
-  /** the flow of the change the node is seen and edited on: 'main' or an option (ADR 0032 §6), given with the change
-   * the tab was opened in; empty: the change as a whole (its edits go to its active option) */
-  let flowAsked = $state({ change: untrack(() => tab.params.change) ?? '', flow: untrack(() => tab.params.flow) ?? '' });
-  const workFlow = $derived(workId && flowAsked.change === workId ? flowAsked.flow : '');
+  /** the flow of the change the node is seen and edited on: the option selected in the header (ADR 0032 §6); '' the
+   * main flow */
+  const workFlow = $derived(workId && working.option !== MAIN_SCOPE ? working.option : '');
   let work = $state<Work | undefined>();
   /** the world of the change as read so far: the neighbourhoods read in it (its fork as it left it, its commits, its
    * drafts; GetNodeNeighbourhood in the change), the node's then the ones of the nodes unfolded */
@@ -107,17 +107,20 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   /** the neighbourhoods to read again when the world moves: the ones read so far, the node's first */
   const readAgain = (hoods: Hood[]) => [...new Set([id, ...hoods.flatMap((h) => (h.node?.id ? [h.node.id] : []))])].slice(0, 20);
 
-  // opened in a change (tab.params.change, set again when the tab is opened anew): that change becomes the one selected
-  // in the context, which the editor then follows
+  // opened in a change (tab.params.change, set again when the tab is opened anew), on a flow: that change and that option
+  // become the ones selected in the context, which the editor then follows
   $effect(() => {
     const c = tab.params.change ?? '';
     const f = tab.params.flow ?? '';
     untrack(() => {
       if (!c) return;
-      if (flowAsked.change !== c || flowAsked.flow !== f) flowAsked = { change: c, flow: f };
-      if (c === workId || c === asked) return;
+      const onOption = () => (f && f !== workFlow ? workOnOption(f) : undefined);
+      if (c === workId) return void onOption();
+      if (c === asked) return;
       asked = c;
-      void workInId(c).finally(() => (asked = ''));
+      void workInId(c)
+        .then((ok) => ok && onOption())
+        .finally(() => (asked = ''));
     });
   });
   // the tab names what it shows (its URL): the change followed and its flow
@@ -530,7 +533,6 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   /** Selects the change of the context the editor follows ('': none, the latest released versions). */
   function pickChange(value: string) {
     editing = false;
-    flowAsked = { change: '', flow: '' }; // another change: seen as a whole
     if (value) void workInId(value);
     else stopWorking();
   }

@@ -31,7 +31,7 @@
   import { setContext, tick, untrack } from 'svelte';
   import { applicable, loadApplicable } from '../../stores/project.svelte';
   import { rootProject } from '../../stores/session.svelte';
-  import { isWorking, refreshWorking, stopWorking, workable, workIn } from '../../stores/workingChange.svelte';
+  import { isWorking, refreshWorking, stopWorking, workable, workIn, workOnOption, working } from '../../stores/workingChange.svelte';
   import { registerAssist, revealTarget, type ToolImpl } from '../../assist/registry.svelte';
   import { changeSummary, impactEntities, stepEntities, transitionEntities, type ImpactFacts } from '../../assist/changeScreen';
   import { recordAction } from '../../assist/recorder';
@@ -51,7 +51,7 @@
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
 import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
-  import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, awaitingReview, writeNodeInChange, removeFromChange, removeManyFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
+  import { changeNodes, lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, awaitingReview, writeNodeInChange, removeFromChange, removeManyFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
   import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
@@ -138,11 +138,20 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   let loading = $state(false);
   let error = $state('');
   let missing = $state(false);
-  /** the flow the editor looks at: the main flow or one option (ADR 0032 §6); local to the editor, it does not
-   * move the active option. The impacts and items panes show the change as that flow sees it. */
+  /** the flow the editor looks at: the main flow or one option (ADR 0032 §6). For the working change it is the option
+   * of the header, both ways; for another change it is local to the editor and does not move its active option. The
+   * impacts and items panes show the change as that flow sees it. */
   let scope = $state(untrack(() => tab.params.scope) || '');
   $effect(() => {
     tab.params.scope = scope;
+  });
+  $effect(() => {
+    const o = working.option;
+    if (isWorking(tab.params.id)) untrack(() => scope !== o && (scope = o));
+  });
+  $effect(() => {
+    const s = scope;
+    if (s && isWorking(tab.params.id)) untrack(() => s !== working.option && void workOnOption(s));
   });
   /** the change as the scope sees it: its change impacts (with the posts of that flow) and items */
   let view = $state<Change | undefined>();
@@ -209,17 +218,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
   /** the baseline `nodes` was read from */
   let nodesOf = '';
-
-  /** The nodes of the baseline the impacts of a change act on, every page of them. */
-  async function changeNodes(changeId: string, baselineId: string, signal?: AbortSignal): Promise<GraphNode[]> {
-    if (!baselineId) return [];
-    const out: GraphNode[] = [];
-    for (;;) {
-      const r = await graph.listBaselineNodes({ baselineId, changeId, includeDeleted: true, offset: out.length, limit: 500 }, signal);
-      out.push(...(r.nodes ?? []));
-      if (!r.nodes?.length || out.length >= (r.total ?? 0)) return out;
-    }
-  }
 
   // the nodes of the baseline the change could take on: a page of those matching what the person looks for, searched by
   // the server as they type

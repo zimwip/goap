@@ -1568,7 +1568,15 @@ it when a request names none.
 (not three separate entries); a project selector next to the brand mark reissues the token
 (`stores/project.svelte.ts`), followed by the working change selector (`stores/workingChange.svelte.ts`, ADR 0135: the
 change the person works in, chosen there, by *Work in this change* on the change tab or by the assistant, kept per
-project in the preferences, carried to the assistant as `app.change`), and persists the choice locally (`goap-dev`, with no token to reissue, keeps a
+project in the preferences, carried to the assistant as `app.change`), then the option selector (`shell/OptionSelector.svelte`:
+the option of the working change worked on, *Main flow* by default; picking one makes it the change's active option, so the
+screens, the assistant and the engine's calls naming no flow agree; `working.option`, the change tab's scope follows it
+for the working change, both ways). Together they are the **context view** every screen reads (`web/src/lib/contextView.ts`):
+for the namespace the working change acts on, the change on that option; for the others, and with no working change, the
+head of main. A screen reads of it only what it shows (a neighbourhood, a page of a search; `viewHoods`, `searchView`):
+the node tab, the pickers, the *New object* dialog, the human tasks (the nodes of their change, `lifecycle.changeNodes`,
+the rest searched) and the Graph explorer (a neighbourhood at a time, from the organisation or a node found); the
+Baseline explorer is the exception, it shows the commit the person picks. The choice of project persists the choice locally (`goap-dev`, with no token to reissue, keeps a
 fixed `GOAP_DEV_PROJECT` env var instead, like `GOAP_DEV_ORG`). Assignment has no nav entry of its own: an
 "Assignments" pane on the Organisation, Project and User editors (one `AssignmentsPane.svelte`,
 parametrized by which side is fixed) offers a "+ Assignment" action, and each explorer's context menu
