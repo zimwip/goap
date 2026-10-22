@@ -1259,7 +1259,13 @@ each start (nodes, baselines and changes). The compose image is `pgvector/pgvect
   read-only ones (`platform.OpenSQLiteReader`, WAL): the plain reads of the engine, job and domain stores go there,
   and so do the graph's transactions in a read-only context (`platform.ReadOnly`, set by `platform.ReadOnlyRequests`
   on a GET or a Connect procedure named `Get…`, `List…`, `Export…`, `Diff…`, `Search…`, `Compare…`, `Is…`,
-  `Watch…`; a write they try runs again on the writer). A long write, an import, then holds no reader of the IDE.
+  `Watch…`, `Query…`; a write they try runs again on the writer). A long write, an import, then holds no reader of the IDE.
+  PostgreSQL does the same in `platform/cmd/graph`: a second pool whose sessions are read-only
+  (`platform.PostgresReader`, `default_transaction_read_only=on`) serves the graph's transactions of a read-only
+  context on one connection with no `BEGIN` / `COMMIT` (`Postgres.WithReader`; PostgreSQL reads in READ COMMITTED, so a
+  transaction gave them no snapshot, only two round trips); a write they try fails with SQLSTATE 25006 (a lock of a
+  change or a branch refuses at once) and the transaction runs again on the writer. The graph test variant
+  `postgres-readers` runs every transaction there first.
 - A single multi-target image (`Dockerfile`, `ARG SERVICE`), static binary on `distroless`; its `services` target holds every binary (`/goap/<service>`), the one image `goap/goap:dev` the compose stack runs with an entrypoint per service (`make images`, done by `make up`), so it compiles once.
 - Kubernetes 🟡: one Helm chart per service (or kustomize); engine as a scalable `Deployment` (HPA on
   the work-queue stream depth), NATS via the official chart, Vault Agent Injector.

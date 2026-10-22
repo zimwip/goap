@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -40,6 +42,30 @@ func OpenPostgres(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 		case <-time.After(time.Second):
 		}
 	}
+}
+
+// PostgresReader opens a pool of read-only connections next to pool, on the same database and settings: every
+// statement runs in a read-only transaction of its own (default_transaction_read_only), so a store serves the reads of
+// a read-only context (ReadOnly) there with no BEGIN and COMMIT around them, and a write tried there fails (SQLSTATE
+// 25006, IsPostgresReadOnly) rather than landing outside a transaction.
+func PostgresReader(ctx context.Context, pool *pgxpool.Pool) (*pgxpool.Pool, error) {
+	cfg := pool.Config().Copy()
+	cfg.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
+	read, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := read.Ping(ctx); err != nil {
+		read.Close()
+		return nil, fmt.Errorf("postgres readers: %w", err)
+	}
+	return read, nil
+}
+
+// IsPostgresReadOnly tells the error of a write on a read-only connection (SQLSTATE 25006, read_only_sql_transaction).
+func IsPostgresReadOnly(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "25006"
 }
 
 // Migrate applies the *.sql files of dir (lexicographic order) that were not

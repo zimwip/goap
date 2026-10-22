@@ -29,10 +29,10 @@ func IsReadOnly(ctx context.Context) bool {
 }
 
 // readPrefixes are the names of the Connect procedures that only read.
-var readPrefixes = []string{"Get", "List", "Export", "Diff", "Search", "Compare", "Is", "Watch"}
+var readPrefixes = []string{"Get", "List", "Export", "Diff", "Search", "Compare", "Is", "Watch", "Query"}
 
 // ReadOnlyRequests marks the context of the requests that only read (ReadOnly): a GET, or a Connect procedure
-// whose method is named Get…, List…, Export…, Diff…, Search…, Compare…, Is… or Watch…. A store still runs a write
+// whose method is named Get…, List…, Export…, Diff…, Search…, Compare…, Is…, Watch… or Query…. A store still runs a write
 // such a request makes on its writer.
 func ReadOnlyRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
