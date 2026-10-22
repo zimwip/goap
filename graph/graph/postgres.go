@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/lib/outbox"
+	"github.com/zimwip/goap/lib/platform"
 )
 
 // Migrations holds the PostgreSQL schema of the graph service.
@@ -25,18 +27,64 @@ import (
 var Migrations embed.FS
 
 // Postgres is a PostgreSQL Repo.
-type Postgres struct{ pool *pgxpool.Pool }
+type Postgres struct {
+	pool *pgxpool.Pool
+	// read, when set, serves the transactions of a read-only context (platform.ReadOnly) on read-only connections
+	// (platform.PostgresReader) with no transaction around them: no BEGIN and COMMIT round trips. They see what they
+	// would see in a transaction: the graph's transactions run READ COMMITTED, each statement reading the last commit.
+	read *pgxpool.Pool
+	// readAll takes every context as read-only (the tests of the readers)
+	readAll bool
+}
 
 // NewPostgres returns a repository on pool (schema already migrated).
 func NewPostgres(pool *pgxpool.Pool) *Postgres { return &Postgres{pool: pool} }
 
+// WithReader gives the repository a pool of read-only connections (platform.PostgresReader) for the transactions of
+// a read-only context.
+func (p *Postgres) WithReader(read *pgxpool.Pool) *Postgres {
+	p.read = read
+	return p
+}
+
 // InTx implements Repo.
 func (p *Postgres) InTx(ctx context.Context, fn func(tx Tx) error) error {
+	if p.read != nil && (p.readAll || platform.IsReadOnly(ctx)) {
+		err := p.readTx(ctx, fn)
+		if !errors.Is(err, errWrites) {
+			return err
+		}
+		slog.WarnContext(ctx, "graph: a read-only request writes; running its transaction on the writer")
+	}
 	return pgx.BeginFunc(ctx, p.pool, func(tx pgx.Tx) error { return fn(&pgTx{tx: tx}) })
 }
 
+// readTx runs fn on one read-only connection, outside any transaction; a write it tries ends it with errWrites, before
+// anything is written (every statement of the connection is read-only).
+func (p *Postgres) readTx(ctx context.Context, fn func(tx Tx) error) error {
+	conn, err := p.read.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	err = fn(&pgTx{tx: conn, readOnly: true})
+	if err != nil && platform.IsPostgresReadOnly(err) {
+		return errWrites
+	}
+	return err
+}
+
+// pgQuerier is what a pgTx runs its statements on: a transaction, or a read-only connection (readTx).
+type pgQuerier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 type pgTx struct {
-	tx pgx.Tx
+	tx pgQuerier
+	// readOnly is a read on a read-only connection (readTx): no transaction, so no lock to take
+	readOnly bool
 }
 
 // AppendOutbox implements Tx.
@@ -317,6 +365,9 @@ func (t *pgTx) joinBranches(ctx context.Context, id domain.NodeID, vs []domain.N
 // once the lock is held: an attach or a detach that committed meanwhile moved the change to another tree, whose lock
 // is taken in turn.
 func (t *pgTx) LockChange(ctx context.Context, id domain.ChangeID) error {
+	if t.readOnly {
+		return errWrites // a lock announces a write: stop before reading what it checks
+	}
 	root, err := t.changeRoot(ctx, id)
 	for err == nil {
 		if err = t.advisoryLock(ctx, "goap.change:"+root); err != nil {
@@ -333,6 +384,9 @@ func (t *pgTx) LockChange(ctx context.Context, id domain.ChangeID) error {
 
 // LockBranch implements Tx: a transaction-level advisory lock on the branch.
 func (t *pgTx) LockBranch(ctx context.Context, namespace, name string) error {
+	if t.readOnly {
+		return errWrites
+	}
 	return mapErr(t.advisoryLock(ctx, "goap.branch:"+domain.NamespaceOf(namespace)+"/"+name), "lock branch "+name)
 }
 

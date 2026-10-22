@@ -136,7 +136,19 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 	if dsn == "" {
 		return
 	}
-	t.Run("postgres", func(t *testing.T) {
+	for _, readers := range []bool{false, true} {
+		name := "postgres"
+		if readers {
+			// every transaction starts on a read-only connection with no transaction, the writes running again in
+			// one on the writer (platform.ReadOnlyRequests)
+			name = "postgres-readers"
+		}
+		t.Run(name, func(t *testing.T) { postgresRepo(t, dsn, readers, f) })
+	}
+}
+
+func postgresRepo(t *testing.T, dsn string, readers bool, f func(t *testing.T, repo Repo)) {
+	{
 		ctx := context.Background()
 		schema := fmt.Sprintf("graph_test_%d", time.Now().UnixNano())
 		admin, err := pgxpool.New(ctx, dsn)
@@ -162,11 +174,19 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 			t.Fatal(err)
 		}
 		repo := NewPostgres(pool)
+		if readers {
+			read, err := platform.PostgresReader(ctx, pool)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer read.Close()
+			repo.WithReader(read).readAll = true
+		}
 		f(t, repo)
 		checkImpactLogs(t, repo)
 		checkCommits(t, repo)
 		checkStates(t, repo)
-	})
+	}
 }
 
 // checkImpactLogs replays the impact log of every change and compares it with the change_impact projection (ADR 0029),

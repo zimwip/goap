@@ -110,7 +110,14 @@ func main() {
 		if err := platform.Migrate(ctx, log, pool, smarttagsvc.Migrations, "migrations"); err != nil {
 			platform.Fatal(log, "migrate smart tags", err)
 		}
-		repo = graph.NewPostgres(pool)
+		pg := graph.NewPostgres(pool)
+		// the requests that only read run on read-only connections, with no BEGIN and COMMIT around them
+		read, err := platform.PostgresReader(ctx, pool)
+		if err != nil {
+			platform.Fatal(log, "postgres readers", err)
+		}
+		defer read.Close()
+		repo = pg.WithReader(read)
 		if err := graph.CheckReferences(ctx, stdlib.OpenDBFromPool(pool)); err != nil {
 			platform.Fatal(log, "database", err)
 		}
@@ -286,7 +293,7 @@ func main() {
 	if content {
 		// the jobs, the domain registry, the smart tags and the imports are the platform graph's (a job of a content
 		// namespace, a smart tag of its versions: steps to come of ADR 0154)
-		srv.Mount(path, graphService)
+		srv.Mount(path, platform.ReadOnlyRequests(graphService))
 		if err := srv.Run(); err != nil {
 			platform.Fatal(log, "server", err)
 		}
@@ -296,7 +303,8 @@ func main() {
 	go (&jobkit.Worker{Queue: jobs, ID: jobkit.WorkerID("graph"), Kinds: graphHandler.JobRunners(), Log: log}).Run(ctx)
 	// the calls on the namespaces other graphs hold go to them, the declared graph sources driving them (ADR 0154 §9)
 	graphService = &graphsvc.Router{Local: graphService, Sources: g.Sources, LocalSource: graphsvc.PlatformSource, Client: platform.H2CClient(), HasChange: g.HasChange}
-	srv.Mount(path, graphService)
+	// the requests that only read (Get…, List…: platform.ReadOnlyRequests) take the readers of the store
+	srv.Mount(path, platform.ReadOnlyRequests(graphService))
 	srv.Mount(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: domains}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	smartTags := &smarttagsvc.Service{Store: smartTagStore, Exists: smarttagsvc.VersionsExist(g.Node)}
 	srv.Mount(smarttagv1connect.NewSmartTagServiceHandler(&smarttagsvc.Handler{Service: smartTags}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
