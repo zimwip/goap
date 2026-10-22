@@ -68,80 +68,78 @@
   }
 </script>
 
-{#if dependsOn.length || dependents.length || order.length || editable}
-  <section class="deps" aria-label="Dependencies">
-    <div class="head">
-      <h3>Depends on</h3>
-      {#if editable && !adding}<button type="button" class="small" onclick={startAdding}>Add dependency…</button>{/if}
-    </div>
-    {#if dependsOn.length}
-      <ul>
-        {#each dependsOn as d (d.id)}
-          <li>
-            <span class="mark" class:ok={d.satisfied} aria-hidden="true">{d.satisfied ? '✓' : '…'}</span>
-            <button type="button" class="link" onclick={() => open(d.id)}>{d.title || d.id}</button>
-            <StatusBadge status={d.status} />
-            <span class="hint">{dependencyNote(d)}</span>
-            {#if editable}
-              <button type="button" class="small" disabled={busy} title="Remove the dependency"
-                onclick={() => save(withoutDependency(change.dependsOn, d.id ?? ''), 'Dependency removed.')}>Remove</button>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-    {:else}
-      <p class="hint">No dependency: it merges once its work is committed and settled.</p>
-    {/if}
-    {#if adding}
-      <form class="add" onsubmit={(e) => (e.preventDefault(), save(withDependency(change.dependsOn, target), 'Dependency added.'))}>
-        {#if !choices}
-          <span class="hint">Reading the changes…</span>
-        {:else if !choices.length}
-          <span class="hint">No open change to depend on.</span>
-        {:else}
-          <label for="dep-target">Depends on change</label>
-          <select id="dep-target" bind:value={target}>
-            {#each choices as c (c.id)}<option value={c.id}>{c.title || c.id} ({c.methodology || 'no methodology'}, {c.status})</option>{/each}
-          </select>
-          <p class="hint">This change will merge only once the work of the one chosen has reached the branch it merges into.</p>
-        {/if}
-        <div class="row">
-          {#if choices?.length}<button type="submit" class="primary small" disabled={busy || !target}>Add</button>{/if}
-          <button type="button" class="small" onclick={() => (adding = false)}>Cancel</button>
-        </div>
-      </form>
-    {/if}
-    {#if dependents.length}
-      <h3>Needed by</h3>
-      <ul>
-        {#each dependents as d (d.id)}
-          <li>
-            <button type="button" class="link" onclick={() => open(d.id)}>{d.title || d.id}</button>
-            <StatusBadge status={d.status} />
-            {#if d.satisfied}<span class="hint">has what it needs from this change</span>{/if}
-          </li>
-        {/each}
-      </ul>
-    {/if}
-    {#if order.length}
-      <h3>Merge order of its sub-changes</h3>
-      <ol>
-        {#each order as d (d.id)}
-          <li>
-            <button type="button" class="link" onclick={() => open(d.id)}>{d.title || d.id}</button>
-            <StatusBadge status={d.status} />
-            <span class="hint">{d.satisfied ? 'ready as far as its dependencies go' : d.reason}</span>
-          </li>
-        {/each}
-      </ol>
-    {/if}
-    {#if error}<div class="alert small">{error}</div>{/if}
-  </section>
-{/if}
+<section class="deps" aria-label="Dependencies">
+  <div class="head">
+    <h3>Depends on <span class="count">{dependsOn.length}</span></h3>
+    {#if editable && !adding}<button type="button" class="small" onclick={startAdding}>Add dependency…</button>{/if}
+  </div>
+  {#if dependsOn.length}
+    <ul>
+      {#each dependsOn as d (d.id)}
+        <li>
+          <span class="mark" class:ok={d.satisfied} aria-hidden="true">{d.satisfied ? '✓' : '…'}</span>
+          <button type="button" class="link" onclick={() => open(d.id)}>{d.title || d.id}</button>
+          <StatusBadge status={d.status} />
+          <span class="hint">{dependencyNote(d)}</span>
+          {#if editable}
+            <button type="button" class="small" disabled={busy} title="Remove the dependency"
+              onclick={() => save(withoutDependency(change.dependsOn, d.id ?? ''), 'Dependency removed.')}>Remove</button>
+          {/if}
+        </li>
+      {/each}
+    </ul>
+  {:else}
+    <p class="hint">No dependency: it merges once its work is committed and settled.</p>
+  {/if}
+  {#if adding}
+    <form class="add" onsubmit={(e) => (e.preventDefault(), save(withDependency(change.dependsOn, target), 'Dependency added.'))}>
+      {#if !choices}
+        <span class="hint">Reading the changes…</span>
+      {:else if !choices.length}
+        <span class="hint">No open change to depend on.</span>
+      {:else}
+        <label for="dep-target">Depends on change</label>
+        <select id="dep-target" bind:value={target}>
+          {#each choices as c (c.id)}<option value={c.id}>{c.title || c.id} ({c.methodology || 'no methodology'}, {c.status})</option>{/each}
+        </select>
+        <p class="hint">This change will merge only once the work of the one chosen has reached the branch it merges into.</p>
+      {/if}
+      <div class="row">
+        {#if choices?.length}<button type="submit" class="primary small" disabled={busy || !target}>Add</button>{/if}
+        <button type="button" class="small" onclick={() => (adding = false)}>Cancel</button>
+      </div>
+    </form>
+  {/if}
+  {#if dependents.length}
+    <h3>Needed by</h3>
+    <ul>
+      {#each dependents as d (d.id)}
+        <li>
+          <button type="button" class="link" onclick={() => open(d.id)}>{d.title || d.id}</button>
+          <StatusBadge status={d.status} />
+          {#if d.satisfied}<span class="hint">has what it needs from this change</span>{/if}
+        </li>
+      {/each}
+    </ul>
+  {/if}
+  {#if order.length}
+    <h3>Merge order of its sub-changes</h3>
+    <ol>
+      {#each order as d (d.id)}
+        <li>
+          <button type="button" class="link" onclick={() => open(d.id)}>{d.title || d.id}</button>
+          <StatusBadge status={d.status} />
+          <span class="hint">{d.satisfied ? 'ready as far as its dependencies go' : d.reason}</span>
+        </li>
+      {/each}
+    </ol>
+  {/if}
+  {#if error}<div class="alert small">{error}</div>{/if}
+</section>
 
 <style>
   .deps {
-    margin: 0.75rem 0;
+    margin: 0;
   }
   .head {
     display: flex;
@@ -149,8 +147,16 @@
     gap: 8px;
   }
   h3 {
-    font-size: 0.9rem;
     margin: 0.5rem 0 0.25rem;
+  }
+  .head h3 {
+    margin-top: 0;
+  }
+  .count {
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-weight: 500;
+    margin-left: 0.3rem;
   }
   ul,
   ol {

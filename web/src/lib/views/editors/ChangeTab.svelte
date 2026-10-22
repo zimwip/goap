@@ -645,7 +645,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     { id: 'risks', label: 'Risks & actions', badge: riskRegister(change?.items ?? []).filter(liveRisk).length || undefined },
     { id: 'verification', label: 'Verification', badge: verifications(change?.items ?? []).filter((v) => v.open).length || undefined },
     { id: 'derogations', label: 'Derogations', badge: derogationRegister(change?.items ?? []).filter(openDerogation).length || undefined },
-    { id: 'changes', label: 'Changes', badge: subs.length + ancestors.length || undefined },
+    { id: 'dependencies', label: 'Dependencies', badge: subs.length + ancestors.length + (change?.dependsOn?.length ?? 0) || undefined },
     { id: 'audit', label: 'Audit' },
   ]);
 
@@ -1342,7 +1342,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             </dd>
           {/if}
         </dl>
-        <ChangeDependencies change={ch} onchange={() => load(selected)} />
         <ChangeState changeId={selected} onopen={(id) => openTab({ kind: 'run', params: { id } })} />
         {#if showSteps}
           <PossibleSteps
@@ -1516,7 +1515,11 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       <section class="card">
         <ChangeAudit change={ch} bind:process={auditProcess} bind:run={auditRun} onrun={(pid) => openTab({ kind: 'run', params: { id: pid } })} />
       </section>
-      {:else if active === 'changes'}
+      {:else if active === 'dependencies'}
+      <section class="card">
+        <ChangeDependencies change={ch} onchange={() => load(selected)} />
+      </section>
+
       <section class="card">
         <h3>Parent changes <span class="count">{ancestors.length}</span></h3>
         {#if ancestors.length}

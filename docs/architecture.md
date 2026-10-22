@@ -93,7 +93,7 @@ into its parent's like a root change into its target (rebased onto the head of t
 guardian, a fast-forward); a parent's uncommitted draft of a node the sub-change changed holds that merge. The parent
 records the merged work as accepted, committed impacts of its own (`recordInParent`) and merges it in turn: the work climbs
 one level per merge. The change's overview gives a sub-change the same Commit and Merge ("Merge into parent") buttons;
-its Changes pane draws the history of the change with its parent and sub-changes as a branch graph
+its Dependencies pane (the changes it depends on, those needing it, its parent and sub-changes) draws the history of the change with its parent and sub-changes as a branch graph
 (`SubChangeHistory.svelte` over `HistoryGraph`, `web/src/lib/subChangeHistory.ts`: a lane per change, a row per impact
 event of its main flow, a sub-change's lane starting where its parent stood, its rebase, and the "merged" edge from its
 commit of a version to the parent's; a node filter).
