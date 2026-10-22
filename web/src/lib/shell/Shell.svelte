@@ -68,8 +68,18 @@
   const sideMax = $derived(Math.max(LIMITS.side.min, Math.min(LIMITS.side.max, Math.floor(width * 0.4))));
   const bottomMax = $derived(Math.max(LIMITS.bottom.min, Math.min(LIMITS.bottom.max, height - 200)));
 
-  // The context bar: docked open when pinned on a wide screen, else a rail of icons that slides open over the editor
-  // while hovered or focused.
+  // The context bar (right) is a rail of icons with its pin at the top. Pinned on a wide screen, it is docked beside the
+  // editor; else a click on an icon (or the focus) opens it over the editor and it closes once the pointer and the focus
+  // left it. The left side is no such bar: its activity bar selects the tool (ADR 0158).
+  const HIDE_DELAY = 350;
+
+  /** Whether the focus is on something the person is working with in the bar (a filter typed, a menu open). */
+  function busy(bar: HTMLElement | undefined): boolean {
+    const el = document.activeElement;
+    return !!bar?.contains(el) && el !== document.body && !!el?.matches('input, textarea, select, [aria-expanded="true"]');
+  }
+
+  // The context bar (right): open, its rail slides out over the editor with the labels.
   const docked = $derived(layout.rightOpen && !narrow);
   $effect(() => {
     contextBar.docked = docked;
@@ -78,33 +88,16 @@
   const ctxWidth = $derived(Math.max(LIMITS.context.min, Math.min(layout.contextWidth, ctxMax)));
   let rail = $state<HTMLElement>();
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
-  let showTimer: ReturnType<typeof setTimeout> | undefined;
-
-  function reveal() {
-    clearTimeout(hideTimer);
-    contextBar.revealed = true;
-  }
-  function revealSoon() {
-    clearTimeout(hideTimer);
-    clearTimeout(showTimer);
-    showTimer = setTimeout(reveal, 160);
-  }
-  function hideSoon() {
-    clearTimeout(showTimer);
+  function ctxLeave() {
     clearTimeout(hideTimer);
     hideTimer = setTimeout(() => {
-      // kept while it holds the focus (a selector open)
-      if (rail?.contains(document.activeElement)) return;
-      contextBar.revealed = false;
-    }, 350);
+      if (!busy(rail)) contextBar.revealed = false;
+    }, HIDE_DELAY);
   }
-  function leaveFocus(e: FocusEvent) {
-    if (!rail?.contains(e.relatedTarget as Node | null)) {
-      clearTimeout(showTimer);
-      contextBar.revealed = false;
-    }
+  function ctxFocusOut(e: FocusEvent) {
+    if (!rail?.contains(e.relatedTarget as Node | null) && !rail?.matches(':hover')) contextBar.revealed = false;
   }
-  function railKey(e: KeyboardEvent) {
+  function ctxKey(e: KeyboardEvent) {
     if (e.key === 'Escape' && contextBar.revealed) {
       contextBar.revealed = false;
       e.stopPropagation();
@@ -252,7 +245,7 @@
         <ContextBar open />
       </div>
     {:else}
-      <!-- the context bar's rail: hovering or focusing it slides the bar open over the editor -->
+      <!-- the context bar's rail: a click on a section (or the focus) slides the bar open over the editor; leaving it hides it -->
       <div class="rail-slot" style:width="{RAIL}px">
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
@@ -260,11 +253,13 @@
           class:open={contextBar.revealed}
           bind:this={rail}
           style:width="{contextBar.revealed ? ctxWidth : RAIL}px"
-          onmouseenter={revealSoon}
-          onmouseleave={hideSoon}
-          onfocusin={reveal}
-          onfocusout={leaveFocus}
-          onkeydown={railKey}
+          onmouseenter={() => clearTimeout(hideTimer)}
+          onmouseleave={ctxLeave}
+          onfocusin={(e) => {
+            if (!(e.target as HTMLElement).matches('.pin')) contextBar.revealed = true;
+          }}
+          onfocusout={ctxFocusOut}
+          onkeydown={ctxKey}
         >
           <ContextBar open={contextBar.revealed} />
         </div>

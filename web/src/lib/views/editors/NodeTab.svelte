@@ -328,23 +328,6 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     { id: 'history', label: 'History', badge: versions.at(-1)?.version || undefined },
   ]);
 
-  // opened on the edit of the node (the Edit of an impact, tab.params.edit): the edit starts once the node is read as
-  // the change followed has it, never from another state of it
-  let editAsked = $state(false);
-  $effect(() => {
-    if (!tab.params.edit) return;
-    untrack(() => {
-      delete tab.params.edit;
-      pane = 'details';
-      editAsked = true;
-    });
-  });
-  $effect(() => {
-    if (!editAsked || loading || !stored || asked || (workId && work?.change.id !== workId)) return;
-    editAsked = false;
-    if (!stored.deleted) editing = true;
-  });
-
   // --- the change followed ------------------------------------------------------------
   async function ensureChange(): Promise<string> {
     if (workId) return workId;

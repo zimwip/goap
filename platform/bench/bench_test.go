@@ -163,3 +163,44 @@ func TestDomainGrows(t *testing.T) {
 		t.Fatal("step 3 holds 2+3 types")
 	}
 }
+
+// With MaxLinks, a modification adding a link to a node holding that many drops one: no node holds more, and the bench
+// counts what the graph holds.
+func TestMaxLinks(t *testing.T) {
+	for _, mode := range []string{bench.ModeCommit, bench.ModeLifecycle} {
+		t.Run(mode, func(t *testing.T) {
+			g, url := server(t)
+			r, _ := runner(t, url, bench.Config{Run: "t", Domain: bench.DomainShape{Types: 2}, Workers: 1, Edits: 4,
+				CreateRatio: 0.3, Links: 2, AddLinks: 1, MaxLinks: 2, HotNodes: 1, HotRatio: 0.8, TextBytes: 10, Mode: mode, MaxChanges: 15,
+				ReportEvery: time.Hour, Seed: 3})
+			if err := r.WaitReady(t.Context(), time.Second); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Run(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			tot := &r.Metrics.Totals
+			if tot.Errors.Load() != 0 {
+				t.Fatalf("errors %d", tot.Errors.Load())
+			}
+			head, err := g.BranchHead(t.Context(), bench.Namespace, domain.MainBranch)
+			if err != nil {
+				t.Fatal(err)
+			}
+			links := 0
+			for id, v := range head.Nodes {
+				ls, err := g.OutLinksOf(t.Context(), domain.NodeRef{ID: id, Version: v})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(ls) > 2 {
+					t.Errorf("node %s holds %d links", id, len(ls))
+				}
+				links += len(ls)
+			}
+			if int64(links) != tot.Links.Load() {
+				t.Fatalf("the graph holds %d links, the bench counted %d", links, tot.Links.Load())
+			}
+		})
+	}
+}

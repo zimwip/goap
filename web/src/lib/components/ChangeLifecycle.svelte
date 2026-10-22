@@ -26,7 +26,6 @@
     disabled = false,
     busy = '',
     onmove,
-    onedit,
     onadd,
     types,
     lifecycleOf,
@@ -53,8 +52,6 @@
     disabled?: boolean;
     busy?: string;
     onmove: (row: LifecycleRow, t: LifecycleTransition) => void;
-    /** proposes new values for properties (only the changed ones) */
-    onedit: (row: LifecycleRow, patch: Record<string, unknown>, state?: string) => Promise<boolean> | boolean;
     /** takes on a node of the baseline; with impacts, rationale says why the change impacts it */
     onadd: (id: string, rationale?: string) => void;
     /** node types a new node can have */
@@ -70,7 +67,8 @@
     onremovemany?: (rows: LifecycleRow[]) => Promise<boolean> | boolean;
     /** opens the history of a stored node */
     onhistory: (row: LifecycleRow) => void;
-    /** opens the node editor on a node, seen through the change (`edit`: to edit it, the Edit of its row) */
+    /** opens a node in the node editor, seen through the change; `edit` (the Edit of its row): the standard node editor
+     * whatever its type names, a creation only planned given its draft first */
     onopennode: (row: LifecycleRow, edit?: boolean) => void;
     /** show each row as the change impact of its node: why, versions, review */
     impacts?: boolean;
@@ -117,7 +115,6 @@
   const removableRows = $derived(rows.filter(removable));
   const checkedRows = $derived(removableRows.filter((r) => checked.includes(r.impact?.id ?? '')));
   const allChecked = $derived(removableRows.length > 0 && checkedRows.length === removableRows.length);
-  const columns = $derived((impacts ? 6 : 3) + (bulk ? 1 : 0));
 
   function toggle(r: LifecycleRow, on: boolean) {
     const id = r.impact?.id ?? '';
@@ -146,7 +143,6 @@
   let newNodeState = $state('');
   let createError = $state('');
   let creating = $state(false);
-  let draftState = $state('');
 
   const newLifecycle = $derived(newNodeType ? lifecycleOf(newNodeType) : undefined);
   const newStates = $derived(birthStates(newLifecycle));
@@ -203,64 +199,11 @@
   }
 
   let picked = $state('');
-  let editing = $state('');
-  let draft = $state<Record<string, string>>({});
-  let newKey = $state('');
-  let newValue = $state('');
-  let formError = $state('');
 
   const shown = $derived(
     candidates.filter((n) => !filter || `${n.key} ${n.type}`.toLowerCase().includes(filter.toLowerCase())).slice(0, 200),
   );
   const stuck = $derived(rows.filter((r) => r.lifecycle && !r.committable));
-
-  const text = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
-
-  /** Property names of the form: declared ones first, then the ones the node has. */
-  function fields(r: LifecycleRow): string[] {
-    return [...new Set([...r.declared, ...(r.open ? Object.keys(r.props) : [])])];
-  }
-
-  function startEdit(r: LifecycleRow) {
-    editing = r.node.id ?? '';
-    draftState = r.effective;
-    draft = Object.fromEntries(fields(r).map((k) => [k, text(r.props[k])]));
-    newKey = newValue = formError = '';
-  }
-
-  /** A value typed in the form: text, unless the property already holds a non-text value. */
-  function parse(r: LifecycleRow, key: string, value: string): unknown {
-    const cur = r.props[key];
-    if (cur !== undefined && cur !== null && typeof cur !== 'string') {
-      try {
-        return JSON.parse(value);
-      } catch {
-        throw new Error(`“${key}” holds ${typeof cur === 'object' ? 'structured' : typeof cur} data: ${value} is not valid JSON`);
-      }
-    }
-    return value;
-  }
-
-  async function save(r: LifecycleRow) {
-    formError = '';
-    const patch: Record<string, unknown> = {};
-    try {
-      for (const [k, v] of Object.entries(draft)) if (v !== text(r.props[k])) patch[k] = parse(r, k, v);
-      if (r.open && newKey.trim()) {
-        if (newKey.trim() in draft) throw new Error(`property “${newKey.trim()}” is already in the form`);
-        patch[newKey.trim()] = newValue;
-      }
-    } catch (e) {
-      formError = e instanceof Error ? e.message : String(e);
-      return;
-    }
-    const stateChanged = !!r.created && !!r.lifecycle && draftState !== r.effective;
-    if (!Object.keys(patch).length && !stateChanged) {
-      editing = '';
-      return;
-    }
-    if (await onedit(r, patch, stateChanged ? draftState : undefined)) editing = '';
-  }
 
   function add() {
     if (!picked) return;
@@ -371,8 +314,8 @@
                   type="button"
                   class="small"
                   disabled={busy !== ''}
-                  title={openable(r) ? 'Edit the node in its editor, which sees the graph through this change' : 'Edit the properties'}
-                  onclick={() => (openable(r) ? onopennode(r, true) : editing === r.node.id ? (editing = '') : startEdit(r))}
+                  title="Edit the node in the node editor, which sees the graph through this change: properties, links, lifecycle"
+                  onclick={() => onopennode(r, true)}
                 >
                   Edit
                 </button>
@@ -405,53 +348,6 @@
               {/if}
             </td>
           </tr>
-          {#if editing === r.node.id && !disabled}
-            <tr class="editrow">
-              <td colspan={columns}>
-                <form
-                  class="edit"
-                  onsubmit={(e) => {
-                    e.preventDefault();
-                    void save(r);
-                  }}
-                >
-                  {#if r.created && r.lifecycle}
-                    <div class="field">
-                      <label for="st-{r.node.id}">State the node is created in</label>
-                      <select id="st-{r.node.id}" bind:value={draftState}>
-                        {#each birthStates(r.lifecycle) as s (s)}<option value={s}>{s}</option>{/each}
-                      </select>
-                    </div>
-                  {/if}
-                  {#each Object.keys(draft) as k (k)}
-                    <div class="field">
-                      <label for="p-{r.node.id}-{k}">{k}{#if !r.declared.includes(k)} <span class="hint">(not declared by {r.node.type})</span>{/if}</label>
-                      {#if draft[k].length > 80 || draft[k].includes('\n')}
-                        <textarea id="p-{r.node.id}-{k}" rows="4" bind:value={draft[k]}></textarea>
-                      {:else}
-                        <input id="p-{r.node.id}-{k}" type="text" bind:value={draft[k]} />
-                      {/if}
-                    </div>
-                  {/each}
-                  {#if r.open}
-                    <div class="newprop">
-                      <input type="text" class="mono" placeholder="new property" aria-label="New property name" bind:value={newKey} />
-                      <input type="text" placeholder="value" aria-label="New property value" bind:value={newValue} />
-                    </div>
-                  {/if}
-                  <p class="hint">
-                    Values are text; a property that already holds a number, boolean or list is edited as JSON. Only the changed
-                    properties are proposed.{#if !r.open} Only the attributes of {r.node.type} can be set.{/if}
-                  </p>
-                  {#if formError}<div class="alert">{formError}</div>{/if}
-                  <div class="row">
-                    <button type="submit" class="primary small" disabled={busy !== ''}>{busy === `${r.node.id}:edit` ? 'Proposing…' : 'Propose the changes'}</button>
-                    <button type="button" class="small" onclick={() => (editing = '')}>Cancel</button>
-                  </div>
-                </form>
-              </td>
-            </tr>
-          {/if}
         {/each}
       </tbody>
     </table>
@@ -617,18 +513,5 @@
   }
   .add .why-input {
     width: 16rem;
-  }
-  .editrow td {
-    background: var(--surface-2);
-  }
-  .edit {
-    display: grid;
-    gap: 0.4rem;
-    padding: 0.4rem 0.2rem;
-  }
-  .newprop {
-    display: grid;
-    grid-template-columns: minmax(8rem, 1fr) 3fr;
-    gap: 0.4rem;
   }
 </style>

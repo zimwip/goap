@@ -145,6 +145,16 @@ export async function writeNodeInChange(
   }
 }
 
+/** The node of a row as the change holds it, to open in the node editor: a creation only planned (ADR 0121) is given
+ * its draft first (the node has no id before). */
+export async function nodeInChange(changeId: string, row: LifecycleRow, flow = ''): Promise<{ id: string; key: string }> {
+  const key = row.node.key ?? '';
+  if (!row.created || row.impact?.post?.id) return { id: row.impact?.post?.id ?? row.node.id ?? '', key };
+  const cn = (await graph.impactNodeCreate(changeId, { key, type: row.node.type ?? '', rationale: row.impact?.rationale ?? '' }, flow)).node;
+  if (!cn?.post?.id) throw new Error(`${key} could not be given its draft.`);
+  return { id: cn.post.id, key };
+}
+
 /** Takes a node the change works on out of it, at any time (ADR 0102): its draft is dropped (a node the change created
  * goes away); one the change committed already is reverted on its branch by the next commit. */
 export async function removeFromChange(changeId: string, cn: ChangeImpact, flow = ''): Promise<void> {
