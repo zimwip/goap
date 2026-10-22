@@ -1330,7 +1330,7 @@ would (identity headers of `system:bench`, admin; or `-token` through the gatewa
 a generated domain `bench`, `bench@T000...` extending `bench@Item`, link `bench@relates`, through `ImportDomain`, a new version
 at each run and every `-domain-every` versions written) and the **change** (`-workers` writers on their own nodes, each change
 of `-edits` nodes, `-create` of them created with `-links` links (2 by default), the others modified, `-add-links` of the
-modifications adding a link to another node (a node links to another once, so the links keep growing), each change drawn
+modifications adding a link to another node (a node links to another once; a node holding `-max-links` links, 1000 by default, drops one as it gains one, `0` letting the links of the hot nodes grow without bound), each change drawn
 within `-spread` (0.5 by default) of these four values, their means staying the values set, `-hot` nodes taking
 `-hot-ratio` of the modifications for deep histories; `-mode commit`: one `CommitEdits`, `-mode lifecycle`: `CreateChange`,
 `ImpactNodeCreate`, one `ImpactNodeCheckoutBatch` of the modified nodes (`-node-checkout`: one `ImpactNodeCheckout` each), `ImpactNodeUpdate` + `ImpactLinkCreate` per node, one `ImpactNodeReviewBatch` of the change by `system:bench-reviewer`, `CommitChange`, `MergeChange`), and every

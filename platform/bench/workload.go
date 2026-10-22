@@ -41,7 +41,10 @@ type Config struct {
 	Edits       int     // nodes per change
 	CreateRatio float64 // share of the edits of a change that create a node (the others modify one), 0..1
 	Links       int     // links of a created node to earlier nodes
-	AddLinks    float64 // share of the modifications that also add a link to another node, 0..1 (links keep growing)
+	AddLinks    float64 // share of the modifications that also add a link to another node, 0..1 (links grow up to MaxLinks)
+	// MaxLinks bounds the links a node holds: a modification adding a link to a node holding that many also drops one
+	// (0: no bound, the links of the hot nodes keep growing)
+	MaxLinks int
 	// Spread varies each change around these averages: the nodes of a change, its share of creations, the links of a
 	// created node and the share of modifications adding a link are drawn uniformly within ±Spread of their value (0..1;
 	// 0: every change alike), the mean staying the value set.
@@ -279,6 +282,8 @@ type edit struct {
 	create bool
 	props  map[string]any
 	links  []*node
+	drop   bool  // the edit also drops a link of the node (Config.MaxLinks)
+	gone   *node // the target of the link it dropped, once written
 }
 
 // plan picks the nodes of the next change of a worker.
@@ -320,6 +325,7 @@ func (r *Runner) plan(w *worker) []edit {
 		e := edit{n: n, props: map[string]any{"value": w.rnd.Float64() * 1000, "rev": float64(n.version)}}
 		if w.rnd.Float64() < addLinks {
 			e.links = w.linkTargets(1, n)
+			e.drop = len(e.links) > 0 && cfg.MaxLinks > 0 && len(n.out)+len(e.links) > cfg.MaxLinks
 		}
 		edits = append(edits, e)
 	}
@@ -413,7 +419,34 @@ func (r *Runner) change(ctx context.Context, w *worker) {
 
 // held is the number of links the node of an edit holds once the edit is written (the ones the bench wrote).
 func (e edit) held() int {
+	if e.drop {
+		return len(e.n.out) + len(e.links) - 1
+	}
 	return len(e.n.out) + len(e.links)
+}
+
+// dropped picks the link an edit drops: the first outgoing link of the bench's type of the node as the view holds it
+// (a change: its draft), noting its target.
+func (r *Runner) dropped(ctx context.Context, e *edit, ref *graphv1.NodeRef, view *graphv1.View) (string, error) {
+	res, err := timed(ctx, r.Metrics, "drop.ListNodeLinks", func(ctx context.Context) (*connect.Response[graphv1.ListNodeLinksResponse], error) {
+		return r.Clients.Graph.ListNodeLinks(ctx, connect.NewRequest(&graphv1.ListNodeLinksRequest{Ref: ref, View: view, Type: LinkType, Limit: 1}))
+	})
+	if err != nil || len(res.Msg.Links) == 0 {
+		return "", err
+	}
+	l := res.Msg.Links[0]
+	to := l.GetTo().GetId()
+	for _, n := range e.n.out {
+		if n.id == "" { // linked by key (commit mode): its id is read once
+			if err := r.resolve(ctx, n); err != nil {
+				return "", err
+			}
+		}
+		if n.id == to {
+			e.gone = n
+		}
+	}
+	return l.GetId(), nil
 }
 
 // heldBy is the number of links the nodes of a change hold once it is written.
@@ -435,6 +468,10 @@ func (r *Runner) committed(w *worker, edits []edit) {
 			t.Nodes.Add(1)
 		} else {
 			e.n.version++
+		}
+		if e.gone != nil {
+			e.n.out = slices.DeleteFunc(e.n.out, func(n *node) bool { return n == e.gone })
+			t.Links.Add(-1)
 		}
 		e.n.out = append(e.n.out, e.links...)
 		t.Links.Add(int64(len(e.links)))
@@ -458,12 +495,22 @@ func (r *Runner) resolve(ctx context.Context, n *node) error {
 
 func (r *Runner) commit(ctx context.Context, w *worker, edits []edit) error {
 	req := &graphv1.CommitEditsRequest{Namespace: Namespace, Title: fmt.Sprintf("bench %s w%d", r.Config.Run, w.id), ProjectId: access.DefaultProject}
-	for _, e := range edits {
+	for i := range edits {
+		e := &edits[i]
 		pe := &graphv1.NodeEdit{Props: structOf(e.props)}
 		if e.create {
 			pe.Key, pe.Type = e.n.key, e.n.typ
 		} else {
 			pe.Pre = &graphv1.NodeRef{Id: e.n.id, Version: e.n.version}
+			if e.drop {
+				link, err := r.dropped(ctx, e, pe.Pre, nil)
+				if err != nil {
+					return err
+				}
+				if link != "" {
+					pe.RemoveLinks = []string{link}
+				}
+			}
 		}
 		for _, to := range e.links {
 			pe.Links = append(pe.Links, &graphv1.LinkEdit{Type: LinkType, ToKey: to.key})
@@ -513,7 +560,8 @@ func (r *Runner) lifecycle(ctx context.Context, w *worker, edits []edit) error {
 		}
 	}
 	impacts := make([]string, 0, len(edits))
-	for _, e := range edits {
+	for i := range edits {
+		e := &edits[i]
 		if e.create {
 			var links []*graphv1.NodeLinkWrite
 			for _, to := range e.links {
@@ -544,6 +592,19 @@ func (r *Runner) lifecycle(ctx context.Context, w *worker, edits []edit) error {
 			return g.ImpactNodeUpdate(ctx, connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: id, ChangeImpactId: imp, Props: structOf(e.props)}))
 		}); err != nil {
 			return abandon(err)
+		}
+		if e.drop {
+			link, err := r.dropped(ctx, e, &graphv1.NodeRef{Id: e.n.id}, &graphv1.View{ChangeId: id})
+			if err != nil {
+				return abandon(err)
+			}
+			if link != "" {
+				if _, err := timed(ctx, m, "ImpactLinkDelete", func(ctx context.Context) (*connect.Response[graphv1.ImpactLinkDeleteResponse], error) {
+					return g.ImpactLinkDelete(ctx, connect.NewRequest(&graphv1.ImpactLinkDeleteRequest{ChangeId: id, LinkId: link}))
+				}); err != nil {
+					return abandon(err)
+				}
+			}
 		}
 		for _, to := range e.links {
 			if _, err := timed(ctx, m, "ImpactLinkCreate", func(ctx context.Context) (*connect.Response[graphv1.ImpactLinkCreateResponse], error) {
