@@ -32,8 +32,9 @@ const (
 type QueryOptions struct {
 	// MaxRows, MaxReads, MaxAnchors: zero takes the default cap.
 	MaxRows, MaxReads, MaxAnchors int
-	// Visible tells whether the caller reads a node (nil: every node). A node it may not read is no anchor and no end
-	// of a hop.
+	// Visible tells whether the caller reads a node (nil: every node): a row naming or passing through a node it may
+	// not read is dropped before RETURN. It is asked after the read, outside its transaction (an access check reads the
+	// graph, and nothing in a graph transaction may wait on such a read).
 	Visible func(domain.Node) bool
 }
 
@@ -93,6 +94,7 @@ func (g *Graph) QueryView(ctx context.Context, v View, src string, opts QueryOpt
 		}
 		return QueryResult{}, err
 	}
+	run.hide()
 	cols, rows, err := cypher.Project(q.Return, run.vars, run.rows)
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("%w: %w", ErrInvalid, err)
@@ -131,6 +133,8 @@ type queryRun struct {
 	reads int
 
 	rows      []cypher.MapScope
+	touched   [][]*qNode // the nodes each row names or passes through
+	active    []*qTrail  // the trails of the patterns being matched
 	truncated bool
 	notes     []string
 
@@ -210,7 +214,8 @@ func (r *queryRun) prepare() error {
 		return err
 	}
 	r.stream = -1
-	if n, ok := cypher.Streams(r.q.Return); ok {
+	// rows dropped after the read (Visible) would leave fewer than the LIMIT: the match then goes on to its caps
+	if n, ok := cypher.Streams(r.q.Return); ok && r.opts.Visible == nil {
 		r.stream = n
 	}
 	return nil
@@ -263,6 +268,14 @@ func (r *queryRun) pattern(i int, b cypher.MapScope, used map[domain.LinkID]bool
 			row[k] = v
 		}
 		r.rows = append(r.rows, row)
+		var nodes []*qNode
+		for _, t := range r.active {
+			nodes = append(nodes, t.nodes...)
+			for _, m := range t.mids {
+				nodes = append(nodes, m...)
+			}
+		}
+		r.touched = append(r.touched, nodes)
 		if r.stream >= 0 && len(r.rows) >= r.stream {
 			return errQueryStop
 		}
@@ -274,6 +287,8 @@ func (r *queryRun) pattern(i int, b cypher.MapScope, used map[domain.LinkID]bool
 		return err
 	}
 	tr := &qTrail{nodes: make([]*qNode, len(p.Nodes)), rels: make([][]domain.Link, len(p.Rels)), mids: make([][]*qNode, len(p.Rels))}
+	r.active = append(r.active, tr)
+	defer func() { r.active = r.active[:len(r.active)-1] }()
 	for _, n := range cands {
 		ok, undo, err := r.bindNode(p.Nodes[at], n, b)
 		if err != nil {
@@ -302,6 +317,37 @@ func (r *queryRun) pattern(i int, b cypher.MapScope, used map[domain.LinkID]bool
 		}
 	}
 	return nil
+}
+
+// hide drops the rows naming or passing through a node the caller may not read (QueryOptions.Visible), asked once per
+// node, after the read.
+func (r *queryRun) hide() {
+	if r.opts.Visible == nil {
+		return
+	}
+	seen := map[domain.NodeID]bool{}
+	visible := func(n *qNode) bool {
+		ok, known := seen[n.n.ID]
+		if !known {
+			ok = r.opts.Visible(n.n)
+			seen[n.n.ID] = ok
+		}
+		return ok
+	}
+	kept := r.rows[:0]
+	for i, row := range r.rows {
+		ok := true
+		for _, n := range r.touched[i] {
+			if n != nil && !visible(n) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			kept = append(kept, row)
+		}
+	}
+	r.rows = kept
 }
 
 // anchor picks the node pattern a pattern starts from and its candidate nodes: a variable already bound, else a key
@@ -507,9 +553,6 @@ func (r *queryRun) ofLabel(n cypher.NodePattern) ([]*qNode, error) {
 // bindNode binds a node to a node pattern when it matches: its labels, its properties, the variable (the same node
 // when bound already) and the conditions it completes; undo takes the binding back.
 func (r *queryRun) bindNode(p cypher.NodePattern, n *qNode, b cypher.MapScope) (bool, func(), error) {
-	if r.opts.Visible != nil && !r.opts.Visible(n.n) {
-		return false, nop, nil
-	}
 	for _, l := range p.Labels {
 		if !r.isLabel(n.n.Type, l) {
 			return false, nop, nil
@@ -771,9 +814,6 @@ func (r *queryRun) hops(n *qNode, types []string) ([]qHop, error) {
 			other = l.From.ID
 		}
 		if h.other = near[other]; h.other == nil {
-			continue
-		}
-		if r.opts.Visible != nil && !r.opts.Visible(h.other.n) {
 			continue
 		}
 		r.links[l.ID] = l

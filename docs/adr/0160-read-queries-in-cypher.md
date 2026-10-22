@@ -50,12 +50,14 @@ would ignore the views and need keeping in sync.
 5. **RPC `GraphService.QueryView`** (`view`, `query`): the columns, the rows as JSON lists (a node, a link and a path
    are objects naming them, `{"$node": id}`, `{"$link": id}`, `{"$path": {nodes, links}}`), the nodes and links they
    name, `truncated`, `notes`, `reads`, the baseline read. The router sends it to the graph holding the view's namespace
-   (its `view`). Outside a change, a node the caller may not read (`mayReadNode`, ADR 0138) is no anchor and no end of a
-   hop; through a change the nodes are the change's (`PersonalScope`). `GetNodeNeighbourhood` takes `link_types` too.
+   (its `view`). Outside a change, a row naming or passing through a node the caller may not read (`mayReadNode`, ADR
+   0138) is dropped before `RETURN`; the check runs after the read, outside its transaction, since an access check reads
+   the graph and nothing in a graph transaction may wait on such a read (a query that checks it then reads to its caps
+   rather than stopping at its `LIMIT`). Through a change the nodes are the change's (`PersonalScope`). `GetNodeNeighbourhood` takes `link_types` too.
 6. **The Graph explorer has a query box.** *Query* opens it: the text (Ctrl+Enter runs it), the namespace whose context
    view it reads (the working change on its option for the namespace it acts on, the head of main for the others),
-   examples. The nodes and links found are laid in the graph as one neighbourhood whose nodes are not expanded yet; the
-   rows are a table under it, a cell naming a node selects it, a double click opens it. A context move runs the query
+   examples. The nodes and links the rows name replace what the canvas showed, as one neighbourhood whose nodes are not
+   expanded yet (each can be expanded from there); the rows are a table under it, a cell naming a node selects it, a double click opens it. A context move runs the query
    again (`web/src/lib/graphQuery.ts`).
 
 ## Consequences

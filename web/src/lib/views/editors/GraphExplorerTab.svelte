@@ -96,15 +96,15 @@
     }
   }
 
-  /** Reads again what is shown when the context moves: the neighbourhoods read, in the new view, and the query. */
+  /** Reads again what is shown when the context moves: the query, else the neighbourhoods read, in the new view. */
   async function reread() {
     const ids = Object.values(hoods)
       .flatMap((h) => (h.node ? [h.node] : []))
       .slice(0, 200);
     hoods = {};
-    if (ids.length) await expand(ids);
     if (result) await runQuery();
-    else if (!ids.length) await startFromOrganisation();
+    else if (ids.length) await expand(ids);
+    else await startFromOrganisation();
   }
 
   // the query: its text, the namespace whose view it reads, what it answered
@@ -123,7 +123,7 @@
     queryNs = w && namespaces.includes(w) ? w : (queryNamespaces[0] ?? namespaces[0] ?? '');
   });
 
-  /** Runs the query in the view of its namespace and lays its nodes and links in the graph. */
+  /** Runs the query in the view of its namespace and shows what it found in place of the graph, to expand from. */
   async function runQuery() {
     if (!queryText.trim() || !queryNs) return;
     querying = true;
@@ -131,10 +131,8 @@
     try {
       const res = await graphApi.queryView(graphView(await viewOf(queryNs)), queryText);
       result = res;
-      const next = { ...hoods };
-      delete next[QUERY_HOOD];
-      if (res.nodes?.length) next[QUERY_HOOD] = queryHood(res);
-      hoods = next;
+      selected = '';
+      hoods = res.nodes?.length ? { [QUERY_HOOD]: queryHood(res) } : {};
       for (const n of res.nodes ?? []) if (n.namespace && shown[n.namespace] === false) shown[n.namespace] = true;
     } catch (e) {
       queryError = errorMessage(e);
@@ -371,7 +369,7 @@
     {#if queryError}<div class="alert mono">{queryError}</div>{/if}
   {/if}
   {#if error}<div class="alert">{error}</div>{/if}
-  <div class="body">
+  <div class="body" class:with-results={!!result}>
     <div class="canvas" role="presentation" bind:clientWidth={cw} bind:clientHeight={ch} onwheel={wheel} onpointerdown={down} onpointermove={move} onpointerup={() => (drag = null)}>
       <svg width="100%" height="100%" aria-label="Graph explorer">
         <g transform="translate({tx},{ty}) scale({scale})">
@@ -535,6 +533,7 @@
     min-width: 200px;
   }
   .results {
+    flex: none;
     margin-top: 8px;
     max-height: 32vh;
     overflow: auto;
@@ -576,6 +575,9 @@
     grid-template-columns: minmax(0, 1fr) 300px;
     gap: 8px;
     min-height: 480px;
+  }
+  .body.with-results {
+    min-height: 280px;
   }
   @media (max-width: 900px) {
     .body {

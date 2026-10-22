@@ -414,8 +414,9 @@ func (h *Handler) GetNodeNeighbourhood(ctx context.Context, r *connect.Request[g
 	return connect.NewResponse(out), nil
 }
 
-// QueryView runs a read query in a view (ADR 0160). Outside a change, a node the caller may not read (mayReadNode) is no
-// anchor and no end of a hop; through a change, the nodes are the change's (PersonalScope).
+// QueryView runs a read query in a view (ADR 0160). Outside a change, a row naming or passing through a node the caller
+// may not read (mayReadNode) is dropped, checked after the read; through a change, the nodes are the change's
+// (PersonalScope).
 func (h *Handler) QueryView(ctx context.Context, r *connect.Request[graphv1.QueryViewRequest]) (*connect.Response[graphv1.QueryViewResponse], error) {
 	view := pbconv.GraphViewFromPB(r.Msg.View)
 	var opts graph.QueryOptions
