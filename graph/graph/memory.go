@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"sort"
@@ -14,12 +15,13 @@ import (
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/lib/outbox"
+	"github.com/zimwip/goap/lib/platform"
 )
 
-// Memory is an in-memory Repo. Transactions are serialized and rolled back by
-// restoring a snapshot.
+// Memory is an in-memory Repo. The transactions of a read-only context (platform.ReadOnly) run together, the others
+// one at a time, rolled back by restoring the snapshot their first write took.
 type Memory struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 	st memState
 	// outbox holds the events of the committed transactions (ADR 0136)
 	outbox outbox.Memory
@@ -101,16 +103,32 @@ func (s memState) clone() memState {
 
 // InTx implements Repo.
 func (m *Memory) InTx(ctx context.Context, fn func(tx Tx) error) error {
+	if platform.IsReadOnly(ctx) {
+		if wrote, err := m.readTx(fn); !wrote {
+			return err
+		}
+		slog.WarnContext(ctx, "graph: a read-only request writes; running its transaction on the writer")
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	snapshot := m.st.clone()
 	tx := &memTx{st: &m.st}
 	if err := fn(tx); err != nil {
-		m.st = snapshot
+		if tx.snap != nil {
+			m.st = *tx.snap
+		}
 		return err
 	}
 	m.outbox.Append(tx.outbox...)
 	return nil
+}
+
+// readTx runs fn beside the other readers; wrote says it tried to write, so it must run again on the writer.
+func (m *Memory) readTx(fn func(tx Tx) error) (wrote bool, err error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	tx := &memTx{st: &m.st, readOnly: true}
+	err = fn(tx)
+	return tx.wrote, err
 }
 
 // Pending implements outbox.Store.
@@ -130,11 +148,32 @@ func (m *Memory) PurgePublished(ctx context.Context, before time.Time) error {
 
 type memTx struct {
 	st *memState
+	// snap is the state before the first write of the transaction, restored when it fails: taken at that write, so a
+	// transaction that only reads copies nothing
+	snap *memState
+	// readOnly is a transaction of a read-only context, run beside the other readers; wrote says it tried to write
+	readOnly, wrote bool
 	// outbox are the events of the transaction, stored when it commits
 	outbox []outbox.Message
 }
 
+// write takes the snapshot of the state before the first write of the transaction; a read-only one refuses it.
+func (t *memTx) write() error {
+	if t.readOnly {
+		t.wrote = true
+		return errWrites
+	}
+	if t.snap == nil {
+		s := t.st.clone()
+		t.snap = &s
+	}
+	return nil
+}
+
 func (t *memTx) AppendOutbox(_ context.Context, msgs []outbox.Message) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	t.outbox = append(t.outbox, msgs...)
 	return nil
 }
@@ -188,7 +227,7 @@ func (t *memTx) Versions(_ context.Context, id domain.NodeID) ([]domain.Node, er
 	vs = slices.Clone(vs)
 	for k := range t.st.joins {
 		if k.ref.ID == id {
-			vs[k.ref.Version-1].Joined = append(vs[k.ref.Version-1].Joined, k.branch)
+			vs[k.ref.Version-1].Joined = append(slices.Clip(vs[k.ref.Version-1].Joined), k.branch) // never into the stored array
 		}
 	}
 	for i := range vs {
@@ -256,6 +295,9 @@ func (t *memTx) LockChange(context.Context, domain.ChangeID) error { return nil 
 func (t *memTx) LockBranch(context.Context, string, string) error { return nil }
 
 func (t *memTx) PutBranch(_ context.Context, b domain.Branch) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	b.Namespace = domain.NamespaceOf(b.Namespace)
 	t.st.branches[branchKey(b.Namespace, b.Name)] = b
 	return nil
@@ -511,6 +553,9 @@ func (t *memTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]domai
 }
 
 func (t *memTx) PutNode(_ context.Context, n domain.Node) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	vs := t.st.versions[n.ID]
 	if int(n.Version) != len(vs)+1 {
 		return fmt.Errorf("node %s: expected version %d: %w", n.Ref(), len(vs)+1, ErrConflict)
@@ -548,16 +593,25 @@ func (t *memTx) Link(_ context.Context, id domain.LinkID) (domain.Link, error) {
 }
 
 func (t *memTx) PutLink(_ context.Context, l domain.Link) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	t.st.links = append(t.st.links, l)
 	return nil
 }
 
 func (t *memTx) DropLink(_ context.Context, from domain.NodeRef, row domain.LinkID, l domain.Link) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	t.st.drops = append(t.st.drops, memDrop{row: row, from: from, removes: l.ID, to: l.To, change: l.ChangeID})
 	return nil
 }
 
 func (t *memTx) PutLinkSet(_ context.Context, from domain.NodeRef, set LinkSet) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	if set.Of == 0 {
 		set.Of = from.Version
 	}
@@ -583,6 +637,9 @@ func (t *memTx) LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[doma
 }
 
 func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	if _, dup := t.st.baselines[b.ID]; dup {
 		return fmt.Errorf("baseline %s: %w", b.ID, ErrConflict)
 	}
@@ -652,6 +709,9 @@ func (t *memTx) commits(namespace, branch string, after, upTo int64, ids []domai
 }
 
 func (t *memTx) NextCommit(context.Context) (int64, error) {
+	if err := t.write(); err != nil {
+		return 0, err
+	}
 	t.st.seq++
 	return t.st.seq, nil
 }
@@ -742,6 +802,9 @@ func (t *memTx) VersionJoins(_ context.Context, id domain.NodeID) ([]domain.Vers
 }
 
 func (t *memTx) PutChange(_ context.Context, c domain.Change) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	c.Items, c.Nodes = nil, nil // the facts are in the log
 	c.DependsOn = slices.Clone(c.DependsOn)
 	t.st.changes[c.ID] = c
@@ -749,6 +812,9 @@ func (t *memTx) PutChange(_ context.Context, c domain.Change) error {
 }
 
 func (t *memTx) AppendLog(_ context.Context, e domain.LogEntry) (domain.LogEntry, error) {
+	if err := t.write(); err != nil {
+		return domain.LogEntry{}, err
+	}
 	if _, ok := t.st.changes[e.Change]; !ok { // a reference to an unknown change, as the SQL foreign key
 		return e, fmt.Errorf("change %s: %w", e.Change, ErrInvalid)
 	}
@@ -799,6 +865,9 @@ func (t *memTx) OpenChangeIDs(_ context.Context) ([]domain.ChangeID, error) {
 }
 
 func (t *memTx) DeleteChangeImpact(_ context.Context, change domain.ChangeID, id domain.ChangeImpactID) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	list := t.st.nodes[change]
 	i := slices.IndexFunc(list, func(cn domain.ChangeImpact) bool { return cn.ID == id })
 	if i < 0 {
@@ -809,6 +878,9 @@ func (t *memTx) DeleteChangeImpact(_ context.Context, change domain.ChangeID, id
 }
 
 func (t *memTx) PutChangeImpact(_ context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	if _, ok := t.st.changes[change]; !ok {
 		return fmt.Errorf("change %s: %w", change, ErrNotFound)
 	}
@@ -870,6 +942,9 @@ func (t *memTx) NodeChangePage(_ context.Context, node domain.NodeID, before int
 }
 
 func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	vs := t.st.versions[ref.ID]
 	if ref.Version < 1 || int(ref.Version) > len(vs) {
 		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
@@ -879,6 +954,9 @@ func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change doma
 }
 
 func (t *memTx) JoinBranch(_ context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, committed int64) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	vs := t.st.versions[ref.ID]
 	if ref.Version < 1 || int(ref.Version) > len(vs) {
 		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
@@ -892,6 +970,9 @@ func (t *memTx) JoinBranch(_ context.Context, ref domain.NodeRef, branch string,
 }
 
 func (t *memTx) PutTag(_ context.Context, tag domain.Tag) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	if !slices.ContainsFunc(t.st.versions[tag.Node], func(n domain.Node) bool { return n.Version == tag.Version }) {
 		return fmt.Errorf("tag %q: node %s: %w", tag.Name, tag.Ref(), ErrNotFound)
 	}
@@ -906,6 +987,9 @@ func (t *memTx) PutTag(_ context.Context, tag domain.Tag) error {
 }
 
 func (t *memTx) DeleteTag(_ context.Context, id domain.TagID) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	for i, old := range t.st.tags {
 		if old.ID == id {
 			t.st.tags = slices.Delete(t.st.tags, i, i+1)
@@ -926,6 +1010,9 @@ func (t *memTx) Tags(_ context.Context, f domain.TagFilter) ([]domain.Tag, error
 }
 
 func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, branch string) error {
+	if err := t.write(); err != nil {
+		return err
+	}
 	used := fmt.Errorf("change %s: what it wrote is used by the graph: %w", id, ErrConflict)
 	for _, b := range t.st.baselines {
 		if b.ChangeID == id {
