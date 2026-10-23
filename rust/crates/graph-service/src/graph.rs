@@ -150,7 +150,7 @@ async fn served_change(tx: &mut Tx<'_, Session>, id: &str) -> Result<ChangeId, G
 const REASON_HEADER: &str = "Goap-Error-Reason";
 
 /// The Connect error of a graph error (`lib/rpcerr.ToConnect`).
-fn connect_error(e: GraphError) -> ConnectError {
+pub(crate) fn connect_error(e: GraphError) -> ConnectError {
     if e.kind == Kind::Invalid && e.message.ends_with(&format!(": {NOTHING_TO_COMMIT}: invalid")) {
         return ConnectError::invalid_argument(e.message).with_meta(REASON_HEADER, "nothing-to-commit");
     }

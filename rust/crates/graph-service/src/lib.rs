@@ -14,6 +14,7 @@ use graph_store::{Store, read::Session};
 use tokio::sync::Mutex;
 
 mod convert;
+mod domains;
 mod graph;
 
 pub use graph::Graph;
@@ -59,8 +60,6 @@ impl State {
 pub struct Domains {
     pub state: Arc<State>,
 }
-
-impl registrypb::DomainService for Domains {}
 
 /// `goap.smarttag.v1.SmartTagService` (ADR 0143 §7).
 pub struct SmartTags {
