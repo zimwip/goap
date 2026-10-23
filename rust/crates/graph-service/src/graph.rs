@@ -13,7 +13,7 @@ use graph_core::{
     lnk::Url,
     model::{BaselineId, NodeId, NodeQuery, NodeRef, namespace_of},
     page::link_page,
-    read::{self, World},
+    read::{self, ViewLevel, World},
     stats,
     store::ReadTx,
 };
@@ -150,6 +150,19 @@ async fn served_change(tx: &mut Tx<'_, Session>, id: &str) -> Result<ChangeId, G
         ));
     }
     Ok(id)
+}
+
+/// The view of a change on its main flow, refusing a change that does not exist; an option, a flow or a personal
+/// change is the Go service's.
+async fn change_world<'a, T: ReadTx>(tx: &'a T, id: &str, flow: &str) -> Result<World<'a, T>, GraphError> {
+    let id = ChangeId(id.to_string());
+    no_flows(tx, &id).await?;
+    let view = graph_core::view::View {
+        change: id,
+        flow: flow.to_string(),
+        ..Default::default()
+    };
+    World::open_node(tx, &view).await
 }
 
 /// Refuses a change that does not exist, and leaves to the Go service one whose log opened a flow or a decision
@@ -1413,6 +1426,112 @@ impl pb::GraphService for Graph {
             let w = whole::whole_change(tx, &cat, &ChangeId(m.id.clone())).await?;
             let c = whole_pb(&w)?;
             Ok(pb::GetChangeResponse { change: Some(c) })
+        })
+        .await
+    }
+
+    /// The blackboard of a change (`Graph.BlackboardIn`): the change as its main flow sees it, the nodes its impacts
+    /// name with their links, their neighbours; no option nor decision point in the simple world.
+    async fn get_blackboard(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetBlackboardRequest>,
+    ) -> Answer<pb::GetBlackboardResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let state = self.state.clone();
+        self.read(caller, async |tx| {
+            let cat = state.catalog(tx).await?;
+            let id = ChangeId(m.change_id.clone());
+            let w = whole::whole_change(tx, &cat, &id).await?;
+            let view = graph_core::view::View {
+                change: id,
+                flow: m.flow.clone(),
+                ..Default::default()
+            };
+            let world = World::open_node(tx, &view).await?;
+            let (views, neighbours) = world.blackboard().await?;
+            let nodes = views
+                .iter()
+                .map(|v| pb::NodeView {
+                    node: Some(convert::node(&v.node)),
+                    latest: v.latest,
+                    out: convert::links(&v.out),
+                    r#in: convert::links(&v.r#in),
+                    not_committable: !v.node.state.is_empty()
+                        && cat
+                            .lifecycle(&v.node.typ)
+                            .is_some_and(|lc| !lc.committable(&v.node.state)),
+                    ..Default::default()
+                })
+                .collect();
+            Ok(pb::GetBlackboardResponse {
+                change: Some(whole_pb(&w)?),
+                nodes,
+                neighbors: convert::nodes(&neighbours),
+                at: convert::time(&Some(chrono::Utc::now())),
+                ..Default::default()
+            })
+        })
+        .await
+    }
+
+    /// The state a change sees at a level (`Graph.ChangeView`).
+    async fn get_change_view(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetChangeViewRequest>,
+    ) -> Answer<pb::GetChangeViewResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.read(caller, async |tx| {
+            let level = ViewLevel::parse(&m.level)?;
+            let world = change_world(tx, &m.change_id, &m.flow).await?;
+            let (h, state) = world.change_state(level).await?;
+            let state = state.into_iter().map(|(n, v)| (n.0, v)).collect();
+            Ok(pb::GetChangeViewResponse {
+                baseline: Some(convert::baseline(&h, Some(state))),
+            })
+        })
+        .await
+    }
+
+    /// The graph a change sees (`Graph.ChangeGraph`: the baseline it forked from with no option; `world`:
+    /// `Graph.ChangeWorld`, its written view with its drafts).
+    async fn get_change_graph(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetChangeGraphRequest>,
+    ) -> Answer<pb::GetChangeGraphResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.read(caller, async |tx| {
+            let world = change_world(tx, &m.change_id, &m.flow).await?;
+            let (nodes, links) = if m.world {
+                world.change_graph(true).await?
+            } else {
+                let state = if world.baseline.id.is_empty() {
+                    HashMap::new()
+                } else {
+                    read::select(tx, &world.baseline, None).await?
+                };
+                let mut refs: Vec<NodeRef> = state.iter().map(|(n, v)| NodeRef::new(n.clone(), *v)).collect();
+                refs.sort();
+                if refs.is_empty() {
+                    (Vec::new(), Vec::new())
+                } else {
+                    let out = tx.links_from(&refs, None).await?;
+                    let within = out
+                        .into_iter()
+                        .filter(|l| l.to_node().is_some_and(|t| state.get(&t.id) == Some(&t.version)))
+                        .collect();
+                    (tx.nodes_at(&refs, "").await?, within)
+                }
+            };
+            Ok(pb::GetChangeGraphResponse {
+                nodes: convert::nodes(&nodes),
+                links: convert::links(&links),
+            })
         })
         .await
     }

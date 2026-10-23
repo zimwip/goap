@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     change::Change,
     error::{GraphError, Result},
-    impact::{Draft, Fold, REVIEW_REJECTED},
+    impact::{Draft, Fold, REVIEW_ACCEPTED, REVIEW_REJECTED},
     model::{
         BRANCH_OPEN, Baseline, BaselineId, Branch, Link, MAIN_BRANCH, MAX_BROWSE_LIMIT, Neighbourhood, Node, NodeId,
         NodePage, NodeQuery, NodeRef, NodeView, Target, Version, branch_of, namespace_of,
@@ -21,6 +21,42 @@ use crate::{
     view::View,
     write::{change::change_branch_origin, work::fold_change},
 };
+
+/// The level of a change view (Go's `ViewWritten`, `ViewAccepted`, `ViewCommitted`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewLevel {
+    Written,
+    Accepted,
+    Committed,
+}
+
+impl ViewLevel {
+    /// A level by its name, the written view when none is named.
+    pub fn parse(s: &str) -> Result<ViewLevel> {
+        match s {
+            "" | "written" => Ok(ViewLevel::Written),
+            "accepted" => Ok(ViewLevel::Accepted),
+            "committed" => Ok(ViewLevel::Committed),
+            _ => Err(GraphError::invalid(format!("unknown view level {s:?}"))),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ViewLevel::Written => "written",
+            ViewLevel::Accepted => "accepted",
+            ViewLevel::Committed => "committed",
+        }
+    }
+}
+
+/// The whole state of a baseline (none for the empty state).
+async fn whole_state<T: ReadTx>(tx: &T, h: &Baseline) -> Result<HashMap<NodeId, Version>> {
+    if h.id.is_empty() {
+        return Ok(HashMap::new());
+    }
+    select(tx, h, None).await
+}
 
 /// The number of nodes one statement selects the versions of.
 pub const SELECT_BATCH: usize = 2000;
@@ -504,6 +540,207 @@ impl<'a, T: ReadTx> World<'a, T> {
             out,
             r#in,
         })
+    }
+
+    /// The nodes a change view's blackboard holds (Go's `BlackboardIn` over its draft reader): every version its
+    /// impacts name (pre, post, committed), with their links, and the nodes at the other ends, read in one batch. A
+    /// branch view holds none.
+    pub async fn blackboard(&self) -> Result<(Vec<NodeView>, Vec<Node>)> {
+        let Some(cw) = &self.change else {
+            return Ok((Vec::new(), Vec::new()));
+        };
+        let mut refs: Vec<NodeRef> = Vec::new();
+        for cn in &cw.fold.impacts {
+            for r in [&cn.pre, &cn.post, &cn.committed].into_iter().flatten() {
+                if !r.id.is_empty() && !refs.contains(r) {
+                    refs.push(r.clone());
+                }
+            }
+        }
+        let mut views = Vec::with_capacity(refs.len());
+        let mut near: Vec<NodeRef> = Vec::new();
+        for r in refs {
+            let v = self.reader_view(cw, &r).await?;
+            near.extend(v.out.iter().filter_map(|l| l.to_node().cloned()));
+            near.extend(v.r#in.iter().map(|l| l.from.clone()));
+            views.push(v);
+        }
+        let mut neighbours: Vec<Node> = Vec::new();
+        let mut stored: Vec<NodeRef> = Vec::new();
+        let mut seen = HashSet::new();
+        for r in near {
+            if !seen.insert(r.clone()) {
+                continue;
+            }
+            if r.is_draft() {
+                match cw.draft(&r.id) {
+                    Some(d) => neighbours.push(cw.draft_node(d)),
+                    None => neighbours.push(stored_node(self.tx, &r).await?),
+                }
+            } else {
+                stored.push(r);
+            }
+        }
+        if !stored.is_empty() {
+            neighbours.extend(self.tx.nodes_at(&stored, "").await?);
+        }
+        Ok((views, neighbours))
+    }
+
+    /// A node as the draft reader of a change sees it (Go's `viewIn`): the draft of a draft reference, else the stored
+    /// version, the stored links entering the version (one per version of their source holding them; a link of a
+    /// version a draft replaces is the draft's) and the links the drafts hold to it.
+    async fn reader_view(&self, cw: &ChangeWorld, r: &NodeRef) -> Result<NodeView> {
+        let d = cw.draft(&r.id).filter(|_| r.is_draft());
+        let node = match d {
+            Some(d) => cw.draft_node(d),
+            None => self.node(r).await?,
+        };
+        let latest = latest_of(self.tx, &node).await?;
+        let out = match d {
+            Some(d) => cw.out_links(d),
+            None => self.tx.links_from(std::slice::from_ref(r), None).await?,
+        };
+        let mut r#in = Vec::new();
+        let from = d.and_then(|d| d.base.clone()).unwrap_or_else(|| r.clone());
+        if !from.is_draft() {
+            for l in self.tx.links_to(&from).await? {
+                if !l.from.is_draft() && cw.draft(&l.from.id).is_some_and(|d| d.base.as_ref() == Some(&l.from)) {
+                    continue;
+                }
+                r#in.push(l);
+            }
+        }
+        for o in cw.drafts() {
+            for l in cw.out_links(o) {
+                let Target::Node(to) = &l.to else { continue };
+                if to.id == r.id && r.is_draft() == to.is_draft() && (r.is_draft() || to == r) {
+                    r#in.push(l);
+                }
+            }
+        }
+        Ok(NodeView {
+            node,
+            latest,
+            out,
+            r#in,
+        })
+    }
+
+    /// The state of a change view at a level (Go's `ChangeView`): its own branch (its fork with what committed on it,
+    /// ADR 0140) or the baseline it forked from, the posts of its impacts laid over it (a draft is version 0; a
+    /// rejected impact left out, every one not accepted at `accepted`); `committed` is the baseline the change left,
+    /// else its fork. The header names the view.
+    pub async fn change_state(&self, level: ViewLevel) -> Result<(Baseline, HashMap<NodeId, Version>)> {
+        let Some(cw) = &self.change else {
+            return Err(GraphError::internal("a change state of a branch view"));
+        };
+        let c = &cw.change;
+        if level == ViewLevel::Committed {
+            let from = if c.status == "applied" && !c.result_baseline_id.is_empty() {
+                &c.result_baseline_id
+            } else {
+                &c.baseline_id
+            };
+            let h = header_of(self.tx, from).await?;
+            let state = whole_state(self.tx, &h).await?;
+            return Ok((h, state));
+        }
+        let (base, mut nodes) = match &cw.own {
+            Some(own) => {
+                let fork = header_of(self.tx, &own.fork_baseline).await?;
+                let mut state = whole_state(self.tx, &fork).await?;
+                for (n, v) in self
+                    .tx
+                    .committed_versions(&own.namespace, &own.name, 0, i64::MAX, None)
+                    .await?
+                {
+                    if v == 0 {
+                        state.remove(&n);
+                    } else {
+                        state.insert(n, v);
+                    }
+                }
+                (fork, state)
+            }
+            None => (self.baseline.clone(), whole_state(self.tx, &self.baseline).await?),
+        };
+        for cn in &cw.fold.impacts {
+            let Some(post) = &cn.post else { continue };
+            if cn.review == REVIEW_REJECTED || (level == ViewLevel::Accepted && cn.review != REVIEW_ACCEPTED) {
+                continue;
+            }
+            if post.is_draft() {
+                nodes.insert(post.id.clone(), 0);
+                continue;
+            }
+            let n = stored_node(self.tx, post).await?;
+            if n.deleted {
+                nodes.remove(&n.id);
+            } else {
+                nodes.insert(n.id, n.version);
+            }
+        }
+        let header = Baseline {
+            name: format!("{} ({})", c.title, level.as_str()),
+            namespace: base.namespace.clone(),
+            branch: c.branch.clone(),
+            parent_id: base.id.clone(),
+            change_id: c.id.clone(),
+            created_at: base.created_at,
+            ..Baseline::default()
+        };
+        Ok((header, nodes))
+    }
+
+    /// The graph of the written view of a change (Go's `viewGraphTx`): its nodes by key, the drafts read through the
+    /// change, and the links between them, to the exact version of the view (`by_node`: to the node at any version).
+    pub async fn change_graph(&self, by_node: bool) -> Result<(Vec<Node>, Vec<Link>)> {
+        let Some(cw) = &self.change else {
+            return Err(GraphError::internal("a change graph of a branch view"));
+        };
+        let (view, state) = self.change_state(ViewLevel::Written).await?;
+        let contains = |r: &NodeRef| state.get(&r.id) == Some(&r.version);
+        let parent = header_of(self.tx, &view.parent_id).await?;
+        let mut refs: Vec<NodeRef> = whole_state(self.tx, &parent)
+            .await?
+            .into_iter()
+            .map(|(n, v)| NodeRef::new(n, v))
+            .filter(contains)
+            .collect();
+        refs.sort();
+        let mut nodes = if refs.is_empty() {
+            Vec::new()
+        } else {
+            self.tx.nodes_at(&refs, "").await?
+        };
+        let held: HashSet<&NodeRef> = refs.iter().collect();
+        for (id, &v) in &state {
+            let r = NodeRef::new(id.clone(), v);
+            if held.contains(&r) {
+                continue;
+            }
+            nodes.push(match cw.draft(&r.id).filter(|_| r.is_draft()) {
+                Some(d) => cw.draft_node(d),
+                None => self.node(&r).await?,
+            });
+        }
+        nodes.sort_by(|a, b| a.key.cmp(&b.key));
+        let mut links = Vec::new();
+        for n in &nodes {
+            let r = n.node_ref();
+            let out = match cw.draft(&r.id).filter(|_| r.is_draft()) {
+                Some(d) => cw.out_links(d),
+                None => self.tx.links_from(std::slice::from_ref(&r), None).await?,
+            };
+            for l in out {
+                let Target::Node(to) = &l.to else { continue };
+                if (by_node && state.contains_key(&to.id)) || to.is_draft() || contains(to) {
+                    links.push(l);
+                }
+            }
+        }
+        Ok((nodes, links))
     }
 
     /// The link types asked as the store holds them: as written, and an unqualified one also qualified by the

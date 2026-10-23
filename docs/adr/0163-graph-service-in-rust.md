@@ -220,4 +220,10 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   and the 325 events of the outbox the same. Go resolves a transition once to authorize it, in a transaction it rolls
   back; on PostgreSQL the impact declared there still takes a position of the log and of the impacts (sequences are not
   rolled back), which the Rust service takes too while the two are compared (`WriteTx::skip_declaration`).
+  The reads of a change on its main flow follow: `ListFlows`, `ListOptions` and `ListDecisionPoints` (none in the
+  simple world, a change whose log opened a flow or a decision point is Go's), `GetBlackboard` (the nodes its impacts
+  name, read as Go's draft reader reads them: the stored links entering a version once per version of their source,
+  the drafts' links; their neighbours in one batch), `GetChangeView` (its own branch or its fork, the posts of its
+  impacts laid over it, at the levels written, accepted and committed) and `GetChangeGraph` (the baseline it forked
+  from, or its written view with its drafts): 463 calls, none divergent.
 - Not done yet: the rest of phase 4.
