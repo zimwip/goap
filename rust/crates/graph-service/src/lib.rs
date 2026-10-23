@@ -14,6 +14,7 @@ use graph_store::{Store, read::Session};
 use tokio::sync::Mutex;
 
 mod convert;
+mod domainpb;
 mod domains;
 mod graph;
 mod smarttags;

@@ -5,7 +5,12 @@ use graph_catalog::{
 };
 use graph_core::{GraphError, store::OutboxMessage};
 
-use super::{Session, value::Arg};
+use graph_catalog::record::STATUS_PUBLISHED;
+
+use super::{
+    Session,
+    value::{Arg, Val},
+};
 
 const COLUMNS: &str = "name, version, status, definition, created_at, updated_at, published_at, updated_by";
 
@@ -82,6 +87,57 @@ impl Session {
         ];
         self.run((q, args), "domain").await?;
         self.append_to_outbox("domain_outbox", events).await
+    }
+}
+
+/// A stored version as read, its definition the JSON as stored.
+pub struct StoredDomain {
+    pub name: String,
+    pub version: String,
+    pub status: String,
+    pub definition: serde_json::Value,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub published_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub updated_by: String,
+}
+
+impl Session {
+    /// A stored version (`SQLStore.GetDomain`): the one named, or with no version the latest published.
+    pub async fn stored_domain(&self, name: &str, version: &str) -> Result<Option<StoredDomain>, GraphError> {
+        let (filter, second) = if version.is_empty() {
+            ("status", STATUS_PUBLISHED)
+        } else {
+            ("version", version)
+        };
+        let q = format!(
+            "SELECT {COLUMNS} FROM domain_version WHERE name = {} AND {filter} = {}",
+            self.sql.ph(1),
+            self.sql.ph(2)
+        );
+        let rows = self.select((q, vec![name.into(), second.into()]), "domain").await?;
+        let mut best: Option<StoredDomain> = None;
+        for r in &rows {
+            let time = |i: usize| parse_time(&r.text(i)).map_err(GraphError::internal);
+            let definition = match r.0.get(3) {
+                Some(Val::Json(j)) => j.clone(),
+                _ => serde_json::from_str(&r.text(3)).map_err(GraphError::internal)?,
+            };
+            let d = StoredDomain {
+                name: r.text(0),
+                version: r.text(1),
+                status: r.text(2),
+                definition,
+                created_at: time(4)?,
+                updated_at: time(5)?,
+                published_at: time(6)?,
+                updated_by: r.text(7),
+            };
+            if best.as_ref().is_none_or(|b| d.published_at > b.published_at) {
+                best = Some(d);
+            }
+        }
+        Ok(best)
     }
 }
 

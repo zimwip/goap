@@ -100,6 +100,64 @@ pub fn to_string<T: ?Sized + Serialize>(v: &T) -> String {
     String::from_utf8(to_vec(v)).unwrap_or_default()
 }
 
+/// The JSON of a value as Go's `json.MarshalIndent(v, "", indent)` writes it: `json.Indent` over the compact text (an
+/// empty object or array stays `{}` / `[]`).
+pub fn to_string_indent<T: ?Sized + Serialize>(v: &T, indent: &str) -> String {
+    let compact = to_string(v);
+    let mut out = String::with_capacity(compact.len() * 2);
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut chars = compact.chars().peekable();
+    let newline = |out: &mut String, depth: usize| {
+        out.push('\n');
+        for _ in 0..depth {
+            out.push_str(indent);
+        }
+    };
+    while let Some(c) = chars.next() {
+        if in_string {
+            out.push(c);
+            match (escaped, c) {
+                (true, _) => escaped = false,
+                (false, '\\') => escaped = true,
+                (false, '"') => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match c {
+            '"' => {
+                in_string = true;
+                out.push(c);
+            }
+            '{' | '[' => {
+                out.push(c);
+                let close = if c == '{' { '}' } else { ']' };
+                if chars.peek() == Some(&close) {
+                    out.push(close);
+                    chars.next();
+                } else {
+                    depth += 1;
+                    newline(&mut out, depth);
+                }
+            }
+            '}' | ']' => {
+                depth = depth.saturating_sub(1);
+                newline(&mut out, depth);
+                out.push(c);
+            }
+            ',' => {
+                out.push(c);
+                newline(&mut out, depth);
+            }
+            ':' => out.push_str(": "),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 /// A JSON text written again as Go writes it (`json.Marshal` of a decoded `any`): numbers as float64, keys sorted.
 pub fn normalize(raw: &str) -> Result<String, serde_json::Error> {
     let v: Value = serde_json::from_str(raw)?;
@@ -215,5 +273,14 @@ mod tests {
             .with_timezone(&Utc);
         assert_eq!(time_text(&t), "2026-10-23T10:00:01Z");
         assert_eq!(time_text(&zero_time()), "0001-01-01T00:00:00Z");
+    }
+
+    #[test]
+    fn indents_as_go() {
+        let v = serde_json::json!({"a": [1, {"b": "x,{y}:\"z\""}], "e": {}, "f": []});
+        assert_eq!(
+            to_string_indent(&v, "  "),
+            "{\n  \"a\": [\n    1,\n    {\n      \"b\": \"x,{y}:\\\"z\\\"\"\n    }\n  ],\n  \"e\": {},\n  \"f\": []\n}"
+        );
     }
 }

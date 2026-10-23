@@ -1,6 +1,6 @@
 # ADR 0163 — The graph service in Rust, behind a comparing proxy
 
-**Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets), phase 2 implemented (the reads of the bench, the shadow mode), phase 3 implemented (the writes of the bench), phase 4 under way (the smart tags) · **Date**: 2026-10
+**Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets), phase 2 implemented (the reads of the bench, the shadow mode), phase 3 implemented (the writes of the bench), phase 4 under way (the smart tags, the reads of the domain registry) · **Date**: 2026-10
 
 ## Context
 
@@ -148,4 +148,10 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `graph-store` `read/smarttags.rs`: the times `timestamptz` on PostgreSQL, Go's RFC 3339 text on SQLite), for any
   caller, its errors worded as Go words them; the proxy pairs its ids (32 hex digits) like UUIDs. Driven through the
   compare proxy (create, share, update, list, get, delete, the refusals), every call is `same`, messages included.
+  `GetDomain` answers the built-in domains (their YAML read as `def.ParseDomain` reads it) and the stored ones
+  (`graph-service` `domainpb.rs`: the definition mapped onto `registry.v1.Domain` as `lib/domainpb` maps it);
+  `ExportDomain` the JSON of a stored domain as Go writes it (the definition through YAML and back: empty lists
+  written, empty `requires` and forms dropped, keys sorted, Go's indentation, `gojson::to_string_indent`); the YAML
+  export and the built-in domains are still Go's. Every built-in, `alm`, `code` and a bench domain, the unknown
+  format and the missing domain: `same`.
 - Not done yet: the rest of phase 4.

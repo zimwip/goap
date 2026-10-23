@@ -174,6 +174,11 @@ pub fn builtins() -> &'static [Domain] {
     &BUILTINS
 }
 
+/// The YAML of the domains that ship with the platform, in their order.
+pub fn builtin_sources() -> impl Iterator<Item = &'static str> {
+    BUILTIN_SOURCES.iter().map(|(_, src)| *src)
+}
+
 /// Whether a namespace is the one of a built-in domain.
 pub fn is_builtin(ns: &str) -> bool {
     BUILTINS.iter().any(|d| d.name == ns)

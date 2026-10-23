@@ -611,6 +611,7 @@ dependencies = [
  "pbjson-types",
  "reqwest",
  "serde_json",
+ "serde_norway",
  "tokio",
  "tracing",
  "tracing-subscriber",

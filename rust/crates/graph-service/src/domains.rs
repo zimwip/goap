@@ -4,14 +4,14 @@ use goap_connect::{ConnectError, Ctx, Request, Response, async_trait};
 use goap_proto::registry::v1 as pb;
 use graph_catalog::{
     Catalog,
-    catalog::{builtins, is_builtin},
+    catalog::{builtin_sources, builtins, is_builtin},
     imported::{self, Imported},
     record::{Record, STATUS_DRAFT, STATUS_PUBLISHED, in_force, latest},
 };
 use graph_core::{GraphError, gojson, store::OutboxMessage};
 use graph_store::read::NewDomain;
 
-use crate::{Domains, convert, graph::connect_error};
+use crate::{Domains, convert, domainpb, graph::connect_error};
 
 /// The identity headers the gateway sets (`lib/identity`) and the stamp of a command (`X-Goap-Command`).
 const HEADER_SUBJECT: &str = "x-goap-subject";
@@ -86,6 +86,87 @@ impl pb::DomainService for Domains {
             })
             .collect();
         Ok(Response::new(pb::ListDomainsResponse { domains }))
+    }
+
+    /// A version (`Service.GetDomain`): a built-in domain (any version asked, or its own), else the one stored, else
+    /// with no version the latest published.
+    async fn get_domain(&self, _ctx: &Ctx, req: Request<pb::GetDomainRequest>) -> Answer<pb::GetDomainResponse> {
+        let r = req.into_inner();
+        for src in builtin_sources() {
+            let def: serde_json::Value =
+                serde_norway::from_str(src).map_err(|e| connect_error(GraphError::internal(e.to_string())))?;
+            let mut d = domainpb::domain(&def).map_err(|e| connect_error(GraphError::internal(e)))?;
+            if d.name == r.name && (r.version.is_empty() || r.version == d.version) {
+                d.status = STATUS_PUBLISHED.into();
+                d.updated_by = "platform".into();
+                d.builtin = true;
+                return Ok(Response::new(pb::GetDomainResponse { domain: Some(d) }));
+            }
+        }
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
+            let what = if r.version.is_empty() {
+                format!("{} (published)", r.name)
+            } else {
+                format!("{}@{}", r.name, r.version)
+            };
+            return Err(ConnectError::not_found(format!("{what}: domain not found")));
+        };
+        let mut d = domainpb::domain(&s.definition).map_err(|e| connect_error(GraphError::internal(e)))?;
+        d.name = s.name;
+        d.version = s.version;
+        d.status = s.status;
+        d.created_at = convert::time(&s.created_at);
+        d.updated_at = convert::time(&s.updated_at);
+        d.published_at = convert::time(&s.published_at);
+        d.updated_by = s.updated_by;
+        Ok(Response::new(pb::GetDomainResponse { domain: Some(d) }))
+    }
+
+    /// A stored version as JSON (`Service.ExportDomain` with format `json`): the YAML document of the definition read
+    /// back, keys sorted, indented. The YAML itself (yaml.v3's emitter) and a built-in domain are the Go service's.
+    async fn export_domain(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ExportDomainRequest>,
+    ) -> Answer<pb::ExportDomainResponse> {
+        let r = req.into_inner();
+        if is_builtin(&r.name) {
+            return Err(unserved("the export of a built-in domain"));
+        }
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
+            return Err(unserved("the export of a domain not stored"));
+        };
+        match r.format.as_str() {
+            "json" => {}
+            "" | "yaml" => return Err(unserved("the YAML export of a domain")),
+            f => {
+                return Err(ConnectError::invalid_argument(format!(
+                    "unknown export format {f:?} (yaml or json): invalid domain"
+                )));
+            }
+        }
+        let mut def = s.definition;
+        if let Some(o) = def.as_object_mut() {
+            o.insert("name".into(), s.name.clone().into());
+            o.insert("version".into(), s.version.clone().into());
+        }
+        Ok(Response::new(pb::ExportDomainResponse {
+            yaml: gojson::to_string_indent(&yaml_document(def), "  "),
+            filename: format!("domain-{}-{}.json", s.name, s.version),
+            media_type: "application/json".into(),
+        }))
     }
 
     /// Stores a domain version from its YAML, published on request (`Service.ImportDomain`): a new version a platform
@@ -307,4 +388,69 @@ fn attributes(as_: &[imported::Attribute]) -> Vec<pb::Attribute> {
             validators: Vec::new(),
         })
         .collect()
+}
+
+/// The stored JSON of a definition as its YAML document reads (`yaml.Marshal(def.Domain)` read back): the lists Go
+/// writes `null` in JSON are `[]` in YAML, a transition's empty `requires` and an empty form are left out (YAML's
+/// `omitempty` leaves out a zero struct, JSON's does not), and the bound algorithms of a transition never are YAML.
+fn yaml_document(mut def: serde_json::Value) -> serde_json::Value {
+    use serde_json::Value;
+    fn list(o: &mut serde_json::Map<String, Value>, k: &str) {
+        if o.get(k).is_none_or(Value::is_null) {
+            o.insert(k.into(), Value::Array(Vec::new()));
+        }
+    }
+    fn empty(v: Option<&Value>) -> bool {
+        v.is_none_or(|v| v.is_null() || v.as_array().is_some_and(Vec::is_empty) || v.as_str() == Some(""))
+    }
+    let Some(d) = def.as_object_mut() else {
+        return def;
+    };
+    list(d, "nodeTypes");
+    list(d, "linkTypes");
+    for n in d
+        .get_mut("nodeTypes")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+    {
+        let Some(n) = n.as_object_mut() else { continue };
+        if let Some(doc) = n.get_mut("document").and_then(Value::as_object_mut) {
+            list(doc, "contains");
+        }
+        if n.get("form")
+            .and_then(Value::as_object)
+            .is_some_and(|f| empty(f.get("fields")) && empty(f.get("title")) && empty(f.get("description")))
+        {
+            n.remove("form");
+        }
+    }
+    for l in d
+        .get_mut("lifecycles")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+    {
+        let Some(l) = l.as_object_mut() else { continue };
+        list(l, "states");
+        for t in l
+            .get_mut("transitions")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
+            let Some(t) = t.as_object_mut() else { continue };
+            t.remove("guardAlgos");
+            t.remove("actionAlgos");
+            if t.get("requires")
+                .is_none_or(|r| empty(r.get("attributes")) && empty(r.get("outgoingLinks")))
+            {
+                t.remove("requires");
+            }
+            if let Some(c) = t.get_mut("children").and_then(Value::as_object_mut) {
+                list(c, "states");
+            }
+        }
+    }
+    def
 }
