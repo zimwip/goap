@@ -11,7 +11,7 @@ use graph_core::{
     change::{self, ChangesFilter},
     items,
     lnk::Url,
-    model::{BaselineId, NodeId, NodeQuery},
+    model::{BaselineId, NodeId, NodeQuery, NodeRef, namespace_of},
     page::link_page,
     read::{self, World},
     store::ReadTx,
@@ -19,6 +19,7 @@ use graph_core::{
 use graph_core::{
     model::{ChangeId, MAIN_BRANCH},
     write::{
+        branches::{self, NewBranch},
         change::NewChange,
         commit::NOTHING_TO_COMMIT,
         edits::{Commit, LinkEdit, NodeEdit},
@@ -28,7 +29,7 @@ use graph_core::{
         work::{NodeCheckout, NodeCreate, fold_change},
     },
 };
-use graph_store::read::Session;
+use graph_store::read::{Session, Tag};
 
 use crate::{State, convert};
 
@@ -571,19 +572,125 @@ impl pb::GraphService for Graph {
             let m = &req.msg;
             let tags = tx.tags(&m.namespace, &m.name, &m.node_id).await?;
             Ok(pb::ListTagsResponse {
-                tags: tags
-                    .into_iter()
-                    .map(|t| pb::Tag {
-                        id: t.id,
-                        name: t.name,
-                        namespace: t.namespace,
-                        node_id: t.node,
-                        version: t.version,
-                        by: t.by,
-                        created_at: convert::time(&t.created_at),
-                    })
-                    .collect(),
+                tags: tags.into_iter().map(tag_pb).collect(),
             })
+        })
+        .await
+    }
+
+    /// Names a node version for the caller; the same name on the same version is the tag already there.
+    async fn tag_version(&self, _ctx: &Ctx, req: Request<pb::TagVersionRequest>) -> Answer<pb::TagVersionResponse> {
+        let caller = Caller::of(&req)?;
+        let by = caller.subject.clone();
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let mut r = NodeRef::new(NodeId(m.node_id.clone()), m.version);
+            if r.version <= 0 {
+                let Some(view) = m.view.as_ref() else {
+                    return Err(GraphError::new(
+                        Kind::Invalid,
+                        format!("tag {}: name a version or a view: {}", r.id, graph_core::view::NO_VIEW),
+                    ));
+                };
+                r.version = World::open_node(tx.store, &convert::view(Some(view)))
+                    .await?
+                    .node_view(&r.id, "")
+                    .await?
+                    .node
+                    .version;
+            }
+            // a draft of the view (version 0) reads as the node's latest, then has no version to tag
+            let n = read::stored_node(tx.store, &r).await?;
+            if m.name.is_empty() {
+                return Err(GraphError::invalid("a tag needs a name"));
+            }
+            if r.version <= 0 {
+                return Err(GraphError::invalid(format!("a tag names a written version, not {r}")));
+            }
+            let have = tx.store.tags("", &m.name, &r.id.0).await?;
+            let t = match have.into_iter().find(|t| t.version == r.version) {
+                Some(t) => t,
+                None => {
+                    let t = Tag {
+                        id: tx.env.new_id(),
+                        name: m.name.clone(),
+                        namespace: namespace_of(&n.namespace).to_string(),
+                        node: r.id.0.clone(),
+                        version: r.version,
+                        by: by.clone(),
+                        created_at: Some(tx.env.now()),
+                    };
+                    tx.store.put_tag(&t).await?;
+                    t
+                }
+            };
+            Ok(pb::TagVersionResponse { tag: Some(tag_pb(t)) })
+        })
+        .await
+    }
+
+    /// Removes a tag; the version it named is untouched.
+    async fn delete_tag(&self, _ctx: &Ctx, req: Request<pb::DeleteTagRequest>) -> Answer<pb::DeleteTagResponse> {
+        let caller = Caller::of(&req)?;
+        let id = req.into_inner().id;
+        self.write(caller, async |tx| {
+            tx.store.delete_tag(&id).await?;
+            Ok(pb::DeleteTagResponse {})
+        })
+        .await
+    }
+
+    /// Opens a branch forked from a baseline.
+    async fn create_branch(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::CreateBranchRequest>,
+    ) -> Answer<pb::CreateBranchResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let b = branches::create_branch(
+                tx,
+                NewBranch {
+                    name: m.name,
+                    namespace: m.namespace,
+                    from: BaselineId(m.from_baseline),
+                    origin: m.origin,
+                    description: m.description,
+                },
+            )
+            .await?;
+            Ok(pb::CreateBranchResponse {
+                branch: Some(convert::branch(&b)),
+            })
+        })
+        .await
+    }
+
+    async fn set_branch_status(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::SetBranchStatusRequest>,
+    ) -> Answer<pb::SetBranchStatusResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            branches::set_branch_status(tx, &m.namespace, &m.name, &m.status).await?;
+            Ok(pb::SetBranchStatusResponse {})
+        })
+        .await
+    }
+
+    async fn set_branch_description(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::SetBranchDescriptionRequest>,
+    ) -> Answer<pb::SetBranchDescriptionResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            branches::set_branch_description(tx, &m.namespace, &m.name, &m.description).await?;
+            Ok(pb::SetBranchDescriptionResponse {})
         })
         .await
     }
@@ -1293,4 +1400,16 @@ fn listed_baseline(b: &graph_core::model::Baseline, namespace: &str) -> pb::Base
     let mut p = convert::baseline(b, None);
     p.namespace = graph_core::model::namespace_of(namespace).to_string();
     p
+}
+
+fn tag_pb(t: Tag) -> pb::Tag {
+    pb::Tag {
+        id: t.id,
+        name: t.name,
+        namespace: t.namespace,
+        node_id: t.node,
+        version: t.version,
+        by: t.by,
+        created_at: convert::time(&t.created_at),
+    }
 }

@@ -173,5 +173,8 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   person): every one `same`, the tables the same. The listings that filter nothing by their caller, `ListTags`,
   `ListBaselines` (all headers or some by id; the history of a branch is still Go's) and `ListBranches`, are served for
   any identified caller; `GetChangeImpacts` and `ListSubChanges` read the fold of each change, as the guard's
-  `Change` does, for a platform service. With them the scenario reaches 61 calls, all `same`.
+  `Change` does, for a platform service. A platform service's tags (`TagVersion`, `DeleteTag`: rows of the store,
+  no change; version 0 is the one the view holds, a draft of a change refused as Go refuses it) and branches
+  (`CreateBranch`, `SetBranchStatus`, `SetBranchDescription`, `graph-core` `write::branches`) are written here too.
+  With them the scenario reaches 87 calls, all `same`, the tables the same.
 - Not done yet: the rest of phase 4.

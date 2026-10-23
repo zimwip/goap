@@ -1,3 +1,4 @@
+pub mod branches;
 pub mod change;
 pub mod check;
 pub mod commit;

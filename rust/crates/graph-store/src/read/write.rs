@@ -741,3 +741,52 @@ impl WriteTx for Session {
 fn json_list_always<T: serde::Serialize>(xs: &[T]) -> String {
     json_list(xs)
 }
+
+impl Session {
+    /// Writes a tag (`Tx.PutTag`): a tag of the same id is renamed.
+    pub async fn put_tag(&self, t: &super::Tag) -> Result<(), GraphError> {
+        let tail = format!(
+            " ON CONFLICT (id) DO UPDATE SET name = {}.name",
+            if self.sql.pg { "EXCLUDED" } else { "excluded" }
+        );
+        let q = self.insert(
+            "tag",
+            &["id", "name", "namespace", "node_id", "version", "by", "created_at"],
+            &tail,
+        );
+        let args = vec![
+            t.id.as_str().into(),
+            t.name.as_str().into(),
+            namespace_of(&t.namespace).into(),
+            t.node.as_str().into(),
+            Arg::Int(t.version.into()),
+            t.by.as_str().into(),
+            Arg::Time(t.created_at.unwrap_or_else(gojson::zero_time)),
+        ];
+        self.run((q, args), &format!("tag {}", t.name)).await?;
+        Ok(())
+    }
+
+    /// Deletes a tag; none of that id is not found (`Tx.DeleteTag`).
+    pub async fn delete_tag(&self, id: &str) -> Result<(), GraphError> {
+        let what = format!("tag {id}");
+        if self.sql.pg && uuid::Uuid::try_parse(id).is_err() {
+            return Err(GraphError::unimplemented(format!(
+                "{what}: not an id PostgreSQL reads, the error Go words is not served here yet"
+            )));
+        }
+        let n = self
+            .run(
+                (
+                    format!("DELETE FROM tag WHERE id = {}", self.sql.ph(1)),
+                    vec![id.into()],
+                ),
+                &what,
+            )
+            .await?;
+        if n != 1 {
+            return Err(GraphError::not_found(what));
+        }
+        Ok(())
+    }
+}
