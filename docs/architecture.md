@@ -853,10 +853,11 @@ and `open`, and judge by themselves only while the states load (`bubbleView`).
 governed by rules it does not consume. The rules are domain content (`alm@Rule`, `ArchitectureDecision`,
 `CodingRule`: a statement, a severity veto | objective | advice, a `check` code text in `cypher` or `shell`, a `fix`;
 linked by `alm@governs` to what they govern; lifecycle `rule`); the methodology writes only general rules and how
-they apply. A **control** is a condition carrying `control: {types, via, where, rules}` (`methodology.Control`,
-`engine/methodology/control.go`): its expression says the rules were collected (zero rules is a valid answer), its
-control which rules it covers. An action or a step names `controls: [...]` (link `methodology@controlled_by`) and
-waits for them (merged into the step's entry and the action's `pre`). `Compiled.ControlsOf` and
+they apply. A condition is never marked a control: it is one by its **use**. An action or a step lists `controls:
+[{condition, types, via, where, rules}]` (`methodology.Control`, `engine/methodology/control.go`): the condition says
+the rules were collected (zero rules is a valid answer) and is waited for (merged into the step's entry and the
+action's `pre`), the use says which rules it covers; stored, it is the link `methodology@controlled_by` carrying them,
+the condition node unmarked. `Compiled.ControlsOf` and
 `Engine.ControlOf(change, action, step, subject)` (`engine/engine/control.go`) resolve the controls of an execution in
 the view of the change, each established or pending; a run records the rules it was given (`Step.Controls`), an llm
 action reads them in a `CONTROLS` section of its system prompt (one line per rule). The builtin `control.check`

@@ -17,7 +17,8 @@ import (
 )
 
 // controlledYAML builds under the architecture decisions of the project (ADR 0162): the design collects them (the
-// control condition is its output), the build is controlled by them and its check measures them on each component.
+// condition is its output), the build uses that condition as a control, saying which rules govern it, and its check
+// measures them on each component.
 const controlledYAML = `
 name: controlled
 version: 1.0.0
@@ -28,12 +29,6 @@ conditions:
   - name: architecture_decided
     description: The architecture decisions of the change are collected (there may be none)
     expr: 'artifacts.exists(a, a.target == "architecture")'
-    control:
-      types: [alm@ArchitectureDecision]
-      via: alm@governs
-      where: 'self.state == "accepted"'
-      rules:
-        - {id: DOC, statement: Every component says what it is for}
   - {name: impacted, expr: 'changeImpacts.exists(i, i.intent == "modified")'}
   - {name: rules_checked, scope: impact, expr: 'artifacts.exists(a, a.target == "control_report" && a.data.subject == self.key)'}
   - {name: all_checked, all: rules_checked}
@@ -45,7 +40,15 @@ processes:
     roles: {responsible: dev}
     steps:
       - {name: design, action: decide}
-      - {name: build, controls: [architecture_decided], action: verify_rules}
+      - name: build
+        action: verify_rules
+        controls:
+          - condition: architecture_decided
+            types: [alm@ArchitectureDecision]
+            via: alm@governs
+            where: 'self.state == "accepted"'
+            rules:
+              - {id: DOC, statement: Every component says what it is for}
 `
 
 // the check of ADR-1: no component the subject depends on (a violation per row)
@@ -175,7 +178,7 @@ func TestAControlGovernsAndMeasuresAnActivity(t *testing.T) {
 func TestAControlCollectedWithNoRuleIsEstablished(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	m, err := methodology.Parse([]byte(strings.Replace(controlledYAML, "      rules:\n        - {id: DOC, statement: Every component says what it is for}\n", "", 1)))
+	m, err := methodology.Parse([]byte(strings.Replace(controlledYAML, "            rules:\n              - {id: DOC, statement: Every component says what it is for}\n", "", 1)))
 	if err != nil {
 		t.Fatal(err)
 	}

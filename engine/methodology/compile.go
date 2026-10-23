@@ -104,8 +104,8 @@ type compileState struct {
 	automaticReviews map[string]string
 	// assessments are the compiled assessment views (ADR 0116)
 	assessments *condition.AssessmentViews
-	// controls are the control conditions (ADR 0162)
-	controls map[string]ControlInfo
+	// controls are the controls of the activities (ADR 0162)
+	controls map[string][]ControlInfo
 }
 
 func (s *compileState) add(path, format string, args ...any) {

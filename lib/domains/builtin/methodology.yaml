@@ -107,7 +107,6 @@ nodeTypes:
       - {name: any, label: Any, description: "Aggregate: some subject satisfies this scoped condition, when the version does not declare it (aggregates link, as any)", type: string, section: Aggregate, order: 7}
       - {name: none, label: None, description: "Aggregate: no subject satisfies this scoped condition, when the version does not declare it (aggregates link, as none)", type: string, section: Aggregate, order: 8}
       - {name: empty, label: Empty, description: "Value of an all aggregate over no subject (default false)", type: boolean, section: Aggregate, order: 9}
-      - {name: control, label: Control, description: "The condition is a control (ADR 0162): it holds once the rules were collected, and says which govern the activities it controls: types of the domain, via (a link type from a rule to the subject), where (CEL: self the rule, subject, change), rules of its own (id, statement, severity, check, fix)", type: json, widget: textarea, section: Control, order: 10}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   - name: Goal
@@ -148,7 +147,7 @@ nodeTypes:
       - {name: input, label: Input, description: "Conditions the activity takes that the version does not declare (generated: state:, step:; a library's): a declared condition is a requires link (ADR 0120)", type: json, widget: textarea, section: Definition, order: 3}
       - {name: output, label: Output, description: "Conditions the activity produces that the version does not declare: a declared condition is a produces link (ADR 0120)", type: json, widget: textarea, section: Definition, order: 5}
       - {name: on, label: "Reacts to", description: "Events that run the activity again on a change of its methodology (ADR 0110): event, filter (CEL over event), from", type: json, widget: textarea, section: Reactions, order: 6}
-      - {name: controls, label: "Controlled by", description: "Control conditions the version does not declare: a declared one is a controlled_by link (ADR 0162); the activity waits for each, is given its rules and is measured against them", type: json, widget: textarea, section: Definition, order: 4}
+      - {name: controls, label: "Controlled by", description: "Conditions used as controls that the version does not declare, each with what it covers (ADR 0162): a declared one is a controlled_by link; the activity waits for each, is given its rules and is measured against them", type: json, widget: textarea, section: Definition, order: 4}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   # ADR 0034: the steps and sub-steps that reach an objective, each done by an action, an agent, a nested process or a person
@@ -275,13 +274,17 @@ linkTypes:
     attributes:
       - {name: value, label: Value, description: "The value the condition must have (default true)", type: boolean, order: 1}
   - name: controlled_by
-    description: "A control: a condition governing what an activity produces without being consumed by it, the rules it covers given to the activity and measured on its output (ADR 0162)"
+    description: "A control: a condition used by an activity as a control (ADR 0162). The condition says the rules were collected and the activity waits for it; the link says which rules govern what the activity produces without being consumed by it, given to the activity and measured on its output. A condition is a control by this use only"
     from: Activity
     to: Condition
     label: "controlled by"
     inverseLabel: "controls"
     attributes:
       - {name: position, label: Position, description: "Position in the list of controls", type: number, order: 1}
+      - {name: types, label: Types, description: "Node types of the domain the rules are (alm@ArchitectureDecision, alm@CodingRule)", type: json, order: 2}
+      - {name: via, label: Via, description: "Link type from a rule to the subject of the execution (alm@governs): only the rules linked to it govern it", type: string, order: 3}
+      - {name: where, label: Where, description: "CEL keeping the rules that govern (self the rule, subject the subject, change the change)", type: string, widget: textarea, order: 4}
+      - {name: rules, label: Rules, description: "General rules of the methodology (id, statement, severity, check, fix)", type: json, widget: textarea, order: 5}
   - name: produces
     description: "An output: a condition an action or an activity establishes, with its value (an action's effects, a step's or a method's done)"
     from: Activity

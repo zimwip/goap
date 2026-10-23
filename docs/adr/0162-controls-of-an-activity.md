@@ -1,4 +1,4 @@
-# ADR 0162 — Controls of an activity: rules in the domain, control conditions, a measure that answers with the rule broken
+# ADR 0162 — Controls of an activity: rules in the domain, conditions used as controls, a measure that answers with the rule broken
 
 **Status**: accepted, step 1 implemented · **Date**: 2026-10 ·
 Builds on ADR 0034 (processes and steps), ADR 0050 (methods), ADR 0075 (vetos, objectives, derogations), ADR 0109
@@ -39,36 +39,48 @@ to any node) and to the rule it replaces by `alm@supersedes`. Lifecycle `rule`: 
 `proposed`, `accepted`, `superseded`, `retired`. The severities are those of ADR 0075: a veto blocks, an objective
 needs a derogation, an advice is noted.
 
-### 2. A control is a condition of the methodology
+### 2. A condition is a control by its use
 
-A condition may carry a `control` (`methodology.Control`):
+A condition is never marked as a control. It stays an ordinary condition of the methodology, here the one saying that
+the rules were collected: the output of the activity that collects them. What makes it a control is its use by an
+activity: an action or a step (of a process or a method) lists it among its `controls`, and that use says which
+rules govern the activity (`methodology.Control`):
 
 ```yaml
 conditions:
   - name: architecture_decided
     description: The architecture decisions of the change are collected (there may be none)
     expr: 'artifacts.exists(a, a.target == "architecture")'   # the collection was done
-    control:
-      types: [alm@ArchitectureDecision]   # the rules of the domain it covers
-      via: alm@governs                    # only those linked to the subject of the execution
-      where: 'self.state == "accepted"'   # CEL: self the rule, subject the subject, change the change
-      rules:                              # the general rules of the method itself
-        - {id: DOC, statement: Every component says what it is for}
+processes:
+  - name: delivery
+    steps:
+      - {name: design, action: decide}                         # produces architecture_decided
+      - name: build
+        action: implement
+        controls:
+          - condition: architecture_decided                    # waited for
+            types: [alm@ArchitectureDecision]                  # the rules of the domain it covers
+            via: alm@governs                                   # only those linked to the subject of the execution
+            where: 'self.state == "accepted"'                  # CEL: self the rule, subject the subject, change the change
+            rules:                                             # the general rules of the method itself
+              - {id: DOC, statement: Every component says what it is for}
 ```
 
-- Its **expression** says the rules were collected: it is the output of the activity that collects them. With no
-  expression, a control is established at once (general rules only).
-- Its **control** says which rules it covers: the nodes of `types` (a subtype is not one of them unless named),
-  linked to the subject through `via` when given, kept by `where`; and the general rules the methodology writes.
-- A control is about the change: no scope, no aggregate.
+- The **condition** says the rules were collected; the same condition is the output of one activity and the control
+  of another, as a condition is the output of an activity and the input of another (ADR 0120).
+- The **use** says which rules it covers: the nodes of `types` (a subtype is not one of them unless named), linked to
+  the subject through `via` when given, kept by `where`; and the general rules the methodology writes. A use covers
+  rules (types, rules or both); its condition is about the change (no scope, no aggregate).
+- Two activities may use one condition with different coverage (the coding rules for the build, the architecture
+  decisions for the design review).
 
-### 3. Activities name their controls (`controlled_by`)
+### 3. Stored as `controlled_by`
 
-An action or a step (of a process or a method) lists `controls: [<condition>]`. Stored, it is the link
-`methodology@controlled_by` (from an activity to a condition, ADR 0120), symmetric to `requires` / `produces`.
-**An activity waits for its controls by default**: the compiler merges them into the entry of the step (and of its
-sub-steps) and the `pre` of the action, so nothing is planned before the rules are collected. The definition is not
-modified.
+Stored, a use is the link `methodology@controlled_by` from the activity to the condition node (ADR 0120), carrying
+`types`, `via`, `where` and `rules` as its attributes, as `requires` / `produces` carry their value. The condition
+node holds nothing of it. **An activity waits for its controls by default**: the compiler merges their conditions into
+the entry of the step (and of its sub-steps) and the `pre` of the action, so nothing is planned before the rules are
+collected. The definition is not modified.
 
 ### 4. The control function of an execution
 
@@ -103,15 +115,16 @@ what an agent reads to fix its work.
 
 ## As built (step 1)
 
-- `domains/alm.yaml` 1.8.0; `lib/domains/builtin/methodology.yaml` 1.17.0 (`Condition.control`, `Activity.controls`,
-  link type `controlled_by`).
-- `engine/methodology/control.go` (`Control`, `ControlRule`, `ControlCheck`, `ControlInfo`, `ControlsOf`,
-  `compileControls`), `engine/condition/control.go` (`RuleFilter`), `refs.go` (`controlled_by`), proto
-  `registry.v1.Condition.control` / `Action.controls` / `Step.controls`, `registrysvc` conversions, web types.
+- `domains/alm.yaml` 1.8.0; `lib/domains/builtin/methodology.yaml` 1.17.0 (`Activity.controls`, link type
+  `controlled_by` with `types`, `via`, `where`, `rules`).
+- `engine/methodology/control.go` (`Control`, written as a condition name or in full; `ControlRule`, `ControlCheck`,
+  `ControlInfo`, `ControlsOf`, `compileControls`), `engine/condition/control.go` (`RuleFilter`), `refs.go`
+  (`controlled_by`, shape `refUses`: a list of objects naming a condition, the rest of each on its link), proto
+  `registry.v1.Control` in `Action.controls` / `Step.controls`, `registrysvc` conversions, web types.
 - `engine/engine/control.go` (`ControlSet`, `ControlOf`, `controlsOf` in `runAction`, the prompt section),
   `engine/engine/controlcheck.go` (`ControlCheck`, `contracts/builtins.ControlCheck`), `graphapi.Port.QueryView`
   (`lib/graphclient` over RPC).
-- Tests: `engine/methodology/control_test.go`, `engine/engine/controlcheck_test.go`,
+- Tests: `engine/methodology/control_test.go`, `platform/registrysvc/refs_test.go` (`TestControlsAreLinks`), `engine/engine/controlcheck_test.go`,
   `platform/e2e/engine/control_test.go` (a control pending then established, the rules of the subject only, a
   violation found by a query with its fix; collected and empty).
 
@@ -122,12 +135,11 @@ what an agent reads to fix its work.
   `rules_respected` in the build gate.
 - The rules of the project chain only (a filter on the project of the rule and its ancestors) and the rules
   superseded left out by default.
-- An opt-out of the wait (`wait: false`) for a control that advises only.
+- An opt-out of the wait (`wait: false`) on a use that advises only.
 - A `judge` check (a model rating a rule a query cannot measure), cached by the fingerprint of the subject.
 - The open count aware of derogations (ADR 0075) and the gate items reading the report.
 - An MCP `control` (`rules`, `check`) so that an agent measures its work inside its own loop.
-- Human tasks showing their controls; the web editing `controls` (`StepEditor.svelte`, the action tab) and the
-  control of a condition; the compiled view (`ViewStep`) and the flow drawing them.
+- Human tasks showing their controls; the web editing `controls` (`StepEditor.svelte`, the action tab); the compiled view (`ViewStep`) and the flow drawing them.
 
 ## Consequences
 

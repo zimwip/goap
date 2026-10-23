@@ -16,13 +16,13 @@ func ToPB(r Record) *registryv1.Methodology {
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 	for _, c := range m.Conditions {
 		out.Conditions = append(out.Conditions, &registryv1.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr,
-			Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty, Control: controlToPB(c.Control)})
+			Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty})
 	}
 	for _, a := range m.Actions {
 		pa := &registryv1.Action{Name: a.Name, Description: a.Description, Kind: a.Kind, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost,
 			Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin, Instructions: a.Instructions,
 			Params: pbconv.Struct(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
-			Specializes: a.Specializes, When: a.When, Priority: int32(a.Priority), Incremental: a.Incremental, Mcps: a.MCPs, On: subsToPB(a.On), Emits: a.Emits, Controls: a.Controls, Scope: a.Scope, Where: a.Where, Parallel: int32(a.Parallel),
+			Specializes: a.Specializes, When: a.When, Priority: int32(a.Priority), Incremental: a.Incremental, Mcps: a.MCPs, On: subsToPB(a.On), Emits: a.Emits, Controls: controlsToPB(a.Controls), Scope: a.Scope, Where: a.Where, Parallel: int32(a.Parallel),
 			Form: pbconv.FormToPB(a.Form), Loop: loopToPB(a.Loop), Roles: a.Roles, Role: a.Role}
 		if e := a.Expects; e != nil {
 			pe := &registryv1.Expectation{ForEach: e.ForEach, Where: e.Where, Produce: &registryv1.ProduceSpec{Op: e.Produce.Op, NodeType: e.Produce.NodeType}}
@@ -65,7 +65,7 @@ func stepsToPB(steps []methodology.Step) []*registryv1.Step {
 	out := make([]*registryv1.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, &registryv1.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: s.Pre, Done: s.Done,
-			References: refsToPB(s.References), Guidance: s.Guidance, Checklist: s.Checklist, Deliverables: s.Deliverables, Method: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy, Roles: respToPB(s.Roles), Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Process: s.Process, On: subsToPB(s.On), Where: s.Where, Review: reviewToPB(s.Review), Gate: GateToPB(s.Gate), Controls: s.Controls})
+			References: refsToPB(s.References), Guidance: s.Guidance, Checklist: s.Checklist, Deliverables: s.Deliverables, Method: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy, Roles: respToPB(s.Roles), Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Process: s.Process, On: subsToPB(s.On), Where: s.Where, Review: reviewToPB(s.Review), Gate: GateToPB(s.Gate), Controls: controlsToPB(s.Controls)})
 	}
 	return out
 }
@@ -77,7 +77,7 @@ func stepsFromPB(steps []*registryv1.Step) []methodology.Step {
 	out := make([]methodology.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, methodology.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: nilIfEmpty(s.Pre), Done: nilIfEmpty(s.Done),
-			References: refsFromPB(s.References), Guidance: s.Guidance, Checklist: nilIfNone(s.Checklist), Deliverables: nilIfNone(s.Deliverables), Capability: s.Method, Foreach: s.Foreach, GroupBy: s.GroupBy, Roles: respFromPB(s.Roles), Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Process: s.Process, On: subsFromPB(s.On), Where: s.Where, Review: reviewFromPB(s.Review), Gate: GateFromPB(s.Gate), Controls: nilIfNone(s.Controls)})
+			References: refsFromPB(s.References), Guidance: s.Guidance, Checklist: nilIfNone(s.Checklist), Deliverables: nilIfNone(s.Deliverables), Capability: s.Method, Foreach: s.Foreach, GroupBy: s.GroupBy, Roles: respFromPB(s.Roles), Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Process: s.Process, On: subsFromPB(s.On), Where: s.Where, Review: reviewFromPB(s.Review), Gate: GateFromPB(s.Gate), Controls: controlsFromPB(s.Controls)})
 	}
 	return out
 }
@@ -225,13 +225,13 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 		Integrates: integrationsFromPB(p.Integrates), Guardian: guardianFromPB(p.Guardian), Events: eventsFromPB(p.Events), Assessments: assessmentsFromPB(p.Assessments), Domains: nilIfEmpty(p.Domains)}
 	for _, c := range p.Conditions {
 		m.Conditions = append(m.Conditions, methodology.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr,
-			Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty, Control: controlFromPB(c.Control)})
+			Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty})
 	}
 	for _, a := range p.Actions {
 		ma := methodology.Action{Name: a.Name, Description: a.Description, Kind: a.Kind, Pre: nilIfEmpty(a.Pre), Effects: nilIfEmpty(a.Effects),
 			Cost: a.Cost, Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin,
 			Instructions: a.Instructions, Params: pbconv.Map(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
-			Specializes: a.Specializes, When: a.When, Priority: int(a.Priority), Incremental: a.Incremental, MCPs: a.Mcps, On: subsFromPB(a.On), Emits: nilIfNone(a.Emits), Controls: nilIfNone(a.Controls), Scope: a.Scope, Where: a.Where, Parallel: int(a.Parallel),
+			Specializes: a.Specializes, When: a.When, Priority: int(a.Priority), Incremental: a.Incremental, MCPs: a.Mcps, On: subsFromPB(a.On), Emits: nilIfNone(a.Emits), Controls: controlsFromPB(a.Controls), Scope: a.Scope, Where: a.Where, Parallel: int(a.Parallel),
 			Form: pbconv.FormFromPB(a.Form), Loop: loopFromPB(a.Loop), Roles: nilIfNone(a.Roles), Role: a.Role}
 		if e := a.Expects; e != nil && e.ForEach != "" {
 			me := &condition.Expectation{ForEach: e.ForEach, Where: e.Where}
@@ -458,32 +458,34 @@ func stepViewsToPB(steps []methodology.StepView) []*registryv1.ViewStep {
 	return out
 }
 
-func controlToPB(c *methodology.Control) *registryv1.Control {
-	if c == nil {
-		return nil
-	}
-	out := &registryv1.Control{Types: c.Types, Via: c.Via, Where: c.Where}
-	for _, r := range c.Rules {
-		pr := &registryv1.ControlRule{Id: r.ID, Statement: r.Statement, Severity: r.Severity, Fix: r.Fix}
-		if r.Check != nil {
-			pr.Check = &registryv1.ControlCheck{Language: r.Check.Language, Code: r.Check.Code}
+func controlsToPB(cs []methodology.Control) []*registryv1.Control {
+	var out []*registryv1.Control
+	for _, c := range cs {
+		pc := &registryv1.Control{Condition: c.Condition, Types: c.Types, Via: c.Via, Where: c.Where}
+		for _, r := range c.Rules {
+			pr := &registryv1.ControlRule{Id: r.ID, Statement: r.Statement, Severity: r.Severity, Fix: r.Fix}
+			if r.Check != nil {
+				pr.Check = &registryv1.ControlCheck{Language: r.Check.Language, Code: r.Check.Code}
+			}
+			pc.Rules = append(pc.Rules, pr)
 		}
-		out.Rules = append(out.Rules, pr)
+		out = append(out, pc)
 	}
 	return out
 }
 
-func controlFromPB(c *registryv1.Control) *methodology.Control {
-	if c == nil {
-		return nil
-	}
-	out := &methodology.Control{Types: nilIfNone(c.Types), Via: c.Via, Where: c.Where}
-	for _, r := range c.Rules {
-		mr := methodology.ControlRule{ID: r.Id, Statement: r.Statement, Severity: r.Severity, Fix: r.Fix}
-		if r.Check != nil {
-			mr.Check = &methodology.ControlCheck{Language: r.Check.Language, Code: r.Check.Code}
+func controlsFromPB(cs []*registryv1.Control) []methodology.Control {
+	var out []methodology.Control
+	for _, c := range cs {
+		mc := methodology.Control{Condition: c.Condition, Types: nilIfNone(c.Types), Via: c.Via, Where: c.Where}
+		for _, r := range c.Rules {
+			mr := methodology.ControlRule{ID: r.Id, Statement: r.Statement, Severity: r.Severity, Fix: r.Fix}
+			if r.Check != nil {
+				mr.Check = &methodology.ControlCheck{Language: r.Check.Language, Code: r.Check.Code}
+			}
+			mc.Rules = append(mc.Rules, mr)
 		}
-		out.Rules = append(out.Rules, mr)
+		out = append(out, mc)
 	}
 	return out
 }

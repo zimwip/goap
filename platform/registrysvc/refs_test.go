@@ -153,3 +153,56 @@ func TestReferencesAreLinks(t *testing.T) {
 		t.Fatalf("a name the version no longer declares is a property again: %v", p)
 	}
 }
+
+// A control is the use of a condition by an activity (ADR 0162): a controlled_by link carrying what it covers, the
+// condition node itself unmarked; the definition reads back as it was saved.
+func TestControlsAreLinks(t *testing.T) {
+	ctx := context.Background()
+	s, g := typedStore()
+	m, err := methodology.Parse([]byte(`
+name: ctl
+version: "1"
+namespace: alm
+roles: [{name: dev}]
+conditions:
+  - {name: decided, expr: 'artifacts.exists(a, a.target == "architecture")'}
+  - {name: built, expr: 'artifacts.exists(a, a.target == "build")'}
+actions:
+  - {name: decide, kind: human, effects: {decided: true}}
+  - name: build
+    kind: human
+    effects: {built: true}
+    controls:
+      - {condition: decided, rules: [{id: DOC, statement: Every component says what it is for}]}
+processes:
+  - name: p
+    roles: {responsible: dev}
+    steps:
+      - {name: design, action: decide}
+      - {name: make, action: build, controls: [{condition: decided, types: [alm@ArchitectureDecision], via: alm@governs}]}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 23, 8, 0, 0, 0, time.UTC)
+	if err := s.Save(ctx, Record{Methodology: *m, Status: StatusDraft, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get(ctx, m.Name, m.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if canon(t, got.Methodology) != canon(t, *m) {
+		t.Fatalf("the definition does not read back:\n have %s\n want %s", canon(t, got.Methodology), canon(t, *m))
+	}
+	hk := MethodologyVersionKey(m.Name, m.Version)
+	if l := linksOf(t, g, hk, "action/build"); !slices.Contains(l, `controlled_by condition/decided {"position":0,"rules":[{"id":"DOC","statement":"Every component says what it is for"}]}`) {
+		t.Fatalf("the action's control is a link carrying its rules: %q", l)
+	}
+	if l := linksOf(t, g, hk, "step/p/make"); !slices.Contains(l, `controlled_by condition/decided {"position":0,"types":["alm@ArchitectureDecision"],"via":"alm@governs"}`) {
+		t.Fatalf("the step's control is a link carrying what it covers: %q", l)
+	}
+	if p := node(t, g, hk+"/condition/decided").Properties; p["control"] != nil {
+		t.Fatalf("the condition is not marked: %v", p)
+	}
+}

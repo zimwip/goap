@@ -60,7 +60,11 @@ const (
 	refOne  = iota // a name
 	refList        // a list of names
 	refMap         // names to a boolean (a condition and its value)
+	refUses        // a list of objects naming an element under refName, the rest of each object on its link (a use)
 )
+
+// refName is the field of an object of a refUses list naming the element it uses.
+const refName = "condition"
 
 // refField is a field of an element naming other elements of the version.
 type refField struct {
@@ -95,7 +99,7 @@ var refFields = []refField{
 	{kinds: []string{ElementCondition}, path: []string{"any"}, shape: refOne, link: LinkAggregates, as: "any", to: []string{ElementCondition}},
 	{kinds: []string{ElementCondition}, path: []string{"none"}, shape: refOne, link: LinkAggregates, as: "none", to: []string{ElementCondition}},
 	{kinds: []string{ElementAction}, path: []string{"specializes"}, shape: refOne, link: LinkSpecializes, to: []string{ElementAction}},
-	{kinds: append([]string{ElementAction}, stepKinds...), path: []string{"controls"}, shape: refList, link: LinkControlledBy, to: []string{ElementCondition}},
+	{kinds: append([]string{ElementAction}, stepKinds...), path: []string{"controls"}, shape: refUses, link: LinkControlledBy, to: []string{ElementCondition}},
 	{kinds: []string{ElementVersion}, path: []string{"goal"}, shape: refOne, link: LinkMainGoal, to: []string{ElementGoal, ElementProcess}},
 }
 
@@ -227,6 +231,32 @@ func EncodeRefs(kind string, props map[string]any, ix RefIndex) Encoded {
 			} else {
 				setField(out.Props, f.path, rest)
 			}
+		case refUses:
+			list, _ := v.([]any)
+			var rest []any
+			for i, item := range list {
+				obj, _ := item.(map[string]any)
+				name, _ := obj[refName].(string)
+				if name == "" {
+					name, _ = item.(string)
+				}
+				if rel, ok := ix.resolve(f.to, name); ok {
+					p := map[string]any{LinkAttrPosition: float64(i)}
+					for k, x := range obj {
+						if k != refName {
+							p[k] = x
+						}
+					}
+					out.Links = append(out.Links, RefLink{f.link, rel, attrs(p)})
+				} else {
+					rest = append(rest, item)
+				}
+			}
+			if rest == nil {
+				setField(out.Props, f.path, nil)
+			} else {
+				setField(out.Props, f.path, rest)
+			}
 		case refMap:
 			m, _ := v.(map[string]any)
 			rest := map[string]any{}
@@ -259,7 +289,7 @@ func DecodeRefs(kind string, props map[string]any, links []RefTarget) map[string
 	out := maps.Clone(props)
 	type listItem struct {
 		pos  float64
-		name string
+		name any // a name, or the object of a use
 	}
 	lists := map[int][]listItem{}
 	fields := fieldsOf(kind)
@@ -276,6 +306,15 @@ func DecodeRefs(kind string, props map[string]any, links []RefTarget) map[string
 			case refList:
 				pos, _ := l.Props[LinkAttrPosition].(float64)
 				lists[i] = append(lists[i], listItem{pos, l.Name})
+			case refUses:
+				pos, _ := l.Props[LinkAttrPosition].(float64)
+				obj := map[string]any{refName: l.Name}
+				for k, x := range l.Props {
+					if k != LinkAttrPosition && k != LinkAttrAs {
+						obj[k] = x
+					}
+				}
+				lists[i] = append(lists[i], listItem{pos, obj})
 			case refMap:
 				v, ok := getField(out, f.path)
 				m, _ := v.(map[string]any)
@@ -304,7 +343,7 @@ func DecodeRefs(kind string, props map[string]any, links []RefTarget) map[string
 		}
 		names := make([]any, len(items)+len(rest))
 		taken := make([]bool, len(names))
-		var late []string
+		var late []any
 		for _, it := range items {
 			if p := int(it.pos); p >= 0 && p < len(names) && !taken[p] {
 				names[p], taken[p] = it.name, true

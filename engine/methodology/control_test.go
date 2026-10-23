@@ -17,20 +17,19 @@ conditions:
   - name: architecture_decided
     description: The architecture decisions are collected (there may be none)
     expr: 'artifacts.exists(x, x.target == "architecture")'
-    control:
-      types: [alm@ArchitectureDecision]
-      via: alm@governs
-      where: 'self.state == "accepted"'
-  - name: method_rules
-    control:
-      rules:
-        - {id: TESTS, statement: Every changed function is tested, check: {language: shell, code: "go test ./..."}}
-        - {id: NAMES, statement: Names say the business concept, severity: advice}
+  - {name: method_known, expr: 'change.id != ""'}
   - {name: implemented, expr: 'artifacts.exists(x, x.target == "code")'}
-  - {name: decided, expr: 'artifacts.exists(x, x.target == "architecture")'}
 actions:
-  - {name: decide, kind: human, effects: {decided: true}}
-  - {name: implement, kind: llm, prompt: code, effects: {implemented: true}, controls: [method_rules]}
+  - {name: decide, kind: human, effects: {architecture_decided: true}}
+  - name: implement
+    kind: llm
+    prompt: code
+    effects: {implemented: true}
+    controls:
+      - condition: method_known
+        rules:
+          - {id: TESTS, statement: Every changed function is tested, check: {language: shell, code: "go test ./..."}}
+          - {id: NAMES, statement: Names say the business concept, severity: advice}
 `
 
 func compileControl(t *testing.T, src string) (*Compiled, error) {
@@ -53,7 +52,8 @@ processes:
     steps:
       - {name: design, action: decide}
       - name: build
-        controls: [architecture_decided]
+        controls:
+          - {condition: architecture_decided, types: [alm@ArchitectureDecision], via: alm@governs, where: 'self.state == "accepted"'}
         steps:
           - {name: code, action: implement}
 `)
@@ -65,7 +65,7 @@ processes:
 		t.Fatalf("the sub-step waits for the control of its step: entry %v", entry)
 	}
 	a, _ := c.Action("implement")
-	if !a.Pre["method_rules"] {
+	if !a.Pre["method_known"] {
 		t.Fatalf("the action waits for its own control: pre %v", a.Pre)
 	}
 	if d := c.Definition().Actions[1]; d.Pre != nil {
@@ -75,69 +75,89 @@ processes:
 	for _, ci := range c.ControlsOf("implement", "delivery/build/code") {
 		names = append(names, ci.Condition)
 	}
-	if strings.Join(names, ",") != "method_rules,architecture_decided" {
+	if strings.Join(names, ",") != "method_known,architecture_decided" {
 		t.Fatalf("controls of the execution: %v", names)
 	}
-	ci, _ := c.ControlCondition("architecture_decided")
-	if ci.Via != "alm@governs" || len(ci.Types) != 1 {
+	cs := c.ControlsOf("implement", "delivery/build/code")
+	ci, mr := cs[1], cs[0]
+	if ci.Via != "alm@governs" || len(ci.Types) != 1 || ci.Description == "" {
 		t.Fatalf("compiled control: %+v", ci)
 	}
 	if !ci.Where.Keeps(map[string]any{"state": "accepted"}, nil, nil) || ci.Where.Keeps(map[string]any{"state": "draft"}, nil, nil) {
 		t.Fatal("the where keeps the accepted rules only")
 	}
-	mr, _ := c.ControlCondition("method_rules")
 	if len(mr.Rules) != 2 || mr.Rules[1].SeverityOf() != SeverityAdvice || mr.Rules[0].SeverityOf() != SeverityVeto {
 		t.Fatalf("general rules: %+v", mr.Rules)
 	}
 }
 
 func TestControlIssues(t *testing.T) {
+	step := func(controls string) string {
+		return `
+processes:
+  - name: p
+    roles: {responsible: dev}
+    steps:
+      - name: s
+        action: decide
+        controls: ` + controls + "\n"
+	}
 	for _, tc := range []struct{ name, src, want string }{
-		{"not a control", `
-processes:
-  - name: p
-    roles: {responsible: dev}
-    steps:
-      - {name: s, action: decide, controls: [implemented]}
-`, "carries no control"},
-		{"unknown", `
-processes:
-  - name: p
-    roles: {responsible: dev}
-    steps:
-      - {name: s, action: decide, controls: [nothing]}
-`, "unknown condition nothing"},
-		{"empty control", `
-  - {name: empty_ctl, control: {}}
-`, "a control covers rules"},
+		{"nothing covered", step("[implemented]"), "a control covers rules"},
+		{"unknown", step("[{condition: nothing, types: [alm@CodingRule]}]"), "unknown condition nothing"},
+		{"no condition", step("[{types: [alm@CodingRule]}]"), "condition required"},
 		{"scoped", `
-  - {name: scoped_ctl, scope: impact, expr: 'self.key != ""', control: {types: [alm@CodingRule]}}
-`, "a control is about the change"},
-		{"bad rule", `
-  - {name: bad_rules, control: {rules: [{id: X, statement: "", severity: fatal, check: {language: python, code: x}}]}}
-`, "statement required"},
-		{"bad where", `
-  - {name: bad_where, control: {types: [alm@CodingRule], where: 'self.state +'}}
-`, "where"},
+  - {name: per_impact, scope: impact, expr: 'self.key != ""'}
+` + step("[{condition: per_impact, types: [alm@CodingRule]}]"), "about the change"},
+		{"bad rule", step(`[{condition: implemented, rules: [{id: X, statement: "", severity: fatal, check: {language: python, code: x}}]}]`), "statement required"},
+		{"bad where", step(`[{condition: implemented, types: [alm@CodingRule], where: 'self.state +'}]`), "where"},
+		{"via without types", step("[{condition: implemented, via: alm@governs, rules: [{id: X, statement: x}]}]"), "name their types"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if !strings.HasPrefix(strings.TrimSpace(tc.src), "processes") {
-				// a condition: insert it among the conditions
-				m, err := Parse([]byte(strings.Replace(controlBase, "actions:\n", strings.TrimPrefix(tc.src, "\n")+"actions:\n", 1)))
+			src := tc.src
+			if cond, procs, ok := strings.Cut(src, "\nprocesses:"); ok && strings.TrimSpace(cond) != "" {
+				// a condition of its own: insert it among the conditions
+				src = "\nprocesses:" + procs
+				base := strings.Replace(controlBase, "actions:\n", strings.TrimPrefix(cond, "\n")+"\nactions:\n", 1)
+				m, err := Parse([]byte(base + src))
 				if err != nil {
 					t.Fatal(err)
 				}
 				m.WithBuiltins(builtins.Known{})
-				_, err = m.Compile()
-				if err == nil || !strings.Contains(err.Error(), tc.want) {
+				if _, err = m.Compile(); err == nil || !strings.Contains(err.Error(), tc.want) {
 					t.Fatalf("want %q, got %v", tc.want, err)
 				}
 				return
 			}
-			_, err := compileControl(t, tc.src)
+			_, err := compileControl(t, src)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("want %q, got %v", tc.want, err)
 			}
 		})
+	}
+}
+
+// A condition is never marked a control: it is one by its use (ADR 0162). The same condition is the output of the
+// activity collecting the rules and the control of another; a condition carries no control of its own.
+func TestAConditionIsAControlByItsUse(t *testing.T) {
+	if _, err := Parse([]byte(strings.Replace(controlBase, "    expr: 'artifacts.exists(x, x.target == \"architecture\")'\n",
+		"    expr: 'artifacts.exists(x, x.target == \"architecture\")'\n    control: {types: [alm@CodingRule]}\n", 1))); err == nil {
+		t.Fatal("a condition declares no control")
+	}
+	c, err := compileControl(t, `
+processes:
+  - name: delivery
+    roles: {responsible: dev}
+    steps:
+      - {name: design, action: decide}
+      - name: build
+        action: implement
+        controls: [{condition: architecture_decided, types: [alm@CodingRule]}]
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.ControlsOf("decide", "delivery/design")) != 0 || len(c.ControlsOf("implement", "delivery/build")) != 2 {
+		t.Fatalf("the design produces the condition, the build is controlled by it: %v", c.ControlsOf("implement", "delivery/build"))
 	}
 }

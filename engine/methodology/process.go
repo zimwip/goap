@@ -108,9 +108,10 @@ type Step struct {
 	// Review declares the step a review of a subject of the change (ADR 0130); an automatic one starts by itself on
 	// the events of its subject.
 	Review *Review `yaml:"review,omitempty" json:"review,omitempty"`
-	// Controls are the control conditions governing what the step and its sub-steps produce (ADR 0162): the step
-	// waits for each to hold (its rules collected), its executions are given their rules and measured against them.
-	Controls []string `yaml:"controls,omitempty" json:"controls,omitempty"`
+	// Controls govern what the step and its sub-steps produce (ADR 0162): conditions used as controls, each with the
+	// rules it covers; the step waits for each condition (its rules collected), its executions are given the rules and
+	// measured against them.
+	Controls []Control `yaml:"controls,omitempty" json:"controls,omitempty"`
 	// Gate declares the step a gate of its process (ADR 0132): a checklist, a go decision, a move of the lifecycle of
 	// the change. Its method, when it names one, is how the decision is reached.
 	Gate *Gate `yaml:"gate,omitempty" json:"gate,omitempty"`

@@ -27,7 +27,7 @@ type ControlSet struct {
 
 // ControlState is a control of an execution.
 type ControlState struct {
-	// Condition is the control condition; Description what it says.
+	// Condition is the condition the control waits for (the rules collected); Description what it says.
 	Condition   string `json:"condition"`
 	Description string `json:"description,omitempty"`
 	// State: established (the rules were collected; Rules may be empty) or pending (not yet: no rule is known).

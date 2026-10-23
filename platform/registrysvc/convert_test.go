@@ -89,16 +89,17 @@ func TestRunRolesRoundTripThroughPB(t *testing.T) {
 	}
 }
 
-// The controls of a methodology survive the PB round trip (ADR 0162): a control condition, the controls of a step and
-// of an action.
+// The controls of a methodology survive the PB round trip (ADR 0162): the use of a condition as a control by an
+// action, with what it covers, and by a step.
 func TestControlsRoundTripThroughPB(t *testing.T) {
 	in := methodology.Methodology{Name: "m", Version: "1",
-		Conditions: []methodology.Condition{{Name: "architecture_decided", Expr: "true", Control: &methodology.Control{
+		Conditions: []methodology.Condition{{Name: "architecture_decided", Expr: "true"}},
+		Actions: []methodology.Action{{Name: "implement", Kind: "llm", Controls: []methodology.Control{{Condition: "architecture_decided",
 			Types: []string{"alm@ArchitectureDecision"}, Via: "alm@governs", Where: `self.state == "accepted"`,
 			Rules: []methodology.ControlRule{{ID: "TESTS", Statement: "Tests pass", Severity: "objective", Fix: "run them",
-				Check: &methodology.ControlCheck{Language: "shell", Code: "go test ./..."}}, {ID: "NAMES", Statement: "Names say the business"}}}}},
-		Actions:   []methodology.Action{{Name: "implement", Kind: "llm", Controls: []string{"architecture_decided"}}},
-		Processes: []methodology.Process{{Name: "p", Steps: []methodology.Step{{Name: "build", Action: "implement", Controls: []string{"architecture_decided"}}}}},
+				Check: &methodology.ControlCheck{Language: "shell", Code: "go test ./..."}}, {ID: "NAMES", Statement: "Names say the business"}}}}}},
+		Processes: []methodology.Process{{Name: "p", Steps: []methodology.Step{{Name: "build", Action: "implement",
+			Controls: []methodology.Control{{Condition: "architecture_decided", Types: []string{"alm@CodingRule"}}}}}}},
 	}
 	out := FromPB(ToPB(Record{Methodology: in}))
 	if !reflect.DeepEqual(out.Conditions, in.Conditions) || !reflect.DeepEqual(out.Actions[0].Controls, in.Actions[0].Controls) || !reflect.DeepEqual(out.Processes, in.Processes) {

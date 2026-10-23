@@ -263,13 +263,13 @@ export interface Condition {
   none?: string;
   /** Value of an `all` aggregate over no subject (default false). */
   empty?: boolean;
-  /** The condition is a control (ADR 0162): it holds once the rules were collected, and says which govern. */
-  control?: Control;
 }
 
-/** What a control condition covers (ADR 0162): rules of the domain, linked to the subject or kept by a filter, and
- *  general rules of the methodology. */
+/** A condition used as a control of an activity, and what it covers (ADR 0162): rules of the domain, linked to the
+ *  subject or kept by a filter, and general rules of the methodology. A condition is a control by this use only. */
 export interface Control {
+  /** the condition the activity waits for: it holds once the rules were collected */
+  condition?: string;
   /** node types of the domain the rules are (alm@ArchitectureDecision) */
   types?: string[];
   /** link type from a rule to the subject of the execution (alm@governs); empty: no link needed */
@@ -374,8 +374,8 @@ export interface Action {
   on?: Subscription[];
   /** the events of the methodology it raises when it reaches its effects (ADR 0110) */
   emits?: string[];
-  /** the control conditions governing what it produces (ADR 0162) */
-  controls?: string[];
+  /** the controls governing what it produces (ADR 0162) */
+  controls?: Control[];
   /** runs once per pending subject of this scope (ADR 0109), within `where` */
   scope?: string;
   where?: string;
@@ -556,8 +556,8 @@ export interface ProcessStep {
   review?: StepReview;
   /** the step is a gate of the lifecycle of the change (ADR 0132) */
   gate?: StepGate;
-  /** the control conditions governing what the step and its sub-steps produce (ADR 0162) */
-  controls?: string[];
+  /** the controls governing what the step and its sub-steps produce (ADR 0162) */
+  controls?: Control[];
 }
 
 /** A gate of a process (ADR 0132): the transition its go takes, its checklist split among roles, its decision. */
