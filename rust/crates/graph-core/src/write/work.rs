@@ -545,7 +545,7 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// Declares an impact (Go's `declareTx` for one): checked, proposed when `propose` (an existing node), else only
     /// returned (a creation, whose created event carries it).
-    async fn declare(&mut self, id: &ChangeId, mut cn: ChangeImpact, propose: bool) -> Result<ChangeImpact> {
+    pub(super) async fn declare(&mut self, id: &ChangeId, mut cn: ChangeImpact, propose: bool) -> Result<ChangeImpact> {
         let mut c = self.change_open(id).await?;
         cn.id = self.env.new_id();
         if cn.review.is_empty() {

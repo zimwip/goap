@@ -20,6 +20,7 @@ use graph_core::{
     write::{
         change::NewChange,
         commit::NOTHING_TO_COMMIT,
+        edits::{Commit, LinkEdit, NodeEdit},
         review::{ReviewBatch, Verdict},
         tx::{Env, Tx},
         work::{NodeCheckout, NodeCreate},
@@ -767,6 +768,95 @@ impl pb::GraphService for Graph {
             let b = tx.commit_change(&id, &m.baseline_name).await?;
             Ok(pb::CommitChangeResponse {
                 baseline: Some(convert::baseline(&b, None)),
+            })
+        })
+        .await
+    }
+
+    async fn commit_edits(&self, _ctx: &Ctx, req: Request<pb::CommitEditsRequest>) -> Answer<pb::CommitEditsResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let by = caller.subject.clone();
+        let token_project = caller.project.clone();
+        if !m.events.is_empty() {
+            return Err(connect_error(GraphError::unimplemented(
+                "a commit carrying the events of a service (ADR 0136): not served here yet",
+            )));
+        }
+        if m.owner_org == "@me" || m.owner_org.starts_with(change::USER_PREFIX) || m.owner_org.contains("/USR:") {
+            return Err(connect_error(GraphError::unimplemented(
+                "a personal change (ADR 0037): not served here yet",
+            )));
+        }
+        if is_platform_namespace(&m.namespace) {
+            return Err(connect_error(GraphError::unimplemented(
+                "a change of the platform's namespaces: not served here yet",
+            )));
+        }
+        let edits: Vec<NodeEdit> = m
+            .edits
+            .iter()
+            .map(|e| NodeEdit {
+                key: e.key.clone(),
+                typ: e.r#type.clone(),
+                pre: e.pre.as_ref().map(|p| convert::ref_from(Some(p))),
+                props: e.props.as_ref().map(convert::map).filter(|p| !p.is_empty()),
+                rationale: e.rationale.clone(),
+                links: e
+                    .links
+                    .iter()
+                    .map(|l| LinkEdit {
+                        typ: l.r#type.clone(),
+                        to: l.to.as_ref().map(|t| convert::ref_from(Some(t))),
+                        to_key: l.to_key.clone(),
+                        props: l.props.as_ref().map(convert::map).filter(|p| !p.is_empty()),
+                    })
+                    .collect(),
+                remove_links: e.remove_links.iter().map(|l| l.as_str().into()).collect(),
+                owner: e.owner.clone(),
+                state: e.state.clone(),
+            })
+            .collect();
+        self.write(caller, async |tx| {
+            // the access nodes are gated by the service (`gateAccess`)
+            for e in &edits {
+                let mut typ = e.typ.clone();
+                if let Some(pre) = &e.pre
+                    && let Ok(n) = read::stored_node(tx.store, pre).await
+                {
+                    typ = n.typ;
+                }
+                if tx.catalog().admin_only(&typ) {
+                    return Err(GraphError::unimplemented(
+                        "a commit of an access node (ADR 0068): not served here yet",
+                    ));
+                }
+            }
+            let project = if !m.project_id.is_empty() {
+                m.project_id.clone()
+            } else if !token_project.is_empty() {
+                token_project.clone()
+            } else {
+                tx.structure_root(STRUCTURE_PROJECT)?
+            };
+            let out = tx
+                .commit_edits(Commit {
+                    namespace: m.namespace.clone(),
+                    title: m.title.clone(),
+                    intent: m.intent.clone(),
+                    methodology: m.methodology.clone(),
+                    data: m.data.as_ref().map(convert::map).filter(|d| !d.is_empty()),
+                    baseline: m.baseline_id.as_str().into(),
+                    by,
+                    baseline_name: m.baseline_name.clone(),
+                    edits,
+                    owner_org: m.owner_org.clone(),
+                    project_id: project,
+                })
+                .await?;
+            Ok(pb::CommitEditsResponse {
+                change_id: out.change.0.clone(),
+                baseline: Some(convert::baseline(&out.baseline, None)),
             })
         })
         .await

@@ -101,6 +101,25 @@ pub fn link(cat: &Catalog, typ: &str, from: &str, to: &str) -> Result<()> {
     cat.check_link(typ, from, to).map_err(GraphError::invalid)
 }
 
+/// The links a node of the type must carry (Go's `requirementsOf`): the link type, how many, and how a refusal
+/// names them.
+pub fn requirements(cat: &Catalog, key: &str, typ: &str) -> Vec<(String, i64, String)> {
+    let mut reqs = Vec::new();
+    for st in cat.structures() {
+        if typ == st.typ && key != st.root {
+            reqs.push((st.parent.clone(), 1, format!("a parent {} ({})", st.typ, st.parent)));
+        }
+    }
+    for r in cat.requires(typ) {
+        reqs.push((
+            r.link.clone(),
+            r.exactly(),
+            format!("exactly {} {}", r.exactly(), r.link),
+        ));
+    }
+    reqs
+}
+
 /// What a version (or the draft it is written from) must satisfy (Go's `checkVersion`): its properties, the links
 /// its type requires, the attributes of its links. A domain running scripts plugs validators the Go service runs.
 pub fn version(
@@ -117,20 +136,7 @@ pub fn version(
         ));
     }
     attributes(cat, key, typ, props)?;
-    let mut reqs: Vec<(String, i64, String)> = Vec::new();
-    for st in cat.structures() {
-        if typ == st.typ && key != st.root {
-            reqs.push((st.parent.clone(), 1, format!("a parent {} ({})", st.typ, st.parent)));
-        }
-    }
-    for r in cat.requires(typ) {
-        reqs.push((
-            r.link.clone(),
-            r.exactly(),
-            format!("exactly {} {}", r.exactly(), r.link),
-        ));
-    }
-    for (link, want, of) in reqs {
+    for (link, want, of) in requirements(cat, key, typ) {
         let got = links.iter().filter(|(t, _)| *t == link).count() as i64;
         if got != want {
             return Err(GraphError::invalid(format!("{key} needs {of}, got {got}")));
