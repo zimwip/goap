@@ -158,5 +158,8 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `PublishDomain` (of a draft with nothing the Go service alone checks), `CreateDomainVersion` (the stored JSON under
   the new number, Go's text kept on SQLite) and `DeleteDomain` (a draft removed, a published version archived) write
   as the Go service does, with the event of each in `domain_outbox`. A scenario of 26 calls (each refusal included):
-  every one `same`, served by Rust, the tables and the outbox of the registry the same.
+  every one `same`, served by Rust, the tables and the outbox of the registry the same. `SaveDomain` and
+  `ValidateDomain` read the edited domain from the protocol as `DomainFromPB` does (`domainpb::imported`); a draft
+  with issues stays Go's, which stores it and words them. Reading the definitions Go writes, a nil slice is a `null`
+  list, read as empty (`def.rs` `nullable`): without it, a stored domain with no link types broke `ListDomains`.
 - Not done yet: the rest of phase 4.

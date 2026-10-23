@@ -3,7 +3,7 @@
 //! `registry.v1.Domain`, then decoded. What the protocol has no field for (a structure's bootstrap, the bound
 //! algorithms of a transition) is left out, as the Go converter leaves it out.
 use goap_proto::registry::v1 as pb;
-use graph_catalog::{catalog, def};
+use graph_catalog::{catalog, def, imported::Imported};
 use serde_json::{Map, Value, json};
 
 type Obj = Map<String, Value>;
@@ -353,4 +353,128 @@ pub fn lifecycle_info(l: &def::Lifecycle) -> pb::Lifecycle {
             })
             .collect(),
     }
+}
+
+/// An edited domain as the registry stores it (`domainpb.DomainFromPB`, status and times ignored), when it is one read
+/// here ([`Imported::checked`]): none with a lifecycle, an algorithm, a validator, a document, a structure or a form.
+pub fn imported(p: &pb::Domain) -> Option<Imported> {
+    use graph_catalog::imported as im;
+    let attributes = |as_: &[pb::Attribute]| -> Vec<im::Attribute> {
+        as_.iter()
+            .map(|a| im::Attribute {
+                name: a.name.clone(),
+                label: a.label.clone(),
+                description: a.description.clone(),
+                typ: a.r#type.clone(),
+                widget: a.widget.clone(),
+                diff: a.diff.clone(),
+                enumeration: a.r#enum.clone(),
+                default: a.default_value.clone(),
+                section: a.section.clone(),
+                order: a.order.into(),
+                tooltip: a.tooltip.clone(),
+                as_name: a.as_name,
+                validators: a.validators.clone(),
+            })
+            .collect()
+    };
+    if !p.lifecycles.is_empty() || !p.algorithms.is_empty() || !p.algorithm_instances.is_empty() {
+        return None;
+    }
+    let mut node_types = Vec::new();
+    for n in &p.node_types {
+        if !n.lifecycle.is_empty() || n.document.is_some() || n.structure.is_some() || n.form.is_some() {
+            return None;
+        }
+        node_types.push(im::NodeType {
+            name: n.name.clone(),
+            description: n.description.clone(),
+            attributes: attributes(&n.attributes),
+            extends: n.extends.clone(),
+            change_controlled: n.change_controlled,
+            validators: n.validators.clone(),
+            search: n
+                .search
+                .iter()
+                .map(|s| im::SearchProperty {
+                    property: s.property.clone(),
+                    text: s.text,
+                    facet: s.facet,
+                })
+                .collect(),
+            editor: n.editor.clone(),
+            icon: n.icon.clone(),
+            color: n.color.clone(),
+            requires: n
+                .requires
+                .iter()
+                .map(|r| im::RequiredLink {
+                    link: r.link.clone(),
+                    count: r.count.into(),
+                })
+                .collect(),
+            admin_only: n.admin_only,
+            additional_properties: n.additional_properties,
+            ..im::NodeType::default()
+        });
+    }
+    let link_types: Vec<im::LinkType> = p
+        .link_types
+        .iter()
+        .map(|l| im::LinkType {
+            name: l.name.clone(),
+            description: l.description.clone(),
+            from: l.from.clone(),
+            to: l.to.clone(),
+            attributes: attributes(&l.attributes),
+            validators: l.validators.clone(),
+            compose: l.compose,
+            label: l.label.clone(),
+            inverse_label: l.inverse_label.clone(),
+        })
+        .collect();
+    let d = Imported {
+        name: p.name.clone(),
+        version: p.version.clone(),
+        description: p.description.clone(),
+        node_types: (!node_types.is_empty()).then_some(node_types),
+        link_types: (!link_types.is_empty()).then_some(link_types),
+        enums: p
+            .enums
+            .iter()
+            .map(|e| im::Enum {
+                name: e.name.clone(),
+                description: e.description.clone(),
+                values: e
+                    .values
+                    .iter()
+                    .map(|v| im::EnumValue {
+                        value: v.value.clone(),
+                        label: v.label.clone(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+        item_types: p
+            .item_types
+            .iter()
+            .map(|t| im::ItemType {
+                name: t.name.clone(),
+                description: t.description.clone(),
+                attributes: attributes(&t.attributes),
+            })
+            .collect(),
+        importers: p
+            .importers
+            .iter()
+            .map(|i| im::Importer {
+                name: i.name.clone(),
+                label: i.label.clone(),
+                description: i.description.clone(),
+                params: attributes(&i.params),
+            })
+            .collect(),
+        ..Imported::default()
+    };
+    d.checked()
 }

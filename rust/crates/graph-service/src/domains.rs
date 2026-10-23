@@ -208,6 +208,78 @@ impl pb::DomainService for Domains {
         }))
     }
 
+    /// Checks an edited domain (`Handler.ValidateDomain`): one with no issue and nothing the Go service alone checks.
+    async fn validate_domain(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ValidateDomainRequest>,
+    ) -> Answer<pb::ValidateDomainResponse> {
+        let p = req.into_inner().domain.unwrap_or_default();
+        if domainpb::imported(&p).is_none() {
+            return Err(unserved("a domain with issues, or checked by scripts, guards or forms"));
+        }
+        Ok(Response::new(pb::ValidateDomainResponse { issues: Vec::new() }))
+    }
+
+    /// Creates or replaces a draft (`Service.SaveDomain`): a platform service's, with no issue and nothing the Go
+    /// service alone checks (a draft with issues is stored by Go, which words them).
+    async fn save_domain(&self, _ctx: &Ctx, req: Request<pb::SaveDomainRequest>) -> Answer<pb::SaveDomainResponse> {
+        let (subject, command) = caller(&req);
+        let p = req.into_inner().domain.unwrap_or_default();
+        if p.name.is_empty() || p.version.is_empty() {
+            return Err(ConnectError::invalid_argument(
+                "name and version are required: invalid domain",
+            ));
+        }
+        if is_builtin(&p.name) {
+            return Err(builtin_error(&p.name));
+        }
+        if !subject.starts_with("system:") {
+            return Err(unserved("a person's draft of a domain goes through the authorizer"));
+        }
+        let Some(d) = domainpb::imported(&p) else {
+            return Err(unserved("a domain with issues, or checked by scripts, guards or forms"));
+        };
+        let domain = d.domain().map_err(|e| connect_error(GraphError::internal(e)))?;
+        let tx = self.writer().await?;
+        if !resolves(&tx, domain).await? {
+            return Err(unserved(
+                "a domain whose types do not resolve with the domains in force",
+            ));
+        }
+        let stored = tx.domain_status(&d.name, &d.version).await.map_err(connect_error)?;
+        if stored.as_deref().is_some_and(|s| s != STATUS_DRAFT) {
+            return Err(not_a_draft(&format!("{}@{}", d.name, d.version)));
+        }
+        let now = chrono::Utc::now();
+        let at = gojson::time_text(&now);
+        let events = self.events(&subject, &command, "saved", &d.name, &d.version, STATUS_DRAFT, now);
+        let definition = gojson::to_string(&d);
+        let row = NewDomain {
+            name: &d.name,
+            version: &d.version,
+            status: STATUS_DRAFT,
+            definition: &definition,
+            created_at: &at,
+            updated_at: &at,
+            published_at: "",
+            updated_by: &subject,
+        };
+        if stored.is_some() {
+            tx.update_domain(&row, &events).await
+        } else {
+            tx.insert_domain(&row, &events).await
+        }
+        .map_err(connect_error)?;
+        let saved = tx.stored_domain(&d.name, &d.version).await.map_err(connect_error)?;
+        tx.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
+        let saved = saved.ok_or_else(|| not_found(&d.name, &d.version))?;
+        Ok(Response::new(pb::SaveDomainResponse {
+            domain: Some(stored_pb(saved)?),
+            issues: Vec::new(),
+        }))
+    }
+
     /// Freezes a draft (`Service.PublishDomain`): a version a platform service publishes, valid and with nothing the
     /// Go service alone checks.
     async fn publish_domain(

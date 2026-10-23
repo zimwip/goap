@@ -132,6 +132,33 @@ impl Session {
         Ok(true)
     }
 
+    /// Replaces a draft (`SQLStore.SaveDomain` of a version stored): its status, definition, times and author.
+    pub async fn update_domain(&self, r: &NewDomain<'_>, events: &[OutboxMessage]) -> Result<(), GraphError> {
+        let ph = |i| self.sql.ph(i);
+        let q = format!(
+            "UPDATE domain_version SET status = {}, definition = {}, updated_at = {}, published_at = {}, updated_by = {} \
+             WHERE name = {} AND version = {}",
+            ph(1),
+            ph(2),
+            ph(3),
+            ph(4),
+            ph(5),
+            ph(6),
+            ph(7)
+        );
+        let args: Vec<Arg> = vec![
+            r.status.into(),
+            r.definition.into(),
+            r.updated_at.into(),
+            r.published_at.into(),
+            r.updated_by.into(),
+            r.name.into(),
+            r.version.into(),
+        ];
+        self.run((q, args), "domain").await?;
+        self.append_to_outbox("domain_outbox", events).await
+    }
+
     /// Removes a draft (`SQLStore.DeleteDomain`).
     pub async fn delete_domain_draft(
         &self,

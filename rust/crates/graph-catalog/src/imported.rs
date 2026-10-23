@@ -215,6 +215,11 @@ impl Imported {
         (d.served() && d.valid()).then_some(d)
     }
 
+    /// The definition when it is one read here (as [`Imported::parse`] decides): served, and with no issue.
+    pub fn checked(self) -> Option<Imported> {
+        (self.served() && self.valid()).then_some(self)
+    }
+
     /// The domain as the catalogue reads it.
     pub fn domain(&self) -> Result<Domain, String> {
         Domain::from_json(&serde_json::to_string(self).map_err(|e| e.to_string())?)

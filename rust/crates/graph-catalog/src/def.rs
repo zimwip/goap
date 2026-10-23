@@ -14,12 +14,19 @@ pub struct Domain {
     pub description: String,
     #[serde(deserialize_with = "short_list")]
     pub node_types: Vec<NodeType>,
+    #[serde(deserialize_with = "nullable")]
     pub link_types: Vec<LinkType>,
+    #[serde(deserialize_with = "nullable")]
     pub enums: Vec<Enum>,
+    #[serde(deserialize_with = "nullable")]
     pub lifecycles: Vec<Lifecycle>,
+    #[serde(deserialize_with = "nullable")]
     pub algorithms: Vec<Value>,
+    #[serde(deserialize_with = "nullable")]
     pub algorithm_instances: Vec<Value>,
+    #[serde(deserialize_with = "nullable")]
     pub item_types: Vec<ItemType>,
+    #[serde(deserialize_with = "nullable")]
     pub importers: Vec<Value>,
 }
 
@@ -82,12 +89,15 @@ pub struct NodeType {
     pub lifecycle: String,
     pub document: Option<DocumentSpec>,
     pub change_controlled: Option<bool>,
+    #[serde(deserialize_with = "nullable")]
     pub validators: Vec<String>,
+    #[serde(deserialize_with = "nullable")]
     pub search: Vec<SearchProperty>,
     pub editor: String,
     pub icon: String,
     pub color: String,
     pub structure: Option<StructureTag>,
+    #[serde(deserialize_with = "nullable")]
     pub requires: Vec<RequiredLink>,
     pub admin_only: bool,
     pub additional_properties: bool,
@@ -97,6 +107,7 @@ pub struct NodeType {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct DocumentSpec {
+    #[serde(deserialize_with = "nullable")]
     pub contains: Vec<String>,
 }
 
@@ -153,6 +164,7 @@ pub struct Attribute {
     pub order: i64,
     pub tooltip: String,
     pub as_name: bool,
+    #[serde(deserialize_with = "nullable")]
     pub validators: Vec<String>,
 }
 
@@ -165,6 +177,7 @@ pub struct LinkType {
     pub to: String,
     #[serde(deserialize_with = "short_list")]
     pub attributes: Vec<Attribute>,
+    #[serde(deserialize_with = "nullable")]
     pub validators: Vec<String>,
     pub compose: bool,
     pub label: String,
@@ -208,7 +221,9 @@ pub struct Lifecycle {
     pub name: String,
     pub description: String,
     pub initial: String,
+    #[serde(deserialize_with = "nullable")]
     pub states: Vec<LifecycleState>,
+    #[serde(deserialize_with = "nullable")]
     pub transitions: Vec<Transition>,
 }
 
@@ -233,9 +248,13 @@ pub struct Transition {
     pub guard: String,
     pub requires: Option<TransitionRequires>,
     pub children: Option<TransitionChildren>,
+    #[serde(deserialize_with = "nullable")]
     pub vetos: Vec<Value>,
+    #[serde(deserialize_with = "nullable")]
     pub objectives: Vec<Value>,
+    #[serde(deserialize_with = "nullable")]
     pub guards: Vec<String>,
+    #[serde(deserialize_with = "nullable")]
     pub actions: Vec<String>,
 }
 
@@ -243,7 +262,9 @@ pub struct Transition {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct TransitionRequires {
+    #[serde(deserialize_with = "nullable")]
     pub attributes: Vec<String>,
+    #[serde(deserialize_with = "nullable")]
     pub outgoing_links: Vec<String>,
 }
 
@@ -251,6 +272,7 @@ pub struct TransitionRequires {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct TransitionChildren {
+    #[serde(deserialize_with = "nullable")]
     pub states: Vec<String>,
 }
 
@@ -322,6 +344,15 @@ where
 }
 
 /// A string field read from any scalar, as yaml.v3 decodes a number or a boolean into a string.
+/// A list Go may write as null (a nil slice): empty.
+fn nullable<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(d)?.unwrap_or_default())
+}
+
 fn text<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
     Ok(match Value::deserialize(d)? {
         Value::Null => String::new(),
@@ -339,6 +370,15 @@ fn scalar(v: Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_the_nil_slices_go_writes() {
+        let d = Domain::from_json(
+            r#"{"name":"d","version":"1","nodeTypes":[{"name":"A","validators":null}],"linkTypes":null,"enums":null}"#,
+        )
+        .unwrap();
+        assert_eq!((d.node_types.len(), d.link_types.len()), (1, 0));
+    }
 
     #[test]
     fn reads_the_short_forms() {
