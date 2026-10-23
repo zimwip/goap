@@ -1,5 +1,5 @@
 name: methodology
-version: 1.16.0
+version: 1.17.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
   "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
@@ -107,6 +107,7 @@ nodeTypes:
       - {name: any, label: Any, description: "Aggregate: some subject satisfies this scoped condition, when the version does not declare it (aggregates link, as any)", type: string, section: Aggregate, order: 7}
       - {name: none, label: None, description: "Aggregate: no subject satisfies this scoped condition, when the version does not declare it (aggregates link, as none)", type: string, section: Aggregate, order: 8}
       - {name: empty, label: Empty, description: "Value of an all aggregate over no subject (default false)", type: boolean, section: Aggregate, order: 9}
+      - {name: control, label: Control, description: "The condition is a control (ADR 0162): it holds once the rules were collected, and says which govern the activities it controls: types of the domain, via (a link type from a rule to the subject), where (CEL: self the rule, subject, change), rules of its own (id, statement, severity, check, fix)", type: json, widget: textarea, section: Control, order: 10}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   - name: Goal
@@ -147,6 +148,7 @@ nodeTypes:
       - {name: input, label: Input, description: "Conditions the activity takes that the version does not declare (generated: state:, step:; a library's): a declared condition is a requires link (ADR 0120)", type: json, widget: textarea, section: Definition, order: 3}
       - {name: output, label: Output, description: "Conditions the activity produces that the version does not declare: a declared condition is a produces link (ADR 0120)", type: json, widget: textarea, section: Definition, order: 5}
       - {name: on, label: "Reacts to", description: "Events that run the activity again on a change of its methodology (ADR 0110): event, filter (CEL over event), from", type: json, widget: textarea, section: Reactions, order: 6}
+      - {name: controls, label: "Controlled by", description: "Control conditions the version does not declare: a declared one is a controlled_by link (ADR 0162); the activity waits for each, is given its rules and is measured against them", type: json, widget: textarea, section: Definition, order: 4}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   # ADR 0034: the steps and sub-steps that reach an objective, each done by an action, an agent, a nested process or a person
@@ -272,6 +274,14 @@ linkTypes:
     inverseLabel: "input of"
     attributes:
       - {name: value, label: Value, description: "The value the condition must have (default true)", type: boolean, order: 1}
+  - name: controlled_by
+    description: "A control: a condition governing what an activity produces without being consumed by it, the rules it covers given to the activity and measured on its output (ADR 0162)"
+    from: Activity
+    to: Condition
+    label: "controlled by"
+    inverseLabel: "controls"
+    attributes:
+      - {name: position, label: Position, description: "Position in the list of controls", type: number, order: 1}
   - name: produces
     description: "An output: a condition an action or an activity establishes, with its value (an action's effects, a step's or a method's done)"
     from: Activity

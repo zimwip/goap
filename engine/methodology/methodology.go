@@ -191,11 +191,18 @@ type Condition struct {
 	None string `yaml:"none,omitempty" json:"none,omitempty"`
 	// Empty is the value of an all aggregate over no subject (default false).
 	Empty bool `yaml:"empty,omitempty" json:"empty,omitempty"`
+	// Control makes the condition a control (ADR 0162): it holds once the rules it covers were collected, and an
+	// activity it controls waits for it; Control says which rules govern the activity.
+	Control *Control `yaml:"control,omitempty" json:"control,omitempty"`
 }
 
 // Definition is the condition as the condition package compiles it.
 func (c Condition) Definition() condition.Definition {
-	return condition.Definition{Name: c.Name, Description: c.Description, Expr: c.Expr, Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty}
+	expr := c.Expr
+	if expr == "" && c.Control != nil {
+		expr = "true" // a control of general rules only: nothing to collect
+	}
+	return condition.Definition{Name: c.Name, Description: c.Description, Expr: expr, Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty}
 }
 
 // Action kinds.
@@ -305,6 +312,9 @@ type Action struct {
 	// On makes the action reactive (ADR 0110): it runs again on a change of its methodology for each matching event,
 	// towards its effects, through an agent generated for it (ReactionAgent).
 	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
+	// Controls are the control conditions governing what the action produces (ADR 0162): it waits for each to hold
+	// (its rules collected), is given its rules and is measured against them.
+	Controls []string `yaml:"controls,omitempty" json:"controls,omitempty"`
 	// Emits are the events of the methodology (Methodology.Events) the action raises when it reaches its effects
 	// (ADR 0110): the engine adds a signal item of each name to the change.
 	Emits []string `yaml:"emits,omitempty" json:"emits,omitempty"`
@@ -445,6 +455,8 @@ type Compiled struct {
 	assessments *condition.AssessmentViews
 	// view is the shape of the activities as they are shown (ADR 0126 step 3), computed once at compilation
 	view *View
+	// controls are the control conditions (ADR 0162), by name
+	controls map[string]ControlInfo
 }
 
 // Definition is the methodology as written, compiled into c.

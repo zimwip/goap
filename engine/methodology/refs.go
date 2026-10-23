@@ -30,6 +30,7 @@ const (
 	LinkSpecializes  = "methodology@specializes"    // the action a specialization specializes
 	LinkMainGoal     = "methodology@main_goal"      // the main goal of a version (a goal or a process)
 	LinkMentions     = "methodology@mentions"       // a condition an expression or a nested structure of an element reads
+	LinkControlledBy = "methodology@controlled_by"  // a control: a condition governing what an activity produces (ADR 0162)
 )
 
 // Attributes of the reference links.
@@ -94,6 +95,7 @@ var refFields = []refField{
 	{kinds: []string{ElementCondition}, path: []string{"any"}, shape: refOne, link: LinkAggregates, as: "any", to: []string{ElementCondition}},
 	{kinds: []string{ElementCondition}, path: []string{"none"}, shape: refOne, link: LinkAggregates, as: "none", to: []string{ElementCondition}},
 	{kinds: []string{ElementAction}, path: []string{"specializes"}, shape: refOne, link: LinkSpecializes, to: []string{ElementAction}},
+	{kinds: append([]string{ElementAction}, stepKinds...), path: []string{"controls"}, shape: refList, link: LinkControlledBy, to: []string{ElementCondition}},
 	{kinds: []string{ElementVersion}, path: []string{"goal"}, shape: refOne, link: LinkMainGoal, to: []string{ElementGoal, ElementProcess}},
 }
 
