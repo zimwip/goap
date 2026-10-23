@@ -1,14 +1,15 @@
 //! The flows and options of a change (Go's `graph/graph/flow.go`, `option.go`, `flownodes.go`; ADR 0009 §3, 0017,
-//! 0025, 0032 §6): every move is a `flow` item of the log, the flows its replay ([`crate::flow::Flows`]). Adopting or
-//! discarding a flow also moves the impacts it declared: served here while the flows of the change declared none and
-//! no impact came from a run a flow invalidates; the rest is the Go service's.
+//! 0025, 0032 §6): every move is a `flow` item of the log, the flows its replay ([`crate::flow::Flows`]). Adopting a
+//! flow installs its drafts on the main flow, discarding it rejects the impacts it declared.
+use std::collections::HashSet;
+
 use serde::Serialize;
 use serde_json::{Map, Value};
 
 use super::{
     items::{ItemWrite, served},
     tx::Tx,
-    work::fold_any,
+    work::{fold_any, node_of},
 };
 use crate::{
     GraphError, Result,
@@ -19,8 +20,10 @@ use crate::{
         OP_DISCARD, OP_EVALUATE, OP_OPEN, OptionSpec, TYPE_FLOW, stale_closure,
     },
     gojson,
-    impact::{ImpactEvent, ImpactOp, LOG_FACT, LogEntry, REVIEW_REJECTED, Review},
-    model::ChangeId,
+    impact::{
+        self, ChangeImpact, Draft, ImpactEvent, ImpactOp, LOG_FACT, LogEntry, REVIEW_ACCEPTED, REVIEW_REJECTED, Review,
+    },
+    model::{ChangeId, NodeId},
     store::{ReadTx, WriteTx},
 };
 
@@ -365,9 +368,9 @@ impl<S: WriteTx> Tx<'_, S> {
                     "flow {flow} competes with the adopted flow {a} (it replaces the same items): relaunch or discard it"
                 )));
             }
-            self.adopt_nodes(id, &cur).await?;
+            self.adopt_nodes(id, &cur, by).await?;
         } else {
-            self.discard_nodes(id, &fx, &cur).await?;
+            self.discard_nodes(id, &fx, &cur, by).await?;
         }
         self.flow_event(
             id,
@@ -390,34 +393,80 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(())
     }
 
-    /// Installs on the main flow what an adopted flow saw of the nodes (Go's `adoptNodes`): with no impact declared on
-    /// a flow and none from a run the flow invalidates, nothing moves but the adoption itself.
-    async fn adopt_nodes(&mut self, id: &ChangeId, f: &Flow) -> Result<()> {
+    /// Installs on the main flow what an adopted flow saw of the nodes (Go's `adoptNodes`, ADR 0025 §5, 0079): a draft
+    /// the flow holds becomes the main flow's (a conflict when the main flow's moved on since the flow checked the node
+    /// out, by a run that is not stale); a main draft written in part by stale runs is reset to what the others left,
+    /// or dropped. Then the adoption, folded over every impact, then the installs (Go's `adoptChangeImpacts`).
+    async fn adopt_nodes(&mut self, id: &ChangeId, f: &Flow, by: &str) -> Result<()> {
         self.flow_view(id).await?;
         let v = &self.views[id];
-        let worked = v.events.iter().any(|e| e.op != ImpactOp::Adopted && !e.flow.is_empty())
-            || v.fold.impacts.iter().any(|c| !c.flow.is_empty() || c.superseded);
-        let stale = !f.stale_runs.is_empty()
-            && v.events
-                .iter()
-                .any(|e| !e.execution.is_empty() && f.stale_runs.contains(&e.execution));
-        if worked || stale {
-            return Err(unserved(
-                "the adoption of a flow that declared impacts (ADR 0025, 0079)",
-            ));
+        let stale: HashSet<&str> = f.stale_runs.iter().map(String::as_str).collect();
+        let is_stale = |e: &str| !e.is_empty() && stale.contains(e);
+        let mut installs = Vec::new();
+        for cn in &v.fold.impacts {
+            let fd = v.fold.draft(&cn.id, &f.id);
+            let md = v.fold.draft(&cn.id, "");
+            if let Some(fd) = fd {
+                if !accepted_on_flow(&v.fold.impacts, node_of(cn).as_ref(), &f.id) {
+                    return Err(GraphError::conflict(format!(
+                        "node {} is a draft on flow {} that the flow did not accept: accept it, or cancel the checkout, before the flow is adopted (ADR 0079)",
+                        fd.key, f.id
+                    )));
+                }
+                let mut seq = 0;
+                for e in v.events.iter().filter(|e| e.impact == cn.id) {
+                    if e.flow == f.id && e.starts_draft() && seq == 0 {
+                        seq = e.seq;
+                    } else if seq > 0
+                        && e.flow.is_empty()
+                        && e.seq > seq
+                        && changes_draft(e.op)
+                        && !is_stale(&e.execution)
+                    {
+                        return Err(GraphError::conflict(format!(
+                            "node {} was changed on the main flow since the flow forked (checked out again in the meantime)",
+                            fd.key
+                        )));
+                    }
+                }
+                installs.push(install(id, &cn.id, fd.clone(), by, &f.id));
+            } else if let Some(md) = md {
+                if cn.flow.is_empty() && !cn.superseded && is_stale(&cn.execution) {
+                    continue;
+                }
+                match impact::draft_seen_by(&v.events, &cn.id, &[], &is_stale) {
+                    None => installs.push(ImpactEvent {
+                        change: id.clone(),
+                        impact: cn.id.clone(),
+                        op: ImpactOp::Cancelled,
+                        by: by.into(),
+                        ..ImpactEvent::default()
+                    }),
+                    Some(kept) if !same_draft(&kept, md) => installs.push(install(id, &cn.id, kept, by, &f.id)),
+                    Some(_) => {}
+                }
+            }
         }
         self.emit(vec![ImpactEvent {
             change: id.clone(),
             op: ImpactOp::Adopted,
             flow: f.id.clone(),
             stale: f.stale_runs.clone(),
+            by: by.into(),
             ..ImpactEvent::default()
         }])
-        .await
+        .await?;
+        for e in installs {
+            let live = self.views[id].fold.impact(&e.impact).is_some_and(|cn| !cn.superseded);
+            if live {
+                self.emit(vec![e]).await?;
+            }
+        }
+        Ok(())
     }
 
     /// Rejects the impacts a discarded flow and its descendants declared (Go's `discardNodes`).
-    async fn discard_nodes(&mut self, id: &ChangeId, fx: &Flows, f: &Flow) -> Result<()> {
+    async fn discard_nodes(&mut self, id: &ChangeId, fx: &Flows, f: &Flow, by: &str) -> Result<()> {
         self.flow_view(id).await?;
         let mut gone = vec![f.id.clone()];
         let mut changed = true;
@@ -439,15 +488,15 @@ impl<S: WriteTx> Tx<'_, S> {
             .collect();
         let now = self.env.now();
         for (impact, flow) in rejected {
-            let by = self.env.by.clone();
             self.emit(vec![ImpactEvent {
                 change: id.clone(),
                 impact,
                 op: ImpactOp::Discarded,
                 flow: flow.clone(),
+                by: by.into(),
                 review: Some(Review {
                     status: REVIEW_REJECTED.into(),
-                    by,
+                    by: by.into(),
                     comment: "flow discarded".into(),
                     at: now,
                     flow,
@@ -523,4 +572,55 @@ impl<S: WriteTx> Tx<'_, S> {
         self.activate(&mut c).await?;
         self.flow_of(id, &flow).await
     }
+}
+
+/// The install of a draft on the main flow by an adoption.
+fn install(change: &ChangeId, impact: &str, d: Draft, by: &str, flow: &str) -> ImpactEvent {
+    let mut patch = Map::new();
+    patch.insert("adopted".into(), Value::String(flow.into()));
+    ImpactEvent {
+        change: change.clone(),
+        impact: impact.into(),
+        op: ImpactOp::Transitioned,
+        execution: d.execution.clone(),
+        by: by.into(),
+        post: Some(d.draft_ref()),
+        draft: Some(d),
+        patch: Some(patch),
+        ..ImpactEvent::default()
+    }
+}
+
+/// The events that change what a draft holds.
+fn changes_draft(op: ImpactOp) -> bool {
+    matches!(
+        op,
+        ImpactOp::Created | ImpactOp::CheckedOut | ImpactOp::Updated | ImpactOp::Transitioned | ImpactOp::Cancelled
+    )
+}
+
+/// Drafts that hold the same (Go's `sameDraft`): the flow, the run and the ids of the links are not what a draft
+/// holds.
+fn same_draft(a: &Draft, b: &Draft) -> bool {
+    let norm = |d: &Draft| {
+        let mut d = d.clone();
+        d.flow.clear();
+        d.execution.clear();
+        for l in d.links.iter_mut() {
+            l.id = Default::default();
+        }
+        gojson::to_string(&d)
+    };
+    norm(a) == norm(b)
+}
+
+/// Whether the last review of a node of the change made on a flow accepts it (Go's `acceptedOnFlow`).
+fn accepted_on_flow(impacts: &[ChangeImpact], node: Option<&NodeId>, flow: &str) -> bool {
+    let mut accepted = false;
+    for cn in impacts.iter().filter(|cn| node_of(cn).as_ref() == node) {
+        for r in cn.reviews.iter().filter(|r| r.flow == flow && !r.superseded) {
+            accepted = r.status == REVIEW_ACCEPTED;
+        }
+    }
+    accepted
 }

@@ -232,8 +232,8 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// The gate of an acceptance (Go's `checkModifies` then `checkAcceptedIn`): the impact holds a draft that
     /// modifies its node, and the draft is what a version must be.
-    async fn check_accepted(&self, ns: &str, change: &ChangeId, cn: &ChangeImpact) -> Result<()> {
-        let d = self.views[change].fold.draft(&cn.id, "").cloned();
+    async fn check_accepted(&self, ns: &str, change: &ChangeId, flow: &str, cn: &ChangeImpact) -> Result<()> {
+        let d = self.views[change].seen_draft(flow, &cn.id);
         let Some(d) = d else {
             return Err(GraphError::invalid(format!(
                 "change impact {} ({}) modifies nothing: check the node out and change it, or withdraw the impact",
@@ -259,12 +259,10 @@ impl<S: WriteTx> Tx<'_, S> {
         self.check_draft(ns, &d)
     }
 
-    /// Submits a review on the main flow of a change (Go's `ImpactNodeReviewBatch` with no item of the caller's): the
-    /// record, then the verdicts as one entry. It answers the impacts as the verdicts leave them, in their order.
+    /// Submits a review of a change (Go's `ImpactNodeReviewBatch` with no item of the caller's): the record, then the
+    /// verdicts, as one entry on the main flow, one each on a flow. It answers the impacts as the verdicts leave them,
+    /// in their order.
     pub async fn impact_node_review_batch(&mut self, id: &ChangeId, b: ReviewBatch) -> Result<Vec<ChangeImpact>> {
-        if !b.flow.is_empty() {
-            return Err(unserved("a review on an option of a change (ADR 0032)"));
-        }
         if b.verdicts.is_empty() {
             return Err(GraphError::invalid("a review batch needs at least one verdict"));
         }
@@ -296,25 +294,28 @@ impl<S: WriteTx> Tx<'_, S> {
         let item = self.env.new_id();
         let at = self.env.now();
         let data = record_data(&key, &b.flow, &by, &at, &b.verdicts);
+        self.lock_change(id).await?;
+        self.change_head(id).await?;
+        self.view(id).await?;
+        // the verdicts are made on this flow (ADR 0032 §6)
+        let flow = self.views[id].flows.resolve(&b.flow);
         let payload = gojson::to_string(&Item {
             id: &item,
             typ: TYPE_REVIEW,
             status: ITEM_PROPOSED,
-            flow: "",
+            flow: &flow,
             data: &data,
             produced_by: &by,
             execution: &b.execution,
             created_at: at,
         });
 
-        self.lock_change(id).await?;
-        self.change_head(id).await?;
         self.append_log(&LogEntry {
             seq: 0,
             id: item.clone(),
             change: id.clone(),
             typ: format!("{LOG_FACT}.{TYPE_REVIEW}"),
-            flow: String::new(),
+            flow: flow.clone(),
             process: String::new(),
             execution: b.execution.clone(),
             subject: String::new(),
@@ -324,7 +325,10 @@ impl<S: WriteTx> Tx<'_, S> {
             payload,
         })
         .await?;
-        let w = self.work_on(id, "").await?;
+        if !flow.is_empty() {
+            return self.review_on_flow(id, &b, &flow, &key, &item).await;
+        }
+        let w = self.work_on(id, crate::flow::MAIN_FLOW).await?;
         let mut out = Vec::with_capacity(b.verdicts.len());
         let mut events = Vec::with_capacity(b.verdicts.len());
         for (n, v) in b.verdicts.iter().enumerate() {
@@ -354,7 +358,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 ))));
             }
             if v.accept {
-                self.check_accepted(&w.ns, id, vcn).await.map_err(named)?;
+                self.check_accepted(&w.ns, id, "", vcn).await.map_err(named)?;
             }
             let r = Review {
                 status: v.status().into(),
@@ -381,5 +385,103 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         self.emit_staged(events).await?;
         Ok(out)
+    }
+
+    /// The verdicts of a review on a flow (Go's `reviewTx` with no scope): each its own entry, what the flow sees read
+    /// again from the log after each one.
+    async fn review_on_flow(
+        &mut self,
+        id: &ChangeId,
+        b: &ReviewBatch,
+        flow: &str,
+        key: &str,
+        item: &str,
+    ) -> Result<Vec<ChangeImpact>> {
+        let many = b.verdicts.len() > 1;
+        let mut out = Vec::with_capacity(b.verdicts.len());
+        for (n, v) in b.verdicts.iter().enumerate() {
+            let named = |this: &Self, e: GraphError| {
+                if !many {
+                    return e;
+                }
+                let what = this.views[id]
+                    .fold
+                    .impact(&v.impact)
+                    .map_or(v.impact.clone(), |cn| cn.key.clone());
+                e.with_prefix(&format!("verdict {} ({what}): ", n + 1))
+            };
+            let r = self.verdict_on_flow(id, b, flow, v, key, item).await;
+            match r {
+                Ok(cn) => out.push(cn),
+                Err(e) => return Err(named(self, e)),
+            }
+        }
+        Ok(out)
+    }
+
+    async fn verdict_on_flow(
+        &mut self,
+        id: &ChangeId,
+        b: &ReviewBatch,
+        flow: &str,
+        v: &Verdict,
+        key: &str,
+        item: &str,
+    ) -> Result<ChangeImpact> {
+        let c = self.change_open(id).await?;
+        let view = &self.views[id];
+        if view.flows.get(flow).is_none() {
+            return Err(GraphError::not_found(format!("flow {flow}")));
+        }
+        if view.flows.effective(flow) != crate::flow::FLOW_OPEN {
+            return Err(GraphError::conflict(format!("flow {flow} is not open")));
+        }
+        let Some(mut cn) = view.fold.impact(&v.impact).cloned() else {
+            return Err(GraphError::not_found(format!(
+                "change impact {} of change {id}",
+                v.impact
+            )));
+        };
+        let Some(vcn) = view.seen(flow).into_iter().find(|c| c.id == v.impact) else {
+            return Err(GraphError::not_found(format!(
+                "change impact {} is not on the flow {flow:?} of change {id}",
+                v.impact
+            )));
+        };
+        if vcn.review != REVIEW_PROPOSED {
+            return Err(GraphError::conflict(format!(
+                "change impact {} is already {}",
+                v.impact, vcn.review
+            )));
+        }
+        if v.accept {
+            self.check_accepted(crate::model::namespace_of(&c.namespace), id, flow, &vcn)
+                .await?;
+        }
+        let by = self.env.by.clone();
+        let r = Review {
+            status: v.status().into(),
+            by: by.clone(),
+            comment: v.comment.trim().into(),
+            at: self.env.now(),
+            flow: flow.to_string(),
+            execution: b.execution.clone(),
+            review_id: key.to_string(),
+            ..Review::default()
+        };
+        cn.reviews.push(r.clone());
+        self.emit(vec![ImpactEvent {
+            change: id.clone(),
+            impact: cn.id.clone(),
+            op: ImpactOp::Reviewed,
+            flow: flow.to_string(),
+            execution: b.execution.clone(),
+            by,
+            review: Some(r),
+            causation: item.to_string(),
+            ..ImpactEvent::default()
+        }])
+        .await?;
+        Ok(cn)
     }
 }

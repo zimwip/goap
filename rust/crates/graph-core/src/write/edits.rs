@@ -430,7 +430,7 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// Takes an impact out of the change with the impacts via it (Go's `WithdrawImpact` on the main flow).
     async fn withdraw_impact(&mut self, id: &ChangeId, impact: &str) -> Result<()> {
-        let mut w = self.work_on(id, "").await?;
+        let mut w = self.work_on(id, crate::flow::MAIN_FLOW).await?;
         self.select_impact(&mut w, impact)?;
         if !w.cn.flow.is_empty() {
             return Err(GraphError::conflict(format!(

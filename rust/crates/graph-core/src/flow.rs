@@ -294,6 +294,28 @@ impl Flows {
         st
     }
 
+    /// The flows from one up to the main flow (excluded), innermost first (Go's `flowChain`).
+    pub fn chain(&self, flow: &str) -> Vec<&Flow> {
+        let mut out = Vec::new();
+        let mut flow = flow;
+        for _ in 0..64 {
+            if flow.is_empty() {
+                break;
+            }
+            let Some(f) = self.get(flow) else { break };
+            out.push(f);
+            flow = &f.parent;
+        }
+        out
+    }
+
+    /// The ids of the chain of a flow and the runs it invalidates (Go's `flowIDs` and `staleOf`).
+    pub fn chain_of(&self, flow: &str) -> (Vec<String>, HashSet<String>) {
+        let chain = self.chain(flow);
+        let stale = chain.iter().flat_map(|f| f.stale_runs.iter().cloned()).collect();
+        (chain.into_iter().map(|f| f.id.clone()).collect(), stale)
+    }
+
     /// The flow a call works on: "main" names the main flow, an empty one the active option (else the main flow).
     pub fn resolve(&self, flow: &str) -> String {
         match flow {

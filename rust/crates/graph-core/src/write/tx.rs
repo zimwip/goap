@@ -195,6 +195,13 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             self.seq.insert(e.change.clone(), seq);
             self.positions.insert(e.change.clone(), seq);
         }
+        if e.typ.starts_with(&format!("{LOG_FACT}.")) && self.views.contains_key(&e.change) {
+            // the flows of a change are a replay of its items: the view follows them
+            let fx = super::flow::flows_of(self.store, &e.change).await?;
+            if let Some(v) = self.views.get_mut(&e.change) {
+                v.flows = fx;
+            }
+        }
         Ok(seq)
     }
 

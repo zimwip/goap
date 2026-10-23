@@ -245,7 +245,15 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   lists, the options of `GetBlackboard` and the items its main flow sees, a point decided on an open option selecting
   it, an open flow holding the merge): `graph-core` `flow` replays the `flow` items (statuses, the active option, the
   competition of adopted flows, the view of a flow, the stale closure of its seeds); adopting or discarding a flow moves
-  the impacts it declared, served while its flows declared none and no impact came from a run a flow invalidates, and a
-  change working on an active option or a flow branch stays Go's: 677 calls, none divergent, the tables and the 466
-  events of the outbox the same.
+  the impacts it declared (at first served only while its flows declared none, then whole, below): 677 calls, none divergent, the tables and the 466
+  events of the outbox the same. The work on an option or a flow branch follows: the writes on a flow (create, check
+  out, update, link, transition, cancel, withdraw and review on the flow named, else the active option; `work_on`
+  resolves it, a flow's draft forked from the one its parent flow or the main flow sees, Go's errors for a flow unknown
+  or not open, a draft of another flow or a node already checked out), the adoption installing the drafts it accepted
+  on the main flow (a conflict for a draft it did not accept or a node the main flow changed since by a run not stale)
+  and resetting the main drafts the stale runs wrote, and the reads of a change on a flow (`GetBlackboard`,
+  `GetChangeView`, `GetChangeGraph` of an option, `GetNode` and the neighbourhood in a change view on a flow, the
+  validations of `GetChange` per flow): the view of a change keeps its flows (`ChangeView::seen`, `seen_draft`,
+  `seen_drafts`, the folds `impacts_seen_by` / `draft_seen_by` of Go's `ImpactsSeenBy` / `DraftSeenBy`), refreshed at
+  each fact written: 742 calls, none divergent, the tables and the 520 events of the outbox the same.
 - Not done yet: the rest of phase 4.

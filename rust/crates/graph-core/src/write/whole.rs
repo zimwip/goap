@@ -1,17 +1,20 @@
 //! A change read whole (Go's `Graph.ChangeChecked`): its header, the impacts and items of the fold of its log, and the
-//! validation of each draft the main flow sees (`impactValidations`): what the review gate of an acceptance would say
-//! of it as it stands, derived, never stored. The simple world only, as the fold ([`super::work::fold_change`]).
+//! validation of each draft by the flow it is on (`impactValidations`): what the review gate of an acceptance would say
+//! of it as it stands, derived, never stored.
+use std::collections::HashMap;
+
 use graph_catalog::Catalog;
 use serde_json::Value;
 
 use super::{
     check,
     review::{draft_changed, stored_draft},
-    work::fold_change,
+    work::{ChangeView, fold_change},
 };
 use crate::{
     GraphError, Kind, Result,
     change::Change,
+    flow::FLOW_OPEN,
     impact::{ChangeImpact, LOG_FACT},
     model::{ChangeId, namespace_of},
     store::ReadTx,
@@ -47,6 +50,17 @@ fn message(e: &GraphError) -> String {
 
 /// Reads a change whole.
 pub async fn whole_change<T: ReadTx>(tx: &T, cat: &Catalog, id: &ChangeId) -> Result<WholeChange> {
+    whole_change_on(tx, cat, id, None).await
+}
+
+/// Reads a change whole as a flow sees it (Go's `BlackboardIn`): its impacts the ones the flow sees, validated with
+/// the drafts it sees while it is open; with no flow, every impact, validated as the main flow sees them.
+pub async fn whole_change_on<T: ReadTx>(
+    tx: &T,
+    cat: &Catalog,
+    id: &ChangeId,
+    flow: Option<&str>,
+) -> Result<WholeChange> {
     let change = tx
         .change(id)
         .await?
@@ -58,37 +72,20 @@ pub async fn whole_change<T: ReadTx>(tx: &T, cat: &Catalog, id: &ChangeId) -> Re
     }
     let validates = !matches!(change.status.as_str(), "applied" | "abandoned" | "committed");
     let ns = namespace_of(&change.namespace);
-    let mut impacts = Vec::with_capacity(view.fold.impacts.len());
-    for cn in &view.fold.impacts {
-        let d = view.fold.draft(&cn.id, "");
-        let validation = match d {
-            Some(d) if validates && !cn.superseded && cn.drafted() => {
-                if !d.origins.is_empty() {
-                    return Err(GraphError::unimplemented(
-                        "the validation of the successor of a merge or a split (ADR 0077): not served here yet",
-                    ));
-                }
-                let modified = match &d.base {
-                    Some(b) => draft_changed(&stored_draft(tx, b).await?, d),
-                    None => true,
-                };
-                let links: Vec<_> = d.links.iter().map(|l| (l.typ.as_str(), l.props.as_ref())).collect();
-                match check::version(cat, ns, &d.key, &d.typ, d.props.as_ref(), &links) {
-                    Ok(()) => Some(Validation {
-                        valid: true,
-                        modified,
-                        ..Validation::default()
-                    }),
-                    Err(e) if matches!(e.kind, Kind::Invalid | Kind::Conflict) => Some(Validation {
-                        message: message(&e),
-                        modified,
-                        ..Validation::default()
-                    }),
-                    Err(e) => return Err(e),
-                }
-            }
-            _ => None,
-        };
+    let list = match flow {
+        Some(f) => view.seen(f),
+        None => view.fold.impacts.clone(),
+    };
+    // each impact validated by the flow it is on (Go's `attachValidation` per flow), or by the flow read
+    let mut by_flow: HashMap<String, HashMap<String, Validation>> = HashMap::new();
+    let mut impacts = Vec::with_capacity(list.len());
+    for cn in &list {
+        let f = flow.unwrap_or(&cn.flow);
+        if validates && !by_flow.contains_key(f) {
+            let vs = validations(tx, cat, ns, &view, f).await?;
+            by_flow.insert(f.to_string(), vs);
+        }
+        let validation = by_flow.get(f).and_then(|vs| vs.get(&cn.id)).cloned();
         impacts.push((cn.clone(), validation));
     }
     Ok(WholeChange {
@@ -97,4 +94,51 @@ pub async fn whole_change<T: ReadTx>(tx: &T, cat: &Catalog, id: &ChangeId) -> Re
         items,
         seq: view.seq,
     })
+}
+
+/// What the gate of an acceptance says of each draft a flow sees (Go's `impactValidations`): none on a flow no longer
+/// open.
+async fn validations<T: ReadTx>(
+    tx: &T,
+    cat: &Catalog,
+    ns: &str,
+    view: &ChangeView,
+    flow: &str,
+) -> Result<HashMap<String, Validation>> {
+    let mut out = HashMap::new();
+    if !flow.is_empty() && (view.flows.get(flow).is_none() || view.flows.effective(flow) != FLOW_OPEN) {
+        return Ok(out);
+    }
+    let drafts = view.seen_drafts(flow);
+    for cn in view.seen(flow) {
+        let Some(d) = drafts.get(&cn.id) else { continue };
+        if cn.superseded || !cn.drafted() {
+            continue;
+        }
+        if !d.origins.is_empty() {
+            return Err(GraphError::unimplemented(
+                "the validation of the successor of a merge or a split (ADR 0077): not served here yet",
+            ));
+        }
+        let modified = match &d.base {
+            Some(b) => draft_changed(&stored_draft(tx, b).await?, d),
+            None => true,
+        };
+        let links: Vec<_> = d.links.iter().map(|l| (l.typ.as_str(), l.props.as_ref())).collect();
+        let v = match check::version(cat, ns, &d.key, &d.typ, d.props.as_ref(), &links) {
+            Ok(()) => Validation {
+                valid: true,
+                modified,
+                ..Validation::default()
+            },
+            Err(e) if matches!(e.kind, Kind::Invalid | Kind::Conflict) => Validation {
+                message: message(&e),
+                modified,
+                ..Validation::default()
+            },
+            Err(e) => return Err(e),
+        };
+        out.insert(cn.id.clone(), v);
+    }
+    Ok(out)
 }

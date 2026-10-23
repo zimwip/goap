@@ -156,8 +156,8 @@ async fn served_change(tx: &mut Tx<'_, Session>, id: &str) -> Result<ChangeId, G
     Ok(id)
 }
 
-/// The view of a change on its main flow, refusing a change that does not exist; an option, a flow branch or a
-/// personal change is the Go service's (the fold of the change refuses what a flow moved).
+/// The view of a change on a flow (empty: its active option), refusing a change that does not exist; a personal
+/// change is the Go service's.
 async fn change_world<'a, T: ReadTx>(tx: &'a T, id: &str, flow: &str) -> Result<World<'a, T>, GraphError> {
     let id = ChangeId(id.to_string());
     known_change(tx, &id).await?;
@@ -1448,19 +1448,19 @@ impl pb::GraphService for Graph {
         self.read(caller, async |tx| {
             let cat = state.catalog(tx).await?;
             let id = ChangeId(m.change_id.clone());
-            let w = whole::whole_change(tx, &cat, &id).await?;
             let items = wflow::items_of(tx, &id).await?;
             let fx = graph_core::flow::Flows::replay(&items);
-            if !fx.resolve(&m.flow).is_empty() {
-                return Err(GraphError::unimplemented(
-                    "the blackboard of an option or a flow branch (ADR 0025, 0032 §6): not served here yet",
-                ));
-            }
+            let flow = fx.resolve(&m.flow); // no flow: the active option (ADR 0032 §6)
+            let w = whole::whole_change_on(tx, &cat, &id, Some(&flow)).await?;
             let at = chrono::Utc::now();
             let points = decision::points_of(tx, &id, at).await?;
             let view = graph_core::view::View {
                 change: id,
-                flow: String::new(),
+                flow: if flow.is_empty() {
+                    graph_core::flow::MAIN_FLOW.into()
+                } else {
+                    flow.clone()
+                },
                 ..Default::default()
             };
             let world = World::open_node(tx, &view).await?;
@@ -1480,11 +1480,18 @@ impl pb::GraphService for Graph {
                 })
                 .collect();
             let mut change = whole_pb(&w)?;
-            // the items the main flow sees (`Change.View`)
+            // the items the flow sees (`Change.View`): those of its chain plain, the view carries no flow events
+            let chain: Vec<&str> = fx.chain(&flow).iter().map(|f| f.id.as_str()).collect();
             change.items = fx
-                .view(&items, "")
+                .view(&items, &flow)
                 .into_iter()
-                .map(|i| change.items[i].clone())
+                .map(|i| {
+                    let mut it = change.items[i].clone();
+                    if chain.contains(&items[i].flow.as_str()) {
+                        it.flow = String::new();
+                    }
+                    it
+                })
                 .collect();
             Ok(pb::GetBlackboardResponse {
                 change: Some(change),
@@ -1509,6 +1516,13 @@ impl pb::GraphService for Graph {
         let m = req.into_inner();
         self.read(caller, async |tx| {
             let level = ViewLevel::parse(&m.level)?;
+            let id = ChangeId(m.change_id.clone());
+            known_change(tx, &id).await?;
+            let fx = wflow::flows_of(tx, &id).await?;
+            let flow = fx.resolve(&m.flow); // no flow: the active option
+            if !flow.is_empty() && fx.get(&flow).is_none() {
+                return Err(GraphError::not_found(format!("flow {flow} of change {id}")));
+            }
             let world = change_world(tx, &m.change_id, &m.flow).await?;
             let (h, state) = world.change_state(level).await?;
             let state = state.into_iter().map(|(n, v)| (n.0, v)).collect();
@@ -1530,8 +1544,10 @@ impl pb::GraphService for Graph {
         let m = req.into_inner();
         self.read(caller, async |tx| {
             let world = change_world(tx, &m.change_id, &m.flow).await?;
-            let (nodes, links) = if m.world {
-                world.change_graph(true).await?
+            let fx = wflow::flows_of(tx, &ChangeId(m.change_id.clone())).await?;
+            let on_option = fx.get(&fx.resolve(&m.flow)).is_some_and(|f| f.option.is_some());
+            let (nodes, links) = if m.world || on_option {
+                world.change_graph(m.world).await?
             } else {
                 let state = if world.baseline.id.is_empty() {
                     HashMap::new()

@@ -2,7 +2,7 @@
 //! [`ImpactEvent`] appended to the log of the change, and the impacts and drafts are the fold of those events. The
 //! payloads are the ones `contracts/domain` writes (ADR 0142, 0144): the envelope in the columns of the log entry, the
 //! rest in a JSON written as Go writes it, so that a log either service wrote reads the same.
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -975,6 +975,101 @@ fn adopt_impact(cn: &mut ChangeImpact, flow: &str, stale: &[String]) {
             }
         }
     }
+}
+
+/// What a process on a flow sees of the impacts (Go's `ImpactsSeenBy`, ADR 0025 §3, 0029 §3): `chain` the flow and
+/// its ancestors, innermost first (empty: the main flow), `stale` the runs the chain invalidates. The impacts of
+/// another flow or of a stale run are left out; on a flow, the post is the last one a run that is not stale wrote on
+/// the innermost flow of the chain that wrote one, else on the main flow, and the review the last one on the chain or
+/// the main flow neither superseded nor stale.
+pub fn impacts_seen_by(
+    impacts: &[ChangeImpact],
+    events: &[ImpactEvent],
+    chain: &[String],
+    stale: &HashSet<String>,
+) -> Vec<ChangeImpact> {
+    let is_stale = |e: &str| !e.is_empty() && stale.contains(e);
+    let in_chain = |f: &str| chain.iter().any(|c| c == f);
+    let mut out = Vec::new();
+    for cn in impacts {
+        if cn.superseded
+            || (!cn.flow.is_empty() && !in_chain(&cn.flow))
+            || (!chain.is_empty() && is_stale(&cn.execution))
+        {
+            continue;
+        }
+        if chain.is_empty() {
+            out.push(cn.clone());
+            continue;
+        }
+        let mut cn = cn.clone();
+        cn.post = flow_post(events, &cn.id, chain, &is_stale);
+        cn.review = REVIEW_PROPOSED.into();
+        for r in &cn.reviews {
+            if r.superseded || (!r.flow.is_empty() && !in_chain(&r.flow)) || is_stale(&r.execution) {
+                continue;
+            }
+            cn.review = r.status.clone();
+        }
+        out.push(cn);
+    }
+    out
+}
+
+/// The post a chain of flows sees for an impact (Go's `flowPost`).
+fn flow_post(events: &[ImpactEvent], id: &str, chain: &[String], stale: &dyn Fn(&str) -> bool) -> Option<NodeRef> {
+    let mut last: HashMap<&str, Option<NodeRef>> = HashMap::new();
+    for e in events {
+        if (!e.op.writes_post() && e.op != ImpactOp::Cancelled) || e.impact != id {
+            continue;
+        }
+        if e.flow.is_empty() && !stale(&e.execution) {
+            last.insert("", e.post.clone());
+        } else if !e.flow.is_empty() && chain.contains(&e.flow) && !stale(&e.execution) {
+            // a flow inside a flow may relaunch a step of its parent flow: that step's writes are stale too
+            last.insert(&e.flow, e.post.clone());
+        }
+        if e.op == ImpactOp::Cancelled && e.post.is_none() {
+            last.remove(e.flow.as_str()); // back to what the flow saw before its checkout
+        }
+    }
+    chain
+        .iter()
+        .map(String::as_str)
+        .chain([""])
+        .find_map(|f| last.get(f).cloned().flatten())
+}
+
+/// The draft a process on a flow sees for an impact (Go's `DraftSeenBy`): the one of the innermost flow of the chain
+/// (the flow, its ancestors, the main flow) holding one, as that flow's own events left it, the events of the runs
+/// stale on the chain not counted.
+pub fn draft_seen_by(
+    events: &[ImpactEvent],
+    impact: &str,
+    chain: &[String],
+    stale: &dyn Fn(&str) -> bool,
+) -> Option<Draft> {
+    let order: Vec<&str> = chain.iter().map(String::as_str).chain([""]).collect();
+    let mut rows: HashMap<&str, Option<Draft>> = HashMap::new();
+    for e in events {
+        let gone = matches!(e.op, ImpactOp::Committed | ImpactOp::Withdrawn);
+        if e.impact != impact || !order.contains(&e.flow.as_str()) || (stale(&e.execution) && !gone) {
+            continue;
+        }
+        match e.op {
+            ImpactOp::Withdrawn | ImpactOp::Committed => rows.clear(),
+            ImpactOp::Created
+            | ImpactOp::CheckedOut
+            | ImpactOp::Transitioned
+            | ImpactOp::Updated
+            | ImpactOp::Cancelled => {
+                let next = apply_draft(rows.get(e.flow.as_str()).and_then(Option::as_ref), e);
+                rows.insert(&e.flow, next);
+            }
+            _ => {}
+        }
+    }
+    order.iter().find_map(|f| rows.get(f).cloned().flatten())
 }
 
 /// The typed form of a patch, whatever the JSON decoding made of its numbers.

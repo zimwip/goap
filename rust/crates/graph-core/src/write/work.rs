@@ -18,6 +18,7 @@ use super::{
 use crate::{
     GraphError, Result,
     change::Change,
+    flow::{FLOW_OPEN, Flows},
     impact::{
         self, BaseCopy, BaseLink, BaseNode, ChangeImpact, Draft, DraftLink, Fold, INTENT_CREATED, INTENT_MODIFIED,
         ImpactEvent, ImpactOp, LOG_FACT, LOG_IMPACT, REVIEW_PROPOSED, Review,
@@ -43,18 +44,67 @@ pub struct ChangeView {
     pub seq: i64,
     /// the impact events of the log, in order, the checkouts hydrated
     pub events: Vec<ImpactEvent>,
+    /// the flows and options of the change, replayed from its items
+    pub flows: Flows,
 }
 
-/// What an operation on a change impact works on: the change, the branch its versions are written on, and the impact
-/// as the main flow sees it.
+impl ChangeView {
+    /// What a process on a flow sees of the impacts (Go's `newFlowNodes(flow).nodes`): on the main flow its own impacts
+    /// not superseded.
+    pub fn seen(&self, flow: &str) -> Vec<ChangeImpact> {
+        let (chain, stale) = self.flows.chain_of(flow);
+        impact::impacts_seen_by(&self.fold.impacts, &self.events, &chain, &stale)
+    }
+
+    /// The draft a flow sees for an impact (Go's `seenDraft`): the one of the innermost flow of its chain holding
+    /// one, the events of the runs stale on the chain left out.
+    pub fn seen_draft(&self, flow: &str, impact: &str) -> Option<Draft> {
+        let (chain, stale) = self.flows.chain_of(flow);
+        if stale.is_empty() {
+            return chain
+                .iter()
+                .map(String::as_str)
+                .chain([""])
+                .find_map(|f| self.fold.draft(impact, f).cloned());
+        }
+        impact::draft_seen_by(&self.events, impact, &chain, &|e: &str| {
+            !e.is_empty() && stale.contains(e)
+        })
+    }
+
+    /// The drafts a flow sees, by impact (Go's `seenDrafts`).
+    pub fn seen_drafts(&self, flow: &str) -> HashMap<String, Draft> {
+        let (chain, stale) = self.flows.chain_of(flow);
+        let mut out = HashMap::new();
+        if stale.is_empty() {
+            for f in chain.iter().map(String::as_str).chain([""]) {
+                for d in self.fold.drafts.iter().filter(|d| d.flow == f) {
+                    out.entry(d.impact.clone()).or_insert_with(|| d.clone());
+                }
+            }
+            return out;
+        }
+        let is_stale = |e: &str| !e.is_empty() && stale.contains(e);
+        for cn in &self.fold.impacts {
+            if let Some(d) = impact::draft_seen_by(&self.events, &cn.id, &chain, &is_stale) {
+                out.insert(cn.id.clone(), d);
+            }
+        }
+        out
+    }
+}
+
+/// What an operation on a change impact works on: the change, the flow it works on and the branch its versions are
+/// written on, and the impact as the flow sees it.
 #[derive(Debug, Clone)]
 pub struct Work {
     pub c: Change,
+    pub flow: String,
     pub branch: String,
     pub ns: String,
-    /// the impacts the main flow sees
+    /// the impacts the flow sees
     pub seen: Vec<ChangeImpact>,
-    /// the stored impact, and as the flow sees it (the same on the main flow)
+    /// the stored impact, and as the flow sees it
     pub cn: ChangeImpact,
     pub vcn: ChangeImpact,
     /// a creation names the key of a planned creation (ADR 0121): its draft fulfils that impact
@@ -96,6 +146,8 @@ pub struct Named {
     pub rationale: String,
     pub execution: String,
     pub produced_by: String,
+    /// the flow it works on, as the request names it
+    pub flow: String,
 }
 
 /// An outgoing link a write gives a draft: to an exact version or a draft of the change (a URL of another source is
@@ -132,13 +184,9 @@ pub struct NodeCheckout {
     pub produced_by: String,
 }
 
-/// The flow an operation names: the main flow only here.
-fn on_main(flow: &str) -> Result<()> {
-    if flow.is_empty() {
-        Ok(())
-    } else {
-        Err(unserved("a write on an option of a change (ADR 0032)"))
-    }
+/// The branch of a flow other than the main one (Go's `graphapi.FlowBranch`).
+pub fn flow_branch(flow: &str) -> String {
+    format!("flow-{}", flow.get(..8).unwrap_or(flow))
 }
 
 fn draft_of(cn: &ChangeImpact) -> String {
@@ -342,9 +390,8 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(c)
     }
 
-    /// Opens an operation on a change, on its main flow (Go's `workOn`).
+    /// Opens an operation on a change, on a flow (Go's `workOn`): none names the active option, "main" the main flow.
     pub async fn work_on(&mut self, id: &ChangeId, flow: &str) -> Result<Work> {
-        on_main(flow)?;
         let c = self.change_open(id).await?;
         if !c.parent_id.is_empty() || !c.lifecycle.is_empty() || !c.guardians.is_empty() {
             return Err(unserved(
@@ -353,11 +400,24 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         self.view(id).await?;
         let c = self.ensure_own_branch(c).await?;
-        let seen = self.views[id].fold.impacts.clone();
+        let v = &self.views[id];
+        let flow = v.flows.resolve(flow);
+        let mut branch = branch_of(&c.branch).to_string();
+        if !flow.is_empty() {
+            if v.flows.get(&flow).is_none() {
+                return Err(GraphError::not_found(format!("flow {flow}")));
+            }
+            if v.flows.effective(&flow) != FLOW_OPEN {
+                return Err(GraphError::conflict(format!("flow {flow} is not open")));
+            }
+            branch = flow_branch(&flow);
+        }
+        let seen = v.seen(&flow);
         Ok(Work {
-            branch: branch_of(&c.branch).to_string(),
+            branch,
             ns: namespace_of(&c.namespace).to_string(),
             c,
+            flow,
             seen,
             cn: ChangeImpact::default(),
             vcn: ChangeImpact::default(),
@@ -368,7 +428,7 @@ impl<S: WriteTx> Tx<'_, S> {
     /// Takes the change and what the flow sees again, after a write of the operation (Go's `reread`).
     async fn reread(&mut self, w: &mut Work) -> Result<()> {
         w.c = self.change_open(&w.c.id).await?;
-        w.seen = self.views[&w.c.id].fold.impacts.clone();
+        w.seen = self.views[&w.c.id].seen(&w.flow);
         Ok(())
     }
 
@@ -382,8 +442,8 @@ impl<S: WriteTx> Tx<'_, S> {
         };
         let Some(vcn) = w.seen.iter().find(|c| c.id == id).cloned() else {
             return Err(GraphError::not_found(format!(
-                "change impact {id} is not on the flow \"\" of change {}",
-                w.c.id
+                "change impact {id} is not on the flow {:?} of change {}",
+                w.flow, w.c.id
             )));
         };
         w.cn = cn;
@@ -393,7 +453,7 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// Finds the impact an operation names, declaring it when the change holds none (Go's `resolve`).
     pub async fn resolve(&mut self, id: &ChangeId, t: Named) -> Result<Work> {
-        let mut w = self.work_on(id, "").await?;
+        let mut w = self.work_on(id, &t.flow).await?;
         if !t.impact.is_empty() {
             self.select_impact(&mut w, &t.impact)?;
             return Ok(w);
@@ -471,6 +531,7 @@ impl<S: WriteTx> Tx<'_, S> {
             }
         }
         decl.rationale = t.rationale;
+        decl.flow = t.flow;
         decl.execution = t.execution;
         decl.produced_by = t.produced_by;
         let was_draft = w.c.status == STATUS_DRAFT;
@@ -500,9 +561,6 @@ impl<S: WriteTx> Tx<'_, S> {
                 )));
             }
         }
-        if batch.iter().any(|cn| !cn.flow.is_empty() && cn.flow != "main") {
-            return Err(unserved("an impact proposed on an option (ADR 0032)"));
-        }
         let c = self.change_open(id).await?;
         if !c.parent_id.is_empty() || !c.lifecycle.is_empty() || !c.guardians.is_empty() {
             return Err(unserved(
@@ -514,7 +572,6 @@ impl<S: WriteTx> Tx<'_, S> {
             if cn.id.is_empty() {
                 cn.id = self.env.new_id();
             }
-            cn.flow = String::new();
         }
         let ids: Vec<String> = batch.iter().map(|cn| cn.id.clone()).collect();
         let mut out = Vec::with_capacity(batch.len());
@@ -585,6 +642,22 @@ impl<S: WriteTx> Tx<'_, S> {
         if cn.review.is_empty() {
             cn.review = REVIEW_PROPOSED.into();
         }
+        let flows = &self.views[id].flows;
+        cn.flow = flows.resolve(&cn.flow); // no flow: the active option (ADR 0032 §6)
+        if !cn.flow.is_empty() {
+            if flows.get(&cn.flow).is_none() {
+                return Err(GraphError::not_found(format!(
+                    "change impact {}: unknown flow {}",
+                    cn.id, cn.flow
+                )));
+            }
+            if flows.effective(&cn.flow) != FLOW_OPEN {
+                return Err(GraphError::conflict(format!(
+                    "change impact {}: flow {} is not open",
+                    cn.id, cn.flow
+                )));
+            }
+        }
         if let Some(pre) = cn.pre.clone() {
             let header = read::header_of(self.store, &c.baseline_id).await?;
             let at = read::select(self.store, &header, Some(std::slice::from_ref(&pre.id))).await?;
@@ -594,11 +667,18 @@ impl<S: WriteTx> Tx<'_, S> {
                     cn.id, header.id
                 )));
             }
-            if self.views[id]
-                .fold
+            // a node appears once per flow: what the flow sees (the stale impacts of a relaunched step do not count)
+            let v = &self.views[id];
+            let (chain, stale) = v.flows.chain_of(&cn.flow);
+            let visible = |o: &ChangeImpact| {
+                !o.superseded
+                    && (o.flow.is_empty() || chain.contains(&o.flow))
+                    && !(!cn.flow.is_empty() && !o.execution.is_empty() && stale.contains(&o.execution))
+            };
+            if v.fold
                 .impacts
                 .iter()
-                .any(|o| o.pre.as_ref().is_some_and(|p| p.id == pre.id))
+                .any(|o| visible(o) && o.pre.as_ref().is_some_and(|p| p.id == pre.id))
             {
                 return Err(GraphError::conflict(format!(
                     "change impact {}: node {} is already in the change",
@@ -637,6 +717,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 change: id.clone(),
                 impact: cn.id.clone(),
                 op: ImpactOp::Proposed,
+                flow: cn.flow.clone(),
                 execution: cn.execution.clone(),
                 state: Some(cn.clone()),
                 ..ImpactEvent::default()
@@ -661,16 +742,29 @@ impl<S: WriteTx> Tx<'_, S> {
             return self.store.latest_on(&id, &w.branch).await;
         };
         let n = read::stored_node(self.store, pre).await?;
+        if !w.flow.is_empty() {
+            return Ok(Some(n));
+        }
         Ok(Some(self.store.latest_on(&n.id, &w.branch).await?.unwrap_or(n)))
     }
 
-    /// The draft of the impact on the main flow, editable (Go's `working`).
+    /// The draft of the impact on the flow itself, editable (Go's `working`): a parent flow's draft is that flow's to
+    /// edit.
     fn working(&self, w: &Work) -> Result<Draft> {
-        self.views[&w.c.id]
-            .fold
-            .draft(&w.cn.id, "")
-            .cloned()
-            .ok_or_else(|| GraphError::conflict(format!("{} is not checked out: check it out first", draft_of(&w.cn))))
+        let v = &self.views[&w.c.id];
+        if let Some(d) = v.fold.draft(&w.cn.id, &w.flow) {
+            return Ok(d.clone());
+        }
+        if v.seen_draft(&w.flow, &w.cn.id).is_some() {
+            return Err(GraphError::conflict(format!(
+                "{} holds a draft of another flow: check it out on this one first",
+                draft_of(&w.cn)
+            )));
+        }
+        Err(GraphError::conflict(format!(
+            "{} is not checked out: check it out first",
+            draft_of(&w.cn)
+        )))
     }
 
     /// The type of the node a link of a draft targets: a draft of the change, or a stored version.
@@ -718,7 +812,6 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// Creates a node in a change: one `created` event adds the impact and the draft (Go's `createTx`).
     pub async fn impact_node_create(&mut self, id: &ChangeId, inp: NodeCreate, flow: &str) -> Result<ChangeImpact> {
-        on_main(flow)?;
         if inp.key.is_empty() || inp.typ.is_empty() {
             return Err(GraphError::invalid("a node needs a key and a type"));
         }
@@ -735,6 +828,7 @@ impl<S: WriteTx> Tx<'_, S> {
                     rationale: inp.rationale.clone(),
                     execution: inp.execution.clone(),
                     produced_by: inp.produced_by.clone(),
+                    flow: flow.to_string(),
                     ..Named::default()
                 },
             )
@@ -764,6 +858,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 change: w.c.id.clone(),
                 impact: w.cn.id.clone(),
                 op: ImpactOp::CheckedOut,
+                flow: w.flow.clone(),
                 execution: inp.execution.clone(),
                 post: Some(r.clone()),
                 draft: Some(d),
@@ -776,6 +871,7 @@ impl<S: WriteTx> Tx<'_, S> {
             change: w.c.id.clone(),
             impact: w.cn.id.clone(),
             op: ImpactOp::Created,
+            flow: w.flow.clone(),
             execution: inp.execution.clone(),
             state: Some(w.cn.clone()),
             post: Some(r.clone()),
@@ -794,7 +890,6 @@ impl<S: WriteTx> Tx<'_, S> {
         flow: &str,
         nodes: Vec<NodeCheckout>,
     ) -> Result<Vec<ChangeImpact>> {
-        on_main(flow)?;
         if nodes.is_empty() {
             return Err(GraphError::invalid("no node to check out"));
         }
@@ -807,6 +902,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 rationale: n.rationale,
                 execution: n.execution.clone(),
                 produced_by: n.produced_by,
+                flow: flow.to_string(),
                 ..Named::default()
             };
             let w = self.resolve(id, t).await?;
@@ -818,11 +914,35 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// The checkout of the impact w selects (Go's `checkoutTx`): a draft copying the version it starts from.
     async fn checkout(&mut self, w: &Work, execution: &str) -> Result<Draft> {
-        if self.views[&w.c.id].fold.draft(&w.cn.id, "").is_some() {
+        let v = &self.views[&w.c.id];
+        if v.fold.draft(&w.cn.id, &w.flow).is_some() {
             return Err(GraphError::conflict(format!(
                 "{} is already checked out",
                 draft_of(&w.cn)
             )));
+        }
+        if let Some(parent) = v.seen_draft(&w.flow, &w.cn.id) {
+            // a node a parent flow holds a draft of: a copy, the links with ids of their own (Go's `forkDraft`)
+            let mut d = parent;
+            d.change = w.c.id.clone();
+            d.impact = w.cn.id.clone();
+            d.flow = w.flow.clone();
+            d.execution = execution.to_string();
+            for l in d.links.iter_mut() {
+                l.id = LinkId(self.env.new_id());
+            }
+            self.emit(vec![ImpactEvent {
+                change: w.c.id.clone(),
+                impact: w.cn.id.clone(),
+                op: ImpactOp::CheckedOut,
+                flow: w.flow.clone(),
+                execution: execution.to_string(),
+                post: Some(d.draft_ref()),
+                draft: Some(d.clone()),
+                ..ImpactEvent::default()
+            }])
+            .await?;
+            return Ok(d);
         }
         let Some(base) = self.base(w).await? else {
             if w.cn.planned_creation() {
@@ -843,6 +963,7 @@ impl<S: WriteTx> Tx<'_, S> {
                     change: w.c.id.clone(),
                     impact: w.cn.id.clone(),
                     op: ImpactOp::CheckedOut,
+                    flow: w.flow.clone(),
                     execution: execution.to_string(),
                     post: Some(d.draft_ref()),
                     draft: Some(d.clone()),
@@ -890,6 +1011,7 @@ impl<S: WriteTx> Tx<'_, S> {
             change: w.c.id.clone(),
             impact: w.cn.id.clone(),
             op: ImpactOp::CheckedOut,
+            flow: w.flow.clone(),
             execution: execution.to_string(),
             from_base: Some(copy),
             ..ImpactEvent::default()
@@ -912,7 +1034,6 @@ impl<S: WriteTx> Tx<'_, S> {
         flow: &str,
         execution: &str,
     ) -> Result<ChangeImpact> {
-        on_main(flow)?;
         if props.is_empty() && owner.is_empty() {
             return Err(GraphError::invalid("nothing to update"));
         }
@@ -925,6 +1046,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 Named {
                     impact: impact.to_string(),
                     execution: execution.to_string(),
+                    flow: flow.to_string(),
                     ..Named::default()
                 },
             )
@@ -983,6 +1105,7 @@ impl<S: WriteTx> Tx<'_, S> {
             .filter(|d| stored.as_ref().is_none_or(|s| d.node == s.from.id))
             .cloned()
             .collect();
+        let mut other = false;
         for d in drafts {
             let mut found = d.link(link).cloned();
             if found.is_none()
@@ -1001,9 +1124,18 @@ impl<S: WriteTx> Tx<'_, S> {
                     .cloned();
             }
             let Some(found) = found else { continue };
+            if d.flow != w.flow {
+                other = true;
+                continue;
+            }
             self.select_impact(&mut w, &d.impact)?;
             let d = self.working(&w)?;
             return Ok((w, d, found));
+        }
+        if other {
+            return Err(GraphError::conflict(format!(
+                "link {link} is a link of a draft of another flow of change {id}: check the node out on this one first"
+            )));
         }
         Err(GraphError::conflict(format!(
             "link {link} is not a link of a draft of change {id}"
@@ -1076,6 +1208,7 @@ impl<S: WriteTx> Tx<'_, S> {
             change: w.c.id.clone(),
             impact: w.cn.id.clone(),
             op: ImpactOp::Updated,
+            flow: w.flow.clone(),
             execution: execution.to_string(),
             post: Some(r.clone()),
             patch: Some(patch),
@@ -1096,14 +1229,13 @@ impl<S: WriteTx> Tx<'_, S> {
         n: NodeCheckout,
         to: &str,
     ) -> Result<ChangeImpact> {
-        on_main(flow)?;
         if to.is_empty() {
             return Err(GraphError::invalid("a transition names the state it goes to"));
         }
         let execution = n.execution.clone();
         // what the Go service serves is known before anything is written (the declaration of an impact moves the
         // sequence of the log)
-        if let Some((typ, state, declares)) = self.transition_source(id, &n).await?
+        if let Some((typ, state, declares)) = self.transition_source(id, flow, &n).await?
             && let Some(lc) = self.catalog().lifecycle(&typ)
         {
             let from = if state.is_empty() {
@@ -1135,12 +1267,13 @@ impl<S: WriteTx> Tx<'_, S> {
                     rationale: n.rationale,
                     execution: n.execution,
                     produced_by: n.produced_by,
+                    flow: flow.to_string(),
                     ..Named::default()
                 },
             )
             .await?;
-        let own = self.views[id].fold.draft(&w.cn.id, "").cloned();
-        let (key, typ, state) = match &own {
+        let own = self.views[id].fold.draft(&w.cn.id, &w.flow).is_some();
+        let (key, typ, state) = match &self.views[id].seen_draft(&w.flow, &w.cn.id) {
             Some(d) => (d.key.clone(), d.typ.clone(), d.state.clone()),
             None => match self.base(&w).await? {
                 Some(b) => (b.key, b.typ, b.state),
@@ -1175,7 +1308,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 "a transition with a guard, algorithms or a condition on the children",
             ));
         }
-        if own.is_none() {
+        if !own {
             self.checkout(&w, &execution).await?;
             self.reread(&mut w).await?;
             let impact = w.cn.id.clone();
@@ -1217,6 +1350,7 @@ impl<S: WriteTx> Tx<'_, S> {
             change: id.clone(),
             impact: w.cn.id.clone(),
             op: ImpactOp::Transitioned,
+            flow: w.flow.clone(),
             execution,
             post: Some(r.clone()),
             patch: Some(patch),
@@ -1228,8 +1362,13 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// The type and state of the node a transition moves, as the change sees it, read without writing anything, and
     /// whether the change declares an impact for it; none when it is not found (the operation says why).
-    async fn transition_source(&mut self, id: &ChangeId, n: &NodeCheckout) -> Result<Option<(String, String, bool)>> {
-        let w = self.work_on(id, "").await?;
+    async fn transition_source(
+        &mut self,
+        id: &ChangeId,
+        flow: &str,
+        n: &NodeCheckout,
+    ) -> Result<Option<(String, String, bool)>> {
+        let w = self.work_on(id, flow).await?;
         let cn = if !n.impact.is_empty() {
             self.views[id].fold.impact(&n.impact).cloned()
         } else {
@@ -1240,8 +1379,8 @@ impl<S: WriteTx> Tx<'_, S> {
                 .cloned()
         };
         if let Some(cn) = cn {
-            if let Some(d) = self.views[id].fold.draft(&cn.id, "") {
-                return Ok(Some((d.typ.clone(), d.state.clone(), false)));
+            if let Some(d) = self.views[id].seen_draft(&w.flow, &cn.id) {
+                return Ok(Some((d.typ, d.state, false)));
             }
             let w = Work { cn, ..w };
             return Ok(self.base(&w).await?.map(|b| (b.typ, b.state, false)));
@@ -1267,6 +1406,7 @@ impl<S: WriteTx> Tx<'_, S> {
             change: w.c.id.clone(),
             impact: w.cn.id.clone(),
             op: ImpactOp::Reviewed,
+            flow: w.flow.clone(),
             execution: execution.to_string(),
             by: self.env.by.clone(),
             review: Some(Review {
@@ -1274,7 +1414,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 by: self.env.by.clone(),
                 comment: "edited again".into(),
                 at,
-                flow: String::new(),
+                flow: w.flow.clone(),
                 execution: execution.to_string(),
                 superseded: false,
                 review_id: String::new(),
@@ -1297,16 +1437,29 @@ impl<S: WriteTx> Tx<'_, S> {
     ) -> Result<ChangeImpact> {
         let mut w = self.work_on(id, flow).await?;
         self.select_impact(&mut w, impact)?;
-        if self.views[id].fold.draft(impact, "").is_none() {
+        let v = &self.views[id];
+        let Some(d) = v.fold.draft(impact, &w.flow) else {
             return Err(GraphError::conflict(format!(
                 "change impact {impact} ({}) is not checked out",
                 w.cn.key
             )));
-        }
-        let back = w.cn.committed.clone();
+        };
+        // what the flow falls back to: the version the change committed, or the draft of a parent flow
+        let back = if w.flow.is_empty() {
+            w.cn.committed.clone()
+        } else {
+            let (chain, _) = v.flows.chain_of(&w.flow);
+            chain[1..]
+                .iter()
+                .map(String::as_str)
+                .chain([""])
+                .any(|f| v.fold.draft(impact, f).is_some())
+                .then(|| d.draft_ref())
+        };
         self.emit(vec![ImpactEvent {
             change: id.clone(),
             impact: impact.to_string(),
+            flow: w.flow.clone(),
             op: ImpactOp::Cancelled,
             execution: execution.to_string(),
             post: back.clone(),
@@ -1331,6 +1484,7 @@ impl<S: WriteTx> Tx<'_, S> {
         execution: &str,
     ) -> Result<()> {
         let mut w = self.work_on(id, flow).await?;
+        let flow = w.flow.clone();
         let mut gone: Vec<String> = Vec::new();
         let mut events = Vec::new();
         let mut withdraw = |impact: &str, events: &mut Vec<ImpactEvent>| {
@@ -1340,6 +1494,7 @@ impl<S: WriteTx> Tx<'_, S> {
                     change: id.clone(),
                     impact: impact.to_string(),
                     op: ImpactOp::Withdrawn,
+                    flow: flow.clone(),
                     execution: execution.to_string(),
                     ..ImpactEvent::default()
                 });
@@ -1350,7 +1505,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 continue;
             }
             self.select_impact(&mut w, impact)?;
-            if !w.cn.flow.is_empty() {
+            if w.cn.flow != w.flow {
                 return Err(GraphError::conflict(format!(
                     "change impact {impact} was declared on another flow"
                 )));
@@ -1414,22 +1569,9 @@ fn remove_link_patch(l: &DraftLink) -> Value {
     Value::Object(m)
 }
 
-/// The view of a change: the fold of its log, the checkouts hydrated (the simple world only: the main flow, impact
-/// events and review records; flows that wrote no impact, decided or not worked on).
+/// The view of a change: the fold of its log, the checkouts hydrated, its flows replayed.
 pub async fn fold_change<T: ReadTx>(store: &T, id: &ChangeId) -> Result<ChangeView> {
-    let (out, items) = fold_any(store, id).await?;
-    if out
-        .events
-        .iter()
-        .any(|e| e.op != ImpactOp::Adopted && !e.flow.is_empty())
-        || out.fold.impacts.iter().any(|c| c.superseded || !c.flow.is_empty())
-    {
-        return Err(unserved("a change working on options (ADR 0032)"));
-    }
-    if !crate::flow::Flows::replay(&items).active.is_empty() {
-        return Err(unserved("a change working on its active option (ADR 0032 §6)"));
-    }
-    Ok(out)
+    Ok(fold_any(store, id).await?.0)
 }
 
 /// The fold of the log of a change whatever its flows, with the items of the change in the order of its log: what
@@ -1462,6 +1604,7 @@ pub async fn fold_any<T: ReadTx>(store: &T, id: &ChangeId) -> Result<(ChangeView
         out.fold.apply(e);
     }
     out.events = events;
+    out.flows = Flows::replay(&items);
     Ok((out, items))
 }
 

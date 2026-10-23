@@ -4,14 +4,14 @@
 //! A branch view is a baseline (the head of the branch when the view names none) whose state is a selection: the last
 //! commit of each node on its branch up to its order, else, past the fork, on the branch it was forked from (ADR 0143).
 //! A change view (its fork, its commits, its drafts folded from its log) is read here for one node at a time
-//! ([`World::open_node`]), in the simple world of the writes (the main flow); its other reads answer
-//! [`crate::error::Kind::Unimplemented`].
+//! ([`World::open_node`]), on the flow it names (else the active option): the impacts and drafts that flow sees; a
+//! personal change answers [`crate::error::Kind::Unimplemented`].
 use std::collections::{HashMap, HashSet};
 
 use crate::{
     change::Change,
     error::{GraphError, Result},
-    impact::{Draft, Fold, REVIEW_ACCEPTED, REVIEW_REJECTED},
+    impact::{ChangeImpact, Draft, REVIEW_ACCEPTED, REVIEW_REJECTED},
     model::{
         BRANCH_OPEN, Baseline, BaselineId, Branch, Link, MAIN_BRANCH, MAX_BROWSE_LIMIT, Neighbourhood, Node, NodeId,
         NodePage, NodeQuery, NodeRef, NodeView, Target, Version, branch_of, namespace_of,
@@ -201,7 +201,9 @@ pub struct World<'a, T> {
 /// the versions it wrote over its fork (a draft is version 0) and the nodes it deleted.
 struct ChangeWorld {
     change: Change,
-    fold: Fold,
+    /// the impacts the view's flow sees, and the draft it sees for each
+    impacts: Vec<ChangeImpact>,
+    seen: HashMap<String, Draft>,
     own: Option<Branch>,
     over: HashMap<NodeId, Version>,
     gone: HashSet<NodeId>,
@@ -211,18 +213,17 @@ impl ChangeWorld {
     /// The draft the view holds for a node: the one of the last impact of the node that has one (Go's
     /// `draftReader.get`).
     fn draft(&self, id: &NodeId) -> Option<&Draft> {
-        self.fold
-            .impacts
+        self.impacts
             .iter()
-            .filter_map(|cn| self.fold.draft(&cn.id, ""))
+            .filter_map(|cn| self.seen.get(&cn.id))
             .rfind(|d| &d.node == id)
     }
 
     /// The drafts of the view, one per node, by key.
     fn drafts(&self) -> Vec<&Draft> {
         let mut by: HashMap<&NodeId, &Draft> = HashMap::new();
-        for cn in &self.fold.impacts {
-            if let Some(d) = self.fold.draft(&cn.id, "") {
+        for cn in &self.impacts {
+            if let Some(d) = self.seen.get(&cn.id) {
                 by.insert(&d.node, d);
             }
         }
@@ -255,7 +256,11 @@ impl ChangeWorld {
             change_impact: d.impact.clone(),
             execution: d.execution.clone(),
             reason: d.reason().to_string(),
-            branch: branch_of(&self.change.branch).to_string(),
+            branch: if d.flow.is_empty() {
+                branch_of(&self.change.branch).to_string()
+            } else {
+                crate::write::work::flow_branch(&d.flow)
+            },
             ..Node::default()
         }
     }
@@ -356,15 +361,14 @@ impl<'a, T: ReadTx> World<'a, T> {
                 "a view of a personal change (ADR 0037): not served here yet",
             ));
         }
-        if !view.flow.is_empty() && view.flow != "main" {
-            return Err(GraphError::unimplemented(format!(
-                "{view}: the views of an option are read by the Go service"
-            )));
-        }
-        let fold = fold_change(tx, &c.id).await?.fold;
+        let cv = fold_change(tx, &c.id).await?;
+        let flow = cv.flows.resolve(&view.flow);
+        let impacts = cv.seen(&flow);
+        let mut seen = cv.seen_drafts(&flow);
+        seen.retain(|id, _| impacts.iter().any(|cn| &cn.id == id));
         let mut over = HashMap::new();
         let mut gone = HashSet::new();
-        for cn in &fold.impacts {
+        for cn in &impacts {
             let Some(post) = &cn.post else { continue };
             if cn.review == REVIEW_REJECTED {
                 continue;
@@ -396,7 +400,8 @@ impl<'a, T: ReadTx> World<'a, T> {
             namespace,
             change: Some(ChangeWorld {
                 change: c,
-                fold,
+                impacts,
+                seen,
                 own,
                 over,
                 gone,
@@ -561,7 +566,7 @@ impl<'a, T: ReadTx> World<'a, T> {
             return Ok((Vec::new(), Vec::new()));
         };
         let mut refs: Vec<NodeRef> = Vec::new();
-        for cn in &cw.fold.impacts {
+        for cn in &cw.impacts {
             for r in [&cn.pre, &cn.post, &cn.committed].into_iter().flatten() {
                 if !r.id.is_empty() && !refs.contains(r) {
                     refs.push(r.clone());
@@ -671,7 +676,7 @@ impl<'a, T: ReadTx> World<'a, T> {
             }
             None => (self.baseline.clone(), whole_state(self.tx, &self.baseline).await?),
         };
-        for cn in &cw.fold.impacts {
+        for cn in &cw.impacts {
             let Some(post) = &cn.post else { continue };
             if cn.review == REVIEW_REJECTED || (level == ViewLevel::Accepted && cn.review != REVIEW_ACCEPTED) {
                 continue;

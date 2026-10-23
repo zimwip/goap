@@ -270,7 +270,7 @@ impl<S: WriteTx> Tx<'_, S> {
     /// Commits a change on its own branch (Go's `CommitChange` for a root change of the main flow, no methodology to
     /// ask: the committable states of its lifecycles are its guardian): the header of the commit.
     pub async fn commit_change(&mut self, id: &ChangeId, baseline_name: &str) -> Result<Baseline> {
-        let w = self.work_on(id, "").await?;
+        let w = self.work_on(id, crate::flow::MAIN_FLOW).await?;
         let c = w.c.clone();
         let branch = w.branch.clone();
         let own = self.store.branch(&c.namespace, &c.branch).await?.unwrap_or_default();
