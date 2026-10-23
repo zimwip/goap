@@ -427,7 +427,7 @@ func (e edit) held() int {
 
 // dropped picks the link an edit drops: the outgoing link of the bench's type of the node as the view holds it (a
 // change: its draft) to the node it linked first, noting that target. The target decides, not the order of the page:
-// link ids are random, so two services given the same calls drop the same link (the comparison of ADR 0162).
+// link ids are random, so two services given the same calls drop the same link (the comparison of ADR 0163).
 func (r *Runner) dropped(ctx context.Context, e *edit, ref *graphv1.NodeRef, view *graphv1.View) (string, error) {
 	res, err := timed(ctx, r.Metrics, "drop.ListNodeLinks", func(ctx context.Context) (*connect.Response[graphv1.ListNodeLinksResponse], error) {
 		return r.Clients.Graph.ListNodeLinks(ctx, connect.NewRequest(&graphv1.ListNodeLinksRequest{Ref: ref, View: view, Type: LinkType, Limit: maxDropPage}))

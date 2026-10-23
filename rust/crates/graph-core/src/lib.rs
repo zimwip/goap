@@ -1,4 +1,4 @@
-//! The core of the Rust graph service (ADR 0162): the model of the graph, its views and the reads through them, over
+//! The core of the Rust graph service (ADR 0163): the model of the graph, its views and the reads through them, over
 //! a store it knows only as the [`store::ReadTx`] trait. No I/O of its own: `graph-store` implements the trait per
 //! SQL dialect, `graph-service` answers the RPCs from what the reads return.
 pub mod change;

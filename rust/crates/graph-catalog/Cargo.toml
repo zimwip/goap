@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "The type catalogue of the Rust graph service (ADR 0162): the domains in force resolved, as lib/typecat resolves them"
+description = "The type catalogue of the Rust graph service (ADR 0163): the domains in force resolved, as lib/typecat resolves them"
 
 [dependencies]
 chrono = { workspace = true }

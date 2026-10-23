@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "The pure core of the Rust graph service (ADR 0162): the model, views, selections and pages, with no I/O"
+description = "The pure core of the Rust graph service (ADR 0163): the model, views, selections and pages, with no I/O"
 
 [dependencies]
 chrono = { workspace = true }
