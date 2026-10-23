@@ -372,6 +372,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             change: ChangeJson::of(c, seq),
             baseline: baseline.map(events::BaselineJson::of),
             items: &[],
+            fields: None,
             end_user: &self.env.end_user,
             branch,
             nodes,
@@ -396,6 +397,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
                 change: ChangeJson::of(c, seq),
                 baseline: None,
                 items,
+                fields: None,
                 end_user: &self.env.end_user,
                 branch: "",
                 nodes: &[],
@@ -403,6 +405,24 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             self.raised
                 .push((events::change_subject(&c.id, typ), gojson::to_string(&ev)));
         }
+    }
+
+    /// Raises `change.edited` with the fields of the header an edit of a change read at `seq` changed.
+    pub fn raise_edited(&mut self, c: &Change, seq: i64, fields: &serde_json::Map<String, serde_json::Value>) {
+        let ev = ChangeEvent {
+            typ: events::CHANGE_EDITED,
+            change: ChangeJson::of(c, seq),
+            baseline: None,
+            items: &[],
+            fields: Some(fields),
+            end_user: &self.env.end_user,
+            branch: "",
+            nodes: &[],
+        };
+        self.raised.push((
+            events::change_subject(&c.id, events::CHANGE_EDITED),
+            gojson::to_string(&ev),
+        ));
     }
 
     /// Ends the transaction: checks what it wrote names what exists (Go's `guardTx.verify`), then writes the events

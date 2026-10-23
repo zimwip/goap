@@ -27,6 +27,7 @@ use graph_core::{
         items::ItemWrite,
         review::{ReviewBatch, Verdict},
         tx::{Env, Tx},
+        update::ChangePatch,
         whole,
         work::{NodeCheckout, NodeCreate, fold_change},
     },
@@ -1198,6 +1199,36 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    /// Edits the header of a change: its title, intent, goal, status and data (ADR 0110: `change.edited`).
+    async fn update_change(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::UpdateChangeRequest>,
+    ) -> Answer<pb::UpdateChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let data = m.data.as_ref().map(convert::map);
+        if data.as_ref().is_some_and(|d| d.contains_key("criticality")) {
+            return Err(connect_error(GraphError::unimplemented(
+                "the criticality of a change (ADR 0075): set by the Go service",
+            )));
+        }
+        let patch = ChangePatch {
+            title: m.title,
+            intent: m.intent,
+            goal: m.goal,
+            status: m.status,
+            data,
+        };
+        self.write(caller, async |tx| {
+            let w = tx.update_change(&ChangeId(m.id.clone()), patch).await?;
+            Ok(pb::UpdateChangeResponse {
+                change: Some(whole_pb(&w)?),
+            })
+        })
+        .await
+    }
+
     /// Appends items to the blackboard of a change (artifacts, signals, the types no code reads; ADR 0119, 0128).
     async fn add_items(&self, _ctx: &Ctx, req: Request<pb::AddItemsRequest>) -> Answer<pb::AddItemsResponse> {
         let caller = Caller::of(&req)?;
@@ -1366,27 +1397,7 @@ impl pb::GraphService for Graph {
             }
             let cat = state.catalog(tx).await?;
             let w = whole::whole_change(tx, &cat, &ChangeId(m.id.clone())).await?;
-            let mut c = convert::change(&w.change);
-            c.nodes = w
-                .impacts
-                .iter()
-                .map(|(cn, v)| {
-                    let mut p = convert::change_impact(cn);
-                    p.validation = v.as_ref().map(|v| pb::ImpactValidation {
-                        valid: v.valid,
-                        message: v.message.clone(),
-                        modified: v.modified,
-                    });
-                    p
-                })
-                .collect();
-            c.items = w
-                .items
-                .iter()
-                .map(convert::item)
-                .collect::<Result<_, _>>()
-                .map_err(GraphError::internal)?;
-            c.seq = w.seq;
+            let c = whole_pb(&w)?;
             Ok(pb::GetChangeResponse { change: Some(c) })
         })
         .await
@@ -2245,4 +2256,30 @@ fn state_stats_pb(s: stats::StateStats) -> pb::StateStats {
         owners: s.owners as i32,
         projects: s.projects as i32,
     }
+}
+
+/// A change read whole, for an answer: its header, its impacts (with their validation) and items, its position.
+fn whole_pb(w: &whole::WholeChange) -> Result<pb::Change, GraphError> {
+    let mut c = convert::change(&w.change);
+    c.nodes = w
+        .impacts
+        .iter()
+        .map(|(cn, v)| {
+            let mut p = convert::change_impact(cn);
+            p.validation = v.as_ref().map(|v| pb::ImpactValidation {
+                valid: v.valid,
+                message: v.message.clone(),
+                modified: v.modified,
+            });
+            p
+        })
+        .collect();
+    c.items = w
+        .items
+        .iter()
+        .map(convert::item)
+        .collect::<Result<_, _>>()
+        .map_err(GraphError::internal)?;
+    c.seq = w.seq;
+    Ok(c)
 }

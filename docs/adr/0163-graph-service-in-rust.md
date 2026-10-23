@@ -207,4 +207,8 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   read; a flow, a decision, a transition, a review or an item of a use case is Go's) follows: 239 calls, none
   divergent, the tables and the 240 events of the outbox the same. The view of a change refuses only the facts that make
   it (`fact.flow`, `fact.transition`, `fact.decision_point`, `fact.decision`); the other items are items only.
+  `UpdateChange` (`graph-core` `write::update`: title, intent, goal, status, data; the abandonment of a change takes
+  its open sub-changes and its own branches with it; a `change.updated` entry naming the fields, `change.edited` with
+  the change as read; the criticality of a change is Go's) follows: 260 calls, none divergent, the tables and the 263
+  events of the outbox the same.
 - Not done yet: the rest of phase 4.
