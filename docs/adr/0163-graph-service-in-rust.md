@@ -176,5 +176,7 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `Change` does, for a platform service. A platform service's tags (`TagVersion`, `DeleteTag`: rows of the store,
   no change; version 0 is the one the view holds, a draft of a change refused as Go refuses it) and branches
   (`CreateBranch`, `SetBranchStatus`, `SetBranchDescription`, `graph-core` `write::branches`) are written here too.
-  With them the scenario reaches 87 calls, all `same`, the tables the same.
+  `ListViewNodes` (a branch view; a change view is still Go's), `ResolveView` (a change view included) and
+  `GetCommitState` (`Tx::commit_state` over the `unsettled` of the merge) follow: 107 calls, all `same`, the tables
+  the same.
 - Not done yet: the rest of phase 4.

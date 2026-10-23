@@ -438,6 +438,56 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    /// The nodes of a type a view holds, all of them (`ViewNodesOfType`): a branch view; a change view is still Go's.
+    async fn list_view_nodes(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ListViewNodesRequest>,
+    ) -> Answer<pb::ListViewNodesResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.read(caller, async |tx| {
+            let w = World::open(tx, &convert::view(m.view.as_ref())).await?;
+            let q = NodeQuery {
+                typ: m.r#type.clone(),
+                limit: i32::MAX as usize,
+                ..NodeQuery::default()
+            };
+            let mut nodes = w.page(&q).await?.nodes;
+            if !m.r#type.is_empty() {
+                nodes.retain(|n| n.typ == m.r#type);
+            }
+            Ok(pb::ListViewNodesResponse {
+                nodes: convert::nodes(&nodes),
+            })
+        })
+        .await
+    }
+
+    /// The versions some nodes have in a view, with what the view stands on (`ViewVersions`).
+    async fn resolve_view(&self, _ctx: &Ctx, req: Request<pb::ResolveViewRequest>) -> Answer<pb::ResolveViewResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.read(caller, async |tx| {
+            let v = convert::view(m.view.as_ref());
+            let w = World::open_node(tx, &v).await?;
+            let main_head = if !v.is_change() && graph_core::model::branch_of(&v.branch) == MAIN_BRANCH {
+                v.baseline.is_empty() || read::branch_head(tx, &w.namespace, MAIN_BRANCH).await?.id == v.baseline
+            } else {
+                false
+            };
+            let ids: Vec<NodeId> = m.node_ids.iter().cloned().map(NodeId).collect();
+            let versions = w.at(&ids).await?;
+            Ok(pb::ResolveViewResponse {
+                namespace: w.namespace.clone(),
+                baseline_id: w.baseline.id.0.clone(),
+                main_head,
+                versions: versions.into_iter().map(|(n, v)| (n.0, v)).collect(),
+            })
+        })
+        .await
+    }
+
     async fn list_node_versions(
         &self,
         _ctx: &Ctx,
@@ -561,6 +611,28 @@ impl pb::GraphService for Graph {
             Ok(pb::GetBranchResponse {
                 branch: Some(convert::branch(&b)),
                 head: Some(convert::baseline(&head, state)),
+            })
+        })
+        .await
+    }
+
+    /// What a change has to commit and whether it may merge.
+    async fn get_commit_state(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetCommitStateRequest>,
+    ) -> Answer<pb::GetCommitStateResponse> {
+        let caller = Caller::of(&req)?;
+        let id = ChangeId(req.into_inner().change_id);
+        self.write(caller, async |tx| {
+            let st = tx.commit_state(&id).await?;
+            Ok(pb::GetCommitStateResponse {
+                to_commit: st.to_commit,
+                reverts: st.reverts as i32,
+                unsettled: st.unsettled,
+                commits: st.commits,
+                can_commit: st.can_commit,
+                can_merge: st.can_merge,
             })
         })
         .await

@@ -40,7 +40,58 @@ pub struct ChangeRead {
     pub seq: i64,
 }
 
+/// What a change has to commit and whether it may merge (Go's `CommitState`): what drives the Commit and Merge buttons.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CommitState {
+    /// the keys of the accepted modifications not committed yet
+    pub to_commit: Vec<String>,
+    /// the nodes withdrawn since their commit, a commit reverts
+    pub reverts: usize,
+    /// what holds the merge
+    pub unsettled: Vec<String>,
+    /// an impact committed
+    pub commits: bool,
+    pub can_commit: bool,
+    pub can_merge: bool,
+}
+
 impl<S: WriteTx> Tx<'_, S> {
+    /// What a change has to commit and whether it may merge; nothing for a change no longer open.
+    pub async fn commit_state(&mut self, id: &ChangeId) -> Result<CommitState> {
+        let c = self.change_head(id).await?;
+        let mut st = CommitState::default();
+        if c.status != super::change::STATUS_DRAFT && c.status != super::change::STATUS_ACTIVE {
+            return Ok(st);
+        }
+        self.view(id).await?;
+        let impacts: Vec<ChangeImpact> = self.views[id]
+            .fold
+            .impacts
+            .iter()
+            .filter(|cn| cn.flow.is_empty() && !cn.superseded)
+            .cloned()
+            .collect();
+        for cn in &impacts {
+            if cn.review == REVIEW_ACCEPTED && self.modifies(id, &cn.id).await? {
+                st.to_commit.push(cn.key.clone());
+            }
+        }
+        let own = match self.store.branch(&c.namespace, &c.branch).await? {
+            Some(b)
+                if branch_of(&c.branch) != MAIN_BRANCH && b.origin == super::change::change_branch_origin(&c.id) =>
+            {
+                Some(b)
+            }
+            _ => None,
+        };
+        // a node withdrawn since its commit (a revert to come) holds the merge: the Go service's, as `unsettled` says
+        st.unsettled = self.unsettled(&c, &impacts, own.as_ref()).await?;
+        st.commits = impacts.iter().any(|cn| cn.committed.is_some());
+        st.can_commit = !st.to_commit.is_empty() || st.reverts > 0;
+        st.can_merge = st.unsettled.is_empty() && st.commits;
+        Ok(st)
+    }
+
     /// Whether the draft of an impact of the main flow modifies its node (Go's `draftModifies`).
     async fn modifies(&self, id: &ChangeId, impact: &str) -> Result<bool> {
         let Some(d) = self.views[id].fold.draft(impact, "").cloned() else {
