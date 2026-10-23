@@ -8,9 +8,7 @@ use graph_core::{
     change::{Change, ChangesFilter},
     gojson,
     impact::{ChangeImpact, LogEntry},
-    model::{
-        Baseline, Branch, ChangeId, Link, LinkId, Node, NodeId, NodeRef, Target, branch_of, namespace_of,
-    },
+    model::{Baseline, Branch, ChangeId, Link, LinkId, Node, NodeId, NodeRef, Target, branch_of, namespace_of},
     store::{LinkSet, OutboxMessage, WriteTx},
 };
 
@@ -399,7 +397,11 @@ impl WriteTx for Session {
 
     async fn put_change_impact(&self, change: &ChangeId, cn: &ChangeImpact) -> Result<(), GraphError> {
         let ver = |r: &Option<NodeRef>| r.as_ref().map_or(Arg::Null, |r| Arg::Int(r.version.into()));
-        let node = cn.pre.as_ref().or(cn.post.as_ref()).map_or(Arg::Null, |r| Arg::Text(r.id.to_string()));
+        let node = cn
+            .pre
+            .as_ref()
+            .or(cn.post.as_ref())
+            .map_or(Arg::Null, |r| Arg::Text(r.id.to_string()));
         let args = vec![
             Arg::Text(cn.id.clone()),
             Arg::Text(change.to_string()),
@@ -460,7 +462,10 @@ impl WriteTx for Session {
             self.sql.ph(2)
         );
         let rows = self
-            .select((q, vec![change.as_str().into(), Arg::Int(limit as i64)]), "change impacts")
+            .select(
+                (q, vec![change.as_str().into(), Arg::Int(limit as i64)]),
+                "change impacts",
+            )
             .await?;
         Ok(rows.iter().map(|r| (r.text(0), r.text(1))).collect())
     }
@@ -513,7 +518,10 @@ impl WriteTx for Session {
             );
             let what = format!("node {}", n.node_ref());
             if self
-                .run((q, vec![Arg::Text(n.id.to_string()), Arg::Int(n.version.into())]), &what)
+                .run(
+                    (q, vec![Arg::Text(n.id.to_string()), Arg::Int(n.version.into())]),
+                    &what,
+                )
                 .await?
                 != 1
             {
@@ -581,7 +589,11 @@ impl WriteTx for Session {
         } else {
             Arg::Null
         };
-        let base = if set.base != 0 { Arg::Int(set.base.into()) } else { Arg::Null };
+        let base = if set.base != 0 {
+            Arg::Int(set.base.into())
+        } else {
+            Arg::Null
+        };
         let args = vec![
             Arg::Text(from.id.to_string()),
             Arg::Int(from.version.into()),
@@ -613,7 +625,13 @@ impl WriteTx for Session {
         Ok(out)
     }
 
-    async fn join_branch(&self, r: &NodeRef, branch: &str, change: &ChangeId, committed: i64) -> Result<(), GraphError> {
+    async fn join_branch(
+        &self,
+        r: &NodeRef,
+        branch: &str,
+        change: &ChangeId,
+        committed: i64,
+    ) -> Result<(), GraphError> {
         let s = self.sql;
         let q = format!(
             "INSERT INTO node_branch (node_id, version, branch, change_id, committed) SELECT node_id, version, {}, {}, {} FROM node_version
@@ -659,8 +677,13 @@ impl WriteTx for Session {
     }
 
     async fn log_types(&self, change: &ChangeId) -> Result<Vec<String>, GraphError> {
-        let q = format!("SELECT DISTINCT type FROM change_log WHERE change_id = {}", self.sql.ph(1));
-        let rows = self.select((q, vec![change.as_str().into()]), "log of a change").await?;
+        let q = format!(
+            "SELECT DISTINCT type FROM change_log WHERE change_id = {}",
+            self.sql.ph(1)
+        );
+        let rows = self
+            .select((q, vec![change.as_str().into()]), "log of a change")
+            .await?;
         Ok(rows.iter().map(|r| r.text(0)).collect())
     }
 
@@ -696,7 +719,10 @@ impl WriteTx for Session {
         let nodes: Vec<String> = self
             .select(
                 (
-                    format!("SELECT DISTINCT {} FROM node_version WHERE change_id = {p}", s.id("node_id")),
+                    format!(
+                        "SELECT DISTINCT {} FROM node_version WHERE change_id = {p}",
+                        s.id("node_id")
+                    ),
                     arg(),
                 ),
                 &format!("change {id}"),

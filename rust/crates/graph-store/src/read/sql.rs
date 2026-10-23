@@ -3,7 +3,7 @@
 //! order tie-break are the words that differ.
 use graph_core::{
     change::ChangesFilter,
-    model::{ChangeId, NodeId, NodeQuery, NodeRef, branch_of, namespace_of},
+    model::{ChangeId, LinkId, NodeId, NodeQuery, NodeRef, branch_of, namespace_of},
 };
 
 use super::value::Arg;
@@ -336,6 +336,18 @@ impl Sql {
             WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)",
             self.refs_rows(n),
             self.outer_join()
+        )
+    }
+
+    /// One link row by its id (`sqlLinkByID`).
+    pub fn link_by_id(self, id: &LinkId) -> Stmt {
+        (
+            format!(
+                "SELECT {} FROM link l WHERE l.id = {} AND l.removes IS NULL",
+                self.link_cols(),
+                self.ph(1)
+            ),
+            vec![id.0.clone().into()],
         )
     }
 

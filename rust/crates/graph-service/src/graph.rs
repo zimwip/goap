@@ -5,6 +5,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use goap_connect::{ConnectError, Ctx, Request, Response, async_trait};
 use goap_proto::graph::v1 as pb;
+use graph_catalog::catalog::STRUCTURE_PROJECT;
 use graph_core::{
     GraphError, Kind,
     change::{self, ChangesFilter},
@@ -14,12 +15,12 @@ use graph_core::{
     read::{self, World},
     store::ReadTx,
 };
-use graph_catalog::catalog::STRUCTURE_PROJECT;
 use graph_core::{
     model::{ChangeId, MAIN_BRANCH},
     write::{
         change::NewChange,
         tx::{Env, Tx},
+        work::{NodeCheckout, NodeCreate},
     },
 };
 use graph_store::read::Session;
@@ -40,6 +41,9 @@ const HEADER_AT_LEAST: &str = "x-goap-at-least";
 const HEADER_CHANGE_SEQ: &str = "x-goap-change-seq";
 const HEADER_PROJECT: &str = "x-goap-project";
 const HEADER_COMMAND: &str = "x-goap-command";
+const HEADER_ROLES: &str = "x-goap-roles";
+/// The platform role of the administrators (`access.RoleAdmin`).
+const ROLE_ADMIN: &str = "admin";
 
 /// The caller of a request.
 struct Caller {
@@ -48,6 +52,7 @@ struct Caller {
     at_least: bool,
     project: String,
     command: String,
+    roles: Vec<String>,
 }
 
 impl Caller {
@@ -68,6 +73,13 @@ impl Caller {
             at_least: !req.header(HEADER_AT_LEAST).is_empty(),
             project: req.header(HEADER_PROJECT).to_string(),
             command: req.header(HEADER_COMMAND).to_string(),
+            roles: req
+                .header(HEADER_ROLES)
+                .split(',')
+                .map(str::trim)
+                .filter(|r| !r.is_empty())
+                .map(str::to_string)
+                .collect(),
         })
     }
 
@@ -103,6 +115,32 @@ impl Caller {
         }
         Ok(())
     }
+}
+
+impl Caller {
+    /// The writes the access of the organisation would let through whatever the project: a platform administrator's
+    /// (ADR 0047). Any other caller is judged by the policies of the organisation, which the Go service reads.
+    fn administers(&self) -> Result<(), GraphError> {
+        if self.roles.iter().any(|r| r == ROLE_ADMIN) {
+            return Ok(());
+        }
+        Err(GraphError::unimplemented(
+            "a write authorized by the policies of the organisation: not served here yet",
+        ))
+    }
+}
+
+/// The change a write on its impacts works on, when it is one served here: neither personal nor of the platform's
+/// namespaces.
+async fn served_change(tx: &mut Tx<'_, Session>, id: &str) -> Result<ChangeId, GraphError> {
+    let id: ChangeId = id.into();
+    let c = tx.change_head(&id).await?;
+    if c.is_personal() || is_platform_namespace(&c.namespace) {
+        return Err(GraphError::unimplemented(
+            "a personal change or a change of the platform's namespaces: not served here yet",
+        ));
+    }
+    Ok(id)
 }
 
 /// The Connect error of a graph error (`lib/rpcerr.ToConnect`).
@@ -188,10 +226,7 @@ impl Graph {
         let mut tx = Tx::new(&session, &env);
         let out = f(&mut tx).await.map_err(connect_error)?;
         let positions = tx.finish().await.map_err(connect_error)?;
-        session
-            .commit()
-            .await
-            .map_err(|e| connect_error(GraphError::from(e)))?;
+        session.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
         let mut res = Response::new(out);
         if !positions.is_empty() {
             let v = positions
@@ -486,10 +521,14 @@ impl pb::GraphService for Graph {
         let token_project = caller.project.clone();
         self.write(caller, async |tx| {
             if !m.parent_id.is_empty() {
-                return Err(GraphError::unimplemented("a sub-change (ADR 0103): not served here yet"));
+                return Err(GraphError::unimplemented(
+                    "a sub-change (ADR 0103): not served here yet",
+                ));
             }
             if m.owner_org == "@me" || m.owner_org.starts_with(change::USER_PREFIX) || m.owner_org.contains("/USR:") {
-                return Err(GraphError::unimplemented("a personal change (ADR 0037): not served here yet"));
+                return Err(GraphError::unimplemented(
+                    "a personal change (ADR 0037): not served here yet",
+                ));
             }
             if is_platform_namespace(&m.namespace) {
                 return Err(GraphError::unimplemented(
@@ -555,6 +594,158 @@ impl pb::GraphService for Graph {
         })
         .await
     }
+    async fn impact_node_create(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactNodeCreateRequest>,
+    ) -> Answer<pb::ImpactNodeCreateResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let by = caller.subject.clone();
+        caller.administers().map_err(connect_error)?;
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let links = convert::link_writes(&m.links).map_err(|e| GraphError::new(Kind::Invalid, e))?;
+            let cn = tx
+                .impact_node_create(
+                    &id,
+                    NodeCreate {
+                        key: m.key.clone(),
+                        typ: m.r#type.clone(),
+                        props: m.props.as_ref().map(convert::map).filter(|p| !p.is_empty()),
+                        owner: m.owner.clone(),
+                        rationale: m.rationale.clone(),
+                        links,
+                        execution: m.execution.clone(),
+                        produced_by: by,
+                    },
+                    &m.flow,
+                )
+                .await?;
+            Ok(pb::ImpactNodeCreateResponse {
+                node: Some(convert::change_impact(&cn)),
+            })
+        })
+        .await
+    }
+
+    async fn impact_node_checkout(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactNodeCheckoutRequest>,
+    ) -> Answer<pb::ImpactNodeCheckoutResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let by = caller.subject.clone();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let mut out = tx
+                .impact_node_checkout(
+                    &id,
+                    &m.flow,
+                    vec![NodeCheckout {
+                        impact: m.change_impact_id.clone(),
+                        node: m.node_id.as_str().into(),
+                        key: String::new(),
+                        rationale: m.rationale.clone(),
+                        execution: m.execution.clone(),
+                        produced_by: by,
+                    }],
+                )
+                .await?;
+            Ok(pb::ImpactNodeCheckoutResponse {
+                node: out.pop().map(|cn| convert::change_impact(&cn)),
+            })
+        })
+        .await
+    }
+
+    async fn impact_node_checkout_batch(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactNodeCheckoutBatchRequest>,
+    ) -> Answer<pb::ImpactNodeCheckoutBatchResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let by = caller.subject.clone();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let nodes = m
+                .nodes
+                .iter()
+                .map(|n| NodeCheckout {
+                    impact: n.change_impact_id.clone(),
+                    node: n.node_id.as_str().into(),
+                    key: n.key.clone(),
+                    rationale: n.rationale.clone(),
+                    execution: m.execution.clone(),
+                    produced_by: by.clone(),
+                })
+                .collect();
+            let out = tx.impact_node_checkout(&id, &m.flow, nodes).await?;
+            Ok(pb::ImpactNodeCheckoutBatchResponse {
+                nodes: out.iter().map(convert::change_impact).collect(),
+            })
+        })
+        .await
+    }
+
+    async fn impact_node_update(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactNodeUpdateRequest>,
+    ) -> Answer<pb::ImpactNodeUpdateResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let props = m.props.as_ref().map(convert::map).unwrap_or_default();
+            let cn = tx
+                .impact_node_update(&id, &m.change_impact_id, props, &m.owner, &m.flow, &m.execution)
+                .await?;
+            Ok(pb::ImpactNodeUpdateResponse {
+                node: Some(convert::change_impact(&cn)),
+            })
+        })
+        .await
+    }
+
+    async fn impact_link_create(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactLinkCreateRequest>,
+    ) -> Answer<pb::ImpactLinkCreateResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let l = convert::link_write(&m.r#type, m.to.as_ref(), &m.target, m.props.as_ref())
+                .map_err(|e| GraphError::new(Kind::Invalid, e))?;
+            let link = tx
+                .impact_link_create(&id, &m.change_impact_id, l, &m.flow, &m.execution)
+                .await?;
+            Ok(pb::ImpactLinkCreateResponse {
+                link: Some(convert::link(&link)),
+            })
+        })
+        .await
+    }
+
+    async fn impact_link_delete(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactLinkDeleteRequest>,
+    ) -> Answer<pb::ImpactLinkDeleteResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            tx.impact_link_delete(&id, &m.link_id.as_str().into(), &m.flow, &m.execution)
+                .await?;
+            Ok(pb::ImpactLinkDeleteResponse {})
+        })
+        .await
+    }
 }
 
 /// The namespaces the platform graph holds (ADR 0154 §9): their writes are checked by the platform's validators,
@@ -583,12 +774,19 @@ async fn project_stopped(tx: &Tx<'_, Session>, project: &str) -> Result<bool, Gr
             Err(e) if e.is_not_found() => return Ok(false),
             Err(e) => return Err(e),
         };
-        if v.node.props.as_ref().and_then(|p| p.get("stopped")).and_then(serde_json::Value::as_bool) == Some(true) {
+        if v.node
+            .props
+            .as_ref()
+            .and_then(|p| p.get("stopped"))
+            .and_then(serde_json::Value::as_bool)
+            == Some(true)
+        {
             return Ok(true);
         }
         key = String::new();
         for l in &v.out {
-            if l.typ == st.parent || l.typ.rsplit('@').next() == Some(st.parent.rsplit('@').next().unwrap_or_default()) {
+            if l.typ == st.parent || l.typ.rsplit('@').next() == Some(st.parent.rsplit('@').next().unwrap_or_default())
+            {
                 if let Some(to) = l.to_node() {
                     key = tx.store.node(to).await?.map(|n| n.key).unwrap_or_default();
                 }

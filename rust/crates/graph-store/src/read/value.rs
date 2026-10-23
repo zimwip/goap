@@ -26,7 +26,11 @@ pub enum Arg {
 impl Arg {
     /// A text, null when empty (Go's `nullUUID`).
     pub fn or_null(s: &str) -> Arg {
-        if s.is_empty() { Arg::Null } else { Arg::Text(s.to_string()) }
+        if s.is_empty() {
+            Arg::Null
+        } else {
+            Arg::Text(s.to_string())
+        }
     }
 }
 

@@ -1,8 +1,8 @@
 //! The reads of the graph ([`graph_core::store::ReadTx`]) over a read-only session of either dialect.
+mod domains;
 mod sql;
 mod value;
 mod write;
-mod domains;
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -420,6 +420,13 @@ impl ReadTx for Session {
             return Ok(Vec::new());
         }
         self.nodes(self.sql.nodes_at(refs, typ)).await
+    }
+
+    async fn link(&self, id: &LinkId) -> Result<Option<Link>, GraphError> {
+        if !is_uuid(id.as_str()) {
+            return Ok(None);
+        }
+        Ok(self.links(self.sql.link_by_id(id)).await?.into_iter().next())
     }
 
     async fn links_from(&self, refs: &[NodeRef], types: Option<&[String]>) -> Result<Vec<Link>, GraphError> {

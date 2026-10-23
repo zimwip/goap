@@ -5,7 +5,9 @@ use std::{collections::HashMap, future::Future};
 use crate::{
     change::{Change, ChangesFilter},
     error::Result,
-    model::{Baseline, BaselineId, Branch, ChangeId, Link, LinkId, Node, NodeId, NodePage, NodeQuery, NodeRef, Version},
+    model::{
+        Baseline, BaselineId, Branch, ChangeId, Link, LinkId, Node, NodeId, NodePage, NodeQuery, NodeRef, Version,
+    },
 };
 
 /// The reads of a store, in one session (a read-only connection: PostgreSQL with no transaction around the
@@ -45,6 +47,9 @@ pub trait ReadTx: Sync {
 
     /// Versions of nodes, of one type when `typ` is not empty, by key.
     fn nodes_at(&self, refs: &[NodeRef], typ: &str) -> impl Future<Output = Result<Vec<Node>>> + Send;
+
+    /// A link row by its id, none when the store holds none (a row dropping a link left out).
+    fn link(&self, id: &LinkId) -> impl Future<Output = Result<Option<Link>>> + Send;
 
     /// The links some versions hold (their link sets, ADR 0141), of some types (None: every type), by id.
     fn links_from(&self, refs: &[NodeRef], types: Option<&[String]>) -> impl Future<Output = Result<Vec<Link>>> + Send;

@@ -12,7 +12,9 @@ const COLUMNS: &str = "name, version, status, definition, created_at, updated_at
 impl Session {
     /// Every stored domain version, in the order of the table (`ListDomains`).
     pub async fn domain_records(&self) -> Result<Vec<Record>, GraphError> {
-        let rows = self.rows((format!("SELECT {COLUMNS} FROM domain_version"), Vec::new())).await?;
+        let rows = self
+            .rows((format!("SELECT {COLUMNS} FROM domain_version"), Vec::new()))
+            .await?;
         rows.iter()
             .map(|r| {
                 let (name, version) = (r.text(0), r.text(1));
@@ -38,7 +40,8 @@ impl Session {
     pub async fn domain_fingerprint(&self) -> Result<String, GraphError> {
         let rows = self
             .rows((
-                "SELECT name, version, status, updated_at, published_at FROM domain_version ORDER BY name, version".into(),
+                "SELECT name, version, status, updated_at, published_at FROM domain_version ORDER BY name, version"
+                    .into(),
                 Vec::new(),
             ))
             .await?;

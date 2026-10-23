@@ -9,9 +9,7 @@ use chrono::{DateTime, Utc};
 use graph_catalog::{Catalog, catalog::STRUCTURE_ORGANISATION, catalog::STRUCTURE_PROJECT};
 use serde::Serialize;
 
-use super::events::{
-    self, BaselineEvent, ChangeDocEvent, ChangeEvent, ChangeJson, DocRef, EventNode, NodeEvent,
-};
+use super::events::{self, BaselineEvent, ChangeDocEvent, ChangeEvent, ChangeJson, DocRef, EventNode, NodeEvent};
 use crate::{
     GraphError, Result,
     change::Change,
@@ -78,6 +76,8 @@ pub struct Tx<'s, S: WriteTx> {
     baselines: Vec<(Baseline, Option<BTreeMap<NodeId, i32>>)>,
     /// the last position the transaction left the log of each change at (the watermark, ADR 0153)
     pub positions: BTreeMap<ChangeId, i64>,
+    /// the views of the changes the transaction works on, folded from their logs and kept up by its writes
+    pub(super) views: HashMap<ChangeId, super::work::ChangeView>,
 }
 
 impl<'s, S: WriteTx> Tx<'s, S> {
@@ -102,6 +102,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             nodes: Vec::new(),
             baselines: Vec::new(),
             positions: BTreeMap::new(),
+            views: HashMap::new(),
         }
     }
 
@@ -271,8 +272,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
                 n.project = c.project_id.clone();
             }
         }
-        self.owners
-            .insert(n.owner.to_string(), (n.owner.clone(), what.clone()));
+        self.owners.insert(n.owner.to_string(), (n.owner.clone(), what.clone()));
         self.projects
             .insert(n.project.to_string(), (n.project.clone(), what.clone()));
         let committed = self.commit_on(&n.branch).await?;
@@ -409,11 +409,13 @@ impl<'s, S: WriteTx> Tx<'s, S> {
         }
         let owners: Vec<(Url, String)> = self.owners.values().cloned().collect();
         for (u, what) in owners {
-            self.in_structure(STRUCTURE_ORGANISATION, &u, &format!("{what}: owner")).await?;
+            self.in_structure(STRUCTURE_ORGANISATION, &u, &format!("{what}: owner"))
+                .await?;
         }
         let projects: Vec<(Url, String)> = self.projects.values().cloned().collect();
         for (u, what) in projects {
-            self.in_structure(STRUCTURE_PROJECT, &u, &format!("{what}: project")).await?;
+            self.in_structure(STRUCTURE_PROJECT, &u, &format!("{what}: project"))
+                .await?;
         }
         let changes: Vec<Change> = self.changes.values().cloned().collect();
         for c in changes {
@@ -489,11 +491,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
                 id: id.clone(),
                 ..Change::default()
             });
-            out.push(self.message(
-                events::subject_change_touched(&id),
-                touched_json(&c, seq),
-                now,
-            ));
+            out.push(self.message(events::subject_change_touched(&id), touched_json(&c, seq), now));
         }
         for id in self.indexed.clone() {
             let c = match self.written_headers.get(&id) {
@@ -612,10 +610,7 @@ fn touched_json(c: &Change, seq: i64) -> String {
 }
 
 /// The text and facet values of a node, from the search declarations of its type (Go's `typeIndex.searchable`).
-fn searchable(
-    cat: &Catalog,
-    n: &Node,
-) -> (BTreeMap<String, String>, serde_json::Map<String, serde_json::Value>) {
+fn searchable(cat: &Catalog, n: &Node) -> (BTreeMap<String, String>, serde_json::Map<String, serde_json::Value>) {
     let mut text = BTreeMap::new();
     let mut facets = serde_json::Map::new();
     let Some(props) = &n.props else {

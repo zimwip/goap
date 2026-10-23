@@ -5,9 +5,11 @@ use chrono::{DateTime, Utc};
 use goap_proto::graph::v1 as pb;
 use graph_core::{
     change::{BaselineDiff, Change, StackChange},
+    impact::ChangeImpact,
     lnk::Url,
     model::{Baseline, Branch, Link, Node, NodeRef, Props, Target, TypeCount, branch_of, namespace_of},
     view::View,
+    write::work::LinkWrite,
 };
 use pbjson_types::value::Kind;
 use serde_json::Value as Json;
@@ -237,4 +239,74 @@ pub fn baseline_diff(d: &BaselineDiff) -> pb::BaselineDiff {
         from: d.from.as_ref().map(node),
         to: d.to.as_ref().map(node),
     }
+}
+
+/// A time as `pbconv.Time` writes it: none for the zero time.
+fn go_time(t: &DateTime<Utc>) -> Option<pbjson_types::Timestamp> {
+    (*t != graph_core::gojson::zero_time()).then(|| pbjson_types::Timestamp::from(*t))
+}
+
+/// A change impact (`pbconv.ChangeImpactToPB`).
+pub fn change_impact(cn: &ChangeImpact) -> pb::ChangeImpact {
+    pb::ChangeImpact {
+        id: cn.id.clone(),
+        key: cn.key.clone(),
+        r#type: cn.typ.clone(),
+        intent: cn.intent.clone(),
+        rationale: cn.rationale.clone(),
+        pre: cn.pre.as_ref().map(node_ref),
+        post: cn.post.as_ref().map(node_ref),
+        committed: cn.committed.as_ref().map(node_ref),
+        review: cn.review.clone(),
+        reviews: cn
+            .reviews
+            .iter()
+            .map(|r| pb::Review {
+                status: r.status.clone(),
+                by: r.by.clone(),
+                comment: r.comment.clone(),
+                at: go_time(&r.at),
+                flow: r.flow.clone(),
+                execution: r.execution.clone(),
+                superseded: r.superseded,
+                review_id: r.review_id.clone(),
+            })
+            .collect(),
+        via: cn.via.clone(),
+        recheck: cn.recheck,
+        produced_by: cn.produced_by.clone(),
+        derived_from: cn.derived_from.clone(),
+        execution: cn.execution.clone(),
+        items: cn.items.clone(),
+        created_at: go_time(&cn.created_at),
+        flow: cn.flow.clone(),
+        superseded: cn.superseded,
+        validation: None,
+    }
+}
+
+/// The links a write gives a draft (`linkWrites`); a target URL that does not parse is refused.
+pub fn link_writes(ls: &[pb::NodeLinkWrite]) -> Result<Vec<LinkWrite>, String> {
+    ls.iter()
+        .map(|l| link_write(&l.r#type, l.to.as_ref(), &l.target, l.props.as_ref()))
+        .collect()
+}
+
+pub fn link_write(
+    typ: &str,
+    to: Option<&pb::NodeRef>,
+    target: &str,
+    props: Option<&pbjson_types::Struct>,
+) -> Result<LinkWrite, String> {
+    let target = if target.is_empty() {
+        Url::default()
+    } else {
+        Url::parse(target).map_err(|e| e.to_string())?
+    };
+    Ok(LinkWrite {
+        typ: typ.to_string(),
+        to: ref_from(to),
+        target,
+        props: props.map(map).filter(|m| !m.is_empty()),
+    })
 }

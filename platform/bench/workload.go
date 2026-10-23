@@ -425,29 +425,40 @@ func (e edit) held() int {
 	return len(e.n.out) + len(e.links)
 }
 
-// dropped picks the link an edit drops: the first outgoing link of the bench's type of the node as the view holds it
-// (a change: its draft), noting its target.
+// dropped picks the link an edit drops: the outgoing link of the bench's type of the node as the view holds it (a
+// change: its draft) to the node it linked first, noting that target. The target decides, not the order of the page:
+// link ids are random, so two services given the same calls drop the same link (the comparison of ADR 0162).
 func (r *Runner) dropped(ctx context.Context, e *edit, ref *graphv1.NodeRef, view *graphv1.View) (string, error) {
 	res, err := timed(ctx, r.Metrics, "drop.ListNodeLinks", func(ctx context.Context) (*connect.Response[graphv1.ListNodeLinksResponse], error) {
-		return r.Clients.Graph.ListNodeLinks(ctx, connect.NewRequest(&graphv1.ListNodeLinksRequest{Ref: ref, View: view, Type: LinkType, Limit: 1}))
+		return r.Clients.Graph.ListNodeLinks(ctx, connect.NewRequest(&graphv1.ListNodeLinksRequest{Ref: ref, View: view, Type: LinkType, Limit: maxDropPage}))
 	})
 	if err != nil || len(res.Msg.Links) == 0 {
 		return "", err
 	}
-	l := res.Msg.Links[0]
-	to := l.GetTo().GetId()
+	byTarget := make(map[string]string, len(res.Msg.Links))
+	for _, l := range res.Msg.Links {
+		if to := l.GetTo().GetId(); to != "" {
+			if _, ok := byTarget[to]; !ok {
+				byTarget[to] = l.GetId()
+			}
+		}
+	}
 	for _, n := range e.n.out {
 		if n.id == "" { // linked by key (commit mode): its id is read once
 			if err := r.resolve(ctx, n); err != nil {
 				return "", err
 			}
 		}
-		if n.id == to {
+		if id, ok := byTarget[n.id]; ok {
 			e.gone = n
+			return id, nil
 		}
 	}
-	return l.GetId(), nil
+	return res.Msg.Links[0].GetId(), nil // a link the bench did not write
 }
+
+// maxDropPage is the page of links dropped reads: the largest one.
+const maxDropPage = 500
 
 // heldBy is the number of links the nodes of a change hold once it is written.
 func heldBy(edits []edit) int {

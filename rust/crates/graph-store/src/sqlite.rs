@@ -44,10 +44,7 @@ impl Drop for SqliteSession {
         if let (Some(conn), Some((pool, _permit))) = (self.conn.take(), self.pool.take())
             && let Ok(m) = Arc::try_unwrap(conn)
         {
-            pool.idle
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .push(m.into_inner());
+            pool.idle.lock().unwrap_or_else(|e| e.into_inner()).push(m.into_inner());
         }
     }
 }
@@ -224,11 +221,8 @@ impl SqliteTx {
 
     /// Commits, then lets the writer go.
     pub async fn commit(self) -> Result<(), StoreError> {
-        let res = self.run(|c| Ok(c.execute_batch("COMMIT")?)).await;
-        if res.is_err() {
-            // a failed COMMIT leaves the transaction open: Drop rolls it back
-            return res;
-        }
+        // a failed COMMIT leaves the transaction open: Drop rolls it back
+        self.run(|c| Ok(c.execute_batch("COMMIT")?)).await?;
         self.conn.lock().await.take();
         Ok(())
     }

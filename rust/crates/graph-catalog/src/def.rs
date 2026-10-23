@@ -43,7 +43,11 @@ impl Domain {
             return None;
         }
         // the last of a name wins, as the Go loops keep overwriting
-        self.enums.iter().rev().find(|e| e.name == name).map(|e| e.values.as_slice())
+        self.enums
+            .iter()
+            .rev()
+            .find(|e| e.name == name)
+            .map(|e| e.values.as_slice())
     }
 
     /// Whether the domain declares or plugs algorithms (def.Schema.HasAlgorithms): its checks run scripts.
@@ -58,10 +62,11 @@ impl Domain {
                 .link_types
                 .iter()
                 .any(|l| !l.validators.is_empty() || l.attributes.iter().any(|a| !a.validators.is_empty()))
-            || self
-                .lifecycles
-                .iter()
-                .any(|l| l.transitions.iter().any(|t| !t.guards.is_empty() || !t.actions.is_empty()))
+            || self.lifecycles.iter().any(|l| {
+                l.transitions
+                    .iter()
+                    .any(|t| !t.guards.is_empty() || !t.actions.is_empty())
+            })
     }
 }
 
@@ -170,7 +175,11 @@ impl LinkType {
     /// The label read from the source and the one read from the target, with their fallbacks.
     pub fn labels(&self) -> (String, String) {
         let forward = if self.label.is_empty() { &self.name } else { &self.label };
-        let inverse = if self.inverse_label.is_empty() { forward } else { &self.inverse_label };
+        let inverse = if self.inverse_label.is_empty() {
+            forward
+        } else {
+            &self.inverse_label
+        };
         (forward.clone(), inverse.clone())
     }
 }
@@ -255,19 +264,28 @@ trait Short: DeserializeOwned + Default {
 
 impl Short for Attribute {
     fn named(name: String) -> Self {
-        Attribute { name, ..Attribute::default() }
+        Attribute {
+            name,
+            ..Attribute::default()
+        }
     }
 }
 
 impl Short for NodeType {
     fn named(name: String) -> Self {
-        NodeType { name, ..NodeType::default() }
+        NodeType {
+            name,
+            ..NodeType::default()
+        }
     }
 }
 
 impl Short for EnumValue {
     fn named(value: String) -> Self {
-        EnumValue { value, ..EnumValue::default() }
+        EnumValue {
+            value,
+            ..EnumValue::default()
+        }
     }
 }
 
@@ -315,7 +333,10 @@ mod tests {
         assert_eq!(d.version, "1.0");
         assert_eq!(d.node_types[0].name, "A");
         let b = &d.node_types[1];
-        assert_eq!((b.attributes[0].name.as_str(), b.attributes[1].default.as_str()), ("title", "0"));
+        assert_eq!(
+            (b.attributes[0].name.as_str(), b.attributes[1].default.as_str()),
+            ("title", "0")
+        );
         assert_eq!(d.enum_values("e").unwrap()[0].value, "one");
         assert!(!d.has_algorithms());
     }

@@ -152,6 +152,19 @@ impl Serialize for Raw {
     }
 }
 
+/// A value as Go decodes it into `any`: every number a float64, so that two values Go finds equal are equal here.
+pub fn floats(v: Value) -> Value {
+    match v {
+        Value::Number(n) => n
+            .as_f64()
+            .and_then(serde_json::Number::from_f64)
+            .map_or(Value::Null, Value::Number),
+        Value::Array(a) => Value::Array(a.into_iter().map(floats).collect()),
+        Value::Object(m) => Value::Object(m.into_iter().map(|(k, v)| (k, floats(v))).collect()),
+        v => v,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,7 +189,10 @@ mod tests {
         for (v, want) in cases {
             assert_eq!(float(v), want, "{v}");
         }
-        assert_eq!(to_string(&json!([1, 2.0, 12345678901234567890u64, -9007199254740993i64])), "[1,2,12345678901234567000,-9007199254740992]");
+        assert_eq!(
+            to_string(&json!([1, 2.0, 12345678901234567890u64, -9007199254740993i64])),
+            "[1,2,12345678901234567000,-9007199254740992]"
+        );
     }
 
     #[test]
@@ -190,23 +206,14 @@ mod tests {
 
     #[test]
     fn writes_times_as_go() {
-        let t = DateTime::parse_from_rfc3339("2026-10-23T10:00:01.120000000Z").unwrap().with_timezone(&Utc);
+        let t = DateTime::parse_from_rfc3339("2026-10-23T10:00:01.120000000Z")
+            .unwrap()
+            .with_timezone(&Utc);
         assert_eq!(time_text(&t), "2026-10-23T10:00:01.12Z");
-        let t = DateTime::parse_from_rfc3339("2026-10-23T10:00:01Z").unwrap().with_timezone(&Utc);
+        let t = DateTime::parse_from_rfc3339("2026-10-23T10:00:01Z")
+            .unwrap()
+            .with_timezone(&Utc);
         assert_eq!(time_text(&t), "2026-10-23T10:00:01Z");
         assert_eq!(time_text(&zero_time()), "0001-01-01T00:00:00Z");
-    }
-}
-
-/// A value as Go decodes it into `any`: every number a float64, so that two values Go finds equal are equal here.
-pub fn floats(v: Value) -> Value {
-    match v {
-        Value::Number(n) => n
-            .as_f64()
-            .and_then(serde_json::Number::from_f64)
-            .map_or(Value::Null, Value::Number),
-        Value::Array(a) => Value::Array(a.into_iter().map(floats).collect()),
-        Value::Object(m) => Value::Object(m.into_iter().map(|(k, v)| (k, floats(v))).collect()),
-        v => v,
     }
 }

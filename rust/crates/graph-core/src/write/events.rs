@@ -38,7 +38,11 @@ pub fn subject_token(s: &str) -> String {
 
 /// `goap.node.<namespace>.<type>.<id>.written`.
 pub fn subject_node_written(namespace: &str, typ: &str, id: &NodeId) -> String {
-    format!("goap.node.{}.{}.{id}.written", subject_token(namespace), subject_token(typ))
+    format!(
+        "goap.node.{}.{}.{id}.written",
+        subject_token(namespace),
+        subject_token(typ)
+    )
 }
 
 /// `goap.baseline.<branch>.advanced`.

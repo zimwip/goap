@@ -166,6 +166,32 @@ pub struct ChangeImpact {
     pub created_at: DateTime<Utc>,
 }
 
+impl Default for ChangeImpact {
+    fn default() -> Self {
+        ChangeImpact {
+            id: String::new(),
+            key: String::new(),
+            typ: String::new(),
+            intent: String::new(),
+            rationale: String::new(),
+            pre: None,
+            post: None,
+            committed: None,
+            review: String::new(),
+            reviews: Vec::new(),
+            via: String::new(),
+            recheck: false,
+            produced_by: String::new(),
+            derived_from: Vec::new(),
+            execution: String::new(),
+            items: Vec::new(),
+            flow: String::new(),
+            superseded: false,
+            created_at: zero_time(),
+        }
+    }
+}
+
 impl ChangeImpact {
     /// No post yet: its node is not checked out.
     pub fn planned(&self) -> bool {
@@ -193,7 +219,10 @@ impl ChangeImpact {
             }
             INTENT_MODIFIED => {
                 let Some(pre) = self.pre.as_ref().filter(|p| p.version != 0) else {
-                    return Err(format!("change impact {}: a modified node needs its pre version", self.key));
+                    return Err(format!(
+                        "change impact {}: a modified node needs its pre version",
+                        self.key
+                    ));
                 };
                 if let Some(post) = &self.post
                     && (post.id != pre.id || (!post.is_draft() && post.version <= pre.version))
@@ -227,7 +256,12 @@ pub struct DraftLink {
     pub to: NodeRef,
     #[serde(default, skip_serializing_if = "Url::is_zero")]
     pub target: Url,
-    #[serde(default, rename = "props", skip_serializing_if = "no_props", deserialize_with = "go_props")]
+    #[serde(
+        default,
+        rename = "props",
+        skip_serializing_if = "no_props",
+        deserialize_with = "go_props"
+    )]
     pub props: Props,
 }
 
@@ -258,7 +292,12 @@ pub struct Draft {
     pub state: String,
     #[serde(default, skip_serializing_if = "Url::is_zero")]
     pub owner: Url,
-    #[serde(default, rename = "props", skip_serializing_if = "no_props", deserialize_with = "go_props")]
+    #[serde(
+        default,
+        rename = "props",
+        skip_serializing_if = "no_props",
+        deserialize_with = "go_props"
+    )]
     pub props: Props,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub origins: Vec<NodeRef>,
@@ -454,7 +493,10 @@ impl ImpactEvent {
                 )
             }
             ImpactOp::Transitioned | ImpactOp::CheckedOut => {
-                need(!self.impact.is_empty() && self.post.is_some(), "a change impact and a post")?;
+                need(
+                    !self.impact.is_empty() && self.post.is_some(),
+                    "a change impact and a post",
+                )?;
                 need(
                     self.op == ImpactOp::Transitioned
                         || !self.post.as_ref().is_some_and(NodeRef::is_draft)
@@ -462,15 +504,22 @@ impl ImpactEvent {
                     "the initial state of the draft",
                 )
             }
-            ImpactOp::Reviewed | ImpactOp::Discarded => {
-                need(!self.impact.is_empty() && self.review.is_some(), "a change impact and a review")
-            }
-            ImpactOp::Adopted => need(self.impact.is_empty() && !self.flow.is_empty(), "a flow and no change impact"),
+            ImpactOp::Reviewed | ImpactOp::Discarded => need(
+                !self.impact.is_empty() && self.review.is_some(),
+                "a change impact and a review",
+            ),
+            ImpactOp::Adopted => need(
+                self.impact.is_empty() && !self.flow.is_empty(),
+                "a flow and no change impact",
+            ),
             ImpactOp::Committed => need(
                 !self.impact.is_empty() && self.committed.is_some(),
                 "a change impact and a committed version",
             ),
-            ImpactOp::Rebased => need(!self.impact.is_empty() && self.pre.is_some(), "a change impact and a pre version"),
+            ImpactOp::Rebased => need(
+                !self.impact.is_empty() && self.pre.is_some(),
+                "a change impact and a pre version",
+            ),
             ImpactOp::Updated => need(
                 !self.impact.is_empty() && self.post.is_some() && self.patch.as_ref().is_some_and(|p| !p.is_empty()),
                 "a change impact, its draft and a patch",
@@ -1035,11 +1084,18 @@ impl Fold {
 
     /// The impact of a node on the main flow, by its key or its node id.
     pub fn impact_of_key(&self, key: &str) -> Option<&ChangeImpact> {
-        self.impacts.iter().find(|c| c.key == key && c.flow.is_empty() && !c.superseded)
+        self.impacts
+            .iter()
+            .find(|c| c.key == key && c.flow.is_empty() && !c.superseded)
     }
 
     fn reindex(&mut self) {
-        self.at = self.impacts.iter().enumerate().map(|(i, c)| (c.id.clone(), i)).collect();
+        self.at = self
+            .impacts
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.id.clone(), i))
+            .collect();
     }
 
     /// Applies one event: the impacts, then the drafts (Go's `ApplyImpactEventAt`, then `ApplyDraftEvent`).
@@ -1050,7 +1106,10 @@ impl Fold {
         if self.impacts.len() != before || e.op == ImpactOp::Adopted {
             self.reindex();
         }
-        let at = self.drafts.iter().position(|d| d.impact == e.impact && d.flow == e.flow);
+        let at = self
+            .drafts
+            .iter()
+            .position(|d| d.impact == e.impact && d.flow == e.flow);
         match e.op {
             ImpactOp::Created
             | ImpactOp::CheckedOut
@@ -1069,7 +1128,8 @@ impl Fold {
             _ => {}
         }
         let live: HashMap<&str, bool> = self.impacts.iter().map(|c| (c.id.as_str(), !c.superseded)).collect();
-        self.drafts.retain(|d| live.get(d.impact.as_str()).copied().unwrap_or(false));
+        self.drafts
+            .retain(|d| live.get(d.impact.as_str()).copied().unwrap_or(false));
     }
 }
 
@@ -1185,7 +1245,10 @@ mod tests {
         let mut other = review("i2");
         other.review.as_mut().unwrap().comment = "other".into();
         let l = batch_entry("b1", &[review("i1"), other.clone()]).unwrap();
-        assert_eq!(l.payload, r#"{"impacts":[{"impactId":"i1","review":{"comment":"bench"}},{"impactId":"i2","review":{"comment":"other"}}],"op":"reviewed","review":{"at":"2026-10-23T10:00:02Z","by":"system:r","reviewId":"rv","status":"accepted"}}"#);
+        assert_eq!(
+            l.payload,
+            r#"{"impacts":[{"impactId":"i1","review":{"comment":"bench"}},{"impactId":"i2","review":{"comment":"other"}}],"op":"reviewed","review":{"at":"2026-10-23T10:00:02Z","by":"system:r","reviewId":"rv","status":"accepted"}}"#
+        );
         assert_eq!(events_of(&l).unwrap()[1].review, other.review);
     }
 

@@ -153,7 +153,10 @@ const BUILTIN_SOURCES: [(&str, &str); 3] = [
         "organisation.yaml",
         include_str!("../../../../lib/domains/builtin/organisation.yaml"),
     ),
-    ("platform.yaml", include_str!("../../../../lib/domains/builtin/platform.yaml")),
+    (
+        "platform.yaml",
+        include_str!("../../../../lib/domains/builtin/platform.yaml"),
+    ),
 ];
 
 static BUILTINS: LazyLock<Vec<Domain>> = LazyLock::new(|| {
@@ -288,10 +291,16 @@ impl Catalog {
         }
         for (kind, st) in &c.structures {
             if !c.links.contains_key(&st.parent) {
-                return Err(format!("structure {kind}: parent link type {}: unknown type", st.parent));
+                return Err(format!(
+                    "structure {kind}: parent link type {}: unknown type",
+                    st.parent
+                ));
             }
         }
-        let (o, p) = (c.structures.get(STRUCTURE_ORGANISATION), c.structures.get(STRUCTURE_PROJECT));
+        let (o, p) = (
+            c.structures.get(STRUCTURE_ORGANISATION),
+            c.structures.get(STRUCTURE_PROJECT),
+        );
         if o.map(|s| &s.namespace) != p.map(|s| &s.namespace) {
             return Err(format!(
                 "the organisation ({}) and the projects ({}) must live in one namespace: invalid",
@@ -532,7 +541,8 @@ fn resolve(r: &str, decl: &HashMap<String, (&Domain, &def::NodeType)>) -> Result
                 }
             }
         }
-        t.validators.extend(dt.attributes.iter().flat_map(|a| a.validators.iter().cloned()));
+        t.validators
+            .extend(dt.attributes.iter().flat_map(|a| a.validators.iter().cloned()));
         t.validators.extend(dt.validators.iter().cloned());
         for sp in &dt.search {
             match search_at.get(&sp.property) {
@@ -563,7 +573,10 @@ mod tests {
     fn resolves_the_builtin_domains() {
         let c = Catalog::builtin();
         let org = c.structure(STRUCTURE_ORGANISATION).unwrap();
-        assert_eq!((org.typ.as_str(), org.root.as_str()), ("organisation@OrgUnit", "ORG-DEFAULT"));
+        assert_eq!(
+            (org.typ.as_str(), org.root.as_str()),
+            ("organisation@OrgUnit", "ORG-DEFAULT")
+        );
         assert_eq!(org.parent, "organisation@part_of");
         let proj = c.structure(STRUCTURE_PROJECT).unwrap();
         assert!(proj.self_parent);
