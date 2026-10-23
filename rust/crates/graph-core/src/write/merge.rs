@@ -2,7 +2,7 @@
 //! `changebranch.go`; ADR 0102, 0140): settled, up to date, then fast-forwarded: what its branch committed joins the
 //! target, a baseline of kind fast-forward is the new head, each impact is committed there, the change is applied.
 //! A rebase, a three-way merge, a sub-change and a dependency are the Go service's.
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
 use serde_json::Value;
 
@@ -16,7 +16,7 @@ use crate::{
     GraphError, Result,
     change::{Change, ChangesFilter},
     impact::{ChangeImpact, ImpactEvent, ImpactOp, LOG_FACT, REVIEW_ACCEPTED, REVIEW_REJECTED},
-    model::{Baseline, BaselineId, Branch, ChangeId, MAIN_BRANCH, NodeId, NodeRef, REASON_REVERT, branch_of},
+    model::{Baseline, BaselineId, Branch, ChangeId, MAIN_BRANCH, NodeId, NodeRef, branch_of},
     read,
     store::WriteTx,
 };
@@ -84,7 +84,10 @@ impl<S: WriteTx> Tx<'_, S> {
             }
             _ => None,
         };
-        // a node withdrawn since its commit (a revert to come) holds the merge: the Go service's, as `unsettled` says
+        if let Some(own) = &own {
+            let held: Vec<&ChangeImpact> = impacts.iter().collect();
+            st.reverts = super::commit::withdrawn_since(self.store, own, &held).await?.len();
+        }
         st.unsettled = self.unsettled(&c, &impacts, own.as_ref()).await?;
         st.commits = impacts.iter().any(|cn| cn.committed.is_some());
         st.can_commit = !st.to_commit.is_empty() || st.reverts > 0;
@@ -136,20 +139,15 @@ impl<S: WriteTx> Tx<'_, S> {
                 out.push(format!("{} is not committed", cn.key));
             }
         }
-        // a node withdrawn after its commit is reverted by a commit: the Go service's
-        let held: HashSet<NodeId> = impacts
-            .iter()
-            .filter_map(|cn| cn.post.as_ref().or(cn.pre.as_ref()).map(|r| r.id.clone()))
-            .collect();
-        if let Some(own) = own
-            && self
-                .store
-                .branch_node_ids(&own.name)
-                .await?
-                .iter()
-                .any(|n| !held.contains(n))
-        {
-            return Err(unserved("the merge of a change holding a withdrawn node"));
+        if let Some(own) = own {
+            let held: Vec<&ChangeImpact> = impacts.iter().collect();
+            let w = super::commit::withdrawn_since(self.store, own, &held).await?;
+            if !w.is_empty() {
+                out.push(format!(
+                    "{} withdrawn node(s) still on the branch (commit to revert them)",
+                    w.len()
+                ));
+            }
         }
         Ok(out)
     }
@@ -248,13 +246,6 @@ impl<S: WriteTx> Tx<'_, S> {
         // the fast-forward
         let mut ids = self.store.branch_node_ids(&own.name).await?;
         ids.sort();
-        for n in &ids {
-            if let Some(l) = self.store.latest_on(n, &own.name).await?
-                && l.reason == REASON_REVERT
-            {
-                return Err(unserved("the merge of a branch holding a revert"));
-            }
-        }
         let into = read::select(self.store, &head, Some(&ids)).await?;
         let from = read::branch_versions(self.store, &own, &ids).await?;
         let mut moves = Vec::new();

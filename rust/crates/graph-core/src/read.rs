@@ -17,7 +17,7 @@ use crate::{
         NodePage, NodeQuery, NodeRef, NodeView, Target, Version, branch_of, namespace_of,
     },
     page::page_nodes,
-    store::ReadTx,
+    store::{REVERTED, ReadTx},
     view::View,
     write::{change::change_branch_origin, work::fold_change},
 };
@@ -285,17 +285,28 @@ impl ChangeWorld {
 pub async fn branch_versions<T: ReadTx>(tx: &T, own: &Branch, ids: &[NodeId]) -> Result<HashMap<NodeId, Version>> {
     let fork = header_of(tx, &own.fork_baseline).await?;
     let mut out = select(tx, &fork, Some(ids)).await?;
-    for (n, v) in tx
-        .committed_versions(&own.namespace, &own.name, 0, i64::MAX, Some(ids))
-        .await?
-    {
-        if v == 0 {
-            out.remove(&n);
-        } else {
-            out.insert(n, v);
+    lay_commits(
+        &mut out,
+        tx.committed_versions(&own.namespace, &own.name, 0, i64::MAX, Some(ids))
+            .await?,
+    );
+    Ok(out)
+}
+
+/// Lays the commits of the branch of a change over its fork: a deletion removes the node, a revert gives it back the
+/// version of the fork (Go's `chainVersions`).
+fn lay_commits(state: &mut HashMap<NodeId, Version>, commits: HashMap<NodeId, Version>) {
+    for (n, v) in commits {
+        match v {
+            0 => {
+                state.remove(&n);
+            }
+            REVERTED => {}
+            v => {
+                state.insert(n, v);
+            }
         }
     }
-    Ok(out)
 }
 
 impl<'a, T: ReadTx> World<'a, T> {
@@ -650,17 +661,12 @@ impl<'a, T: ReadTx> World<'a, T> {
             Some(own) => {
                 let fork = header_of(self.tx, &own.fork_baseline).await?;
                 let mut state = whole_state(self.tx, &fork).await?;
-                for (n, v) in self
-                    .tx
-                    .committed_versions(&own.namespace, &own.name, 0, i64::MAX, None)
-                    .await?
-                {
-                    if v == 0 {
-                        state.remove(&n);
-                    } else {
-                        state.insert(n, v);
-                    }
-                }
+                lay_commits(
+                    &mut state,
+                    self.tx
+                        .committed_versions(&own.namespace, &own.name, 0, i64::MAX, None)
+                        .await?,
+                );
                 (fork, state)
             }
             None => (self.baseline.clone(), whole_state(self.tx, &self.baseline).await?),

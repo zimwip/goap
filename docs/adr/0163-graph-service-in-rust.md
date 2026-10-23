@@ -231,5 +231,9 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   the change committed must rest in one; 482 calls, none divergent, the tables and the 356 events of the outbox the
   same. `ProposeImpact` (the modification of an existing node, a planned creation: a key and a type, no draft,
   ADR 0121) follows, with the creation or the checkout that fulfils a planned creation (a `checkedOut` event giving its
-  impact a draft): 513 calls, none divergent, the tables the same.
+  impact a draft): 513 calls, none divergent, the tables the same. A commit reverts the nodes withdrawn since their
+  commit (a version of reason `revert` holding the fork's properties and sharing its link set, a deletion for a node
+  the fork does not hold; the baseline of kind `revert`; the branch reads a revert as the fork's version, so the
+  fast-forward joins nothing for it), and `GetCommitState` and the merge count them as Go does: 535 calls, none
+  divergent, the tables and the 403 events of the outbox the same.
 - Not done yet: the rest of phase 4.

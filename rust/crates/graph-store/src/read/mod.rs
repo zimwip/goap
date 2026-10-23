@@ -18,11 +18,11 @@ use graph_core::{
     change::{Change, ChangesFilter, GuardianRef},
     lnk::Url,
     model::{
-        Baseline, BaselineId, Branch, ChangeId, Link, LinkId, Node, NodeId, NodePage, NodeQuery, NodeRef, Target,
-        Version,
+        Baseline, BaselineId, Branch, ChangeId, Link, LinkId, Node, NodeId, NodePage, NodeQuery, NodeRef,
+        REASON_REVERT, Target, Version,
     },
     page::type_counts,
-    store::ReadTx,
+    store::{REVERTED, ReadTx},
 };
 pub use sql::like_pattern;
 pub use value::{Arg, Row, Val};
@@ -494,7 +494,14 @@ impl ReadTx for Session {
             .await?;
         Ok(rows
             .iter()
-            .map(|r| (NodeId(r.text(0)), if r.bool(2) { 0 } else { r.int32(1) }))
+            .map(|r| {
+                let v = match (r.bool(2), r.text(3) == REASON_REVERT) {
+                    (_, true) => REVERTED,
+                    (true, false) => 0,
+                    (false, false) => r.int32(1),
+                };
+                (NodeId(r.text(0)), v)
+            })
             .collect())
     }
 

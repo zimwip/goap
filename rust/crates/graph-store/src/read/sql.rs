@@ -198,7 +198,8 @@ impl Sql {
         )
     }
 
-    /// The last commit of each node on a branch in the orders (after, up_to], with whether it deletes the node.
+    /// The last commit of each node on a branch in the orders (after, up_to], with whether it deletes the node and
+    /// why it was written.
     pub fn committed_versions(
         self,
         namespace: &str,
@@ -219,8 +220,7 @@ impl Sql {
             // history; what the version found holds is read by its key once found
             args.push(Arg::Texts(list(ids)));
             return (
-                "SELECT q.id::text, x.version,
-                    (SELECT w.deleted FROM node_version w WHERE w.node_id = q.id AND w.version = x.version)
+                "SELECT q.id::text, x.version, w.deleted, w.reason
                 FROM unnest($5::uuid[]) AS q(id) JOIN node n ON n.id = q.id AND n.namespace = $4
                 CROSS JOIN LATERAL (
                     SELECT u.version FROM (
@@ -230,7 +230,7 @@ impl Sql {
                         (SELECT j.version, j.committed FROM node_branch j
                         WHERE j.node_id = q.id AND j.branch = $1 AND j.committed > $2 AND j.committed <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
                     ) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
-                ) x"
+                ) x JOIN node_version w ON w.node_id = q.id AND w.version = x.version"
                     .into(),
                 args,
             );
@@ -244,13 +244,13 @@ impl Sql {
         }
         (
             format!(
-                "SELECT {}, version, deleted FROM (
-                    SELECT x.node_id, x.version, x.deleted, row_number() OVER (PARTITION BY x.node_id ORDER BY x.committed DESC, x.version DESC) AS rn
+                "SELECT {}, version, deleted, reason FROM (
+                    SELECT x.node_id, x.version, x.deleted, x.reason, row_number() OVER (PARTITION BY x.node_id ORDER BY x.committed DESC, x.version DESC) AS rn
                     FROM (
-                        SELECT v.node_id, v.version, v.deleted, v.committed FROM node_version v
+                        SELECT v.node_id, v.version, v.deleted, v.reason, v.committed FROM node_version v
                         WHERE v.branch = {p1} AND v.committed > {p2} AND v.committed <= {p3}{in_v}
                         UNION ALL
-                        SELECT j.node_id, j.version, v.deleted, j.committed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
+                        SELECT j.node_id, j.version, v.deleted, v.reason, j.committed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
                         WHERE j.branch = {p1} AND j.committed > {p2} AND j.committed <= {p3}{in_j}
                     ) x JOIN node n ON n.id = x.node_id WHERE n.namespace = {p4}
                 ) y WHERE rn = 1",

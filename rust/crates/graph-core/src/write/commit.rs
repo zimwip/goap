@@ -3,7 +3,7 @@
 //! outgoing links (a set shared with the version it was checked out from, or a delta over an earlier one), then one
 //! `committed` entry for them all. The change stays open; the branch of a change keeps no baseline, the header answered
 //! is the commit as its event tells it.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
@@ -13,6 +13,7 @@ use super::{
     events::{CHANGE_COMMITTED, EventNode},
     review::draft_changed,
     tx::Tx,
+    work::node_of,
 };
 use crate::{
     GraphError, Result,
@@ -21,10 +22,10 @@ use crate::{
     impact::{ChangeImpact, Draft, INTENT_CREATED, ImpactEvent, ImpactOp, REVIEW_ACCEPTED},
     model::{
         Baseline, BaselineId, Branch, ChangeId, Link, LinkId, Node, NodeId, NodeRef, REASON_CREATE, REASON_DERIVE,
-        REASON_REBASE, REASON_REVISE, Target, Version, branch_of, namespace_of,
+        REASON_REBASE, REASON_REVERT, REASON_REVISE, Target, Version, branch_of, namespace_of,
     },
-    read::{branch_versions, stored_node},
-    store::{LinkSet, WriteTx},
+    read::{branch_versions, header_of, select, stored_node},
+    store::{LinkSet, ReadTx, WriteTx},
 };
 use graph_catalog::def::Lifecycle;
 
@@ -33,6 +34,12 @@ const MAX_LINK_DEPTH: i32 = 16;
 
 /// The kind of the baseline a commit tells (`domain.BaselineCommit`).
 const BASELINE_COMMIT: &str = "commit";
+
+/// The kind of the baseline of a commit that reverts nodes (`domain.BaselineRevert`).
+const BASELINE_REVERT: &str = "revert";
+
+/// The comment of a version reverting a node withdrawn after its commit.
+const REVERT_COMMENT: &str = "reverted: its impact was withdrawn from the change";
 
 /// `graphapi.ErrNothingToCommit`: an invalid request the caller tells apart (`lib/rpcerr`'s reason).
 pub const NOTHING_TO_COMMIT: &str = "nothing to commit";
@@ -274,21 +281,6 @@ impl<S: WriteTx> Tx<'_, S> {
             .filter(|cn| cn.flow.is_empty() && !cn.superseded)
             .collect();
 
-        // nothing a commit wrote is withdrawn since: a revert is the Go service's (ADR 0102)
-        let held: std::collections::HashSet<_> = impacts
-            .iter()
-            .filter_map(|cn| cn.post.as_ref().or(cn.pre.as_ref()).map(|r| r.id.clone()))
-            .collect();
-        if self
-            .store
-            .branch_node_ids(&own.name)
-            .await?
-            .iter()
-            .any(|n| !held.contains(n))
-        {
-            return Err(unserved("the revert of a node withdrawn after its commit"));
-        }
-
         let mut todo: Vec<(ChangeImpact, Draft)> = Vec::new();
         for cn in &impacts {
             if cn.review != REVIEW_ACCEPTED {
@@ -305,7 +297,8 @@ impl<S: WriteTx> Tx<'_, S> {
             }
             todo.push(((*cn).clone(), d.clone()));
         }
-        if todo.is_empty() {
+        let withdrawn = withdrawn_since(self.store, &own, &impacts).await?;
+        if todo.is_empty() && withdrawn.is_empty() {
             return Err(GraphError::invalid(format!(
                 "change {id}: no accepted change impact modifies a node, and nothing it committed is withdrawn: {NOTHING_TO_COMMIT}"
             )));
@@ -359,6 +352,8 @@ impl<S: WriteTx> Tx<'_, S> {
             self.put_version_links(n, &links, &like).await?;
             wrote.push(links);
         }
+        // 3. the reverts of the nodes withdrawn since their commit (ADR 0102)
+        let reverted = self.revert_withdrawn(&c, &branch, &own, &withdrawn).await?;
         // the versions are what a version must be (Go's `walkChangeImpacts`)
         for (n, links) in nodes.iter().zip(&wrote) {
             if n.deleted {
@@ -390,7 +385,12 @@ impl<S: WriteTx> Tx<'_, S> {
             branch: branch.clone(),
             parent_id: own.fork_baseline.clone(),
             change_id: c.id.clone(),
-            kind: BASELINE_COMMIT.into(),
+            kind: if reverted.is_empty() {
+                BASELINE_COMMIT
+            } else {
+                BASELINE_REVERT
+            }
+            .into(),
             seq: self.end_commit(&branch),
             created_at: Some(self.env.now()),
             ..Baseline::default()
@@ -414,13 +414,107 @@ impl<S: WriteTx> Tx<'_, S> {
             c.status = STATUS_ACTIVE.into();
         }
         self.put_change(&c).await?;
-        let ev: Vec<EventNode> = nodes.iter().map(EventNode::of).collect();
+        let ev: Vec<EventNode> = nodes.iter().chain(&reverted).map(EventNode::of).collect();
         self.raise(CHANGE_COMMITTED, &c, Some(&result), branch_of(&branch), &ev);
         Ok(result)
     }
 }
 
+/// The nodes the branch of a change changed that no impact of it holds any more, withdrawn after their commit, each with
+/// the version of the fork a commit reverts it to (none: the fork does not hold it), by id (Go's `withdrawnSince`).
+pub async fn withdrawn_since<T: ReadTx>(
+    tx: &T,
+    own: &Branch,
+    impacts: &[&ChangeImpact],
+) -> Result<Vec<(NodeId, Option<Version>)>> {
+    if own.name.is_empty() {
+        return Ok(Vec::new());
+    }
+    let held: HashSet<NodeId> = impacts.iter().filter_map(|cn| node_of(cn)).collect();
+    // only a node the branch holds a version of can differ from the fork (ADR 0137)
+    let mut ids: Vec<NodeId> = tx
+        .branch_node_ids(&own.name)
+        .await?
+        .into_iter()
+        .filter(|n| !held.contains(n))
+        .collect();
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    ids.sort();
+    let fork = select(tx, &header_of(tx, &own.fork_baseline).await?, Some(&ids)).await?;
+    let at = branch_versions(tx, own, &ids).await?;
+    Ok(ids
+        .into_iter()
+        .filter(|n| at.get(n).is_some_and(|v| fork.get(n) != Some(v)))
+        .map(|n| {
+            let v = fork.get(&n).copied();
+            (n, v)
+        })
+        .collect())
+}
+
 impl<S: WriteTx> Tx<'_, S> {
+    /// Writes on the branch of a change a revert of each node withdrawn since its commit (Go's `revertWithdrawn`): a
+    /// version with the properties and links of the version of the fork, sharing its link set, which the branch reads as
+    /// that version (ADR 0140, 0141); a deletion for a node the fork does not hold. It answers the versions written.
+    async fn revert_withdrawn(
+        &mut self,
+        c: &Change,
+        branch: &str,
+        own: &Branch,
+        withdrawn: &[(NodeId, Option<Version>)],
+    ) -> Result<Vec<Node>> {
+        let mut wrote = Vec::with_capacity(withdrawn.len());
+        for (id, fork) in withdrawn {
+            let latest = self
+                .store
+                .latest_on(id, &own.name)
+                .await?
+                .ok_or_else(|| GraphError::not_found(format!("node {id} on branch {}", own.name)))?;
+            let last = self.store.version_range(id, 0, 1).await?;
+            let mut n = Node {
+                version: last.last().map_or(0, |l| l.version) + 1,
+                branch: branch.to_string(),
+                change_id: c.id.clone(),
+                reason: REASON_REVERT.into(),
+                parents: vec![latest.version],
+                comment: REVERT_COMMENT.into(),
+                created_at: Some(self.env.now()),
+                origins: Vec::new(),
+                deleted: false,
+                change_impact: String::new(),
+                execution: String::new(),
+                joined: Vec::new(),
+                ..latest.clone()
+            };
+            let (links, like) = match fork {
+                Some(v) => {
+                    let src = NodeRef::new(id.clone(), *v);
+                    let f = self
+                        .store
+                        .node(&src)
+                        .await?
+                        .ok_or_else(|| GraphError::not_found(format!("node {id} v{v}")))?;
+                    n.props = f.props.clone();
+                    n.state = f.state.clone();
+                    n.owner = f.owner.clone();
+                    n.origins = f.origins.clone();
+                    let links = self.out_links(&src).await?;
+                    (links, vec![src, latest.node_ref()])
+                }
+                None => {
+                    n.deleted = true;
+                    (Vec::new(), vec![latest.node_ref()])
+                }
+            };
+            self.put_node(&n).await?;
+            self.put_version_links(&n, &links, &like).await?;
+            wrote.push(n);
+        }
+        Ok(wrote)
+    }
+
     /// The guardian of a commit with no methodology to ask (Go's `ownGuardian`, ADR 0078, 0146): what the change
     /// committed, this commit and the ones before, rests in a committable state.
     async fn check_committable(&mut self, id: &ChangeId, own: &Branch, wrote: &[Node]) -> Result<()> {
