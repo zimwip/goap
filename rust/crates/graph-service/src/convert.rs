@@ -351,3 +351,20 @@ pub fn item(v: &Json) -> Result<pb::ChangeItem, String> {
         ..pb::ChangeItem::default()
     })
 }
+
+pub fn log_entry(e: &graph_core::impact::LogEntry) -> pb::LogEntry {
+    pb::LogEntry {
+        seq: e.seq,
+        id: e.id.clone(),
+        change_id: e.change.0.clone(),
+        r#type: e.typ.clone(),
+        flow: e.flow.clone(),
+        process_id: e.process.clone(),
+        execution: e.execution.clone(),
+        subject: e.subject.clone(),
+        by: e.by.clone(),
+        at: time(&Some(e.at)),
+        payload: e.payload.clone(),
+        causation: e.causation.clone(),
+    }
+}

@@ -3,6 +3,8 @@ mod domains;
 pub use domains::{NewDomain, StoredDomain};
 mod browse;
 pub use browse::Tag;
+mod log;
+pub use log::LogFilter;
 mod smarttags;
 pub use smarttags::{SmartTag, Which};
 mod sql;
@@ -261,6 +263,24 @@ fn link_of(r: &Row) -> Result<Link, GraphError> {
 }
 
 /// A baseline header from the columns of `Sql::header_cols`.
+/// A log entry as the select list of [`LOG_COLS`] reads it.
+fn log_entry_of(r: &Row) -> graph_core::impact::LogEntry {
+    graph_core::impact::LogEntry {
+        seq: r.int(0),
+        id: r.text(1),
+        change: ChangeId(r.text(2)),
+        typ: r.text(3),
+        flow: r.text(4),
+        process: r.text(5),
+        execution: r.text(6),
+        subject: r.text(7),
+        by: r.text(8),
+        causation: r.text(9),
+        at: r.time(10).unwrap_or_else(graph_core::gojson::zero_time),
+        payload: r.text(11),
+    }
+}
+
 /// A branch as the select list of `branch_cols` reads it.
 fn branch_of_row(r: &Row) -> Branch {
     Branch {
@@ -373,23 +393,7 @@ impl ReadTx for Session {
         }
         q.push_str(" ORDER BY seq");
         let rows = self.select((q, args), &format!("log of change {change}")).await?;
-        Ok(rows
-            .iter()
-            .map(|r| graph_core::impact::LogEntry {
-                seq: r.int(0),
-                id: r.text(1),
-                change: ChangeId(r.text(2)),
-                typ: r.text(3),
-                flow: r.text(4),
-                process: r.text(5),
-                execution: r.text(6),
-                subject: r.text(7),
-                by: r.text(8),
-                causation: r.text(9),
-                at: r.time(10).unwrap_or_else(graph_core::gojson::zero_time),
-                payload: r.text(11),
-            })
-            .collect())
+        Ok(rows.iter().map(log_entry_of).collect())
     }
 
     async fn branch(&self, namespace: &str, name: &str) -> Result<Option<Branch>, GraphError> {

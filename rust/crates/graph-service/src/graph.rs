@@ -29,7 +29,7 @@ use graph_core::{
         work::{NodeCheckout, NodeCreate, fold_change},
     },
 };
-use graph_store::read::{Session, Tag};
+use graph_store::read::{LogFilter, Session, Tag};
 
 use crate::{State, convert};
 
@@ -611,6 +611,52 @@ impl pb::GraphService for Graph {
             Ok(pb::GetBranchResponse {
                 branch: Some(convert::branch(&b)),
                 head: Some(convert::baseline(&head, state)),
+            })
+        })
+        .await
+    }
+
+    /// The log of a change (or of processes), filtered, with the number of entries of each type.
+    async fn list_change_log(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ListChangeLogRequest>,
+    ) -> Answer<pb::ListChangeLogResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.read(caller, async |tx| {
+            let f = LogFilter {
+                change: m.change_id.clone(),
+                types: m.types.clone(),
+                flows: (!m.flows.is_empty()).then(|| {
+                    m.flows
+                        .iter()
+                        .map(|f| if f == "main" { String::new() } else { f.clone() })
+                        .collect()
+                }),
+                processes: m.process_ids.clone(),
+                execution: m.execution.clone(),
+                after_seq: m.after_seq,
+                limit: m.limit.into(),
+            };
+            if f.change.is_empty() && f.processes.is_empty() {
+                return Err(GraphError::invalid("the log of which change"));
+            }
+            if !f.change.is_empty() && tx.change(&ChangeId(f.change.clone())).await?.is_none() {
+                return Err(GraphError::not_found(format!("change {}", f.change)));
+            }
+            let (entries, counts) = tx.change_log(&f).await?;
+            // the prompts of the model calls are the change's: a read by processes only names its types
+            let model_call = f.types.is_empty()
+                || f.types
+                    .iter()
+                    .any(|t| t == "model.call" || (t.ends_with('.') && "model.call".starts_with(t.as_str())));
+            if model_call && f.change.is_empty() {
+                return Err(GraphError::invalid("a log read without a change names its types"));
+            }
+            Ok(pb::ListChangeLogResponse {
+                entries: entries.iter().map(convert::log_entry).collect(),
+                counts: counts.into_iter().map(|(t, n)| (t, n as i32)).collect(),
             })
         })
         .await

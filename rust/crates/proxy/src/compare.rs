@@ -130,6 +130,15 @@ pub fn normalise(v: &Value, method: &str, ignore: &[Ignore]) -> Value {
     fn walk(v: &Value, path: &str, method: &str, ignore: &[Ignore]) -> Value {
         match v {
             Value::String(s) if TIME.is_match(s) => Value::String("<time>".into()),
+            // a JSON text (the payload of a log entry) is compared as what it holds, its times masked too
+            Value::String(s) if s.starts_with(['{', '[']) => match serde_json::from_str::<Value>(s) {
+                Ok(x) => {
+                    let mut m = Map::new();
+                    m.insert("<json>".into(), walk(&x, path, method, ignore));
+                    Value::Object(m)
+                }
+                Err(_) => v.clone(),
+            },
             Value::Array(a) => Value::Array(a.iter().map(|x| walk(x, path, method, ignore)).collect()),
             Value::Object(o) => {
                 let mut out = Map::new();
@@ -559,6 +568,25 @@ mod tests {
             &Bytes::from(json!({"ref": {"id": G}}).to_string()),
         );
         assert_eq!(serde_json::from_slice::<Value>(&body).unwrap()["ref"]["id"], R);
+    }
+
+    #[test]
+    fn a_json_text_is_compared_as_what_it_holds() {
+        let mut c = Comparer::in_memory(&[]);
+        let log = Procedure::of("/goap.graph.v1.GraphService/ListChangeLog").unwrap();
+        let go = reply(
+            200,
+            json!({"entries": [{"payload": format!(r#"{{"op": "x", "at": "2026-10-23T10:00:00Z", "id": "{G}"}}"#)}]}),
+        );
+        let rust = reply(
+            200,
+            json!({"entries": [{"payload": format!(r#"{{"op": "x", "at": "2026-10-23T10:00:02Z", "id": "{R}"}}"#)}]}),
+        );
+        let rec = c.judge(&log, &Bytes::new(), &json_headers(), &go, &rust, vec![]);
+        assert_eq!(rec.verdict, Verdict::Same, "{rec:?}");
+        let other = reply(200, json!({"entries": [{"payload": r#"{"op": "y"}"#}]}));
+        let rec = c.judge(&log, &Bytes::new(), &json_headers(), &go, &other, vec![]);
+        assert_ne!(rec.verdict, Verdict::Same, "{rec:?}");
     }
 
     #[test]
