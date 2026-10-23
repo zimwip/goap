@@ -153,5 +153,10 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `ExportDomain` the JSON of a stored domain as Go writes it (the definition through YAML and back: empty lists
   written, empty `requires` and forms dropped, keys sorted, Go's indentation, `gojson::to_string_indent`); the YAML
   export and the built-in domains are still Go's. Every built-in, `alm`, `code` and a bench domain, the unknown
-  format and the missing domain: `same`.
+  format and the missing domain: `same`. `ListTypes` resolves the catalogue of the domains in force (`Catalog::types` /
+  `link_types`, the node validators of each type, a transition's `requires` and `children`). A platform service's
+  `PublishDomain` (of a draft with nothing the Go service alone checks), `CreateDomainVersion` (the stored JSON under
+  the new number, Go's text kept on SQLite) and `DeleteDomain` (a draft removed, a published version archived) write
+  as the Go service does, with the event of each in `domain_outbox`. A scenario of 26 calls (each refusal included):
+  every one `same`, served by Rust, the tables and the outbox of the registry the same.
 - Not done yet: the rest of phase 4.

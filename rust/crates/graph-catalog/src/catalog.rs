@@ -65,6 +65,8 @@ pub struct Type {
     /// The names of the validator instances plugged on the type and its attributes, the supertypes' first: a type
     /// with any runs scripts when its nodes are checked.
     pub validators: Vec<String>,
+    /// The node validator instances of the type and its supertypes, the supertypes' first.
+    pub node_validators: Vec<String>,
     pub search: Vec<def::SearchProperty>,
     pub editor: String,
     pub icon: String,
@@ -320,6 +322,20 @@ impl Catalog {
         self.types.get(r)
     }
 
+    /// The node types, sorted by reference.
+    pub fn types(&self) -> Vec<&Type> {
+        let mut out: Vec<&Type> = self.types.values().collect();
+        out.sort_by(|a, b| a.reference.cmp(&b.reference));
+        out
+    }
+
+    /// The link types, sorted by reference.
+    pub fn link_types(&self) -> Vec<&LinkType> {
+        let mut out: Vec<&LinkType> = self.links.values().collect();
+        out.sort_by(|a, b| a.reference.cmp(&b.reference));
+        out
+    }
+
     pub fn link_type(&self, r: &str) -> Option<&LinkType> {
         self.links.get(r)
     }
@@ -465,6 +481,7 @@ fn resolve(r: &str, decl: &HashMap<String, (&Domain, &def::NodeType)>) -> Result
         document: None,
         change_controlled: true,
         validators: Vec::new(),
+        node_validators: Vec::new(),
         search: Vec::new(),
         editor: String::new(),
         icon: String::new(),
@@ -549,6 +566,7 @@ fn resolve(r: &str, decl: &HashMap<String, (&Domain, &def::NodeType)>) -> Result
         t.validators
             .extend(dt.attributes.iter().flat_map(|a| a.validators.iter().cloned()));
         t.validators.extend(dt.validators.iter().cloned());
+        t.node_validators.extend(dt.validators.iter().cloned());
         for sp in &dt.search {
             match search_at.get(&sp.property) {
                 Some(&i) => t.search[i] = sp.clone(),

@@ -3,6 +3,7 @@
 //! `registry.v1.Domain`, then decoded. What the protocol has no field for (a structure's bootstrap, the bound
 //! algorithms of a transition) is left out, as the Go converter leaves it out.
 use goap_proto::registry::v1 as pb;
+use graph_catalog::{catalog, def};
 use serde_json::{Map, Value, json};
 
 type Obj = Map<String, Value>;
@@ -263,4 +264,93 @@ fn list(m: &mut Obj, o: &Obj, from: &str, to: &str, short: Option<&str>, f: impl
         })
         .collect();
     m.insert(to.into(), Value::Array(items));
+}
+
+/// The resolved attributes of a type (`domainpb.AttributeInfosToPB`).
+pub fn attribute_infos(as_: &[catalog::Attribute]) -> Vec<pb::AttributeInfo> {
+    as_.iter()
+        .map(|a| {
+            let d = &a.def;
+            pb::AttributeInfo {
+                attribute: Some(pb::Attribute {
+                    name: d.name.clone(),
+                    label: d.label.clone(),
+                    description: d.description.clone(),
+                    r#type: d.typ.clone(),
+                    widget: d.widget.clone(),
+                    diff: d.diff.clone(),
+                    r#enum: d.enumeration.clone(),
+                    default_value: d.default.clone(),
+                    section: d.section.clone(),
+                    order: d.order as i32,
+                    tooltip: d.tooltip.clone(),
+                    as_name: d.as_name,
+                    validators: d.validators.clone(),
+                }),
+                from: a.from.clone(),
+                values: a
+                    .values
+                    .iter()
+                    .map(|v| pb::EnumValue {
+                        value: v.value.clone(),
+                        label: v.label.clone(),
+                    })
+                    .collect(),
+            }
+        })
+        .collect()
+}
+
+/// A lifecycle (`domainpb.LifecyclesToPB`): what the protocol has a field for, never the bound algorithms.
+pub fn lifecycle_info(l: &def::Lifecycle) -> pb::Lifecycle {
+    let criteria = |cs: &[Value]| -> Vec<pb::Criterion> {
+        cs.iter()
+            .map(|c| {
+                let o = obj(c);
+                let s = |k: &str| o.get(k).and_then(scalar).unwrap_or_default();
+                pb::Criterion {
+                    name: s("name"),
+                    expr: s("expr"),
+                    description: s("description"),
+                }
+            })
+            .collect()
+    };
+    pb::Lifecycle {
+        name: l.name.clone(),
+        description: l.description.clone(),
+        initial: l.initial.clone(),
+        states: l
+            .states
+            .iter()
+            .map(|s| pb::LifecycleState {
+                name: s.name.clone(),
+                description: s.description.clone(),
+                not_committable: s.not_committable,
+                r#final: s.is_final,
+            })
+            .collect(),
+        transitions: l
+            .transitions
+            .iter()
+            .map(|t| {
+                let req = t.requires.clone().unwrap_or_default();
+                pb::LifecycleTransition {
+                    name: t.name.clone(),
+                    description: t.description.clone(),
+                    from: t.from.clone(),
+                    to: t.to.clone(),
+                    permission: t.permission.clone(),
+                    guard: t.guard.clone(),
+                    requires_attributes: req.attributes,
+                    requires_outgoing_links: req.outgoing_links,
+                    children_states: t.children.as_ref().map(|c| c.states.clone()).unwrap_or_default(),
+                    guards: t.guards.clone(),
+                    actions: t.actions.clone(),
+                    vetos: criteria(&t.vetos),
+                    objectives: criteria(&t.objectives),
+                }
+            })
+            .collect(),
+    }
 }

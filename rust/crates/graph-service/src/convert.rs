@@ -32,7 +32,7 @@ fn value(v: &Json) -> pbjson_types::Value {
     pbjson_types::Value { kind: Some(kind) }
 }
 
-fn object(m: &serde_json::Map<String, Json>) -> pbjson_types::Struct {
+pub fn object(m: &serde_json::Map<String, Json>) -> pbjson_types::Struct {
     pbjson_types::Struct {
         fields: m.iter().map(|(k, v)| (k.clone(), value(v))).collect(),
     }

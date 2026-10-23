@@ -5,7 +5,7 @@ use graph_catalog::{
 };
 use graph_core::{GraphError, store::OutboxMessage};
 
-use graph_catalog::record::STATUS_PUBLISHED;
+use graph_catalog::record::{STATUS_DRAFT, STATUS_PUBLISHED};
 
 use super::{
     Session,
@@ -88,6 +88,67 @@ impl Session {
         self.run((q, args), "domain").await?;
         self.append_to_outbox("domain_outbox", events).await
     }
+
+    /// Moves a version to a status (`SQLStore.SetDomainStatus`), stamping its publication when it is published; false
+    /// when there is no such version.
+    pub async fn set_domain_status(
+        &self,
+        name: &str,
+        version: &str,
+        status: &str,
+        at: &str,
+        events: &[OutboxMessage],
+    ) -> Result<bool, GraphError> {
+        let ph = |i| self.sql.ph(i);
+        let (q, mut args): (String, Vec<Arg>) = if status == STATUS_PUBLISHED {
+            (
+                format!(
+                    "UPDATE domain_version SET status = {}, updated_at = {}, published_at = {} WHERE name = {} AND version = {}",
+                    ph(1),
+                    ph(2),
+                    ph(3),
+                    ph(4),
+                    ph(5)
+                ),
+                vec![status.into(), at.into(), at.into()],
+            )
+        } else {
+            (
+                format!(
+                    "UPDATE domain_version SET status = {}, updated_at = {} WHERE name = {} AND version = {}",
+                    ph(1),
+                    ph(2),
+                    ph(3),
+                    ph(4)
+                ),
+                vec![status.into(), at.into()],
+            )
+        };
+        args.extend([name.into(), version.into()]);
+        if self.run((q, args), "domain").await? == 0 {
+            return Ok(false);
+        }
+        self.append_to_outbox("domain_outbox", events).await?;
+        Ok(true)
+    }
+
+    /// Removes a draft (`SQLStore.DeleteDomain`).
+    pub async fn delete_domain_draft(
+        &self,
+        name: &str,
+        version: &str,
+        events: &[OutboxMessage],
+    ) -> Result<(), GraphError> {
+        let q = format!(
+            "DELETE FROM domain_version WHERE name = {} AND version = {} AND status = {}",
+            self.sql.ph(1),
+            self.sql.ph(2),
+            self.sql.ph(3)
+        );
+        self.run((q, vec![name.into(), version.into(), STATUS_DRAFT.into()]), "domain")
+            .await?;
+        self.append_to_outbox("domain_outbox", events).await
+    }
 }
 
 /// A stored version as read, its definition the JSON as stored.
@@ -96,6 +157,8 @@ pub struct StoredDomain {
     pub version: String,
     pub status: String,
     pub definition: serde_json::Value,
+    /// The definition as the database holds it: Go's JSON on SQLite, the text of the `jsonb` on PostgreSQL.
+    pub definition_text: String,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
     pub published_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -119,15 +182,19 @@ impl Session {
         let mut best: Option<StoredDomain> = None;
         for r in &rows {
             let time = |i: usize| parse_time(&r.text(i)).map_err(GraphError::internal);
-            let definition = match r.0.get(3) {
-                Some(Val::Json(j)) => j.clone(),
-                _ => serde_json::from_str(&r.text(3)).map_err(GraphError::internal)?,
+            let (definition, definition_text) = match r.0.get(3) {
+                Some(Val::Json(j)) => (j.clone(), j.to_string()),
+                _ => (
+                    serde_json::from_str(&r.text(3)).map_err(GraphError::internal)?,
+                    r.text(3),
+                ),
             };
             let d = StoredDomain {
                 name: r.text(0),
                 version: r.text(1),
                 status: r.text(2),
                 definition,
+                definition_text,
                 created_at: time(4)?,
                 updated_at: time(5)?,
                 published_at: time(6)?,

@@ -6,10 +6,10 @@ use graph_catalog::{
     Catalog,
     catalog::{builtin_sources, builtins, is_builtin},
     imported::{self, Imported},
-    record::{Record, STATUS_DRAFT, STATUS_PUBLISHED, in_force, latest},
+    record::{Record, STATUS_ARCHIVED, STATUS_DRAFT, STATUS_PUBLISHED, in_force, latest},
 };
 use graph_core::{GraphError, gojson, store::OutboxMessage};
-use graph_store::read::NewDomain;
+use graph_store::read::{NewDomain, StoredDomain};
 
 use crate::{Domains, convert, domainpb, graph::connect_error};
 
@@ -110,21 +110,9 @@ impl pb::DomainService for Domains {
             .await
             .map_err(|e| connect_error(GraphError::internal(e)))?;
         let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
-            let what = if r.version.is_empty() {
-                format!("{} (published)", r.name)
-            } else {
-                format!("{}@{}", r.name, r.version)
-            };
-            return Err(ConnectError::not_found(format!("{what}: domain not found")));
+            return Err(not_found(&r.name, &r.version));
         };
-        let mut d = domainpb::domain(&s.definition).map_err(|e| connect_error(GraphError::internal(e)))?;
-        d.name = s.name;
-        d.version = s.version;
-        d.status = s.status;
-        d.created_at = convert::time(&s.created_at);
-        d.updated_at = convert::time(&s.updated_at);
-        d.published_at = convert::time(&s.published_at);
-        d.updated_by = s.updated_by;
+        let d = stored_pb(s)?;
         Ok(Response::new(pb::GetDomainResponse { domain: Some(d) }))
     }
 
@@ -169,6 +157,226 @@ impl pb::DomainService for Domains {
         }))
     }
 
+    /// The resolved model of the types in force (`Handler.ListTypes`).
+    async fn list_types(&self, _ctx: &Ctx, _req: Request<pb::ListTypesRequest>) -> Answer<pb::ListTypesResponse> {
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let rs = tx.domain_records().await.map_err(connect_error)?;
+        let ds: Vec<_> = in_force(&rs).into_iter().filter(|x| !is_builtin(&x.name)).collect();
+        // the domains in force resolve, or the registry refused them; a catalogue that does not is Go's to word
+        let cat = Catalog::new(&ds).map_err(|_| unserved("a catalogue that does not resolve"))?;
+        let types = cat
+            .types()
+            .into_iter()
+            .map(|t| pb::TypeInfo {
+                r#ref: t.reference.clone(),
+                description: t.description.clone(),
+                attributes: domainpb::attribute_infos(&t.attributes),
+                ancestors: t.ancestors.clone(),
+                lifecycle: t.lifecycle.as_deref().map(domainpb::lifecycle_info),
+                change_controlled: t.change_controlled,
+                editor: t.editor.clone(),
+                contains: t.document.clone().unwrap_or_default(),
+                node_validators: t.node_validators.clone(),
+                additional_properties: t.additional_properties,
+                form: t.form.as_ref().and_then(|f| f.as_object()).map(convert::object),
+                icon: t.icon.clone(),
+                color: t.color.clone(),
+            })
+            .collect();
+        let link_types = cat
+            .link_types()
+            .into_iter()
+            .map(|l| pb::LinkTypeInfo {
+                r#ref: l.reference.clone(),
+                from: l.from.clone(),
+                to: l.to.clone(),
+                compose: l.compose,
+                attributes: domainpb::attribute_infos(&l.attributes),
+                label: l.label.clone(),
+                inverse_label: l.inverse_label.clone(),
+            })
+            .collect();
+        Ok(Response::new(pb::ListTypesResponse {
+            types,
+            link_types,
+            domains: cat.domains().clone().into_iter().collect(),
+        }))
+    }
+
+    /// Freezes a draft (`Service.PublishDomain`): a version a platform service publishes, valid and with nothing the
+    /// Go service alone checks.
+    async fn publish_domain(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::PublishDomainRequest>,
+    ) -> Answer<pb::PublishDomainResponse> {
+        let (subject, command) = caller(&req);
+        let r = req.into_inner();
+        if is_builtin(&r.name) {
+            return Err(builtin_error(&r.name));
+        }
+        let tx = self.writer().await?;
+        let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
+            return Err(not_found(&r.name, &r.version));
+        };
+        if !subject.starts_with("system:") {
+            return Err(unserved(
+                "a person's publication of a domain goes through the authorizer",
+            ));
+        }
+        if s.status != STATUS_DRAFT {
+            return Err(not_a_draft(&format!("{}@{}", r.name, r.version)));
+        }
+        let Some(d) = Imported::parse(&s.definition_text) else {
+            return Err(unserved("a domain with issues, or checked by scripts, guards or forms"));
+        };
+        let domain = d.domain().map_err(|e| connect_error(GraphError::internal(e)))?;
+        if !resolves(&tx, domain).await? {
+            return Err(unserved(
+                "a domain whose types do not resolve with the domains in force",
+            ));
+        }
+        let now = chrono::Utc::now();
+        let events = self.events(
+            &subject,
+            &command,
+            "published",
+            &r.name,
+            &r.version,
+            STATUS_PUBLISHED,
+            now,
+        );
+        let at = gojson::time_text(&now);
+        if !tx
+            .set_domain_status(&r.name, &r.version, STATUS_PUBLISHED, &at, &events)
+            .await
+            .map_err(connect_error)?
+        {
+            return Err(not_found(&r.name, &r.version));
+        }
+        let saved = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)?;
+        tx.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
+        let saved = saved.ok_or_else(|| not_found(&r.name, &r.version))?;
+        Ok(Response::new(pb::PublishDomainResponse {
+            domain: Some(stored_pb(saved)?),
+        }))
+    }
+
+    /// Copies a version into a new draft (`Service.CreateDomainVersion`), for a platform service.
+    async fn create_domain_version(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::CreateDomainVersionRequest>,
+    ) -> Answer<pb::CreateDomainVersionResponse> {
+        let (subject, command) = caller(&req);
+        let r = req.into_inner();
+        if is_builtin(&r.name) {
+            return Err(builtin_error(&r.name));
+        }
+        let tx = self.writer().await?;
+        let Some(src) = tx
+            .stored_domain(&r.name, &r.from_version)
+            .await
+            .map_err(connect_error)?
+        else {
+            return Err(not_found(&r.name, &r.from_version));
+        };
+        let to = r.new_version.as_str();
+        if to.is_empty() || to == src.version {
+            return Err(ConnectError::invalid_argument(
+                "a new version number is required: invalid domain",
+            ));
+        }
+        if tx.domain_status(&r.name, to).await.map_err(connect_error)?.is_some() {
+            return Err(not_a_draft(&format!("{}@{to} already exists", r.name)));
+        }
+        if !subject.starts_with("system:") {
+            return Err(unserved("a person's new domain version goes through the authorizer"));
+        }
+        let definition = renumbered(&src, to);
+        let now = chrono::Utc::now();
+        let at = gojson::time_text(&now);
+        let events = self.events(&subject, &command, "saved", &r.name, to, STATUS_DRAFT, now);
+        tx.insert_domain(
+            &NewDomain {
+                name: &r.name,
+                version: to,
+                status: STATUS_DRAFT,
+                definition: &definition,
+                created_at: &at,
+                updated_at: &at,
+                published_at: "",
+                updated_by: &subject,
+            },
+            &events,
+        )
+        .await
+        .map_err(connect_error)?;
+        let saved = tx.stored_domain(&r.name, to).await.map_err(connect_error)?;
+        tx.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
+        let saved = saved.ok_or_else(|| not_found(&r.name, to))?;
+        Ok(Response::new(pb::CreateDomainVersionResponse {
+            domain: Some(stored_pb(saved)?),
+        }))
+    }
+
+    /// Removes a draft or archives a published version (`Service.DeleteDomain`), for a platform service.
+    async fn delete_domain(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::DeleteDomainRequest>,
+    ) -> Answer<pb::DeleteDomainResponse> {
+        let (subject, command) = caller(&req);
+        let r = req.into_inner();
+        if is_builtin(&r.name) {
+            return Err(builtin_error(&r.name));
+        }
+        let tx = self.writer().await?;
+        let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
+            return Err(not_found(&r.name, &r.version));
+        };
+        if !subject.starts_with("system:") {
+            return Err(unserved("a person's deletion of a domain goes through the authorizer"));
+        }
+        if s.status == STATUS_ARCHIVED {
+            return Ok(Response::new(pb::DeleteDomainResponse {}));
+        }
+        // the event names the status the version had
+        let events = self.events(
+            &subject,
+            &command,
+            "deleted",
+            &r.name,
+            &r.version,
+            &s.status,
+            chrono::Utc::now(),
+        );
+        if s.status == STATUS_DRAFT {
+            tx.delete_domain_draft(&r.name, &r.version, &events)
+                .await
+                .map_err(connect_error)?;
+        } else {
+            let at = gojson::time_text(&chrono::Utc::now());
+            if !tx
+                .set_domain_status(&r.name, &r.version, STATUS_ARCHIVED, &at, &events)
+                .await
+                .map_err(connect_error)?
+            {
+                return Err(ConnectError::not_found(format!(
+                    "{}@{}: domain not found",
+                    r.name, r.version
+                )));
+            }
+        }
+        tx.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
+        Ok(Response::new(pb::DeleteDomainResponse {}))
+    }
+
     /// Stores a domain version from its YAML, published on request (`Service.ImportDomain`): a new version a platform
     /// service imports, valid and with nothing the Go service alone checks. Anything else (a person, a version already
     /// stored, issues, a lifecycle, a script...) is the Go service's.
@@ -204,14 +412,7 @@ impl pb::DomainService for Domains {
         {
             return Err(unserved("a domain version already stored"));
         }
-        // the domains in force with this version in place of its domain's (`Service.Types`)
-        let rs = tx.domain_records().await.map_err(connect_error)?;
-        let mut ds: Vec<_> = in_force(&rs).into_iter().filter(|x| !is_builtin(&x.name)).collect();
-        match ds.iter_mut().find(|x| x.name == d.name) {
-            Some(x) => *x = domain,
-            None => ds.push(domain),
-        }
-        if Catalog::new(&ds).is_err() {
+        if !resolves(&tx, domain.clone()).await? {
             return Err(unserved(
                 "a domain whose types do not resolve with the domains in force",
             ));
@@ -224,20 +425,7 @@ impl pb::DomainService for Domains {
         } else {
             (STATUS_DRAFT, "saved")
         };
-        let mut events = Vec::new();
-        if self.state.outbox {
-            let mut headers = std::collections::BTreeMap::new();
-            if !command.is_empty() {
-                headers.insert("X-Goap-Actor".to_string(), subject.clone());
-                headers.insert("X-Goap-Command".to_string(), command);
-            }
-            events.push(OutboxMessage {
-                subject: format!("goap.registry.domain.{event}"),
-                data: gojson::to_string(&serde_json::json!({"name": d.name, "version": d.version, "status": status})),
-                headers,
-                created_at: now,
-            });
-        }
+        let events = self.events(&subject, &command, event, &d.name, &d.version, status, now);
         let definition = gojson::to_string(&d);
         tx.insert_domain(
             &NewDomain {
@@ -262,6 +450,121 @@ impl pb::DomainService for Domains {
             issues: Vec::new(),
         }))
     }
+}
+
+impl Domains {
+    async fn writer(&self) -> Result<graph_store::read::Session, ConnectError> {
+        self.state
+            .store
+            .writer()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))
+    }
+
+    /// The event of a write (`Service.events`), when the service has an outbox.
+    #[allow(clippy::too_many_arguments)]
+    fn events(
+        &self,
+        subject: &str,
+        command: &str,
+        event: &str,
+        name: &str,
+        version: &str,
+        status: &str,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Vec<OutboxMessage> {
+        if !self.state.outbox {
+            return Vec::new();
+        }
+        let mut headers = std::collections::BTreeMap::new();
+        if !command.is_empty() {
+            headers.insert("X-Goap-Actor".to_string(), subject.to_string());
+            headers.insert("X-Goap-Command".to_string(), command.to_string());
+        }
+        vec![OutboxMessage {
+            subject: format!("goap.registry.domain.{event}"),
+            data: gojson::to_string(&serde_json::json!({"name": name, "version": version, "status": status})),
+            headers,
+            created_at: now,
+        }]
+    }
+}
+
+/// The subject and the command stamp of a call.
+fn caller<T>(req: &Request<T>) -> (String, String) {
+    (
+        req.header(HEADER_SUBJECT).to_string(),
+        req.header(HEADER_COMMAND).to_string(),
+    )
+}
+
+/// A write to a built-in domain (`builtinError`).
+fn builtin_error(name: &str) -> ConnectError {
+    ConnectError::failed_precondition(format!(
+        "domain {name} is built into the platform: it changes with the platform code"
+    ))
+}
+
+/// A version the registry does not hold (`SQLStore.GetDomain`).
+fn not_found(name: &str, version: &str) -> ConnectError {
+    let what = if version.is_empty() {
+        format!("{name} (published)")
+    } else {
+        format!("{name}@{version}")
+    };
+    ConnectError::not_found(format!("{what}: domain not found"))
+}
+
+/// A write a version that is no longer a draft refuses (`ErrImmutable`).
+fn not_a_draft(what: &str) -> ConnectError {
+    ConnectError::failed_precondition(format!("domain {what}: domain version is not a draft"))
+}
+
+/// Whether the domains in force still make a catalogue with this one in place of its domain's (`Service.Types`).
+async fn resolves(tx: &graph_store::read::Session, d: graph_catalog::def::Domain) -> Result<bool, ConnectError> {
+    let rs = tx.domain_records().await.map_err(connect_error)?;
+    let mut ds: Vec<_> = in_force(&rs).into_iter().filter(|x| !is_builtin(&x.name)).collect();
+    match ds.iter_mut().find(|x| x.name == d.name) {
+        Some(x) => *x = d,
+        None => ds.push(d),
+    }
+    Ok(Catalog::new(&ds).is_ok())
+}
+
+/// The definition of a version under another number, as Go writes it again: its JSON with the version replaced in
+/// place (Go's JSON starts with the name and the version), else read and written again (the `jsonb` of PostgreSQL,
+/// which orders the keys itself).
+fn renumbered(src: &StoredDomain, to: &str) -> String {
+    let head = format!(
+        "{{\"name\":{},\"version\":{}",
+        gojson::to_string(&src.name),
+        gojson::to_string(&src.version)
+    );
+    if let Some(rest) = src.definition_text.strip_prefix(&head) {
+        return format!(
+            "{{\"name\":{},\"version\":{}{rest}",
+            gojson::to_string(&src.name),
+            gojson::to_string(&to)
+        );
+    }
+    let mut def = src.definition.clone();
+    if let Some(o) = def.as_object_mut() {
+        o.insert("version".into(), to.into());
+    }
+    gojson::to_string(&def)
+}
+
+/// A stored version as the registry answers it (`domainpb.DomainToPB`).
+fn stored_pb(s: StoredDomain) -> Result<pb::Domain, ConnectError> {
+    let mut d = domainpb::domain(&s.definition).map_err(|e| connect_error(GraphError::internal(e)))?;
+    d.name = s.name;
+    d.version = s.version;
+    d.status = s.status;
+    d.created_at = convert::time(&s.created_at);
+    d.updated_at = convert::time(&s.updated_at);
+    d.published_at = convert::time(&s.published_at);
+    d.updated_by = s.updated_by;
+    Ok(d)
 }
 
 /// A stored version as the registry answers it (`domainpb.DomainToPB`).
@@ -453,4 +756,37 @@ fn yaml_document(mut def: serde_json::Value) -> serde_json::Value {
         }
     }
     def
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stored(text: &str) -> StoredDomain {
+        StoredDomain {
+            name: "dt".into(),
+            version: "1.0.0".into(),
+            status: STATUS_DRAFT.into(),
+            definition: serde_json::from_str(text).unwrap(),
+            definition_text: text.into(),
+            created_at: None,
+            updated_at: None,
+            published_at: None,
+            updated_by: String::new(),
+        }
+    }
+
+    #[test]
+    fn a_new_version_keeps_the_text_go_wrote() {
+        let go = r#"{"name":"dt","version":"1.0.0","nodeTypes":[{"name":"Thing"}],"description":"x"}"#;
+        assert_eq!(
+            renumbered(&stored(go), "1.1.0"),
+            r#"{"name":"dt","version":"1.1.0","nodeTypes":[{"name":"Thing"}],"description":"x"}"#
+        );
+        // the text of a jsonb, ordered by the database: read and written again
+        let pg = r#"{"name": "dt", "version": "1.0.0", "nodeTypes": [{"name": "Thing"}]}"#;
+        let again: serde_json::Value = serde_json::from_str(&renumbered(&stored(pg), "2.0.0")).unwrap();
+        assert_eq!(again["version"], "2.0.0");
+        assert_eq!(again["nodeTypes"][0]["name"], "Thing");
+    }
 }

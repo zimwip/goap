@@ -231,10 +231,27 @@ pub struct Transition {
     pub to: String,
     pub permission: String,
     pub guard: String,
+    pub requires: Option<TransitionRequires>,
+    pub children: Option<TransitionChildren>,
     pub vetos: Vec<Value>,
     pub objectives: Vec<Value>,
     pub guards: Vec<String>,
     pub actions: Vec<String>,
+}
+
+/// What a transition requires of the node it moves.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct TransitionRequires {
+    pub attributes: Vec<String>,
+    pub outgoing_links: Vec<String>,
+}
+
+/// The states the children of the node must be in for a transition.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct TransitionChildren {
+    pub states: Vec<String>,
 }
 
 impl Lifecycle {
