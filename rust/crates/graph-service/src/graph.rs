@@ -11,7 +11,7 @@ use graph_core::{
     change::{self, ChangesFilter},
     items,
     lnk::Url,
-    model::{NodeId, NodeQuery},
+    model::{BaselineId, NodeId, NodeQuery},
     page::link_page,
     read::{self, World},
     store::ReadTx,
@@ -25,7 +25,7 @@ use graph_core::{
         review::{ReviewBatch, Verdict},
         tx::{Env, Tx},
         whole,
-        work::{NodeCheckout, NodeCreate},
+        work::{NodeCheckout, NodeCreate, fold_change},
     },
 };
 use graph_store::read::Session;
@@ -238,6 +238,21 @@ impl Graph {
             )));
         }
         Ok(caller)
+    }
+
+    /// Runs a read any identified caller may make, one that filters nothing by its caller.
+    async fn read_any<R, T, F>(&self, req: &Request<R>, f: F) -> Answer<T>
+    where
+        F: AsyncFnOnce(&Session) -> Result<T, GraphError>,
+    {
+        self.identified(req).await?;
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        f(&tx).await.map(Response::new).map_err(connect_error)
     }
 
     /// The type catalogue of the domains in force.
@@ -546,6 +561,137 @@ impl pb::GraphService for Graph {
                 branch: Some(convert::branch(&b)),
                 head: Some(convert::baseline(&head, state)),
             })
+        })
+        .await
+    }
+
+    /// The tags matching the filter, oldest first.
+    async fn list_tags(&self, _ctx: &Ctx, req: Request<pb::ListTagsRequest>) -> Answer<pb::ListTagsResponse> {
+        self.read_any(&req, async |tx| {
+            let m = &req.msg;
+            let tags = tx.tags(&m.namespace, &m.name, &m.node_id).await?;
+            Ok(pb::ListTagsResponse {
+                tags: tags
+                    .into_iter()
+                    .map(|t| pb::Tag {
+                        id: t.id,
+                        name: t.name,
+                        namespace: t.namespace,
+                        node_id: t.node,
+                        version: t.version,
+                        by: t.by,
+                        created_at: convert::time(&t.created_at),
+                    })
+                    .collect(),
+            })
+        })
+        .await
+    }
+
+    /// The headers of the baselines of a namespace, or of some of them by id. The history of a branch (a page with
+    /// the baselines it relates to) is still Go's.
+    async fn list_baselines(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ListBaselinesRequest>,
+    ) -> Answer<pb::ListBaselinesResponse> {
+        self.read_any(&req, async |tx| {
+            let m = &req.msg;
+            if !m.branch.is_empty() {
+                return Err(GraphError::unimplemented(
+                    "the history of a branch (BaselineHistory): not served here yet",
+                ));
+            }
+            let bs = if m.ids.is_empty() {
+                tx.baseline_headers(&m.namespace).await?
+            } else {
+                let ids: Vec<_> = m.ids.iter().cloned().map(BaselineId).collect();
+                tx.baseline_headers_of(&m.namespace, &ids).await?
+            };
+            Ok(pb::ListBaselinesResponse {
+                baselines: bs.iter().map(|b| listed_baseline(b, &m.namespace)).collect(),
+                ..Default::default()
+            })
+        })
+        .await
+    }
+
+    /// The branches of a namespace (of the statuses asked), the header of each head and the number of baselines of
+    /// each branch.
+    async fn list_branches(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ListBranchesRequest>,
+    ) -> Answer<pb::ListBranchesResponse> {
+        self.read_any(&req, async |tx| {
+            let m = &req.msg;
+            let mut bs = tx.branches(&m.namespace).await?;
+            if !m.status.is_empty() {
+                bs.retain(|b| m.status.contains(&b.status));
+            }
+            let ids: Vec<_> = bs
+                .iter()
+                .filter(|b| !b.head.0.is_empty())
+                .map(|b| b.head.clone())
+                .collect();
+            let heads = tx.baseline_headers_of(&m.namespace, &ids).await?;
+            let counts = tx.baseline_counts(&m.namespace).await?;
+            Ok(pb::ListBranchesResponse {
+                branches: bs.iter().map(convert::branch).collect(),
+                heads: heads.iter().map(|b| listed_baseline(b, &m.namespace)).collect(),
+                counts: counts.into_iter().map(|(k, n)| (k, n as i32)).collect(),
+            })
+        })
+        .await
+    }
+
+    /// The versions a change starts from: the version before of each of its impacts, in the order of the fold.
+    async fn get_change_impacts(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetChangeImpactsRequest>,
+    ) -> Answer<pb::GetChangeImpactsResponse> {
+        let caller = Caller::of(&req)?;
+        let id = ChangeId(req.into_inner().change_id);
+        self.read(caller, async |tx| {
+            if tx.change(&id).await?.is_none() {
+                return Err(GraphError::not_found(format!("change {id}")));
+            }
+            let view = fold_change(tx, &id).await?;
+            Ok(pb::GetChangeImpactsResponse {
+                nodes: view
+                    .fold
+                    .impacts
+                    .iter()
+                    .filter_map(|cn| cn.pre.as_ref())
+                    .map(convert::node_ref)
+                    .collect(),
+            })
+        })
+        .await
+    }
+
+    /// The sub-changes of a change, oldest first, each with its impacts and without its items.
+    async fn list_sub_changes(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ListSubChangesRequest>,
+    ) -> Answer<pb::ListSubChangesResponse> {
+        let caller = Caller::of(&req)?;
+        let id = ChangeId(req.into_inner().change_id);
+        self.read(caller, async |tx| {
+            let f = ChangesFilter {
+                parent: id.clone(),
+                ..ChangesFilter::default()
+            };
+            let mut changes = Vec::new();
+            for c in tx.change_heads(&f).await? {
+                let view = fold_change(tx, &c.id).await?;
+                let mut p = convert::change(&c);
+                p.nodes = view.fold.impacts.iter().map(convert::change_impact).collect();
+                changes.push(p);
+            }
+            Ok(pb::ListSubChangesResponse { changes })
         })
         .await
     }
@@ -1140,4 +1286,11 @@ async fn project_stopped(tx: &Tx<'_, Session>, project: &str) -> Result<bool, Gr
         }
     }
     Ok(false)
+}
+
+/// A baseline header as a listing gives it: no state, the namespace asked.
+fn listed_baseline(b: &graph_core::model::Baseline, namespace: &str) -> pb::Baseline {
+    let mut p = convert::baseline(b, None);
+    p.namespace = graph_core::model::namespace_of(namespace).to_string();
+    p
 }

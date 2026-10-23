@@ -3,7 +3,7 @@
 //! order tie-break are the words that differ.
 use graph_core::{
     change::ChangesFilter,
-    model::{ChangeId, LinkId, NodeId, NodeQuery, NodeRef, branch_of, namespace_of},
+    model::{BaselineId, ChangeId, LinkId, NodeId, NodeQuery, NodeRef, branch_of, namespace_of},
 };
 
 use super::value::Arg;
@@ -307,17 +307,62 @@ impl Sql {
         )
     }
 
+    /// The select list of a branch.
+    fn branch_cols(self) -> String {
+        format!(
+            "namespace, name, parent, {}, {}, origin, status, created_at, description, intent, {}, ephemeral, fork_seq",
+            self.id_or("fork_baseline"),
+            self.id_or("head_baseline"),
+            self.id_or("rebased_from")
+        )
+    }
+
     pub fn branch(self, namespace: &str, name: &str) -> Stmt {
         (
             format!(
-                "SELECT namespace, name, parent, {}, {}, origin, status, created_at, description, intent, {}, ephemeral, fork_seq FROM branch WHERE namespace = {} AND name = {}",
-                self.id_or("fork_baseline"),
-                self.id_or("head_baseline"),
-                self.id_or("rebased_from"),
+                "SELECT {} FROM branch WHERE namespace = {} AND name = {}",
+                self.branch_cols(),
                 self.ph(1),
                 self.ph(2)
             ),
             vec![namespace_of(namespace).into(), name.into()],
+        )
+    }
+
+    /// The branches of a namespace, oldest first.
+    pub fn branches(self, namespace: &str) -> Stmt {
+        (
+            format!(
+                "SELECT {} FROM branch WHERE namespace = {}{}",
+                self.branch_cols(),
+                self.ph(1),
+                self.order_by("created_at")
+            ),
+            vec![namespace_of(namespace).into()],
+        )
+    }
+
+    /// The headers of baselines of a namespace by id, in the order they committed.
+    pub fn baseline_headers_of(self, namespace: &str, ids: &[BaselineId]) -> Stmt {
+        let (cond, arg) = self.in_list("id", 2, ids.iter().map(|i| i.0.clone()).collect(), true);
+        (
+            format!(
+                "SELECT {} FROM baseline WHERE namespace = {} AND {cond} ORDER BY seq",
+                self.header_cols(),
+                self.ph(1)
+            ),
+            vec![namespace_of(namespace).into(), arg],
+        )
+    }
+
+    /// The number of baselines of each branch of a namespace.
+    pub fn baseline_counts(self, namespace: &str) -> Stmt {
+        (
+            format!(
+                "SELECT branch, count(*) FROM baseline WHERE namespace = {} GROUP BY branch",
+                self.ph(1)
+            ),
+            vec![namespace_of(namespace).into()],
         )
     }
 

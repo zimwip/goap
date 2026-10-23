@@ -2,6 +2,7 @@
 mod domains;
 pub use domains::{NewDomain, StoredDomain};
 mod browse;
+pub use browse::Tag;
 mod smarttags;
 pub use smarttags::{SmartTag, Which};
 mod sql;
@@ -260,6 +261,25 @@ fn link_of(r: &Row) -> Result<Link, GraphError> {
 }
 
 /// A baseline header from the columns of `Sql::header_cols`.
+/// A branch as the select list of `branch_cols` reads it.
+fn branch_of_row(r: &Row) -> Branch {
+    Branch {
+        namespace: r.text(0),
+        name: r.text(1),
+        parent: r.text(2),
+        fork_baseline: BaselineId(r.text(3)),
+        head: BaselineId(r.text(4)),
+        origin: r.text(5),
+        status: r.text(6),
+        created_at: r.time(7),
+        description: r.text(8),
+        intent: r.text(9),
+        rebased_from: BaselineId(r.text(10)),
+        ephemeral: r.bool(11),
+        fork_seq: r.int(12),
+    }
+}
+
 fn header_of(r: &Row) -> Baseline {
     Baseline {
         id: BaselineId(r.text(0)),
@@ -377,21 +397,44 @@ impl ReadTx for Session {
             .rows(self.sql.branch(namespace, name))
             .await?
             .first()
-            .map(|r| Branch {
-                namespace: r.text(0),
-                name: r.text(1),
-                parent: r.text(2),
-                fork_baseline: BaselineId(r.text(3)),
-                head: BaselineId(r.text(4)),
-                origin: r.text(5),
-                status: r.text(6),
-                created_at: r.time(7),
-                description: r.text(8),
-                intent: r.text(9),
-                rebased_from: BaselineId(r.text(10)),
-                ephemeral: r.bool(11),
-                fork_seq: r.int(12),
-            }))
+            .map(branch_of_row))
+    }
+
+    async fn branches(&self, namespace: &str) -> Result<Vec<Branch>, GraphError> {
+        Ok(self
+            .rows(self.sql.branches(namespace))
+            .await?
+            .iter()
+            .map(branch_of_row)
+            .collect())
+    }
+
+    async fn baseline_headers_of(&self, namespace: &str, ids: &[BaselineId]) -> Result<Vec<Baseline>, GraphError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        if self.sql.pg
+            && let Some(id) = ids.iter().find(|i| !is_uuid(i.as_str()))
+        {
+            return Err(GraphError::unimplemented(format!(
+                "baseline {id}: not an id PostgreSQL reads, the error Go words is not served here yet"
+            )));
+        }
+        Ok(self
+            .rows(self.sql.baseline_headers_of(namespace, ids))
+            .await?
+            .iter()
+            .map(header_of)
+            .collect())
+    }
+
+    async fn baseline_counts(&self, namespace: &str) -> Result<HashMap<String, i64>, GraphError> {
+        Ok(self
+            .rows(self.sql.baseline_counts(namespace))
+            .await?
+            .iter()
+            .map(|r| (r.text(0), r.int(1)))
+            .collect())
     }
 
     async fn baseline_header(&self, id: &BaselineId) -> Result<Option<Baseline>, GraphError> {

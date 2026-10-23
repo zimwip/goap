@@ -170,5 +170,8 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   facts, its position and, for an open change, the check of each main-flow draft against what a version must satisfy
   (`valid`, the message, `modified` against the version checked out from); a draft with origins and a read at a
   position (`at_seq`) are still Go's. A scenario of 41 calls (checkout, edit, refusals, a change not found, a
-  person): every one `same`, the tables the same.
+  person): every one `same`, the tables the same. The listings that filter nothing by their caller, `ListTags`,
+  `ListBaselines` (all headers or some by id; the history of a branch is still Go's) and `ListBranches`, are served for
+  any identified caller; `GetChangeImpacts` and `ListSubChanges` read the fold of each change, as the guard's
+  `Change` does, for a platform service. With them the scenario reaches 61 calls, all `same`.
 - Not done yet: the rest of phase 4.

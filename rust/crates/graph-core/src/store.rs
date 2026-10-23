@@ -33,6 +33,20 @@ pub trait ReadTx: Sync {
     /// The headers of the baselines of a namespace, oldest first.
     fn baseline_headers(&self, namespace: &str) -> impl Future<Output = Result<Vec<Baseline>>> + Send;
 
+    /// The branches of a namespace, oldest first.
+    fn branches(&self, namespace: &str) -> impl Future<Output = Result<Vec<Branch>>> + Send;
+
+    /// The headers of baselines of a namespace by id, in the order they committed; an id of no baseline of the
+    /// namespace is left out.
+    fn baseline_headers_of(
+        &self,
+        namespace: &str,
+        ids: &[BaselineId],
+    ) -> impl Future<Output = Result<Vec<Baseline>>> + Send;
+
+    /// The number of baselines of each branch of a namespace.
+    fn baseline_counts(&self, namespace: &str) -> impl Future<Output = Result<HashMap<String, i64>>> + Send;
+
     /// The last commit of each node on a branch of a namespace in the orders `(after, up_to]` (ADR 0140, 0143), for
     /// some nodes (None: every node): its version, 0 when that version deletes the node.
     fn committed_versions(
