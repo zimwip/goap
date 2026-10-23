@@ -340,6 +340,9 @@ type Step struct {
 	// id, "<kind>:<key>" of a keyed item).
 	Subject    string `json:"subject,omitempty"`
 	SubjectRef string `json:"subjectRef,omitempty"`
+	// Controls are the rules that governed the run (ADR 0162), as it was given them: "<rule>@<version>" for a rule of
+	// the domain, "<condition>/<rule>" for a general rule of the methodology; a control still pending, "<condition>?".
+	Controls []string `json:"controls,omitempty"`
 	// Progress: an incremental action produced items without reaching its effects yet.
 	Progress   bool       `json:"progress,omitempty"`
 	ApprovedBy string     `json:"approvedBy,omitempty"`

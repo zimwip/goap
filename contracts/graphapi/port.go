@@ -65,6 +65,9 @@ type Port interface {
 	// ViewNodesOfType is the explicit read of a whole type (exactly, not its subtypes; empty: every node of the view),
 	// in one read of the state rather than page by page.
 	ViewNodesOfType(ctx context.Context, v View, typ string) ([]domain.Node, error)
+	// QueryView runs a read query in a subset of openCypher in a view (ADR 0160): what measures a rule of a control
+	// (ADR 0162) reads.
+	QueryView(ctx context.Context, v View, query string, opts QueryOptions) (QueryResult, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 	// ChangeGraph is the graph a call on a change reads: the active option's (or the option flow names), else the
 	// reference baseline of the change (ADR 0032 §6).

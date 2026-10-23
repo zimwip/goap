@@ -849,6 +849,21 @@ at compile; `Engine.AssessmentStates` (RPC `GetAssessmentStates`) evaluates them
 (`condition.DefaultAssessmentViews`) settling the subjects no declared state does; the change tab gives the states to
 its bubbles (Svelte context `ASSESSMENT_STATES`), which render the tone (ok, warn, danger, info, neutral), the label
 and `open`, and judge by themselves only while the states load (`bubbleView`).
+**Controls of an activity** ([ADR 0162](adr/0162-controls-of-an-activity.md)): beside what it consumes, an activity is
+governed by rules it does not consume. The rules are domain content (`alm@Rule`, `ArchitectureDecision`,
+`CodingRule`: a statement, a severity veto | objective | advice, a `check` code text in `cypher` or `shell`, a `fix`;
+linked by `alm@governs` to what they govern; lifecycle `rule`); the methodology writes only general rules and how
+they apply. A condition is never marked a control: it is one by its **use**. An action or a step lists `controls:
+[{condition, types, via, where, rules}]` (`methodology.Control`, `engine/methodology/control.go`): the condition says
+the rules were collected (zero rules is a valid answer) and is waited for (merged into the step's entry and the
+action's `pre`), the use says which rules it covers; stored, it is the link `methodology@controlled_by` carrying them,
+the condition node unmarked. `Compiled.ControlsOf` and
+`Engine.ControlOf(change, action, step, subject)` (`engine/engine/control.go`) resolve the controls of an execution in
+the view of the change, each established or pending; a run records the rules it was given (`Step.Controls`), an llm
+action reads them in a `CONTROLS` section of its system prompt (one line per rule). The builtin `control.check`
+(`engine/engine/controlcheck.go`) measures them without a model: a Cypher query over the view (`graphapi.Port.QueryView`,
+`subject` bound, columns `at` / `msg`) or a command in the workspace (SARIF, `file:line: message`), and writes a
+`control_report` artifact whose output is one line per rule broken, with where and how to fix it.
 A methodology declares its own events (`events: [{name, description}]`, names out of the standard families) and
 follows them like the standard ones; an unknown event is refused at compile, one followed from a related methodology
 that does not declare it is a composition warning. A signal item of that name raises it: an action's `emits` (added

@@ -265,6 +265,40 @@ export interface Condition {
   empty?: boolean;
 }
 
+/** A condition used as a control of an activity, and what it covers (ADR 0162): rules of the domain, linked to the
+ *  subject or kept by a filter, and general rules of the methodology. A condition is a control by this use only. */
+export interface Control {
+  /** the condition the activity waits for: it holds once the rules were collected */
+  condition?: string;
+  /** node types of the domain the rules are (alm@ArchitectureDecision) */
+  types?: string[];
+  /** link type from a rule to the subject of the execution (alm@governs); empty: no link needed */
+  via?: string;
+  /** CEL keeping the rules that govern the subject: self the rule, subject, change */
+  where?: string;
+  /** general rules of the methodology */
+  rules?: ControlRule[];
+}
+
+/** A rule a control covers (ADR 0162). */
+export interface ControlRule {
+  id?: string;
+  /** the rule in one imperative sentence: all an agent is given of it */
+  statement?: string;
+  /** veto (empty) | objective | advice */
+  severity?: 'veto' | 'objective' | 'advice' | string;
+  /** how the rule is measured; none: it guides */
+  check?: ControlCheck;
+  /** how to fix a violation, in one line */
+  fix?: string;
+}
+
+/** How a rule is measured (ADR 0162): a query over the view of the change, or a command in its workspace. */
+export interface ControlCheck {
+  language?: 'cypher' | 'shell' | string;
+  code?: string;
+}
+
 export interface ProduceSpec {
   op?: 'create_node' | 'update_node' | string;
   nodeType?: string;
@@ -340,6 +374,8 @@ export interface Action {
   on?: Subscription[];
   /** the events of the methodology it raises when it reaches its effects (ADR 0110) */
   emits?: string[];
+  /** the controls governing what it produces (ADR 0162) */
+  controls?: Control[];
   /** runs once per pending subject of this scope (ADR 0109), within `where` */
   scope?: string;
   where?: string;
@@ -520,6 +556,8 @@ export interface ProcessStep {
   review?: StepReview;
   /** the step is a gate of the lifecycle of the change (ADR 0132) */
   gate?: StepGate;
+  /** the controls governing what the step and its sub-steps produce (ADR 0162) */
+  controls?: Control[];
 }
 
 /** A gate of a process (ADR 0132): the transition its go takes, its checklist split among roles, its decision. */

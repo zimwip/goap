@@ -38,6 +38,8 @@ type ActionContext struct {
 	// Form are the checked values of the form of a human action whose code runs on them (ADR 0115), given to the code
 	// as the variable "form".
 	Form map[string]any
+	// Controls are the controls governing the run (ADR 0162), resolved for its subject (nil: nothing controls it).
+	Controls *ControlSet
 }
 
 // ActionResult is what an executor produced.
@@ -393,7 +395,7 @@ func (e LLMExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResul
 		return ActionResult{}, err
 	}
 	prompt += guidanceSection(ac.Blackboard)
-	system := llmSystem + ac.Step.section() + briefSection(ac)
+	system := llmSystem + ac.Step.section() + ac.Controls.section() + briefSection(ac)
 	if ac.Step.responsible() == "" && ac.Action.Role != "" {
 		system += fmt.Sprintf("\n\nYou act as the role %q.\n", ac.Action.Role) // the role of what the action refines (ADR 0139)
 	}
@@ -747,6 +749,7 @@ func DefaultBuiltins() BuiltinExecutor {
 	b.Register(builtins.DerogationExpire, expireAllDerogations)
 	b.Register(builtins.GateOpen, GateOpen)
 	b.Register(builtins.GatePass, GatePass)
+	b.Register(builtins.ControlCheck, ControlCheck)
 	return b
 }
 
