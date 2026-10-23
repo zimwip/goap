@@ -272,4 +272,11 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   successor (`check_origins`) holds its review (a batch settling its own origins first, the verdicts tried again while
   some progress), its validation and its commit: 834 calls, none divergent, the tables and the 613 events of the
   outbox the same.
+  A change moving to another project (`MoveChange`, ADR 0091) and a change taking a methodology
+  (`SetChangeMethodology`, ADR 0096) follow (`graph-core` `write::project`), with the gates `platform/cmd/graph` plugs
+  for a platform service: the methodology of each moved change applying to both projects, the one taken applying to
+  the change's. They read the projects as the Go service's directory does (`graph-core` `access::Directory`: the
+  project nodes in force at the head of main, their parents, the methodologies they name, their stop), the first piece
+  of the organisation the Rust service reads itself: 860 calls, none divergent, the tables and the 641 events of the
+  outbox the same.
 - Not done yet: the rest of phase 4.

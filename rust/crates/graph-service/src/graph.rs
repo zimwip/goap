@@ -1252,6 +1252,51 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    /// Moves a change with its open sub-changes to another project (ADR 0091).
+    async fn move_change(&self, _ctx: &Ctx, req: Request<pb::MoveChangeRequest>) -> Answer<pb::MoveChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            // the project is read first, as the Go service does
+            let to = tx
+                .structure_ref(STRUCTURE_PROJECT, &m.project_id)
+                .map_err(|e| e.context(format!("move change {}", m.change_id)))?;
+            if to.is_zero() {
+                return Err(GraphError::invalid(format!(
+                    "move change {}: a project is required",
+                    m.change_id
+                )));
+            }
+            let id = served_change(tx, &m.change_id).await?;
+            let (c, seq) = tx.move_change(&id, &m.project_id).await?;
+            let mut c = convert::change(&c);
+            c.seq = seq;
+            Ok(pb::MoveChangeResponse { change: Some(c) })
+        })
+        .await
+    }
+
+    /// Gives a change that follows no methodology one (ADR 0096).
+    async fn set_change_methodology(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::SetChangeMethodologyRequest>,
+    ) -> Answer<pb::SetChangeMethodologyResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            if m.methodology.is_empty() {
+                return Err(GraphError::invalid("a methodology is required"));
+            }
+            let id = served_change(tx, &m.change_id).await?;
+            let (c, seq) = tx.set_change_methodology(&id, &m.methodology).await?;
+            let mut c = convert::change(&c);
+            c.seq = seq;
+            Ok(pb::SetChangeMethodologyResponse { change: Some(c) })
+        })
+        .await
+    }
+
     /// Edits the header of a change: its title, intent, goal, status and data (ADR 0110: `change.edited`).
     async fn update_change(
         &self,

@@ -15,6 +15,7 @@ use crate::{
 pub const STATUS_DRAFT: &str = "draft";
 pub const STATUS_ACTIVE: &str = "active";
 pub const STATUS_ABANDONED: &str = "abandoned";
+pub const STATUS_APPLIED: &str = "applied";
 /// The intent of an option a change's own branch is opened with by default.
 pub const INTENT_DERIVE: &str = "derive";
 
