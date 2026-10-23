@@ -221,6 +221,12 @@ pub trait WriteTx: ReadTx {
     /// rolled back; SQLite's are), so that both services number alike while they are compared (ADR 0163).
     fn skip_declaration(&self) -> impl Future<Output = Result<()>> + Send;
 
+    /// Marks the point a rehearsal of the Go service starts from (Go's `gated`: a pass it rolls back, ADR 0163).
+    fn savepoint(&self) -> impl Future<Output = Result<()>> + Send;
+
+    /// Undoes what the transaction wrote since its savepoint; the sequences of PostgreSQL keep the positions taken.
+    fn rollback_to_savepoint(&self) -> impl Future<Output = Result<()>> + Send;
+
     /// The next order of a commit.
     fn next_commit(&self) -> impl Future<Output = Result<i64>> + Send;
 

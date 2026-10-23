@@ -110,22 +110,20 @@ async fn validations<T: ReadTx>(
         return Ok(out);
     }
     let drafts = view.seen_drafts(flow);
-    for cn in view.seen(flow) {
+    let seen = view.seen(flow);
+    for cn in &seen {
         let Some(d) = drafts.get(&cn.id) else { continue };
         if cn.superseded || !cn.drafted() {
             continue;
-        }
-        if !d.origins.is_empty() {
-            return Err(GraphError::unimplemented(
-                "the validation of the successor of a merge or a split (ADR 0077): not served here yet",
-            ));
         }
         let modified = match &d.base {
             Some(b) => draft_changed(&stored_draft(tx, b).await?, d),
             None => true,
         };
         let links: Vec<_> = d.links.iter().map(|l| (l.typ.as_str(), l.props.as_ref())).collect();
-        let v = match check::version(cat, ns, &d.key, &d.typ, d.props.as_ref(), &links) {
+        let checked = super::review::check_origins(&seen, cn, d)
+            .and_then(|()| check::version(cat, ns, &d.key, &d.typ, d.props.as_ref(), &links));
+        let v = match checked {
             Ok(()) => Validation {
                 valid: true,
                 modified,

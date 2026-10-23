@@ -263,4 +263,13 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   no registry, the refusals of `TransitionChange` (no lifecycle) and `UpgradeChange`. The proxy pairs the review keys
   (`REV-` and ten hex digits, their case kept): 792 calls, none divergent, the tables and 563 events of the outbox the
   same (but for the order of a few lists keyed by ids).
+  The merge and split of nodes follow (ADR 0077, `graph-core` `write::restructure`): the sources resolved and checked,
+  the nodes holding links to them read as the flow sees them (a draft, else the version the flow starts from), the
+  successors created with their origins, the links moved in the drafts of the parents, the impacts of the sources
+  carrying their parent's (`via`), the links of other types to a split source returned as suspect. The Go service runs
+  it twice (`gated`: a first pass collecting what its gate is asked, rolled back): the Rust one replays that pass in a
+  savepoint (`Tx::rehearse` / `rewind`), so that PostgreSQL's sequences take the same positions. The origins gate of a
+  successor (`check_origins`) holds its review (a batch settling its own origins first, the verdicts tried again while
+  some progress), its validation and its commit: 834 calls, none divergent, the tables and the 613 events of the
+  outbox the same.
 - Not done yet: the rest of phase 4.

@@ -19,7 +19,7 @@ use crate::{
     GraphError, Result,
     change::Change,
     gojson,
-    impact::{ChangeImpact, Draft, INTENT_CREATED, ImpactEvent, ImpactOp, REVIEW_ACCEPTED},
+    impact::{ChangeImpact, Draft, ImpactEvent, ImpactOp, REVIEW_ACCEPTED},
     model::{
         Baseline, BaselineId, Branch, ChangeId, Link, LinkId, Node, NodeId, NodeRef, REASON_CREATE, REASON_DERIVE,
         REASON_REBASE, REASON_REVERT, REASON_REVISE, Target, Version, branch_of, namespace_of,
@@ -292,9 +292,7 @@ impl<S: WriteTx> Tx<'_, S> {
             {
                 continue;
             }
-            if cn.intent == INTENT_CREATED && !d.origins.is_empty() {
-                return Err(unserved("the commit of the successor of a merge or a split (ADR 0077)"));
-            }
+            super::review::check_origins(&impacts, cn, d)?;
             todo.push(((*cn).clone(), d.clone()));
         }
         let withdrawn = withdrawn_since(self.store, &own, &impacts).await?;

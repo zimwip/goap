@@ -80,6 +80,27 @@ pub struct Tx<'s, S: WriteTx> {
     pub(super) views: HashMap<ChangeId, super::work::ChangeView>,
 }
 
+/// What a transaction holds in memory when a rehearsal starts (the locks taken stay).
+pub(super) struct Rehearsal {
+    change_refs: BTreeMap<ChangeId, String>,
+    owners: BTreeMap<String, (Url, String)>,
+    projects: BTreeMap<String, (Url, String)>,
+    changes: BTreeMap<ChangeId, Change>,
+    headers: HashMap<ChangeId, Change>,
+    commit: BTreeMap<String, i64>,
+    written: HashSet<NodeRef>,
+    touched: Vec<ChangeId>,
+    written_headers: HashMap<ChangeId, Change>,
+    indexed: Vec<ChangeId>,
+    purged: Vec<ChangeId>,
+    raised: Vec<(String, String)>,
+    seq: HashMap<ChangeId, i64>,
+    nodes: Vec<Node>,
+    baselines: Vec<(Baseline, Option<BTreeMap<NodeId, i32>>)>,
+    positions: BTreeMap<ChangeId, i64>,
+    views: HashMap<ChangeId, super::work::ChangeView>,
+}
+
 impl<'s, S: WriteTx> Tx<'s, S> {
     pub fn new(store: &'s S, env: &'s Env) -> Tx<'s, S> {
         Tx {
@@ -104,6 +125,54 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             positions: BTreeMap::new(),
             views: HashMap::new(),
         }
+    }
+
+    /// Starts a pass the Go service runs then rolls back (its `gated`): a savepoint, and what the transaction holds
+    /// in memory, given back by [`Tx::rewind`].
+    pub(super) async fn rehearse(&mut self) -> Result<Rehearsal> {
+        self.store.savepoint().await?;
+        Ok(Rehearsal {
+            change_refs: self.change_refs.clone(),
+            owners: self.owners.clone(),
+            projects: self.projects.clone(),
+            changes: self.changes.clone(),
+            headers: self.headers.clone(),
+            commit: self.commit.clone(),
+            written: self.written.clone(),
+            touched: self.touched.clone(),
+            written_headers: self.written_headers.clone(),
+            indexed: self.indexed.clone(),
+            purged: self.purged.clone(),
+            raised: self.raised.clone(),
+            seq: self.seq.clone(),
+            nodes: self.nodes.clone(),
+            baselines: self.baselines.clone(),
+            positions: self.positions.clone(),
+            views: self.views.clone(),
+        })
+    }
+
+    /// Undoes the pass a rehearsal started.
+    pub(super) async fn rewind(&mut self, r: Rehearsal) -> Result<()> {
+        self.store.rollback_to_savepoint().await?;
+        self.change_refs = r.change_refs;
+        self.owners = r.owners;
+        self.projects = r.projects;
+        self.changes = r.changes;
+        self.headers = r.headers;
+        self.commit = r.commit;
+        self.written = r.written;
+        self.touched = r.touched;
+        self.written_headers = r.written_headers;
+        self.indexed = r.indexed;
+        self.purged = r.purged;
+        self.raised = r.raised;
+        self.seq = r.seq;
+        self.nodes = r.nodes;
+        self.baselines = r.baselines;
+        self.positions = r.positions;
+        self.views = r.views;
+        Ok(())
     }
 
     pub fn catalog(&self) -> &Catalog {

@@ -1,6 +1,7 @@
 //! The verdicts of a submitted review (Go's `ImpactNodeReviewBatch`, ADR 0080, 0102, 0105): the record of the review is
 //! written first, then every verdict as one entry of the log naming it as its cause; all of them stand or none does. An
 //! acceptance is the gate of what a version must satisfy, checked on the draft: only a modification is accepted.
+use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
@@ -150,10 +151,6 @@ fn check_verdict(v: &Verdict) -> Result<()> {
     Ok(())
 }
 
-fn unserved(what: &str) -> GraphError {
-    GraphError::unimplemented(format!("{what}: not served here yet"))
-}
-
 /// The key of a link in a comparison of drafts (Go's `linkKey`): its type and its target.
 fn link_key(l: &DraftLink) -> String {
     if l.is_external() {
@@ -274,7 +271,14 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// The gate of an acceptance (Go's `checkModifies` then `checkAcceptedIn`): the impact holds a draft that
     /// modifies its node, and the draft is what a version must be.
-    async fn check_accepted(&self, ns: &str, change: &ChangeId, flow: &str, cn: &ChangeImpact) -> Result<()> {
+    async fn check_accepted(
+        &self,
+        ns: &str,
+        change: &ChangeId,
+        flow: &str,
+        seen: &[ChangeImpact],
+        cn: &ChangeImpact,
+    ) -> Result<()> {
         let d = self.views[change].seen_draft(flow, &cn.id);
         let Some(d) = d else {
             return Err(GraphError::invalid(format!(
@@ -293,11 +297,7 @@ impl<S: WriteTx> Tx<'_, S> {
         if cn.post.is_none() {
             return Ok(());
         }
-        if cn.intent == INTENT_CREATED && !d.origins.is_empty() {
-            return Err(unserved(
-                "the acceptance of the successor of a merge or a split (ADR 0077)",
-            ));
-        }
+        check_origins(seen, cn, &d)?;
         self.check_draft(ns, &d)
     }
 
@@ -377,60 +377,86 @@ impl<S: WriteTx> Tx<'_, S> {
             return self.review_on_flow(id, &b, &flow, &key, &item).await;
         }
         let w = self.work_on(id, crate::flow::MAIN_FLOW).await?;
-        let mut out = Vec::with_capacity(b.verdicts.len());
+        // the verdicts judge each other (the origins of an acceptance): what the batch settled is seen by the next
+        let mut seen = w.seen.clone();
+        let mut out: Vec<Option<ChangeImpact>> = vec![None; b.verdicts.len()];
         let mut events = Vec::with_capacity(b.verdicts.len());
-        for (n, v) in b.verdicts.iter().enumerate() {
-            let named = |e: GraphError| {
-                let what = self.views[id]
-                    .fold
-                    .impact(&v.impact)
-                    .map_or(v.impact.clone(), |cn| cn.key.clone());
-                e.with_prefix(&label(n, &what))
-            };
-            let Some(mut cn) = self.views[id].fold.impact(&v.impact).cloned() else {
-                return Err(named(GraphError::not_found(format!(
-                    "change impact {} not in change {id}",
-                    v.impact
-                ))));
-            };
-            let Some(vcn) = w.seen.iter().find(|c| c.id == v.impact) else {
-                return Err(named(GraphError::not_found(format!(
-                    "change impact {} is not on the flow \"\" of change {id}",
-                    v.impact
-                ))));
-            };
-            if vcn.review != REVIEW_PROPOSED {
-                return Err(named(GraphError::conflict(format!(
-                    "change impact {} is already {}",
-                    v.impact, vcn.review
-                ))));
+        let mut pending: Vec<usize> = (0..b.verdicts.len()).collect();
+        while !pending.is_empty() {
+            let mut next = Vec::new();
+            let mut last = None;
+            for &n in &pending {
+                let v = &b.verdicts[n];
+                let named = |e: GraphError| {
+                    let what = self.views[id]
+                        .fold
+                        .impact(&v.impact)
+                        .map_or(v.impact.clone(), |cn| cn.key.clone());
+                    e.with_prefix(&label(n, &what))
+                };
+                let Some(mut cn) = self.views[id].fold.impact(&v.impact).cloned() else {
+                    return Err(named(GraphError::not_found(format!(
+                        "change impact {} not in change {id}",
+                        v.impact
+                    ))));
+                };
+                let Some(vcn) = seen.iter().find(|c| c.id == v.impact).cloned() else {
+                    return Err(named(GraphError::not_found(format!(
+                        "change impact {} is not on the flow \"\" of change {id}",
+                        v.impact
+                    ))));
+                };
+                if vcn.review != REVIEW_PROPOSED {
+                    return Err(named(GraphError::conflict(format!(
+                        "change impact {} is already {}",
+                        v.impact, vcn.review
+                    ))));
+                }
+                if v.accept {
+                    match self.check_accepted(&w.ns, id, "", &seen, &vcn).await {
+                        Ok(()) => {}
+                        Err(e) if e.message.ends_with(ORIGINS_PENDING) => {
+                            next.push(n);
+                            last = Some(named(e));
+                            continue;
+                        }
+                        Err(e) => return Err(named(e)),
+                    }
+                }
+                let r = Review {
+                    status: v.status().into(),
+                    by: by.clone(),
+                    comment: v.comment.trim().into(),
+                    at: self.env.now(),
+                    execution: b.execution.clone(),
+                    review_id: key.clone(),
+                    ..Review::default()
+                };
+                cn.review = r.status.clone();
+                cn.reviews.push(r.clone());
+                if let Some(s) = seen.iter_mut().find(|c| c.id == cn.id) {
+                    s.review = r.status.clone();
+                    s.reviews.push(r.clone());
+                }
+                events.push(ImpactEvent {
+                    change: id.clone(),
+                    impact: cn.id.clone(),
+                    op: ImpactOp::Reviewed,
+                    execution: b.execution.clone(),
+                    by: by.clone(),
+                    review: Some(r),
+                    causation: item.clone(),
+                    ..ImpactEvent::default()
+                });
+                out[n] = Some(cn);
             }
-            if v.accept {
-                self.check_accepted(&w.ns, id, "", vcn).await.map_err(named)?;
+            if next.len() == pending.len() {
+                // no progress: the origins are not settled by this batch
+                return Err(last.expect("a verdict held"));
             }
-            let r = Review {
-                status: v.status().into(),
-                by: by.clone(),
-                comment: v.comment.trim().into(),
-                at: self.env.now(),
-                execution: b.execution.clone(),
-                review_id: key.clone(),
-                ..Review::default()
-            };
-            cn.review = r.status.clone();
-            cn.reviews.push(r.clone());
-            events.push(ImpactEvent {
-                change: id.clone(),
-                impact: cn.id.clone(),
-                op: ImpactOp::Reviewed,
-                execution: b.execution.clone(),
-                by: by.clone(),
-                review: Some(r),
-                causation: item.clone(),
-                ..ImpactEvent::default()
-            });
-            out.push(cn);
+            pending = next;
         }
+        let out: Vec<ChangeImpact> = out.into_iter().flatten().collect();
         self.emit_staged(events).await?;
         Ok(out)
     }
@@ -503,7 +529,8 @@ impl<S: WriteTx> Tx<'_, S> {
             )));
         }
         if v.accept {
-            self.check_accepted(crate::model::namespace_of(&c.namespace), id, flow, &vcn)
+            let seen = view.seen(flow);
+            self.check_accepted(crate::model::namespace_of(&c.namespace), id, flow, &seen, &vcn)
                 .await?;
         }
         let by = self.env.by.clone();
@@ -532,4 +559,47 @@ impl<S: WriteTx> Tx<'_, S> {
         .await?;
         Ok(cn)
     }
+}
+
+/// The end of the refusal of an acceptance whose origins are not accepted yet: a batch tries it again once the others
+/// are made (Go's `errOriginsPending`).
+const ORIGINS_PENDING: &str = "settle the origins first";
+
+/// The review gate of a successor (Go's `checkOrigins`, ADR 0077): a node created by the change with origins is
+/// accepted and committed only once the change impact of every origin is accepted (an origin changed by the impact of
+/// its parent, `via`: that one).
+pub(crate) fn check_origins<I: Borrow<ChangeImpact>>(impacts: &[I], cn: &ChangeImpact, d: &Draft) -> Result<()> {
+    let impacts: Vec<&ChangeImpact> = impacts.iter().map(Borrow::borrow).collect();
+    if cn.intent != INTENT_CREATED || d.origins.is_empty() {
+        return Ok(());
+    }
+    let node_of = |x: &ChangeImpact| x.post.as_ref().or(x.pre.as_ref()).map(|r| r.id.clone());
+    let mut pending = Vec::new();
+    for o in &d.origins {
+        let mut i = impacts.iter().position(|x| node_of(x).as_ref() == Some(&o.id));
+        if let Some(k) = i
+            && !impacts[k].via.is_empty()
+        {
+            let via = &impacts[k].via;
+            i = impacts.iter().position(|x| &x.id == via);
+        }
+        match i {
+            None => pending.push(format!("{} (not in the change)", o.id)),
+            Some(k) if impacts[k].review != crate::impact::REVIEW_ACCEPTED => {
+                pending.push(format!("{} ({})", impacts[k].key, impacts[k].review))
+            }
+            _ => {}
+        }
+    }
+    if pending.is_empty() {
+        return Ok(());
+    }
+    Err(GraphError::new(
+        crate::Kind::Conflict,
+        format!(
+            "{} derives from nodes whose change impacts are not accepted: {}: conflict: {ORIGINS_PENDING}",
+            cn.key,
+            pending.join(", ")
+        ),
+    ))
 }

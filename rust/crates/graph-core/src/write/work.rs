@@ -189,7 +189,7 @@ pub fn flow_branch(flow: &str) -> String {
     format!("flow-{}", flow.get(..8).unwrap_or(flow))
 }
 
-fn draft_of(cn: &ChangeImpact) -> String {
+pub(super) fn draft_of(cn: &ChangeImpact) -> String {
     format!("change impact {} ({})", cn.id, cn.key)
 }
 
@@ -733,7 +733,7 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// The stored version a draft of the impact starts from (Go's `work.base`): its pre version, the latest of the
     /// node on the branch of the change on the main flow; none for a creation.
-    async fn base(&self, w: &Work) -> Result<Option<Node>> {
+    pub(super) async fn base(&self, w: &Work) -> Result<Option<Node>> {
         let Some(pre) = &w.cn.pre else {
             if w.cn.committed.is_none() {
                 return Ok(None);
@@ -750,7 +750,7 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// The draft of the impact on the flow itself, editable (Go's `working`): a parent flow's draft is that flow's to
     /// edit.
-    fn working(&self, w: &Work) -> Result<Draft> {
+    pub(super) fn working(&self, w: &Work) -> Result<Draft> {
         let v = &self.views[&w.c.id];
         if let Some(d) = v.fold.draft(&w.cn.id, &w.flow) {
             return Ok(d.clone());
@@ -786,7 +786,7 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     /// The outgoing link a draft gains, checked (Go's `newDraftLink`).
-    async fn new_draft_link(&self, w: &Work, from: &Draft, l: &LinkWrite) -> Result<DraftLink> {
+    pub(super) async fn new_draft_link(&self, w: &Work, from: &Draft, l: &LinkWrite) -> Result<DraftLink> {
         if l.to.id.is_empty() && !l.target.is_zero() && !l.typ.is_empty() {
             return Err(unserved("a link to a URL (ADR 0154)"));
         }
@@ -812,6 +812,18 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// Creates a node in a change: one `created` event adds the impact and the draft (Go's `createTx`).
     pub async fn impact_node_create(&mut self, id: &ChangeId, inp: NodeCreate, flow: &str) -> Result<ChangeImpact> {
+        self.create_node(id, inp, flow, &[]).await
+    }
+
+    /// A creation, the successor of the nodes origins names (a merge or a split, ADR 0077): its draft records them,
+    /// its created event describes them.
+    pub(super) async fn create_node(
+        &mut self,
+        id: &ChangeId,
+        inp: NodeCreate,
+        flow: &str,
+        origins: &[NodeRef],
+    ) -> Result<ChangeImpact> {
         if inp.key.is_empty() || inp.typ.is_empty() {
             return Err(GraphError::invalid("a node needs a key and a type"));
         }
@@ -841,6 +853,7 @@ impl<S: WriteTx> Tx<'_, S> {
             typ: inp.typ.clone(),
             props: inp.props.clone(),
             execution: inp.execution.clone(),
+            origins: origins.to_vec(),
             ..Draft::default()
         };
         if let Some(lc) = self.catalog().lifecycle(&d.typ) {
@@ -852,6 +865,23 @@ impl<S: WriteTx> Tx<'_, S> {
             d.links.push(dl);
         }
         let r = d.draft_ref();
+        let patch = if origins.is_empty() {
+            None
+        } else {
+            let mut list = Vec::with_capacity(origins.len());
+            for o in origins {
+                let mut m = Map::new();
+                m.insert("id".into(), Value::String(o.id.0.clone()));
+                m.insert("version".into(), Value::from(o.version));
+                if let Ok(n) = read::stored_node(self.store, o).await {
+                    m.insert("key".into(), Value::String(n.key));
+                }
+                list.push(Value::Object(m));
+            }
+            let mut p = Map::new();
+            p.insert("origins".into(), Value::Array(list));
+            Some(p)
+        };
         if w.planned {
             // the creation was planned: its impact is recorded, the draft fulfils it
             self.emit(vec![ImpactEvent {
@@ -862,6 +892,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 execution: inp.execution.clone(),
                 post: Some(r.clone()),
                 draft: Some(d),
+                patch: patch.clone(),
                 ..ImpactEvent::default()
             }])
             .await?;
@@ -876,6 +907,7 @@ impl<S: WriteTx> Tx<'_, S> {
             state: Some(w.cn.clone()),
             post: Some(r.clone()),
             draft: Some(d),
+            patch,
             ..ImpactEvent::default()
         }])
         .await?;
@@ -913,7 +945,7 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     /// The checkout of the impact w selects (Go's `checkoutTx`): a draft copying the version it starts from.
-    async fn checkout(&mut self, w: &Work, execution: &str) -> Result<Draft> {
+    pub(super) async fn checkout(&mut self, w: &Work, execution: &str) -> Result<Draft> {
         let v = &self.views[&w.c.id];
         if v.fold.draft(&w.cn.id, &w.flow).is_some() {
             return Err(GraphError::conflict(format!(
@@ -1197,7 +1229,7 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     /// Records an edit of a draft, then sends a decided review back to proposed (Go's `emitUpdated`, `editedAgain`).
-    async fn emit_updated(
+    pub(super) async fn emit_updated(
         &mut self,
         w: &mut Work,
         r: &NodeRef,
@@ -1543,7 +1575,7 @@ fn base_node(n: &Node) -> BaseNode {
 }
 
 /// A link added to a draft, for the updated event (Go's `linkPatch`).
-fn add_link_patch(l: &DraftLink) -> Value {
+pub(super) fn add_link_patch(l: &DraftLink) -> Value {
     let mut m = Map::new();
     m.insert("id".into(), Value::String(l.id.0.clone()));
     m.insert("type".into(), Value::String(l.typ.clone()));
@@ -1555,7 +1587,7 @@ fn add_link_patch(l: &DraftLink) -> Value {
 }
 
 /// A link removed from a draft, for the updated event (Go's `removeLinkPatch`).
-fn remove_link_patch(l: &DraftLink) -> Value {
+pub(super) fn remove_link_patch(l: &DraftLink) -> Value {
     let mut m = Map::new();
     m.insert("id".into(), Value::String(l.id.0.clone()));
     m.insert("type".into(), Value::String(l.typ.clone()));

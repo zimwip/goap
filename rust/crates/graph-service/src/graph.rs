@@ -6,6 +6,7 @@ use std::{collections::HashMap, sync::Arc};
 use goap_connect::{ConnectError, Ctx, Request, Response, async_trait};
 use goap_proto::graph::v1 as pb;
 use graph_catalog::{Catalog, catalog::STRUCTURE_PROJECT};
+use graph_core::write::restructure::{NodeName, Restructured};
 use graph_core::write::reviews::{Actor, EntryEdit, ReviewEdit, ReviewObject};
 use graph_core::{
     GraphError, Kind,
@@ -2338,6 +2339,66 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    async fn impact_node_merge(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactNodeMergeRequest>,
+    ) -> Answer<pb::ImpactNodeRestructureResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let by = caller.subject.clone();
+        caller.administers().map_err(connect_error)?;
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let into = create_spec(m.into.as_ref(), &m.execution, &by)?;
+            let sources = m.sources.iter().map(node_name).collect();
+            let out = tx
+                .impact_node_merge(
+                    &id,
+                    sources,
+                    into,
+                    m.rationale.clone(),
+                    m.flow.clone(),
+                    m.execution.clone(),
+                )
+                .await?;
+            Ok(restructured(&out))
+        })
+        .await
+    }
+
+    async fn impact_node_split(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactNodeSplitRequest>,
+    ) -> Answer<pb::ImpactNodeRestructureResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let by = caller.subject.clone();
+        caller.administers().map_err(connect_error)?;
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let into = m
+                .into
+                .iter()
+                .map(|s| create_spec(Some(s), &m.execution, &by))
+                .collect::<Result<Vec<_>, _>>()?;
+            let source = m.source.as_ref().map(node_name).unwrap_or_default();
+            let out = tx
+                .impact_node_split(
+                    &id,
+                    source,
+                    into,
+                    m.rationale.clone(),
+                    m.flow.clone(),
+                    m.execution.clone(),
+                )
+                .await?;
+            Ok(restructured(&out))
+        })
+        .await
+    }
+
     async fn impact_node_checkout(
         &self,
         _ctx: &Ctx,
@@ -3080,4 +3141,47 @@ fn whole_pb(w: &whole::WholeChange) -> Result<pb::Change, GraphError> {
         .map_err(GraphError::internal)?;
     c.seq = w.seq;
     Ok(c)
+}
+
+/// A node a merge or a split names (Go's `nameOf`).
+fn node_name(n: &pb::NodeName) -> NodeName {
+    NodeName {
+        impact: n.change_impact_id.clone(),
+        node: n.node_id.as_str().into(),
+        key: n.key.clone(),
+    }
+}
+
+/// A node a merge or a split creates (Go's `createSpec`).
+fn create_spec(s: Option<&pb::NodeCreateSpec>, execution: &str, by: &str) -> Result<NodeCreate, GraphError> {
+    let Some(s) = s else { return Ok(NodeCreate::default()) };
+    Ok(NodeCreate {
+        key: s.key.clone(),
+        typ: s.r#type.clone(),
+        props: s.props.as_ref().map(convert::map).filter(|p| !p.is_empty()),
+        owner: s.owner.clone(),
+        rationale: s.rationale.clone(),
+        links: convert::link_writes(&s.links).map_err(|e| GraphError::new(Kind::Invalid, e))?,
+        execution: execution.to_string(),
+        produced_by: by.to_string(),
+    })
+}
+
+fn restructured(r: &Restructured) -> pb::ImpactNodeRestructureResponse {
+    pb::ImpactNodeRestructureResponse {
+        successors: r.successors.iter().map(convert::change_impact).collect(),
+        sources: r.sources.iter().map(convert::change_impact).collect(),
+        parents: r.parents.iter().map(convert::change_impact).collect(),
+        suspect: r
+            .suspect
+            .iter()
+            .map(|l| pb::SuspectLink {
+                from: Some(convert::node_ref(&l.from)),
+                from_key: l.from_key.clone(),
+                r#type: l.typ.clone(),
+                to: Some(convert::node_ref(&l.to)),
+                to_key: l.to_key.clone(),
+            })
+            .collect(),
+    }
 }

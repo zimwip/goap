@@ -618,6 +618,17 @@ impl WriteTx for Session {
         Ok(())
     }
 
+    async fn savepoint(&self) -> Result<(), GraphError> {
+        self.run(("SAVEPOINT rehearsal".into(), vec![]), "savepoint").await?;
+        Ok(())
+    }
+
+    async fn rollback_to_savepoint(&self) -> Result<(), GraphError> {
+        self.run(("ROLLBACK TO SAVEPOINT rehearsal".into(), vec![]), "savepoint")
+            .await?;
+        Ok(())
+    }
+
     async fn next_commit(&self) -> Result<i64, GraphError> {
         let q = if self.sql.pg {
             "SELECT nextval('commit_seq')"
