@@ -357,7 +357,9 @@ pub(crate) fn change_of(r: &Row) -> Result<Change, GraphError> {
 impl ReadTx for Session {
     async fn change(&self, id: &ChangeId) -> Result<Option<Change>, GraphError> {
         if self.sql.pg && uuid::Uuid::try_parse(id.as_str()).is_err() {
-            return Ok(None);
+            return Err(GraphError::invalid(format!(
+                "change {id}: invalid input syntax for type uuid: \"{id}\""
+            )));
         }
         let f = ChangesFilter {
             ids: vec![id.clone()],

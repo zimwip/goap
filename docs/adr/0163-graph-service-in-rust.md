@@ -189,4 +189,12 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `read::sql` `store_counts`) and `GetGraphOverview` follow: 142 calls, none divergent. The overview and
   `ListNamespaces` name this graph's source (`platform`) and are left to Go while the platform declares other graphs
   holding namespaces: Go's router merges their listings, Rust has no router yet.
+  `ListBaselineLinks` (`read::sql` `link_page`), `DerivedNodes`, `GetSharedNodes` (the impact projection, as Go's
+  `Tx.Change` reads it), `GetChangeDependencies` (`graph-core` `dependency`) and `SetChangeDependencies`
+  (`write::dependency`: a `change.updated` entry, the change answered at the position it was read at) follow: 189
+  calls, none divergent, the tables the same. A change's view now folds the `change.updated` entries that edit its
+  header only (a rebase's `baselineId`, an attachment's `parentId` still refuse), its position the last impact event
+  or fact, as Go's. A change id PostgreSQL cannot read as a UUID is refused by Rust as Go's store refuses it
+  (`invalid input syntax for type uuid`); Go's router answers it before, in plain text, which the comparison leaves
+  out.
 - Not done yet: the rest of phase 4.

@@ -484,6 +484,78 @@ impl Sql {
         )
     }
 
+    /// The links between two of the versions refs matching a text (`linkRefsWhere`, no reach: a person's call is Go's).
+    fn link_refs_where(self, refs: &[NodeRef], text: &str) -> (String, Vec<Arg>, usize) {
+        let (mut args, n) = self.refs_args(refs);
+        args.push(like_pattern(text).into());
+        (
+            format!(
+                " FROM ({}) l{} WHERE {}",
+                self.held_links(1, ""),
+                self.refs_join("t", "l.to_id", "l.to_version", 1),
+                self.text_match(n, "l.props", &["l.type"])
+            ),
+            args,
+            n + 1,
+        )
+    }
+
+    /// A page of the links between two of the versions refs, by type then id (`sqlLinkPage`).
+    pub fn link_page(self, refs: &[NodeRef], typ: &str, text: &str, offset: usize, limit: usize) -> Stmt {
+        let (w, mut args, n) = self.link_refs_where(refs, text);
+        args.push(typ.to_string().into());
+        args.push((limit as i64).into());
+        args.push((offset as i64).into());
+        let order = if self.pg { "l.type COLLATE \"C\"" } else { "l.type" };
+        (
+            format!(
+                "SELECT {}{w} AND ({t} = '' OR l.type = {t}) ORDER BY {order}, l.id LIMIT {} OFFSET {}",
+                self.link_cols(),
+                self.ph(n + 1),
+                self.ph(n + 2),
+                t = self.ph(n)
+            ),
+            args,
+        )
+    }
+
+    /// The counts by type of the links a page reads (`sqlLinkTypeCounts`).
+    pub fn link_type_counts(self, refs: &[NodeRef], text: &str) -> Stmt {
+        let (w, args, _) = self.link_refs_where(refs, text);
+        (format!("SELECT l.type, count(*){w} GROUP BY l.type"), args)
+    }
+
+    /// The node versions derived from a version, or from any version of a node (version 0), by key then version
+    /// (`sqlDerivedNodes`).
+    pub fn derived_nodes(self, r: &NodeRef) -> Stmt {
+        if self.pg {
+            let mut o = serde_json::Map::new();
+            o.insert("id".into(), r.id.0.clone().into());
+            if r.version != 0 {
+                o.insert("version".into(), r.version.into());
+            }
+            let list = serde_json::Value::Array(vec![o.into()]).to_string();
+            return (
+                format!(
+                    "SELECT {}{NODE_FROM} WHERE v.origins @> {}::jsonb ORDER BY n.key, v.version",
+                    self.node_cols(),
+                    self.ph(1)
+                ),
+                vec![list.into()],
+            );
+        }
+        (
+            format!(
+                "SELECT {}{NODE_FROM} WHERE EXISTS (SELECT 1 FROM json_each(v.origins) o WHERE json_extract(o.value, '$.id') = {p1} \
+                 AND ({p2} = 0 OR json_extract(o.value, '$.version') = {p2})) ORDER BY n.key, v.version",
+                self.node_cols(),
+                p1 = self.ph(1),
+                p2 = self.ph(2)
+            ),
+            vec![r.id.0.clone().into(), r.version.into()],
+        )
+    }
+
     pub fn links_from_into(self, refs: &[NodeRef], to: &NodeId) -> Stmt {
         let (mut args, n) = self.refs_args(refs);
         args.push(to.0.clone().into());

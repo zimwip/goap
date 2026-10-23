@@ -20,7 +20,7 @@ use crate::{
     change::Change,
     impact::{
         self, BaseCopy, BaseLink, BaseNode, ChangeImpact, Draft, DraftLink, Fold, INTENT_CREATED, INTENT_MODIFIED,
-        ImpactEvent, ImpactOp, LOG_IMPACT, REVIEW_PROPOSED, Review,
+        ImpactEvent, ImpactOp, LOG_FACT, LOG_IMPACT, REVIEW_PROPOSED, Review,
     },
     lnk::Url,
     model::{
@@ -971,10 +971,12 @@ pub async fn fold_change<T: ReadTx>(store: &T, id: &ChangeId) -> Result<ChangeVi
     let mut out = ChangeView::default();
     let mut events = Vec::new();
     for l in store.log(id, 0, &[]).await? {
-        out.seq = out.seq.max(l.seq);
+        if l.stream() == LOG_IMPACT || l.stream() == LOG_FACT {
+            out.seq = out.seq.max(l.seq); // the position of the view: its impact events and facts
+        }
         if l.stream() == LOG_IMPACT {
             events.extend(impact::events_of(&l).map_err(GraphError::internal)?);
-        } else if l.typ != LOG_REVIEW {
+        } else if l.typ != LOG_REVIEW && !header_only(&l) {
             return Err(unserved(&format!(
                 "a change whose log records {} entries (options, decisions, executions)",
                 l.typ
@@ -993,6 +995,14 @@ pub async fn fold_change<T: ReadTx>(store: &T, id: &ChangeId) -> Result<ChangeVi
     }
     out.events = events;
     Ok(out)
+}
+
+/// Whether a log entry edits the header of its change only, leaving its impacts and drafts as they are: a
+/// `change.updated` entry but a rebase (`baselineId`) or an attachment (`parentId`), which move its fork.
+fn header_only(l: &crate::impact::LogEntry) -> bool {
+    l.typ == "change.updated"
+        && !l.subject.is_empty()
+        && l.subject.split(',').all(|f| f != "baselineId" && f != "parentId")
 }
 
 /// Rebuilds the drafts of the checkouts that copy a stored version (ADR 0142): the version and its links.

@@ -92,3 +92,62 @@ impl Session {
             .collect())
     }
 }
+
+impl Session {
+    /// A page of the links between two of the versions refs (`Tx.LinkPage`): the links, how many the type keeps, the
+    /// counts of every type.
+    pub async fn link_page(
+        &self,
+        refs: &[graph_core::model::NodeRef],
+        typ: &str,
+        text: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<(Vec<graph_core::model::Link>, usize, Vec<graph_core::model::TypeCount>), GraphError> {
+        if refs.is_empty() {
+            return Ok((Vec::new(), 0, Vec::new()));
+        }
+        let counts: std::collections::BTreeMap<String, usize> = self
+            .rows(self.sql.link_type_counts(refs, text))
+            .await?
+            .iter()
+            .map(|r| (r.text(0), r.int(1) as usize))
+            .collect();
+        let (types, total) = graph_core::page::type_counts(&counts, typ);
+        let links = self.links(self.sql.link_page(refs, typ, text, offset, limit)).await?;
+        Ok((links, total, types))
+    }
+}
+
+impl Session {
+    /// The node versions derived from a version (`Tx.DerivedNodes`).
+    pub async fn derived_nodes(
+        &self,
+        r: &graph_core::model::NodeRef,
+    ) -> Result<Vec<graph_core::model::Node>, GraphError> {
+        self.nodes(self.sql.derived_nodes(r)).await
+    }
+}
+
+impl Session {
+    /// The node of each impact of a change in the order written, with the version it starts from (`pre`) and
+    /// whether it names one after (`post`): the projection Go's `Tx.Change` reads.
+    pub async fn impact_nodes(
+        &self,
+        change: &graph_core::model::ChangeId,
+    ) -> Result<Vec<(graph_core::model::NodeId, Option<i32>, bool)>, GraphError> {
+        if self.sql.pg && !super::is_uuid(change.as_str()) {
+            return Ok(Vec::new());
+        }
+        let mut out = Vec::new();
+        for r in self.rows(self.sql.impact_refs(change)).await? {
+            let node = r.text(0);
+            if node.is_empty() {
+                continue;
+            }
+            let pre = (!r.is_null(1)).then(|| r.int32(1));
+            out.push((graph_core::model::NodeId(node), pre, !r.is_null(2)));
+        }
+        Ok(out)
+    }
+}

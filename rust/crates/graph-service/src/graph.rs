@@ -439,6 +439,56 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    /// A page of the links of a baseline, between two of its nodes (`BaselineLinks`).
+    async fn list_baseline_links(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ListBaselineLinksRequest>,
+    ) -> Answer<pb::ListBaselineLinksResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.read(caller, async |tx| {
+            let header = read::header_of(tx, &BaselineId(m.baseline_id.clone())).await?;
+            let limit = match m.limit {
+                l if l <= 0 || l as usize > graph_core::model::MAX_BROWSE_LIMIT => graph_core::model::MAX_BROWSE_LIMIT,
+                l => l as usize,
+            };
+            let state = read::select(tx, &header, None).await?;
+            let mut refs: Vec<NodeRef> = state.iter().map(|(n, v)| NodeRef::new(n.clone(), *v)).collect();
+            refs.sort();
+            let (links, total, types) = tx
+                .link_page(&refs, &m.r#type, &m.query, m.offset.max(0) as usize, limit)
+                .await?;
+            Ok(pb::ListBaselineLinksResponse {
+                baseline: Some(convert::baseline(&header, None)),
+                links: convert::links(&links),
+                total: total as i32,
+                types: convert::type_counts(&types),
+            })
+        })
+        .await
+    }
+
+    /// The node versions merged or split from a version (`DerivedNodes`).
+    async fn derived_nodes(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::DerivedNodesRequest>,
+    ) -> Answer<pb::DerivedNodesResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.read(caller, async |tx| {
+            let r = m
+                .r#ref
+                .map(|r| NodeRef::new(NodeId(r.id), r.version))
+                .unwrap_or_default();
+            Ok(pb::DerivedNodesResponse {
+                nodes: convert::nodes(&tx.derived_nodes(&r).await?),
+            })
+        })
+        .await
+    }
+
     /// The nodes of a type a view holds, all of them (`ViewNodesOfType`): a branch view; a change view is still Go's.
     async fn list_view_nodes(
         &self,
@@ -1123,6 +1173,120 @@ impl pb::GraphService for Graph {
                     .map(convert::node_ref)
                     .collect(),
             })
+        })
+        .await
+    }
+
+    /// Sets the changes an open change depends on (ADR 0108).
+    async fn set_change_dependencies(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::SetChangeDependenciesRequest>,
+    ) -> Answer<pb::SetChangeDependenciesResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let deps: Vec<ChangeId> = m.depends_on.iter().map(|d| ChangeId(d.clone())).collect();
+            let (c, seq) = tx
+                .set_change_dependencies(&ChangeId(m.change_id.clone()), &deps)
+                .await?;
+            let mut c = convert::change(&c);
+            c.seq = seq;
+            Ok(pb::SetChangeDependenciesResponse { change: Some(c) })
+        })
+        .await
+    }
+
+    /// What a change depends on, its dependents and the merge order of its open sub-changes (ADR 0108).
+    async fn get_change_dependencies(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetChangeDependenciesRequest>,
+    ) -> Answer<pb::GetChangeDependenciesResponse> {
+        let caller = Caller::of(&req)?;
+        let id = ChangeId(req.into_inner().change_id);
+        self.read(caller, async |tx| {
+            let d = graph_core::dependency::change_dependencies(tx, &id).await?;
+            let pb = |ds: &[graph_core::dependency::Dependency]| {
+                ds.iter()
+                    .map(|d| pb::Dependency {
+                        id: d.id.0.clone(),
+                        title: d.title.clone(),
+                        methodology: d.methodology.clone(),
+                        status: d.status.clone(),
+                        state: d.state.clone(),
+                        parent_id: d.parent_id.0.clone(),
+                        satisfied: d.satisfied,
+                        reason: d.reason.clone(),
+                    })
+                    .collect()
+            };
+            Ok(pb::GetChangeDependenciesResponse {
+                depends_on: pb(&d.depends_on),
+                dependents: pb(&d.dependents),
+                order: pb(&d.order),
+            })
+        })
+        .await
+    }
+
+    /// The nodes a change starts from that other open changes of its namespace act on too (`SharedNodes`).
+    async fn get_shared_nodes(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetSharedNodesRequest>,
+    ) -> Answer<pb::GetSharedNodesResponse> {
+        let caller = Caller::of(&req)?;
+        let id = ChangeId(req.into_inner().change_id);
+        self.read(caller, async |tx| {
+            let Some(c) = tx.change(&id).await? else {
+                return Err(GraphError::not_found(format!("change {id}")));
+            };
+            let open = tx
+                .change_heads(&ChangesFilter {
+                    status: vec!["draft".into(), "active".into(), "committed".into()],
+                    ..ChangesFilter::default()
+                })
+                .await?;
+            // the open changes acting on each node (`openChangeHolders`)
+            let mut holders: HashMap<NodeId, Vec<&change::Change>> = HashMap::new();
+            for o in &open {
+                for (node, pre, post) in tx.impact_nodes(&o.id).await? {
+                    if pre.is_some() || post {
+                        let hs = holders.entry(node).or_default();
+                        if !hs.iter().any(|h| h.id == o.id) {
+                            hs.push(o);
+                        }
+                    }
+                }
+            }
+            let mut seen = std::collections::HashSet::new();
+            let mut nodes = Vec::new();
+            for (node, pre, _) in tx.impact_nodes(&id).await? {
+                let Some(pre) = pre.map(|v| NodeRef::new(node, v)) else {
+                    continue;
+                };
+                if !seen.insert(pre.id.clone()) {
+                    continue;
+                }
+                let others: Vec<String> = holders
+                    .get(&pre.id)
+                    .into_iter()
+                    .flatten()
+                    .filter(|o| o.id != id && namespace_of(&o.namespace) == namespace_of(&c.namespace))
+                    .map(|o| o.id.0.clone())
+                    .collect();
+                if others.is_empty() {
+                    continue;
+                }
+                let n = read::stored_node(tx, &pre).await?;
+                nodes.push(pb::SharedNode {
+                    node: Some(convert::node_ref(&pre)),
+                    key: n.key,
+                    changes: others,
+                });
+            }
+            Ok(pb::GetSharedNodesResponse { nodes })
         })
         .await
     }
