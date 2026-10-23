@@ -301,6 +301,69 @@ impl<S: WriteTx> Tx<'_, S> {
         self.check_draft(ns, &d)
     }
 
+    /// Records a review the graph submits itself (Go's `putReviewRecord`): the merge of a sub-change accepting what it
+    /// committed. It answers the key of the record and the id of its item, the cause of its verdicts.
+    pub(crate) async fn put_review_record(
+        &mut self,
+        change: &ChangeId,
+        by: &str,
+        comment: &str,
+        entries: &[(String, String)],
+    ) -> Result<(String, String)> {
+        let key = format!("REV-{}", self.env.new_id());
+        let at = self.env.now();
+        let entries = entries
+            .iter()
+            .map(|(impact, comment)| {
+                let mut m = Map::new();
+                m.insert("impact".into(), Value::String(impact.clone()));
+                if !comment.is_empty() {
+                    m.insert("comment".into(), Value::String(comment.clone()));
+                }
+                m.insert("outcome".into(), Value::String("accept".into()));
+                Value::Object(m)
+            })
+            .collect();
+        let mut data = BTreeMap::new();
+        data.insert("key".to_string(), Value::String(key.clone()));
+        data.insert("status".into(), Value::String(RECORD_SUBMITTED.into()));
+        data.insert("entries".into(), Value::Array(entries));
+        if !comment.is_empty() {
+            data.insert("comment".into(), Value::String(comment.into()));
+        }
+        if !by.is_empty() {
+            data.insert("by".into(), Value::String(by.into()));
+        }
+        data.insert("submittedAt".into(), Value::String(time_text(&at)));
+        let item = self.env.new_id();
+        let payload = gojson::to_string(&Item {
+            id: &item,
+            typ: TYPE_REVIEW,
+            status: ITEM_PROPOSED,
+            flow: "",
+            data: &data,
+            produced_by: by,
+            execution: "",
+            created_at: at,
+        });
+        self.append_log(&LogEntry {
+            seq: 0,
+            id: item.clone(),
+            change: change.clone(),
+            typ: format!("{LOG_FACT}.{TYPE_REVIEW}"),
+            flow: String::new(),
+            process: String::new(),
+            execution: String::new(),
+            subject: String::new(),
+            by: by.to_string(),
+            at,
+            causation: String::new(),
+            payload,
+        })
+        .await?;
+        Ok((key, item))
+    }
+
     /// Submits a review of a change (Go's `ImpactNodeReviewBatch` with no item of the caller's): the record, then the
     /// verdicts, as one entry on the main flow, one each on a flow. It answers the impacts as the verdicts leave them,
     /// in their order.

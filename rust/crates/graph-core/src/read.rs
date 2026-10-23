@@ -288,13 +288,59 @@ impl ChangeWorld {
 /// The versions some nodes have on the branch of a change: its fork, then what committed on it (Go's
 /// `branchVersions`).
 pub async fn branch_versions<T: ReadTx>(tx: &T, own: &Branch, ids: &[NodeId]) -> Result<HashMap<NodeId, Version>> {
-    let fork = header_of(tx, &own.fork_baseline).await?;
-    let mut out = select(tx, &fork, Some(ids)).await?;
-    lay_commits(
-        &mut out,
-        tx.committed_versions(&own.namespace, &own.name, 0, i64::MAX, Some(ids))
-            .await?,
-    );
+    chain_versions(tx, own, Some(ids), true).await
+}
+
+/// The whole state of the branch of a change.
+pub async fn branch_state<T: ReadTx>(tx: &T, own: &Branch) -> Result<HashMap<NodeId, Version>> {
+    chain_versions(tx, own, None, true).await
+}
+
+/// The versions some nodes have in the fork of the branch of a change (Go's `forkVersions`).
+pub async fn fork_versions<T: ReadTx>(tx: &T, own: &Branch, ids: &[NodeId]) -> Result<HashMap<NodeId, Version>> {
+    chain_versions(tx, own, Some(ids), false).await
+}
+
+/// The state of the branch of a change, or of its fork (Go's `chainVersions`, ADR 0103, 0140): the lasting baseline
+/// under the chain of the branches it is forked from, then the commits of each branch of the chain, outermost first,
+/// each up to the order the branch under it was forked at.
+async fn chain_versions<T: ReadTx>(
+    tx: &T,
+    b: &Branch,
+    ids: Option<&[NodeId]>,
+    own: bool,
+) -> Result<HashMap<NodeId, Version>> {
+    let mut layers: Vec<(String, i64)> = Vec::new(); // the innermost first
+    let mut up_to = i64::MAX;
+    if own {
+        layers.push((b.name.clone(), up_to));
+    }
+    let mut cur = b.clone();
+    let mut hops = 0;
+    while cur.fork_seq > 0 {
+        hops += 1;
+        if hops > 64 {
+            return Err(GraphError::invalid(format!(
+                "branch {}: the chain of the branches it is forked from does not end",
+                b.name
+            )));
+        }
+        up_to = up_to.min(cur.fork_seq);
+        let p = branch(tx, &cur.namespace, &cur.parent).await?;
+        layers.push((p.name.clone(), up_to));
+        cur = p;
+    }
+    let fork = header_of(tx, &b.fork_baseline).await?;
+    let mut out = match ids {
+        Some(ids) => select(tx, &fork, Some(ids)).await?,
+        None => whole_state(tx, &fork).await?,
+    };
+    for (name, up_to) in layers.iter().rev() {
+        lay_commits(
+            &mut out,
+            tx.committed_versions(&b.namespace, name, 0, *up_to, ids).await?,
+        );
+    }
     Ok(out)
 }
 
@@ -665,14 +711,7 @@ impl<'a, T: ReadTx> World<'a, T> {
         let (base, mut nodes) = match &cw.own {
             Some(own) => {
                 let fork = header_of(self.tx, &own.fork_baseline).await?;
-                let mut state = whole_state(self.tx, &fork).await?;
-                lay_commits(
-                    &mut state,
-                    self.tx
-                        .committed_versions(&own.namespace, &own.name, 0, i64::MAX, None)
-                        .await?,
-                );
-                (fork, state)
+                (fork, branch_state(self.tx, own).await?)
             }
             None => (self.baseline.clone(), whole_state(self.tx, &self.baseline).await?),
         };

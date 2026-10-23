@@ -2193,15 +2193,23 @@ impl pb::GraphService for Graph {
         let m = req.into_inner();
         let token_project = caller.project.clone();
         self.write(caller, async |tx| {
-            if !m.parent_id.is_empty() {
-                return Err(GraphError::unimplemented(
-                    "a sub-change (ADR 0103): not served here yet",
-                ));
-            }
             if m.owner_org == "@me" || m.owner_org.starts_with(change::USER_PREFIX) || m.owner_org.contains("/USR:") {
                 return Err(GraphError::unimplemented(
                     "a personal change (ADR 0037): not served here yet",
                 ));
+            }
+            if !m.parent_id.is_empty()
+                && let Ok(parent) = tx.change_head(&m.parent_id.as_str().into()).await
+            {
+                if parent.is_personal() {
+                    // a personal change is never split
+                    return Err(GraphError::new(Kind::Conflict, "a personal change has no sub-changes"));
+                }
+                if is_platform_namespace(&parent.namespace) || !parent.lifecycle.is_empty() || !parent.guardians.is_empty() {
+                    return Err(GraphError::unimplemented(
+                        "a sub-change of a change of the platform's namespaces or following a lifecycle: not served here yet",
+                    ));
+                }
             }
             if is_platform_namespace(&m.namespace) {
                 return Err(GraphError::unimplemented(
@@ -2236,6 +2244,7 @@ impl pb::GraphService for Graph {
                     owner_org: m.owner_org.clone(),
                     project_id: project,
                     data,
+                    parent_id: m.parent_id.as_str().into(),
                 })
                 .await?;
             Ok(pb::CreateChangeResponse {

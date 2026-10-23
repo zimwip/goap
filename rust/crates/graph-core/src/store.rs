@@ -216,6 +216,16 @@ pub trait WriteTx: ReadTx {
         committed: i64,
     ) -> impl Future<Output = Result<()>> + Send;
 
+    /// Gives a version the change and impact it commits for, with the comment of that impact (a version a sub-change
+    /// wrote, merged into its parent and then into its target: Go's `SetNodeOrigin`).
+    fn set_node_origin(
+        &self,
+        r: &NodeRef,
+        change: &ChangeId,
+        impact: &str,
+        comment: &str,
+    ) -> impl Future<Output = Result<()>> + Send;
+
     /// Takes the next position of the log of the changes and of their impacts and leaves them unused: what a
     /// transaction of the Go service declaring an impact then rolling back takes (PostgreSQL's sequences are not
     /// rolled back; SQLite's are), so that both services number alike while they are compared (ADR 0163).

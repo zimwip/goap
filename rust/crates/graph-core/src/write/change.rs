@@ -33,6 +33,8 @@ pub struct NewChange {
     pub owner_org: String,
     pub project_id: String,
     pub data: Option<Map<String, Value>>,
+    /// the change it is a sub-change of (ADR 0103)
+    pub parent_id: ChangeId,
 }
 
 /// The name of the branch a change owns (`changeBranchName`).
@@ -135,7 +137,7 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// Opens a root change (Go's `createChange` without a parent, a lifecycle or a guardian: the service has no
     /// registry, as `platform/cmd/graph`).
-    pub async fn create_change(&mut self, inp: NewChange) -> Result<Change> {
+    pub async fn create_change(&mut self, mut inp: NewChange) -> Result<Change> {
         let org = STRUCTURE_ORGANISATION;
         let proj = STRUCTURE_PROJECT;
         let owner = self
@@ -146,20 +148,22 @@ impl<S: WriteTx> Tx<'_, S> {
             .map_err(|e| e.context("project of the change"))?;
         let mut c = Change {
             id: ChangeId(self.env.new_id()),
-            title: inp.title,
-            intent: inp.intent,
-            methodology: inp.methodology,
-            methodology_version: inp.methodology_version,
+            title: inp.title.clone(),
+            intent: inp.intent.clone(),
+            methodology: inp.methodology.clone(),
+            methodology_version: inp.methodology_version.clone(),
             namespace: namespace_of(&inp.namespace).to_string(),
             status: STATUS_DRAFT.into(),
-            baseline_id: inp.baseline_id,
+            baseline_id: inp.baseline_id.clone(),
             branch: branch_of(&inp.branch).to_string(),
-            data: inp.data,
+            data: inp.data.take(),
             created_at: Some(self.env.now()),
+            parent_id: inp.parent_id.clone(),
             owner_org: owner,
             project_id: project,
             ..Change::default()
         };
+        self.prepare_sub_change(&mut c, &mut inp).await?;
         // scopeChange: the root unit by default, a project always named, one spelling per node
         if c.owner_org.is_zero() {
             c.owner_org = self.structure_url(org, &self.structure_root(org)?)?;
@@ -177,7 +181,7 @@ impl<S: WriteTx> Tx<'_, S> {
             .map_err(|e| e.context("project of the change"))?;
         c.owner_org = self.structure_url(org, &unit.key)?;
         c.project_id = self.structure_url(proj, &project.key)?;
-        if c.baseline_id.is_empty() {
+        if c.baseline_id.is_empty() && c.parent_id.is_empty() {
             c.baseline_id = read::branch_head(self.store, &c.namespace, &c.branch).await?.id;
         }
         let fork = read::header_of(self.store, &c.baseline_id).await?;
@@ -191,13 +195,8 @@ impl<S: WriteTx> Tx<'_, S> {
         if b.status != BRANCH_OPEN {
             return Err(GraphError::conflict(format!("branch {} is {}", b.name, b.status)));
         }
-        if b.ephemeral {
-            return Err(GraphError::unimplemented(
-                "a change forked from the branch of a change: not served here yet",
-            ));
-        }
         if inp.own_branch {
-            let own = Branch {
+            let mut own = Branch {
                 ephemeral: true,
                 name: change_branch_name(&c.id),
                 namespace: c.namespace.clone(),
@@ -209,6 +208,9 @@ impl<S: WriteTx> Tx<'_, S> {
                 created_at: Some(self.env.now()),
                 ..Branch::default()
             };
+            if b.ephemeral {
+                (own.fork_baseline, own.fork_seq) = super::subchange::fork_point(self, &b).await?;
+            }
             self.put_branch(&own).await?;
             c.branch = own.name;
         }

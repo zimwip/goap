@@ -1,8 +1,9 @@
 //! The merge of a change into the branch it was forked from (Go's `IntegrateChange`, `rebase_committed.go`,
 //! `changebranch.go`; ADR 0102, 0140): settled, up to date, then fast-forwarded: what its branch committed joins the
 //! target, a baseline of kind fast-forward is the new head, each impact is committed there, the change is applied.
-//! A rebase, a three-way merge, a sub-change and a dependency are the Go service's.
-use std::collections::BTreeMap;
+//! A sub-change merges into the branch of its parent the same way (ADR 0103). A rebase, a three-way merge and a
+//! dependency are the Go service's.
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde_json::Value;
 
@@ -11,12 +12,15 @@ use super::{
     events::{CHANGE_APPLIED, CHANGE_MERGED, EventNode},
     review::draft_changed,
     tx::Tx,
+    work::node_of,
 };
 use crate::{
     GraphError, Result,
     change::{Change, ChangesFilter},
-    impact::{ChangeImpact, ImpactEvent, ImpactOp, LOG_FACT, REVIEW_ACCEPTED, REVIEW_REJECTED},
-    model::{Baseline, BaselineId, Branch, ChangeId, MAIN_BRANCH, NodeId, NodeRef, branch_of},
+    impact::{
+        ChangeImpact, ImpactEvent, ImpactOp, LOG_FACT, REVIEW_ACCEPTED, REVIEW_PROPOSED, REVIEW_REJECTED, Review,
+    },
+    model::{Baseline, BaselineId, Branch, ChangeId, MAIN_BRANCH, NodeId, NodeRef, Version, branch_of},
     read,
     store::WriteTx,
 };
@@ -25,6 +29,8 @@ use crate::{
 const BASELINE_FAST_FORWARD: &str = "fast-forward";
 const BRANCH_MERGED: &str = "merged";
 const STATUS_APPLIED: &str = "applied";
+/// Who records the work of a merged sub-change in its parent.
+const MERGE_PRODUCER: &str = "graph.merge";
 
 fn unserved(what: &str) -> GraphError {
     GraphError::unimplemented(format!("{what}: not served here yet"))
@@ -128,8 +134,12 @@ impl<S: WriteTx> Tx<'_, S> {
                 ..ChangesFilter::default()
             })
             .await?;
-        if !subs.is_empty() {
-            return Err(unserved("the merge of a change with sub-changes (ADR 0103)"));
+        let open = subs
+            .iter()
+            .filter(|s| s.status != STATUS_APPLIED && s.status != super::change::STATUS_ABANDONED)
+            .count();
+        if open > 0 {
+            out.push(format!("{open} open sub-change(s) (merge or abandon them)"));
         }
         for cn in impacts {
             if !cn.via.is_empty() {
@@ -190,8 +200,9 @@ impl<S: WriteTx> Tx<'_, S> {
         self.put_branch(&b).await
     }
 
-    /// Merges a root change into the lasting branch it was forked from, by a fast-forward (Go's `IntegrateChange` of
-    /// an open change): the change as it is once applied.
+    /// Merges a change into what it was forked from, by a fast-forward (Go's `IntegrateChange` of an open change): a
+    /// root change into the lasting branch it was forked from, a sub-change into the branch of its parent, which takes
+    /// its work as its own (ADR 0103). The change as it is once applied.
     pub async fn merge_change(&mut self, id: &ChangeId) -> Result<ChangeRead> {
         self.lock_change(id).await?;
         let c = self.change_head(id).await?;
@@ -201,27 +212,12 @@ impl<S: WriteTx> Tx<'_, S> {
             }
             return Err(GraphError::conflict(format!("change {id} is {}", c.status)));
         }
-        if !c.parent_id.is_empty() || !c.lifecycle.is_empty() || !c.guardians.is_empty() {
-            return Err(unserved(
-                "the merge of a sub-change, or of a change following a lifecycle",
-            ));
+        if !c.lifecycle.is_empty() || !c.guardians.is_empty() {
+            return Err(unserved("the merge of a change following a lifecycle"));
         }
         self.view(id).await?;
-        let fold = self.views[id].fold.clone();
-        let impacts: Vec<ChangeImpact> = fold
-            .impacts
-            .iter()
-            .filter(|cn| cn.flow.is_empty() && !cn.superseded)
-            .cloned()
-            .collect();
-        let own = match self.store.branch(&c.namespace, &c.branch).await? {
-            Some(b)
-                if branch_of(&c.branch) != MAIN_BRANCH && b.origin == super::change::change_branch_origin(&c.id) =>
-            {
-                Some(b)
-            }
-            _ => None,
-        };
+        let impacts = main_impacts(&self.views[id].fold.impacts);
+        let own = self.own_branch(&c).await?;
         // settled
         let left = self.unsettled(&c, &impacts, own.as_ref()).await?;
         if !left.is_empty() {
@@ -235,6 +231,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 "change {id} committed nothing on its branch: {NOTHING_TO_COMMIT}"
             )));
         }
+        self.check_parent_drafts(&c, &impacts).await?;
         let Some(mut own) = own else {
             return Err(GraphError::invalid(format!("change {id} has no branch of its own")));
         };
@@ -243,7 +240,15 @@ impl<S: WriteTx> Tx<'_, S> {
         self.lock_branch(&c.namespace, &target).await?;
         let parent = read::branch(self.store, &own.namespace, &own.parent).await?;
         if parent.ephemeral {
-            return Err(unserved("the merge into the branch of a change"));
+            if parent.fork_baseline != own.fork_baseline || self.store.last_commit(&parent.name).await? > own.fork_seq {
+                return Err(unserved(
+                    "the merge of a sub-change whose parent moved since its fork (a rebase, ADR 0103)",
+                ));
+            }
+            if !c.depends_on.is_empty() {
+                return Err(unserved("the merge of a change depending on others (ADR 0108)"));
+            }
+            return self.merge_into_parent(c, own, parent, impacts).await;
         }
         let head = read::branch_head(self.store, &own.namespace, &parent.name).await?;
         if head.id != own.fork_baseline {
@@ -260,27 +265,7 @@ impl<S: WriteTx> Tx<'_, S> {
         ids.sort();
         let into = read::select(self.store, &head, Some(&ids)).await?;
         let from = read::branch_versions(self.store, &own, &ids).await?;
-        let mut moves = Vec::new();
-        let mut delta: BTreeMap<NodeId, i32> = BTreeMap::new();
-        for n in &ids {
-            if let Some(&v) = from.get(n)
-                && into.get(n) != Some(&v)
-            {
-                moves.push(NodeRef::new(n.clone(), v));
-                delta.insert(n.clone(), v);
-            }
-        }
-        for n in &ids {
-            if !into.contains_key(n) || from.contains_key(n) {
-                continue;
-            }
-            delta.insert(n.clone(), 0);
-            if let Some(l) = self.store.latest_on(n, &own.name).await?
-                && l.deleted
-            {
-                moves.push(l.node_ref());
-            }
-        }
+        let (moves, delta) = self.moves(&own, &ids, &into, &from).await?;
         for r in &moves {
             self.join_branch(r, &target, &c.id).await?;
         }
@@ -302,56 +287,285 @@ impl<S: WriteTx> Tx<'_, S> {
         let res = self.put_baseline(&res, Some(delta)).await?;
         self.advance_branch(&c.namespace, &target, &res).await?;
         c.result_baseline_id = res.id.clone();
+        self.commit_impacts(&c, &impacts, &target, &res.id).await?;
+        let ev = self.moved_nodes(&moves).await?;
+        self.raise(CHANGE_MERGED, &c, Some(&res), &target, &ev);
+        self.raise(CHANGE_APPLIED, &c, Some(&res), "", &[]);
+        self.put_change(&c).await?;
+        self.change_read(c).await
+    }
 
-        // each impact committed on the target (Go's `commit`)
-        let commits: Vec<&ChangeImpact> = impacts
+    /// The fast-forward of a sub-change into the branch of its parent (Go's `fastForward` onto the branch of a change,
+    /// then `recordInParent`): what its branch committed joins the parent's, no baseline is written.
+    async fn merge_into_parent(
+        &mut self,
+        mut c: Change,
+        mut own: Branch,
+        parent: Branch,
+        impacts: Vec<ChangeImpact>,
+    ) -> Result<ChangeRead> {
+        let target = parent.name.clone();
+        let mut ids = self.store.branch_node_ids(&own.name).await?;
+        ids.sort();
+        let fork = read::fork_versions(self.store, &own, &ids).await?;
+        let into = read::branch_versions(self.store, &parent, &ids).await?;
+        if fork != into {
+            return Err(GraphError::conflict(format!(
+                "the branch of parent change {} moved meanwhile: merge {} again",
+                c.parent_id, c.id
+            )));
+        }
+        let from = read::branch_versions(self.store, &own, &ids).await?;
+        let (moves, _) = self.moves(&own, &ids, &into, &from).await?;
+        for r in &moves {
+            self.join_branch(r, &target, &c.id).await?;
+        }
+        own.status = BRANCH_MERGED.into();
+        self.put_branch(&own).await?;
+        c.status = STATUS_APPLIED.into();
+        // the branch of the parent holds what the sub-change committed, its impacts committed there
+        self.end_commit(&target);
+        self.commit_impacts(&c, &impacts, &target, &BaselineId::default())
+            .await?;
+        let ev = self.moved_nodes(&moves).await?;
+        self.raise(CHANGE_MERGED, &c, None, &target, &ev);
+        self.put_change(&c).await?;
+        self.record_in_parent(&c).await?;
+        self.change_read(c).await
+    }
+
+    /// What a fast-forward moves (Go's `fastForward`): the versions the branch holds that the target does not, the
+    /// tombstones of the nodes it retired, and the delta of the state of the target.
+    async fn moves(
+        &self,
+        own: &Branch,
+        ids: &[NodeId],
+        into: &HashMap<NodeId, Version>,
+        from: &HashMap<NodeId, Version>,
+    ) -> Result<(Vec<NodeRef>, BTreeMap<NodeId, i32>)> {
+        let mut moves = Vec::new();
+        let mut delta: BTreeMap<NodeId, i32> = BTreeMap::new();
+        for n in ids {
+            if let Some(&v) = from.get(n)
+                && into.get(n) != Some(&v)
+            {
+                moves.push(NodeRef::new(n.clone(), v));
+                delta.insert(n.clone(), v);
+            }
+        }
+        for n in ids {
+            if !into.contains_key(n) || from.contains_key(n) {
+                continue;
+            }
+            delta.insert(n.clone(), 0);
+            if let Some(l) = self.store.latest_on(n, &own.name).await?
+                && l.deleted
+            {
+                moves.push(l.node_ref());
+            }
+        }
+        Ok((moves, delta))
+    }
+
+    async fn moved_nodes(&self, moves: &[NodeRef]) -> Result<Vec<EventNode>> {
+        if moves.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(self
+            .store
+            .nodes_at(moves, "")
+            .await?
             .iter()
-            .filter(|cn| cn.post.is_some() && (cn.review == REVIEW_ACCEPTED || cn.committed.is_some()))
-            .collect();
+            .map(EventNode::of)
+            .collect())
+    }
+
+    /// Commits each impact of a merged change on its target (Go's `commit`): the version of the target it wrote, its
+    /// origin made the change's.
+    async fn commit_impacts(
+        &mut self,
+        c: &Change,
+        impacts: &[ChangeImpact],
+        target: &str,
+        result: &BaselineId,
+    ) -> Result<()> {
         let mut committed = Vec::new();
-        for cn in commits {
+        for cn in impacts {
+            if cn.post.is_none() || (cn.review != REVIEW_ACCEPTED && cn.committed.is_none()) {
+                continue;
+            }
             let mut post = cn.post.clone().unwrap_or_default();
             if post.is_draft()
                 && let Some(c) = &cn.committed
             {
                 post = c.clone();
             }
-            let Some(head) = self.store.latest_on(&post.id, &target).await? else {
+            let Some(head) = self.store.latest_on(&post.id, target).await? else {
                 return Err(GraphError::not_found(format!("node {} on {target}", post.id)));
             };
             if head.change_id != c.id && head.node_ref() != post {
                 continue;
             }
+            let r = head.node_ref();
             let comment = cn.reviews.last().map_or(cn.rationale.clone(), |r| r.comment.clone());
             if head.change_id != c.id || head.change_impact != cn.id || head.comment != comment {
-                return Err(unserved("a merge naming a version another change wrote"));
+                self.set_node_origin(&r, &c.id, &cn.id, &comment).await?;
             }
             committed.push(ImpactEvent {
                 change: c.id.clone(),
                 impact: cn.id.clone(),
                 op: ImpactOp::Committed,
-                committed: Some(head.node_ref()),
-                baseline: res.id.clone(),
-                branch: target.clone(),
+                committed: Some(r),
+                baseline: result.clone(),
+                branch: target.to_string(),
                 ..ImpactEvent::default()
             });
         }
-        self.emit(committed).await?;
-        let moved = if moves.is_empty() {
-            Vec::new()
-        } else {
-            self.store.nodes_at(&moves, "").await?
-        };
-        let ev: Vec<EventNode> = moved.iter().map(EventNode::of).collect();
-        self.raise(CHANGE_MERGED, &c, Some(&res), &target, &ev);
-        self.raise(CHANGE_APPLIED, &c, Some(&res), "", &[]);
-        self.put_change(&c).await?;
+        self.emit(committed).await
+    }
 
+    /// Refuses the merge of a sub-change while its parent holds an uncommitted modification of a node the sub-change
+    /// changed (Go's `checkParentDrafts`).
+    async fn check_parent_drafts(&mut self, c: &Change, impacts: &[ChangeImpact]) -> Result<()> {
+        if c.parent_id.is_empty() {
+            return Ok(());
+        }
+        let parent = c.parent_id.clone();
+        self.view(&parent).await?;
+        let mine: HashSet<NodeId> = impacts.iter().filter_map(node_of).collect();
+        let mut held = Vec::new();
+        for cn in main_impacts(&self.views[&parent].fold.impacts) {
+            if node_of(&cn).is_some_and(|n| mine.contains(&n)) && self.modifies(&parent, &cn.id).await? {
+                held.push(cn.key.clone());
+            }
+        }
+        if held.is_empty() {
+            return Ok(());
+        }
+        Err(GraphError::conflict(format!(
+            "parent change {parent} holds uncommitted modifications of {}: it commits or cancels them first",
+            held.join(", ")
+        )))
+    }
+
+    /// Gives the parent of a merged sub-change an impact for each node the sub-change committed (Go's
+    /// `recordInParent`): its own impact of the node, else a new one, accepted by one review of `graph.merge` and
+    /// committed as the version the sub-change committed.
+    async fn record_in_parent(&mut self, c: &Change) -> Result<()> {
+        let parent = self.change_head(&c.parent_id).await?;
+        self.view(&parent.id).await?;
+        let mut held: HashMap<NodeId, String> = HashMap::new();
+        for p in main_impacts(&self.views[&parent.id].fold.impacts) {
+            if let Some(n) = node_of(&p) {
+                held.insert(n, p.id.clone());
+            }
+        }
+        let mut todo = Vec::new();
+        let mut entries = Vec::new();
+        for cn in main_impacts(&self.views[&c.id].fold.impacts) {
+            let Some(r) = cn.committed.clone() else { continue };
+            let mut events = Vec::new();
+            let id = match held.get(&r.id) {
+                Some(id) => id.clone(),
+                None => {
+                    let id = self.env.new_id();
+                    let st = ChangeImpact {
+                        id: id.clone(),
+                        key: cn.key.clone(),
+                        typ: cn.typ.clone(),
+                        intent: cn.intent.clone(),
+                        rationale: cn.rationale.clone(),
+                        pre: cn.pre.clone(),
+                        review: REVIEW_PROPOSED.into(),
+                        produced_by: MERGE_PRODUCER.into(),
+                        derived_from: vec![cn.id.clone()],
+                        execution: cn.execution.clone(),
+                        created_at: self.env.now(),
+                        ..ChangeImpact::default()
+                    };
+                    let (op, post) = if cn.pre.is_some() {
+                        (ImpactOp::Proposed, None)
+                    } else {
+                        (ImpactOp::Created, Some(r.clone()))
+                    };
+                    events.push(ImpactEvent {
+                        change: parent.id.clone(),
+                        impact: id.clone(),
+                        op,
+                        state: Some(st),
+                        post,
+                        ..ImpactEvent::default()
+                    });
+                    id
+                }
+            };
+            let last = cn
+                .reviews
+                .iter()
+                .rfind(|r| r.flow.is_empty() && !r.superseded)
+                .cloned()
+                .unwrap_or_default();
+            let review = Review {
+                status: REVIEW_ACCEPTED.into(),
+                by: last.by.clone(),
+                at: self.env.now(),
+                comment: format!("merged from sub-change {} ({}): {}", c.title, c.id, last.comment)
+                    .trim()
+                    .to_string(),
+                ..Review::default()
+            };
+            entries.push((id.clone(), review.comment.clone()));
+            todo.push((events, id, r, review));
+        }
+        if todo.is_empty() {
+            return Ok(());
+        }
+        let (key, cause) = self
+            .put_review_record(
+                &parent.id,
+                MERGE_PRODUCER,
+                &format!("merge of sub-change {} ({})", c.title, c.id),
+                &entries,
+            )
+            .await?;
+        // by phase, so that the verdicts of the review and the versions of the commit are one entry each (ADR 0144)
+        let mut phases: [Vec<ImpactEvent>; 3] = Default::default();
+        let branch = branch_of(&parent.branch).to_string();
+        for (events, id, r, mut review) in todo {
+            review.review_id = key.clone();
+            phases[0].extend(events);
+            phases[1].push(ImpactEvent {
+                change: parent.id.clone(),
+                impact: id.clone(),
+                op: ImpactOp::Reviewed,
+                by: review.by.clone(),
+                review: Some(review),
+                causation: cause.clone(),
+                ..ImpactEvent::default()
+            });
+            phases[2].push(ImpactEvent {
+                change: parent.id.clone(),
+                impact: id,
+                op: ImpactOp::Committed,
+                committed: Some(r),
+                branch: branch.clone(),
+                ..ImpactEvent::default()
+            });
+        }
+        for events in phases {
+            self.emit(events).await?;
+        }
+        Ok(())
+    }
+
+    /// A change as a merge answers it.
+    async fn change_read(&mut self, c: Change) -> Result<ChangeRead> {
+        let id = c.id.clone();
         let mut items = Vec::new();
-        for l in self.store.log(id, 0, &[&format!("{LOG_FACT}.")]).await? {
+        for l in self.store.log(&id, 0, &[&format!("{LOG_FACT}.")]).await? {
             items.push(serde_json::from_str(&l.payload).map_err(GraphError::internal)?);
         }
-        let v = &self.views[id];
+        let v = &self.views[&id];
         Ok(ChangeRead {
             change: c,
             impacts: v.fold.impacts.clone(),
@@ -359,4 +573,13 @@ impl<S: WriteTx> Tx<'_, S> {
             seq: v.seq,
         })
     }
+}
+
+/// The impacts of the main flow of a change (Go's `mainImpactsOf`).
+fn main_impacts(impacts: &[ChangeImpact]) -> Vec<ChangeImpact> {
+    impacts
+        .iter()
+        .filter(|cn| cn.flow.is_empty() && !cn.superseded)
+        .cloned()
+        .collect()
 }

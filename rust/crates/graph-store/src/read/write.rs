@@ -608,6 +608,35 @@ impl WriteTx for Session {
         Ok(())
     }
 
+    async fn set_node_origin(
+        &self,
+        r: &NodeRef,
+        change: &ChangeId,
+        impact: &str,
+        comment: &str,
+    ) -> Result<(), GraphError> {
+        let s = self.sql;
+        let q = format!(
+            "UPDATE node_version SET change_id = {}, change_impact = {}, comment = {} WHERE node_id = {} AND version = {}",
+            s.ph(3),
+            s.ph(4),
+            s.ph(5),
+            s.ph(1),
+            s.ph(2)
+        );
+        let args = vec![
+            Arg::Text(r.id.to_string()),
+            Arg::Int(r.version.into()),
+            Arg::or_null(change.as_str()),
+            Arg::or_null(impact),
+            Arg::Text(comment.to_string()),
+        ];
+        if self.run((q, args), &format!("node {r}")).await? != 1 {
+            return Err(GraphError::not_found(format!("node {r}")));
+        }
+        Ok(())
+    }
+
     async fn skip_declaration(&self) -> Result<(), GraphError> {
         if self.sql.pg {
             for table in ["change_log", "change_impact"] {

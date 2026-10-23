@@ -24,7 +24,7 @@ use crate::{
         Baseline, BaselineId, Branch, ChangeId, Link, LinkId, Node, NodeId, NodeRef, REASON_CREATE, REASON_DERIVE,
         REASON_REBASE, REASON_REVERT, REASON_REVISE, Target, Version, branch_of, namespace_of,
     },
-    read::{branch_versions, header_of, select, stored_node},
+    read::{branch_versions, fork_versions, stored_node},
     store::{LinkSet, ReadTx, WriteTx},
 };
 use graph_catalog::def::Lifecycle;
@@ -440,7 +440,7 @@ pub async fn withdrawn_since<T: ReadTx>(
         return Ok(Vec::new());
     }
     ids.sort();
-    let fork = select(tx, &header_of(tx, &own.fork_baseline).await?, Some(&ids)).await?;
+    let fork = fork_versions(tx, own, &ids).await?;
     let at = branch_versions(tx, own, &ids).await?;
     Ok(ids
         .into_iter()

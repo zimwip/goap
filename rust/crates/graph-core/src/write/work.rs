@@ -351,7 +351,7 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     /// Gives a root change the branch its versions are written on when it commits (Go's `ensureOwnBranch`).
-    async fn ensure_own_branch(&mut self, mut c: Change) -> Result<Change> {
+    pub(crate) async fn ensure_own_branch(&mut self, mut c: Change) -> Result<Change> {
         if branch_of(&c.branch) != MAIN_BRANCH
             && let Some(b) = self.store.branch(&c.namespace, &c.branch).await?
             && b.origin == change_branch_origin(&c.id)
@@ -393,10 +393,8 @@ impl<S: WriteTx> Tx<'_, S> {
     /// Opens an operation on a change, on a flow (Go's `workOn`): none names the active option, "main" the main flow.
     pub async fn work_on(&mut self, id: &ChangeId, flow: &str) -> Result<Work> {
         let c = self.change_open(id).await?;
-        if !c.parent_id.is_empty() || !c.lifecycle.is_empty() || !c.guardians.is_empty() {
-            return Err(unserved(
-                "a sub-change, or a change following a lifecycle (ADR 0058, 0103)",
-            ));
+        if !c.lifecycle.is_empty() || !c.guardians.is_empty() {
+            return Err(unserved("a change following a lifecycle (ADR 0058)"));
         }
         self.view(id).await?;
         let c = self.ensure_own_branch(c).await?;
@@ -562,10 +560,8 @@ impl<S: WriteTx> Tx<'_, S> {
             }
         }
         let c = self.change_open(id).await?;
-        if !c.parent_id.is_empty() || !c.lifecycle.is_empty() || !c.guardians.is_empty() {
-            return Err(unserved(
-                "a sub-change, or a change following a lifecycle (ADR 0058, 0103)",
-            ));
+        if !c.lifecycle.is_empty() || !c.guardians.is_empty() {
+            return Err(unserved("a change following a lifecycle (ADR 0058)"));
         }
         self.view(id).await?;
         for cn in batch.iter_mut() {

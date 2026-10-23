@@ -124,6 +124,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 owner_org: inp.owner_org.clone(),
                 project_id: inp.project_id.clone(),
                 data: inp.data.clone(),
+                ..NewChange::default()
             })
             .await?;
         let id = c.id.clone();

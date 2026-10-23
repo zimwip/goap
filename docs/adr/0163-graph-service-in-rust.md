@@ -279,4 +279,15 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   project nodes in force at the head of main, their parents, the methodologies they name, their stop), the first piece
   of the organisation the Rust service reads itself: 860 calls, none divergent, the tables and the 641 events of the
   outbox the same.
+  The sub-changes of ADR 0103 follow (`graph-core` `write::subchange`, `write::merge`): a change created under a
+  parent (`prepare_sub_change`: the parent given its branch, the namespace, methodology, goal, unit and project its,
+  a unit or a project named inside the parent's; the branch forked at `fork_point`, the order of commit up to which
+  the commits of the parent's branch are in its fork), worked on and committed like any change, its state read as the
+  chain of the branches it is forked from (`read::branch_versions` / `fork_versions`: Go's `chainVersions` over
+  `Branch.fork_seq`); its merge fast-forwards the branch of its parent (no baseline, the commit order ended there) and
+  records the work in the parent (`record_in_parent`: an impact per committed node, accepted by one review of
+  `graph.merge`, committed at the parent's head), the parent held while it has open sub-changes or uncommitted drafts
+  of the same nodes; the parent's merge then gives the versions the sub-changes wrote its own origin
+  (`WriteTx::set_node_origin`). A sub-change whose parent moved since its fork (a rebase) stays the Go service's:
+  907 calls, none divergent, the tables and the 706 events of the outbox the same.
 - Not done yet: the rest of phase 4.

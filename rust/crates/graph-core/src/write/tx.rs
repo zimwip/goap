@@ -410,6 +410,12 @@ impl<'s, S: WriteTx> Tx<'s, S> {
         self.store.join_branch(r, branch, change, committed).await
     }
 
+    /// Gives a version the change and impact it commits for (Go's guarded `SetNodeOrigin`).
+    pub async fn set_node_origin(&mut self, r: &NodeRef, change: &ChangeId, impact: &str, comment: &str) -> Result<()> {
+        self.need_change(change, &format!("the origin of node {r}"))?;
+        self.store.set_node_origin(r, change, impact, comment).await
+    }
+
     /// Writes the header of a baseline, giving it the order of the commit of its branch, which ends. `delta` is what it
     /// changed of its parent's state (its event carries it), none when its event names it only.
     pub async fn put_baseline(&mut self, b: &Baseline, delta: Option<BTreeMap<NodeId, i32>>) -> Result<Baseline> {
