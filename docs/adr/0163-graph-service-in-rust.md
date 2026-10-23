@@ -210,5 +210,8 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `UpdateChange` (`graph-core` `write::update`: title, intent, goal, status, data; the abandonment of a change takes
   its open sub-changes and its own branches with it; a `change.updated` entry naming the fields, `change.edited` with
   the change as read; the criticality of a change is Go's) follows: 260 calls, none divergent, the tables and the 263
-  events of the outbox the same.
+  events of the outbox the same. `ImpactNodeCancel` (a creation cancelled is gone with its impact, a committed one
+  falls back to the version the change wrote, a decided review proposed again), `WithdrawImpact` and
+  `WithdrawImpacts` (the impacts via one withdrawn leave with it, one entry for the batch) follow on the main flow: 283
+  calls, none divergent, the tables and the 284 events of the outbox the same.
 - Not done yet: the rest of phase 4.

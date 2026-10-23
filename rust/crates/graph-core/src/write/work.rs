@@ -896,6 +896,12 @@ impl<S: WriteTx> Tx<'_, S> {
             ..ImpactEvent::default()
         }])
         .await?;
+        self.edited_again(w, execution).await
+    }
+
+    /// Sends a decided review of the impact w selects back to proposed: the draft it was reviewed on is gone (Go's
+    /// `editedAgain`, ADR 0102).
+    async fn edited_again(&mut self, w: &mut Work, execution: &str) -> Result<()> {
         if w.vcn.review == REVIEW_PROPOSED {
             return Ok(());
         }
@@ -921,6 +927,90 @@ impl<S: WriteTx> Tx<'_, S> {
         .await?;
         w.vcn.review = REVIEW_PROPOSED.into();
         Ok(())
+    }
+
+    /// Drops the draft of an impact (Go's `ImpactNodeCancel`): a creation cancelled is gone with its impact, a committed
+    /// one falls back to the version the change wrote.
+    pub async fn impact_node_cancel(
+        &mut self,
+        id: &ChangeId,
+        impact: &str,
+        flow: &str,
+        execution: &str,
+    ) -> Result<ChangeImpact> {
+        let mut w = self.work_on(id, flow).await?;
+        self.select_impact(&mut w, impact)?;
+        if self.views[id].fold.draft(impact, "").is_none() {
+            return Err(GraphError::conflict(format!(
+                "change impact {impact} ({}) is not checked out",
+                w.cn.key
+            )));
+        }
+        let back = w.cn.committed.clone();
+        self.emit(vec![ImpactEvent {
+            change: id.clone(),
+            impact: impact.to_string(),
+            op: ImpactOp::Cancelled,
+            execution: execution.to_string(),
+            post: back.clone(),
+            ..ImpactEvent::default()
+        }])
+        .await?;
+        if w.cn.intent == INTENT_MODIFIED || w.cn.committed.is_some() {
+            self.edited_again(&mut w, execution).await?;
+        }
+        let mut cn = w.vcn.clone();
+        cn.post = back;
+        Ok(cn)
+    }
+
+    /// Takes impacts out of the change, with the impacts via them, each once (Go's `withdrawTx`): their drafts are
+    /// dropped, one committed already is reverted by the next commit.
+    pub async fn withdraw_impacts(
+        &mut self,
+        id: &ChangeId,
+        impacts: &[String],
+        flow: &str,
+        execution: &str,
+    ) -> Result<()> {
+        let mut w = self.work_on(id, flow).await?;
+        let mut gone: Vec<String> = Vec::new();
+        let mut events = Vec::new();
+        let mut withdraw = |impact: &str, events: &mut Vec<ImpactEvent>| {
+            if !gone.iter().any(|g| g == impact) {
+                gone.push(impact.to_string());
+                events.push(ImpactEvent {
+                    change: id.clone(),
+                    impact: impact.to_string(),
+                    op: ImpactOp::Withdrawn,
+                    execution: execution.to_string(),
+                    ..ImpactEvent::default()
+                });
+            }
+        };
+        for impact in impacts {
+            if events.iter().any(|e: &ImpactEvent| e.impact == *impact) {
+                continue;
+            }
+            self.select_impact(&mut w, impact)?;
+            if !w.cn.flow.is_empty() {
+                return Err(GraphError::conflict(format!(
+                    "change impact {impact} was declared on another flow"
+                )));
+            }
+            let via: Vec<String> = self.views[id]
+                .fold
+                .impacts
+                .iter()
+                .filter(|o| o.via == *impact)
+                .map(|o| o.id.clone())
+                .collect();
+            for o in via {
+                withdraw(&o, &mut events);
+            }
+            withdraw(impact, &mut events);
+        }
+        self.emit(events).await
     }
 }
 

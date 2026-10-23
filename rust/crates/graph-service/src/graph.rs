@@ -1854,6 +1854,61 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    async fn impact_node_cancel(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactNodeCancelRequest>,
+    ) -> Answer<pb::ImpactNodeCancelResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let cn = tx
+                .impact_node_cancel(&id, &m.change_impact_id, &m.flow, &m.execution)
+                .await?;
+            Ok(pb::ImpactNodeCancelResponse {
+                node: Some(convert::change_impact(&cn)),
+            })
+        })
+        .await
+    }
+
+    async fn withdraw_impact(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::WithdrawImpactRequest>,
+    ) -> Answer<pb::WithdrawImpactResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            tx.withdraw_impacts(&id, std::slice::from_ref(&m.change_impact_id), &m.flow, &m.execution)
+                .await?;
+            Ok(pb::WithdrawImpactResponse {})
+        })
+        .await
+    }
+
+    /// Takes several impacts out of a change in one transaction: all of them or none.
+    async fn withdraw_impacts(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::WithdrawImpactsRequest>,
+    ) -> Answer<pb::WithdrawImpactsResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            if m.change_impact_ids.is_empty() {
+                return Err(GraphError::invalid("no change impact to withdraw"));
+            }
+            let id = served_change(tx, &m.change_id).await?;
+            tx.withdraw_impacts(&id, &m.change_impact_ids, &m.flow, &m.execution)
+                .await?;
+            Ok(pb::WithdrawImpactsResponse {})
+        })
+        .await
+    }
+
     async fn impact_link_create(
         &self,
         _ctx: &Ctx,
