@@ -20,11 +20,13 @@ use crate::{
     gojson,
     impact::{ChangeImpact, Draft, INTENT_CREATED, ImpactEvent, ImpactOp, REVIEW_ACCEPTED},
     model::{
-        Baseline, BaselineId, ChangeId, Link, LinkId, Node, NodeRef, REASON_CREATE, REASON_DERIVE, REASON_REBASE,
-        REASON_REVISE, Target, Version, branch_of, namespace_of,
+        Baseline, BaselineId, Branch, ChangeId, Link, LinkId, Node, NodeId, NodeRef, REASON_CREATE, REASON_DERIVE,
+        REASON_REBASE, REASON_REVISE, Target, Version, branch_of, namespace_of,
     },
+    read::{branch_versions, stored_node},
     store::{LinkSet, WriteTx},
 };
+use graph_catalog::def::Lifecycle;
 
 /// How many deltas deep a link set may be before a version writes its links whole (ADR 0141).
 const MAX_LINK_DEPTH: i32 = 16;
@@ -258,8 +260,8 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(n)
     }
 
-    /// Commits a change on its own branch (Go's `CommitChange` for a root change of the main flow, no lifecycle, no
-    /// guardian): the header of the commit.
+    /// Commits a change on its own branch (Go's `CommitChange` for a root change of the main flow, no methodology to
+    /// ask: the committable states of its lifecycles are its guardian): the header of the commit.
     pub async fn commit_change(&mut self, id: &ChangeId, baseline_name: &str) -> Result<Baseline> {
         let w = self.work_on(id, "").await?;
         let c = w.c.clone();
@@ -308,12 +310,6 @@ impl<S: WriteTx> Tx<'_, S> {
                 "change {id}: no accepted change impact modifies a node, and nothing it committed is withdrawn: {NOTHING_TO_COMMIT}"
             )));
         }
-        for (_, d) in &todo {
-            if self.catalog().lifecycle(&d.typ).is_some() {
-                return Err(unserved("the commit of a node following a lifecycle (ADR 0058, 0078)"));
-            }
-        }
-
         // 1. the versions
         let mut written: HashMap<_, Version> = HashMap::new();
         let mut from: HashMap<_, Version> = HashMap::new();
@@ -370,6 +366,16 @@ impl<S: WriteTx> Tx<'_, S> {
             }
             let ls: Vec<_> = links.iter().map(|l| (l.typ.as_str(), l.props.as_ref())).collect();
             check::version(self.catalog(), &w.ns, &n.key, &n.typ, n.props.as_ref(), &ls)?;
+            if let Some(lc) = self.catalog().lifecycle(&n.typ)
+                && !n.state.is_empty()
+            {
+                let cn = &todo
+                    .iter()
+                    .find(|(_, d)| d.node == n.id)
+                    .expect("a version of the commit")
+                    .0;
+                walk_transitions(&self.views[id].events, cn, n, lc)?;
+            }
         }
 
         let name = if baseline_name.is_empty() {
@@ -402,6 +408,7 @@ impl<S: WriteTx> Tx<'_, S> {
             })
             .collect();
         self.emit(committed).await?;
+        self.check_committable(id, &own, &nodes).await?;
         let mut c = self.change_head(id).await?;
         if c.status == STATUS_DRAFT {
             c.status = STATUS_ACTIVE.into();
@@ -411,6 +418,101 @@ impl<S: WriteTx> Tx<'_, S> {
         self.raise(CHANGE_COMMITTED, &c, Some(&result), branch_of(&branch), &ev);
         Ok(result)
     }
+}
+
+impl<S: WriteTx> Tx<'_, S> {
+    /// The guardian of a commit with no methodology to ask (Go's `ownGuardian`, ADR 0078, 0146): what the change
+    /// committed, this commit and the ones before, rests in a committable state.
+    async fn check_committable(&mut self, id: &ChangeId, own: &Branch, wrote: &[Node]) -> Result<()> {
+        let impacts: Vec<ChangeImpact> = self.views[id]
+            .fold
+            .impacts
+            .iter()
+            .filter(|cn| cn.flow.is_empty() && !cn.superseded && cn.committed.is_some())
+            .cloned()
+            .collect();
+        let ids: Vec<NodeId> = impacts
+            .iter()
+            .filter_map(|cn| cn.committed.as_ref().map(|r| r.id.clone()))
+            .collect();
+        let head = branch_versions(self.store, own, &ids).await?;
+        let mut stuck = Vec::new();
+        for cn in &impacts {
+            let nid = &cn.committed.as_ref().expect("filtered").id;
+            let Some(&at) = head.get(nid) else { continue };
+            let n = match wrote.iter().find(|n| &n.id == nid && n.version == at) {
+                Some(n) => n.clone(),
+                None => stored_node(self.store, &NodeRef::new(nid.clone(), at)).await?,
+            };
+            if n.state.is_empty() {
+                continue;
+            }
+            if let Some(lc) = self.catalog().lifecycle(&n.typ)
+                && !lc.committable(&n.state)
+            {
+                stuck.push(format!("{} ({}) in {}", n.key, n.typ, n.state));
+            }
+        }
+        if stuck.is_empty() {
+            return Ok(());
+        }
+        stuck.sort();
+        Err(GraphError::invalid(format!(
+            "the change leaves nodes in a state that cannot commit, move them to a committable state first: {}",
+            stuck.join(", ")
+        )))
+    }
+}
+
+/// Replays the moves the log of the change records for the draft a version was written from (Go's
+/// `walkTransitions`): each move leaves the state the draft was in and is one of its lifecycle, and the chain ends in
+/// the state of the version.
+fn walk_transitions(events: &[ImpactEvent], cn: &ChangeImpact, n: &Node, lc: &Lifecycle) -> Result<()> {
+    let norm = |s: &str| {
+        if s.is_empty() {
+            lc.initial.clone()
+        } else {
+            s.to_string()
+        }
+    };
+    let (mut at, mut tracked) = (String::new(), false);
+    for e in events.iter().filter(|e| e.impact == cn.id && e.flow.is_empty()) {
+        if e.starts_draft() {
+            at = norm(&e.draft.as_ref().expect("a draft").state);
+            tracked = true;
+            continue;
+        }
+        if e.op != ImpactOp::Transitioned {
+            continue;
+        }
+        let Some(st) = e.patch.as_ref().and_then(|p| p.get("state")).filter(|v| !v.is_null()) else {
+            continue;
+        };
+        let from = st.get("from").and_then(Value::as_str).unwrap_or_default();
+        let to = st.get("to").and_then(Value::as_str).unwrap_or_default();
+        if tracked && norm(from) != at {
+            return Err(GraphError::invalid(format!(
+                "{} ({}) was moved from {from} while it was in {at}",
+                n.key, n.typ
+            )));
+        }
+        let f = norm(from);
+        if !lc.transitions.iter().any(|t| t.from == f && t.to == to) {
+            return Err(GraphError::invalid(format!(
+                "{} ({}) cannot go from {from} to {to}",
+                n.key, n.typ
+            )));
+        }
+        at = to.to_string();
+        tracked = true;
+    }
+    if tracked && norm(&n.state) != at {
+        return Err(GraphError::invalid(format!(
+            "{} ({}) is in {}, the moves recorded for it end in {at}",
+            n.key, n.typ, n.state
+        )));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

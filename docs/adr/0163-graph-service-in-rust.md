@@ -225,5 +225,9 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   name, read as Go's draft reader reads them: the stored links entering a version once per version of their source,
   the drafts' links; their neighbours in one batch), `GetChangeView` (its own branch or its fork, the posts of its
   impacts laid over it, at the levels written, accepted and committed) and `GetChangeGraph` (the baseline it forked
-  from, or its written view with its drafts): 463 calls, none divergent.
+  from, or its written view with its drafts): 463 calls, none divergent. `CommitChange` commits nodes following a
+  lifecycle: the moves the log records for each draft are replayed against its lifecycle, and with no methodology to
+  ask (the Go graph service wires none) the guardian of the commit is the committable states (ADR 0078, 0146): what
+  the change committed must rest in one; 482 calls, none divergent, the tables and the 356 events of the outbox the
+  same.
 - Not done yet: the rest of phase 4.
