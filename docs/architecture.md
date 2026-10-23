@@ -1287,7 +1287,7 @@ each start (nodes, baselines and changes). The compose image is `pgvector/pgvect
   `unimplemented`; the reads of the bench are written (`graph-core`: views, selection, neighbourhood, pages, change
   headers, baseline differences, over the store trait `ReadTx`; `graph-store` `read/`: the SQL of both dialects) and so
   are its writes (`graph-core` `write/`: changes, impacts, the review batch, commit, fast-forward merge, `CommitEdits`,
-  over `WriteTx`, in one transaction with the outbox) for a platform service acting by itself in the simple world of
+  `ImportDomain` of a domain no script checks (`graph-catalog` `imported`), over `WriteTx`, in one transaction with the outbox) for a platform service acting by itself in the simple world of
   ADR 0163 (main flow, no lifecycle, sub-change or rebase); the rest still `unimplemented`, its transaction rolled back. `goap-proxy`, the Connect proxy in front of the
   graph services: mode `go`, `rust`, `split` (Rust first, Go for what it does not serve, one database;
   `/proxy/coverage`), `compare` (Go answers, Rust gets the same call on its own database, ids paired, every call judged

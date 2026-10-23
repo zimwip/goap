@@ -19,7 +19,7 @@ async fn health_and_a_method_not_written_yet() {
     assert_eq!(c.get(format!("{base}/readyz")).send().await.unwrap().status(), 200);
     for path in [
         "/goap.graph.v1.GraphService/RebaseChange",
-        "/goap.registry.v1.DomainService/ImportDomain",
+        "/goap.registry.v1.DomainService/ExportDomain",
         "/goap.smarttag.v1.SmartTagService/ListSmartTags",
         "/goap.importer.v1.ImportService/ListImporters",
     ] {

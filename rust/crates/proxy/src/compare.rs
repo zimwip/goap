@@ -375,11 +375,17 @@ impl Comparer {
                             if !self.shared {
                                 rec.clashes.extend(self.ids.pair_json(&g, &r));
                             }
+                            // the ids left unpaired (elements telling nothing of which is which) as ids, on two databases
+                            let (gm, rm) = (
+                                normalise(&self.ids.masked(&g, Toward::Go), method, &self.ignore),
+                                normalise(&self.ids.masked(&r, Toward::Rust), method, &self.ignore),
+                            );
                             let r = self.ids.json(&r, Toward::Go);
                             let (g, r) = (normalise(&g, method, &self.ignore), normalise(&r, method, &self.ignore));
-                            let verdict = if g == r {
+                            let masked = !self.shared;
+                            let verdict = if g == r || (masked && gm == rm) {
                                 Verdict::Same
-                            } else if unordered(&g) == unordered(&r) {
+                            } else if unordered(&g) == unordered(&r) || (masked && unordered(&gm) == unordered(&rm)) {
                                 Verdict::OrderDiffers
                             } else {
                                 rec.diffs = diff(&g, &r);

@@ -1,6 +1,6 @@
 # ADR 0163 — The graph service in Rust, behind a comparing proxy
 
-**Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets), phase 2 implemented (the reads of the bench, the shadow mode), phase 3 implemented but for `ImportDomain` (the writes of the bench) · **Date**: 2026-10
+**Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets), phase 2 implemented (the reads of the bench, the shadow mode), phase 3 implemented (the writes of the bench) · **Date**: 2026-10
 
 ## Context
 
@@ -123,7 +123,10 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   GetBranch 1.1 against 6.6), a hint only: it reads second, after the Go service warmed the database's pages.
 - Phase 3 (the writes of the bench). `graph-core` `write/` runs a write in one transaction of the store (`Tx`: the
   change logs folded once per change, the guard's obligations, the outbox, the positions the logs were left at for
-  `X-Goap-Change-Seq`): `CreateChange` / `DeleteChange`, the impact operations (create, checkout and its batch, update,
+  `X-Goap-Change-Seq`): `ImportDomain` (a new version a platform service imports, `graph-catalog` `imported`: the YAML
+  read strictly, checked as `Domain.Validate` and the type catalogue check it, stored with Go's JSON of the definition
+  and its `domain_outbox` event; a domain with issues, lifecycles, algorithms, validators, forms, documents or
+  structures, a version already stored, or anything yaml.v3 reads more loosely is the Go service's), `CreateChange` / `DeleteChange`, the impact operations (create, checkout and its batch, update,
   link create / delete), `ImpactNodeReviewBatch` (the record of the review first, then every verdict in one entry
   naming it as its cause, ADR 0105), `CommitChange` (the versions, their link sets shared or as deltas, ADR 0141, one
   `committed` entry), `MergeChange` (a fast-forward), `CommitEdits` (the producer's path, all of it in one
@@ -133,9 +136,12 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   URL target, domain running validators, revert, rebase or three-way merge, no dependency; anything else answers
   `unimplemented` with its transaction rolled back, and the split proxy replays it on Go. Measured in mode compare
   with Rust behind a split proxy (Go on the Rust schema for what it does not serve), goap-bench serial and seeded on
-  PostgreSQL: lifecycle (40 changes, 912 calls) and commit (40 changes) give no divergence, only `ImportDomain` falls
+  PostgreSQL: lifecycle and commit (200 changes, new domain versions on the way) give no divergence and nothing falls
   back, the outbox events are the same but for the order of a baseline's `set` map, and `diff-db` finds the tables
   the same but for the order a link id decides (the `drafted` of a checkout, the order `CommitEdits` writes its edits
   in), which Go against Go shows as well.
-- Not done yet: `ImportDomain` (the whole domain model, its validation and Go's encoding of a definition), then phase 4.
-  Until it is served, `make perf-diff` in mode compare needs the split proxy in front of Rust.
+  The proxy pairs the ids of two answers by place, and of two lists by what their elements hold; elements alike but
+  for ids not paired yet (two new links between new nodes, each side in the order of its own ids) say nothing of
+  which is which, so they are left unpaired, compared as ids, until an answer tells them apart (pairing them by
+  position mispaired them half the time, and every call after diverged).
+- Not done yet: phase 4.

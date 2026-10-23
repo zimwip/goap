@@ -153,7 +153,29 @@ impl Session {
         q
     }
 
-    async fn run(&self, stmt: Stmt, what: &str) -> Result<u64, GraphError> {
+    /// Appends messages to an outbox table (`lib/outbox.SQL.Append`): the graph's, or another service's sharing its
+    /// database (the domain registry's `domain_outbox`).
+    pub(super) async fn append_to_outbox(&self, table: &str, msgs: &[OutboxMessage]) -> Result<(), GraphError> {
+        let q = format!(
+            "INSERT INTO {table} (subject, payload, headers, created_at) VALUES ({}, {}, {}, {})",
+            self.sql.ph(1),
+            self.sql.ph(2),
+            self.sql.ph(3),
+            self.sql.ph(4)
+        );
+        for m in msgs {
+            let args = vec![
+                m.subject.as_str().into(),
+                m.data.as_str().into(),
+                Arg::Text(gojson::to_string(&m.headers)),
+                Arg::Time(m.created_at),
+            ];
+            self.run((q.clone(), args), "outbox").await?;
+        }
+        Ok(())
+    }
+
+    pub(super) async fn run(&self, stmt: Stmt, what: &str) -> Result<u64, GraphError> {
         self.exec(stmt).await.map_err(|e| map_err(e, what))
     }
 
@@ -419,23 +441,7 @@ impl WriteTx for Session {
     }
 
     async fn append_outbox(&self, msgs: &[OutboxMessage]) -> Result<(), GraphError> {
-        let q = format!(
-            "INSERT INTO event_outbox (subject, payload, headers, created_at) VALUES ({}, {}, {}, {})",
-            self.sql.ph(1),
-            self.sql.ph(2),
-            self.sql.ph(3),
-            self.sql.ph(4)
-        );
-        for m in msgs {
-            let args = vec![
-                m.subject.as_str().into(),
-                m.data.as_str().into(),
-                Arg::Text(gojson::to_string(&m.headers)),
-                Arg::Time(m.created_at),
-            ];
-            self.run((q.clone(), args), "outbox").await?;
-        }
-        Ok(())
+        self.append_to_outbox("event_outbox", msgs).await
     }
 
     async fn put_node(&self, n: &Node, committed: i64) -> Result<(), GraphError> {

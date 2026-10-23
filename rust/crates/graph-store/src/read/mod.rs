@@ -1,5 +1,6 @@
 //! The reads of the graph ([`graph_core::store::ReadTx`]) over a read-only session of either dialect.
 mod domains;
+pub use domains::NewDomain;
 mod sql;
 mod value;
 mod write;

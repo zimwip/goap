@@ -296,14 +296,25 @@ impl IdMap {
                 .or_default()
                 .push(j);
         }
+        let alike: std::collections::HashSet<String> = by_shape
+            .iter()
+            .filter(|(shape, js)| js.len() > 1 && shape.contains("<id>"))
+            .map(|(shape, _)| shape.clone())
+            .collect();
         let mut used = vec![false; rust.len()];
         let mut pairs = Vec::with_capacity(go.len());
         let mut left = Vec::new();
         for (i, v) in go.iter().enumerate() {
-            match by_shape
-                .get_mut(&self.masked(v, Toward::Go).to_string())
-                .and_then(Vec::pop)
-            {
+            let shape = self.masked(v, Toward::Go).to_string();
+            // elements alike but for ids not paired yet (two new links between new nodes) tell nothing of which is
+            // which: they are left for an answer that tells them apart
+            if alike.contains(&shape) {
+                if let Some(js) = by_shape.get_mut(&shape) {
+                    js.pop().inspect(|&j| used[j] = true);
+                }
+                continue;
+            }
+            match by_shape.get_mut(&shape).and_then(Vec::pop) {
                 Some(j) => {
                     used[j] = true;
                     pairs.push((i, j));
@@ -406,6 +417,24 @@ mod tests {
         assert!(m.pair_json(&go, &rust).is_empty());
         assert_eq!(m.text(l1, Toward::Rust), k1);
         assert_eq!(m.text(l2, Toward::Rust), k2);
+    }
+
+    #[test]
+    fn elements_alike_but_for_new_ids_pair_nothing() {
+        let mut m = IdMap::default();
+        m.pair(G1, R1).unwrap();
+        let (l1, l2, k1, k2) = (
+            "33333333-3333-4333-8333-333333333333",
+            "44444444-4444-4444-8444-444444444444",
+            "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        );
+        // two links from a paired node to two new ones, each side in the order of its own ids: which is which, the
+        // answer does not tell
+        let go = json!([{"from": G1, "to": l1}, {"from": G1, "to": l2}]);
+        let rust = json!([{"from": R1, "to": k2}, {"from": R1, "to": k1}]);
+        assert!(m.pair_json(&go, &rust).is_empty());
+        assert_eq!(m.len(), 1);
     }
 
     #[test]
