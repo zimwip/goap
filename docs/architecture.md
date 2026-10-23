@@ -1281,12 +1281,14 @@ each start (nodes, baselines and changes). The compose image is `pgvector/pgvect
   transaction gave them no snapshot, only two round trips); a write they try fails with SQLSTATE 25006 (a lock of a
   change or a branch refuses at once) and the transaction runs again on the writer. The graph test variant
   `postgres-readers` runs every transaction there first.
-- **The graph service in Rust** ([ADR 0163](adr/0163-graph-service-in-rust.md), phases 1 and 2): the Cargo workspace `rust/`
+- **The graph service in Rust** ([ADR 0163](adr/0163-graph-service-in-rust.md), phases 1 to 3): the Cargo workspace `rust/`
   (outside the `go.work`, generated from the same `proto/`) holds `goap-graph-rs`, the graph's four services on the
   same schema (PostgreSQL or SQLite, the migrations of the Go services embedded), a method not written yet answering
   `unimplemented`; the reads of the bench are written (`graph-core`: views, selection, neighbourhood, pages, change
-  headers, baseline differences, over the store trait `ReadTx`; `graph-store` `read/`: the SQL of both dialects) for a
-  platform service acting by itself, the rest still `unimplemented`. `goap-proxy`, the Connect proxy in front of the
+  headers, baseline differences, over the store trait `ReadTx`; `graph-store` `read/`: the SQL of both dialects) and so
+  are its writes (`graph-core` `write/`: changes, impacts, the review batch, commit, fast-forward merge, `CommitEdits`,
+  over `WriteTx`, in one transaction with the outbox) for a platform service acting by itself in the simple world of
+  ADR 0163 (main flow, no lifecycle, sub-change or rebase); the rest still `unimplemented`, its transaction rolled back. `goap-proxy`, the Connect proxy in front of the
   graph services: mode `go`, `rust`, `split` (Rust first, Go for what it does not serve, one database;
   `/proxy/coverage`), `compare` (Go answers, Rust gets the same call on its own database, ids paired, every call judged
   in `calls.jsonl`; `goap-proxy diff-db` compares the two databases) or `shadow` (Go answers, the reads go to Rust too,

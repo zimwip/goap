@@ -1,6 +1,6 @@
 # ADR 0163 — The graph service in Rust, behind a comparing proxy
 
-**Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets), phase 2 implemented (the reads of the bench, the shadow mode) · **Date**: 2026-10
+**Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets), phase 2 implemented (the reads of the bench, the shadow mode), phase 3 implemented but for `ImportDomain` (the writes of the bench) · **Date**: 2026-10
 
 ## Context
 
@@ -121,4 +121,21 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   read from `jsonb` differed at its last digit until serde_json parsed floats correctly rounded (`float_roundtrip`),
   as Go does. The Rust service answered each read in less time than the Go one (GetNode p50 3.7 ms against 9.0 ms,
   GetBranch 1.1 against 6.6), a hint only: it reads second, after the Go service warmed the database's pages.
-- Not done yet: phases 3 and 4.
+- Phase 3 (the writes of the bench). `graph-core` `write/` runs a write in one transaction of the store (`Tx`: the
+  change logs folded once per change, the guard's obligations, the outbox, the positions the logs were left at for
+  `X-Goap-Change-Seq`): `CreateChange` / `DeleteChange`, the impact operations (create, checkout and its batch, update,
+  link create / delete), `ImpactNodeReviewBatch` (the record of the review first, then every verdict in one entry
+  naming it as its cause, ADR 0105), `CommitChange` (the versions, their link sets shared or as deltas, ADR 0141, one
+  `committed` entry), `MergeChange` (a fast-forward), `CommitEdits` (the producer's path, all of it in one
+  transaction), `ListDomains`, and `GetNode` / `ListNodeLinks` in the view of a change (its fork, its commits, its
+  drafts). It serves the simple world: a platform service acting by itself, the main flow, a log of impact events and
+  review records only, no sub-change, lifecycle, guardian, personal change, platform namespace, planned creation,
+  URL target, domain running validators, revert, rebase or three-way merge, no dependency; anything else answers
+  `unimplemented` with its transaction rolled back, and the split proxy replays it on Go. Measured in mode compare
+  with Rust behind a split proxy (Go on the Rust schema for what it does not serve), goap-bench serial and seeded on
+  PostgreSQL: lifecycle (40 changes, 912 calls) and commit (40 changes) give no divergence, only `ImportDomain` falls
+  back, the outbox events are the same but for the order of a baseline's `set` map, and `diff-db` finds the tables
+  the same but for the order a link id decides (the `drafted` of a checkout, the order `CommitEdits` writes its edits
+  in), which Go against Go shows as well.
+- Not done yet: `ImportDomain` (the whole domain model, its validation and Go's encoding of a definition), then phase 4.
+  Until it is served, `make perf-diff` in mode compare needs the split proxy in front of Rust.
