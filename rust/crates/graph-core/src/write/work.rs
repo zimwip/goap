@@ -32,7 +32,9 @@ use crate::{
 };
 
 /// The entries of a log the service folds: the impact events and the review records (ADR 0105).
-const LOG_REVIEW: &str = "fact.review";
+/// The facts that make the view of a change (its options, its state, its decision points): the Go service's. The
+/// others (reviews, artifacts, signals, the records of the use cases) are items of the change only.
+const VIEW_FACTS: [&str; 4] = ["fact.flow", "fact.transition", "fact.decision_point", "fact.decision"];
 
 /// The view of a change: the fold of its log, up to a position.
 #[derive(Debug, Clone, Default)]
@@ -976,7 +978,9 @@ pub async fn fold_change<T: ReadTx>(store: &T, id: &ChangeId) -> Result<ChangeVi
         }
         if l.stream() == LOG_IMPACT {
             events.extend(impact::events_of(&l).map_err(GraphError::internal)?);
-        } else if (l.stream() == LOG_FACT && l.typ != LOG_REVIEW) || (l.stream() == "change" && !header_only(&l)) {
+        } else if (l.stream() == LOG_FACT && VIEW_FACTS.contains(&l.typ.as_str()))
+            || (l.stream() == "change" && !header_only(&l))
+        {
             // the other streams (the journal, the prompts of the engine) are records of a use case: the view of a
             // change reads none
             return Err(unserved(&format!(

@@ -371,12 +371,38 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             typ,
             change: ChangeJson::of(c, seq),
             baseline: baseline.map(events::BaselineJson::of),
+            items: &[],
             end_user: &self.env.end_user,
             branch,
             nodes,
         };
         self.raised
             .push((events::change_subject(&c.id, typ), gojson::to_string(&ev)));
+    }
+
+    /// Raises `change.item_added` for the items written on a change read at `seq`, and `change.signal` when one is a
+    /// signal (Go's `raiseItems`).
+    pub fn raise_items(&mut self, c: &Change, seq: i64, items: &[serde_json::Value]) {
+        if items.is_empty() {
+            return;
+        }
+        let signal = items.iter().any(|it| it["type"] == "signal");
+        for typ in [events::CHANGE_ITEM_ADDED, events::CHANGE_SIGNAL] {
+            if typ == events::CHANGE_SIGNAL && !signal {
+                continue;
+            }
+            let ev = ChangeEvent {
+                typ,
+                change: ChangeJson::of(c, seq),
+                baseline: None,
+                items,
+                end_user: &self.env.end_user,
+                branch: "",
+                nodes: &[],
+            };
+            self.raised
+                .push((events::change_subject(&c.id, typ), gojson::to_string(&ev)));
+        }
     }
 
     /// Ends the transaction: checks what it wrote names what exists (Go's `guardTx.verify`), then writes the events

@@ -56,6 +56,8 @@ pub const CHANGE_REBASED: &str = "change.rebased";
 pub const CHANGE_MERGED: &str = "change.merged";
 pub const CHANGE_APPLIED: &str = "change.applied";
 pub const CHANGE_PURGED: &str = "change.purged";
+pub const CHANGE_ITEM_ADDED: &str = "change.item_added";
+pub const CHANGE_SIGNAL: &str = "change.signal";
 
 fn is_zero(n: &i64) -> bool {
     *n == 0
@@ -217,6 +219,8 @@ pub struct ChangeEvent<'a> {
     pub change: ChangeJson<'a>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub baseline: Option<BaselineJson<'a>>,
+    #[serde(skip_serializing_if = "<[Value]>::is_empty")]
+    pub items: &'a [Value],
     #[serde(skip_serializing_if = "str::is_empty")]
     pub end_user: &'a str,
     #[serde(skip_serializing_if = "str::is_empty")]

@@ -148,6 +148,27 @@ pub fn version(
     Ok(())
 }
 
+/// The data of an item of a type (Go's `checkItem`, after `ChangeItem.Validate`): the type a domain in force declares,
+/// the values of its declared attributes of their kind. The outer error refuses to serve it, the inner one is the
+/// problem of the item.
+pub fn item_data(cat: &Catalog, typ: &str, data: Option<&Map<String, Value>>) -> Result<Result<(), String>> {
+    let Some(checks) = cat.item_attribute_checks(typ) else {
+        let quoted = serde_json::to_string(typ).unwrap_or_default();
+        return Ok(Err(format!(
+            "unknown item type {quoted}: no domain in force declares it"
+        )));
+    };
+    for a in &checks {
+        if let Err(e) = check_value(a, data.and_then(|d| d.get(&a.name))) {
+            if a.typ == "code" {
+                return Err(value_error(a, e, |e| e));
+            }
+            return Ok(Err(format!("data.{}: {e}", a.name)));
+        }
+    }
+    Ok(Ok(()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

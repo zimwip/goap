@@ -202,4 +202,9 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `ListExecutions` (`graph-service` `journal`: the records as the engine wrote them) follow: 220 calls, none
   divergent, the tables and the 225 events of the outbox the same. The view of a change reads its impact events and
   its facts only, as Go's: the entries of the other streams (the journal, the prompts) no longer refuse it.
+  `AddItems` (`graph-core` `write::items`: artifacts, signals and the item types no code reads, on the main flow, the
+  data checked against the item type a domain declares, `change.item_added` / `change.signal` raised with the change as
+  read; a flow, a decision, a transition, a review or an item of a use case is Go's) follows: 239 calls, none
+  divergent, the tables and the 240 events of the outbox the same. The view of a change refuses only the facts that make
+  it (`fact.flow`, `fact.transition`, `fact.decision_point`, `fact.decision`); the other items are items only.
 - Not done yet: the rest of phase 4.

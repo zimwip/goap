@@ -24,6 +24,7 @@ use graph_core::{
         change::NewChange,
         commit::NOTHING_TO_COMMIT,
         edits::{Commit, LinkEdit, NodeEdit},
+        items::ItemWrite,
         review::{ReviewBatch, Verdict},
         tx::{Env, Tx},
         whole,
@@ -1193,6 +1194,42 @@ impl pb::GraphService for Graph {
             let mut c = convert::change(&c);
             c.seq = seq;
             Ok(pb::SetChangeDependenciesResponse { change: Some(c) })
+        })
+        .await
+    }
+
+    /// Appends items to the blackboard of a change (artifacts, signals, the types no code reads; ADR 0119, 0128).
+    async fn add_items(&self, _ctx: &Ctx, req: Request<pb::AddItemsRequest>) -> Answer<pb::AddItemsResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let mut its = Vec::with_capacity(m.items.len());
+        for it in m.items {
+            if it.decision.is_some() || it.flow_event.is_some() || it.decision_event.is_some() {
+                return Err(connect_error(GraphError::unimplemented(
+                    "an item of a flow or of a decision: written by the Go service",
+                )));
+            }
+            its.push(ItemWrite {
+                id: it.id,
+                typ: it.r#type,
+                target: it.target,
+                status: it.status,
+                flow: it.flow,
+                data: it.data.as_ref().map(convert::map),
+                produced_by: it.produced_by,
+                derived_from: it.derived_from,
+                supersedes: it.supersedes,
+                execution: it.execution,
+            });
+        }
+        self.write(caller, async |tx| {
+            let written = tx.add_items(&ChangeId(m.change_id.clone()), its).await?;
+            let items = written
+                .iter()
+                .map(convert::item)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(GraphError::internal)?;
+            Ok(pb::AddItemsResponse { items })
         })
         .await
     }

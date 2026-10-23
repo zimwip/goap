@@ -5,6 +5,7 @@ pub mod commit;
 pub mod dependency;
 pub mod edits;
 pub mod events;
+pub mod items;
 pub mod merge;
 pub mod review;
 pub mod tx;
