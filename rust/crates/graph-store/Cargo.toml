@@ -1,0 +1,23 @@
+[package]
+name = "graph-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "The storage of the Rust graph service: PostgreSQL or SQLite, the schema of the Go service (ADR 0162)"
+
+[dependencies]
+deadpool-postgres = { workspace = true }
+rusqlite = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-postgres = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio-postgres = { workspace = true }
+
+[lints]
+workspace = true

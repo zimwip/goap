@@ -148,6 +148,13 @@ footer { font-size: 13px; color: var(--muted); }
       </div>
     </div>
     <div class="rule"><span class="chip m-contracts">contracts</span>←<span class="chip m-lib">lib</span>←<span class="chip m-graph">graph</span>/<span class="chip m-engine">engine</span>/<span class="chip m-mcp">mcp</span>/<span class="chip m-gateway">gateway</span>←<span class="chip m-platform">platform</span></div>
+    <div class="stack">
+      <div class="tier">
+        <div class="mod m-graph" data-module="rust"><h3>rust <span>the graph service in Rust, outside the go.work</span></h3>
+          <p>A Cargo workspace (ADR 0162): the graph service rewritten in Rust, the same RPCs on the same schema (PostgreSQL or SQLite, the migrations of the Go services), and <code>goap-proxy</code>, the Connect proxy in front of the Go and the Rust services (one of them, Rust falling back on Go, or both compared call by call). Generated from the same protos; it depends on no Go module.</p>
+          <div class="pk">crates/proto · connect · ctx · graph-store · graph-service · proxy</div></div>
+      </div>
+    </div>
   </section>
 
   <section>
@@ -275,7 +282,7 @@ footer { font-size: 13px; color: var(--muted); }
 
   <section>
     <h2>Deployment units</h2>
-    <p>Every binary of <code>platform/cmd</code>. The first thirteen are the containers of <code>deploy/compose/docker-compose.yml</code>; the module named is the one whose service the binary runs, and every binary also embeds <code>lib</code> and <code>contracts</code>.</p>
+    <p>Every binary of <code>platform/cmd</code>, and the two of the Rust workspace. The first thirteen are the containers of <code>deploy/compose/docker-compose.yml</code>; the module named is the one whose service the binary runs, and every binary also embeds <code>lib</code> and <code>contracts</code>.</p>
     <div class="tbl"><table>
       <thead><tr><th>Binary</th><th>Module</th><th>Port</th><th>What it runs</th></tr></thead>
       <tbody>
@@ -302,6 +309,8 @@ footer { font-size: 13px; color: var(--muted); }
         <tr data-binary="goap-eval"><td><code>goap-eval</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>offline evaluation CLI (make eval)</td></tr>
         <tr data-binary="goap-bench"><td><code>goap-bench</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>load generator of the performance stack: writes through the graph's API, measured in Grafana (make perf, <code>deploy/compose/perf.yml</code>)</td></tr>
         <tr data-binary="goap-gitimport"><td><code>goap-gitimport</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>git importer: one change per commit of a repository, directories and files as nodes of the <code>code</code> domain, written through the graph's API (ADR 0147)</td></tr>
+        <tr data-binary="goap-graph-rs"><td><code>goap-graph-rs</code></td><td><span class="chip m-graph">rust</span></td><td class="num">:8080</td><td>the Rust graph service (<code>rust/</code>, ADR 0162): the services of <code>graph</code> on the same database, a method not written yet answering <code>unimplemented</code>; the performance stack only (<code>deploy/compose/perf.rust.yml</code>: <code>graph-rs</code>, :8384)</td></tr>
+        <tr data-binary="goap-proxy"><td><code>goap-proxy</code></td><td><span class="chip m-graph">rust</span></td><td class="num">:8080</td><td>the Connect proxy in front of the graph services (<code>rust/</code>, ADR 0162): mode go, rust, split (Rust first, Go for what it does not serve) or compare (both, call by call, ids paired); the entry of the performance stack (<code>proxy</code>, :8383; make perf, perf-rust, perf-diff)</td></tr>
         <tr data-binary="goap-opgen"><td><code>goap-opgen</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>generator of the operations catalogue (make generate)</td></tr>
       </tbody>
     </table></div>

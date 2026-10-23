@@ -36,6 +36,28 @@ EXPOSE 8080
 USER nonroot
 ENTRYPOINT ["/goap/importer-git"]
 
+# the Rust graph service and the proxy in front of it (ADR 0162): docker build --target rust -t goap/rust:dev .
+# /goap/goap-graph-rs and /goap/goap-proxy (SQLite is compiled in: rusqlite bundled, the one C of the build)
+FROM rust:1.97-slim-bookworm AS rust-build
+WORKDIR /src
+COPY proto proto
+COPY graph/graph/migrations graph/graph/migrations
+COPY graph/graph/migrations_sqlite graph/graph/migrations_sqlite
+COPY graph/domainsvc/migrations graph/domainsvc/migrations
+COPY graph/domainsvc/migrations_sqlite graph/domainsvc/migrations_sqlite
+COPY graph/smarttagsvc/migrations graph/smarttagsvc/migrations
+COPY graph/smarttagsvc/migrations_sqlite graph/smarttagsvc/migrations_sqlite
+COPY rust rust
+RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/src/rust/target \
+    cd rust && cargo build --release --locked -p goap-proxy -p graph-service \
+    && mkdir -p /out && cp target/release/goap-proxy target/release/goap-graph-rs /out/
+
+FROM gcr.io/distroless/cc-debian12:nonroot AS rust
+COPY --from=rust-build /out/ /goap/
+COPY domains /domains
+EXPOSE 8080
+USER nonroot
+
 # one service (the default target): docker build --build-arg SERVICE=graph .
 FROM gcr.io/distroless/static-debian12:nonroot
 ARG SERVICE

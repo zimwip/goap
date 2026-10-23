@@ -179,8 +179,57 @@ function PerfArgs { if ($env:PERF_ARGS) { -split $env:PERF_ARGS } else { @('-ver
 # goap-bench stays up once its run ends, so its series stay in Grafana, until interrupted; $env:PERF_AUTOSTOP = '30m'
 # stops it after that long, '0' with the run
 function PerfHold { if ($env:PERF_AUTOSTOP) { "-hold=$env:PERF_AUTOSTOP" } else { '-hold=-1s' } }
-function PerfUp { Run docker build --target services -t goap/goap:dev .; Run docker @Perf up -d }
-function PerfRun { $a = PerfArgs; $h = PerfHold; Run docker @Perf run --rm bench $h @a }
+# goap-proxy in front of the graph service (ADR 0162): every call of the bench and the gateway goes through it;
+# $env:PERF_PROXY = '0' sends them to the graph service itself
+function PerfNoProxy { $env:PERF_PROXY -eq '0' }
+# the Rust graph service (deploy/compose/perf.rust.yml): perf-rust runs it behind the proxy in mode
+# $env:PERF_RUST_MODE, split while it does not serve every method (the Go service serves the rest: /proxy/coverage),
+# rust once it does; perf-diff compares it with the Go one call by call ($env:PERF_DIFF_ARGS, serial, seeded;
+# $env:PERF_DIFF_RUST = 'go' compares Go with Go)
+$PerfRust = @('compose', '-f', 'deploy/compose/perf.yml', '-f', 'deploy/compose/perf.rust.yml')
+$PerfDiffDsnGo = 'postgres://graph:graph@postgres:5432/goap?sslmode=disable'
+$PerfDiffDsnRs = 'postgres://graph_rs:graph_rs@postgres:5432/goap?sslmode=disable'
+# runs a block with environment variables set, then puts them back
+function WithEnv([hashtable]$vars, [scriptblock]$block) {
+    $saved = @{}
+    foreach ($k in $vars.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $vars[$k]) }
+    try { & $block } finally { foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) } }
+}
+function PerfGoEnv { if (PerfNoProxy) { @{ GOAP_PERF_GRAPH_URL = 'http://graph:8080' } } else { @{} } }
+function PerfRustEnv {
+    $mode = if ($env:PERF_RUST_MODE) { $env:PERF_RUST_MODE } else { 'split' }
+    $vars = @{ GOAP_PERF_IMPL = $mode }
+    if (PerfNoProxy) { $vars.GOAP_PERF_GRAPH_URL = 'http://graph-rs:8080' }
+    $vars
+}
+function PerfDiffEnv {
+    $vars = @{ GOAP_PERF_IMPL = 'compare'; GOAP_PERF_RS_DSN = $PerfDiffDsnRs }
+    if ($env:PERF_DIFF_RUST -eq 'go') { $vars.GOAP_PERF_RS_IMAGE = 'goap/goap:dev'; $vars.GOAP_PERF_RS_BIN = '/goap/graph' }
+    $vars
+}
+function PerfImages { Run docker build --target services -t goap/goap:dev .; Run docker build --target rust -t goap/rust:dev . }
+function PerfUp { PerfImages; WithEnv (PerfGoEnv) { Run docker @Perf up -d } }
+function PerfRun { $a = PerfArgs; $h = PerfHold; WithEnv (PerfGoEnv) { Run docker @Perf run --rm bench $h @a } }
+function PerfRustUp { PerfImages; WithEnv (PerfRustEnv) { Run docker @PerfRust up -d } }
+function PerfRustRun { $a = PerfArgs; $h = PerfHold; WithEnv (PerfRustEnv) { Run docker @PerfRust run --rm bench $h @a } }
+function PerfRust {
+    PerfRustUp
+    PerfRustRun
+    Write-Host 'Grafana: http://localhost:3300/d/goap-perf - coverage: http://localhost:8383/proxy/coverage - reports: .goap\perf\*.csv'
+}
+function PerfDiff {
+    PerfImages
+    $a = if ($env:PERF_DIFF_ARGS) { -split $env:PERF_DIFF_ARGS } else { @('-versions', '5000') }
+    Run docker @PerfRust up -d --wait postgres
+    Run docker @PerfRust run --rm --no-deps --entrypoint psql postgres-init -v ON_ERROR_STOP=1 -h postgres -U goap -d goap `
+        -c 'DROP SCHEMA IF EXISTS graph CASCADE' -c 'DROP SCHEMA IF EXISTS graph_rs CASCADE'
+    WithEnv (PerfDiffEnv) {
+        Run docker @PerfRust up -d --force-recreate postgres-init graph graph-rs proxy otel-collector
+        Run docker @PerfRust run --rm bench -hold=0 -workers 1 -seed 1 @a
+        Write-Host (Invoke-RestMethod http://localhost:8383/proxy/report | ConvertTo-Json -Depth 6)
+        Run docker @PerfRust run --rm --no-deps --entrypoint /goap/goap-proxy proxy diff-db --go $PerfDiffDsnGo --rust $PerfDiffDsnRs --ids /results/diff/ids.json
+    }
+}
 # captures of the performance stack's Prometheus (perf-capture), replayed by perf-analysis
 $PerfCaptures = '.goap/perf/captures'
 $PerfAnalysis = @('compose', '-f', 'deploy/compose/perf-analysis.yml')
@@ -217,8 +266,10 @@ function Perf {
     PerfRun
     Write-Host 'Grafana: http://localhost:3300/d/goap-perf - Prometheus: http://localhost:9390 - web: http://localhost:5174 - reports: .goap\perf\*.csv'
 }
-function PerfDown { Run docker @Perf --profile bench down }
-function PerfReset { Run docker @Perf --profile bench down --volumes --remove-orphans }
+function PerfDown { Run docker @PerfRust --profile bench down }
+function PerfReset { Run docker @PerfRust --profile bench down --volumes --remove-orphans }
+function RustTest { InDir rust { Run cargo test --locked } }
+function RustLint { InDir rust { Run cargo fmt --check; Run cargo clippy --locked --all-targets -- -D warnings } }
 
 function Logs { DockerSock; Run docker @Compose logs -f engine graph registry modelgw gateway }
 
@@ -253,11 +304,20 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   up | down | logs  docker compose stack (up prints its URLs and how to reach its database, DBeaver)
   reset             stop the stack and drop its containers, volumes (database, NATS, web modules) and images
   urls              the URLs of the compose stack: IDE, gateway, each service, tools, database
-  perf              performance test in docker: the graph service on PostgreSQL loaded by goap-bench
-                    ($env:PERF_ARGS, goap-bench -h), measured in Grafana http://localhost:3300; goap-bench holds
-                    once its run ends until interrupted, or for $env:PERF_AUTOSTOP (e.g. 30m; 0: exits with the run)
+  perf              performance test in docker: the graph service on PostgreSQL loaded by goap-bench through
+                    goap-proxy ($env:PERF_ARGS, goap-bench -h; $env:PERF_PROXY = '0' without the proxy), measured
+                    in Grafana http://localhost:3300; goap-bench holds once its run ends until interrupted, or for
+                    $env:PERF_AUTOSTOP (e.g. 30m; 0: exits with the run)
+  perf-images       the images of the performance stack: goap/goap:dev and goap/rust:dev (Rust graph, goap-proxy)
   perf-up | perf-run | perf-down | perf-reset
                     start the performance stack, one more run of goap-bench, stop it (keeping its data), drop its data
+  perf-rust | perf-rust-up | perf-rust-run
+                    the same with the Rust graph service behind goap-proxy in mode $env:PERF_RUST_MODE (split: what
+                    Rust does not serve yet goes to Go, http://localhost:8383/proxy/coverage; rust)
+  perf-diff         the Go and the Rust graph services compared call by call, then their databases
+                    ($env:PERF_DIFF_ARGS, serial and seeded; $env:PERF_DIFF_RUST = 'go': Go with Go); .goap\perf\diff
+  rust-test | rust-lint
+                    cargo test, cargo fmt + clippy of the Rust workspace (rust\)
   perf-capture      save what the performance stack's Prometheus holds in .goap\perf\captures\<$env:PERF_CAPTURE>
   perf-analysis | perf-analysis-down
                     replay a capture ($env:PERF_CAPTURE, default the latest) in a Grafana of its own,
@@ -294,6 +354,13 @@ switch ($Target) {
     'perf'             { Perf }
     'perf-up'          { PerfUp }
     'perf-run'         { PerfRun }
+    'perf-images'      { PerfImages }
+    'perf-rust'        { PerfRust }
+    'perf-rust-up'     { PerfRustUp }
+    'perf-rust-run'    { PerfRustRun }
+    'perf-diff'        { PerfDiff }
+    'rust-test'        { RustTest }
+    'rust-lint'        { RustLint }
     'perf-down'        { PerfDown }
     'perf-reset'       { PerfReset }
     'perf-capture'     { PerfCapture }

@@ -1266,6 +1266,14 @@ each start (nodes, baselines and changes). The compose image is `pgvector/pgvect
   transaction gave them no snapshot, only two round trips); a write they try fails with SQLSTATE 25006 (a lock of a
   change or a branch refuses at once) and the transaction runs again on the writer. The graph test variant
   `postgres-readers` runs every transaction there first.
+- **The graph service in Rust** ([ADR 0162](adr/0162-graph-service-in-rust.md), phase 1): the Cargo workspace `rust/`
+  (outside the `go.work`, generated from the same `proto/`) holds `goap-graph-rs`, the graph's four services on the
+  same schema (PostgreSQL or SQLite, the migrations of the Go services embedded), a method not written yet answering
+  `unimplemented`, and `goap-proxy`, the Connect proxy in front of the graph services: mode `go`, `rust`, `split` (Rust
+  first, Go for what it does not serve, one database; `/proxy/coverage`) or `compare` (Go answers, Rust gets the same
+  call on its own database, ids paired, every call judged in `calls.jsonl`; `goap-proxy diff-db` compares the two
+  databases). The performance stack goes through it: `make perf` (go), `make perf-rust` (`perf.rust.yml`, split),
+  `make perf-diff` (compare; `PERF_DIFF_RUST=go` compares Go with Go); image `goap/rust:dev` (`--target rust`).
 - A single multi-target image (`Dockerfile`, `ARG SERVICE`), static binary on `distroless`; its `services` target holds every binary (`/goap/<service>`), the one image `goap/goap:dev` the compose stack runs with an entrypoint per service (`make images`, done by `make up`), so it compiles once.
 - Kubernetes 🟡: one Helm chart per service (or kustomize); engine as a scalable `Deployment` (HPA on
   the work-queue stream depth), NATS via the official chart, Vault Agent Injector.
@@ -2089,6 +2097,7 @@ lib/importerkit/               kit of an importer service: a worker of the job s
 lib/jobkit/                    kit of the long runs: the job queue (in process or over RPC), the worker, the job of a runner (ADR 0149)
 graph/index/                   document index (nodes and changes): hybrid search, facets, similar_to, stores (memory, SQLite FTS5, PostgreSQL pgvector)
 proto/                       connect-rpc contracts (buf)
+rust/                        Cargo workspace (ADR 0162): goap-proto, goap-connect, graph-store, graph-service (goap-graph-rs), proxy (goap-proxy)
 contracts/gen/                         generated code (committed)
 methodologies/               example methodologies (active part)
 domains/                     domains: seeded at startup (alm, code), builtin/ embedded and frozen except domain (one per namespace)
