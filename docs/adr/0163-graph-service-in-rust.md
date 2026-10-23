@@ -162,4 +162,8 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `ValidateDomain` read the edited domain from the protocol as `DomainFromPB` does (`domainpb::imported`); a draft
   with issues stays Go's, which stores it and words them. Reading the definitions Go writes, a nil slice is a `null`
   list, read as empty (`def.rs` `nullable`): without it, a stored domain with no link types broke `ListDomains`.
+  The reads of the catalogue (`IsAdminOnlyType`, `ListItemTypes` with the item types this service gives a meaning,
+  `graph-core` `items`, `GetStructures`) and `ListNamespaces` are served for any identified caller, as Go serves them;
+  but the first call of a person creates its user (Go's `EnsureCaller`), so a person the graph holds no user of yet
+  is left to Go (`Graph::identified`), which creates it in the shared database.
 - Not done yet: the rest of phase 4.

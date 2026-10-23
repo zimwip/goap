@@ -5,10 +5,11 @@ use std::{collections::HashMap, sync::Arc};
 
 use goap_connect::{ConnectError, Ctx, Request, Response, async_trait};
 use goap_proto::graph::v1 as pb;
-use graph_catalog::catalog::STRUCTURE_PROJECT;
+use graph_catalog::{Catalog, catalog::STRUCTURE_PROJECT};
 use graph_core::{
     GraphError, Kind,
     change::{self, ChangesFilter},
+    items,
     lnk::Url,
     model::{NodeId, NodeQuery},
     page::link_page,
@@ -210,6 +211,45 @@ impl Graph {
 }
 
 impl Graph {
+    /// Opens a call any identified caller may make: the first call of a person creates its user (Go's `EnsureCaller`
+    /// interceptor, ADR 0040), which is the Go service's, so a person this graph holds no user of yet is left to it.
+    async fn identified<T>(&self, req: &Request<T>) -> Result<Caller, ConnectError> {
+        let caller = Caller::of(req)?;
+        if caller.subject.starts_with("system:") {
+            return Ok(caller);
+        }
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        if !tx
+            .has_node(
+                graph_core::model::NAMESPACE_ORGANISATION,
+                &format!("USR:{}", caller.subject),
+            )
+            .await
+            .map_err(connect_error)?
+        {
+            return Err(connect_error(GraphError::unimplemented(
+                "the first call of a person creates its user (EnsureUser): not served here yet",
+            )));
+        }
+        Ok(caller)
+    }
+
+    /// The type catalogue of the domains in force.
+    async fn catalog(&self) -> Result<Arc<Catalog>, ConnectError> {
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        self.state.catalog(&tx).await.map_err(connect_error)
+    }
+
     /// Runs a write in one transaction of the store, through the guard and the outbox of the graph: committed when it
     /// succeeds, rolled back otherwise. The positions it left the change logs at go back in `X-Goap-Change-Seq`.
     async fn write<T, F>(&self, caller: Caller, f: F) -> Answer<T>
@@ -396,6 +436,92 @@ impl pb::GraphService for Graph {
             })
         })
         .await
+    }
+
+    /// Whether a node type is written by platform administrators only (ADR 0068), open to any identified caller.
+    async fn is_admin_only_type(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::IsAdminOnlyTypeRequest>,
+    ) -> Answer<pb::IsAdminOnlyTypeResponse> {
+        self.identified(&req).await?;
+        let cat = self.catalog().await?;
+        let t = req.into_inner().r#type;
+        Ok(Response::new(pb::IsAdminOnlyTypeResponse {
+            admin_only: cat.admin_only(&t) || Catalog::builtin().admin_only(&t),
+        }))
+    }
+
+    /// The item types the domains in force declare (ADR 0128), with what this service gives them.
+    async fn list_item_types(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ListItemTypesRequest>,
+    ) -> Answer<pb::ListItemTypesResponse> {
+        self.identified(&req).await?;
+        let cat = self.catalog().await?;
+        let types = cat
+            .item_types()
+            .map(|t| {
+                let (permission, subject_field) = items::permission(&t.name).unwrap_or_default();
+                pb::ItemTypeInfo {
+                    r#type: t.name.clone(),
+                    domain: t.domain.clone(),
+                    domain_version: t.version.clone(),
+                    description: t.description.clone(),
+                    code: items::has_code(&t.name),
+                    permission: permission.into(),
+                    subject_field: subject_field.into(),
+                }
+            })
+            .collect();
+        Ok(Response::new(pb::ListItemTypesResponse { types }))
+    }
+
+    /// The structures of the graph (ADR 0054), each with the types building it.
+    async fn get_structures(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetStructuresRequest>,
+    ) -> Answer<pb::GetStructuresResponse> {
+        self.identified(&req).await?;
+        let cat = self.catalog().await?;
+        let all = cat.types();
+        let structures = cat
+            .structures()
+            .map(|st| pb::Structure {
+                kind: st.kind.clone(),
+                r#type: st.typ.clone(),
+                namespace: st.namespace.clone(),
+                parent: st.parent.clone(),
+                root: st.root.clone(),
+                self_parent: st.self_parent,
+                types: all
+                    .iter()
+                    .filter(|t| t.is(&st.typ))
+                    .map(|t| t.reference.clone())
+                    .collect(),
+                bootstrap: (!st.bootstrap.is_empty()).then(|| convert::object(&st.bootstrap)),
+            })
+            .collect();
+        Ok(Response::new(pb::GetStructuresResponse { structures }))
+    }
+
+    /// The namespaces some node lives in.
+    async fn list_namespaces(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ListNamespacesRequest>,
+    ) -> Answer<pb::ListNamespacesResponse> {
+        self.identified(&req).await?;
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let namespaces = tx.namespaces().await.map_err(connect_error)?;
+        Ok(Response::new(pb::ListNamespacesResponse { namespaces }))
     }
 
     async fn get_branch(&self, _ctx: &Ctx, req: Request<pb::GetBranchRequest>) -> Answer<pb::GetBranchResponse> {

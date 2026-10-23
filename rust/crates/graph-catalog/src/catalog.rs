@@ -322,6 +322,11 @@ impl Catalog {
         self.types.get(r)
     }
 
+    /// The item types the domains declare, sorted by name.
+    pub fn item_types(&self) -> impl Iterator<Item = &ItemType> {
+        self.items.values()
+    }
+
     /// The node types, sorted by reference.
     pub fn types(&self) -> Vec<&Type> {
         let mut out: Vec<&Type> = self.types.values().collect();
