@@ -21,11 +21,11 @@ use crate::{
 pub const STATUS_APPLIED: &str = "applied";
 
 /// A methodology of the guardian chain of a change (ADR 0106).
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct GuardianRef {
     #[serde(default)]
     pub methodology: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub version: String,
 }
 

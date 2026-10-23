@@ -21,12 +21,12 @@ const NODE_FROM: &str = " FROM node n JOIN node_version v ON v.node_id = n.id";
 
 impl Sql {
     /// The placeholder of the n-th argument (1-based).
-    fn ph(self, n: usize) -> String {
+    pub(crate) fn ph(self, n: usize) -> String {
         if self.pg { format!("${n}") } else { format!("?{n}") }
     }
 
     /// A uuid column read as text.
-    fn id(self, col: &str) -> String {
+    pub(crate) fn id(self, col: &str) -> String {
         if self.pg {
             format!("{col}::text")
         } else {
@@ -35,7 +35,7 @@ impl Sql {
     }
 
     /// A nullable uuid column read as text, empty when null.
-    fn id_or(self, col: &str) -> String {
+    pub(crate) fn id_or(self, col: &str) -> String {
         format!("coalesce({}, '')", self.id(col))
     }
 
@@ -373,6 +373,19 @@ impl Sql {
         )
     }
 
+    /// How some versions hold their links (`sqlLinkSetsOf`).
+    pub fn link_sets_of(self, refs: &[NodeRef]) -> Stmt {
+        let (args, _) = self.refs_args(refs);
+        (
+            format!(
+                "SELECT {}, v.version, coalesce(v.links, v.version), coalesce(v.links_base, 0), v.links_depth, v.links_seq FROM node_version v{}",
+                self.id("v.node_id"),
+                self.refs_join("r", "v.node_id", "v.version", 1)
+            ),
+            args,
+        )
+    }
+
     pub fn link_sources(self, id: &NodeId) -> Stmt {
         (
             format!(
@@ -538,7 +551,7 @@ impl Sql {
     }
 
     /// The order of a listing, the rows of one time in the order they were written on SQLite.
-    fn order_by(self, cols: &str) -> String {
+    pub(crate) fn order_by(self, cols: &str) -> String {
         if self.pg {
             format!(" ORDER BY {cols}")
         } else {

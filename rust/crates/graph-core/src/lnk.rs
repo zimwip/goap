@@ -240,3 +240,21 @@ mod tests {
         assert!(Url::of("nope").is_zero());
     }
 }
+
+impl serde::Serialize for Url {
+    /// As Go's `MarshalText`: the text of the URL, empty for the zero URL.
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.collect_str(self)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Url {
+    /// As Go's `UnmarshalText`: empty is the zero URL, anything else must parse.
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Url, D::Error> {
+        let s = String::deserialize(d)?;
+        if s.is_empty() {
+            return Ok(Url::default());
+        }
+        Url::parse(&s).map_err(serde::de::Error::custom)
+    }
+}

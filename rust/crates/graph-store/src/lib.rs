@@ -83,6 +83,14 @@ impl Store {
         })
     }
 
+    /// A write transaction on the writer: committed by [`read::Session::commit`], rolled back when dropped.
+    pub async fn writer(&self) -> Result<read::Session, StoreError> {
+        Ok(match self {
+            Store::Postgres(p) => read::Session::postgres_tx(p.write.get().await?).await?,
+            Store::Sqlite(s) => read::Session::sqlite_tx(s.begin().await?),
+        })
+    }
+
     /// Whether the database answers (readiness).
     pub async fn ping(&self) -> Result<(), StoreError> {
         match self {

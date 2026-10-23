@@ -47,7 +47,7 @@ reqwest = { version = "0.13", default-features = false, features = ["http2", "js
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 # float_roundtrip: a float read back as Go reads it (correctly rounded), or a property differs at its last digit
-serde_json = { version = "1", features = ["float_roundtrip"] }
+serde_json = { version = "1", features = ["float_roundtrip", "raw_value"] }
 serde_norway = "0.9"
 sha2 = "0.10"
 similar = "2"
@@ -59,7 +59,7 @@ tokio-util = "0.7"
 tower = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-uuid = { version = "1", features = ["v4", "serde"] }
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
 
 [profile.release]
 debug = "line-tables-only"

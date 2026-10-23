@@ -3,12 +3,13 @@
 use std::sync::{Arc, Mutex};
 
 use rusqlite::{Connection, OpenFlags};
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard, OwnedSemaphorePermit, Semaphore};
 
 use crate::{StoreError, migrate};
 
 pub struct Sqlite {
-    writer: Arc<Mutex<Connection>>,
+    /// The writer: held by a write transaction from its BEGIN to its COMMIT, across the awaits between its statements.
+    writer: Arc<AsyncMutex<Connection>>,
     readers: Option<Arc<Readers>>,
 }
 
@@ -23,7 +24,7 @@ pub type SqliteConn = Connection;
 /// A read session: a reader of the pool held until the session is dropped (the writer, shared, for a database in
 /// memory). Each statement runs on the blocking pool.
 pub struct SqliteSession {
-    conn: Option<Arc<Mutex<Connection>>>,
+    conn: Option<Arc<AsyncMutex<Connection>>>,
     pool: Option<(Arc<Readers>, OwnedSemaphorePermit)>,
 }
 
@@ -34,13 +35,7 @@ impl SqliteSession {
         f: impl FnOnce(&Connection) -> Result<T, StoreError> + Send + 'static,
     ) -> Result<T, StoreError> {
         let c = self.conn.clone().expect("a connection until dropped");
-        blocking(move || {
-            let c = c
-                .lock()
-                .map_err(|_| StoreError::Other("sqlite connection poisoned".into()))?;
-            f(&c)
-        })
-        .await
+        blocking(move || f(&c.blocking_lock())).await
     }
 }
 
@@ -52,7 +47,7 @@ impl Drop for SqliteSession {
             pool.idle
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .push(m.into_inner().unwrap_or_else(|e| e.into_inner()));
+                .push(m.into_inner());
         }
     }
 }
@@ -101,7 +96,7 @@ impl Sqlite {
         })
         .await?;
         Ok(Sqlite {
-            writer: Arc::new(Mutex::new(writer)),
+            writer: Arc::new(AsyncMutex::new(writer)),
             readers: Some(Arc::new(Readers {
                 idle: Mutex::new(conns),
                 slots: Arc::new(Semaphore::new(n)),
@@ -119,7 +114,7 @@ impl Sqlite {
         })
         .await?;
         Ok(Sqlite {
-            writer: Arc::new(Mutex::new(c)),
+            writer: Arc::new(AsyncMutex::new(c)),
             readers: None,
         })
     }
@@ -130,13 +125,7 @@ impl Sqlite {
         f: impl FnOnce(&mut Connection) -> Result<T, StoreError> + Send + 'static,
     ) -> Result<T, StoreError> {
         let w = self.writer.clone();
-        blocking(move || {
-            let mut c = w
-                .lock()
-                .map_err(|_| StoreError::Other("sqlite writer poisoned".into()))?;
-            f(&mut c)
-        })
-        .await
+        blocking(move || f(&mut w.blocking_lock())).await
     }
 
     /// Runs `f` on a read-only connection (the writer when the database has none).
@@ -184,15 +173,80 @@ impl Sqlite {
             .pop()
             .expect("a connection per slot");
         Ok(SqliteSession {
-            conn: Some(Arc::new(Mutex::new(conn))),
+            conn: Some(Arc::new(AsyncMutex::new(conn))),
             pool: Some((r, permit)),
         })
+    }
+
+    /// A write transaction: the writer, held until it commits or is dropped (rolled back), `BEGIN IMMEDIATE` taking
+    /// the database's write lock at once, as the Go service's transactions do.
+    pub async fn begin(&self) -> Result<SqliteTx, StoreError> {
+        let g = self.writer.clone().lock_owned().await;
+        let tx = SqliteTx {
+            conn: AsyncMutex::new(Some(g)),
+        };
+        tx.run(|c| Ok(c.execute_batch("BEGIN IMMEDIATE")?)).await?;
+        Ok(tx)
     }
 
     pub async fn ping(&self) -> Result<(), StoreError> {
         self.read(|c| Ok(c.query_row("SELECT 1", [], |r| r.get::<_, i64>(0))?))
             .await?;
         Ok(())
+    }
+}
+
+/// A write transaction on the writer of a SQLite database: each statement runs on the blocking pool with the writer,
+/// which the transaction keeps between them.
+pub struct SqliteTx {
+    conn: AsyncMutex<Option<OwnedMutexGuard<Connection>>>,
+}
+
+impl SqliteTx {
+    /// Runs `f` on the writer, in the transaction.
+    pub async fn run<T: Send + 'static>(
+        &self,
+        f: impl FnOnce(&Connection) -> Result<T, StoreError> + Send + 'static,
+    ) -> Result<T, StoreError> {
+        let mut slot = self.conn.lock().await;
+        let g = slot
+            .take()
+            .ok_or_else(|| StoreError::Other("sqlite transaction over".into()))?;
+        let (g, res) = tokio::task::spawn_blocking(move || {
+            let res = f(&g);
+            (g, res)
+        })
+        .await
+        .map_err(|e| StoreError::Other(format!("sqlite task: {e}")))?;
+        *slot = Some(g);
+        res
+    }
+
+    /// Commits, then lets the writer go.
+    pub async fn commit(self) -> Result<(), StoreError> {
+        let res = self.run(|c| Ok(c.execute_batch("COMMIT")?)).await;
+        if res.is_err() {
+            // a failed COMMIT leaves the transaction open: Drop rolls it back
+            return res;
+        }
+        self.conn.lock().await.take();
+        Ok(())
+    }
+}
+
+impl Drop for SqliteTx {
+    /// A transaction neither committed nor rolled back is rolled back, the writer let go after.
+    fn drop(&mut self) {
+        let Some(g) = self.conn.get_mut().take() else { return };
+        let rollback = move || {
+            let _ = g.execute_batch("ROLLBACK");
+        };
+        match tokio::runtime::Handle::try_current() {
+            Ok(h) => {
+                h.spawn_blocking(rollback);
+            }
+            Err(_) => rollback(),
+        }
     }
 }
 

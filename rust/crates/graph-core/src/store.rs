@@ -5,7 +5,7 @@ use std::{collections::HashMap, future::Future};
 use crate::{
     change::{Change, ChangesFilter},
     error::Result,
-    model::{Baseline, BaselineId, Branch, ChangeId, Link, Node, NodeId, NodePage, NodeQuery, NodeRef, Version},
+    model::{Baseline, BaselineId, Branch, ChangeId, Link, LinkId, Node, NodeId, NodePage, NodeQuery, NodeRef, Version},
 };
 
 /// The reads of a store, in one session (a read-only connection: PostgreSQL with no transaction around the
@@ -91,4 +91,101 @@ pub trait ReadTx: Sync {
 
     /// The versions the impacts of a change name (before, after, committed), in the order they were written.
     fn impact_refs(&self, change: &ChangeId) -> impl Future<Output = Result<Vec<NodeRef>>> + Send;
+}
+
+/// How a version holds its links (ADR 0141): its own rows (`of` its version, `base` 0), the set of an earlier version
+/// as is (`of`), or its rows as a delta over the set of version `base`, `depth` deltas deep, `seq` its order.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LinkSet {
+    pub of: Version,
+    pub base: Version,
+    pub depth: i32,
+    pub seq: i64,
+}
+
+/// An event of the outbox of the graph (ADR 0136): written in the transaction of its fact, delivered by a relay.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OutboxMessage {
+    pub subject: String,
+    /// The JSON of the event, as Go writes it.
+    pub data: String,
+    pub headers: std::collections::BTreeMap<String, String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// The writes of a store, in one transaction on its writer (Go's `Tx`): what a write reads it reads through the same
+/// transaction ([`ReadTx`]), and nothing is kept unless it commits.
+pub trait WriteTx: ReadTx {
+    /// Serializes the writers of the tree of a change (ADR 0127): PostgreSQL takes an advisory lock on its root.
+    fn lock_change(&self, id: &ChangeId) -> impl Future<Output = Result<()>> + Send;
+
+    /// Serializes the writers of a branch.
+    fn lock_branch(&self, namespace: &str, name: &str) -> impl Future<Output = Result<()>> + Send;
+
+    /// The whole header of a change; none when the store holds none.
+    fn change(&self, id: &ChangeId) -> impl Future<Output = Result<Option<Change>>> + Send;
+
+    fn put_change(&self, c: &Change) -> impl Future<Output = Result<()>> + Send;
+
+    fn put_branch(&self, b: &Branch) -> impl Future<Output = Result<()>> + Send;
+
+    fn put_baseline(&self, b: &Baseline) -> impl Future<Output = Result<()>> + Send;
+
+    /// Appends an entry to the log of its change and returns its order.
+    fn append_log(&self, e: &crate::impact::LogEntry) -> impl Future<Output = Result<i64>> + Send;
+
+    /// The entries of the log of a change after an order whose type starts with one of the prefixes, in order.
+    fn log(
+        &self,
+        change: &ChangeId,
+        after: i64,
+        prefixes: &[&str],
+    ) -> impl Future<Output = Result<Vec<crate::impact::LogEntry>>> + Send;
+
+    /// Writes the projection of an impact (`change_impact`).
+    fn put_change_impact(
+        &self,
+        change: &ChangeId,
+        cn: &crate::impact::ChangeImpact,
+    ) -> impl Future<Output = Result<()>> + Send;
+
+    fn delete_change_impact(&self, change: &ChangeId, id: &str) -> impl Future<Output = Result<()>> + Send;
+
+    /// The keys and types of the first impacts of a change, at most `limit`.
+    fn change_impact_keys(
+        &self,
+        change: &ChangeId,
+        limit: usize,
+    ) -> impl Future<Output = Result<Vec<(String, String)>>> + Send;
+
+    fn append_outbox(&self, msgs: &[OutboxMessage]) -> impl Future<Output = Result<()>> + Send;
+
+    /// Writes a version (and the node, at its first), committed at an order.
+    fn put_node(&self, n: &Node, committed: i64) -> impl Future<Output = Result<()>> + Send;
+
+    /// Writes link rows.
+    fn put_links(&self, ls: &[Link]) -> impl Future<Output = Result<()>> + Send;
+
+    /// Writes the row dropping a link from the set of a version.
+    fn drop_link(&self, from: &NodeRef, row: &LinkId, l: &Link) -> impl Future<Output = Result<()>> + Send;
+
+    fn put_link_set(&self, from: &NodeRef, set: LinkSet) -> impl Future<Output = Result<()>> + Send;
+
+    /// How some versions hold their links.
+    fn link_sets_of(&self, refs: &[NodeRef]) -> impl Future<Output = Result<HashMap<NodeRef, LinkSet>>> + Send;
+
+    /// Makes a version join a branch, at the order of the baseline it commits in.
+    fn join_branch(
+        &self,
+        r: &NodeRef,
+        branch: &str,
+        change: &ChangeId,
+        committed: i64,
+    ) -> impl Future<Output = Result<()>> + Send;
+
+    /// The next order of a commit.
+    fn next_commit(&self) -> impl Future<Output = Result<i64>> + Send;
+
+    /// Deletes a change that wrote nothing the graph uses, with what it wrote and its branch (`branch` not empty).
+    fn delete_change(&self, id: &ChangeId, namespace: &str, branch: &str) -> impl Future<Output = Result<()>> + Send;
 }

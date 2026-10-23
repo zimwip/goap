@@ -1,6 +1,7 @@
 //! The reads of the graph ([`graph_core::store::ReadTx`]) over a read-only session of either dialect.
 mod sql;
 mod value;
+mod write;
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -20,7 +21,7 @@ pub use value::{Arg, Row, Val};
 
 use crate::{
     StoreError,
-    sqlite::{SqliteConn, SqliteSession},
+    sqlite::{SqliteConn, SqliteSession, SqliteTx},
 };
 use sql::{Sql, Stmt};
 
@@ -33,6 +34,27 @@ pub struct Session {
 enum Conn {
     Pg(deadpool_postgres::Object),
     Sqlite(SqliteSession),
+    /// A write transaction on a writer of the pool: none once it committed.
+    PgTx(Option<deadpool_postgres::Object>),
+    SqliteTx(Option<SqliteTx>),
+}
+
+impl Drop for Session {
+    /// A PostgreSQL transaction neither committed nor rolled back is rolled back before its connection goes back to
+    /// the pool (the SQLite one rolls itself back).
+    fn drop(&mut self) {
+        if let Conn::PgTx(c) = &mut self.conn
+            && let Some(c) = c.take()
+            && let Ok(h) = tokio::runtime::Handle::try_current()
+        {
+            h.spawn(async move {
+                if c.batch_execute("ROLLBACK").await.is_err() {
+                    // a connection whose state is unknown leaves the pool
+                    drop(deadpool_postgres::Object::take(c));
+                }
+            });
+        }
+    }
 }
 
 impl From<StoreError> for GraphError {
@@ -56,10 +78,81 @@ impl Session {
         }
     }
 
+    /// A write transaction on a writer of PostgreSQL.
+    pub(crate) async fn postgres_tx(c: deadpool_postgres::Object) -> Result<Session, StoreError> {
+        c.batch_execute("BEGIN").await?;
+        Ok(Session {
+            conn: Conn::PgTx(Some(c)),
+            sql: Sql { pg: true },
+        })
+    }
+
+    pub(crate) fn sqlite_tx(t: SqliteTx) -> Session {
+        Session {
+            conn: Conn::SqliteTx(Some(t)),
+            sql: Sql { pg: false },
+        }
+    }
+
+    /// Whether the session is a write transaction.
+    pub fn writes(&self) -> bool {
+        matches!(self.conn, Conn::PgTx(_) | Conn::SqliteTx(_))
+    }
+
+    /// Commits a write transaction (a read session has nothing to commit).
+    pub async fn commit(mut self) -> Result<(), StoreError> {
+        match &mut self.conn {
+            Conn::PgTx(c) => {
+                let c = c.take().ok_or_else(|| StoreError::Other("transaction over".into()))?;
+                match c.batch_execute("COMMIT").await {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        drop(deadpool_postgres::Object::take(c));
+                        Err(e.into())
+                    }
+                }
+            }
+            Conn::SqliteTx(t) => match t.take() {
+                Some(t) => t.commit().await,
+                None => Err(StoreError::Other("transaction over".into())),
+            },
+            _ => Ok(()),
+        }
+    }
+
+    /// Runs a statement that writes and returns the number of rows it touched.
+    pub async fn exec(&self, (text, args): Stmt) -> Result<u64, StoreError> {
+        match &self.conn {
+            Conn::Pg(c) | Conn::PgTx(Some(c)) => {
+                let st = c.prepare_cached(&text).await?;
+                let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = args
+                    .iter()
+                    .map(|a| a as &(dyn tokio_postgres::types::ToSql + Sync))
+                    .collect();
+                Ok(c.execute(&st, &params).await?)
+            }
+            Conn::SqliteTx(Some(t)) => {
+                t.run(move |c: &SqliteConn| {
+                    let mut st = c.prepare_cached(&text)?;
+                    Ok(st.execute(rusqlite::params_from_iter(args.iter()))? as u64)
+                })
+                .await
+            }
+            Conn::Sqlite(s) => {
+                s.run(move |c: &SqliteConn| {
+                    let mut st = c.prepare_cached(&text)?;
+                    Ok(st.execute(rusqlite::params_from_iter(args.iter()))? as u64)
+                })
+                .await
+            }
+            Conn::PgTx(None) | Conn::SqliteTx(None) => Err(StoreError::Other("transaction over".into())),
+        }
+    }
+
     /// Runs a statement and returns its rows.
     pub async fn query(&self, (text, args): Stmt) -> Result<Vec<Row>, StoreError> {
         match &self.conn {
-            Conn::Pg(c) => {
+            Conn::Pg(c) | Conn::PgTx(Some(c)) => {
                 let st = c.prepare_cached(&text).await?;
                 let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = args
                     .iter()
@@ -67,15 +160,9 @@ impl Session {
                     .collect();
                 c.query(&st, &params).await?.iter().map(Row::from_pg).collect()
             }
-            Conn::Sqlite(s) => {
-                s.run(move |c: &SqliteConn| {
-                    let mut st = c.prepare_cached(&text)?;
-                    let n = st.column_count();
-                    let rows = st.query_map(rusqlite::params_from_iter(args.iter()), |r| Row::from_sqlite(r, n))?;
-                    Ok(rows.collect::<Result<Vec<_>, _>>()?)
-                })
-                .await
-            }
+            Conn::Sqlite(s) => s.run(move |c: &SqliteConn| sqlite_rows(c, &text, &args)).await,
+            Conn::SqliteTx(Some(t)) => t.run(move |c: &SqliteConn| sqlite_rows(c, &text, &args)).await,
+            Conn::PgTx(None) | Conn::SqliteTx(None) => Err(StoreError::Other("transaction over".into())),
         }
     }
 
@@ -90,6 +177,13 @@ impl Session {
     async fn links(&self, stmt: Stmt) -> Result<Vec<Link>, GraphError> {
         self.rows(stmt).await?.iter().map(link_of).collect()
     }
+}
+
+fn sqlite_rows(c: &SqliteConn, text: &str, args: &[Arg]) -> Result<Vec<Row>, StoreError> {
+    let mut st = c.prepare_cached(text)?;
+    let n = st.column_count();
+    let rows = st.query_map(rusqlite::params_from_iter(args.iter()), |r| Row::from_sqlite(r, n))?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
 /// A uuid, as the SQL stores key their nodes: an id that is none names no node (Go's `uuidIDs`).
@@ -178,7 +272,7 @@ fn header_of(r: &Row) -> Baseline {
 }
 
 /// A change header from the columns of `Sql::change_heads`.
-fn change_of(r: &Row) -> Result<Change, GraphError> {
+pub(crate) fn change_of(r: &Row) -> Result<Change, GraphError> {
     let id = r.text(0);
     let list = |i: usize, what: &str| -> Result<serde_json::Value, GraphError> {
         match r.json(i) {

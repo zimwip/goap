@@ -28,7 +28,8 @@ pub fn branch_of(b: &str) -> &str {
 macro_rules! id {
     ($(#[$doc:meta])* $name:ident) => {
         $(#[$doc])*
-        #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+        #[serde(transparent)]
         pub struct $name(pub String);
 
         impl $name {
@@ -87,7 +88,7 @@ id!(
 pub type Version = i32;
 
 /// A version of a node.
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct NodeRef {
     pub id: NodeId,
     pub version: Version,
@@ -282,3 +283,11 @@ pub struct NodeQuery {
 
 /// The largest page of a browse.
 pub const MAX_BROWSE_LIMIT: usize = 500;
+
+/// Why a version was written (`node_version.reason`).
+pub const REASON_CREATE: &str = "create";
+pub const REASON_REVISE: &str = "revise";
+pub const REASON_DERIVE: &str = "derive";
+pub const REASON_MERGE: &str = "merge";
+pub const REASON_REBASE: &str = "rebase";
+pub const REASON_REVERT: &str = "revert";

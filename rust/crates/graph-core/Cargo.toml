@@ -12,6 +12,8 @@ chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+uuid = { workspace = true }
+graph-catalog = { workspace = true }
 
 [lints]
 workspace = true

@@ -12,12 +12,22 @@ use crate::StoreError;
 /// An argument of a statement.
 #[derive(Debug, Clone)]
 pub enum Arg {
+    Null,
     Text(String),
+    /// A time: `timestamptz` on PostgreSQL, the fixed-width UTC text of the Go service on SQLite.
+    Time(DateTime<Utc>),
     Int(i64),
     Bool(bool),
     /// A list of texts: a `text[]` or `uuid[]` on PostgreSQL (SQLite takes lists as JSON texts).
     Texts(Vec<String>),
     Ints(Vec<i32>),
+}
+
+impl Arg {
+    /// A text, null when empty (Go's `nullUUID`).
+    pub fn or_null(s: &str) -> Arg {
+        if s.is_empty() { Arg::Null } else { Arg::Text(s.to_string()) }
+    }
 }
 
 impl From<&str> for Arg {
@@ -59,6 +69,8 @@ fn uuid(s: &str) -> Result<uuid::Uuid, BoxError> {
 impl ToSql for Arg {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, BoxError> {
         match (self, ty) {
+            (Arg::Null, _) => Ok(IsNull::Yes),
+            (Arg::Time(t), _) => t.to_sql(ty, out),
             (Arg::Text(s), &Type::UUID) => uuid(s)?.to_sql(ty, out),
             (Arg::Text(s), &Type::JSONB | &Type::JSON) => serde_json::from_str::<Json>(s)?.to_sql(ty, out),
             (Arg::Text(s), _) => s.as_str().to_sql(ty, out),
@@ -88,6 +100,8 @@ impl rusqlite::ToSql for Arg {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
         use rusqlite::types::{ToSqlOutput, Value};
         Ok(match self {
+            Arg::Null => ToSqlOutput::Owned(Value::Null),
+            Arg::Time(t) => ToSqlOutput::Owned(Value::Text(t.format(SQLITE_TIME).to_string())),
             Arg::Text(s) => ToSqlOutput::from(s.as_str()),
             Arg::Int(n) => ToSqlOutput::from(*n),
             Arg::Bool(b) => ToSqlOutput::from(*b),
