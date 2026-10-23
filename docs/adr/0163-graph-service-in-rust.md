@@ -235,5 +235,10 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   commit (a version of reason `revert` holding the fork's properties and sharing its link set, a deletion for a node
   the fork does not hold; the baseline of kind `revert`; the branch reads a revert as the fork's version, so the
   fast-forward joins nothing for it), and `GetCommitState` and the merge count them as Go does: 535 calls, none
-  divergent, the tables and the 403 events of the outbox the same.
+  divergent, the tables and the 403 events of the outbox the same. The decision points of a change working on no
+  option follow (`OpenDecision`, `RuleDecision`, `AnswerQuestion`, `RatifyDecision`, `ListDecisionPoints`, and the
+  points of `GetBlackboard`, the pending point holding the merge): `graph-core` `decision` replays the `decision_point`
+  items under the policy the Go graph service plugs (`contracts/decision`: decider, threshold, rounds, deadline, a board
+  ruling by unanimity, majority or consent with its chair), and a platform service sits in any seat: 592 calls, none
+  divergent, the tables and the 426 events of the outbox the same.
 - Not done yet: the rest of phase 4.

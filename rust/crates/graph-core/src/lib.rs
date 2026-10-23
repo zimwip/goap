@@ -2,6 +2,7 @@
 //! a store it knows only as the [`store::ReadTx`] trait. No I/O of its own: `graph-store` implements the trait per
 //! SQL dialect, `graph-service` answers the RPCs from what the reads return.
 pub mod change;
+pub mod decision;
 pub mod dependency;
 pub mod error;
 pub mod gojson;

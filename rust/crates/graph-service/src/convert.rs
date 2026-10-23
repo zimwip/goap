@@ -335,10 +335,7 @@ pub fn link_write(
 /// An item as its log entry holds it (`domain.ChangeItem` JSON), for the answer (`pbconv.ItemToPB`); a flow, a
 /// decision point or a decision is the Go service's.
 pub fn item(v: &Json) -> Result<pb::ChangeItem, String> {
-    if ["flowEvent", "decisionEvent", "decision"]
-        .iter()
-        .any(|k| v.get(k).is_some())
-    {
+    if ["flowEvent", "decision"].iter().any(|k| v.get(k).is_some()) {
         return Err("an item of a flow or of a decision".into());
     }
     let s = |k: &str| v.get(k).and_then(Json::as_str).unwrap_or_default().to_string();
@@ -369,8 +366,80 @@ pub fn item(v: &Json) -> Result<pb::ChangeItem, String> {
         created_at: created.as_ref().and_then(go_time),
         execution: s("execution"),
         flow: s("flow"),
+        decision_event: match v.get("decisionEvent") {
+            Some(e) => Some(decision_event(
+                &serde_json::from_value(e.clone()).map_err(|e| e.to_string())?,
+            )),
+            None => None,
+        },
         ..pb::ChangeItem::default()
     })
+}
+
+/// An event of a decision point (`pbconv.DecisionEventToPB`).
+pub fn decision_event(e: &graph_core::decision::DecisionEvent) -> pb::DecisionEvent {
+    pb::DecisionEvent {
+        op: e.op.clone(),
+        point: e.point.clone(),
+        question: e.question.clone(),
+        options: e.options.clone(),
+        criteria: e.criteria.clone(),
+        outcome: e.outcome.clone(),
+        option: e.option.clone(),
+        confidence: e.confidence,
+        justification: e.justification.clone(),
+        questions: e.questions.clone(),
+        human: e.human,
+        question_id: e.question_id.clone(),
+        answer: e.answer.clone(),
+        process: e.process.clone(),
+        accept: e.accept,
+        comment: e.comment.clone(),
+        by: e.by.clone(),
+        policy: (!e.policy.is_empty()).then(|| object(&e.policy)),
+    }
+}
+
+/// A replayed decision point (`pbconv.DecisionPointToPB`).
+pub fn decision_point(d: &graph_core::decision::DecisionPoint) -> pb::DecisionPoint {
+    pb::DecisionPoint {
+        id: d.id.clone(),
+        question: d.question.clone(),
+        options: d.options.clone(),
+        criteria: d.criteria.clone(),
+        policy: (!d.policy.is_empty()).then(|| object(&d.policy)),
+        opened_at: time(&d.opened_at),
+        opened_by: d.opened_by.clone(),
+        status: d.status.clone(),
+        human_only: d.human_only,
+        escalation: d.escalation.clone(),
+        option: d.option.clone(),
+        decided_at: time(&d.decided_at),
+        decided_by: d.decided_by.clone(),
+        questions: d
+            .questions
+            .iter()
+            .map(|q| pb::Question {
+                id: q.id.clone(),
+                point: q.point.clone(),
+                text: q.text.clone(),
+                status: q.status.clone(),
+                answer: q.answer.clone(),
+                answered_by: q.answered_by.clone(),
+                process: q.process.clone(),
+                asked_at: time(&q.asked_at),
+            })
+            .collect(),
+        ruling: d.ruling.as_ref().map(|r| pb::Ruling {
+            outcome: r.outcome.clone(),
+            option: r.option.clone(),
+            confidence: r.confidence,
+            justification: r.justification.clone(),
+            by: r.by.clone(),
+            human: r.human,
+            at: time(&r.at),
+        }),
+    }
 }
 
 pub fn log_entry(e: &graph_core::impact::LogEntry) -> pb::LogEntry {

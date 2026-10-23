@@ -24,6 +24,7 @@ use graph_core::{
         branches::{self, NewBranch},
         change::NewChange,
         commit::NOTHING_TO_COMMIT,
+        decision::{self, OpenDecision, Rule},
         edits::{Commit, LinkEdit, NodeEdit},
         items::ItemWrite,
         review::{ReviewBatch, Verdict},
@@ -172,9 +173,10 @@ async fn no_flows<T: ReadTx>(tx: &T, id: &ChangeId) -> Result<(), GraphError> {
     if tx.change(id).await?.is_none() {
         return Err(GraphError::not_found(format!("change {id}")));
     }
-    if !tx.log(id, 0, &["fact.flow", "fact.decision"]).await?.is_empty() {
+    let flows = tx.log(id, 0, &["fact.flow", "fact.decision"]).await?;
+    if flows.iter().any(|l| l.typ == "fact.flow" || l.typ == "fact.decision") {
         return Err(GraphError::unimplemented(
-            "a change with flows or decision points (ADR 0009): not served here yet",
+            "a change with flows or options (ADR 0009, 0032): not served here yet",
         ));
     }
     Ok(())
@@ -1445,6 +1447,8 @@ impl pb::GraphService for Graph {
             let cat = state.catalog(tx).await?;
             let id = ChangeId(m.change_id.clone());
             let w = whole::whole_change(tx, &cat, &id).await?;
+            let at = chrono::Utc::now();
+            let points = decision::points_of(tx, &id, at).await?;
             let view = graph_core::view::View {
                 change: id,
                 flow: m.flow.clone(),
@@ -1470,7 +1474,8 @@ impl pb::GraphService for Graph {
                 change: Some(whole_pb(&w)?),
                 nodes,
                 neighbors: convert::nodes(&neighbours),
-                at: convert::time(&Some(chrono::Utc::now())),
+                decision_points: points.iter().map(convert::decision_point).collect(),
+                at: convert::time(&Some(at)),
                 ..Default::default()
             })
         })
@@ -1722,7 +1727,117 @@ impl pb::GraphService for Graph {
         let id = ChangeId(req.into_inner().change_id);
         self.read(caller, async |tx| {
             no_flows(tx, &id).await?;
-            Ok(pb::ListDecisionPointsResponse::default())
+            let points = decision::points_of(tx, &id, chrono::Utc::now()).await?;
+            Ok(pb::ListDecisionPointsResponse {
+                points: points.iter().map(convert::decision_point).collect(),
+            })
+        })
+        .await
+    }
+
+    /// Opens a decision point on a change (ADR 0009 §4).
+    async fn open_decision(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::OpenDecisionRequest>,
+    ) -> Answer<pb::OpenDecisionResponse> {
+        let caller = Caller::of(&req)?;
+        let by = caller.subject.clone();
+        let m = req.into_inner();
+        let policy = m.policy.as_ref().map(convert::map).unwrap_or_default();
+        // what is refused before the change is read
+        let checked =
+            !m.question.trim().is_empty() && graph_core::decision::open_policy(&policy, chrono::Utc::now()).is_ok();
+        let r#in = OpenDecision {
+            question: m.question,
+            options: if m.all_options { None } else { Some(m.options) },
+            criteria: m.criteria,
+            policy,
+            choices: m.choices,
+            by,
+        };
+        self.write(caller, async |tx| {
+            let id = if checked {
+                served_change(tx, &m.change_id).await?
+            } else {
+                ChangeId(m.change_id.clone())
+            };
+            let d = tx.open_decision(&id, r#in).await?;
+            Ok(pb::OpenDecisionResponse {
+                point: Some(convert::decision_point(&d)),
+            })
+        })
+        .await
+    }
+
+    /// Rules a decision point.
+    async fn rule_decision(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::RuleDecisionRequest>,
+    ) -> Answer<pb::RuleDecisionResponse> {
+        let caller = Caller::of(&req)?;
+        let by = caller.subject.clone();
+        let m = req.into_inner();
+        let r#in = Rule {
+            point: m.point,
+            outcome: m.outcome,
+            option: m.option,
+            confidence: m.confidence,
+            justification: m.justification,
+            questions: m.questions,
+            human: !m.agent,
+            by,
+            role: m.role,
+        };
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let d = tx.rule_decision(&id, r#in).await?;
+            Ok(pb::RuleDecisionResponse {
+                point: Some(convert::decision_point(&d)),
+            })
+        })
+        .await
+    }
+
+    /// Answers an open question of a decision point.
+    async fn answer_question(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::AnswerQuestionRequest>,
+    ) -> Answer<pb::AnswerQuestionResponse> {
+        let caller = Caller::of(&req)?;
+        let by = caller.subject.clone();
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = if m.answer.trim().is_empty() {
+                ChangeId(m.change_id.clone())
+            } else {
+                served_change(tx, &m.change_id).await?
+            };
+            let d = tx.answer_question(&id, &m.question, &m.answer, &m.process, &by).await?;
+            Ok(pb::AnswerQuestionResponse {
+                point: Some(convert::decision_point(&d)),
+            })
+        })
+        .await
+    }
+
+    /// Ratifies or refuses the ruling of a decision point the policy did not settle.
+    async fn ratify_decision(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::RatifyDecisionRequest>,
+    ) -> Answer<pb::RatifyDecisionResponse> {
+        let caller = Caller::of(&req)?;
+        let by = caller.subject.clone();
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let d = tx.ratify_decision(&id, &m.point, m.accept, &by, &m.comment).await?;
+            Ok(pb::RatifyDecisionResponse {
+                point: Some(convert::decision_point(&d)),
+            })
         })
         .await
     }

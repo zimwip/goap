@@ -2,6 +2,7 @@ pub mod branches;
 pub mod change;
 pub mod check;
 pub mod commit;
+pub mod decision;
 pub mod dependency;
 pub mod edits;
 pub mod events;
