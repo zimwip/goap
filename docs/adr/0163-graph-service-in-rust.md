@@ -165,5 +165,10 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   The reads of the catalogue (`IsAdminOnlyType`, `ListItemTypes` with the item types this service gives a meaning,
   `graph-core` `items`, `GetStructures`) and `ListNamespaces` are served for any identified caller, as Go serves them;
   but the first call of a person creates its user (Go's `EnsureCaller`), so a person the graph holds no user of yet
-  is left to Go (`Graph::identified`), which creates it in the shared database.
+  is left to Go (`Graph::identified`), which creates it in the shared database. `GetChange` answers the whole
+  change as `ChangeChecked` does (`graph-core` `write::whole`): the header, the impacts of the fold, the items of its
+  facts, its position and, for an open change, the check of each main-flow draft against what a version must satisfy
+  (`valid`, the message, `modified` against the version checked out from); a draft with origins and a read at a
+  position (`at_seq`) are still Go's. A scenario of 41 calls (checkout, edit, refusals, a change not found, a
+  person): every one `same`, the tables the same.
 - Not done yet: the rest of phase 4.

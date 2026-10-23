@@ -16,7 +16,7 @@ use crate::{
         REVIEW_PROPOSED, REVIEW_REJECTED, Review,
     },
     model::{ChangeId, NodeRef, Props, Target},
-    store::WriteTx,
+    store::{ReadTx, WriteTx},
 };
 
 /// The item type of the record of a review (`domain.TypeReview`).
@@ -138,7 +138,7 @@ fn same_props(a: &Props, b: &Props) -> bool {
 }
 
 /// Whether a draft differs from the version it was checked out from (Go's `DraftChanged`).
-pub(super) fn draft_changed(base: &Draft, d: &Draft) -> bool {
+pub(crate) fn draft_changed(base: &Draft, d: &Draft) -> bool {
     if let (Some(m), Some(b)) = (&d.merged_with, &d.base)
         && m != b
     {
@@ -179,44 +179,47 @@ pub(super) fn draft_changed(base: &Draft, d: &Draft) -> bool {
     false
 }
 
+/// The version a draft was checked out from, as a draft (Go's `storedDraft`).
+pub(crate) async fn stored_draft<T: ReadTx>(store: &T, r: &NodeRef) -> Result<Draft> {
+    let n = store
+        .node(r)
+        .await?
+        .ok_or_else(|| GraphError::not_found(format!("node version {r}")))?;
+    let links = store
+        .links_from(std::slice::from_ref(r), None)
+        .await?
+        .into_iter()
+        .map(|l| {
+            let (to, target) = match l.to {
+                Target::Node(t) => (t, Default::default()),
+                Target::External(u) => (NodeRef::default(), u),
+            };
+            DraftLink {
+                id: l.id,
+                typ: l.typ,
+                to,
+                target,
+                props: l.props,
+            }
+        })
+        .collect();
+    Ok(Draft {
+        node: n.id.clone(),
+        key: n.key.clone(),
+        typ: n.typ.clone(),
+        state: n.state.clone(),
+        owner: n.owner.clone(),
+        props: n.props.clone(),
+        base: Some(r.clone()),
+        links,
+        ..Draft::default()
+    })
+}
+
 impl<S: WriteTx> Tx<'_, S> {
     /// The version a draft was checked out from, as a draft (Go's `storedDraft`).
     pub(super) async fn stored_draft(&self, r: &NodeRef) -> Result<Draft> {
-        let n = self
-            .store
-            .node(r)
-            .await?
-            .ok_or_else(|| GraphError::not_found(format!("node version {r}")))?;
-        let links = self
-            .store
-            .links_from(std::slice::from_ref(r), None)
-            .await?
-            .into_iter()
-            .map(|l| {
-                let (to, target) = match l.to {
-                    Target::Node(t) => (t, Default::default()),
-                    Target::External(u) => (NodeRef::default(), u),
-                };
-                DraftLink {
-                    id: l.id,
-                    typ: l.typ,
-                    to,
-                    target,
-                    props: l.props,
-                }
-            })
-            .collect();
-        Ok(Draft {
-            node: n.id.clone(),
-            key: n.key.clone(),
-            typ: n.typ.clone(),
-            state: n.state.clone(),
-            owner: n.owner.clone(),
-            props: n.props.clone(),
-            base: Some(r.clone()),
-            links,
-            ..Draft::default()
-        })
+        stored_draft(self.store, r).await
     }
 
     /// What a draft must satisfy to be accepted, the version written from it to commit (Go's `checkDraft`): its

@@ -6,4 +6,5 @@ pub mod events;
 pub mod merge;
 pub mod review;
 pub mod tx;
+pub mod whole;
 pub mod work;

@@ -24,6 +24,7 @@ use graph_core::{
         edits::{Commit, LinkEdit, NodeEdit},
         review::{ReviewBatch, Verdict},
         tx::{Env, Tx},
+        whole,
         work::{NodeCheckout, NodeCreate},
     },
 };
@@ -545,6 +546,45 @@ impl pb::GraphService for Graph {
                 branch: Some(convert::branch(&b)),
                 head: Some(convert::baseline(&head, state)),
             })
+        })
+        .await
+    }
+
+    /// A change whole (`Graph.ChangeChecked`): its impacts with the validation of their drafts, its items.
+    async fn get_change(&self, _ctx: &Ctx, req: Request<pb::GetChangeRequest>) -> Answer<pb::GetChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let state = self.state.clone();
+        self.read(caller, async |tx| {
+            if m.at_seq > 0 {
+                return Err(GraphError::unimplemented(
+                    "a change as its log stood at a position (ADR 0153): not served here yet",
+                ));
+            }
+            let cat = state.catalog(tx).await?;
+            let w = whole::whole_change(tx, &cat, &ChangeId(m.id.clone())).await?;
+            let mut c = convert::change(&w.change);
+            c.nodes = w
+                .impacts
+                .iter()
+                .map(|(cn, v)| {
+                    let mut p = convert::change_impact(cn);
+                    p.validation = v.as_ref().map(|v| pb::ImpactValidation {
+                        valid: v.valid,
+                        message: v.message.clone(),
+                        modified: v.modified,
+                    });
+                    p
+                })
+                .collect();
+            c.items = w
+                .items
+                .iter()
+                .map(convert::item)
+                .collect::<Result<_, _>>()
+                .map_err(GraphError::internal)?;
+            c.seq = w.seq;
+            Ok(pb::GetChangeResponse { change: Some(c) })
         })
         .await
     }
