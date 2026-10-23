@@ -9,6 +9,7 @@ use graph_catalog::{Catalog, catalog::STRUCTURE_PROJECT};
 use graph_core::{
     GraphError, Kind,
     change::{self, ChangesFilter},
+    flow::{OP_ADOPT, OP_DISCARD},
     impact::ChangeImpact,
     items,
     lnk::Url,
@@ -26,6 +27,7 @@ use graph_core::{
         commit::NOTHING_TO_COMMIT,
         decision::{self, OpenDecision, Rule},
         edits::{Commit, LinkEdit, NodeEdit},
+        flow::{self as wflow, OpenFlow},
         items::ItemWrite,
         review::{ReviewBatch, Verdict},
         tx::{Env, Tx},
@@ -154,11 +156,11 @@ async fn served_change(tx: &mut Tx<'_, Session>, id: &str) -> Result<ChangeId, G
     Ok(id)
 }
 
-/// The view of a change on its main flow, refusing a change that does not exist; an option, a flow or a personal
-/// change is the Go service's.
+/// The view of a change on its main flow, refusing a change that does not exist; an option, a flow branch or a
+/// personal change is the Go service's (the fold of the change refuses what a flow moved).
 async fn change_world<'a, T: ReadTx>(tx: &'a T, id: &str, flow: &str) -> Result<World<'a, T>, GraphError> {
     let id = ChangeId(id.to_string());
-    no_flows(tx, &id).await?;
+    known_change(tx, &id).await?;
     let view = graph_core::view::View {
         change: id,
         flow: flow.to_string(),
@@ -167,19 +169,38 @@ async fn change_world<'a, T: ReadTx>(tx: &'a T, id: &str, flow: &str) -> Result<
     World::open_node(tx, &view).await
 }
 
-/// Refuses a change that does not exist, and leaves to the Go service one whose log opened a flow or a decision
-/// point (ADR 0009): the simple world has neither.
-async fn no_flows<T: ReadTx>(tx: &T, id: &ChangeId) -> Result<(), GraphError> {
+/// Refuses a change that does not exist.
+async fn known_change<T: ReadTx>(tx: &T, id: &ChangeId) -> Result<(), GraphError> {
     if tx.change(id).await?.is_none() {
         return Err(GraphError::not_found(format!("change {id}")));
     }
-    let flows = tx.log(id, 0, &["fact.flow", "fact.decision"]).await?;
-    if flows.iter().any(|l| l.typ == "fact.flow" || l.typ == "fact.decision") {
-        return Err(GraphError::unimplemented(
-            "a change with flows or options (ADR 0009, 0032): not served here yet",
-        ));
-    }
     Ok(())
+}
+
+/// The items a request writes; one carrying a flow event, a decision event or a decision is the Go service's.
+fn item_writes(items: Vec<pb::ChangeItem>) -> Result<Vec<ItemWrite>, ConnectError> {
+    items
+        .into_iter()
+        .map(|it| {
+            if it.decision.is_some() || it.flow_event.is_some() || it.decision_event.is_some() {
+                return Err(connect_error(GraphError::unimplemented(
+                    "an item of a flow or of a decision: written by the Go service",
+                )));
+            }
+            Ok(ItemWrite {
+                id: it.id,
+                typ: it.r#type,
+                target: it.target,
+                status: it.status,
+                flow: it.flow,
+                data: it.data.as_ref().map(convert::map),
+                produced_by: it.produced_by,
+                derived_from: it.derived_from,
+                supersedes: it.supersedes,
+                execution: it.execution,
+            })
+        })
+        .collect()
 }
 
 /// The header naming, on a Connect error, the sentinel finer than its code (`lib/rpcerr`).
@@ -1263,26 +1284,7 @@ impl pb::GraphService for Graph {
     async fn add_items(&self, _ctx: &Ctx, req: Request<pb::AddItemsRequest>) -> Answer<pb::AddItemsResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        let mut its = Vec::with_capacity(m.items.len());
-        for it in m.items {
-            if it.decision.is_some() || it.flow_event.is_some() || it.decision_event.is_some() {
-                return Err(connect_error(GraphError::unimplemented(
-                    "an item of a flow or of a decision: written by the Go service",
-                )));
-            }
-            its.push(ItemWrite {
-                id: it.id,
-                typ: it.r#type,
-                target: it.target,
-                status: it.status,
-                flow: it.flow,
-                data: it.data.as_ref().map(convert::map),
-                produced_by: it.produced_by,
-                derived_from: it.derived_from,
-                supersedes: it.supersedes,
-                execution: it.execution,
-            });
-        }
+        let its = item_writes(m.items)?;
         self.write(caller, async |tx| {
             let written = tx.add_items(&ChangeId(m.change_id.clone()), its).await?;
             let items = written
@@ -1434,7 +1436,7 @@ impl pb::GraphService for Graph {
     }
 
     /// The blackboard of a change (`Graph.BlackboardIn`): the change as its main flow sees it, the nodes its impacts
-    /// name with their links, their neighbours; no option nor decision point in the simple world.
+    /// name with their links, their neighbours, its options and decision points; an option or a flow is Go's.
     async fn get_blackboard(
         &self,
         _ctx: &Ctx,
@@ -1447,11 +1449,18 @@ impl pb::GraphService for Graph {
             let cat = state.catalog(tx).await?;
             let id = ChangeId(m.change_id.clone());
             let w = whole::whole_change(tx, &cat, &id).await?;
+            let items = wflow::items_of(tx, &id).await?;
+            let fx = graph_core::flow::Flows::replay(&items);
+            if !fx.resolve(&m.flow).is_empty() {
+                return Err(GraphError::unimplemented(
+                    "the blackboard of an option or a flow branch (ADR 0025, 0032 §6): not served here yet",
+                ));
+            }
             let at = chrono::Utc::now();
             let points = decision::points_of(tx, &id, at).await?;
             let view = graph_core::view::View {
                 change: id,
-                flow: m.flow.clone(),
+                flow: String::new(),
                 ..Default::default()
             };
             let world = World::open_node(tx, &view).await?;
@@ -1470,13 +1479,21 @@ impl pb::GraphService for Graph {
                     ..Default::default()
                 })
                 .collect();
+            let mut change = whole_pb(&w)?;
+            // the items the main flow sees (`Change.View`)
+            change.items = fx
+                .view(&items, "")
+                .into_iter()
+                .map(|i| change.items[i].clone())
+                .collect();
             Ok(pb::GetBlackboardResponse {
-                change: Some(whole_pb(&w)?),
+                change: Some(change),
+                options: fx.options().map(convert::flow).collect(),
+                active_option: fx.active.clone(),
                 nodes,
                 neighbors: convert::nodes(&neighbours),
                 decision_points: points.iter().map(convert::decision_point).collect(),
                 at: convert::time(&Some(at)),
-                ..Default::default()
             })
         })
         .await
@@ -1695,24 +1712,187 @@ impl pb::GraphService for Graph {
         .await
     }
 
-    /// The flows of a change: none in the simple world of ADR 0163, a change with flows or decisions being Go's.
+    /// The flows of a change, oldest first (ADR 0017, 0025).
     async fn list_flows(&self, _ctx: &Ctx, req: Request<pb::ListFlowsRequest>) -> Answer<pb::ListFlowsResponse> {
         let caller = Caller::of(&req)?;
         let id = ChangeId(req.into_inner().change_id);
         self.read(caller, async |tx| {
-            no_flows(tx, &id).await?;
-            Ok(pb::ListFlowsResponse::default())
+            known_change(tx, &id).await?;
+            let fx = wflow::flows_of(tx, &id).await?;
+            Ok(pb::ListFlowsResponse {
+                flows: fx.list.iter().map(convert::flow).collect(),
+            })
         })
         .await
     }
 
-    /// The options of a change, and the one it works on: none in the simple world.
+    /// The options of a change, oldest first, and the one it works on (ADR 0009 §3).
     async fn list_options(&self, _ctx: &Ctx, req: Request<pb::ListOptionsRequest>) -> Answer<pb::ListOptionsResponse> {
         let caller = Caller::of(&req)?;
         let id = ChangeId(req.into_inner().change_id);
         self.read(caller, async |tx| {
-            no_flows(tx, &id).await?;
-            Ok(pb::ListOptionsResponse::default())
+            known_change(tx, &id).await?;
+            let fx = wflow::flows_of(tx, &id).await?;
+            let options: Vec<_> = fx.options().collect();
+            Ok(pb::ListOptionsResponse {
+                options: options.iter().map(|f| convert::flow(f)).collect(),
+                active: options
+                    .iter()
+                    .rfind(|f| f.active)
+                    .map(|f| f.id.clone())
+                    .unwrap_or_default(),
+            })
+        })
+        .await
+    }
+
+    /// Opens a flow branch: the items it invalidates are stale until it is adopted.
+    async fn open_flow(&self, _ctx: &Ctx, req: Request<pb::OpenFlowRequest>) -> Answer<pb::OpenFlowResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let r#in = OpenFlow {
+            parent: m.parent,
+            fork_after: m.fork_after,
+            seeds: m.seeds,
+            stale_runs: m.stale_runs,
+            origin: m.origin.as_ref().map(convert::map).unwrap_or_default(),
+            items: item_writes(m.items)?,
+        };
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let f = tx.open_flow(&id, r#in).await?;
+            Ok(pb::OpenFlowResponse {
+                flow: Some(convert::flow(&f)),
+            })
+        })
+        .await
+    }
+
+    /// Adopts an open flow branch.
+    async fn adopt_flow(&self, _ctx: &Ctx, req: Request<pb::AdoptFlowRequest>) -> Answer<pb::AdoptFlowResponse> {
+        let caller = Caller::of(&req)?;
+        let by = caller.subject.clone();
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let f = tx.decide_flow_op(&id, &m.flow, OP_ADOPT, &by).await?;
+            Ok(pb::AdoptFlowResponse {
+                flow: Some(convert::flow(&f)),
+            })
+        })
+        .await
+    }
+
+    /// Discards an open flow branch.
+    async fn discard_flow(&self, _ctx: &Ctx, req: Request<pb::DiscardFlowRequest>) -> Answer<pb::DiscardFlowResponse> {
+        let caller = Caller::of(&req)?;
+        let by = caller.subject.clone();
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let f = tx.decide_flow_op(&id, &m.flow, OP_DISCARD, &by).await?;
+            Ok(pb::DiscardFlowResponse {
+                flow: Some(convert::flow(&f)),
+            })
+        })
+        .await
+    }
+
+    /// Opens an option: a flow branch of its own, forked from the main flow.
+    async fn open_option(&self, _ctx: &Ctx, req: Request<pb::OpenOptionRequest>) -> Answer<pb::OpenOptionResponse> {
+        let caller = Caller::of(&req)?;
+        let by = caller.subject.clone();
+        let m = req.into_inner();
+        let named = !m.name.trim().is_empty();
+        self.write(caller, async |tx| {
+            let id = if named {
+                served_change(tx, &m.change_id).await?
+            } else {
+                ChangeId(m.change_id.clone())
+            };
+            let f = tx.open_option(&id, &m.name, &m.hypothesis, m.activate, &by).await?;
+            Ok(pb::OpenOptionResponse {
+                option: Some(convert::flow(&f)),
+            })
+        })
+        .await
+    }
+
+    /// Makes an open option the one the change works on; empty or "main" goes back to the main flow.
+    async fn activate_option(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ActivateOptionRequest>,
+    ) -> Answer<pb::ActivateOptionResponse> {
+        let caller = Caller::of(&req)?;
+        let by = caller.subject.clone();
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let active = tx.activate_option(&id, &m.option, &by).await?;
+            Ok(pb::ActivateOptionResponse { active })
+        })
+        .await
+    }
+
+    /// Records the evaluation of an open option.
+    async fn evaluate_option(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::EvaluateOptionRequest>,
+    ) -> Answer<pb::EvaluateOptionResponse> {
+        let caller = Caller::of(&req)?;
+        let by = caller.subject.clone();
+        let m = req.into_inner();
+        let commented = !m.comment.trim().is_empty();
+        self.write(caller, async |tx| {
+            let id = if commented {
+                served_change(tx, &m.change_id).await?
+            } else {
+                ChangeId(m.change_id.clone())
+            };
+            let f = tx.evaluate_option(&id, &m.option, &by, &m.comment).await?;
+            Ok(pb::EvaluateOptionResponse {
+                option: Some(convert::flow(&f)),
+            })
+        })
+        .await
+    }
+
+    /// Selects an open option: its flow adopted, the other open options rejected.
+    async fn select_option(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::SelectOptionRequest>,
+    ) -> Answer<pb::SelectOptionResponse> {
+        let caller = Caller::of(&req)?;
+        let by = caller.subject.clone();
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let f = tx.select_option(&id, &m.option, &by).await?;
+            Ok(pb::SelectOptionResponse {
+                option: Some(convert::flow(&f)),
+            })
+        })
+        .await
+    }
+
+    /// Rejects an open option: its flow is discarded.
+    async fn reject_option(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::RejectOptionRequest>,
+    ) -> Answer<pb::RejectOptionResponse> {
+        let caller = Caller::of(&req)?;
+        let by = caller.subject.clone();
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let f = tx.reject_option(&id, &m.option, &by).await?;
+            Ok(pb::RejectOptionResponse {
+                option: Some(convert::flow(&f)),
+            })
         })
         .await
     }
@@ -1726,7 +1906,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let id = ChangeId(req.into_inner().change_id);
         self.read(caller, async |tx| {
-            no_flows(tx, &id).await?;
+            known_change(tx, &id).await?;
             let points = decision::points_of(tx, &id, chrono::Utc::now()).await?;
             Ok(pb::ListDecisionPointsResponse {
                 points: points.iter().map(convert::decision_point).collect(),

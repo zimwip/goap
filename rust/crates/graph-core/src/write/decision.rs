@@ -1,18 +1,22 @@
 //! The decision points of a change (Go's `graph/graph/decision.go`, ADR 0009 §4): opened, ruled, their questions
 //! answered, a ruling the policy did not settle ratified. Every operation is a `decision_point` item of the main flow;
-//! the points are its replay ([`crate::decision::points_at`]). A change working on options (flows) is the Go service's:
-//! a decided point that names an option selects it.
+//! the points are its replay ([`crate::decision::points_at`]). A point decided on an open option of the change selects
+//! it ([`super::flow`]).
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-use super::tx::Tx;
+use super::{
+    flow::{open_option, option_id},
+    tx::Tx,
+};
 use crate::{
     GraphError, Result,
     change::Change,
     decision::{
         self, DecisionEvent, DecisionPoint, OP_ANSWER, OP_OPEN, OP_RATIFY, OP_RULE, OUTCOME_DECIDED,
-        OUTCOME_UNDECIDABLE, POINT_BLOCKED, POINT_RATIFYING, PointItem, QUESTION_OPEN, TYPE_DECISION_POINT,
+        OUTCOME_UNDECIDABLE, POINT_BLOCKED, POINT_DECIDED, POINT_RATIFYING, PointItem, QUESTION_OPEN,
+        TYPE_DECISION_POINT,
     },
     gojson,
     impact::{LOG_FACT, LogEntry},
@@ -101,23 +105,23 @@ impl<S: WriteTx> Tx<'_, S> {
         if c.status != "draft" && c.status != "active" {
             return Err(GraphError::conflict(format!("change {id} is {}", c.status)));
         }
-        let flows = self
+        let decided = format!("{LOG_FACT}.decision");
+        if self
             .store
-            .log(id, 0, &[&format!("{LOG_FACT}.flow"), &format!("{LOG_FACT}.decision")])
-            .await?;
-        if flows
+            .log(id, 0, &[&decided])
+            .await?
             .iter()
-            .any(|l| l.typ == format!("{LOG_FACT}.flow") || l.typ == format!("{LOG_FACT}.decision"))
+            .any(|l| l.typ == decided)
         {
             return Err(GraphError::unimplemented(
-                "a decision of a change working on options (ADR 0032): the Go service's",
+                "a change whose items are decided on (decision items): the Go service's",
             ));
         }
         Ok(c)
     }
 
     /// Appends an event of a point to the log of a change, on the main flow; answers the id of its item.
-    async fn put_decision_event(&mut self, id: &ChangeId, e: &DecisionEvent) -> Result<String> {
+    pub(crate) async fn put_decision_event(&mut self, id: &ChangeId, e: &DecisionEvent) -> Result<String> {
         // what `ChangeItem.Validate` asks of the event
         let problem = match e.op.as_str() {
             OP_OPEN if e.question.is_empty() => Some("a decision point needs a question".to_string()),
@@ -165,6 +169,21 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(item)
     }
 
+    /// A point after a ruling or a ratification (Go's `settleDecision`): decided on an open option of the change, it
+    /// selects that option.
+    async fn settle(&mut self, id: &ChangeId, point: &str, by: &str) -> Result<DecisionPoint> {
+        let d = self.point(id, point).await?;
+        if d.status != POINT_DECIDED || d.option.is_empty() {
+            return Ok(d);
+        }
+        let fx = self.flows(id).await?;
+        if !fx.get(&d.option).is_some_and(|f| f.option.is_some() && f.is_open()) {
+            return Ok(d); // not an option of the change, or already decided
+        }
+        self.select_option_tx(id, &d.option, by).await?;
+        Ok(d)
+    }
+
     async fn points(&self, id: &ChangeId) -> Result<Vec<DecisionPoint>> {
         points_of(self.store, id, self.env.now()).await
     }
@@ -209,10 +228,15 @@ impl<S: WriteTx> Tx<'_, S> {
         let policy = decision::open_policy(&r#in.policy, self.env.now())
             .map_err(|e| GraphError::invalid(format!("decision policy: {e}")))?;
         let mut c = self.decision_change(id).await?;
-        // a change with no option: every open option is none, a named one is not an option of the change
-        let mut options = r#in.options.take().unwrap_or_default();
-        if let Some(o) = options.first() {
-            return Err(GraphError::not_found(format!("option {o} of change {id}")));
+        // none named: every open option of the change; each one named must be open
+        let fx = self.flows(id).await?;
+        let mut options = match r#in.options.take() {
+            Some(os) => os,
+            None => fx.options().filter(|o| o.is_open()).map(|o| o.id.clone()).collect(),
+        };
+        for o in &mut options {
+            *o = option_id(&fx, o);
+            open_option(&fx, id, o)?;
         }
         for ch in &r#in.choices {
             if ch.is_empty() || options.contains(ch) {
@@ -301,6 +325,9 @@ impl<S: WriteTx> Tx<'_, S> {
         };
         match r#in.outcome.as_str() {
             OUTCOME_DECIDED => {
+                if !r#in.option.is_empty() && !cur.options.contains(&r#in.option) {
+                    r#in.option = option_id(&self.flows(id).await?, &r#in.option); // a choice is kept as named
+                }
                 if !cur.options.is_empty() && !cur.options.contains(&r#in.option) {
                     return Err(GraphError::invalid(format!(
                         "decision point {} chooses among [{}], not {:?}",
@@ -341,8 +368,7 @@ impl<S: WriteTx> Tx<'_, S> {
             }
         }
         self.put_decision_event(id, &e).await?;
-        // a decided point naming an option would select it: a change with no option has none to select
-        self.point(id, &cur.id).await
+        self.settle(id, &cur.id, &r#in.by).await
     }
 
     /// Answers an open question of a decision point; `process` is the one that investigated it, if any.
@@ -415,6 +441,6 @@ impl<S: WriteTx> Tx<'_, S> {
             ..DecisionEvent::default()
         };
         self.put_decision_event(id, &e).await?;
-        self.point(id, point).await
+        self.settle(id, point, by).await
     }
 }

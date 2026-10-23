@@ -332,11 +332,11 @@ pub fn link_write(
     })
 }
 
-/// An item as its log entry holds it (`domain.ChangeItem` JSON), for the answer (`pbconv.ItemToPB`); a flow, a
-/// decision point or a decision is the Go service's.
+/// An item as its log entry holds it (`domain.ChangeItem` JSON), for the answer (`pbconv.ItemToPB`); a decision is
+/// the Go service's.
 pub fn item(v: &Json) -> Result<pb::ChangeItem, String> {
-    if ["flowEvent", "decision"].iter().any(|k| v.get(k).is_some()) {
-        return Err("an item of a flow or of a decision".into());
+    if v.get("decision").is_some() {
+        return Err("an item of a decision".into());
     }
     let s = |k: &str| v.get(k).and_then(Json::as_str).unwrap_or_default().to_string();
     let list = |k: &str| {
@@ -372,8 +372,62 @@ pub fn item(v: &Json) -> Result<pb::ChangeItem, String> {
             )),
             None => None,
         },
+        flow_event: match v.get("flowEvent") {
+            Some(e) => Some(flow_event(
+                &serde_json::from_value(e.clone()).map_err(|e| e.to_string())?,
+            )),
+            None => None,
+        },
         ..pb::ChangeItem::default()
     })
+}
+
+fn option(o: &Option<graph_core::flow::OptionSpec>) -> Option<pb::Option> {
+    o.as_ref().map(|o| pb::Option {
+        name: o.name.clone(),
+        hypothesis: o.hypothesis.clone(),
+    })
+}
+
+/// An event of a flow (`pbconv.FlowEventToPB`).
+pub fn flow_event(e: &graph_core::flow::FlowEvent) -> pb::FlowEvent {
+    pb::FlowEvent {
+        op: e.op.clone(),
+        flow: e.flow.clone(),
+        parent: e.parent.clone(),
+        fork_after: e.fork_after.clone(),
+        stale: e.stale.clone(),
+        by: e.by.clone(),
+        option: option(&e.option),
+        comment: e.comment.clone(),
+        stale_runs: e.stale_runs.clone(),
+        origin: (!e.origin.is_empty()).then(|| object(&e.origin)),
+    }
+}
+
+/// A replayed flow (`pbconv.FlowToPB`).
+pub fn flow(f: &graph_core::flow::Flow) -> pb::Flow {
+    pb::Flow {
+        id: f.id.clone(),
+        parent: f.parent.clone(),
+        fork_after: f.fork_after.clone(),
+        status: f.status.clone(),
+        stale: f.stale.clone(),
+        opened_at: time(&f.opened_at),
+        decided_at: time(&f.decided_at),
+        decided_by: f.decided_by.clone(),
+        competes_with: f.competes_with.clone(),
+        option: option(&f.option),
+        option_status: if f.option.is_some() {
+            f.option_status().to_string()
+        } else {
+            String::new()
+        },
+        evaluation: f.evaluation.clone(),
+        active: f.active,
+        stale_runs: f.stale_runs.clone(),
+        origin: (!f.origin.is_empty()).then(|| object(&f.origin)),
+    }
 }
 
 /// An event of a decision point (`pbconv.DecisionEventToPB`).

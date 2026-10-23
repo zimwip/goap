@@ -5,6 +5,7 @@ pub mod change;
 pub mod decision;
 pub mod dependency;
 pub mod error;
+pub mod flow;
 pub mod gojson;
 pub mod impact;
 pub mod items;

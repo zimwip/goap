@@ -32,9 +32,9 @@ use crate::{
 };
 
 /// The entries of a log the service folds: the impact events and the review records (ADR 0105).
-/// The facts that make the view of a change (its options, its state, the decisions of its options): the Go service's. The
+/// The facts that make the view of a change (its state, the decisions on its items): the Go service's. The
 /// others (reviews, artifacts, signals, the records of the use cases) are items of the change only.
-const VIEW_FACTS: [&str; 3] = ["fact.flow", "fact.transition", "fact.decision"];
+const VIEW_FACTS: [&str; 2] = ["fact.transition", "fact.decision"];
 
 /// The view of a change: the fold of its log, up to a position.
 #[derive(Debug, Clone, Default)]
@@ -260,17 +260,23 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// Applies an event to the `change_impact` projection, the view being the fold before it (Go's `project`).
     async fn project(&mut self, e: &ImpactEvent) -> Result<()> {
-        if e.op == ImpactOp::Adopted {
-            return Err(unserved("the adoption of an option"));
-        }
-        let cur: Vec<ChangeImpact> = self.views[&e.change]
-            .fold
-            .impact(&e.impact)
-            .cloned()
-            .into_iter()
-            .collect();
+        // an event touches its own change impact, an adoption every one of them
+        let cur: Vec<ChangeImpact> = if e.op == ImpactOp::Adopted {
+            self.views[&e.change].fold.impacts.clone()
+        } else {
+            self.views[&e.change]
+                .fold
+                .impact(&e.impact)
+                .cloned()
+                .into_iter()
+                .collect()
+        };
         let mut next = cur.clone();
-        let at = if next.is_empty() { None } else { Some(0) };
+        let at = if next.is_empty() || e.op == ImpactOp::Adopted {
+            None
+        } else {
+            Some(0)
+        };
         impact::apply_impact_event(&mut next, at, e);
         for c in &cur {
             if !next.iter().any(|n| n.id == c.id) {
@@ -1409,10 +1415,29 @@ fn remove_link_patch(l: &DraftLink) -> Value {
 }
 
 /// The view of a change: the fold of its log, the checkouts hydrated (the simple world only: the main flow, impact
-/// events and review records).
+/// events and review records; flows that wrote no impact, decided or not worked on).
 pub async fn fold_change<T: ReadTx>(store: &T, id: &ChangeId) -> Result<ChangeView> {
+    let (out, items) = fold_any(store, id).await?;
+    if out
+        .events
+        .iter()
+        .any(|e| e.op != ImpactOp::Adopted && !e.flow.is_empty())
+        || out.fold.impacts.iter().any(|c| c.superseded || !c.flow.is_empty())
+    {
+        return Err(unserved("a change working on options (ADR 0032)"));
+    }
+    if !crate::flow::Flows::replay(&items).active.is_empty() {
+        return Err(unserved("a change working on its active option (ADR 0032 §6)"));
+    }
+    Ok(out)
+}
+
+/// The fold of the log of a change whatever its flows, with the items of the change in the order of its log: what
+/// the operations on the flows themselves read.
+pub async fn fold_any<T: ReadTx>(store: &T, id: &ChangeId) -> Result<(ChangeView, Vec<crate::flow::Item>)> {
     let mut out = ChangeView::default();
     let mut events = Vec::new();
+    let mut items = Vec::new();
     for l in store.log(id, 0, &[]).await? {
         if l.stream() == LOG_IMPACT || l.stream() == LOG_FACT {
             out.seq = out.seq.max(l.seq); // the position of the view: its impact events and facts
@@ -1425,23 +1450,19 @@ pub async fn fold_change<T: ReadTx>(store: &T, id: &ChangeId) -> Result<ChangeVi
             // the other streams (the journal, the prompts of the engine) are records of a use case: the view of a
             // change reads none
             return Err(unserved(&format!(
-                "a change whose log records {} entries (options, decisions, executions)",
+                "a change whose log records {} entries (transitions, decisions on items, executions)",
                 l.typ
             )));
+        } else if l.stream() == LOG_FACT {
+            items.push(crate::flow::Item::of(&l.payload).map_err(GraphError::internal)?);
         }
     }
     hydrate(store, &mut events).await?;
     for e in &events {
-        if e.op == ImpactOp::Adopted || !e.flow.is_empty() {
-            return Err(unserved("a change working on options (ADR 0032)"));
-        }
         out.fold.apply(e);
     }
-    if out.fold.impacts.iter().any(|c| c.superseded || !c.flow.is_empty()) {
-        return Err(unserved("a change working on options (ADR 0032)"));
-    }
     out.events = events;
-    Ok(out)
+    Ok((out, items))
 }
 
 /// Whether a log entry edits the header of its change only, leaving its impacts and drafts as they are: a

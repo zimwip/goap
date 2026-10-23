@@ -240,5 +240,12 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   points of `GetBlackboard`, the pending point holding the merge): `graph-core` `decision` replays the `decision_point`
   items under the policy the Go graph service plugs (`contracts/decision`: decider, threshold, rounds, deadline, a board
   ruling by unanimity, majority or consent with its chair), and a platform service sits in any seat: 592 calls, none
-  divergent, the tables and the 426 events of the outbox the same.
+  divergent, the tables and the 426 events of the outbox the same. The flows and options follow (`OpenOption`,
+  `ActivateOption`, `EvaluateOption`, `SelectOption`, `RejectOption`, `OpenFlow`, `AdoptFlow`, `DiscardFlow`, their
+  lists, the options of `GetBlackboard` and the items its main flow sees, a point decided on an open option selecting
+  it, an open flow holding the merge): `graph-core` `flow` replays the `flow` items (statuses, the active option, the
+  competition of adopted flows, the view of a flow, the stale closure of its seeds); adopting or discarding a flow moves
+  the impacts it declared, served while its flows declared none and no impact came from a run a flow invalidates, and a
+  change working on an active option or a flow branch stays Go's: 677 calls, none divergent, the tables and the 466
+  events of the outbox the same.
 - Not done yet: the rest of phase 4.

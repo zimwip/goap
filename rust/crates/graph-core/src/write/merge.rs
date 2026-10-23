@@ -109,6 +109,14 @@ impl<S: WriteTx> Tx<'_, S> {
     /// What holds the merge of a change (Go's `unsettled`).
     async fn unsettled(&self, c: &Change, impacts: &[ChangeImpact], own: Option<&Branch>) -> Result<Vec<String>> {
         let mut out = Vec::new();
+        if let Some(f) = super::flow::flows_of(self.store, &c.id)
+            .await?
+            .list
+            .iter()
+            .find(|f| f.is_open())
+        {
+            out.push(format!("open flow {} (adopt or discard it)", f.id));
+        }
         let points = super::decision::points_of(self.store, &c.id, self.env.now()).await?;
         if let Some(d) = points.iter().find(|d| d.pending()) {
             out.push(format!("pending decision point {:?}", d.question));

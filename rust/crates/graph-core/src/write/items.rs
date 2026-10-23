@@ -58,7 +58,7 @@ struct ItemJson<'a> {
 }
 
 /// Whether the items of a type are served here: an artifact, a signal, or a type no code gives a meaning.
-fn served(t: &str) -> bool {
+pub(crate) fn served(t: &str) -> bool {
     t == "artifact" || t == "signal" || !items::has_code(t)
 }
 
@@ -71,6 +71,54 @@ fn validate(it: &ItemWrite) -> std::result::Result<(), String> {
 }
 
 impl<S: WriteTx> Tx<'_, S> {
+    /// Checks an item and appends it to the log of a change (Go's `checkItem`, then `putItem`): its status the given
+    /// default when it names none. The item comes back as written.
+    pub(crate) async fn put_item(&mut self, id: &ChangeId, it: &ItemWrite, default_status: &str) -> Result<Value> {
+        let status = if it.status.is_empty() {
+            default_status
+        } else {
+            it.status.as_str()
+        };
+        let at = self.env.now();
+        let data = it.data.as_ref().filter(|m| !m.is_empty());
+        let problem = match validate(it) {
+            Err(e) => Err(e),
+            Ok(()) => check::item_data(self.catalog(), &it.typ, data)?,
+        };
+        if let Err(e) = problem {
+            return Err(GraphError::invalid(format!("item {}: {e}", it.id)));
+        }
+        let payload = gojson::to_string(&ItemJson {
+            id: &it.id,
+            typ: &it.typ,
+            target: &it.target,
+            status,
+            flow: &it.flow,
+            data,
+            produced_by: &it.produced_by,
+            derived_from: &it.derived_from,
+            supersedes: &it.supersedes,
+            execution: &it.execution,
+            created_at: at,
+        });
+        self.append_log(&LogEntry {
+            seq: 0,
+            id: it.id.clone(),
+            change: id.clone(),
+            typ: format!("{LOG_FACT}.{}", it.typ),
+            flow: it.flow.clone(),
+            process: String::new(),
+            execution: it.execution.clone(),
+            subject: it.target.clone(),
+            by: it.produced_by.clone(),
+            at,
+            causation: String::new(),
+            payload: payload.clone(),
+        })
+        .await?;
+        serde_json::from_str(&payload).map_err(GraphError::internal)
+    }
+
     /// Appends items to the log of an open change, on its main flow; a draft change becomes active. The items come
     /// back as written (`domain.ChangeItem` JSON).
     pub async fn add_items(&mut self, id: &ChangeId, mut its: Vec<ItemWrite>) -> Result<Vec<Value>> {
@@ -97,49 +145,7 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         let mut out = Vec::with_capacity(its.len());
         for it in &its {
-            let status = if it.status.is_empty() {
-                ITEM_PROPOSED
-            } else {
-                it.status.as_str()
-            };
-            let at = self.env.now();
-            let data = it.data.as_ref().filter(|m| !m.is_empty());
-            let problem = match validate(it) {
-                Err(e) => Err(e),
-                Ok(()) => check::item_data(self.catalog(), &it.typ, data)?,
-            };
-            if let Err(e) = problem {
-                return Err(GraphError::invalid(format!("item {}: {e}", it.id)));
-            }
-            let payload = gojson::to_string(&ItemJson {
-                id: &it.id,
-                typ: &it.typ,
-                target: &it.target,
-                status,
-                flow: &it.flow,
-                data,
-                produced_by: &it.produced_by,
-                derived_from: &it.derived_from,
-                supersedes: &it.supersedes,
-                execution: &it.execution,
-                created_at: at,
-            });
-            self.append_log(&LogEntry {
-                seq: 0,
-                id: it.id.clone(),
-                change: id.clone(),
-                typ: format!("{LOG_FACT}.{}", it.typ),
-                flow: it.flow.clone(),
-                process: String::new(),
-                execution: it.execution.clone(),
-                subject: it.target.clone(),
-                by: it.produced_by.clone(),
-                at,
-                causation: String::new(),
-                payload: payload.clone(),
-            })
-            .await?;
-            out.push(serde_json::from_str(&payload).map_err(GraphError::internal)?);
+            out.push(self.put_item(id, it, ITEM_PROPOSED).await?);
         }
         if c.status == "draft" {
             c.status = "active".into();

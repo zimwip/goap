@@ -6,6 +6,7 @@ pub mod decision;
 pub mod dependency;
 pub mod edits;
 pub mod events;
+pub mod flow;
 pub mod items;
 pub mod merge;
 pub mod review;
