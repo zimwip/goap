@@ -1,4 +1,4 @@
-# The Rust graph service and its proxy (ADR 0162). A workspace of its own: the Go modules stay in go.work.
+# The Rust graph service and its proxy (ADR 0163). A workspace of its own: the Go modules stay in go.work.
 [workspace]
 resolver = "3"
 members = ["crates/*"]

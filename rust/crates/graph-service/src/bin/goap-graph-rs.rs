@@ -1,4 +1,4 @@
-//! goap-graph-rs: the Rust graph service (ADR 0162). The environment of the Go service: `GOAP_HTTP_ADDR`,
+//! goap-graph-rs: the Rust graph service (ADR 0163). The environment of the Go service: `GOAP_HTTP_ADDR`,
 //! `GOAP_DB_DSN` (PostgreSQL), else `GOAP_SQLITE_PATH` (SQLite, `GOAP_SQLITE_READERS` read-only connections), else a
 //! database in memory.
 use std::sync::Arc;

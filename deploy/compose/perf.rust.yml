@@ -1,4 +1,4 @@
-# The Rust graph service in the performance stack (ADR 0162), over perf.yml:
+# The Rust graph service in the performance stack (ADR 0163), over perf.yml:
 #   docker compose -f deploy/compose/perf.yml -f deploy/compose/perf.rust.yml up -d
 # make perf-rust: goap-proxy in mode split, the Rust service first and the Go one for what it does not serve yet, both
 # on the database of the stack (GOAP_PERF_RS_DSN: the graph's). make perf-diff: mode compare, the Go service answering

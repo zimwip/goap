@@ -126,7 +126,7 @@ PERF_HOLD := -hold=$(if $(PERF_AUTOSTOP),$(PERF_AUTOSTOP),-1s)
 # captures of the performance stack's Prometheus (make perf-capture), replayed by make perf-analysis
 PERF_CAPTURES := .goap/perf/captures
 PERF_ANALYSIS := docker compose -f deploy/compose/perf-analysis.yml
-# goap-proxy in front of the graph service (ADR 0162): every call of the bench and the gateway goes through it;
+# goap-proxy in front of the graph service (ADR 0163): every call of the bench and the gateway goes through it;
 # PERF_PROXY=0 sends them to the graph service itself
 PERF_PROXY ?= 1
 # the Rust graph service (deploy/compose/perf.rust.yml): make perf-rust runs it behind the proxy in mode
@@ -202,7 +202,7 @@ perf-down: ## stop the performance stack, keeping its data (the graph grows run 
 perf-reset: ## stop the performance stack and drop its data (database, Prometheus)
 	$(PERF_RUST) --profile bench down --volumes --remove-orphans
 
-rust-test: ## cargo test of the Rust workspace (rust/: the Rust graph service and goap-proxy, ADR 0162; GOAP_TEST_PG_DSN for its PostgreSQL tests)
+rust-test: ## cargo test of the Rust workspace (rust/: the Rust graph service and goap-proxy, ADR 0163; GOAP_TEST_PG_DSN for its PostgreSQL tests)
 	cd rust && cargo test --locked
 
 rust-lint: ## cargo fmt and clippy of the Rust workspace, warnings refused

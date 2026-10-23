@@ -2,7 +2,7 @@
 #   docker build --target services -t goap/goap:dev . && docker build --target rust -t goap/rust:dev .
 #   docker compose -f deploy/compose/perf.yml up -d
 #   docker compose -f deploy/compose/perf.yml run --rm bench -versions 100000 -workers 8
-# Every call goes through goap-proxy (ADR 0162), mode go here: the Go graph service; perf.rust.yml adds the Rust one
+# Every call goes through goap-proxy (ADR 0163), mode go here: the Go graph service; perf.rust.yml adds the Rust one
 # (make perf-rust: mode split, make perf-diff: mode compare). GOAP_PERF_GRAPH_URL=http://graph:8080 (make perf
 # PERF_PROXY=0) leaves the proxy out.
 # The graph service alone on PostgreSQL (with the domain registry it serves), measured by goap-bench, the load generator,

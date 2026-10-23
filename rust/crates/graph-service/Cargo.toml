@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "The Rust graph service (ADR 0162): the RPCs of the Go graph service, on the same database"
+description = "The Rust graph service (ADR 0163): the RPCs of the Go graph service, on the same database"
 
 [[bin]]
 name = "goap-graph-rs"

@@ -15,7 +15,7 @@
 !platform/
 !domains/
 !methodologies/
-# the Rust graph service and its proxy (ADR 0162): the workspace, the protos it generates from, without its build
+# the Rust graph service and its proxy (ADR 0163): the workspace, the protos it generates from, without its build
 !rust/
 !proto/
 rust/target/

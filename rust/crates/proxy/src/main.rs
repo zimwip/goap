@@ -1,4 +1,4 @@
-//! goap-proxy: the Connect proxy in front of the Go and the Rust graph services (ADR 0162).
+//! goap-proxy: the Connect proxy in front of the Go and the Rust graph services (ADR 0163).
 //!
 //! `goap-proxy` serves, with `GOAP_PROXY_MODE`:
 //! - `go` / `rust`: every call to one service, passed as is;

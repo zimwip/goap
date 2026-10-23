@@ -1,4 +1,4 @@
-//! The storage of the Rust graph service (ADR 0162): one schema with the Go service, in PostgreSQL or SQLite.
+//! The storage of the Rust graph service (ADR 0163): one schema with the Go service, in PostgreSQL or SQLite.
 //!
 //! [`Store::open`] connects and brings the schema up to date with the migrations of the Go services the graph process
 //! runs (the same files, recorded in the same `schema_migrations` table, so either service starts on a database the

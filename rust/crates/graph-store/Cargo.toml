@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "The storage of the Rust graph service: PostgreSQL or SQLite, the schema of the Go service (ADR 0162)"
+description = "The storage of the Rust graph service: PostgreSQL or SQLite, the schema of the Go service (ADR 0163)"
 
 [dependencies]
 deadpool-postgres = { workspace = true }

@@ -36,7 +36,7 @@ EXPOSE 8080
 USER nonroot
 ENTRYPOINT ["/goap/importer-git"]
 
-# the Rust graph service and the proxy in front of it (ADR 0162): docker build --target rust -t goap/rust:dev .
+# the Rust graph service and the proxy in front of it (ADR 0163): docker build --target rust -t goap/rust:dev .
 # /goap/goap-graph-rs and /goap/goap-proxy (SQLite is compiled in: rusqlite bundled, the one C of the build)
 FROM rust:1.97-slim-bookworm AS rust-build
 WORKDIR /src

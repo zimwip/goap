@@ -3,7 +3,7 @@ CREATE EXTENSION IF NOT EXISTS vector SCHEMA public;
 
 -- Dev only: one database, one schema and one role per service.
 -- In production each service gets its own database (only GOAP_DB_DSN changes). graph_rs: the second graph of a
--- comparison (make perf-diff, ADR 0162).
+-- comparison (make perf-diff, ADR 0163).
 DO $$
 DECLARE
     svc text;

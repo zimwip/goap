@@ -1,5 +1,5 @@
 # Prometheus of the performance stack (make perf): the collector (graph service, goap-bench), PostgreSQL and goap-proxy
-# (its calls by who served them, ADR 0162), every 5 s.
+# (its calls by who served them, ADR 0163), every 5 s.
 global:
   scrape_interval: 5s
 scrape_configs:

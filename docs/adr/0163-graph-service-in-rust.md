@@ -1,4 +1,4 @@
-# ADR 0162 — The graph service in Rust, behind a comparing proxy
+# ADR 0163 — The graph service in Rust, behind a comparing proxy
 
 **Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets) · **Date**: 2026-10
 

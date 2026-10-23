@@ -1266,7 +1266,7 @@ each start (nodes, baselines and changes). The compose image is `pgvector/pgvect
   transaction gave them no snapshot, only two round trips); a write they try fails with SQLSTATE 25006 (a lock of a
   change or a branch refuses at once) and the transaction runs again on the writer. The graph test variant
   `postgres-readers` runs every transaction there first.
-- **The graph service in Rust** ([ADR 0162](adr/0162-graph-service-in-rust.md), phase 1): the Cargo workspace `rust/`
+- **The graph service in Rust** ([ADR 0163](adr/0163-graph-service-in-rust.md), phase 1): the Cargo workspace `rust/`
   (outside the `go.work`, generated from the same `proto/`) holds `goap-graph-rs`, the graph's four services on the
   same schema (PostgreSQL or SQLite, the migrations of the Go services embedded), a method not written yet answering
   `unimplemented`, and `goap-proxy`, the Connect proxy in front of the graph services: mode `go`, `rust`, `split` (Rust
@@ -2097,7 +2097,7 @@ lib/importerkit/               kit of an importer service: a worker of the job s
 lib/jobkit/                    kit of the long runs: the job queue (in process or over RPC), the worker, the job of a runner (ADR 0149)
 graph/index/                   document index (nodes and changes): hybrid search, facets, similar_to, stores (memory, SQLite FTS5, PostgreSQL pgvector)
 proto/                       connect-rpc contracts (buf)
-rust/                        Cargo workspace (ADR 0162): goap-proto, goap-connect, graph-store, graph-service (goap-graph-rs), proxy (goap-proxy)
+rust/                        Cargo workspace (ADR 0163): goap-proto, goap-connect, graph-store, graph-service (goap-graph-rs), proxy (goap-proxy)
 contracts/gen/                         generated code (committed)
 methodologies/               example methodologies (active part)
 domains/                     domains: seeded at startup (alm, code), builtin/ embedded and frozen except domain (one per namespace)

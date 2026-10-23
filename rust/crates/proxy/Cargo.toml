@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "The Connect proxy in front of the Go and the Rust graph services: one of them, the Rust one falling back on the Go one, or both compared call by call (ADR 0162)"
+description = "The Connect proxy in front of the Go and the Rust graph services: one of them, the Rust one falling back on the Go one, or both compared call by call (ADR 0163)"
 
 [dependencies]
 goap-proto = { workspace = true }

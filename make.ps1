@@ -179,7 +179,7 @@ function PerfArgs { if ($env:PERF_ARGS) { -split $env:PERF_ARGS } else { @('-ver
 # goap-bench stays up once its run ends, so its series stay in Grafana, until interrupted; $env:PERF_AUTOSTOP = '30m'
 # stops it after that long, '0' with the run
 function PerfHold { if ($env:PERF_AUTOSTOP) { "-hold=$env:PERF_AUTOSTOP" } else { '-hold=-1s' } }
-# goap-proxy in front of the graph service (ADR 0162): every call of the bench and the gateway goes through it;
+# goap-proxy in front of the graph service (ADR 0163): every call of the bench and the gateway goes through it;
 # $env:PERF_PROXY = '0' sends them to the graph service itself
 function PerfNoProxy { $env:PERF_PROXY -eq '0' }
 # the Rust graph service (deploy/compose/perf.rust.yml): perf-rust runs it behind the proxy in mode

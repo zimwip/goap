@@ -1,4 +1,4 @@
-//! The Rust graph service (ADR 0162): the services the Go graph process serves (`GraphService`, `DomainService`,
+//! The Rust graph service (ADR 0163): the services the Go graph process serves (`GraphService`, `DomainService`,
 //! `SmartTagService`, `ImportService`), on the same database. A method not written yet answers `unimplemented`
 //! (the generated default) before anything else, so that `goap-proxy` in mode split replays it on the Go service.
 use std::sync::Arc;
