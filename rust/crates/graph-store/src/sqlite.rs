@@ -3,7 +3,7 @@
 use std::sync::{Arc, Mutex};
 
 use rusqlite::{Connection, OpenFlags};
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::{StoreError, migrate};
 
@@ -14,7 +14,47 @@ pub struct Sqlite {
 
 struct Readers {
     idle: Mutex<Vec<Connection>>,
-    slots: Semaphore,
+    slots: Arc<Semaphore>,
+}
+
+/// The connection a session runs its statements on.
+pub type SqliteConn = Connection;
+
+/// A read session: a reader of the pool held until the session is dropped (the writer, shared, for a database in
+/// memory). Each statement runs on the blocking pool.
+pub struct SqliteSession {
+    conn: Option<Arc<Mutex<Connection>>>,
+    pool: Option<(Arc<Readers>, OwnedSemaphorePermit)>,
+}
+
+impl SqliteSession {
+    /// Runs `f` on the connection of the session.
+    pub async fn run<T: Send + 'static>(
+        &self,
+        f: impl FnOnce(&Connection) -> Result<T, StoreError> + Send + 'static,
+    ) -> Result<T, StoreError> {
+        let c = self.conn.clone().expect("a connection until dropped");
+        blocking(move || {
+            let c = c
+                .lock()
+                .map_err(|_| StoreError::Other("sqlite connection poisoned".into()))?;
+            f(&c)
+        })
+        .await
+    }
+}
+
+impl Drop for SqliteSession {
+    fn drop(&mut self) {
+        if let (Some(conn), Some((pool, _permit))) = (self.conn.take(), self.pool.take())
+            && let Ok(m) = Arc::try_unwrap(conn)
+        {
+            pool.idle
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(m.into_inner().unwrap_or_else(|e| e.into_inner()));
+        }
+    }
 }
 
 const WRITER_PRAGMAS: &str =
@@ -64,7 +104,7 @@ impl Sqlite {
             writer: Arc::new(Mutex::new(writer)),
             readers: Some(Arc::new(Readers {
                 idle: Mutex::new(conns),
-                slots: Semaphore::new(n),
+                slots: Arc::new(Semaphore::new(n)),
             })),
         })
     }
@@ -121,6 +161,32 @@ impl Sqlite {
             res
         })
         .await
+    }
+
+    /// A read session: a reader of the pool, held until the session is dropped.
+    pub async fn session(&self) -> Result<SqliteSession, StoreError> {
+        let Some(r) = self.readers.clone() else {
+            return Ok(SqliteSession {
+                conn: Some(self.writer.clone()),
+                pool: None,
+            });
+        };
+        let permit = r
+            .slots
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|e| StoreError::Other(e.to_string()))?;
+        let conn = r
+            .idle
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop()
+            .expect("a connection per slot");
+        Ok(SqliteSession {
+            conn: Some(Arc::new(Mutex::new(conn))),
+            pool: Some((r, permit)),
+        })
     }
 
     pub async fn ping(&self) -> Result<(), StoreError> {

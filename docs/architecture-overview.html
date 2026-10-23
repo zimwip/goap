@@ -151,7 +151,7 @@ footer { font-size: 13px; color: var(--muted); }
     <div class="stack">
       <div class="tier">
         <div class="mod m-graph" data-module="rust"><h3>rust <span>the graph service in Rust, outside the go.work</span></h3>
-          <p>A Cargo workspace (ADR 0163): the graph service rewritten in Rust, the same RPCs on the same schema (PostgreSQL or SQLite, the migrations of the Go services), and <code>goap-proxy</code>, the Connect proxy in front of the Go and the Rust services (one of them, Rust falling back on Go, or both compared call by call). Generated from the same protos; it depends on no Go module.</p>
+          <p>A Cargo workspace (ADR 0163): the graph service rewritten in Rust, the same RPCs on the same schema (PostgreSQL or SQLite, the migrations of the Go services), and <code>goap-proxy</code>, the Connect proxy in front of the Go and the Rust services (one of them, Rust falling back on Go, or both compared call by call, each on its database or the reads on one). Generated from the same protos; it depends on no Go module.</p>
           <div class="pk">crates/proto · connect · ctx · graph-store · graph-service · proxy</div></div>
       </div>
     </div>
@@ -310,7 +310,7 @@ footer { font-size: 13px; color: var(--muted); }
         <tr data-binary="goap-bench"><td><code>goap-bench</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>load generator of the performance stack: writes through the graph's API, measured in Grafana (make perf, <code>deploy/compose/perf.yml</code>)</td></tr>
         <tr data-binary="goap-gitimport"><td><code>goap-gitimport</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>git importer: one change per commit of a repository, directories and files as nodes of the <code>code</code> domain, written through the graph's API (ADR 0147)</td></tr>
         <tr data-binary="goap-graph-rs"><td><code>goap-graph-rs</code></td><td><span class="chip m-graph">rust</span></td><td class="num">:8080</td><td>the Rust graph service (<code>rust/</code>, ADR 0163): the services of <code>graph</code> on the same database, a method not written yet answering <code>unimplemented</code>; the performance stack only (<code>deploy/compose/perf.rust.yml</code>: <code>graph-rs</code>, :8384)</td></tr>
-        <tr data-binary="goap-proxy"><td><code>goap-proxy</code></td><td><span class="chip m-graph">rust</span></td><td class="num">:8080</td><td>the Connect proxy in front of the graph services (<code>rust/</code>, ADR 0163): mode go, rust, split (Rust first, Go for what it does not serve) or compare (both, call by call, ids paired); the entry of the performance stack (<code>proxy</code>, :8383; make perf, perf-rust, perf-diff)</td></tr>
+        <tr data-binary="goap-proxy"><td><code>goap-proxy</code></td><td><span class="chip m-graph">rust</span></td><td class="num">:8080</td><td>the Connect proxy in front of the graph services (<code>rust/</code>, ADR 0163): mode go, rust, split (Rust first, Go for what it does not serve), compare (both, call by call, ids paired) or shadow (Go answers, the reads sent to Rust too, one database); the entry of the performance stack (<code>proxy</code>, :8383; make perf, perf-rust, perf-diff)</td></tr>
         <tr data-binary="goap-opgen"><td><code>goap-opgen</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>generator of the operations catalogue (make generate)</td></tr>
       </tbody>
     </table></div>

@@ -227,10 +227,12 @@ pub struct Comparer {
     clashes: u64,
     /// `GOAP_PROXY_SAMPLES=all`: the request and the answers of every call in its record, not only of a divergent one.
     samples: bool,
+    /// Both services on one database (mode shadow): an id is the same on both sides, nothing is paired or translated.
+    shared: bool,
 }
 
 impl Comparer {
-    pub fn new(dir: PathBuf, ignore: &[String]) -> anyhow::Result<Comparer> {
+    pub fn new(dir: PathBuf, ignore: &[String], shared: bool) -> anyhow::Result<Comparer> {
         fs::create_dir_all(&dir)?;
         let calls = File::options()
             .create(true)
@@ -244,6 +246,7 @@ impl Comparer {
             seq: 0,
             clashes: 0,
             samples: std::env::var("GOAP_PROXY_SAMPLES").is_ok_and(|v| v == "all"),
+            shared,
         })
     }
 
@@ -258,6 +261,7 @@ impl Comparer {
             seq: 0,
             clashes: 0,
             samples: false,
+            shared: false,
         }
     }
 
@@ -283,6 +287,9 @@ impl Comparer {
         body: &Bytes,
     ) -> (String, HeaderMap, Bytes, Vec<String>) {
         let mut notes = Vec::new();
+        if self.shared {
+            return (path.to_string(), headers.clone(), body.clone(), notes);
+        }
         let path = self.ids.text(path, Toward::Rust).into_owned();
         let mut h = HeaderMap::with_capacity(headers.len());
         for (k, v) in headers {
@@ -346,7 +353,9 @@ impl Comparer {
                 Verdict::RustUnimplemented
             }
             (Some(g), Some(r)) if g.code == r.code => {
-                rec.clashes.extend(self.ids.pair_text(&g.message, &r.message));
+                if !self.shared {
+                    rec.clashes.extend(self.ids.pair_text(&g.message, &r.message));
+                }
                 if self.ids.text(&r.message, Toward::Go) == g.message {
                     Verdict::Same
                 } else {
@@ -363,7 +372,9 @@ impl Comparer {
                         rpc::to_json(&proc.output(), rc, &rust.body),
                     ) {
                         (Ok(g), Ok(r)) => {
-                            rec.clashes.extend(self.ids.pair_json(&g, &r));
+                            if !self.shared {
+                                rec.clashes.extend(self.ids.pair_json(&g, &r));
+                            }
                             let r = self.ids.json(&r, Toward::Go);
                             let (g, r) = (normalise(&g, method, &self.ignore), normalise(&r, method, &self.ignore));
                             let verdict = if g == r {
@@ -403,7 +414,9 @@ impl Comparer {
                 continue;
             };
             let r = r.unwrap_or("");
-            rec.clashes.extend(self.ids.pair_text(g, r));
+            if !self.shared {
+                rec.clashes.extend(self.ids.pair_text(g, r));
+            }
             let r = self.ids.text(r, Toward::Go);
             if g != r && !self.ignore.iter().any(|i| i.matches(method, &format!("header:{k}"))) {
                 rec.diffs.push(Diff {
@@ -540,6 +553,23 @@ mod tests {
             &Bytes::from(json!({"ref": {"id": G}}).to_string()),
         );
         assert_eq!(serde_json::from_slice::<Value>(&body).unwrap()["ref"]["id"], R);
+    }
+
+    #[test]
+    fn on_one_database_an_id_is_never_paired() {
+        let mut c = Comparer::in_memory(&[]);
+        c.shared = true;
+        let go = reply(200, json!({"view": {"node": {"id": G}}}));
+        let rust = reply(200, json!({"view": {"node": {"id": R}}}));
+        let rec = c.judge(&proc(), &Bytes::new(), &json_headers(), &go, &rust, vec![]);
+        assert_eq!(rec.verdict, Verdict::Differs, "{rec:?}");
+        assert_eq!(c.ids.len(), 0);
+        let same = reply(200, json!({"view": {"node": {"id": G}}}));
+        assert_eq!(
+            c.judge(&proc(), &Bytes::new(), &json_headers(), &go, &same, vec![])
+                .verdict,
+            Verdict::Same
+        );
     }
 
     #[test]

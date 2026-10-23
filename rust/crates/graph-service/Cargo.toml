@@ -13,6 +13,10 @@ path = "src/bin/goap-graph-rs.rs"
 
 [dependencies]
 goap-connect = { workspace = true }
+graph-core = { workspace = true }
+chrono = { workspace = true }
+pbjson-types = { workspace = true }
+serde_json = { workspace = true }
 goap-proto = { workspace = true }
 graph-store = { workspace = true }
 anyhow = { workspace = true }

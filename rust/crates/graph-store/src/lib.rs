@@ -7,6 +7,7 @@
 mod error;
 mod migrate;
 mod postgres;
+pub mod read;
 mod sqlite;
 
 pub use error::StoreError;
@@ -72,6 +73,14 @@ impl Store {
             Store::Postgres(_) => Dialect::Postgres,
             Store::Sqlite(_) => Dialect::Sqlite,
         }
+    }
+
+    /// A read-only session for the reads of a request.
+    pub async fn reader(&self) -> Result<read::Session, StoreError> {
+        Ok(match self {
+            Store::Postgres(p) => read::Session::postgres(p.read.get().await?),
+            Store::Sqlite(s) => read::Session::sqlite(s.session().await?),
+        })
     }
 
     /// Whether the database answers (readiness).

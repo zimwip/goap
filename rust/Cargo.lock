@@ -575,14 +575,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "graph-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "graph-service"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "chrono",
  "goap-connect",
  "goap-proto",
+ "graph-core",
  "graph-store",
+ "pbjson-types",
  "reqwest",
  "serde_json",
  "tokio",
@@ -594,13 +607,18 @@ dependencies = [
 name = "graph-store"
 version = "0.1.0"
 dependencies = [
+ "bytes",
+ "chrono",
  "deadpool-postgres",
+ "graph-core",
  "rusqlite",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
  "tokio-postgres",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -2177,7 +2195,9 @@ version = "1.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a0e2d11620c50695fe12bbbfde96b3477fe606e7284c22d505c12ce51214514"
 dependencies = [
+ "getrandom 0.4.3",
  "js-sys",
+ "serde_core",
  "wasm-bindgen",
 ]
 

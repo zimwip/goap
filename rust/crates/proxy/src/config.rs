@@ -17,6 +17,9 @@ pub enum Mode {
     /// Every call to the Go graph service, which answers, and again to the Rust one, each on its own database: the
     /// two answers are compared call by call.
     Compare,
+    /// Every call to the Go service, which answers; a call that only reads is sent again to the Rust one, both on one
+    /// database, and the two answers are compared: the reads of the Rust service checked against what Go wrote.
+    Shadow,
 }
 
 impl Mode {
@@ -26,6 +29,7 @@ impl Mode {
             Mode::Rust => "rust",
             Mode::Split => "split",
             Mode::Compare => "compare",
+            Mode::Shadow => "shadow",
         }
     }
 }
@@ -39,7 +43,8 @@ impl FromStr for Mode {
             "rust" => Mode::Rust,
             "split" => Mode::Split,
             "compare" => Mode::Compare,
-            _ => bail!("GOAP_PROXY_MODE: {s:?} is none of go, rust, split, compare"),
+            "shadow" => Mode::Shadow,
+            _ => bail!("GOAP_PROXY_MODE: {s:?} is none of go, rust, split, compare, shadow"),
         })
     }
 }
@@ -116,8 +121,8 @@ impl Config {
                 Err(_) => 256 << 20,
             },
         };
-        let need_go = matches!(mode, Mode::Go | Mode::Split | Mode::Compare);
-        let need_rust = matches!(mode, Mode::Rust | Mode::Split | Mode::Compare);
+        let need_go = matches!(mode, Mode::Go | Mode::Split | Mode::Compare | Mode::Shadow);
+        let need_rust = matches!(mode, Mode::Rust | Mode::Split | Mode::Compare | Mode::Shadow);
         if need_go && cfg.go.is_none() {
             bail!("mode {}: GOAP_PROXY_GO is not set", mode.name());
         }

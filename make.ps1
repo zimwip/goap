@@ -185,7 +185,8 @@ function PerfNoProxy { $env:PERF_PROXY -eq '0' }
 # the Rust graph service (deploy/compose/perf.rust.yml): perf-rust runs it behind the proxy in mode
 # $env:PERF_RUST_MODE, split while it does not serve every method (the Go service serves the rest: /proxy/coverage),
 # rust once it does; perf-diff compares it with the Go one call by call ($env:PERF_DIFF_ARGS, serial, seeded;
-# $env:PERF_DIFF_RUST = 'go' compares Go with Go)
+# $env:PERF_DIFF_RUST = 'go' compares Go with Go), in mode $env:PERF_DIFF_MODE: shadow (default: the reads sent to both
+# on the Go service's schema) or compare (every call, each on its schema, then their tables)
 $PerfRust = @('compose', '-f', 'deploy/compose/perf.yml', '-f', 'deploy/compose/perf.rust.yml')
 $PerfDiffDsnGo = 'postgres://graph:graph@postgres:5432/goap?sslmode=disable'
 $PerfDiffDsnRs = 'postgres://graph_rs:graph_rs@postgres:5432/goap?sslmode=disable'
@@ -202,8 +203,11 @@ function PerfRustEnv {
     if (PerfNoProxy) { $vars.GOAP_PERF_GRAPH_URL = 'http://graph-rs:8080' }
     $vars
 }
+function PerfDiffMode { if ($env:PERF_DIFF_MODE) { $env:PERF_DIFF_MODE } else { 'shadow' } }
 function PerfDiffEnv {
-    $vars = @{ GOAP_PERF_IMPL = 'compare'; GOAP_PERF_RS_DSN = $PerfDiffDsnRs }
+    $mode = PerfDiffMode
+    $dsn = if ($mode -eq 'shadow') { $PerfDiffDsnGo } else { $PerfDiffDsnRs }
+    $vars = @{ GOAP_PERF_IMPL = $mode; GOAP_PERF_RS_DSN = $dsn }
     if ($env:PERF_DIFF_RUST -eq 'go') { $vars.GOAP_PERF_RS_IMAGE = 'goap/goap:dev'; $vars.GOAP_PERF_RS_BIN = '/goap/graph' }
     $vars
 }
@@ -227,7 +231,9 @@ function PerfDiff {
         Run docker @PerfRust up -d --force-recreate postgres-init graph graph-rs proxy otel-collector
         Run docker @PerfRust run --rm bench -hold=0 -workers 1 -seed 1 @a
         Write-Host (Invoke-RestMethod http://localhost:8383/proxy/report | ConvertTo-Json -Depth 6)
-        Run docker @PerfRust run --rm --no-deps --entrypoint /goap/goap-proxy proxy diff-db --go $PerfDiffDsnGo --rust $PerfDiffDsnRs --ids /results/diff/ids.json
+        if ((PerfDiffMode) -ne 'shadow') {
+            Run docker @PerfRust run --rm --no-deps --entrypoint /goap/goap-proxy proxy diff-db --go $PerfDiffDsnGo --rust $PerfDiffDsnRs --ids /results/diff/ids.json
+        }
     }
 }
 # captures of the performance stack's Prometheus (perf-capture), replayed by perf-analysis
@@ -314,7 +320,8 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   perf-rust | perf-rust-up | perf-rust-run
                     the same with the Rust graph service behind goap-proxy in mode $env:PERF_RUST_MODE (split: what
                     Rust does not serve yet goes to Go, http://localhost:8383/proxy/coverage; rust)
-  perf-diff         the Go and the Rust graph services compared call by call, then their databases
+  perf-diff         the Go and the Rust graph services compared call by call ($env:PERF_DIFF_MODE: shadow, the
+                    reads on one schema; compare, every call each on its schema, then the databases)
                     ($env:PERF_DIFF_ARGS, serial and seeded; $env:PERF_DIFF_RUST = 'go': Go with Go); .goap\perf\diff
   rust-test | rust-lint
                     cargo test, cargo fmt + clippy of the Rust workspace (rust\)

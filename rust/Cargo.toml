@@ -19,6 +19,7 @@ all = { level = "warn", priority = -1 }
 goap-ctx = { path = "crates/ctx" }
 goap-connect = { path = "crates/connect" }
 goap-proto = { path = "crates/proto" }
+graph-core = { path = "crates/graph-core" }
 graph-store = { path = "crates/graph-store" }
 
 anyhow = "1"
@@ -44,7 +45,8 @@ regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["http2", "json", "stream"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# float_roundtrip: a float read back as Go reads it (correctly rounded), or a property differs at its last digit
+serde_json = { version = "1", features = ["float_roundtrip"] }
 sha2 = "0.10"
 similar = "2"
 thiserror = "2"

@@ -1,6 +1,6 @@
 # ADR 0163 — The graph service in Rust, behind a comparing proxy
 
-**Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets) · **Date**: 2026-10
+**Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets), phase 2 implemented (the reads of the bench, the shadow mode) · **Date**: 2026-10
 
 ## Context
 
@@ -68,6 +68,11 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
      `message_differs` (the soft ones), `differs`, `error_differs`, `undecodable`, `rust_unimplemented`. Every call is
      a line of `calls.jsonl` (verdict, both durations, differences, the ids that clash with an earlier pair, the bodies
      of a divergent call) in `GOAP_PROXY_REPORT_DIR`; `/proxy/report` writes `summary.json` and `ids.json`.
+   - `shadow`: every call to the Go service, which answers the client; a call that only reads (the Go rule of
+     `ReadOnlyRequests`: `Get…`, `List…`, `Export…`, `Diff…`, `Search…`, `Compare…`, `Is…`, `Query…`, a stream
+     left out) goes to the Rust one too, both on one database, one call at a time: the Rust reads are judged against
+     what the Go service wrote before the Rust service writes anything. No id to pair: the verdicts and the report
+     are those of `compare`.
    - `goap-proxy diff-db --go <dsn> --rust <dsn> --ids ids.json` compares the tables of the two databases as
      multisets, once the ids are paired (the comparison's, then the rows one of a kind on each side) and the times
      masked.
@@ -75,8 +80,10 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
    the verdicts and the time of each side.
 3. **The performance stack goes through the proxy.** `make perf` (mode go, `PERF_PROXY=0` without it), `make
    perf-rust` (`deploy/compose/perf.rust.yml`, mode `PERF_RUST_MODE`: split until the Rust service serves every
-   method, then rust), `make perf-diff` (mode compare: both schemas dropped, the Go service on `graph`, the Rust one on
-   `graph_rs`, goap-bench serial and seeded, then the report and `diff-db`; `PERF_DIFF_RUST=go` compares Go with Go).
+   method, then rust), `make perf-diff` (mode `PERF_DIFF_MODE`: `shadow` while the Rust service only reads, both on
+   the schema `graph`; `compare` once it writes: both schemas dropped, the Go service on `graph`, the Rust one on
+   `graph_rs`, then `diff-db`; goap-bench serial and seeded, then the report; `PERF_DIFF_RUST=go` compares Go with
+   Go).
    The image `goap/rust:dev` (`docker build --target rust`) holds both Rust binaries.
 4. **Phases, one pull request each**: (1) the workspace, the store and its migrations, the skeleton service, the
    proxy, the targets; (2) the reads (views, `GetNode`, neighbourhoods, baselines, listings, queries); (3) the writes
@@ -93,4 +100,25 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   its next build. `TestSchemasAligned` keeps the two dialects aligned as before.
 - The Rust service holds the same multi-database option as the Go one (PostgreSQL, SQLite); the Go service goes away at
   the end of phase 4, the proxy stays as the entry of the performance stack and of later comparisons.
-- Not done yet: everything past phase 1.
+- Phase 2 (the reads). `graph-core` holds the reads as functions over a store trait (`store::ReadTx`, one statement
+  or a few batched per method): the selection of a state (ADR 0143: the chain of forks, batches of 2000, the node
+  list of the namespace for a whole state), the view of a branch, a node with its entering links from the version of
+  each source the view holds, the neighbourhood (suspect links), the pages (links by type, nodes by type and text),
+  the versions of a node, the headers of the changes and their pages (`changes_page`, `node_changes`), the lineage gap
+  of two baselines and their difference (`lineage_gap`, `diff_baselines`). `graph-store` writes the SQL of both
+  dialects once (`read/sql.rs`, as `sqlbuild.go`) and reads the rows into one value shape. `goap-graph-rs` serves
+  `GetNode`, `ListNodeLinks`, `GetNodeNeighbourhood`, `ListBaselineNodes`, `ListNodeVersions`, `GetBranch`,
+  `DiffBaselines`, `ListChanges` (headers) and `ListNodeChanges` for a platform service acting by itself (no reach);
+  it answers `unimplemented`, so the Go service answers in mode split, a person or a service acting for one (the
+  reach and the access snapshot of ADR 0161), a view of a change (the fold of its log, ADR 0153), a read at a log
+  position (`X-Goap-At-Least`), the state of a change's branch, a change read whole, a unit or project named by its
+  key (the structures of the catalogue). Those reads, `QueryView` (Cypher) and the other listings move to phases 3
+  and 4.
+- Measured in mode shadow, goap-bench serial and seeded: on PostgreSQL (lifecycle, 4000 versions) 1,528 reads of five
+  node reads, then (commit, 5000 versions) 1,455 reads of the eight methods the bench reads with, all `same`
+  (`ListNodeLinks`, which the bench never calls, is covered by the tests only); on SQLite (goap-dev
+  and `goap-graph-rs` on one file, lifecycle, 2000 versions) 794 reads, all `same`. One fix came out of it: a float
+  read from `jsonb` differed at its last digit until serde_json parsed floats correctly rounded (`float_roundtrip`),
+  as Go does. The Rust service answered each read in less time than the Go one (GetNode p50 3.7 ms against 9.0 ms,
+  GetBranch 1.1 against 6.6), a hint only: it reads second, after the Go service warmed the database's pages.
+- Not done yet: phases 3 and 4.

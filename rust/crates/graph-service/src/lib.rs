@@ -10,17 +10,15 @@ use goap_proto::{
 };
 use graph_store::Store;
 
+mod convert;
+mod graph;
+
+pub use graph::Graph;
+
 /// What the handlers share.
 pub struct State {
     pub store: Store,
 }
-
-/// `goap.graph.v1.GraphService`.
-pub struct Graph {
-    pub state: Arc<State>,
-}
-
-impl graphpb::GraphService for Graph {}
 
 /// `goap.registry.v1.DomainService`: the domain registry the graph serves (ADR 0125 §3).
 pub struct Domains {

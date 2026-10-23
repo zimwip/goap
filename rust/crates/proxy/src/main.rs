@@ -5,7 +5,9 @@
 //! - `split`: every call to the Rust service, replayed on the Go one when it answers `unimplemented` (one database):
 //!   `/proxy/coverage` tells what still falls back;
 //! - `compare`: every call to the Go service, which answers, and to the Rust one, each on its own database, compared
-//!   call by call (`calls.jsonl` in `GOAP_PROXY_REPORT_DIR`, `/proxy/report`).
+//!   call by call (`calls.jsonl` in `GOAP_PROXY_REPORT_DIR`, `/proxy/report`);
+//! - `shadow`: every call to the Go service, which answers, a call that only reads to the Rust one too, both on one
+//!   database, compared the same way (no id to pair: the Rust service reads what the Go one wrote).
 //!
 //! `goap-proxy diff-db --go <dsn> --rust <dsn>` compares the tables of the two databases of a comparison.
 use std::{io::Read as _, sync::Arc};
@@ -62,7 +64,11 @@ async fn main() -> anyhow::Result<()> {
     }
     let cfg = Config::from_env()?;
     let comparer = match cfg.mode {
-        Mode::Compare => Some(Mutex::new(Comparer::new(cfg.report_dir.clone(), &cfg.ignore)?)),
+        Mode::Compare | Mode::Shadow => Some(Mutex::new(Comparer::new(
+            cfg.report_dir.clone(),
+            &cfg.ignore,
+            cfg.mode == Mode::Shadow,
+        )?)),
         _ => None,
     };
     let proxy = Arc::new(Proxy {
@@ -80,7 +86,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/metrics", get(metrics))
         .fallback(forward)
         .with_state(proxy.clone());
-    if proxy.cfg.mode == Mode::Compare {
+    if matches!(proxy.cfg.mode, Mode::Compare | Mode::Shadow) {
         // both services answer before the first call: a call one of them is not ready for would be a divergence
         for up in [proxy.go.as_ref(), proxy.rust.as_ref()].into_iter().flatten() {
             wait_ready(up).await?;
@@ -217,10 +223,11 @@ async fn forward(State(p): State<Arc<Proxy>>, req: Request) -> Response {
             p.count(&key, ServedBy::GoFallback, Side::Go, &g);
             reply(g)
         }
-        Mode::Compare => {
+        Mode::Compare | Mode::Shadow => {
             let go = p.go.as_ref().expect("checked");
+            let proc = proc.filter(|pr| p.cfg.mode == Mode::Compare || pr.reads_only());
             let Some(proc) = proc else {
-                // a path of no RPC (health, readiness): the Go service alone
+                // a path of no RPC (health, readiness), or a write in mode shadow: the Go service alone
                 let r = go.call(&parts.method, &path, &headers, body).await;
                 p.count(&key, ServedBy::Go, Side::Go, &r);
                 return reply(r);

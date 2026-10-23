@@ -42,6 +42,21 @@ impl Procedure {
     pub fn output(&self) -> MessageDescriptor {
         self.method().output()
     }
+
+    /// Whether the procedure only reads, by the rule of the Go services (`lib/platform.ReadOnlyRequests`: a method
+    /// named Get…, List…, Export…, Diff…, Search…, Compare…, Is… or Query…); a stream (Watch…) is no call to compare.
+    pub fn reads_only(&self) -> bool {
+        const READS: &[&str] = &["Get", "List", "Export", "Diff", "Search", "Compare", "Is", "Query"];
+        let m = self.method();
+        if m.is_client_streaming() || m.is_server_streaming() {
+            return false;
+        }
+        READS.iter().any(|p| {
+            self.method
+                .strip_prefix(p)
+                .is_some_and(|rest| rest.chars().next().is_none_or(|c| c.is_ascii_uppercase()))
+        })
+    }
 }
 
 impl std::fmt::Display for Procedure {
@@ -161,6 +176,16 @@ mod tests {
         assert_eq!(p.input().name(), "GetNodeRequest");
         assert!(Procedure::of("/goap.graph.v1.GraphService/Nope").is_none());
         assert!(Procedure::of("/healthz").is_none());
+    }
+
+    #[test]
+    fn tells_a_read() {
+        let p = |m: &str| Procedure::of(&format!("/goap.graph.v1.GraphService/{m}")).unwrap();
+        assert!(p("GetNode").reads_only());
+        assert!(p("ListBaselineNodes").reads_only());
+        assert!(p("DiffBaselines").reads_only());
+        assert!(!p("CommitChange").reads_only());
+        assert!(!p("CreateChange").reads_only());
     }
 
     #[test]

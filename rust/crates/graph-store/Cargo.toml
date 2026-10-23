@@ -8,6 +8,11 @@ publish = false
 description = "The storage of the Rust graph service: PostgreSQL or SQLite, the schema of the Go service (ADR 0163)"
 
 [dependencies]
+graph-core = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
 deadpool-postgres = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }
