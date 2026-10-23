@@ -310,3 +310,44 @@ pub fn link_write(
         props: props.map(map).filter(|m| !m.is_empty()),
     })
 }
+
+/// An item as its log entry holds it (`domain.ChangeItem` JSON), for the answer (`pbconv.ItemToPB`); a flow, a
+/// decision point or a decision is the Go service's.
+pub fn item(v: &Json) -> Result<pb::ChangeItem, String> {
+    if ["flowEvent", "decisionEvent", "decision"]
+        .iter()
+        .any(|k| v.get(k).is_some())
+    {
+        return Err("an item of a flow or of a decision".into());
+    }
+    let s = |k: &str| v.get(k).and_then(Json::as_str).unwrap_or_default().to_string();
+    let list = |k: &str| {
+        v.get(k)
+            .and_then(Json::as_array)
+            .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+            .unwrap_or_default()
+    };
+    let created = v
+        .get("createdAt")
+        .and_then(Json::as_str)
+        .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
+        .map(|t| t.with_timezone(&Utc));
+    Ok(pb::ChangeItem {
+        id: s("id"),
+        r#type: s("type"),
+        target: s("target"),
+        status: s("status"),
+        data: v
+            .get("data")
+            .and_then(Json::as_object)
+            .filter(|m| !m.is_empty())
+            .map(object),
+        produced_by: s("producedBy"),
+        derived_from: list("derivedFrom"),
+        supersedes: list("supersedes"),
+        created_at: created.as_ref().and_then(go_time),
+        execution: s("execution"),
+        flow: s("flow"),
+        ..pb::ChangeItem::default()
+    })
+}

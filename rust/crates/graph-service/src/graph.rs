@@ -772,6 +772,31 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    async fn merge_change(&self, _ctx: &Ctx, req: Request<pb::MergeChangeRequest>) -> Answer<pb::MergeChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        if !m.resolutions.is_empty() {
+            return Err(connect_error(GraphError::unimplemented(
+                "a merge given resolutions (a three-way merge)",
+            )));
+        }
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let r = tx.merge_change(&id).await?;
+            let mut c = convert::change(&r.change);
+            c.nodes = r.impacts.iter().map(convert::change_impact).collect();
+            c.items = r
+                .items
+                .iter()
+                .map(convert::item)
+                .collect::<Result<_, _>>()
+                .map_err(|e| GraphError::unimplemented(format!("{e}: not served here yet")))?;
+            c.seq = r.seq;
+            Ok(pb::MergeChangeResponse { change: Some(c) })
+        })
+        .await
+    }
+
     async fn impact_node_review_batch(
         &self,
         _ctx: &Ctx,
