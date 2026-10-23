@@ -152,6 +152,20 @@ async fn served_change(tx: &mut Tx<'_, Session>, id: &str) -> Result<ChangeId, G
     Ok(id)
 }
 
+/// Refuses a change that does not exist, and leaves to the Go service one whose log opened a flow or a decision
+/// point (ADR 0009): the simple world has neither.
+async fn no_flows<T: ReadTx>(tx: &T, id: &ChangeId) -> Result<(), GraphError> {
+    if tx.change(id).await?.is_none() {
+        return Err(GraphError::not_found(format!("change {id}")));
+    }
+    if !tx.log(id, 0, &["fact.flow", "fact.decision"]).await?.is_empty() {
+        return Err(GraphError::unimplemented(
+            "a change with flows or decision points (ADR 0009): not served here yet",
+        ));
+    }
+    Ok(())
+}
+
 /// The header naming, on a Connect error, the sentinel finer than its code (`lib/rpcerr`).
 const REASON_HEADER: &str = "Goap-Error-Reason";
 
@@ -1552,6 +1566,43 @@ impl pb::GraphService for Graph {
             Ok(pb::ListExecutionsResponse {
                 records: crate::journal::records(&entries).map_err(GraphError::internal)?,
             })
+        })
+        .await
+    }
+
+    /// The flows of a change: none in the simple world of ADR 0163, a change with flows or decisions being Go's.
+    async fn list_flows(&self, _ctx: &Ctx, req: Request<pb::ListFlowsRequest>) -> Answer<pb::ListFlowsResponse> {
+        let caller = Caller::of(&req)?;
+        let id = ChangeId(req.into_inner().change_id);
+        self.read(caller, async |tx| {
+            no_flows(tx, &id).await?;
+            Ok(pb::ListFlowsResponse::default())
+        })
+        .await
+    }
+
+    /// The options of a change, and the one it works on: none in the simple world.
+    async fn list_options(&self, _ctx: &Ctx, req: Request<pb::ListOptionsRequest>) -> Answer<pb::ListOptionsResponse> {
+        let caller = Caller::of(&req)?;
+        let id = ChangeId(req.into_inner().change_id);
+        self.read(caller, async |tx| {
+            no_flows(tx, &id).await?;
+            Ok(pb::ListOptionsResponse::default())
+        })
+        .await
+    }
+
+    /// The decision points of a change: none in the simple world.
+    async fn list_decision_points(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ListDecisionPointsRequest>,
+    ) -> Answer<pb::ListDecisionPointsResponse> {
+        let caller = Caller::of(&req)?;
+        let id = ChangeId(req.into_inner().change_id);
+        self.read(caller, async |tx| {
+            no_flows(tx, &id).await?;
+            Ok(pb::ListDecisionPointsResponse::default())
         })
         .await
     }
