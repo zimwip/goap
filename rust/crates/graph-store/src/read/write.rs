@@ -5,14 +5,14 @@ use std::collections::HashMap;
 
 use graph_core::{
     GraphError,
-    change::{Change, ChangesFilter},
+    change::Change,
     gojson,
     impact::{ChangeImpact, LogEntry},
     model::{Baseline, Branch, ChangeId, Link, LinkId, Node, NodeId, NodeRef, Target, branch_of, namespace_of},
     store::{LinkSet, OutboxMessage, WriteTx},
 };
 
-use super::{Arg, Row, Session, Stmt, change_of};
+use super::{Arg, Row, Session, Stmt};
 use crate::StoreError;
 
 /// The columns of the inserts both repositories run, in the order of their arguments (`sqlbuild.go`).
@@ -157,7 +157,7 @@ impl Session {
         self.exec(stmt).await.map_err(|e| map_err(e, what))
     }
 
-    async fn select(&self, stmt: Stmt, what: &str) -> Result<Vec<Row>, GraphError> {
+    pub(super) async fn select(&self, stmt: Stmt, what: &str) -> Result<Vec<Row>, GraphError> {
         self.query(stmt).await.map_err(|e| map_err(e, what))
     }
 
@@ -228,20 +228,6 @@ impl WriteTx for Session {
         }
         self.advisory_lock(&format!("goap.branch:{}/{name}", namespace_of(namespace)))
             .await
-    }
-
-    async fn change(&self, id: &ChangeId) -> Result<Option<Change>, GraphError> {
-        if self.sql.pg && uuid::Uuid::try_parse(id.as_str()).is_err() {
-            return Ok(None);
-        }
-        let f = ChangesFilter {
-            ids: vec![id.clone()],
-            ..ChangesFilter::default()
-        };
-        match self.rows(self.sql.change_heads(&f)).await?.first() {
-            Some(r) => Ok(Some(change_of(r)?)),
-            None => Ok(None),
-        }
     }
 
     async fn put_change(&self, c: &Change) -> Result<(), GraphError> {
@@ -355,44 +341,6 @@ impl WriteTx for Session {
         ];
         let rows = self.select((q, args), &format!("log entry {}", e.typ)).await?;
         Ok(rows.first().map_or(0, |r| r.int(0)))
-    }
-
-    async fn log(&self, change: &ChangeId, after: i64, prefixes: &[&str]) -> Result<Vec<LogEntry>, GraphError> {
-        let s = self.sql;
-        let mut q = format!(
-            "SELECT seq, id, {}, type, flow, process_id, execution, subject, by_whom, causation, at, payload FROM change_log WHERE change_id = {} AND seq > {}",
-            s.id("change_id"),
-            s.ph(1),
-            s.ph(2)
-        );
-        let mut args: Vec<Arg> = vec![change.as_str().into(), Arg::Int(after)];
-        if !prefixes.is_empty() {
-            let mut ors = Vec::new();
-            for p in prefixes {
-                args.push(Arg::Text(format!("{}%", super::like_pattern(p))));
-                ors.push(format!("type LIKE {} ESCAPE '\\'", s.ph(args.len())));
-            }
-            q.push_str(&format!(" AND ({})", ors.join(" OR ")));
-        }
-        q.push_str(" ORDER BY seq");
-        let rows = self.select((q, args), &format!("log of change {change}")).await?;
-        Ok(rows
-            .iter()
-            .map(|r| LogEntry {
-                seq: r.int(0),
-                id: r.text(1),
-                change: ChangeId(r.text(2)),
-                typ: r.text(3),
-                flow: r.text(4),
-                process: r.text(5),
-                execution: r.text(6),
-                subject: r.text(7),
-                by: r.text(8),
-                causation: r.text(9),
-                at: r.time(10).unwrap_or_else(gojson::zero_time),
-                payload: r.text(11),
-            })
-            .collect())
     }
 
     async fn put_change_impact(&self, change: &ChangeId, cn: &ChangeImpact) -> Result<(), GraphError> {

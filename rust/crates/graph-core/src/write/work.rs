@@ -28,7 +28,7 @@ use crate::{
         namespace_of,
     },
     read,
-    store::WriteTx,
+    store::{ReadTx, WriteTx},
 };
 
 /// The entries of a log the service folds: the impact events and the review records (ADR 0105).
@@ -163,77 +163,7 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     async fn fold_log(&self, id: &ChangeId) -> Result<ChangeView> {
-        let mut out = ChangeView::default();
-        let mut events = Vec::new();
-        for l in self.store.log(id, 0, &[]).await? {
-            out.seq = out.seq.max(l.seq);
-            if l.stream() == LOG_IMPACT {
-                events.extend(impact::events_of(&l).map_err(GraphError::internal)?);
-            } else if l.typ != LOG_REVIEW {
-                return Err(unserved(&format!(
-                    "a change whose log records {} entries (options, decisions, executions)",
-                    l.typ
-                )));
-            }
-        }
-        self.hydrate(&mut events).await?;
-        for e in &events {
-            if e.op == ImpactOp::Adopted || !e.flow.is_empty() {
-                return Err(unserved("a change working on options (ADR 0032)"));
-            }
-            out.fold.apply(e);
-        }
-        if out.fold.impacts.iter().any(|c| c.superseded || !c.flow.is_empty()) {
-            return Err(unserved("a change working on options (ADR 0032)"));
-        }
-        Ok(out)
-    }
-
-    /// Rebuilds the drafts of the checkouts that copy a stored version (ADR 0142): the version and its links.
-    async fn hydrate(&self, events: &mut [ImpactEvent]) -> Result<()> {
-        let bases: Vec<NodeRef> = events
-            .iter()
-            .filter(|e| !e.hydrated())
-            .filter_map(|e| e.draft.as_ref().and_then(|d| d.base.clone()))
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect();
-        if bases.is_empty() {
-            return Ok(());
-        }
-        let nodes: HashMap<NodeRef, Node> = self
-            .store
-            .nodes_at(&bases, "")
-            .await?
-            .into_iter()
-            .map(|n| (n.node_ref(), n))
-            .collect();
-        let mut links: HashMap<NodeRef, Vec<BaseLink>> = HashMap::new();
-        for l in self.store.links_from(&bases, None).await? {
-            let (to, target) = ends(&l);
-            links.entry(l.from.clone()).or_default().push(BaseLink {
-                id: l.id,
-                typ: l.typ,
-                to,
-                target,
-                props: l.props,
-            });
-        }
-        for e in events.iter_mut().filter(|e| !e.hydrated()) {
-            let Some(base) = e.draft.as_ref().and_then(|d| d.base.clone()) else {
-                continue;
-            };
-            let n = nodes
-                .get(&base)
-                .ok_or_else(|| GraphError::internal(format!("impact event {}: version {base} is gone", e.id)))?;
-            let d = impact::copy_draft(
-                e,
-                &base_node(n),
-                links.get(&base).map(Vec::as_slice).unwrap_or_default(),
-            );
-            e.draft = Some(d);
-        }
-        Ok(())
+        fold_change(self.store, id).await
     }
 
     /// Appends events to the log of their change and applies each one to the projection and to the view (Go's
@@ -1031,4 +961,79 @@ fn remove_link_patch(l: &DraftLink) -> Value {
         m.insert("toId".into(), Value::String(l.to.id.0.clone()));
     }
     Value::Object(m)
+}
+
+/// The view of a change: the fold of its log, the checkouts hydrated (the simple world only: the main flow, impact
+/// events and review records).
+pub async fn fold_change<T: ReadTx>(store: &T, id: &ChangeId) -> Result<ChangeView> {
+    let mut out = ChangeView::default();
+    let mut events = Vec::new();
+    for l in store.log(id, 0, &[]).await? {
+        out.seq = out.seq.max(l.seq);
+        if l.stream() == LOG_IMPACT {
+            events.extend(impact::events_of(&l).map_err(GraphError::internal)?);
+        } else if l.typ != LOG_REVIEW {
+            return Err(unserved(&format!(
+                "a change whose log records {} entries (options, decisions, executions)",
+                l.typ
+            )));
+        }
+    }
+    hydrate(store, &mut events).await?;
+    for e in &events {
+        if e.op == ImpactOp::Adopted || !e.flow.is_empty() {
+            return Err(unserved("a change working on options (ADR 0032)"));
+        }
+        out.fold.apply(e);
+    }
+    if out.fold.impacts.iter().any(|c| c.superseded || !c.flow.is_empty()) {
+        return Err(unserved("a change working on options (ADR 0032)"));
+    }
+    Ok(out)
+}
+
+/// Rebuilds the drafts of the checkouts that copy a stored version (ADR 0142): the version and its links.
+async fn hydrate<T: ReadTx>(store: &T, events: &mut [ImpactEvent]) -> Result<()> {
+    let bases: Vec<NodeRef> = events
+        .iter()
+        .filter(|e| !e.hydrated())
+        .filter_map(|e| e.draft.as_ref().and_then(|d| d.base.clone()))
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    if bases.is_empty() {
+        return Ok(());
+    }
+    let nodes: HashMap<NodeRef, Node> = store
+        .nodes_at(&bases, "")
+        .await?
+        .into_iter()
+        .map(|n| (n.node_ref(), n))
+        .collect();
+    let mut links: HashMap<NodeRef, Vec<BaseLink>> = HashMap::new();
+    for l in store.links_from(&bases, None).await? {
+        let (to, target) = ends(&l);
+        links.entry(l.from.clone()).or_default().push(BaseLink {
+            id: l.id,
+            typ: l.typ,
+            to,
+            target,
+            props: l.props,
+        });
+    }
+    for e in events.iter_mut().filter(|e| !e.hydrated()) {
+        let Some(base) = e.draft.as_ref().and_then(|d| d.base.clone()) else {
+            continue;
+        };
+        let n = nodes
+            .get(&base)
+            .ok_or_else(|| GraphError::internal(format!("impact event {}: version {base} is gone", e.id)))?;
+        let d = impact::copy_draft(
+            e,
+            &base_node(n),
+            links.get(&base).map(Vec::as_slice).unwrap_or_default(),
+        );
+        e.draft = Some(d);
+    }
+    Ok(())
 }

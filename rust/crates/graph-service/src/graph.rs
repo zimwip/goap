@@ -276,7 +276,10 @@ async fn read_node(
     if key.is_empty() && r.version > 0 {
         return read::version_view(tx, &r).await;
     }
-    World::open(tx, &convert::view(view)).await?.node_view(&r.id, key).await
+    World::open_node(tx, &convert::view(view))
+        .await?
+        .node_view(&r.id, key)
+        .await
 }
 
 #[async_trait]

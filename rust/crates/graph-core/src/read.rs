@@ -3,12 +3,15 @@
 //!
 //! A branch view is a baseline (the head of the branch when the view names none) whose state is a selection: the last
 //! commit of each node on its branch up to its order, else, past the fork, on the branch it was forked from (ADR 0143).
-//! The views of a change (its fork, its commits, its drafts folded from its log) are not served here yet: they answer
+//! A change view (its fork, its commits, its drafts folded from its log) is read here for one node at a time
+//! ([`World::open_node`]), in the simple world of the writes (the main flow); its other reads answer
 //! [`crate::error::Kind::Unimplemented`].
 use std::collections::{HashMap, HashSet};
 
 use crate::{
+    change::Change,
     error::{GraphError, Result},
+    impact::{Draft, Fold, REVIEW_REJECTED},
     model::{
         BRANCH_OPEN, Baseline, BaselineId, Branch, Link, MAIN_BRANCH, MAX_BROWSE_LIMIT, Neighbourhood, Node, NodeId,
         NodePage, NodeQuery, NodeRef, NodeView, Target, Version, branch_of, namespace_of,
@@ -16,6 +19,7 @@ use crate::{
     page::page_nodes,
     store::ReadTx,
     view::View,
+    write::{change::change_branch_origin, work::fold_change},
 };
 
 /// The number of nodes one statement selects the versions of.
@@ -150,9 +154,112 @@ pub async fn select<T: ReadTx>(tx: &T, header: &Baseline, ids: Option<&[NodeId]>
 pub struct World<'a, T> {
     tx: &'a T,
     view: View,
-    /// The baseline the view reads (empty: the empty state).
+    /// The baseline the view reads (empty: the empty state); for a change view, its fork.
     pub baseline: Baseline,
     pub namespace: String,
+    /// What a change view lays over its fork.
+    change: Option<ChangeWorld>,
+}
+
+/// What a change view adds to its fork (Go's `world` of a change): the change, the fold of its log, its own branch,
+/// the versions it wrote over its fork (a draft is version 0) and the nodes it deleted.
+struct ChangeWorld {
+    change: Change,
+    fold: Fold,
+    own: Option<Branch>,
+    over: HashMap<NodeId, Version>,
+    gone: HashSet<NodeId>,
+}
+
+impl ChangeWorld {
+    /// The draft the view holds for a node: the one of the last impact of the node that has one (Go's
+    /// `draftReader.get`).
+    fn draft(&self, id: &NodeId) -> Option<&Draft> {
+        self.fold
+            .impacts
+            .iter()
+            .filter_map(|cn| self.fold.draft(&cn.id, ""))
+            .rfind(|d| &d.node == id)
+    }
+
+    /// The drafts of the view, one per node, by key.
+    fn drafts(&self) -> Vec<&Draft> {
+        let mut by: HashMap<&NodeId, &Draft> = HashMap::new();
+        for cn in &self.fold.impacts {
+            if let Some(d) = self.fold.draft(&cn.id, "") {
+                by.insert(&d.node, d);
+            }
+        }
+        let mut out: Vec<&Draft> = by.into_values().collect();
+        out.sort_by(|a, b| a.key.cmp(&b.key));
+        out
+    }
+
+    /// A reference to the version a node was checked out from, pointed at the draft of the node.
+    fn normalize(&self, r: &NodeRef) -> NodeRef {
+        match self.draft(&r.id) {
+            Some(d) if d.base.as_ref() == Some(r) => d.draft_ref(),
+            _ => r.clone(),
+        }
+    }
+
+    /// A draft as a node (Go's `draftNode`).
+    fn draft_node(&self, d: &Draft) -> Node {
+        Node {
+            id: d.node.clone(),
+            version: 0,
+            namespace: namespace_of(&self.change.namespace).to_string(),
+            key: d.key.clone(),
+            typ: d.typ.clone(),
+            props: d.props.clone(),
+            state: d.state.clone(),
+            owner: d.owner.clone(),
+            origins: d.origins.clone(),
+            change_id: self.change.id.clone(),
+            change_impact: d.impact.clone(),
+            execution: d.execution.clone(),
+            reason: d.reason().to_string(),
+            branch: branch_of(&self.change.branch).to_string(),
+            ..Node::default()
+        }
+    }
+
+    /// The outgoing links of a draft as links of a node view.
+    fn out_links(&self, d: &Draft) -> Vec<Link> {
+        d.links
+            .iter()
+            .map(|l| Link {
+                id: l.id.clone(),
+                typ: l.typ.clone(),
+                from: d.draft_ref(),
+                to: if l.is_external() {
+                    Target::External(l.target.clone())
+                } else {
+                    Target::Node(self.normalize(&l.to))
+                },
+                props: l.props.clone(),
+                change_id: self.change.id.clone(),
+            })
+            .collect()
+    }
+}
+
+/// The versions some nodes have on the branch of a change: its fork, then what committed on it (Go's
+/// `branchVersions`).
+pub async fn branch_versions<T: ReadTx>(tx: &T, own: &Branch, ids: &[NodeId]) -> Result<HashMap<NodeId, Version>> {
+    let fork = header_of(tx, &own.fork_baseline).await?;
+    let mut out = select(tx, &fork, Some(ids)).await?;
+    for (n, v) in tx
+        .committed_versions(&own.namespace, &own.name, 0, i64::MAX, Some(ids))
+        .await?
+    {
+        if v == 0 {
+            out.remove(&n);
+        } else {
+            out.insert(n, v);
+        }
+    }
+    Ok(out)
 }
 
 impl<'a, T: ReadTx> World<'a, T> {
@@ -182,11 +289,91 @@ impl<'a, T: ReadTx> World<'a, T> {
             view: view.clone(),
             baseline,
             namespace,
+            change: None,
+        })
+    }
+
+    /// Opens a view to read a node in, a change view included (Go's `openWorld`): the change's fork, what it committed
+    /// on its branch, its drafts laid over them.
+    pub async fn open_node(tx: &'a T, view: &View) -> Result<World<'a, T>> {
+        if !view.is_change() {
+            return World::open(tx, view).await;
+        }
+        view.check()?;
+        let c = tx
+            .change(&view.change)
+            .await?
+            .ok_or_else(|| GraphError::not_found(format!("change {}", view.change)))?;
+        if c.is_personal() {
+            return Err(GraphError::unimplemented(
+                "a view of a personal change (ADR 0037): not served here yet",
+            ));
+        }
+        if !view.flow.is_empty() && view.flow != "main" {
+            return Err(GraphError::unimplemented(format!(
+                "{view}: the views of an option are read by the Go service"
+            )));
+        }
+        let fold = fold_change(tx, &c.id).await?.fold;
+        let mut over = HashMap::new();
+        let mut gone = HashSet::new();
+        for cn in &fold.impacts {
+            let Some(post) = &cn.post else { continue };
+            if cn.review == REVIEW_REJECTED {
+                continue;
+            }
+            if post.is_draft() {
+                over.insert(post.id.clone(), 0);
+                continue;
+            }
+            let n = stored_node(tx, post).await?;
+            if n.deleted {
+                gone.insert(n.id);
+            } else {
+                over.insert(n.id, n.version);
+            }
+        }
+        let namespace = namespace_of(&c.namespace).to_string();
+        let mut own = None;
+        if branch_of(&c.branch) != MAIN_BRANCH {
+            let b = branch(tx, &c.namespace, &c.branch).await?;
+            if b.origin == change_branch_origin(&c.id) {
+                own = Some(b);
+            }
+        }
+        let baseline = header_of(tx, &c.baseline_id).await?;
+        Ok(World {
+            tx,
+            view: view.clone(),
+            baseline,
+            namespace,
+            change: Some(ChangeWorld {
+                change: c,
+                fold,
+                own,
+                over,
+                gone,
+            }),
         })
     }
 
     /// The versions some nodes have in the view (absent: not in it).
     pub async fn at(&self, ids: &[NodeId]) -> Result<HashMap<NodeId, Version>> {
+        if let Some(cw) = &self.change {
+            let mut at = match &cw.own {
+                Some(own) => branch_versions(self.tx, own, ids).await?,
+                None if self.baseline.id.is_empty() => HashMap::new(),
+                None => select(self.tx, &self.baseline, Some(ids)).await?,
+            };
+            for id in ids {
+                if let Some(&v) = cw.over.get(id) {
+                    at.insert(id.clone(), v);
+                } else if cw.gone.contains(id) {
+                    at.remove(id);
+                }
+            }
+            return Ok(at);
+        }
         if self.baseline.id.is_empty() || ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -199,7 +386,13 @@ impl<'a, T: ReadTx> World<'a, T> {
 
     /// Finds a node of the view by id or, when the id is empty, by key: its version in the view.
     pub async fn find(&self, id: &NodeId, key: &str) -> Result<NodeRef> {
-        let id = if id.is_empty() {
+        let drafted = match (&self.change, id.is_empty()) {
+            (Some(cw), true) => cw.drafts().into_iter().rfind(|d| d.key == key).map(|d| d.node.clone()),
+            _ => None,
+        };
+        let id = if let Some(id) = drafted {
+            id
+        } else if id.is_empty() {
             let id = self
                 .tx
                 .node_id_by_key(&self.namespace, key)
@@ -248,11 +441,63 @@ impl<'a, T: ReadTx> World<'a, T> {
     /// A node as the view holds it, with its links (ADR 0157).
     pub async fn node_view(&self, id: &NodeId, key: &str) -> Result<NodeView> {
         let r = self.find(id, key).await?;
+        if let Some(cw) = &self.change {
+            return self.change_node_view(cw, r).await;
+        }
         let entering = self.entering(&r.id).await?;
         let r#in = entering.into_iter().filter(|l| l.to_node() == Some(&r)).collect();
         let node = self.node(&r).await?;
         let latest = latest_of(self.tx, &node).await?;
         let out = self.tx.links_from(std::slice::from_ref(&r), None).await?;
+        Ok(NodeView {
+            node,
+            latest,
+            out,
+            r#in,
+        })
+    }
+
+    /// A node as a change view holds it (Go's `viewIn` over the draft reader): its draft, or its stored version, with
+    /// the links of the draft or of the version, and the links entering it from the versions and the drafts of the view.
+    async fn change_node_view(&self, cw: &ChangeWorld, r: NodeRef) -> Result<NodeView> {
+        let d = cw.draft(&r.id).filter(|_| r.is_draft());
+        let node = match d {
+            Some(d) => cw.draft_node(d),
+            None => self.node(&r).await?,
+        };
+        let mut latest = self.tx.latest_on(&r.id, MAIN_BRANCH).await?.map_or(0, |n| n.version);
+        if latest == 0 {
+            latest = node.version;
+        }
+        let out = match d {
+            Some(d) => cw.out_links(d),
+            None => self.tx.links_from(std::slice::from_ref(&r), None).await?,
+        };
+        let mut r#in = Vec::new();
+        let from = match d.and_then(|d| d.base.clone()) {
+            Some(base) => base,
+            None => r.clone(),
+        };
+        if !from.is_draft() {
+            for l in self.entering(&from.id).await? {
+                if l.to_node() != Some(&from) {
+                    continue;
+                }
+                // a link of a version a draft replaces is the draft's now
+                if !l.from.is_draft() && cw.draft(&l.from.id).is_some_and(|d| d.base.as_ref() == Some(&l.from)) {
+                    continue;
+                }
+                r#in.push(l);
+            }
+        }
+        for o in cw.drafts() {
+            for l in cw.out_links(o) {
+                let Target::Node(to) = &l.to else { continue };
+                if to.id == r.id && r.is_draft() == to.is_draft() && (r.is_draft() || *to == r) {
+                    r#in.push(l);
+                }
+            }
+        }
         Ok(NodeView {
             node,
             latest,

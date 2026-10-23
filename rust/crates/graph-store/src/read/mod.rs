@@ -311,6 +311,63 @@ pub(crate) fn change_of(r: &Row) -> Result<Change, GraphError> {
 }
 
 impl ReadTx for Session {
+    async fn change(&self, id: &ChangeId) -> Result<Option<Change>, GraphError> {
+        if self.sql.pg && uuid::Uuid::try_parse(id.as_str()).is_err() {
+            return Ok(None);
+        }
+        let f = ChangesFilter {
+            ids: vec![id.clone()],
+            ..ChangesFilter::default()
+        };
+        match self.rows(self.sql.change_heads(&f)).await?.first() {
+            Some(r) => Ok(Some(change_of(r)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn log(
+        &self,
+        change: &ChangeId,
+        after: i64,
+        prefixes: &[&str],
+    ) -> Result<Vec<graph_core::impact::LogEntry>, GraphError> {
+        let s = self.sql;
+        let mut q = format!(
+            "SELECT seq, id, {}, type, flow, process_id, execution, subject, by_whom, causation, at, payload FROM change_log WHERE change_id = {} AND seq > {}",
+            s.id("change_id"),
+            s.ph(1),
+            s.ph(2)
+        );
+        let mut args: Vec<Arg> = vec![change.as_str().into(), Arg::Int(after)];
+        if !prefixes.is_empty() {
+            let mut ors = Vec::new();
+            for p in prefixes {
+                args.push(Arg::Text(format!("{}%", sql::like_pattern(p))));
+                ors.push(format!("type LIKE {} ESCAPE '\\'", s.ph(args.len())));
+            }
+            q.push_str(&format!(" AND ({})", ors.join(" OR ")));
+        }
+        q.push_str(" ORDER BY seq");
+        let rows = self.select((q, args), &format!("log of change {change}")).await?;
+        Ok(rows
+            .iter()
+            .map(|r| graph_core::impact::LogEntry {
+                seq: r.int(0),
+                id: r.text(1),
+                change: ChangeId(r.text(2)),
+                typ: r.text(3),
+                flow: r.text(4),
+                process: r.text(5),
+                execution: r.text(6),
+                subject: r.text(7),
+                by: r.text(8),
+                causation: r.text(9),
+                at: r.time(10).unwrap_or_else(graph_core::gojson::zero_time),
+                payload: r.text(11),
+            })
+            .collect())
+    }
+
     async fn branch(&self, namespace: &str, name: &str) -> Result<Option<Branch>, GraphError> {
         Ok(self
             .rows(self.sql.branch(namespace, name))

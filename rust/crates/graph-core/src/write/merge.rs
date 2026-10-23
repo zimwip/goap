@@ -2,7 +2,7 @@
 //! `changebranch.go`; ADR 0102, 0140): settled, up to date, then fast-forwarded: what its branch committed joins the
 //! target, a baseline of kind fast-forward is the new head, each impact is committed there, the change is applied.
 //! A rebase, a three-way merge, a sub-change and a dependency are the Go service's.
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use serde_json::Value;
 
@@ -16,7 +16,7 @@ use crate::{
     GraphError, Result,
     change::{Change, ChangesFilter},
     impact::{ChangeImpact, ImpactEvent, ImpactOp, LOG_FACT, REVIEW_ACCEPTED, REVIEW_REJECTED},
-    model::{Baseline, BaselineId, Branch, ChangeId, MAIN_BRANCH, NodeId, NodeRef, REASON_REVERT, Version, branch_of},
+    model::{Baseline, BaselineId, Branch, ChangeId, MAIN_BRANCH, NodeId, NodeRef, REASON_REVERT, branch_of},
     read,
     store::WriteTx,
 };
@@ -50,25 +50,6 @@ impl<S: WriteTx> Tx<'_, S> {
             None => Ok(true),
             Some(b) => Ok(draft_changed(&self.stored_draft(b).await?, &d)),
         }
-    }
-
-    /// The versions some nodes have on the branch of a root change: its fork, with what committed on it (Go's
-    /// `branchVersions` for a branch forked from a lasting one).
-    async fn branch_versions(&self, own: &Branch, ids: &[NodeId]) -> Result<HashMap<NodeId, Version>> {
-        let fork = read::header_of(self.store, &own.fork_baseline).await?;
-        let mut out = read::select(self.store, &fork, Some(ids)).await?;
-        for (n, v) in self
-            .store
-            .committed_versions(&own.namespace, &own.name, 0, i64::MAX, Some(ids))
-            .await?
-        {
-            if v == 0 {
-                out.remove(&n);
-            } else {
-                out.insert(n, v);
-            }
-        }
-        Ok(out)
     }
 
     /// What holds the merge of a change (Go's `unsettled`).
@@ -224,7 +205,7 @@ impl<S: WriteTx> Tx<'_, S> {
             }
         }
         let into = read::select(self.store, &head, Some(&ids)).await?;
-        let from = self.branch_versions(&own, &ids).await?;
+        let from = read::branch_versions(self.store, &own, &ids).await?;
         let mut moves = Vec::new();
         let mut delta: BTreeMap<NodeId, i32> = BTreeMap::new();
         for n in &ids {

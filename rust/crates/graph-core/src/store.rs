@@ -13,6 +13,17 @@ use crate::{
 /// The reads of a store, in one session (a read-only connection: PostgreSQL with no transaction around the
 /// statements, SQLite a reader of the WAL).
 pub trait ReadTx: Sync {
+    /// The whole header of a change; none when the store holds none.
+    fn change(&self, id: &ChangeId) -> impl Future<Output = Result<Option<Change>>> + Send;
+
+    /// The entries of the log of a change after an order whose type starts with one of the prefixes, in order.
+    fn log(
+        &self,
+        change: &ChangeId,
+        after: i64,
+        prefixes: &[&str],
+    ) -> impl Future<Output = Result<Vec<crate::impact::LogEntry>>> + Send;
+
     /// A branch of a namespace; none when the store holds none of that name.
     fn branch(&self, namespace: &str, name: &str) -> impl Future<Output = Result<Option<Branch>>> + Send;
 
@@ -127,9 +138,6 @@ pub trait WriteTx: ReadTx {
     /// Serializes the writers of a branch.
     fn lock_branch(&self, namespace: &str, name: &str) -> impl Future<Output = Result<()>> + Send;
 
-    /// The whole header of a change; none when the store holds none.
-    fn change(&self, id: &ChangeId) -> impl Future<Output = Result<Option<Change>>> + Send;
-
     fn put_change(&self, c: &Change) -> impl Future<Output = Result<()>> + Send;
 
     fn put_branch(&self, b: &Branch) -> impl Future<Output = Result<()>> + Send;
@@ -138,14 +146,6 @@ pub trait WriteTx: ReadTx {
 
     /// Appends an entry to the log of its change and returns its order.
     fn append_log(&self, e: &crate::impact::LogEntry) -> impl Future<Output = Result<i64>> + Send;
-
-    /// The entries of the log of a change after an order whose type starts with one of the prefixes, in order.
-    fn log(
-        &self,
-        change: &ChangeId,
-        after: i64,
-        prefixes: &[&str],
-    ) -> impl Future<Output = Result<Vec<crate::impact::LogEntry>>> + Send;
 
     /// Writes the projection of an impact (`change_impact`).
     fn put_change_impact(
