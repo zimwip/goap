@@ -610,6 +610,18 @@ impl ReadTx for Session {
         Ok(vs)
     }
 
+    async fn version_joins(&self, id: &NodeId) -> Result<Vec<(Version, String, ChangeId)>, GraphError> {
+        if self.sql.pg && !is_uuid(id.as_str()) {
+            return Ok(Vec::new());
+        }
+        Ok(self
+            .rows(self.sql.version_joins(id))
+            .await?
+            .iter()
+            .map(|r| (r.int32(0), r.text(1), ChangeId(r.text(2))))
+            .collect())
+    }
+
     async fn change_nodes(&self, change: &ChangeId) -> Result<Option<Vec<NodeId>>, GraphError> {
         if self.sql.pg && !is_uuid(change.as_str()) {
             return Ok(None);

@@ -125,6 +125,10 @@ pub trait ReadTx: Sync {
     /// The nodes a branch holds a version of: written on it or joined to it (ADR 0137).
     fn branch_node_ids(&self, branch: &str) -> impl Future<Output = Result<Vec<NodeId>>> + Send;
 
+    /// The branches the versions of a node joined as is, with the change that joined each, by version then branch
+    /// (`Tx.VersionJoins`).
+    fn version_joins(&self, id: &NodeId) -> impl Future<Output = Result<Vec<(Version, String, ChangeId)>>> + Send;
+
     /// The versions the impacts of a change name (before, after, committed), in the order they were written.
     fn impact_refs(&self, change: &ChangeId) -> impl Future<Output = Result<Vec<NodeRef>>> + Send;
 }

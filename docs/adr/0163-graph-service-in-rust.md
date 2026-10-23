@@ -196,5 +196,6 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   header only (a rebase's `baselineId`, an attachment's `parentId` still refuse), its position the last impact event
   or fact, as Go's. A change id PostgreSQL cannot read as a UUID is refused by Rust as Go's store refuses it
   (`invalid input syntax for type uuid`); Go's router answers it before, in plain text, which the comparison leaves
-  out.
+  out. `GetChangeStack` (`graph-core` `change::change_stack`: the lineage of a version or of a baseline, the
+  sub-changes a merge took in) follows: 208 calls, none divergent.
 - Not done yet: the rest of phase 4.

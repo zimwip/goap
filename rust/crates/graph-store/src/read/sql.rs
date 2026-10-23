@@ -728,6 +728,18 @@ impl Sql {
         )
     }
 
+    /// The joins of the versions of a node (`sqlVersionJoins`).
+    pub fn version_joins(self, id: &NodeId) -> Stmt {
+        (
+            format!(
+                "SELECT version, branch, {} FROM node_branch WHERE node_id = {} ORDER BY version, branch",
+                self.id("change_id"),
+                self.ph(1)
+            ),
+            vec![id.0.clone().into()],
+        )
+    }
+
     pub fn change_exists(self, change: &str) -> Stmt {
         (
             format!("SELECT 1 FROM change WHERE id = {}", self.ph(1)),

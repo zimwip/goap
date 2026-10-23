@@ -1422,6 +1422,72 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    /// The stack of changes producing a node version or a baseline (ADR 0133).
+    async fn get_change_stack(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetChangeStackRequest>,
+    ) -> Answer<pb::GetChangeStackResponse> {
+        let caller = Caller::of(&req)?;
+        let subject = caller.subject.clone();
+        let m = req.into_inner();
+        self.read(caller, async |tx| {
+            let node = NodeRef::new(NodeId(m.node_id.clone()), m.version);
+            let mut s =
+                change::change_stack(tx, &node, &BaselineId(m.baseline_id.clone()), m.limit.max(0) as usize).await?;
+            for c in &mut s.changes {
+                if c.owner_org.key.starts_with(change::USER_PREFIX)
+                    && c.owner_org.key[change::USER_PREFIX.len()..] != *subject
+                {
+                    c.title.clear(); // the title of the personal changes of others (ADR 0037)
+                }
+            }
+            Ok(pb::GetChangeStackResponse {
+                stack: Some(pb::ChangeStack {
+                    changes: convert::stack_changes(&s.changes),
+                    versions: s
+                        .versions
+                        .iter()
+                        .map(|v| pb::VersionStep {
+                            version: v.version,
+                            branch: v.branch.clone(),
+                            reason: v.reason.clone(),
+                            parents: v.parents.clone(),
+                            change: v.change.0.clone(),
+                            joined: v
+                                .joined
+                                .iter()
+                                .map(|j| pb::VersionJoin {
+                                    branch: j.branch.clone(),
+                                    change: j.change.0.clone(),
+                                })
+                                .collect(),
+                            created_at: convert::time(&v.created_at),
+                        })
+                        .collect(),
+                    baselines: s
+                        .baselines
+                        .iter()
+                        .map(|b| pb::BaselineStep {
+                            id: b.id.0.clone(),
+                            name: b.name.clone(),
+                            branch: b.branch.clone(),
+                            kind: b.kind.clone(),
+                            change: b.change.0.clone(),
+                            parent: b.parent.0.clone(),
+                            merged_from: b.merged_from.0.clone(),
+                            rebased_from: b.rebased_from.0.clone(),
+                            created_at: convert::time(&b.created_at),
+                            merged: b.merged.iter().map(|c| c.0.clone()).collect(),
+                        })
+                        .collect(),
+                    truncated: s.truncated,
+                }),
+            })
+        })
+        .await
+    }
+
     async fn diff_baselines(
         &self,
         _ctx: &Ctx,

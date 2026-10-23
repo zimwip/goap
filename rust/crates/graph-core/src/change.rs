@@ -456,6 +456,193 @@ impl<T: ReadTx> MergedInto<'_, T> {
     }
 }
 
+/// The most recent steps of a lineage kept when none is asked (`domain.DefaultStackLimit`).
+pub const DEFAULT_STACK_LIMIT: usize = 500;
+
+/// A branch a version joined as is, and the change that joined it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct VersionJoin {
+    pub branch: String,
+    pub change: ChangeId,
+}
+
+/// A version of the lineage of a node version (`domain.VersionStep`).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct VersionStep {
+    pub version: Version,
+    pub branch: String,
+    pub reason: String,
+    pub parents: Vec<Version>,
+    pub change: ChangeId,
+    pub joined: Vec<VersionJoin>,
+    pub created_at: Option<DateTime<Utc>>,
+}
+
+/// A baseline of the lineage of a baseline (`domain.BaselineStep`): `merged` the sub-changes a merge took in.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BaselineStep {
+    pub id: BaselineId,
+    pub name: String,
+    pub branch: String,
+    pub kind: String,
+    pub change: ChangeId,
+    pub parent: BaselineId,
+    pub merged_from: BaselineId,
+    pub rebased_from: BaselineId,
+    pub created_at: Option<DateTime<Utc>>,
+    pub merged: Vec<ChangeId>,
+}
+
+/// The stack of changes producing a node version or a baseline (ADR 0133).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ChangeStack {
+    pub changes: Vec<StackChange>,
+    pub versions: Vec<VersionStep>,
+    pub baselines: Vec<BaselineStep>,
+    pub truncated: bool,
+}
+
+fn keep_last<T>(mut out: Vec<T>, limit: usize) -> (Vec<T>, bool) {
+    let limit = if limit == 0 { DEFAULT_STACK_LIMIT } else { limit };
+    if out.len() > limit {
+        out.drain(..out.len() - limit);
+        return (out, true);
+    }
+    (out, false)
+}
+
+/// The versions a node version comes from, through its parents, oldest first, each with the branches it joined
+/// (`domain.VersionLineage`).
+pub fn version_lineage(
+    versions: &[Node],
+    joins: &[(Version, String, ChangeId)],
+    v: Version,
+    limit: usize,
+) -> (Vec<VersionStep>, bool) {
+    let by_version: HashMap<Version, &Node> = versions.iter().map(|n| (n.version, n)).collect();
+    let mut seen = HashSet::new();
+    let mut todo = std::collections::VecDeque::from([v]);
+    let mut out = Vec::new();
+    while let Some(x) = todo.pop_front() {
+        let Some(n) = by_version.get(&x) else { continue };
+        if !seen.insert(x) {
+            continue;
+        }
+        let mut joined: Vec<VersionJoin> = joins
+            .iter()
+            .filter(|(jv, _, _)| *jv == x)
+            .map(|(_, b, c)| VersionJoin {
+                branch: b.clone(),
+                change: c.clone(),
+            })
+            .collect();
+        joined.sort_by(|a, b| a.branch.cmp(&b.branch));
+        out.push(VersionStep {
+            version: x,
+            branch: crate::model::branch_of(&n.branch).to_string(),
+            reason: n.reason.clone(),
+            parents: n.parents.clone(),
+            change: n.change_id.clone(),
+            joined,
+            created_at: n.created_at,
+        });
+        todo.extend(n.parents.iter().copied());
+    }
+    out.sort_by_key(|s| s.version);
+    keep_last(out, limit)
+}
+
+/// The baselines a baseline comes from, through its parents and the baselines merged into it, oldest first
+/// (`domain.BaselineLineage`).
+async fn baseline_lineage<T: ReadTx>(
+    tx: &T,
+    headers: &[crate::model::Baseline],
+    from: &BaselineId,
+    limit: usize,
+) -> (Vec<BaselineStep>, bool) {
+    let by_id: HashMap<&BaselineId, &crate::model::Baseline> = headers.iter().map(|b| (&b.id, b)).collect();
+    let mut merged = MergedInto {
+        tx,
+        cache: HashMap::new(),
+    };
+    let mut seen = HashSet::new();
+    let mut todo = std::collections::VecDeque::from([from.clone()]);
+    let mut out = Vec::new();
+    while let Some(id) = todo.pop_front() {
+        let Some(b) = by_id.get(&id) else { continue };
+        if id.is_empty() || !seen.insert(id.clone()) {
+            continue;
+        }
+        let mut step = BaselineStep {
+            id: b.id.clone(),
+            name: b.name.clone(),
+            branch: crate::model::branch_of(&b.branch).to_string(),
+            kind: b.kind.clone(),
+            change: b.change_id.clone(),
+            parent: b.parent_id.clone(),
+            merged_from: b.merged_from.clone(),
+            rebased_from: b.rebased_from.clone(),
+            created_at: b.created_at,
+            merged: Vec::new(),
+        };
+        if !b.change_id.is_empty() && (b.kind == "fast-forward" || b.kind == "merge") {
+            step.merged = merged.walk(&b.change_id, 0).await;
+        }
+        out.push(step);
+        todo.push_back(b.parent_id.clone());
+        todo.push_back(b.merged_from.clone());
+    }
+    out.sort_by_key(|s| s.created_at);
+    keep_last(out, limit)
+}
+
+/// The changes a stack names, each once: those of the versions and their joins, then the merged sub-changes before
+/// the change of each baseline (`domain.StackChangeIDs`).
+pub fn stack_change_ids(versions: &[VersionStep], baselines: &[BaselineStep]) -> Vec<ChangeId> {
+    let mut out: Vec<ChangeId> = Vec::new();
+    let mut add = |c: &ChangeId| {
+        if !c.is_empty() && !out.contains(c) {
+            out.push(c.clone());
+        }
+    };
+    for v in versions {
+        add(&v.change);
+        v.joined.iter().for_each(|j| add(&j.change));
+    }
+    for b in baselines {
+        b.merged.iter().for_each(&mut add);
+        add(&b.change);
+    }
+    out
+}
+
+/// The change-stack of a node version (`node` set) or of a baseline (`ChangeStack`).
+pub async fn change_stack<T: ReadTx>(
+    tx: &T,
+    node: &NodeRef,
+    baseline: &BaselineId,
+    limit: usize,
+) -> Result<ChangeStack> {
+    if node.id.is_empty() == baseline.is_empty() {
+        return Err(GraphError::invalid(
+            "a change-stack is of a node version or of a baseline",
+        ));
+    }
+    let mut s = ChangeStack::default();
+    if !baseline.is_empty() {
+        let b = header_of(tx, baseline).await?; // its lineage only: its state is not read
+        let heads = tx.baseline_headers(&b.namespace).await?;
+        (s.baselines, s.truncated) = baseline_lineage(tx, &heads, &b.id, limit).await;
+    } else {
+        let n = crate::read::stored_node(tx, node).await?;
+        let vs = tx.version_range(&n.id, 0, i32::MAX as usize).await?;
+        let joins = tx.version_joins(&n.id).await?;
+        (s.versions, s.truncated) = version_lineage(&vs, &joins, n.version, limit);
+    }
+    s.changes = stack_changes(tx, &stack_change_ids(&s.versions, &s.baselines)).await?;
+    Ok(s)
+}
+
 /// The kinds of a difference of two baselines.
 pub const DIFF_ADDED: &str = "added";
 pub const DIFF_REMOVED: &str = "removed";
