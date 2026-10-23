@@ -222,9 +222,10 @@ impl<'s, S: WriteTx> Tx<'s, S> {
         Ok(s)
     }
 
-    /// Closes the commit of a branch that keeps no baseline (the branch of a change, ADR 0140).
-    pub fn end_commit(&mut self, branch: &str) {
-        self.commit.remove(branch_of(branch));
+    /// Closes the commit of a branch that keeps no baseline (the branch of a change, ADR 0140) and returns its order
+    /// (0: nothing committed there).
+    pub fn end_commit(&mut self, branch: &str) -> i64 {
+        self.commit.remove(branch_of(branch)).unwrap_or(0)
     }
 
     /// Writes a version, stamped with its owner and its project (from the version it follows, else from its change)
@@ -359,9 +360,16 @@ impl<'s, S: WriteTx> Tx<'s, S> {
 
     /// Emits an event of a change from the transaction that writes its fact (Go's `Graph.raise`).
     pub fn raise(&mut self, typ: &str, c: &Change, baseline: Option<&Baseline>, branch: &str, nodes: &[EventNode]) {
+        // the change as read in the transaction: at the position its log stands at (`Change.Seq`)
+        let seq = self
+            .views
+            .get(&c.id)
+            .map(|v| v.seq)
+            .or_else(|| self.seq.get(&c.id).copied())
+            .unwrap_or(0);
         let ev = ChangeEvent {
             typ,
-            change: ChangeJson::of(c, 0),
+            change: ChangeJson::of(c, seq),
             baseline: baseline.map(events::BaselineJson::of),
             end_user: &self.env.end_user,
             branch,

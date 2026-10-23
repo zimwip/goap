@@ -101,6 +101,47 @@ pub fn link(cat: &Catalog, typ: &str, from: &str, to: &str) -> Result<()> {
     cat.check_link(typ, from, to).map_err(GraphError::invalid)
 }
 
+/// What a version (or the draft it is written from) must satisfy (Go's `checkVersion`): its properties, the links
+/// its type requires, the attributes of its links. A domain running scripts plugs validators the Go service runs.
+pub fn version(
+    cat: &Catalog,
+    ns: &str,
+    key: &str,
+    typ: &str,
+    props: Option<&Map<String, Value>>,
+    links: &[(&str, Option<&Map<String, Value>>)],
+) -> Result<()> {
+    if cat.scripted(ns) {
+        return Err(GraphError::unimplemented(
+            "a version of a node of a domain running validators (ADR 0018): not served here yet",
+        ));
+    }
+    attributes(cat, key, typ, props)?;
+    let mut reqs: Vec<(String, i64, String)> = Vec::new();
+    for st in cat.structures() {
+        if typ == st.typ && key != st.root {
+            reqs.push((st.parent.clone(), 1, format!("a parent {} ({})", st.typ, st.parent)));
+        }
+    }
+    for r in cat.requires(typ) {
+        reqs.push((
+            r.link.clone(),
+            r.exactly(),
+            format!("exactly {} {}", r.exactly(), r.link),
+        ));
+    }
+    for (link, want, of) in reqs {
+        let got = links.iter().filter(|(t, _)| *t == link).count() as i64;
+        if got != want {
+            return Err(GraphError::invalid(format!("{key} needs {of}, got {got}")));
+        }
+    }
+    for (t, p) in links {
+        link_attributes(cat, t, *p).map_err(|e| e.with_prefix(&format!("{key}: ")))?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

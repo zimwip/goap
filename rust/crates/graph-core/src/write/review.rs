@@ -138,7 +138,7 @@ fn same_props(a: &Props, b: &Props) -> bool {
 }
 
 /// Whether a draft differs from the version it was checked out from (Go's `DraftChanged`).
-fn draft_changed(base: &Draft, d: &Draft) -> bool {
+pub(super) fn draft_changed(base: &Draft, d: &Draft) -> bool {
     if let (Some(m), Some(b)) = (&d.merged_with, &d.base)
         && m != b
     {
@@ -181,7 +181,7 @@ fn draft_changed(base: &Draft, d: &Draft) -> bool {
 
 impl<S: WriteTx> Tx<'_, S> {
     /// The version a draft was checked out from, as a draft (Go's `storedDraft`).
-    async fn stored_draft(&self, r: &NodeRef) -> Result<Draft> {
+    pub(super) async fn stored_draft(&self, r: &NodeRef) -> Result<Draft> {
         let n = self
             .store
             .node(r)
@@ -223,37 +223,8 @@ impl<S: WriteTx> Tx<'_, S> {
     /// properties, the links its type requires, the attributes of its links. A domain running scripts checks its
     /// validators in the Go service.
     fn check_draft(&self, ns: &str, d: &Draft) -> Result<()> {
-        let cat = self.catalog();
-        if cat.scripted(ns) {
-            return Err(unserved(
-                "the acceptance of a node of a domain running validators (ADR 0018)",
-            ));
-        }
-        check::attributes(cat, &d.key, &d.typ, d.props.as_ref())?;
-        let mut reqs: Vec<(String, i64, String)> = Vec::new();
-        for st in cat.structures() {
-            if d.typ == st.typ && d.key != st.root {
-                reqs.push((st.parent.clone(), 1, format!("a parent {} ({})", st.typ, st.parent)));
-            }
-        }
-        for r in cat.requires(&d.typ) {
-            reqs.push((
-                r.link.clone(),
-                r.exactly(),
-                format!("exactly {} {}", r.exactly(), r.link),
-            ));
-        }
-        for (link, want, of) in reqs {
-            let got = d.links.iter().filter(|l| l.typ == link).count() as i64;
-            if got != want {
-                return Err(GraphError::invalid(format!("{} needs {of}, got {got}", d.key)));
-            }
-        }
-        for l in &d.links {
-            check::link_attributes(cat, &l.typ, l.props.as_ref())
-                .map_err(|e| e.with_prefix(&format!("{}: ", d.key)))?;
-        }
-        Ok(())
+        let links: Vec<_> = d.links.iter().map(|l| (l.typ.as_str(), l.props.as_ref())).collect();
+        check::version(self.catalog(), ns, &d.key, &d.typ, d.props.as_ref(), &links)
     }
 
     /// The gate of an acceptance (Go's `checkModifies` then `checkAcceptedIn`): the impact holds a draft that

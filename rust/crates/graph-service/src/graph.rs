@@ -19,6 +19,7 @@ use graph_core::{
     model::{ChangeId, MAIN_BRANCH},
     write::{
         change::NewChange,
+        commit::NOTHING_TO_COMMIT,
         review::{ReviewBatch, Verdict},
         tx::{Env, Tx},
         work::{NodeCheckout, NodeCreate},
@@ -144,8 +145,14 @@ async fn served_change(tx: &mut Tx<'_, Session>, id: &str) -> Result<ChangeId, G
     Ok(id)
 }
 
+/// The header naming, on a Connect error, the sentinel finer than its code (`lib/rpcerr`).
+const REASON_HEADER: &str = "Goap-Error-Reason";
+
 /// The Connect error of a graph error (`lib/rpcerr.ToConnect`).
 fn connect_error(e: GraphError) -> ConnectError {
+    if e.kind == Kind::Invalid && e.message.ends_with(&format!(": {NOTHING_TO_COMMIT}: invalid")) {
+        return ConnectError::invalid_argument(e.message).with_meta(REASON_HEADER, "nothing-to-commit");
+    }
     match e.kind {
         Kind::NotFound => ConnectError::not_found(e.message),
         Kind::Invalid => ConnectError::invalid_argument(e.message),
@@ -744,6 +751,23 @@ impl pb::GraphService for Graph {
             tx.impact_link_delete(&id, &m.link_id.as_str().into(), &m.flow, &m.execution)
                 .await?;
             Ok(pb::ImpactLinkDeleteResponse {})
+        })
+        .await
+    }
+
+    async fn commit_change(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::CommitChangeRequest>,
+    ) -> Answer<pb::CommitChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let b = tx.commit_change(&id, &m.baseline_name).await?;
+            Ok(pb::CommitChangeResponse {
+                baseline: Some(convert::baseline(&b, None)),
+            })
         })
         .await
     }
