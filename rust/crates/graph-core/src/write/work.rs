@@ -976,7 +976,9 @@ pub async fn fold_change<T: ReadTx>(store: &T, id: &ChangeId) -> Result<ChangeVi
         }
         if l.stream() == LOG_IMPACT {
             events.extend(impact::events_of(&l).map_err(GraphError::internal)?);
-        } else if l.typ != LOG_REVIEW && !header_only(&l) {
+        } else if (l.stream() == LOG_FACT && l.typ != LOG_REVIEW) || (l.stream() == "change" && !header_only(&l)) {
+            // the other streams (the journal, the prompts of the engine) are records of a use case: the view of a
+            // change reads none
             return Err(unserved(&format!(
                 "a change whose log records {} entries (options, decisions, executions)",
                 l.typ

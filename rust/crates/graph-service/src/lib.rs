@@ -17,6 +17,7 @@ mod convert;
 mod domainpb;
 mod domains;
 mod graph;
+mod journal;
 mod smarttags;
 
 pub use graph::Graph;

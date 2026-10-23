@@ -17,6 +17,7 @@ graph-core = { workspace = true }
 graph-catalog = { workspace = true }
 chrono = { workspace = true }
 pbjson-types = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 serde_norway = { workspace = true }

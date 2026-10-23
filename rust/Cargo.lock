@@ -610,6 +610,7 @@ dependencies = [
  "graph-store",
  "pbjson-types",
  "reqwest",
+ "serde",
  "serde_json",
  "serde_norway",
  "tokio",

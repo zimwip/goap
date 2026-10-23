@@ -198,4 +198,8 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   (`invalid input syntax for type uuid`); Go's router answers it before, in plain text, which the comparison leaves
   out. `GetChangeStack` (`graph-core` `change::change_stack`: the lineage of a version or of a baseline, the
   sub-changes a merge took in) follows: 208 calls, none divergent.
+  `AppendLog` (an entry of a change the store does not hold is left to Go, whose answer is the database's) and
+  `ListExecutions` (`graph-service` `journal`: the records as the engine wrote them) follow: 220 calls, none
+  divergent, the tables and the 225 events of the outbox the same. The view of a change reads its impact events and
+  its facts only, as Go's: the entries of the other streams (the journal, the prompts) no longer refuse it.
 - Not done yet: the rest of phase 4.

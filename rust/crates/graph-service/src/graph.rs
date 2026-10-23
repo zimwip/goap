@@ -1422,6 +1422,92 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    /// Appends entries a use case writes to the logs of changes (the journal of the engine, ADR 0011, 0030).
+    async fn append_log(&self, _ctx: &Ctx, req: Request<pb::AppendLogRequest>) -> Answer<pb::AppendLogResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        for e in &m.entries {
+            if e.change_id.is_empty() || !e.r#type.contains('.') {
+                return Err(connect_error(GraphError::invalid(
+                    "a log entry needs a change and a type <stream>.<kind>",
+                )));
+            }
+            let stream = e.r#type.split_once('.').map_or(e.r#type.as_str(), |(s, _)| s);
+            if ["fact", "impact", "change"].contains(&stream) {
+                return Err(connect_error(GraphError::invalid(format!(
+                    "the {stream} stream of a log is written by the graph only"
+                ))));
+            }
+        }
+        self.write(caller, async |tx| {
+            for e in &m.entries {
+                let change = ChangeId(e.change_id.clone());
+                if tx.store.change(&change).await?.is_none() {
+                    return Err(GraphError::unimplemented(
+                        "an entry of a change the store does not hold: not served here yet",
+                    ));
+                }
+                let at =
+                    e.at.as_ref()
+                        .and_then(|t| chrono::DateTime::from_timestamp(t.seconds, t.nanos as u32))
+                        .unwrap_or_else(|| tx.env.now()); // none: now, as Go reads a zero time
+                tx.append_log(&graph_core::impact::LogEntry {
+                    seq: 0,
+                    id: if e.id.is_empty() { tx.env.new_id() } else { e.id.clone() },
+                    change,
+                    typ: e.r#type.clone(),
+                    flow: e.flow.clone(),
+                    process: e.process_id.clone(),
+                    execution: e.execution.clone(),
+                    subject: e.subject.clone(),
+                    by: e.by.clone(),
+                    at,
+                    causation: e.causation.clone(),
+                    payload: e.payload.clone(),
+                })
+                .await?;
+            }
+            Ok(pb::AppendLogResponse {})
+        })
+        .await
+    }
+
+    /// The execution journal of a change and / or of processes, as records.
+    async fn list_executions(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ListExecutionsRequest>,
+    ) -> Answer<pb::ListExecutionsResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.read(caller, async |tx| {
+            if m.change_id.is_empty() && m.process_ids.is_empty() {
+                // Go joins the graph's invalid with the journal's
+                return Err(GraphError::new(
+                    Kind::Invalid,
+                    "invalid\njournal filter needs a change or processes: invalid journal",
+                ));
+            }
+            let f = LogFilter {
+                change: m.change_id.clone(),
+                types: vec![format!("{}.", crate::journal::STREAM)],
+                flows: None,
+                processes: m.process_ids.clone(),
+                execution: String::new(),
+                after_seq: 0,
+                limit: 0,
+            };
+            if !f.change.is_empty() && tx.change(&ChangeId(f.change.clone())).await?.is_none() {
+                return Err(GraphError::not_found(format!("change {}", f.change)));
+            }
+            let (entries, _) = tx.change_log(&f).await?;
+            Ok(pb::ListExecutionsResponse {
+                records: crate::journal::records(&entries).map_err(GraphError::internal)?,
+            })
+        })
+        .await
+    }
+
     /// The stack of changes producing a node version or a baseline (ADR 0133).
     async fn get_change_stack(
         &self,
