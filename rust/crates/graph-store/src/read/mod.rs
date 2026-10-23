@@ -2,6 +2,7 @@
 mod sql;
 mod value;
 mod write;
+mod domains;
 
 use std::collections::{BTreeMap, HashMap};
 

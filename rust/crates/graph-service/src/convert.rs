@@ -36,6 +36,23 @@ fn object(m: &serde_json::Map<String, Json>) -> pbjson_types::Struct {
     }
 }
 
+/// A JSON value of a protocol value, as Go's `structpb` reads it (numbers are float64).
+fn json(v: &pbjson_types::Value) -> Json {
+    match &v.kind {
+        None | Some(Kind::NullValue(_)) => Json::Null,
+        Some(Kind::BoolValue(b)) => Json::Bool(*b),
+        Some(Kind::NumberValue(n)) => serde_json::Number::from_f64(*n).map_or(Json::Null, Json::Number),
+        Some(Kind::StringValue(s)) => Json::String(s.clone()),
+        Some(Kind::ListValue(l)) => Json::Array(l.values.iter().map(json).collect()),
+        Some(Kind::StructValue(s)) => Json::Object(map(s)),
+    }
+}
+
+/// The map of a Struct (`pbconv.Map`).
+pub fn map(s: &pbjson_types::Struct) -> serde_json::Map<String, Json> {
+    s.fields.iter().map(|(k, v)| (k.clone(), json(v))).collect()
+}
+
 /// Properties as a Struct: none when empty.
 pub fn props(p: &Props) -> Option<pbjson_types::Struct> {
     p.as_ref().filter(|m| !m.is_empty()).map(object)

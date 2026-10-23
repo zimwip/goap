@@ -33,6 +33,8 @@ pub struct Env {
     pub actor: String,
     pub command: String,
     pub catalog: Arc<Catalog>,
+    /// Whether the events go to the outbox: a bus delivers them (Go's `Graph.Observe` with a sink); none, no event.
+    pub outbox: bool,
 }
 
 impl Env {
@@ -373,6 +375,9 @@ impl<'s, S: WriteTx> Tx<'s, S> {
     /// of its writes in the outbox (Go's `observedRepo.InTx`). The caller commits the store's transaction after.
     pub async fn finish(mut self) -> Result<BTreeMap<ChangeId, i64>> {
         self.verify().await?;
+        if !self.env.outbox {
+            return Ok(self.positions);
+        }
         let msgs = self.events().await?;
         if !msgs.is_empty() {
             self.store.append_outbox(&msgs).await?;

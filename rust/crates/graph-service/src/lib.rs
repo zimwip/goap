@@ -8,7 +8,10 @@ use goap_connect::Interceptors;
 use goap_proto::{
     graph::v1 as graphpb, importer::v1 as importerpb, registry::v1 as registrypb, smarttag::v1 as smarttagpb,
 };
-use graph_store::Store;
+use graph_catalog::{Catalog, catalog::is_builtin, record::in_force};
+use graph_core::GraphError;
+use graph_store::{Store, read::Session};
+use tokio::sync::Mutex;
 
 mod convert;
 mod graph;
@@ -18,6 +21,38 @@ pub use graph::Graph;
 /// What the handlers share.
 pub struct State {
     pub store: Store,
+    /// Whether a bus takes the events: written in the outbox, as the Go service does with `GOAP_NATS_URL` set (its
+    /// relay delivers them for now), else none.
+    pub outbox: bool,
+    /// The type catalogue of the domains in force, with what told the stored versions apart when it was built.
+    catalog: Mutex<(Option<String>, Arc<Catalog>)>,
+}
+
+impl State {
+    pub fn new(store: Store) -> State {
+        State {
+            store,
+            outbox: false,
+            catalog: Mutex::new((None, Catalog::builtin())),
+        }
+    }
+
+    /// The type catalogue of the domains in force (`typecat.Live`), built again when a stored version changed: a
+    /// version published through the Go registry reaches the next write here.
+    pub async fn catalog(&self, tx: &Session) -> Result<Arc<Catalog>, GraphError> {
+        let fp = tx.domain_fingerprint().await?;
+        let mut cur = self.catalog.lock().await;
+        if cur.0.as_deref() == Some(fp.as_str()) {
+            return Ok(cur.1.clone());
+        }
+        let rs = tx.domain_records().await?;
+        let ds: Vec<_> = in_force(&rs).into_iter().filter(|d| !is_builtin(&d.name)).collect();
+        let c = Catalog::new(&ds).map_err(|e| {
+            GraphError::unimplemented(format!("the domains in force do not make a catalogue here: {e}"))
+        })?;
+        *cur = (Some(fp), Arc::new(c));
+        Ok(cur.1.clone())
+    }
 }
 
 /// `goap.registry.v1.DomainService`: the domain registry the graph serves (ADR 0125 §3).

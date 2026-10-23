@@ -1,6 +1,7 @@
 //! goap-graph-rs: the Rust graph service (ADR 0163). The environment of the Go service: `GOAP_HTTP_ADDR`,
 //! `GOAP_DB_DSN` (PostgreSQL), else `GOAP_SQLITE_PATH` (SQLite, `GOAP_SQLITE_READERS` read-only connections), else a
-//! database in memory.
+//! database in memory. `GOAP_NATS_URL` set, the events of the graph are written in its outbox, which the Go service's
+//! relay delivers (ADR 0136).
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -27,7 +28,12 @@ async fn main() -> anyhow::Result<()> {
         .await
         .with_context(|| format!("listening on {addr}"))?;
     tracing::info!(%addr, dialect = ?store.dialect(), "goap-graph-rs serving");
-    axum::serve(listener, app(Arc::new(State { store })))
+    let mut state = State::new(store);
+    state.outbox = std::env::var("GOAP_NATS_URL").is_ok_and(|u| !u.is_empty());
+    if !state.outbox {
+        tracing::warn!("GOAP_NATS_URL not set: events disabled");
+    }
+    axum::serve(listener, app(Arc::new(state)))
         .with_graceful_shutdown(shutdown())
         .await?;
     Ok(())

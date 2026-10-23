@@ -14,6 +14,14 @@ use graph_core::{
     read::{self, World},
     store::ReadTx,
 };
+use graph_catalog::catalog::STRUCTURE_PROJECT;
+use graph_core::{
+    model::{ChangeId, MAIN_BRANCH},
+    write::{
+        change::NewChange,
+        tx::{Env, Tx},
+    },
+};
 use graph_store::read::Session;
 
 use crate::{State, convert};
@@ -28,12 +36,18 @@ const HEADER_SUBJECT: &str = "x-goap-subject";
 const HEADER_ON_BEHALF_OF: &str = "x-goap-on-behalf-of";
 /// The positions of change logs a read must reach (ADR 0153).
 const HEADER_AT_LEAST: &str = "x-goap-at-least";
+/// The positions a write left the logs of its changes at (ADR 0153).
+const HEADER_CHANGE_SEQ: &str = "x-goap-change-seq";
+const HEADER_PROJECT: &str = "x-goap-project";
+const HEADER_COMMAND: &str = "x-goap-command";
 
 /// The caller of a request.
 struct Caller {
     subject: String,
     on_behalf_of: String,
     at_least: bool,
+    project: String,
+    command: String,
 }
 
 impl Caller {
@@ -52,6 +66,8 @@ impl Caller {
             subject,
             on_behalf_of,
             at_least: !req.header(HEADER_AT_LEAST).is_empty(),
+            project: req.header(HEADER_PROJECT).to_string(),
+            command: req.header(HEADER_COMMAND).to_string(),
         })
     }
 
@@ -67,6 +83,22 @@ impl Caller {
         if self.at_least {
             return Err(GraphError::unimplemented(
                 "a read at a position of a change log (ADR 0153): not served here yet",
+            ));
+        }
+        Ok(())
+    }
+
+    /// The writes served here: a platform service acting by itself. A person's write goes through the organisation's
+    /// access (reach, owned writes, project roles): the Go service serves those for now.
+    fn writes(&self) -> Result<(), GraphError> {
+        if !self.subject.starts_with("system:") || !self.on_behalf_of.is_empty() {
+            return Err(GraphError::unimplemented(
+                "a person's write goes through the access of the organisation: not served here yet",
+            ));
+        }
+        if self.at_least {
+            return Err(GraphError::unimplemented(
+                "a request at a position of a change log (ADR 0153): not served here yet",
             ));
         }
         Ok(())
@@ -127,6 +159,65 @@ impl Graph {
             .await
             .map_err(|e| connect_error(GraphError::internal(e)))?;
         f(&tx).await.map(Response::new).map_err(connect_error)
+    }
+}
+
+impl Graph {
+    /// Runs a write in one transaction of the store, through the guard and the outbox of the graph: committed when it
+    /// succeeds, rolled back otherwise. The positions it left the change logs at go back in `X-Goap-Change-Seq`.
+    async fn write<T, F>(&self, caller: Caller, f: F) -> Answer<T>
+    where
+        F: for<'a, 'b> AsyncFnOnce(&'a mut Tx<'b, Session>) -> Result<T, GraphError>,
+    {
+        caller.writes().map_err(connect_error)?;
+        let session = self
+            .state
+            .store
+            .writer()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let catalog = self.state.catalog(&session).await.map_err(connect_error)?;
+        let env = Env {
+            by: caller.subject.clone(),
+            end_user: String::new(),
+            actor: caller.subject.clone(),
+            command: caller.command.clone(),
+            catalog,
+            outbox: self.state.outbox,
+        };
+        let mut tx = Tx::new(&session, &env);
+        let out = f(&mut tx).await.map_err(connect_error)?;
+        let positions = tx.finish().await.map_err(connect_error)?;
+        session
+            .commit()
+            .await
+            .map_err(|e| connect_error(GraphError::from(e)))?;
+        let mut res = Response::new(out);
+        if !positions.is_empty() {
+            let v = positions
+                .iter()
+                .map(|(id, seq)| format!("{id}:{seq}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            if let Ok(v) = v.parse() {
+                res.headers.insert(HEADER_CHANGE_SEQ, v);
+            }
+        }
+        Ok(res)
+    }
+}
+
+/// The criticality a change's data may name (`validCriticality`).
+fn valid_criticality(data: &serde_json::Map<String, serde_json::Value>) -> Result<(), GraphError> {
+    let Some(v) = data.get("criticality") else {
+        return Ok(());
+    };
+    match v.as_str() {
+        Some("C1" | "C2" | "C3") => Ok(()),
+        _ => Err(GraphError::new(
+            Kind::Invalid,
+            format!("criticality {}: C1, C2 or C3", graph_core::write::tx::go_sprint(v)),
+        )),
     }
 }
 
@@ -384,4 +475,126 @@ impl pb::GraphService for Graph {
         })
         .await
     }
+
+    async fn create_change(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::CreateChangeRequest>,
+    ) -> Answer<pb::CreateChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let token_project = caller.project.clone();
+        self.write(caller, async |tx| {
+            if !m.parent_id.is_empty() {
+                return Err(GraphError::unimplemented("a sub-change (ADR 0103): not served here yet"));
+            }
+            if m.owner_org == "@me" || m.owner_org.starts_with(change::USER_PREFIX) || m.owner_org.contains("/USR:") {
+                return Err(GraphError::unimplemented("a personal change (ADR 0037): not served here yet"));
+            }
+            if is_platform_namespace(&m.namespace) {
+                return Err(GraphError::unimplemented(
+                    "a change of the platform's namespaces: not served here yet",
+                ));
+            }
+            let project = if !m.project_id.is_empty() {
+                m.project_id.clone()
+            } else if !token_project.is_empty() {
+                token_project.clone()
+            } else {
+                tx.structure_root(STRUCTURE_PROJECT)?
+            };
+            if project_stopped(tx, &project).await? {
+                return Err(GraphError::new(
+                    Kind::Conflict,
+                    format!("project {project} is stopped: it takes no new change"),
+                ));
+            }
+            let data = m.data.as_ref().map(convert::map);
+            valid_criticality(data.as_ref().unwrap_or(&serde_json::Map::new()))?;
+            let c = tx
+                .create_change(NewChange {
+                    title: m.title.clone(),
+                    intent: m.intent.clone(),
+                    methodology: m.methodology.clone(),
+                    methodology_version: m.methodology_version.clone(),
+                    namespace: m.namespace.clone(),
+                    baseline_id: m.baseline_id.as_str().into(),
+                    branch: m.branch.clone(),
+                    own_branch: m.own_branch,
+                    owner_org: m.owner_org.clone(),
+                    project_id: project,
+                    data,
+                })
+                .await?;
+            Ok(pb::CreateChangeResponse {
+                change: Some(convert::change(&c)),
+            })
+        })
+        .await
+    }
+
+    async fn delete_change(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::DeleteChangeRequest>,
+    ) -> Answer<pb::DeleteChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id: ChangeId = m.change_id.as_str().into();
+            let c = tx.change_head(&id).await?;
+            if c.is_personal() || is_platform_namespace(&c.namespace) || !c.parent_id.is_empty() {
+                return Err(GraphError::unimplemented(
+                    "a personal change, a sub-change or a change of the platform's namespaces: not served here yet",
+                ));
+            }
+            let c = tx.purge_change(&id).await?;
+            Ok(pb::DeleteChangeResponse {
+                change: Some(convert::change(&c)),
+            })
+        })
+        .await
+    }
+}
+
+/// The namespaces the platform graph holds (ADR 0154 §9): their writes are checked by the platform's validators,
+/// which the Go service runs.
+fn is_platform_namespace(ns: &str) -> bool {
+    matches!(
+        graph_core::model::namespace_of(ns),
+        graph_core::model::NAMESPACE_ORGANISATION
+            | graph_core::model::NAMESPACE_PLATFORM
+            | graph_core::model::NAMESPACE_METHODOLOGY
+    )
+}
+
+/// Whether a project or one above it is stopped (`access.Snapshot.ProjectStopped`, ADR 0138): the projects at the
+/// head of main, followed up through their parent links. A project the structure does not hold is not stopped.
+async fn project_stopped(tx: &Tx<'_, Session>, project: &str) -> Result<bool, GraphError> {
+    let Some(st) = tx.catalog().structure(STRUCTURE_PROJECT).cloned() else {
+        return Ok(false);
+    };
+    let world = World::open(tx.store, &graph_core::view::View::branch(&st.namespace, MAIN_BRANCH)).await?;
+    let mut seen = std::collections::HashSet::new();
+    let mut key = project.to_string();
+    while !key.is_empty() && seen.insert(key.clone()) {
+        let v = match world.node_view(&NodeId::default(), &key).await {
+            Ok(v) => v,
+            Err(e) if e.is_not_found() => return Ok(false),
+            Err(e) => return Err(e),
+        };
+        if v.node.props.as_ref().and_then(|p| p.get("stopped")).and_then(serde_json::Value::as_bool) == Some(true) {
+            return Ok(true);
+        }
+        key = String::new();
+        for l in &v.out {
+            if l.typ == st.parent || l.typ.rsplit('@').next() == Some(st.parent.rsplit('@').next().unwrap_or_default()) {
+                if let Some(to) = l.to_node() {
+                    key = tx.store.node(to).await?.map(|n| n.key).unwrap_or_default();
+                }
+                break;
+            }
+        }
+    }
+    Ok(false)
 }
