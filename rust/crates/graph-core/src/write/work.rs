@@ -57,6 +57,8 @@ pub struct Work {
     /// the stored impact, and as the flow sees it (the same on the main flow)
     pub cn: ChangeImpact,
     pub vcn: ChangeImpact,
+    /// a creation names the key of a planned creation (ADR 0121): its draft fulfils that impact
+    pub planned: bool,
 }
 
 impl Work {
@@ -353,6 +355,7 @@ impl<S: WriteTx> Tx<'_, S> {
             seen,
             cn: ChangeImpact::default(),
             vcn: ChangeImpact::default(),
+            planned: false,
         })
     }
 
@@ -408,8 +411,10 @@ impl<S: WriteTx> Tx<'_, S> {
             })
             .cloned();
         if let Some(found) = found {
-            if t.create && found.intent == INTENT_CREATED && found.post.is_none() && found.committed.is_none() {
-                return Err(unserved("the creation of a planned node (ADR 0121)"));
+            if t.create && found.planned_creation() && found.typ == t.typ {
+                self.select_impact(&mut w, &found.id)?;
+                w.planned = true;
+                return Ok(w);
             }
             if t.create {
                 return Err(GraphError::conflict(format!(
@@ -477,11 +482,100 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(w)
     }
 
+    /// Proposes impacts (Go's `ProposeImpact`): the modifications of existing nodes a change will make, and the
+    /// creations it plans (intent created, a key and a type, no draft, ADR 0121), each recorded by a `proposed`
+    /// event. The impacts come back as declared.
+    pub async fn propose_impacts(&mut self, id: &ChangeId, mut batch: Vec<ChangeImpact>) -> Result<Vec<ChangeImpact>> {
+        for cn in &batch {
+            if cn.intent == INTENT_CREATED && (cn.key.is_empty() || cn.typ.is_empty()) {
+                return Err(GraphError::invalid(format!(
+                    "change impact of {:?}: a planned creation needs a key and a type",
+                    cn.key
+                )));
+            }
+        }
+        if batch.iter().any(|cn| !cn.flow.is_empty() && cn.flow != "main") {
+            return Err(unserved("an impact proposed on an option (ADR 0032)"));
+        }
+        let c = self.change_open(id).await?;
+        if !c.parent_id.is_empty() || !c.lifecycle.is_empty() || !c.guardians.is_empty() {
+            return Err(unserved(
+                "a sub-change, or a change following a lifecycle (ADR 0058, 0103)",
+            ));
+        }
+        self.view(id).await?;
+        for cn in batch.iter_mut() {
+            if cn.id.is_empty() {
+                cn.id = self.env.new_id();
+            }
+            cn.flow = String::new();
+        }
+        let ids: Vec<String> = batch.iter().map(|cn| cn.id.clone()).collect();
+        let mut out = Vec::with_capacity(batch.len());
+        for cn in batch {
+            if cn.post.is_some() || cn.committed.is_some() || !cn.reviews.is_empty() || cn.recheck {
+                return Err(GraphError::invalid(format!(
+                    "change impact {}: post, committed and reviews are set by ImpactNodeCreate / ImpactNodeCheckout, ImpactNodeReview and Apply",
+                    cn.id
+                )));
+            }
+            if !cn.review.is_empty() && cn.review != REVIEW_PROPOSED {
+                return Err(GraphError::invalid(format!(
+                    "change impact {} starts proposed, it is accepted or rejected by ImpactNodeReview",
+                    cn.id
+                )));
+            }
+            if !cn.via.is_empty()
+                && !ids.contains(&cn.via)
+                && !self.views[id].fold.impacts.iter().any(|o| o.id == cn.via)
+            {
+                return Err(GraphError::invalid(format!(
+                    "change impact {}: unknown via {}",
+                    cn.id, cn.via
+                )));
+            }
+            out.push(self.declare(id, cn, true).await?);
+        }
+        Ok(out)
+    }
+
+    /// Refuses a planned creation whose key a node of the reference baseline holds, or the change already acts on
+    /// (Go's `checkPlannedKey`).
+    async fn check_planned_key(&self, c: &Change, cn: &ChangeImpact) -> Result<()> {
+        if let Some(nid) = self.store.node_id_by_key(namespace_of(&c.namespace), &cn.key).await? {
+            let header = read::header_of(self.store, &c.baseline_id).await?;
+            if !header.id.is_empty()
+                && read::select(self.store, &header, Some(std::slice::from_ref(&nid)))
+                    .await?
+                    .contains_key(&nid)
+            {
+                return Err(GraphError::conflict(format!(
+                    "cannot plan {} ({}): the reference baseline of change {} already holds it",
+                    cn.key, cn.typ, c.id
+                )));
+            }
+        }
+        if let Some(other) = self.views[&c.id]
+            .fold
+            .impacts
+            .iter()
+            .find(|o| o.key == cn.key && o.id != cn.id)
+        {
+            return Err(GraphError::conflict(format!(
+                "cannot plan {} ({}): the change already holds it as change impact {}",
+                cn.key, cn.typ, other.id
+            )));
+        }
+        Ok(())
+    }
+
     /// Declares an impact (Go's `declareTx` for one): checked, proposed when `propose` (an existing node), else only
     /// returned (a creation, whose created event carries it).
     pub(super) async fn declare(&mut self, id: &ChangeId, mut cn: ChangeImpact, propose: bool) -> Result<ChangeImpact> {
         let mut c = self.change_open(id).await?;
-        cn.id = self.env.new_id();
+        if cn.id.is_empty() {
+            cn.id = self.env.new_id();
+        }
         if cn.review.is_empty() {
             cn.review = REVIEW_PROPOSED.into();
         }
@@ -525,6 +619,9 @@ impl<S: WriteTx> Tx<'_, S> {
         } else if !cn.typ.is_empty() {
             check::node(self.catalog(), namespace_of(&c.namespace), &cn.typ)
                 .map_err(|e| e.context(format!("change impact {}", cn.id)))?;
+        }
+        if propose && cn.intent == INTENT_CREATED {
+            self.check_planned_key(&c, &cn).await?;
         }
         cn.created_at = self.env.now();
         cn.validate()
@@ -655,6 +752,20 @@ impl<S: WriteTx> Tx<'_, S> {
             d.links.push(dl);
         }
         let r = d.draft_ref();
+        if w.planned {
+            // the creation was planned: its impact is recorded, the draft fulfils it
+            self.emit(vec![ImpactEvent {
+                change: w.c.id.clone(),
+                impact: w.cn.id.clone(),
+                op: ImpactOp::CheckedOut,
+                execution: inp.execution.clone(),
+                post: Some(r.clone()),
+                draft: Some(d),
+                ..ImpactEvent::default()
+            }])
+            .await?;
+            return Ok(w.seen_as(&r));
+        }
         self.emit(vec![ImpactEvent {
             change: w.c.id.clone(),
             impact: w.cn.id.clone(),
@@ -708,8 +819,31 @@ impl<S: WriteTx> Tx<'_, S> {
             )));
         }
         let Some(base) = self.base(w).await? else {
-            if w.cn.intent == INTENT_CREATED && w.cn.post.is_none() && w.cn.committed.is_none() {
-                return Err(unserved("the checkout of a planned creation (ADR 0121)"));
+            if w.cn.planned_creation() {
+                // a planned creation checked out: its first draft, bare (ADR 0076: the creation fulfils the plan)
+                let mut d = Draft {
+                    change: w.c.id.clone(),
+                    impact: w.cn.id.clone(),
+                    node: NodeId(self.env.new_id()),
+                    key: w.cn.key.clone(),
+                    typ: w.cn.typ.clone(),
+                    execution: execution.to_string(),
+                    ..Draft::default()
+                };
+                if let Some(lc) = self.catalog().lifecycle(&d.typ) {
+                    d.state = lc.initial.clone();
+                }
+                self.emit(vec![ImpactEvent {
+                    change: w.c.id.clone(),
+                    impact: w.cn.id.clone(),
+                    op: ImpactOp::CheckedOut,
+                    execution: execution.to_string(),
+                    post: Some(d.draft_ref()),
+                    draft: Some(d.clone()),
+                    ..ImpactEvent::default()
+                }])
+                .await?;
+                return Ok(d);
             }
             return Err(GraphError::invalid(format!(
                 "change impact {} has no version to check out",

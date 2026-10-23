@@ -9,6 +9,7 @@ use graph_catalog::{Catalog, catalog::STRUCTURE_PROJECT};
 use graph_core::{
     GraphError, Kind,
     change::{self, ChangesFilter},
+    impact::ChangeImpact,
     items,
     lnk::Url,
     model::{BaselineId, NodeId, NodeQuery, NodeRef, namespace_of},
@@ -1908,6 +1909,54 @@ impl pb::GraphService for Graph {
         })
         .await
     }
+    /// Proposes impacts on a change (`Graph.ProposeImpact`): modifications of existing nodes, planned creations.
+    async fn propose_impact(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ProposeImpactRequest>,
+    ) -> Answer<pb::ProposeImpactResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        caller.administers().map_err(connect_error)?;
+        if m.nodes.iter().any(|cn| !cn.reviews.is_empty() || cn.superseded) {
+            return Err(connect_error(GraphError::unimplemented(
+                "an impact proposed with reviews: answered by the Go service",
+            )));
+        }
+        let opt = |r: &Option<pb::NodeRef>| r.as_ref().map(|r| convert::ref_from(Some(r)));
+        let batch: Vec<ChangeImpact> = m
+            .nodes
+            .iter()
+            .map(|cn| ChangeImpact {
+                id: cn.id.clone(),
+                key: cn.key.clone(),
+                typ: cn.r#type.clone(),
+                intent: cn.intent.clone(),
+                rationale: cn.rationale.clone(),
+                pre: opt(&cn.pre),
+                post: opt(&cn.post),
+                committed: opt(&cn.committed),
+                review: cn.review.clone(),
+                via: cn.via.clone(),
+                recheck: cn.recheck,
+                produced_by: cn.produced_by.clone(),
+                derived_from: cn.derived_from.clone(),
+                execution: cn.execution.clone(),
+                items: cn.items.clone(),
+                flow: cn.flow.clone(),
+                ..ChangeImpact::default()
+            })
+            .collect();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let out = tx.propose_impacts(&id, batch).await?;
+            Ok(pb::ProposeImpactResponse {
+                nodes: out.iter().map(convert::change_impact).collect(),
+            })
+        })
+        .await
+    }
+
     async fn impact_node_create(
         &self,
         _ctx: &Ctx,

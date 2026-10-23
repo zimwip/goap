@@ -229,5 +229,7 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   lifecycle: the moves the log records for each draft are replayed against its lifecycle, and with no methodology to
   ask (the Go graph service wires none) the guardian of the commit is the committable states (ADR 0078, 0146): what
   the change committed must rest in one; 482 calls, none divergent, the tables and the 356 events of the outbox the
-  same.
+  same. `ProposeImpact` (the modification of an existing node, a planned creation: a key and a type, no draft,
+  ADR 0121) follows, with the creation or the checkout that fulfils a planned creation (a `checkedOut` event giving its
+  impact a draft): 513 calls, none divergent, the tables the same.
 - Not done yet: the rest of phase 4.

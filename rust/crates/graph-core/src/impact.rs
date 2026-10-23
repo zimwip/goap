@@ -208,9 +208,9 @@ impl Default for ChangeImpact {
 }
 
 impl ChangeImpact {
-    /// No post yet: its node is not checked out.
-    pub fn planned(&self) -> bool {
-        self.post.is_none()
+    /// A creation planned by `ProposeImpact` and not drafted yet: no draft, no version (ADR 0121).
+    pub fn planned_creation(&self) -> bool {
+        self.intent == INTENT_CREATED && self.post.is_none() && self.committed.is_none()
     }
 
     /// Its node has a draft.

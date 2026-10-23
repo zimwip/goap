@@ -123,7 +123,7 @@ impl<S: WriteTx> Tx<'_, S> {
             let modifies = self.modifies(&c.id, &cn.id).await?;
             if cn.review == REVIEW_REJECTED {
                 out.push(format!("{} is rejected (rework or withdraw it)", cn.key));
-            } else if cn.planned() {
+            } else if cn.planned_creation() {
                 out.push(format!(
                     "{} is planned, not created yet (create or withdraw it)",
                     cn.key
