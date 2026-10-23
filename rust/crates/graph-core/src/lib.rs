@@ -10,6 +10,7 @@ pub mod lnk;
 pub mod model;
 pub mod page;
 pub mod read;
+pub mod stats;
 pub mod store;
 pub mod view;
 pub mod write;

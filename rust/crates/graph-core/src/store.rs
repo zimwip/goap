@@ -44,6 +44,12 @@ pub trait ReadTx: Sync {
         ids: &[BaselineId],
     ) -> impl Future<Output = Result<Vec<Baseline>>> + Send;
 
+    /// The rows of a namespace in the store, by measure (`stats::STORE_MEASURES`) then by key (`Tx.StoreCounts`).
+    fn store_counts(
+        &self,
+        namespace: &str,
+    ) -> impl Future<Output = Result<HashMap<String, HashMap<String, i64>>>> + Send;
+
     /// The number of baselines of each branch of a namespace.
     fn baseline_counts(&self, namespace: &str) -> impl Future<Output = Result<HashMap<String, i64>>> + Send;
 

@@ -185,4 +185,8 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   id on each side) come back `order_differs`, as they do Go against Go. The proxy pairs ids that are keys of a map
   by the shape of their value only when one key of each side has that shape: a baseline's map of node ids to versions,
   all 1, tells nothing, and pairing it in order paired the wrong nodes.
+  `GetGraphStats` (`graph-core` `stats`, Go's `stateStats`; the store counts one statement per measure,
+  `read::sql` `store_counts`) and `GetGraphOverview` follow: 142 calls, none divergent. The overview and
+  `ListNamespaces` name this graph's source (`platform`) and are left to Go while the platform declares other graphs
+  holding namespaces: Go's router merges their listings, Rust has no router yet.
 - Not done yet: the rest of phase 4.

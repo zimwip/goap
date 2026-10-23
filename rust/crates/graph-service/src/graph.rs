@@ -14,6 +14,7 @@ use graph_core::{
     model::{BaselineId, NodeId, NodeQuery, NodeRef, namespace_of},
     page::link_page,
     read::{self, World},
+    stats,
     store::ReadTx,
 };
 use graph_core::{
@@ -587,6 +588,9 @@ impl pb::GraphService for Graph {
             .reader()
             .await
             .map_err(|e| connect_error(GraphError::internal(e)))?;
+        if other_graphs(&tx).await.map_err(connect_error)? {
+            return Err(connect_error(GraphError::unimplemented(MERGED_LISTING)));
+        }
         let namespaces = tx.namespaces().await.map_err(connect_error)?;
         Ok(Response::new(pb::ListNamespacesResponse { namespaces }))
     }
@@ -695,6 +699,113 @@ impl pb::GraphService for Graph {
                 nodes: convert::nodes(&nodes),
                 links: convert::links(&links),
                 suspect_links: convert::links(&suspects),
+            })
+        })
+        .await
+    }
+
+    /// What every namespace holds (`GraphOverview`): those holding nodes and those of the domains in force.
+    async fn get_graph_overview(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetGraphOverviewRequest>,
+    ) -> Answer<pb::GetGraphOverviewResponse> {
+        let caller = Caller::of(&req)?;
+        let cat = self.catalog().await?;
+        self.read(caller, async |tx| {
+            if other_graphs(tx).await? {
+                return Err(GraphError::unimplemented(MERGED_LISTING));
+            }
+            let mut ns: Vec<String> = cat.domains().keys().cloned().collect();
+            for n in tx.namespaces().await? {
+                if !ns.contains(&n) {
+                    ns.push(n);
+                }
+            }
+            ns.sort();
+            let mut out = Vec::with_capacity(ns.len());
+            for n in ns {
+                let counts = tx.store_counts(&n).await?;
+                let sum = |m: &str| counts.get(m).map_or(0, |c| c.values().sum::<i64>()) as i32;
+                out.push(pb::NamespaceSummary {
+                    nodes: sum("nodesByType"),
+                    versions: sum("versionsByType"),
+                    link_rows: sum("linkRowsByType"),
+                    changes: sum("changesByStatus"),
+                    baselines: sum("baselinesByKind"),
+                    branches: tx.branches(&n).await?.len() as i32,
+                    types: counts.get("nodesByType").map_or(0, |c| c.len()) as i32,
+                    log_entries: sum("logByType"),
+                    namespace: n,
+                    source: PLATFORM_SOURCE.into(),
+                });
+            }
+            Ok(pb::GetGraphOverviewResponse { namespaces: out })
+        })
+        .await
+    }
+
+    /// The statistics of a namespace at the head of a lasting branch (`GraphStats`): what the store holds, counted by
+    /// the database, and the shape of the state.
+    async fn get_graph_stats(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetGraphStatsRequest>,
+    ) -> Answer<pb::GetGraphStatsResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.read(caller, async |tx| {
+            let namespace = namespace_of(&m.namespace).to_string();
+            let branch = graph_core::model::branch_of(&m.branch).to_string();
+            let store = tx.store_counts(&namespace).await?;
+            let bs = stats::branch_stats(&tx.branches(&namespace).await?);
+            let head = read::branch_head(tx, &namespace, &branch).await?;
+            let state = read::select(tx, &head, None).await?;
+            let (mut nodes, mut links) = (Vec::new(), Vec::new());
+            if !state.is_empty() {
+                let mut refs: Vec<NodeRef> = state.iter().map(|(n, v)| NodeRef::new(n.clone(), *v)).collect();
+                refs.sort();
+                nodes = tx.nodes_at(&refs, "").await?;
+                let live: Vec<NodeRef> = nodes
+                    .iter()
+                    .filter(|n| !n.deleted)
+                    .map(|n| NodeRef::new(n.id.clone(), n.version))
+                    .collect();
+                if !live.is_empty() {
+                    links = tx.links_from(&live, None).await?;
+                }
+            }
+            let st = stats::state_stats(&state, &nodes, &links);
+            let counts = |m: &HashMap<String, usize>| m.iter().map(|(k, v)| (k.clone(), *v as i32)).collect();
+            Ok(pb::GetGraphStatsResponse {
+                stats: Some(pb::GraphStats {
+                    namespace,
+                    branch,
+                    baseline_at: if head.id.is_empty() {
+                        None
+                    } else {
+                        convert::time(&head.created_at)
+                    },
+                    baseline_id: head.id.0.clone(),
+                    branches: Some(pb::BranchStats {
+                        total: bs.total as i32,
+                        lasting: bs.lasting as i32,
+                        ephemeral: bs.ephemeral as i32,
+                        by_status: counts(&bs.by_status),
+                        names: bs.names,
+                    }),
+                    store: stats::STORE_MEASURES
+                        .iter()
+                        .map(|name| pb::StoreMeasure {
+                            name: name.to_string(),
+                            counts: store
+                                .get(*name)
+                                .map(|c| c.iter().map(|(k, v)| (k.clone(), *v as i32)).collect())
+                                .unwrap_or_default(),
+                        })
+                        .collect(),
+                    state: Some(state_stats_pb(st)),
+                }),
             })
         })
         .await
@@ -1597,6 +1708,42 @@ fn is_platform_namespace(ns: &str) -> bool {
 
 /// Whether a project or one above it is stopped (`access.Snapshot.ProjectStopped`, ADR 0138): the projects at the
 /// head of main, followed up through their parent links. A project the structure does not hold is not stopped.
+/// The name of this graph's source in the listings (`graphsvc.PlatformSource`).
+const PLATFORM_SOURCE: &str = "platform";
+
+const MERGED_LISTING: &str = "a listing merged with the other graphs' answers: not served here yet";
+
+/// Whether the platform declares other graphs holding namespaces (`Router.graphs`): their listings are merged into
+/// this graph's, which Rust does not do yet.
+async fn other_graphs(tx: &Session) -> Result<bool, GraphError> {
+    let world = World::open(tx, &graph_core::view::View::branch("platform", MAIN_BRANCH)).await?;
+    let q = NodeQuery {
+        typ: "platform@Source".into(),
+        limit: i32::MAX as usize,
+        ..NodeQuery::default()
+    };
+    let str = |n: &graph_core::model::Node, k: &str| {
+        n.props
+            .as_ref()
+            .and_then(|p| p.get(k))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    Ok(world.page(&q).await?.nodes.iter().any(|n| {
+        !n.deleted
+            && n.state != "retired"
+            && n.key.starts_with("SRC:")
+            && str(n, "kind") == "graph"
+            && !str(n, "location").is_empty()
+            && n.props
+                .as_ref()
+                .and_then(|p| p.get("namespaces"))
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|a| a.iter().any(|v| v.as_str().is_some_and(|s| !s.is_empty())))
+    }))
+}
+
 async fn project_stopped(tx: &Tx<'_, Session>, project: &str) -> Result<bool, GraphError> {
     let Some(st) = tx.catalog().structure(STRUCTURE_PROJECT).cloned() else {
         return Ok(false);
@@ -1654,3 +1801,95 @@ fn tag_pb(t: Tag) -> pb::Tag {
 
 /// The most nodes a delta carries (`graph.MaxDeltaNodes`): beyond, the baseline is read.
 const MAX_DELTA_NODES: usize = 5000;
+
+fn distribution_pb(d: &stats::Distribution) -> Option<pb::Distribution> {
+    Some(pb::Distribution {
+        min: d.min as i32,
+        max: d.max as i32,
+        mean: d.mean,
+        median: d.median,
+        p90: d.p90 as i32,
+        sum: d.sum as i32,
+    })
+}
+
+/// A state's shape as its message (`stateStatsToPB`).
+fn state_stats_pb(s: stats::StateStats) -> pb::StateStats {
+    let counts = |m: &HashMap<String, usize>| m.iter().map(|(k, v)| (k.clone(), *v as i32)).collect();
+    pb::StateStats {
+        nodes: s.nodes as i32,
+        deleted: s.deleted as i32,
+        links: s.links as i32,
+        suspect: s.suspect as i32,
+        external: s.external as i32,
+        isolated: s.isolated as i32,
+        self_links: s.self_links as i32,
+        reciprocal: s.reciprocal as i32,
+        density: s.density,
+        component_count: s.component_count as i32,
+        components: s.components.iter().map(|c| *c as i32).collect(),
+        out: distribution_pb(&s.out),
+        r#in: distribution_pb(&s.r#in),
+        degree: distribution_pb(&s.degree),
+        histogram: s
+            .histogram
+            .iter()
+            .map(|b| pb::HistogramBucket {
+                label: b.label.clone(),
+                from: b.from as i32,
+                to: b.to as i32,
+                count: b.count as i32,
+            })
+            .collect(),
+        versions: distribution_pb(&s.versions),
+        properties: distribution_pb(&s.properties),
+        types: s
+            .types
+            .iter()
+            .map(|t| pb::NodeTypeStats {
+                r#type: t.typ.clone(),
+                nodes: t.nodes as i32,
+                states: counts(&t.states),
+                out: distribution_pb(&t.out),
+                r#in: distribution_pb(&t.r#in),
+                versions: distribution_pb(&t.versions),
+                properties: distribution_pb(&t.properties),
+                isolated: t.isolated as i32,
+            })
+            .collect(),
+        link_types: s
+            .link_types
+            .iter()
+            .map(|lt| pb::LinkTypeStats {
+                r#type: lt.typ.clone(),
+                links: lt.links as i32,
+                suspect: lt.suspect as i32,
+                sources: lt.sources as i32,
+                targets: lt.targets as i32,
+                pairs: lt
+                    .pairs
+                    .iter()
+                    .map(|p| pb::TypePair {
+                        from: p.from.clone(),
+                        to: p.to.clone(),
+                        count: p.count as i32,
+                    })
+                    .collect(),
+                max_out: lt.max_out as i32,
+            })
+            .collect(),
+        hubs: s
+            .hubs
+            .iter()
+            .map(|h| pb::HubNode {
+                id: h.id.0.clone(),
+                key: h.key.clone(),
+                r#type: h.typ.clone(),
+                out: h.out as i32,
+                r#in: h.r#in as i32,
+            })
+            .collect(),
+        owners: s.owners as i32,
+        projects: s.projects as i32,
+    }
+}

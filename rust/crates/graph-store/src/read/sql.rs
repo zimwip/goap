@@ -355,6 +355,74 @@ impl Sql {
         )
     }
 
+    /// The statement of each measure of the store for a namespace (`sqlStoreCounts`): rows of a key and a count, in
+    /// the order of `stats::STORE_MEASURES`.
+    pub fn store_counts(self, namespace: &str) -> Vec<(&'static str, Stmt)> {
+        let ns = self.ph(1);
+        let versions = format!(" FROM node_version v JOIN node n ON n.id = v.node_id WHERE n.namespace = {ns}");
+        let links = format!(" FROM link l JOIN node n ON n.id = l.from_id WHERE n.namespace = {ns}");
+        let qs = [
+            (
+                "nodesByType",
+                format!("SELECT type, count(*) FROM node WHERE namespace = {ns} GROUP BY type"),
+            ),
+            (
+                "versionsByType",
+                format!("SELECT n.type, count(*){versions} GROUP BY n.type"),
+            ),
+            (
+                "versionsByReason",
+                format!("SELECT v.reason, count(*){versions} GROUP BY v.reason"),
+            ),
+            (
+                "versionsPerNode",
+                format!("SELECT CAST(latest AS text), count(*) FROM node WHERE namespace = {ns} GROUP BY latest"),
+            ),
+            (
+                "linkRowsByType",
+                format!("SELECT l.type, count(*){links} AND l.removes IS NULL GROUP BY l.type"),
+            ),
+            (
+                "linkDrops",
+                format!("SELECT l.type, count(*){links} AND l.removes IS NOT NULL GROUP BY l.type"),
+            ),
+            (
+                "linkSetsByMode",
+                format!(
+                    "SELECT CASE WHEN v.links IS NOT NULL THEN 'shared' WHEN v.links_base IS NOT NULL THEN 'delta' \
+                     ELSE 'own' END AS mode, count(*){versions} GROUP BY mode"
+                ),
+            ),
+            (
+                "joins",
+                format!(
+                    "SELECT '', count(*) FROM node_branch j JOIN node n ON n.id = j.node_id WHERE n.namespace = {ns}"
+                ),
+            ),
+            (
+                "baselinesByKind",
+                format!("SELECT kind, count(*) FROM baseline WHERE namespace = {ns} GROUP BY kind"),
+            ),
+            (
+                "changesByStatus",
+                format!("SELECT status, count(*) FROM change WHERE namespace = {ns} GROUP BY status"),
+            ),
+            (
+                "tags",
+                format!("SELECT name, count(*) FROM tag WHERE namespace = {ns} GROUP BY name"),
+            ),
+            (
+                "logByType",
+                format!(
+                    "SELECT l.type, count(*) FROM change_log l JOIN change c ON c.id = l.change_id WHERE c.namespace = {ns} GROUP BY l.type"
+                ),
+            ),
+        ];
+        qs.into_iter()
+            .map(|(m, q)| (m, (q, vec![namespace_of(namespace).into()])))
+            .collect()
+    }
+
     /// The number of baselines of each branch of a namespace.
     pub fn baseline_counts(self, namespace: &str) -> Stmt {
         (

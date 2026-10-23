@@ -432,6 +432,15 @@ impl ReadTx for Session {
             .collect())
     }
 
+    async fn store_counts(&self, namespace: &str) -> Result<HashMap<String, HashMap<String, i64>>, GraphError> {
+        let mut out = HashMap::new();
+        for (measure, stmt) in self.sql.store_counts(namespace) {
+            let counts = self.rows(stmt).await?.iter().map(|r| (r.text(0), r.int(1))).collect();
+            out.insert(measure.to_string(), counts);
+        }
+        Ok(out)
+    }
+
     async fn baseline_counts(&self, namespace: &str) -> Result<HashMap<String, i64>, GraphError> {
         Ok(self
             .rows(self.sql.baseline_counts(namespace))
