@@ -14,16 +14,20 @@ use regex::Regex;
 use serde::Serialize;
 use serde_json::Value;
 
-/// An id a side draws at random: a UUID, or 32 hex digits (the id of a smart tag).
+/// An id a side draws at random: a UUID, 32 hex digits (the id of a smart tag), or the key of a review object
+/// (`REV-` and ten upper-case hex digits).
 static UUID: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|\b[0-9a-f]{32}\b").unwrap()
+    Regex::new(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|\b[0-9a-f]{32}\b|\bREV-[0-9A-F]{10}\b",
+    )
+    .unwrap()
 });
 
 /// A UUID, or a short id: the first eight digits of one, as the graph names the branch of a change
 /// (`change-3013a15b`). The alternation tries the UUID first, so the head of a UUID is never read as a short id.
 static TOKEN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|\b[0-9a-f]{32}\b|\b[0-9a-f]{8}\b",
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|\b[0-9a-f]{32}\b|\bREV-[0-9A-F]{10}\b|\b[0-9a-f]{8}\b",
     )
     .unwrap()
 });
@@ -31,6 +35,20 @@ static TOKEN: LazyLock<Regex> = LazyLock::new(|| {
 /// A time (RFC 3339, or as a database writes it): each side stamps its own.
 pub static TIME: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$").unwrap());
+
+/// Whether an id is the key of a review object, whose case is its own.
+fn is_review_key(id: &str) -> bool {
+    id.starts_with("REV-")
+}
+
+/// An id as the map keys it: a UUID in lower case, a review key as it is.
+fn fold(id: &str) -> String {
+    if is_review_key(id) {
+        id.to_string()
+    } else {
+        id.to_ascii_lowercase()
+    }
+}
 
 /// The UUIDs a text holds, in order.
 fn uuids(s: &str) -> impl Iterator<Item = &str> {
@@ -90,8 +108,8 @@ impl IdMap {
     /// Pairs a Go id with a Rust one. The same pair again is nothing; an id already paired with another is a clash
     /// (the pair already held stays).
     pub fn pair(&mut self, go: &str, rust: &str) -> Result<(), Clash> {
-        let go = go.to_ascii_lowercase();
-        let rust = rust.to_ascii_lowercase();
+        let go = fold(go);
+        let rust = fold(rust);
         if go.len() != rust.len() {
             return Ok(());
         }
@@ -109,7 +127,9 @@ impl IdMap {
             }),
             (None, None) => {
                 // the short ids of the pair: a clash there is two UUIDs sharing their head, left to the UUIDs
-                let _ = self.pair_short(go[..8].to_string(), rust[..8].to_string());
+                if !is_review_key(&go) {
+                    let _ = self.pair_short(go[..8].to_string(), rust[..8].to_string());
+                }
                 self.go_to_rust.insert(go.clone(), rust.clone());
                 self.rust_to_go.insert(rust, go);
                 Ok(())
@@ -139,7 +159,7 @@ impl IdMap {
     }
 
     fn get(&self, id: &str, toward: Toward) -> Option<&String> {
-        let id = id.to_ascii_lowercase();
+        let id = fold(id);
         match (toward, id.len() == 8) {
             (Toward::Rust, false) => self.go_to_rust.get(&id),
             (Toward::Go, false) => self.rust_to_go.get(&id),
@@ -278,7 +298,7 @@ impl IdMap {
             TOKEN
                 .replace_all(s, |c: &regex::Captures<'_>| match (side, self.get(&c[0], toward)) {
                     (Toward::Rust, Some(g)) => g.clone(),
-                    (Toward::Go, Some(_)) => c[0].to_ascii_lowercase(),
+                    (Toward::Go, Some(_)) => fold(&c[0]),
                     (_, None) if c[0].len() == 8 => c[0].to_string(),
                     (_, None) => "<id>".into(),
                 })
@@ -404,6 +424,14 @@ mod tests {
         assert!(m.pair_json(&go, &rust).is_empty());
         assert_eq!(m.text(G1, Toward::Rust), R1);
         assert_eq!(m.text(G2, Toward::Rust), R2);
+    }
+
+    #[test]
+    fn a_review_key_pairs_and_keeps_its_case() {
+        let mut m = IdMap::default();
+        m.pair_json(&json!({"key": "REV-0A1B2C3D4E"}), &json!({"key": "REV-FFEEDDCCBB"}));
+        assert_eq!(m.text("review REV-0A1B2C3D4E", Toward::Rust), "review REV-FFEEDDCCBB");
+        assert_eq!(m.text("REV-FFEEDDCCBB", Toward::Go), "REV-0A1B2C3D4E");
     }
 
     #[test]

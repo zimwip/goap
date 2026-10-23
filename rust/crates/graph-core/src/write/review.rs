@@ -39,6 +39,11 @@ pub struct ReviewBatch {
     pub flow: String,
     pub execution: String,
     pub verdicts: Vec<Verdict>,
+    /// the data of the submitted record the use case built (`domain.ReviewBatch.Item`), checked against the verdicts;
+    /// none: the graph makes it of them
+    pub record: Option<Map<String, Value>>,
+    /// the type of the item given with the record (a review)
+    pub record_type: String,
 }
 
 impl Verdict {
@@ -98,6 +103,43 @@ fn record_data(key: &str, flow: &str, by: &str, at: &DateTime<Utc>, verdicts: &[
     }
     d.insert("submittedAt".into(), Value::String(time_text(at)));
     d
+}
+
+/// The record of a batch the use case built (Go's `reviewRecord` with an item): submitted, of the batch's key, recording
+/// each verdict. It answers its key.
+fn check_record(b: &ReviewBatch, rec: &Map<String, Value>) -> Result<String> {
+    let d = Some(rec);
+    let key = super::items::data_text(d, "key").to_string();
+    let status = super::items::data_text(d, "status");
+    if b.record_type != TYPE_REVIEW || status != RECORD_SUBMITTED {
+        return Err(GraphError::invalid(format!(
+            "the item of a review batch is the submitted review, not a {status} {} item",
+            b.record_type
+        )));
+    }
+    if !b.id.is_empty() && key != b.id {
+        return Err(GraphError::invalid(format!(
+            "review batch {} carries the record of review {key}",
+            b.id
+        )));
+    }
+    let entries = super::items::review_entries(d);
+    if entries.len() != b.verdicts.len() {
+        return Err(GraphError::invalid(format!(
+            "review {key} has {} entries for {} verdicts",
+            entries.len(),
+            b.verdicts.len()
+        )));
+    }
+    for v in &b.verdicts {
+        if !entries.iter().any(|(i, _, o)| *i == v.impact && o == v.outcome()) {
+            return Err(GraphError::invalid(format!(
+                "review {key} does not record the verdict on {}",
+                v.impact
+            )));
+        }
+    }
+    Ok(key)
 }
 
 /// The verdict is accepted or rejected, with a comment (Go's `checkVerdict`).
@@ -286,14 +328,20 @@ impl<S: WriteTx> Tx<'_, S> {
             }
         }
         let by = self.env.by.clone();
-        let key = if b.id.is_empty() {
-            format!("REV-{}", self.env.new_id())
-        } else {
-            b.id.clone()
+        let at = self.env.now();
+        let (key, data) = match &b.record {
+            Some(rec) => (check_record(&b, rec)?, rec.clone().into_iter().collect()),
+            None => {
+                let key = if b.id.is_empty() {
+                    format!("REV-{}", self.env.new_id())
+                } else {
+                    b.id.clone()
+                };
+                let data = record_data(&key, &b.flow, &by, &at, &b.verdicts);
+                (key, data)
+            }
         };
         let item = self.env.new_id();
-        let at = self.env.now();
-        let data = record_data(&key, &b.flow, &by, &at, &b.verdicts);
         self.lock_change(id).await?;
         self.change_head(id).await?;
         self.view(id).await?;

@@ -1,6 +1,6 @@
 //! The facts a change's work writes on its blackboard (Go's `Graph.AddItems`): items of the log of the change, one
-//! entry each (`domain.FactEntry`). The items a use case gives a meaning (flows, decisions, transitions, reviews,
-//! risks...) are the Go service's; artifacts, signals and the types no code reads are served here.
+//! entry each (`domain.FactEntry`). The items a use case gives a meaning (flows, decisions, transitions, risks...) are
+//! the Go service's; artifacts, signals, the reviews being built up and the types no code reads are served here.
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -59,13 +59,94 @@ struct ItemJson<'a> {
 
 /// Whether the items of a type are served here: an artifact, a signal, or a type no code gives a meaning.
 pub(crate) fn served(t: &str) -> bool {
-    t == "artifact" || t == "signal" || !items::has_code(t)
+    t == "artifact" || t == "signal" || t == TYPE_REVIEW || !items::has_code(t)
+}
+
+/// The item type of the record of a review (`domain.TypeReview`).
+pub(crate) const TYPE_REVIEW: &str = "review";
+
+/// The types an operation of their own records, which `AddItems` refuses.
+fn recorded_elsewhere(t: &str) -> Option<&'static str> {
+    match t {
+        "flow" => Some("flow events are recorded by OpenFlow, AdoptFlow and DiscardFlow"),
+        "transition" => Some("transitions are recorded by TransitionChange"),
+        "decision_point" => {
+            Some("decision points are recorded by OpenDecision, RuleDecision, AnswerQuestion and RatifyDecision")
+        }
+        _ => None,
+    }
+}
+
+/// A trimmed text of the data of an item (`domain.reviewString`).
+pub(crate) fn data_text<'a>(d: Option<&'a Map<String, Value>>, k: &str) -> &'a str {
+    d.and_then(|d| d.get(k))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+}
+
+/// What `ChangeItem.Validate` asks of the record of a review (`domain.validateReview`).
+fn validate_review(d: Option<&Map<String, Value>>) -> std::result::Result<(), String> {
+    if data_text(d, "key").is_empty() {
+        return Err("review item requires data.key".into());
+    }
+    let status = data_text(d, "status");
+    if !matches!(status, "open" | "submitted" | "discarded") {
+        return Err("review status must be one of open, submitted, discarded".into());
+    }
+    let entries = review_entries(d);
+    let mut seen = std::collections::HashSet::new();
+    for (impact, _, outcome) in &entries {
+        if impact.is_empty() {
+            return Err("review entry requires its impact".into());
+        }
+        if !seen.insert(impact.clone()) {
+            return Err(format!("review names impact {impact} twice"));
+        }
+        if !outcome.is_empty() && outcome != "accept" && outcome != "reject" {
+            return Err("review entry outcome must be accept or reject".into());
+        }
+    }
+    if status == "submitted" {
+        if entries.is_empty() {
+            return Err("a submitted review has at least one entry".into());
+        }
+        if let Some((impact, _, _)) = entries.iter().find(|(_, _, o)| o != "accept" && o != "reject") {
+            return Err(format!(
+                "a submitted review decides every entry: impact {impact} has no outcome"
+            ));
+        }
+        if data_text(d, "submittedAt").is_empty() {
+            return Err("a submitted review requires data.submittedAt".into());
+        }
+    }
+    Ok(())
+}
+
+/// The entries of the record of a review: impact, comment, outcome (`domain.ReviewEntriesOf`).
+pub(crate) fn review_entries(d: Option<&Map<String, Value>>) -> Vec<(String, String, String)> {
+    let Some(Value::Array(list)) = d.and_then(|d| d.get("entries")) else {
+        return Vec::new();
+    };
+    list.iter()
+        .filter_map(Value::as_object)
+        .map(|m| {
+            (
+                data_text(Some(m), "impact").to_string(),
+                data_text(Some(m), "comment").to_string(),
+                data_text(Some(m), "outcome").to_string(),
+            )
+        })
+        .collect()
 }
 
 /// What `ChangeItem.Validate` asks of an item served here.
 fn validate(it: &ItemWrite) -> std::result::Result<(), String> {
     if it.typ == "signal" && it.target.is_empty() {
         return Err("signal item requires target, the name of the signal".into());
+    }
+    if it.typ == TYPE_REVIEW {
+        return validate_review(it.data.as_ref());
     }
     Ok(())
 }
@@ -122,23 +203,42 @@ impl<S: WriteTx> Tx<'_, S> {
     /// Appends items to the log of an open change, on its main flow; a draft change becomes active. The items come
     /// back as written (`domain.ChangeItem` JSON).
     pub async fn add_items(&mut self, id: &ChangeId, mut its: Vec<ItemWrite>) -> Result<Vec<Value>> {
-        if let Some(it) = its.iter().find(|it| !served(&it.typ)) {
+        if let Some(it) = its
+            .iter()
+            .find(|it| !served(&it.typ) && recorded_elsewhere(&it.typ).is_none())
+        {
             return Err(GraphError::unimplemented(format!(
                 "an item of type {}: written by the Go service",
                 it.typ
             )));
         }
-        if its.iter().any(|it| !it.flow.is_empty()) {
-            return Err(GraphError::unimplemented(
-                "an item of an option (ADR 0032): written by the Go service",
-            ));
-        }
         self.lock_change(id).await?;
         let mut c = self.change_head(id).await?;
-        // the change as read: its position, and no option (an item naming no flow goes to the active option)
+        // the change as read: its position
         let seq = fold_change(self.store, id).await?.seq;
         if matches!(c.status.as_str(), "applied" | "abandoned" | "committed") {
             return Err(GraphError::conflict(format!("change {id} is {}", c.status)));
+        }
+        let fx = super::flow::flows_of(self.store, id).await?;
+        for it in its.iter_mut() {
+            it.flow = fx.resolve(&it.flow); // no flow: the active option (ADR 0032 §6)
+        }
+        let batch = its.first().map(|it| it.flow.clone()).unwrap_or_default();
+        for it in &its {
+            if let Some(why) = recorded_elsewhere(&it.typ) {
+                return Err(GraphError::invalid(why));
+            }
+            if it.typ == TYPE_REVIEW && data_text(it.data.as_ref(), "status") == "submitted" {
+                return Err(GraphError::invalid(
+                    "a review is submitted with its verdicts, by ImpactNodeReviewBatch (ADR 0105)",
+                ));
+            }
+            if it.flow != batch {
+                return Err(GraphError::invalid("the items of a batch belong to one flow"));
+            }
+        }
+        if !batch.is_empty() && fx.effective(&batch) != crate::flow::FLOW_OPEN {
+            return Err(GraphError::conflict(format!("flow {batch} is not open")));
         }
         for it in its.iter_mut().filter(|it| it.id.is_empty()) {
             it.id = self.env.new_id();

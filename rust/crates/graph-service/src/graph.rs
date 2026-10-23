@@ -6,6 +6,7 @@ use std::{collections::HashMap, sync::Arc};
 use goap_connect::{ConnectError, Ctx, Request, Response, async_trait};
 use goap_proto::graph::v1 as pb;
 use graph_catalog::{Catalog, catalog::STRUCTURE_PROJECT};
+use graph_core::write::reviews::{Actor, EntryEdit, ReviewEdit, ReviewObject};
 use graph_core::{
     GraphError, Kind,
     change::{self, ChangesFilter},
@@ -2198,6 +2199,40 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    /// Moves a change along its lifecycle: with no registry wired, no change follows one (`Graph.TransitionChange`).
+    async fn transition_change(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::TransitionChangeRequest>,
+    ) -> Answer<pb::TransitionChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let c = tx.transition_change(&m.change_id.as_str().into()).await?;
+            Ok(pb::TransitionChangeResponse {
+                change: Some(convert::change(&c)),
+            })
+        })
+        .await
+    }
+
+    /// Moves a change to another version of its methodology: with no registry wired, refused (`Graph.UpgradeChange`).
+    async fn upgrade_change(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::UpgradeChangeRequest>,
+    ) -> Answer<pb::UpgradeChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let c = tx.upgrade_change(&m.change_id.as_str().into()).await?;
+            Ok(pb::UpgradeChangeResponse {
+                change: Some(convert::change(&c)),
+            })
+        })
+        .await
+    }
+
     async fn delete_change(
         &self,
         _ctx: &Ctx,
@@ -2656,6 +2691,101 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    /// Starts a review object on a flow (ADR 0080).
+    async fn review_open(&self, _ctx: &Ctx, req: Request<pb::ReviewOpenRequest>) -> Answer<pb::ReviewResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let who = reviewer(&caller);
+        self.write(caller, async |tx| {
+            let r = tx
+                .review_open(&m.change_id.as_str().into(), &m.flow, &m.comment, &who)
+                .await?;
+            Ok(review_pb(&r))
+        })
+        .await
+    }
+
+    /// Changes an open review object: its comment, its impacts, the comments and outcomes of its entries.
+    async fn review_update(&self, _ctx: &Ctx, req: Request<pb::ReviewUpdateRequest>) -> Answer<pb::ReviewResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let who = reviewer(&caller);
+        let edit = ReviewEdit {
+            comment: m.set_comment.then(|| m.comment.clone()),
+            remove: m.remove.clone(),
+            add: m.add.clone(),
+            entries: m
+                .entries
+                .iter()
+                .map(|x| EntryEdit {
+                    impact: x.change_impact_id.clone(),
+                    comment: x.set_comment.then(|| x.comment.clone()),
+                    outcome: x.set_outcome.then(|| x.outcome.clone()),
+                })
+                .collect(),
+        };
+        self.write(caller, async |tx| {
+            let r = tx
+                .review_update(&m.change_id.as_str().into(), &m.key, edit, &who)
+                .await?;
+            Ok(review_pb(&r))
+        })
+        .await
+    }
+
+    /// Submits a review object: its entries as the verdicts of one batch, all of them or none.
+    async fn review_submit(&self, _ctx: &Ctx, req: Request<pb::ReviewSubmitRequest>) -> Answer<pb::ReviewResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let who = reviewer(&caller);
+        self.write(caller, async |tx| {
+            let r = tx.review_submit(&m.change_id.as_str().into(), &m.key, &who).await?;
+            Ok(review_pb(&r))
+        })
+        .await
+    }
+
+    /// Drops an open review object.
+    async fn review_discard(&self, _ctx: &Ctx, req: Request<pb::ReviewDiscardRequest>) -> Answer<pb::ReviewResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let who = reviewer(&caller);
+        self.write(caller, async |tx| {
+            let r = tx.review_discard(&m.change_id.as_str().into(), &m.key, &who).await?;
+            Ok(review_pb(&r))
+        })
+        .await
+    }
+
+    /// Reviews one change impact: a batch of one (`Graph.ImpactNodeReviewOn`).
+    async fn impact_node_review(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactNodeReviewRequest>,
+    ) -> Answer<pb::ImpactNodeReviewResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let b = ReviewBatch {
+                id: String::new(),
+                flow: m.flow.clone(),
+                execution: m.execution.clone(),
+                verdicts: vec![Verdict {
+                    impact: m.change_impact_id.clone(),
+                    accept: m.accept,
+                    comment: m.comment.clone(),
+                }],
+                ..ReviewBatch::default()
+            };
+            let out = tx.impact_node_review_batch(&id, b).await?;
+            Ok(pb::ImpactNodeReviewResponse {
+                node: out.first().map(convert::change_impact),
+            })
+        })
+        .await
+    }
+
     async fn impact_node_review_batch(
         &self,
         _ctx: &Ctx,
@@ -2663,11 +2793,6 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactNodeReviewBatchResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        if m.item.is_some() {
-            return Err(connect_error(GraphError::unimplemented(
-                "the record of a review built up by the use case (ADR 0080)",
-            )));
-        }
         self.write(caller, async |tx| {
             let id = served_change(tx, &m.change_id).await?;
             let b = ReviewBatch {
@@ -2683,6 +2808,11 @@ impl pb::GraphService for Graph {
                         comment: v.comment.clone(),
                     })
                     .collect(),
+                record: m
+                    .item
+                    .as_ref()
+                    .map(|it| it.data.as_ref().map(convert::map).unwrap_or_default()),
+                record_type: m.item.as_ref().map(|it| it.r#type.clone()).unwrap_or_default(),
             };
             let out = tx.impact_node_review_batch(&id, b).await?;
             Ok(pb::ImpactNodeReviewBatchResponse {
@@ -2690,6 +2820,40 @@ impl pb::GraphService for Graph {
             })
         })
         .await
+    }
+}
+
+/// The actor of a review call (`graphsvc.Handler.reviewer`): the writes served here are a platform service's, which
+/// acts on the reviews of others as an administrator does.
+fn reviewer(caller: &Caller) -> Actor {
+    Actor {
+        subject: caller.subject.clone(),
+        admin: true,
+    }
+}
+
+/// A review object as the answers carry it (`pbconv.ReviewToPB`).
+fn review_pb(r: &ReviewObject) -> pb::ReviewResponse {
+    pb::ReviewResponse {
+        review: Some(pb::ReviewRecord {
+            key: r.key.clone(),
+            flow: r.flow.clone(),
+            comment: r.comment.clone(),
+            status: r.status.clone(),
+            entries: r
+                .entries
+                .iter()
+                .map(|e| pb::ReviewEntry {
+                    change_impact_id: e.impact.clone(),
+                    comment: e.comment.clone(),
+                    outcome: e.outcome.clone(),
+                })
+                .collect(),
+            by: r.by.clone(),
+            submitted_at: convert::time(&r.submitted_at),
+            item: r.item.clone(),
+            versions: r.versions,
+        }),
     }
 }
 

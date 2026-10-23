@@ -162,4 +162,32 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         Ok(())
     }
+
+    /// Moves the state of a change along a transition of its lifecycle (Go's `TransitionChange`, ADR 0058): with no
+    /// registry, no change follows a lifecycle, so the move is refused once the change is known to be open.
+    pub async fn transition_change(&mut self, id: &ChangeId) -> Result<Change> {
+        let c = self.change_head(id).await?;
+        if matches!(c.status.as_str(), "applied" | "abandoned" | "committed") {
+            return Err(GraphError::conflict(format!("change {id} is {}", c.status)));
+        }
+        if c.lifecycle.is_empty() {
+            return Err(GraphError::invalid(format!("change {id} follows no lifecycle")));
+        }
+        Err(GraphError::unimplemented(
+            "a change following a lifecycle (ADR 0058): moved by the Go service",
+        ))
+    }
+
+    /// Moves an open change to another version of its methodology (Go's `UpgradeChange`, ADR 0113): with no registry
+    /// to resolve the versions, refused.
+    pub async fn upgrade_change(&mut self, id: &ChangeId) -> Result<Change> {
+        let c = self.change_head(id).await?;
+        if c.methodology.is_empty() {
+            return Err(GraphError::invalid(format!("change {id} follows no methodology")));
+        }
+        Err(GraphError::invalid(format!(
+            "no registry resolves the versions of methodology {}",
+            c.methodology
+        )))
+    }
 }

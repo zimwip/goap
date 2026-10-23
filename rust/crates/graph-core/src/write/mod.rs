@@ -10,6 +10,7 @@ pub mod flow;
 pub mod items;
 pub mod merge;
 pub mod review;
+pub mod reviews;
 pub mod tx;
 pub mod update;
 pub mod whole;

@@ -256,4 +256,11 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   validations of `GetChange` per flow): the view of a change keeps its flows (`ChangeView::seen`, `seen_draft`,
   `seen_drafts`, the folds `impacts_seen_by` / `draft_seen_by` of Go's `ImpactsSeenBy` / `DraftSeenBy`), refreshed at
   each fact written: 742 calls, none divergent, the tables and the 520 events of the outbox the same.
+  The review objects follow (ADR 0080, 0105): `ReviewOpen`, `ReviewUpdate`, `ReviewSubmit` and `ReviewDiscard`
+  (`graph-core` `write::reviews`: the fold of the `review` items, the rules of `contracts/review` for an author acting
+  for itself, the submission a review batch carrying its record, checked against its verdicts), `AddItems` of a review
+  record (validated as `domain.validateReview`, refused once submitted) and `ImpactNodeReview` as a batch of one; with
+  no registry, the refusals of `TransitionChange` (no lifecycle) and `UpgradeChange`. The proxy pairs the review keys
+  (`REV-` and ten hex digits, their case kept): 792 calls, none divergent, the tables and 563 events of the outbox the
+  same (but for the order of a few lists keyed by ids).
 - Not done yet: the rest of phase 4.
