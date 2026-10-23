@@ -246,6 +246,40 @@ fn go_time(t: &DateTime<Utc>) -> Option<pbjson_types::Timestamp> {
     (*t != graph_core::gojson::zero_time()).then(|| pbjson_types::Timestamp::from(*t))
 }
 
+fn review(r: &graph_core::impact::Review) -> pb::Review {
+    pb::Review {
+        status: r.status.clone(),
+        by: r.by.clone(),
+        comment: r.comment.clone(),
+        at: go_time(&r.at),
+        flow: r.flow.clone(),
+        execution: r.execution.clone(),
+        superseded: r.superseded,
+        review_id: r.review_id.clone(),
+    }
+}
+
+/// An event of the impacts of a change (`pbconv.ImpactEventToPB`).
+pub fn impact_event(e: &graph_core::impact::ImpactEvent) -> pb::ImpactEvent {
+    pb::ImpactEvent {
+        id: e.id.clone(),
+        change_id: e.change.0.clone(),
+        seq: e.seq as i32,
+        impact_id: e.impact.clone(),
+        op: e.op.as_str().to_string(),
+        flow: e.flow.clone(),
+        execution: e.execution.clone(),
+        by: e.by.clone(),
+        at: go_time(&e.at),
+        post: e.post.as_ref().map(node_ref),
+        pre: e.pre.as_ref().map(node_ref),
+        committed: e.committed.as_ref().map(node_ref),
+        stale: e.stale.clone(),
+        state: e.state.as_ref().map(change_impact),
+        review: e.review.as_ref().map(review),
+    }
+}
+
 /// A change impact (`pbconv.ChangeImpactToPB`).
 pub fn change_impact(cn: &ChangeImpact) -> pb::ChangeImpact {
     pb::ChangeImpact {
@@ -258,20 +292,7 @@ pub fn change_impact(cn: &ChangeImpact) -> pb::ChangeImpact {
         post: cn.post.as_ref().map(node_ref),
         committed: cn.committed.as_ref().map(node_ref),
         review: cn.review.clone(),
-        reviews: cn
-            .reviews
-            .iter()
-            .map(|r| pb::Review {
-                status: r.status.clone(),
-                by: r.by.clone(),
-                comment: r.comment.clone(),
-                at: go_time(&r.at),
-                flow: r.flow.clone(),
-                execution: r.execution.clone(),
-                superseded: r.superseded,
-                review_id: r.review_id.clone(),
-            })
-            .collect(),
+        reviews: cn.reviews.iter().map(review).collect(),
         via: cn.via.clone(),
         recheck: cn.recheck,
         produced_by: cn.produced_by.clone(),

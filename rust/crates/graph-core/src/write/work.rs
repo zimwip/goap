@@ -39,6 +39,8 @@ const LOG_REVIEW: &str = "fact.review";
 pub struct ChangeView {
     pub fold: Fold,
     pub seq: i64,
+    /// the impact events of the log, in order, the checkouts hydrated
+    pub events: Vec<ImpactEvent>,
 }
 
 /// What an operation on a change impact works on: the change, the branch its versions are written on, and the impact
@@ -989,6 +991,7 @@ pub async fn fold_change<T: ReadTx>(store: &T, id: &ChangeId) -> Result<ChangeVi
     if out.fold.impacts.iter().any(|c| c.superseded || !c.flow.is_empty()) {
         return Err(unserved("a change working on options (ADR 0032)"));
     }
+    out.events = events;
     Ok(out)
 }
 

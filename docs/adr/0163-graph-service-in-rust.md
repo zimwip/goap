@@ -180,5 +180,9 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `GetCommitState` (`Tx::commit_state` over the `unsettled` of the merge) follow, then `ListChangeLog`
   (`graph-store` `read::log`, Go's `logWhere`; the payload read as the text PostgreSQL gives of its `jsonb`, as Go
   reads it). The proxy compares a string holding a JSON object or array as that JSON, its times masked (a payload
-  stamps its own): 117 calls, all `same`, the tables the same.
+  stamps its own). `ListChangeEvents` (the events of the fold, kept on its view), `GetBaselineGraph` and
+  `GetBaselineDelta` follow: 134 calls, none divergent, the tables the same; the lists Go orders by link id (a random
+  id on each side) come back `order_differs`, as they do Go against Go. The proxy pairs ids that are keys of a map
+  by the shape of their value only when one key of each side has that shape: a baseline's map of node ids to versions,
+  all 1, tells nothing, and pairing it in order paired the wrong nodes.
 - Not done yet: the rest of phase 4.

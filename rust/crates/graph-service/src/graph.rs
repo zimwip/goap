@@ -662,6 +662,126 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    /// A baseline whole: its state, the nodes it holds, the links between them and the suspect ones (a link to
+    /// another version of a node the baseline holds).
+    async fn get_baseline_graph(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetBaselineGraphRequest>,
+    ) -> Answer<pb::GetBaselineGraphResponse> {
+        let caller = Caller::of(&req)?;
+        let id = BaselineId(req.into_inner().id);
+        self.read(caller, async |tx| {
+            let header = read::header_of(tx, &id).await?;
+            let state = read::select(tx, &header, None).await?;
+            let mut refs: Vec<NodeRef> = state.iter().map(|(n, v)| NodeRef::new(n.clone(), *v)).collect();
+            refs.sort();
+            let (nodes, out) = if refs.is_empty() {
+                (Vec::new(), Vec::new())
+            } else {
+                (tx.nodes_at(&refs, "").await?, tx.links_from(&refs, None).await?)
+            };
+            let (mut links, mut suspects) = (Vec::new(), Vec::new());
+            for l in out {
+                match l.to_node().and_then(|t| state.get(&t.id).map(|v| *v == t.version)) {
+                    Some(true) => links.push(l),
+                    Some(false) => suspects.push(l),
+                    None => {}
+                }
+            }
+            let state = state.into_iter().map(|(n, v)| (n.0, v)).collect::<HashMap<_, _>>();
+            Ok(pb::GetBaselineGraphResponse {
+                baseline: Some(convert::baseline(&header, Some(state))),
+                nodes: convert::nodes(&nodes),
+                links: convert::links(&links),
+                suspect_links: convert::links(&suspects),
+            })
+        })
+        .await
+    }
+
+    /// What changed between two baselines of a branch: the nodes committed between them as the later one holds
+    /// them, their links, and the nodes it no longer holds.
+    async fn get_baseline_delta(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetBaselineDeltaRequest>,
+    ) -> Answer<pb::GetBaselineDeltaResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.read(caller, async |tx| {
+            if m.from.is_empty() || m.to.is_empty() {
+                return Err(GraphError::invalid("a delta goes from a baseline to another"));
+            }
+            let from = read::header_of(tx, &BaselineId(m.from.clone())).await?;
+            let to = read::header_of(tx, &BaselineId(m.to.clone())).await?;
+            let branch = graph_core::model::branch_of(&to.branch).to_string();
+            if from.namespace != to.namespace
+                || graph_core::model::branch_of(&from.branch) != branch
+                || to.seq < from.seq
+            {
+                return Err(GraphError::invalid(format!(
+                    "baseline {} does not follow {} on its branch",
+                    m.to, m.from
+                )));
+            }
+            let moved = tx
+                .committed_versions(&to.namespace, &branch, from.seq, to.seq, None)
+                .await?;
+            if moved.len() > MAX_DELTA_NODES {
+                return Err(GraphError::invalid(format!(
+                    "{} nodes moved between {} and {}, read the baseline",
+                    moved.len(),
+                    m.from,
+                    m.to
+                )));
+            }
+            let mut ids: Vec<NodeId> = moved.into_keys().collect();
+            ids.sort();
+            let at = read::select(tx, &to, Some(&ids)).await?;
+            let removed = ids
+                .iter()
+                .filter(|n| !at.contains_key(*n))
+                .map(|n| n.0.clone())
+                .collect();
+            let mut refs: Vec<NodeRef> = at.into_iter().map(|(n, v)| NodeRef::new(n, v)).collect();
+            refs.sort();
+            let (nodes, links) = if refs.is_empty() {
+                (Vec::new(), Vec::new())
+            } else {
+                (tx.nodes_at(&refs, "").await?, tx.links_from(&refs, None).await?)
+            };
+            Ok(pb::GetBaselineDeltaResponse {
+                from: Some(convert::baseline(&from, None)),
+                to: Some(convert::baseline(&to, None)),
+                nodes: convert::nodes(&nodes),
+                links: convert::links(&links),
+                removed,
+            })
+        })
+        .await
+    }
+
+    /// The events of the impacts of a change, in the order of its log.
+    async fn list_change_events(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ListChangeEventsRequest>,
+    ) -> Answer<pb::ListChangeEventsResponse> {
+        let caller = Caller::of(&req)?;
+        let id = ChangeId(req.into_inner().change_id);
+        self.read(caller, async |tx| {
+            if tx.change(&id).await?.is_none() {
+                return Err(GraphError::not_found(format!("change {id}")));
+            }
+            let view = fold_change(tx, &id).await?;
+            Ok(pb::ListChangeEventsResponse {
+                events: view.events.iter().map(convert::impact_event).collect(),
+            })
+        })
+        .await
+    }
+
     /// What a change has to commit and whether it may merge.
     async fn get_commit_state(
         &self,
@@ -1531,3 +1651,6 @@ fn tag_pb(t: Tag) -> pb::Tag {
         created_at: convert::time(&t.created_at),
     }
 }
+
+/// The most nodes a delta carries (`graph.MaxDeltaNodes`): beyond, the baseline is read.
+const MAX_DELTA_NODES: usize = 5000;

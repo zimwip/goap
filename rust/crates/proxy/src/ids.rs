@@ -239,18 +239,24 @@ impl IdMap {
                     self.walk(&g[k], &r[rk], clashes);
                     return;
                 }
-                for k in unmatched {
-                    if !UUID.is_match(k) {
+                // a shape tells which is which only when one id of each side has it (a map of ids to versions, all
+                // 1, tells nothing)
+                let unmatched: Vec<&String> = unmatched.into_iter().filter(|k| UUID.is_match(k)).collect();
+                for k in &unmatched {
+                    let shape = shape_of(&g[*k]);
+                    if unmatched.iter().filter(|x| shape_of(&g[**x]) == shape).count() != 1 {
                         continue;
                     }
-                    let shape = shape_of(&g[k]);
-                    if let Some(i) = rest_rust
+                    let alike: Vec<usize> = rest_rust
                         .iter()
-                        .position(|rk| UUID.is_match(rk) && shape_of(&r[*rk]) == shape)
-                    {
+                        .enumerate()
+                        .filter(|(_, rk)| UUID.is_match(rk) && shape_of(&r[**rk]) == shape)
+                        .map(|(i, _)| i)
+                        .collect();
+                    if let [i] = alike[..] {
                         let rk = rest_rust.remove(i);
                         clashes.extend(self.pair_text(k, rk));
-                        self.walk(&g[k], &r[rk], clashes);
+                        self.walk(&g[*k], &r[rk], clashes);
                     }
                 }
             }
@@ -379,6 +385,15 @@ mod tests {
         assert_eq!(c.before, R1);
         assert!(m.pair(G2, R1).is_err());
         assert!(m.pair(G1, R1).is_ok());
+    }
+
+    #[test]
+    fn map_keys_alike_in_shape_pair_with_nothing() {
+        let mut m = IdMap::default();
+        let go = json!({"nodes": {G1: 1, G2: 1}});
+        let rust = json!({"nodes": {R2: 1, R1: 1}});
+        assert!(m.pair_json(&go, &rust).is_empty());
+        assert_eq!(m.len(), 0);
     }
 
     #[test]
