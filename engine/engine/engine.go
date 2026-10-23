@@ -942,7 +942,13 @@ func (e *Engine) runAction(ctx context.Context, p *Process, m *methodology.Compi
 	host := e.newHost(p, action, agentMCPs)
 	host.step, host.base = i, len(p.Steps[i].LLMCalls)
 	sc := stepContext(m, p, action)
-	res, err := exec.Execute(ctx, ActionContext{Process: p, Action: action, Blackboard: bb, Graph: e.Graph, Host: host, Step: sc})
+	// the controls governing the run (ADR 0162): given to it, and recorded with the step
+	controls, err := e.controlsOf(ctx, p, m, bb, action, sc)
+	if err != nil {
+		return ran{ctx: ctx, end: end, host: host, sc: sc, err: fmt.Errorf("controls of %s: %w", action.Name, err)}, nil
+	}
+	p.Steps[i].Controls = controls.Refs()
+	res, err := exec.Execute(ctx, ActionContext{Process: p, Action: action, Blackboard: bb, Graph: e.Graph, Host: host, Step: sc, Controls: controls})
 	return ran{ctx: ctx, end: end, host: host, sc: sc, res: res, err: err}, nil
 }
 

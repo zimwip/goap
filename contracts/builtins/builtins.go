@@ -15,6 +15,8 @@ const (
 	// GateOpen opens the decision of a gate of a process, GatePass takes its transition once it said go (ADR 0132).
 	GateOpen = "gate.open"
 	GatePass = "gate.pass"
+	// ControlCheck measures the rules governing a run on what it produced and records the rules broken (ADR 0162).
+	ControlCheck = "control.check"
 	// Builtins of the self-observation methodology (ADR 0011).
 	ObserveAnalyze   = "observe.analyze"
 	ObservePropose   = "observe.propose"
@@ -23,7 +25,7 @@ const (
 
 // All lists the known builtin names.
 func All() []string {
-	return []string{GraphPropagate, GraphApply, DecisionInvestigate, DerogationExpire, GateOpen, GatePass, ObserveAnalyze, ObservePropose, MethodologyDraft}
+	return []string{GraphPropagate, GraphApply, DecisionInvestigate, DerogationExpire, GateOpen, GatePass, ControlCheck, ObserveAnalyze, ObservePropose, MethodologyDraft}
 }
 
 // Known is the static set of the builtin names; it implements methodology.BuiltinSet.

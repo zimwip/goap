@@ -1060,3 +1060,28 @@ func (c *Client) ViewNodesOfType(ctx context.Context, v graphapi.View, typ strin
 	}
 	return out, nil
 }
+
+// QueryView runs a read query in a view (ADR 0160) over the RPC; the caps are the service's (the options give the
+// bound variables only).
+func (c *Client) QueryView(ctx context.Context, v graphapi.View, query string, opts graphapi.QueryOptions) (graphapi.QueryResult, error) {
+	req := &graphv1.QueryViewRequest{View: pbconv.GraphViewToPB(v), Query: query}
+	for name, id := range opts.Bind {
+		if req.Bind == nil {
+			req.Bind = map[string]string{}
+		}
+		req.Bind[name] = string(id)
+	}
+	r, err := c.rpc.QueryView(ctx, connect.NewRequest(req))
+	if err != nil {
+		return graphapi.QueryResult{}, rpcerr.FromConnect(err)
+	}
+	out := graphapi.QueryResult{Columns: r.Msg.Columns, Links: pbconv.LinksFromPB(r.Msg.Links), Truncated: r.Msg.Truncated, Notes: r.Msg.Notes,
+		Reads: int(r.Msg.Reads), Baseline: domain.BaselineID(r.Msg.BaselineId)}
+	for _, n := range r.Msg.Nodes {
+		out.Nodes = append(out.Nodes, pbconv.NodeFromPB(n))
+	}
+	for _, row := range r.Msg.Rows {
+		out.Rows = append(out.Rows, row.AsSlice())
+	}
+	return out, nil
+}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
+	"github.com/zimwip/goap/contracts/builtins"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/mcp"
 	"github.com/zimwip/goap/engine/condition"
@@ -103,6 +104,8 @@ type compileState struct {
 	automaticReviews map[string]string
 	// assessments are the compiled assessment views (ADR 0116)
 	assessments *condition.AssessmentViews
+	// controls are the controls of the activities (ADR 0162)
+	controls map[string][]ControlInfo
 }
 
 func (s *compileState) add(path, format string, args ...any) {
@@ -115,6 +118,7 @@ func (m *Methodology) compileWith(opt CompileOptions) (*Compiled, def.Issues) {
 	s.checkEvents()
 	s.compileConditions()
 	s.injectLibraries()
+	s.compileControls()
 	s.compileActions()
 	s.chainScoped()
 	s.checkSpecializations()
@@ -383,6 +387,14 @@ func (s *compileState) compileActions() {
 		path := fmt.Sprintf("actions[%d]", i)
 		a := src
 		a.Effects = maps.Clone(src.Effects)
+		if len(src.Controls) > 0 {
+			// an action waits for the rules that govern it to be collected (ADR 0162)
+			a.Pre = maps.Clone(src.Pre)
+			if a.Pre == nil {
+				a.Pre = map[string]bool{}
+			}
+			maps.Copy(a.Pre, controlsPre(src.Controls))
+		}
 		if a.Name == "" {
 			s.add(path+".name", "name required")
 			continue
@@ -574,8 +586,8 @@ func (s *compileState) checkInvocation(path string, a Action) {
 		}
 	}
 	// the code of a human action's form runs as a script does (ADR 0115) and may call the tools it declares (ADR 0131)
-	if len(a.MCPs) > 0 && a.Kind != KindLLM && a.Kind != KindScript && (a.Kind != KindHuman || a.Code == "") {
-		s.add(path+".mcps", "mcps apply to llm and script actions, and to the code of a human action's form (a tool action names its tool)")
+	if len(a.MCPs) > 0 && a.Kind != KindLLM && a.Kind != KindScript && (a.Kind != KindHuman || a.Code == "") && (a.Kind != KindBuiltin || a.Builtin != builtins.ControlCheck) {
+		s.add(path+".mcps", "mcps apply to llm and script actions, to the code of a human action's form and to the measure of the controls (control.check, whose shell checks run in the workspace; a tool action names its tool)")
 	}
 	if a.Permission != "" && !strings.Contains(a.Permission, ":") {
 		s.add(path+".permission", "permission must be <resource>:<action>")
@@ -881,7 +893,7 @@ func (s *compileState) finish(lenient bool) (*Compiled, def.Issues) {
 	}
 	c := &Compiled{definition: m, Conditions: set, actions: s.actions, utilities: uset, agents: s.agents, whens: wset, processes: s.procs,
 		methods: s.meths, methodGuards: mset, reactions: s.reactions, automaticReviews: s.automaticReviews, assessments: s.assessments,
-		gates: s.procs.gates}
+		gates: s.procs.gates, controls: s.controls}
 	c.view = c.buildView()
 	return c, s.issues
 }

@@ -308,6 +308,41 @@ message Condition {
   bool empty = 9;
 }
 
+// A condition used as a control of an activity, and what it covers (ADR 0162): rules of the domain, linked to the
+// subject or kept by a filter, and general rules of the methodology. A condition is a control by this use only.
+message Control {
+  // the condition the activity waits for: it holds once the rules were collected
+  string condition = 5;
+  // node types of the domain the rules are (alm@ArchitectureDecision)
+  repeated string types = 1;
+  // link type from a rule to the subject of the execution (alm@governs); empty: no link needed
+  string via = 2;
+  // CEL keeping the rules that govern the subject: self the rule, subject the subject, change the change
+  string where = 3;
+  // general rules of the methodology
+  repeated ControlRule rules = 4;
+}
+
+// A rule a control covers (ADR 0162).
+message ControlRule {
+  string id = 1;
+  // the rule in one imperative sentence: all an agent is given of it
+  string statement = 2;
+  // veto (empty) | objective | advice
+  string severity = 3;
+  // how the rule is measured; none: it guides, it is not measured
+  ControlCheck check = 4;
+  // how to fix a violation, in one line
+  string fix = 5;
+}
+
+// How a rule is measured (ADR 0162).
+message ControlCheck {
+  // cypher (a query over the view of the change, each row a violation) | shell (a command in the workspace)
+  string language = 1;
+  string code = 2;
+}
+
 message ProduceSpec {
   // create_node | update_node
   string op = 1;
@@ -378,6 +413,8 @@ message Action {
   repeated string roles = 31;
   // the role the action acts as (ADR 0139): its own; the compiler gives the others the role of what refines them
   string role = 32;
+  // the controls governing what it produces (ADR 0162): their conditions waited for, their rules given and measured
+  repeated Control controls = 33;
 }
 
 // The budget of the tool loop of an llm action (ADR 0118); 0 / empty: the engine's default.
@@ -682,6 +719,8 @@ message Step {
   StepReview review = 24;
   // the step is a gate of its process: a checklist, a go decision, a move of the lifecycle of the change (ADR 0132)
   StepGate gate = 25;
+  // the controls governing what the step and its sub-steps produce (ADR 0162)
+  repeated Control controls = 26;
 }
 
 // A gate of a process (ADR 0132): a milestone where the checklist of the change is checked, a go is decided and the

@@ -1,5 +1,5 @@
 name: alm
-version: 1.7.2
+version: 1.8.0
 description: >
   Application lifecycle management domain: needs, requirements, functions, components, builds, releases and deployments. Shared by the delivery methodologies (impact-analysis, test-design, sdlc).
 enums:
@@ -7,6 +7,7 @@ enums:
   - {name: classification, description: Sensitivity of a data object, values: [{value: public, label: Public}, {value: internal, label: Internal}, {value: confidential, label: Confidential}, {value: personal, label: Personal data}]}
   - {name: test-level, description: Level a test case verifies at, values: [{value: unit, label: Unit}, {value: integration, label: Integration}, {value: system, label: System}, {value: acceptance, label: Acceptance}]}
   - {name: flow-mode, description: How the data of a flow is exchanged, values: [{value: synchronous, label: Synchronous}, {value: asynchronous, label: Asynchronous}, {value: batch, label: Batch}]}
+  - {name: rule-severity, description: "How a broken rule weighs (ADR 0162): a veto blocks, an objective passes under a derogation naming it, an advice is only reported", values: [{value: veto, label: Veto}, {value: objective, label: Objective}, {value: advice, label: Advice}]}
   - {name: stage, description: Stage of an environment on the way to production, values: [{value: dev, label: Development}, {value: test, label: Integration test}, {value: staging, label: Staging}, {value: prod, label: Production}]}
 nodeTypes:
   - name: Need
@@ -162,6 +163,34 @@ nodeTypes:
       - {name: stage, label: Stage, description: Stage of the target environment, type: enum, enum: stage, section: Outcome, order: 2}
       - {name: date, label: Deployed on, description: Date of the deployment, type: date, section: Outcome, order: 3}
       - {name: checks, label: Checks, description: Results of the post-deployment checks (structured), type: json, widget: textarea, section: Outcome, order: 4}
+  # Rules (ADR 0162): what governs an activity without being consumed by it. A project produces them through its own
+  # processes (architecture decisions, coding rules), they govern the components they are linked to (governs) or, with
+  # no such link, what the controls of a methodology select. The statement is all an agent is given in its brief; the
+  # check measures the rule on what an activity produced and answers with the violations only.
+  - name: Rule
+    icon: shield
+    color: "#b45309"
+    description: A rule governing what the activities of a project produce
+    attributes:
+      - {name: statement, label: Statement, description: "The rule in one imperative sentence (140 characters or so): all an agent is given of it", type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+      - {name: rationale, label: Rationale, description: Why the rule holds, with good and bad examples, type: string, widget: textarea, section: Identity, order: 2, validators: [description-max-2000]}
+      - {name: severity, label: Severity, description: "How a broken rule weighs: veto (blocks), objective (passes under a derogation naming it), advice (reported)", type: enum, enum: rule-severity, default: veto, section: Control, order: 3}
+      - {name: technology, label: Technology, description: "The technology the rule is about (go, java…); empty: any", type: string, section: Control, order: 4}
+      - {name: check, label: Check, description: "How the rule is measured (a code text): cypher (a query over the view of the change, subject bound to the subject, each row a violation: its columns at and msg say where and what), shell (a command in the workspace of the change, in the directory of the subject: SARIF or file:line: message lines); none: the rule guides, it is not measured", type: code, section: Control, order: 5}
+      - {name: fix, label: Fix, description: "How to fix a violation, in one line: given with it", type: string, section: Control, order: 6}
+    lifecycle: rule
+    search: [{property: statement, text: true}, {property: rationale, text: true}, {property: severity, facet: true}, {property: technology, facet: true}]
+  - name: ArchitectureDecision
+    extends: Rule
+    icon: graph
+    description: An architecture decision record (ADR) of a project, governing the components it is linked to
+    attributes:
+      - {name: context, label: Context, description: The forces at play when the decision was taken, type: string, widget: textarea, section: Decision, order: 7, validators: [description-max-2000]}
+      - {name: consequences, label: Consequences, description: What the decision makes easier or harder, type: string, widget: textarea, section: Decision, order: 8, validators: [description-max-2000]}
+  - name: CodingRule
+    extends: Rule
+    icon: code
+    description: A coding rule of a project
 lifecycles:
   # The maturity of a delivery change (ADR 0132): the phases it goes through. The domain says which states exist; the
   # methodology says what it takes to leave one (the gates of its processes, their checklists and decisions).
@@ -261,6 +290,24 @@ lifecycles:
       - {name: rework, description: Reopen an accepted version before it is delivered, from: accepted, to: draft}
       - {name: reopen, description: Rework a released version in a change, from: released, to: draft}
       - {name: withdraw, description: Take the released version out of service, from: released, to: withdrawn}
+  # The lifecycle of a rule (ADR 0162): only an accepted rule governs; a superseded or retired one is kept for the
+  # history of what governed the work done under it.
+  - name: rule
+    description: How a rule is written, accepted, then superseded or retired
+    initial: draft
+    states:
+      - {name: draft, notCommittable: true, description: "Being written or reworked in a change"}
+      - {name: proposed, description: "Put forward, awaiting a decision"}
+      - {name: accepted, description: "In force: it governs"}
+      - {name: superseded, final: true, description: "Replaced by another rule"}
+      - {name: retired, final: true, description: "No longer in force"}
+    transitions:
+      - {name: propose, description: Put the written rule forward for a decision, from: draft, to: proposed}
+      - {name: accept, description: Put the rule in force, from: proposed, to: accepted}
+      - {name: adopt, description: Put the written rule in force at once, from: draft, to: accepted}
+      - {name: rework, description: Rework a rule, from: accepted, to: draft}
+      - {name: supersede, description: Replace the rule by another one, from: accepted, to: superseded}
+      - {name: retire, description: Take the rule out of force, from: accepted, to: retired}
 # Algorithms (ADR 0018): scripts of a fixed type with declared parameters, and their
 # instances (parameter values), which the node types and transitions above plug.
 algorithms:
@@ -461,3 +508,14 @@ linkTypes:
     description: "The environment a deployment runs in"
     from: Deployment
     to: Environment
+  - name: governs
+    description: "A rule governs what the activities of a project produce about its target (a component, an application, a solution; ADR 0162)"
+    from: Rule
+    label: "governs"
+    inverseLabel: "governed by"
+  - name: supersedes
+    description: "A rule replaces another rule"
+    from: Rule
+    to: Rule
+    label: "supersedes"
+    inverseLabel: "superseded by"

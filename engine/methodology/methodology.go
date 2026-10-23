@@ -305,6 +305,9 @@ type Action struct {
 	// On makes the action reactive (ADR 0110): it runs again on a change of its methodology for each matching event,
 	// towards its effects, through an agent generated for it (ReactionAgent).
 	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
+	// Controls govern what the action produces (ADR 0162): conditions used as controls, each with the rules it
+	// covers; the action waits for each condition (its rules collected), is given the rules and measured against them.
+	Controls []Control `yaml:"controls,omitempty" json:"controls,omitempty"`
 	// Emits are the events of the methodology (Methodology.Events) the action raises when it reaches its effects
 	// (ADR 0110): the engine adds a signal item of each name to the change.
 	Emits []string `yaml:"emits,omitempty" json:"emits,omitempty"`
@@ -445,6 +448,8 @@ type Compiled struct {
 	assessments *condition.AssessmentViews
 	// view is the shape of the activities as they are shown (ADR 0126 step 3), computed once at compilation
 	view *View
+	// controls are the controls of the activities (ADR 0162), by action and by step (actionControls, stepControls)
+	controls map[string][]ControlInfo
 }
 
 // Definition is the methodology as written, compiled into c.
