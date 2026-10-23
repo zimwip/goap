@@ -1,6 +1,6 @@
 # ADR 0163 — The graph service in Rust, behind a comparing proxy
 
-**Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets), phase 2 implemented (the reads of the bench, the shadow mode), phase 3 implemented (the writes of the bench) · **Date**: 2026-10
+**Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets), phase 2 implemented (the reads of the bench, the shadow mode), phase 3 implemented (the writes of the bench), phase 4 under way (the smart tags) · **Date**: 2026-10
 
 ## Context
 
@@ -144,4 +144,8 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   for ids not paired yet (two new links between new nodes, each side in the order of its own ids) say nothing of
   which is which, so they are left unpaired, compared as ids, until an answer tells them apart (pairing them by
   position mispaired them half the time, and every call after diverged).
-- Not done yet: phase 4.
+- Phase 4 (everything else), under way. `SmartTagService` is served whole (`graph-service` `smarttags.rs`, the SQL in
+  `graph-store` `read/smarttags.rs`: the times `timestamptz` on PostgreSQL, Go's RFC 3339 text on SQLite), for any
+  caller, its errors worded as Go words them; the proxy pairs its ids (32 hex digits) like UUIDs. Driven through the
+  compare proxy (create, share, update, list, get, delete, the refusals), every call is `same`, messages included.
+- Not done yet: the rest of phase 4.

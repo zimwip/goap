@@ -16,6 +16,7 @@ use tokio::sync::Mutex;
 mod convert;
 mod domains;
 mod graph;
+mod smarttags;
 
 pub use graph::Graph;
 
@@ -65,8 +66,6 @@ pub struct Domains {
 pub struct SmartTags {
     pub state: Arc<State>,
 }
-
-impl smarttagpb::SmartTagService for SmartTags {}
 
 /// `goap.importer.v1.ImportService` (ADR 0148).
 pub struct Imports {

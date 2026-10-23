@@ -14,14 +14,18 @@ use regex::Regex;
 use serde::Serialize;
 use serde_json::Value;
 
+/// An id a side draws at random: a UUID, or 32 hex digits (the id of a smart tag).
 static UUID: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}").unwrap()
+    Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|\b[0-9a-f]{32}\b").unwrap()
 });
 
 /// A UUID, or a short id: the first eight digits of one, as the graph names the branch of a change
 /// (`change-3013a15b`). The alternation tries the UUID first, so the head of a UUID is never read as a short id.
 static TOKEN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|\b[0-9a-f]{8}\b").unwrap()
+    Regex::new(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|\b[0-9a-f]{32}\b|\b[0-9a-f]{8}\b",
+    )
+    .unwrap()
 });
 
 /// A time (RFC 3339, or as a database writes it): each side stamps its own.
@@ -417,6 +421,17 @@ mod tests {
         assert!(m.pair_json(&go, &rust).is_empty());
         assert_eq!(m.text(l1, Toward::Rust), k1);
         assert_eq!(m.text(l2, Toward::Rust), k2);
+    }
+
+    #[test]
+    fn thirty_two_hex_digits_are_an_id() {
+        let (g, r) = ("0123456789abcdef0123456789abcdef", "fedcba9876543210fedcba9876543210");
+        let mut m = IdMap::default();
+        assert!(m.pair_json(&json!({"id": g}), &json!({"id": r})).is_empty());
+        assert_eq!(
+            m.text(&format!("smart tag {g}"), Toward::Rust),
+            format!("smart tag {r}")
+        );
     }
 
     #[test]
