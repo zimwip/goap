@@ -212,6 +212,11 @@ pub trait WriteTx: ReadTx {
         committed: i64,
     ) -> impl Future<Output = Result<()>> + Send;
 
+    /// Takes the next position of the log of the changes and of their impacts and leaves them unused: what a
+    /// transaction of the Go service declaring an impact then rolling back takes (PostgreSQL's sequences are not
+    /// rolled back; SQLite's are), so that both services number alike while they are compared (ADR 0163).
+    fn skip_declaration(&self) -> impl Future<Output = Result<()>> + Send;
+
     /// The next order of a commit.
     fn next_commit(&self) -> impl Future<Output = Result<i64>> + Send;
 

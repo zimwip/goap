@@ -213,5 +213,11 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   events of the outbox the same. `ImpactNodeCancel` (a creation cancelled is gone with its impact, a committed one
   falls back to the version the change wrote, a decided review proposed again), `WithdrawImpact` and
   `WithdrawImpacts` (the impacts via one withdrawn leave with it, one entry for the batch) follow on the main flow: 283
-  calls, none divergent, the tables and the 284 events of the outbox the same.
+  calls, none divergent, the tables and the 284 events of the outbox the same. `ImpactLinkUpdate` (the properties of a
+  link of a draft checked against its link type) and `ImpactNodeTransition` (the move of a draft, checked out first
+  when the node has none, the attributes and links its target state requires; a transition with a guard, actions or a
+  condition on the children is Go's, known before anything is written) follow: 327 calls, none divergent, the tables
+  and the 325 events of the outbox the same. Go resolves a transition once to authorize it, in a transaction it rolls
+  back; on PostgreSQL the impact declared there still takes a position of the log and of the impacts (sequences are not
+  rolled back), which the Rust service takes too while the two are compared (`WriteTx::skip_declaration`).
 - Not done yet: the rest of phase 4.

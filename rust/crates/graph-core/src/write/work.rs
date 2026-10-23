@@ -827,15 +827,9 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(link)
     }
 
-    /// Removes an outgoing link of a draft (Go's `ImpactLinkDelete`): the link by its id, or the stored link of the
-    /// version the draft was checked out from.
-    pub async fn impact_link_delete(
-        &mut self,
-        id: &ChangeId,
-        link: &LinkId,
-        flow: &str,
-        execution: &str,
-    ) -> Result<()> {
+    /// The draft holding a link a change edits and the link as the draft holds it (Go's `linkWork`): the link by its
+    /// id, or the stored link of the version the draft was checked out from.
+    async fn link_work(&mut self, id: &ChangeId, link: &LinkId, flow: &str) -> Result<(Work, Draft, DraftLink)> {
         let mut w = self.work_on(id, flow).await?;
         let stored = self.store.link(link).await?;
         // the gate of the service reads the type of the source first (Go's `LinkSourceType`)
@@ -869,13 +863,65 @@ impl<S: WriteTx> Tx<'_, S> {
             let Some(found) = found else { continue };
             self.select_impact(&mut w, &d.impact)?;
             let d = self.working(&w)?;
-            let mut patch = Map::new();
-            patch.insert("removeLink".into(), remove_link_patch(&found));
-            return self.emit_updated(&mut w, &d.draft_ref(), execution, patch).await;
+            return Ok((w, d, found));
         }
         Err(GraphError::conflict(format!(
             "link {link} is not a link of a draft of change {id}"
         )))
+    }
+
+    /// Sets the properties of an outgoing link of a draft (Go's `ImpactLinkUpdate`).
+    pub async fn impact_link_update(
+        &mut self,
+        id: &ChangeId,
+        link: &LinkId,
+        props: Option<Map<String, Value>>,
+        flow: &str,
+        execution: &str,
+    ) -> Result<Link> {
+        let (mut w, d, cur) = self.link_work(id, link, flow).await?;
+        check::link_attributes(self.catalog(), &cur.typ, props.as_ref())?;
+        let props_value = props.clone().map_or(Value::Null, Value::Object);
+        let mut m = Map::new();
+        m.insert("id".into(), Value::String(cur.id.0.clone()));
+        m.insert("type".into(), Value::String(cur.typ.clone()));
+        if cur.is_external() {
+            m.insert("target".into(), Value::String(cur.target.to_string()));
+        } else {
+            m.insert("toId".into(), Value::String(cur.to.id.0.clone()));
+        }
+        m.insert("props".into(), props_value);
+        let mut patch = Map::new();
+        patch.insert("updateLink".into(), Value::Object(m));
+        let to = if cur.is_external() {
+            Target::External(cur.target.clone())
+        } else {
+            Target::Node(cur.to.clone())
+        };
+        let l = Link {
+            id: cur.id.clone(),
+            typ: cur.typ.clone(),
+            from: d.draft_ref(),
+            to,
+            props,
+            change_id: id.clone(),
+        };
+        self.emit_updated(&mut w, &d.draft_ref(), execution, patch).await?;
+        Ok(l)
+    }
+
+    /// Removes an outgoing link of a draft (Go's `ImpactLinkDelete`): removing a child is a modification of its parent.
+    pub async fn impact_link_delete(
+        &mut self,
+        id: &ChangeId,
+        link: &LinkId,
+        flow: &str,
+        execution: &str,
+    ) -> Result<()> {
+        let (mut w, d, found) = self.link_work(id, link, flow).await?;
+        let mut patch = Map::new();
+        patch.insert("removeLink".into(), remove_link_patch(&found));
+        self.emit_updated(&mut w, &d.draft_ref(), execution, patch).await
     }
 
     /// Records an edit of a draft, then sends a decided review back to proposed (Go's `emitUpdated`, `editedAgain`).
@@ -897,6 +943,177 @@ impl<S: WriteTx> Tx<'_, S> {
         }])
         .await?;
         self.edited_again(w, execution).await
+    }
+
+    /// Moves a node along its lifecycle in a change (Go's `ImpactNodeTransition`): the state of its draft, the node
+    /// checked out first when the change holds no draft of it; a transitioned event with the patch of the state. A
+    /// transition with a guard, guard or action algorithms, or a condition on the children of the node is the Go
+    /// service's.
+    pub async fn impact_node_transition(
+        &mut self,
+        id: &ChangeId,
+        flow: &str,
+        n: NodeCheckout,
+        to: &str,
+    ) -> Result<ChangeImpact> {
+        on_main(flow)?;
+        if to.is_empty() {
+            return Err(GraphError::invalid("a transition names the state it goes to"));
+        }
+        let execution = n.execution.clone();
+        // what the Go service serves is known before anything is written (the declaration of an impact moves the
+        // sequence of the log)
+        if let Some((typ, state, declares)) = self.transition_source(id, &n).await?
+            && let Some(lc) = self.catalog().lifecycle(&typ)
+        {
+            let from = if state.is_empty() {
+                lc.initial.as_str()
+            } else {
+                state.as_str()
+            };
+            let t = lc.transitions.iter().find(|t| t.from == from && t.to == to);
+            if t.is_some_and(|t| {
+                !t.guard.is_empty() || !t.guards.is_empty() || !t.actions.is_empty() || t.children.is_some()
+            }) {
+                return Err(unserved(
+                    "a transition with a guard, algorithms or a condition on the children (ADR 0018)",
+                ));
+            }
+            // the Go service resolves the move once to authorize it, in a transaction it rolls back: the impact it
+            // declares there takes a position of the log and of the impacts
+            if declares && t.is_some() && lc.state(to).is_some() {
+                self.store.skip_declaration().await?;
+            }
+        }
+        let mut w = self
+            .resolve(
+                id,
+                Named {
+                    impact: n.impact,
+                    node: n.node,
+                    key: n.key,
+                    rationale: n.rationale,
+                    execution: n.execution,
+                    produced_by: n.produced_by,
+                    ..Named::default()
+                },
+            )
+            .await?;
+        let own = self.views[id].fold.draft(&w.cn.id, "").cloned();
+        let (key, typ, state) = match &own {
+            Some(d) => (d.key.clone(), d.typ.clone(), d.state.clone()),
+            None => match self.base(&w).await? {
+                Some(b) => (b.key, b.typ, b.state),
+                None => {
+                    return Err(GraphError::invalid(format!(
+                        "change impact {} has no version to move",
+                        w.cn.id
+                    )));
+                }
+            },
+        };
+        let quoted = serde_json::to_string(to).unwrap_or_default();
+        let Some(lc) = self.catalog().lifecycle(&typ).cloned() else {
+            return Err(GraphError::invalid(format!(
+                "node type {typ} has no lifecycle: state {quoted}"
+            )));
+        };
+        if lc.state(to).is_none() {
+            return Err(GraphError::invalid(format!("{typ} has no state {quoted}")));
+        }
+        let from = if state.is_empty() { lc.initial.clone() } else { state };
+        if from == to {
+            return Err(GraphError::invalid(format!("{key} ({typ}) is already {to}")));
+        }
+        let Some(t) = lc.transitions.iter().find(|t| t.from == from && t.to == to).cloned() else {
+            return Err(GraphError::invalid(format!(
+                "{key} ({typ}) cannot go from {from} to {to}"
+            )));
+        };
+        if !t.guard.is_empty() || !t.guards.is_empty() || !t.actions.is_empty() || t.children.is_some() {
+            return Err(unserved(
+                "a transition with a guard, algorithms or a condition on the children",
+            ));
+        }
+        if own.is_none() {
+            self.checkout(&w, &execution).await?;
+            self.reread(&mut w).await?;
+            let impact = w.cn.id.clone();
+            self.select_impact(&mut w, &impact)?;
+        }
+        let d = self.working(&w)?;
+        if let Some(req) = &t.requires {
+            for k in &req.attributes {
+                let v = d.props.as_ref().and_then(|p| p.get(k));
+                if v.is_none_or(|v| v.is_null() || v.as_str() == Some("")) {
+                    return Err(GraphError::invalid(format!(
+                        "{} ({}) cannot take {}: attribute {} is required",
+                        d.key,
+                        d.typ,
+                        t.name,
+                        serde_json::to_string(k).unwrap_or_default()
+                    )));
+                }
+            }
+            for lt in &req.outgoing_links {
+                if !d.links.iter().any(|l| l.typ == *lt) {
+                    return Err(GraphError::invalid(format!(
+                        "{} ({}) cannot take {}: an outgoing {} link is required",
+                        d.key,
+                        d.typ,
+                        t.name,
+                        serde_json::to_string(lt).unwrap_or_default()
+                    )));
+                }
+            }
+        }
+        let mut state = Map::new();
+        state.insert("from".into(), Value::String(d.state.clone()));
+        state.insert("to".into(), Value::String(t.to.clone()));
+        let mut patch = Map::new();
+        patch.insert("state".into(), Value::Object(state));
+        let r = d.draft_ref();
+        self.emit(vec![ImpactEvent {
+            change: id.clone(),
+            impact: w.cn.id.clone(),
+            op: ImpactOp::Transitioned,
+            execution,
+            post: Some(r.clone()),
+            patch: Some(patch),
+            ..ImpactEvent::default()
+        }])
+        .await?;
+        Ok(w.seen_as(&r))
+    }
+
+    /// The type and state of the node a transition moves, as the change sees it, read without writing anything, and
+    /// whether the change declares an impact for it; none when it is not found (the operation says why).
+    async fn transition_source(&mut self, id: &ChangeId, n: &NodeCheckout) -> Result<Option<(String, String, bool)>> {
+        let w = self.work_on(id, "").await?;
+        let cn = if !n.impact.is_empty() {
+            self.views[id].fold.impact(&n.impact).cloned()
+        } else {
+            w.seen
+                .iter()
+                .rev()
+                .find(|cn| node_of(cn).as_ref() == Some(&n.node))
+                .cloned()
+        };
+        if let Some(cn) = cn {
+            if let Some(d) = self.views[id].fold.draft(&cn.id, "") {
+                return Ok(Some((d.typ.clone(), d.state.clone(), false)));
+            }
+            let w = Work { cn, ..w };
+            return Ok(self.base(&w).await?.map(|b| (b.typ, b.state, false)));
+        }
+        if n.node.is_empty() {
+            return Ok(None);
+        }
+        let header = read::header_of(self.store, &w.c.baseline_id).await?;
+        let at = read::select(self.store, &header, Some(std::slice::from_ref(&n.node))).await?;
+        let Some(v) = at.get(&n.node) else { return Ok(None) };
+        let b = read::stored_node(self.store, &NodeRef::new(n.node.clone(), *v)).await?;
+        Ok(Some((b.typ, b.state, true)))
     }
 
     /// Sends a decided review of the impact w selects back to proposed: the draft it was reviewed on is gone (Go's

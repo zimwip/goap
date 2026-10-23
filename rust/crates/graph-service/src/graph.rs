@@ -1854,6 +1854,35 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    async fn impact_node_transition(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactNodeTransitionRequest>,
+    ) -> Answer<pb::ImpactNodeTransitionResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let by = caller.subject.clone();
+        self.write(caller, async |tx| {
+            if m.state.is_empty() {
+                return Err(GraphError::invalid("a transition names the state it goes to"));
+            }
+            let id = served_change(tx, &m.change_id).await?;
+            let n = NodeCheckout {
+                impact: m.change_impact_id.clone(),
+                node: m.node_id.as_str().into(),
+                key: String::new(),
+                rationale: m.rationale.clone(),
+                execution: m.execution.clone(),
+                produced_by: by,
+            };
+            let cn = tx.impact_node_transition(&id, &m.flow, n, &m.state).await?;
+            Ok(pb::ImpactNodeTransitionResponse {
+                node: Some(convert::change_impact(&cn)),
+            })
+        })
+        .await
+    }
+
     async fn impact_node_cancel(
         &self,
         _ctx: &Ctx,
@@ -1924,6 +1953,26 @@ impl pb::GraphService for Graph {
                 .impact_link_create(&id, &m.change_impact_id, l, &m.flow, &m.execution)
                 .await?;
             Ok(pb::ImpactLinkCreateResponse {
+                link: Some(convert::link(&link)),
+            })
+        })
+        .await
+    }
+
+    async fn impact_link_update(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactLinkUpdateRequest>,
+    ) -> Answer<pb::ImpactLinkUpdateResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let props = m.props.as_ref().map(convert::map);
+            let link = tx
+                .impact_link_update(&id, &m.link_id.as_str().into(), props, &m.flow, &m.execution)
+                .await?;
+            Ok(pb::ImpactLinkUpdateResponse {
                 link: Some(convert::link(&link)),
             })
         })

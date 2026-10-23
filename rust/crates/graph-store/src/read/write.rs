@@ -608,6 +608,16 @@ impl WriteTx for Session {
         Ok(())
     }
 
+    async fn skip_declaration(&self) -> Result<(), GraphError> {
+        if self.sql.pg {
+            for table in ["change_log", "change_impact"] {
+                let q = format!("SELECT nextval(pg_get_serial_sequence('{table}', 'seq'))");
+                self.select((q, vec![]), "position of the log").await?;
+            }
+        }
+        Ok(())
+    }
+
     async fn next_commit(&self) -> Result<i64, GraphError> {
         let q = if self.sql.pg {
             "SELECT nextval('commit_seq')"
