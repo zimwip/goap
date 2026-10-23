@@ -9,6 +9,8 @@ import (
 // code and its tests reading as before.
 type (
 	View                = graphapi.View
+	QueryOptions        = graphapi.QueryOptions
+	QueryResult         = graphapi.QueryResult
 	ViewState           = graphapi.ViewState
 	NewChange           = graphapi.NewChange
 	ChangePatch         = graphapi.ChangePatch

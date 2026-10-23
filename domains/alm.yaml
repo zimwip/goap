@@ -176,7 +176,7 @@ nodeTypes:
       - {name: rationale, label: Rationale, description: Why the rule holds, with good and bad examples, type: string, widget: textarea, section: Identity, order: 2, validators: [description-max-2000]}
       - {name: severity, label: Severity, description: "How a broken rule weighs: veto (blocks), objective (passes under a derogation naming it), advice (reported)", type: enum, enum: rule-severity, default: veto, section: Control, order: 3}
       - {name: technology, label: Technology, description: "The technology the rule is about (go, java…); empty: any", type: string, section: Control, order: 4}
-      - {name: check, label: Check, description: "How the rule is measured (a code text): cypher (a query over the view of the change, each row a violation), shell (a command in the workspace of the change, SARIF or file:line: message lines); none: the rule guides, it is not measured", type: code, section: Control, order: 5}
+      - {name: check, label: Check, description: "How the rule is measured (a code text): cypher (a query over the view of the change, subject bound to the subject, each row a violation: its columns at and msg say where and what), shell (a command in the workspace of the change, in the directory of the subject: SARIF or file:line: message lines); none: the rule guides, it is not measured", type: code, section: Control, order: 5}
       - {name: fix, label: Fix, description: "How to fix a violation, in one line: given with it", type: string, section: Control, order: 6}
     lifecycle: rule
     search: [{property: statement, text: true}, {property: rationale, text: true}, {property: severity, facet: true}, {property: technology, facet: true}]

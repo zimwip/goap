@@ -10,6 +10,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
+	"github.com/zimwip/goap/contracts/builtins"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/mcp"
 	"github.com/zimwip/goap/engine/condition"
@@ -585,8 +586,8 @@ func (s *compileState) checkInvocation(path string, a Action) {
 		}
 	}
 	// the code of a human action's form runs as a script does (ADR 0115) and may call the tools it declares (ADR 0131)
-	if len(a.MCPs) > 0 && a.Kind != KindLLM && a.Kind != KindScript && (a.Kind != KindHuman || a.Code == "") {
-		s.add(path+".mcps", "mcps apply to llm and script actions, and to the code of a human action's form (a tool action names its tool)")
+	if len(a.MCPs) > 0 && a.Kind != KindLLM && a.Kind != KindScript && (a.Kind != KindHuman || a.Code == "") && (a.Kind != KindBuiltin || a.Builtin != builtins.ControlCheck) {
+		s.add(path+".mcps", "mcps apply to llm and script actions, to the code of a human action's form and to the measure of the controls (control.check, whose shell checks run in the workspace; a tool action names its tool)")
 	}
 	if a.Permission != "" && !strings.Contains(a.Permission, ":") {
 		s.add(path+".permission", "permission must be <resource>:<action>")
