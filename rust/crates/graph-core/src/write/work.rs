@@ -254,17 +254,45 @@ impl<S: WriteTx> Tx<'_, S> {
                 n += 1;
             }
             let rest = events.split_off(n);
-            self.emit_entry(events).await?;
+            self.emit_entry(events, false).await?;
             events = rest;
         }
         Ok(())
     }
 
-    async fn emit_entry(&mut self, mut events: Vec<ImpactEvent>) -> Result<()> {
+    /// Appends events staged together as one entry, a batch even of one (Go's `stage` then `flush`: the verdicts of
+    /// a review, ADR 0144); they share the envelope of the first.
+    pub async fn emit_staged(&mut self, mut events: Vec<ImpactEvent>) -> Result<()> {
+        if events.is_empty() {
+            return Ok(());
+        }
+        let now = self.env.now();
+        for e in events.iter_mut() {
+            if e.at == crate::gojson::zero_time() {
+                e.at = now;
+            }
+            if e.by.is_empty() {
+                e.by = self.env.by.clone();
+            }
+        }
+        if let Some(e) = events.iter().skip(1).find(|e| !events[0].same_entry(e)) {
+            return Err(GraphError::internal(format!(
+                "change {}: event {} of {} is not staged with {} of {}",
+                e.change,
+                e.op.as_str(),
+                e.impact,
+                events[0].op.as_str(),
+                events[0].impact
+            )));
+        }
+        self.emit_entry(events, true).await
+    }
+
+    async fn emit_entry(&mut self, mut events: Vec<ImpactEvent>, staged: bool) -> Result<()> {
         let change = events[0].change.clone();
         let id = self.env.new_id();
         let at = events[0].at;
-        let many = events.len() > 1;
+        let many = staged || events.len() > 1;
         for (i, e) in events.iter_mut().enumerate() {
             if many {
                 e.id = impact::part_id(&id, i);

@@ -19,6 +19,7 @@ use graph_core::{
     model::{ChangeId, MAIN_BRANCH},
     write::{
         change::NewChange,
+        review::{ReviewBatch, Verdict},
         tx::{Env, Tx},
         work::{NodeCheckout, NodeCreate},
     },
@@ -743,6 +744,42 @@ impl pb::GraphService for Graph {
             tx.impact_link_delete(&id, &m.link_id.as_str().into(), &m.flow, &m.execution)
                 .await?;
             Ok(pb::ImpactLinkDeleteResponse {})
+        })
+        .await
+    }
+
+    async fn impact_node_review_batch(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactNodeReviewBatchRequest>,
+    ) -> Answer<pb::ImpactNodeReviewBatchResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        if m.item.is_some() {
+            return Err(connect_error(GraphError::unimplemented(
+                "the record of a review built up by the use case (ADR 0080)",
+            )));
+        }
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let b = ReviewBatch {
+                id: m.review_id.clone(),
+                flow: m.flow.clone(),
+                execution: m.execution.clone(),
+                verdicts: m
+                    .verdicts
+                    .iter()
+                    .map(|v| Verdict {
+                        impact: v.change_impact_id.clone(),
+                        accept: v.accept,
+                        comment: v.comment.clone(),
+                    })
+                    .collect(),
+            };
+            let out = tx.impact_node_review_batch(&id, b).await?;
+            Ok(pb::ImpactNodeReviewBatchResponse {
+                nodes: out.iter().map(convert::change_impact).collect(),
+            })
         })
         .await
     }

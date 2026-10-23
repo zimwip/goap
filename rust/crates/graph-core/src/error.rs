@@ -58,6 +58,12 @@ impl GraphError {
         self
     }
 
+    /// The error with a prefix before its message, as is (Go's `fmt.Errorf("%s%w", prefix, err)`).
+    pub fn with_prefix(mut self, prefix: &str) -> GraphError {
+        self.message = format!("{prefix}{}", self.message);
+        self
+    }
+
     pub fn is_not_found(&self) -> bool {
         self.kind == Kind::NotFound
     }

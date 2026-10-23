@@ -120,6 +120,21 @@ pub struct Review {
     pub review_id: String,
 }
 
+impl Default for Review {
+    fn default() -> Review {
+        Review {
+            status: String::new(),
+            by: String::new(),
+            comment: String::new(),
+            at: zero_time(),
+            flow: String::new(),
+            execution: String::new(),
+            superseded: false,
+            review_id: String::new(),
+        }
+    }
+}
+
 /// The link from a change to a node: the version it reads (pre), its draft or the version it wrote (post), the version
 /// on the target branch (committed), and why.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
