@@ -6,8 +6,10 @@ use std::collections::HashMap;
 use graph_catalog::{Catalog, catalog::STRUCTURE_PROJECT};
 use serde_json::Value;
 
+use graph_script::abac;
+
 use crate::{
-    Result,
+    GraphError, Result,
     model::{MAIN_BRANCH, NodeRef},
     read,
     store::ReadTx,
@@ -134,6 +136,7 @@ pub const PLATFORM_SCOPE: &str = "PLATFORM";
 pub const TYPE_USER: &str = "organisation@User";
 pub const TYPE_ASSIGNMENT: &str = "organisation@Assignment";
 pub const TYPE_PROJECT_UNIT: &str = "organisation@ProjectUnit";
+pub const TYPE_POLICY: &str = "organisation@Policy";
 pub const LINK_MEMBER_OF: &str = "organisation@member_of";
 pub const LINK_ASSIGNS_ORG: &str = "organisation@assigns_org";
 pub const LINK_ASSIGNS_PROJECT: &str = "organisation@assigns_project";
@@ -199,6 +202,8 @@ pub struct Snapshot {
     project_keys: std::collections::HashSet<String>,
     assignments: Vec<Assignment>,
     org_root: String,
+    /// The rules stored as `Policy` nodes, a malformed one left out (`PolicyFromProps`).
+    policies: Vec<abac::Policy>,
 }
 
 fn flag(props: &crate::model::Props, k: &str) -> bool {
@@ -265,6 +270,21 @@ impl Snapshot {
                     let subject = text(&n.props, "subject");
                     if !subject.is_empty() {
                         s.users.insert(subject.to_string(), String::new());
+                    }
+                }
+                TYPE_POLICY => {
+                    let p = abac::Policy {
+                        rule: text(&n.props, "rule").to_string(),
+                        resource: text(&n.props, "resource").to_string(),
+                        action: text(&n.props, "action").to_string(),
+                        effect: text(&n.props, "effect").to_string(),
+                    };
+                    if (p.effect == "allow" || p.effect == "deny")
+                        && !p.rule.is_empty()
+                        && !p.resource.is_empty()
+                        && !p.action.is_empty()
+                    {
+                        s.policies.push(p);
                     }
                 }
                 TYPE_ASSIGNMENT => {
@@ -441,6 +461,83 @@ impl Snapshot {
         !self.platform_roles(&chain).is_empty()
             || !self.project_roles(&chain, &projects).is_empty()
             || p.roles.iter().any(|r| r == ROLE_ADMIN)
+    }
+
+    /// The principal completed with what the organisation knows of its subject (`Enrich`): its unit when it names
+    /// none, the platform roles apart from the others, those its unit chain holds added.
+    fn enrich(&self, p: &Principal) -> abac::Subject {
+        let mut out = abac::Subject {
+            subject: p.subject.clone(),
+            org: p.org.clone(),
+            ..abac::Subject::default()
+        };
+        if out.org.is_empty()
+            && let Some(u) = self.users.get(&p.subject)
+        {
+            out.org = u.clone();
+        }
+        let add = |l: &mut Vec<String>, r: &str| {
+            if !l.iter().any(|x| x == r) {
+                l.push(r.to_string());
+            }
+        };
+        for r in &p.roles {
+            if PLATFORM_ROLES.contains(&r.as_str()) {
+                add(&mut out.global, r);
+            } else {
+                add(&mut out.roles, r);
+            }
+        }
+        let chain = self.chain_of(&Principal {
+            subject: out.subject.clone(),
+            org: out.org.clone(),
+            roles: Vec::new(),
+        });
+        for r in self.platform_roles(&chain) {
+            add(&mut out.global, &r);
+        }
+        out
+    }
+
+    /// Decides a request as Go's `access.Authorizer` does (ADR 0020, 0043, 0138): the principal completed, the roles
+    /// it holds on the resource's project (the root when it names none) merged, the flags of that project's
+    /// Assignments when the resource names one; the floor first (an administrator may do everything), then the
+    /// stored rules, the compiled-in defaults while none is stored. A stored rule this service cannot read is the Go
+    /// service's to judge.
+    pub fn authorize(&self, p: &Principal, mut res: abac::Resource, act: &str) -> Result<bool> {
+        if p.subject.is_empty() {
+            return Ok(false);
+        }
+        let mut sub = self.enrich(p);
+        if !res.org.is_empty() && res.org_chain.is_empty() {
+            res.org_chain = self.units.chain(&res.org);
+        }
+        let projects = self.projects.chain(&res.project_id);
+        let chain = self.chain_of(&Principal {
+            subject: sub.subject.clone(),
+            org: sub.org.clone(),
+            roles: Vec::new(),
+        });
+        for r in self.project_roles(&chain, &projects) {
+            if !sub.roles.contains(&r) {
+                sub.roles.push(r);
+            }
+        }
+        if !res.project_id.is_empty() {
+            (sub.project_admin, sub.project_owner) = self.project_flags(&chain, &projects);
+        }
+        let floor = abac::Enforcer::new(&abac::floor_policies()).map_err(GraphError::internal)?;
+        if floor.authorize(&sub, &res, act).map_err(GraphError::internal)? {
+            return Ok(true);
+        }
+        let rules = if self.policies.is_empty() {
+            abac::Enforcer::new(&abac::default_policies()).map_err(GraphError::internal)?
+        } else {
+            abac::Enforcer::new(&self.policies).map_err(|e| {
+                GraphError::unimplemented(format!("a rule of the organisation this service cannot read: {e}"))
+            })?
+        };
+        rules.authorize(&sub, &res, act).map_err(GraphError::internal)
     }
 
     /// The projects whose nodes a principal reads (`ReachableProjects`, ADR 0161 §5): those it works on, sorted.

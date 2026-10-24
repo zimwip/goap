@@ -367,4 +367,12 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   position of a change log, `ListChangeLog` (the prompts of `prompt:inspect`) and the reads of the current graph (the
   reach of ADR 0161) stay Go's for a person: 2346 calls, the divergent ones as above and the cursors of the pages of
   changes (a time of each database).
+  The rules of the organisation are judged here too (`graph-script` `abac`: Go's Casbin model, its default and floor
+  rules and its functions, `hasRole`, `hasAnyRole`, `hasRoleIn`, `onProject`, `mayRun`, `isProjectAdmin`,
+  `isProjectOwner`, `isAnonymous`, the subject rules evaluated as CEL over `r.sub`, `r.obj`, `r.act`;
+  `access::Snapshot::authorize` as `access.Authorizer.Authorize`: the principal completed, the roles of the
+  resource's project merged, its flags, the floor then the stored `Policy` nodes, the defaults while none is stored;
+  a stored rule CEL does not read is Go's to judge). Their first use is `ListChangeLog`, for a person too: the
+  prompts of the model calls asked without `prompt:inspect` are refused, left out of a read naming no type: 2395
+  calls, the divergent ones as above.
 - Not done yet: the rest of phase 4.

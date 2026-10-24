@@ -41,6 +41,7 @@ use graph_core::{
         work::{NodeCheckout, NodeCreate, fold_change},
     },
 };
+use graph_script::abac;
 use graph_store::read::{LogFilter, Session, Tag};
 
 use crate::{State, convert};
@@ -145,6 +146,16 @@ impl Caller {
         !self.subject.starts_with("system:") || !self.on_behalf_of.is_empty()
     }
 
+    /// The principal a request is decided for by the authorizer: itself, with the unit and the roles it carries
+    /// (Go's `authz.From`: a platform service acting for a person is still itself there).
+    fn reader_or_self(&self) -> access::Principal {
+        access::Principal {
+            subject: self.subject.clone(),
+            org: self.org.clone(),
+            roles: self.roles.clone(),
+        }
+    }
+
     /// The principal a read is decided for (Go's `graphsvc.Reader`, ADR 0161 §5): a platform service acting for a
     /// person reads as that person, with nothing but its subject.
     fn reader(&self) -> access::Principal {
@@ -160,6 +171,15 @@ impl Caller {
             roles: self.roles.clone(),
         }
     }
+}
+
+/// A refusal of the authorizer (`authz.Check`: `ErrForbidden` joined with what was refused).
+fn forbidden(who: &str, act: &str, typ: &str, id: &str) -> GraphError {
+    let who = if who.is_empty() { "anonymous" } else { who };
+    GraphError::new(
+        Kind::Forbidden,
+        format!("permission denied\n{who} may not {act} {typ} {id}"),
+    )
 }
 
 /// What a caller reads of the changes (Go's `Handler.mayRead`, ADR 0037, 0138): a personal change is its subject's
@@ -910,7 +930,8 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ListChangeLogResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
+        let who = caller.reader_or_self();
+        self.read_changes(caller, &[m.change_id.as_str()], async |tx, _| {
             let f = LogFilter {
                 change: m.change_id.clone(),
                 types: m.types.clone(),
@@ -940,9 +961,42 @@ impl pb::GraphService for Graph {
             if model_call && f.change.is_empty() {
                 return Err(GraphError::invalid("a log read without a change names its types"));
             }
+            // the prompts of the model calls are read with their own permission (prompt:inspect on the project of
+            // the change): asking for them without it is refused, a read without types leaves them out
+            let mut hide = false;
+            if model_call {
+                let c = change::change_heads(tx, std::slice::from_ref(&ChangeId(f.change.clone())))
+                    .await?
+                    .remove(&ChangeId(f.change.clone()))
+                    .ok_or_else(|| GraphError::not_found(format!("change {}", f.change)))?;
+                let snap = access::Snapshot::read(tx).await?;
+                let res = abac::Resource {
+                    typ: "prompt".into(),
+                    id: c.id.0.clone(),
+                    name: c.title.clone(),
+                    org: c.owner_org.key.clone(),
+                    project_id: c.project_id.key.clone(),
+                    ..abac::Resource::default()
+                };
+                if !snap.authorize(&who, res, "inspect")? {
+                    if f.types.iter().any(|t| t.starts_with("model.")) {
+                        return Err(forbidden(&who.subject, "inspect", "prompt", &c.id.0));
+                    }
+                    hide = true;
+                }
+            }
+            let model = |t: &str| hide && t.starts_with("model.");
             Ok(pb::ListChangeLogResponse {
-                entries: entries.iter().map(convert::log_entry).collect(),
-                counts: counts.into_iter().map(|(t, n)| (t, n as i32)).collect(),
+                entries: entries
+                    .iter()
+                    .filter(|e| !model(&e.typ))
+                    .map(convert::log_entry)
+                    .collect(),
+                counts: counts
+                    .into_iter()
+                    .filter(|(t, _)| !model(t))
+                    .map(|(t, n)| (t, n as i32))
+                    .collect(),
             })
         })
         .await
