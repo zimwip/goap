@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use serde_json::Value;
 
 use super::{
+    branchmerge::{MergeRequest, Resolution, plan_merge},
     commit::NOTHING_TO_COMMIT,
     events::{CHANGE_APPLIED, CHANGE_MERGED, EventNode},
     rebase::main_impacts,
@@ -29,12 +30,9 @@ use crate::{
 /// The kind of the baseline a fast-forward leaves (`domain.BaselineFastForward`).
 const BASELINE_FAST_FORWARD: &str = "fast-forward";
 const STATUS_APPLIED: &str = "applied";
+use super::change::STATUS_COMMITTED;
 /// Who records the work of a merged sub-change in its parent.
 const MERGE_PRODUCER: &str = "graph.merge";
-
-fn unserved(what: &str) -> GraphError {
-    GraphError::unimplemented(format!("{what}: not served here yet"))
-}
 
 /// A change as a merge answers it: its header, its impacts and its items, at the position its log stands at.
 #[derive(Debug, Clone, Default)]
@@ -212,12 +210,12 @@ impl<S: WriteTx> Tx<'_, S> {
     /// what its branch is forked from now, then fast-forwarded: a root change into the lasting branch it was forked from,
     /// a sub-change into the branch of its parent, which takes its work as its own (ADR 0103). A rebase that left
     /// impacts to look at again is kept, the merge refused: [`Merge::Rebased`], whose transaction is committed.
-    pub async fn merge_change(&mut self, id: &ChangeId) -> Result<Merge> {
+    pub async fn merge_change(&mut self, id: &ChangeId, resolutions: &HashMap<NodeId, Resolution>) -> Result<Merge> {
         self.lock_change(id).await?;
         let c = self.change_head(id).await?;
         if c.status != super::change::STATUS_DRAFT && c.status != super::change::STATUS_ACTIVE {
-            if c.status == "committed" && c.parent_id.is_empty() {
-                return Err(unserved("the merge of a change waiting for its resolutions"));
+            if c.status == STATUS_COMMITTED && c.parent_id.is_empty() {
+                return self.integrate_committed(c, resolutions).await;
             }
             return Err(GraphError::conflict(format!("change {id} is {}", c.status)));
         }
@@ -250,26 +248,110 @@ impl<S: WriteTx> Tx<'_, S> {
                 rebased.summary()
             ))));
         }
-        let mut c = self.change_head(id).await?;
+        let c = self.change_head(id).await?;
         self.check_merge(&c).await?;
-        let Some(mut own) = self.own_branch(&c).await? else {
+        let Some(own) = self.own_branch(&c).await? else {
             return Err(GraphError::invalid(format!("change {id} has no branch of its own")));
         };
-        // the fast-forward (Go's `fastForward`): what the branch changed since its fork joins the target, which must
-        // not have moved on those nodes
+        if !c.parent_id.is_empty() {
+            return match self.fast_forward(c.clone(), own).await? {
+                Some(r) => Ok(Merge::Applied(Box::new(r))),
+                None => Err(GraphError::conflict(format!(
+                    "the branch of parent change {} moved meanwhile: merge {} again",
+                    c.parent_id, c.id
+                ))),
+            };
+        }
+        self.integrate(c, own, resolutions).await
+    }
+
+    /// The merge of a root change whose three-way merge waits for its resolutions (Go's `IntegrateChange` of a
+    /// committed change): integrated with them once they resolve every conflict.
+    async fn integrate_committed(&mut self, c: Change, resolutions: &HashMap<NodeId, Resolution>) -> Result<Merge> {
+        let Some(own) = self.own_branch(&c).await? else {
+            return Err(GraphError::invalid(format!("change {} has no branch of its own", c.id)));
+        };
+        self.lock_branch(&c.namespace, branch_of(&own.parent)).await?;
+        let plan = plan_merge(self.store, &c.namespace, &own.name, &own.parent).await?;
+        let un: Vec<&str> = plan
+            .candidates
+            .iter()
+            .filter(|k| !k.conflicts.is_empty() && !resolutions.contains_key(&k.node))
+            .map(|k| k.key.as_str())
+            .collect();
+        if !un.is_empty() {
+            return Err(GraphError::conflict(format!(
+                "merge {} into {}: unresolved conflicts on [{}]",
+                own.name,
+                own.parent,
+                un.join(" ")
+            )));
+        }
+        self.integrate(c, own, resolutions).await
+    }
+
+    /// Integrates a root change into the lasting branch it was forked from (Go's `integrate`): a fast-forward, else the
+    /// three-way merge of its branch with the resolutions given; a conflict left without one leaves the change
+    /// committed, waiting for them.
+    async fn integrate(
+        &mut self,
+        mut c: Change,
+        own: Branch,
+        resolutions: &HashMap<NodeId, Resolution>,
+    ) -> Result<Merge> {
+        if let Some(r) = self.fast_forward(c.clone(), own.clone()).await? {
+            return Ok(Merge::Applied(Box::new(r)));
+        }
+        let plan = plan_merge(self.store, &c.namespace, &own.name, &own.parent).await?;
+        if plan
+            .candidates
+            .iter()
+            .any(|k| !k.conflicts.is_empty() && !resolutions.contains_key(&k.node))
+        {
+            c.status = STATUS_COMMITTED.into();
+            self.put_change(&c).await?;
+            return self.change_read(c).await.map(|r| Merge::Applied(Box::new(r)));
+        }
+        // the change answered as it was read before the merge, its impacts not folded again (Go's `integrate`)
+        self.view(&c.id).await?;
+        let before = self.change_read(c.clone()).await?;
+        let res = self
+            .merge_branch(MergeRequest {
+                from: own.name.clone(),
+                into: own.parent.clone(),
+                title: format!("merge {}", c.title),
+                namespace: c.namespace.clone(),
+                resolutions: resolutions.clone(),
+                owner_org: c.owner_org.to_string(),
+                project_id: c.project_id.to_string(),
+            })
+            .await?;
+        c.status = STATUS_APPLIED.into();
+        c.result_baseline_id = res.baseline.id.clone();
+        self.view(&c.id).await?;
+        let impacts = main_impacts(&self.views[&c.id].fold.impacts);
+        let target = branch_of(&own.parent).to_string();
+        self.commit_impacts(&c, &impacts, &target, &res.baseline.id, &res.change.id)
+            .await?;
+        let ev: Vec<EventNode> = res.merged.iter().map(EventNode::of).collect();
+        self.raise(CHANGE_MERGED, &c, Some(&res.baseline), &target, &ev);
+        self.raise(CHANGE_APPLIED, &c, Some(&res.baseline), "", &[]);
+        self.put_change(&c).await?;
+        Ok(Merge::Applied(Box::new(ChangeRead { change: c, ..before })))
+    }
+
+    /// The fast-forward of a change's branch (Go's `fastForward`): what the branch changed since its fork joins the
+    /// target, which must not have moved on those nodes (none: it did, a merge is needed).
+    async fn fast_forward(&mut self, mut c: Change, mut own: Branch) -> Result<Option<ChangeRead>> {
+        let id = c.id.clone();
+        let id = &id;
         let to = self.onto_of(&own).await?;
         let mut ids = self.store.branch_node_ids(&own.name).await?;
         ids.sort();
         let fork = read::fork_versions(self.store, &own, &ids).await?;
         let into = self.onto_versions(&to, &ids).await?;
         if fork != into {
-            if to.parent.ephemeral {
-                return Err(GraphError::conflict(format!(
-                    "the branch of parent change {} moved meanwhile: merge {} again",
-                    c.parent_id, c.id
-                )));
-            }
-            return Err(unserved("the three-way merge of a change whose target moved meanwhile"));
+            return Ok(None);
         }
         if self.moved(&to, &own).await? {
             // moved on other nodes: the work of the branch stands over it as it is, the fork moved
@@ -291,13 +373,13 @@ impl<S: WriteTx> Tx<'_, S> {
         if to.parent.ephemeral {
             // the branch of the parent holds what the sub-change committed, its impacts committed there
             self.end_commit(&target);
-            self.commit_impacts(&c, &impacts, &target, &BaselineId::default())
+            self.commit_impacts(&c, &impacts, &target, &BaselineId::default(), &ChangeId::default())
                 .await?;
             let ev = self.moved_nodes(&moves).await?;
             self.raise(CHANGE_MERGED, &c, None, &target, &ev);
             self.put_change(&c).await?;
             self.record_in_parent(&c).await?;
-            return self.change_read(c).await.map(|r| Merge::Applied(Box::new(r)));
+            return self.change_read(c).await.map(Some);
         }
         let res = Baseline {
             id: BaselineId(self.env.new_id()),
@@ -313,12 +395,13 @@ impl<S: WriteTx> Tx<'_, S> {
         let res = self.put_baseline(&res, Some(delta)).await?;
         self.advance_branch(&c.namespace, &target, &res).await?;
         c.result_baseline_id = res.id.clone();
-        self.commit_impacts(&c, &impacts, &target, &res.id).await?;
+        self.commit_impacts(&c, &impacts, &target, &res.id, &ChangeId::default())
+            .await?;
         let ev = self.moved_nodes(&moves).await?;
         self.raise(CHANGE_MERGED, &c, Some(&res), &target, &ev);
         self.raise(CHANGE_APPLIED, &c, Some(&res), "", &[]);
         self.put_change(&c).await?;
-        self.change_read(c).await.map(|r| Merge::Applied(Box::new(r)))
+        self.change_read(c).await.map(Some)
     }
 
     /// What makes the work of a change whole before its merge (Go's `checkMerge`, ADR 0146): the changes it depends on
@@ -397,6 +480,7 @@ impl<S: WriteTx> Tx<'_, S> {
         impacts: &[ChangeImpact],
         target: &str,
         result: &BaselineId,
+        merge_change: &ChangeId,
     ) -> Result<()> {
         let mut committed = Vec::new();
         for cn in impacts {
@@ -412,7 +496,7 @@ impl<S: WriteTx> Tx<'_, S> {
             let Some(head) = self.store.latest_on(&post.id, target).await? else {
                 return Err(GraphError::not_found(format!("node {} on {target}", post.id)));
             };
-            if head.change_id != c.id && head.node_ref() != post {
+            if (merge_change.0.is_empty() || head.change_id != *merge_change) && head.node_ref() != post {
                 continue;
             }
             let r = head.node_ref();

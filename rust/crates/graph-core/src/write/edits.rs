@@ -420,7 +420,7 @@ impl<S: WriteTx> Tx<'_, S> {
         allow(&c, CHANGE_MERGE)?;
         // the writer's events follow `change.applied` (Go's `raiseApplied` over `withCarried`)
         self.carried = inp.events.clone();
-        let merged = self.merge_change(&id).await;
+        let merged = self.merge_change(&id, &HashMap::new()).await;
         self.carried.clear();
         let done = match merged? {
             super::merge::Merge::Applied(done) => done,

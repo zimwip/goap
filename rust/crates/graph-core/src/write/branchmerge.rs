@@ -84,6 +84,8 @@ pub struct MergeRequest {
     pub title: String,
     pub namespace: String,
     pub resolutions: HashMap<NodeId, Resolution>,
+    /// The unit holding the merge change (empty: the root unit).
+    pub owner_org: String,
     /// The project the merge change acts in (required).
     pub project_id: String,
 }
@@ -95,6 +97,8 @@ pub struct MergeResult {
     pub baseline: Baseline,
     pub state: HashMap<NodeId, Version>,
     pub plan: MergePlan,
+    /// The versions the merge wrote or joined on the target (ADR 0159).
+    pub merged: Vec<Node>,
 }
 
 fn same(a: Option<&Value>, b: Option<&Value>) -> bool {
@@ -355,7 +359,7 @@ impl<S: WriteTx> Tx<'_, S> {
         } else {
             inp.title.clone()
         };
-        let owner = self.structure_ref(STRUCTURE_ORGANISATION, "")?;
+        let owner = self.structure_ref(STRUCTURE_ORGANISATION, &inp.owner_org)?;
         let project = self.structure_ref(STRUCTURE_PROJECT, &inp.project_id)?;
         let mut data = Map::new();
         let mut merge = Map::new();
@@ -691,6 +695,7 @@ impl<S: WriteTx> Tx<'_, S> {
             baseline: res,
             state: target,
             plan,
+            merged: merged_nodes,
         })
     }
 }

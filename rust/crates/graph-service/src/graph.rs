@@ -2237,6 +2237,7 @@ impl pb::GraphService for Graph {
                     title: m.title.clone(),
                     namespace: m.namespace.clone(),
                     resolutions,
+                    owner_org: String::new(),
                     project_id,
                 })
                 .await?;
@@ -4165,16 +4166,19 @@ impl pb::GraphService for Graph {
     async fn merge_change(&self, _ctx: &Ctx, req: Request<pb::MergeChangeRequest>) -> Answer<pb::MergeChangeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        if !m.resolutions.is_empty() {
-            return Err(connect_error(GraphError::unimplemented(
-                "a merge given resolutions (a three-way merge)",
-            )));
-        }
+        let resolutions: HashMap<NodeId, branchmerge::Resolution> = m
+            .resolutions
+            .iter()
+            .map(|(id, r)| {
+                let props = r.props.as_ref().map(convert::map).filter(|p| !p.is_empty());
+                (id.as_str().into(), branchmerge::Resolution { props, skip: r.skip })
+            })
+            .collect();
         let res = self
             .write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
                 let id = served_change(tx, &m.change_id).await?;
                 acc.allow(tx, &m.change_id, operations::CHANGE_MERGE).await?;
-                let r = match tx.merge_change(&id).await? {
+                let r = match tx.merge_change(&id, &resolutions).await? {
                     Merge::Applied(r) => r,
                     // the rebase is kept: committed, then the merge refused
                     Merge::Rebased(err) => return Ok(Err(err)),
