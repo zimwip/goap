@@ -33,6 +33,9 @@ pub struct Env {
     pub catalog: Arc<Catalog>,
     /// Whether the caller holds the administration of the platform (ADR 0047): the access nodes are its to write.
     pub administers: bool,
+    /// The person committing, whose rights on the projects the validators of the platform judge
+    /// (`ProjectScopeValidator`); none for a platform service, which they never ask.
+    pub person: Option<crate::access::Principal>,
     /// Whether the events go to the outbox: a bus delivers them (Go's `Graph.Observe` with a sink); none, no event.
     pub outbox: bool,
 }

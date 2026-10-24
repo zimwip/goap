@@ -3,7 +3,7 @@
 //! Assignments carrying no project flag (`access.ProjectScopeValidator`), the owners of the projects
 //! (`access.ProjectOwnerValidator`), the protected aliases (`llmcfg.ProtectedAliasValidator`) and the platform's own
 //! source (`graphsvc.PlatformSourceValidator`). Each judges the nodes of its types a commit writes, on the state the
-//! commit leaves; the writes served here are a platform service's, which the rights on the projects never ask.
+//! commit leaves; the rights on the projects are asked of a person only.
 use std::collections::HashMap;
 
 use graph_catalog::{
@@ -16,7 +16,8 @@ use super::tx::Tx;
 use crate::{
     GraphError, Result,
     access::{
-        LINK_ASSIGNS_PROJECT, PLATFORM_SCOPE, STATE_RETIRED, Snapshot, TYPE_ASSIGNMENT, TYPE_PROJECT_UNIT, TYPE_USER,
+        LINK_ASSIGNS_PROJECT, LINK_PROJECT_PART_OF, PLATFORM_SCOPE, ROLE_ADMIN, STATE_RETIRED, Snapshot,
+        TYPE_ASSIGNMENT, TYPE_PROJECT_UNIT, TYPE_USER,
     },
     model::{Link, Node, NodeId, NodeRef, Props, Version, namespace_of},
     store::{ReadTx, WriteTx},
@@ -184,8 +185,9 @@ impl<S: WriteTx> Tx<'_, S> {
         platform_source(&of(&[TYPE_SOURCE]))
     }
 
-    /// A platform Assignment carries no owner or admin flag, whoever writes it (the first part of
-    /// `ProjectScopeValidator`); the rights on the projects are not asked of a platform service.
+    /// The writes of Assignments and projects within the rights of the person committing them (`ProjectScopeValidator`,
+    /// ADR 0138), judged on the state before the commit: a platform Assignment carries no owner or admin flag, whoever
+    /// writes it; a platform service and a platform administrator are not asked more.
     async fn project_scope(&self, q: &Query, impacted: &[&Validated<'_>]) -> Result<()> {
         for v in impacted {
             let n = v.post;
@@ -200,7 +202,149 @@ impl<S: WriteTx> Tx<'_, S> {
                 )));
             }
         }
+        let Some(who) = &self.env.person else {
+            return Ok(());
+        };
+        let before = match snapshots(self.store, q, impacted).await {
+            Ok((_, before)) => before,
+            Err(e) => {
+                return Err(GraphError::forbidden(format!(
+                    "the rights on the projects cannot be checked: {}",
+                    e.message
+                )));
+            }
+        };
+        let subject = before.principal_chain(who);
+        if who.roles.iter().any(|r| r == ROLE_ADMIN) || before.platform_roles(&subject).iter().any(|r| r == ROLE_ADMIN)
+        {
+            return Ok(());
+        }
+        let scope = Scope {
+            tx: self.store,
+            q,
+            before: &before,
+            subject: &subject,
+        };
+        for v in impacted {
+            match v.post.typ.as_str() {
+                TYPE_ASSIGNMENT => scope.assignment(v).await?,
+                TYPE_PROJECT_UNIT => scope.project(v).await?,
+                _ => {}
+            }
+        }
         Ok(())
+    }
+}
+
+/// What `ProjectScopeValidator` judges a person's writes against: the state before the commit and the units of the
+/// person.
+struct Scope<'a, T> {
+    tx: &'a T,
+    q: &'a Query,
+    before: &'a Snapshot,
+    subject: &'a [String],
+}
+
+impl<T: ReadTx> Scope<'_, T> {
+    /// The chain of a project (itself first): the state's for a project it held, else the parent the commit gives a
+    /// new project, then the chain of that parent (`projectChain`).
+    async fn chain(&self, mut project: String) -> Result<Vec<String>> {
+        let mut chain = Vec::new();
+        for _ in 0..64 {
+            if self.before.has_project(&project) {
+                chain.extend(self.before.project_chain(&project));
+                return Ok(chain);
+            }
+            chain.push(project.clone());
+            let Some(n) = self
+                .q
+                .of_types(&[TYPE_PROJECT_UNIT])
+                .into_iter()
+                .find(|n| n.key == project)
+            else {
+                return Ok(chain);
+            };
+            let parent = linked_key(self.tx, self.q, n, LINK_PROJECT_PART_OF).await?;
+            if parent.is_empty() || parent == project || chain.contains(&parent) {
+                return Ok(chain);
+            }
+            project = parent;
+        }
+        Ok(chain)
+    }
+
+    /// The right a write needs on a project: to administer it, or to own it.
+    async fn need(&self, project: &str, owner: bool, what: &str) -> Result<()> {
+        let chain = self.chain(project.to_string()).await?;
+        let (admin, own) = self.before.project_flags(self.subject, &chain);
+        if (owner && !own) || !admin {
+            let right = if owner { "own" } else { "administer" };
+            return Err(GraphError::forbidden(format!(
+                "{what} needs to {right} the project {project}"
+            )));
+        }
+        Ok(())
+    }
+
+    async fn assignment(&self, v: &Validated<'_>) -> Result<()> {
+        let n = v.post;
+        let what = format!("assignment {}", n.key);
+        let post = linked_key(self.tx, self.q, n, LINK_ASSIGNS_PROJECT).await?;
+        let retired = n.state == STATE_RETIRED;
+        let (post_owner, post_admin) = (!retired && flag(&n.props, "owner"), !retired && flag(&n.props, "admin"));
+        let pre = self.before.assignment_flags(&n.key);
+        let (pre_project, pre_owner, pre_admin) = pre.clone().unwrap_or_default();
+        if post.is_empty() || pre_project == PLATFORM_SCOPE {
+            return Err(GraphError::forbidden(format!(
+                "{what}: a platform assignment is a platform administrator's"
+            )));
+        }
+        let flags = post_owner != pre_owner || post_admin != pre_admin;
+        let mut projects = vec![post.clone()];
+        if pre.is_some() && pre_project != post {
+            projects.push(pre_project);
+        }
+        for p in projects {
+            self.need(&p, flags, &what).await?;
+        }
+        Ok(())
+    }
+
+    async fn project(&self, v: &Validated<'_>) -> Result<()> {
+        let key = &v.post.key;
+        let what = format!("project {key}");
+        let mut parent = linked_key(self.tx, self.q, v.post, LINK_PROJECT_PART_OF).await?;
+        if &parent == key {
+            parent.clear();
+        }
+        let Some(pre) = v.pre.as_ref().filter(|_| self.before.has_project(key)) else {
+            if parent.is_empty() {
+                return Err(GraphError::forbidden(format!(
+                    "{what}: a root project is a platform administrator's"
+                )));
+            }
+            return self.need(&parent, false, &format!("creating {what}")).await;
+        };
+        let was = self.before.project_of(key);
+        if was.is_empty() {
+            return Err(GraphError::forbidden(format!(
+                "{what}: the root project is a platform administrator's"
+            )));
+        }
+        if parent != was {
+            if parent.is_empty() {
+                return Err(GraphError::forbidden(format!(
+                    "{what}: a root project is a platform administrator's"
+                )));
+            }
+            for p in [&was, &parent] {
+                self.need(p, true, &format!("moving {what}")).await?;
+            }
+        }
+        if flag(&pre.props, "stopped") != flag(&v.post.props, "stopped") {
+            return self.need(key, true, &format!("stopping or restarting {what}")).await;
+        }
+        self.need(key, false, &format!("editing {what}")).await
     }
 }
 

@@ -61,7 +61,6 @@ impl Graph {
         };
         stamp.on(self
             .write_on(caller, &[], async |tx, acc| {
-                platform_served(tx, &s.namespace)?;
                 let project = if !m.project_id.is_empty() {
                     m.project_id.clone()
                 } else if !token_project.is_empty() {

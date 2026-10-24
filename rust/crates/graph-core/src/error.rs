@@ -44,6 +44,11 @@ impl GraphError {
         GraphError::new(Kind::Conflict, format!("{what}: conflict"))
     }
 
+    /// `<what>: permission denied` (Go's `authz.ErrForbidden` wrapped).
+    pub fn forbidden(what: impl fmt::Display) -> GraphError {
+        GraphError::new(Kind::Forbidden, format!("{what}: permission denied"))
+    }
+
     pub fn unimplemented(what: impl fmt::Display) -> GraphError {
         GraphError::new(Kind::Unimplemented, what.to_string())
     }

@@ -307,7 +307,7 @@ impl Access {
 
     /// The gate of the access nodes (`gateAccess`, ADR 0068): a node of an `adminOnly` type is the administrators' to
     /// write; the Assignments and the projects are also the owners' and administrators' of the caller's active
-    /// project, whose writes the validators of the organisation then judge in the Go service.
+    /// project, whose writes the validators of the organisation then judge at the commit (`ProjectScopeValidator`).
     fn gate_access(&self, catalog: &Catalog, typ: &str) -> Result<(), GraphError> {
         if !(catalog.admin_only(typ) || Catalog::builtin().admin_only(typ)) || self.administers()? {
             return Ok(());
@@ -330,10 +330,7 @@ impl Access {
                 project_id: project,
                 ..abac::Resource::default()
             },
-        )?;
-        Err(GraphError::unimplemented(
-            "a write of the access nodes by a project's administrator: not served here yet",
-        ))
+        )
     }
 }
 
@@ -384,22 +381,19 @@ impl Readable {
 
 impl Caller {}
 
-/// The change a write on its impacts works on, when it is one served here: of the platform's namespaces only for a
-/// caller administering the platform.
+/// The change a write on its impacts works on, refused when the store does not hold it.
 async fn served_change(tx: &mut Tx<'_, Session>, id: &str) -> Result<ChangeId, GraphError> {
     let id: ChangeId = id.into();
-    let c = tx.change_head(&id).await?;
-    platform_served(tx, &c.namespace)?;
+    tx.change_head(&id).await?;
     Ok(id)
 }
 
-/// A write in the platform's namespaces is served for a caller administering the platform, whom the gate of the
-/// access nodes lets through (`gateAccess`); the policies of the organisation judge any other caller, in the Go
-/// service.
-fn platform_served(tx: &Tx<'_, Session>, namespace: &str) -> Result<(), GraphError> {
+/// The settings of the platform's namespaces are served for a caller administering the platform; any other caller's
+/// are the Go service's.
+pub(crate) fn platform_served(tx: &Tx<'_, Session>, namespace: &str) -> Result<(), GraphError> {
     if is_platform_namespace(namespace) && !tx.env.administers {
         return Err(GraphError::unimplemented(
-            "a write of the platform's namespaces by a caller not administering the platform: not served here yet",
+            "the settings of the platform's namespaces of a caller not administering the platform: not served here yet",
         ));
     }
     Ok(())
@@ -948,6 +942,8 @@ impl Graph {
             command: caller.command.clone(),
             catalog,
             administers,
+            // a platform service is not asked its rights on the projects, even acting for a person
+            person: (!caller.subject.starts_with("system:")).then(|| caller.reader_or_self()),
             outbox: self.state.outbox,
         };
         let mut tx = Tx::new(&session, &env);
@@ -2186,6 +2182,7 @@ impl pb::GraphService for Graph {
             command: caller.command.clone(),
             catalog,
             administers: false,
+            person: None,
             outbox: false,
         };
         let namespaces = session.namespaces().await.map_err(connect_error)?;
@@ -4134,7 +4131,6 @@ impl pb::GraphService for Graph {
                     }
                     acc.gate_access(tx.catalog(), &typ)?;
                 }
-                platform_served(tx, &m.namespace)?;
                 // a platform service's own events ride on its commit (ADR 0136); a person carries none
                 if !events.is_empty() && !service {
                     return Err(GraphError::new(

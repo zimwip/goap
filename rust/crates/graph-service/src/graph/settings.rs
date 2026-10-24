@@ -133,8 +133,8 @@ async fn run(tx: &mut Tx<'_, Session>, acc: &Access, me: &str, op: Op) -> Result
     }
 }
 
-/// The writes of the platform's namespaces are served for a caller administering the platform (`platform_served`):
-/// any other caller's settings in them are the Go service's, judged by the validators of the organisation.
+/// The settings of the platform's namespaces are served for a caller administering the platform (`platform_served`):
+/// any other caller's are the Go service's.
 fn served_spaces(tx: &Tx<'_, Session>, spaces: &[&str]) -> Result<(), GraphError> {
     for ns in spaces {
         platform_served(tx, ns)?;

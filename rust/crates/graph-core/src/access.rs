@@ -644,6 +644,33 @@ impl Snapshot {
             .any(|a| a.owner && !a.project.is_empty() && chain.contains(&a.project))
     }
 
+    /// The chain of a project, itself first, the root last (`ProjectChain`).
+    pub fn project_chain(&self, project: &str) -> Vec<String> {
+        self.projects.chain(project)
+    }
+
+    /// The parent of a project, none for the root (`ProjectOf`).
+    pub fn project_of(&self, project: &str) -> String {
+        self.project_chain(project).get(1).cloned().unwrap_or_default()
+    }
+
+    /// The units of a principal, its user first (`SubjectChain`).
+    pub fn principal_chain(&self, p: &Principal) -> Vec<String> {
+        self.chain_of(p)
+    }
+
+    /// The project an Assignment of a key names ([`PLATFORM_SCOPE`] for a platform one) and its owner and admin
+    /// flags, when the snapshot holds it (`AssignmentProject`).
+    pub fn assignment_flags(&self, key: &str) -> Option<(String, bool, bool)> {
+        self.assignments.iter().find(|a| a.key == key).map(|a| {
+            if a.project.is_empty() {
+                (PLATFORM_SCOPE.to_string(), false, false)
+            } else {
+                (a.project.clone(), a.owner, a.admin)
+            }
+        })
+    }
+
     /// The project an Assignment of a key names ([`PLATFORM_SCOPE`] for a platform one) and its owner flag, when the
     /// snapshot holds it (`AssignmentProject`).
     pub fn assignment_project(&self, key: &str) -> Option<(String, bool)> {
