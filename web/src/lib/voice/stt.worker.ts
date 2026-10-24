@@ -1,10 +1,11 @@
 // Whisper speech-to-text in a Web Worker (transformers.js). Runs fully in the browser.
 import { env, pipeline } from '@huggingface/transformers';
+import { onCPU, type Plan } from './plan';
 
 export interface WorkerRequest {
   id: number;
   type: 'load' | 'transcribe';
-  model: string;
+  plan: Plan;
   audio?: Float32Array;
   language?: string;
   /** optional self-hosted model host (air-gapped deployments) */
@@ -24,11 +25,11 @@ type Recognizer = (audio: Float32Array, opts: Record<string, unknown>) => Promis
 
 const loaded = new Map<string, Promise<{ run: Recognizer; device: string }>>();
 
-function load(model: string, onProgress: (p: number) => void) {
-  let p = loaded.get(model);
+function load(plan: Plan, onProgress: (p: number) => void) {
+  const key = JSON.stringify(plan);
+  let p = loaded.get(key);
   if (!p) {
     p = (async () => {
-      const device = 'gpu' in navigator ? 'webgpu' : 'wasm';
       const files = new Map<string, number>();
       const progress_callback = (e: { status?: string; file?: string; progress?: number }) => {
         if (e.status === 'progress' && e.file) {
@@ -37,35 +38,32 @@ function load(model: string, onProgress: (p: number) => void) {
           onProgress(all.reduce((a, b) => a + b, 0) / all.length);
         }
       };
-      const build = (d: 'webgpu' | 'wasm') =>
-        pipeline('automatic-speech-recognition', model, {
-          device: d,
-          dtype: d === 'webgpu' ? { encoder_model: 'fp32', decoder_model_merged: 'q4' } : 'q8',
-          progress_callback,
-        });
+      // the dtype is a per-file map or one name, both of which transformers.js takes
+      const build = (q: Plan) =>
+        pipeline('automatic-speech-recognition', q.model, { device: q.device, dtype: q.dtype as never, progress_callback });
       let rec;
-      let used = device;
+      let used = plan;
       try {
-        rec = await build(device as 'webgpu' | 'wasm');
+        rec = await build(plan);
       } catch (e) {
-        if (device === 'wasm') throw e;
-        used = 'wasm';
-        rec = await build('wasm');
+        if (plan.device === 'wasm') throw e;
+        used = onCPU(plan);
+        rec = await build(used);
       }
-      return { run: rec as unknown as Recognizer, device: used };
+      return { run: rec as unknown as Recognizer, device: used.device };
     })();
-    p.catch(() => loaded.delete(model));
-    loaded.set(model, p);
+    p.catch(() => loaded.delete(key));
+    loaded.set(key, p);
   }
   return p;
 }
 
 self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
-  const { id, type, model, audio, language, host } = ev.data;
+  const { id, type, plan, audio, language, host } = ev.data;
   const post = (m: WorkerResponse) => self.postMessage(m);
   if (host) env.remoteHost = host;
   try {
-    const { run, device } = await load(model, (progress) => post({ id, type: 'progress', progress }));
+    const { run, device } = await load(plan, (progress) => post({ id, type: 'progress', progress }));
     if (type === 'load') {
       post({ id, type: 'ready', device });
       return;
