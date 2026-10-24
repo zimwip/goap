@@ -1281,6 +1281,43 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    /// Makes a root change a sub-change of another one (ADR 0106).
+    async fn attach_change(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::AttachChangeRequest>,
+    ) -> Answer<pb::AttachChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let parent = served_change(tx, &m.parent_id).await?;
+            let (c, seq) = tx.attach_change(&id, &parent).await?;
+            let mut c = convert::change(&c);
+            c.seq = seq;
+            Ok(pb::AttachChangeResponse { change: Some(c) })
+        })
+        .await
+    }
+
+    /// Gives a sub-change back as a root change (ADR 0106).
+    async fn detach_change(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::DetachChangeRequest>,
+    ) -> Answer<pb::DetachChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let (c, seq) = tx.detach_change(&id).await?;
+            let mut c = convert::change(&c);
+            c.seq = seq;
+            Ok(pb::DetachChangeResponse { change: Some(c) })
+        })
+        .await
+    }
+
     /// Moves a change with its open sub-changes to another project (ADR 0091).
     async fn move_change(&self, _ctx: &Ctx, req: Request<pb::MoveChangeRequest>) -> Answer<pb::MoveChangeResponse> {
         let caller = Caller::of(&req)?;

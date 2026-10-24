@@ -243,14 +243,23 @@ impl<S: WriteTx> Tx<'_, S> {
             return Ok(res);
         }
         let parent = res.parent.clone();
-        res = self.rebase_onto(&c, own, merging).await?;
+        let forked = own.clone();
+        res = self.rebase_onto(&c, own, &forked, merging).await?;
         res.parent = parent;
         Ok(res)
     }
 
     /// Go's `rebaseCommittedTx`: the fork moved there, each node changed on both sides since the fork merged three-way
     /// (base: the version at the fork; ours: the version the change committed; theirs: the version on the target).
-    async fn rebase_onto(&mut self, c: &Change, mut own: Branch, merging: bool) -> Result<RebaseResult> {
+    /// forked: the branch as it was forked (another parent for a reparent), the base of the merges; the rebase is
+    /// then made whatever moved.
+    pub(crate) async fn rebase_onto(
+        &mut self,
+        c: &Change,
+        mut own: Branch,
+        forked: &Branch,
+        merging: bool,
+    ) -> Result<RebaseResult> {
         let target = branch_of(&own.parent).to_string();
         let mut res = RebaseResult {
             branch: target.clone(),
@@ -259,7 +268,7 @@ impl<S: WriteTx> Tx<'_, S> {
         };
         let to = self.onto_of(&own).await?;
         res.onto = to.head.clone();
-        if !self.moved(&to, &own).await? {
+        if forked.parent == own.parent && !self.moved(&to, &own).await? {
             return Ok(res);
         }
         let keys = self.uncommitted(&c.id).await?;
@@ -282,8 +291,8 @@ impl<S: WriteTx> Tx<'_, S> {
         ids.extend(impacts.iter().filter_map(|cn| cn.pre.as_ref().map(|p| p.id.clone())));
         ids.sort();
         ids.dedup();
-        let fork = read::fork_versions(self.store, &own, &ids).await?;
-        let mine = read::branch_versions(self.store, &own, &ids).await?;
+        let fork = read::fork_versions(self.store, forked, &ids).await?;
+        let mine = read::branch_versions(self.store, forked, &ids).await?;
         let head = self.onto_versions(&to, &ids).await?;
         // the link sets of the versions merged on both sides: a side whose set is the one the sides started from left
         // its links alone

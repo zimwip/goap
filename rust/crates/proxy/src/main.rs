@@ -218,6 +218,9 @@ async fn forward(State(p): State<Arc<Proxy>>, req: Request) -> Response {
                 return reply(r);
             }
             p.stats.lock().unwrap().time(&key, Side::Rust.name(), r.elapsed);
+            if let Some(e) = rpc::error_of(r.status, &r.body) {
+                tracing::info!(procedure = %key, reason = %e.message, "replayed on Go");
+            }
             let go = p.go.as_ref().expect("checked");
             let g = go.call(&parts.method, &path, &headers, body).await;
             p.count(&key, ServedBy::GoFallback, Side::Go, &g);

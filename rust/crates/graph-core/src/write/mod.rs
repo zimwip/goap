@@ -1,3 +1,4 @@
+pub mod attach;
 pub mod branches;
 pub mod change;
 pub mod check;

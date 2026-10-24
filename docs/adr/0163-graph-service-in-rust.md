@@ -302,4 +302,13 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   values and `GetRebaseState` tells the impacts behind and the conflicts: 1087 calls, none divergent, the tables the
   same, the events of the outbox but the order of a baseline's `set` (a map). The three-way merge of a target moved
   meanwhile (`MergeChange` with resolutions) stays the Go service's.
+  `AttachChange` and `DetachChange` follow (ADR 0106, `write::attach`): the checks of the attachment (open, one
+  namespace, no cycle, no dependency between the change and the parent's chain, project and unit within the parent's),
+  the header entry (`parentId`, `guardians`: the parent's chain plus the change's methodology, none once detached: no
+  registry), then `reparent`: the branch forked again from the parent's (or from the branch the root ancestor merges
+  into), what it committed rebased there (`rebase_onto` over the branch as it was forked), a conflict refusing the move.
+  The view of a change reads past its header entries, a rebase's and an attachment's included. The split proxy logs
+  why it replays a call on Go: with the attachments, no call of the scenarios but the ones Rust refuses on purpose
+  falls back; 1148 calls, none divergent, the tables the same, the events of the outbox but the orders of ids (a
+  baseline's `set`, the reverted nodes of a commit).
 - Not done yet: the rest of phase 4.

@@ -1664,11 +1664,9 @@ pub async fn fold_any<T: ReadTx>(store: &T, id: &ChangeId) -> Result<(ChangeView
 }
 
 /// Whether a log entry edits the header of its change only, leaving its impacts and drafts as they are: a
-/// `change.updated` entry but a rebase (`baselineId`) or an attachment (`parentId`), which move its fork.
+/// `change.updated` entry (a rebase or an attachment moves the fork of its branch, which the branch records).
 fn header_only(l: &crate::impact::LogEntry) -> bool {
-    l.typ == "change.updated"
-        && !l.subject.is_empty()
-        && l.subject.split(',').all(|f| f != "baselineId" && f != "parentId")
+    l.typ == "change.updated" && !l.subject.is_empty()
 }
 
 /// Rebuilds the drafts of the checkouts that copy a stored version (ADR 0142): the version and its links.

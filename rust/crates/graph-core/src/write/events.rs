@@ -59,6 +59,8 @@ pub const CHANGE_PURGED: &str = "change.purged";
 pub const CHANGE_ITEM_ADDED: &str = "change.item_added";
 pub const CHANGE_SIGNAL: &str = "change.signal";
 pub const CHANGE_EDITED: &str = "change.edited";
+pub const CHANGE_ATTACHED: &str = "change.attached";
+pub const CHANGE_DETACHED: &str = "change.detached";
 
 fn is_zero(n: &i64) -> bool {
     *n == 0

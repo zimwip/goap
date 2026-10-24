@@ -107,7 +107,7 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     /// Whether a node of a structure is the other or below it (Go's `within`): walked up its parent links on main.
-    async fn within(&self, kind: &str, u: &Url, of: &Url) -> Result<bool> {
+    pub(crate) async fn within(&self, kind: &str, u: &Url, of: &Url) -> Result<bool> {
         let st = self
             .catalog()
             .structure(kind)
