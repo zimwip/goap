@@ -487,4 +487,5 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   bus, the document of every change, then per namespace every version of the nodes main holds and the head of main as
   its whole state, published at once with no event id (never through the outbox), counted as Go counts them; compared
   on the bus with Go's for the same graph: the same events.
+- `LoadDemoData` (`graph/demo.rs`): the demo moves out of Go code into `platform/devseed/demo.json` (the project, its assignment, the units, the owners, the ALM nodes and links), embedded by both services; Rust checks the floor on writing the policies, then seeds, as the graph service for the person, the organisation and project in one change and the ALM data in another, each when missing, as `devseed.Demo` does.
 - Not done yet: the rest of phase 4.

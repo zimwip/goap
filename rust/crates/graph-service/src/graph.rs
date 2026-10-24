@@ -49,6 +49,7 @@ use graph_store::read::{LogFilter, Session, Tag};
 
 use crate::{State, convert};
 
+mod demo;
 mod import;
 mod imports;
 pub mod jobs;
@@ -76,6 +77,7 @@ const ROLE_ADMIN: &str = "admin";
 const OWNER_ME: &str = "@me";
 
 /// The caller of a request.
+#[derive(Clone)]
 struct Caller {
     subject: String,
     on_behalf_of: String,
@@ -2006,6 +2008,14 @@ impl pb::GraphService for Graph {
 
     /// The branches of a namespace (of the statuses asked), the header of each head and the number of baselines of
     /// each branch.
+    async fn load_demo_data(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::LoadDemoDataRequest>,
+    ) -> Answer<pb::LoadDemoDataResponse> {
+        self.load_demo_data_rpc(req).await
+    }
+
     async fn republish_index(
         &self,
         _ctx: &Ctx,

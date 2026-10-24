@@ -17,10 +17,7 @@ async fn health_and_a_method_not_written_yet() {
     let c = reqwest::Client::new();
     assert_eq!(c.get(format!("{base}/healthz")).send().await.unwrap().status(), 200);
     assert_eq!(c.get(format!("{base}/readyz")).send().await.unwrap().status(), 200);
-    for path in [
-        "/goap.graph.v1.GraphService/LoadDemoData",
-        "/goap.registry.v1.DomainService/ExportDomain",
-    ] {
+    for path in ["/goap.registry.v1.DomainService/ExportDomain"] {
         let res = c
             .post(format!("{base}{path}"))
             .header("content-type", "application/json")

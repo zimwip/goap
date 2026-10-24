@@ -47,6 +47,7 @@ COPY graph/domainsvc/migrations graph/domainsvc/migrations
 COPY graph/domainsvc/migrations_sqlite graph/domainsvc/migrations_sqlite
 COPY graph/smarttagsvc/migrations graph/smarttagsvc/migrations
 COPY graph/smarttagsvc/migrations_sqlite graph/smarttagsvc/migrations_sqlite
+COPY platform/devseed/demo.json platform/devseed/demo.json
 COPY rust rust
 RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/src/rust/target \
     cd rust && cargo build --release --locked -p goap-proxy -p graph-service \
