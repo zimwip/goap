@@ -16,6 +16,7 @@ use tokio::sync::Mutex;
 mod convert;
 mod domainpb;
 mod domains;
+mod domainyaml;
 pub mod graph;
 mod journal;
 pub mod relay;

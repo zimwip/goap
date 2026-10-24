@@ -642,7 +642,13 @@ fn analyze(value: &str) -> Analysis {
 
 /// Writes a document as `yaml.v3`'s `Encoder` with `SetIndent(2)` does, then closed.
 pub fn to_string(doc: &Yaml) -> String {
+    to_string_indent(doc, 2)
+}
+
+/// Writes a document as `yaml.v3`'s `Encoder` with `SetIndent(indent)` does (`yaml.Marshal`: 4), then closed.
+pub fn to_string_indent(doc: &Yaml, indent: i64) -> String {
     let mut e = Emitter {
+        best_indent: indent,
         out: String::new(),
         column: 0,
         whitespace: true,
@@ -685,6 +691,8 @@ enum Ctx {
 }
 
 struct Emitter {
+    /// the indentation chosen (`best_indent`)
+    best_indent: i64,
     out: String,
     column: i64,
     whitespace: bool,
@@ -709,11 +717,13 @@ impl Emitter {
     fn increase_indent(&mut self, flow: bool, ctx: Ctx) {
         self.indents.push(self.indent);
         if self.indent < 0 {
-            self.indent = if flow { 2 } else { 0 };
+            self.indent = if flow { self.best_indent } else { 0 };
         } else if ctx == Ctx::Item {
+            // the first indent inside a sequence skips the "- " indicator
             self.indent += 2;
         } else {
-            self.indent = 2 * ((self.indent + 2) / 2);
+            let b = self.best_indent;
+            self.indent = b * ((self.indent + b) / b);
         }
     }
 
@@ -954,7 +964,8 @@ impl Emitter {
         let b = value.as_bytes();
         // the block scalar hints
         if b.first() == Some(&b' ') || is_break(b, 0) {
-            self.indicator("2", false, false, false);
+            let hint = self.best_indent.to_string();
+            self.indicator(&hint, false, false, false);
         }
         // the chomping hint (its indicator clears the open end the `+` hint sets)
         let mut last = b.len() - 1;

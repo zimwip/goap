@@ -1,0 +1,1380 @@
+{
+  "comment": "Code generated from lib/def (GOAP_UPDATE_RUST=1 go test ./lib/def/ -run TestRustYAMLSchemaIsCurrent). DO NOT EDIT.",
+  "root": "def.Domain",
+  "types": {
+    "algo.Algorithm": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "type",
+          "json": "type",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "language",
+          "json": "language",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "code",
+          "json": "code",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "params",
+          "json": "params",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "algo.Param"
+            }
+          }
+        }
+      ]
+    },
+    "algo.Instance": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "algorithm",
+          "json": "algorithm",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "values",
+          "json": "values",
+          "omit": true,
+          "type": {
+            "kind": "map",
+            "elem": {
+              "kind": "any"
+            }
+          }
+        }
+      ]
+    },
+    "algo.Param": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "type",
+          "json": "type",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "required",
+          "json": "required",
+          "omit": true,
+          "type": {
+            "kind": "bool"
+          }
+        },
+        {
+          "yaml": "default",
+          "json": "default",
+          "omit": true,
+          "type": {
+            "kind": "any"
+          }
+        },
+        {
+          "yaml": "values",
+          "json": "values",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "string"
+            }
+          }
+        }
+      ]
+    },
+    "def.Attribute": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "label",
+          "json": "label",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "type",
+          "json": "type",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "widget",
+          "json": "widget",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "diff",
+          "json": "diff",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "enum",
+          "json": "enum",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "default",
+          "json": "default",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "section",
+          "json": "section",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "order",
+          "json": "order",
+          "omit": true,
+          "type": {
+            "kind": "int"
+          }
+        },
+        {
+          "yaml": "tooltip",
+          "json": "tooltip",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "asName",
+          "json": "asName",
+          "omit": true,
+          "type": {
+            "kind": "bool"
+          }
+        },
+        {
+          "yaml": "validators",
+          "json": "validators",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "string"
+            }
+          }
+        }
+      ]
+    },
+    "def.Domain": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "version",
+          "json": "version",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "nodeTypes",
+          "json": "nodeTypes",
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "def.NodeType"
+            }
+          }
+        },
+        {
+          "yaml": "linkTypes",
+          "json": "linkTypes",
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "def.LinkType"
+            }
+          }
+        },
+        {
+          "yaml": "enums",
+          "json": "enums",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "def.Enum"
+            }
+          }
+        },
+        {
+          "yaml": "lifecycles",
+          "json": "lifecycles",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "domain.Lifecycle"
+            }
+          }
+        },
+        {
+          "yaml": "algorithms",
+          "json": "algorithms",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "algo.Algorithm"
+            }
+          }
+        },
+        {
+          "yaml": "algorithmInstances",
+          "json": "algorithmInstances",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "algo.Instance"
+            }
+          }
+        },
+        {
+          "yaml": "itemTypes",
+          "json": "itemTypes",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "def.ItemType"
+            }
+          }
+        },
+        {
+          "yaml": "importers",
+          "json": "importers",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "def.Importer"
+            }
+          }
+        }
+      ]
+    },
+    "def.Enum": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "values",
+          "json": "values",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "def.EnumValue"
+            }
+          }
+        }
+      ]
+    },
+    "def.EnumValue": {
+      "fields": [
+        {
+          "yaml": "value",
+          "json": "value",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "label",
+          "json": "label",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "def.Importer": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "label",
+          "json": "label",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "params",
+          "json": "params",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "def.Attribute"
+            }
+          }
+        }
+      ]
+    },
+    "def.ItemType": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "attributes",
+          "json": "attributes",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "def.Attribute"
+            }
+          }
+        }
+      ]
+    },
+    "def.LinkType": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "from",
+          "json": "from",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "to",
+          "json": "to",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "attributes",
+          "json": "attributes",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "def.Attribute"
+            }
+          }
+        },
+        {
+          "yaml": "validators",
+          "json": "validators",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "yaml": "compose",
+          "json": "compose",
+          "omit": true,
+          "type": {
+            "kind": "bool"
+          }
+        },
+        {
+          "yaml": "label",
+          "json": "label",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "inverseLabel",
+          "json": "inverseLabel",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "def.NodeType": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "attributes",
+          "json": "attributes",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "def.Attribute"
+            }
+          }
+        },
+        {
+          "yaml": "extends",
+          "json": "extends",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "lifecycle",
+          "json": "lifecycle",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "document",
+          "json": "document",
+          "omit": true,
+          "type": {
+            "kind": "ptr",
+            "elem": {
+              "kind": "struct",
+              "name": "domain.DocumentSpec"
+            }
+          }
+        },
+        {
+          "yaml": "changeControlled",
+          "json": "changeControlled",
+          "omit": true,
+          "type": {
+            "kind": "ptr",
+            "elem": {
+              "kind": "bool"
+            }
+          }
+        },
+        {
+          "yaml": "validators",
+          "json": "validators",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "yaml": "search",
+          "json": "search",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "def.SearchProperty"
+            }
+          }
+        },
+        {
+          "yaml": "editor",
+          "json": "editor",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "icon",
+          "json": "icon",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "color",
+          "json": "color",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "structure",
+          "json": "structure",
+          "omit": true,
+          "type": {
+            "kind": "ptr",
+            "elem": {
+              "kind": "struct",
+              "name": "def.StructureTag"
+            }
+          }
+        },
+        {
+          "yaml": "requires",
+          "json": "requires",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "domain.RequiredLink"
+            }
+          }
+        },
+        {
+          "yaml": "adminOnly",
+          "json": "adminOnly",
+          "omit": true,
+          "type": {
+            "kind": "bool"
+          }
+        },
+        {
+          "yaml": "additionalProperties",
+          "json": "additionalProperties",
+          "omit": true,
+          "type": {
+            "kind": "bool"
+          }
+        },
+        {
+          "yaml": "form",
+          "json": "form",
+          "omit": true,
+          "type": {
+            "kind": "ptr",
+            "elem": {
+              "kind": "struct",
+              "name": "form.Form"
+            }
+          }
+        }
+      ]
+    },
+    "def.SearchProperty": {
+      "fields": [
+        {
+          "yaml": "property",
+          "json": "property",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "text",
+          "json": "text",
+          "omit": true,
+          "type": {
+            "kind": "bool"
+          }
+        },
+        {
+          "yaml": "facet",
+          "json": "facet",
+          "omit": true,
+          "type": {
+            "kind": "bool"
+          }
+        }
+      ]
+    },
+    "def.StructureTag": {
+      "fields": [
+        {
+          "yaml": "kind",
+          "json": "kind",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "parent",
+          "json": "parent",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "root",
+          "json": "root",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "selfParent",
+          "json": "selfParent",
+          "omit": true,
+          "type": {
+            "kind": "bool"
+          }
+        },
+        {
+          "yaml": "bootstrap",
+          "json": "bootstrap",
+          "omit": true,
+          "type": {
+            "kind": "map",
+            "elem": {
+              "kind": "any"
+            }
+          }
+        }
+      ]
+    },
+    "domain.ChildrenRule": {
+      "fields": [
+        {
+          "yaml": "states",
+          "json": "states",
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "string"
+            }
+          }
+        }
+      ]
+    },
+    "domain.Criterion": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "expr",
+          "json": "expr",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        }
+      ]
+    },
+    "domain.DocumentSpec": {
+      "fields": [
+        {
+          "yaml": "contains",
+          "json": "contains",
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "string"
+            }
+          }
+        }
+      ]
+    },
+    "domain.Freezes": {
+      "fields": [
+        {
+          "yaml": "fields",
+          "json": "fields",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "yaml": "types",
+          "json": "types",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "yaml": "transitions",
+          "json": "transitions",
+          "omit": true,
+          "type": {
+            "kind": "bool"
+          }
+        },
+        {
+          "yaml": "keepPhase",
+          "json": "keepPhase",
+          "omit": true,
+          "type": {
+            "kind": "bool"
+          }
+        }
+      ]
+    },
+    "domain.Lifecycle": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "initial",
+          "json": "initial",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "states",
+          "json": "states",
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "domain.LifecycleState"
+            }
+          }
+        },
+        {
+          "yaml": "transitions",
+          "json": "transitions",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "domain.Transition"
+            }
+          }
+        }
+      ]
+    },
+    "domain.LifecycleState": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "notCommittable",
+          "json": "notCommittable",
+          "omit": true,
+          "type": {
+            "kind": "bool"
+          }
+        },
+        {
+          "yaml": "final",
+          "json": "final",
+          "omit": true,
+          "type": {
+            "kind": "bool"
+          }
+        }
+      ]
+    },
+    "domain.RequiredLink": {
+      "fields": [
+        {
+          "yaml": "link",
+          "json": "link",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "count",
+          "json": "count",
+          "omit": true,
+          "type": {
+            "kind": "int"
+          }
+        }
+      ]
+    },
+    "domain.Transition": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "from",
+          "json": "from",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "to",
+          "json": "to",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "permission",
+          "json": "permission",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "guard",
+          "json": "guard",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "vetos",
+          "json": "vetos",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "domain.Criterion"
+            }
+          }
+        },
+        {
+          "yaml": "objectives",
+          "json": "objectives",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "domain.Criterion"
+            }
+          }
+        },
+        {
+          "yaml": "guards",
+          "json": "guards",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "yaml": "actions",
+          "json": "actions",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "yaml": "requires",
+          "json": "requires",
+          "omit": true,
+          "type": {
+            "kind": "struct",
+            "name": "domain.TransitionRequires"
+          }
+        },
+        {
+          "yaml": "children",
+          "json": "children",
+          "omit": true,
+          "type": {
+            "kind": "ptr",
+            "elem": {
+              "kind": "struct",
+              "name": "domain.ChildrenRule"
+            }
+          }
+        },
+        {
+          "yaml": "freezes",
+          "json": "freezes",
+          "omit": true,
+          "type": {
+            "kind": "ptr",
+            "elem": {
+              "kind": "struct",
+              "name": "domain.Freezes"
+            }
+          }
+        }
+      ]
+    },
+    "domain.TransitionRequires": {
+      "fields": [
+        {
+          "yaml": "attributes",
+          "json": "attributes",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "yaml": "outgoingLinks",
+          "json": "outgoingLinks",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "string"
+            }
+          }
+        }
+      ]
+    },
+    "form.Condition": {
+      "fields": [
+        {
+          "yaml": "field",
+          "json": "field",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "equals",
+          "json": "equals",
+          "omit": true,
+          "type": {
+            "kind": "any"
+          }
+        },
+        {
+          "yaml": "in",
+          "json": "in",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "any"
+            }
+          }
+        },
+        {
+          "yaml": "set",
+          "json": "set",
+          "omit": true,
+          "type": {
+            "kind": "ptr",
+            "elem": {
+              "kind": "bool"
+            }
+          }
+        }
+      ]
+    },
+    "form.Field": {
+      "fields": [
+        {
+          "yaml": "name",
+          "json": "name",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "widget",
+          "json": "widget",
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "label",
+          "json": "label",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "help",
+          "json": "help",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "placeholder",
+          "json": "placeholder",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "section",
+          "json": "section",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "required",
+          "json": "required",
+          "omit": true,
+          "type": {
+            "kind": "bool"
+          }
+        },
+        {
+          "yaml": "default",
+          "json": "default",
+          "omit": true,
+          "type": {
+            "kind": "any"
+          }
+        },
+        {
+          "yaml": "constraints",
+          "json": "constraints",
+          "omit": true,
+          "type": {
+            "kind": "map",
+            "elem": {
+              "kind": "any"
+            }
+          }
+        },
+        {
+          "yaml": "visibleWhen",
+          "json": "visibleWhen",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "form.Condition"
+            }
+          }
+        },
+        {
+          "yaml": "requiredWhen",
+          "json": "requiredWhen",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "form.Condition"
+            }
+          }
+        },
+        {
+          "yaml": "fields",
+          "json": "fields",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "form.Field"
+            }
+          }
+        }
+      ]
+    },
+    "form.Form": {
+      "fields": [
+        {
+          "yaml": "title",
+          "json": "title",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "description",
+          "json": "description",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "submit",
+          "json": "submit",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "artifact",
+          "json": "artifact",
+          "omit": true,
+          "type": {
+            "kind": "string"
+          }
+        },
+        {
+          "yaml": "fields",
+          "json": "fields",
+          "omit": true,
+          "type": {
+            "kind": "slice",
+            "elem": {
+              "kind": "struct",
+              "name": "form.Field"
+            }
+          }
+        }
+      ],
+      "zero": [
+        "fields",
+        "title",
+        "description"
+      ]
+    }
+  }
+}

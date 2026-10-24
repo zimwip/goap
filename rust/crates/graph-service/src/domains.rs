@@ -8,10 +8,10 @@ use graph_catalog::{
     imported::{self, Imported},
     record::{Record, STATUS_ARCHIVED, STATUS_DRAFT, STATUS_PUBLISHED, in_force, latest},
 };
-use graph_core::{GraphError, gojson, store::OutboxMessage};
+use graph_core::{GraphError, gojson, goyaml, store::OutboxMessage};
 use graph_store::read::{NewDomain, StoredDomain};
 
-use crate::{Domains, convert, domainpb, graph::connect_error};
+use crate::{Domains, convert, domainpb, domainyaml, graph::connect_error};
 
 /// The identity headers the gateway sets (`lib/identity`) and the stamp of a command (`X-Goap-Command`).
 const HEADER_SUBJECT: &str = "x-goap-subject";
@@ -116,45 +116,66 @@ impl pb::DomainService for Domains {
         Ok(Response::new(pb::GetDomainResponse { domain: Some(d) }))
     }
 
-    /// A stored version as JSON (`Service.ExportDomain` with format `json`): the YAML document of the definition read
-    /// back, keys sorted, indented. The YAML itself (yaml.v3's emitter) and a built-in domain are the Go service's.
+    /// A version as YAML or JSON (`Service.ExportDomain`): its YAML as `Domain.YAML` writes it (`domainyaml`), the
+    /// JSON the YAML document read back, keys sorted, indented. A stored version's JSON is written from its stored
+    /// definition, a built-in domain's from its YAML read back.
     async fn export_domain(
         &self,
         _ctx: &Ctx,
         req: Request<pb::ExportDomainRequest>,
     ) -> Answer<pb::ExportDomainResponse> {
         let r = req.into_inner();
-        if is_builtin(&r.name) {
-            return Err(unserved("the export of a built-in domain"));
-        }
-        let tx = self
-            .state
-            .store
-            .reader()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
-        let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
-            return Err(unserved("the export of a domain not stored"));
-        };
-        match r.format.as_str() {
-            "json" => {}
-            "" | "yaml" => return Err(unserved("the YAML export of a domain")),
-            f => {
-                return Err(ConnectError::invalid_argument(format!(
-                    "unknown export format {f:?} (yaml or json): invalid domain"
-                )));
+        let (name, version, def, builtin) = match builtin_definition(&r.name, &r.version)? {
+            Some(def) => {
+                let version = def
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_owned();
+                (r.name.clone(), version, def, true)
             }
+            None => {
+                let tx = self
+                    .state
+                    .store
+                    .reader()
+                    .await
+                    .map_err(|e| connect_error(GraphError::internal(e)))?;
+                let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
+                    return Err(not_found(&r.name, &r.version));
+                };
+                let mut def = s.definition;
+                if let Some(o) = def.as_object_mut() {
+                    o.insert("name".into(), s.name.clone().into());
+                    o.insert("version".into(), s.version.clone().into());
+                }
+                (s.name, s.version, def, false)
+            }
+        };
+        let yaml = goyaml::to_string_indent(&domainyaml::document(&def), domainyaml::INDENT);
+        let base = format!("domain-{name}-{version}");
+        match r.format.as_str() {
+            "" | "yaml" => Ok(Response::new(pb::ExportDomainResponse {
+                yaml,
+                filename: format!("{base}.yaml"),
+                media_type: "application/yaml".into(),
+            })),
+            "json" => {
+                let doc = if builtin {
+                    serde_norway::from_str(&yaml).map_err(|e| connect_error(GraphError::internal(e.to_string())))?
+                } else {
+                    yaml_document(def)
+                };
+                Ok(Response::new(pb::ExportDomainResponse {
+                    yaml: gojson::to_string_indent(&doc, "  "),
+                    filename: format!("{base}.json"),
+                    media_type: "application/json".into(),
+                }))
+            }
+            f => Err(ConnectError::invalid_argument(format!(
+                "unknown export format {f:?} (yaml or json): invalid domain"
+            ))),
         }
-        let mut def = s.definition;
-        if let Some(o) = def.as_object_mut() {
-            o.insert("name".into(), s.name.clone().into());
-            o.insert("version".into(), s.version.clone().into());
-        }
-        Ok(Response::new(pb::ExportDomainResponse {
-            yaml: gojson::to_string_indent(&yaml_document(def), "  "),
-            filename: format!("domain-{}-{}.json", s.name, s.version),
-            media_type: "application/json".into(),
-        }))
     }
 
     /// The resolved model of the types in force (`Handler.ListTypes`).
@@ -637,6 +658,19 @@ fn builtin_error(name: &str) -> ConnectError {
 }
 
 /// A version the registry does not hold (`SQLStore.GetDomain`).
+/// The definition of a built-in domain of that name, any version asked or its own (`Service.GetDomain`), as JSON.
+fn builtin_definition(name: &str, version: &str) -> Result<Option<serde_json::Value>, ConnectError> {
+    for src in builtin_sources() {
+        let def: serde_json::Value =
+            serde_norway::from_str(src).map_err(|e| connect_error(GraphError::internal(e.to_string())))?;
+        let field = |k: &str| def.get(k).and_then(|v| v.as_str()).unwrap_or_default().to_owned();
+        if field("name") == name && (version.is_empty() || field("version") == version) {
+            return Ok(Some(def));
+        }
+    }
+    Ok(None)
+}
+
 fn not_found(name: &str, version: &str) -> ConnectError {
     let what = if version.is_empty() {
         format!("{name} (published)")
