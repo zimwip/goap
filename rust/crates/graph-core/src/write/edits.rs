@@ -337,6 +337,7 @@ impl<S: WriteTx> Tx<'_, S> {
             &id,
             ReviewBatch {
                 verdicts,
+                by: inp.by.clone(),
                 ..ReviewBatch::default()
             },
         )

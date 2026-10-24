@@ -6,6 +6,7 @@ use std::{collections::HashMap, sync::Arc};
 use goap_connect::{ConnectError, Ctx, Request, Response, async_trait};
 use goap_proto::graph::v1 as pb;
 use graph_catalog::{Catalog, catalog::STRUCTURE_PROJECT};
+use graph_core::access;
 use graph_core::write::branchmerge;
 use graph_core::write::merge::Merge;
 use graph_core::write::restructure::{NodeName, Restructured};
@@ -286,10 +287,10 @@ impl Graph {
 impl Graph {
     /// Opens a call any identified caller may make: the first call of a person creates its user (Go's `EnsureCaller`
     /// interceptor, ADR 0040), which is the Go service's, so a person this graph holds no user of yet is left to it.
-    async fn identified<T>(&self, req: &Request<T>) -> Result<Caller, ConnectError> {
+    async fn identified<T>(&self, req: &Request<T>) -> Result<(Caller, Stamp), ConnectError> {
         let caller = Caller::of(req)?;
         if caller.subject.starts_with("system:") {
-            return Ok(caller);
+            return Ok((caller, Stamp(None)));
         }
         let tx = self
             .state
@@ -297,19 +298,61 @@ impl Graph {
             .reader()
             .await
             .map_err(|e| connect_error(GraphError::internal(e)))?;
-        if !tx
-            .has_node(
-                graph_core::model::NAMESPACE_ORGANISATION,
-                &format!("USR:{}", caller.subject),
-            )
-            .await
-            .map_err(connect_error)?
-        {
-            return Err(connect_error(GraphError::unimplemented(
-                "the first call of a person creates its user (EnsureUser): not served here yet",
-            )));
+        drop(tx);
+        let stamp = Stamp(self.ensure_user(&caller).await.map_err(connect_error)?);
+        Ok((caller, stamp))
+    }
+
+    /// Makes sure the user of a person exists (Go's `EnsureUser`, ADR 0039, 0040, 0042): the first call of a subject
+    /// commits its `User` node, active, member of the unit new users join, as a change of its own on main, and the
+    /// very first user of the namespace takes the administration of the platform through a platform Assignment
+    /// committed with it. It acts as the graph service itself; a platform service is never a user. A subject seen is
+    /// not asked again by this process.
+    async fn ensure_user(&self, caller: &Caller) -> Result<Option<String>, GraphError> {
+        let subject = caller.subject.as_str();
+        if subject.is_empty() || subject.starts_with("system:") || self.state.users.lock().await.contains(subject) {
+            return Ok(None);
         }
-        Ok(caller)
+        // one creation at a time: the web fires several calls at once right after a sign-in
+        let _one = self.state.ensuring.lock().await;
+        let key = format!("{}{subject}", access::USER_PREFIX);
+        let mut last = None;
+        for _ in 0..3 {
+            let tx = self.state.store.reader().await.map_err(GraphError::internal)?;
+            if tx.has_node(graph_core::model::NAMESPACE_ORGANISATION, &key).await? {
+                self.state.users.lock().await.insert(subject.to_string());
+                return Ok(None);
+            }
+            drop(tx);
+            let system = Caller {
+                subject: SYSTEM_GRAPH.into(),
+                on_behalf_of: String::new(),
+                at_least: false,
+                project: String::new(),
+                command: caller.command.clone(),
+                roles: vec![ROLE_ADMIN.into()],
+            };
+            let key = key.clone();
+            let made = self
+                .write(system, async |tx| create_user(tx, subject, &key).await)
+                .await;
+            match made {
+                Ok(res) => {
+                    self.state.users.lock().await.insert(subject.to_string());
+                    let at = res.headers.get(HEADER_CHANGE_SEQ).and_then(|v| v.to_str().ok());
+                    return Ok(at.map(str::to_string));
+                }
+                // another change moved main meanwhile: read again
+                Err(e)
+                    if e.code() == goap_connect::Code::FailedPrecondition
+                        || e.code() == goap_connect::Code::Aborted =>
+                {
+                    last = Some(GraphError::conflict(e.message()));
+                }
+                Err(e) => return Err(GraphError::internal(e.message())),
+            }
+        }
+        Err(last.unwrap_or_else(|| GraphError::internal("the user could not be created")))
     }
 
     /// Runs a read any identified caller may make, one that filters nothing by its caller.
@@ -317,14 +360,14 @@ impl Graph {
     where
         F: AsyncFnOnce(&Session) -> Result<T, GraphError>,
     {
-        self.identified(req).await?;
+        let (_, stamp) = self.identified(req).await?;
         let tx = self
             .state
             .store
             .reader()
             .await
             .map_err(|e| connect_error(GraphError::internal(e)))?;
-        f(&tx).await.map(Response::new).map_err(connect_error)
+        stamp.on(f(&tx).await.map(Response::new).map_err(connect_error))
     }
 
     /// The type catalogue of the domains in force.
@@ -633,12 +676,12 @@ impl pb::GraphService for Graph {
         _ctx: &Ctx,
         req: Request<pb::IsAdminOnlyTypeRequest>,
     ) -> Answer<pb::IsAdminOnlyTypeResponse> {
-        self.identified(&req).await?;
+        let (_, stamp) = self.identified(&req).await?;
         let cat = self.catalog().await?;
         let t = req.into_inner().r#type;
-        Ok(Response::new(pb::IsAdminOnlyTypeResponse {
+        stamp.on(Ok(Response::new(pb::IsAdminOnlyTypeResponse {
             admin_only: cat.admin_only(&t) || Catalog::builtin().admin_only(&t),
-        }))
+        })))
     }
 
     /// The item types the domains in force declare (ADR 0128), with what this service gives them.
@@ -647,7 +690,7 @@ impl pb::GraphService for Graph {
         _ctx: &Ctx,
         req: Request<pb::ListItemTypesRequest>,
     ) -> Answer<pb::ListItemTypesResponse> {
-        self.identified(&req).await?;
+        let (_, stamp) = self.identified(&req).await?;
         let cat = self.catalog().await?;
         let types = cat
             .item_types()
@@ -664,7 +707,7 @@ impl pb::GraphService for Graph {
                 }
             })
             .collect();
-        Ok(Response::new(pb::ListItemTypesResponse { types }))
+        stamp.on(Ok(Response::new(pb::ListItemTypesResponse { types })))
     }
 
     /// The structures of the graph (ADR 0054), each with the types building it.
@@ -673,7 +716,7 @@ impl pb::GraphService for Graph {
         _ctx: &Ctx,
         req: Request<pb::GetStructuresRequest>,
     ) -> Answer<pb::GetStructuresResponse> {
-        self.identified(&req).await?;
+        let (_, stamp) = self.identified(&req).await?;
         let cat = self.catalog().await?;
         let all = cat.types();
         let structures = cat
@@ -693,7 +736,7 @@ impl pb::GraphService for Graph {
                 bootstrap: (!st.bootstrap.is_empty()).then(|| convert::object(&st.bootstrap)),
             })
             .collect();
-        Ok(Response::new(pb::GetStructuresResponse { structures }))
+        stamp.on(Ok(Response::new(pb::GetStructuresResponse { structures })))
     }
 
     /// The namespaces some node lives in.
@@ -702,7 +745,7 @@ impl pb::GraphService for Graph {
         _ctx: &Ctx,
         req: Request<pb::ListNamespacesRequest>,
     ) -> Answer<pb::ListNamespacesResponse> {
-        self.identified(&req).await?;
+        let (_, stamp) = self.identified(&req).await?;
         let tx = self
             .state
             .store
@@ -713,7 +756,7 @@ impl pb::GraphService for Graph {
             return Err(connect_error(GraphError::unimplemented(MERGED_LISTING)));
         }
         let namespaces = tx.namespaces().await.map_err(connect_error)?;
-        Ok(Response::new(pb::ListNamespacesResponse { namespaces }))
+        stamp.on(Ok(Response::new(pb::ListNamespacesResponse { namespaces })))
     }
 
     async fn get_branch(&self, _ctx: &Ctx, req: Request<pb::GetBranchRequest>) -> Answer<pb::GetBranchResponse> {
@@ -3116,6 +3159,7 @@ impl pb::GraphService for Graph {
         self.write(caller, async |tx| {
             let id = served_change(tx, &m.change_id).await?;
             let b = ReviewBatch {
+                by: String::new(),
                 id: m.review_id.clone(),
                 flow: m.flow.clone(),
                 execution: m.execution.clone(),
@@ -3442,5 +3486,139 @@ fn restructured(r: &Restructured) -> pb::ImpactNodeRestructureResponse {
                 to_key: l.to_key.clone(),
             })
             .collect(),
+    }
+}
+
+/// The identity of the graph service acting by itself (`graphsvc.SystemPrincipal`): the seeds, the bookkeeping of a
+/// sign-in.
+const SYSTEM_GRAPH: &str = "system:graph";
+
+/// The unit new users join (`graphsvc.NewUserUnit`, ADR 0042): the unit an administrator flagged waiting (the
+/// smallest key when several are), else the root of the organisation, at the head of main.
+async fn new_user_unit<T: ReadTx>(tx: &T, cat: &Catalog) -> Result<NodeRef, GraphError> {
+    let st = cat
+        .structure(graph_catalog::catalog::STRUCTURE_ORGANISATION)
+        .ok_or_else(|| GraphError::not_found("the structure of the organisation"))?;
+    let w = World::open(tx, &graph_core::view::View::branch(&st.namespace, MAIN_BRANCH)).await?;
+    let q = NodeQuery {
+        typ: st.typ.clone(),
+        limit: i32::MAX as usize,
+        ..NodeQuery::default()
+    };
+    let waiting = w
+        .page(&q)
+        .await?
+        .nodes
+        .into_iter()
+        .filter(|n| n.typ == st.typ)
+        .filter(|n| {
+            n.props
+                .as_ref()
+                .and_then(|p| p.get("waiting"))
+                .and_then(serde_json::Value::as_bool)
+                == Some(true)
+        })
+        .min_by(|a, b| a.key.cmp(&b.key));
+    if let Some(n) = waiting {
+        return Ok(n.node_ref());
+    }
+    let id = tx
+        .node_id_by_key(&st.namespace, &st.root)
+        .await?
+        .ok_or_else(|| GraphError::not_found(format!("node key {}", st.root)))?;
+    let at = w.at(std::slice::from_ref(&id)).await?;
+    let v = at
+        .get(&id)
+        .copied()
+        .ok_or_else(|| GraphError::not_found(format!("node key {}", st.root)))?;
+    Ok(NodeRef::new(id, v))
+}
+
+/// Commits the user of a subject (Go's `createUser`): the node, active, member of the unit new users join, and the
+/// platform Assignment of the administration when it is the first user the namespace holds.
+async fn create_user(tx: &mut Tx<'_, Session>, subject: &str, key: &str) -> Result<(), GraphError> {
+    let cat = tx.env.catalog.clone();
+    let unit = new_user_unit(tx.store, &cat).await?;
+    let w = World::open(
+        tx.store,
+        &graph_core::view::View::branch(graph_core::model::NAMESPACE_ORGANISATION, MAIN_BRANCH),
+    )
+    .await?;
+    let q = NodeQuery {
+        typ: access::TYPE_USER.into(),
+        limit: 1,
+        ..NodeQuery::default()
+    };
+    let first = w.page(&q).await?.total == 0;
+    let mut props = serde_json::Map::new();
+    props.insert("subject".into(), subject.into());
+    let mut edits = vec![NodeEdit {
+        key: key.to_string(),
+        typ: access::TYPE_USER.into(),
+        props: Some(props),
+        rationale: format!("First sign-in of {subject}"),
+        links: vec![LinkEdit {
+            typ: access::LINK_MEMBER_OF.into(),
+            to: Some(unit),
+            to_key: String::new(),
+            props: None,
+        }],
+        state: "active".into(),
+        ..NodeEdit::default()
+    }];
+    if first {
+        let mut props = serde_json::Map::new();
+        props.insert("description".into(), "First user becomes administrator".into());
+        props.insert("roles".into(), serde_json::json!([access::ROLE_ADMIN]));
+        edits.push(NodeEdit {
+            key: format!("ASG:{key}/{}", access::PLATFORM_SCOPE),
+            typ: access::TYPE_ASSIGNMENT.into(),
+            props: Some(props),
+            rationale: "First user becomes administrator".into(),
+            links: vec![LinkEdit {
+                typ: access::LINK_ASSIGNS_ORG.into(),
+                to: None,
+                to_key: key.to_string(),
+                props: None,
+            }],
+            ..NodeEdit::default()
+        });
+    }
+    let title = format!("User {subject}");
+    let project = tx.structure_root(STRUCTURE_PROJECT)?;
+    match tx
+        .commit_edits(Commit {
+            namespace: graph_core::model::NAMESPACE_ORGANISATION.into(),
+            title: title.clone(),
+            intent: title.clone(),
+            by: "graphsvc.seed".into(),
+            baseline_name: title,
+            edits,
+            project_id: project,
+            ..Commit::default()
+        })
+        .await
+    {
+        Err(e) if e.message.ends_with(&format!("{NOTHING_TO_COMMIT}: invalid")) => Ok(()),
+        r => r.map(|_| ()),
+    }
+}
+
+/// The positions the creation of a caller's user left the change logs at (Go's `EnsureCaller` runs inside its
+/// `Positions` interceptor): `X-Goap-Change-Seq` of the answer, or of the error.
+struct Stamp(Option<String>);
+
+impl Stamp {
+    fn on<T>(self, answer: Answer<T>) -> Answer<T> {
+        let Some(at) = self.0 else { return answer };
+        match answer {
+            Ok(mut res) => {
+                if let Ok(v) = at.parse() {
+                    res.headers.insert(HEADER_CHANGE_SEQ, v);
+                }
+                Ok(res)
+            }
+            Err(e) => Err(e.with_meta(HEADER_CHANGE_SEQ, &at)),
+        }
     }
 }

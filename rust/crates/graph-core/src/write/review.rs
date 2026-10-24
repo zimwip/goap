@@ -45,6 +45,8 @@ pub struct ReviewBatch {
     pub record: Option<Map<String, Value>>,
     /// the type of the item given with the record (a review)
     pub record_type: String,
+    /// who reviews (`domain.ReviewBatch.By`, a commit's producer); empty: the caller
+    pub by: String,
 }
 
 impl Verdict {
@@ -404,7 +406,11 @@ impl<S: WriteTx> Tx<'_, S> {
                 )));
             }
         }
-        let by = self.env.by.clone();
+        let by = if b.by.is_empty() {
+            self.env.by.clone()
+        } else {
+            b.by.clone()
+        };
         let at = self.env.now();
         let (key, data) = match &b.record {
             Some(rec) => (check_record(&b, rec)?, rec.clone().into_iter().collect()),
@@ -620,7 +626,11 @@ impl<S: WriteTx> Tx<'_, S> {
             let seen = view.seen(flow);
             self.check_accepted(id, flow, &seen, &vcn).await?;
         }
-        let by = self.env.by.clone();
+        let by = if b.by.is_empty() {
+            self.env.by.clone()
+        } else {
+            b.by.clone()
+        };
         let r = Review {
             status: v.status().into(),
             by: by.clone(),

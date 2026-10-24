@@ -350,4 +350,9 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   before it: 2001 calls, the divergent ones the `removeLink` order and the wording of what a script throws; the tables
   the same but the orders of ids in the change log and two sub-changes the comparison does not pair (the same rows
   but their ids), the events of the outbox but the order of a baseline's `set`.
+  The first call of a person creates its user here too (Go's `EnsureCaller`, ADR 0040, 0042): the `User` node,
+  active, member of the waiting unit else the root, the first user of the namespace taking the administration through
+  a platform Assignment, one change on main written as the graph service (`system:graph`, reviewed by
+  `graphsvc.seed` as Go's `Commit.By`), its positions in the answer's `X-Goap-Change-Seq`; the reads any identified
+  caller makes no longer leave a new person to Go: 2008 calls, the divergent ones as above.
 - Not done yet: the rest of phase 4.

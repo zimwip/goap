@@ -30,6 +30,9 @@ pub struct State {
     pub outbox: bool,
     /// The type catalogue of the domains in force, with what told the stored versions apart when it was built.
     catalog: Mutex<(Option<String>, Arc<Catalog>)>,
+    /// The persons this process made sure have a user (Go's `EnsureCaller`), and the creation in progress.
+    users: Mutex<std::collections::HashSet<String>>,
+    ensuring: Mutex<()>,
 }
 
 impl State {
@@ -38,6 +41,8 @@ impl State {
             store,
             outbox: false,
             catalog: Mutex::new((None, Catalog::builtin())),
+            users: Mutex::new(Default::default()),
+            ensuring: Mutex::new(()),
         }
     }
 
