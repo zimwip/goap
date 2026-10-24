@@ -647,6 +647,15 @@ impl WriteTx for Session {
         Ok(())
     }
 
+    async fn skip_impact_positions(&self, n: usize) -> Result<(), GraphError> {
+        if self.sql.pg && n > 0 {
+            let q =
+                format!("SELECT nextval(pg_get_serial_sequence('change_impact', 'seq')) FROM generate_series(1, {n})");
+            self.select((q, vec![]), "position of the impacts").await?;
+        }
+        Ok(())
+    }
+
     async fn savepoint(&self) -> Result<(), GraphError> {
         self.run(("SAVEPOINT rehearsal".into(), vec![]), "savepoint").await?;
         Ok(())

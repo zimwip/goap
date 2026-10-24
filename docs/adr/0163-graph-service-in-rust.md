@@ -341,4 +341,13 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   lowered to cel-go's case); the tables the same but the orders of ids in the change log, the events of the outbox but
   the order of a baseline's `set`. The YAML export of a domain and `ImportDomain` of a domain with a lifecycle or
   scripts (Go's `Domain.Validate` of them) stay Go's.
+  The platform's namespaces follow for a platform service administering the platform (`organisation`, `platform`,
+  `methodology`: changes, their impacts, `CommitEdits`, the merge of their branches; any other caller is Go's, whose
+  policies judge it): the commit runs the validators `platform/cmd/graph` plugs (`write::validators`: the floor of
+  administrators, a platform Assignment carrying no project flag, the owner of a project kept, the protected aliases,
+  the platform's own source; `access::Snapshot` the part of `lib/access`'s snapshot they ask), on the state the commit
+  leaves; a review batch whose verdict fails takes the positions of the impacts Go's projection took for the verdicts
+  before it: 2001 calls, the divergent ones the `removeLink` order and the wording of what a script throws; the tables
+  the same but the orders of ids in the change log and two sub-changes the comparison does not pair (the same rows
+  but their ids), the events of the outbox but the order of a baseline's `set`.
 - Not done yet: the rest of phase 4.

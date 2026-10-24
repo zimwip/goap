@@ -31,6 +31,8 @@ pub struct Env {
     pub actor: String,
     pub command: String,
     pub catalog: Arc<Catalog>,
+    /// Whether the caller holds the administration of the platform (ADR 0047): the access nodes are its to write.
+    pub administers: bool,
     /// Whether the events go to the outbox: a bus delivers them (Go's `Graph.Observe` with a sink); none, no event.
     pub outbox: bool,
 }

@@ -461,79 +461,88 @@ impl<S: WriteTx> Tx<'_, S> {
         let mut out: Vec<Option<ChangeImpact>> = vec![None; b.verdicts.len()];
         let mut events = Vec::with_capacity(b.verdicts.len());
         let mut pending: Vec<usize> = (0..b.verdicts.len()).collect();
-        while !pending.is_empty() {
-            let mut next = Vec::new();
-            let mut last = None;
-            for &n in &pending {
-                let v = &b.verdicts[n];
-                let named = |e: GraphError| {
-                    let what = self.views[id]
-                        .fold
-                        .impact(&v.impact)
-                        .map_or(v.impact.clone(), |cn| cn.key.clone());
-                    e.with_prefix(&label(n, &what))
-                };
-                let Some(mut cn) = self.views[id].fold.impact(&v.impact).cloned() else {
-                    return Err(named(GraphError::not_found(format!(
-                        "change impact {} not in change {id}",
-                        v.impact
-                    ))));
-                };
-                let Some(vcn) = seen.iter().find(|c| c.id == v.impact).cloned() else {
-                    return Err(named(GraphError::not_found(format!(
-                        "change impact {} is not on the flow \"\" of change {id}",
-                        v.impact
-                    ))));
-                };
-                if vcn.review != REVIEW_PROPOSED {
-                    return Err(named(GraphError::conflict(format!(
-                        "change impact {} is already {}",
-                        v.impact, vcn.review
-                    ))));
-                }
-                if v.accept {
-                    match self.check_accepted(id, "", &seen, &vcn).await {
-                        Ok(()) => {}
-                        Err(e) if e.message.ends_with(ORIGINS_PENDING) => {
-                            next.push(n);
-                            last = Some(named(e));
-                            continue;
-                        }
-                        Err(e) => return Err(named(e)),
+        let checked: Result<()> = async {
+            while !pending.is_empty() {
+                let mut next = Vec::new();
+                let mut last = None;
+                for &n in &pending {
+                    let v = &b.verdicts[n];
+                    let named = |e: GraphError| {
+                        let what = self.views[id]
+                            .fold
+                            .impact(&v.impact)
+                            .map_or(v.impact.clone(), |cn| cn.key.clone());
+                        e.with_prefix(&label(n, &what))
+                    };
+                    let Some(mut cn) = self.views[id].fold.impact(&v.impact).cloned() else {
+                        return Err(named(GraphError::not_found(format!(
+                            "change impact {} not in change {id}",
+                            v.impact
+                        ))));
+                    };
+                    let Some(vcn) = seen.iter().find(|c| c.id == v.impact).cloned() else {
+                        return Err(named(GraphError::not_found(format!(
+                            "change impact {} is not on the flow \"\" of change {id}",
+                            v.impact
+                        ))));
+                    };
+                    if vcn.review != REVIEW_PROPOSED {
+                        return Err(named(GraphError::conflict(format!(
+                            "change impact {} is already {}",
+                            v.impact, vcn.review
+                        ))));
                     }
+                    if v.accept {
+                        match self.check_accepted(id, "", &seen, &vcn).await {
+                            Ok(()) => {}
+                            Err(e) if e.message.ends_with(ORIGINS_PENDING) => {
+                                next.push(n);
+                                last = Some(named(e));
+                                continue;
+                            }
+                            Err(e) => return Err(named(e)),
+                        }
+                    }
+                    let r = Review {
+                        status: v.status().into(),
+                        by: by.clone(),
+                        comment: v.comment.trim().into(),
+                        at: self.env.now(),
+                        execution: b.execution.clone(),
+                        review_id: key.clone(),
+                        ..Review::default()
+                    };
+                    cn.review = r.status.clone();
+                    cn.reviews.push(r.clone());
+                    if let Some(s) = seen.iter_mut().find(|c| c.id == cn.id) {
+                        s.review = r.status.clone();
+                        s.reviews.push(r.clone());
+                    }
+                    events.push(ImpactEvent {
+                        change: id.clone(),
+                        impact: cn.id.clone(),
+                        op: ImpactOp::Reviewed,
+                        execution: b.execution.clone(),
+                        by: by.clone(),
+                        review: Some(r),
+                        causation: item.clone(),
+                        ..ImpactEvent::default()
+                    });
+                    out[n] = Some(cn);
                 }
-                let r = Review {
-                    status: v.status().into(),
-                    by: by.clone(),
-                    comment: v.comment.trim().into(),
-                    at: self.env.now(),
-                    execution: b.execution.clone(),
-                    review_id: key.clone(),
-                    ..Review::default()
-                };
-                cn.review = r.status.clone();
-                cn.reviews.push(r.clone());
-                if let Some(s) = seen.iter_mut().find(|c| c.id == cn.id) {
-                    s.review = r.status.clone();
-                    s.reviews.push(r.clone());
+                if next.len() == pending.len() {
+                    // no progress: the origins are not settled by this batch
+                    return Err(last.expect("a verdict held"));
                 }
-                events.push(ImpactEvent {
-                    change: id.clone(),
-                    impact: cn.id.clone(),
-                    op: ImpactOp::Reviewed,
-                    execution: b.execution.clone(),
-                    by: by.clone(),
-                    review: Some(r),
-                    causation: item.clone(),
-                    ..ImpactEvent::default()
-                });
-                out[n] = Some(cn);
+                pending = next;
             }
-            if next.len() == pending.len() {
-                // no progress: the origins are not settled by this batch
-                return Err(last.expect("a verdict held"));
-            }
-            pending = next;
+            Ok(())
+        }
+        .await;
+        if let Err(e) = checked {
+            // the Go service writes the projection of each verdict before it judges the next one
+            self.store.skip_impact_positions(events.len()).await?;
+            return Err(e);
         }
         let out: Vec<ChangeImpact> = out.into_iter().flatten().collect();
         self.emit_staged(events).await?;

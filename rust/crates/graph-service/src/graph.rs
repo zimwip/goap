@@ -147,17 +147,30 @@ impl Caller {
     }
 }
 
-/// The change a write on its impacts works on, when it is one served here: neither personal nor of the platform's
-/// namespaces.
+/// The change a write on its impacts works on, when it is one served here: not personal, and of the platform's
+/// namespaces only for a caller administering the platform.
 async fn served_change(tx: &mut Tx<'_, Session>, id: &str) -> Result<ChangeId, GraphError> {
     let id: ChangeId = id.into();
     let c = tx.change_head(&id).await?;
-    if c.is_personal() || is_platform_namespace(&c.namespace) {
+    if c.is_personal() {
         return Err(GraphError::unimplemented(
-            "a personal change or a change of the platform's namespaces: not served here yet",
+            "a personal change (ADR 0037): not served here yet",
         ));
     }
+    platform_served(tx, &c.namespace)?;
     Ok(id)
+}
+
+/// A write in the platform's namespaces is served for a caller administering the platform, whom the gate of the
+/// access nodes lets through (`gateAccess`); the policies of the organisation judge any other caller, in the Go
+/// service.
+fn platform_served(tx: &Tx<'_, Session>, namespace: &str) -> Result<(), GraphError> {
+    if is_platform_namespace(namespace) && !tx.env.administers {
+        return Err(GraphError::unimplemented(
+            "a write of the platform's namespaces by a caller not administering the platform: not served here yet",
+        ));
+    }
+    Ok(())
 }
 
 /// The view of a change on a flow (empty: its active option), refusing a change that does not exist; a personal
@@ -345,6 +358,7 @@ impl Graph {
             actor: caller.subject.clone(),
             command: caller.command.clone(),
             catalog,
+            administers: caller.roles.iter().any(|r| r == ROLE_ADMIN),
             outbox: self.state.outbox,
         };
         let mut tx = Tx::new(&session, &env);
@@ -1258,11 +1272,6 @@ impl pb::GraphService for Graph {
         let m = req.into_inner();
         let token_project = caller.project.clone();
         self.write(caller, async |tx| {
-            if is_platform_namespace(&m.namespace) {
-                return Err(GraphError::unimplemented(
-                    "a merge of branches of the platform's namespaces: not served here yet",
-                ));
-            }
             let project_id = if token_project.is_empty() {
                 tx.structure_root(STRUCTURE_PROJECT)?
             } else {
@@ -2333,17 +2342,14 @@ impl pb::GraphService for Graph {
                     // a personal change is never split
                     return Err(GraphError::new(Kind::Conflict, "a personal change has no sub-changes"));
                 }
-                if is_platform_namespace(&parent.namespace) || !parent.lifecycle.is_empty() || !parent.guardians.is_empty() {
+                if !parent.lifecycle.is_empty() || !parent.guardians.is_empty() {
                     return Err(GraphError::unimplemented(
-                        "a sub-change of a change of the platform's namespaces or following a lifecycle: not served here yet",
+                        "a sub-change of a change following a lifecycle: not served here yet",
                     ));
                 }
+                platform_served(tx, &parent.namespace)?;
             }
-            if is_platform_namespace(&m.namespace) {
-                return Err(GraphError::unimplemented(
-                    "a change of the platform's namespaces: not served here yet",
-                ));
-            }
+            platform_served(tx, &m.namespace)?;
             let project = if !m.project_id.is_empty() {
                 m.project_id.clone()
             } else if !token_project.is_empty() {
@@ -2426,11 +2432,12 @@ impl pb::GraphService for Graph {
         self.write(caller, async |tx| {
             let id: ChangeId = m.change_id.as_str().into();
             let c = tx.change_head(&id).await?;
-            if c.is_personal() || is_platform_namespace(&c.namespace) || !c.parent_id.is_empty() {
+            if c.is_personal() || !c.parent_id.is_empty() {
                 return Err(GraphError::unimplemented(
-                    "a personal change, a sub-change or a change of the platform's namespaces: not served here yet",
+                    "a personal change or a sub-change: not served here yet",
                 ));
             }
+            platform_served(tx, &c.namespace)?;
             let c = tx.purge_change(&id).await?;
             Ok(pb::DeleteChangeResponse {
                 change: Some(convert::change(&c)),
@@ -2852,18 +2859,17 @@ impl pb::GraphService for Graph {
                 "a personal change (ADR 0037): not served here yet",
             )));
         }
-        if is_platform_namespace(&m.namespace) {
-            return Err(connect_error(GraphError::unimplemented(
-                "a change of the platform's namespaces: not served here yet",
-            )));
-        }
         let edits: Vec<NodeEdit> = m
             .edits
             .iter()
             .map(|e| NodeEdit {
                 key: e.key.clone(),
                 typ: e.r#type.clone(),
-                pre: e.pre.as_ref().map(|p| convert::ref_from(Some(p))),
+                pre: e
+                    .pre
+                    .as_ref()
+                    .filter(|p| !p.id.is_empty())
+                    .map(|p| convert::ref_from(Some(p))),
                 props: e.props.as_ref().map(convert::map).filter(|p| !p.is_empty()),
                 rationale: e.rationale.clone(),
                 links: e
@@ -2871,7 +2877,11 @@ impl pb::GraphService for Graph {
                     .iter()
                     .map(|l| LinkEdit {
                         typ: l.r#type.clone(),
-                        to: l.to.as_ref().map(|t| convert::ref_from(Some(t))),
+                        to: l
+                            .to
+                            .as_ref()
+                            .filter(|t| !t.id.is_empty())
+                            .map(|t| convert::ref_from(Some(t))),
                         to_key: l.to_key.clone(),
                         props: l.props.as_ref().map(convert::map).filter(|p| !p.is_empty()),
                     })
@@ -2890,12 +2900,13 @@ impl pb::GraphService for Graph {
                 {
                     typ = n.typ;
                 }
-                if tx.catalog().admin_only(&typ) {
+                if tx.catalog().admin_only(&typ) && !tx.env.administers {
                     return Err(GraphError::unimplemented(
-                        "a commit of an access node (ADR 0068): not served here yet",
+                        "a commit of an access node (ADR 0068) by a caller not administering the platform: not served here yet",
                     ));
                 }
             }
+            platform_served(tx, &m.namespace)?;
             let project = if !m.project_id.is_empty() {
                 m.project_id.clone()
             } else if !token_project.is_empty() {

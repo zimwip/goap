@@ -255,6 +255,11 @@ pub trait WriteTx: ReadTx {
     /// rolled back; SQLite's are), so that both services number alike while they are compared (ADR 0163).
     fn skip_declaration(&self) -> impl Future<Output = Result<()>> + Send;
 
+    /// Takes the next positions of the impacts and leaves them unused: what the verdicts of a review batch the Go
+    /// service wrote before one of them failed take (its projection is written verdict by verdict), so that both
+    /// services number alike while they are compared (ADR 0163).
+    fn skip_impact_positions(&self, n: usize) -> impl Future<Output = Result<()>> + Send;
+
     /// Marks the point a rehearsal of the Go service starts from (Go's `gated`: a pass it rolls back, ADR 0163).
     fn savepoint(&self) -> impl Future<Output = Result<()>> + Send;
 

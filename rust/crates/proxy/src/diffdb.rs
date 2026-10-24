@@ -252,11 +252,14 @@ pub async fn run(args: &[String]) -> anyhow::Result<()> {
                 only_go.len(),
                 only_rust.len()
             );
-            for k in only_go.iter().take(3) {
-                println!("    - go   {}", short(k));
+            // GOAP_DIFF_FULL=1 prints every row whole
+            let full = std::env::var_os("GOAP_DIFF_FULL").is_some();
+            let (n, show): (usize, fn(&str) -> String) = if full { (usize::MAX, str::to_string) } else { (3, short) };
+            for k in only_go.iter().take(n) {
+                println!("    - go   {}", show(k));
             }
-            for k in only_rust.iter().take(3) {
-                println!("    + rust {}", short(k));
+            for k in only_rust.iter().take(n) {
+                println!("    + rust {}", show(k));
             }
         }
     }

@@ -14,6 +14,7 @@ use super::{
     events::{CHANGE_COMMITTED, EventNode},
     review::draft_changed,
     tx::Tx,
+    validators::Validated,
     work::node_of,
 };
 use crate::{
@@ -25,7 +26,7 @@ use crate::{
         Baseline, BaselineId, Branch, ChangeId, Link, LinkId, Node, NodeId, NodeRef, REASON_CREATE, REASON_DERIVE,
         REASON_REBASE, REASON_REVERT, REASON_REVISE, Target, Version, branch_of, namespace_of,
     },
-    read::{branch_versions, fork_versions, stored_node},
+    read::{branch_state, branch_versions, fork_versions, stored_node},
     store::{LinkSet, ReadTx, WriteTx},
 };
 use graph_catalog::def::Lifecycle;
@@ -394,6 +395,25 @@ impl<S: WriteTx> Tx<'_, S> {
                     .0;
                 walk_transitions(&self.views[id].events, cn, n, lc)?;
             }
+        }
+        if !mechanical {
+            let mut validated = Vec::with_capacity(nodes.len());
+            for ((cn, _), n) in todo.iter().zip(&nodes) {
+                let pre = match &cn.pre {
+                    Some(r) => Some(stored_node(self.store, r).await?),
+                    None => None,
+                };
+                validated.push(Validated { post: n, pre });
+            }
+            let store = self.store;
+            let state = async || {
+                let mut at = branch_state(store, &own).await?;
+                for n in nodes.iter().chain(&reverted) {
+                    at.insert(n.id.clone(), n.version);
+                }
+                Ok(at)
+            };
+            self.run_node_validators(state, &validated).await?;
         }
 
         let name = if baseline_name.is_empty() {

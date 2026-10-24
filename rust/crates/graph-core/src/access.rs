@@ -124,3 +124,336 @@ impl Directory {
         self.projects.get(key).is_some_and(|p| p.stopped)
     }
 }
+
+/// The platform roles (`access.PlatformRoles`): held everywhere, never on a project.
+pub const PLATFORM_ROLES: [&str; 2] = ["admin", "reader"];
+/// The platform role of the administrators (`access.RoleAdmin`).
+pub const ROLE_ADMIN: &str = "admin";
+/// The scope `AssignmentProject` names a platform Assignment's (`access.PlatformScope`).
+pub const PLATFORM_SCOPE: &str = "PLATFORM";
+pub const TYPE_USER: &str = "organisation@User";
+pub const TYPE_ASSIGNMENT: &str = "organisation@Assignment";
+pub const TYPE_PROJECT_UNIT: &str = "organisation@ProjectUnit";
+pub const LINK_MEMBER_OF: &str = "organisation@member_of";
+pub const LINK_ASSIGNS_ORG: &str = "organisation@assigns_org";
+pub const LINK_ASSIGNS_PROJECT: &str = "organisation@assigns_project";
+pub const LINK_PROJECT_PART_OF: &str = "organisation@project_part_of";
+/// The key prefix of a user's node, its personal unit (`access.UserPrefix`).
+pub const USER_PREFIX: &str = "USR:";
+
+/// A hierarchy of a structure by key (`domain.Hierarchy`).
+#[derive(Debug, Clone, Default)]
+pub struct Hierarchy {
+    root: String,
+    parent: HashMap<String, String>,
+}
+
+impl Hierarchy {
+    /// A node followed by its ancestors, nearest first, the root last; cycle-safe (`Hierarchy.Chain`).
+    pub fn chain(&self, key: &str) -> Vec<String> {
+        let key = if key.is_empty() { self.root.as_str() } else { key };
+        let mut out = vec![key.to_string()];
+        let mut cur = key.to_string();
+        while let Some(p) = self.parent.get(&cur) {
+            if p.is_empty() || out.contains(p) {
+                break;
+            }
+            out.push(p.clone());
+            cur = p.clone();
+        }
+        if !out.contains(&self.root) {
+            out.push(self.root.clone());
+        }
+        out
+    }
+}
+
+/// An Assignment as the snapshot resolves it: the roles a unit holds on a project, or platform-wide when it names
+/// none.
+#[derive(Debug, Clone, Default)]
+struct Assignment {
+    key: String,
+    org: String,
+    project: String,
+    roles: Vec<String>,
+    owner: bool,
+    admin: bool,
+}
+
+/// What the access of the organisation reads of a set of its nodes (Go's `access.Snapshot`, the part the validators of
+/// a commit ask): the users and their units, the hierarchies, the projects and the Assignments, the retired nodes out.
+#[derive(Debug, Clone, Default)]
+pub struct Snapshot {
+    users: HashMap<String, String>,
+    units: Hierarchy,
+    projects: Hierarchy,
+    project_keys: std::collections::HashSet<String>,
+    assignments: Vec<Assignment>,
+    org_root: String,
+}
+
+fn flag(props: &crate::model::Props, k: &str) -> bool {
+    props.as_ref().and_then(|p| p.get(k)).and_then(Value::as_bool) == Some(true)
+}
+
+fn text<'a>(props: &'a crate::model::Props, k: &str) -> &'a str {
+    props
+        .as_ref()
+        .and_then(|p| p.get(k))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+}
+
+/// A property as a list of strings (`strList`): none, or a list of strings only.
+fn strings(props: &crate::model::Props, k: &str) -> Option<Vec<String>> {
+    match props.as_ref().and_then(|p| p.get(k)) {
+        None | Some(Value::Null) => Some(Vec::new()),
+        Some(Value::Array(l)) => l.iter().map(|v| v.as_str().map(str::to_string)).collect(),
+        Some(_) => None,
+    }
+}
+
+impl Snapshot {
+    /// Reads the snapshot of some nodes of the organisation and their outgoing links (`BuildSnapshot`, the types of the
+    /// structures those of the built-in catalogue).
+    pub fn build(nodes: &[crate::model::Node], links: &[crate::model::Link]) -> Snapshot {
+        use graph_catalog::catalog::STRUCTURE_ORGANISATION;
+        use std::collections::HashSet;
+        let cat = Catalog::builtin();
+        let (Some(org), Some(proj)) = (cat.structure(STRUCTURE_ORGANISATION), cat.structure(STRUCTURE_PROJECT)) else {
+            return Snapshot::default();
+        };
+        let retired: HashSet<_> = nodes
+            .iter()
+            .filter(|n| n.state == STATE_RETIRED)
+            .map(|n| n.id.clone())
+            .collect();
+        let nodes: Vec<_> = nodes.iter().filter(|n| !retired.contains(&n.id)).collect();
+        let links: Vec<_> = links
+            .iter()
+            .filter(|l| !retired.contains(&l.from.id) && l.to_node().is_none_or(|t| !retired.contains(&t.id)))
+            .collect();
+        let by_id: HashMap<_, _> = nodes.iter().map(|n| (n.id.clone(), *n)).collect();
+        let mut s = Snapshot {
+            units: Hierarchy {
+                root: org.root.clone(),
+                ..Hierarchy::default()
+            },
+            projects: Hierarchy {
+                root: proj.root.clone(),
+                ..Hierarchy::default()
+            },
+            org_root: org.root.clone(),
+            ..Snapshot::default()
+        };
+        let mut assigned: HashMap<_, Assignment> = HashMap::new();
+        for n in &nodes {
+            if cat.is_a(&n.typ, &proj.typ) {
+                s.project_keys.insert(n.key.clone());
+            }
+            match n.typ.as_str() {
+                TYPE_USER => {
+                    let subject = text(&n.props, "subject");
+                    if !subject.is_empty() {
+                        s.users.insert(subject.to_string(), String::new());
+                    }
+                }
+                TYPE_ASSIGNMENT => {
+                    if let Some(roles) = strings(&n.props, "roles") {
+                        assigned.insert(
+                            n.id.clone(),
+                            Assignment {
+                                key: n.key.clone(),
+                                roles,
+                                owner: flag(&n.props, "owner"),
+                                admin: flag(&n.props, "admin"),
+                                ..Assignment::default()
+                            },
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+        for l in &links {
+            let Some(to) = l.to_node() else { continue };
+            let (from, to) = (by_id.get(&l.from.id).copied(), by_id.get(&to.id).copied());
+            let (from_typ, to_typ) = (from.map_or("", |n| n.typ.as_str()), to.map_or("", |n| n.typ.as_str()));
+            let to_key = to.map_or(String::new(), |n| n.key.clone());
+            let from_key = from.map_or("", |n| n.key.as_str());
+            for (h, st) in [(&mut s.units, org), (&mut s.projects, proj)] {
+                if l.typ == st.parent && cat.is_a(from_typ, &st.typ) && cat.is_a(to_typ, &st.typ) && from_key != to_key
+                {
+                    h.parent.insert(from_key.to_string(), to_key.clone());
+                }
+            }
+            if l.typ == LINK_MEMBER_OF
+                && from_typ == TYPE_USER
+                && cat.is_a(to_typ, &org.typ)
+                && let Some(u) = s.users.get_mut(text(&from.expect("typed").props, "subject"))
+            {
+                *u = to_key.clone();
+            }
+            if from_typ == TYPE_ASSIGNMENT
+                && let Some(a) = assigned.get_mut(&l.from.id)
+            {
+                if l.typ == LINK_ASSIGNS_ORG {
+                    a.org = to_key.clone();
+                } else if l.typ == LINK_ASSIGNS_PROJECT {
+                    a.project = to_key.clone();
+                }
+            }
+        }
+        for mut a in assigned.into_values() {
+            if a.project.is_empty() {
+                (a.owner, a.admin) = (false, false);
+            }
+            if !a.org.is_empty() && (!a.roles.is_empty() || a.owner || a.admin) {
+                s.assignments.push(a);
+            }
+        }
+        s
+    }
+
+    /// The units an Assignment names to grant a subject roles: its user, then its unit and the unit's ancestors
+    /// (`SubjectChain`).
+    pub fn subject_chain(&self, subject: &str) -> Vec<String> {
+        let unit = self.users.get(subject).map_or("", String::as_str);
+        let unit = if unit.is_empty() { self.org_root.as_str() } else { unit };
+        let mut out = vec![format!("{USER_PREFIX}{subject}")];
+        out.extend(self.units.chain(unit));
+        out
+    }
+
+    /// The platform roles held by a unit of a chain (`PlatformRoles`).
+    pub fn platform_roles(&self, chain: &[String]) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for a in &self.assignments {
+            if a.project.is_empty() && chain.contains(&a.org) {
+                for r in &a.roles {
+                    if !out.contains(r) {
+                        out.push(r.clone());
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// Whether a subject holds the administration of the platform (`Enrich(...).HasRole(RoleAdmin)`).
+    pub fn administers(&self, subject: &str) -> bool {
+        self.platform_roles(&self.subject_chain(subject))
+            .iter()
+            .any(|r| r == ROLE_ADMIN)
+    }
+
+    pub fn has_project(&self, key: &str) -> bool {
+        self.project_keys.contains(key)
+    }
+
+    /// Whether a project, or one above it, is owned by an owner Assignment (`ProjectOwned`).
+    pub fn project_owned(&self, project: &str) -> bool {
+        let chain = self.projects.chain(project);
+        self.assignments
+            .iter()
+            .any(|a| a.owner && !a.project.is_empty() && chain.contains(&a.project))
+    }
+
+    /// The project an Assignment of a key names ([`PLATFORM_SCOPE`] for a platform one) and its owner flag, when the
+    /// snapshot holds it (`AssignmentProject`).
+    pub fn assignment_project(&self, key: &str) -> Option<(String, bool)> {
+        self.assignments.iter().find(|a| a.key == key).map(|a| {
+            if a.project.is_empty() {
+                (PLATFORM_SCOPE.to_string(), false)
+            } else {
+                (a.project.clone(), a.owner)
+            }
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::model::{Link, Node, NodeId, NodeRef, Target};
+
+    fn node(id: &str, key: &str, typ: &str, state: &str, props: Value) -> Node {
+        Node {
+            id: NodeId(id.into()),
+            version: 1,
+            key: key.into(),
+            typ: typ.into(),
+            state: state.into(),
+            props: props.as_object().cloned(),
+            ..Node::default()
+        }
+    }
+
+    fn link(typ: &str, from: &str, to: &str) -> Link {
+        Link {
+            typ: typ.into(),
+            from: NodeRef::new(NodeId(from.into()), 1),
+            to: Target::Node(NodeRef::new(NodeId(to.into()), 1)),
+            id: Default::default(),
+            props: None,
+            change_id: Default::default(),
+        }
+    }
+
+    #[test]
+    fn resolves_platform_roles_and_project_owners() {
+        let nodes = vec![
+            node("o", "ORG-DEFAULT", "organisation@OrgUnit", "", json!({})),
+            node("t", "TEAM", "organisation@OrgUnit", "", json!({})),
+            node("u", "USR:ann", TYPE_USER, "active", json!({"subject": "ann"})),
+            node(
+                "a",
+                "ASG:TEAM/PLATFORM",
+                TYPE_ASSIGNMENT,
+                "active",
+                json!({"roles": ["admin"]}),
+            ),
+            node("p", "PROJ-ROOT", TYPE_PROJECT_UNIT, "", json!({})),
+            node("q", "PROJ-Q", TYPE_PROJECT_UNIT, "", json!({})),
+            node(
+                "b",
+                "ASG:USR:ann/PROJ-ROOT",
+                TYPE_ASSIGNMENT,
+                "active",
+                json!({"owner": true}),
+            ),
+            node(
+                "r",
+                "ASG:USR:ann/OLD",
+                TYPE_ASSIGNMENT,
+                "retired",
+                json!({"roles": ["admin"]}),
+            ),
+        ];
+        let links = vec![
+            link("organisation@part_of", "t", "o"),
+            link(LINK_MEMBER_OF, "u", "t"),
+            link(LINK_ASSIGNS_ORG, "a", "t"),
+            link(LINK_PROJECT_PART_OF, "q", "p"),
+            link(LINK_ASSIGNS_ORG, "b", "u"),
+            link(LINK_ASSIGNS_PROJECT, "b", "p"),
+            link(LINK_ASSIGNS_ORG, "r", "u"),
+        ];
+        let s = Snapshot::build(&nodes, &links);
+        assert_eq!(s.subject_chain("ann"), ["USR:ann", "TEAM", "ORG-DEFAULT"]);
+        assert!(s.administers("ann"));
+        assert!(!s.administers("bob"));
+        assert!(s.project_owned("PROJ-Q"));
+        assert_eq!(
+            s.assignment_project("ASG:USR:ann/PROJ-ROOT"),
+            Some(("PROJ-ROOT".into(), true))
+        );
+        assert_eq!(
+            s.assignment_project("ASG:TEAM/PLATFORM"),
+            Some((PLATFORM_SCOPE.into(), false))
+        );
+        assert_eq!(s.assignment_project("ASG:USR:ann/OLD"), None);
+    }
+}
