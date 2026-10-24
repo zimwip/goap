@@ -1354,13 +1354,15 @@ impl<S: WriteTx> Tx<'_, S> {
     /// Moves a node along its lifecycle in a change (Go's `ImpactNodeTransition`): the state of its draft, the node
     /// checked out first when the change holds no draft of it; the states its children must be in, its CEL guard and
     /// guard algorithms checked, its action algorithms run; a transitioned event with the patch of the state and of the
-    /// properties the actions set.
+    /// properties the actions set. `authorize` decides whether the caller takes the transition (Go's
+    /// `Graph.Authorizer`), given the id and the key of the node and the transition, before anything is written.
     pub async fn impact_node_transition(
         &mut self,
         id: &ChangeId,
         flow: &str,
         n: NodeCheckout,
         to: &str,
+        authorize: &Authorize<'_>,
     ) -> Result<ChangeImpact> {
         if to.is_empty() {
             return Err(GraphError::invalid("a transition names the state it goes to"));
@@ -1368,19 +1370,24 @@ impl<S: WriteTx> Tx<'_, S> {
         let execution = n.execution.clone();
         // what the Go service serves is known before anything is written (the declaration of an impact moves the
         // sequence of the log)
-        if let Some((typ, state, declares)) = self.transition_source(id, flow, &n).await?
-            && let Some(lc) = self.catalog().lifecycle(&typ)
+        if let Some(src) = self.transition_source(id, flow, &n).await?
+            && let Some(lc) = self.catalog().lifecycle(&src.typ).cloned()
         {
-            let from = if state.is_empty() {
+            let from = if src.state.is_empty() {
                 lc.initial.as_str()
             } else {
-                state.as_str()
+                src.state.as_str()
             };
             let t = lc.transitions.iter().find(|t| t.from == from && t.to == to);
-            // the Go service resolves the move once to authorize it, in a transaction it rolls back: the impact it
-            // declares there takes a position of the log and of the impacts
-            if declares && t.is_some() && lc.state(to).is_some() {
-                self.store.skip_declaration().await?;
+            if let Some(t) = t
+                && lc.state(to).is_some()
+            {
+                // the Go service resolves the move once to authorize it, in a transaction it rolls back: the impact
+                // it declares there takes a position of the log and of the impacts
+                if src.declares {
+                    self.store.skip_declaration().await?;
+                }
+                authorize(&src.node, &src.key, t)?;
             }
         }
         let mut w = self
@@ -1509,37 +1516,64 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// The type and state of the node a transition moves, as the change sees it, read without writing anything, and
     /// whether the change declares an impact for it; none when it is not found (the operation says why).
-    async fn transition_source(
-        &mut self,
-        id: &ChangeId,
-        flow: &str,
-        n: &NodeCheckout,
-    ) -> Result<Option<(String, String, bool)>> {
+    async fn transition_source(&mut self, id: &ChangeId, flow: &str, n: &NodeCheckout) -> Result<Option<Source>> {
         let w = self.work_on(id, flow).await?;
         let cn = if !n.impact.is_empty() {
             self.views[id].fold.impact(&n.impact).cloned()
         } else {
+            // as `resolve` names it: by node, else by key
             w.seen
                 .iter()
                 .rev()
-                .find(|cn| node_of(cn).as_ref() == Some(&n.node))
+                .find(|cn| {
+                    if !n.node.is_empty() {
+                        node_of(cn).as_ref() == Some(&n.node)
+                    } else {
+                        cn.key == n.key
+                    }
+                })
                 .cloned()
         };
         if let Some(cn) = cn {
             if let Some(d) = self.views[id].seen_draft(&w.flow, &cn.id) {
-                return Ok(Some((d.typ, d.state, false)));
+                return Ok(Some(Source {
+                    node: d.node.0.clone(),
+                    key: d.key,
+                    typ: d.typ,
+                    state: d.state,
+                    declares: false,
+                }));
             }
             let w = Work { cn, ..w };
-            return Ok(self.base(&w).await?.map(|b| (b.typ, b.state, false)));
+            return Ok(self.base(&w).await?.map(|b| Source {
+                node: b.id.0.clone(),
+                key: b.key,
+                typ: b.typ,
+                state: b.state,
+                declares: false,
+            }));
         }
-        if n.node.is_empty() {
+        let mut nid = n.node.clone();
+        if nid.is_empty()
+            && !n.key.is_empty()
+            && let Some(got) = self.store.node_id_by_key(&w.ns, &n.key).await?
+        {
+            nid = got;
+        }
+        if nid.is_empty() {
             return Ok(None);
         }
         let header = read::header_of(self.store, &w.c.baseline_id).await?;
-        let at = read::select(self.store, &header, Some(std::slice::from_ref(&n.node))).await?;
-        let Some(v) = at.get(&n.node) else { return Ok(None) };
-        let b = read::stored_node(self.store, &NodeRef::new(n.node.clone(), *v)).await?;
-        Ok(Some((b.typ, b.state, true)))
+        let at = read::select(self.store, &header, Some(std::slice::from_ref(&nid))).await?;
+        let Some(v) = at.get(&nid) else { return Ok(None) };
+        let b = read::stored_node(self.store, &NodeRef::new(nid.clone(), *v)).await?;
+        Ok(Some(Source {
+            node: b.id.0.clone(),
+            key: b.key,
+            typ: b.typ,
+            state: b.state,
+            declares: true,
+        }))
     }
 
     /// Sends a decided review of the impact w selects back to proposed: the draft it was reviewed on is gone (Go's
@@ -1813,4 +1847,18 @@ async fn hydrate<T: ReadTx>(store: &T, events: &mut [ImpactEvent]) -> Result<()>
         e.draft = Some(d);
     }
     Ok(())
+}
+
+/// Whether the caller takes a transition of a lifecycle on a node, given the id and the key of the node (Go's
+/// `graph.TransitionAuthorizer`).
+pub type Authorize<'a> = dyn Fn(&str, &str, &Transition) -> Result<()> + Sync + 'a;
+
+/// What a transition starts from, as the authorization of the move reads it (Go's first `transitionOf`).
+struct Source {
+    node: String,
+    key: String,
+    typ: String,
+    state: String,
+    /// Whether the change holds no impact on the node yet: the move declares one.
+    declares: bool,
 }

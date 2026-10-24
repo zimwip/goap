@@ -350,7 +350,15 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// Applies every entry as a verdict on its change impact, by the submitter, with the entry's comment and the
     /// global one, all of them or none; the review becomes submitted, final.
-    pub async fn review_submit(&mut self, id: &ChangeId, key: &str, who: &Actor) -> Result<ReviewObject> {
+    /// `allowed` is whether the methodology of the change allows the actor its verdicts, asked by the batch once the
+    /// review stands.
+    pub async fn review_submit(
+        &mut self,
+        id: &ChangeId,
+        key: &str,
+        who: &Actor,
+        allowed: Result<()>,
+    ) -> Result<ReviewObject> {
         let (_, mut r) = self.review_load(id, key, who).await?;
         if r.entries.is_empty() {
             return Err(invalid(format!("review {key} has no entry")));
@@ -383,6 +391,7 @@ impl<S: WriteTx> Tx<'_, S> {
             record_type: TYPE_REVIEW.into(),
             ..ReviewBatch::default()
         };
+        allowed?;
         self.impact_node_review_batch(id, b).await?;
         let all = reviews(&review_items(self.store, id).await?);
         Ok(all.into_iter().find(|o| o.key == key).unwrap_or_default())

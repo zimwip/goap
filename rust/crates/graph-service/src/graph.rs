@@ -5,8 +5,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use goap_connect::{ConnectError, Ctx, Request, Response, async_trait};
 use goap_proto::graph::v1 as pb;
+use graph_catalog::def::Transition;
 use graph_catalog::{Catalog, catalog::STRUCTURE_PROJECT};
 use graph_core::access;
+use graph_core::operations;
 use graph_core::reach::{OPEN_NAMESPACES, Reach};
 use graph_core::write::branchmerge;
 use graph_core::write::merge::Merge;
@@ -46,6 +48,8 @@ use graph_script::abac;
 use graph_store::read::{LogFilter, Session, Tag};
 
 use crate::{State, convert};
+
+mod settings;
 
 /// `goap.graph.v1.GraphService`.
 pub struct Graph {
@@ -786,11 +790,6 @@ impl Graph {
             if !readable.may_read(c) {
                 return Err(connect_error(GraphError::not_found(format!("change {id}"))));
             }
-            if !c.methodology.is_empty() {
-                return Err(connect_error(GraphError::unimplemented(
-                    "the roles a methodology allows an operation (ADR 0103): asked of the registry by the Go service",
-                )));
-            }
         }
         drop(tx);
         let stamp = self.ensure_caller(&caller).await;
@@ -1010,6 +1009,39 @@ async fn read_node(
 
 #[async_trait]
 impl pb::GraphService for Graph {
+    async fn get_pending_settings(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetPendingSettingsRequest>,
+    ) -> Answer<pb::PendingSettingsResponse> {
+        self.get_pending_settings_rpc(Caller::of(&req)?).await
+    }
+
+    async fn stage_settings(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::StageSettingsRequest>,
+    ) -> Answer<pb::PendingSettingsResponse> {
+        let caller = Caller::of(&req)?;
+        self.stage_settings_rpc(caller, req.into_inner().edits).await
+    }
+
+    async fn save_settings(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::SaveSettingsRequest>,
+    ) -> Answer<pb::PendingSettingsResponse> {
+        self.save_settings_rpc(Caller::of(&req)?).await
+    }
+
+    async fn discard_settings(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::DiscardSettingsRequest>,
+    ) -> Answer<pb::PendingSettingsResponse> {
+        self.discard_settings_rpc(Caller::of(&req)?).await
+    }
+
     async fn get_node(&self, _ctx: &Ctx, req: Request<pb::GetNodeRequest>) -> Answer<pb::GetNodeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
@@ -3154,6 +3186,7 @@ impl pb::GraphService for Graph {
             let id = served_change(tx, &m.change_id).await?;
             let c = tx.change_head(&id).await?;
             acc.check_create(&c, tx.catalog(), &m.r#type)?;
+            acc.allow(tx, &m.change_id, operations::IMPACT_CREATE).await?;
             let links = convert::link_writes(&m.links).map_err(|e| GraphError::new(Kind::Invalid, e))?;
             let cn = tx
                 .impact_node_create(
@@ -3190,6 +3223,7 @@ impl pb::GraphService for Graph {
             let id = served_change(tx, &m.change_id).await?;
             let c = tx.change_head(&id).await?;
             acc.check_create(&c, tx.catalog(), m.into.as_ref().map_or("", |i| i.r#type.as_str()))?;
+            acc.allow(tx, &m.change_id, operations::IMPACT_MERGE).await?;
             let into = create_spec(m.into.as_ref(), &m.execution, &by)?;
             let sources = m.sources.iter().map(node_name).collect();
             let out = tx
@@ -3221,6 +3255,7 @@ impl pb::GraphService for Graph {
             for i in &m.into {
                 acc.check_create(&c, tx.catalog(), &i.r#type)?;
             }
+            acc.allow(tx, &m.change_id, operations::IMPACT_SPLIT).await?;
             let into = m
                 .into
                 .iter()
@@ -3255,6 +3290,7 @@ impl pb::GraphService for Graph {
             if m.change_impact_id.is_empty() {
                 acc.gate_node(tx, &m.node_id).await?;
             }
+            acc.allow(tx, &m.change_id, operations::IMPACT_CHECKOUT).await?;
             let mut out = tx
                 .impact_node_checkout(
                     &id,
@@ -3286,6 +3322,7 @@ impl pb::GraphService for Graph {
         let by = caller.subject.clone();
         self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            acc.allow(tx, &m.change_id, operations::IMPACT_CHECKOUT).await?;
             for n in m.nodes.iter().filter(|n| n.change_impact_id.is_empty()) {
                 acc.gate_node(tx, &n.node_id).await?;
             }
@@ -3316,8 +3353,9 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactNodeUpdateResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            acc.allow(tx, &m.change_id, operations::IMPACT_UPDATE).await?;
             let props = m.props.as_ref().map(convert::map).unwrap_or_default();
             let cn = tx
                 .impact_node_update(&id, &m.change_impact_id, props, &m.owner, &m.flow, &m.execution)
@@ -3336,8 +3374,9 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactNodeResolveResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            acc.allow(tx, &m.change_id, operations::IMPACT_RESOLVE).await?;
             let cn = tx.impact_node_resolve(&id, &m.change_impact_id, &m.execution).await?;
             Ok(pb::ImpactNodeResolveResponse {
                 node: Some(convert::change_impact(&cn)),
@@ -3354,7 +3393,8 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let by = caller.subject.clone();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+            acc.allow(tx, &m.change_id, operations::IMPACT_TRANSITION).await?;
             if m.state.is_empty() {
                 return Err(GraphError::invalid("a transition names the state it goes to"));
             }
@@ -3367,7 +3407,8 @@ impl pb::GraphService for Graph {
                 execution: m.execution.clone(),
                 produced_by: by,
             };
-            let cn = tx.impact_node_transition(&id, &m.flow, n, &m.state).await?;
+            let authorize = |node: &str, key: &str, t: &Transition| acc.transition(node, key, t);
+            let cn = tx.impact_node_transition(&id, &m.flow, n, &m.state, &authorize).await?;
             Ok(pb::ImpactNodeTransitionResponse {
                 node: Some(convert::change_impact(&cn)),
             })
@@ -3382,8 +3423,9 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactNodeCancelResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            acc.allow(tx, &m.change_id, operations::IMPACT_CANCEL).await?;
             let cn = tx
                 .impact_node_cancel(&id, &m.change_impact_id, &m.flow, &m.execution)
                 .await?;
@@ -3401,8 +3443,9 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::WithdrawImpactResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            acc.allow(tx, &m.change_id, operations::IMPACT_WITHDRAW).await?;
             tx.withdraw_impacts(&id, std::slice::from_ref(&m.change_impact_id), &m.flow, &m.execution)
                 .await?;
             Ok(pb::WithdrawImpactResponse {})
@@ -3418,11 +3461,12 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::WithdrawImpactsResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             if m.change_impact_ids.is_empty() {
                 return Err(GraphError::invalid("no change impact to withdraw"));
             }
             let id = served_change(tx, &m.change_id).await?;
+            acc.allow(tx, &m.change_id, operations::IMPACT_WITHDRAW).await?;
             tx.withdraw_impacts(&id, &m.change_impact_ids, &m.flow, &m.execution)
                 .await?;
             Ok(pb::WithdrawImpactsResponse {})
@@ -3437,8 +3481,9 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactLinkCreateResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            acc.allow(tx, &m.change_id, operations::IMPACT_LINK_CREATE).await?;
             let l = convert::link_write(&m.r#type, m.to.as_ref(), &m.target, m.props.as_ref())
                 .map_err(|e| GraphError::new(Kind::Invalid, e))?;
             let link = tx
@@ -3458,8 +3503,9 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactLinkUpdateResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            acc.allow(tx, &m.change_id, operations::IMPACT_LINK_UPDATE).await?;
             let props = m.props.as_ref().map(convert::map);
             let link = tx
                 .impact_link_update(&id, &m.link_id.as_str().into(), props, &m.flow, &m.execution)
@@ -3478,8 +3524,9 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactLinkDeleteResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            acc.allow(tx, &m.change_id, operations::IMPACT_LINK_DELETE).await?;
             tx.impact_link_delete(&id, &m.link_id.as_str().into(), &m.flow, &m.execution)
                 .await?;
             Ok(pb::ImpactLinkDeleteResponse {})
@@ -3494,8 +3541,9 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::CommitChangeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            acc.allow(tx, &m.change_id, operations::CHANGE_COMMIT).await?;
             let b = tx.commit_change(&id, &m.baseline_name).await?;
             Ok(pb::CommitChangeResponse {
                 baseline: Some(convert::baseline(&b, None)),
@@ -3514,12 +3562,11 @@ impl pb::GraphService for Graph {
                 "a commit carrying the events of a service (ADR 0136): not served here yet",
             )));
         }
-        // a person's commit is the Go service's (`write`); a platform service is no user to make sure of
-        let owner = if caller.person() {
-            m.owner_org.clone()
-        } else {
-            self.resolve_owner(&caller, &m.owner_org).await.map_err(|(e, _)| e)?.0
+        let (owner, stamp) = match self.resolve_owner(&caller, &m.owner_org).await {
+            Ok(v) => v,
+            Err((e, stamp)) => return stamp.on(Err(e)),
         };
+        let person = caller.person();
         let edits: Vec<NodeEdit> = m
             .edits
             .iter()
@@ -3552,50 +3599,56 @@ impl pb::GraphService for Graph {
                 state: e.state.clone(),
             })
             .collect();
-        self.write(caller, async |tx| {
-            // the access nodes are gated by the service (`gateAccess`)
-            for e in &edits {
-                let mut typ = e.typ.clone();
-                if let Some(pre) = &e.pre
-                    && let Ok(n) = read::stored_node(tx.store, pre).await
-                {
-                    typ = n.typ;
+        stamp.on(self
+            .write_on(caller, &[], async |tx, acc| {
+                // the access nodes are gated by the service (`gateAccess`)
+                for e in &edits {
+                    let mut typ = e.typ.clone();
+                    if let Some(pre) = &e.pre
+                        && let Ok(n) = read::stored_node(tx.store, pre).await
+                    {
+                        typ = n.typ;
+                    }
+                    acc.gate_access(tx.catalog(), &typ)?;
                 }
-                if tx.catalog().admin_only(&typ) && !tx.env.administers {
+                platform_served(tx, &m.namespace)?;
+                if person && !m.methodology.is_empty() {
+                    // each operation of the commit asks the roles the methodology allows it to (ADR 0103)
                     return Err(GraphError::unimplemented(
-                        "a commit of an access node (ADR 0068) by a caller not administering the platform: not served here yet",
+                        "a person's commit of a change following a methodology: not served here yet",
                     ));
                 }
-            }
-            platform_served(tx, &m.namespace)?;
-            let project = if !m.project_id.is_empty() {
-                m.project_id.clone()
-            } else if !token_project.is_empty() {
-                token_project.clone()
-            } else {
-                tx.structure_root(STRUCTURE_PROJECT)?
-            };
-            let out = tx
-                .commit_edits(Commit {
-                    namespace: m.namespace.clone(),
-                    title: m.title.clone(),
-                    intent: m.intent.clone(),
-                    methodology: m.methodology.clone(),
-                    data: m.data.as_ref().map(convert::map).filter(|d| !d.is_empty()),
-                    baseline: m.baseline_id.as_str().into(),
-                    by,
-                    baseline_name: m.baseline_name.clone(),
-                    edits,
-                    owner_org: owner.clone(),
-                    project_id: project,
+                let project = if !m.project_id.is_empty() {
+                    m.project_id.clone()
+                } else if !token_project.is_empty() {
+                    token_project.clone()
+                } else {
+                    tx.structure_root(STRUCTURE_PROJECT)?
+                };
+                let out = tx
+                    .commit_edits(
+                        Commit {
+                            namespace: m.namespace.clone(),
+                            title: m.title.clone(),
+                            intent: m.intent.clone(),
+                            methodology: m.methodology.clone(),
+                            data: m.data.as_ref().map(convert::map).filter(|d| !d.is_empty()),
+                            baseline: m.baseline_id.as_str().into(),
+                            by,
+                            baseline_name: m.baseline_name.clone(),
+                            edits,
+                            owner_org: owner.clone(),
+                            project_id: project,
+                        },
+                        &|node: &str, key: &str, t: &Transition| acc.transition(node, key, t),
+                    )
+                    .await?;
+                Ok(pb::CommitEditsResponse {
+                    change_id: out.change.0.clone(),
+                    baseline: Some(convert::baseline(&out.baseline, None)),
                 })
-                .await?;
-            Ok(pb::CommitEditsResponse {
-                change_id: out.change.0.clone(),
-                baseline: Some(convert::baseline(&out.baseline, None)),
             })
-        })
-        .await
+            .await)
     }
 
     async fn merge_change(&self, _ctx: &Ctx, req: Request<pb::MergeChangeRequest>) -> Answer<pb::MergeChangeResponse> {
@@ -3607,8 +3660,9 @@ impl pb::GraphService for Graph {
             )));
         }
         let res = self
-            .write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+            .write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
                 let id = served_change(tx, &m.change_id).await?;
+                acc.allow(tx, &m.change_id, operations::CHANGE_MERGE).await?;
                 let r = match tx.merge_change(&id).await? {
                     Merge::Applied(r) => r,
                     // the rebase is kept: committed, then the merge refused
@@ -3725,8 +3779,15 @@ impl pb::GraphService for Graph {
         let m = req.into_inner();
         let who = reviewer(&caller);
         self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+            // the verdicts are the operation the methodology allows (`review.Service.Submit` asks the batch)
+            let allowed = acc.allow(tx, &m.change_id, operations::IMPACT_REVIEW).await;
             let r = tx
-                .review_submit(&m.change_id.as_str().into(), &m.key, &acc.reviewer(who.clone())?)
+                .review_submit(
+                    &m.change_id.as_str().into(),
+                    &m.key,
+                    &acc.reviewer(who.clone())?,
+                    allowed,
+                )
                 .await?;
             Ok(review_pb(&r))
         })
@@ -3755,8 +3816,9 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactNodeReviewResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            acc.allow(tx, &m.change_id, operations::IMPACT_REVIEW).await?;
             let b = ReviewBatch {
                 id: String::new(),
                 flow: m.flow.clone(),
@@ -3783,7 +3845,8 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactNodeReviewBatchResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+            acc.allow(tx, &m.change_id, operations::IMPACT_REVIEW).await?;
             if m.verdicts.is_empty() {
                 // refused before the change is read (Go's `reviewBatch`)
                 return Err(GraphError::invalid("a review batch needs at least one verdict"));
@@ -3818,6 +3881,9 @@ impl pb::GraphService for Graph {
     }
 }
 
+/// A role no one holds: an operation a methodology allows to no role is the administrators' (`graphsvc.noRole`).
+const NO_ROLE: &str = "-";
+
 /// The actor of a review call (`graphsvc.Handler.reviewer`): the writes served here are a platform service's, which
 /// acts on the reviews of others as an administrator does.
 fn reviewer(caller: &Caller) -> Actor {
@@ -3833,6 +3899,81 @@ impl Access {
     fn reviewer(&self, mut who: Actor) -> Result<Actor, GraphError> {
         who.admin = !self.person || self.administers()?;
         Ok(who)
+    }
+
+    /// Whether the caller takes a transition of a lifecycle on a node (Go's `graphsvc.TransitionAuthorizer`): the
+    /// permission the transition declares, by default `node:transition`, on the caller's unit and active project.
+    fn transition(&self, node: &str, key: &str, t: &Transition) -> Result<(), GraphError> {
+        let (typ, act) = if t.permission.is_empty() {
+            ("node", "transition")
+        } else {
+            match t.permission.split_once(':') {
+                Some((typ, act)) if !typ.is_empty() && !act.is_empty() => (typ, act),
+                _ => return Err(GraphError::internal("permission must be <resource>:<action>")),
+            }
+        };
+        self.check(
+            act,
+            abac::Resource {
+                typ: typ.into(),
+                id: node.into(),
+                name: key.into(),
+                org: self.who.org.clone(),
+                project_id: self.project.clone(),
+                ..abac::Resource::default()
+            },
+        )
+    }
+
+    /// Whether the methodology of a change allows the caller an operation on it (Go's `Graph.allow` over
+    /// `graphsvc.OperationAuthorizer`, ADR 0103, 0138): `operation:perform` with the roles the methodology allows it
+    /// to, no role allowing it leaving it to the administrators. A platform service, a change that does not exist and
+    /// one following no methodology are not asked; a methodology the registry does not hold refuses. The registry
+    /// would also refuse a version the domains in force suspend: that is not seen here (ADR 0125 §3).
+    async fn allow(&self, tx: &Tx<'_, Session>, id: &str, op: &str) -> Result<(), GraphError> {
+        if self.who.subject.starts_with("system:") || uuid::Uuid::parse_str(id).is_err() {
+            return Ok(());
+        }
+        let id = ChangeId::from(id);
+        let Ok(mut heads) = change::change_heads(tx.store, std::slice::from_ref(&id)).await else {
+            return Ok(());
+        };
+        let Some(c) = heads.remove(&id) else { return Ok(()) };
+        if c.methodology.is_empty() {
+            return Ok(());
+        }
+        let reference = if c.methodology_version.is_empty() {
+            c.methodology.clone()
+        } else {
+            format!("{}@{}", c.methodology, c.methodology_version)
+        };
+        let Some(mut allowed) = operations::operation_roles(tx.store, &reference, op).await? else {
+            return Err(GraphError::internal(format!("unknown methodology {reference}")));
+        };
+        if allowed.is_empty() {
+            allowed = vec![NO_ROLE.into()];
+        }
+        let res = abac::Resource {
+            typ: "operation".into(),
+            id: c.id.0.clone(),
+            name: op.into(),
+            org: c.owner_org.key.clone(),
+            project_id: c.project_id.key.clone(),
+            roles: allowed.clone(),
+            ..abac::Resource::default()
+        };
+        self.check("perform", res).map_err(|e| {
+            GraphError::new(
+                Kind::Forbidden,
+                format!(
+                    "{op} on change {} needs one of the roles [{}] of methodology {}: {}",
+                    c.id.0,
+                    allowed.join(" "),
+                    c.methodology,
+                    e.message
+                ),
+            )
+        })
     }
 
     /// The gate of the access nodes for a node a call names by its id (`gateImpact`): the type of its latest version.
@@ -4242,16 +4383,19 @@ async fn create_user(tx: &mut Tx<'_, Session>, subject: &str, key: &str) -> Resu
     let title = format!("User {subject}");
     let project = tx.structure_root(STRUCTURE_PROJECT)?;
     match tx
-        .commit_edits(Commit {
-            namespace: graph_core::model::NAMESPACE_ORGANISATION.into(),
-            title: title.clone(),
-            intent: title.clone(),
-            by: "graphsvc.seed".into(),
-            baseline_name: title,
-            edits,
-            project_id: project,
-            ..Commit::default()
-        })
+        .commit_edits(
+            Commit {
+                namespace: graph_core::model::NAMESPACE_ORGANISATION.into(),
+                title: title.clone(),
+                intent: title.clone(),
+                by: "graphsvc.seed".into(),
+                baseline_name: title,
+                edits,
+                project_id: project,
+                ..Commit::default()
+            },
+            &|_: &str, _: &str, _: &Transition| Ok(()),
+        )
         .await
     {
         Err(e) if e.message.ends_with(&format!("{NOTHING_TO_COMMIT}: invalid")) => Ok(()),

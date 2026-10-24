@@ -11,7 +11,7 @@ use super::{
     commit::NOTHING_TO_COMMIT,
     review::{ReviewBatch, Verdict, draft_changed},
     tx::Tx,
-    work::{LinkWrite, NodeCheckout, NodeCreate},
+    work::{Authorize, LinkWrite, NodeCheckout, NodeCreate},
 };
 use crate::{
     GraphError, Result, gojson,
@@ -94,7 +94,8 @@ fn link_to(t: &Target) -> Option<&NodeId> {
 
 impl<S: WriteTx> Tx<'_, S> {
     /// Runs the edits as one change (Go's `Graph.Commit` with no event carried).
-    pub async fn commit_edits(&mut self, inp: Commit) -> Result<CommitResult> {
+    /// The moves of the state edits are authorized by `authorize` (Go's `Graph.Authorizer`).
+    pub async fn commit_edits(&mut self, inp: Commit, authorize: &Authorize<'_>) -> Result<CommitResult> {
         if inp.edits.is_empty() {
             return Err(GraphError::invalid("a commit needs at least one edit"));
         }
@@ -305,6 +306,7 @@ impl<S: WriteTx> Tx<'_, S> {
                     ..NodeCheckout::default()
                 },
                 &e.state,
+                authorize,
             )
             .await
             .map_err(|err| err.context(node_name(e)))?;

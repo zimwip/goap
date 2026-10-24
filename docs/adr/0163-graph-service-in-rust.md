@@ -422,4 +422,19 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   (`Snapshot::criticality_policy`), then, for a derogation a person writes, `derogation:sign`, its signatory the writer
   and the role the level asks of a signatory (`authorize_items`, Go's `graphsvc.ItemAuthorizer`); the items are
   validated as `risk.Register` and `verify.Register` do. 5460 calls, the divergent ones the known ones.
+- The roles of a methodology and the permissions of the transitions (ADR 0103, 0058): every operation of the
+  catalogue a person performs on a change following a methodology asks `Access::allow` (Go's `Graph.allow` and
+  `graphsvc.OperationAuthorizer`) where Go asks it, the roles read from the methodology's version as the registry
+  stores it in the graph, at the head of main of `methodology` (`graph_core::operations`: the catalogue,
+  `operation_roles`; the elements keyed `<header>/role/<name>`); `perform` on the operation is then judged by the ABAC
+  rules, a methodology the graph holds no version of is the registry's `unknown methodology`. A node transition asks the
+  permission its lifecycle declares (`Access::transition`, Go's `TransitionAuthorizer`, for system callers too) after
+  the rolled-back declaration Go takes, a node named by key included; a person's `CommitEdits` on a change following no
+  methodology asks it for its state edits (one following a methodology stays Go's). The settings dialog of ADR 0122
+  (`GetPendingSettings`, `StageSettings`, `SaveSettings`, `DiscardSettings`, `graph/settings.rs`) runs in one
+  transaction, each of Go's operations a savepoint kept by `Tx::checkpoint` once it succeeds and rewound when refused,
+  so a refusal keeps the steps before it as Go's separate transactions do; anything not served undoes the call for Go;
+  the platform's namespaces for a caller administering the platform only. The compare stack's Go graph asks a
+  registry reading it directly (through the compare proxy, a call made inside a call waits behind it). 6276 calls, the
+  divergent ones the known ones.
 - Not done yet: the rest of phase 4.

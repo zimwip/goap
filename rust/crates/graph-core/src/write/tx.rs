@@ -83,7 +83,7 @@ pub struct Tx<'s, S: WriteTx> {
 }
 
 /// What a transaction holds in memory when a rehearsal starts (the locks taken stay).
-pub(super) struct Rehearsal {
+pub struct Rehearsal {
     change_refs: BTreeMap<ChangeId, String>,
     owners: BTreeMap<String, (Url, String)>,
     projects: BTreeMap<String, (Url, String)>,
@@ -131,7 +131,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
 
     /// Starts a pass the Go service runs then rolls back (its `gated`): a savepoint, and what the transaction holds
     /// in memory, given back by [`Tx::rewind`].
-    pub(super) async fn rehearse(&mut self) -> Result<Rehearsal> {
+    pub async fn rehearse(&mut self) -> Result<Rehearsal> {
         self.store.savepoint().await?;
         Ok(Rehearsal {
             change_refs: self.change_refs.clone(),
@@ -155,7 +155,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
     }
 
     /// Undoes the pass a rehearsal started.
-    pub(super) async fn rewind(&mut self, r: Rehearsal) -> Result<()> {
+    pub async fn rewind(&mut self, r: Rehearsal) -> Result<()> {
         self.store.rollback_to_savepoint().await?;
         self.change_refs = r.change_refs;
         self.owners = r.owners;
@@ -534,6 +534,30 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             self.store.append_outbox(&msgs).await?;
         }
         Ok(self.positions)
+    }
+
+    /// Ends a transaction of the Go service within this one (Go's operations called one after the other, each in its
+    /// own transaction): what the transaction wrote so far is checked and its events written, as [`Tx::finish`]
+    /// does, and the next writes are collected afresh. The views of the changes stay.
+    pub async fn checkpoint(&mut self) -> Result<()> {
+        self.verify().await?;
+        if self.env.outbox {
+            let msgs = self.events().await?;
+            if !msgs.is_empty() {
+                self.store.append_outbox(&msgs).await?;
+            }
+        }
+        self.change_refs.clear();
+        self.owners.clear();
+        self.projects.clear();
+        self.changes.clear();
+        self.written.clear();
+        self.touched.clear();
+        self.written_headers.clear();
+        self.indexed.clear();
+        self.purged.clear();
+        self.seq.clear();
+        Ok(())
     }
 
     async fn verify(&mut self) -> Result<()> {

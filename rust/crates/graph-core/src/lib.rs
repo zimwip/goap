@@ -14,6 +14,7 @@ pub mod impact;
 pub mod items;
 pub mod lnk;
 pub mod model;
+pub mod operations;
 pub mod page;
 pub mod reach;
 pub mod read;

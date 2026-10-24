@@ -36,6 +36,8 @@ pub struct State {
     /// The changes this graph was found to hold, remembered as Go's router does (`Router.changeBase`): one purged since
     /// is this graph's still, which answers it is not found, rather than a change another graph may hold.
     pub(crate) held: Mutex<std::collections::HashSet<graph_core::model::ChangeId>>,
+    /// The settings calls of each subject, one at a time (Go's `lockSettings`).
+    pub(crate) settings: Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>,
 }
 
 impl State {
@@ -47,6 +49,7 @@ impl State {
             users: Mutex::new(Default::default()),
             ensuring: Mutex::new(()),
             held: Mutex::new(Default::default()),
+            settings: Mutex::new(Default::default()),
         }
     }
 
