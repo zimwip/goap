@@ -6,7 +6,10 @@ use std::{collections::HashMap, sync::Arc};
 use goap_connect::{ConnectError, Ctx, Request, Response, async_trait};
 use goap_proto::graph::v1 as pb;
 use graph_catalog::def::Transition;
-use graph_catalog::{Catalog, catalog::STRUCTURE_PROJECT};
+use graph_catalog::{
+    Catalog,
+    catalog::{STRUCTURE_ORGANISATION, STRUCTURE_PROJECT},
+};
 use graph_core::access;
 use graph_core::operations;
 use graph_core::reach::{OPEN_NAMESPACES, Reach};
@@ -457,6 +460,9 @@ fn item_writes(items: Vec<pb::ChangeItem>) -> Result<Vec<ItemWrite>, ConnectErro
         .collect()
 }
 
+/// The refusal of a read whose view of a change does not reach the position asked for (`graphapi.ErrBehind`).
+const BEHIND: &str = "the view of the change is behind the position asked for";
+
 /// The header naming, on a Connect error, the sentinel finer than its code (`lib/rpcerr`).
 const REASON_HEADER: &str = "Goap-Error-Reason";
 
@@ -464,6 +470,9 @@ const REASON_HEADER: &str = "Goap-Error-Reason";
 pub(crate) fn connect_error(e: GraphError) -> ConnectError {
     if e.kind == Kind::Invalid && e.message.ends_with(&format!(": {NOTHING_TO_COMMIT}: invalid")) {
         return ConnectError::invalid_argument(e.message).with_meta(REASON_HEADER, "nothing-to-commit");
+    }
+    if e.kind == Kind::Conflict && e.message.ends_with(&format!(": {BEHIND}: conflict")) {
+        return ConnectError::failed_precondition(e.message).with_meta(REASON_HEADER, "behind");
     }
     match e.kind {
         Kind::NotFound => ConnectError::not_found(e.message),
@@ -487,20 +496,22 @@ fn link_limit(n: i32) -> usize {
     }
 }
 
-/// A unit or a project of a filter as the changes store it: a URL, without its version. A key needs the structures
-/// of the type catalogue (`Graph.StructureURL`): the Go service resolves it for now.
-fn structure_ref(s: &str) -> Result<String, GraphError> {
+/// A unit or a project of a filter as the changes store it (Go's `scopeFilter`): a URL, without its version, a key
+/// named by the URL of its structure; one that does not read is kept as it is.
+fn structure_ref(cat: &Catalog, kind: &str, s: &str) -> String {
     if s.is_empty() {
-        return Ok(String::new());
+        return String::new();
     }
     if !s.starts_with("lnk:") {
-        return Err(GraphError::unimplemented(
-            "a unit or a project named by its key needs the structures of the catalogue: not served here yet",
-        ));
+        return match cat.structure(kind) {
+            Some(st) => {
+                let bare = st.typ.split_once('@').map_or(st.typ.as_str(), |(_, t)| t);
+                Url::new(&st.namespace, bare, s).to_string()
+            }
+            None => s.to_string(),
+        };
     }
-    Url::parse(s)
-        .map(|u| u.logical().to_string())
-        .map_err(GraphError::invalid)
+    Url::parse(s).map_or_else(|_| s.to_string(), |u| u.logical().to_string())
 }
 
 /// The positions of `X-Goap-At-Least` (Go's `graphapi.ParsePositions`): `<change>:<seq>` pairs separated by commas, a
@@ -527,7 +538,7 @@ fn positions(v: &str) -> Vec<(String, i64)> {
 impl Graph {
     /// Whether the logs of the changes the caller names in `X-Goap-At-Least` reach the positions it asks for (ADR
     /// 0153). This service reads the store as committed, so its fold of a log always reaches what the writes before it
-    /// left: a position not reached yet is a refusal of Go's fold (`ErrBehind`), which the Go service words.
+    /// left: a position past its last impact event or fact is refused as Go's fold refuses it (`ErrBehind`).
     async fn reached(&self, caller: &Caller) -> Result<(), ConnectError> {
         if caller.at_least.is_empty() {
             return Ok(());
@@ -544,9 +555,15 @@ impl Graph {
                 .await
                 .map_err(connect_error)?;
             if after.is_empty() {
-                return Err(connect_error(GraphError::unimplemented(
-                    "a read at a position of a change log its fold has not reached (ADR 0153): not served here yet",
-                )));
+                let at = tx
+                    .log(&ChangeId::from(id.as_str()), 0, &["impact.", "fact."])
+                    .await
+                    .map_err(connect_error)?
+                    .last()
+                    .map_or(0, |l| l.seq);
+                return Err(connect_error(GraphError::conflict(format!(
+                    "change {id}: its log is read up to {at}, {seq} asked for: {BEHIND}"
+                ))));
             }
         }
         Ok(())
@@ -2723,12 +2740,14 @@ impl pb::GraphService for Graph {
     async fn list_changes(&self, _ctx: &Ctx, req: Request<pb::ListChangesRequest>) -> Answer<pb::ListChangesResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
+        let state = self.state.clone();
         self.read_changes(caller, &[], async |tx, r| {
+            let cat = state.catalog(tx).await?;
             let f = ChangesFilter {
                 namespace: m.namespace.clone(),
-                owner_org: structure_ref(&m.owner_org)?,
+                owner_org: structure_ref(&cat, STRUCTURE_ORGANISATION, &m.owner_org),
                 status: m.status.clone(),
-                project: structure_ref(&m.project)?,
+                project: structure_ref(&cat, STRUCTURE_PROJECT, &m.project),
                 query: m.query.clone(),
                 ..ChangesFilter::default()
             };
