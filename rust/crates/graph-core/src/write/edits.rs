@@ -67,10 +67,6 @@ pub struct CommitResult {
     pub baseline: Baseline,
 }
 
-fn unserved(what: &str) -> GraphError {
-    GraphError::unimplemented(format!("{what}: not served here yet"))
-}
-
 fn node_name(e: &NodeEdit) -> String {
     match &e.pre {
         Some(p) => p.to_string(),
@@ -97,18 +93,12 @@ fn link_to(t: &Target) -> Option<&NodeId> {
 }
 
 impl<S: WriteTx> Tx<'_, S> {
-    /// Runs the edits as one change (Go's `Graph.Commit` with no state edit, no owner moved and no event carried).
+    /// Runs the edits as one change (Go's `Graph.Commit` with no event carried).
     pub async fn commit_edits(&mut self, inp: Commit) -> Result<CommitResult> {
         if inp.edits.is_empty() {
             return Err(GraphError::invalid("a commit needs at least one edit"));
         }
         for e in &inp.edits {
-            if !e.owner.is_empty() {
-                return Err(unserved("a commit moving the owner of a node"));
-            }
-            if !e.state.is_empty() {
-                return Err(unserved("a commit moving a node in its lifecycle (ADR 0076)"));
-            }
             self.check_required_parent(e)?;
         }
         let c = self
@@ -198,7 +188,7 @@ impl<S: WriteTx> Tx<'_, S> {
                             key: e.key.clone(),
                             typ: e.typ.clone(),
                             props: e.props.clone(),
-                            owner: String::new(),
+                            owner: e.owner.clone(),
                             rationale: why(e),
                             links,
                             execution: String::new(),
@@ -228,7 +218,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 .map_err(|err| err.context(node_name(e)))?;
             impacts[i] = added.id.clone();
             let props = e.props.clone().unwrap_or_default();
-            if props.is_empty() && links.is_empty() && e.remove_links.is_empty() {
+            if props.is_empty() && e.owner.is_empty() && links.is_empty() && e.remove_links.is_empty() {
                 continue;
             }
             let mut out = self
@@ -244,8 +234,8 @@ impl<S: WriteTx> Tx<'_, S> {
                 .map_err(|err| err.context(node_name(e)))?;
             let cn = out.pop().unwrap_or_default();
             posts[i] = cn.post.clone();
-            if !props.is_empty() {
-                self.impact_node_update(&id, &cn.id, props, "", "", "")
+            if !props.is_empty() || !e.owner.is_empty() {
+                self.impact_node_update(&id, &cn.id, props, &e.owner, "", "")
                     .await
                     .map_err(|err| err.context(node_name(e)))?;
             }
@@ -278,6 +268,46 @@ impl<S: WriteTx> Tx<'_, S> {
                         l.to_key
                     ))
                 })?;
+        }
+        // a state edit is a move of the node's draft (a node with none is checked out by the move)
+        for (i, e) in inp.edits.iter().enumerate() {
+            if e.state.is_empty() {
+                continue;
+            }
+            self.view(&id).await?;
+            let (node, mut cur) = match &posts[i] {
+                Some(_) => match self.views[&id].fold.draft(&impacts[i], "") {
+                    Some(d) => (d.node.clone(), d.state.clone()),
+                    None => return Err(GraphError::not_found(format!("the draft of {}", node_name(e)))),
+                },
+                None => {
+                    let pre = e.pre.clone().unwrap_or_default();
+                    (pre.id.clone(), crate::read::stored_node(self.store, &pre).await?.state)
+                }
+            };
+            if cur.is_empty()
+                && e.pre.is_none()
+                && let Some(lc) = self.catalog().lifecycle(&e.typ)
+            {
+                cur = lc.initial.clone();
+            }
+            if cur == e.state {
+                continue;
+            }
+            self.impact_node_transition(
+                &id,
+                "",
+                NodeCheckout {
+                    impact: impacts[i].clone(),
+                    node,
+                    rationale: why(e),
+                    produced_by: inp.by.clone(),
+                    ..NodeCheckout::default()
+                },
+                &e.state,
+            )
+            .await
+            .map_err(|err| err.context(node_name(e)))?;
         }
         // each impact that modifies its node is accepted by the producer, one that modifies nothing withdrawn
         let mut verdicts = Vec::new();

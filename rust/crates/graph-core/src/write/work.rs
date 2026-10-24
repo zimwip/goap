@@ -8,6 +8,7 @@
 //! request on the Go service.
 use std::collections::{HashMap, HashSet};
 
+use graph_catalog::catalog::STRUCTURE_ORGANISATION;
 use serde_json::{Map, Value};
 
 use super::{
@@ -823,9 +824,6 @@ impl<S: WriteTx> Tx<'_, S> {
         if inp.key.is_empty() || inp.typ.is_empty() {
             return Err(GraphError::invalid("a node needs a key and a type"));
         }
-        if !inp.owner.is_empty() {
-            return Err(unserved("a node created with an owner of its own"));
-        }
         let w = self
             .resolve(
                 id,
@@ -856,6 +854,9 @@ impl<S: WriteTx> Tx<'_, S> {
             d.state = lc.initial.clone();
         }
         check::attributes(self.catalog(), &d.key, &d.typ, d.props.as_ref())?;
+        if !inp.owner.is_empty() {
+            d.owner = self.resolve_structure(STRUCTURE_ORGANISATION, &inp.owner).await?;
+        }
         for l in &inp.links {
             let dl = self.new_draft_link(&w, &d, l).await?;
             d.links.push(dl);
@@ -1065,9 +1066,6 @@ impl<S: WriteTx> Tx<'_, S> {
         if props.is_empty() && owner.is_empty() {
             return Err(GraphError::invalid("nothing to update"));
         }
-        if !owner.is_empty() {
-            return Err(unserved("a move of the owner of a node"));
-        }
         let mut w = self
             .resolve(
                 id,
@@ -1080,11 +1078,17 @@ impl<S: WriteTx> Tx<'_, S> {
             )
             .await?;
         let d = self.working(&w)?;
-        let mut merged = d.props.clone().unwrap_or_default();
-        merged.extend(props.clone());
-        check::attributes(self.catalog(), &d.key, &d.typ, Some(&merged))?;
         let mut patch = Map::new();
-        patch.insert("props".into(), Value::Object(props));
+        if !props.is_empty() {
+            let mut merged = d.props.clone().unwrap_or_default();
+            merged.extend(props.clone());
+            check::attributes(self.catalog(), &d.key, &d.typ, Some(&merged))?;
+            patch.insert("props".into(), Value::Object(props));
+        }
+        if !owner.is_empty() {
+            let unit = self.resolve_structure(STRUCTURE_ORGANISATION, owner).await?;
+            patch.insert("owner".into(), Value::String(unit.to_string()));
+        }
         let r = d.draft_ref();
         self.emit_updated(&mut w, &r, execution, patch).await?;
         Ok(w.seen_as(&r))

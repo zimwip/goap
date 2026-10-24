@@ -127,6 +127,13 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(n)
     }
 
+    /// What an input names as a node of a structure, read and spelled as its URL (Go's `resolveStructure`).
+    pub async fn resolve_structure(&self, kind: &str, s: &str) -> Result<Url> {
+        let u = self.structure_ref(kind, s)?;
+        let n = self.structure_node(kind, &u).await?;
+        self.structure_url(kind, &n.key)
+    }
+
     /// The root of a structure.
     pub fn structure_root(&self, kind: &str) -> Result<String> {
         self.catalog()

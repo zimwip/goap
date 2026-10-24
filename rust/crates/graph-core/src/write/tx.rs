@@ -449,6 +449,19 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             .map(|v| v.seq)
             .or_else(|| self.seq.get(&c.id).copied())
             .unwrap_or(0);
+        self.raise_at(typ, c, seq, baseline, branch, nodes);
+    }
+
+    /// Raises an event of a change as it stands at a position of its log (0: a change the call made, never read).
+    pub fn raise_at(
+        &mut self,
+        typ: &str,
+        c: &Change,
+        seq: i64,
+        baseline: Option<&Baseline>,
+        branch: &str,
+        nodes: &[EventNode],
+    ) {
         let ev = ChangeEvent {
             typ,
             change: ChangeJson::of(c, seq),

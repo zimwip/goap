@@ -324,4 +324,8 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   target, one changed on both a merge version with its merged links, the baseline of kind merge (its event the delta on
   main only), the source branch merged: 1864 calls, one divergent (the `removeLink` order above), the tables the same
   but the orders of ids in the change log, the events of the outbox but the order of a baseline's `set`.
+  The owner of a node follows (Go's `resolveStructure`: given at its creation, moved by `ImpactNodeUpdate` and by the
+  edits of `CommitEdits`), with the state edits of `CommitEdits` (the move of each draft, a node with none checked out
+  by the move): 1905 calls, none divergent, the tables the same but an order of ids in the change log, the events of
+  the outbox but the order of a baseline's `set`.
 - Not done yet: the rest of phase 4.

@@ -682,8 +682,9 @@ impl<S: WriteTx> Tx<'_, S> {
         c.result_baseline_id = res.id.clone();
         self.put_change(&c).await?;
         let ev: Vec<EventNode> = merged_nodes.iter().map(EventNode::of).collect();
-        self.raise(CHANGE_MERGED, &c, Some(&res), &into, &ev);
-        self.raise(CHANGE_APPLIED, &c, Some(&res), "", &[]);
+        // the change as the merge made it, never read from its log (Go's `Change.Seq` 0)
+        self.raise_at(CHANGE_MERGED, &c, 0, Some(&res), &into, &ev);
+        self.raise_at(CHANGE_APPLIED, &c, 0, Some(&res), "", &[]);
         fb.status = BRANCH_MERGED.into();
         self.put_branch(&fb).await?;
         Ok(MergeResult {
