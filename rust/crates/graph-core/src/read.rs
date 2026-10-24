@@ -3,8 +3,8 @@
 //!
 //! A branch view is a baseline (the head of the branch when the view names none) whose state is a selection: the last
 //! commit of each node on its branch up to its order, else, past the fork, on the branch it was forked from (ADR 0143).
-//! A change view (its fork, its commits, its drafts folded from its log) is read here for one node at a time
-//! ([`World::open_node`]), on the flow it names (else the active option): the impacts and drafts that flow sees.
+//! A change view (its fork, its commits, its drafts folded from its log) is read here too ([`World::open`]), on the
+//! flow it names (else the active option): the impacts and drafts that flow sees.
 use std::collections::{HashMap, HashSet};
 
 use crate::{
@@ -368,13 +368,11 @@ fn lay_commits(state: &mut HashMap<NodeId, Version>, commits: HashMap<NodeId, Ve
 }
 
 impl<'a, T: ReadTx> World<'a, T> {
-    /// Opens a view: a branch at a baseline of it, else at its head.
+    /// Opens a view: a branch at a baseline of it, else at its head; a change on a flow.
     pub async fn open(tx: &'a T, view: &View) -> Result<World<'a, T>> {
         view.check()?;
         if view.is_change() {
-            return Err(GraphError::unimplemented(format!(
-                "{view}: the views of a change are read by the Go service"
-            )));
+            return World::open_change(tx, view).await;
         }
         let namespace = namespace_of(&view.namespace).to_string();
         let baseline = if view.baseline.is_empty() {
@@ -399,13 +397,9 @@ impl<'a, T: ReadTx> World<'a, T> {
         })
     }
 
-    /// Opens a view to read a node in, a change view included (Go's `openWorld`): the change's fork, what it committed
-    /// on its branch, its drafts laid over them.
-    pub async fn open_node(tx: &'a T, view: &View) -> Result<World<'a, T>> {
-        if !view.is_change() {
-            return World::open(tx, view).await;
-        }
-        view.check()?;
+    /// Opens a change view (Go's `openWorld`): the change's fork, what it committed on its branch, its drafts laid over
+    /// them.
+    async fn open_change(tx: &'a T, view: &View) -> Result<World<'a, T>> {
         let c = tx
             .change(&view.change)
             .await?
@@ -537,7 +531,15 @@ impl<'a, T: ReadTx> World<'a, T> {
         select(self.tx, &self.baseline, Some(ids)).await
     }
 
+    /// A node of the view at a version `at` answered: the draft of a change view for version 0 (Go's
+    /// `draftReader.node`), else the stored version.
     async fn node(&self, r: &NodeRef) -> Result<Node> {
+        if let Some(cw) = &self.change
+            && r.is_draft()
+            && let Some(d) = cw.draft(&r.id)
+        {
+            return Ok(cw.draft_node(d));
+        }
         stored_node(self.tx, r).await
     }
 
@@ -890,9 +892,14 @@ impl<'a, T: ReadTx> World<'a, T> {
             return Err(GraphError::not_found(format!("node {id} in {}", self.view)));
         }
         let keep = |l: &Link| types.is_none_or(|ts| ts.contains(&l.typ));
-        let mut out = match types {
-            Some([]) => Vec::new(),
-            _ => self.tx.links_from(std::slice::from_ref(&r), types).await?,
+        let draft = match &self.change {
+            Some(cw) if r.is_draft() => cw.draft(id).map(|d| cw.out_links(d)),
+            _ => None,
+        };
+        let mut out = match (draft, types) {
+            (Some(links), _) => links,
+            (None, Some([])) => Vec::new(),
+            (None, _) => self.tx.links_from(std::slice::from_ref(&r), types).await?,
         };
         let mut r#in = match types {
             Some([]) => Vec::new(),
@@ -900,6 +907,19 @@ impl<'a, T: ReadTx> World<'a, T> {
         };
         out.retain(keep);
         r#in.retain(keep);
+        // the drafts of a change hold links into the node too
+        if let Some(cw) = &self.change {
+            let mut drafted: Vec<&NodeId> = cw.over.iter().filter(|(_, v)| **v == 0).map(|(n, _)| n).collect();
+            drafted.sort();
+            for d in drafted.into_iter().filter(|d| *d != id) {
+                let Some(d) = cw.draft(d) else { continue };
+                r#in.extend(
+                    cw.out_links(d)
+                        .into_iter()
+                        .filter(|l| l.to_node().is_some_and(|t| t.id == *id) && keep(l)),
+                );
+            }
+        }
 
         let mut ends: Vec<NodeId> = out
             .iter()
@@ -926,6 +946,8 @@ impl<'a, T: ReadTx> World<'a, T> {
                 refs.push(l.from.clone());
             }
         }
+        // a draft is read from the change, by `meet`
+        refs.retain(|r| !r.is_draft());
         let mut near: HashMap<NodeRef, Node> = self
             .tx
             .nodes_at(&refs, "")
@@ -1027,6 +1049,8 @@ impl<'a, T: ReadTx> World<'a, T> {
         };
         let mut page = if !q.change.is_empty() {
             page_nodes(self.change_nodes(q).await?, q)
+        } else if let Some(cw) = &self.change {
+            self.written_page(cw, q).await?
         } else if self.baseline.id.is_empty() {
             NodePage::default()
         } else {
@@ -1043,7 +1067,71 @@ impl<'a, T: ReadTx> World<'a, T> {
         Ok(page)
     }
 
-    /// The nodes the impacts of a change act on, as the baseline holds them, by key (ADR 0137): never the whole state.
+    /// The page of a change view (Go's `world.nodes`): the fork's nodes the change left alone, paged by the store, with
+    /// the nodes it holds another version of (its commits, its drafts, the nodes it created), read node by node.
+    async fn written_page(&self, cw: &ChangeWorld, q: &NodeQuery) -> Result<NodePage> {
+        let mut mine: Vec<NodeId> = match &cw.own {
+            Some(own) => self.tx.branch_node_ids(&own.name).await?,
+            None => Vec::new(),
+        };
+        mine.extend(cw.over.keys().cloned());
+        mine.extend(cw.gone.iter().cloned());
+        mine.sort();
+        mine.dedup();
+        let at = self.at(&mine).await?;
+        let mut written = Vec::new();
+        for id in &mine {
+            let Some(&v) = at.get(id) else { continue };
+            let n = self.node(&NodeRef::new(id.clone(), v)).await?;
+            if self.sees(&n) {
+                written.push(n);
+            }
+        }
+        // the fork, the nodes the change wrote left out, paged with room for them
+        let mut page = NodePage::default();
+        if !self.baseline.id.is_empty() {
+            let mut refs: Vec<NodeRef> = select(self.tx, &self.baseline, None)
+                .await?
+                .into_iter()
+                .filter(|(n, _)| mine.binary_search(n).is_err())
+                .map(|(n, v)| NodeRef::new(n, v))
+                .collect();
+            if !refs.is_empty() {
+                refs.sort();
+                let wide = NodeQuery {
+                    offset: 0,
+                    limit: q.offset.saturating_add(q.limit),
+                    ..q.clone()
+                };
+                page = self.tx.node_page(&refs, &wide).await?;
+            }
+        }
+        let extra = page_nodes(
+            written,
+            &NodeQuery {
+                typ: q.typ.clone(),
+                text: q.text.clone(),
+                include_deleted: q.include_deleted,
+                limit: q.offset.saturating_add(q.limit).max(MAX_BROWSE_LIMIT),
+                ..NodeQuery::default()
+            },
+        );
+        let mut all: Vec<Node> = page.nodes.into_iter().chain(extra.nodes).collect();
+        all.sort_by(|a, b| a.key.cmp(&b.key));
+        let mut counts = std::collections::BTreeMap::new();
+        for t in page.types.iter().chain(&extra.types) {
+            *counts.entry(t.typ.clone()).or_insert(0) += t.count;
+        }
+        Ok(NodePage {
+            nodes: all.into_iter().skip(q.offset).take(q.limit).collect(),
+            total: page.total + extra.total,
+            types: crate::page::type_counts(&counts, "").0,
+            ..NodePage::default()
+        })
+    }
+
+    /// The nodes the impacts of a change act on, as the baseline holds them (a change view's fork), by key (ADR 0137):
+    /// never the whole state.
     async fn change_nodes(&self, q: &NodeQuery) -> Result<Vec<Node>> {
         let mut ids = self
             .tx
@@ -1052,12 +1140,12 @@ impl<'a, T: ReadTx> World<'a, T> {
             .ok_or_else(|| GraphError::not_found(format!("change {}", q.change)))?;
         ids.sort();
         ids.dedup();
-        let refs: Vec<NodeRef> = self
-            .at(&ids)
-            .await?
-            .into_iter()
-            .map(|(n, v)| NodeRef::new(n, v))
-            .collect();
+        let at = if self.baseline.id.is_empty() || ids.is_empty() {
+            HashMap::new()
+        } else {
+            select(self.tx, &self.baseline, Some(&ids)).await?
+        };
+        let refs: Vec<NodeRef> = at.into_iter().map(|(n, v)| NodeRef::new(n, v)).collect();
         if refs.is_empty() {
             return Ok(Vec::new());
         }

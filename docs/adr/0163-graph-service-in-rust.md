@@ -405,4 +405,9 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   no gate judges, is served for any caller. The settings (`GetPendingSettings` … `DiscardSettings`) stay Go's: they
   retire nodes by their transition and commit in the platform's namespaces for persons. 3361 calls, the divergent
   ones the known ones (and a list of changes the Go service on the Rust schema reads stale).
+- The views of a change read whole (`GetNodeNeighbourhood`, `ListBaselineNodes`, `ListViewNodes` naming a change on a
+  flow): `World::open` opens a change view as it opens a node in one, a draft of the view read as a node and its links
+  as the draft's (Go's `draftReader`), the drafts' links into a node among its entering links, and a page of the fork's
+  nodes the change left alone merged with the nodes it wrote, read node by node (`World::written_page`, Go's
+  `world.nodes`). 4748 calls, the divergent ones the known ones.
 - Not done yet: the rest of phase 4.

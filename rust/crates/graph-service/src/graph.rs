@@ -355,7 +355,7 @@ async fn change_world<'a, T: ReadTx>(tx: &'a T, id: &str, flow: &str) -> Result<
         flow: flow.to_string(),
         ..Default::default()
     };
-    World::open_node(tx, &view).await
+    World::open(tx, &view).await
 }
 
 /// Refuses a change that does not exist.
@@ -878,7 +878,7 @@ async fn read_node(
     let v = if key.is_empty() && r.version > 0 {
         read::version_view(tx, &r).await?
     } else {
-        World::open_node(tx, &view)
+        World::open(tx, &view)
             .await?
             .reached(who.reach().as_ref())
             .node_view(&r.id, key)
@@ -1052,7 +1052,7 @@ impl pb::GraphService for Graph {
         .await
     }
 
-    /// The nodes of a type a view holds, all of them (`ViewNodesOfType`): a branch view; a change view is still Go's.
+    /// The nodes of a type a view holds, all of them (`ViewNodesOfType`).
     async fn list_view_nodes(
         &self,
         _ctx: &Ctx,
@@ -1086,7 +1086,7 @@ impl pb::GraphService for Graph {
         let m = req.into_inner();
         self.read_view(caller, m.view.as_ref(), async |tx, _| {
             let v = convert::view(m.view.as_ref());
-            let w = World::open_node(tx, &v).await?;
+            let w = World::open(tx, &v).await?;
             let main_head = if !v.is_change() && graph_core::model::branch_of(&v.branch) == MAIN_BRANCH {
                 v.baseline.is_empty() || read::branch_head(tx, &w.namespace, MAIN_BRANCH).await?.id == v.baseline
             } else {
@@ -1624,7 +1624,7 @@ impl pb::GraphService for Graph {
                         format!("tag {}: name a version or a view: {}", r.id, graph_core::view::NO_VIEW),
                     ));
                 };
-                r.version = World::open_node(tx.store, &convert::view(Some(view)))
+                r.version = World::open(tx.store, &convert::view(Some(view)))
                     .await?
                     .node_view(&r.id, "")
                     .await?
@@ -2181,7 +2181,7 @@ impl pb::GraphService for Graph {
                 },
                 ..Default::default()
             };
-            let world = World::open_node(tx, &view).await?;
+            let world = World::open(tx, &view).await?;
             let (views, neighbours) = world.blackboard().await?;
             let nodes = views
                 .iter()
