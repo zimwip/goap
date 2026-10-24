@@ -6,7 +6,7 @@
 // (`normalize`), so a new preference touches no backend code.
 import { preferencesApi, errorMessage, type Struct } from '../api';
 import { layout, type Theme } from '../shell/layout.svelte';
-import { voiceSettings, type VoiceLanguage, type VoiceModel } from '../voice/settings.svelte';
+import { isVoiceModel, voiceSettings, type VoiceLanguage, type VoiceModel } from '../voice/settings.svelte';
 import { me } from './session.svelte';
 
 export interface Prefs {
@@ -25,7 +25,7 @@ export interface Prefs {
 export const DEFAULT_PREFS: Prefs = {
   theme: 'auto',
   voiceEnabled: true,
-  voiceModel: 'base',
+  voiceModel: 'auto',
   voiceLanguage: 'auto',
   usagePeriod: '7d',
   usageScope: 'mine',
@@ -44,7 +44,7 @@ function normalize(raw: Record<string, unknown> | undefined): Prefs {
   if (!raw) return p;
   if (raw.theme === 'auto' || raw.theme === 'light' || raw.theme === 'dark') p.theme = raw.theme;
   if (typeof raw.voiceEnabled === 'boolean') p.voiceEnabled = raw.voiceEnabled;
-  if (raw.voiceModel === 'tiny' || raw.voiceModel === 'base') p.voiceModel = raw.voiceModel;
+  if (isVoiceModel(raw.voiceModel)) p.voiceModel = raw.voiceModel;
   if (raw.voiceLanguage === 'auto' || raw.voiceLanguage === 'fr' || raw.voiceLanguage === 'en') p.voiceLanguage = raw.voiceLanguage;
   if (typeof raw.usagePeriod === 'string' && raw.usagePeriod) p.usagePeriod = raw.usagePeriod;
   if (raw.usageScope === 'mine' || raw.usageScope === 'platform') p.usageScope = raw.usageScope;

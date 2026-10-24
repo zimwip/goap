@@ -100,8 +100,10 @@
           <div class="field">
             <label for="pref-voice-model">Model</label>
             <select id="pref-voice-model" value={prefs.values.voiceModel} onchange={(e) => set('voiceModel', e.currentTarget.value as Prefs['voiceModel'])}>
-              <option value="tiny">Tiny (faster)</option>
-              <option value="base">Base (more accurate)</option>
+              <option value="auto">Automatic (fits the device)</option>
+              <option value="tiny">Tiny (fastest, ~40 MB)</option>
+              <option value="base">Base (~80 MB)</option>
+              <option value="small">Small (most accurate, ~250 MB)</option>
             </select>
           </div>
           <div class="field">

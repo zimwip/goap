@@ -1,10 +1,13 @@
 // Main-thread client of the Whisper worker: model loading state and transcription.
 import type { WorkerRequest, WorkerResponse } from './stt.worker';
 import { voiceSettings, type VoiceModel } from './settings.svelte';
+import { plan, probe, type Capabilities, type ModelSize, type Plan } from './plan';
 
 export const stt = $state({
-  /** model currently loaded (or being loaded) */
+  /** choice currently loaded (or being loaded) */
   model: '' as VoiceModel | '',
+  /** the size that choice resolved to on this device */
+  size: '' as ModelSize | '',
   status: 'idle' as 'idle' | 'loading' | 'ready' | 'error',
   /** download progress, 0-100 */
   progress: 0,
@@ -12,13 +15,20 @@ export const stt = $state({
   error: '',
 });
 
-const MODEL_IDS: Record<VoiceModel, string> = {
-  tiny: 'Xenova/whisper-tiny',
-  base: 'Xenova/whisper-base',
-};
-
 // Base URL of a self-hosted model mirror; default is the public Hugging Face hub.
 const HOST = (import.meta.env.VITE_VOICE_MODEL_HOST as string | undefined) || undefined;
+
+let caps: Promise<Capabilities> | undefined;
+let current: { choice: VoiceModel; plan: Plan } | undefined;
+
+/** The plan of the selected model on this device (the device is read once). */
+async function planOf(choice: VoiceModel): Promise<Plan> {
+  if (current?.choice === choice) return current.plan;
+  caps ??= probe();
+  const p = plan(choice, await caps);
+  current = { choice, plan: p };
+  return p;
+}
 
 let worker: Worker | undefined;
 let seq = 0;
@@ -51,12 +61,12 @@ function getWorker(): Worker {
   return worker;
 }
 
-function call(req: Omit<WorkerRequest, 'id' | 'model' | 'host'>): Promise<WorkerResponse> {
+async function call(req: Omit<WorkerRequest, 'id' | 'plan' | 'host'>): Promise<WorkerResponse> {
   const id = ++seq;
-  const model = MODEL_IDS[voiceSettings.model];
+  const p = await planOf(voiceSettings.model);
   return new Promise((resolve, reject) => {
     waiting.set(id, { resolve, reject });
-    getWorker().postMessage({ id, model, host: HOST, ...req } satisfies WorkerRequest, req.audio ? [req.audio.buffer] : []);
+    getWorker().postMessage({ id, plan: p, host: HOST, ...req } satisfies WorkerRequest, req.audio ? [req.audio.buffer] : []);
   });
 }
 
@@ -69,6 +79,7 @@ export async function loadModel(): Promise<void> {
   stt.progress = 0;
   stt.error = '';
   try {
+    stt.size = (await planOf(wanted)).size;
     const r = await call({ type: 'load' });
     if (r.type === 'ready') stt.device = r.device;
     stt.status = 'ready';

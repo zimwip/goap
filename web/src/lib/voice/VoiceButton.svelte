@@ -4,6 +4,7 @@
   import { Recorder, voiceSupported } from './recorder';
   import { stt, transcribe, loadModel } from './stt.svelte';
   import { voiceSettings } from './settings.svelte';
+  import { MODEL_MB } from './plan';
 
   let { ontranscript }: { ontranscript: (text: string) => void } = $props();
 
@@ -18,7 +19,8 @@
     if (error) return error;
     if (phase === 'recording') return 'Release to transcribe';
     if (phase === 'transcribing') return 'Transcribing…';
-    if (stt.status === 'loading') return `Downloading the speech model… ${stt.progress}%`;
+    if (stt.status === 'loading') return `Downloading the speech model${stt.size ? ` (Whisper ${stt.size}, about ${MODEL_MB[stt.size]} MB)` : ''}… ${stt.progress}%`;
+    if (stt.status === 'ready' && stt.size) return `Hold to speak (Whisper ${stt.size} on ${stt.device === 'webgpu' ? 'the GPU' : 'the CPU'}; audio is processed locally, never uploaded)`;
     return 'Hold to speak (audio is processed locally, never uploaded)';
   });
 
