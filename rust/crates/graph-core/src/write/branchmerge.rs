@@ -20,8 +20,8 @@ use crate::{
         ChangeImpact, INTENT_CREATED, INTENT_MODIFIED, ImpactEvent, ImpactOp, REVIEW_ACCEPTED, REVIEW_PROPOSED, Review,
     },
     model::{
-        BRANCH_OPEN, Baseline, BaselineId, ChangeId, Link, LinkId, MAIN_BRANCH, Node, NodeId, NodeRef, Props,
-        REASON_MERGE, Target, Version, branch_of, namespace_of,
+        BRANCH_MERGED, BRANCH_OPEN, Baseline, BaselineId, ChangeId, Link, LinkId, MAIN_BRANCH, Node, NodeId, NodeRef,
+        Props, REASON_MERGE, Target, Version, branch_of, namespace_of,
     },
     read::{self, stored_node},
     store::{ReadTx, WriteTx},
@@ -37,7 +37,6 @@ pub const MERGE_FAST_FORWARD: &str = "fast_forward";
 pub const MERGE_THREE_WAY: &str = "merge";
 /// The kind of the baseline a merge leaves (`domain.BaselineMerge`).
 const BASELINE_MERGE: &str = "merge";
-const BRANCH_MERGED: &str = "merged";
 const MERGE_PRODUCER: &str = "graph.merge";
 /// The versions of a node read at once to find a common ancestor.
 const VERSION_PAGE: usize = 500;

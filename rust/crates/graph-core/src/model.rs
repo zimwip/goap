@@ -228,6 +228,8 @@ pub struct Branch {
 
 /// The status of an open branch.
 pub const BRANCH_OPEN: &str = "open";
+pub const BRANCH_MERGED: &str = "merged";
+pub const BRANCH_ABANDONED: &str = "abandoned";
 
 /// A count of the nodes or links of a type.
 #[derive(Debug, Clone, PartialEq, Eq)]

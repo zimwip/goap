@@ -21,14 +21,13 @@ use crate::{
     impact::{
         ChangeImpact, ImpactEvent, ImpactOp, LOG_FACT, REVIEW_ACCEPTED, REVIEW_PROPOSED, REVIEW_REJECTED, Review,
     },
-    model::{Baseline, BaselineId, Branch, ChangeId, MAIN_BRANCH, NodeId, NodeRef, Version, branch_of},
+    model::{BRANCH_MERGED, Baseline, BaselineId, Branch, ChangeId, MAIN_BRANCH, NodeId, NodeRef, Version, branch_of},
     read,
     store::WriteTx,
 };
 
 /// The kind of the baseline a fast-forward leaves (`domain.BaselineFastForward`).
 const BASELINE_FAST_FORWARD: &str = "fast-forward";
-const BRANCH_MERGED: &str = "merged";
 const STATUS_APPLIED: &str = "applied";
 /// Who records the work of a merged sub-change in its parent.
 const MERGE_PRODUCER: &str = "graph.merge";

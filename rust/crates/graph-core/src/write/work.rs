@@ -28,8 +28,8 @@ use crate::{
     },
     lnk::Url,
     model::{
-        BRANCH_OPEN, Branch, ChangeId, Link, LinkId, MAIN_BRANCH, Node, NodeId, NodeRef, Props, Target, Version,
-        branch_of, namespace_of,
+        BRANCH_ABANDONED, BRANCH_MERGED, BRANCH_OPEN, Branch, ChangeId, Link, LinkId, MAIN_BRANCH, Node, NodeId,
+        NodeRef, Props, Target, Version, branch_of, namespace_of,
     },
     read, sources,
     store::{ReadTx, WriteTx},
@@ -117,6 +117,9 @@ pub struct Work {
     pub vcn: ChangeImpact,
     /// a creation names the key of a planned creation (ADR 0121): its draft fulfils that impact
     pub planned: bool,
+    /// the node a creation takes over: the node of its key, which only abandoned changes or other lasting lines of
+    /// work wrote (`take_key`)
+    pub reuse: NodeId,
 }
 
 impl Work {
@@ -428,6 +431,7 @@ impl<S: WriteTx> Tx<'_, S> {
             cn: ChangeImpact::default(),
             vcn: ChangeImpact::default(),
             planned: false,
+            reuse: NodeId::default(),
         })
     }
 
@@ -518,7 +522,11 @@ impl<S: WriteTx> Tx<'_, S> {
                 )));
             }
             (None, true) if !nid.is_empty() => {
-                return Err(unserved("a creation taking over the key of a node out of the baseline"));
+                self.take_key(&w.c, &nid, &t.key, &t.typ).await?;
+                w.reuse = nid.clone();
+                decl.intent = INTENT_CREATED.into();
+                decl.key = t.key.clone();
+                decl.typ = t.typ.clone();
             }
             (None, true) => {
                 decl.intent = INTENT_CREATED.into();
@@ -553,6 +561,61 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         self.select_impact(&mut w, &decl.id)?;
         Ok(w)
+    }
+
+    /// Decides a creation whose key is the key of a node out of the reference baseline of a change (Go's `takeKey`,
+    /// a key is one node's): a node another change wrote on a branch not abandoned holds it, refused now rather than
+    /// at the commit; a node only abandoned changes wrote never reached the graph and is taken over; so is a node
+    /// living only on other lasting lines of work (ADR 0151), the lasting branch the change lands on holding it being
+    /// the race of two changes, refused.
+    pub(super) async fn take_key(&self, c: &Change, nid: &NodeId, key: &str, typ: &str) -> Result<()> {
+        let ns = namespace_of(&c.namespace);
+        let vs = self.store.version_range(nid, 0, i32::MAX as usize).await?;
+        let mut line: Option<String> = None;
+        for v in &vs {
+            if v.typ != typ {
+                return Err(GraphError::conflict(format!(
+                    "cannot create {key} ({typ}): the key is taken by a node of type {}",
+                    v.typ
+                )));
+            }
+            let names = std::iter::once(branch_of(&v.branch).to_string()).chain(v.joined.iter().cloned());
+            for name in names {
+                let b = self.store.branch(ns, &name).await?;
+                // a version of a merged branch lives on in the branches it joined, checked with them
+                if let Some(b) = &b
+                    && (b.status == BRANCH_ABANDONED || b.status == BRANCH_MERGED)
+                {
+                    continue;
+                }
+                if let Some(b) = &b
+                    && !b.ephemeral
+                    && b.status == BRANCH_OPEN
+                {
+                    if line.is_none() {
+                        line = Some(self.lasting_line(c).await?);
+                    }
+                    if line.as_deref() != Some(name.as_str()) {
+                        continue;
+                    }
+                }
+                return Err(GraphError::conflict(format!(
+                    "cannot create {key} ({typ}): the key is taken by a node change {} created on branch {name}: rename it, or merge or abandon that change",
+                    v.change_id
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// The lasting branch a change lands on in the end: its branch, else the branch its branch is forked from, up the
+    /// branches of its parent changes (Go's `lastingLine`).
+    async fn lasting_line(&self, c: &Change) -> Result<String> {
+        let mut b = read::branch(self.store, &c.namespace, &c.branch).await?;
+        while b.ephemeral {
+            b = read::branch(self.store, &c.namespace, &b.parent).await?;
+        }
+        Ok(b.name)
     }
 
     /// Proposes impacts (Go's `ProposeImpact`): the modifications of existing nodes a change will make, and the
@@ -1025,10 +1088,14 @@ impl<S: WriteTx> Tx<'_, S> {
                 },
             )
             .await?;
+        let mut node = NodeId(self.env.new_id());
+        if !w.reuse.is_empty() {
+            node = w.reuse.clone();
+        }
         let mut d = Draft {
             change: w.c.id.clone(),
             impact: w.cn.id.clone(),
-            node: NodeId(self.env.new_id()),
+            node,
             key: inp.key.clone(),
             typ: inp.typ.clone(),
             props: inp.props.clone(),

@@ -48,10 +48,6 @@ const REVERT_COMMENT: &str = "reverted: its impact was withdrawn from the change
 /// `graphapi.ErrNothingToCommit`: an invalid request the caller tells apart (`lib/rpcerr`'s reason).
 pub const NOTHING_TO_COMMIT: &str = "nothing to commit";
 
-fn unserved(what: &str) -> GraphError {
-    GraphError::unimplemented(format!("{what}: not served here yet"))
-}
-
 /// What makes two links the same link of two versions of a node (Go's `linkKey`): type, target and properties.
 fn link_key(l: &Link) -> String {
     let to = match &l.to {
@@ -236,7 +232,18 @@ impl<S: WriteTx> Tx<'_, S> {
                         d.key, d.typ
                     )));
                 }
-                Some(_) => return Err(unserved("a creation taking over a key (ADR 0151)")),
+                // a node only abandoned changes or other lines of work wrote, taken over by the creation
+                // (`take_key`): its next version, still a creation
+                Some(_) => {
+                    self.take_key(c, &n.id, &n.key, &n.typ).await?;
+                    let last = self
+                        .store
+                        .version_range(&n.id, 0, 1)
+                        .await?
+                        .pop()
+                        .map_or(0, |v| v.version);
+                    n.version = last + 1;
+                }
                 None => n.version = 1,
             }
             n.reason = REASON_CREATE.into();

@@ -3,13 +3,13 @@
 use super::tx::Tx;
 use crate::{
     GraphError, Result,
-    model::{BRANCH_OPEN, BaselineId, Branch, MAIN_BRANCH, branch_of, namespace_of},
+    model::{BRANCH_ABANDONED, BRANCH_MERGED, BRANCH_OPEN, BaselineId, Branch, MAIN_BRANCH, branch_of, namespace_of},
     read,
     store::WriteTx,
 };
 
 /// The statuses a branch takes.
-const STATUSES: [&str; 3] = [BRANCH_OPEN, "merged", "abandoned"];
+const STATUSES: [&str; 3] = [BRANCH_OPEN, BRANCH_MERGED, BRANCH_ABANDONED];
 
 /// A branch to open: forked from a baseline of its namespace (empty: the empty state).
 #[derive(Debug, Clone, Default)]
