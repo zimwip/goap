@@ -461,7 +461,7 @@ impl<'a, T: ReadTx> World<'a, T> {
 
     /// Whether the caller reads a node of the view (`world.sees`): in its reach, or a draft of the change it reads
     /// (a draft is the change's, read through it, ADR 0161 §4).
-    fn sees(&self, n: &Node) -> bool {
+    pub fn sees(&self, n: &Node) -> bool {
         match &self.reach {
             None => true,
             Some(_) if self.change.is_some() && n.version == 0 => true,
@@ -533,7 +533,7 @@ impl<'a, T: ReadTx> World<'a, T> {
 
     /// A node of the view at a version `at` answered: the draft of a change view for version 0 (Go's
     /// `draftReader.node`), else the stored version.
-    async fn node(&self, r: &NodeRef) -> Result<Node> {
+    pub async fn node(&self, r: &NodeRef) -> Result<Node> {
         if let Some(cw) = &self.change
             && r.is_draft()
             && let Some(d) = cw.draft(&r.id)

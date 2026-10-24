@@ -19,6 +19,7 @@ pub mod model;
 pub mod operations;
 pub mod page;
 pub mod prov;
+pub mod query;
 pub mod reach;
 pub mod read;
 pub mod snapshot;

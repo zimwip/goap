@@ -449,4 +449,12 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   error in Go's words, the log positions and events of Go's separate transactions; a document the decoder refuses is
   Go's (its messages). `ExportChangeProvenance` (`graph_core::prov`, Go's `prov.Export`): the change and its whole log
   as PROV-O JSON-LD, the model calls left out for a reader without `prompt:inspect`.
+- The read queries of ADR 0160, `QueryView`: the openCypher subset in a crate of its own, `crates/cypher` (the tree,
+  values and evaluation, RETURN, of `lib/cypher`), its parser written by hand after the grammar's rules (the white space
+  each rule asks for or allows, the keywords no variable may take); a query it does not read with certainty (outside
+  ASCII, a parameter, what the subset leaves out) answers `unimplemented`, so the errors of the grammar stay Go's. The
+  match (`graph_core::query`) is Go's depth first search in the same order, so the same reads, caps, notes and rows:
+  Go's continuations become frames of a list the run follows, the bindings, the links a clause used and the trails of
+  its patterns stacks of the run; outside a change the runs that learn what the caller reads (`mayReadNode`) are Go's
+  too.
 - Not done yet: the rest of phase 4.

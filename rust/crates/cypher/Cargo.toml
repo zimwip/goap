@@ -1,0 +1,14 @@
+[package]
+name = "cypher"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "The read-only subset of openCypher the graph answers (ADR 0160), as lib/cypher reads it: parse, evaluate, project"
+
+[dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

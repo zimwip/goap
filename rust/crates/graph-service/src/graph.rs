@@ -1231,6 +1231,49 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    /// A read query in a view (ADR 0160, Go's `Handler.QueryView`): outside a change, a row naming or passing through a
+    /// node the caller may not read is dropped, checked after the read (`mayReadNode`, by namespace and project);
+    /// through a change, the nodes are the change's.
+    async fn query_view(&self, _ctx: &Ctx, req: Request<pb::QueryViewRequest>) -> Answer<pb::QueryViewResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let catalog = self.catalog().await?;
+        let view = convert::view(m.view.as_ref());
+        self.read_view(caller, m.view.as_ref(), async |tx, who| {
+            let w = World::open(tx, &view).await?.reached(who.reach().as_ref());
+            let opts = graph_core::query::QueryOptions {
+                bind: m.bind.iter().map(|(k, v)| (k.clone(), NodeId(v.clone()))).collect(),
+                ..Default::default()
+            };
+            let seen = std::sync::Mutex::new(HashMap::<String, bool>::new());
+            let visible = |n: &graph_core::model::Node| {
+                let key = format!("{}\0{}", n.namespace, n.project.key);
+                let mut seen = seen.lock().unwrap_or_else(|e| e.into_inner());
+                *seen.entry(key).or_insert_with(|| who.may_read_node(n))
+            };
+            let is_a = |t: &str, b: &str| t == b || catalog.is_a(t, b);
+            let visible: Option<graph_core::query::Visible<'_>> = (!view.is_change()).then_some(&visible);
+            let res = graph_core::query::query_view(&w, &is_a, &m.query, &opts, visible).await?;
+            Ok(pb::QueryViewResponse {
+                columns: res.columns,
+                rows: res
+                    .rows
+                    .iter()
+                    .map(|row| pbjson_types::ListValue {
+                        values: row.iter().map(convert::value).collect(),
+                    })
+                    .collect(),
+                nodes: convert::nodes(&res.nodes),
+                links: convert::links(&res.links),
+                truncated: res.truncated,
+                notes: res.notes,
+                reads: res.reads as i32,
+                baseline_id: res.baseline.0,
+            })
+        })
+        .await
+    }
+
     /// The versions some nodes have in a view, with what the view stands on (`ViewVersions`).
     async fn resolve_view(&self, _ctx: &Ctx, req: Request<pb::ResolveViewRequest>) -> Answer<pb::ResolveViewResponse> {
         let caller = Caller::of(&req)?;

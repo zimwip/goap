@@ -345,6 +345,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cypher"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "deadpool"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -696,6 +703,7 @@ name = "graph-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "cypher",
  "graph-catalog",
  "graph-script",
  "serde",

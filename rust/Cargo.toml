@@ -19,6 +19,7 @@ all = { level = "warn", priority = -1 }
 goap-ctx = { path = "crates/ctx" }
 goap-connect = { path = "crates/connect" }
 goap-proto = { path = "crates/proto" }
+cypher = { path = "crates/cypher" }
 graph-catalog = { path = "crates/graph-catalog" }
 graph-core = { path = "crates/graph-core" }
 graph-script = { path = "crates/graph-script" }
