@@ -15,6 +15,7 @@ path = "src/bin/goap-graph-rs.rs"
 goap-connect = { workspace = true }
 graph-core = { workspace = true }
 graph-catalog = { workspace = true }
+graph-script = { workspace = true }
 chrono = { workspace = true }
 pbjson-types = { workspace = true }
 serde = { workspace = true }

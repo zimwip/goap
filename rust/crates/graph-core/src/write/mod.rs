@@ -16,6 +16,7 @@ pub mod rebase;
 pub mod restructure;
 pub mod review;
 pub mod reviews;
+pub mod scripts;
 pub mod subchange;
 pub mod tx;
 pub mod update;

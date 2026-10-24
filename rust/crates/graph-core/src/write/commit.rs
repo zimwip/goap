@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
+use super::scripts;
 use super::{
     change::{STATUS_ACTIVE, STATUS_DRAFT},
     check,
@@ -371,8 +372,18 @@ impl<S: WriteTx> Tx<'_, S> {
             if n.deleted || mechanical {
                 continue;
             }
-            let ls: Vec<_> = links.iter().map(|l| (l.typ.as_str(), l.props.as_ref())).collect();
-            check::version(self.catalog(), &w.ns, &n.key, &n.typ, n.props.as_ref(), &ls)?;
+            let mut ls = Vec::with_capacity(links.len());
+            for l in links {
+                let to = match &l.to {
+                    Target::Node(r) if !self.catalog().link_type_validators(&l.typ).is_empty() => {
+                        scripts::stored_target(self.store, r).await?
+                    }
+                    _ => None,
+                };
+                ls.push((l.typ.as_str(), l.props.as_ref(), to));
+            }
+            let subject = scripts::node(n.id.as_str(), n.version, &n.key, &n.typ, &n.state, &n.props);
+            check::version(self.catalog(), &subject, &ls)?;
             if let Some(lc) = self.catalog().lifecycle(&n.typ)
                 && !n.state.is_empty()
             {

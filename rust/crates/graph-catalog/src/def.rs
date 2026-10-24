@@ -256,6 +256,12 @@ pub struct Transition {
     pub guards: Vec<String>,
     #[serde(deserialize_with = "nullable")]
     pub actions: Vec<String>,
+    /// The guard instances resolved by the catalogue (`GuardAlgos`).
+    #[serde(skip)]
+    pub guard_algos: Vec<crate::algo::Bound>,
+    /// The action instances resolved by the catalogue (`ActionAlgos`).
+    #[serde(skip)]
+    pub action_algos: Vec<crate::algo::Bound>,
 }
 
 /// What a transition requires of the node it moves.

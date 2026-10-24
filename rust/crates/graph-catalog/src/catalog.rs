@@ -6,6 +6,7 @@ use std::sync::{Arc, LazyLock};
 
 use serde_json::{Map, Value};
 
+use crate::algo::{self, Bound};
 use crate::def::{self, Domain, EnumValue, Lifecycle};
 
 /// The separator of a qualified type reference.
@@ -67,6 +68,9 @@ pub struct Type {
     pub validators: Vec<String>,
     /// The node validator instances of the type and its supertypes, the supertypes' first.
     pub node_validators: Vec<String>,
+    /// The validators resolved in call order (`Type.Validators`): the supertypes' first, and for each type the
+    /// validators of its attributes (bound to the attribute) then its node validators.
+    pub bound: Vec<Bound>,
     pub search: Vec<def::SearchProperty>,
     pub editor: String,
     pub icon: String,
@@ -101,6 +105,10 @@ pub struct LinkType {
     pub attributes: Vec<Attribute>,
     /// The validators of its attributes, then its own (link validators).
     pub validators: Vec<String>,
+    /// The property validators of its attributes resolved, each bound to its attribute.
+    pub attribute_validators: Vec<Bound>,
+    /// Its link validators resolved.
+    pub link_validators: Vec<Bound>,
 }
 
 /// A hierarchy a domain tags (domain.Structure, ADR 0054).
@@ -259,6 +267,13 @@ impl Catalog {
                 let mut validators: Vec<String> =
                     l.attributes.iter().flat_map(|a| a.validators.iter().cloned()).collect();
                 validators.extend(l.validators.iter().cloned());
+                let set = algo::Set::of(&d.algorithms, &d.algorithm_instances);
+                let attribute_validators = l
+                    .attributes
+                    .iter()
+                    .flat_map(|a| set.bind_all(&a.validators, algo::PROPERTY_VALIDATOR, &a.name))
+                    .collect();
+                let link_validators = set.bind_all(&l.validators, algo::LINK_VALIDATOR, "");
                 let mut lt = LinkType {
                     reference: r.clone(),
                     from: String::new(),
@@ -268,6 +283,8 @@ impl Catalog {
                     inverse_label,
                     attributes: l.attributes.iter().map(|a| Attribute::of(d, a)).collect(),
                     validators,
+                    attribute_validators,
+                    link_validators,
                 };
                 if !l.from.is_empty() {
                     lt.from = qualify_in(&d.name, &l.from).map_err(|e| format!("link type {r}: {e}"))?;
@@ -356,6 +373,27 @@ impl Catalog {
     /// Whether the node type `typ` is `base` or one of its subtypes (false when `typ` is unknown).
     pub fn is_a(&self, typ: &str, base: &str) -> bool {
         self.typ(typ).is_some_and(|t| t.is(base))
+    }
+
+    /// The validators of a node type in call order (`Catalog.Validators`).
+    pub fn bound_validators(&self, typ: &str) -> &[Bound] {
+        self.typ(typ).map(|t| t.bound.as_slice()).unwrap_or_default()
+    }
+
+    /// The property validators of the attributes of a link type (`LinkAttributeValidators`).
+    pub fn link_attribute_validators(&self, typ: &str) -> &[Bound] {
+        self.links
+            .get(typ)
+            .map(|l| l.attribute_validators.as_slice())
+            .unwrap_or_default()
+    }
+
+    /// The link validators of a link type (`LinkTypeValidators`).
+    pub fn link_type_validators(&self, typ: &str) -> &[Bound] {
+        self.links
+            .get(typ)
+            .map(|l| l.link_validators.as_slice())
+            .unwrap_or_default()
     }
 
     pub fn lifecycle(&self, typ: &str) -> Option<&Arc<Lifecycle>> {
@@ -487,6 +525,7 @@ fn resolve(r: &str, decl: &HashMap<String, (&Domain, &def::NodeType)>) -> Result
         change_controlled: true,
         validators: Vec::new(),
         node_validators: Vec::new(),
+        bound: Vec::new(),
         search: Vec::new(),
         editor: String::new(),
         icon: String::new(),
@@ -505,7 +544,7 @@ fn resolve(r: &str, decl: &HashMap<String, (&Domain, &def::NodeType)>) -> Result
             let Some(l) = d.lifecycle(&dt.lifecycle) else {
                 return Err(format!("type {c}: lifecycle {}: unknown type", dt.lifecycle));
             };
-            t.lifecycle = Some(Arc::new(l.clone()));
+            t.lifecycle = Some(Arc::new(bind_lifecycle(d, l)));
         }
         if t.document.is_none()
             && let Some(doc) = &dt.document
@@ -572,6 +611,12 @@ fn resolve(r: &str, decl: &HashMap<String, (&Domain, &def::NodeType)>) -> Result
             .extend(dt.attributes.iter().flat_map(|a| a.validators.iter().cloned()));
         t.validators.extend(dt.validators.iter().cloned());
         t.node_validators.extend(dt.validators.iter().cloned());
+        let set = algo::Set::of(&d.algorithms, &d.algorithm_instances);
+        for a in &dt.attributes {
+            t.bound
+                .extend(set.bind_all(&a.validators, algo::PROPERTY_VALIDATOR, &a.name));
+        }
+        t.bound.extend(set.bind_all(&dt.validators, algo::NODE_VALIDATOR, ""));
         for sp in &dt.search {
             match search_at.get(&sp.property) {
                 Some(&i) => t.search[i] = sp.clone(),
@@ -586,6 +631,17 @@ fn resolve(r: &str, decl: &HashMap<String, (&Domain, &def::NodeType)>) -> Result
         t.change_controlled = true;
     }
     Ok(t)
+}
+
+/// A copy of a lifecycle with the guard and action instances of its transitions resolved (`Schema.BindLifecycle`).
+fn bind_lifecycle(d: &Domain, l: &Lifecycle) -> Lifecycle {
+    let set = algo::Set::of(&d.algorithms, &d.algorithm_instances);
+    let mut c = l.clone();
+    for t in &mut c.transitions {
+        t.guard_algos = set.bind_all(&t.guards, algo::TRANSITION_GUARD, "");
+        t.action_algos = set.bind_all(&t.actions, algo::TRANSITION_ACTION, "");
+    }
+    c
 }
 
 #[cfg(test)]

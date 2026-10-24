@@ -221,6 +221,60 @@ impl pb::DomainService for Domains {
         Ok(Response::new(pb::ValidateDomainResponse { issues: Vec::new() }))
     }
 
+    /// Runs an algorithm on a sample input (`Service.RunAlgorithm`): a platform service's; a declaration or parameter
+    /// value with an issue is refused, a script that fails answers its error.
+    async fn run_algorithm(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::RunAlgorithmRequest>,
+    ) -> Answer<pb::RunAlgorithmResponse> {
+        let (subject, _) = caller(&req);
+        let r = req.into_inner();
+        let Some(a) = r.algorithm else {
+            return Err(ConnectError::invalid_argument("algorithm required"));
+        };
+        if !subject.starts_with("system:") {
+            return Err(unserved("a person's trial of an algorithm goes through the authorizer"));
+        }
+        let a = algorithm(&a);
+        let invalid = |m: String| Err(ConnectError::invalid_argument(format!("invalid domain: {m}")));
+        if let Some(i) = a.issues().first() {
+            return invalid(i.clone());
+        }
+        if let Err(e) = graph_script::js::check_code(&a.language, &a.code) {
+            return invalid(e);
+        }
+        let values = r.values.as_ref().map(convert::map);
+        let (params, issues) = a.resolve(values.as_ref());
+        if let Some(i) = issues.first() {
+            return invalid(i.clone());
+        }
+        let input = r.input.as_ref().map(convert::map).unwrap_or_default();
+        let sample = serde_json::from_value::<Sample>(serde_json::Value::Object(input)).ok();
+        let Some(sample) = sample.filter(Sample::integral) else {
+            return Err(unserved("a sample input Go's decoder words the refusal of"));
+        };
+        let b = graph_script::js::Bound {
+            instance: "try".into(),
+            algorithm: a.name.clone(),
+            typ: a.typ.clone(),
+            language: a.language.clone(),
+            code: a.code.clone(),
+            params,
+            property: String::new(),
+        };
+        let (out, err) = graph_script::js::try_algorithm(&b, &sample.input());
+        let resp = pb::RunAlgorithmResponse {
+            ok: err.is_none() && out.ok(),
+            logs: out.logs.iter().map(|l| format!("{}: {}", l.level, l.message)).collect(),
+            set: (!out.set.is_empty()).then(|| convert::object(&out.set)),
+            failures: out.failures,
+            unset: out.unset,
+            error: err.unwrap_or_default(),
+        };
+        Ok(Response::new(resp))
+    }
+
     /// Creates or replaces a draft (`Service.SaveDomain`): a platform service's, with no issue and nothing the Go
     /// service alone checks (a draft with issues is stored by Go, which words them).
     async fn save_domain(&self, _ctx: &Ctx, req: Request<pb::SaveDomainRequest>) -> Answer<pb::SaveDomainResponse> {
@@ -860,5 +914,135 @@ mod tests {
         let again: serde_json::Value = serde_json::from_str(&renumbered(&stored(pg), "2.0.0")).unwrap();
         assert_eq!(again["version"], "2.0.0");
         assert_eq!(again["nodeTypes"][0]["name"], "Thing");
+    }
+}
+
+/// An algorithm of the protocol (`domainpb.AlgorithmsFromPB`).
+fn algorithm(a: &pb::Algorithm) -> graph_catalog::algo::Algorithm {
+    let params = a
+        .params
+        .iter()
+        .map(|p| graph_catalog::algo::Param {
+            name: p.name.clone(),
+            typ: p.r#type.clone(),
+            required: p.required,
+            default: p.default_value.as_ref().map(convert::json),
+            values: (!p.values.is_empty()).then(|| p.values.clone()),
+        })
+        .collect::<Vec<_>>();
+    graph_catalog::algo::Algorithm {
+        name: a.name.clone(),
+        typ: a.r#type.clone(),
+        language: a.language.clone(),
+        code: a.code.clone(),
+        params: (!params.is_empty()).then_some(params),
+    }
+}
+
+/// A node of a sample input (`dsl.Node`).
+#[derive(serde::Deserialize, Default)]
+#[serde(default)]
+struct SampleNode {
+    id: Option<String>,
+    version: Option<serde_json::Number>,
+    key: Option<String>,
+    #[serde(rename = "type")]
+    typ: Option<String>,
+    state: Option<String>,
+    props: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+impl SampleNode {
+    fn node(self) -> graph_script::js::Node {
+        graph_script::js::Node {
+            id: self.id.unwrap_or_default(),
+            version: self.version.and_then(|n| n.as_f64()).unwrap_or_default() as i64,
+            key: self.key.unwrap_or_default(),
+            typ: self.typ.unwrap_or_default(),
+            state: self.state.unwrap_or_default(),
+            props: self.props.unwrap_or_default(),
+        }
+    }
+}
+
+#[derive(serde::Deserialize, Default)]
+#[serde(default)]
+struct SampleLink {
+    #[serde(rename = "type")]
+    typ: Option<String>,
+    props: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+#[derive(serde::Deserialize, Default)]
+#[serde(default)]
+struct SampleNamed {
+    id: Option<String>,
+    name: Option<String>,
+    title: Option<String>,
+    intent: Option<String>,
+    methodology: Option<String>,
+    goal: Option<String>,
+    from: Option<String>,
+    to: Option<String>,
+}
+
+/// The sample input of a trial (Go decodes it into the fields of `dsl.AlgorithmInput`).
+#[derive(serde::Deserialize, Default)]
+#[serde(default)]
+struct Sample {
+    node: Option<SampleNode>,
+    property: Option<String>,
+    value: Option<serde_json::Value>,
+    link: Option<SampleLink>,
+    from: Option<SampleNode>,
+    to: Option<SampleNode>,
+    children: Option<Vec<SampleNode>>,
+    transition: Option<SampleNamed>,
+    change: Option<SampleNamed>,
+}
+
+impl Sample {
+    /// Whether every version is an integer, as `dsl.Node.Version` decodes only one.
+    fn integral(&self) -> bool {
+        let nodes = [&self.node, &self.from, &self.to].into_iter().flatten();
+        nodes.chain(self.children.iter().flatten()).all(|n| {
+            n.version
+                .as_ref()
+                .is_none_or(|v| v.as_f64().is_some_and(|f| f.fract() == 0.0))
+        })
+    }
+
+    fn input(self) -> graph_script::js::Input {
+        let link = self.link.unwrap_or_default();
+        let t = self.transition.unwrap_or_default();
+        let c = self.change.unwrap_or_default();
+        graph_script::js::Input {
+            node: self.node.unwrap_or_default().node(),
+            property: self.property.unwrap_or_default(),
+            value: self.value.filter(|v| !v.is_null()),
+            link_type: link.typ.unwrap_or_default(),
+            link_props: link.props.unwrap_or_default(),
+            from: self.from.unwrap_or_default().node(),
+            to: self.to.unwrap_or_default().node(),
+            children: self
+                .children
+                .unwrap_or_default()
+                .into_iter()
+                .map(SampleNode::node)
+                .collect(),
+            change: graph_script::js::ChangeInfo {
+                id: c.id.unwrap_or_default(),
+                title: c.title.unwrap_or_default(),
+                intent: c.intent.unwrap_or_default(),
+                methodology: c.methodology.unwrap_or_default(),
+                goal: c.goal.unwrap_or_default(),
+            },
+            transition: [
+                t.name.unwrap_or_default(),
+                t.from.unwrap_or_default(),
+                t.to.unwrap_or_default(),
+            ],
+            ..graph_script::js::Input::default()
+        }
     }
 }

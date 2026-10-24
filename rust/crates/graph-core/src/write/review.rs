@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-use super::{check, tx::Tx};
+use super::{check, scripts, tx::Tx};
 use crate::{
     GraphError, Result,
     gojson::{self, time_text},
@@ -262,18 +262,24 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     /// What a draft must satisfy to be accepted, the version written from it to commit (Go's `checkDraft`): its
-    /// properties, the links its type requires, the attributes of its links. A domain running scripts checks its
-    /// validators in the Go service.
-    fn check_draft(&self, ns: &str, d: &Draft) -> Result<()> {
-        let links: Vec<_> = d.links.iter().map(|l| (l.typ.as_str(), l.props.as_ref())).collect();
-        check::version(self.catalog(), ns, &d.key, &d.typ, d.props.as_ref(), &links)
+    /// properties, the links its type requires, the attributes of its links, the validators of its type and of its
+    /// links (their targets read through the drafts the flow sees).
+    async fn check_draft(&self, change: &ChangeId, flow: &str, d: &Draft) -> Result<()> {
+        let drafts = self.views[change].seen_drafts(flow);
+        let to = scripts::draft_targets(self.store, self.catalog(), &d.links, &drafts).await?;
+        let links: Vec<_> = d
+            .links
+            .iter()
+            .zip(to)
+            .map(|(l, to)| (l.typ.as_str(), l.props.as_ref(), to))
+            .collect();
+        check::version(self.catalog(), &scripts::draft_node(d), &links)
     }
 
     /// The gate of an acceptance (Go's `checkModifies` then `checkAcceptedIn`): the impact holds a draft that
     /// modifies its node, and the draft is what a version must be.
     async fn check_accepted(
         &self,
-        ns: &str,
         change: &ChangeId,
         flow: &str,
         seen: &[ChangeImpact],
@@ -306,7 +312,7 @@ impl<S: WriteTx> Tx<'_, S> {
             return Ok(());
         }
         check_origins(seen, cn, &d)?;
-        self.check_draft(ns, &d)
+        self.check_draft(change, flow, &d).await
     }
 
     /// Records a review the graph submits itself (Go's `putReviewRecord`): the merge of a sub-change accepting what it
@@ -486,7 +492,7 @@ impl<S: WriteTx> Tx<'_, S> {
                     ))));
                 }
                 if v.accept {
-                    match self.check_accepted(&w.ns, id, "", &seen, &vcn).await {
+                    match self.check_accepted(id, "", &seen, &vcn).await {
                         Ok(()) => {}
                         Err(e) if e.message.ends_with(ORIGINS_PENDING) => {
                             next.push(n);
@@ -575,7 +581,7 @@ impl<S: WriteTx> Tx<'_, S> {
         key: &str,
         item: &str,
     ) -> Result<ChangeImpact> {
-        let c = self.change_open(id).await?;
+        self.change_open(id).await?;
         let view = &self.views[id];
         if view.flows.get(flow).is_none() {
             return Err(GraphError::not_found(format!("flow {flow}")));
@@ -603,8 +609,7 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         if v.accept {
             let seen = view.seen(flow);
-            self.check_accepted(crate::model::namespace_of(&c.namespace), id, flow, &seen, &vcn)
-                .await?;
+            self.check_accepted(id, flow, &seen, &vcn).await?;
         }
         let by = self.env.by.clone();
         let r = Review {

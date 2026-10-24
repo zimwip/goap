@@ -39,7 +39,7 @@ pub fn object(m: &serde_json::Map<String, Json>) -> pbjson_types::Struct {
 }
 
 /// A JSON value of a protocol value, as Go's `structpb` reads it (numbers are float64).
-fn json(v: &pbjson_types::Value) -> Json {
+pub fn json(v: &pbjson_types::Value) -> Json {
     match &v.kind {
         None | Some(Kind::NullValue(_)) => Json::Null,
         Some(Kind::BoolValue(b)) => Json::Bool(*b),

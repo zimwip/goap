@@ -4,6 +4,9 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime};
 use graph_catalog::{Catalog, catalog::AttributeCheck};
 use serde_json::{Map, Value};
 
+use graph_script::js;
+
+use super::scripts;
 use super::tx::go_sprint;
 use crate::{GraphError, Result};
 
@@ -120,30 +123,25 @@ pub fn requirements(cat: &Catalog, key: &str, typ: &str) -> Vec<(String, i64, St
     reqs
 }
 
-/// What a version (or the draft it is written from) must satisfy (Go's `checkVersion`): its properties, the links
-/// its type requires, the attributes of its links. A domain running scripts plugs validators the Go service runs.
-pub fn version(
-    cat: &Catalog,
-    ns: &str,
-    key: &str,
-    typ: &str,
-    props: Option<&Map<String, Value>>,
-    links: &[(&str, Option<&Map<String, Value>>)],
-) -> Result<()> {
-    if cat.scripted(ns) {
-        return Err(GraphError::unimplemented(
-            "a version of a node of a domain running validators (ADR 0018): not served here yet",
-        ));
-    }
-    attributes(cat, key, typ, props)?;
+/// A link a version leaves: its type, its properties and, for the link validators of its type, the node it reaches.
+pub type LinkCheck<'a> = (&'a str, Option<&'a Map<String, Value>>, Option<js::Node>);
+
+/// What a version (or the draft it is written from) must satisfy (Go's `checkVersion`): its properties (attributes,
+/// then the validators of its type), the links its type requires, and per link its attributes and the validators of
+/// its type, given the node it reaches when resolved.
+pub fn version(cat: &Catalog, n: &js::Node, links: &[LinkCheck<'_>]) -> Result<()> {
+    let (key, typ) = (n.key.as_str(), n.typ.as_str());
+    attributes(cat, key, typ, Some(&n.props))?;
+    scripts::validate(cat, n)?;
     for (link, want, of) in requirements(cat, key, typ) {
-        let got = links.iter().filter(|(t, _)| *t == link).count() as i64;
+        let got = links.iter().filter(|(t, ..)| *t == link).count() as i64;
         if got != want {
             return Err(GraphError::invalid(format!("{key} needs {of}, got {got}")));
         }
     }
-    for (t, p) in links {
+    for (t, p, to) in links {
         link_attributes(cat, t, *p).map_err(|e| e.with_prefix(&format!("{key}: ")))?;
+        scripts::validate_link(cat, n, t, *p, to.as_ref())?;
     }
     Ok(())
 }

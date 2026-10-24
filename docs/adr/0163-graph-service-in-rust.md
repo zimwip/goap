@@ -328,4 +328,17 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   edits of `CommitEdits`), with the state edits of `CommitEdits` (the move of each draft, a node with none checked out
   by the move): 1905 calls, none divergent, the tables the same but an order of ids in the change log, the events of
   the outbox but the order of a baseline's `set`.
+  The algorithms of a domain follow (ADR 0018; crate `graph-script`: the JavaScript algorithms on QuickJS through
+  `rquickjs`, the body of `run(ctx)` with the context of each usage, a 5 s deadline, 64 MiB of memory; the CEL guards
+  through `cel` with the variables of `lib/guard`): the catalogue binds the instances (`graph-catalog` `algo`: Go's
+  `Set.Bind`, `Algorithm.Resolve` and `Param.Coerce`, the validators of a type in call order, of a link type, the
+  guards and actions of each transition), the property, node and link validators run at the acceptance, in the
+  validation of `GetChange` and at the commit (`write::scripts`, the targets of a draft's links through the drafts the
+  flow sees, else the store), a transition checks the states of the parts of a document (in the view of the change),
+  its CEL guard and guard algorithms, then runs its actions and validates the properties they leave, and
+  `RunAlgorithm` tries an algorithm for a platform service: 1942 calls, the divergent ones the `removeLink` order and
+  the wording of what a script throws (QuickJS's syntax errors and stack positions are not goja's; a CEL error is
+  lowered to cel-go's case); the tables the same but the orders of ids in the change log, the events of the outbox but
+  the order of a baseline's `set`. The YAML export of a domain and `ImportDomain` of a domain with a lifecycle or
+  scripts (Go's `Domain.Validate` of them) stay Go's.
 - Not done yet: the rest of phase 4.

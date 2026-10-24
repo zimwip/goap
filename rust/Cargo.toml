@@ -21,6 +21,7 @@ goap-connect = { path = "crates/connect" }
 goap-proto = { path = "crates/proto" }
 graph-catalog = { path = "crates/graph-catalog" }
 graph-core = { path = "crates/graph-core" }
+graph-script = { path = "crates/graph-script" }
 graph-store = { path = "crates/graph-store" }
 
 anyhow = "1"
@@ -44,6 +45,8 @@ prost-reflect = { version = "0.16", features = ["serde"] }
 prost-types = "0.14"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["http2", "json", "stream"] }
+rquickjs = { version = "0.14", default-features = false }
+cel = "0.15"
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 # float_roundtrip: a float read back as Go reads it (correctly rounded), or a property differs at its last digit

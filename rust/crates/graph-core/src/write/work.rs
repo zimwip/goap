@@ -9,11 +9,13 @@
 use std::collections::{HashMap, HashSet};
 
 use graph_catalog::catalog::STRUCTURE_ORGANISATION;
+use graph_catalog::def::Transition;
+use graph_script::js;
 use serde_json::{Map, Value};
 
 use super::{
     change::{INTENT_DERIVE, STATUS_ACTIVE, STATUS_DRAFT, change_branch_name, change_branch_origin},
-    check,
+    check, scripts,
     tx::Tx,
 };
 use crate::{
@@ -26,12 +28,17 @@ use crate::{
     },
     lnk::Url,
     model::{
-        BRANCH_OPEN, Branch, ChangeId, Link, LinkId, MAIN_BRANCH, Node, NodeId, NodeRef, Props, Target, branch_of,
-        namespace_of,
+        BRANCH_OPEN, Branch, ChangeId, Link, LinkId, MAIN_BRANCH, Node, NodeId, NodeRef, Props, Target, Version,
+        branch_of, namespace_of,
     },
     read,
     store::{ReadTx, WriteTx},
 };
+
+/// Whether a link type is the containment of a document (`domain.IsContains`).
+fn is_contains(typ: &str) -> bool {
+    typ == "contains" || typ.ends_with("@contains")
+}
 
 /// The entries of a log the service folds: the impact events and the review records (ADR 0105).
 /// The facts that make the view of a change (its state, the decisions on its items): the Go service's. The
@@ -728,6 +735,75 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(cn)
     }
 
+    /// The parts of a document a transition looks at (Go's `checkTransition` over `childOf`): the targets of its
+    /// `contains` links as the flow sees them, the draft of the part, else its version in the view of the change (a
+    /// part not in it, or in another source, left out); a transition naming the states of the children refuses a part
+    /// in another.
+    async fn transition_children(&self, w: &Work, moved: &Draft, t: &Transition) -> Result<Vec<js::Node>> {
+        let mut drafts = self.views[&w.c.id].seen_drafts(&w.flow);
+        drafts.insert(w.cn.id.clone(), moved.clone());
+        let mut out = Vec::new();
+        for l in &moved.links {
+            if !is_contains(&l.typ) || !l.target.is_zero() {
+                continue;
+            }
+            let draft = drafts
+                .values()
+                .find(|d| d.node == l.to.id && (l.to.is_draft() || d.base.as_ref() == Some(&l.to)));
+            let c = match draft {
+                Some(d) => scripts::draft_node(d),
+                None => {
+                    let Some(v) = self.view_version(&w.c, &l.to.id).await? else {
+                        continue;
+                    };
+                    let Some(n) = scripts::stored_target(self.store, &NodeRef::new(l.to.id.clone(), v)).await? else {
+                        continue;
+                    };
+                    n
+                }
+            };
+            if let Some(ch) = &t.children
+                && !ch.states.contains(&c.state)
+            {
+                let got = if c.state.is_empty() {
+                    "no state"
+                } else {
+                    c.state.as_str()
+                };
+                return Err(GraphError::invalid(format!(
+                    "{} ({}) cannot take {}: contained {} ({}) is in {got}, expected {}",
+                    moved.key,
+                    moved.typ,
+                    t.name,
+                    c.key,
+                    c.typ,
+                    ch.states.join(" or ")
+                )));
+            }
+            out.push(c);
+        }
+        Ok(out)
+    }
+
+    /// The version a node has in the view of a change (Go's `viewTarget`): its own branch, else the head of the branch
+    /// it works on, else its baseline.
+    async fn view_version(&self, c: &Change, node: &NodeId) -> Result<Option<Version>> {
+        let ids = [node.clone()];
+        let at = match self.own_branch(c).await? {
+            Some(own) => read::branch_versions(self.store, &own, &ids).await?,
+            None => {
+                let head = match read::branch_head(self.store, &c.namespace, &c.branch).await {
+                    Ok(h) if !h.id.is_empty() => h,
+                    Ok(_) => read::header_of(self.store, &c.baseline_id).await?,
+                    Err(e) if e.is_not_found() => read::header_of(self.store, &c.baseline_id).await?,
+                    Err(e) => return Err(e),
+                };
+                read::select(self.store, &head, Some(&ids)).await?
+            }
+        };
+        Ok(at.get(node).copied())
+    }
+
     /// The stored version a draft of the impact starts from (Go's `work.base`): its pre version, the latest of the
     /// node on the branch of the change on the main flow; none for a creation.
     pub(super) async fn base(&self, w: &Work) -> Result<Option<Node>> {
@@ -1278,9 +1354,9 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     /// Moves a node along its lifecycle in a change (Go's `ImpactNodeTransition`): the state of its draft, the node
-    /// checked out first when the change holds no draft of it; a transitioned event with the patch of the state. A
-    /// transition with a guard, guard or action algorithms, or a condition on the children of the node is the Go
-    /// service's.
+    /// checked out first when the change holds no draft of it; the states its children must be in, its CEL guard and
+    /// guard algorithms checked, its action algorithms run; a transitioned event with the patch of the state and of the
+    /// properties the actions set.
     pub async fn impact_node_transition(
         &mut self,
         id: &ChangeId,
@@ -1303,13 +1379,6 @@ impl<S: WriteTx> Tx<'_, S> {
                 state.as_str()
             };
             let t = lc.transitions.iter().find(|t| t.from == from && t.to == to);
-            if t.is_some_and(|t| {
-                !t.guard.is_empty() || !t.guards.is_empty() || !t.actions.is_empty() || t.children.is_some()
-            }) {
-                return Err(unserved(
-                    "a transition with a guard, algorithms or a condition on the children (ADR 0018)",
-                ));
-            }
             // the Go service resolves the move once to authorize it, in a transaction it rolls back: the impact it
             // declares there takes a position of the log and of the impacts
             if declares && t.is_some() && lc.state(to).is_some() {
@@ -1362,11 +1431,6 @@ impl<S: WriteTx> Tx<'_, S> {
                 "{key} ({typ}) cannot go from {from} to {to}"
             )));
         };
-        if !t.guard.is_empty() || !t.guards.is_empty() || !t.actions.is_empty() || t.children.is_some() {
-            return Err(unserved(
-                "a transition with a guard, algorithms or a condition on the children",
-            ));
-        }
         if !own {
             self.checkout(&w, &execution).await?;
             self.reread(&mut w).await?;
@@ -1399,11 +1463,37 @@ impl<S: WriteTx> Tx<'_, S> {
                 }
             }
         }
+        let (mut set, mut unset) = (Map::new(), Vec::new());
+        if t.children.is_some() || !t.guard.is_empty() || !t.guard_algos.is_empty() || !t.action_algos.is_empty() {
+            let mut moved = d.clone();
+            moved.state = t.to.clone();
+            let children = self.transition_children(&w, &moved, &t).await?;
+            let node = scripts::draft_node(&moved);
+            let m = scripts::Move {
+                node: &node,
+                draft: &moved,
+                children: &children,
+                change: &w.c,
+                impact: &w.vcn,
+                transition: &t,
+            };
+            m.check()?;
+            (set, unset) = m.actions(self.catalog())?;
+        }
         let mut state = Map::new();
         state.insert("from".into(), Value::String(d.state.clone()));
         state.insert("to".into(), Value::String(t.to.clone()));
         let mut patch = Map::new();
+        if !set.is_empty() {
+            patch.insert("props".into(), Value::Object(set));
+        }
         patch.insert("state".into(), Value::Object(state));
+        if !unset.is_empty() {
+            patch.insert(
+                "unset".into(),
+                Value::Array(unset.into_iter().map(Value::String).collect()),
+            );
+        }
         let r = d.draft_ref();
         self.emit(vec![ImpactEvent {
             change: id.clone(),

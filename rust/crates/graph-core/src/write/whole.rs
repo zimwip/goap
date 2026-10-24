@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use graph_catalog::Catalog;
 use serde_json::Value;
 
+use super::scripts;
 use super::{
     check,
     review::{draft_changed, stored_draft},
@@ -16,7 +17,7 @@ use crate::{
     change::Change,
     flow::FLOW_OPEN,
     impact::{ChangeImpact, LOG_FACT},
-    model::{ChangeId, namespace_of},
+    model::ChangeId,
     store::ReadTx,
 };
 
@@ -71,7 +72,6 @@ pub async fn whole_change_on<T: ReadTx>(
         items.push(serde_json::from_str(&l.payload).map_err(GraphError::internal)?);
     }
     let validates = !matches!(change.status.as_str(), "applied" | "abandoned" | "committed");
-    let ns = namespace_of(&change.namespace);
     let list = match flow {
         Some(f) => view.seen(f),
         None => view.fold.impacts.clone(),
@@ -82,7 +82,7 @@ pub async fn whole_change_on<T: ReadTx>(
     for cn in &list {
         let f = flow.unwrap_or(&cn.flow);
         if validates && !by_flow.contains_key(f) {
-            let vs = validations(tx, cat, ns, &view, f).await?;
+            let vs = validations(tx, cat, &view, f).await?;
             by_flow.insert(f.to_string(), vs);
         }
         let validation = by_flow.get(f).and_then(|vs| vs.get(&cn.id)).cloned();
@@ -101,7 +101,6 @@ pub async fn whole_change_on<T: ReadTx>(
 async fn validations<T: ReadTx>(
     tx: &T,
     cat: &Catalog,
-    ns: &str,
     view: &ChangeView,
     flow: &str,
 ) -> Result<HashMap<String, Validation>> {
@@ -120,9 +119,15 @@ async fn validations<T: ReadTx>(
             Some(b) => draft_changed(&stored_draft(tx, b).await?, d),
             None => true,
         };
-        let links: Vec<_> = d.links.iter().map(|l| (l.typ.as_str(), l.props.as_ref())).collect();
+        let to = scripts::draft_targets(tx, cat, &d.links, &drafts).await?;
+        let links: Vec<_> = d
+            .links
+            .iter()
+            .zip(to)
+            .map(|(l, to)| (l.typ.as_str(), l.props.as_ref(), to))
+            .collect();
         let checked = super::review::check_origins(&seen, cn, d)
-            .and_then(|()| check::version(cat, ns, &d.key, &d.typ, d.props.as_ref(), &links));
+            .and_then(|()| check::version(cat, &scripts::draft_node(d), &links));
         let v = match checked {
             Ok(()) => Validation {
                 valid: true,
