@@ -186,6 +186,8 @@ impl Caller {
 /// acting for a person is itself there).
 pub(crate) struct Access {
     who: access::Principal,
+    /// The person the reads are decided for (Go's `graphsvc.Reader`): the caller, or the person a service acts for.
+    reader: access::Principal,
     /// Whether the caller is a person, or a platform service acting for one.
     person: bool,
     snap: access::Snapshot,
@@ -197,6 +199,7 @@ impl Access {
     async fn of(caller: &Caller, tx: &Session) -> Result<Access, GraphError> {
         Ok(Access {
             who: caller.reader_or_self(),
+            reader: caller.reader(),
             person: caller.person(),
             snap: access::Snapshot::read(tx).await?,
             project: caller.project.clone(),
@@ -211,6 +214,19 @@ impl Access {
             ..abac::Resource::default()
         };
         self.snap.floor(&self.who, &res, "write")
+    }
+
+    /// What the caller reads of the current graph (Go's `graphsvc.ReachOf`, ADR 0161 §5); a platform service acting
+    /// by itself, everything.
+    fn reach(&self) -> Option<Reach> {
+        self.person.then(|| Reach::of(&self.snap, &self.reader))
+    }
+
+    /// Whether the caller reads a node outside a change (Go's `Handler.mayReadNode`).
+    fn may_read_node(&self, n: &graph_core::model::Node) -> bool {
+        !self.person
+            || OPEN_NAMESPACES.contains(&n.namespace.as_str())
+            || self.snap.may_access_project(&self.reader, &n.project.key)
     }
 
     /// Refuses what the authorizer refuses (`authz.Check`).
@@ -1449,9 +1465,8 @@ impl pb::GraphService for Graph {
     }
 
     async fn get_branch(&self, _ctx: &Ctx, req: Request<pb::GetBranchRequest>) -> Answer<pb::GetBranchResponse> {
-        let caller = Caller::of(&req)?;
-        let m = req.into_inner();
-        self.read(caller, async |tx| {
+        let m = &req.msg;
+        self.read_any(&req, async |tx| {
             let b = read::branch(tx, &m.namespace, &m.name).await?;
             if b.ephemeral && !m.header_only {
                 return Err(GraphError::unimplemented(
@@ -1644,9 +1659,8 @@ impl pb::GraphService for Graph {
         _ctx: &Ctx,
         req: Request<pb::GetGraphOverviewRequest>,
     ) -> Answer<pb::GetGraphOverviewResponse> {
-        let caller = Caller::of(&req)?;
         let cat = self.catalog().await?;
-        self.read(caller, async |tx| {
+        self.read_any(&req, async |tx| {
             if other_graphs(tx).await? {
                 return Err(GraphError::unimplemented(MERGED_LISTING));
             }
@@ -1686,9 +1700,8 @@ impl pb::GraphService for Graph {
         _ctx: &Ctx,
         req: Request<pb::GetGraphStatsRequest>,
     ) -> Answer<pb::GetGraphStatsResponse> {
-        let caller = Caller::of(&req)?;
-        let m = req.into_inner();
-        self.read(caller, async |tx| {
+        let m = &req.msg;
+        self.read_any(&req, async |tx| {
             let namespace = namespace_of(&m.namespace).to_string();
             let branch = graph_core::model::branch_of(&m.branch).to_string();
             let store = tx.store_counts(&namespace).await?;
@@ -1836,7 +1849,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::GetCommitStateResponse> {
         let caller = Caller::of(&req)?;
         let id = ChangeId(req.into_inner().change_id);
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[id.0.as_str()], async |tx, _| {
             let st = tx.commit_state(&id).await?;
             Ok(pb::GetCommitStateResponse {
                 to_commit: st.to_commit,
@@ -1857,7 +1870,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::GetRebaseStateResponse> {
         let caller = Caller::of(&req)?;
         let id = ChangeId(req.into_inner().change_id);
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[id.0.as_str()], async |tx, _| {
             let st = tx.rebase_state(&id).await?;
             Ok(pb::GetRebaseStateResponse {
                 parent_id: st.parent.0,
@@ -1895,7 +1908,8 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let by = caller.subject.clone();
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        let named = m.view.as_ref().map(|v| v.change_id.clone()).unwrap_or_default();
+        self.write_on(caller, &[named.as_str()], async |tx, acc| {
             let mut r = NodeRef::new(NodeId(m.node_id.clone()), m.version);
             if r.version <= 0 {
                 let Some(view) = m.view.as_ref() else {
@@ -1906,6 +1920,7 @@ impl pb::GraphService for Graph {
                 };
                 r.version = World::open(tx.store, &convert::view(Some(view)))
                     .await?
+                    .reached(acc.reach().as_ref())
                     .node_view(&r.id, "")
                     .await?
                     .node
@@ -1913,6 +1928,20 @@ impl pb::GraphService for Graph {
             }
             // a draft of the view (version 0) reads as the node's latest, then has no version to tag
             let n = read::stored_node(tx.store, &r).await?;
+            if !acc.may_read_node(&n) {
+                return Err(GraphError::not_found(format!("node {r}")));
+            }
+            acc.check(
+                "create",
+                abac::Resource {
+                    typ: "tag".into(),
+                    namespace: n.namespace.clone(),
+                    org: acc.who.org.clone(),
+                    owner: acc.who.subject.clone(),
+                    project_id: n.project.key.clone(),
+                    ..abac::Resource::default()
+                },
+            )?;
             if m.name.is_empty() {
                 return Err(GraphError::invalid("a tag needs a name"));
             }
@@ -1945,7 +1974,17 @@ impl pb::GraphService for Graph {
     async fn delete_tag(&self, _ctx: &Ctx, req: Request<pb::DeleteTagRequest>) -> Answer<pb::DeleteTagResponse> {
         let caller = Caller::of(&req)?;
         let id = req.into_inner().id;
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[], async |tx, acc| {
+            acc.check(
+                "delete",
+                abac::Resource {
+                    typ: "tag".into(),
+                    org: acc.who.org.clone(),
+                    owner: acc.who.subject.clone(),
+                    project_id: acc.project.clone(),
+                    ..abac::Resource::default()
+                },
+            )?;
             tx.store.delete_tag(&id).await?;
             Ok(pb::DeleteTagResponse {})
         })
@@ -1960,7 +1999,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::CreateBranchResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[], async |tx, _| {
             let b = branches::create_branch(
                 tx,
                 NewBranch {
@@ -1986,7 +2025,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::SetBranchStatusResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[], async |tx, _| {
             branches::set_branch_status(tx, &m.namespace, &m.name, &m.status).await?;
             Ok(pb::SetBranchStatusResponse {})
         })
@@ -2000,7 +2039,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::SetBranchDescriptionResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[], async |tx, _| {
             branches::set_branch_description(tx, &m.namespace, &m.name, &m.description).await?;
             Ok(pb::SetBranchDescriptionResponse {})
         })
