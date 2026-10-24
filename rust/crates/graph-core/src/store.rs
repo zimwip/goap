@@ -47,6 +47,30 @@ pub trait ReadTx: Sync {
         ids: &[BaselineId],
     ) -> impl Future<Output = Result<Vec<Baseline>>> + Send;
 
+    /// The headers of the baselines of a branch committed before the order before (0: the newest), newest first, at
+    /// most limit.
+    fn baseline_page(
+        &self,
+        namespace: &str,
+        branch: &str,
+        before: i64,
+        limit: i64,
+    ) -> impl Future<Output = Result<Vec<Baseline>>> + Send;
+
+    /// The headers of the baselines some changes left in a namespace, in the order they committed.
+    fn change_baseline_headers(
+        &self,
+        namespace: &str,
+        changes: &[ChangeId],
+    ) -> impl Future<Output = Result<Vec<Baseline>>> + Send;
+
+    /// The headers of the baselines of a branch, in the order they committed.
+    fn branch_baseline_headers(
+        &self,
+        namespace: &str,
+        branch: &str,
+    ) -> impl Future<Output = Result<Vec<Baseline>>> + Send;
+
     /// The rows of a namespace in the store, by measure (`stats::STORE_MEASURES`) then by key (`Tx.StoreCounts`).
     fn store_counts(
         &self,

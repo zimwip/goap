@@ -311,4 +311,9 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   why it replays a call on Go: with the attachments, no call of the scenarios but the ones Rust refuses on purpose
   falls back; 1148 calls, none divergent, the tables the same, the events of the outbox but the orders of ids (a
   baseline's `set`, the reverted nodes of a commit).
+  `GetChange` at a position of its log (`at_seq`, ADR 0153: `write::whole::change_at`, the fold up to that entry,
+  `work::fold_upto`; at or past the current position, the change as it is) and the history of a branch in
+  `ListBaselines` (`read::baseline_history`: a page of its baselines before a position, the related baselines of the
+  changes they took, `next`) follow: 1148 calls, one divergent, the order of two `removeLink` patches of a split
+  (ids drawn at random).
 - Not done yet: the rest of phase 4.

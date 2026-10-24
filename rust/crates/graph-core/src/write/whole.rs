@@ -9,7 +9,7 @@ use serde_json::Value;
 use super::{
     check,
     review::{draft_changed, stored_draft},
-    work::{ChangeView, fold_change},
+    work::{ChangeView, fold_change, fold_upto},
 };
 use crate::{
     GraphError, Kind, Result,
@@ -139,4 +139,34 @@ async fn validations<T: ReadTx>(
         out.insert(cn.id.clone(), v);
     }
     Ok(out)
+}
+
+/// A change as its log stood at a position (Go's `ChangeAt`, ADR 0153): its impacts and items folded from the entries
+/// up to it, nothing validated; at or past the position the change stands at, the change as it is.
+pub async fn change_at<T: ReadTx>(tx: &T, id: &ChangeId, seq: i64) -> Result<WholeChange> {
+    if seq <= 0 {
+        return Err(GraphError::invalid(format!(
+            "change {id}: a position of its log is above 0"
+        )));
+    }
+    let change = tx
+        .change(id)
+        .await?
+        .ok_or_else(|| GraphError::not_found(format!("change {id}")))?;
+    let now = fold_change(tx, id).await?;
+    let upto = if seq >= now.seq { 0 } else { seq };
+    let (view, _) = fold_upto(tx, id, upto).await?;
+    let mut items = Vec::new();
+    for l in tx.log(id, 0, &[&format!("{LOG_FACT}.")]).await? {
+        if upto > 0 && l.seq > upto {
+            break;
+        }
+        items.push(serde_json::from_str(&l.payload).map_err(GraphError::internal)?);
+    }
+    Ok(WholeChange {
+        change,
+        impacts: view.fold.impacts.into_iter().map(|cn| (cn, None)).collect(),
+        items,
+        seq: view.seq,
+    })
 }

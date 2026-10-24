@@ -1031,3 +1031,81 @@ pub fn view_page_limit(limit: i64) -> usize {
         limit as usize
     }
 }
+
+/// A page of the history of a branch (Go's `BaselineHistory`): its baselines, oldest first, and the baselines they
+/// relate to.
+#[derive(Debug, Clone, Default)]
+pub struct BaselineHistory {
+    pub baselines: Vec<Baseline>,
+    /// the other baselines of the changes of the page, those of the open branches forked from this one (first page
+    /// only), and the parents, merge and rebase sources not listed otherwise
+    pub related: Vec<Baseline>,
+    /// the order to ask the next page before, 0 when none remains
+    pub next: i64,
+}
+
+/// The history of a branch, newest commits first by pages of limit, before the order before (0: the newest).
+pub async fn baseline_history<T: ReadTx>(
+    tx: &T,
+    namespace: &str,
+    branch: &str,
+    before: i64,
+    limit: i64,
+) -> Result<BaselineHistory> {
+    let limit = if limit <= 0 || limit > MAX_BROWSE_LIMIT as i64 {
+        100
+    } else {
+        limit
+    };
+    let branch = branch_of(branch);
+    let mut h = BaselineHistory::default();
+    let mut page = tx.baseline_page(namespace, branch, before, limit + 1).await?;
+    if page.len() as i64 > limit {
+        page.truncate(limit as usize);
+        h.next = page[limit as usize - 1].seq;
+    }
+    page.reverse();
+    let mut seen: HashSet<BaselineId> = page.iter().map(|b| b.id.clone()).collect();
+    let mut changes: Vec<_> = page
+        .iter()
+        .filter(|b| !b.change_id.is_empty())
+        .map(|b| b.change_id.clone())
+        .collect();
+    h.baselines = page;
+    let add = |h: &mut BaselineHistory, seen: &mut HashSet<BaselineId>, bs: Vec<Baseline>| {
+        for b in bs {
+            if seen.insert(b.id.clone()) {
+                h.related.push(b);
+            }
+        }
+    };
+    changes.sort();
+    changes.dedup();
+    let related = tx.change_baseline_headers(namespace, &changes).await?;
+    add(&mut h, &mut seen, related);
+    if before == 0 {
+        for br in tx.branches(namespace).await? {
+            if br.status != BRANCH_OPEN || br.name == branch || branch_of(&br.parent) != branch {
+                continue;
+            }
+            let bs = tx.branch_baseline_headers(namespace, &br.name).await?;
+            add(&mut h, &mut seen, bs);
+        }
+    }
+    let mut reach: Vec<BaselineId> = Vec::new();
+    for b in h.baselines.iter().chain(&h.related) {
+        for id in [&b.parent_id, &b.merged_from, &b.rebased_from] {
+            if !id.is_empty() && !seen.contains(id) {
+                reach.push(id.clone());
+            }
+        }
+    }
+    reach.sort();
+    reach.dedup();
+    let ghosts = tx.baseline_headers_of(namespace, &reach).await?;
+    add(&mut h, &mut seen, ghosts);
+    for b in h.baselines.iter_mut().chain(h.related.iter_mut()) {
+        b.namespace = namespace_of(namespace).to_string();
+    }
+    Ok(h)
+}

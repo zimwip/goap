@@ -355,6 +355,54 @@ impl Sql {
         )
     }
 
+    /// The headers of the baselines of a branch committed before the order before (0: the newest), newest first, at
+    /// most limit (`sqlBaselinePage`).
+    pub fn baseline_page(self, namespace: &str, branch: &str, before: i64, limit: i64) -> Stmt {
+        (
+            format!(
+                "SELECT {} FROM baseline WHERE namespace = {} AND branch = {} AND ({} = 0 OR seq < {}) ORDER BY seq DESC LIMIT {}",
+                self.header_cols(),
+                self.ph(1),
+                self.ph(2),
+                self.ph(3),
+                self.ph(3),
+                self.ph(4)
+            ),
+            vec![
+                namespace_of(namespace).into(),
+                branch_of(branch).into(),
+                before.into(),
+                limit.into(),
+            ],
+        )
+    }
+
+    /// The headers of the baselines some changes left in a namespace, in the order they committed.
+    pub fn change_baseline_headers(self, namespace: &str, changes: &[ChangeId]) -> Stmt {
+        let (cond, arg) = self.in_list("change_id", 2, changes.iter().map(|i| i.0.clone()).collect(), true);
+        (
+            format!(
+                "SELECT {} FROM baseline WHERE namespace = {} AND {cond} ORDER BY seq",
+                self.header_cols(),
+                self.ph(1)
+            ),
+            vec![namespace_of(namespace).into(), arg],
+        )
+    }
+
+    /// The headers of the baselines of a branch, in the order they committed.
+    pub fn branch_baseline_headers(self, namespace: &str, branch: &str) -> Stmt {
+        (
+            format!(
+                "SELECT {} FROM baseline WHERE namespace = {} AND branch = {} ORDER BY seq",
+                self.header_cols(),
+                self.ph(1),
+                self.ph(2)
+            ),
+            vec![namespace_of(namespace).into(), branch_of(branch).into()],
+        )
+    }
+
     /// The statement of each measure of the store for a namespace (`sqlStoreCounts`): rows of a key and a count, in
     /// the order of `stats::STORE_MEASURES`.
     pub fn store_counts(self, namespace: &str) -> Vec<(&'static str, Stmt)> {

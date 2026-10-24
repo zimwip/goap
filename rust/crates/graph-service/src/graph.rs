@@ -1178,8 +1178,8 @@ impl pb::GraphService for Graph {
         .await
     }
 
-    /// The headers of the baselines of a namespace, or of some of them by id. The history of a branch (a page with
-    /// the baselines it relates to) is still Go's.
+    /// The headers of the baselines of a namespace, of some of them by id, or the history of a branch (a page with the
+    /// baselines it relates to).
     async fn list_baselines(
         &self,
         _ctx: &Ctx,
@@ -1188,9 +1188,13 @@ impl pb::GraphService for Graph {
         self.read_any(&req, async |tx| {
             let m = &req.msg;
             if !m.branch.is_empty() {
-                return Err(GraphError::unimplemented(
-                    "the history of a branch (BaselineHistory): not served here yet",
-                ));
+                let h =
+                    graph_core::read::baseline_history(tx, &m.namespace, &m.branch, m.before, m.limit as i64).await?;
+                return Ok(pb::ListBaselinesResponse {
+                    baselines: h.baselines.iter().map(|b| listed_baseline(b, &m.namespace)).collect(),
+                    related: h.related.iter().map(|b| listed_baseline(b, &m.namespace)).collect(),
+                    next: h.next,
+                });
             }
             let bs = if m.ids.is_empty() {
                 tx.baseline_headers(&m.namespace).await?
@@ -1536,9 +1540,10 @@ impl pb::GraphService for Graph {
         let state = self.state.clone();
         self.read(caller, async |tx| {
             if m.at_seq > 0 {
-                return Err(GraphError::unimplemented(
-                    "a change as its log stood at a position (ADR 0153): not served here yet",
-                ));
+                let w = whole::change_at(tx, &ChangeId(m.id.clone()), m.at_seq).await?;
+                return Ok(pb::GetChangeResponse {
+                    change: Some(whole_pb(&w)?),
+                });
             }
             let cat = state.catalog(tx).await?;
             let w = whole::whole_change(tx, &cat, &ChangeId(m.id.clone())).await?;

@@ -1632,10 +1632,18 @@ pub async fn fold_change<T: ReadTx>(store: &T, id: &ChangeId) -> Result<ChangeVi
 /// The fold of the log of a change whatever its flows, with the items of the change in the order of its log: what
 /// the operations on the flows themselves read.
 pub async fn fold_any<T: ReadTx>(store: &T, id: &ChangeId) -> Result<(ChangeView, Vec<crate::flow::Item>)> {
+    fold_upto(store, id, 0).await
+}
+
+/// The fold of the log of a change as it stood at a position (0: as it stands).
+pub async fn fold_upto<T: ReadTx>(store: &T, id: &ChangeId, upto: i64) -> Result<(ChangeView, Vec<crate::flow::Item>)> {
     let mut out = ChangeView::default();
     let mut events = Vec::new();
     let mut items = Vec::new();
     for l in store.log(id, 0, &[]).await? {
+        if upto > 0 && l.seq > upto {
+            break;
+        }
         if l.stream() == LOG_IMPACT || l.stream() == LOG_FACT {
             out.seq = out.seq.max(l.seq); // the position of the view: its impact events and facts
         }

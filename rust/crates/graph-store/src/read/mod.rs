@@ -434,6 +434,46 @@ impl ReadTx for Session {
             .collect())
     }
 
+    async fn baseline_page(
+        &self,
+        namespace: &str,
+        branch: &str,
+        before: i64,
+        limit: i64,
+    ) -> Result<Vec<Baseline>, GraphError> {
+        Ok(self
+            .rows(self.sql.baseline_page(namespace, branch, before, limit))
+            .await?
+            .iter()
+            .map(header_of)
+            .collect())
+    }
+
+    async fn change_baseline_headers(
+        &self,
+        namespace: &str,
+        changes: &[ChangeId],
+    ) -> Result<Vec<Baseline>, GraphError> {
+        if changes.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(self
+            .rows(self.sql.change_baseline_headers(namespace, changes))
+            .await?
+            .iter()
+            .map(header_of)
+            .collect())
+    }
+
+    async fn branch_baseline_headers(&self, namespace: &str, branch: &str) -> Result<Vec<Baseline>, GraphError> {
+        Ok(self
+            .rows(self.sql.branch_baseline_headers(namespace, branch))
+            .await?
+            .iter()
+            .map(header_of)
+            .collect())
+    }
+
     async fn store_counts(&self, namespace: &str) -> Result<HashMap<String, HashMap<String, i64>>, GraphError> {
         let mut out = HashMap::new();
         for (measure, stmt) in self.sql.store_counts(namespace) {
