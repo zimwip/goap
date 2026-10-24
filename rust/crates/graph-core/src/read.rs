@@ -51,7 +51,7 @@ impl ViewLevel {
 }
 
 /// The whole state of a baseline (none for the empty state).
-async fn whole_state<T: ReadTx>(tx: &T, h: &Baseline) -> Result<HashMap<NodeId, Version>> {
+pub async fn whole_state<T: ReadTx>(tx: &T, h: &Baseline) -> Result<HashMap<NodeId, Version>> {
     if h.id.is_empty() {
         return Ok(HashMap::new());
     }
@@ -294,6 +294,11 @@ pub async fn branch_versions<T: ReadTx>(tx: &T, own: &Branch, ids: &[NodeId]) ->
 /// The whole state of the branch of a change.
 pub async fn branch_state<T: ReadTx>(tx: &T, own: &Branch) -> Result<HashMap<NodeId, Version>> {
     chain_versions(tx, own, None, true).await
+}
+
+/// The whole state the branch of a change was forked from.
+pub async fn fork_state<T: ReadTx>(tx: &T, own: &Branch) -> Result<HashMap<NodeId, Version>> {
+    chain_versions(tx, own, None, false).await
 }
 
 /// The versions some nodes have in the fork of the branch of a change (Go's `forkVersions`).

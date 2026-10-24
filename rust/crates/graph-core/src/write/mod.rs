@@ -1,5 +1,6 @@
 pub mod attach;
 pub mod branches;
+pub mod branchmerge;
 pub mod change;
 pub mod check;
 pub mod commit;

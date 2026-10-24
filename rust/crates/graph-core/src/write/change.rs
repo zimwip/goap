@@ -135,6 +135,30 @@ impl<S: WriteTx> Tx<'_, S> {
             .ok_or_else(|| GraphError::internal(format!("no {kind} structure in the catalogue")))
     }
 
+    /// Gives a change its unit and its project (Go's `scopeChange`): the root unit by default, a project always named,
+    /// one spelling per node.
+    pub(crate) async fn scope_change(&self, c: &mut Change) -> Result<()> {
+        let org = STRUCTURE_ORGANISATION;
+        let proj = STRUCTURE_PROJECT;
+        if c.owner_org.is_zero() {
+            c.owner_org = self.structure_url(org, &self.structure_root(org)?)?;
+        }
+        if c.project_id.is_zero() {
+            return Err(GraphError::invalid("a change names the project it acts in"));
+        }
+        let unit = self
+            .structure_node(org, &c.owner_org)
+            .await
+            .map_err(|e| e.context("owner of the change"))?;
+        let project = self
+            .structure_node(proj, &c.project_id)
+            .await
+            .map_err(|e| e.context("project of the change"))?;
+        c.owner_org = self.structure_url(org, &unit.key)?;
+        c.project_id = self.structure_url(proj, &project.key)?;
+        Ok(())
+    }
+
     /// Opens a root change (Go's `createChange` without a parent, a lifecycle or a guardian: the service has no
     /// registry, as `platform/cmd/graph`).
     pub async fn create_change(&mut self, mut inp: NewChange) -> Result<Change> {
@@ -164,23 +188,7 @@ impl<S: WriteTx> Tx<'_, S> {
             ..Change::default()
         };
         self.prepare_sub_change(&mut c, &mut inp).await?;
-        // scopeChange: the root unit by default, a project always named, one spelling per node
-        if c.owner_org.is_zero() {
-            c.owner_org = self.structure_url(org, &self.structure_root(org)?)?;
-        }
-        if c.project_id.is_zero() {
-            return Err(GraphError::invalid("a change names the project it acts in"));
-        }
-        let unit = self
-            .structure_node(org, &c.owner_org)
-            .await
-            .map_err(|e| e.context("owner of the change"))?;
-        let project = self
-            .structure_node(proj, &c.project_id)
-            .await
-            .map_err(|e| e.context("project of the change"))?;
-        c.owner_org = self.structure_url(org, &unit.key)?;
-        c.project_id = self.structure_url(proj, &project.key)?;
+        self.scope_change(&mut c).await?;
         if c.baseline_id.is_empty() && c.parent_id.is_empty() {
             c.baseline_id = read::branch_head(self.store, &c.namespace, &c.branch).await?.id;
         }

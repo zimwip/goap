@@ -100,7 +100,7 @@ impl<S: WriteTx> Tx<'_, S> {
             .ok_or_else(|| GraphError::not_found(format!("link set of {r}")))
     }
 
-    async fn out_links(&self, r: &NodeRef) -> Result<Vec<Link>> {
+    pub(super) async fn out_links(&self, r: &NodeRef) -> Result<Vec<Link>> {
         self.store.links_from(std::slice::from_ref(r), None).await
     }
 
@@ -122,7 +122,7 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// Writes the outgoing links of a version written in the transaction (Go's `putLinks`, ADR 0141): the set of one
     /// of `like` when it holds the same links, else a new set, a delta over an earlier one when that is smaller.
-    async fn put_version_links(&mut self, n: &Node, links: &[Link], like: &[NodeRef]) -> Result<()> {
+    pub(super) async fn put_version_links(&mut self, n: &Node, links: &[Link], like: &[NodeRef]) -> Result<()> {
         let from = n.node_ref();
         let mut prev: Option<NodeRef> = None;
         for r in like {

@@ -316,4 +316,12 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `ListBaselines` (`read::baseline_history`: a page of its baselines before a position, the related baselines of the
   changes they took, `next`) follow: 1148 calls, one divergent, the order of two `removeLink` patches of a split
   (ids drawn at random).
+  The three-way merge of branches follows (`PlanMerge` for any identified caller, `MergeBranch` out of the
+  platform's namespaces, `write::branchmerge`): Go's `MergeProps`, `MergeLinks` and `CommonAncestor`, the plan over
+  the states of the source branch (its fork and head baselines, or the chain of the branch of a change) and the head
+  of the target, then the merge change (the root unit, the caller's project), one review of `graph.merge`, the
+  impacts in four phases (created or proposed, reviewed, written, committed), a node changed on one side joining the
+  target, one changed on both a merge version with its merged links, the baseline of kind merge (its event the delta on
+  main only), the source branch merged: 1864 calls, one divergent (the `removeLink` order above), the tables the same
+  but the orders of ids in the change log, the events of the outbox but the order of a baseline's `set`.
 - Not done yet: the rest of phase 4.

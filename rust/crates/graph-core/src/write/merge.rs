@@ -185,7 +185,7 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// Moves the head of a branch to a baseline built on it (Go's `advanceBranch`): main is created on first use, a
     /// head another transaction moved meanwhile is a conflict.
-    async fn advance_branch(&mut self, namespace: &str, name: &str, head: &Baseline) -> Result<()> {
+    pub(super) async fn advance_branch(&mut self, namespace: &str, name: &str, head: &Baseline) -> Result<()> {
         let ns = crate::model::namespace_of(namespace).to_string();
         self.lock_branch(&ns, name).await?;
         let mut b = match self.store.branch(&ns, name).await? {

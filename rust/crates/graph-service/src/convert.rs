@@ -512,3 +512,31 @@ pub fn log_entry(e: &graph_core::impact::LogEntry) -> pb::LogEntry {
         causation: e.causation.clone(),
     }
 }
+
+/// A merge plan (Go's `pbconv.MergePlanToPB`).
+pub fn merge_plan(p: &graph_core::write::branchmerge::MergePlan) -> pb::MergePlan {
+    pb::MergePlan {
+        from: p.from.clone(),
+        into: p.into.clone(),
+        into_head: p.into_head.0.clone(),
+        candidates: p
+            .candidates
+            .iter()
+            .map(|c| pb::MergeCandidate {
+                node: c.node.0.clone(),
+                key: c.key.clone(),
+                r#type: c.typ.clone(),
+                kind: c.kind.clone(),
+                ancestor: c.ancestor.as_ref().map(node_ref),
+                ours: c.ours.as_ref().map(node_ref),
+                theirs: Some(node_ref(&c.theirs)),
+                deleted: c.deleted,
+                base: props(&c.base),
+                ours_props: props(&c.ours_props),
+                theirs_props: props(&c.theirs_props),
+                merged: props(&c.merged),
+                conflicts: c.conflicts.clone(),
+            })
+            .collect(),
+    }
+}

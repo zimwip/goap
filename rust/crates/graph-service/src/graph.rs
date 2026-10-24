@@ -6,6 +6,7 @@ use std::{collections::HashMap, sync::Arc};
 use goap_connect::{ConnectError, Ctx, Request, Response, async_trait};
 use goap_proto::graph::v1 as pb;
 use graph_catalog::{Catalog, catalog::STRUCTURE_PROJECT};
+use graph_core::write::branchmerge;
 use graph_core::write::merge::Merge;
 use graph_core::write::restructure::{NodeName, Restructured};
 use graph_core::write::reviews::{Actor, EntryEdit, ReviewEdit, ReviewObject};
@@ -1234,6 +1235,62 @@ impl pb::GraphService for Graph {
                 branches: bs.iter().map(convert::branch).collect(),
                 heads: heads.iter().map(|b| listed_baseline(b, &m.namespace)).collect(),
                 counts: counts.into_iter().map(|(k, n)| (k, n as i32)).collect(),
+            })
+        })
+        .await
+    }
+
+    /// The three-way merge of a branch into another one, as it would go (`Graph.PlanMerge`).
+    async fn plan_merge(&self, _ctx: &Ctx, req: Request<pb::PlanMergeRequest>) -> Answer<pb::PlanMergeResponse> {
+        self.read_any(&req, async |tx| {
+            let m = &req.msg;
+            let p = branchmerge::plan_merge(tx, &m.namespace, &m.from, &m.into).await?;
+            Ok(pb::PlanMergeResponse {
+                plan: Some(convert::merge_plan(&p)),
+            })
+        })
+        .await
+    }
+
+    /// Merges a branch into another one (`Graph.MergeBranch`), in the caller's project, else the root one.
+    async fn merge_branch(&self, _ctx: &Ctx, req: Request<pb::MergeBranchRequest>) -> Answer<pb::MergeBranchResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let token_project = caller.project.clone();
+        self.write(caller, async |tx| {
+            if is_platform_namespace(&m.namespace) {
+                return Err(GraphError::unimplemented(
+                    "a merge of branches of the platform's namespaces: not served here yet",
+                ));
+            }
+            let project_id = if token_project.is_empty() {
+                tx.structure_root(STRUCTURE_PROJECT)?
+            } else {
+                token_project.clone()
+            };
+            let resolutions = m
+                .resolutions
+                .iter()
+                .map(|(id, r)| {
+                    let props = r.props.as_ref().map(convert::map).filter(|p| !p.is_empty());
+                    (id.as_str().into(), branchmerge::Resolution { props, skip: r.skip })
+                })
+                .collect();
+            let r = tx
+                .merge_branch(branchmerge::MergeRequest {
+                    from: m.from.clone(),
+                    into: m.into.clone(),
+                    title: m.title.clone(),
+                    namespace: m.namespace.clone(),
+                    resolutions,
+                    project_id,
+                })
+                .await?;
+            let state = r.state.iter().map(|(id, v)| (id.0.clone(), *v)).collect();
+            Ok(pb::MergeBranchResponse {
+                change: Some(convert::change(&r.change)),
+                baseline: Some(convert::baseline(&r.baseline, Some(state))),
+                plan: Some(convert::merge_plan(&r.plan)),
             })
         })
         .await
