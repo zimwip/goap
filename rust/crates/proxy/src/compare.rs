@@ -429,6 +429,13 @@ impl Comparer {
                 continue;
             };
             let r = r.unwrap_or("");
+            // a watermark is a map: its entries in the order of their positions, as either side writes them
+            let (g, r) = if k.as_str() == "x-goap-change-seq" {
+                (by_position(g), by_position(r))
+            } else {
+                (g.to_string(), r.to_string())
+            };
+            let (g, r) = (g.as_str(), r.as_str());
             if !self.shared {
                 rec.clashes.extend(self.ids.pair_text(g, r));
             }
@@ -514,6 +521,13 @@ pub async fn call(
     let rust_reply = rust.call(method, &rpath, &rheaders, rbody).await;
     let rec = c.judge(proc, &body, headers, &go_reply, &rust_reply, notes);
     (go_reply, rec)
+}
+
+/// The entries `<change>:<seq>` of a watermark sorted by their position.
+fn by_position(v: &str) -> String {
+    let mut e: Vec<&str> = v.split(',').filter(|e| !e.is_empty()).collect();
+    e.sort_by_key(|e| e.rsplit_once(':').and_then(|(_, n)| n.parse::<i64>().ok()).unwrap_or(0));
+    e.join(",")
 }
 
 #[cfg(test)]

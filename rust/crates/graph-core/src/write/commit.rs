@@ -37,6 +37,8 @@ const BASELINE_COMMIT: &str = "commit";
 
 /// The kind of the baseline of a commit that reverts nodes (`domain.BaselineRevert`).
 const BASELINE_REVERT: &str = "revert";
+/// The kind of the commit of the merges of a rebase (`domain.BaselineRebase`).
+const BASELINE_REBASE: &str = "rebase";
 
 /// The comment of a version reverting a node withdrawn after its commit.
 const REVERT_COMMENT: &str = "reverted: its impact was withdrawn from the change";
@@ -270,6 +272,18 @@ impl<S: WriteTx> Tx<'_, S> {
     /// Commits a change on its own branch (Go's `CommitChange` for a root change of the main flow, no methodology to
     /// ask: the committable states of its lifecycles are its guardian): the header of the commit.
     pub async fn commit_change(&mut self, id: &ChangeId, baseline_name: &str) -> Result<Baseline> {
+        Ok(self.commit_on_branch(id, baseline_name, false).await?.0)
+    }
+
+    /// Writes the accepted modifications of a change on its own branch and reverts the nodes it no longer changes (Go's
+    /// `commitOnBranch` with its guardian): the header of the commit and the versions written. A rebase (mechanical)
+    /// writes its merges and checks nothing of what they mean (ADR 0146), its commit told by the rebase.
+    pub(crate) async fn commit_on_branch(
+        &mut self,
+        id: &ChangeId,
+        baseline_name: &str,
+        mechanical: bool,
+    ) -> Result<(Baseline, Vec<Node>)> {
         let w = self.work_on(id, crate::flow::MAIN_FLOW).await?;
         let c = w.c.clone();
         let branch = w.branch.clone();
@@ -354,7 +368,7 @@ impl<S: WriteTx> Tx<'_, S> {
         let reverted = self.revert_withdrawn(&c, &branch, &own, &withdrawn).await?;
         // the versions are what a version must be (Go's `walkChangeImpacts`)
         for (n, links) in nodes.iter().zip(&wrote) {
-            if n.deleted {
+            if n.deleted || mechanical {
                 continue;
             }
             let ls: Vec<_> = links.iter().map(|l| (l.typ.as_str(), l.props.as_ref())).collect();
@@ -383,7 +397,9 @@ impl<S: WriteTx> Tx<'_, S> {
             branch: branch.clone(),
             parent_id: own.fork_baseline.clone(),
             change_id: c.id.clone(),
-            kind: if reverted.is_empty() {
+            kind: if mechanical {
+                BASELINE_REBASE
+            } else if reverted.is_empty() {
                 BASELINE_COMMIT
             } else {
                 BASELINE_REVERT
@@ -406,15 +422,20 @@ impl<S: WriteTx> Tx<'_, S> {
             })
             .collect();
         self.emit(committed).await?;
-        self.check_committable(id, &own, &nodes).await?;
+        if !mechanical {
+            self.check_committable(id, &own, &nodes).await?;
+        }
         let mut c = self.change_head(id).await?;
         if c.status == STATUS_DRAFT {
             c.status = STATUS_ACTIVE.into();
         }
         self.put_change(&c).await?;
-        let ev: Vec<EventNode> = nodes.iter().chain(&reverted).map(EventNode::of).collect();
-        self.raise(CHANGE_COMMITTED, &c, Some(&result), branch_of(&branch), &ev);
-        Ok(result)
+        let wrote: Vec<Node> = nodes.into_iter().chain(reverted).collect();
+        if !mechanical {
+            let ev: Vec<EventNode> = wrote.iter().map(EventNode::of).collect();
+            self.raise(CHANGE_COMMITTED, &c, Some(&result), branch_of(&branch), &ev);
+        }
+        Ok((result, wrote))
     }
 }
 

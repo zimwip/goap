@@ -1110,6 +1110,75 @@ fn links_of(one: Option<PatchLink>, many: Vec<PatchLink>) -> Vec<PatchLink> {
     one.into_iter().chain(many).collect()
 }
 
+/// The conflicts of an impact an event leaves (Go's `ApplyConflictEvent`): the merge of a rebase names them, an edit
+/// of a field settles its own, a resolution or a new draft all.
+pub fn apply_conflict_event(pending: &[String], e: &ImpactEvent) -> Vec<String> {
+    if !e.flow.is_empty() {
+        return pending.to_vec();
+    }
+    let mut pending = pending.to_vec();
+    let settle = |pending: &mut Vec<String>, name: &str| pending.retain(|c| c != name);
+    let patch = e.patch.as_ref();
+    let rebased = patch.and_then(|p| p.get("rebased")).is_some_and(|r| !r.is_null());
+    let conflicts_of = || -> Vec<String> {
+        match patch.and_then(|p| p.get("conflicts")) {
+            Some(Value::Array(a)) => a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect(),
+            _ => Vec::new(),
+        }
+    };
+    let typed = || -> DraftPatch {
+        patch
+            .and_then(|m| serde_json::from_value(Value::Object(m.clone())).ok())
+            .unwrap_or_default()
+    };
+    match e.op {
+        ImpactOp::Created | ImpactOp::CheckedOut | ImpactOp::Cancelled | ImpactOp::Withdrawn | ImpactOp::Committed => {
+            return Vec::new();
+        }
+        ImpactOp::Transitioned => {
+            if rebased {
+                return conflicts_of();
+            }
+            if e.draft.is_some() {
+                return Vec::new(); // a draft installed wholesale (an adoption)
+            }
+            if patch.and_then(|p| p.get("state")).is_some_and(|s| !s.is_null()) {
+                settle(&mut pending, crate::draftmerge::CONFLICT_STATE);
+            }
+            for k in typed().props.unwrap_or_default().keys() {
+                settle(&mut pending, &crate::draftmerge::conflict_prop(k));
+            }
+        }
+        ImpactOp::Updated => {
+            if rebased {
+                return conflicts_of(); // the merge of a rebase (ADR 0144)
+            }
+            if patch.and_then(|p| p.get("resolved")).and_then(Value::as_bool) == Some(true) {
+                return Vec::new();
+            }
+            settle(&mut pending, crate::draftmerge::CONFLICT_NODE);
+            let p = typed();
+            for k in p.props.unwrap_or_default().keys().chain(p.unset.iter()) {
+                settle(&mut pending, &crate::draftmerge::conflict_prop(k));
+            }
+            if !p.owner.is_zero() {
+                settle(&mut pending, crate::draftmerge::CONFLICT_OWNER);
+            }
+            for l in [p.add_link, p.remove_link, p.update_link].into_iter().flatten() {
+                let mut to = l.to_id.to_string();
+                if to.is_empty() && !l.target.is_empty() {
+                    to = Url::of(&l.target).logical().to_string();
+                }
+                if !l.typ.is_empty() && !to.is_empty() {
+                    settle(&mut pending, &crate::draftmerge::conflict_link(&l.typ, &NodeId(to)));
+                }
+            }
+        }
+        _ => {}
+    }
+    pending
+}
+
 /// The draft an event of its impact and flow leaves of a draft (none: none, or no more). Go's `applyDraft`.
 pub fn apply_draft(d: Option<&Draft>, e: &ImpactEvent) -> Option<Draft> {
     if matches!(e.op, ImpactOp::Created | ImpactOp::CheckedOut | ImpactOp::Transitioned)
@@ -1178,6 +1247,8 @@ pub fn apply_draft(d: Option<&Draft>, e: &ImpactEvent) -> Option<Draft> {
 pub struct Fold {
     pub impacts: Vec<ChangeImpact>,
     pub drafts: Vec<Draft>,
+    /// The conflicts a rebase left on the impacts that have some, not settled yet (Go's `draftState.conflicts`).
+    pub conflicts: HashMap<String, Vec<String>>,
     /// The position of each impact in `impacts`.
     at: HashMap<String, usize>,
 }
@@ -1236,6 +1307,12 @@ impl Fold {
             ImpactOp::Withdrawn | ImpactOp::Committed => self.drafts.retain(|d| d.impact != e.impact),
             ImpactOp::Adopted => self.drafts.retain(|d| d.flow != e.flow),
             _ => {}
+        }
+        let pending = apply_conflict_event(self.conflicts.get(&e.impact).map_or(&[], Vec::as_slice), e);
+        if pending.is_empty() {
+            self.conflicts.remove(&e.impact);
+        } else {
+            self.conflicts.insert(e.impact.clone(), pending);
         }
         let live: HashMap<&str, bool> = self.impacts.iter().map(|c| (c.id.as_str(), !c.superseded)).collect();
         self.drafts

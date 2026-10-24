@@ -1,8 +1,8 @@
 //! The merge of a change into the branch it was forked from (Go's `IntegrateChange`, `rebase_committed.go`,
 //! `changebranch.go`; ADR 0102, 0140): settled, up to date, then fast-forwarded: what its branch committed joins the
 //! target, a baseline of kind fast-forward is the new head, each impact is committed there, the change is applied.
-//! A sub-change merges into the branch of its parent the same way (ADR 0103). A rebase, a three-way merge and a
-//! dependency are the Go service's.
+//! A sub-change merges into the branch of its parent the same way (ADR 0103). A three-way merge and a dependency are
+//! the Go service's.
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde_json::Value;
@@ -10,6 +10,7 @@ use serde_json::Value;
 use super::{
     commit::NOTHING_TO_COMMIT,
     events::{CHANGE_APPLIED, CHANGE_MERGED, EventNode},
+    rebase::main_impacts,
     review::draft_changed,
     tx::Tx,
     work::node_of,
@@ -44,6 +45,14 @@ pub struct ChangeRead {
     /// the items of its log, as written (`domain.ChangeItem` JSON)
     pub items: Vec<Value>,
     pub seq: i64,
+}
+
+/// What a merge did: the change applied, or a rebase kept that left impacts to look at again (the error the merge
+/// answers, once the rebase is committed).
+#[derive(Debug)]
+pub enum Merge {
+    Applied(Box<ChangeRead>),
+    Rebased(GraphError),
 }
 
 /// What a change has to commit and whether it may merge (Go's `CommitState`): what drives the Commit and Merge buttons.
@@ -102,7 +111,7 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     /// Whether the draft of an impact of the main flow modifies its node (Go's `draftModifies`).
-    async fn modifies(&self, id: &ChangeId, impact: &str) -> Result<bool> {
+    pub(super) async fn modifies(&self, id: &ChangeId, impact: &str) -> Result<bool> {
         let Some(d) = self.views[id].fold.draft(impact, "").cloned() else {
             return Ok(false);
         };
@@ -200,10 +209,11 @@ impl<S: WriteTx> Tx<'_, S> {
         self.put_branch(&b).await
     }
 
-    /// Merges a change into what it was forked from, by a fast-forward (Go's `IntegrateChange` of an open change): a
-    /// root change into the lasting branch it was forked from, a sub-change into the branch of its parent, which takes
-    /// its work as its own (ADR 0103). The change as it is once applied.
-    pub async fn merge_change(&mut self, id: &ChangeId) -> Result<ChangeRead> {
+    /// Merges a change into what it was forked from (Go's `IntegrateChange` of an open change): settled, rebased onto
+    /// what its branch is forked from now, then fast-forwarded: a root change into the lasting branch it was forked from,
+    /// a sub-change into the branch of its parent, which takes its work as its own (ADR 0103). A rebase that left
+    /// impacts to look at again is kept, the merge refused: [`Merge::Rebased`], whose transaction is committed.
+    pub async fn merge_change(&mut self, id: &ChangeId) -> Result<Merge> {
         self.lock_change(id).await?;
         let c = self.change_head(id).await?;
         if c.status != super::change::STATUS_DRAFT && c.status != super::change::STATUS_ACTIVE {
@@ -232,53 +242,75 @@ impl<S: WriteTx> Tx<'_, S> {
             )));
         }
         self.check_parent_drafts(&c, &impacts).await?;
-        let Some(mut own) = own else {
-            return Err(GraphError::invalid(format!("change {id} has no branch of its own")));
-        };
-        // up to date: what it is forked from has not moved since (else a rebase, the Go service's)
-        let target = branch_of(&own.parent).to_string();
-        self.lock_branch(&c.namespace, &target).await?;
-        let parent = read::branch(self.store, &own.namespace, &own.parent).await?;
-        if parent.ephemeral {
-            if parent.fork_baseline != own.fork_baseline || self.store.last_commit(&parent.name).await? > own.fork_seq {
-                return Err(unserved(
-                    "the merge of a sub-change whose parent moved since its fork (a rebase, ADR 0103)",
-                ));
-            }
-            if !c.depends_on.is_empty() {
-                return Err(unserved("the merge of a change depending on others (ADR 0108)"));
-            }
-            return self.merge_into_parent(c, own, parent, impacts).await;
-        }
-        let head = read::branch_head(self.store, &own.namespace, &parent.name).await?;
-        if head.id != own.fork_baseline {
-            return Err(unserved(
-                "the merge of a change whose target moved since its fork (a rebase, ADR 0102)",
-            ));
-        }
         if !c.depends_on.is_empty() {
             return Err(unserved("the merge of a change depending on others (ADR 0108)"));
         }
-
-        // the fast-forward
+        // the target is locked before the rebase reads its head: no other merge commits between the rebase and the
+        // fast-forward
+        if let Some(own) = &own {
+            self.lock_branch(&c.namespace, branch_of(&own.parent)).await?;
+        }
+        let rebased = self.rebase_change(id, true).await?;
+        if rebased.changed() {
+            return Ok(Merge::Rebased(GraphError::conflict(format!(
+                "change {id} {}",
+                rebased.summary()
+            ))));
+        }
+        let mut c = self.change_head(id).await?;
+        let Some(mut own) = self.own_branch(&c).await? else {
+            return Err(GraphError::invalid(format!("change {id} has no branch of its own")));
+        };
+        // the fast-forward (Go's `fastForward`): what the branch changed since its fork joins the target, which must
+        // not have moved on those nodes
+        let to = self.onto_of(&own).await?;
         let mut ids = self.store.branch_node_ids(&own.name).await?;
         ids.sort();
-        let into = read::select(self.store, &head, Some(&ids)).await?;
+        let fork = read::fork_versions(self.store, &own, &ids).await?;
+        let into = self.onto_versions(&to, &ids).await?;
+        if fork != into {
+            if to.parent.ephemeral {
+                return Err(GraphError::conflict(format!(
+                    "the branch of parent change {} moved meanwhile: merge {} again",
+                    c.parent_id, c.id
+                )));
+            }
+            return Err(unserved("the three-way merge of a change whose target moved meanwhile"));
+        }
+        if self.moved(&to, &own).await? {
+            // moved on other nodes: the work of the branch stands over it as it is, the fork moved
+            self.move_fork(id, &mut own, &to).await?;
+            self.raise_rebased(id, &own.name, &[]).await?;
+            c = self.change_head(id).await?;
+        }
+        self.view(id).await?;
+        let impacts = main_impacts(&self.views[id].fold.impacts);
         let from = read::branch_versions(self.store, &own, &ids).await?;
         let (moves, delta) = self.moves(&own, &ids, &into, &from).await?;
+        let target = to.parent.name.clone();
         for r in &moves {
             self.join_branch(r, &target, &c.id).await?;
         }
         own.status = BRANCH_MERGED.into();
         self.put_branch(&own).await?;
-        let mut c = c;
         c.status = STATUS_APPLIED.into();
+        if to.parent.ephemeral {
+            // the branch of the parent holds what the sub-change committed, its impacts committed there
+            self.end_commit(&target);
+            self.commit_impacts(&c, &impacts, &target, &BaselineId::default())
+                .await?;
+            let ev = self.moved_nodes(&moves).await?;
+            self.raise(CHANGE_MERGED, &c, None, &target, &ev);
+            self.put_change(&c).await?;
+            self.record_in_parent(&c).await?;
+            return self.change_read(c).await.map(|r| Merge::Applied(Box::new(r)));
+        }
         let res = Baseline {
             id: BaselineId(self.env.new_id()),
             name: c.title.clone(),
             namespace: c.namespace.clone(),
             branch: target.clone(),
-            parent_id: head.id.clone(),
+            parent_id: to.head.clone(),
             change_id: c.id.clone(),
             kind: BASELINE_FAST_FORWARD.into(),
             created_at: Some(self.env.now()),
@@ -292,46 +324,7 @@ impl<S: WriteTx> Tx<'_, S> {
         self.raise(CHANGE_MERGED, &c, Some(&res), &target, &ev);
         self.raise(CHANGE_APPLIED, &c, Some(&res), "", &[]);
         self.put_change(&c).await?;
-        self.change_read(c).await
-    }
-
-    /// The fast-forward of a sub-change into the branch of its parent (Go's `fastForward` onto the branch of a change,
-    /// then `recordInParent`): what its branch committed joins the parent's, no baseline is written.
-    async fn merge_into_parent(
-        &mut self,
-        mut c: Change,
-        mut own: Branch,
-        parent: Branch,
-        impacts: Vec<ChangeImpact>,
-    ) -> Result<ChangeRead> {
-        let target = parent.name.clone();
-        let mut ids = self.store.branch_node_ids(&own.name).await?;
-        ids.sort();
-        let fork = read::fork_versions(self.store, &own, &ids).await?;
-        let into = read::branch_versions(self.store, &parent, &ids).await?;
-        if fork != into {
-            return Err(GraphError::conflict(format!(
-                "the branch of parent change {} moved meanwhile: merge {} again",
-                c.parent_id, c.id
-            )));
-        }
-        let from = read::branch_versions(self.store, &own, &ids).await?;
-        let (moves, _) = self.moves(&own, &ids, &into, &from).await?;
-        for r in &moves {
-            self.join_branch(r, &target, &c.id).await?;
-        }
-        own.status = BRANCH_MERGED.into();
-        self.put_branch(&own).await?;
-        c.status = STATUS_APPLIED.into();
-        // the branch of the parent holds what the sub-change committed, its impacts committed there
-        self.end_commit(&target);
-        self.commit_impacts(&c, &impacts, &target, &BaselineId::default())
-            .await?;
-        let ev = self.moved_nodes(&moves).await?;
-        self.raise(CHANGE_MERGED, &c, None, &target, &ev);
-        self.put_change(&c).await?;
-        self.record_in_parent(&c).await?;
-        self.change_read(c).await
+        self.change_read(c).await.map(|r| Merge::Applied(Box::new(r)))
     }
 
     /// What a fast-forward moves (Go's `fastForward`): the versions the branch holds that the target does not, the
@@ -573,13 +566,4 @@ impl<S: WriteTx> Tx<'_, S> {
             seq: v.seq,
         })
     }
-}
-
-/// The impacts of the main flow of a change (Go's `mainImpactsOf`).
-fn main_impacts(impacts: &[ChangeImpact]) -> Vec<ChangeImpact> {
-    impacts
-        .iter()
-        .filter(|cn| cn.flow.is_empty() && !cn.superseded)
-        .cloned()
-        .collect()
 }

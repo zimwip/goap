@@ -5,6 +5,7 @@ pub mod access;
 pub mod change;
 pub mod decision;
 pub mod dependency;
+pub mod draftmerge;
 pub mod error;
 pub mod flow;
 pub mod gojson;

@@ -10,6 +10,7 @@ pub mod flow;
 pub mod items;
 pub mod merge;
 pub mod project;
+pub mod rebase;
 pub mod restructure;
 pub mod review;
 pub mod reviews;

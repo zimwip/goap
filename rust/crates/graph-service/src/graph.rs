@@ -6,6 +6,7 @@ use std::{collections::HashMap, sync::Arc};
 use goap_connect::{ConnectError, Ctx, Request, Response, async_trait};
 use goap_proto::graph::v1 as pb;
 use graph_catalog::{Catalog, catalog::STRUCTURE_PROJECT};
+use graph_core::write::merge::Merge;
 use graph_core::write::restructure::{NodeName, Restructured};
 use graph_core::write::reviews::{Actor, EntryEdit, ReviewEdit, ReviewObject};
 use graph_core::{
@@ -1015,6 +1016,34 @@ impl pb::GraphService for Graph {
                 commits: st.commits,
                 can_commit: st.can_commit,
                 can_merge: st.can_merge,
+            })
+        })
+        .await
+    }
+
+    async fn get_rebase_state(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::GetRebaseStateRequest>,
+    ) -> Answer<pb::GetRebaseStateResponse> {
+        let caller = Caller::of(&req)?;
+        let id = ChangeId(req.into_inner().change_id);
+        self.write(caller, async |tx| {
+            let st = tx.rebase_state(&id).await?;
+            Ok(pb::GetRebaseStateResponse {
+                parent_id: st.parent.0,
+                behind_impact_ids: st.behind,
+                conflicts: st
+                    .conflicts
+                    .into_iter()
+                    .map(|(change_impact_id, key, conflicts)| pb::ImpactConflicts {
+                        change_impact_id,
+                        key,
+                        conflicts,
+                    })
+                    .collect(),
+                branch: st.branch,
+                onto: st.onto.0,
             })
         })
         .await
@@ -2534,6 +2563,23 @@ impl pb::GraphService for Graph {
         .await
     }
 
+    async fn impact_node_resolve(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ImpactNodeResolveRequest>,
+    ) -> Answer<pb::ImpactNodeResolveResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write(caller, async |tx| {
+            let id = served_change(tx, &m.change_id).await?;
+            let cn = tx.impact_node_resolve(&id, &m.change_impact_id, &m.execution).await?;
+            Ok(pb::ImpactNodeResolveResponse {
+                node: Some(convert::change_impact(&cn)),
+            })
+        })
+        .await
+    }
+
     async fn impact_node_transition(
         &self,
         _ctx: &Ctx,
@@ -2789,19 +2835,68 @@ impl pb::GraphService for Graph {
                 "a merge given resolutions (a three-way merge)",
             )));
         }
+        let res = self
+            .write(caller, async |tx| {
+                let id = served_change(tx, &m.change_id).await?;
+                let r = match tx.merge_change(&id).await? {
+                    Merge::Applied(r) => r,
+                    // the rebase is kept: committed, then the merge refused
+                    Merge::Rebased(err) => return Ok(Err(err)),
+                };
+                let mut c = convert::change(&r.change);
+                c.nodes = r.impacts.iter().map(convert::change_impact).collect();
+                c.items = r
+                    .items
+                    .iter()
+                    .map(convert::item)
+                    .collect::<Result<_, _>>()
+                    .map_err(|e| GraphError::unimplemented(format!("{e}: not served here yet")))?;
+                c.seq = r.seq;
+                Ok(Ok(pb::MergeChangeResponse { change: Some(c) }))
+            })
+            .await?;
+        match res.msg {
+            Ok(msg) => Ok(Response {
+                headers: res.headers,
+                trailers: res.trailers,
+                msg,
+            }),
+            Err(err) => {
+                // the positions the kept rebase left go back with the refusal
+                let mut e = connect_error(err);
+                e.meta_mut().extend(res.headers);
+                Err(e)
+            }
+        }
+    }
+
+    async fn rebase_change(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::RebaseChangeRequest>,
+    ) -> Answer<pb::RebaseChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
         self.write(caller, async |tx| {
             let id = served_change(tx, &m.change_id).await?;
-            let r = tx.merge_change(&id).await?;
-            let mut c = convert::change(&r.change);
-            c.nodes = r.impacts.iter().map(convert::change_impact).collect();
-            c.items = r
-                .items
-                .iter()
-                .map(convert::item)
-                .collect::<Result<_, _>>()
-                .map_err(|e| GraphError::unimplemented(format!("{e}: not served here yet")))?;
-            c.seq = r.seq;
-            Ok(pb::MergeChangeResponse { change: Some(c) })
+            let r = tx.rebase_change(&id, false).await?;
+            Ok(pb::RebaseChangeResponse {
+                parent_id: r.parent.0.clone(),
+                branch: r.branch.clone(),
+                from: r.from.0.clone(),
+                onto: r.onto.0.clone(),
+                impacts: r
+                    .impacts
+                    .iter()
+                    .map(|i| pb::RebasedImpact {
+                        change_impact_id: i.impact.clone(),
+                        key: i.key.clone(),
+                        changed: i.changed,
+                        merged: i.merged,
+                        conflicts: i.conflicts.clone(),
+                    })
+                    .collect(),
+            })
         })
         .await
     }

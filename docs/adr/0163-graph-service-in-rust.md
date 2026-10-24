@@ -288,6 +288,18 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   records the work in the parent (`record_in_parent`: an impact per committed node, accepted by one review of
   `graph.merge`, committed at the parent's head), the parent held while it has open sub-changes or uncommitted drafts
   of the same nodes; the parent's merge then gives the versions the sub-changes wrote its own origin
-  (`WriteTx::set_node_origin`). A sub-change whose parent moved since its fork (a rebase) stays the Go service's:
-  907 calls, none divergent, the tables and the 706 events of the outbox the same.
+  (`WriteTx::set_node_origin`): 907 calls, none divergent, the tables and the 706 events of the outbox the same.
+  The rebase follows (ADR 0101, 0102, 0103; `graph-core` `draftmerge`, `write::rebase`): `RebaseChange` and the merge
+  bring what a change committed onto what its branch is forked from now (the head of its target, the branch of its
+  parent): the fork moved (`move_fork`, a `change.updated` entry `baselineId`), each node changed on both sides merged
+  three-way (`merge_drafts`, Go's `MergeDrafts`, the link sets compared before the links are read), installed as a
+  checkout of the committed version and the patch of the merge (`draft_diff`, with `rebased` and `conflicts`), the
+  clean ones accepted by one review of `graph.merge` and committed by a mechanical commit (`commit_on_branch`, kind
+  `rebase`), the conflicting ones sent back to proposed; a merge whose rebase left conflicts keeps it and refuses
+  (`write::merge::Merge::Rebased`, the transaction committed, the positions in the refusal), a target moved on other
+  nodes moves the fork at the fast-forward. The fold of a change tracks the conflicts (`impact::apply_conflict_event`,
+  Go's `ApplyConflictEvent`), an acceptance refuses them (`checkSettled`), `ImpactNodeResolve` keeps the change's
+  values and `GetRebaseState` tells the impacts behind and the conflicts: 1087 calls, none divergent, the tables the
+  same, the events of the outbox but the order of a baseline's `set` (a map). The three-way merge of a target moved
+  meanwhile (`MergeChange` with resolutions) stays the Go service's.
 - Not done yet: the rest of phase 4.

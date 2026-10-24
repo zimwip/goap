@@ -86,7 +86,7 @@ pub(crate) fn data_text<'a>(d: Option<&'a Map<String, Value>>, k: &str) -> &'a s
 }
 
 /// What `ChangeItem.Validate` asks of the record of a review (`domain.validateReview`).
-fn validate_review(d: Option<&Map<String, Value>>) -> std::result::Result<(), String> {
+pub(crate) fn validate_review(d: Option<&Map<String, Value>>) -> std::result::Result<(), String> {
     if data_text(d, "key").is_empty() {
         return Err("review item requires data.key".into());
     }

@@ -318,7 +318,11 @@ impl<S: WriteTx> Tx<'_, S> {
         {
             return Err(err);
         }
-        let done = self.merge_change(&id).await?;
+        // a rebase the merge keeps is refused with the whole commit: one transaction
+        let done = match self.merge_change(&id).await? {
+            super::merge::Merge::Applied(done) => done,
+            super::merge::Merge::Rebased(err) => return Err(err),
+        };
         let mut res = CommitResult {
             change: id,
             baseline: Baseline::default(),

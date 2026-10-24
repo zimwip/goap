@@ -1090,6 +1090,33 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(w.seen_as(&r))
     }
 
+    /// Settles the conflicts a rebase left on an impact by keeping the change's values (Go's `ImpactNodeResolve`, ADR
+    /// 0082 §2): an updated event with `{"resolved": true}`; the impact is then reviewed as any.
+    pub async fn impact_node_resolve(&mut self, id: &ChangeId, impact: &str, execution: &str) -> Result<ChangeImpact> {
+        let mut w = self
+            .resolve(
+                id,
+                Named {
+                    impact: impact.to_string(),
+                    execution: execution.to_string(),
+                    ..Named::default()
+                },
+            )
+            .await?;
+        let d = self.working(&w)?;
+        if !self.views[id].fold.conflicts.contains_key(impact) {
+            return Err(GraphError::conflict(format!(
+                "change impact {impact} ({}) has no conflict to settle",
+                w.cn.key
+            )));
+        }
+        let r = d.draft_ref();
+        let mut patch = Map::new();
+        patch.insert("resolved".into(), Value::Bool(true));
+        self.emit_updated(&mut w, &r, execution, patch).await?;
+        Ok(w.seen_as(&r))
+    }
+
     /// Adds an outgoing link to the draft of an impact (Go's `ImpactLinkCreate`).
     pub async fn impact_link_create(
         &mut self,

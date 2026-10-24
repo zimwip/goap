@@ -147,7 +147,7 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     /// Journals an edit of the header of a change (Go's `headerEntry`): a `change.updated` entry naming its fields.
-    async fn header_entry(&mut self, id: &ChangeId, fields: Value) -> Result<()> {
+    pub(crate) async fn header_entry(&mut self, id: &ChangeId, fields: Value) -> Result<()> {
         let mut names: Vec<&String> = fields.as_object().map(Map::keys).into_iter().flatten().collect();
         names.sort();
         let subject = names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(",");

@@ -279,6 +279,14 @@ impl<S: WriteTx> Tx<'_, S> {
         seen: &[ChangeImpact],
         cn: &ChangeImpact,
     ) -> Result<()> {
+        // the conflicts a rebase left are settled first (Go's `checkSettled`)
+        if let Some(pending) = self.views[change].fold.conflicts.get(&cn.id) {
+            return Err(GraphError::conflict(format!(
+                "change impact {} has conflicts with the branch it was forked from to settle first (edit the fields, or keep them with ImpactNodeResolve): {}",
+                cn.id,
+                pending.join(", ")
+            )));
+        }
         let d = self.views[change].seen_draft(flow, &cn.id);
         let Some(d) = d else {
             return Err(GraphError::invalid(format!(
@@ -410,6 +418,8 @@ impl<S: WriteTx> Tx<'_, S> {
         self.view(id).await?;
         // the verdicts are made on this flow (ADR 0032 §6)
         let flow = self.views[id].flows.resolve(&b.flow);
+        super::items::validate_review(Some(&data.clone().into_iter().collect()))
+            .map_err(|e| GraphError::invalid(format!("item {item}: {e}")))?;
         let payload = gojson::to_string(&Item {
             id: &item,
             typ: TYPE_REVIEW,
