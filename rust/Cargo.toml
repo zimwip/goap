@@ -27,6 +27,7 @@ graph-store = { path = "crates/graph-store" }
 
 anyhow = "1"
 arc-swap = "1"
+async-nats = "0.50"
 async-trait = "0.1"
 axum = { version = "0.8", features = ["http2"] }
 base64 = "0.23"

@@ -18,6 +18,7 @@ mod domainpb;
 mod domains;
 mod graph;
 mod journal;
+pub mod relay;
 mod smarttags;
 
 pub use graph::Graph;
@@ -25,9 +26,11 @@ pub use graph::Graph;
 /// What the handlers share.
 pub struct State {
     pub store: Store,
-    /// Whether a bus takes the events: written in the outbox, as the Go service does with `GOAP_NATS_URL` set (its
-    /// relay delivers them for now), else none.
+    /// Whether a bus takes the events: written in the outbox, as the Go service does with `GOAP_NATS_URL` set, else
+    /// none.
     pub outbox: bool,
+    /// The relays delivering the outboxes to the bus, when this process delivers them ([`State::relay`]).
+    relays: Option<Relays>,
     /// The type catalogue of the domains in force, with what told the stored versions apart when it was built.
     catalog: Mutex<(Option<String>, Arc<Catalog>)>,
     /// The persons this process made sure have a user (Go's `EnsureCaller`), and the creation in progress.
@@ -45,11 +48,40 @@ impl State {
         State {
             store,
             outbox: false,
+            relays: None,
             catalog: Mutex::new((None, Catalog::builtin())),
             users: Mutex::new(Default::default()),
             ensuring: Mutex::new(()),
             held: Mutex::new(Default::default()),
             settings: Mutex::new(Default::default()),
+        }
+    }
+
+    /// Writes the events in the outboxes and delivers them to `sink` (Go's `outbox.Start` of the graph and of the domain
+    /// registry): returns the relays, for [`relay::Relay::run`].
+    pub fn relay(&mut self, sink: relay::Sink) -> [Arc<relay::Relay>; 2] {
+        let sink = Arc::new(sink);
+        let r = Relays {
+            graph: Arc::new(relay::Relay::new("graph", "event_outbox", sink.clone())),
+            domains: Arc::new(relay::Relay::new("domains", "domain_outbox", sink)),
+        };
+        self.outbox = true;
+        let out = [r.graph.clone(), r.domains.clone()];
+        self.relays = Some(r);
+        out
+    }
+
+    /// Delivers the graph's events a commit wrote, at once.
+    pub(crate) async fn deliver_graph(&self) {
+        if let Some(r) = &self.relays {
+            r.graph.after_commit(&self.store).await;
+        }
+    }
+
+    /// Delivers the domain registry's events a commit wrote, at once.
+    pub(crate) async fn deliver_domains(&self) {
+        if let Some(r) = &self.relays {
+            r.domains.after_commit(&self.store).await;
         }
     }
 
@@ -69,6 +101,12 @@ impl State {
         *cur = (Some(fp), Arc::new(c));
         Ok(cur.1.clone())
     }
+}
+
+/// The relays of the outboxes this process writes.
+struct Relays {
+    graph: Arc<relay::Relay>,
+    domains: Arc<relay::Relay>,
 }
 
 /// `goap.registry.v1.DomainService`: the domain registry the graph serves (ADR 0125 §3).

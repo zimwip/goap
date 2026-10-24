@@ -327,6 +327,7 @@ impl pb::DomainService for Domains {
         .map_err(connect_error)?;
         let saved = tx.stored_domain(&d.name, &d.version).await.map_err(connect_error)?;
         tx.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
+        self.state.deliver_domains().await;
         let saved = saved.ok_or_else(|| not_found(&d.name, &d.version))?;
         Ok(Response::new(pb::SaveDomainResponse {
             domain: Some(stored_pb(saved)?),
@@ -387,6 +388,7 @@ impl pb::DomainService for Domains {
         }
         let saved = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)?;
         tx.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
+        self.state.deliver_domains().await;
         let saved = saved.ok_or_else(|| not_found(&r.name, &r.version))?;
         Ok(Response::new(pb::PublishDomainResponse {
             domain: Some(stored_pb(saved)?),
@@ -445,6 +447,7 @@ impl pb::DomainService for Domains {
         .map_err(connect_error)?;
         let saved = tx.stored_domain(&r.name, to).await.map_err(connect_error)?;
         tx.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
+        self.state.deliver_domains().await;
         let saved = saved.ok_or_else(|| not_found(&r.name, to))?;
         Ok(Response::new(pb::CreateDomainVersionResponse {
             domain: Some(stored_pb(saved)?),
@@ -500,6 +503,7 @@ impl pb::DomainService for Domains {
             }
         }
         tx.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
+        self.state.deliver_domains().await;
         Ok(Response::new(pb::DeleteDomainResponse {}))
     }
 
@@ -569,6 +573,7 @@ impl pb::DomainService for Domains {
         .await
         .map_err(connect_error)?;
         tx.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
+        self.state.deliver_domains().await;
 
         let published = r.publish.then_some(now);
         Ok(Response::new(pb::ImportDomainResponse {

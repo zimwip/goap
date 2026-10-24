@@ -5,6 +5,8 @@ mod browse;
 pub use browse::Tag;
 mod log;
 pub use log::LogFilter;
+mod outbox;
+pub use outbox::Pending;
 mod smarttags;
 pub use smarttags::{SmartTag, Which};
 mod sql;

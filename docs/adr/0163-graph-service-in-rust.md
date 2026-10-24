@@ -457,4 +457,12 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   Go's continuations become frames of a list the run follows, the bindings, the links a clause used and the trails of
   its patterns stacks of the run; outside a change the runs that learn what the caller reads (`mayReadNode`) are Go's
   too.
+- The relays of the outboxes (`crates/graph-service/src/relay.rs`, `lib/outbox.Relay`): with `GOAP_NATS_URL` set,
+  `goap-graph-rs` delivers the graph's `event_outbox` (origin `graph`) and the domain registry's `domain_outbox` (origin
+  `domains`) itself, on the GOAP stream it creates as `platform.ConnectEvents` does, each message with its stored
+  headers and its id `<origin>:<seq>` as `Nats-Msg-Id` and `X-Goap-Event-Id`, the payload as the database gives it back
+  as text; a drain after each commit that may have written events, the retries every `GOAP_OUTBOX_POLL` with a backoff
+  up to a minute, the hourly purge after `GOAP_OUTBOX_RETENTION`. A Go service on the same database relays the same rows
+  under the same ids, which the stream deduplicates. Compared on the bench's lifecycle run: the same 1466 messages on
+  each bus, every row published, the only differences the order of the keys of a jsonb (ids of either side).
 - Not done yet: the rest of phase 4.

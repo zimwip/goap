@@ -1,11 +1,11 @@
 //! goap-graph-rs: the Rust graph service (ADR 0163). The environment of the Go service: `GOAP_HTTP_ADDR`,
 //! `GOAP_DB_DSN` (PostgreSQL), else `GOAP_SQLITE_PATH` (SQLite, `GOAP_SQLITE_READERS` read-only connections), else a
-//! database in memory. `GOAP_NATS_URL` set, the events of the graph are written in its outbox, which the Go service's
-//! relay delivers (ADR 0136).
+//! database in memory. `GOAP_NATS_URL` set, the events of the graph and of the domain registry are written in their
+//! outboxes and delivered to the bus (ADR 0136; `GOAP_OUTBOX_POLL`, `GOAP_OUTBOX_RETENTION`).
 use std::sync::Arc;
 
 use anyhow::Context;
-use graph_service::{State, app};
+use graph_service::{State, app, relay::Sink};
 use graph_store::{Store, StoreConfig};
 
 #[tokio::main]
@@ -29,11 +29,19 @@ async fn main() -> anyhow::Result<()> {
         .with_context(|| format!("listening on {addr}"))?;
     tracing::info!(%addr, dialect = ?store.dialect(), "goap-graph-rs serving");
     let mut state = State::new(store);
-    state.outbox = std::env::var("GOAP_NATS_URL").is_ok_and(|u| !u.is_empty());
-    if !state.outbox {
+    let nats = std::env::var("GOAP_NATS_URL").unwrap_or_default();
+    let relays = if nats.is_empty() {
         tracing::warn!("GOAP_NATS_URL not set: events disabled");
+        Vec::new()
+    } else {
+        let sink = Sink::connect(&nats).await.with_context(|| format!("NATS at {nats}"))?;
+        state.relay(sink).to_vec()
+    };
+    let state = Arc::new(state);
+    for r in relays {
+        tokio::spawn(r.run(state.clone()));
     }
-    axum::serve(listener, app(Arc::new(state)))
+    axum::serve(listener, app(state))
         .with_graceful_shutdown(shutdown())
         .await?;
     Ok(())

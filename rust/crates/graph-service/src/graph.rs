@@ -838,6 +838,7 @@ impl Graph {
         let out = f(&mut tx).await.map_err(connect_error)?;
         let positions = tx.finish().await.map_err(connect_error)?;
         session.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
+        self.state.deliver_graph().await;
         let mut res = Response::new(out);
         if !positions.is_empty() {
             let v = positions
