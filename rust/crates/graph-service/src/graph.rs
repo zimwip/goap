@@ -7,6 +7,7 @@ use goap_connect::{ConnectError, Ctx, Request, Response, async_trait};
 use goap_proto::graph::v1 as pb;
 use graph_catalog::{Catalog, catalog::STRUCTURE_PROJECT};
 use graph_core::access;
+use graph_core::reach::{OPEN_NAMESPACES, Reach};
 use graph_core::write::branchmerge;
 use graph_core::write::merge::Merge;
 use graph_core::write::restructure::{NodeName, Restructured};
@@ -199,6 +200,22 @@ impl Readable {
             None => true,
             Some((p, snap)) => snap.may_access_project(p, &c.project_id.key),
         }
+    }
+
+    /// What the caller reads of the current graph (Go's `graphsvc.ReachOf`, ADR 0161 §5): the nodes of the projects
+    /// it works on; a platform service acting by itself, everything.
+    pub(crate) fn reach(&self) -> Option<Reach> {
+        self.person.as_ref().map(|(p, snap)| Reach::of(snap, p))
+    }
+
+    /// Whether the caller reads a node outside a change (Go's `Handler.mayReadNode`, ADR 0138): the nodes of the
+    /// open namespaces are every person's, the others those of who works on their project (the root for a node of
+    /// none).
+    pub(crate) fn may_read_node(&self, n: &graph_core::model::Node) -> bool {
+        let Some((p, snap)) = &self.person else {
+            return true;
+        };
+        OPEN_NAMESPACES.contains(&n.namespace.as_str()) || snap.may_access_project(p, &n.project.key)
     }
 }
 
@@ -422,6 +439,36 @@ impl Graph {
         stamp.on(f(&tx, &readable).await.map(Response::new).map_err(connect_error))
     }
 
+    /// Runs a read of a request naming neither a namespace nor a change (`read_changes` naming none): with other
+    /// graphs declared, what this graph does not find Go's router asks of them (ADR 0154), so it is left to it.
+    async fn read_unnamed<T, F>(&self, caller: Caller, f: F) -> Answer<T>
+    where
+        F: AsyncFnOnce(&Session, &Readable) -> Result<T, GraphError>,
+    {
+        self.read_changes(caller, &[], async |tx, who| match f(tx, who).await {
+            Err(e) if e.kind == Kind::NotFound && other_graphs(tx).await? => Err(GraphError::unimplemented(
+                "what another graph may hold (ADR 0154): routed by the Go service",
+            )),
+            r => r,
+        })
+        .await
+    }
+
+    /// Runs a read through the view a request names: the change of the view decides whether the caller reads it
+    /// (Go's `PersonalScope`); a view naming neither a namespace nor a change is routed by Go's router to the graph
+    /// that finds what it reads.
+    async fn read_view<T, F>(&self, caller: Caller, view: Option<&pb::View>, f: F) -> Answer<T>
+    where
+        F: AsyncFnOnce(&Session, &Readable) -> Result<T, GraphError>,
+    {
+        match view {
+            Some(v) if !v.namespace.is_empty() || !v.change_id.is_empty() => {
+                self.read_changes(caller, &[v.change_id.as_str()], f).await
+            }
+            _ => self.read_unnamed(caller, f).await,
+        }
+    }
+
     /// Opens a call any identified caller may make: the first call of a person creates its user (Go's `EnsureCaller`
     /// interceptor, ADR 0040), which is the Go service's, so a person this graph holds no user of yet is left to it.
     async fn identified<T>(&self, req: &Request<T>) -> Result<(Caller, Stamp), ConnectError> {
@@ -576,20 +623,29 @@ fn valid_criticality(data: &serde_json::Map<String, serde_json::Value>) -> Resul
 }
 
 /// A node as GetNode reads it: a version named is its history (no view), else the node as the view holds it.
+/// One the caller may not read is not found (`readNode`, ADR 0138, 0161).
 async fn read_node(
     tx: &Session,
     r#ref: Option<&pb::NodeRef>,
     key: &str,
     view: Option<&pb::View>,
+    who: &Readable,
 ) -> Result<graph_core::model::NodeView, GraphError> {
     let r = convert::ref_from(r#ref);
-    if key.is_empty() && r.version > 0 {
-        return read::version_view(tx, &r).await;
+    let view = convert::view(view);
+    let v = if key.is_empty() && r.version > 0 {
+        read::version_view(tx, &r).await?
+    } else {
+        World::open_node(tx, &view)
+            .await?
+            .reached(who.reach().as_ref())
+            .node_view(&r.id, key)
+            .await?
+    };
+    if !view.is_change() && !who.may_read_node(&v.node) {
+        return Err(GraphError::not_found(format!("node {}", v.node.id)));
     }
-    World::open_node(tx, &convert::view(view))
-        .await?
-        .node_view(&r.id, key)
-        .await
+    Ok(v)
 }
 
 #[async_trait]
@@ -597,8 +653,8 @@ impl pb::GraphService for Graph {
     async fn get_node(&self, _ctx: &Ctx, req: Request<pb::GetNodeRequest>) -> Answer<pb::GetNodeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
-            let v = read_node(tx, m.r#ref.as_ref(), &m.key, m.view.as_ref()).await?;
+        self.read_view(caller, m.view.as_ref(), async |tx, who| {
+            let v = read_node(tx, m.r#ref.as_ref(), &m.key, m.view.as_ref(), who).await?;
             // a page of each direction: a hub's thousands of links are read with ListNodeLinks
             let limit = link_limit(m.link_limit);
             let (out, out_total, out_types) = link_page(&v.out, "", 0, limit);
@@ -627,8 +683,8 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ListNodeLinksResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
-            let v = read_node(tx, m.r#ref.as_ref(), &m.key, m.view.as_ref()).await?;
+        self.read_view(caller, m.view.as_ref(), async |tx, who| {
+            let v = read_node(tx, m.r#ref.as_ref(), &m.key, m.view.as_ref(), who).await?;
             let links = if m.incoming { &v.r#in } else { &v.out };
             let (page, total, _) = link_page(links, &m.r#type, m.offset.max(0) as usize, link_limit(m.limit));
             Ok(pb::ListNodeLinksResponse {
@@ -646,8 +702,10 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::GetNodeNeighbourhoodResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
-            let w = World::open(tx, &convert::view(m.view.as_ref())).await?;
+        self.read_view(caller, m.view.as_ref(), async |tx, who| {
+            let w = World::open(tx, &convert::view(m.view.as_ref()))
+                .await?
+                .reached(who.reach().as_ref());
             let types = (!m.link_types.is_empty()).then_some(m.link_types.as_slice());
             let types = w.link_types(types);
             let nb = w.neighbourhood(&NodeId(m.node_id.clone()), types.as_deref()).await?;
@@ -668,8 +726,10 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ListBaselineNodesResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
-            let w = World::open(tx, &convert::view(m.view.as_ref())).await?;
+        self.read_view(caller, m.view.as_ref(), async |tx, who| {
+            let w = World::open(tx, &convert::view(m.view.as_ref()))
+                .await?
+                .reached(who.reach().as_ref());
             let q = NodeQuery {
                 typ: m.r#type.clone(),
                 text: m.query.clone(),
@@ -699,17 +759,26 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ListBaselineLinksResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
+        self.read_unnamed(caller, async |tx, who| {
             let header = read::header_of(tx, &BaselineId(m.baseline_id.clone())).await?;
             let limit = match m.limit {
                 l if l <= 0 || l as usize > graph_core::model::MAX_BROWSE_LIMIT => graph_core::model::MAX_BROWSE_LIMIT,
                 l => l as usize,
             };
+            let reach = who.reach();
+            let projects = Reach::within(reach.as_ref(), &header.namespace).map(Reach::filter);
             let state = read::select(tx, &header, None).await?;
             let mut refs: Vec<NodeRef> = state.iter().map(|(n, v)| NodeRef::new(n.clone(), *v)).collect();
             refs.sort();
             let (links, total, types) = tx
-                .link_page(&refs, &m.r#type, &m.query, m.offset.max(0) as usize, limit)
+                .link_page(
+                    &refs,
+                    &m.r#type,
+                    &m.query,
+                    projects.as_deref(),
+                    m.offset.max(0) as usize,
+                    limit,
+                )
                 .await?;
             Ok(pb::ListBaselineLinksResponse {
                 baseline: Some(convert::baseline(&header, None)),
@@ -729,7 +798,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::DerivedNodesResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
+        self.read_unnamed(caller, async |tx, _| {
             let r = m
                 .r#ref
                 .map(|r| NodeRef::new(NodeId(r.id), r.version))
@@ -749,8 +818,10 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ListViewNodesResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
-            let w = World::open(tx, &convert::view(m.view.as_ref())).await?;
+        self.read_view(caller, m.view.as_ref(), async |tx, who| {
+            let w = World::open(tx, &convert::view(m.view.as_ref()))
+                .await?
+                .reached(who.reach().as_ref());
             let q = NodeQuery {
                 typ: m.r#type.clone(),
                 limit: i32::MAX as usize,
@@ -771,7 +842,7 @@ impl pb::GraphService for Graph {
     async fn resolve_view(&self, _ctx: &Ctx, req: Request<pb::ResolveViewRequest>) -> Answer<pb::ResolveViewResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
+        self.read_view(caller, m.view.as_ref(), async |tx, _| {
             let v = convert::view(m.view.as_ref());
             let w = World::open_node(tx, &v).await?;
             let main_head = if !v.is_change() && graph_core::model::branch_of(&v.branch) == MAIN_BRANCH {
@@ -798,7 +869,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ListNodeVersionsResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
+        self.read_unnamed(caller, async |tx, _| {
             let (vs, next) = read::version_page(tx, &NodeId(m.id.clone()), m.before, m.limit.max(0) as usize).await?;
             Ok(pb::ListNodeVersionsResponse {
                 versions: convert::nodes(&vs),
@@ -1011,7 +1082,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::GetBaselineGraphResponse> {
         let caller = Caller::of(&req)?;
         let id = BaselineId(req.into_inner().id);
-        self.read(caller, async |tx| {
+        self.read_unnamed(caller, async |tx, who| {
             let header = read::header_of(tx, &id).await?;
             let state = read::select(tx, &header, None).await?;
             let mut refs: Vec<NodeRef> = state.iter().map(|(n, v)| NodeRef::new(n.clone(), *v)).collect();
@@ -1029,6 +1100,11 @@ impl pb::GraphService for Graph {
                     None => {}
                 }
             }
+            // what the caller reads only (ADR 0161 §5)
+            let reach = who.reach();
+            let (kept, links) = Reach::keep(reach.as_ref(), nodes.clone(), links);
+            let (_, suspects) = Reach::keep(reach.as_ref(), nodes, suspects);
+            let nodes = kept;
             let state = state.into_iter().map(|(n, v)| (n.0, v)).collect::<HashMap<_, _>>();
             Ok(pb::GetBaselineGraphResponse {
                 baseline: Some(convert::baseline(&header, Some(state))),
@@ -1156,7 +1232,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::GetBaselineDeltaResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
+        self.read_unnamed(caller, async |tx, who| {
             if m.from.is_empty() || m.to.is_empty() {
                 return Err(GraphError::invalid("a delta goes from a baseline to another"));
             }
@@ -1198,6 +1274,7 @@ impl pb::GraphService for Graph {
             } else {
                 (tx.nodes_at(&refs, "").await?, tx.links_from(&refs, None).await?)
             };
+            let (nodes, links) = Reach::keep(who.reach().as_ref(), nodes, links); // what the caller reads only (ADR 0161 §5)
             Ok(pb::GetBaselineDeltaResponse {
                 from: Some(convert::baseline(&from, None)),
                 to: Some(convert::baseline(&to, None)),
@@ -2444,7 +2521,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let subject = caller.subject.clone();
         let m = req.into_inner();
-        self.read(caller, async |tx| {
+        self.read_unnamed(caller, async |tx, _| {
             let node = NodeRef::new(NodeId(m.node_id.clone()), m.version);
             let mut s =
                 change::change_stack(tx, &node, &BaselineId(m.baseline_id.clone()), m.limit.max(0) as usize).await?;
@@ -2509,9 +2586,15 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let subject = caller.subject.clone();
         let m = req.into_inner();
-        self.read(caller, async |tx| {
+        self.read_unnamed(caller, async |tx, who| {
             let (from, to) = (m.from.as_str().into(), m.to.as_str().into());
-            let (ds, gap) = change::diff_baselines(tx, &from, &to).await?;
+            let (mut ds, gap) = change::diff_baselines(tx, &from, &to).await?;
+            // a node the caller does not read (ADR 0161 §5)
+            let reach = who.reach();
+            ds.retain(|d| {
+                d.from.as_ref().is_none_or(|n| Reach::holds(reach.as_ref(), n))
+                    && d.to.as_ref().is_none_or(|n| Reach::holds(reach.as_ref(), n))
+            });
             // the title of the personal changes of others is left out of a stack: their id stays (ADR 0037)
             let readable = |mut cs: Vec<change::StackChange>| {
                 for c in &mut cs {

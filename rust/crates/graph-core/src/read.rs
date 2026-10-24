@@ -17,6 +17,7 @@ use crate::{
         NodePage, NodeQuery, NodeRef, NodeView, Target, Version, branch_of, namespace_of,
     },
     page::page_nodes,
+    reach::Reach,
     store::{REVERTED, ReadTx},
     view::View,
     write::{change::change_branch_origin, work::fold_change},
@@ -195,6 +196,8 @@ pub struct World<'a, T> {
     pub namespace: String,
     /// What a change view lays over its fork.
     change: Option<ChangeWorld>,
+    /// What the caller reads of the view's namespace (None: everything, ADR 0161 §5).
+    reach: Option<Reach>,
 }
 
 /// What a change view adds to its fork (Go's `world` of a change): the change, the fold of its log, its own branch,
@@ -393,6 +396,7 @@ impl<'a, T: ReadTx> World<'a, T> {
             baseline,
             namespace,
             change: None,
+            reach: None,
         })
     }
 
@@ -457,7 +461,63 @@ impl<'a, T: ReadTx> World<'a, T> {
                 over,
                 gone,
             }),
+            reach: None,
         })
+    }
+
+    /// The view read by a caller of some reach (None: everything): what it reads of the view's namespace.
+    pub fn reached(mut self, reach: Option<&Reach>) -> Self {
+        self.reach = Reach::within(reach, &self.namespace).cloned();
+        self
+    }
+
+    /// Whether the caller reads a node of the view (`world.sees`): in its reach, or a draft of the change it reads
+    /// (a draft is the change's, read through it, ADR 0161 §4).
+    fn sees(&self, n: &Node) -> bool {
+        match &self.reach {
+            None => true,
+            Some(_) if self.change.is_some() && n.version == 0 => true,
+            Some(r) => r.sees(n),
+        }
+    }
+
+    /// The nodes some refs name the caller does not read (`world.hidden`): one read for the stored ones, the drafts
+    /// of the change seen.
+    async fn hidden(&self, refs: &[NodeRef]) -> Result<HashSet<NodeId>> {
+        let Some(reach) = &self.reach else {
+            return Ok(HashSet::new());
+        };
+        let mut stored: Vec<NodeRef> = refs.iter().filter(|r| !r.is_draft()).cloned().collect();
+        stored.sort();
+        stored.dedup();
+        if stored.is_empty() {
+            return Ok(HashSet::new());
+        }
+        let nodes = self.tx.nodes_at(&stored, "").await?;
+        Ok(nodes.into_iter().filter(|n| !reach.sees(n)).map(|n| n.id).collect())
+    }
+
+    /// The links whose other end the caller reads (`world.keepLinks`): the target of an outgoing link, the source of
+    /// an entering one; a link to another source is kept.
+    async fn keep_links(&self, out: Vec<Link>, r#in: Vec<Link>) -> Result<(Vec<Link>, Vec<Link>)> {
+        if self.reach.is_none() {
+            return Ok((out, r#in));
+        }
+        let refs: Vec<NodeRef> = out
+            .iter()
+            .filter_map(|l| l.to_node().cloned())
+            .chain(r#in.iter().map(|l| l.from.clone()))
+            .collect();
+        let hide = self.hidden(&refs).await?;
+        if hide.is_empty() {
+            return Ok((out, r#in));
+        }
+        let out = out
+            .into_iter()
+            .filter(|l| l.to_node().is_none_or(|t| !hide.contains(&t.id)))
+            .collect();
+        let r#in = r#in.into_iter().filter(|l| !hide.contains(&l.from.id)).collect();
+        Ok((out, r#in))
     }
 
     /// The versions some nodes have in the view (absent: not in it).
@@ -509,8 +569,16 @@ impl<'a, T: ReadTx> World<'a, T> {
         } else {
             id.clone()
         };
-        match self.at(std::slice::from_ref(&id)).await?.get(&id) {
-            Some(&v) => Ok(NodeRef::new(id, v)),
+        let mut at = self.at(std::slice::from_ref(&id)).await?.get(&id).copied();
+        if let Some(v) = at
+            && v != 0
+            && self.reach.is_some()
+            && !self.sees(&self.node(&NodeRef::new(id.clone(), v)).await?)
+        {
+            at = None; // a node the caller does not read is not found (ADR 0161 §5)
+        }
+        match at {
+            Some(v) => Ok(NodeRef::new(id, v)),
             None => {
                 let what = if key.is_empty() {
                     id.to_string()
@@ -552,6 +620,7 @@ impl<'a, T: ReadTx> World<'a, T> {
         let node = self.node(&r).await?;
         let latest = latest_of(self.tx, &node).await?;
         let out = self.tx.links_from(std::slice::from_ref(&r), None).await?;
+        let (out, r#in) = self.keep_links(out, r#in).await?;
         Ok(NodeView {
             node,
             latest,
@@ -601,6 +670,7 @@ impl<'a, T: ReadTx> World<'a, T> {
                 }
             }
         }
+        let (out, r#in) = self.keep_links(out, r#in).await?;
         Ok(NodeView {
             node,
             latest,
@@ -822,6 +892,9 @@ impl<'a, T: ReadTx> World<'a, T> {
         };
         let r = NodeRef::new(id.clone(), v);
         let node = self.node(&r).await?;
+        if !self.sees(&node) {
+            return Err(GraphError::not_found(format!("node {id} in {}", self.view)));
+        }
         let keep = |l: &Link| types.is_none_or(|ts| ts.contains(&l.typ));
         let mut out = match types {
             Some([]) => Vec::new(),
@@ -871,7 +944,8 @@ impl<'a, T: ReadTx> World<'a, T> {
             node,
             ..Neighbourhood::default()
         };
-        let mut seen: HashSet<NodeId> = HashSet::from([id.clone()]);
+        // a neighbour the caller does not read is left out with the links to it (ADR 0161 §5: no stub)
+        let mut seen: HashMap<NodeId, bool> = HashMap::from([(id.clone(), true)]);
         for l in out {
             let Target::Node(to) = &l.to else {
                 nb.links.push(l);
@@ -887,7 +961,9 @@ impl<'a, T: ReadTx> World<'a, T> {
                 None if to.is_draft() => continue, // a draft the change no longer holds
                 None => {}
             }
-            self.meet(&mut nb, &mut seen, &mut near, &to).await?;
+            if !self.meet(&mut nb, &mut seen, &mut near, &to).await? {
+                continue;
+            }
             if suspect {
                 nb.suspect.push(l.id.clone());
             }
@@ -906,7 +982,9 @@ impl<'a, T: ReadTx> World<'a, T> {
             if at.get(&l.from.id) != Some(&l.from.version) {
                 continue; // not the version of its source the view holds
             }
-            self.meet(&mut nb, &mut seen, &mut near, &l.from).await?;
+            if !self.meet(&mut nb, &mut seen, &mut near, &l.from).await? {
+                continue;
+            }
             if to_version != 0 && v != 0 && to_version != v {
                 nb.suspect.push(l.id.clone());
             }
@@ -916,29 +994,43 @@ impl<'a, T: ReadTx> World<'a, T> {
         Ok(nb)
     }
 
-    /// Adds a neighbour once, read from the batch or, when the batch missed it, alone.
+    /// Adds a neighbour once, read from the batch or, when the batch missed it, alone: whether the caller reads it.
     async fn meet(
         &self,
         nb: &mut Neighbourhood,
-        seen: &mut HashSet<NodeId>,
+        seen: &mut HashMap<NodeId, bool>,
         near: &mut HashMap<NodeRef, Node>,
         r: &NodeRef,
-    ) -> Result<()> {
-        if seen.contains(&r.id) {
-            return Ok(());
+    ) -> Result<bool> {
+        if let Some(&v) = seen.get(&r.id) {
+            return Ok(v);
         }
         let n = match near.remove(r) {
             Some(n) => n,
             None => self.node(r).await?,
         };
-        seen.insert(r.id.clone());
-        nb.nodes.push(n);
-        Ok(())
+        let visible = self.sees(&n);
+        seen.insert(r.id.clone(), visible);
+        if visible {
+            nb.nodes.push(n);
+        }
+        Ok(visible)
     }
 
     /// A page of the nodes of the view ordered by key, matching `q`: the page of its baseline, or the nodes the
     /// impacts of a change act on as the baseline holds them.
     pub async fn page(&self, q: &NodeQuery) -> Result<NodePage> {
+        let filtered;
+        let q = match &self.reach {
+            None => q,
+            Some(r) => {
+                filtered = NodeQuery {
+                    projects: Some(r.filter()),
+                    ..q.clone()
+                };
+                &filtered
+            }
+        };
         let mut page = if !q.change.is_empty() {
             page_nodes(self.change_nodes(q).await?, q)
         } else if self.baseline.id.is_empty() {

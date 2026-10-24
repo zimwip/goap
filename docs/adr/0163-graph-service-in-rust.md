@@ -375,4 +375,11 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   a stored rule CEL does not read is Go's to judge). Their first use is `ListChangeLog`, for a person too: the
   prompts of the model calls asked without `prompt:inspect` are refused, left out of a read naming no type: 2395
   calls, the divergent ones as above.
+- A person's reads of the graph are served with the reach of ADR 0161 §5 (`graph-core` `reach::Reach`: the projects
+  the caller works on, the open namespaces whole; `World::reached`): a node out of reach is not found, its links and
+  its neighbours are left out, the pages of nodes and of links are filtered in the store (both ends of a link), the
+  baseline graphs, deltas and diffs keep what `Reach.Keep` keeps, and a node read outside a change is the caller's
+  only as `Handler.mayReadNode` says. A request naming neither a namespace nor a change, which Go's router asks the
+  other graphs when this one does not find what it reads, is left to Go while other graphs are declared. 2863 calls,
+  the divergent ones as above (and pages of links ordered by ids the two databases draw apart).
 - Not done yet: the rest of phase 4.

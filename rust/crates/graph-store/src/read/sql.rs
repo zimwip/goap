@@ -532,25 +532,44 @@ impl Sql {
         )
     }
 
-    /// The links between two of the versions refs matching a text (`linkRefsWhere`, no reach: a person's call is Go's).
-    fn link_refs_where(self, refs: &[NodeRef], text: &str) -> (String, Vec<Arg>, usize) {
+    /// The links between two of the versions refs matching a text (`linkRefsWhere`), both ends nodes of the projects
+    /// of a caller's reach when it has one (ADR 0161 §5).
+    fn link_refs_where(self, refs: &[NodeRef], text: &str, projects: Option<&[String]>) -> (String, Vec<Arg>, usize) {
         let (mut args, n) = self.refs_args(refs);
         args.push(like_pattern(text).into());
+        let from = format!(
+            " FROM ({}) l{}",
+            self.held_links(1, ""),
+            self.refs_join("t", "l.to_id", "l.to_version", 1)
+        );
+        let text = self.text_match(n, "l.props", &["l.type"]);
+        let Some(ps) = projects else {
+            return (format!("{from} WHERE {text}"), args, n + 1);
+        };
+        let (f, fa) = self.in_list("nf.project", n + 1, ps.to_vec(), false);
+        let (t, ta) = self.in_list("nt.project", n + 2, ps.to_vec(), false);
+        args.push(fa);
+        args.push(ta);
         (
             format!(
-                " FROM ({}) l{} WHERE {}",
-                self.held_links(1, ""),
-                self.refs_join("t", "l.to_id", "l.to_version", 1),
-                self.text_match(n, "l.props", &["l.type"])
+                "{from} JOIN node nf ON nf.id = l.from_id JOIN node nt ON nt.id = l.to_id WHERE {text} AND {f} AND {t}"
             ),
             args,
-            n + 1,
+            n + 3,
         )
     }
 
     /// A page of the links between two of the versions refs, by type then id (`sqlLinkPage`).
-    pub fn link_page(self, refs: &[NodeRef], typ: &str, text: &str, offset: usize, limit: usize) -> Stmt {
-        let (w, mut args, n) = self.link_refs_where(refs, text);
+    pub fn link_page(
+        self,
+        refs: &[NodeRef],
+        typ: &str,
+        text: &str,
+        projects: Option<&[String]>,
+        offset: usize,
+        limit: usize,
+    ) -> Stmt {
+        let (w, mut args, n) = self.link_refs_where(refs, text, projects);
         args.push(typ.to_string().into());
         args.push((limit as i64).into());
         args.push((offset as i64).into());
@@ -568,8 +587,8 @@ impl Sql {
     }
 
     /// The counts by type of the links a page reads (`sqlLinkTypeCounts`).
-    pub fn link_type_counts(self, refs: &[NodeRef], text: &str) -> Stmt {
-        let (w, args, _) = self.link_refs_where(refs, text);
+    pub fn link_type_counts(self, refs: &[NodeRef], text: &str, projects: Option<&[String]>) -> Stmt {
+        let (w, args, _) = self.link_refs_where(refs, text, projects);
         (format!("SELECT l.type, count(*){w} GROUP BY l.type"), args)
     }
 
