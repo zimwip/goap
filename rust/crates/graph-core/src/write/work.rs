@@ -43,7 +43,7 @@ fn is_contains(typ: &str) -> bool {
 /// The entries of a log the service folds: the impact events and the review records (ADR 0105).
 /// The facts that make the view of a change (its state, the decisions on its items): the Go service's. The
 /// others (reviews, artifacts, signals, the records of the use cases) are items of the change only.
-const VIEW_FACTS: [&str; 2] = ["fact.transition", "fact.decision"];
+const VIEW_FACTS: [&str; 1] = ["fact.transition"];
 
 /// The view of a change: the fold of its log, up to a position.
 #[derive(Debug, Clone, Default)]
@@ -2017,7 +2017,7 @@ pub async fn fold_upto<T: ReadTx>(store: &T, id: &ChangeId, upto: i64) -> Result
             // the other streams (the journal, the prompts of the engine) are records of a use case: the view of a
             // change reads none
             return Err(unserved(&format!(
-                "a change whose log records {} entries (transitions, decisions on items, executions)",
+                "a change whose log records {} entries (transitions, executions)",
                 l.typ
             )));
         } else if l.stream() == LOG_FACT {

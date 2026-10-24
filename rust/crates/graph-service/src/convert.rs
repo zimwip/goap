@@ -335,9 +335,6 @@ pub fn link_write(
 /// An item as its log entry holds it (`domain.ChangeItem` JSON), for the answer (`pbconv.ItemToPB`); a decision is
 /// the Go service's.
 pub fn item(v: &Json) -> Result<pb::ChangeItem, String> {
-    if v.get("decision").is_some() {
-        return Err("an item of a decision".into());
-    }
     let s = |k: &str| v.get(k).and_then(Json::as_str).unwrap_or_default().to_string();
     let list = |k: &str| {
         v.get(k)
@@ -366,6 +363,11 @@ pub fn item(v: &Json) -> Result<pb::ChangeItem, String> {
         created_at: created.as_ref().and_then(go_time),
         execution: s("execution"),
         flow: s("flow"),
+        decision: v.get("decision").and_then(Json::as_object).map(|d| pb::Decision {
+            item: d.get("item").and_then(Json::as_str).unwrap_or_default().into(),
+            accept: d.get("accept").and_then(Json::as_bool).unwrap_or_default(),
+            comment: d.get("comment").and_then(Json::as_str).unwrap_or_default().into(),
+        }),
         decision_event: match v.get("decisionEvent") {
             Some(e) => Some(decision_event(
                 &serde_json::from_value(e.clone()).map_err(|e| e.to_string())?,
@@ -378,7 +380,6 @@ pub fn item(v: &Json) -> Result<pb::ChangeItem, String> {
             )),
             None => None,
         },
-        ..pb::ChangeItem::default()
     })
 }
 

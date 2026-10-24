@@ -36,7 +36,7 @@ use graph_core::{
         decision::{self, OpenDecision, Rule},
         edits::{Commit, LinkEdit, NodeEdit},
         flow::{self as wflow, OpenFlow},
-        items::ItemWrite,
+        items::{ItemDecision, ItemWrite},
         review::{ReviewBatch, Verdict},
         tx::{Env, Tx},
         update::ChangePatch,
@@ -423,14 +423,14 @@ async fn known_change<T: ReadTx>(tx: &T, id: &ChangeId) -> Result<(), GraphError
     Ok(())
 }
 
-/// The items a request writes; one carrying a flow event, a decision event or a decision is the Go service's.
+/// The items a request writes; one carrying a flow event or a decision event is the Go service's.
 fn item_writes(items: Vec<pb::ChangeItem>) -> Result<Vec<ItemWrite>, ConnectError> {
     items
         .into_iter()
         .map(|it| {
-            if it.decision.is_some() || it.flow_event.is_some() || it.decision_event.is_some() {
+            if it.flow_event.is_some() || it.decision_event.is_some() {
                 return Err(connect_error(GraphError::unimplemented(
-                    "an item of a flow or of a decision: written by the Go service",
+                    "an item of a flow or of a decision point: written by the Go service",
                 )));
             }
             Ok(ItemWrite {
@@ -444,6 +444,11 @@ fn item_writes(items: Vec<pb::ChangeItem>) -> Result<Vec<ItemWrite>, ConnectErro
                 derived_from: it.derived_from,
                 supersedes: it.supersedes,
                 execution: it.execution,
+                decision: it.decision.map(|d| ItemDecision {
+                    item: d.item,
+                    accept: d.accept,
+                    comment: d.comment,
+                }),
                 created_at: it
                     .created_at
                     .and_then(|t| chrono::DateTime::from_timestamp(t.seconds, t.nanos.max(0) as u32)),
@@ -3303,16 +3308,10 @@ impl pb::GraphService for Graph {
             .write_on(caller, &[], async |tx, _acc| {
                 if !m.parent_id.is_empty()
                     && let Ok(parent) = tx.change_head(&m.parent_id.as_str().into()).await
+                    && (parent.is_personal() || owner.starts_with(change::USER_PREFIX))
                 {
-                    if parent.is_personal() || owner.starts_with(change::USER_PREFIX) {
-                        // a personal change is never split, and nothing is split off a personal change
-                        return Err(GraphError::new(Kind::Conflict, "a personal change has no sub-changes"));
-                    }
-                    if !parent.lifecycle.is_empty() || !parent.guardians.is_empty() {
-                        return Err(GraphError::unimplemented(
-                            "a sub-change of a change following a lifecycle: not served here yet",
-                        ));
-                    }
+                    // a personal change is never split, and nothing is split off a personal change
+                    return Err(GraphError::new(Kind::Conflict, "a personal change has no sub-changes"));
                 }
                 let project = if !m.project_id.is_empty() {
                     m.project_id.clone()

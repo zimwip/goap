@@ -98,24 +98,12 @@ pub struct Rule {
 }
 
 impl<S: WriteTx> Tx<'_, S> {
-    /// The change a decision works on (Go's `flowChange`): open, and with no option (the Go service's).
+    /// The change a decision works on (Go's `flowChange`): open.
     async fn decision_change(&mut self, id: &ChangeId) -> Result<Change> {
         self.lock_change(id).await?;
         let c = self.change_head(id).await?;
         if c.status != "draft" && c.status != "active" {
             return Err(GraphError::conflict(format!("change {id} is {}", c.status)));
-        }
-        let decided = format!("{LOG_FACT}.decision");
-        if self
-            .store
-            .log(id, 0, &[&decided])
-            .await?
-            .iter()
-            .any(|l| l.typ == decided)
-        {
-            return Err(GraphError::unimplemented(
-                "a change whose items are decided on (decision items): the Go service's",
-            ));
         }
         Ok(c)
     }

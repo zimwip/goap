@@ -1,6 +1,6 @@
 //! The facts a change's work writes on its blackboard (Go's `Graph.AddItems`): items of the log of the change, one
-//! entry each (`domain.FactEntry`). The flows, decision points and transitions an operation of their own records, a
-//! decision is the Go service's; the other types are served here, validated as their use cases register them.
+//! entry each (`domain.FactEntry`). The flows, decision points and transitions an operation of their own records; the
+//! other types are served here, validated as their use cases register them.
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -29,11 +29,22 @@ pub struct ItemWrite {
     pub derived_from: Vec<String>,
     pub supersedes: Vec<String>,
     pub execution: String,
+    /// The item a `decision` item accepts or rejects (`domain.Decision`).
+    pub decision: Option<ItemDecision>,
     /// When its writer says it was made: only the policy of a derogation reads it (the log stamps the item itself).
     pub created_at: Option<DateTime<Utc>>,
 }
 
-/// An item as Go marshals a `domain.ChangeItem` with no flow event, decision event, decision nor recipient.
+/// What a `decision` item decides (`domain.Decision`): another item accepted or rejected.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ItemDecision {
+    pub item: String,
+    pub accept: bool,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub comment: String,
+}
+
+/// An item as Go marshals a `domain.ChangeItem` with no flow event, decision event nor recipient.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ItemJson<'a> {
@@ -45,6 +56,8 @@ struct ItemJson<'a> {
     status: &'a str,
     #[serde(skip_serializing_if = "str::is_empty")]
     flow: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    decision: Option<&'a ItemDecision>,
     #[serde(skip_serializing_if = "Option::is_none")]
     data: Option<&'a Map<String, Value>>,
     #[serde(skip_serializing_if = "str::is_empty")]
@@ -64,6 +77,7 @@ pub(crate) fn served(t: &str) -> bool {
     matches!(
         t,
         "artifact"
+            | "decision"
             | "signal"
             | TYPE_REVIEW
             | "risk"
@@ -159,6 +173,9 @@ pub(crate) fn review_entries(d: Option<&Map<String, Value>>) -> Vec<(String, Str
 pub(crate) fn validate_item(it: &ItemWrite, now: DateTime<Utc>) -> std::result::Result<(), String> {
     let d = it.data.as_ref();
     match it.typ.as_str() {
+        "decision" if it.decision.as_ref().is_none_or(|d| d.item.is_empty()) => {
+            Err("decision item requires decision.item".into())
+        }
         "signal" if it.target.is_empty() => Err("signal item requires target, the name of the signal".into()),
         TYPE_REVIEW => validate_review(d),
         "risk" | "action" => validate_record(&it.typ, d),
@@ -296,6 +313,16 @@ fn validate_verification(d: Option<&Map<String, Value>>) -> std::result::Result<
 }
 
 impl<S: WriteTx> Tx<'_, S> {
+    /// What an item must be (Go's `checkItem`): its type's validation, then its data as its domain declares it.
+    fn check_item(&self, it: &ItemWrite, at: DateTime<Utc>) -> Result<()> {
+        let data = it.data.as_ref().filter(|m| !m.is_empty());
+        let problem = match validate_item(it, at) {
+            Err(e) => Err(e),
+            Ok(()) => check::item_data(self.catalog(), &it.typ, data)?,
+        };
+        problem.map_err(|e| GraphError::invalid(format!("item {}: {e}", it.id)))
+    }
+
     /// Checks an item and appends it to the log of a change (Go's `checkItem`, then `putItem`): its status the given
     /// default when it names none. The item comes back as written.
     pub(crate) async fn put_item(&mut self, id: &ChangeId, it: &ItemWrite, default_status: &str) -> Result<Value> {
@@ -306,19 +333,14 @@ impl<S: WriteTx> Tx<'_, S> {
         };
         let at = self.env.now();
         let data = it.data.as_ref().filter(|m| !m.is_empty());
-        let problem = match validate_item(it, at) {
-            Err(e) => Err(e),
-            Ok(()) => check::item_data(self.catalog(), &it.typ, data)?,
-        };
-        if let Err(e) = problem {
-            return Err(GraphError::invalid(format!("item {}: {e}", it.id)));
-        }
+        self.check_item(it, at)?;
         let payload = gojson::to_string(&ItemJson {
             id: &it.id,
             typ: &it.typ,
             target: &it.target,
             status,
             flow: &it.flow,
+            decision: it.decision.as_ref(),
             data,
             produced_by: &it.produced_by,
             derived_from: &it.derived_from,
@@ -387,9 +409,27 @@ impl<S: WriteTx> Tx<'_, S> {
         for it in its.iter_mut().filter(|it| it.id.is_empty()) {
             it.id = self.env.new_id();
         }
+        // the items a decision may target: those of the change, then those of the batch written before it
+        let mut known: std::collections::HashSet<String> = self
+            .store
+            .log(id, 0, &[&format!("{LOG_FACT}.")])
+            .await?
+            .into_iter()
+            .map(|l| l.id)
+            .collect();
         let mut out = Vec::with_capacity(its.len());
         for it in &its {
+            if let Some(d) = &it.decision
+                && !known.contains(&d.item)
+            {
+                self.check_item(it, self.env.now())?;
+                return Err(GraphError::invalid(format!(
+                    "decision {} targets unknown item {}",
+                    it.id, d.item
+                )));
+            }
             out.push(self.put_item(id, it, ITEM_PROPOSED).await?);
+            known.insert(it.id.clone());
         }
         if c.status == "draft" {
             c.status = "active".into();

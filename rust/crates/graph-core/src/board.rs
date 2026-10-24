@@ -298,13 +298,15 @@ fn check_item(
         derived_from: it.derived_from.clone(),
         supersedes: it.supersedes.clone(),
         execution: it.execution.clone(),
+        decision: it.decision.as_ref().map(|d| crate::write::items::ItemDecision {
+            item: d.item.clone(),
+            accept: d.accept,
+            comment: String::new(),
+        }),
         created_at: None,
     };
     if let Err(e) = validate_item(&w, now) {
         return Ok(Err(e));
-    }
-    if it.typ == "decision" && it.decision.as_ref().is_none_or(|d| d.item.is_empty()) {
-        return Ok(Err("decision item requires decision.item".into()));
     }
     check::item_data(cat, &it.typ, it.data.as_ref().filter(|m| !m.is_empty()))
 }

@@ -27,10 +27,6 @@ use crate::{
     store::{ReadTx, WriteTx},
 };
 
-fn unserved(what: &str) -> GraphError {
-    GraphError::unimplemented(format!("{what}: not served here yet"))
-}
-
 /// A flow item as Go marshals a `domain.ChangeItem` carrying a flow event.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -108,15 +104,6 @@ impl<S: WriteTx> Tx<'_, S> {
         let c = self.change_head(id).await?;
         if c.status != "draft" && c.status != "active" {
             return Err(GraphError::conflict(format!("change {id} is {}", c.status)));
-        }
-        if self
-            .store
-            .log(id, 0, &[&format!("{LOG_FACT}.decision")])
-            .await?
-            .iter()
-            .any(|l| l.typ == format!("{LOG_FACT}.decision"))
-        {
-            return Err(unserved("a change whose items are decided on (decision items)"));
         }
         Ok(c)
     }
