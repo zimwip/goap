@@ -96,6 +96,23 @@ pub async fn whole_change_on<T: ReadTx>(
     })
 }
 
+/// A change of a listing read whole (Go's `guardTx.Change`): the header already read, the impacts and items of the
+/// fold of its log and its position, nothing validated.
+pub async fn folded<T: ReadTx>(tx: &T, change: Change) -> Result<WholeChange> {
+    let id = change.id.clone();
+    let view = fold_change(tx, &id).await?;
+    let mut items = Vec::new();
+    for l in tx.log(&id, 0, &[&format!("{LOG_FACT}.")]).await? {
+        items.push(serde_json::from_str(&l.payload).map_err(GraphError::internal)?);
+    }
+    Ok(WholeChange {
+        change,
+        impacts: view.fold.impacts.iter().map(|cn| (cn.clone(), None)).collect(),
+        items,
+        seq: view.seq,
+    })
+}
+
 /// What the gate of an acceptance says of each draft a flow sees (Go's `impactValidations`): none on a flow no longer
 /// open.
 async fn validations<T: ReadTx>(

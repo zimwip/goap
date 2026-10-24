@@ -81,7 +81,8 @@ const OWNER_ME: &str = "@me";
 struct Caller {
     subject: String,
     on_behalf_of: String,
-    at_least: bool,
+    /// the positions the reads must see the change logs at (`X-Goap-At-Least`, Go's `graphapi.ParsePositions`)
+    at_least: Vec<(String, i64)>,
     project: String,
     command: String,
     roles: Vec<String>,
@@ -109,7 +110,7 @@ impl Caller {
         Caller {
             subject,
             on_behalf_of,
-            at_least: !req.header(HEADER_AT_LEAST).is_empty(),
+            at_least: positions(req.header(HEADER_AT_LEAST)),
             project: req.header(HEADER_PROJECT).to_string(),
             command: req.header(HEADER_COMMAND).to_string(),
             org: req.header(HEADER_ORG).to_string(),
@@ -132,11 +133,6 @@ impl Caller {
                 "a person's read goes through the reach of its caller (ADR 0161): not served here yet",
             ));
         }
-        if self.at_least {
-            return Err(GraphError::unimplemented(
-                "a read at a position of a change log (ADR 0153): not served here yet",
-            ));
-        }
         Ok(())
     }
 
@@ -146,11 +142,6 @@ impl Caller {
         if !self.subject.starts_with("system:") || !self.on_behalf_of.is_empty() {
             return Err(GraphError::unimplemented(
                 "a person's write goes through the access of the organisation: not served here yet",
-            ));
-        }
-        if self.at_least {
-            return Err(GraphError::unimplemented(
-                "a request at a position of a change log (ADR 0153): not served here yet",
             ));
         }
         Ok(())
@@ -456,13 +447,62 @@ fn structure_ref(s: &str) -> Result<String, GraphError> {
         .map_err(GraphError::invalid)
 }
 
+/// The positions of `X-Goap-At-Least` (Go's `graphapi.ParsePositions`): `<change>:<seq>` pairs separated by commas, a
+/// malformed or non-positive one left out, the last of a change kept.
+fn positions(v: &str) -> Vec<(String, i64)> {
+    let mut out: Vec<(String, i64)> = Vec::new();
+    for p in v.split(',') {
+        let Some(i) = p.rfind(':').filter(|i| *i > 0) else {
+            continue;
+        };
+        let Ok(seq) = p[i + 1..].trim().parse::<i64>() else {
+            continue;
+        };
+        if seq <= 0 {
+            continue;
+        }
+        let id = p[..i].trim().to_string();
+        out.retain(|(x, _)| *x != id);
+        out.push((id, seq));
+    }
+    out
+}
+
 impl Graph {
+    /// Whether the logs of the changes the caller names in `X-Goap-At-Least` reach the positions it asks for (ADR
+    /// 0153). This service reads the store as committed, so its fold of a log always reaches what the writes before it
+    /// left: a position not reached yet is a refusal of Go's fold (`ErrBehind`), which the Go service words.
+    async fn reached(&self, caller: &Caller) -> Result<(), ConnectError> {
+        if caller.at_least.is_empty() {
+            return Ok(());
+        }
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        for (id, seq) in &caller.at_least {
+            let after = tx
+                .log(&ChangeId::from(id.as_str()), seq - 1, &["impact.", "fact."])
+                .await
+                .map_err(connect_error)?;
+            if after.is_empty() {
+                return Err(connect_error(GraphError::unimplemented(
+                    "a read at a position of a change log its fold has not reached (ADR 0153): not served here yet",
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// Runs a read on a session of the store, once the caller is one served here.
     async fn read<T, F>(&self, caller: Caller, f: F) -> Answer<T>
     where
         F: AsyncFnOnce(&Session) -> Result<T, GraphError>,
     {
         caller.serves().map_err(connect_error)?;
+        self.reached(&caller).await?;
         let tx = self
             .state
             .store
@@ -482,11 +522,7 @@ impl Graph {
         F: AsyncFnOnce(&Session, &Readable) -> Result<T, GraphError>,
     {
         let person = caller.person();
-        if person && caller.at_least {
-            return Err(connect_error(GraphError::unimplemented(
-                "a read at a position of a change log (ADR 0153): not served here yet",
-            )));
-        }
+        self.reached(&caller).await?;
         let tx = self
             .state
             .store
@@ -672,7 +708,7 @@ impl Graph {
             let system = Caller {
                 subject: SYSTEM_GRAPH.into(),
                 on_behalf_of: String::new(),
-                at_least: false,
+                at_least: Vec::new(),
                 project: String::new(),
                 command: caller.command.clone(),
                 roles: vec![ROLE_ADMIN.into()],
@@ -734,6 +770,7 @@ impl Graph {
         F: for<'a, 'b> AsyncFnOnce(&'a mut Tx<'b, Session>) -> Result<T, GraphError>,
     {
         caller.writes().map_err(connect_error)?;
+        self.reached(&caller).await?;
         let administers = caller.roles.iter().any(|r| r == ROLE_ADMIN);
         self.transact(&caller, String::new(), administers, f).await
     }
@@ -747,11 +784,7 @@ impl Graph {
     where
         F: for<'a, 'b, 'c> AsyncFnOnce(&'a mut Tx<'b, Session>, &'c Access) -> Result<T, GraphError>,
     {
-        if caller.at_least {
-            return Err(connect_error(GraphError::unimplemented(
-                "a request at a position of a change log (ADR 0153): not served here yet",
-            )));
-        }
+        self.reached(&caller).await?;
         let tx = self
             .state
             .store
@@ -2602,11 +2635,6 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         self.read_changes(caller, &[], async |tx, r| {
-            if !m.header_only {
-                return Err(GraphError::unimplemented(
-                    "a change read whole is a fold of its log (ADR 0153): not served here yet",
-                ));
-            }
             let f = ChangesFilter {
                 namespace: m.namespace.clone(),
                 owner_org: structure_ref(&m.owner_org)?,
@@ -2615,12 +2643,23 @@ impl pb::GraphService for Graph {
                 query: m.query.clone(),
                 ..ChangesFilter::default()
             };
+            // only the changes kept are read whole, unless the headers are asked for
+            let whole = async |cs: Vec<change::Change>| -> Result<Vec<pb::Change>, GraphError> {
+                if m.header_only {
+                    return Ok(convert::changes(&cs));
+                }
+                let mut out = Vec::with_capacity(cs.len());
+                for c in cs {
+                    out.push(whole_pb(&whole::folded(tx, c).await?)?);
+                }
+                Ok(out)
+            };
             // what the caller may not read is left out before a page is cut, so a page is full whenever more remain
             let keep = |c: &change::Change| r.may_read(c);
             if m.limit > 0 {
                 let p = change::changes_page(tx, &f, change::page_limit(m.limit.into()), &m.cursor, keep).await?;
                 return Ok(pb::ListChangesResponse {
-                    changes: convert::changes(&p.changes),
+                    changes: whole(p.changes).await?,
                     next_cursor: p.next,
                     total: p.total as i32,
                 });
@@ -2632,7 +2671,7 @@ impl pb::GraphService for Graph {
                 .filter(|c| f.matches(c) && keep(c))
                 .collect();
             Ok(pb::ListChangesResponse {
-                changes: convert::changes(&cs),
+                changes: whole(cs).await?,
                 ..Default::default()
             })
         })

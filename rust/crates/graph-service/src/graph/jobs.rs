@@ -101,7 +101,7 @@ impl Principal {
             } else {
                 String::new()
             },
-            at_least: false,
+            at_least: Vec::new(),
             project: self.project.clone(),
             command: String::new(),
             roles,

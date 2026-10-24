@@ -150,7 +150,7 @@ impl Graph {
         let system = Caller {
             subject: "system:graph".into(),
             on_behalf_of: end_user_of(&caller).into(),
-            at_least: false,
+            at_least: Vec::new(),
             project: String::new(),
             command: caller.command.clone(),
             roles: vec![ROLE_ADMIN.into()],
