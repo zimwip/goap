@@ -105,6 +105,23 @@ pub async fn branch_head<T: ReadTx>(tx: &T, namespace: &str, name: &str) -> Resu
         .unwrap_or_else(|| empty_head(ns, name)))
 }
 
+/// The head of a branch as Go's `Graph.BranchHead` answers it: the branch of a change answers its fork with the order
+/// of its last commit, a header with no id (`changeBranchHead`).
+pub async fn any_branch_head<T: ReadTx>(tx: &T, namespace: &str, name: &str) -> Result<Baseline> {
+    if let Some(b) = tx.branch(namespace_of(namespace), branch_of(name)).await?
+        && b.ephemeral
+    {
+        return Ok(Baseline {
+            namespace: b.namespace.clone(),
+            branch: b.name.clone(),
+            parent_id: b.fork_baseline.clone(),
+            seq: tx.last_commit(&b.name).await?,
+            ..Baseline::default()
+        });
+    }
+    branch_head(tx, namespace, name).await
+}
+
 /// A branch of a namespace; main exists implicitly, open at its head, before any change made it a row.
 pub async fn branch<T: ReadTx>(tx: &T, namespace: &str, name: &str) -> Result<Branch> {
     let (ns, name) = (namespace_of(namespace), branch_of(name));

@@ -16,6 +16,9 @@ pub const REVERTED: Version = -1;
 /// The reads of a store, in one session (a read-only connection: PostgreSQL with no transaction around the
 /// statements, SQLite a reader of the WAL).
 pub trait ReadTx: Sync {
+    /// The order of the last commit on a branch (0: none).
+    fn last_commit(&self, branch: &str) -> impl Future<Output = Result<i64>> + Send;
+
     /// The whole header of a change; none when the store holds none.
     fn change(&self, id: &ChangeId) -> impl Future<Output = Result<Option<Change>>> + Send;
 
@@ -268,9 +271,6 @@ pub trait WriteTx: ReadTx {
 
     /// The next order of a commit.
     fn next_commit(&self) -> impl Future<Output = Result<i64>> + Send;
-
-    /// The order of the last commit on a branch (0: none).
-    fn last_commit(&self, branch: &str) -> impl Future<Output = Result<i64>> + Send;
 
     /// The types of the entries of the log of a change.
     fn log_types(&self, change: &ChangeId) -> impl Future<Output = Result<Vec<String>>> + Send;

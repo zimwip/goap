@@ -679,16 +679,6 @@ impl WriteTx for Session {
         Ok(rows.first().map_or(1, |r| r.int(0)))
     }
 
-    async fn last_commit(&self, branch: &str) -> Result<i64, GraphError> {
-        let p = self.sql.ph(1);
-        let q = format!(
-            "SELECT coalesce(max(committed), 0) FROM (SELECT max(committed) AS committed FROM node_version WHERE branch = {p} \
-             UNION ALL SELECT max(committed) FROM node_branch WHERE branch = {p}) l"
-        );
-        let rows = self.select((q, vec![branch_of(branch).into()]), "last commit").await?;
-        Ok(rows.first().map_or(0, |r| r.int(0)))
-    }
-
     async fn log_types(&self, change: &ChangeId) -> Result<Vec<String>, GraphError> {
         let q = format!(
             "SELECT DISTINCT type FROM change_log WHERE change_id = {}",

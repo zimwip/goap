@@ -1526,9 +1526,16 @@ impl pb::GraphService for Graph {
         self.read_any(&req, async |tx| {
             let b = read::branch(tx, &m.namespace, &m.name).await?;
             if b.ephemeral && !m.header_only {
-                return Err(GraphError::unimplemented(
-                    "the head of the branch of a change (its fork with its commits): not served here yet",
-                ));
+                // the head of the branch of a change (Go's `changeBranchHead`): its fork with what committed on it
+                let head = read::any_branch_head(tx, &m.namespace, &b.name).await?;
+                let state = read::branch_state(tx, &b).await?;
+                return Ok(pb::GetBranchResponse {
+                    branch: Some(convert::branch(&b)),
+                    head: Some(convert::baseline(
+                        &head,
+                        Some(state.into_iter().map(|(n, v)| (n.0, v)).collect()),
+                    )),
+                });
             }
             let head = read::branch_head(tx, &m.namespace, &b.name).await?;
             let state = if m.header_only {

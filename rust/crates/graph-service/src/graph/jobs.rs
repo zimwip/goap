@@ -203,17 +203,7 @@ impl Graph {
                 m.baseline_id.clone()
             } else {
                 let branch = graph_core::model::branch_of(&m.branch);
-                if tx
-                    .branch(&ns, branch)
-                    .await
-                    .map_err(connect_error)?
-                    .is_some_and(|b| b.ephemeral)
-                {
-                    return Err(connect_error(GraphError::unimplemented(
-                        "the head of the branch of a change: answered by the Go service",
-                    )));
-                }
-                read::branch_head(&tx, &ns, branch).await.map_err(connect_error)?;
+                read::any_branch_head(&tx, &ns, branch).await.map_err(connect_error)?;
                 branch.to_string()
             }
         };

@@ -357,6 +357,18 @@ pub(crate) fn change_of(r: &Row) -> Result<Change, GraphError> {
 }
 
 impl ReadTx for Session {
+    async fn last_commit(&self, branch: &str) -> Result<i64, GraphError> {
+        let p = self.sql.ph(1);
+        let q = format!(
+            "SELECT coalesce(max(committed), 0) FROM (SELECT max(committed) AS committed FROM node_version WHERE branch = {p} \
+             UNION ALL SELECT max(committed) FROM node_branch WHERE branch = {p}) l"
+        );
+        let rows = self
+            .select((q, vec![graph_core::model::branch_of(branch).into()]), "last commit")
+            .await?;
+        Ok(rows.first().map_or(0, |r| r.int(0)))
+    }
+
     async fn change(&self, id: &ChangeId) -> Result<Option<Change>, GraphError> {
         if self.sql.pg && uuid::Uuid::try_parse(id.as_str()).is_err() {
             return Err(GraphError::invalid(format!(

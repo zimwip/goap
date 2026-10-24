@@ -265,7 +265,7 @@ pub async fn export_snapshot<T: ReadTx>(
         nodes: Vec::new(),
     };
     let header = if baseline.is_empty() {
-        read::branch_head(tx, &namespace, branch).await?
+        read::any_branch_head(tx, &namespace, branch).await?
     } else {
         let b = read::header_of(tx, baseline).await?;
         if b.namespace != namespace {
