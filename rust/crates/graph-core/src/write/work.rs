@@ -31,7 +31,7 @@ use crate::{
         BRANCH_OPEN, Branch, ChangeId, Link, LinkId, MAIN_BRANCH, Node, NodeId, NodeRef, Props, Target, Version,
         branch_of, namespace_of,
     },
-    read,
+    read, sources,
     store::{ReadTx, WriteTx},
 };
 
@@ -860,9 +860,15 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// The outgoing link a draft gains, checked (Go's `newDraftLink`).
     pub(super) async fn new_draft_link(&self, w: &Work, from: &Draft, l: &LinkWrite) -> Result<DraftLink> {
-        if l.to.id.is_empty() && !l.target.is_zero() && !l.typ.is_empty() {
-            return Err(unserved("a link to a URL (ADR 0154)"));
+        let mut l = l.clone();
+        if l.to.id.is_empty()
+            && !l.target.is_zero()
+            && !l.typ.is_empty()
+            && let Some(ext) = self.target_of(w, from, &mut l).await?
+        {
+            return Ok(ext);
         }
+        let l = &l;
         if l.typ.is_empty() || l.to.id.is_empty() {
             return Err(GraphError::invalid("a link needs a type and a target"));
         }
@@ -883,8 +889,112 @@ impl<S: WriteTx> Tx<'_, S> {
         })
     }
 
+    /// The target of a link written to a URL (Go's `targetOf`, ADR 0154 step 2): a node of this graph sets the link's
+    /// node (the version the URL names, else the draft of the change on the flow, else the version on the change's
+    /// branch) and the link is checked as any; a target in another source is the link returned, checked against the
+    /// type its URL names. A node of another graph names its version.
+    async fn target_of(&self, w: &Work, from: &Draft, l: &mut LinkWrite) -> Result<Option<DraftLink>> {
+        let src = self.link_source(&w.c.project_id.key, &l.target.source).await?;
+        if src.local() {
+            l.to = self.local_target(w, &src, &l.target).await?;
+            l.target = Url::default();
+            return Ok(None);
+        }
+        let mut to_type = l.target.typ.clone();
+        if src.kind == sources::KIND_GRAPH {
+            if l.target.version == 0 {
+                return Err(GraphError::invalid(format!(
+                    "a link to {}, a node of graph source {}, names its version (?v=)",
+                    l.target, src.name
+                )));
+            }
+            to_type = format!("{}@{}", src.namespace_of(), l.target.typ);
+        }
+        check::link(self.catalog(), &l.typ, &from.typ, &to_type)?;
+        check::link_attributes(self.catalog(), &l.typ, l.props.as_ref())?;
+        Ok(Some(DraftLink {
+            id: LinkId(self.env.new_id()),
+            typ: l.typ.clone(),
+            to: NodeRef::default(),
+            target: l.target.clone(),
+            props: l.props.clone(),
+        }))
+    }
+
+    /// The sources the URLs of the links of a write name, read before the write as Go's `withLinkSources` does, so
+    /// that a source it cannot read refuses the write before anything else.
+    async fn link_sources(&self, id: &ChangeId, links: &[LinkWrite]) -> Result<()> {
+        let names: Vec<&str> = links
+            .iter()
+            .filter(|l| l.to.id.is_empty() && !l.target.is_zero())
+            .map(|l| l.target.source.as_str())
+            .collect();
+        if names.is_empty() {
+            return Ok(());
+        }
+        let Some(c) = self.store.change(id).await? else {
+            return Err(GraphError::not_found(format!("change {id}")));
+        };
+        for name in names {
+            self.link_source(&c.project_id.key, name).await?;
+        }
+        Ok(())
+    }
+
+    /// The source a URL a link of a change names, as the project of the change maps it (Go's `withLinkSources`).
+    async fn link_source(&self, project: &str, name: &str) -> Result<sources::Source> {
+        let mut to = name.to_string();
+        if !project.is_empty() {
+            let dir = crate::access::Directory::read(self.store, self.catalog()).await?;
+            if let Some(mapped) = dir.project_sources(project).get(name).filter(|m| !m.is_empty()) {
+                to = mapped.clone();
+            }
+        }
+        sources::source(self.store, &to).await?.map_err(GraphError::invalid)
+    }
+
+    /// The node of this graph a URL names, as the change sees it (Go's `localTarget`).
+    async fn local_target(&self, w: &Work, src: &sources::Source, u: &Url) -> Result<NodeRef> {
+        let ns = src.namespace_of();
+        let not_found = || GraphError::invalid(format!("{u}: no {} {} in namespace {ns}", u.typ, u.key));
+        let is_a = |typ: &str| {
+            typ.rsplit_once('@').map_or(typ, |(_, t)| t) == u.typ
+                || self.catalog().is_a(typ, &format!("{ns}@{}", u.typ))
+        };
+        let same_ns = namespace_of(&w.ns) == namespace_of(ns);
+        if u.version == 0 && same_ns {
+            for cn in &w.seen {
+                if cn.key == u.key
+                    && let Some(post) = cn.post.as_ref().filter(|p| p.is_draft())
+                {
+                    if !is_a(&cn.typ) {
+                        return Err(not_found());
+                    }
+                    return Ok(post.clone());
+                }
+            }
+        }
+        let Some(id) = self.store.node_id_by_key(ns, &u.key).await? else {
+            return Err(not_found());
+        };
+        let n = if u.version > 0 {
+            self.store.node(&NodeRef::new(id, u.version as Version)).await?
+        } else {
+            let mut branch = src.branch.clone();
+            if branch.is_empty() && same_ns {
+                branch = w.branch.clone();
+            }
+            read::latest_on_chain(self.store, ns, &branch, &id).await?
+        };
+        match n {
+            Some(n) if !n.deleted && is_a(&n.typ) => Ok(w.normalize_to(&n.node_ref())),
+            _ => Err(not_found()),
+        }
+    }
+
     /// Creates a node in a change: one `created` event adds the impact and the draft (Go's `createTx`).
     pub async fn impact_node_create(&mut self, id: &ChangeId, inp: NodeCreate, flow: &str) -> Result<ChangeImpact> {
+        self.link_sources(id, &inp.links).await?;
         self.create_node(id, inp, flow, &[]).await
     }
 
@@ -1204,6 +1314,7 @@ impl<S: WriteTx> Tx<'_, S> {
         flow: &str,
         execution: &str,
     ) -> Result<Link> {
+        self.link_sources(id, std::slice::from_ref(&l)).await?;
         let mut w = self.work_on(id, flow).await?;
         self.select_impact(&mut w, impact)?;
         let d = self.working(&w)?;
@@ -1212,7 +1323,11 @@ impl<S: WriteTx> Tx<'_, S> {
             id: dl.id.clone(),
             typ: dl.typ.clone(),
             from: d.draft_ref(),
-            to: Target::Node(dl.to.clone()),
+            to: if dl.is_external() {
+                Target::External(dl.target.clone())
+            } else {
+                Target::Node(dl.to.clone())
+            },
             props: dl.props.clone(),
             change_id: id.clone(),
         };
@@ -1766,9 +1881,14 @@ pub(super) fn add_link_patch(l: &DraftLink) -> Value {
     let mut m = Map::new();
     m.insert("id".into(), Value::String(l.id.0.clone()));
     m.insert("type".into(), Value::String(l.typ.clone()));
-    m.insert("to".into(), Value::String(l.to.to_string()));
-    m.insert("toId".into(), Value::String(l.to.id.0.clone()));
-    m.insert("toVersion".into(), Value::from(l.to.version));
+    if l.is_external() {
+        m.insert("to".into(), Value::String(l.target.to_string()));
+        m.insert("target".into(), Value::String(l.target.to_string()));
+    } else {
+        m.insert("to".into(), Value::String(l.to.to_string()));
+        m.insert("toId".into(), Value::String(l.to.id.0.clone()));
+        m.insert("toVersion".into(), Value::from(l.to.version));
+    }
     m.insert("props".into(), l.props.clone().map_or(Value::Null, Value::Object));
     Value::Object(m)
 }

@@ -163,11 +163,6 @@ fn params(d: &def::Domain, im: &Decl, values: &Map<String, Json>) -> Result<Map<
                 .map(|vs| vs.iter().map(|v| v.value.clone()).collect())
                 .unwrap_or_default(),
         };
-        if a.typ == "code" {
-            return Err(connect_error(GraphError::unimplemented(
-                "a code text (ADR 0152) is checked by the Go service",
-            )));
-        }
         if let Err(e) = check_value(&check, Some(v)) {
             problems.push(format!("{k}: {e}"));
             continue;

@@ -1307,3 +1307,22 @@ pub async fn baseline_history<T: ReadTx>(
     }
     Ok(h)
 }
+
+/// The latest version of a node on a branch or, past its fork, on the branches it is forked from (Go's `latestOnTx`);
+/// none when no branch of the chain holds it, or a branch of the chain is not stored.
+pub async fn latest_on_chain<T: ReadTx>(tx: &T, namespace: &str, branch: &str, id: &NodeId) -> Result<Option<Node>> {
+    let mut name = crate::model::branch_of(branch).to_string();
+    for _ in 0..64 {
+        if let Some(n) = tx.latest_on(id, &name).await? {
+            return Ok(Some(n));
+        }
+        if name == MAIN_BRANCH {
+            break;
+        }
+        let Some(b) = tx.branch(namespace, &name).await? else {
+            return Ok(None);
+        };
+        name = crate::model::branch_of(&b.parent).to_string();
+    }
+    Ok(None)
+}

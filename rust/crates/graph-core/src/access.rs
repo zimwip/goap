@@ -23,6 +23,8 @@ pub const STATE_RETIRED: &str = "retired";
 pub struct Project {
     pub methodologies: Vec<String>,
     pub stopped: bool,
+    /// the source mapping of the project (ADR 0154 §8): the name of a source its URLs name to the declared source
+    pub sources: HashMap<String, String>,
 }
 
 /// The projects of the organisation, read at the head of main.
@@ -67,7 +69,27 @@ impl Directory {
                 })
                 .unwrap_or_default();
             let stopped = props.and_then(|p| p.get("stopped")).and_then(Value::as_bool) == Some(true);
-            out.projects.insert(n.key.clone(), Project { methodologies, stopped });
+            // a malformed mapping is one of the snapshot's problems: none (`access.sourceMap`)
+            let sources = match props.and_then(|p| p.get("sources")) {
+                Some(Value::Object(m)) => m
+                    .iter()
+                    .map(|(k, v)| {
+                        v.as_str()
+                            .filter(|v| !k.is_empty() && !v.is_empty())
+                            .map(|v| (k.clone(), v.to_string()))
+                    })
+                    .collect::<Option<HashMap<_, _>>>()
+                    .unwrap_or_default(),
+                _ => HashMap::new(),
+            };
+            out.projects.insert(
+                n.key.clone(),
+                Project {
+                    methodologies,
+                    stopped,
+                    sources,
+                },
+            );
         }
         let held: Vec<NodeRef> = nodes.iter().map(|n| n.node_ref()).collect();
         for l in tx.links_from(&held, Some(std::slice::from_ref(&st.parent))).await? {
@@ -113,6 +135,18 @@ impl Directory {
                 if !out.contains(m) {
                     out.push(m.clone());
                 }
+            }
+        }
+        out
+    }
+
+    /// The source mapping in force on a project: its own and its ancestors', the nearest wins
+    /// (`access.Snapshot.ProjectSources`).
+    pub fn project_sources(&self, project: &str) -> HashMap<String, String> {
+        let mut out = HashMap::new();
+        for k in self.chain(project) {
+            for (name, to) in self.projects.get(&k).map(|p| &p.sources).into_iter().flatten() {
+                out.entry(name.clone()).or_insert_with(|| to.clone());
             }
         }
         out

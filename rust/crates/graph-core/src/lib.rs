@@ -26,6 +26,7 @@ pub mod query;
 pub mod reach;
 pub mod read;
 pub mod snapshot;
+pub mod sources;
 pub mod stats;
 pub mod store;
 pub mod view;

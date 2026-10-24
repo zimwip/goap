@@ -345,7 +345,15 @@ impl<S: WriteTx> Tx<'_, S> {
                     to.version = v;
                 }
                 if dl.is_external() {
-                    return Err(unserved("a link to another source (ADR 0154)"));
+                    links.push(Link {
+                        id: dl.id.clone(),
+                        typ: dl.typ.clone(),
+                        from: NodeRef::default(),
+                        to: Target::External(dl.target.clone()),
+                        props: dl.props.clone(),
+                        change_id: ChangeId::default(),
+                    });
+                    continue;
                 }
                 if to.is_draft() {
                     return Err(GraphError::invalid(format!(
