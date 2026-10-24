@@ -3,6 +3,7 @@
 //! deduplicated by the id of each event (`<origin>:<seq>`, `Nats-Msg-Id`). A drain runs after each commit that wrote
 //! events; [`Relay::run`] delivers what a drain could not, and purges what was published.
 use std::{
+    collections::BTreeMap,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -46,6 +47,38 @@ impl Sink {
         Ok(Sink::Nats(js))
     }
 
+    /// Publishes an event at once, with no id (`platform.Events.Publish`): what the graph publishes outside its
+    /// outbox (the events of a republication of the index).
+    pub async fn publish(&self, subject: &str, data: &str, headers: &BTreeMap<String, String>) -> anyhow::Result<()> {
+        match self {
+            Sink::Nats(js) => {
+                let mut h = HeaderMap::new();
+                for (k, v) in headers {
+                    h.insert(k.as_str(), v.as_str());
+                }
+                let msg = jetstream::message::PublishMessage::build()
+                    .payload(data.to_string().into())
+                    .headers(h);
+                js.send_publish(subject.to_string(), msg).await?.await?;
+                Ok(())
+            }
+            #[cfg(test)]
+            Sink::Memory(l) => {
+                l.lock().unwrap().push((
+                    String::new(),
+                    Pending {
+                        seq: 0,
+                        subject: subject.into(),
+                        data: data.into(),
+                        headers: headers.clone(),
+                        created_at: None,
+                    },
+                ));
+                Ok(())
+            }
+        }
+    }
+
     async fn deliver(&self, id: &str, m: &Pending) -> anyhow::Result<()> {
         match self {
             Sink::Nats(js) => {
@@ -86,6 +119,11 @@ pub struct Relay {
 }
 
 impl Relay {
+    /// The bus the relay delivers to.
+    pub fn sink(&self) -> Arc<Sink> {
+        self.sink.clone()
+    }
+
     pub fn new(origin: &'static str, table: &'static str, sink: Arc<Sink>) -> Relay {
         Relay {
             origin,

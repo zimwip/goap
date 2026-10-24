@@ -74,6 +74,11 @@ impl State {
         out
     }
 
+    /// The bus the graph's events go to, when this process delivers them.
+    pub(crate) fn sink(&self) -> Option<Arc<relay::Sink>> {
+        self.relays.as_ref().map(|r| r.graph.sink())
+    }
+
     /// Delivers the graph's events a commit wrote, at once.
     pub(crate) async fn deliver_graph(&self) {
         if let Some(r) = &self.relays {

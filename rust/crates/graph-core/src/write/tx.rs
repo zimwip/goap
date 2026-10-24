@@ -656,6 +656,46 @@ impl<'s, S: WriteTx> Tx<'s, S> {
         }
     }
 
+    /// The events that index the whole graph again (Go's `Graph.Republish`, ADR 0026, 0095): the document of every
+    /// change, then per namespace every version of the nodes main holds and the head of main as its whole state. They
+    /// are published at once, never written in the outbox; the number is that of the documents and node events.
+    pub async fn republish(&mut self, namespaces: &[String]) -> Result<(Vec<OutboxMessage>, usize)> {
+        let cs = self
+            .store
+            .change_heads(&crate::change::ChangesFilter::default())
+            .await?;
+        for c in cs {
+            self.indexed.push(c.id.clone());
+            self.written_headers.insert(c.id.clone(), c);
+        }
+        let mut out = self.events().await?;
+        let mut count = out.len();
+        self.indexed.clear();
+        self.written_headers.clear();
+        for ns in namespaces {
+            let mut latest = Vec::new();
+            for id in self.store.namespace_node_ids(ns).await? {
+                if let Some(n) = self.store.latest_on(&id, crate::model::MAIN_BRANCH).await? {
+                    latest.push(n);
+                }
+            }
+            latest.sort_by(|a, b| a.key.cmp(&b.key));
+            for l in &latest {
+                let vs = self.store.version_range(&l.id, 0, i64::MAX as usize).await?;
+                count += vs.len();
+                self.nodes.extend(vs);
+            }
+            let mut head = crate::read::branch_head(self.store, ns, crate::model::MAIN_BRANCH).await?;
+            if !head.id.is_empty() {
+                let state = crate::read::whole_state(self.store, &head).await?;
+                head.parent_id = Default::default();
+                self.baselines.push((head, Some(state.into_iter().collect())));
+            }
+            out.extend(self.events().await?);
+        }
+        Ok((out, count))
+    }
+
     /// The events of what the transaction wrote, in Go's order (`Graph.eventsOf`).
     async fn events(&mut self) -> Result<Vec<OutboxMessage>> {
         let now = self.env.now();

@@ -483,4 +483,8 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   creates the job for the person; `BrowseImport` creates the short job of the chooser and reads it as the person until
   it ends (15 s at most). Compared with Go's with and without `importer-git` at work: the same answers, the numbers of
   a `Struct` aside (`2.0` for Go's `2`, as everywhere pbjson writes a double).
+- `RepublishIndex` is served (`Tx::republish`, Go's `Graph.Republish`): for a caller administering the platform, with a
+  bus, the document of every change, then per namespace every version of the nodes main holds and the head of main as
+  its whole state, published at once with no event id (never through the outbox), counted as Go counts them; compared
+  on the bus with Go's for the same graph: the same events.
 - Not done yet: the rest of phase 4.

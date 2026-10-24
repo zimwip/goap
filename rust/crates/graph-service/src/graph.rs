@@ -2006,6 +2006,55 @@ impl pb::GraphService for Graph {
 
     /// The branches of a namespace (of the statuses asked), the header of each head and the number of baselines of
     /// each branch.
+    async fn republish_index(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::RepublishIndexRequest>,
+    ) -> Answer<pb::RepublishIndexResponse> {
+        let (caller, stamp) = self.identified(&req).await?;
+        let session = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let snap = access::Snapshot::read(&session).await.map_err(connect_error)?;
+        let res = abac::Resource {
+            typ: "platform".into(),
+            ..abac::Resource::default()
+        };
+        if !snap
+            .authorize(&caller.reader_or_self(), res, "admin")
+            .map_err(connect_error)?
+        {
+            return Err(connect_error(forbidden(&caller.subject, "admin", "platform", "")));
+        }
+        let Some(sink) = self.state.sink() else {
+            return Err(ConnectError::failed_precondition("no event bus"));
+        };
+        let catalog = self.state.catalog(&session).await.map_err(connect_error)?;
+        let env = Env {
+            by: caller.subject.clone(),
+            end_user: String::new(),
+            actor: caller.subject.clone(),
+            command: caller.command.clone(),
+            catalog,
+            administers: false,
+            outbox: false,
+        };
+        let namespaces = session.namespaces().await.map_err(connect_error)?;
+        let mut tx = Tx::new(&session, &env);
+        let (msgs, n) = tx.republish(&namespaces).await.map_err(connect_error)?;
+        drop(tx);
+        drop(session);
+        for m in &msgs {
+            sink.publish(&m.subject, &m.data, &m.headers)
+                .await
+                .map_err(|e| ConnectError::internal(e.to_string()))?;
+        }
+        stamp.on(Ok(Response::new(pb::RepublishIndexResponse { versions: n as i32 })))
+    }
+
     async fn list_branches(
         &self,
         _ctx: &Ctx,
