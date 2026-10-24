@@ -17,9 +17,16 @@ use crate::{
     GraphError, Result, gojson,
     impact::{ChangeImpact, INTENT_MODIFIED, ImpactEvent, ImpactOp},
     model::{Baseline, BaselineId, ChangeId, LinkId, MAIN_BRANCH, NodeId, NodeRef, Props, Target},
+    operations::{
+        CHANGE_COMMIT, CHANGE_MERGE, IMPACT_CHECKOUT, IMPACT_CREATE, IMPACT_LINK_CREATE, IMPACT_LINK_DELETE,
+        IMPACT_PROPOSE, IMPACT_REVIEW, IMPACT_TRANSITION, IMPACT_UPDATE, IMPACT_WITHDRAW,
+    },
     read,
     store::WriteTx,
 };
+
+/// The check of an operation a commit performs on its change (Go's `Graph.allow`).
+pub type Allow<'a> = dyn Fn(&crate::change::Change, &str) -> Result<()> + Sync + 'a;
 
 /// A link an edit gives its node: to a stored version, or to a node of the graph or of the commit by key.
 #[derive(Debug, Clone, Default)]
@@ -96,6 +103,17 @@ impl<S: WriteTx> Tx<'_, S> {
     /// Runs the edits as one change (Go's `Graph.Commit` with no event carried).
     /// The moves of the state edits are authorized by `authorize` (Go's `Graph.Authorizer`).
     pub async fn commit_edits(&mut self, inp: Commit, authorize: &Authorize<'_>) -> Result<CommitResult> {
+        self.commit_edits_as(inp, authorize, &|_, _| Ok(())).await
+    }
+
+    /// A commit whose operations are each asked of `allow` where Go's `Commit` calls the public operation asking it
+    /// (`Graph.allow`, ADR 0103): the roles the methodology of the change allows a person.
+    pub async fn commit_edits_as(
+        &mut self,
+        inp: Commit,
+        authorize: &Authorize<'_>,
+        allow: &Allow<'_>,
+    ) -> Result<CommitResult> {
         if inp.edits.is_empty() {
             return Err(GraphError::invalid("a commit needs at least one edit"));
         }
@@ -182,6 +200,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 });
             }
             let Some(pre) = &e.pre else {
+                allow(&c, IMPACT_CREATE).map_err(|err| err.context(node_name(e)))?;
                 let cn = self
                     .impact_node_create(
                         &id,
@@ -212,6 +231,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 produced_by: inp.by.clone(),
                 ..ChangeImpact::default()
             };
+            allow(&c, IMPACT_PROPOSE).map_err(|err| err.context(node_name(e)))?;
             self.view(&id).await?;
             let added = self
                 .declare(&id, decl, true)
@@ -222,6 +242,7 @@ impl<S: WriteTx> Tx<'_, S> {
             if props.is_empty() && e.owner.is_empty() && links.is_empty() && e.remove_links.is_empty() {
                 continue;
             }
+            allow(&c, IMPACT_CHECKOUT).map_err(|err| err.context(node_name(e)))?;
             let mut out = self
                 .impact_node_checkout(
                     &id,
@@ -236,16 +257,19 @@ impl<S: WriteTx> Tx<'_, S> {
             let cn = out.pop().unwrap_or_default();
             posts[i] = cn.post.clone();
             if !props.is_empty() || !e.owner.is_empty() {
+                allow(&c, IMPACT_UPDATE).map_err(|err| err.context(node_name(e)))?;
                 self.impact_node_update(&id, &cn.id, props, &e.owner, "", "")
                     .await
                     .map_err(|err| err.context(node_name(e)))?;
             }
             for link in &e.remove_links {
+                allow(&c, IMPACT_LINK_DELETE).map_err(|err| err.context(node_name(e)))?;
                 self.impact_link_delete(&id, link, "", "")
                     .await
                     .map_err(|err| err.context(node_name(e)))?;
             }
             for l in links {
+                allow(&c, IMPACT_LINK_CREATE).map_err(|err| err.context(node_name(e)))?;
                 self.impact_link_create(&id, &cn.id, l, "", "")
                     .await
                     .map_err(|err| err.context(node_name(e)))?;
@@ -259,16 +283,21 @@ impl<S: WriteTx> Tx<'_, S> {
                 target: Default::default(),
                 props: l.props.clone(),
             };
-            self.impact_link_create(&id, &impacts[from], w, "", "")
-                .await
-                .map_err(|err| {
-                    err.context(format!(
-                        "link {} from {} to {}",
-                        l.typ,
-                        node_name(&inp.edits[from]),
-                        l.to_key
-                    ))
-                })?;
+            let created = match allow(&c, IMPACT_LINK_CREATE) {
+                Ok(()) => self
+                    .impact_link_create(&id, &impacts[from], w, "", "")
+                    .await
+                    .map(|_| ()),
+                Err(err) => Err(err),
+            };
+            created.map_err(|err| {
+                err.context(format!(
+                    "link {} from {} to {}",
+                    l.typ,
+                    node_name(&inp.edits[from]),
+                    l.to_key
+                ))
+            })?;
         }
         // a state edit is a move of the node's draft (a node with none is checked out by the move)
         for (i, e) in inp.edits.iter().enumerate() {
@@ -295,6 +324,7 @@ impl<S: WriteTx> Tx<'_, S> {
             if cur == e.state {
                 continue;
             }
+            allow(&c, IMPACT_TRANSITION).map_err(|err| err.context(node_name(e)))?;
             self.impact_node_transition(
                 &id,
                 "",
@@ -318,6 +348,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 continue;
             }
             if !self.impact_modifies(&id, &impacts[i]).await? {
+                allow(&c, IMPACT_WITHDRAW).map_err(|err| err.context(node_name(e)))?;
                 self.withdraw_impact(&id, &impacts[i])
                     .await
                     .map_err(|err| err.context(node_name(e)))?;
@@ -335,6 +366,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 inp.title
             )));
         }
+        allow(&c, IMPACT_REVIEW).map_err(|err| err.context(format!("commit {:?}", inp.title)))?;
         self.impact_node_review_batch(
             &id,
             ReviewBatch {
@@ -346,12 +378,14 @@ impl<S: WriteTx> Tx<'_, S> {
         .await
         .map_err(|err| err.context(format!("commit {:?}", inp.title)))?;
         // the apply: commit what is pending, then merge (Go's `apply`)
+        allow(&c, CHANGE_COMMIT)?;
         if let Err(err) = self.commit_change(&id, &inp.baseline_name).await
             && !err.message.ends_with(&format!("{NOTHING_TO_COMMIT}: invalid"))
         {
             return Err(err);
         }
         // a rebase the merge keeps is refused with the whole commit: one transaction
+        allow(&c, CHANGE_MERGE)?;
         let done = match self.merge_change(&id).await? {
             super::merge::Merge::Applied(done) => done,
             super::merge::Merge::Rebased(err) => return Err(err),

@@ -4058,7 +4058,6 @@ impl pb::GraphService for Graph {
             Ok(v) => v,
             Err((e, stamp)) => return stamp.on(Err(e)),
         };
-        let person = caller.person();
         let edits: Vec<NodeEdit> = m
             .edits
             .iter()
@@ -4104,11 +4103,13 @@ impl pb::GraphService for Graph {
                     acc.gate_access(tx.catalog(), &typ)?;
                 }
                 platform_served(tx, &m.namespace)?;
-                if person && !m.methodology.is_empty() {
-                    // each operation of the commit asks the roles the methodology allows it to (ADR 0103)
-                    return Err(GraphError::unimplemented(
-                        "a person's commit of a change following a methodology: not served here yet",
-                    ));
+                // each operation of the commit asks the roles the methodology allows it to (ADR 0103): read once
+                let mut roles: HashMap<&str, Option<Vec<String>>> = HashMap::new();
+                // a platform service is not asked, even for a person (`graphsvc.OperationAuthorizer`)
+                if !acc.who.subject.starts_with("system:") && !m.methodology.is_empty() {
+                    for op in COMMIT_OPERATIONS {
+                        roles.insert(op, operations::operation_roles(tx.store, &m.methodology, op).await?);
+                    }
                 }
                 let project = if !m.project_id.is_empty() {
                     m.project_id.clone()
@@ -4118,7 +4119,7 @@ impl pb::GraphService for Graph {
                     tx.structure_root(STRUCTURE_PROJECT)?
                 };
                 let out = tx
-                    .commit_edits(
+                    .commit_edits_as(
                         Commit {
                             namespace: m.namespace.clone(),
                             title: m.title.clone(),
@@ -4133,6 +4134,10 @@ impl pb::GraphService for Graph {
                             project_id: project,
                         },
                         &|node: &str, key: &str, t: &Transition| acc.transition(node, key, t),
+                        &|c: &graph_core::change::Change, op: &str| match roles.get(op) {
+                            Some(allowed) => acc.check_op(c, op, allowed.as_deref()),
+                            None => Ok(()),
+                        },
                     )
                     .await?;
                 Ok(pb::CommitEditsResponse {
@@ -4377,6 +4382,21 @@ impl pb::GraphService for Graph {
 /// A role no one holds: an operation a methodology allows to no role is the administrators' (`graphsvc.noRole`).
 const NO_ROLE: &str = "-";
 
+/// The operations a commit of edits performs (Go's `Graph.Commit` calling the public operations).
+const COMMIT_OPERATIONS: [&str; 11] = [
+    operations::IMPACT_CREATE,
+    operations::IMPACT_PROPOSE,
+    operations::IMPACT_CHECKOUT,
+    operations::IMPACT_UPDATE,
+    operations::IMPACT_LINK_DELETE,
+    operations::IMPACT_LINK_CREATE,
+    operations::IMPACT_TRANSITION,
+    operations::IMPACT_WITHDRAW,
+    operations::IMPACT_REVIEW,
+    operations::CHANGE_COMMIT,
+    operations::CHANGE_MERGE,
+];
+
 /// The actor of a review call (`graphsvc.Handler.reviewer`): the writes served here are a platform service's, which
 /// acts on the reviews of others as an administrator does.
 fn reviewer(caller: &Caller) -> Actor {
@@ -4435,17 +4455,34 @@ impl Access {
         if c.methodology.is_empty() {
             return Ok(());
         }
-        let reference = if c.methodology_version.is_empty() {
+        let reference = Self::methodology_ref(&c);
+        let allowed = operations::operation_roles(tx.store, &reference, op).await?;
+        self.check_op(&c, op, allowed.as_deref())
+    }
+
+    /// The reference of the methodology version a change follows (`Change.MethodologyRef`).
+    fn methodology_ref(c: &graph_core::change::Change) -> String {
+        if c.methodology_version.is_empty() {
             c.methodology.clone()
         } else {
             format!("{}@{}", c.methodology, c.methodology_version)
-        };
-        let Some(mut allowed) = operations::operation_roles(tx.store, &reference, op).await? else {
-            return Err(GraphError::internal(format!("unknown methodology {reference}")));
-        };
-        if allowed.is_empty() {
-            allowed = vec![NO_ROLE.into()];
         }
+    }
+
+    /// The check of `allow` once the roles the methodology allows the operation to are read (`None`: a methodology
+    /// the registry does not hold).
+    fn check_op(&self, c: &graph_core::change::Change, op: &str, allowed: Option<&[String]>) -> Result<(), GraphError> {
+        let Some(allowed) = allowed else {
+            return Err(GraphError::internal(format!(
+                "unknown methodology {}",
+                Self::methodology_ref(c)
+            )));
+        };
+        let allowed: Vec<String> = if allowed.is_empty() {
+            vec![NO_ROLE.into()]
+        } else {
+            allowed.to_vec()
+        };
         let res = abac::Resource {
             typ: "operation".into(),
             id: c.id.0.clone(),
