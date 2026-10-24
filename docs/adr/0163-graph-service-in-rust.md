@@ -465,4 +465,14 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   up to a minute, the hourly purge after `GOAP_OUTBOX_RETENTION`. A Go service on the same database relays the same rows
   under the same ids, which the stream deduplicates. Compared on the bench's lifecycle run: the same 1466 messages on
   each bus, every row published, the only differences the order of the keys of a jsonb (ids of either side).
+- The jobs of the graph (`crates/graph-service/src/graph/jobs.rs`, `graphsvc/jobs.go` and `lib/jobkit`): with
+  `GOAP_JOBS_URL` the service creates the jobs of `StartGraphExport` / `StartGraphImport` for the caller and runs a
+  worker claiming `graph.export` and `graph.import` (the claim's long poll, the reports every 500 ms, the heartbeat
+  inside the lease, the input read and the result written by chunks, a cancel reaching the run at its next report). The
+  OKF export (`graph_core::okf`, Go's `graph/okf`) writes its front matter as `gopkg.in/yaml.v3` does
+  (`graph_core::goyaml`: the encoder's choice of style, the emitter's checks and layout with an indent of 2, the map
+  keys in its order, floats as `strconv.FormatFloat(f, 'g', -1, 64)`, and what `yaml.Node.Encode` loses on its round
+  trip: a literal starting with a line break loses that break, one with an indentation hint under a sequence is Go's
+  error), checked on 380 values against yaml.v3; the zip compared file by file: the exports of five namespaces as three
+  callers read them are Go's. A snapshot the decoder refuses is still Go's to answer.
 - Not done yet: the rest of phase 4.

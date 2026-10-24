@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use graph_service::{State, app, relay::Sink};
+use graph_service::{Graph, State, app, graph::jobs::Jobs, relay::Sink};
 use graph_store::{Store, StoreConfig};
 
 #[tokio::main]
@@ -37,7 +37,11 @@ async fn main() -> anyhow::Result<()> {
         let sink = Sink::connect(&nats).await.with_context(|| format!("NATS at {nats}"))?;
         state.relay(sink).to_vec()
     };
+    // the job service (ADR 0149): the exports and the snapshot imports are its jobs, created here with the services'
+    // token and run by the worker of this process
+    state.jobs = Some(Arc::new(Jobs::from_env()));
     let state = Arc::new(state);
+    tokio::spawn(Arc::new(Graph { state: state.clone() }).run_worker());
     for r in relays {
         tokio::spawn(r.run(state.clone()));
     }

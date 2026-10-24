@@ -50,6 +50,7 @@ use graph_store::read::{LogFilter, Session, Tag};
 use crate::{State, convert};
 
 mod import;
+pub mod jobs;
 mod settings;
 
 /// `goap.graph.v1.GraphService`.
@@ -3707,6 +3708,24 @@ impl pb::GraphService for Graph {
             })
         })
         .await
+    }
+
+    async fn start_graph_export(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::StartGraphExportRequest>,
+    ) -> Answer<pb::StartGraphExportResponse> {
+        let (caller, stamp) = self.identified(&req).await?;
+        self.start_graph_export_rpc(caller, stamp, req.into_inner()).await
+    }
+
+    async fn start_graph_import(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::StartGraphImportRequest>,
+    ) -> Answer<pb::StartGraphImportResponse> {
+        let (caller, stamp) = self.identified(&req).await?;
+        self.start_graph_import_rpc(caller, stamp, req.into_inner()).await
     }
 
     /// Imports a JSON snapshot as one new change of the caller (`Graph.ImportSnapshot`, ADR 0104).

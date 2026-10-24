@@ -16,7 +16,7 @@ use tokio::sync::Mutex;
 mod convert;
 mod domainpb;
 mod domains;
-mod graph;
+pub mod graph;
 mod journal;
 pub mod relay;
 mod smarttags;
@@ -31,6 +31,8 @@ pub struct State {
     pub outbox: bool,
     /// The relays delivering the outboxes to the bus, when this process delivers them ([`State::relay`]).
     relays: Option<Relays>,
+    /// The job service the long runs are jobs of (ADR 0149), when this process reaches one.
+    pub jobs: Option<Arc<graph::jobs::Jobs>>,
     /// The type catalogue of the domains in force, with what told the stored versions apart when it was built.
     catalog: Mutex<(Option<String>, Arc<Catalog>)>,
     /// The persons this process made sure have a user (Go's `EnsureCaller`), and the creation in progress.
@@ -49,6 +51,7 @@ impl State {
             store,
             outbox: false,
             relays: None,
+            jobs: None,
             catalog: Mutex::new((None, Catalog::builtin())),
             users: Mutex::new(Default::default()),
             ensuring: Mutex::new(()),

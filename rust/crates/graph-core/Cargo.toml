@@ -16,6 +16,7 @@ uuid = { workspace = true }
 graph-catalog = { workspace = true }
 graph-script = { workspace = true }
 cypher = { workspace = true }
+flate2 = { workspace = true }
 
 [lints]
 workspace = true
