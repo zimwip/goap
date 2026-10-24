@@ -149,7 +149,7 @@ fn render_node(
             continue;
         }
         if a.code
-            && let Some(v) = codetext::parse(&text)
+            && let Ok(v) = codetext::parse(&text)
         {
             text = codetext::block(&v).trim().to_string();
         }

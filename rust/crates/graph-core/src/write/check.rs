@@ -10,7 +10,7 @@ use super::scripts;
 use super::tx::go_sprint;
 use crate::{GraphError, Result};
 
-/// What a value of an attribute must be (`domain.AttributeCheck.Check`); a code text is checked by the Go service.
+/// What a value of an attribute must be (`domain.AttributeCheck.Check`).
 pub fn check_value(a: &AttributeCheck, v: Option<&Value>) -> Result<(), String> {
     let Some(v) = v else { return Ok(()) };
     if v.is_null() || v.as_str() == Some("") {
@@ -41,17 +41,15 @@ pub fn check_value(a: &AttributeCheck, v: Option<&Value>) -> Result<(), String> 
             }
         }
         "string" if !v.is_string() => return Err(format!("a string is expected, got {p}")),
-        "code" => return Err(String::new()),
+        "code" => match v.as_str() {
+            None => return Err(format!("a code text is expected, got {p}")),
+            Some(s) => crate::codetext::parse(s)
+                .map(|_| ())
+                .map_err(|e| format!("not a code text: {e}"))?,
+        },
         _ => {}
     }
     Ok(())
-}
-
-fn value_error(a: &AttributeCheck, e: String, what: impl FnOnce(String) -> String) -> GraphError {
-    if a.typ == "code" {
-        return GraphError::unimplemented("a code text (ADR 0152) is checked by the Go service");
-    }
-    GraphError::invalid(what(e))
 }
 
 /// The properties of a node of a type: attributes of its type only (unless it is open), each of its kind.
@@ -72,9 +70,10 @@ pub fn attributes(cat: &Catalog, key: &str, typ: &str, props: Option<&Map<String
     }
     for a in cat.attribute_checks(typ) {
         if let Err(e) = check_value(&a, props.get(&a.name)) {
-            return Err(value_error(&a, e, |e| {
-                format!("{key} ({typ}): property {:?} is invalid: {e}", a.name)
-            }));
+            return Err(GraphError::invalid(format!(
+                "{key} ({typ}): property {:?} is invalid: {e}",
+                a.name
+            )));
         }
     }
     Ok(())
@@ -86,9 +85,10 @@ pub fn link_attributes(cat: &Catalog, typ: &str, props: Option<&Map<String, Valu
     let props = props.unwrap_or(&empty);
     for a in cat.link_attribute_checks(typ) {
         if let Err(e) = check_value(&a, props.get(&a.name)) {
-            return Err(value_error(&a, e, |e| {
-                format!("link {typ}: property {:?} is invalid: {e}", a.name)
-            }));
+            return Err(GraphError::invalid(format!(
+                "link {typ}: property {:?} is invalid: {e}",
+                a.name
+            )));
         }
     }
     Ok(())
@@ -158,9 +158,6 @@ pub fn item_data(cat: &Catalog, typ: &str, data: Option<&Map<String, Value>>) ->
     };
     for a in &checks {
         if let Err(e) = check_value(a, data.and_then(|d| d.get(&a.name))) {
-            if a.typ == "code" {
-                return Err(value_error(a, e, |e| e));
-            }
             return Ok(Err(format!("data.{}: {e}", a.name)));
         }
     }
