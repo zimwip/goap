@@ -103,7 +103,11 @@ pub fn to_string<T: ?Sized + Serialize>(v: &T) -> String {
 /// The JSON of a value as Go's `json.MarshalIndent(v, "", indent)` writes it: `json.Indent` over the compact text (an
 /// empty object or array stays `{}` / `[]`).
 pub fn to_string_indent<T: ?Sized + Serialize>(v: &T, indent: &str) -> String {
-    let compact = to_string(v);
+    indent_text(&to_string(v), indent)
+}
+
+/// A compact JSON text indented as Go's `json.Indent(dst, src, "", indent)` writes it.
+pub fn indent_text(compact: &str, indent: &str) -> String {
     let mut out = String::with_capacity(compact.len() * 2);
     let mut depth = 0usize;
     let mut in_string = false;
@@ -152,6 +156,42 @@ pub fn to_string_indent<T: ?Sized + Serialize>(v: &T, indent: &str) -> String {
                 newline(&mut out, depth);
             }
             ':' => out.push_str(": "),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// A JSON text as Go's `json.Marshal` writes a `json.RawMessage` of it: compacted, its strings HTML-safe, its numbers
+/// and the order of its keys as they are.
+pub fn compact_raw(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut in_string = false;
+    let mut escaped = false;
+    for c in raw.chars() {
+        if in_string {
+            match (escaped, c) {
+                (true, _) => escaped = false,
+                (false, '\\') => escaped = true,
+                (false, '"') => in_string = false,
+                _ => {}
+            }
+            match c {
+                '<' => out.push_str("\\u003c"),
+                '>' => out.push_str("\\u003e"),
+                '&' => out.push_str("\\u0026"),
+                '\u{2028}' => out.push_str("\\u2028"),
+                '\u{2029}' => out.push_str("\\u2029"),
+                c => out.push(c),
+            }
+            continue;
+        }
+        match c {
+            ' ' | '\t' | '\n' | '\r' => {}
+            '"' => {
+                in_string = true;
+                out.push(c);
+            }
             c => out.push(c),
         }
     }

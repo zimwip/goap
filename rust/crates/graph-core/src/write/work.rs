@@ -24,7 +24,7 @@ use crate::{
     flow::{FLOW_OPEN, Flows},
     impact::{
         self, BaseCopy, BaseLink, BaseNode, ChangeImpact, Draft, DraftLink, Fold, INTENT_CREATED, INTENT_MODIFIED,
-        ImpactEvent, ImpactOp, LOG_FACT, LOG_IMPACT, REVIEW_PROPOSED, Review,
+        ImpactEvent, ImpactOp, LOG_FACT, LOG_IMPACT, REVIEW_ACCEPTED, REVIEW_PROPOSED, REVIEW_REJECTED, Review,
     },
     lnk::Url,
     model::{
@@ -1704,6 +1704,44 @@ impl<S: WriteTx> Tx<'_, S> {
             withdraw(impact, &mut events);
         }
         self.emit(events).await
+    }
+
+    /// Sends decided reviews back to proposed (Go's `ReopenImpacts`, ADR 0075): the impacts named that were accepted or
+    /// rejected, each by a review of its own carrying the comment; the others are left alone. Answers those reopened.
+    pub async fn reopen_impacts(&mut self, id: &ChangeId, impacts: &[String], comment: &str) -> Result<Vec<String>> {
+        let comment = comment.trim();
+        if comment.is_empty() {
+            return Err(GraphError::invalid("reopening a review needs a comment"));
+        }
+        self.change_open(id).await?;
+        self.view(id).await?;
+        let mut reopened = Vec::new();
+        for impact in impacts {
+            let Some(cn) = self.views[id].fold.impact(impact).cloned() else {
+                return Err(GraphError::not_found(format!("change impact {impact} of change {id}")));
+            };
+            if cn.review != REVIEW_ACCEPTED && cn.review != REVIEW_REJECTED {
+                continue;
+            }
+            let r = Review {
+                status: REVIEW_PROPOSED.into(),
+                by: self.env.by.clone(),
+                at: self.env.now(),
+                comment: comment.to_string(),
+                ..Review::default()
+            };
+            self.emit(vec![ImpactEvent {
+                change: id.clone(),
+                impact: cn.id.clone(),
+                op: ImpactOp::Reviewed,
+                by: r.by.clone(),
+                review: Some(r),
+                ..ImpactEvent::default()
+            }])
+            .await?;
+            reopened.push(cn.id);
+        }
+        Ok(reopened)
     }
 }
 

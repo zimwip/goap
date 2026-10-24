@@ -4,15 +4,25 @@ use std::collections::HashSet;
 
 use graph_catalog::catalog::{STRUCTURE_ORGANISATION, STRUCTURE_PROJECT};
 
-use super::{change::NewChange, tx::Tx};
+use serde_json::Value;
+
+use super::{
+    change::{INTENT_DERIVE, NewChange, STATUS_ACTIVE, STATUS_DRAFT, change_branch_name, change_branch_origin},
+    events,
+    tx::Tx,
+};
 use crate::{
     GraphError, Result,
-    change::Change,
+    change::{Change, ChangesFilter, STATUS_APPLIED},
+    impact::{ChangeImpact, INTENT_MODIFIED, ImpactEvent, ImpactOp, REVIEW_PROPOSED},
     lnk::Url,
-    model::{BaselineId, Branch, MAIN_BRANCH, Target, namespace_of},
+    model::{BRANCH_OPEN, BaselineId, Branch, ChangeId, MAIN_BRANCH, Target, namespace_of},
     read,
     store::WriteTx,
 };
+
+/// Who splits a change by its owners.
+const SPLIT_BY_OWNER: &str = "graph.split_by_owner";
 
 /// The parent statuses that take no more sub-change.
 const CLOSED: [&str; 3] = ["applied", "abandoned", "committed"];
@@ -95,6 +105,156 @@ impl<S: WriteTx> Tx<'_, S> {
             )));
         }
         Ok(())
+    }
+
+    /// Splits a change along its organisation (Go's `SplitByOwner`, ADR 0024, 0054, 0103): one sub-change per unit
+    /// below the one holding the change that owns nodes the main flow has a candidate impact on (the owner of its pre
+    /// version), the candidate moved to it (withdrawn from the parent, copied derived from it). A unit that has an open
+    /// sub-change already is left as it is. The sub-changes created.
+    pub async fn split_by_owner(&mut self, id: &ChangeId) -> Result<Vec<Change>> {
+        let parent = self.change_head(id).await?;
+        let mut have = HashSet::new();
+        let f = ChangesFilter {
+            parent: id.clone(),
+            ..ChangesFilter::default()
+        };
+        for sc in self.store.change_heads(&f).await? {
+            if sc.status != STATUS_APPLIED && sc.status != "abandoned" {
+                have.insert(sc.owner_org);
+            }
+        }
+        let view = self.view(id).await?;
+        let seen: HashSet<String> = view.seen("").into_iter().map(|cn| cn.id).collect();
+        let impacts = view.fold.impacts.clone();
+        // the units in the order their first candidate comes, each with its name and candidates
+        let mut groups: Vec<(Url, String, Vec<ChangeImpact>)> = Vec::new();
+        for cn in impacts {
+            if !seen.contains(&cn.id) && cn.items.is_empty() {
+                continue; // a candidate of a flow, or replaced by one
+            }
+            let Some(pre) = cn
+                .pre
+                .as_ref()
+                .filter(|_| cn.intent == INTENT_MODIFIED && cn.post.is_none() && !cn.superseded)
+            else {
+                continue; // only a candidate moves: a node the change works on already stays with it
+            };
+            let pre = read::stored_node(self.store, pre).await?;
+            if pre.owner == parent.owner_org {
+                continue; // the unit holding the change owns it
+            }
+            let unit = self.structure_node(STRUCTURE_ORGANISATION, &pre.owner).await?;
+            if !self
+                .within(STRUCTURE_ORGANISATION, &pre.owner, &parent.owner_org)
+                .await?
+            {
+                continue; // owned outside the unit holding the change: nothing to delegate to
+            }
+            match groups.iter_mut().find(|g| g.0 == pre.owner) {
+                Some(g) => g.2.push(cn),
+                None => {
+                    let name = unit
+                        .props
+                        .as_ref()
+                        .and_then(|p| p.get("name"))
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let name = if name.is_empty() {
+                        unit.key.clone()
+                    } else {
+                        name.to_string()
+                    };
+                    groups.push((pre.owner.clone(), name, vec![cn]));
+                }
+            }
+        }
+        let mut created = Vec::new();
+        for (org, name, nodes) in groups {
+            if have.contains(&org) {
+                continue;
+            }
+            let mut inp = NewChange {
+                title: format!("{} / {name}", parent.title),
+                intent: parent.intent.clone(),
+                methodology: parent.methodology.clone(),
+                parent_id: id.clone(),
+                owner_org: org.to_string(),
+                ..NewChange::default()
+            };
+            let mut sub = Change {
+                id: ChangeId(self.env.new_id()),
+                title: inp.title.clone(),
+                intent: inp.intent.clone(),
+                methodology: inp.methodology.clone(),
+                status: STATUS_DRAFT.into(),
+                parent_id: id.clone(),
+                owner_org: org,
+                created_at: Some(self.env.now()),
+                ..Change::default()
+            };
+            self.prepare_sub_change(&mut sub, &mut inp).await?;
+            self.scope_change(&mut sub).await?;
+            let fork = read::header_of(self.store, &sub.baseline_id).await?;
+            // forked as a sub-change is created (`create_change`): at the point of the branch of its parent
+            let pb = read::branch(self.store, &sub.namespace, &sub.branch).await?;
+            let mut own = Branch {
+                ephemeral: true,
+                name: change_branch_name(&sub.id),
+                namespace: sub.namespace.clone(),
+                parent: sub.branch.clone(),
+                fork_baseline: fork.id.clone(),
+                origin: change_branch_origin(&sub.id),
+                intent: INTENT_DERIVE.into(),
+                status: BRANCH_OPEN.into(),
+                created_at: Some(self.env.now()),
+                ..Branch::default()
+            };
+            if pb.ephemeral {
+                (own.fork_baseline, own.fork_seq) = fork_point(self, &pb).await?;
+            }
+            self.put_branch(&own).await?;
+            sub.branch = own.name;
+            self.put_change(&sub).await?;
+            for cn in nodes {
+                // the candidate moves to the sub-change (ADR 0103): withdrawn from the parent, it comes back to it with
+                // the version the sub-change commits, when the sub-change merges
+                self.emit(vec![ImpactEvent {
+                    change: id.clone(),
+                    impact: cn.id.clone(),
+                    op: ImpactOp::Withdrawn,
+                    by: SPLIT_BY_OWNER.into(),
+                    ..ImpactEvent::default()
+                }])
+                .await?;
+                let cp = ChangeImpact {
+                    id: self.env.new_id(),
+                    key: cn.key.clone(),
+                    typ: cn.typ.clone(),
+                    intent: INTENT_MODIFIED.into(),
+                    rationale: cn.rationale.clone(),
+                    pre: cn.pre.clone(),
+                    review: REVIEW_PROPOSED.into(),
+                    produced_by: SPLIT_BY_OWNER.into(),
+                    derived_from: vec![cn.id.clone()],
+                    created_at: self.env.now(),
+                    ..ChangeImpact::default()
+                };
+                self.emit(vec![ImpactEvent {
+                    change: sub.id.clone(),
+                    impact: cp.id.clone(),
+                    op: ImpactOp::Proposed,
+                    by: SPLIT_BY_OWNER.into(),
+                    state: Some(cp),
+                    ..ImpactEvent::default()
+                }])
+                .await?;
+            }
+            sub.status = STATUS_ACTIVE.into();
+            self.put_change(&sub).await?;
+            self.raise(events::CHANGE_CREATED, &sub, None, "", &[]);
+            created.push(sub);
+        }
+        Ok(created)
     }
 
     /// The branch a change owns, when it has one (Go's `ownBranch`).

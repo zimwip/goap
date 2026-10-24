@@ -49,6 +49,7 @@ use graph_store::read::{LogFilter, Session, Tag};
 
 use crate::{State, convert};
 
+mod import;
 mod settings;
 
 /// `goap.graph.v1.GraphService`.
@@ -1460,6 +1461,48 @@ impl pb::GraphService for Graph {
                     .filter(|(t, _)| !model(t))
                     .map(|(t, n)| (t, n as i32))
                     .collect(),
+            })
+        })
+        .await
+    }
+
+    /// The whole log of a change as W3C PROV-O provenance in JSON-LD (ADR 0057): the prompts of its model calls only
+    /// for whoever may inspect them.
+    async fn export_change_provenance(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ExportChangeProvenanceRequest>,
+    ) -> Answer<pb::ExportChangeProvenanceResponse> {
+        let caller = Caller::of(&req)?;
+        let id = ChangeId(req.into_inner().change_id);
+        let who = caller.reader_or_self();
+        self.read_changes(caller, &[id.as_str()], async |tx, _| {
+            let c = tx
+                .change(&id)
+                .await?
+                .ok_or_else(|| GraphError::not_found(format!("change {id}")))?;
+            let f = LogFilter {
+                change: id.0.clone(),
+                ..LogFilter::default()
+            };
+            let (mut entries, _) = tx.change_log(&f).await?;
+            let snap = access::Snapshot::read(tx).await?;
+            let res = abac::Resource {
+                typ: "prompt".into(),
+                id: c.id.0.clone(),
+                name: c.title.clone(),
+                org: c.owner_org.key.clone(),
+                project_id: c.project_id.key.clone(),
+                ..abac::Resource::default()
+            };
+            if !snap.authorize(&who, res, "inspect")? {
+                entries.retain(|e| e.typ.split('.').next() != Some("model"));
+            }
+            let document = graph_core::prov::export(&c, &entries)?;
+            Ok(pb::ExportChangeProvenanceResponse {
+                document,
+                filename: format!("change-{}.prov.jsonld", c.id),
+                media_type: graph_core::prov::MEDIA_TYPE.into(),
             })
         })
         .await
@@ -3140,7 +3183,12 @@ impl pb::GraphService for Graph {
                 "an impact proposed with reviews: answered by the Go service",
             )));
         }
-        let opt = |r: &Option<pb::NodeRef>| r.as_ref().map(|r| convert::ref_from(Some(r)));
+        // a reference naming no node is none (`pbconv.RefPtrFromPB`)
+        let opt = |r: &Option<pb::NodeRef>| {
+            r.as_ref()
+                .filter(|r| !r.id.is_empty())
+                .map(|r| convert::ref_from(Some(r)))
+        };
         let batch: Vec<ChangeImpact> = m
             .nodes
             .iter()
@@ -3470,6 +3518,187 @@ impl pb::GraphService for Graph {
             tx.withdraw_impacts(&id, &m.change_impact_ids, &m.flow, &m.execution)
                 .await?;
             Ok(pb::WithdrawImpactsResponse {})
+        })
+        .await
+    }
+
+    /// The options of a change compared with its main flow (`Graph.CompareOptions`).
+    async fn compare_options(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::CompareOptionsRequest>,
+    ) -> Answer<pb::CompareOptionsResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.read_changes(caller, &[m.change_id.as_str()], async |tx, _| {
+            let id = ChangeId(m.change_id.clone());
+            let c = graph_core::flowdiff::compare_options(tx, &id, &m.level, m.all).await?;
+            Ok(pb::CompareOptionsResponse {
+                level: c.level,
+                options: c.options.iter().map(convert::flow).collect(),
+                nodes: c
+                    .nodes
+                    .into_iter()
+                    .map(|n| pb::OptionNode {
+                        node: n.node.0,
+                        key: n.key,
+                        r#type: n.typ,
+                        main: n.main.as_ref().map(convert::node_ref),
+                        options: n
+                            .options
+                            .iter()
+                            .filter_map(|(o, r)| r.as_ref().map(|r| (o.clone(), convert::node_ref(r))))
+                            .collect(),
+                        props: n
+                            .props
+                            .iter()
+                            .map(|(side, p)| (side.clone(), convert::props(p).unwrap_or_default()))
+                            .collect(),
+                    })
+                    .collect(),
+            })
+        })
+        .await
+    }
+
+    /// Two flows of a change compared impact by impact (`Graph.DiffFlows`, ADR 0083).
+    async fn diff_flows(&self, _ctx: &Ctx, req: Request<pb::DiffFlowsRequest>) -> Answer<pb::DiffFlowsResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.read_changes(caller, &[m.change_id.as_str()], async |tx, _| {
+            let id = ChangeId(m.change_id.clone());
+            let d = graph_core::flowdiff::diff_flows(tx, &id, &m.left, &m.right, &m.level).await?;
+            let side = |s: &graph_core::flowdiff::ImpactSide| pb::ImpactSide {
+                impact: s.impact.clone(),
+                flow: s.flow.clone(),
+                intent: s.intent.clone(),
+                review: s.review.clone(),
+                drafted: s.drafted,
+                state: s.state.clone(),
+                owner: s.owner.to_string(),
+            };
+            Ok(pb::DiffFlowsResponse {
+                left: d.left,
+                right: d.right,
+                level: d.level,
+                identical: d.identical as i32,
+                impacts: d
+                    .impacts
+                    .iter()
+                    .map(|i| pb::ImpactDiff {
+                        node: i.node.clone(),
+                        key: i.key.clone(),
+                        r#type: i.typ.clone(),
+                        category: i.category.clone(),
+                        left: i.left.as_ref().map(side),
+                        right: i.right.as_ref().map(side),
+                        changes: i
+                            .changes
+                            .iter()
+                            .map(|c| pb::FieldChange {
+                                kind: c.kind.clone(),
+                                name: c.name.clone(),
+                                op: c.op.clone(),
+                                target: c.target.clone(),
+                                old: c.old.as_ref().map(convert::value),
+                                new: c.new.as_ref().map(convert::value),
+                            })
+                            .collect(),
+                    })
+                    .collect(),
+            })
+        })
+        .await
+    }
+
+    /// The consistency of what a flow of a change sees (`Graph.ValidateBoard`).
+    async fn validate_board(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ValidateBoardRequest>,
+    ) -> Answer<pb::ValidateBoardResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let state = self.state.clone();
+        self.read_changes(caller, &[m.change_id.as_str()], async |tx, _| {
+            let cat = state.catalog(tx).await?;
+            let issues = graph_core::board::validate_board(tx, &cat, &ChangeId(m.change_id.clone()), &m.flow).await?;
+            Ok(pb::ValidateBoardResponse {
+                issues: issues
+                    .into_iter()
+                    .map(|i| pb::BoardIssue {
+                        item: i.item,
+                        culprit: i.culprit,
+                        code: i.code,
+                        message: i.message,
+                        severity: i.severity,
+                    })
+                    .collect(),
+            })
+        })
+        .await
+    }
+
+    /// The state of a namespace as a JSON snapshot (`Graph.ExportSnapshot`, ADR 0104): what the caller reaches of the
+    /// head of a branch or of a baseline.
+    async fn export_graph(&self, _ctx: &Ctx, req: Request<pb::ExportGraphRequest>) -> Answer<pb::ExportGraphResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.read_changes(caller, &[], async |tx, who| {
+            let reach = who.reach();
+            let s = graph_core::snapshot::export_snapshot(
+                tx,
+                &m.namespace,
+                &m.branch,
+                &BaselineId(m.baseline_id.clone()),
+                reach.as_ref(),
+                chrono::Utc::now(),
+            )
+            .await?;
+            Ok(pb::ExportGraphResponse {
+                document: graph_core::gojson::to_string_indent(&s, "  "),
+                filename: format!("graph-{}-{}.json", s.namespace, s.exported_at.format("%Y%m%d-%H%M%S")),
+                media_type: "application/json".into(),
+                nodes: s.nodes.len() as i32,
+            })
+        })
+        .await
+    }
+
+    /// Imports a JSON snapshot as one new change of the caller (`Graph.ImportSnapshot`, ADR 0104).
+    async fn import_graph(&self, _ctx: &Ctx, req: Request<pb::ImportGraphRequest>) -> Answer<pb::ImportGraphResponse> {
+        let caller = Caller::of(&req)?;
+        self.import_graph_rpc(caller, req.into_inner()).await
+    }
+
+    /// Splits a change by the owners of the nodes it plans to change (`Graph.SplitByOwner`): the sub-changes created.
+    async fn split_change(&self, _ctx: &Ctx, req: Request<pb::SplitChangeRequest>) -> Answer<pb::SplitChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+            let id = served_change(tx, &m.change_id).await?;
+            let created = tx.split_by_owner(&id).await?;
+            Ok(pb::SplitChangeResponse {
+                changes: created.iter().map(convert::change).collect(),
+            })
+        })
+        .await
+    }
+
+    async fn reopen_change_impacts(
+        &self,
+        _ctx: &Ctx,
+        req: Request<pb::ReopenChangeImpactsRequest>,
+    ) -> Answer<pb::ReopenChangeImpactsResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+            if m.comment.trim().is_empty() {
+                return Err(GraphError::invalid("reopening a review needs a comment"));
+            }
+            let id = served_change(tx, &m.change_id).await?;
+            let reopened = tx.reopen_impacts(&id, &m.change_impact_ids, &m.comment).await?;
+            Ok(pb::ReopenChangeImpactsResponse { reopened })
         })
         .await
     }

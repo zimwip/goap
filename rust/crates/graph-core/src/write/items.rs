@@ -156,7 +156,7 @@ pub(crate) fn review_entries(d: Option<&Map<String, Value>>) -> Vec<(String, Str
 
 /// What `ChangeItem.Validate` asks of an item served here: the core types, and the validators `risk.Register`,
 /// `assess.Register` and `verify.Register` give theirs.
-fn validate(it: &ItemWrite, now: DateTime<Utc>) -> std::result::Result<(), String> {
+pub(crate) fn validate_item(it: &ItemWrite, now: DateTime<Utc>) -> std::result::Result<(), String> {
     let d = it.data.as_ref();
     match it.typ.as_str() {
         "signal" if it.target.is_empty() => Err("signal item requires target, the name of the signal".into()),
@@ -306,7 +306,7 @@ impl<S: WriteTx> Tx<'_, S> {
         };
         let at = self.env.now();
         let data = it.data.as_ref().filter(|m| !m.is_empty());
-        let problem = match validate(it, at) {
+        let problem = match validate_item(it, at) {
             Err(e) => Err(e),
             Ok(()) => check::item_data(self.catalog(), &it.typ, data)?,
         };

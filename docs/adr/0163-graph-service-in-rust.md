@@ -437,4 +437,16 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   the platform's namespaces for a caller administering the platform only. The compare stack's Go graph asks a
   registry reading it directly (through the compare proxy, a call made inside a call waits behind it). 6276 calls, the
   divergent ones the known ones.
+- The reads and writes around a change's work: `ReopenChangeImpacts` (`write::work`), `ValidateBoard`
+  (`graph_core::board`, the checks of `AddItems` without the write), `DiffFlows` and `CompareOptions`
+  (`graph_core::flowdiff`, Go's quirk kept: a node at version 0 differs only when both drafts differ), `SplitChange`
+  (`write::subchange::split_by_owner`: a sub-change per unit owning the modified nodes, on its own branch; the Go
+  service's branch of such a sub-change now names its namespace and is forked like any sub-change's), and a
+  `ProposeImpact` whose pre names no node read as none. The snapshots of ADR 0104: `ExportGraph`
+  (`graph_core::snapshot`: the head of a branch or a baseline, the reach of the reader, the provenance of each version,
+  Go's indented JSON) and `ImportGraph` (`graph/import.rs`): one transaction, each of Go's operations a savepoint kept
+  by `Tx::checkpoint`, so a step that fails keeps the steps before it, the change then purged in the same call with the
+  error in Go's words, the log positions and events of Go's separate transactions; a document the decoder refuses is
+  Go's (its messages). `ExportChangeProvenance` (`graph_core::prov`, Go's `prov.Export`): the change and its whole log
+  as PROV-O JSON-LD, the model calls left out for a reader without `prompt:inspect`.
 - Not done yet: the rest of phase 4.

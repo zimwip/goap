@@ -18,7 +18,7 @@ pub fn time(t: &Option<DateTime<Utc>>) -> Option<pbjson_types::Timestamp> {
     t.map(pbjson_types::Timestamp::from)
 }
 
-fn value(v: &Json) -> pbjson_types::Value {
+pub fn value(v: &Json) -> pbjson_types::Value {
     let kind = match v {
         Json::Null => Kind::NullValue(0),
         Json::Bool(b) => Kind::BoolValue(*b),

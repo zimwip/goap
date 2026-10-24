@@ -335,8 +335,16 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if err != nil {
 				return err
 			}
-			own := domain.Branch{Ephemeral: true, Name: changeBranchName(sub.ID), Parent: sub.Branch, ForkBaseline: fork.ID, Head: fork.ID,
-				Origin: domain.ChangeBranchOrigin(sub.ID), Status: domain.BranchOpen, CreatedAt: g.now()}
+			// forked as a sub-change is created (createChange): at the point of the branch of its parent (ADR 0103, 0140)
+			own := domain.Branch{Ephemeral: true, Name: changeBranchName(sub.ID), Namespace: sub.Namespace, Parent: sub.Branch, ForkBaseline: fork.ID,
+				Origin: domain.ChangeBranchOrigin(sub.ID), Intent: domain.IntentDerive, Status: domain.BranchOpen, CreatedAt: g.now()}
+			if pb, err := tx.Branch(ctx, sub.Namespace, sub.Branch); err != nil {
+				return err
+			} else if pb.Ephemeral {
+				if own.ForkBaseline, own.ForkSeq, err = forkPoint(ctx, tx, pb); err != nil {
+					return err
+				}
+			}
 			if err := tx.PutBranch(ctx, own); err != nil {
 				return err
 			}

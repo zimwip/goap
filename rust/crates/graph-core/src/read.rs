@@ -543,6 +543,25 @@ impl<'a, T: ReadTx> World<'a, T> {
         stored_node(self.tx, r).await
     }
 
+    /// The draft a change view holds of a node.
+    pub fn draft_of(&self, id: &NodeId) -> Option<&Draft> {
+        self.change.as_ref().and_then(|cw| cw.draft(id))
+    }
+
+    /// A node of the view by reference with the links leaving it (Go's `draftReader.node` and `outLinks`): a draft
+    /// of a change view with its links, else the stored version with its own.
+    pub async fn node_and_links(&self, r: &NodeRef) -> Result<(Node, Vec<Link>)> {
+        if let Some(cw) = &self.change
+            && r.is_draft()
+            && let Some(d) = cw.draft(&r.id)
+        {
+            return Ok((cw.draft_node(d), cw.out_links(d)));
+        }
+        let n = stored_node(self.tx, r).await?;
+        let out = self.tx.links_from(std::slice::from_ref(r), None).await?;
+        Ok((n, out))
+    }
+
     /// Finds a node of the view by id or, when the id is empty, by key: its version in the view.
     pub async fn find(&self, id: &NodeId, key: &str) -> Result<NodeRef> {
         let drafted = match (&self.change, id.is_empty()) {
