@@ -92,6 +92,12 @@ struct Caller {
     org: String,
 }
 
+/// The person a request names, none for a platform service (`authz.Principal.System`): what an authorizer asks.
+pub(crate) fn person_of<T>(req: &Request<T>) -> Option<access::Principal> {
+    let c = Caller::headers(req);
+    (!c.subject.starts_with("system:")).then(|| c.reader_or_self())
+}
+
 impl Caller {
     /// The caller of a request; an anonymous one is refused, as the Go service's `Identify` interceptor does.
     fn of<T>(req: &Request<T>) -> Result<Caller, ConnectError> {
@@ -335,7 +341,7 @@ impl Access {
 }
 
 /// A refusal of the authorizer (`authz.Check`: `ErrForbidden` joined with what was refused).
-fn forbidden(who: &str, act: &str, typ: &str, id: &str) -> GraphError {
+pub(crate) fn forbidden(who: &str, act: &str, typ: &str, id: &str) -> GraphError {
     let who = if who.is_empty() { "anonymous" } else { who };
     GraphError::new(
         Kind::Forbidden,

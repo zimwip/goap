@@ -11,7 +11,10 @@ use graph_catalog::{
 use graph_core::{GraphError, gojson, goyaml, store::OutboxMessage};
 use graph_store::read::{NewDomain, StoredDomain};
 
-use crate::{Domains, convert, domainpb, domainyaml, graph::connect_error};
+use crate::{
+    Domains, convert, domainpb, domainyaml,
+    graph::{connect_error, forbidden, person_of},
+};
 
 /// The identity headers the gateway sets (`lib/identity`) and the stamp of a command (`X-Goap-Command`).
 const HEADER_SUBJECT: &str = "x-goap-subject";
@@ -249,14 +252,12 @@ impl pb::DomainService for Domains {
         _ctx: &Ctx,
         req: Request<pb::RunAlgorithmRequest>,
     ) -> Answer<pb::RunAlgorithmResponse> {
-        let (subject, _) = caller(&req);
+        let who = person_of(&req);
         let r = req.into_inner();
         let Some(a) = r.algorithm else {
             return Err(ConnectError::invalid_argument("algorithm required"));
         };
-        if !subject.starts_with("system:") {
-            return Err(unserved("a person's trial of an algorithm goes through the authorizer"));
-        }
+        self.authorize(who.as_ref(), "write", "", "").await?;
         let a = algorithm(&a);
         let invalid = |m: String| Err(ConnectError::invalid_argument(format!("invalid domain: {m}")));
         if let Some(i) = a.issues().first() {
@@ -300,6 +301,7 @@ impl pb::DomainService for Domains {
     /// service alone checks (a draft with issues is stored by Go, which words them).
     async fn save_domain(&self, _ctx: &Ctx, req: Request<pb::SaveDomainRequest>) -> Answer<pb::SaveDomainResponse> {
         let (subject, command) = caller(&req);
+        let who = person_of(&req);
         let p = req.into_inner().domain.unwrap_or_default();
         if p.name.is_empty() || p.version.is_empty() {
             return Err(ConnectError::invalid_argument(
@@ -309,9 +311,7 @@ impl pb::DomainService for Domains {
         if is_builtin(&p.name) {
             return Err(builtin_error(&p.name));
         }
-        if !subject.starts_with("system:") {
-            return Err(unserved("a person's draft of a domain goes through the authorizer"));
-        }
+        self.authorize(who.as_ref(), "write", &p.name, &p.version).await?;
         let Some(d) = domainpb::imported(&p) else {
             return Err(unserved("a domain with issues, or checked by scripts, guards or forms"));
         };
@@ -364,6 +364,7 @@ impl pb::DomainService for Domains {
         req: Request<pb::PublishDomainRequest>,
     ) -> Answer<pb::PublishDomainResponse> {
         let (subject, command) = caller(&req);
+        let who = person_of(&req);
         let r = req.into_inner();
         if is_builtin(&r.name) {
             return Err(builtin_error(&r.name));
@@ -372,11 +373,7 @@ impl pb::DomainService for Domains {
         let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
             return Err(not_found(&r.name, &r.version));
         };
-        if !subject.starts_with("system:") {
-            return Err(unserved(
-                "a person's publication of a domain goes through the authorizer",
-            ));
-        }
+        self.authorize(who.as_ref(), "publish", &r.name, &r.version).await?;
         if s.status != STATUS_DRAFT {
             return Err(not_a_draft(&format!("{}@{}", r.name, r.version)));
         }
@@ -423,6 +420,7 @@ impl pb::DomainService for Domains {
         req: Request<pb::CreateDomainVersionRequest>,
     ) -> Answer<pb::CreateDomainVersionResponse> {
         let (subject, command) = caller(&req);
+        let who = person_of(&req);
         let r = req.into_inner();
         if is_builtin(&r.name) {
             return Err(builtin_error(&r.name));
@@ -444,9 +442,7 @@ impl pb::DomainService for Domains {
         if tx.domain_status(&r.name, to).await.map_err(connect_error)?.is_some() {
             return Err(not_a_draft(&format!("{}@{to} already exists", r.name)));
         }
-        if !subject.starts_with("system:") {
-            return Err(unserved("a person's new domain version goes through the authorizer"));
-        }
+        self.authorize(who.as_ref(), "write", &r.name, to).await?;
         let definition = renumbered(&src, to);
         let now = chrono::Utc::now();
         let at = gojson::time_text(&now);
@@ -482,6 +478,7 @@ impl pb::DomainService for Domains {
         req: Request<pb::DeleteDomainRequest>,
     ) -> Answer<pb::DeleteDomainResponse> {
         let (subject, command) = caller(&req);
+        let who = person_of(&req);
         let r = req.into_inner();
         if is_builtin(&r.name) {
             return Err(builtin_error(&r.name));
@@ -490,9 +487,7 @@ impl pb::DomainService for Domains {
         let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
             return Err(not_found(&r.name, &r.version));
         };
-        if !subject.starts_with("system:") {
-            return Err(unserved("a person's deletion of a domain goes through the authorizer"));
-        }
+        self.authorize(who.as_ref(), "delete", &r.name, &r.version).await?;
         if s.status == STATUS_ARCHIVED {
             return Ok(Response::new(pb::DeleteDomainResponse {}));
         }
@@ -538,15 +533,17 @@ impl pb::DomainService for Domains {
     ) -> Answer<pb::ImportDomainResponse> {
         let subject = req.header(HEADER_SUBJECT).to_string();
         let command = req.header(HEADER_COMMAND).to_string();
-        if !subject.starts_with("system:") {
-            return Err(unserved("a person's import of a domain goes through the authorizer"));
-        }
+        let who = person_of(&req);
         let r = req.into_inner();
         let Some(d) = Imported::parse(&r.yaml) else {
             return Err(unserved("a domain with issues, or checked by scripts, guards or forms"));
         };
         if d.version.is_empty() || is_builtin(&d.name) {
             return Err(unserved("a domain with no version, or a built-in one"));
+        }
+        self.authorize(who.as_ref(), "write", &d.name, &d.version).await?;
+        if r.publish {
+            self.authorize(who.as_ref(), "publish", &d.name, &d.version).await?;
         }
         let domain = d.domain().map_err(|e| connect_error(GraphError::internal(e)))?;
         let tx = self
@@ -639,6 +636,41 @@ impl Domains {
             headers,
             created_at: now,
         }]
+    }
+}
+
+impl Domains {
+    /// An action of a person on a domain version, as the organisation's rules allow it (Go's
+    /// `Service.authorizeDomain`): a platform service acting by itself is not asked.
+    async fn authorize(
+        &self,
+        who: Option<&graph_core::access::Principal>,
+        act: &str,
+        name: &str,
+        version: &str,
+    ) -> Result<(), ConnectError> {
+        let Some(who) = who else {
+            return Ok(());
+        };
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let snap = graph_core::access::Snapshot::read(&tx).await.map_err(connect_error)?;
+        let id = format!("{name}@{version}");
+        let res = graph_script::abac::Resource {
+            typ: "domain".into(),
+            id: id.clone(),
+            name: name.into(),
+            org: who.org.clone(),
+            ..Default::default()
+        };
+        if snap.authorize(who, res, act).map_err(connect_error)? {
+            return Ok(());
+        }
+        Err(connect_error(forbidden(&who.subject, act, "domain", &id)))
     }
 }
 
