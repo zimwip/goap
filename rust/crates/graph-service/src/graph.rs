@@ -3433,11 +3433,6 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let catalog = self.catalog().await?;
         let m = req.into_inner();
-        if m.nodes.iter().any(|cn| !cn.reviews.is_empty() || cn.superseded) {
-            return Err(connect_error(GraphError::unimplemented(
-                "an impact proposed with reviews: answered by the Go service",
-            )));
-        }
         // a reference naming no node is none (`pbconv.RefPtrFromPB`)
         let opt = |r: &Option<pb::NodeRef>| {
             r.as_ref()
@@ -3464,6 +3459,16 @@ impl pb::GraphService for Graph {
                 execution: cn.execution.clone(),
                 items: cn.items.clone(),
                 flow: cn.flow.clone(),
+                superseded: cn.superseded,
+                // the graph sets the reviews: any one given is refused (`declareTx`)
+                reviews: cn
+                    .reviews
+                    .iter()
+                    .map(|r| graph_core::impact::Review {
+                        status: r.status.clone(),
+                        ..graph_core::impact::Review::default()
+                    })
+                    .collect(),
                 ..ChangeImpact::default()
             })
             .collect();
