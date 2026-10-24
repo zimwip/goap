@@ -65,6 +65,8 @@ const HEADER_ROLES: &str = "x-goap-roles";
 const HEADER_ORG: &str = "x-goap-org";
 /// The platform role of the administrators (`access.RoleAdmin`).
 const ROLE_ADMIN: &str = "admin";
+/// The owner of a new change designating the personal unit of the caller (Go's `OwnerMe`, ADR 0037).
+const OWNER_ME: &str = "@me";
 
 /// The caller of a request.
 struct Caller {
@@ -322,16 +324,11 @@ impl Caller {
     }
 }
 
-/// The change a write on its impacts works on, when it is one served here: not personal, and of the platform's
-/// namespaces only for a caller administering the platform.
+/// The change a write on its impacts works on, when it is one served here: of the platform's namespaces only for a
+/// caller administering the platform.
 async fn served_change(tx: &mut Tx<'_, Session>, id: &str) -> Result<ChangeId, GraphError> {
     let id: ChangeId = id.into();
     let c = tx.change_head(&id).await?;
-    if c.is_personal() {
-        return Err(GraphError::unimplemented(
-            "a personal change (ADR 0037): not served here yet",
-        ));
-    }
     platform_served(tx, &c.namespace)?;
     Ok(id)
 }
@@ -488,8 +485,8 @@ impl Graph {
         } else {
             change::change_heads(&tx, &ids).await.map_err(connect_error)?
         };
-        // a change this graph does not hold may live in another graph: Go's router looks it up there
-        if ids.iter().any(|id| !heads.contains_key(id)) && other_graphs(&tx).await.map_err(connect_error)? {
+        // a change this graph does not hold, nor held, may live in another graph: Go's router asks it there
+        if self.elsewhere(&tx, &ids, &heads).await.map_err(connect_error)? {
             return Err(connect_error(GraphError::unimplemented(
                 "a change another graph may hold (ADR 0154): routed by the Go service",
             )));
@@ -527,6 +524,22 @@ impl Graph {
             readable.person = Some((caller.reader(), snap));
         }
         stamp.on(f(&tx, &readable).await.map(Response::new).map_err(connect_error))
+    }
+
+    /// Whether a change a request names may live in another graph (Go's `Router.changeBase`): one this graph does not
+    /// hold and was never found holding, while other graphs are declared. The changes it holds are remembered.
+    async fn elsewhere(
+        &self,
+        tx: &Session,
+        ids: &[ChangeId],
+        heads: &HashMap<ChangeId, change::Change>,
+    ) -> Result<bool, GraphError> {
+        let missing = {
+            let mut held = self.state.held.lock().await;
+            held.extend(heads.keys().cloned());
+            ids.iter().any(|id| !held.contains(id))
+        };
+        Ok(missing && other_graphs(tx).await?)
     }
 
     /// Runs a read of a request naming neither a namespace nor a change (`read_changes` naming none): with other
@@ -587,6 +600,34 @@ impl Graph {
                 Stamp(None)
             }
         }
+    }
+
+    /// The unit a new change is held by (Go's `resolveOwner`, ADR 0037), once the user of the caller was made sure of
+    /// (`EnsureCaller`): `@me` is the personal unit of the caller, whose user is made sure of again, its error
+    /// answered; the personal unit of someone else is refused.
+    async fn resolve_owner(&self, caller: &Caller, owner: &str) -> Result<(String, Stamp), (ConnectError, Stamp)> {
+        let stamp = self.ensure_caller(caller).await;
+        if owner == OWNER_ME {
+            if caller.subject.is_empty() {
+                return Err((
+                    ConnectError::unauthenticated("personal changes need an identified caller"),
+                    stamp,
+                ));
+            }
+            return match self.ensure_user(caller).await {
+                Ok(at) => Ok((format!("{}{}", change::USER_PREFIX, caller.subject), stamp.or(at))),
+                Err(e) => Err((connect_error(e), stamp)),
+            };
+        }
+        if let Some(subject) = owner.strip_prefix(change::USER_PREFIX)
+            && subject != caller.subject
+        {
+            return Err((
+                ConnectError::permission_denied(format!("unit {owner} is personal to someone else")),
+                stamp,
+            ));
+        }
+        Ok((owner.to_string(), stamp))
     }
 
     /// Makes sure the user of a person exists (Go's `EnsureUser`, ADR 0039, 0040, 0042): the first call of a subject
@@ -683,8 +724,7 @@ impl Graph {
     /// handler): a change the request names that the caller may not read is not found, before its user is made sure
     /// of; the write is then given what the organisation lets the caller do (`Access`). A person's write on a change
     /// following a methodology is judged by the roles the methodology allows each operation (ADR 0103), which the Go
-    /// service asks of the registry; a personal change and a request at a position of a change log are the Go
-    /// service's too.
+    /// service asks of the registry; a request at a position of a change log is the Go service's too.
     async fn write_on<T, F>(&self, caller: Caller, named: &[&str], f: F) -> Answer<T>
     where
         F: for<'a, 'b, 'c> AsyncFnOnce(&'a mut Tx<'b, Session>, &'c Access) -> Result<T, GraphError>,
@@ -710,13 +750,20 @@ impl Graph {
         } else {
             change::change_heads(&tx, &ids).await.map_err(connect_error)?
         };
-        // a change this graph does not hold may live in another graph: Go's router sends the call there
-        if ids.iter().any(|id| !heads.contains_key(id)) && other_graphs(&tx).await.map_err(connect_error)? {
+        // a change this graph does not hold, nor held, may live in another graph: Go's router asks it there
+        if self.elsewhere(&tx, &ids, &heads).await.map_err(connect_error)? {
             return Err(connect_error(GraphError::unimplemented(
                 "a change another graph may hold (ADR 0154): routed by the Go service",
             )));
         }
         if !caller.person() {
+            // a personal change is its subject's alone, a platform service's acting by itself too (`PersonalScope`)
+            if let Some(id) = ids
+                .iter()
+                .find(|id| heads.get(*id).is_some_and(|c| !c.visible_to(&caller.subject)))
+            {
+                return Err(connect_error(GraphError::not_found(format!("change {id}"))));
+            }
             let acc = Access::of(&caller, &tx).await.map_err(connect_error)?;
             drop(tx);
             let administers = caller.roles.iter().any(|r| r == ROLE_ADMIN);
@@ -735,11 +782,6 @@ impl Graph {
             let Some(c) = heads.get(id) else { continue };
             if !readable.may_read(c) {
                 return Err(connect_error(GraphError::not_found(format!("change {id}"))));
-            }
-            if c.is_personal() {
-                return Err(connect_error(GraphError::unimplemented(
-                    "a personal change (ADR 0037): not served here yet",
-                )));
             }
             if !c.methodology.is_empty() {
                 return Err(connect_error(GraphError::unimplemented(
@@ -2825,63 +2867,61 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let token_project = caller.project.clone();
-        self.write_on(caller, &[], async |tx, _acc| {
-            if m.owner_org == "@me" || m.owner_org.starts_with(change::USER_PREFIX) || m.owner_org.contains("/USR:") {
-                return Err(GraphError::unimplemented(
-                    "a personal change (ADR 0037): not served here yet",
-                ));
-            }
-            if !m.parent_id.is_empty()
-                && let Ok(parent) = tx.change_head(&m.parent_id.as_str().into()).await
-            {
-                if parent.is_personal() {
-                    // a personal change is never split
-                    return Err(GraphError::new(Kind::Conflict, "a personal change has no sub-changes"));
+        let (owner, stamp) = match self.resolve_owner(&caller, &m.owner_org).await {
+            Ok(v) => v,
+            Err((e, stamp)) => return stamp.on(Err(e)),
+        };
+        stamp.on(self
+            .write_on(caller, &[], async |tx, _acc| {
+                if !m.parent_id.is_empty()
+                    && let Ok(parent) = tx.change_head(&m.parent_id.as_str().into()).await
+                {
+                    if parent.is_personal() || owner.starts_with(change::USER_PREFIX) {
+                        // a personal change is never split, and nothing is split off a personal change
+                        return Err(GraphError::new(Kind::Conflict, "a personal change has no sub-changes"));
+                    }
+                    if !parent.lifecycle.is_empty() || !parent.guardians.is_empty() {
+                        return Err(GraphError::unimplemented(
+                            "a sub-change of a change following a lifecycle: not served here yet",
+                        ));
+                    }
                 }
-                if !parent.lifecycle.is_empty() || !parent.guardians.is_empty() {
-                    return Err(GraphError::unimplemented(
-                        "a sub-change of a change following a lifecycle: not served here yet",
+                let project = if !m.project_id.is_empty() {
+                    m.project_id.clone()
+                } else if !token_project.is_empty() {
+                    token_project.clone()
+                } else {
+                    tx.structure_root(STRUCTURE_PROJECT)?
+                };
+                if project_stopped(tx, &project).await? {
+                    return Err(GraphError::new(
+                        Kind::Conflict,
+                        format!("project {project} is stopped: it takes no new change"),
                     ));
                 }
-                platform_served(tx, &parent.namespace)?;
-            }
-            platform_served(tx, &m.namespace)?;
-            let project = if !m.project_id.is_empty() {
-                m.project_id.clone()
-            } else if !token_project.is_empty() {
-                token_project.clone()
-            } else {
-                tx.structure_root(STRUCTURE_PROJECT)?
-            };
-            if project_stopped(tx, &project).await? {
-                return Err(GraphError::new(
-                    Kind::Conflict,
-                    format!("project {project} is stopped: it takes no new change"),
-                ));
-            }
-            let data = m.data.as_ref().map(convert::map);
-            valid_criticality(data.as_ref().unwrap_or(&serde_json::Map::new()))?;
-            let c = tx
-                .create_change(NewChange {
-                    title: m.title.clone(),
-                    intent: m.intent.clone(),
-                    methodology: m.methodology.clone(),
-                    methodology_version: m.methodology_version.clone(),
-                    namespace: m.namespace.clone(),
-                    baseline_id: m.baseline_id.as_str().into(),
-                    branch: m.branch.clone(),
-                    own_branch: m.own_branch,
-                    owner_org: m.owner_org.clone(),
-                    project_id: project,
-                    data,
-                    parent_id: m.parent_id.as_str().into(),
+                let data = m.data.as_ref().map(convert::map);
+                valid_criticality(data.as_ref().unwrap_or(&serde_json::Map::new()))?;
+                let c = tx
+                    .create_change(NewChange {
+                        title: m.title.clone(),
+                        intent: m.intent.clone(),
+                        methodology: m.methodology.clone(),
+                        methodology_version: m.methodology_version.clone(),
+                        namespace: m.namespace.clone(),
+                        baseline_id: m.baseline_id.as_str().into(),
+                        branch: m.branch.clone(),
+                        own_branch: m.own_branch,
+                        owner_org: owner.clone(),
+                        project_id: project,
+                        data,
+                        parent_id: m.parent_id.as_str().into(),
+                    })
+                    .await?;
+                Ok(pb::CreateChangeResponse {
+                    change: Some(convert::change(&c)),
                 })
-                .await?;
-            Ok(pb::CreateChangeResponse {
-                change: Some(convert::change(&c)),
             })
-        })
-        .await
+            .await)
     }
 
     /// Moves a change along its lifecycle: with no registry wired, no change follows one (`Graph.TransitionChange`).
@@ -2925,19 +2965,13 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::DeleteChangeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        // no gate but the reading of the change (Go's `PersonalScope`): the purge itself refuses what committed
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
             let id: ChangeId = m.change_id.as_str().into();
-            let c = tx.change_head(&id).await?;
-            if c.is_personal() || !c.parent_id.is_empty() {
-                return Err(GraphError::unimplemented(
-                    "a personal change or a sub-change: not served here yet",
-                ));
-            }
-            platform_served(tx, &c.namespace)?;
-            let c = tx.purge_change(&id).await?;
-            Ok(pb::DeleteChangeResponse {
-                change: Some(convert::change(&c)),
-            })
+            let (c, seq) = tx.purge_change(&id).await?;
+            let mut c = convert::change(&c);
+            c.seq = seq;
+            Ok(pb::DeleteChangeResponse { change: Some(c) })
         })
         .await
     }
@@ -3361,11 +3395,12 @@ impl pb::GraphService for Graph {
                 "a commit carrying the events of a service (ADR 0136): not served here yet",
             )));
         }
-        if m.owner_org == "@me" || m.owner_org.starts_with(change::USER_PREFIX) || m.owner_org.contains("/USR:") {
-            return Err(connect_error(GraphError::unimplemented(
-                "a personal change (ADR 0037): not served here yet",
-            )));
-        }
+        // a person's commit is the Go service's (`write`); a platform service is no user to make sure of
+        let owner = if caller.person() {
+            m.owner_org.clone()
+        } else {
+            self.resolve_owner(&caller, &m.owner_org).await.map_err(|(e, _)| e)?.0
+        };
         let edits: Vec<NodeEdit> = m
             .edits
             .iter()
@@ -3432,7 +3467,7 @@ impl pb::GraphService for Graph {
                     by,
                     baseline_name: m.baseline_name.clone(),
                     edits,
-                    owner_org: m.owner_org.clone(),
+                    owner_org: owner.clone(),
                     project_id: project,
                 })
                 .await?;
@@ -3630,6 +3665,10 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+            if m.verdicts.is_empty() {
+                // refused before the change is read (Go's `reviewBatch`)
+                return Err(GraphError::invalid("a review batch needs at least one verdict"));
+            }
             let id = served_change(tx, &m.change_id).await?;
             let b = ReviewBatch {
                 by: String::new(),
@@ -4106,6 +4145,11 @@ async fn create_user(tx: &mut Tx<'_, Session>, subject: &str, key: &str) -> Resu
 struct Stamp(Option<String>);
 
 impl Stamp {
+    /// This stamp, else the positions of a later creation.
+    fn or(self, at: Option<String>) -> Stamp {
+        Stamp(self.0.or(at))
+    }
+
     fn on<T>(self, answer: Answer<T>) -> Answer<T> {
         let Some(at) = self.0 else { return answer };
         match answer {

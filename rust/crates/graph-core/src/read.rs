@@ -4,8 +4,7 @@
 //! A branch view is a baseline (the head of the branch when the view names none) whose state is a selection: the last
 //! commit of each node on its branch up to its order, else, past the fork, on the branch it was forked from (ADR 0143).
 //! A change view (its fork, its commits, its drafts folded from its log) is read here for one node at a time
-//! ([`World::open_node`]), on the flow it names (else the active option): the impacts and drafts that flow sees; a
-//! personal change answers [`crate::error::Kind::Unimplemented`].
+//! ([`World::open_node`]), on the flow it names (else the active option): the impacts and drafts that flow sees.
 use std::collections::{HashMap, HashSet};
 
 use crate::{
@@ -411,11 +410,6 @@ impl<'a, T: ReadTx> World<'a, T> {
             .change(&view.change)
             .await?
             .ok_or_else(|| GraphError::not_found(format!("change {}", view.change)))?;
-        if c.is_personal() {
-            return Err(GraphError::unimplemented(
-                "a view of a personal change (ADR 0037): not served here yet",
-            ));
-        }
         let cv = fold_change(tx, &c.id).await?;
         let flow = cv.flows.resolve(&view.flow);
         let impacts = cv.seen(&flow);

@@ -395,4 +395,14 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   does not administer the platform stay Go's. 3174 calls, the divergent ones as above (and a list of changes the Go
   service on the Rust schema reads stale, its directory of the organisation not told of the moves while Rust relays
   no outbox).
+- Personal changes (ADR 0037): `@me` as the owner of a new change is the personal unit of the caller, its user made
+  sure of again with its error answered, the personal unit of someone else refused, a personal change never split
+  (`Graph::resolve_owner`, Go's `resolveOwner`); the writes, the reads of its views and its purge (`DeleteChange`, no
+  gate but the reading of the change, answered with the position its log stood at) are served for its subject, a
+  platform service acting by itself finding the personal changes of others not found as Go's `PersonalScope` does;
+  a change this graph was found to hold is remembered (`State::held`, Go's `Router.changeBase`), so one purged since
+  is not found here rather than asked of another graph; the creation of a change in the platform's namespaces, which
+  no gate judges, is served for any caller. The settings (`GetPendingSettings` … `DiscardSettings`) stay Go's: they
+  retire nodes by their transition and commit in the platform's namespaces for persons. 3361 calls, the divergent
+  ones the known ones (and a list of changes the Go service on the Rust schema reads stale).
 - Not done yet: the rest of phase 4.

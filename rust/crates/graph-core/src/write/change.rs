@@ -234,8 +234,9 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(c)
     }
 
-    /// Deletes a change that left nothing in the graph, with its log (Go's `PurgeChange`).
-    pub async fn purge_change(&mut self, id: &ChangeId) -> Result<Change> {
+    /// Deletes a change that left nothing in the graph, with its log (Go's `PurgeChange`): the change, and the position
+    /// its log stood at.
+    pub async fn purge_change(&mut self, id: &ChangeId) -> Result<(Change, i64)> {
         self.lock_change(id).await?;
         let c = self.change_head(id).await?;
         if ![STATUS_DRAFT, STATUS_ACTIVE, STATUS_ABANDONED].contains(&c.status.as_str()) {
@@ -278,8 +279,10 @@ impl<S: WriteTx> Tx<'_, S> {
             }
             branch = own.name;
         }
+        // the change answered as the log left it, its position too
+        let seq = super::work::fold_change(self.store, id).await?.seq;
         self.delete_change(id, &c.namespace, &branch).await?;
         self.raise(events::CHANGE_PURGED, &c, None, "", &[]);
-        Ok(c)
+        Ok((c, seq))
     }
 }

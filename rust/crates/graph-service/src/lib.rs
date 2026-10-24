@@ -33,6 +33,9 @@ pub struct State {
     /// The persons this process made sure have a user (Go's `EnsureCaller`), and the creation in progress.
     users: Mutex<std::collections::HashSet<String>>,
     ensuring: Mutex<()>,
+    /// The changes this graph was found to hold, remembered as Go's router does (`Router.changeBase`): one purged since
+    /// is this graph's still, which answers it is not found, rather than a change another graph may hold.
+    pub(crate) held: Mutex<std::collections::HashSet<graph_core::model::ChangeId>>,
 }
 
 impl State {
@@ -43,6 +46,7 @@ impl State {
             catalog: Mutex::new((None, Catalog::builtin())),
             users: Mutex::new(Default::default()),
             ensuring: Mutex::new(()),
+            held: Mutex::new(Default::default()),
         }
     }
 
