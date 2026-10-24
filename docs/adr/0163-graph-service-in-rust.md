@@ -355,4 +355,16 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   a platform Assignment, one change on main written as the graph service (`system:graph`, reviewed by
   `graphsvc.seed` as Go's `Commit.By`), its positions in the answer's `X-Goap-Change-Seq`; the reads any identified
   caller makes no longer leave a new person to Go: 2008 calls, the divergent ones as above.
+  A person's reads of changes follow (and a platform service's acting for one, which reads as that person): the
+  change reads served (`GetChange`, its impacts, sub-changes, dependencies, flows, options, decision points, events,
+  shared nodes, blackboard, view, graph, executions) and `ListChanges` / `ListNodeChanges` decide what the caller
+  reads as Go's `PersonalScope` and `Handler.mayRead` do: a personal change is its subject's, any other is read by
+  those who work on its project (`access::Snapshot::may_access_project`, Go's `MayAccessProject`: an administrator
+  or the owner of the project or one above it, a platform role, a role an Assignment grants there, the header's
+  `admin`), over the organisation read at the head of main; a change named that the caller may not read is not
+  found before its user is made sure of, and a list leaves out what it may not read, the user just made counted. A
+  change this graph does not hold while other graphs are declared is Go's (its router looks it up there). A read at a
+  position of a change log, `ListChangeLog` (the prompts of `prompt:inspect`) and the reads of the current graph (the
+  reach of ADR 0161) stay Go's for a person: 2346 calls, the divergent ones as above and the cursors of the pages of
+  changes (a time of each database).
 - Not done yet: the rest of phase 4.

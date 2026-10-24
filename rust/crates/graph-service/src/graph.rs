@@ -60,6 +60,7 @@ const HEADER_CHANGE_SEQ: &str = "x-goap-change-seq";
 const HEADER_PROJECT: &str = "x-goap-project";
 const HEADER_COMMAND: &str = "x-goap-command";
 const HEADER_ROLES: &str = "x-goap-roles";
+const HEADER_ORG: &str = "x-goap-org";
 /// The platform role of the administrators (`access.RoleAdmin`).
 const ROLE_ADMIN: &str = "admin";
 
@@ -71,6 +72,7 @@ struct Caller {
     project: String,
     command: String,
     roles: Vec<String>,
+    org: String,
 }
 
 impl Caller {
@@ -91,6 +93,7 @@ impl Caller {
             at_least: !req.header(HEADER_AT_LEAST).is_empty(),
             project: req.header(HEADER_PROJECT).to_string(),
             command: req.header(HEADER_COMMAND).to_string(),
+            org: req.header(HEADER_ORG).to_string(),
             roles: req
                 .header(HEADER_ROLES)
                 .split(',')
@@ -132,6 +135,50 @@ impl Caller {
             ));
         }
         Ok(())
+    }
+}
+
+impl Caller {
+    /// Whether the caller is a person, or a platform service acting for one: its reads are decided by the access of
+    /// the organisation.
+    fn person(&self) -> bool {
+        !self.subject.starts_with("system:") || !self.on_behalf_of.is_empty()
+    }
+
+    /// The principal a read is decided for (Go's `graphsvc.Reader`, ADR 0161 §5): a platform service acting for a
+    /// person reads as that person, with nothing but its subject.
+    fn reader(&self) -> access::Principal {
+        if self.subject.starts_with("system:") && !self.on_behalf_of.is_empty() {
+            return access::Principal {
+                subject: self.on_behalf_of.clone(),
+                ..access::Principal::default()
+            };
+        }
+        access::Principal {
+            subject: self.subject.clone(),
+            org: self.org.clone(),
+            roles: self.roles.clone(),
+        }
+    }
+}
+
+/// What a caller reads of the changes (Go's `Handler.mayRead`, ADR 0037, 0138): a personal change is its subject's
+/// alone; any other, those who work on its project, and a platform service acting by itself.
+pub(crate) struct Readable {
+    subject: String,
+    person: Option<(access::Principal, access::Snapshot)>,
+}
+
+impl Readable {
+    /// Whether the caller may read a change.
+    pub(crate) fn may_read(&self, c: &change::Change) -> bool {
+        if c.is_personal() {
+            return c.is_personal_to(&self.subject);
+        }
+        match &self.person {
+            None => true,
+            Some((p, snap)) => snap.may_access_project(p, &c.project_id.key),
+        }
     }
 }
 
@@ -285,6 +332,76 @@ impl Graph {
 }
 
 impl Graph {
+    /// Runs a read of changes, a person's too (Go's `PersonalScope` interceptor then the handler): a change the
+    /// request names that the caller may not read is not found, before its user is made sure of; the read is then
+    /// given what the caller reads of the changes. A read at a position of a change log is the Go service's.
+    async fn read_changes<T, F>(&self, caller: Caller, named: &[&str], f: F) -> Answer<T>
+    where
+        F: AsyncFnOnce(&Session, &Readable) -> Result<T, GraphError>,
+    {
+        let person = caller.person();
+        if person && caller.at_least {
+            return Err(connect_error(GraphError::unimplemented(
+                "a read at a position of a change log (ADR 0153): not served here yet",
+            )));
+        }
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let ids: Vec<ChangeId> = named
+            .iter()
+            .filter(|id| uuid::Uuid::parse_str(id).is_ok())
+            .map(|id| ChangeId::from(*id))
+            .collect();
+        let heads = if ids.is_empty() {
+            HashMap::new()
+        } else {
+            change::change_heads(&tx, &ids).await.map_err(connect_error)?
+        };
+        // a change this graph does not hold may live in another graph: Go's router looks it up there
+        if ids.iter().any(|id| !heads.contains_key(id)) && other_graphs(&tx).await.map_err(connect_error)? {
+            return Err(connect_error(GraphError::unimplemented(
+                "a change another graph may hold (ADR 0154): routed by the Go service",
+            )));
+        }
+        if !person {
+            drop(tx);
+            let readable = Readable {
+                subject: caller.subject.clone(),
+                person: None,
+            };
+            return self.read(caller, async |tx| f(tx, &readable).await).await;
+        }
+        let snap = access::Snapshot::read(&tx).await.map_err(connect_error)?;
+        let mut readable = Readable {
+            subject: caller.subject.clone(),
+            person: Some((caller.reader(), snap)),
+        };
+        if let Some(id) = ids
+            .iter()
+            .find(|id| heads.get(*id).is_some_and(|c| !readable.may_read(c)))
+        {
+            return Err(connect_error(GraphError::not_found(format!("change {id}"))));
+        }
+        drop(tx);
+        let stamp = Stamp(self.ensure_user(&caller).await.map_err(connect_error)?);
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        if stamp.0.is_some() {
+            // the user just made: the handler reads the organisation with it
+            let snap = access::Snapshot::read(&tx).await.map_err(connect_error)?;
+            readable.person = Some((caller.reader(), snap));
+        }
+        stamp.on(f(&tx, &readable).await.map(Response::new).map_err(connect_error))
+    }
+
     /// Opens a call any identified caller may make: the first call of a person creates its user (Go's `EnsureCaller`
     /// interceptor, ADR 0040), which is the Go service's, so a person this graph holds no user of yet is left to it.
     async fn identified<T>(&self, req: &Request<T>) -> Result<(Caller, Stamp), ConnectError> {
@@ -331,6 +448,7 @@ impl Graph {
                 project: String::new(),
                 command: caller.command.clone(),
                 roles: vec![ROLE_ADMIN.into()],
+                org: String::new(),
             };
             let key = key.clone();
             let made = self
@@ -1045,7 +1163,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ListChangeEventsResponse> {
         let caller = Caller::of(&req)?;
         let id = ChangeId(req.into_inner().change_id);
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[id.as_str()], async |tx, _| {
             if tx.change(&id).await?.is_none() {
                 return Err(GraphError::not_found(format!("change {id}")));
             }
@@ -1356,7 +1474,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::GetChangeImpactsResponse> {
         let caller = Caller::of(&req)?;
         let id = ChangeId(req.into_inner().change_id);
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[id.as_str()], async |tx, _| {
             if tx.change(&id).await?.is_none() {
                 return Err(GraphError::not_found(format!("change {id}")));
             }
@@ -1531,7 +1649,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::GetChangeDependenciesResponse> {
         let caller = Caller::of(&req)?;
         let id = ChangeId(req.into_inner().change_id);
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[id.as_str()], async |tx, _| {
             let d = graph_core::dependency::change_dependencies(tx, &id).await?;
             let pb = |ds: &[graph_core::dependency::Dependency]| {
                 ds.iter()
@@ -1564,7 +1682,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::GetSharedNodesResponse> {
         let caller = Caller::of(&req)?;
         let id = ChangeId(req.into_inner().change_id);
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[id.as_str()], async |tx, _| {
             let Some(c) = tx.change(&id).await? else {
                 return Err(GraphError::not_found(format!("change {id}")));
             };
@@ -1625,7 +1743,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ListSubChangesResponse> {
         let caller = Caller::of(&req)?;
         let id = ChangeId(req.into_inner().change_id);
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[id.as_str()], async |tx, _| {
             let f = ChangesFilter {
                 parent: id.clone(),
                 ..ChangesFilter::default()
@@ -1647,7 +1765,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let state = self.state.clone();
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[m.id.as_str()], async |tx, _| {
             if m.at_seq > 0 {
                 let w = whole::change_at(tx, &ChangeId(m.id.clone()), m.at_seq).await?;
                 return Ok(pb::GetChangeResponse {
@@ -1672,7 +1790,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let state = self.state.clone();
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[m.change_id.as_str()], async |tx, _| {
             let cat = state.catalog(tx).await?;
             let id = ChangeId(m.change_id.clone());
             let items = wflow::items_of(tx, &id).await?;
@@ -1741,7 +1859,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::GetChangeViewResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[m.change_id.as_str()], async |tx, _| {
             let level = ViewLevel::parse(&m.level)?;
             let id = ChangeId(m.change_id.clone());
             known_change(tx, &id).await?;
@@ -1769,7 +1887,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::GetChangeGraphResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[m.change_id.as_str()], async |tx, _| {
             let world = change_world(tx, &m.change_id, &m.flow).await?;
             let fx = wflow::flows_of(tx, &ChangeId(m.change_id.clone())).await?;
             let on_option = fx.get(&fx.resolve(&m.flow)).is_some_and(|f| f.option.is_some());
@@ -1804,9 +1922,8 @@ impl pb::GraphService for Graph {
 
     async fn list_changes(&self, _ctx: &Ctx, req: Request<pb::ListChangesRequest>) -> Answer<pb::ListChangesResponse> {
         let caller = Caller::of(&req)?;
-        let subject = caller.subject.clone();
         let m = req.into_inner();
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[], async |tx, r| {
             if !m.header_only {
                 return Err(GraphError::unimplemented(
                     "a change read whole is a fold of its log (ADR 0153): not served here yet",
@@ -1820,8 +1937,8 @@ impl pb::GraphService for Graph {
                 query: m.query.clone(),
                 ..ChangesFilter::default()
             };
-            // a platform service by itself works on every project: only the personal changes of others are hidden
-            let keep = |c: &change::Change| c.visible_to(&subject);
+            // what the caller may not read is left out before a page is cut, so a page is full whenever more remain
+            let keep = |c: &change::Change| r.may_read(c);
             if m.limit > 0 {
                 let p = change::changes_page(tx, &f, change::page_limit(m.limit.into()), &m.cursor, keep).await?;
                 return Ok(pb::ListChangesResponse {
@@ -1850,9 +1967,8 @@ impl pb::GraphService for Graph {
         req: Request<pb::ListNodeChangesRequest>,
     ) -> Answer<pb::ListNodeChangesResponse> {
         let caller = Caller::of(&req)?;
-        let subject = caller.subject.clone();
         let m = req.into_inner();
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[], async |tx, r| {
             let (cs, next) = change::node_changes(
                 tx,
                 &NodeId(m.node_id.clone()),
@@ -1860,7 +1976,7 @@ impl pb::GraphService for Graph {
                 change::page_limit(m.limit.into()),
             )
             .await?;
-            let cs: Vec<_> = cs.into_iter().filter(|c| c.visible_to(&subject)).collect();
+            let cs: Vec<_> = cs.into_iter().filter(|c| r.may_read(c)).collect();
             Ok(pb::ListNodeChangesResponse {
                 changes: convert::changes(&cs),
                 next,
@@ -1927,7 +2043,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ListExecutionsResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[m.change_id.as_str()], async |tx, _| {
             if m.change_id.is_empty() && m.process_ids.is_empty() {
                 // Go joins the graph's invalid with the journal's
                 return Err(GraphError::new(
@@ -1959,7 +2075,7 @@ impl pb::GraphService for Graph {
     async fn list_flows(&self, _ctx: &Ctx, req: Request<pb::ListFlowsRequest>) -> Answer<pb::ListFlowsResponse> {
         let caller = Caller::of(&req)?;
         let id = ChangeId(req.into_inner().change_id);
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[id.as_str()], async |tx, _| {
             known_change(tx, &id).await?;
             let fx = wflow::flows_of(tx, &id).await?;
             Ok(pb::ListFlowsResponse {
@@ -1973,7 +2089,7 @@ impl pb::GraphService for Graph {
     async fn list_options(&self, _ctx: &Ctx, req: Request<pb::ListOptionsRequest>) -> Answer<pb::ListOptionsResponse> {
         let caller = Caller::of(&req)?;
         let id = ChangeId(req.into_inner().change_id);
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[id.as_str()], async |tx, _| {
             known_change(tx, &id).await?;
             let fx = wflow::flows_of(tx, &id).await?;
             let options: Vec<_> = fx.options().collect();
@@ -2148,7 +2264,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ListDecisionPointsResponse> {
         let caller = Caller::of(&req)?;
         let id = ChangeId(req.into_inner().change_id);
-        self.read(caller, async |tx| {
+        self.read_changes(caller, &[id.as_str()], async |tx, _| {
             known_change(tx, &id).await?;
             let points = decision::points_of(tx, &id, chrono::Utc::now()).await?;
             Ok(pb::ListDecisionPointsResponse {

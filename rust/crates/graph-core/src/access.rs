@@ -141,6 +141,15 @@ pub const LINK_PROJECT_PART_OF: &str = "organisation@project_part_of";
 /// The key prefix of a user's node, its personal unit (`access.UserPrefix`).
 pub const USER_PREFIX: &str = "USR:";
 
+/// Who a read or a write is decided for (`authz.Principal`, the part the access asks): the subject, the unit it names
+/// and the roles its request carries.
+#[derive(Debug, Clone, Default)]
+pub struct Principal {
+    pub subject: String,
+    pub org: String,
+    pub roles: Vec<String>,
+}
+
 /// A hierarchy of a structure by key (`domain.Hierarchy`).
 #[derive(Debug, Clone, Default)]
 pub struct Hierarchy {
@@ -315,10 +324,48 @@ impl Snapshot {
         s
     }
 
+    /// Reads the snapshot at the head of main of the namespace of the organisation (Go's `Directory.Snapshot`: what
+    /// the last change applied there wrote).
+    pub async fn read<T: ReadTx>(tx: &T) -> Result<Snapshot> {
+        use graph_catalog::catalog::STRUCTURE_ORGANISATION;
+        let Some(ns) = Catalog::builtin()
+            .structure(STRUCTURE_ORGANISATION)
+            .map(|s| s.namespace.clone())
+        else {
+            return Ok(Snapshot::default());
+        };
+        let head = read::branch_head(tx, &ns, MAIN_BRANCH).await?;
+        let at = read::select(tx, &head, None).await?;
+        let refs: Vec<NodeRef> = at.iter().map(|(id, v)| NodeRef::new(id.clone(), *v)).collect();
+        let nodes: Vec<_> = tx
+            .nodes_at(&refs, "")
+            .await?
+            .into_iter()
+            .filter(|n| !n.deleted)
+            .collect();
+        let held: Vec<NodeRef> = nodes.iter().map(|n| n.node_ref()).collect();
+        let links = tx.links_from(&held, None).await?;
+        Ok(Snapshot::build(&nodes, &links))
+    }
+
     /// The units an Assignment names to grant a subject roles: its user, then its unit and the unit's ancestors
     /// (`SubjectChain`).
     pub fn subject_chain(&self, subject: &str) -> Vec<String> {
-        let unit = self.users.get(subject).map_or("", String::as_str);
+        self.chain_of(&Principal {
+            subject: subject.to_string(),
+            ..Principal::default()
+        })
+    }
+
+    /// The units of a principal (`SubjectChain`): its unit is the one its user belongs to, else the one it names,
+    /// else the root.
+    fn chain_of(&self, p: &Principal) -> Vec<String> {
+        let subject = p.subject.as_str();
+        let unit = self
+            .users
+            .get(subject)
+            .filter(|u| !u.is_empty())
+            .map_or(p.org.as_str(), String::as_str);
         let unit = if unit.is_empty() { self.org_root.as_str() } else { unit };
         let mut out = vec![format!("{USER_PREFIX}{subject}")];
         out.extend(self.units.chain(unit));
@@ -349,6 +396,63 @@ impl Snapshot {
 
     pub fn has_project(&self, key: &str) -> bool {
         self.project_keys.contains(key)
+    }
+
+    /// The roles an Assignment grants a unit of a chain on a project of a chain (`ProjectRoles`).
+    pub fn project_roles(&self, org_chain: &[String], project_chain: &[String]) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for a in &self.assignments {
+            if org_chain.contains(&a.org) && project_chain.contains(&a.project) {
+                for r in &a.roles {
+                    if !out.contains(r) {
+                        out.push(r.clone());
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// Whether an Assignment of a unit of a chain on a project of a chain makes its subject an administrator, the
+    /// owner, of the project (`ProjectFlags`): the owner is an administrator too.
+    pub fn project_flags(&self, org_chain: &[String], project_chain: &[String]) -> (bool, bool) {
+        let (mut admin, mut owner) = (false, false);
+        for a in &self.assignments {
+            if a.project.is_empty() || !org_chain.contains(&a.org) || !project_chain.contains(&a.project) {
+                continue;
+            }
+            owner = owner || a.owner;
+            admin = admin || a.admin || a.owner;
+        }
+        (admin, owner)
+    }
+
+    /// Whether a principal works on a project (`MayAccessProject`, ADR 0039, 0138): an administrator of it, or one
+    /// holding a platform role, or a role on it or a project above it.
+    pub fn may_access_project(&self, p: &Principal, project: &str) -> bool {
+        if p.subject.is_empty() {
+            return false;
+        }
+        let chain = self.chain_of(p);
+        let projects = self.projects.chain(project);
+        if self.project_flags(&chain, &projects).0 {
+            return true;
+        }
+        !self.platform_roles(&chain).is_empty()
+            || !self.project_roles(&chain, &projects).is_empty()
+            || p.roles.iter().any(|r| r == ROLE_ADMIN)
+    }
+
+    /// The projects whose nodes a principal reads (`ReachableProjects`, ADR 0161 §5): those it works on, sorted.
+    pub fn reachable_projects(&self, p: &Principal) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .project_keys
+            .iter()
+            .filter(|k| self.may_access_project(p, k))
+            .cloned()
+            .collect();
+        out.sort();
+        out
     }
 
     /// Whether a project, or one above it, is owned by an owner Assignment (`ProjectOwned`).
@@ -431,6 +535,14 @@ mod tests {
                 "retired",
                 json!({"roles": ["admin"]}),
             ),
+            node("c", "USR:cy", TYPE_USER, "active", json!({"subject": "cy"})),
+            node(
+                "d",
+                "ASG:USR:cy/PROJ-Q",
+                TYPE_ASSIGNMENT,
+                "active",
+                json!({"roles": ["dev"]}),
+            ),
         ];
         let links = vec![
             link("organisation@part_of", "t", "o"),
@@ -440,6 +552,9 @@ mod tests {
             link(LINK_ASSIGNS_ORG, "b", "u"),
             link(LINK_ASSIGNS_PROJECT, "b", "p"),
             link(LINK_ASSIGNS_ORG, "r", "u"),
+            link(LINK_MEMBER_OF, "c", "o"),
+            link(LINK_ASSIGNS_ORG, "d", "c"),
+            link(LINK_ASSIGNS_PROJECT, "d", "q"),
         ];
         let s = Snapshot::build(&nodes, &links);
         assert_eq!(s.subject_chain("ann"), ["USR:ann", "TEAM", "ORG-DEFAULT"]);
@@ -455,5 +570,16 @@ mod tests {
             Some((PLATFORM_SCOPE.into(), false))
         );
         assert_eq!(s.assignment_project("ASG:USR:ann/OLD"), None);
+        let who = |subject: &str, roles: &[&str]| Principal {
+            subject: subject.into(),
+            roles: roles.iter().map(|r| r.to_string()).collect(),
+            ..Principal::default()
+        };
+        assert_eq!(s.reachable_projects(&who("cy", &[])), ["PROJ-Q"]);
+        assert!(!s.may_access_project(&who("cy", &[]), "PROJ-ROOT"));
+        assert_eq!(s.reachable_projects(&who("ann", &[])), ["PROJ-Q", "PROJ-ROOT"]);
+        assert!(!s.may_access_project(&who("zed", &[]), "PROJ-Q"));
+        assert!(s.may_access_project(&who("zed", &["admin"]), "PROJ-Q"));
+        assert!(!s.may_access_project(&who("", &["admin"]), "PROJ-Q"));
     }
 }
