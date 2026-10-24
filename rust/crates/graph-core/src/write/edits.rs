@@ -65,6 +65,37 @@ pub struct Commit {
     pub edits: Vec<NodeEdit>,
     pub owner_org: String,
     pub project_id: String,
+    /// the writer's own events, riding on the commit (subject, JSON payload; ADR 0136)
+    pub events: Vec<(String, String)>,
+}
+
+/// The subjects the graph emits itself: a writer may not carry one (ADR 0136).
+const CARRIED_FAMILIES: [&str; 5] = [
+    "goap.change.",
+    "goap.changed.",
+    "goap.changeindex.",
+    "goap.node.",
+    "goap.baseline.",
+];
+
+/// Refuses a carried event outside `goap.>`, with a wildcard or an empty token, or of the graph's families, and one
+/// whose payload is not JSON (Go's `checkCarried`).
+fn check_carried(events: &[(String, String)]) -> Result<()> {
+    for (subject, payload) in events {
+        let bad = !subject.starts_with("goap.")
+            || subject.contains(['*', '>', ' ', '\t', '\r', '\n'])
+            || subject.contains("..")
+            || subject.ends_with('.')
+            || serde_json::from_str::<serde::de::IgnoredAny>(payload).is_err()
+            || CARRIED_FAMILIES.iter().any(|f| subject.starts_with(f));
+        if bad {
+            return Err(GraphError::invalid(format!(
+                "event {}: a writer carries its own events, under goap., as JSON",
+                serde_json::to_string(subject).unwrap_or_default()
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// The change a commit made and the header of the baseline it left.
@@ -117,6 +148,7 @@ impl<S: WriteTx> Tx<'_, S> {
         if inp.edits.is_empty() {
             return Err(GraphError::invalid("a commit needs at least one edit"));
         }
+        check_carried(&inp.events)?;
         for e in &inp.edits {
             self.check_required_parent(e)?;
         }
@@ -386,7 +418,11 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         // a rebase the merge keeps is refused with the whole commit: one transaction
         allow(&c, CHANGE_MERGE)?;
-        let done = match self.merge_change(&id).await? {
+        // the writer's events follow `change.applied` (Go's `raiseApplied` over `withCarried`)
+        self.carried = inp.events.clone();
+        let merged = self.merge_change(&id).await;
+        self.carried.clear();
+        let done = match merged? {
             super::merge::Merge::Applied(done) => done,
             super::merge::Merge::Rebased(err) => return Err(err),
         };

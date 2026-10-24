@@ -4049,11 +4049,17 @@ impl pb::GraphService for Graph {
         let m = req.into_inner();
         let by = caller.subject.clone();
         let token_project = caller.project.clone();
-        if !m.events.is_empty() {
-            return Err(connect_error(GraphError::unimplemented(
-                "a commit carrying the events of a service (ADR 0136): not served here yet",
-            )));
+        // a payload Go's JSON check reads as bytes, not text: left to it
+        let mut events = Vec::with_capacity(m.events.len());
+        for e in &m.events {
+            let Ok(payload) = String::from_utf8(e.payload.to_vec()) else {
+                return Err(connect_error(GraphError::unimplemented(
+                    "a carried event whose payload is not UTF-8: not served here",
+                )));
+            };
+            events.push((e.subject.clone(), payload));
         }
+        let service = caller.subject.starts_with("system:");
         let (owner, stamp) = match self.resolve_owner(&caller, &m.owner_org).await {
             Ok(v) => v,
             Err((e, stamp)) => return stamp.on(Err(e)),
@@ -4103,6 +4109,13 @@ impl pb::GraphService for Graph {
                     acc.gate_access(tx.catalog(), &typ)?;
                 }
                 platform_served(tx, &m.namespace)?;
+                // a platform service's own events ride on its commit (ADR 0136); a person carries none
+                if !events.is_empty() && !service {
+                    return Err(GraphError::new(
+                        Kind::Forbidden,
+                        "only a platform service carries events on a commit",
+                    ));
+                }
                 // each operation of the commit asks the roles the methodology allows it to (ADR 0103): read once
                 let mut roles: HashMap<&str, Option<Vec<String>>> = HashMap::new();
                 // a platform service is not asked, even for a person (`graphsvc.OperationAuthorizer`)
@@ -4132,6 +4145,7 @@ impl pb::GraphService for Graph {
                             edits,
                             owner_org: owner.clone(),
                             project_id: project,
+                            events: events.clone(),
                         },
                         &|node: &str, key: &str, t: &Transition| acc.transition(node, key, t),
                         &|c: &graph_core::change::Change, op: &str| match roles.get(op) {

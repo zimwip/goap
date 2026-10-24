@@ -80,6 +80,8 @@ pub struct Tx<'s, S: WriteTx> {
     pub positions: BTreeMap<ChangeId, i64>,
     /// the views of the changes the transaction works on, folded from their logs and kept up by its writes
     pub(super) views: HashMap<ChangeId, super::work::ChangeView>,
+    /// the events a writer carries on its commit, raised after `change.applied` (ADR 0136)
+    pub(super) carried: Vec<(String, String)>,
 }
 
 /// What a transaction holds in memory when a rehearsal starts (the locks taken stay).
@@ -126,6 +128,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             baselines: Vec::new(),
             positions: BTreeMap::new(),
             views: HashMap::new(),
+            carried: Vec::new(),
         }
     }
 
@@ -476,6 +479,9 @@ impl<'s, S: WriteTx> Tx<'s, S> {
         };
         self.raised
             .push((events::change_subject(&c.id, typ), gojson::to_string(&ev)));
+        if typ == events::CHANGE_APPLIED {
+            self.raised.extend(self.carried.iter().cloned());
+        }
     }
 
     /// Raises `change.item_added` for the items written on a change read at `seq`, and `change.signal` when one is a
