@@ -8,47 +8,56 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "type",
           "json": "type",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "algo.Usage"
           }
         },
         {
           "yaml": "language",
           "json": "language",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "code",
           "json": "code",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "params",
           "json": "params",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]algo.Param",
             "elem": {
               "kind": "struct",
-              "name": "algo.Param"
+              "name": "algo.Param",
+              "go": "algo.Param"
             }
           }
         }
@@ -60,32 +69,39 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "algorithm",
           "json": "algorithm",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "values",
           "json": "values",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "map",
+            "go": "map[string]interface {}",
             "elem": {
-              "kind": "any"
+              "kind": "any",
+              "go": "interface {}"
             }
           }
         }
@@ -97,48 +113,59 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "type",
           "json": "type",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "required",
           "json": "required",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "bool"
+            "kind": "bool",
+            "go": "bool"
           }
         },
         {
           "yaml": "default",
           "json": "default",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "any"
+            "kind": "any",
+            "go": "interface {}"
           }
         },
         {
           "yaml": "values",
           "json": "values",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]string",
             "elem": {
-              "kind": "string"
+              "kind": "string",
+              "go": "string"
             }
           }
         }
@@ -150,109 +177,136 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "label",
           "json": "label",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "type",
           "json": "type",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "widget",
           "json": "widget",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "diff",
           "json": "diff",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "enum",
           "json": "enum",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "default",
           "json": "default",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "section",
           "json": "section",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "order",
           "json": "order",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "int"
+            "kind": "int",
+            "go": "int"
           }
         },
         {
           "yaml": "tooltip",
           "json": "tooltip",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "asName",
           "json": "asName",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "bool"
+            "kind": "bool",
+            "go": "bool"
           }
         },
         {
           "yaml": "validators",
           "json": "validators",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]string",
             "elem": {
-              "kind": "string"
+              "kind": "string",
+              "go": "string"
             }
           }
         }
-      ]
+      ],
+      "short": "name"
     },
     "def.Domain": {
       "fields": [
@@ -260,22 +314,26 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "version",
           "json": "version",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
@@ -283,9 +341,11 @@
           "json": "nodeTypes",
           "type": {
             "kind": "slice",
+            "go": "[]def.NodeType",
             "elem": {
               "kind": "struct",
-              "name": "def.NodeType"
+              "name": "def.NodeType",
+              "go": "def.NodeType"
             }
           }
         },
@@ -294,9 +354,11 @@
           "json": "linkTypes",
           "type": {
             "kind": "slice",
+            "go": "[]def.LinkType",
             "elem": {
               "kind": "struct",
-              "name": "def.LinkType"
+              "name": "def.LinkType",
+              "go": "def.LinkType"
             }
           }
         },
@@ -304,11 +366,14 @@
           "yaml": "enums",
           "json": "enums",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]def.Enum",
             "elem": {
               "kind": "struct",
-              "name": "def.Enum"
+              "name": "def.Enum",
+              "go": "def.Enum"
             }
           }
         },
@@ -316,11 +381,14 @@
           "yaml": "lifecycles",
           "json": "lifecycles",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]domain.Lifecycle",
             "elem": {
               "kind": "struct",
-              "name": "domain.Lifecycle"
+              "name": "domain.Lifecycle",
+              "go": "domain.Lifecycle"
             }
           }
         },
@@ -328,11 +396,14 @@
           "yaml": "algorithms",
           "json": "algorithms",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]algo.Algorithm",
             "elem": {
               "kind": "struct",
-              "name": "algo.Algorithm"
+              "name": "algo.Algorithm",
+              "go": "algo.Algorithm"
             }
           }
         },
@@ -340,11 +411,14 @@
           "yaml": "algorithmInstances",
           "json": "algorithmInstances",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]algo.Instance",
             "elem": {
               "kind": "struct",
-              "name": "algo.Instance"
+              "name": "algo.Instance",
+              "go": "algo.Instance"
             }
           }
         },
@@ -352,11 +426,14 @@
           "yaml": "itemTypes",
           "json": "itemTypes",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]def.ItemType",
             "elem": {
               "kind": "struct",
-              "name": "def.ItemType"
+              "name": "def.ItemType",
+              "go": "def.ItemType"
             }
           }
         },
@@ -364,11 +441,14 @@
           "yaml": "importers",
           "json": "importers",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]def.Importer",
             "elem": {
               "kind": "struct",
-              "name": "def.Importer"
+              "name": "def.Importer",
+              "go": "def.Importer"
             }
           }
         }
@@ -380,26 +460,32 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "values",
           "json": "values",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]def.EnumValue",
             "elem": {
               "kind": "struct",
-              "name": "def.EnumValue"
+              "name": "def.EnumValue",
+              "go": "def.EnumValue"
             }
           }
         }
@@ -411,18 +497,22 @@
           "yaml": "value",
           "json": "value",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "label",
           "json": "label",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         }
-      ]
+      ],
+      "short": "value"
     },
     "def.Importer": {
       "fields": [
@@ -430,34 +520,42 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "label",
           "json": "label",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "params",
           "json": "params",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]def.Attribute",
             "elem": {
               "kind": "struct",
-              "name": "def.Attribute"
+              "name": "def.Attribute",
+              "go": "def.Attribute"
             }
           }
         }
@@ -469,26 +567,32 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "attributes",
           "json": "attributes",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]def.Attribute",
             "elem": {
               "kind": "struct",
-              "name": "def.Attribute"
+              "name": "def.Attribute",
+              "go": "def.Attribute"
             }
           }
         }
@@ -500,42 +604,52 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "from",
           "json": "from",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "to",
           "json": "to",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "attributes",
           "json": "attributes",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]def.Attribute",
             "elem": {
               "kind": "struct",
-              "name": "def.Attribute"
+              "name": "def.Attribute",
+              "go": "def.Attribute"
             }
           }
         },
@@ -543,10 +657,13 @@
           "yaml": "validators",
           "json": "validators",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]string",
             "elem": {
-              "kind": "string"
+              "kind": "string",
+              "go": "string"
             }
           }
         },
@@ -554,24 +671,30 @@
           "yaml": "compose",
           "json": "compose",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "bool"
+            "kind": "bool",
+            "go": "bool"
           }
         },
         {
           "yaml": "label",
           "json": "label",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "inverseLabel",
           "json": "inverseLabel",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         }
       ]
@@ -582,26 +705,32 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "attributes",
           "json": "attributes",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]def.Attribute",
             "elem": {
               "kind": "struct",
-              "name": "def.Attribute"
+              "name": "def.Attribute",
+              "go": "def.Attribute"
             }
           }
         },
@@ -609,27 +738,34 @@
           "yaml": "extends",
           "json": "extends",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "lifecycle",
           "json": "lifecycle",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "document",
           "json": "document",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "ptr",
+            "go": "*domain.DocumentSpec",
             "elem": {
               "kind": "struct",
-              "name": "domain.DocumentSpec"
+              "name": "domain.DocumentSpec",
+              "go": "domain.DocumentSpec"
             }
           }
         },
@@ -637,10 +773,13 @@
           "yaml": "changeControlled",
           "json": "changeControlled",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "ptr",
+            "go": "*bool",
             "elem": {
-              "kind": "bool"
+              "kind": "bool",
+              "go": "bool"
             }
           }
         },
@@ -648,10 +787,13 @@
           "yaml": "validators",
           "json": "validators",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]string",
             "elem": {
-              "kind": "string"
+              "kind": "string",
+              "go": "string"
             }
           }
         },
@@ -659,11 +801,14 @@
           "yaml": "search",
           "json": "search",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]def.SearchProperty",
             "elem": {
               "kind": "struct",
-              "name": "def.SearchProperty"
+              "name": "def.SearchProperty",
+              "go": "def.SearchProperty"
             }
           }
         },
@@ -671,35 +816,44 @@
           "yaml": "editor",
           "json": "editor",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "icon",
           "json": "icon",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "color",
           "json": "color",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "structure",
           "json": "structure",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "ptr",
+            "go": "*def.StructureTag",
             "elem": {
               "kind": "struct",
-              "name": "def.StructureTag"
+              "name": "def.StructureTag",
+              "go": "def.StructureTag"
             }
           }
         },
@@ -707,11 +861,14 @@
           "yaml": "requires",
           "json": "requires",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]domain.RequiredLink",
             "elem": {
               "kind": "struct",
-              "name": "domain.RequiredLink"
+              "name": "domain.RequiredLink",
+              "go": "domain.RequiredLink"
             }
           }
         },
@@ -719,31 +876,39 @@
           "yaml": "adminOnly",
           "json": "adminOnly",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "bool"
+            "kind": "bool",
+            "go": "bool"
           }
         },
         {
           "yaml": "additionalProperties",
           "json": "additionalProperties",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "bool"
+            "kind": "bool",
+            "go": "bool"
           }
         },
         {
           "yaml": "form",
           "json": "form",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "ptr",
+            "go": "*form.Form",
             "elem": {
               "kind": "struct",
-              "name": "form.Form"
+              "name": "form.Form",
+              "go": "form.Form"
             }
           }
         }
-      ]
+      ],
+      "short": "name"
     },
     "def.SearchProperty": {
       "fields": [
@@ -751,23 +916,28 @@
           "yaml": "property",
           "json": "property",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "text",
           "json": "text",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "bool"
+            "kind": "bool",
+            "go": "bool"
           }
         },
         {
           "yaml": "facet",
           "json": "facet",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "bool"
+            "kind": "bool",
+            "go": "bool"
           }
         }
       ]
@@ -778,39 +948,47 @@
           "yaml": "kind",
           "json": "kind",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "parent",
           "json": "parent",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "root",
           "json": "root",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "selfParent",
           "json": "selfParent",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "bool"
+            "kind": "bool",
+            "go": "bool"
           }
         },
         {
           "yaml": "bootstrap",
           "json": "bootstrap",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "map",
+            "go": "map[string]interface {}",
             "elem": {
-              "kind": "any"
+              "kind": "any",
+              "go": "interface {}"
             }
           }
         }
@@ -823,8 +1001,10 @@
           "json": "states",
           "type": {
             "kind": "slice",
+            "go": "[]string",
             "elem": {
-              "kind": "string"
+              "kind": "string",
+              "go": "string"
             }
           }
         }
@@ -836,22 +1016,26 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "expr",
           "json": "expr",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         }
       ]
@@ -863,8 +1047,10 @@
           "json": "contains",
           "type": {
             "kind": "slice",
+            "go": "[]string",
             "elem": {
-              "kind": "string"
+              "kind": "string",
+              "go": "string"
             }
           }
         }
@@ -876,10 +1062,13 @@
           "yaml": "fields",
           "json": "fields",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]string",
             "elem": {
-              "kind": "string"
+              "kind": "string",
+              "go": "string"
             }
           }
         },
@@ -887,10 +1076,13 @@
           "yaml": "types",
           "json": "types",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]string",
             "elem": {
-              "kind": "string"
+              "kind": "string",
+              "go": "string"
             }
           }
         },
@@ -898,16 +1090,20 @@
           "yaml": "transitions",
           "json": "transitions",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "bool"
+            "kind": "bool",
+            "go": "bool"
           }
         },
         {
           "yaml": "keepPhase",
           "json": "keepPhase",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "bool"
+            "kind": "bool",
+            "go": "bool"
           }
         }
       ]
@@ -918,22 +1114,26 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "initial",
           "json": "initial",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
@@ -941,9 +1141,11 @@
           "json": "states",
           "type": {
             "kind": "slice",
+            "go": "[]domain.LifecycleState",
             "elem": {
               "kind": "struct",
-              "name": "domain.LifecycleState"
+              "name": "domain.LifecycleState",
+              "go": "domain.LifecycleState"
             }
           }
         },
@@ -951,11 +1153,14 @@
           "yaml": "transitions",
           "json": "transitions",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]domain.Transition",
             "elem": {
               "kind": "struct",
-              "name": "domain.Transition"
+              "name": "domain.Transition",
+              "go": "domain.Transition"
             }
           }
         }
@@ -967,31 +1172,38 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "notCommittable",
           "json": "notCommittable",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "bool"
+            "kind": "bool",
+            "go": "bool"
           }
         },
         {
           "yaml": "final",
           "json": "final",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "bool"
+            "kind": "bool",
+            "go": "bool"
           }
         }
       ]
@@ -1002,15 +1214,18 @@
           "yaml": "link",
           "json": "link",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "count",
           "json": "count",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "int"
+            "kind": "int",
+            "go": "int"
           }
         }
       ]
@@ -1021,56 +1236,68 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "from",
           "json": "from",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "to",
           "json": "to",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "permission",
           "json": "permission",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "guard",
           "json": "guard",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "vetos",
           "json": "vetos",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]domain.Criterion",
             "elem": {
               "kind": "struct",
-              "name": "domain.Criterion"
+              "name": "domain.Criterion",
+              "go": "domain.Criterion"
             }
           }
         },
@@ -1078,11 +1305,14 @@
           "yaml": "objectives",
           "json": "objectives",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]domain.Criterion",
             "elem": {
               "kind": "struct",
-              "name": "domain.Criterion"
+              "name": "domain.Criterion",
+              "go": "domain.Criterion"
             }
           }
         },
@@ -1090,10 +1320,13 @@
           "yaml": "guards",
           "json": "guards",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]string",
             "elem": {
-              "kind": "string"
+              "kind": "string",
+              "go": "string"
             }
           }
         },
@@ -1101,10 +1334,13 @@
           "yaml": "actions",
           "json": "actions",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]string",
             "elem": {
-              "kind": "string"
+              "kind": "string",
+              "go": "string"
             }
           }
         },
@@ -1112,20 +1348,25 @@
           "yaml": "requires",
           "json": "requires",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "struct",
-            "name": "domain.TransitionRequires"
+            "name": "domain.TransitionRequires",
+            "go": "domain.TransitionRequires"
           }
         },
         {
           "yaml": "children",
           "json": "children",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "ptr",
+            "go": "*domain.ChildrenRule",
             "elem": {
               "kind": "struct",
-              "name": "domain.ChildrenRule"
+              "name": "domain.ChildrenRule",
+              "go": "domain.ChildrenRule"
             }
           }
         },
@@ -1133,11 +1374,14 @@
           "yaml": "freezes",
           "json": "freezes",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "ptr",
+            "go": "*domain.Freezes",
             "elem": {
               "kind": "struct",
-              "name": "domain.Freezes"
+              "name": "domain.Freezes",
+              "go": "domain.Freezes"
             }
           }
         }
@@ -1149,10 +1393,13 @@
           "yaml": "attributes",
           "json": "attributes",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]string",
             "elem": {
-              "kind": "string"
+              "kind": "string",
+              "go": "string"
             }
           }
         },
@@ -1160,10 +1407,13 @@
           "yaml": "outgoingLinks",
           "json": "outgoingLinks",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]string",
             "elem": {
-              "kind": "string"
+              "kind": "string",
+              "go": "string"
             }
           }
         }
@@ -1175,25 +1425,31 @@
           "yaml": "field",
           "json": "field",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "equals",
           "json": "equals",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "any"
+            "kind": "any",
+            "go": "interface {}"
           }
         },
         {
           "yaml": "in",
           "json": "in",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]interface {}",
             "elem": {
-              "kind": "any"
+              "kind": "any",
+              "go": "interface {}"
             }
           }
         },
@@ -1201,10 +1457,13 @@
           "yaml": "set",
           "json": "set",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "ptr",
+            "go": "*bool",
             "elem": {
-              "kind": "bool"
+              "kind": "bool",
+              "go": "bool"
             }
           }
         }
@@ -1216,72 +1475,89 @@
           "yaml": "name",
           "json": "name",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "widget",
           "json": "widget",
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "label",
           "json": "label",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "help",
           "json": "help",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "placeholder",
           "json": "placeholder",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "section",
           "json": "section",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "required",
           "json": "required",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "bool"
+            "kind": "bool",
+            "go": "bool"
           }
         },
         {
           "yaml": "default",
           "json": "default",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "any"
+            "kind": "any",
+            "go": "interface {}"
           }
         },
         {
           "yaml": "constraints",
           "json": "constraints",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "map",
+            "go": "map[string]interface {}",
             "elem": {
-              "kind": "any"
+              "kind": "any",
+              "go": "interface {}"
             }
           }
         },
@@ -1289,11 +1565,14 @@
           "yaml": "visibleWhen",
           "json": "visibleWhen",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]form.Condition",
             "elem": {
               "kind": "struct",
-              "name": "form.Condition"
+              "name": "form.Condition",
+              "go": "form.Condition"
             }
           }
         },
@@ -1301,11 +1580,14 @@
           "yaml": "requiredWhen",
           "json": "requiredWhen",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]form.Condition",
             "elem": {
               "kind": "struct",
-              "name": "form.Condition"
+              "name": "form.Condition",
+              "go": "form.Condition"
             }
           }
         },
@@ -1313,11 +1595,14 @@
           "yaml": "fields",
           "json": "fields",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]form.Field",
             "elem": {
               "kind": "struct",
-              "name": "form.Field"
+              "name": "form.Field",
+              "go": "form.Field"
             }
           }
         }
@@ -1329,43 +1614,54 @@
           "yaml": "title",
           "json": "title",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "description",
           "json": "description",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "submit",
           "json": "submit",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "artifact",
           "json": "artifact",
           "omit": true,
+          "jsonOmit": true,
           "type": {
-            "kind": "string"
+            "kind": "string",
+            "go": "string"
           }
         },
         {
           "yaml": "fields",
           "json": "fields",
           "omit": true,
+          "jsonOmit": true,
           "type": {
             "kind": "slice",
+            "go": "[]form.Field",
             "elem": {
               "kind": "struct",
-              "name": "form.Field"
+              "name": "form.Field",
+              "go": "form.Field"
             }
           }
         }

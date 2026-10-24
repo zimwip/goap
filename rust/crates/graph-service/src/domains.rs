@@ -5,7 +5,7 @@ use goap_proto::registry::v1 as pb;
 use graph_catalog::{
     Catalog,
     catalog::{builtin_sources, builtins, is_builtin},
-    imported::{self, Imported},
+    imported::{Definition, Imported},
     record::{Record, STATUS_ARCHIVED, STATUS_DRAFT, STATUS_PUBLISHED, in_force, latest},
 };
 use graph_core::{GraphError, gojson, goyaml, store::OutboxMessage};
@@ -322,34 +322,16 @@ impl pb::DomainService for Domains {
                 "a domain whose types do not resolve with the domains in force",
             ));
         }
-        let stored = tx.domain_status(&d.name, &d.version).await.map_err(connect_error)?;
-        if stored.as_deref().is_some_and(|s| s != STATUS_DRAFT) {
-            return Err(not_a_draft(&format!("{}@{}", d.name, d.version)));
-        }
-        let now = chrono::Utc::now();
-        let at = gojson::time_text(&now);
-        let events = self.events(&subject, &command, "saved", &d.name, &d.version, STATUS_DRAFT, now);
-        let definition = gojson::to_string(&d);
-        let row = NewDomain {
-            name: &d.name,
-            version: &d.version,
-            status: STATUS_DRAFT,
-            definition: &definition,
-            created_at: &at,
-            updated_at: &at,
-            published_at: "",
-            updated_by: &subject,
-        };
-        if stored.is_some() {
-            tx.update_domain(&row, &events).await
-        } else {
-            tx.insert_domain(&row, &events).await
-        }
-        .map_err(connect_error)?;
-        let saved = tx.stored_domain(&d.name, &d.version).await.map_err(connect_error)?;
-        tx.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
-        self.state.deliver_domains().await;
-        let saved = saved.ok_or_else(|| not_found(&d.name, &d.version))?;
+        let saved = self
+            .store(
+                tx,
+                &d.name,
+                &d.version,
+                &gojson::to_string(&d),
+                STATUS_DRAFT,
+                (&subject, &command),
+            )
+            .await?;
         Ok(Response::new(pb::SaveDomainResponse {
             domain: Some(stored_pb(saved)?),
             issues: Vec::new(),
@@ -523,85 +505,98 @@ impl pb::DomainService for Domains {
         Ok(Response::new(pb::DeleteDomainResponse {}))
     }
 
-    /// Stores a domain version from its YAML, published on request (`Service.ImportDomain`): a new version a platform
-    /// service imports, valid and with nothing the Go service alone checks. Anything else (a person, a version already
-    /// stored, issues, a lifecycle, a script...) is the Go service's.
+    /// Stores a domain version from its YAML, published on request (`Service.ImportDomain`): read as `def.ParseDomain`
+    /// reads it (a definition that does not read is refused in Go's words), then stored as a draft or published. A
+    /// domain with issues, or one only the Go service checks (a lifecycle, a script...), is the Go service's.
     async fn import_domain(
         &self,
         _ctx: &Ctx,
         req: Request<pb::ImportDomainRequest>,
     ) -> Answer<pb::ImportDomainResponse> {
-        let subject = req.header(HEADER_SUBJECT).to_string();
-        let command = req.header(HEADER_COMMAND).to_string();
+        let (subject, command) = caller(&req);
         let who = person_of(&req);
         let r = req.into_inner();
-        let Some(d) = Imported::parse(&r.yaml) else {
+        let def =
+            Definition::read(&r.yaml).map_err(|e| ConnectError::invalid_argument(format!("invalid domain: {e}")))?;
+        if def.name.is_empty() || def.version.is_empty() {
+            return Err(ConnectError::invalid_argument(
+                "name and version are required: invalid domain",
+            ));
+        }
+        if is_builtin(&def.name) {
+            return Err(builtin_error(&def.name));
+        }
+        self.authorize(who.as_ref(), "write", &def.name, &def.version).await?;
+        if r.publish {
+            self.authorize(who.as_ref(), "publish", &def.name, &def.version).await?;
+        }
+        let (Some(d), Ok(json)) = (def.served(), def.json.as_ref()) else {
             return Err(unserved("a domain with issues, or checked by scripts, guards or forms"));
         };
-        if d.version.is_empty() || is_builtin(&d.name) {
-            return Err(unserved("a domain with no version, or a built-in one"));
-        }
-        self.authorize(who.as_ref(), "write", &d.name, &d.version).await?;
-        if r.publish {
-            self.authorize(who.as_ref(), "publish", &d.name, &d.version).await?;
-        }
-        let domain = d.domain().map_err(|e| connect_error(GraphError::internal(e)))?;
-        let tx = self
-            .state
-            .store
-            .writer()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
-        if tx
-            .domain_status(&d.name, &d.version)
-            .await
-            .map_err(connect_error)?
-            .is_some()
-        {
-            return Err(unserved("a domain version already stored"));
-        }
-        if !resolves(&tx, domain.clone()).await? {
+        let domain = graph_catalog::Domain::from_json(json).map_err(|e| connect_error(GraphError::internal(e)))?;
+        let tx = self.writer().await?;
+        if !resolves(&tx, domain).await? {
             return Err(unserved(
                 "a domain whose types do not resolve with the domains in force",
             ));
         }
-
-        let now = chrono::Utc::now();
-        let at = gojson::time_text(&now);
-        let (status, event) = if r.publish {
-            (STATUS_PUBLISHED, "published")
-        } else {
-            (STATUS_DRAFT, "saved")
-        };
-        let events = self.events(&subject, &command, event, &d.name, &d.version, status, now);
-        let definition = gojson::to_string(&d);
-        tx.insert_domain(
-            &NewDomain {
-                name: &d.name,
-                version: &d.version,
-                status,
-                definition: &definition,
-                created_at: &at,
-                updated_at: &at,
-                published_at: if r.publish { &at } else { "" },
-                updated_by: &subject,
-            },
-            &events,
-        )
-        .await
-        .map_err(connect_error)?;
-        tx.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
-        self.state.deliver_domains().await;
-
-        let published = r.publish.then_some(now);
+        let status = if r.publish { STATUS_PUBLISHED } else { STATUS_DRAFT };
+        let saved = self
+            .store(tx, &d.name, &d.version, json, status, (&subject, &command))
+            .await?;
         Ok(Response::new(pb::ImportDomainResponse {
-            domain: Some(domain_pb(&d, status, Some(now), Some(now), published, &subject)),
+            domain: Some(stored_pb(saved)?),
             issues: Vec::new(),
         }))
     }
 }
 
 impl Domains {
+    /// Writes a version (`SQLStore.SaveDomain`): a new one inserted, a draft replaced (its creation kept), anything else
+    /// refused; the event `saved` for a draft, `published` for a version published at once. The version as stored.
+    async fn store(
+        &self,
+        tx: graph_store::read::Session,
+        name: &str,
+        version: &str,
+        definition: &str,
+        status: &str,
+        (subject, command): (&str, &str),
+    ) -> Result<StoredDomain, ConnectError> {
+        let stored = tx.domain_status(name, version).await.map_err(connect_error)?;
+        if stored.as_deref().is_some_and(|s| s != STATUS_DRAFT) {
+            return Err(not_a_draft(&format!("{name}@{version}")));
+        }
+        let now = chrono::Utc::now();
+        let at = gojson::time_text(&now);
+        let event = if status == STATUS_PUBLISHED {
+            "published"
+        } else {
+            "saved"
+        };
+        let events = self.events(subject, command, event, name, version, status, now);
+        let row = NewDomain {
+            name,
+            version,
+            status,
+            definition,
+            created_at: &at,
+            updated_at: &at,
+            published_at: if status == STATUS_PUBLISHED { &at } else { "" },
+            updated_by: subject,
+        };
+        if stored.is_some() {
+            tx.update_domain(&row, &events).await
+        } else {
+            tx.insert_domain(&row, &events).await
+        }
+        .map_err(connect_error)?;
+        let saved = tx.stored_domain(name, version).await.map_err(connect_error)?;
+        tx.commit().await.map_err(|e| connect_error(GraphError::from(e)))?;
+        self.state.deliver_domains().await;
+        saved.ok_or_else(|| not_found(name, version))
+    }
+
     async fn writer(&self) -> Result<graph_store::read::Session, ConnectError> {
         self.state
             .store
@@ -762,132 +757,6 @@ fn stored_pb(s: StoredDomain) -> Result<pb::Domain, ConnectError> {
     d.published_at = convert::time(&s.published_at);
     d.updated_by = s.updated_by;
     Ok(d)
-}
-
-/// A stored version as the registry answers it (`domainpb.DomainToPB`).
-fn domain_pb(
-    d: &Imported,
-    status: &str,
-    created: Option<chrono::DateTime<chrono::Utc>>,
-    updated: Option<chrono::DateTime<chrono::Utc>>,
-    published: Option<chrono::DateTime<chrono::Utc>>,
-    by: &str,
-) -> pb::Domain {
-    pb::Domain {
-        name: d.name.clone(),
-        version: d.version.clone(),
-        description: d.description.clone(),
-        status: status.into(),
-        node_types: d
-            .node_types()
-            .iter()
-            .map(|n| pb::NodeType {
-                name: n.name.clone(),
-                description: n.description.clone(),
-                attributes: attributes(&n.attributes),
-                extends: n.extends.clone(),
-                change_controlled: n.change_controlled,
-                search: n
-                    .search
-                    .iter()
-                    .map(|s| pb::SearchProperty {
-                        property: s.property.clone(),
-                        text: s.text,
-                        facet: s.facet,
-                    })
-                    .collect(),
-                editor: n.editor.clone(),
-                icon: n.icon.clone(),
-                color: n.color.clone(),
-                requires: n
-                    .requires
-                    .iter()
-                    .map(|r| pb::RequiredLink {
-                        link: r.link.clone(),
-                        count: r.count as i32,
-                    })
-                    .collect(),
-                admin_only: n.admin_only,
-                additional_properties: n.additional_properties,
-                ..pb::NodeType::default()
-            })
-            .collect(),
-        link_types: d
-            .link_types()
-            .iter()
-            .map(|l| pb::LinkType {
-                name: l.name.clone(),
-                description: l.description.clone(),
-                from: l.from.clone(),
-                to: l.to.clone(),
-                compose: l.compose,
-                attributes: attributes(&l.attributes),
-                validators: Vec::new(),
-                label: l.label.clone(),
-                inverse_label: l.inverse_label.clone(),
-            })
-            .collect(),
-        enums: d
-            .enums
-            .iter()
-            .map(|e| pb::Enum {
-                name: e.name.clone(),
-                description: e.description.clone(),
-                values: e
-                    .values
-                    .iter()
-                    .map(|v| pb::EnumValue {
-                        value: v.value.clone(),
-                        label: v.label.clone(),
-                    })
-                    .collect(),
-            })
-            .collect(),
-        item_types: d
-            .item_types
-            .iter()
-            .map(|t| pb::ItemType {
-                name: t.name.clone(),
-                description: t.description.clone(),
-                attributes: attributes(&t.attributes),
-            })
-            .collect(),
-        importers: d
-            .importers
-            .iter()
-            .map(|i| pb::ImporterDecl {
-                name: i.name.clone(),
-                label: i.label.clone(),
-                description: i.description.clone(),
-                params: attributes(&i.params),
-            })
-            .collect(),
-        created_at: convert::time(&created),
-        updated_at: convert::time(&updated),
-        published_at: convert::time(&published),
-        updated_by: by.into(),
-        ..pb::Domain::default()
-    }
-}
-
-fn attributes(as_: &[imported::Attribute]) -> Vec<pb::Attribute> {
-    as_.iter()
-        .map(|a| pb::Attribute {
-            name: a.name.clone(),
-            label: a.label.clone(),
-            description: a.description.clone(),
-            r#type: a.typ.clone(),
-            widget: a.widget.clone(),
-            diff: a.diff.clone(),
-            r#enum: a.enumeration.clone(),
-            default_value: a.default.clone(),
-            section: a.section.clone(),
-            order: a.order as i32,
-            tooltip: a.tooltip.clone(),
-            as_name: a.as_name,
-            validators: Vec::new(),
-        })
-        .collect()
 }
 
 /// The stored JSON of a definition as its YAML document reads (`yaml.Marshal(def.Domain)` read back): the lists Go

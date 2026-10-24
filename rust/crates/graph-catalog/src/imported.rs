@@ -1,15 +1,55 @@
 //! A domain as `ImportDomain` reads it (Go's `def.ParseDomain`, `Domain.Validate`): the YAML (or JSON) of a definition,
-//! decoded strictly, checked, and written back as the JSON the registry stores (`json.Marshal(def.Domain)`: the fields
-//! in Go's order, the empty ones left out where Go leaves them out).
+//! decoded as yaml.v3 decodes it into `def.Domain` ([`decode`](crate::decode)), written back as the JSON the registry
+//! stores (`json.Marshal(def.Domain)`), and checked.
 //!
-//! Only the domains whose checks run no script nor guard are read here: lifecycles, algorithms, validators, forms,
-//! documents and structures are the Go service's ([`Imported::parse`] answers `None`), and so is anything this reader
-//! is stricter about than yaml.v3 (an unknown key, a number where a text is expected). A domain with issues is the Go
-//! service's too: it keeps it as a draft and words the issues.
+//! Only the domains whose checks run no script nor guard are judged here: lifecycles, algorithms, validators, forms,
+//! documents and structures are the Go service's ([`Definition::served`] answers `None`). A domain with issues is the
+//! Go service's too: it keeps it as a draft and words the issues.
 use serde::{Deserialize, Deserializer, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
-use crate::def::Domain;
+use crate::{decode, def::Domain};
+
+/// A definition as `def.ParseDomain` reads it: its name and version, the JSON `json.Marshal` writes of it (or the error
+/// it fails with: an unsupported value), and the domain when it is one judged here.
+#[derive(Debug, Clone)]
+pub struct Definition {
+    pub name: String,
+    pub version: String,
+    pub json: Result<String, String>,
+    domain: Option<Imported>,
+}
+
+impl Definition {
+    /// Reads a YAML (or JSON) definition; the error is Go's (`parse domain: …`).
+    pub fn read(src: &str) -> Result<Definition, String> {
+        let v = decode::parse_domain(src.as_bytes()).map_err(|e| e.0)?;
+        let text = |i: usize| match &v {
+            decode::Value::Struct(fields) => match &fields[i] {
+                decode::Value::Str(s) => s.clone(),
+                _ => String::new(),
+            },
+            _ => String::new(),
+        };
+        let json = decode::domain_json(&v);
+        let domain = json
+            .as_ref()
+            .ok()
+            .and_then(|j| serde_json::from_str::<Imported>(j).ok())
+            .and_then(Imported::checked);
+        Ok(Definition {
+            name: text(0),
+            version: text(1),
+            json,
+            domain,
+        })
+    }
+
+    /// The domain when it is one judged here: stored as JSON, with nothing only the Go service checks, and no issue.
+    pub fn served(&self) -> Option<&Imported> {
+        self.domain.as_ref()
+    }
+}
 
 /// A domain definition, as stored.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -207,12 +247,9 @@ pub struct Importer {
 }
 
 impl Imported {
-    /// The domain of a YAML (or JSON) definition, when it is one read here: `None` for a definition that does not
-    /// parse here, uses what only the Go service checks, or has an issue.
+    /// The domain of a YAML (or JSON) definition, when it is one judged here ([`Definition::served`]).
     pub fn parse(src: &str) -> Option<Imported> {
-        let v: Value = serde_norway::from_str(src).ok()?;
-        let d: Imported = serde_json::from_value(v).ok()?;
-        (d.served() && d.valid()).then_some(d)
+        Definition::read(src).ok()?.domain
     }
 
     /// The definition when it is one read here (as [`Imported::parse`] decides): served, and with no issue.
@@ -505,12 +542,27 @@ mod tests {
     }
 
     #[test]
+    fn reads_as_yaml_v3() {
+        // a number for a text, an unknown key within a type reading its short form itself
+        let d = Definition::read("name: x\nversion: 1.0\nnodeTypes: [{name: A, colour: red}]\n").unwrap();
+        assert_eq!(d.version, "1.0");
+        assert_eq!(
+            d.json.as_deref().unwrap(),
+            r#"{"name":"x","version":"1.0","nodeTypes":[{"name":"A"}],"linkTypes":null}"#
+        );
+        assert!(d.served().is_some());
+        assert!(
+            Definition::read("name: x\ncolour: red\n")
+                .unwrap_err()
+                .contains("field colour not found")
+        );
+    }
+
+    #[test]
     fn leaves_the_rest_to_go() {
         for src in [
-            "name: x\nversion: 1.0\nnodeTypes: [A]\n", // a number for a text
-            "name: x\nversion: '1'\nnodeTypes: [{name: A, colour: red}]\n", // an unknown key
             "name: x\nversion: '1'\nnodeTypes: [{name: A, lifecycle: l}]\nlifecycles: [{name: l}]\n", // a lifecycle
-            "name: x\nversion: '1'\nnodeTypes: []\n",  // an issue
+            "name: x\nversion: '1'\nnodeTypes: []\n",                                                 // an issue
             "name: x\nversion: '1'\nnodeTypes: [{name: A, extends: B}]\n", // an unknown parent
             "name: x\nversion: '1'\nnodeTypes: [{name: A, attributes: [{name: s, type: enum}]}]\n",
         ] {

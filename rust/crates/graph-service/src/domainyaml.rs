@@ -2,67 +2,26 @@
 //! their order, omitted when empty where their tag says so, the maps with their keys sorted, from the JSON of the
 //! definition the registry stores. The shape of `def.Domain` is generated from the Go structs
 //! (`lib/def` `TestRustYAMLSchemaIsCurrent`), so that both stay the same.
-use std::{collections::HashMap, sync::LazyLock};
-
+use graph_catalog::shape::{Field, SHAPE, Type};
 use graph_core::goyaml::{Yaml, float_g, key_order};
-use serde::Deserialize;
 use serde_json::Value as Json;
 
 /// The indentation of `yaml.Marshal`.
 pub const INDENT: i64 = 4;
 
-#[derive(Deserialize)]
-struct Schema {
-    root: String,
-    types: HashMap<String, Struct>,
-}
-
-#[derive(Deserialize)]
-struct Struct {
-    fields: Vec<Field>,
-    /// the fields whose emptiness makes the value empty (a type implementing yaml.v3's `IsZeroer`)
-    #[serde(default)]
-    zero: Vec<String>,
-}
-
-#[derive(Deserialize)]
-struct Field {
-    yaml: String,
-    json: String,
-    #[serde(default)]
-    omit: bool,
-    #[serde(rename = "type")]
-    typ: Type,
-}
-
-#[derive(Deserialize)]
-struct Type {
-    kind: String,
-    #[serde(default)]
-    name: String,
-    elem: Option<Box<Type>>,
-}
-
-static SCHEMA: LazyLock<Schema> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("domain_yaml.gen.json")).expect("the generated shape of def.Domain")
-});
-
 /// The YAML document of a definition (Go's JSON of `def.Domain`, or the YAML of a built-in domain read as JSON).
 pub fn document(def: &Json) -> Yaml {
-    let s = &*SCHEMA;
-    strukt(&s.root, def)
+    strukt(&SHAPE.root, def)
 }
 
 fn present(v: Option<&Json>) -> Option<&Json> {
     v.filter(|v| !v.is_null())
 }
 
-impl Field {
-    /// The value of the field in an object: by its JSON name, else (a field JSON leaves out) its YAML one.
-    fn of<'a>(&self, o: &'a serde_json::Map<String, Json>) -> Option<&'a Json> {
-        let name = if self.json.is_empty() { &self.yaml } else { &self.json };
-        present(o.get(name))
-    }
+/// The value of a field in an object: by its JSON name, else (a field JSON leaves out) its YAML one.
+fn of<'a>(f: &Field, o: &'a serde_json::Map<String, Json>) -> Option<&'a Json> {
+    let name = if f.json.is_empty() { &f.yaml } else { &f.json };
+    present(o.get(name))
 }
 
 /// Whether a value is empty as yaml.v3's `isZero` decides.
@@ -80,12 +39,12 @@ fn is_zero(t: &Type, v: Option<&Json>) -> bool {
             elem.kind == "struct" && zero_by_method(&elem.name, v)
         }
         "struct" => {
-            let s = &SCHEMA.types[&t.name];
+            let s = &SHAPE.types[&t.name];
             if !s.zero.is_empty() {
                 return zero_by_method(&t.name, v);
             }
             let o = v.as_object();
-            s.fields.iter().all(|f| is_zero(&f.typ, o.and_then(|o| f.of(o))))
+            s.fields.iter().all(|f| is_zero(&f.typ, o.and_then(|o| of(f, o))))
         }
         _ => false,
     }
@@ -93,7 +52,7 @@ fn is_zero(t: &Type, v: Option<&Json>) -> bool {
 
 /// The `IsZero` of a type implementing it: its fields named all empty.
 fn zero_by_method(name: &str, v: &Json) -> bool {
-    let s = &SCHEMA.types[name];
+    let s = &SHAPE.types[name];
     if s.zero.is_empty() {
         return false;
     }
@@ -102,16 +61,16 @@ fn zero_by_method(name: &str, v: &Json) -> bool {
         s.fields
             .iter()
             .find(|f| &f.yaml == z)
-            .is_none_or(|f| is_zero(&f.typ, o.and_then(|o| f.of(o))))
+            .is_none_or(|f| is_zero(&f.typ, o.and_then(|o| of(f, o))))
     })
 }
 
 fn strukt(name: &str, v: &Json) -> Yaml {
-    let s = &SCHEMA.types[name];
+    let s = &SHAPE.types[name];
     let o = v.as_object();
     let mut out = Vec::new();
     for f in &s.fields {
-        let x = o.and_then(|o| f.of(o));
+        let x = o.and_then(|o| of(f, o));
         if f.omit && is_zero(&f.typ, x) {
             continue;
         }

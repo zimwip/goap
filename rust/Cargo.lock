@@ -879,8 +879,10 @@ dependencies = [
 name = "graph-catalog"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "chrono",
  "graph-script",
+ "libyaml",
  "regex",
  "serde",
  "serde_json",
@@ -1334,6 +1336,13 @@ dependencies = [
  "cc",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "libyaml"
+version = "0.1.0"
+dependencies = [
+ "unsafe-libyaml-norway",
 ]
 
 [[package]]

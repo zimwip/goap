@@ -24,6 +24,7 @@ graph-catalog = { path = "crates/graph-catalog" }
 graph-core = { path = "crates/graph-core" }
 graph-script = { path = "crates/graph-script" }
 graph-store = { path = "crates/graph-store" }
+libyaml = { path = "crates/libyaml" }
 
 anyhow = "1"
 arc-swap = "1"

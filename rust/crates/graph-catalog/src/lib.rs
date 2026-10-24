@@ -3,9 +3,12 @@
 //! writes the domains, the graph judges its nodes by them.
 pub mod algo;
 pub mod catalog;
+pub mod decode;
 pub mod def;
 pub mod imported;
 pub mod record;
+pub mod shape;
+pub mod yamlv3;
 
 pub use catalog::{Catalog, Structure, Type};
 pub use def::Domain;

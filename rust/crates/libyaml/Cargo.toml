@@ -1,0 +1,19 @@
+[package]
+name = "libyaml"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "The events of libyaml's parser, read safely: the parser Go's gopkg.in/yaml.v3 ports, so that a document reads (and fails) as it does there"
+
+[dependencies]
+unsafe-libyaml-norway = "0.2.15"
+
+# The one crate of the workspace calling unsafe code: the bindings of libyaml, behind a safe parser. Everything else
+# keeps the workspace's `unsafe_code = "forbid"`.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

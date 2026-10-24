@@ -11,38 +11,52 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// rustYAMLSchema is the shape of a domain as yaml.v3 writes it (ADR 0163): the fields of each struct in their order,
-// their YAML and JSON names and whether they are omitted when empty, so that the Rust graph service writes the YAML
-// export of a domain from its stored JSON as `Domain.YAML` does.
-const rustYAMLSchema = "../../rust/crates/graph-service/src/domain_yaml.gen.json"
+// rustYAMLSchema is the shape of a domain as yaml.v3 reads and writes it and encoding/json writes it (ADR 0163): the
+// fields of each struct in their order, their YAML and JSON names, whether each encoding omits them when empty, the Go
+// type of each value and the field a plain scalar sets for a type whose UnmarshalYAML accepts one, so that the Rust
+// graph service reads a domain as `ParseDomain` does, stores the JSON `json.Marshal` writes and writes the YAML export
+// as `Domain.YAML` does.
+const rustYAMLSchema = "../../rust/crates/graph-catalog/src/domain_shape.gen.json"
 
 // yamlZero names the fields whose emptiness makes a value implementing yaml.v3's IsZeroer empty.
 var yamlZero = map[string][]string{
 	"form.Form": {"fields", "title", "description"},
 }
 
+// yamlShort names, for each type whose UnmarshalYAML takes a plain scalar as a short form, the field the scalar sets;
+// an object is decoded as the type itself (`type plain T`), by a decoder of its own that knows no field check.
+var yamlShort = map[string]string{
+	"def.Attribute": "name",
+	"def.EnumValue": "value",
+	"def.NodeType":  "name",
+}
+
 type yamlField struct {
-	YAML string    `json:"yaml"`
-	JSON string    `json:"json"`
-	Omit bool      `json:"omit,omitempty"`
-	Type *yamlType `json:"type"`
+	YAML     string    `json:"yaml"`
+	JSON     string    `json:"json"`
+	Omit     bool      `json:"omit,omitempty"`
+	JSONOmit bool      `json:"jsonOmit,omitempty"`
+	Type     *yamlType `json:"type"`
 }
 
 type yamlType struct {
 	Kind string    `json:"kind"`
 	Name string    `json:"name,omitempty"`
+	Go   string    `json:"go"`
 	Elem *yamlType `json:"elem,omitempty"`
 }
 
 type yamlStruct struct {
 	Fields []yamlField `json:"fields"`
 	Zero   []string    `json:"zero,omitempty"`
+	Short  string      `json:"short,omitempty"`
 }
 
 func yamlSchemaOf(t *testing.T) map[string]*yamlStruct {
 	types := map[string]*yamlStruct{}
 	zeroer := reflect.TypeOf((*yaml.IsZeroer)(nil)).Elem()
-	var typeOf func(reflect.Type) *yamlType
+	unmarshaler := reflect.TypeOf((*yaml.Unmarshaler)(nil)).Elem()
+	var typeOf, kindOf func(reflect.Type) *yamlType
 	var fields func(reflect.Type) []yamlField
 	fields = func(rt reflect.Type) []yamlField {
 		var out []yamlField
@@ -56,7 +70,7 @@ func yamlSchemaOf(t *testing.T) map[string]*yamlStruct {
 				continue
 			}
 			yname, yopts, _ := strings.Cut(ytag, ",")
-			jname, _, _ := strings.Cut(jtag, ",")
+			jname, jopts, _ := strings.Cut(jtag, ",")
 			if strings.Contains(yopts, "inline") {
 				if !f.Anonymous || jtag != "" {
 					t.Fatalf("%s.%s: inline in YAML only", rt, f.Name)
@@ -79,11 +93,21 @@ func yamlSchemaOf(t *testing.T) map[string]*yamlStruct {
 			if jtag == "-" {
 				jname = ""
 			}
-			out = append(out, yamlField{YAML: yname, JSON: jname, Omit: strings.Contains(yopts, "omitempty"), Type: typeOf(f.Type)})
+			out = append(out, yamlField{YAML: yname, JSON: jname, Omit: strings.Contains(yopts, "omitempty"),
+				JSONOmit: strings.Contains(jopts, "omitempty"), Type: typeOf(f.Type)})
 		}
 		return out
 	}
 	typeOf = func(rt reflect.Type) *yamlType {
+		t := kindOf(rt)
+		t.Go = rt.String()
+		return t
+	}
+	kindOf = func(rt reflect.Type) *yamlType {
+		if reflect.PointerTo(rt).Implements(reflect.TypeOf((*json.Marshaler)(nil)).Elem()) ||
+			reflect.PointerTo(rt).Implements(reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()) {
+			t.Fatalf("%s: a JSON encoding of its own, not written by the Rust service", rt)
+		}
 		switch rt.Kind() {
 		case reflect.String:
 			return &yamlType{Kind: "string"}
@@ -117,6 +141,13 @@ func yamlSchemaOf(t *testing.T) map[string]*yamlStruct {
 						t.Fatalf("%s implements IsZero: name its fields in yamlZero", name)
 					}
 					s.Zero = z
+				}
+				if reflect.PointerTo(rt).Implements(unmarshaler) {
+					short, ok := yamlShort[name]
+					if !ok {
+						t.Fatalf("%s implements UnmarshalYAML: name the field of its short form in yamlShort", name)
+					}
+					s.Short = short
 				}
 			}
 			return &yamlType{Kind: "struct", Name: name}
