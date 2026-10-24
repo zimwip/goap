@@ -27,7 +27,13 @@ impl<S: WriteTx> Tx<'_, S> {
     /// Moves a root change, draft or active and having committed nothing, with its open sub-changes to another
     /// project. With no registry no guardian chain is computed again. The change comes back with the position its
     /// view was read at.
-    pub async fn move_change(&mut self, id: &ChangeId, to: &str) -> Result<(Change, i64)> {
+    /// `gate` judges the caller on each project a change of the family leaves or enters (Go's `ProjectMoveGate`).
+    pub async fn move_change(
+        &mut self,
+        id: &ChangeId,
+        to: &str,
+        gate: &(dyn Fn(&Change, &str) -> Result<()> + Sync),
+    ) -> Result<(Change, i64)> {
         let project = self
             .structure_ref(STRUCTURE_PROJECT, to)
             .map_err(|e| e.context(format!("move change {id}")))?;
@@ -40,9 +46,12 @@ impl<S: WriteTx> Tx<'_, S> {
             .map_err(|e| e.context("target project"))?;
         let project = self.structure_url(STRUCTURE_PROJECT, &node.key)?;
         let family = self.movable(id, &project).await?;
-        // the gate (a platform service by itself: the methodologies only)
+        // the gate: the caller on both projects, then the methodologies
         let dir = Directory::read(self.store, self.catalog()).await?;
         for c in &family {
+            for p in [c.project_id.key.as_str(), node.key.as_str()] {
+                gate(c, p)?;
+            }
             if c.methodology.is_empty() {
                 continue;
             }

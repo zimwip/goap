@@ -43,8 +43,14 @@ pub const DOER: &str = "doer";
 /// The kind of the operations that judge it.
 pub const REVIEWER: &str = "reviewer";
 
+pub const CHANGE_ATTACH: &str = "change.attach";
 pub const CHANGE_COMMIT: &str = "change.commit";
+pub const CHANGE_DEPEND: &str = "change.depend";
+pub const CHANGE_DETACH: &str = "change.detach";
 pub const CHANGE_MERGE: &str = "change.merge";
+pub const CHANGE_METHODOLOGY: &str = "change.methodology";
+pub const CHANGE_REBASE: &str = "change.rebase";
+pub const CHANGE_UPGRADE: &str = "change.upgrade";
 pub const IMPACT_CANCEL: &str = "impact.cancel";
 pub const IMPACT_CHECKOUT: &str = "impact.checkout";
 pub const IMPACT_CREATE: &str = "impact.create";
@@ -52,6 +58,7 @@ pub const IMPACT_LINK_CREATE: &str = "impact.link.create";
 pub const IMPACT_LINK_DELETE: &str = "impact.link.delete";
 pub const IMPACT_LINK_UPDATE: &str = "impact.link.update";
 pub const IMPACT_MERGE: &str = "impact.merge";
+pub const IMPACT_PROPOSE: &str = "impact.propose";
 pub const IMPACT_RESOLVE: &str = "impact.resolve";
 pub const IMPACT_REVIEW: &str = "impact.review";
 pub const IMPACT_SPLIT: &str = "impact.split";

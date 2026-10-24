@@ -263,9 +263,15 @@ impl<S: WriteTx> Tx<'_, S> {
 
     /// Records a ruling: decided and settled by the policy, it decides the point; decided and not settled, it waits for
     /// a ratification; undecidable, its questions block the point until they are answered.
-    pub async fn rule_decision(&mut self, id: &ChangeId, mut r#in: Rule) -> Result<DecisionPoint> {
+    /// `seat` checks that the caller holds the role of the seat it rules in (Go's `SeatAuthorizer`).
+    pub async fn rule_decision(
+        &mut self,
+        id: &ChangeId,
+        mut r#in: Rule,
+        seat: &(dyn Fn(&Change, &str) -> Result<()> + Sync),
+    ) -> Result<DecisionPoint> {
         r#in.justification = r#in.justification.trim().to_string();
-        self.decision_change(id).await?;
+        let c = self.decision_change(id).await?;
         let cur = self.pending_point(id, &r#in.point).await?;
         if cur.status == POINT_BLOCKED {
             return Err(GraphError::conflict(format!(
@@ -312,6 +318,11 @@ impl<S: WriteTx> Tx<'_, S> {
                 cur.id,
                 seats.join(", ")
             )));
+        } else if let Err(e) = seat(&c, &r#in.role) {
+            return Err(GraphError::new(
+                e.kind,
+                format!("the seat {} of decision point {}: {}", r#in.role, cur.id, e.message),
+            ));
         }
         let mut e = DecisionEvent {
             op: OP_RULE.into(),

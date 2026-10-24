@@ -229,6 +229,52 @@ impl Access {
             || self.snap.may_access_project(&self.reader, &n.project.key)
     }
 
+    /// The seat a person rules a decision point of a board in (Go's `graphsvc.SeatAuthorizer`): `decision:sit` with
+    /// the role of the seat; a platform service sits in any.
+    fn seat(&self, c: &change::Change, role: &str) -> Result<(), GraphError> {
+        if self.who.subject.starts_with("system:") {
+            return Ok(());
+        }
+        self.check(
+            "sit",
+            abac::Resource {
+                typ: "decision".into(),
+                id: c.id.0.clone(),
+                name: c.title.clone(),
+                org: c.owner_org.key.clone(),
+                project_id: c.project_id.key.clone(),
+                roles: vec![role.into()],
+                ..abac::Resource::default()
+            },
+        )
+    }
+
+    /// The gate of a person moving a change onto or off a project (Go's `graphsvc.ProjectMoveGate`): the caller works
+    /// on the project and may move the change there; a platform service by itself is not asked.
+    fn may_move(&self, c: &change::Change, project: &str) -> Result<(), GraphError> {
+        if self.who.subject.starts_with("system:") {
+            return Ok(());
+        }
+        if !self.snap.may_access_project(&self.who, project) {
+            return Err(GraphError::new(
+                Kind::Forbidden,
+                format!("you may not work on project {project}: permission denied"),
+            ));
+        }
+        self.check(
+            "move",
+            abac::Resource {
+                typ: "change".into(),
+                id: c.id.0.clone(),
+                name: c.title.clone(),
+                org: c.owner_org.key.clone(),
+                project_id: project.into(),
+                ..abac::Resource::default()
+            },
+        )
+        .map_err(|e| e.context(format!("moving change {} on project {project}", c.id)))
+    }
+
     /// Refuses what the authorizer refuses (`authz.Check`).
     fn check(&self, act: &str, res: abac::Resource) -> Result<(), GraphError> {
         let (typ, id) = (res.typ.clone(), res.id.clone());
@@ -333,18 +379,7 @@ impl Readable {
     }
 }
 
-impl Caller {
-    /// The writes the access of the organisation would let through whatever the project: a platform administrator's
-    /// (ADR 0047). Any other caller is judged by the policies of the organisation, which the Go service reads.
-    fn administers(&self) -> Result<(), GraphError> {
-        if self.roles.iter().any(|r| r == ROLE_ADMIN) {
-            return Ok(());
-        }
-        Err(GraphError::unimplemented(
-            "a write authorized by the policies of the organisation: not served here yet",
-        ))
-    }
-}
+impl Caller {}
 
 /// The change a write on its impacts works on, when it is one served here: of the platform's namespaces only for a
 /// caller administering the platform.
@@ -2181,7 +2216,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let token_project = caller.project.clone();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[], async |tx, _| {
             let project_id = if token_project.is_empty() {
                 tx.structure_root(STRUCTURE_PROJECT)?
             } else {
@@ -2249,7 +2284,8 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::SetChangeDependenciesResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+            acc.allow(tx, &m.change_id, operations::CHANGE_DEPEND).await?;
             let deps: Vec<ChangeId> = m.depends_on.iter().map(|d| ChangeId(d.clone())).collect();
             let (c, seq) = tx
                 .set_change_dependencies(&ChangeId(m.change_id.clone()), &deps)
@@ -2269,7 +2305,8 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::AttachChangeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+            acc.allow(tx, &m.parent_id, operations::CHANGE_ATTACH).await?;
             let id = served_change(tx, &m.change_id).await?;
             let parent = served_change(tx, &m.parent_id).await?;
             let (c, seq) = tx.attach_change(&id, &parent).await?;
@@ -2288,8 +2325,14 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::DetachChangeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            // the operation is asked of the parent, once the change is known to have one
+            if let Some(c) = tx.store.change(&id).await?
+                && !c.parent_id.is_empty()
+            {
+                acc.allow(tx, &c.parent_id.0, operations::CHANGE_DETACH).await?;
+            }
             let (c, seq) = tx.detach_change(&id).await?;
             let mut c = convert::change(&c);
             c.seq = seq;
@@ -2302,7 +2345,7 @@ impl pb::GraphService for Graph {
     async fn move_change(&self, _ctx: &Ctx, req: Request<pb::MoveChangeRequest>) -> Answer<pb::MoveChangeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             // the project is read first, as the Go service does
             let to = tx
                 .structure_ref(STRUCTURE_PROJECT, &m.project_id)
@@ -2314,7 +2357,7 @@ impl pb::GraphService for Graph {
                 )));
             }
             let id = served_change(tx, &m.change_id).await?;
-            let (c, seq) = tx.move_change(&id, &m.project_id).await?;
+            let (c, seq) = tx.move_change(&id, &m.project_id, &|c, p| acc.may_move(c, p)).await?;
             let mut c = convert::change(&c);
             c.seq = seq;
             Ok(pb::MoveChangeResponse { change: Some(c) })
@@ -2330,7 +2373,8 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::SetChangeMethodologyResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+            acc.allow(tx, &m.change_id, operations::CHANGE_METHODOLOGY).await?;
             if m.methodology.is_empty() {
                 return Err(GraphError::invalid("a methodology is required"));
             }
@@ -2758,7 +2802,7 @@ impl pb::GraphService for Graph {
                 ))));
             }
         }
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[], async |tx, _| {
             for e in &m.entries {
                 let change = ChangeId(e.change_id.clone());
                 if tx.store.change(&change).await?.is_none() {
@@ -2873,7 +2917,7 @@ impl pb::GraphService for Graph {
             origin: m.origin.as_ref().map(convert::map).unwrap_or_default(),
             items: item_writes(m.items)?,
         };
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _| {
             let id = served_change(tx, &m.change_id).await?;
             let f = tx.open_flow(&id, r#in).await?;
             Ok(pb::OpenFlowResponse {
@@ -2888,7 +2932,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let by = caller.subject.clone();
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _| {
             let id = served_change(tx, &m.change_id).await?;
             let f = tx.decide_flow_op(&id, &m.flow, OP_ADOPT, &by).await?;
             Ok(pb::AdoptFlowResponse {
@@ -2903,7 +2947,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let by = caller.subject.clone();
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _| {
             let id = served_change(tx, &m.change_id).await?;
             let f = tx.decide_flow_op(&id, &m.flow, OP_DISCARD, &by).await?;
             Ok(pb::DiscardFlowResponse {
@@ -2919,7 +2963,7 @@ impl pb::GraphService for Graph {
         let by = caller.subject.clone();
         let m = req.into_inner();
         let named = !m.name.trim().is_empty();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _| {
             let id = if named {
                 served_change(tx, &m.change_id).await?
             } else {
@@ -2942,7 +2986,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let by = caller.subject.clone();
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _| {
             let id = served_change(tx, &m.change_id).await?;
             let active = tx.activate_option(&id, &m.option, &by).await?;
             Ok(pb::ActivateOptionResponse { active })
@@ -2960,7 +3004,7 @@ impl pb::GraphService for Graph {
         let by = caller.subject.clone();
         let m = req.into_inner();
         let commented = !m.comment.trim().is_empty();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _| {
             let id = if commented {
                 served_change(tx, &m.change_id).await?
             } else {
@@ -2983,7 +3027,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let by = caller.subject.clone();
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _| {
             let id = served_change(tx, &m.change_id).await?;
             let f = tx.select_option(&id, &m.option, &by).await?;
             Ok(pb::SelectOptionResponse {
@@ -3002,7 +3046,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let by = caller.subject.clone();
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _| {
             let id = served_change(tx, &m.change_id).await?;
             let f = tx.reject_option(&id, &m.option, &by).await?;
             Ok(pb::RejectOptionResponse {
@@ -3051,7 +3095,7 @@ impl pb::GraphService for Graph {
             choices: m.choices,
             by,
         };
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _| {
             let id = if checked {
                 served_change(tx, &m.change_id).await?
             } else {
@@ -3085,9 +3129,9 @@ impl pb::GraphService for Graph {
             by,
             role: m.role,
         };
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
-            let d = tx.rule_decision(&id, r#in).await?;
+            let d = tx.rule_decision(&id, r#in, &|c, role| acc.seat(c, role)).await?;
             Ok(pb::RuleDecisionResponse {
                 point: Some(convert::decision_point(&d)),
             })
@@ -3104,7 +3148,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let by = caller.subject.clone();
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _| {
             let id = if m.answer.trim().is_empty() {
                 ChangeId(m.change_id.clone())
             } else {
@@ -3127,7 +3171,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let by = caller.subject.clone();
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _| {
             let id = served_change(tx, &m.change_id).await?;
             let d = tx.ratify_decision(&id, &m.point, m.accept, &by, &m.comment).await?;
             Ok(pb::RatifyDecisionResponse {
@@ -3315,7 +3359,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::TransitionChangeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _| {
             let c = tx.transition_change(&m.change_id.as_str().into()).await?;
             Ok(pb::TransitionChangeResponse {
                 change: Some(convert::change(&c)),
@@ -3332,7 +3376,8 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::UpgradeChangeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+            acc.allow(tx, &m.change_id, operations::CHANGE_UPGRADE).await?;
             let c = tx.upgrade_change(&m.change_id.as_str().into()).await?;
             Ok(pb::UpgradeChangeResponse {
                 change: Some(convert::change(&c)),
@@ -3365,8 +3410,8 @@ impl pb::GraphService for Graph {
         req: Request<pb::ProposeImpactRequest>,
     ) -> Answer<pb::ProposeImpactResponse> {
         let caller = Caller::of(&req)?;
+        let catalog = self.catalog().await?;
         let m = req.into_inner();
-        caller.administers().map_err(connect_error)?;
         if m.nodes.iter().any(|cn| !cn.reviews.is_empty() || cn.superseded) {
             return Err(connect_error(GraphError::unimplemented(
                 "an impact proposed with reviews: answered by the Go service",
@@ -3401,7 +3446,18 @@ impl pb::GraphService for Graph {
                 ..ChangeImpact::default()
             })
             .collect();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+            // the gate of the access nodes, on the type of the node an impact names (the handler's)
+            for cn in &batch {
+                let mut typ = cn.typ.clone();
+                if let Some(pre) = &cn.pre
+                    && let Ok(n) = read::stored_node(tx.store, pre).await
+                {
+                    typ = n.typ;
+                }
+                acc.gate_access(&catalog, &typ)?;
+            }
+            acc.allow(tx, &m.change_id, operations::IMPACT_PROPOSE).await?;
             let id = served_change(tx, &m.change_id).await?;
             let out = tx.propose_impacts(&id, batch).await?;
             Ok(pb::ProposeImpactResponse {
@@ -4138,8 +4194,9 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::RebaseChangeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            acc.allow(tx, &m.change_id, operations::CHANGE_REBASE).await?;
             let r = tx.rebase_change(&id, false).await?;
             Ok(pb::RebaseChangeResponse {
                 parent_id: r.parent.0.clone(),
