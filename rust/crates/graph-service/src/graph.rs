@@ -856,12 +856,59 @@ fn valid_criticality(data: &serde_json::Map<String, serde_json::Value>) -> Resul
         return Ok(());
     };
     match v.as_str() {
-        Some("C1" | "C2" | "C3") => Ok(()),
+        Some(l) if criticality_rank(l) > 0 => Ok(()),
         _ => Err(GraphError::new(
             Kind::Invalid,
             format!("criticality {}: C1, C2 or C3", graph_core::write::tx::go_sprint(v)),
         )),
     }
+}
+
+/// The levels of criticality of a change, the lowest first (`criticality.Levels`, ADR 0075 §3).
+const CRITICALITY_LEVELS: [&str; 3] = ["C1", "C2", "C3"];
+
+/// The rank of a level of criticality (0: not a level; `criticality.Rank`).
+fn criticality_rank(l: &str) -> usize {
+    CRITICALITY_LEVELS.iter().position(|x| *x == l).map_or(0, |i| i + 1)
+}
+
+/// Guards the criticality an edit of the header of a change sets (Go's `checkCriticality`, ADR 0075 §3): a level, and,
+/// below the level the change holds (its default C2 when it names none), the permission `change:lower-criticality` of
+/// a caller that is not a platform service.
+async fn check_criticality(
+    tx: &mut Tx<'_, Session>,
+    acc: &Access,
+    id: &ChangeId,
+    data: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), GraphError> {
+    valid_criticality(data).map_err(|e| GraphError::invalid(e.message))?;
+    let Some(serde_json::Value::String(to)) = data.get("criticality") else {
+        return Ok(());
+    };
+    let c = tx.change_head(id).await?;
+    let from = match c
+        .data
+        .as_ref()
+        .and_then(|d| d.get("criticality"))
+        .and_then(|v| v.as_str())
+    {
+        Some(l) if criticality_rank(l) > 0 => l,
+        _ => "C2",
+    };
+    if criticality_rank(to) >= criticality_rank(from) || acc.who.subject.starts_with("system:") {
+        return Ok(());
+    }
+    acc.check(
+        "lower-criticality",
+        abac::Resource {
+            typ: "change".into(),
+            id: c.id.0.clone(),
+            name: c.title.clone(),
+            org: c.owner_org.key.clone(),
+            project_id: c.project_id.key.clone(),
+            ..abac::Resource::default()
+        },
+    )
 }
 
 /// A node as GetNode reads it: a version named is its history (no view), else the node as the view holds it.
@@ -1976,11 +2023,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let data = m.data.as_ref().map(convert::map);
-        if data.as_ref().is_some_and(|d| d.contains_key("criticality")) {
-            return Err(connect_error(GraphError::unimplemented(
-                "the criticality of a change (ADR 0075): set by the Go service",
-            )));
-        }
+        let id = ChangeId(m.id.clone());
         let patch = ChangePatch {
             title: m.title,
             intent: m.intent,
@@ -1988,8 +2031,11 @@ impl pb::GraphService for Graph {
             status: m.status,
             data,
         };
-        self.write(caller, async |tx| {
-            let w = tx.update_change(&ChangeId(m.id.clone()), patch).await?;
+        self.write_on(caller, &[m.id.as_str()], async |tx, acc| {
+            if let Some(d) = &patch.data {
+                check_criticality(tx, acc, &id, d).await?;
+            }
+            let w = tx.update_change(&id, patch).await?;
             Ok(pb::UpdateChangeResponse {
                 change: Some(whole_pb(&w)?),
             })
@@ -2002,7 +2048,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let its = item_writes(m.items)?;
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
             let written = tx.add_items(&ChangeId(m.change_id.clone()), its).await?;
             let items = written
                 .iter()

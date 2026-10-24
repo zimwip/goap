@@ -410,4 +410,10 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   as the draft's (Go's `draftReader`), the drafts' links into a node among its entering links, and a page of the fork's
   nodes the change left alone merged with the nodes it wrote, read node by node (`World::written_page`, Go's
   `world.nodes`). 4748 calls, the divergent ones the known ones.
+- The criticality of a change (ADR 0075 §3) and the risk register (ADR 0036): `UpdateChange` setting a criticality
+  checks the level and, below the one the change holds, `change:lower-criticality` of a caller that is not a platform
+  service (`check_criticality`, Go's `checkCriticality`); `AddItems` of risks, actions, hypotheses, assessments and
+  comments runs the validators `risk.Register` and `assess.Register` give them (`write::items::validate`). Both are
+  served for a person too (`Graph::write_on`). Derogations and verifications, which the criticality policy of the
+  organisation judges, stay Go's. 5063 calls, the divergent ones the known ones.
 - Not done yet: the rest of phase 4.

@@ -59,7 +59,10 @@ struct ItemJson<'a> {
 
 /// Whether the items of a type are served here: an artifact, a signal, or a type no code gives a meaning.
 pub(crate) fn served(t: &str) -> bool {
-    t == "artifact" || t == "signal" || t == TYPE_REVIEW || !items::has_code(t)
+    matches!(
+        t,
+        "artifact" | "signal" | TYPE_REVIEW | "risk" | "action" | "hypothesis" | "assessment" | "comment"
+    ) || !items::has_code(t)
 }
 
 /// The item type of the record of a review (`domain.TypeReview`).
@@ -140,13 +143,92 @@ pub(crate) fn review_entries(d: Option<&Map<String, Value>>) -> Vec<(String, Str
         .collect()
 }
 
-/// What `ChangeItem.Validate` asks of an item served here.
+/// What `ChangeItem.Validate` asks of an item served here: the core types, and the validators `risk.Register` and
+/// `assess.Register` give theirs.
 fn validate(it: &ItemWrite) -> std::result::Result<(), String> {
-    if it.typ == "signal" && it.target.is_empty() {
-        return Err("signal item requires target, the name of the signal".into());
+    let d = it.data.as_ref();
+    match it.typ.as_str() {
+        "signal" if it.target.is_empty() => Err("signal item requires target, the name of the signal".into()),
+        TYPE_REVIEW => validate_review(d),
+        "risk" | "action" => validate_record(&it.typ, d),
+        "hypothesis" if data_text(d, "key").is_empty() || data_text(d, "statement").is_empty() => {
+            Err("hypothesis item requires data.key and data.statement".into())
+        }
+        "assessment" => validate_assessment(d),
+        "comment" if raw_text(d, "about").is_empty() || raw_text(d, "text").trim().is_empty() => {
+            Err("comment item requires data.about (its subject) and data.text".into())
+        }
+        _ => Ok(()),
     }
-    if it.typ == TYPE_REVIEW {
-        return validate_review(it.data.as_ref());
+}
+
+/// A text of the data of an item as it is (`assess.str`).
+fn raw_text<'a>(d: Option<&'a Map<String, Value>>, k: &str) -> &'a str {
+    d.and_then(|d| d.get(k)).and_then(Value::as_str).unwrap_or_default()
+}
+
+/// A number of the data of an item, its fraction dropped (`risk.dataInt`, `assess.num`: 0 when it is none).
+fn data_int(d: Option<&Map<String, Value>>, k: &str) -> i64 {
+    d.and_then(|d| d.get(k)).and_then(Value::as_f64).map_or(0, |f| f as i64)
+}
+
+/// Whether the data of an item holds a value under a key (absent and null are none).
+fn data_has(d: Option<&Map<String, Value>>, k: &str) -> bool {
+    d.and_then(|d| d.get(k)).is_some_and(|v| !v.is_null())
+}
+
+/// The data of a risk or an action (`risk.validateRecord`, ADR 0036, 0131): a key and a title, a status of its kind;
+/// a probability and an impact given are 1 to 5, a kind and a purpose given are known.
+fn validate_record(typ: &str, d: Option<&Map<String, Value>>) -> std::result::Result<(), String> {
+    const RISK_STATUSES: [&str; 5] = ["open", "mitigating", "accepted", "occurred", "closed"];
+    const ACTION_STATUSES: [&str; 3] = ["open", "done", "cancelled"];
+    if data_text(d, "key").is_empty() || data_text(d, "title").is_empty() {
+        return Err(format!("{typ} item requires data.key and data.title"));
+    }
+    let status = data_text(d, "status");
+    if typ == "risk" {
+        if !status.is_empty() && !RISK_STATUSES.contains(&status) {
+            return Err(format!("risk status must be one of {}", RISK_STATUSES.join(", ")));
+        }
+        for k in ["probability", "impact"] {
+            // absent: a version of the risk that does not restate it; given, it is 1 to 5
+            if data_has(d, k) && !(1..=5).contains(&data_int(d, k)) {
+                return Err(format!("risk {k} must be between 1 and 5"));
+            }
+        }
+        return Ok(());
+    }
+    if !status.is_empty() && !ACTION_STATUSES.contains(&status) {
+        return Err(format!("action status must be one of {}", ACTION_STATUSES.join(", ")));
+    }
+    let kind = data_text(d, "kind");
+    if !kind.is_empty() && !["mitigation", "poc"].contains(&kind) {
+        return Err("action kind must be one of mitigation, poc".into());
+    }
+    let purpose = data_text(d, "purpose");
+    if !purpose.is_empty() && !["derisk", "explore"].contains(&purpose) {
+        return Err("action purpose must be one of derisk, explore".into());
+    }
+    Ok(())
+}
+
+/// The data of an assessment (`assess.validateAssessment`, ADR 0110): the subject it rates, a score of 0 to 5, a
+/// known verdict.
+fn validate_assessment(d: Option<&Map<String, Value>>) -> std::result::Result<(), String> {
+    if raw_text(d, "key").is_empty() {
+        return Err("assessment item requires data.key, the subject it rates".into());
+    }
+    if !data_has(d, "score") {
+        return Err("assessment item requires data.score".into());
+    }
+    if !(0..=5).contains(&data_int(d, "score")) {
+        return Err("assessment score must be between 0 and 5".into());
+    }
+    if !matches!(
+        raw_text(d, "verdict"),
+        "" | "clear" | "unclear" | "insufficient" | "confirmed" | "refuted"
+    ) {
+        return Err("assessment verdict must be clear, unclear, insufficient, confirmed or refuted".into());
     }
     Ok(())
 }
