@@ -174,6 +174,96 @@ impl Caller {
     }
 }
 
+/// What the organisation lets the caller of a write do (the gates of Go's handler over `authz.From`: a platform service
+/// acting for a person is itself there).
+pub(crate) struct Access {
+    who: access::Principal,
+    /// Whether the caller is a person, or a platform service acting for one.
+    person: bool,
+    snap: access::Snapshot,
+    /// The active project of the caller (its token's claim).
+    project: String,
+}
+
+impl Access {
+    async fn of(caller: &Caller, tx: &Session) -> Result<Access, GraphError> {
+        Ok(Access {
+            who: caller.reader_or_self(),
+            person: caller.person(),
+            snap: access::Snapshot::read(tx).await?,
+            project: caller.project.clone(),
+        })
+    }
+
+    /// Whether the caller administers the platform: the floor lets it write the policies (ADR 0020, 0047).
+    fn administers(&self) -> Result<bool, GraphError> {
+        let res = abac::Resource {
+            typ: access::RESOURCE_POLICY.into(),
+            org: self.who.org.clone(),
+            ..abac::Resource::default()
+        };
+        self.snap.floor(&self.who, &res, "write")
+    }
+
+    /// Refuses what the authorizer refuses (`authz.Check`).
+    fn check(&self, act: &str, res: abac::Resource) -> Result<(), GraphError> {
+        let (typ, id) = (res.typ.clone(), res.id.clone());
+        if self.snap.authorize(&self.who, res, act)? {
+            return Ok(());
+        }
+        Err(forbidden(&self.who.subject, act, &typ, &id))
+    }
+
+    /// The creation of a node of a type in a change (`checkCreate`): ABAC object:create on the project of the change,
+    /// then the gate of the access nodes.
+    fn check_create(&self, c: &change::Change, catalog: &Catalog, typ: &str) -> Result<(), GraphError> {
+        self.check(
+            "create",
+            abac::Resource {
+                typ: "object".into(),
+                name: typ.into(),
+                namespace: c.namespace.clone(),
+                org: c.owner_org.key.clone(),
+                owner: self.who.subject.clone(),
+                project_id: c.project_id.key.clone(),
+                ..abac::Resource::default()
+            },
+        )?;
+        self.gate_access(catalog, typ)
+    }
+
+    /// The gate of the access nodes (`gateAccess`, ADR 0068): a node of an `adminOnly` type is the administrators' to
+    /// write; the Assignments and the projects are also the owners' and administrators' of the caller's active
+    /// project, whose writes the validators of the organisation then judge in the Go service.
+    fn gate_access(&self, catalog: &Catalog, typ: &str) -> Result<(), GraphError> {
+        if !(catalog.admin_only(typ) || Catalog::builtin().admin_only(typ)) || self.administers()? {
+            return Ok(());
+        }
+        let res = match typ {
+            access::TYPE_ASSIGNMENT => "assignment",
+            access::TYPE_PROJECT_UNIT => "project",
+            _ => return Err(forbidden(&self.who.subject, "write", access::RESOURCE_POLICY, "")),
+        };
+        let project = if self.project.is_empty() {
+            self.snap.project_root().to_string()
+        } else {
+            self.project.clone()
+        };
+        self.check(
+            "write",
+            abac::Resource {
+                typ: res.into(),
+                org: self.who.org.clone(),
+                project_id: project,
+                ..abac::Resource::default()
+            },
+        )?;
+        Err(GraphError::unimplemented(
+            "a write of the access nodes by a project's administrator: not served here yet",
+        ))
+    }
+}
+
 /// A refusal of the authorizer (`authz.Check`: `ErrForbidden` joined with what was refused).
 fn forbidden(who: &str, act: &str, typ: &str, id: &str) -> GraphError {
     let who = if who.is_empty() { "anonymous" } else { who };
@@ -424,7 +514,7 @@ impl Graph {
             return Err(connect_error(GraphError::not_found(format!("change {id}"))));
         }
         drop(tx);
-        let stamp = Stamp(self.ensure_user(&caller).await.map_err(connect_error)?);
+        let stamp = self.ensure_caller(&caller).await;
         let tx = self
             .state
             .store
@@ -483,8 +573,20 @@ impl Graph {
             .await
             .map_err(|e| connect_error(GraphError::internal(e)))?;
         drop(tx);
-        let stamp = Stamp(self.ensure_user(&caller).await.map_err(connect_error)?);
+        let stamp = self.ensure_caller(&caller).await;
         Ok((caller, stamp))
+    }
+
+    /// Makes sure the user of the caller exists before its call (Go's `EnsureCaller` interceptor): a user that could not
+    /// be made leaves the call to go on, the next call trying again.
+    async fn ensure_caller(&self, caller: &Caller) -> Stamp {
+        match self.ensure_user(caller).await {
+            Ok(at) => Stamp(at),
+            Err(e) => {
+                tracing::warn!(subject = %caller.subject, error = %e.message, "the user of the caller could not be made");
+                Stamp(None)
+            }
+        }
     }
 
     /// Makes sure the user of a person exists (Go's `EnsureUser`, ADR 0039, 0040, 0042): the first call of a subject
@@ -573,6 +675,104 @@ impl Graph {
         F: for<'a, 'b> AsyncFnOnce(&'a mut Tx<'b, Session>) -> Result<T, GraphError>,
     {
         caller.writes().map_err(connect_error)?;
+        let administers = caller.roles.iter().any(|r| r == ROLE_ADMIN);
+        self.transact(&caller, String::new(), administers, f).await
+    }
+
+    /// Runs a write naming changes, a person's too (Go's `PersonalScope` and `EnsureCaller` interceptors, then the
+    /// handler): a change the request names that the caller may not read is not found, before its user is made sure
+    /// of; the write is then given what the organisation lets the caller do (`Access`). A person's write on a change
+    /// following a methodology is judged by the roles the methodology allows each operation (ADR 0103), which the Go
+    /// service asks of the registry; a personal change and a request at a position of a change log are the Go
+    /// service's too.
+    async fn write_on<T, F>(&self, caller: Caller, named: &[&str], f: F) -> Answer<T>
+    where
+        F: for<'a, 'b, 'c> AsyncFnOnce(&'a mut Tx<'b, Session>, &'c Access) -> Result<T, GraphError>,
+    {
+        if caller.at_least {
+            return Err(connect_error(GraphError::unimplemented(
+                "a request at a position of a change log (ADR 0153): not served here yet",
+            )));
+        }
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let ids: Vec<ChangeId> = named
+            .iter()
+            .filter(|id| uuid::Uuid::parse_str(id).is_ok())
+            .map(|id| ChangeId::from(*id))
+            .collect();
+        let heads = if ids.is_empty() {
+            HashMap::new()
+        } else {
+            change::change_heads(&tx, &ids).await.map_err(connect_error)?
+        };
+        // a change this graph does not hold may live in another graph: Go's router sends the call there
+        if ids.iter().any(|id| !heads.contains_key(id)) && other_graphs(&tx).await.map_err(connect_error)? {
+            return Err(connect_error(GraphError::unimplemented(
+                "a change another graph may hold (ADR 0154): routed by the Go service",
+            )));
+        }
+        if !caller.person() {
+            let acc = Access::of(&caller, &tx).await.map_err(connect_error)?;
+            drop(tx);
+            let administers = caller.roles.iter().any(|r| r == ROLE_ADMIN);
+            return self
+                .transact(&caller, String::new(), administers, async |tx| f(tx, &acc).await)
+                .await;
+        }
+        let readable = Readable {
+            subject: caller.subject.clone(),
+            person: Some((
+                caller.reader(),
+                access::Snapshot::read(&tx).await.map_err(connect_error)?,
+            )),
+        };
+        for id in &ids {
+            let Some(c) = heads.get(id) else { continue };
+            if !readable.may_read(c) {
+                return Err(connect_error(GraphError::not_found(format!("change {id}"))));
+            }
+            if c.is_personal() {
+                return Err(connect_error(GraphError::unimplemented(
+                    "a personal change (ADR 0037): not served here yet",
+                )));
+            }
+            if !c.methodology.is_empty() {
+                return Err(connect_error(GraphError::unimplemented(
+                    "the roles a methodology allows an operation (ADR 0103): asked of the registry by the Go service",
+                )));
+            }
+        }
+        drop(tx);
+        let stamp = self.ensure_caller(&caller).await;
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let acc = Access::of(&caller, &tx).await.map_err(connect_error)?;
+        drop(tx);
+        let administers = acc.administers().map_err(connect_error)?;
+        let end_user = if caller.subject.starts_with("system:") {
+            caller.on_behalf_of.clone()
+        } else {
+            caller.subject.clone()
+        };
+        stamp.on(self
+            .transact(&caller, end_user, administers, async |tx| f(tx, &acc).await)
+            .await)
+    }
+
+    /// Runs a write in one transaction of the store for a caller already let through.
+    async fn transact<T, F>(&self, caller: &Caller, end_user: String, administers: bool, f: F) -> Answer<T>
+    where
+        F: for<'a, 'b> AsyncFnOnce(&'a mut Tx<'b, Session>) -> Result<T, GraphError>,
+    {
         let session = self
             .state
             .store
@@ -582,11 +782,11 @@ impl Graph {
         let catalog = self.state.catalog(&session).await.map_err(connect_error)?;
         let env = Env {
             by: caller.subject.clone(),
-            end_user: String::new(),
+            end_user,
             actor: caller.subject.clone(),
             command: caller.command.clone(),
             catalog,
-            administers: caller.roles.iter().any(|r| r == ROLE_ADMIN),
+            administers,
             outbox: self.state.outbox,
         };
         let mut tx = Tx::new(&session, &env);
@@ -2625,7 +2825,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let token_project = caller.project.clone();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[], async |tx, _acc| {
             if m.owner_org == "@me" || m.owner_org.starts_with(change::USER_PREFIX) || m.owner_org.contains("/USR:") {
                 return Err(GraphError::unimplemented(
                     "a personal change (ADR 0037): not served here yet",
@@ -2797,9 +2997,10 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let by = caller.subject.clone();
-        caller.administers().map_err(connect_error)?;
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            let c = tx.change_head(&id).await?;
+            acc.check_create(&c, tx.catalog(), &m.r#type)?;
             let links = convert::link_writes(&m.links).map_err(|e| GraphError::new(Kind::Invalid, e))?;
             let cn = tx
                 .impact_node_create(
@@ -2832,9 +3033,10 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let by = caller.subject.clone();
-        caller.administers().map_err(connect_error)?;
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            let c = tx.change_head(&id).await?;
+            acc.check_create(&c, tx.catalog(), m.into.as_ref().map_or("", |i| i.r#type.as_str()))?;
             let into = create_spec(m.into.as_ref(), &m.execution, &by)?;
             let sources = m.sources.iter().map(node_name).collect();
             let out = tx
@@ -2860,9 +3062,12 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let by = caller.subject.clone();
-        caller.administers().map_err(connect_error)?;
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            let c = tx.change_head(&id).await?;
+            for i in &m.into {
+                acc.check_create(&c, tx.catalog(), &i.r#type)?;
+            }
             let into = m
                 .into
                 .iter()
@@ -2892,8 +3097,11 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let by = caller.subject.clone();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            if m.change_impact_id.is_empty() {
+                acc.gate_node(tx, &m.node_id).await?;
+            }
             let mut out = tx
                 .impact_node_checkout(
                     &id,
@@ -2923,8 +3131,11 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let by = caller.subject.clone();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
+            for n in m.nodes.iter().filter(|n| n.change_impact_id.is_empty()) {
+                acc.gate_node(tx, &n.node_id).await?;
+            }
             let nodes = m
                 .nodes
                 .iter()
@@ -2952,7 +3163,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactNodeUpdateResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
             let id = served_change(tx, &m.change_id).await?;
             let props = m.props.as_ref().map(convert::map).unwrap_or_default();
             let cn = tx
@@ -2972,7 +3183,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactNodeResolveResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
             let id = served_change(tx, &m.change_id).await?;
             let cn = tx.impact_node_resolve(&id, &m.change_impact_id, &m.execution).await?;
             Ok(pb::ImpactNodeResolveResponse {
@@ -3018,7 +3229,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactNodeCancelResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
             let id = served_change(tx, &m.change_id).await?;
             let cn = tx
                 .impact_node_cancel(&id, &m.change_impact_id, &m.flow, &m.execution)
@@ -3037,7 +3248,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::WithdrawImpactResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
             let id = served_change(tx, &m.change_id).await?;
             tx.withdraw_impacts(&id, std::slice::from_ref(&m.change_impact_id), &m.flow, &m.execution)
                 .await?;
@@ -3054,7 +3265,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::WithdrawImpactsResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
             if m.change_impact_ids.is_empty() {
                 return Err(GraphError::invalid("no change impact to withdraw"));
             }
@@ -3073,7 +3284,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactLinkCreateResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
             let id = served_change(tx, &m.change_id).await?;
             let l = convert::link_write(&m.r#type, m.to.as_ref(), &m.target, m.props.as_ref())
                 .map_err(|e| GraphError::new(Kind::Invalid, e))?;
@@ -3094,7 +3305,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactLinkUpdateResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
             let id = served_change(tx, &m.change_id).await?;
             let props = m.props.as_ref().map(convert::map);
             let link = tx
@@ -3114,7 +3325,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactLinkDeleteResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
             let id = served_change(tx, &m.change_id).await?;
             tx.impact_link_delete(&id, &m.link_id.as_str().into(), &m.flow, &m.execution)
                 .await?;
@@ -3130,7 +3341,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::CommitChangeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
             let id = served_change(tx, &m.change_id).await?;
             let b = tx.commit_change(&id, &m.baseline_name).await?;
             Ok(pb::CommitChangeResponse {
@@ -3242,7 +3453,7 @@ impl pb::GraphService for Graph {
             )));
         }
         let res = self
-            .write(caller, async |tx| {
+            .write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
                 let id = served_change(tx, &m.change_id).await?;
                 let r = match tx.merge_change(&id).await? {
                     Merge::Applied(r) => r,
@@ -3312,9 +3523,14 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let who = reviewer(&caller);
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let r = tx
-                .review_open(&m.change_id.as_str().into(), &m.flow, &m.comment, &who)
+                .review_open(
+                    &m.change_id.as_str().into(),
+                    &m.flow,
+                    &m.comment,
+                    &acc.reviewer(who.clone())?,
+                )
                 .await?;
             Ok(review_pb(&r))
         })
@@ -3340,9 +3556,9 @@ impl pb::GraphService for Graph {
                 })
                 .collect(),
         };
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let r = tx
-                .review_update(&m.change_id.as_str().into(), &m.key, edit, &who)
+                .review_update(&m.change_id.as_str().into(), &m.key, edit, &acc.reviewer(who.clone())?)
                 .await?;
             Ok(review_pb(&r))
         })
@@ -3354,8 +3570,10 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let who = reviewer(&caller);
-        self.write(caller, async |tx| {
-            let r = tx.review_submit(&m.change_id.as_str().into(), &m.key, &who).await?;
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+            let r = tx
+                .review_submit(&m.change_id.as_str().into(), &m.key, &acc.reviewer(who.clone())?)
+                .await?;
             Ok(review_pb(&r))
         })
         .await
@@ -3366,8 +3584,10 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let who = reviewer(&caller);
-        self.write(caller, async |tx| {
-            let r = tx.review_discard(&m.change_id.as_str().into(), &m.key, &who).await?;
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+            let r = tx
+                .review_discard(&m.change_id.as_str().into(), &m.key, &acc.reviewer(who.clone())?)
+                .await?;
             Ok(review_pb(&r))
         })
         .await
@@ -3381,7 +3601,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactNodeReviewResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
             let id = served_change(tx, &m.change_id).await?;
             let b = ReviewBatch {
                 id: String::new(),
@@ -3409,7 +3629,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ImpactNodeReviewBatchResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write(caller, async |tx| {
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
             let id = served_change(tx, &m.change_id).await?;
             let b = ReviewBatch {
                 by: String::new(),
@@ -3446,6 +3666,30 @@ fn reviewer(caller: &Caller) -> Actor {
     Actor {
         subject: caller.subject.clone(),
         admin: true,
+    }
+}
+
+impl Access {
+    /// The actor of a review call for the caller (`review.ActorOf`, then the floor): a platform service, or one who
+    /// administers the platform, acts on the reviews of others.
+    fn reviewer(&self, mut who: Actor) -> Result<Actor, GraphError> {
+        who.admin = !self.person || self.administers()?;
+        Ok(who)
+    }
+
+    /// The gate of the access nodes for a node a call names by its id (`gateImpact`): the type of its latest version.
+    async fn gate_node(&self, tx: &Tx<'_, Session>, node: &str) -> Result<(), GraphError> {
+        if node.is_empty() {
+            return Ok(());
+        }
+        let r = graph_core::model::NodeRef {
+            id: node.into(),
+            version: 0,
+        };
+        match read::stored_node(tx.store, &r).await {
+            Ok(n) => self.gate_access(tx.catalog(), &n.typ),
+            Err(_) => Ok(()),
+        }
     }
 }
 
@@ -3866,7 +4110,18 @@ impl Stamp {
         let Some(at) = self.0 else { return answer };
         match answer {
             Ok(mut res) => {
-                if let Ok(v) = at.parse() {
+                // the positions of the write join the user's (Go's watermark of the call)
+                let mut all: Vec<&str> = at.split(',').collect();
+                let written = res
+                    .headers
+                    .get(HEADER_CHANGE_SEQ)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or_default()
+                    .to_string();
+                all.extend(written.split(',').filter(|p| !p.is_empty()));
+                all.sort();
+                all.dedup();
+                if let Ok(v) = all.join(",").parse() {
                     res.headers.insert(HEADER_CHANGE_SEQ, v);
                 }
                 Ok(res)

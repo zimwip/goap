@@ -382,4 +382,17 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   only as `Handler.mayReadNode` says. A request naming neither a namespace nor a change, which Go's router asks the
   other graphs when this one does not find what it reads, is left to Go while other graphs are declared. 2863 calls,
   the divergent ones as above (and pages of links ordered by ids the two databases draw apart).
+- A person's writes on a change (the creations, checkouts, edits of properties and links, cancels, withdrawals,
+  reviews and review objects, commit and merge of a change following no methodology, and the creation of a change
+  that is not personal), and a platform service's acting for one: the change a request names that the caller may not
+  read is not found before its user is made sure of (`Graph::write_on`, Go's `PersonalScope` then `EnsureCaller`);
+  the gates of Go's handler are asked of the access snapshot (`Access`: `object:create` on the project of the change,
+  `checkCreate`; the access nodes the administrators', `gateAccess`, a project's administrator trying an Assignment or
+  a project left to Go; the floor for the reviews of others), the events carry the end user; a checkout of a node of
+  a project the change's does not hold is refused for every caller (`Tx::check_owned`, Go's `checkOwned`, ADR 0161
+  §3). The roles a methodology allows each operation (`OperationAuthorizer`, which Go asks of the registry), a node's
+  transition (the transition authorizer), a personal change and the writes of the platform's namespaces by one who
+  does not administer the platform stay Go's. 3174 calls, the divergent ones as above (and a list of changes the Go
+  service on the Rust schema reads stale, its directory of the organisation not told of the moves while Rust relays
+  no outbox).
 - Not done yet: the rest of phase 4.

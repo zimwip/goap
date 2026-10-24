@@ -1089,9 +1089,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 base.key, w.ns
             )));
         }
-        if !base.project.is_zero() && !w.c.project_id.is_zero() && base.project.key != w.c.project_id.key {
-            return Err(unserved("a checkout of a node of another project (ADR 0161)"));
-        }
+        self.check_owned(&w.c, &base).await?;
         let mut links = Vec::new();
         let mut copy = BaseCopy::default();
         for l in self

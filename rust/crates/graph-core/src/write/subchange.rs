@@ -106,6 +106,29 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok((b.origin == super::change::change_branch_origin(&c.id)).then_some(b))
     }
 
+    /// Refuses the check out of a stored node by a change whose project does not own it (Go's `checkOwned`, ADR 0161
+    /// §3): the node's project is the change's or one below it. The open namespaces, a node with no project or a change
+    /// with none are not judged.
+    pub(crate) async fn check_owned(&self, c: &Change, n: &crate::model::Node) -> Result<()> {
+        if crate::reach::OPEN_NAMESPACES.contains(&namespace_of(&n.namespace))
+            || n.project.is_zero()
+            || c.project_id.is_zero()
+            || n.project.key == c.project_id.key
+        {
+            return Ok(());
+        }
+        if self.within(STRUCTURE_PROJECT, &n.project, &c.project_id).await? {
+            return Ok(());
+        }
+        Err(GraphError::new(
+            crate::error::Kind::Forbidden,
+            format!(
+                "node {} belongs to project {}, which change {} (project {}) does not own: permission denied",
+                n.key, n.project.key, c.id, c.project_id.key
+            ),
+        ))
+    }
+
     /// Whether a node of a structure is the other or below it (Go's `within`): walked up its parent links on main.
     pub(crate) async fn within(&self, kind: &str, u: &Url, of: &Url) -> Result<bool> {
         let st = self

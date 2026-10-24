@@ -136,6 +136,8 @@ pub const PLATFORM_SCOPE: &str = "PLATFORM";
 pub const TYPE_USER: &str = "organisation@User";
 pub const TYPE_ASSIGNMENT: &str = "organisation@Assignment";
 pub const TYPE_PROJECT_UNIT: &str = "organisation@ProjectUnit";
+/// The resource of the rules of the organisation (`access.ResourcePolicy`).
+pub const RESOURCE_POLICY: &str = "policy";
 pub const TYPE_POLICY: &str = "organisation@Policy";
 pub const LINK_MEMBER_OF: &str = "organisation@member_of";
 pub const LINK_ASSIGNS_ORG: &str = "organisation@assigns_org";
@@ -414,6 +416,11 @@ impl Snapshot {
             .any(|r| r == ROLE_ADMIN)
     }
 
+    /// The root of the projects (`Structure(project).Root`).
+    pub fn project_root(&self) -> &str {
+        &self.projects.root
+    }
+
     pub fn has_project(&self, key: &str) -> bool {
         self.project_keys.contains(key)
     }
@@ -538,6 +545,16 @@ impl Snapshot {
             })?
         };
         rules.authorize(&sub, &res, act).map_err(GraphError::internal)
+    }
+
+    /// Whether the floor lets a principal through (`Authorizer.Floor`, ADR 0020): completed with what the organisation
+    /// knows of it, it administers the platform, whatever the stored rules say.
+    pub fn floor(&self, p: &Principal, res: &abac::Resource, act: &str) -> Result<bool> {
+        if p.subject.is_empty() {
+            return Ok(false);
+        }
+        let floor = abac::Enforcer::new(&abac::floor_policies()).map_err(GraphError::internal)?;
+        floor.authorize(&self.enrich(p), res, act).map_err(GraphError::internal)
     }
 
     /// The projects whose nodes a principal reads (`ReachableProjects`, ADR 0161 §5): those it works on, sorted.

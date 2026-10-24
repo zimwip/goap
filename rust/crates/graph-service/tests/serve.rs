@@ -69,7 +69,7 @@ async fn reads_a_service_serves_and_the_ones_it_leaves_to_go() {
     let view = serde_json::json!({"namespace": "alm", "branch": "main"});
     let (status, body) = call(&base, "GetNode", svc, serde_json::json!({"key": "R-1", "view": view})).await;
     assert_eq!((status, body["code"].as_str()), (404, Some("not_found")), "{body}");
-    // a person reads through its reach: the Go service answers it for now
+    // a person reads through its reach: a graph with no organisation yet makes no user, the read goes on
     let (status, body) = call(
         &base,
         "GetNode",
@@ -77,7 +77,7 @@ async fn reads_a_service_serves_and_the_ones_it_leaves_to_go() {
         serde_json::json!({"key": "R-1", "view": view}),
     )
     .await;
-    assert_eq!((status, body["code"].as_str()), (501, Some("unimplemented")), "{body}");
+    assert_eq!((status, body["code"].as_str()), (404, Some("not_found")), "{body}");
     // the head of main before any change: the empty state
     let (status, body) = call(
         &base,
