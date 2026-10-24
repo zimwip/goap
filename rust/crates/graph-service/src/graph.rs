@@ -50,6 +50,7 @@ use graph_store::read::{LogFilter, Session, Tag};
 use crate::{State, convert};
 
 mod import;
+mod imports;
 pub mod jobs;
 mod settings;
 
@@ -88,16 +89,22 @@ struct Caller {
 impl Caller {
     /// The caller of a request; an anonymous one is refused, as the Go service's `Identify` interceptor does.
     fn of<T>(req: &Request<T>) -> Result<Caller, ConnectError> {
-        let subject = req.header(HEADER_SUBJECT).to_string();
-        if subject.is_empty() {
+        let c = Caller::headers(req);
+        if c.subject.is_empty() {
             return Err(ConnectError::unauthenticated("the caller is not identified"));
         }
+        Ok(c)
+    }
+
+    /// The caller its headers name, anonymous when they name none (Go's `identity.Extractor`).
+    fn headers<T>(req: &Request<T>) -> Caller {
+        let subject = req.header(HEADER_SUBJECT).to_string();
         let on_behalf_of = if subject.starts_with("system:") {
             req.header(HEADER_ON_BEHALF_OF).to_string()
         } else {
             String::new()
         };
-        Ok(Caller {
+        Caller {
             subject,
             on_behalf_of,
             at_least: !req.header(HEADER_AT_LEAST).is_empty(),
@@ -111,7 +118,7 @@ impl Caller {
                 .filter(|r| !r.is_empty())
                 .map(str::to_string)
                 .collect(),
-        })
+        }
     }
 
     /// The reads served here: a platform service acting by itself reads the whole graph (no reach, ADR 0161 §5). A

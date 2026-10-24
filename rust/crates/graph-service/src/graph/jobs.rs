@@ -34,7 +34,7 @@ const DEFAULT_LEASE: Duration = Duration::from_secs(30);
 
 /// The job service as the graph calls it (`jobkit.Client`), with the services' token.
 pub struct Jobs {
-    client: jobspb::JobServiceClient,
+    pub(super) client: jobspb::JobServiceClient,
 }
 
 impl Jobs {
@@ -120,19 +120,19 @@ fn end_user(c: &Caller) -> &str {
 }
 
 /// A job to create (`jobkit.Spec`).
-struct Spec {
-    kind: &'static str,
-    label: String,
-    target: String,
-    params: serde_json::Map<String, Json>,
-    project_id: String,
-    owner_org: String,
-    input: Vec<u8>,
+pub(super) struct Spec {
+    pub(super) kind: String,
+    pub(super) label: String,
+    pub(super) target: String,
+    pub(super) params: serde_json::Map<String, Json>,
+    pub(super) project_id: String,
+    pub(super) owner_org: String,
+    pub(super) input: Vec<u8>,
 }
 
 impl Graph {
     /// The job service and the person a job of `caller` runs for (Go's `jobs` and `caller`).
-    fn job_caller(&self, caller: &Caller) -> Result<Arc<Jobs>, ConnectError> {
+    pub(super) fn job_caller(&self, caller: &Caller) -> Result<Arc<Jobs>, ConnectError> {
         let Some(jobs) = self.state.jobs.clone() else {
             return Err(ConnectError::unimplemented(
                 "no job service: this deployment runs no long job",
@@ -144,10 +144,10 @@ impl Graph {
         Ok(jobs)
     }
 
-    async fn create_job(&self, jobs: &Jobs, caller: &Caller, s: Spec) -> Result<jobspb::Job, ConnectError> {
+    pub(super) async fn create_job(&self, jobs: &Jobs, caller: &Caller, s: Spec) -> Result<jobspb::Job, ConnectError> {
         let principal = Principal::of(caller);
         let req = jobspb::CreateJobRequest {
-            kind: s.kind.into(),
+            kind: s.kind,
             label: s.label,
             target: s.target,
             params: (!s.params.is_empty()).then(|| convert::object(&s.params)),
@@ -227,7 +227,7 @@ impl Graph {
         params.insert("baselineId".into(), m.baseline_id.clone().into());
         params.insert("format".into(), format.into());
         let spec = Spec {
-            kind: KIND_EXPORT,
+            kind: KIND_EXPORT.into(),
             label,
             target: ns,
             params,
@@ -280,7 +280,7 @@ impl Graph {
         params.insert("intent".into(), m.intent.clone().into());
         params.insert("methodology".into(), m.methodology.clone().into());
         let spec = Spec {
-            kind: KIND_IMPORT,
+            kind: KIND_IMPORT.into(),
             label: format!("Import a snapshot of {} ({} nodes)", s.namespace, s.nodes.len()),
             target: s.namespace.clone(),
             params,

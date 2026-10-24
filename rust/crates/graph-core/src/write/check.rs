@@ -11,7 +11,7 @@ use super::tx::go_sprint;
 use crate::{GraphError, Result};
 
 /// What a value of an attribute must be (`domain.AttributeCheck.Check`); a code text is checked by the Go service.
-fn check_value(a: &AttributeCheck, v: Option<&Value>) -> Result<(), String> {
+pub fn check_value(a: &AttributeCheck, v: Option<&Value>) -> Result<(), String> {
     let Some(v) = v else { return Ok(()) };
     if v.is_null() || v.as_str() == Some("") {
         return Ok(());

@@ -475,4 +475,12 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   trip: a literal starting with a line break loses that break, one with an indentation hint under a sequence is Go's
   error), checked on 380 values against yaml.v3; the zip compared file by file: the exports of five namespaces as three
   callers read them are Go's. A snapshot the decoder refuses is still Go's to answer.
+- The import registry (ADR 0148) is served too (`graph/imports.rs`, Go's `graph/importsvc`): `ListImporters` lists the
+  importers of the domains in force with the values of their enum parameters, each available while a live worker of
+  the job service claims its kind (`ListWorkers`, the first worker of a kind named); `StartImport` refuses an anonymous
+  caller, a run with no project, an importer no domain declares, a caller without import:run on the namespace and the
+  project, parameters the declaration refuses (all of them, sorted), then an importer no worker implements, and
+  creates the job for the person; `BrowseImport` creates the short job of the chooser and reads it as the person until
+  it ends (15 s at most). Compared with Go's with and without `importer-git` at work: the same answers, the numbers of
+  a `Struct` aside (`2.0` for Go's `2`, as everywhere pbjson writes a double).
 - Not done yet: the rest of phase 4.

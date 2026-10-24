@@ -20,7 +20,6 @@ async fn health_and_a_method_not_written_yet() {
     for path in [
         "/goap.graph.v1.GraphService/LoadDemoData",
         "/goap.registry.v1.DomainService/ExportDomain",
-        "/goap.importer.v1.ImportService/ListImporters",
     ] {
         let res = c
             .post(format!("{base}{path}"))

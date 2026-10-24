@@ -127,8 +127,6 @@ pub struct Imports {
     pub state: Arc<State>,
 }
 
-impl importerpb::ImportService for Imports {}
-
 /// The routes of the service: its four services, `/healthz` and `/readyz` (the database answers).
 pub fn app(state: Arc<State>) -> Router {
     let ics = Interceptors::none();
