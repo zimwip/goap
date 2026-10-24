@@ -185,6 +185,11 @@ impl Session {
 
     /// The root of the tree a change belongs to, the change itself when it is not stored yet.
     async fn change_root(&self, id: &ChangeId) -> Result<String, GraphError> {
+        if uuid::Uuid::try_parse(id.as_str()).is_err() {
+            return Err(GraphError::invalid(format!(
+                "lock change {id}: invalid input syntax for type uuid: \"{id}\""
+            )));
+        }
         let q = "WITH RECURSIVE up (id, parent_id) AS (
 			SELECT id, parent_id FROM change WHERE id = $1
 			UNION ALL SELECT c.id, c.parent_id FROM change c JOIN up ON c.id = up.parent_id)

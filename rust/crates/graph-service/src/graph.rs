@@ -2837,11 +2837,6 @@ impl pb::GraphService for Graph {
         self.write_on(caller, &[], async |tx, _| {
             for e in &m.entries {
                 let change = ChangeId(e.change_id.clone());
-                if tx.store.change(&change).await?.is_none() {
-                    return Err(GraphError::unimplemented(
-                        "an entry of a change the store does not hold: not served here yet",
-                    ));
-                }
                 let at =
                     e.at.as_ref()
                         .and_then(|t| chrono::DateTime::from_timestamp(t.seconds, t.nanos as u32))
