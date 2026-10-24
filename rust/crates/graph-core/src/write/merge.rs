@@ -221,9 +221,6 @@ impl<S: WriteTx> Tx<'_, S> {
             }
             return Err(GraphError::conflict(format!("change {id} is {}", c.status)));
         }
-        if !c.lifecycle.is_empty() || !c.guardians.is_empty() {
-            return Err(unserved("the merge of a change following a lifecycle"));
-        }
         self.view(id).await?;
         let impacts = main_impacts(&self.views[id].fold.impacts);
         let own = self.own_branch(&c).await?;
@@ -241,9 +238,6 @@ impl<S: WriteTx> Tx<'_, S> {
             )));
         }
         self.check_parent_drafts(&c, &impacts).await?;
-        if !c.depends_on.is_empty() {
-            return Err(unserved("the merge of a change depending on others (ADR 0108)"));
-        }
         // the target is locked before the rebase reads its head: no other merge commits between the rebase and the
         // fast-forward
         if let Some(own) = &own {
@@ -257,6 +251,7 @@ impl<S: WriteTx> Tx<'_, S> {
             ))));
         }
         let mut c = self.change_head(id).await?;
+        self.check_merge(&c).await?;
         let Some(mut own) = self.own_branch(&c).await? else {
             return Err(GraphError::invalid(format!("change {id} has no branch of its own")));
         };
@@ -324,6 +319,28 @@ impl<S: WriteTx> Tx<'_, S> {
         self.raise(CHANGE_APPLIED, &c, Some(&res), "", &[]);
         self.put_change(&c).await?;
         self.change_read(c).await.map(|r| Merge::Applied(Box::new(r)))
+    }
+
+    /// What makes the work of a change whole before its merge (Go's `checkMerge`, ADR 0146): the changes it depends on
+    /// reached the branch it merges into (ADR 0108), then its lifecycle, which no registry resolves here.
+    async fn check_merge(&self, c: &Change) -> Result<()> {
+        let wait: Vec<String> = crate::dependency::dependencies_of(self.store, c)
+            .await?
+            .into_iter()
+            .filter(|d| !d.satisfied)
+            .map(|d| format!("{} ({}): {}", d.id, d.title, d.reason))
+            .collect();
+        if !wait.is_empty() {
+            return Err(GraphError::conflict(format!(
+                "change {} depends on changes whose work has not reached the branch it merges into: {}",
+                c.id,
+                wait.join("; ")
+            )));
+        }
+        if !c.lifecycle.is_empty() {
+            return Err(super::update::unresolved_lifecycle(c));
+        }
+        Ok(())
     }
 
     /// What a fast-forward moves (Go's `fastForward`): the versions the branch holds that the target does not, the

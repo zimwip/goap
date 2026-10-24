@@ -401,12 +401,25 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(c)
     }
 
+    /// A change whose state moved along its lifecycle is worked on by the Go service, which freezes what the moves
+    /// say (ADR 0058, 0132); with no registry its guardians ask nothing, and its lifecycle, never moved, freezes nothing.
+    async fn check_unmoved(&self, c: &Change) -> Result<()> {
+        if !c.lifecycle.is_empty()
+            && !self
+                .store
+                .log(&c.id, 0, &[&format!("{LOG_FACT}.transition")])
+                .await?
+                .is_empty()
+        {
+            return Err(unserved("a change whose lifecycle moved (ADR 0058)"));
+        }
+        Ok(())
+    }
+
     /// Opens an operation on a change, on a flow (Go's `workOn`): none names the active option, "main" the main flow.
     pub async fn work_on(&mut self, id: &ChangeId, flow: &str) -> Result<Work> {
         let c = self.change_open(id).await?;
-        if !c.lifecycle.is_empty() || !c.guardians.is_empty() {
-            return Err(unserved("a change following a lifecycle (ADR 0058)"));
-        }
+        self.check_unmoved(&c).await?;
         self.view(id).await?;
         let c = self.ensure_own_branch(c).await?;
         let v = &self.views[id];
@@ -631,9 +644,7 @@ impl<S: WriteTx> Tx<'_, S> {
             }
         }
         let c = self.change_open(id).await?;
-        if !c.lifecycle.is_empty() || !c.guardians.is_empty() {
-            return Err(unserved("a change following a lifecycle (ADR 0058)"));
-        }
+        self.check_unmoved(&c).await?;
         self.view(id).await?;
         for cn in batch.iter_mut() {
             if cn.id.is_empty() {

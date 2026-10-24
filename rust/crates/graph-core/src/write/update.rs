@@ -164,7 +164,8 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     /// Moves the state of a change along a transition of its lifecycle (Go's `TransitionChange`, ADR 0058): with no
-    /// registry, no change follows a lifecycle, so the move is refused once the change is known to be open.
+    /// registry, nothing resolves the lifecycle a change follows, so the move is refused once the change is known to be
+    /// open.
     pub async fn transition_change(&mut self, id: &ChangeId) -> Result<Change> {
         let c = self.change_head(id).await?;
         if matches!(c.status.as_str(), "applied" | "abandoned" | "committed") {
@@ -173,9 +174,7 @@ impl<S: WriteTx> Tx<'_, S> {
         if c.lifecycle.is_empty() {
             return Err(GraphError::invalid(format!("change {id} follows no lifecycle")));
         }
-        Err(GraphError::unimplemented(
-            "a change following a lifecycle (ADR 0058): moved by the Go service",
-        ))
+        Err(unresolved_lifecycle(&c))
     }
 
     /// Moves an open change to another version of its methodology (Go's `UpgradeChange`, ADR 0113): with no registry
@@ -190,4 +189,13 @@ impl<S: WriteTx> Tx<'_, S> {
             c.methodology
         )))
     }
+}
+
+/// The refusal of a change following a lifecycle, which no registry resolves here (Go's `changeLifecycle` with no
+/// `Lifecycles`).
+pub(super) fn unresolved_lifecycle(c: &Change) -> GraphError {
+    GraphError::invalid(format!(
+        "change {} follows lifecycle {}, which nothing resolves",
+        c.id, c.lifecycle
+    ))
 }
