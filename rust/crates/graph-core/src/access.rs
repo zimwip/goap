@@ -139,6 +139,7 @@ pub const TYPE_PROJECT_UNIT: &str = "organisation@ProjectUnit";
 /// The resource of the rules of the organisation (`access.ResourcePolicy`).
 pub const RESOURCE_POLICY: &str = "policy";
 pub const TYPE_POLICY: &str = "organisation@Policy";
+pub const TYPE_CRITICALITY_POLICY: &str = "organisation@CriticalityPolicy";
 pub const LINK_MEMBER_OF: &str = "organisation@member_of";
 pub const LINK_ASSIGNS_ORG: &str = "organisation@assigns_org";
 pub const LINK_ASSIGNS_PROJECT: &str = "organisation@assigns_project";
@@ -206,6 +207,8 @@ pub struct Snapshot {
     org_root: String,
     /// The rules stored as `Policy` nodes, a malformed one left out (`PolicyFromProps`).
     policies: Vec<abac::Policy>,
+    /// The policies of the criticality levels, by the unit owning them and the level (`readCriticality`).
+    criticality: HashMap<String, HashMap<&'static str, crate::criticality::Policy>>,
 }
 
 fn flag(props: &crate::model::Props, k: &str) -> bool {
@@ -335,6 +338,25 @@ impl Snapshot {
                 }
             }
         }
+        // a policy of a level belongs to the unit owning it, the first of a unit and a level standing
+        let units: std::collections::HashSet<_> = nodes
+            .iter()
+            .filter(|n| cat.is_a(&n.typ, &org.typ))
+            .map(|n| n.key.as_str())
+            .collect();
+        for n in nodes.iter().filter(|n| n.typ == TYPE_CRITICALITY_POLICY) {
+            let unit = n.owner.key.as_str();
+            if !units.contains(unit) {
+                continue;
+            }
+            if let Ok((level, p)) = crate::criticality::Policy::from_props(n.props.as_ref()) {
+                s.criticality
+                    .entry(unit.to_string())
+                    .or_default()
+                    .entry(level)
+                    .or_insert(p);
+            }
+        }
         for mut a in assigned.into_values() {
             if a.project.is_empty() {
                 (a.owner, a.admin) = (false, false);
@@ -368,6 +390,17 @@ impl Snapshot {
         let held: Vec<NodeRef> = nodes.iter().map(|n| n.node_ref()).collect();
         let links = tx.links_from(&held, None).await?;
         Ok(Snapshot::build(&nodes, &links))
+    }
+
+    /// What a level of criticality requires of the changes held by a unit: the policy of the nearest unit of its chain
+    /// holding one for the level, else the compiled-in table (`Snapshot.CriticalityPolicy`).
+    pub fn criticality_policy(&self, unit: &str, level: &str) -> crate::criticality::Policy {
+        self.units
+            .chain(unit)
+            .iter()
+            .find_map(|u| self.criticality.get(u).and_then(|m| m.get(level)))
+            .cloned()
+            .unwrap_or_else(|| crate::criticality::Policy::default_of(level))
     }
 
     /// The units an Assignment names to grant a subject roles: its user, then its unit and the unit's ancestors

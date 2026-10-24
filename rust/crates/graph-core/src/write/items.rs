@@ -1,13 +1,13 @@
 //! The facts a change's work writes on its blackboard (Go's `Graph.AddItems`): items of the log of the change, one
-//! entry each (`domain.FactEntry`). The items a use case gives a meaning (flows, decisions, transitions, risks...) are
-//! the Go service's; artifacts, signals, the reviews being built up and the types no code reads are served here.
+//! entry each (`domain.FactEntry`). The flows, decision points and transitions an operation of their own records, a
+//! decision is the Go service's; the other types are served here, validated as their use cases register them.
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
 use super::{check, tx::Tx, work::fold_change};
 use crate::{
-    GraphError, Result, gojson,
+    GraphError, Result, criticality, gojson,
     impact::{LOG_FACT, LogEntry},
     items,
     model::ChangeId,
@@ -29,6 +29,8 @@ pub struct ItemWrite {
     pub derived_from: Vec<String>,
     pub supersedes: Vec<String>,
     pub execution: String,
+    /// When its writer says it was made: only the policy of a derogation reads it (the log stamps the item itself).
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 /// An item as Go marshals a `domain.ChangeItem` with no flow event, decision event, decision nor recipient.
@@ -61,7 +63,16 @@ struct ItemJson<'a> {
 pub(crate) fn served(t: &str) -> bool {
     matches!(
         t,
-        "artifact" | "signal" | TYPE_REVIEW | "risk" | "action" | "hypothesis" | "assessment" | "comment"
+        "artifact"
+            | "signal"
+            | TYPE_REVIEW
+            | "risk"
+            | "action"
+            | "derogation"
+            | "hypothesis"
+            | "assessment"
+            | "comment"
+            | "verification"
     ) || !items::has_code(t)
 }
 
@@ -143,14 +154,16 @@ pub(crate) fn review_entries(d: Option<&Map<String, Value>>) -> Vec<(String, Str
         .collect()
 }
 
-/// What `ChangeItem.Validate` asks of an item served here: the core types, and the validators `risk.Register` and
-/// `assess.Register` give theirs.
-fn validate(it: &ItemWrite) -> std::result::Result<(), String> {
+/// What `ChangeItem.Validate` asks of an item served here: the core types, and the validators `risk.Register`,
+/// `assess.Register` and `verify.Register` give theirs.
+fn validate(it: &ItemWrite, now: DateTime<Utc>) -> std::result::Result<(), String> {
     let d = it.data.as_ref();
     match it.typ.as_str() {
         "signal" if it.target.is_empty() => Err("signal item requires target, the name of the signal".into()),
         TYPE_REVIEW => validate_review(d),
         "risk" | "action" => validate_record(&it.typ, d),
+        "derogation" => validate_derogation(d, now),
+        "verification" => validate_verification(d),
         "hypothesis" if data_text(d, "key").is_empty() || data_text(d, "statement").is_empty() => {
             Err("hypothesis item requires data.key and data.statement".into())
         }
@@ -233,6 +246,55 @@ fn validate_assessment(d: Option<&Map<String, Value>>) -> std::result::Result<()
     Ok(())
 }
 
+/// The data of a derogation (`risk.validateDerogation`, ADR 0075): what it waives and why, its signatory and its
+/// expiry; an open version expires in the future (a closing one may carry the expiry that passed).
+fn validate_derogation(d: Option<&Map<String, Value>>, now: DateTime<Utc>) -> std::result::Result<(), String> {
+    for f in ["key", "rule", "target", "reason", "signatory", "expires"] {
+        if data_text(d, f).is_empty() {
+            return Err(format!("derogation item requires data.{f}"));
+        }
+    }
+    let status = data_text(d, "status");
+    if !matches!(status, "" | "open" | "closed") {
+        return Err("derogation status must be one of open, closed".into());
+    }
+    let exp = criticality::parse_expiry(data_text(d, "expires")).map_err(|e| format!("derogation: {e}"))?;
+    if status != "closed" && exp <= now {
+        return Err(format!(
+            "derogation expires in the past ({})",
+            criticality::rfc3339(exp)
+        ));
+    }
+    Ok(())
+}
+
+/// The data of a verification of an effect (`verify.validate`, ADR 0075): a known state, the action it is about, the
+/// derogation a reserve stands on, the impact a verdict judges.
+fn validate_verification(d: Option<&Map<String, Value>>) -> std::result::Result<(), String> {
+    let state = raw_text(d, "state");
+    if !matches!(
+        state,
+        "produced" | "verified" | "accepted" | "accepted_with_reserve" | "rejected"
+    ) {
+        return Err(format!(
+            "verification item: unknown state {}",
+            serde_json::to_string(state).unwrap_or_default()
+        ));
+    }
+    if raw_text(d, "action").is_empty() {
+        return Err("verification item requires data.action".into());
+    }
+    if state == "accepted_with_reserve" && raw_text(d, "derogation").is_empty() {
+        return Err(format!(
+            "verification item {state} requires data.derogation: no reserve without a derogation"
+        ));
+    }
+    if state != "produced" && raw_text(d, "impact").is_empty() {
+        return Err(format!("verification item {state} requires data.impact"));
+    }
+    Ok(())
+}
+
 impl<S: WriteTx> Tx<'_, S> {
     /// Checks an item and appends it to the log of a change (Go's `checkItem`, then `putItem`): its status the given
     /// default when it names none. The item comes back as written.
@@ -244,7 +306,7 @@ impl<S: WriteTx> Tx<'_, S> {
         };
         let at = self.env.now();
         let data = it.data.as_ref().filter(|m| !m.is_empty());
-        let problem = match validate(it) {
+        let problem = match validate(it, at) {
             Err(e) => Err(e),
             Ok(()) => check::item_data(self.catalog(), &it.typ, data)?,
         };

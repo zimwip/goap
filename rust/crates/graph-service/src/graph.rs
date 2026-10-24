@@ -387,6 +387,9 @@ fn item_writes(items: Vec<pb::ChangeItem>) -> Result<Vec<ItemWrite>, ConnectErro
                 derived_from: it.derived_from,
                 supersedes: it.supersedes,
                 execution: it.execution,
+                created_at: it
+                    .created_at
+                    .and_then(|t| chrono::DateTime::from_timestamp(t.seconds, t.nanos.max(0) as u32)),
             })
         })
         .collect()
@@ -909,6 +912,74 @@ async fn check_criticality(
             ..abac::Resource::default()
         },
     )
+}
+
+/// What the policy of the organisation and the rights of the writer ask of the items about to be written (Go's
+/// `authorizeItems`, before the transaction of `AddItems`, ADR 0075): for each item in turn, the policy of the level of
+/// the change (`criticality.ItemPolicy`: the oracle of a verification, the lifetime of a derogation), then, for a
+/// derogation written by a person, `derogation:sign`, its signatory the writer, and the role its level asks of a
+/// signatory (`graphsvc.ItemAuthorizer`).
+async fn authorize_items(
+    tx: &mut Tx<'_, Session>,
+    acc: &Access,
+    system: bool,
+    id: &ChangeId,
+    its: &[ItemWrite],
+) -> Result<(), GraphError> {
+    use graph_core::criticality;
+    if !its
+        .iter()
+        .any(|it| matches!(it.typ.as_str(), "verification" | "derogation"))
+    {
+        return Ok(());
+    }
+    let c = tx.change_head(id).await?;
+    let level = criticality::of(c.data.as_ref());
+    let policy = |l: &str| acc.snap.criticality_policy(&c.owner_org.key, l);
+    let resource = |roles: Vec<String>| abac::Resource {
+        typ: "derogation".into(),
+        id: c.id.0.clone(),
+        name: c.title.clone(),
+        org: c.owner_org.key.clone(),
+        project_id: c.project_id.key.clone(),
+        roles,
+        ..abac::Resource::default()
+    };
+    let now = chrono::Utc::now();
+    for it in its {
+        let d = it.data.as_ref();
+        criticality::item_policy(level, policy, &it.typ, d, it.created_at.unwrap_or(now))
+            .map_err(GraphError::invalid)?;
+        if it.typ != "derogation" || system {
+            continue;
+        }
+        acc.check("sign", resource(Vec::new()))?;
+        let text = |k: &str| d.and_then(|d| d.get(k)).and_then(|v| v.as_str()).unwrap_or_default();
+        let signatory = text("signatory");
+        if signatory != acc.who.subject {
+            return Err(GraphError::new(
+                Kind::Forbidden,
+                format!(
+                    "signatory {} must be the one who writes it ({}): permission denied",
+                    serde_json::to_string(signatory).unwrap_or_default(),
+                    acc.who.subject
+                ),
+            ));
+        }
+        let role = policy(level).signatory_role;
+        if text("status") != "closed" && !role.is_empty() {
+            acc.check("sign-role", resource(vec![role.clone()])).map_err(|e| {
+                GraphError::new(
+                    Kind::Forbidden,
+                    format!(
+                        "a derogation on a {level} change is signed by the role {role}: {}",
+                        e.message
+                    ),
+                )
+            })?;
+        }
+    }
+    Ok(())
 }
 
 /// A node as GetNode reads it: a version named is its history (no view), else the node as the view holds it.
@@ -2048,7 +2119,9 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
         let its = item_writes(m.items)?;
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, _acc| {
+        let system = caller.subject.starts_with("system:");
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+            authorize_items(tx, acc, system, &ChangeId(m.change_id.clone()), &its).await?;
             let written = tx.add_items(&ChangeId(m.change_id.clone()), its).await?;
             let items = written
                 .iter()

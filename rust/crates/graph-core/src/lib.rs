@@ -3,6 +3,7 @@
 //! SQL dialect, `graph-service` answers the RPCs from what the reads return.
 pub mod access;
 pub mod change;
+pub mod criticality;
 pub mod decision;
 pub mod dependency;
 pub mod draftmerge;

@@ -414,6 +414,12 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   checks the level and, below the one the change holds, `change:lower-criticality` of a caller that is not a platform
   service (`check_criticality`, Go's `checkCriticality`); `AddItems` of risks, actions, hypotheses, assessments and
   comments runs the validators `risk.Register` and `assess.Register` give them (`write::items::validate`). Both are
-  served for a person too (`Graph::write_on`). Derogations and verifications, which the criticality policy of the
-  organisation judges, stay Go's. 5063 calls, the divergent ones the known ones.
+  served for a person too (`Graph::write_on`). 5063 calls, the divergent ones the known ones.
+- Derogations and verifications (ADR 0075): `AddItems` asks, before its transaction and item by item, the policy of
+  the change's level (`graph_core::criticality`: the oracle a verification of an effect names, the lifetime of a
+  derogation; `item_policy`, Go's `criticality.ItemPolicy`), resolved along the unit chain from the
+  `organisation@CriticalityPolicy` nodes of the access snapshot, else the compiled-in table
+  (`Snapshot::criticality_policy`), then, for a derogation a person writes, `derogation:sign`, its signatory the writer
+  and the role the level asks of a signatory (`authorize_items`, Go's `graphsvc.ItemAuthorizer`); the items are
+  validated as `risk.Register` and `verify.Register` do. 5460 calls, the divergent ones the known ones.
 - Not done yet: the rest of phase 4.
