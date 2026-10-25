@@ -116,7 +116,7 @@ footer { font-size: 13px; color: var(--muted); }
     <div class="stack">
       <div class="tier">
         <div class="mod m-platform" data-module="platform"><h3>platform <span>composition</span></h3>
-          <p>Every binary (<code>cmd/*</code>, <code>goap-dev</code> first), the methodology registry, model gateway, conversations and assistant, event stream, dev seeds, and the tests that need two modules.</p>
+          <p>Every binary (<code>cmd/*</code>), the methodology registry, model gateway, conversations and assistant, event stream, dev seeds, and the tests that need two modules.</p>
           <div class="pk">cmd/* · registrysvc · modelgw · convsvc · assistantsvc · eventsvc · jobsvc · prefssvc · devseed · e2e/* · layering</div></div>
       </div>
       <div class="arrowrow">↓ may use any module below</div>
@@ -305,9 +305,8 @@ footer { font-size: 13px; color: var(--muted); }
         <tr data-binary="connector-workspace"><td><code>connector-workspace</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>workspace of a change (git, commands); standalone, not in compose</td></tr>
         <tr data-binary="connector-claude-coding-agent"><td><code>connector-claude-coding-agent</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>Claude Code sessions; their model calls go to modelgw <code>/anthropic</code> with a token the hub mints; standalone, not in compose</td></tr>
         <tr data-binary="goap-runner"><td><code>goap-runner</code></td><td><span class="chip m-engine">engine</span></td><td class="num">—</td><td>sandbox image the engine runs scripts in (make runner-image)</td></tr>
-        <tr data-binary="goap-dev"><td><code>goap-dev</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>every service in one process on SQLite: make dev</td></tr>
         <tr data-binary="goap-eval"><td><code>goap-eval</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>offline evaluation CLI (make eval)</td></tr>
-        <tr data-binary="goap-local"><td><code>goap-local</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>the compose stack without Docker: one process per binary, an embedded NATS (JetStream), the graph (Rust or Go) and every service on SQLite files of <code>.goap/local</code>, restarted when they stop, on the compose host ports; <code>bench</code> the graph alone behind goap-proxy loaded by goap-bench, <code>test</code> the end-to-end test of <code>platform/e2e/stack</code> (make local, local-test, local-bench)</td></tr>
+        <tr data-binary="goap-local"><td><code>goap-local</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>the compose stack without Docker: one process per binary, an embedded NATS (JetStream), the graph (Rust or Go) and every service on SQLite files of <code>.goap/local</code>, restarted when they stop, on the compose host ports; <code>-watch</code> rebuilds the binaries a change of the sources touches and restarts their services, <code>-web</code> runs Vite, Ctrl-C stops every process group; <code>bench</code> the graph alone behind goap-proxy loaded by goap-bench, <code>test</code> the end-to-end test of <code>platform/e2e/stack</code> (make dev, local, local-test, local-bench)</td></tr>
         <tr data-binary="goap-bench"><td><code>goap-bench</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>load generator of the performance stack: writes through the graph's API, measured in Grafana (make perf, <code>deploy/compose/perf.yml</code>)</td></tr>
         <tr data-binary="goap-gitimport"><td><code>goap-gitimport</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>git importer: one change per commit of a repository, directories and files as nodes of the <code>code</code> domain, written through the graph's API (ADR 0147)</td></tr>
         <tr data-binary="goap-graph-rs"><td><code>goap-graph-rs</code></td><td><span class="chip m-graph">rust</span></td><td class="num">:8080</td><td>the graph service in Rust (<code>rust/</code>, ADR 0163), image <code>goap/rust:dev</code>: the platform graph, its bootstrap and the content graph of the compose stack (<code>graph</code>, <code>graph-bootstrap</code>, <code>graph-content</code>); <code>graph-rs</code> of the performance stack (<code>deploy/compose/perf.rust.yml</code>, :8384)</td></tr>
@@ -332,8 +331,8 @@ footer { font-size: 13px; color: var(--muted); }
 
   <section class="two">
     <div class="note">
-      <h3>make dev: one process</h3>
-      <p><code>goap-dev</code> composes every service in process on SQLite (<code>.goap/goap.db</code>): no NATS, no Docker. Air rebuilds it on each Go change and Vite serves the IDE.</p>
+      <h3>make dev: the local stack</h3>
+      <p><code>goap-local -watch -web</code> runs one process per binary, as compose does, on SQLite files of <code>.goap/local</code> with an embedded NATS: no Docker. A change of the sources rebuilds the binaries it touches (Go and Rust) and restarts their services; Vite serves the IDE.</p>
       <pre>make dev               # :5173 IDE, :8080 API
 .\make.ps1 dev         # Windows</pre>
     </div>

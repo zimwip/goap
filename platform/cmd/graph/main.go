@@ -257,8 +257,7 @@ func main() {
 	registry := registrysvc.NewClient(&http.Client{Timeout: 30 * time.Second}, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), telemetry.ClientOptions()...)
 	g.OperationAuthorizer = graphsvc.OperationAuthorizer(authorizer, registryOperationRoles(registry))
 	// SubChangeValidator and Lifecycles, the guardian of the changes (ADR 0058, 0102), need the registry service itself
-	// (its methodology store): only goap-dev, which holds it in process, wires them; the registry client has no RPC for
-	// them, so this graph merges by the committable states of the domains only
+	// (its methodology store), which no composition holds in process any more; the registry client has no RPC for them, so this graph merges by the committable states of the domains only
 	// the built-in domains (organisation, platform) are always there; the demo seed needs alm. GOAP_GRAPH_SEED=dev seeds
 	// the development data (the document-repository MCP), =demo the demo data too; otherwise an administrator loads the
 	// demo from the settings (LoadDemoData)

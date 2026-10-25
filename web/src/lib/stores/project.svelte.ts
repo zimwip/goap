@@ -2,7 +2,7 @@
 // between the live indicator and the notification bell. None is selected at first: the user (or the assistant, through
 // select_project) picks the project they work in; the root project is a project like the others, picked by its key. Switching it reissues the caller's token
 // (api.switchProject) so every call from here on carries it — best effort: a deployment with no token
-// (AuthMode "none", e.g. goap-dev with GOAP_AUTH_MODE=none) has nothing to reissue, so the selection stays local-display only there.
+// (AuthMode "none", e.g. the local stack with GOAP_AUTH_MODE=none) has nothing to reissue, so the selection stays local-display only there.
 import { headGraph } from '../graphEdit';
 import { errorMessage, getToken, nodeTitle, switchProject as reissueToken, type GraphNode } from '../api';
 import { applicableMethodologies } from '../projectRoles';

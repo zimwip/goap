@@ -1,4 +1,4 @@
-# Offline evaluation cases (ADR 0099): run with `make eval` (or `goap-eval evals/`) against a running goap-dev or
+# Offline evaluation cases (ADR 0099): run with `make eval` (or `goap-eval evals/`) against a running
 # gateway, with GOAP_TOKEN set to the token of the user the calls are made as.
 cases:
   - name: register-a-read-document

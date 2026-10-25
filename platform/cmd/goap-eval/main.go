@@ -29,7 +29,7 @@ func main() {
 func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("goap-eval", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	url := fs.String("url", envOr("GOAP_EVAL_URL", "http://localhost:8080"), "base URL of the model gateway (goap-dev, the gateway or modelgw)")
+	url := fs.String("url", envOr("GOAP_EVAL_URL", "http://localhost:8080"), "base URL of the model gateway (the gateway or modelgw)")
 	token := fs.String("token", os.Getenv("GOAP_TOKEN"), "bearer token of the user the calls are made as (GOAP_TOKEN)")
 	model := fs.String("model", "", "alias or provider/model overriding the model of every case")
 	runs := fs.Int("runs", 0, "runs of every case, overriding theirs")

@@ -194,7 +194,7 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 		return common(g.port, map[string]string{
 			"GOAP_SQLITE_PATH":   g.db,
 			"GOAP_DOMAINS_DIR":   filepath.Join(cfg.root, "domains"),
-			"GOAP_GRAPH_SEED":    "dev",
+			"GOAP_GRAPH_SEED":    envOr("GOAP_GRAPH_SEED", "dev"),
 			"GOAP_GRAPH_SOURCES": sources,
 			"GOAP_JOBS_URL":      url(portJobs),
 			"GOAP_JOB_TOKEN":     sec.jobs,
@@ -212,15 +212,20 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 			return err
 		}
 	}
+	var running []service // the services kept running, for -watch
 	for _, g := range graphs {
-		if err := sup.start(ctx, service{name: "graph-" + g.name, bin: g.bin, port: g.port, ready: "/readyz", env: platformGraph(g)}); err != nil {
+		svc := service{name: "graph-" + g.name, bin: g.bin, port: g.port, ready: "/readyz", env: platformGraph(g)}
+		if err := sup.start(ctx, svc); err != nil {
 			return err
 		}
+		running = append(running, svc)
 	}
 	if cfg.proxy != "" {
-		if err := sup.start(ctx, cfg.proxyService(graphs)); err != nil {
+		svc := cfg.proxyService(graphs)
+		if err := sup.start(ctx, svc); err != nil {
 			return err
 		}
+		running = append(running, svc)
 	}
 	services := []service{}
 	if sources != "" {
@@ -288,6 +293,19 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 			"GOAP_JOBS_URL":          url(portJobs),
 		})},
 	)
+	if cfg.web {
+		web := filepath.Join(cfg.root, "web")
+		if err := sup.start(ctx, service{name: "npm-install", path: "npm", dir: web, once: true,
+			args: []string{"install", "--no-audit", "--no-fund"}}); err != nil {
+			// an install that failed late (a package's own download) may still leave what vite needs
+			if _, serr := os.Stat(filepath.Join(web, "node_modules", ".bin", "vite")); serr != nil {
+				return err
+			}
+			log.Warn("npm install failed, the web runs on the modules in place", "err", err)
+		}
+		services = append(services, service{name: "web", path: "npm", dir: web, args: []string{"run", "dev"},
+			env: map[string]string{"GOAP_GATEWAY_URL": url(portGateway)}})
+	}
 	var started []service
 	for _, svc := range services {
 		if cfg.skip[svc.name] {
@@ -299,6 +317,7 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 		}
 		started = append(started, svc)
 	}
+	running = append(running, started...)
 	// every service answers its readiness once the ones it calls do: waited for together
 	if err := waitAll(ctx, started); err != nil {
 		if ready != nil {
@@ -306,7 +325,14 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 		}
 		log.Warn("not every service is ready", "err", err)
 	} else {
-		log.Info("platform ready", "gateway", url(portGateway), "web", "cd web && npm run dev (http://localhost:5173)")
+		web := "make dev-web (http://localhost:5173)"
+		if cfg.web {
+			web = "http://localhost:5173"
+		}
+		log.Info("platform ready", "gateway", url(portGateway), "web", web)
+	}
+	if cfg.watch {
+		go watch(ctx, cfg, sup, log, running)
 	}
 	if ready != nil {
 		// the platform runs while ready does (goap-local test), then stops

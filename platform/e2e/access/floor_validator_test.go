@@ -16,7 +16,7 @@ import (
 )
 
 // floorGraph returns a graph judged by the domains of the repository, with the admin-floor validator wired
-// the way cmd/goap-dev and cmd/graph wire it (ADR 0048).
+// the way cmd/graph wires it (ADR 0048).
 func floorGraph(t *testing.T) *graph.Graph {
 	t.Helper()
 	ds, err := def.LoadDomains("../../../domains")
@@ -168,7 +168,7 @@ func TestAdminFloorCountsWhatEnrichGrants(t *testing.T) {
 }
 
 // Before any user there is no administrator to lose: an organisation written then (the demo seeded at start,
-// GOAP_DEV_DEMO=1) is not refused, and the first user to sign in still becomes the administrator (ADR 0040).
+// GOAP_GRAPH_SEED=demo) is not refused, and the first user to sign in still becomes the administrator (ADR 0040).
 func TestAdminFloorAcceptsAGraphWithNoUser(t *testing.T) {
 	ctx := context.Background()
 	g := floorGraph(t)

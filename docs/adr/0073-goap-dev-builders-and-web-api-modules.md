@@ -1,6 +1,6 @@
 # ADR 0073 — `goap-dev` as builders, the web API client as modules
 
-**Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0053, 0070, 0071.
+**Status**: accepted, implemented; the `goap-dev` builders removed by ADR 0164 (the web API modules stand) · **Date**: 2026-10 · Builds on ADR 0053, 0070, 0071.
 
 ## Context
 

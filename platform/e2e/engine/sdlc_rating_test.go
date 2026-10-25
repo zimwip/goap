@@ -17,7 +17,7 @@ import (
 )
 
 // The description of a new sdlc change is rated once, by nobody's request but its creation: no run starts again on
-// its own (wired like goap-dev: the graph's events and the process events reach the triggers). A rating that misses
+// its own (wired in process: the graph's events and the process events reach the triggers). A rating that misses
 // its effect (here, about the wrong subject) is not tried again by itself (ADR 0112 §6): the rating falls to a person.
 func TestSDLCDescriptionIsRatedOnce(t *testing.T) {
 	for _, key := range []string{"description", "intent"} {

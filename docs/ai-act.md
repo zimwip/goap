@@ -63,7 +63,7 @@ of a change carries the whole story. Keep that mark when you publish content goa
   `GOAP_LLM_CALL_RETENTION_DAYS` at 183 or more (the default) and `GOAP_LLM_CALL_PROMPTS` on (the default); the gateway
   warns at start otherwise.
 - If you give units the Claude coding agent (ADR 0123), set `GOAP_MODEL_PROXY_SECRET` on the gateway and the MCP hub,
-  and `GOAP_MODEL_PROXY_URL` on the hub (`goap-dev` does both): its sessions then call the model through the gateway and
+  and `GOAP_MODEL_PROXY_URL` on the hub (the local stack, `make dev`, does both): its sessions then call the model through the gateway and
   each call is a ledger row. Without them the sessions use the adapter's own key and their calls are logged nowhere in
   goap.
 - Export a change's provenance (Audit pane, *Export PROV-O*) to keep it outside goap.

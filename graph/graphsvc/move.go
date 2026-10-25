@@ -12,7 +12,7 @@ import (
 )
 
 // ProjectMoveGate is the gate of a move of changes to another project (ADR 0091), plugged by the compositions that
-// hold the organisation (cmd/graph, goap-dev): the caller needs change:move on the project of each change and on
+// hold the organisation (cmd/graph): the caller needs change:move on the project of each change and on
 // the target, and access to both (access.Snapshot.MayAccessProject); and the methodology of each change must apply
 // (its own or inherited, Snapshot.ApplicableMethodologies) to both. A change with no methodology is not held to the
 // second rule. A platform service (authz.Principal.System) is not asked the first two. A nil authorizer refuses (ADR 0138); a nil
@@ -54,7 +54,7 @@ func ProjectMoveGate(a authz.Authorizer, d *access.Directory) graph.ProjectMoveG
 }
 
 // MethodologyGate is the gate of a change taking a methodology (graph.SetChangeMethodology), plugged by the compositions
-// that hold the organisation (cmd/graph, goap-dev): the methodology must apply to the project of the change, its own or
+// that hold the organisation (cmd/graph): the methodology must apply to the project of the change, its own or
 // inherited (Snapshot.ApplicableMethodologies), as the form of a new change offers it. A nil directory checks nothing.
 func MethodologyGate(d *access.Directory) graph.MethodologyGate {
 	return func(ctx context.Context, c domain.Change, methodology string) error {

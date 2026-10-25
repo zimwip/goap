@@ -192,7 +192,7 @@ type Claims struct {
 
 // MountAuthEndpoints registers the sign-in HTTP endpoints alone (no CORS, no proxying, no /api/whoami or
 // /api/status): the endpoints of the Mode (dev-token for hs256 with DevTokens; register, login, logout, refresh for
-// local) and /api/auth/config (always). Split out of Mount so a single-process deployment (cmd/goap-dev) can offer
+// local) and /api/auth/config (always). Split out of Mount so a deployment with no gateway of its own can offer
 // the same sign-in UI as the distributed gateway without also wanting a reverse proxy.
 func MountAuthEndpoints(e *echo.Echo, cfg Config) error {
 	cfg = Prepare(cfg)
@@ -210,7 +210,7 @@ func MountAuthEndpoints(e *echo.Echo, cfg Config) error {
 
 // Authenticator returns the middleware that turns a request's credentials (a bearer token, or nothing in
 // mode that checks none) into the propagated identity headers (setPrincipal): exported so a single-process
-// deployment (cmd/goap-dev) can apply it globally instead of per-route.
+// deployment with no gateway of its own can apply it globally instead of per-route.
 func Authenticator(cfg Config) (echo.MiddlewareFunc, error) { return authenticator(Prepare(cfg)) }
 
 // Mount installs the gateway on e.

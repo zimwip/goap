@@ -3,7 +3,7 @@
 //! lock so that replicas start together; SQLite: by component and name).
 use crate::migrations::*;
 
-/// The migrations of the graph process, by component (the SQLite component names of `goap-dev`).
+/// The migrations of the graph process, by component (the SQLite component names of the Go services).
 pub fn sets(postgres: bool) -> [(&'static str, &'static [(&'static str, &'static str)]); 3] {
     if postgres {
         [

@@ -10,7 +10,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// Memory is an in-memory Store (tests, and goap-dev without a database). Its full text is a token
+// Memory is an in-memory Store (tests, and a service without a database). Its full text is a token
 // match ranked by term frequency; vectors are scanned exactly.
 type Memory struct {
 	mu   sync.Mutex

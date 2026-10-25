@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
-$Services = 'graph', 'registry', 'engine', 'modelgw', 'preferences', 'conversations', 'credentials', 'indexer', 'events', 'jobs', 'gateway', 'mcp', 'connector-localfs', 'connector-workspace', 'connector-claude-coding-agent', 'importer-git', 'goap-dev', 'goap-runner', 'goap-eval', 'goap-bench'
+$Services = 'graph', 'registry', 'engine', 'modelgw', 'preferences', 'conversations', 'credentials', 'indexer', 'events', 'jobs', 'gateway', 'mcp', 'connector-localfs', 'connector-workspace', 'connector-claude-coding-agent', 'importer-git', 'goap-local', 'goap-runner', 'goap-eval', 'goap-bench'
 # the modules of the go.work (ADR 0125): `./...` at the root matches none, every Go command names them
 $Modules = 'contracts', 'lib', 'graph', 'engine', 'mcp', 'gateway', 'platform'
 $Pkgs = $Modules | ForEach-Object { "./$_/..." }
@@ -44,7 +44,6 @@ function Tools {
     Run go install github.com/bufbuild/buf/cmd/buf@latest
     Run go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
     Run go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
-    Run go install github.com/air-verse/air@latest
 }
 
 function Generate {
@@ -94,7 +93,7 @@ function TestPg {
     finally { & docker stop $c | Out-Null }
 }
 
-# offline evaluation of LLM work (ADR 0099) against a running goap-dev or gateway: GOAP_TOKEN, GOAP_EVAL_URL, EVAL (cases)
+# offline evaluation of LLM work (ADR 0099) against a running gateway: GOAP_TOKEN, GOAP_EVAL_URL, EVAL (cases)
 function Eval {
     $cases = if ($env:EVAL) { $env:EVAL } else { 'evals' }
     Run go run ./platform/cmd/goap-eval $cases
@@ -115,17 +114,6 @@ function Lint {
     }
 }
 
-# SQLite backend only, rebuilt and restarted by air on .go changes: http://localhost:8080. .air.toml is written for a
-# POSIX shell (an environment prefix, a binary with no extension): its build settings are given on the command line here.
-function DevBackend {
-    if (-not (Get-Command air -ErrorAction SilentlyContinue)) { Run go install github.com/air-verse/air@latest }
-    $bin = ".air/goap-dev$Exe"
-    $old = $env:GOAP_STORE
-    $env:GOAP_STORE = 'sqlite'
-    try { Run air -c .air.toml --build.cmd "go build -o $bin ./platform/cmd/goap-dev" --build.entrypoint $bin --build.full_bin $bin }
-    finally { $env:GOAP_STORE = $old }
-}
-
 # IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
 function DevWeb {
     InDir web {
@@ -133,21 +121,6 @@ function DevWeb {
         Run npm run dev
     }
 }
-
-# on this machine, no docker: SQLite (.goap/goap.db), backend + IDE both reload on code change: http://localhost:5173
-function Dev {
-    $shell = (Get-Process -Id $PID).Path # powershell.exe or pwsh, whichever runs this script
-    $backend = Start-Process -FilePath $shell -NoNewWindow -PassThru -ArgumentList @(
-        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'make.ps1'), 'dev-backend')
-    try { DevWeb }
-    finally {
-        # the backend and what it started (air, goap-dev)
-        if ($env:OS -eq 'Windows_NT') { & taskkill /T /F /PID $backend.Id 2>&1 | Out-Null }
-        else { Stop-Process -Id $backend.Id -Force -ErrorAction SilentlyContinue }
-    }
-}
-
-function DevReset { Remove-Item -Recurse -Force .goap -ErrorAction SilentlyContinue }
 
 # the platform as the compose stack runs it, one process per binary, without docker (goap-local): an embedded NATS, the
 # graph ($env:LOCAL_GRAPH: rust, or go) and every service on SQLite files of .goap\local, the binaries in .goap\bin
@@ -182,6 +155,23 @@ function LocalBench {
     $bench = if ($env:PERF_ARGS) { $env:PERF_ARGS -split ' ' } else { @() }
     Run ".goap/bin/goap-local$Exe" bench -graph $graph -proxy $proxy @(LocalArgs) -- @bench
 }
+
+# on this machine, no docker: the local stack (goap-local) watching the sources, a change rebuilding the binaries it
+# touches and restarting their services, with vite: http://localhost:5173. Ctrl-C stops every process.
+function Dev {
+    LocalBuild
+    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'rust' }
+    Run ".goap/bin/goap-local$Exe" -watch -web -graph $graph @(LocalArgs)
+}
+
+# the same without the IDE: gateway http://localhost:8080
+function DevBackend {
+    LocalBuild
+    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'rust' }
+    Run ".goap/bin/goap-local$Exe" -watch -graph $graph @(LocalArgs)
+}
+
+function DevReset { LocalReset }
 
 function LocalReset { Remove-Item -Recurse -Force .goap/local -ErrorAction SilentlyContinue }
 
@@ -319,7 +309,7 @@ function Help {
 Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
 
   all               generate, build, test
-  tools             install code generators (and air)
+  tools             install code generators
   generate          regenerate connect-rpc code and the web's TypeScript (web/src/gen) from proto/,
                     and the catalogue of operations
   cypher            regenerate the Cypher parser of lib/cypher from its grammar (ANTLR, needs Java; ADR 0160)
@@ -332,11 +322,11 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
                     pgvector container on PGTEST_PORT, 55432)
   lint              go vet + gofmt + dsl.md sync check + go.mod files tidy
   eval              offline evaluation cases of evals\ (or $env:EVAL) against a running gateway, as GOAP_TOKEN
-  dev               no docker: SQLite (.goap\goap.db), backend + IDE both reload on code change:
-                    http://localhost:5173
-  dev-backend       SQLite backend only, rebuilt and restarted by air: http://localhost:8080
+  dev               no docker: the local stack (see local) watching the sources, a change rebuilding and
+                    restarting what it touches, with vite: http://localhost:5173; Ctrl-C stops every process
+  dev-backend       the same without the IDE: gateway http://localhost:8080
   dev-web           IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
-  dev-reset         drop the local SQLite database
+  dev-reset         drop the data of the local stack (.goap\local)
   local             no docker: the platform one process per binary (embedded NATS, SQLite in .goap\local,
                     $env:LOCAL_GRAPH rust|go, $env:LOCAL_ARGS: goap-local -h): gateway http://localhost:8080,
                     then .\make.ps1 dev-web

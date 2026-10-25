@@ -37,7 +37,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("goap-bench", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var cfg bench.Config
-	graphURL := fs.String("graph", platform.Env("GOAP_GRAPH_URL", "http://localhost:8080"), "base URL of the graph service (or goap-dev)")
+	graphURL := fs.String("graph", platform.Env("GOAP_GRAPH_URL", "http://localhost:8080"), "base URL of the graph service (or the gateway)")
 	domainURL := fs.String("domains", platform.Env("GOAP_DOMAINS_URL", ""), "base URL of the domain registry (default: the graph's)")
 	token := fs.String("token", os.Getenv("GOAP_TOKEN"), "bearer token, to go through the gateway (default: identity headers of a system principal)")
 	csvPath := fs.String("csv", "", "write the report (one row per operation and window) to this CSV file; a directory (ending with /): <run>.csv in it")

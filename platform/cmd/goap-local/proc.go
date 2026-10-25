@@ -20,8 +20,11 @@ import (
 type service struct {
 	name string
 	// bin is the file name of its binary in the directory of the binaries.
-	bin  string
-	args []string
+	bin string
+	// path is the program run instead of bin, looked up in PATH (npm), and dir its working directory (default the
+	// root of the repository).
+	path, dir string
+	args      []string
 	// port is the port it listens on (127.0.0.1), 0: none.
 	port int
 	// ready is the path answering once it serves (/readyz), empty: started is enough.
@@ -33,12 +36,44 @@ type service struct {
 
 func (s service) url() string { return fmt.Sprintf("http://127.0.0.1:%d", s.port) }
 
-// supervisor starts the processes of the stack, restarts those that stop and stops them all with its context.
+// supervisor starts the processes of the stack, restarts those that stop and stops them all with its context. Each
+// process runs in a process group of its own, so that stopping it stops what it started too (vite's esbuild, a go
+// test's binary); a second interrupt (hurry) kills them at once.
 type supervisor struct {
 	cfg config
 	log *slog.Logger
 	out sync.Mutex // the standard output, shared by the processes' lines
 	wg  sync.WaitGroup
+
+	mu       sync.Mutex
+	restarts map[string]chan restartReq // the restart requests of each running service, by name
+}
+
+// restartReq stops a service: it closes stopped once its process ended, and starts it again once resume is closed.
+type restartReq struct{ stopped, resume chan struct{} }
+
+// restart stops the running services named, runs prepare once they all stopped (new binaries put in place: Windows
+// refuses to overwrite a running program) and starts them again; the names of no running service are left alone.
+func (s *supervisor) restart(names []string, prepare func()) {
+	var reqs []restartReq
+	for _, name := range names {
+		s.mu.Lock()
+		ch := s.restarts[name]
+		s.mu.Unlock()
+		if ch == nil {
+			continue
+		}
+		r := restartReq{stopped: make(chan struct{}), resume: make(chan struct{})}
+		ch <- r
+		reqs = append(reqs, r)
+	}
+	for _, r := range reqs {
+		<-r.stopped
+	}
+	prepare()
+	for _, r := range reqs {
+		close(r.resume)
+	}
 }
 
 // wait waits for every process to have stopped.
@@ -55,13 +90,39 @@ func (s *supervisor) start(ctx context.Context, svc service) error {
 		return nil
 	}
 	s.log.Info("starting", "service", svc.name, "port", svc.port)
+	restart := make(chan restartReq)
+	s.mu.Lock()
+	if s.restarts == nil {
+		s.restarts = map[string]chan restartReq{}
+	}
+	s.restarts[svc.name] = restart
+	s.mu.Unlock()
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
 		backoff := time.Second
 		for {
 			began := time.Now()
-			err := s.exec(ctx, svc)
+			run, stop := context.WithCancel(ctx)
+			done := make(chan error, 1)
+			go func() { done <- s.exec(run, svc) }()
+			var err error
+			select {
+			case err = <-done:
+				stop()
+			case r := <-restart:
+				stop()
+				<-done
+				close(r.stopped)
+				select {
+				case <-r.resume:
+				case <-ctx.Done():
+					return
+				}
+				s.log.Info("restarting", "service", svc.name)
+				backoff = time.Second
+				continue
+			}
 			if ctx.Err() != nil {
 				return
 			}
@@ -73,8 +134,16 @@ func (s *supervisor) start(ctx context.Context, svc service) error {
 			case <-ctx.Done():
 				return
 			case <-time.After(backoff):
+				backoff = min(2*backoff, 30*time.Second)
+			case r := <-restart: // stopped already: a new binary may make it start
+				close(r.stopped)
+				select {
+				case <-r.resume:
+				case <-ctx.Done():
+					return
+				}
+				backoff = time.Second
 			}
-			backoff = min(2*backoff, 30*time.Second)
 		}
 	}()
 	return s.waitReady(ctx, svc)
@@ -86,7 +155,13 @@ func (s *supervisor) exec(ctx context.Context, svc service) error {
 	if runtime.GOOS == "windows" {
 		path += ".exe"
 	}
-	if _, err := os.Stat(path); err != nil {
+	if svc.path != "" {
+		p, err := exec.LookPath(svc.path)
+		if err != nil {
+			return err
+		}
+		path = p
+	} else if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("binary %s: %w (make local-build)", path, err)
 	}
 	logs := filepath.Join(s.cfg.dir, "logs")
@@ -98,19 +173,44 @@ func (s *supervisor) exec(ctx context.Context, svc service) error {
 		return err
 	}
 	defer file.Close()
-	cmd := exec.CommandContext(ctx, path, svc.args...)
-	cmd.Dir = s.cfg.root
-	cmd.Env = environ(svc.env)
 	w := &lines{name: svc.name, file: file, out: &s.out}
-	cmd.Stdout, cmd.Stderr = w, w
-	cmd.Cancel = func() error {
-		if err := cmd.Process.Signal(os.Interrupt); err != nil {
-			return cmd.Process.Kill()
-		}
-		return nil
+	dir := s.cfg.root
+	if svc.dir != "" {
+		dir = svc.dir
 	}
-	cmd.WaitDelay = 10 * time.Second
-	err = cmd.Run()
+	return s.run(ctx, w, dir, path, svc.args, environ(svc.env))
+}
+
+// run runs a command in a process group of its own until it ends or the context is done: then the group is
+// interrupted, killed 10 s later or at once when the supervisor hurries; what the group still holds once its leader
+// ended is killed.
+func (s *supervisor) run(ctx context.Context, w *lines, dir, path string, args, env []string) error {
+	cmd := exec.Command(path, args...)
+	cmd.Dir = dir
+	cmd.Env = env
+	cmd.Stdout, cmd.Stderr = w, w
+	ownGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	var err error
+	select {
+	case err = <-done:
+	case <-ctx.Done():
+		interruptGroup(cmd.Process)
+		select {
+		case err = <-done:
+		case <-time.After(10 * time.Second):
+			killGroup(cmd.Process)
+			err = <-done
+		case <-hurry:
+			killGroup(cmd.Process)
+			err = <-done
+		}
+	}
+	killGroup(cmd.Process)
 	w.flush()
 	return err
 }

@@ -1,4 +1,4 @@
-SERVICES := graph registry engine modelgw preferences conversations credentials indexer events jobs gateway mcp connector-localfs connector-workspace connector-claude-coding-agent importer-git goap-dev goap-runner goap-eval goap-bench
+SERVICES := graph registry engine modelgw preferences conversations credentials indexer events jobs gateway mcp connector-localfs connector-workspace connector-claude-coding-agent importer-git goap-local goap-runner goap-eval goap-bench
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 # the modules of the go.work (ADR 0125): `./...` at the root matches none, every Go command names them
 MODULES  := contracts lib graph engine mcp gateway platform
@@ -16,11 +16,10 @@ help: ## list the targets and what they do (the default target)
 
 all: generate build test ## generate, build, test
 
-tools: ## install code generators (and air)
+tools: ## install code generators
 	go install github.com/bufbuild/buf/cmd/buf@latest
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
-	go install github.com/air-verse/air@latest
 
 generate: ## regenerate connect-rpc code and the web's TypeScript (web/src/gen) from proto/, and the catalogue of operations (contracts/operations)
 	@test -x web/node_modules/.bin/protoc-gen-es || (cd web && npm ci --ignore-scripts)
@@ -57,7 +56,7 @@ test-pg: ## every test, the PostgreSQL ones included (GOAP_TEST_PG_DSN, else a t
 	  until [ "$$(docker logs $$c 2>&1 | grep -c 'ready to accept connections')" -ge 2 ]; do sleep 1; done; \
 	  GOAP_TEST_PG_DSN="postgres://goap:goap@localhost:$(PGTEST_PORT)/goap?sslmode=disable" go test -count=1 $(PKGS); fi
 
-# offline evaluation of LLM work (ADR 0099) against a running goap-dev or gateway: GOAP_TOKEN, GOAP_EVAL_URL, EVAL (cases)
+# offline evaluation of LLM work (ADR 0099) against a running gateway: GOAP_TOKEN, GOAP_EVAL_URL, EVAL (cases)
 EVAL ?= evals
 eval: ## offline evaluation cases of evals/ (or EVAL) against a running gateway, as GOAP_TOKEN
 	go run ./platform/cmd/goap-eval $(EVAL)
@@ -68,21 +67,17 @@ lint: ## go vet + gofmt + tidy go.mod files + dsl.md sync check
 	@for m in $(MODULES); do (cd $$m && go mod tidy -diff >/dev/null) || { echo "$$m/go.mod is not tidy: make tidy"; exit 1; }; done
 	@cmp -s docs/dsl.md web/src/lib/help/dsl.md || (echo 'web/src/lib/help/dsl.md is out of sync with docs/dsl.md' && exit 1)
 
-dev: ## on this machine, no docker: SQLite (.goap/goap.db), backend + IDE both reload on code change: http://localhost:5173
-	@command -v air >/dev/null 2>&1 || go install github.com/air-verse/air@latest
-	@trap 'kill 0' EXIT INT TERM; \
-	$(MAKE) dev-backend & \
-	$(MAKE) dev-web & \
-	wait
+dev: local-build ## on this machine, no docker: the local stack (make local) with the IDE, rebuilt and restarted on a change of the sources: http://localhost:5173; Ctrl-C stops every process
+	$(LOCAL_BIN)/goap-local -watch -web -graph $(LOCAL_GRAPH) $(LOCAL_ARGS)
 
-dev-backend: ## SQLite backend only, rebuilt and restarted by air on .go changes: http://localhost:8080
-	air -c .air.toml
+dev-backend: local-build ## the local stack without the IDE, rebuilt and restarted on a change of the sources: http://localhost:8080
+	$(LOCAL_BIN)/goap-local -watch -graph $(LOCAL_GRAPH) $(LOCAL_ARGS)
 
-dev-web: ## IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
+dev-web: ## IDE only, hot-reloaded by vite, proxied to the gateway: http://localhost:5173
 	cd web && npm install --no-audit --no-fund && npm run dev
 
-dev-reset: ## drop the local SQLite database (demo data and methodologies are seeded again)
-	rm -rf .goap
+dev-reset: ## drop the data of the local stack (.goap/local; demo data and methodologies are seeded again)
+	rm -rf .goap/local
 
 # the platform as the compose stack runs it, one process per binary, without docker (goap-local): an embedded NATS, the
 # graph (LOCAL_GRAPH: rust, or go) and every service on SQLite files of .goap/local, the binaries in .goap/bin
@@ -108,10 +103,6 @@ local-bench: local-build ## no docker: the graph alone on SQLite behind goap-pro
 
 local-reset: ## drop the data of the local stack (.goap/local)
 	rm -rf .goap/local
-
-# static build of the IDE, served by goap-dev itself (when web/dist exists; `make dev` serves it from vite instead)
-web/dist/index.html: web/package.json web/index.html web/vite.config.ts $(shell find web/src -type f 2>/dev/null)
-	cd web && npm install --no-audit --no-fund && npm run build
 
 web: dev-web ## same as dev-web
 

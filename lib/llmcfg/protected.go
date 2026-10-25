@@ -9,7 +9,7 @@ import (
 
 // ProtectedAliasValidator keeps the protected aliases of the platform (ADR 0084) in place: a change may retarget one but
 // never retire it, rename it or drop its protected flag, and the aliases the platform uses by name are always created
-// protected. Wired onto Graph.Validators (cmd/goap-dev, cmd/graph); pkg/graph knows no alias name.
+// protected. Wired onto Graph.Validators (cmd/graph); pkg/graph knows no alias name.
 type ProtectedAliasValidator struct{}
 
 // Types runs the validator whenever a change touches an alias.

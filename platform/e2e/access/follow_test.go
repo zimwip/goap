@@ -62,7 +62,7 @@ func TestPoliciesFollowThePlatformEvents(t *testing.T) {
 		t.Fatal("the organisation moved: the new policy applies")
 	}
 
-	// delivered by the graph's outbox, as goap-dev does: the next commit refreshes it
+	// delivered by the graph's outbox, as an in-process composition does: the next commit refreshes it
 	subject := fmt.Sprintf(domain.SubjectBaselineAdvanced, domain.MainBranch)
 	g.Observe(outbox.SinkFunc(func(_ context.Context, m outbox.Message) error {
 		if m.Subject == subject {

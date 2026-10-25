@@ -102,8 +102,7 @@ func ParseSources(spec string) ([]lnk.Source, error) {
 
 // PlatformSourceValidator keeps the platform graph's own source as the bootstrap declares it: the namespaces no other
 // graph holds are this graph's, so no change may edit, retarget or retire SRC:platform. Its creation must be the
-// declaration of this graph (kind graph, no location, no namespace held). Wired onto Graph.Validators (cmd/graph,
-// cmd/goap-dev).
+// declaration of this graph (kind graph, no location, no namespace held). Wired onto Graph.Validators (cmd/graph).
 type PlatformSourceValidator struct{}
 
 // Types runs the validator whenever a change touches a source.

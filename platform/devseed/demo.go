@@ -1,8 +1,8 @@
 // Package devseed holds the data of the development and demo compositions: the ALM demo repository and the local file
 // system document repository. It is separate from the platform bootstrap (graphsvc.Boot), which every composition runs.
 // The demo is loaded on demand (the "Load demo data" setting, RPC LoadDemoData) or at start when asked
-// (GOAP_GRAPH_SEED=demo for the graph service, GOAP_DEV_DEMO=1 for goap-dev); the document repository is seeded by
-// goap-dev at every start.
+// (GOAP_GRAPH_SEED=demo for the graph service); the document repository with
+// GOAP_GRAPH_SEED=dev (the local stack's default).
 package devseed
 
 import (

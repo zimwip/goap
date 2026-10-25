@@ -17,7 +17,7 @@ type Mode interface {
 	// Name is what Config.AuthMode, GOAP_AUTH_MODE and /api/auth/config call the mode.
 	Name() string
 	// Open reports a mode that checks no credentials (every caller is the fixed development principal): a
-	// deployment with its own fixed identity (cmd/goap-dev) needs no gateway in front of its services.
+	// deployment with its own fixed identity needs no gateway in front of its services.
 	Open() bool
 	// VerifiesTokens reports a mode whose callers carry a bearer token signed with Config.JWTSecret.
 	VerifiesTokens() bool

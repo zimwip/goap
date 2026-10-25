@@ -29,7 +29,7 @@ func quietLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, n
 
 var changes = index.Filter{Kind: []string{index.KindChange}}
 
-// The documents of the changes follow the graph through the in-process sink (the path of goap-dev): a created change,
+// The documents of the changes follow the graph through the in-process sink (an in-process composition): a created change,
 // a reformulated one, the impacts it gains, a move to another project, a purge, and a republish after a reset.
 func TestChangesFollowTheGraph(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

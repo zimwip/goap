@@ -1,5 +1,5 @@
 // Command goap-gitimport loads a git repository into the graph, in the code domain (ADR 0147): one change per commit of
-// the first-parent history, a node per directory and per file. It talks to the graph service (or goap-dev) and resumes
+// the first-parent history, a node per directory and per file. It talks to the graph service (or the gateway) and resumes
 // where the last run stopped, so a long history (the Linux kernel) is imported in as many runs as wanted. With -symbols
 // it reads the declarations of the source files with Tree-sitter, which needs a build with cgo.
 //
@@ -39,7 +39,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("goap-gitimport", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var im gitimport.Importer
-	graphURL := fs.String("graph", platform.Env("GOAP_GRAPH_URL", "http://localhost:8080"), "base URL of the graph service (or goap-dev)")
+	graphURL := fs.String("graph", platform.Env("GOAP_GRAPH_URL", "http://localhost:8080"), "base URL of the graph service (or the gateway)")
 	token := fs.String("token", os.Getenv("GOAP_TOKEN"), "bearer token, to go through the gateway (default: identity headers of a system principal)")
 	fs.StringVar(&im.Dir, "repo", "", "the git repository to import (a work tree or a bare repository)")
 	fs.StringVar(&im.Name, "name", "", "name of the repository in the graph (default: the name of its directory)")

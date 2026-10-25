@@ -10,7 +10,7 @@ import (
 	"github.com/zimwip/goap/lib/llmcfg"
 )
 
-// Options says what differs between the compositions that boot the platform (goap-dev, cmd/graph).
+// Options says what differs between the compositions that boot the platform (cmd/graph).
 type Options struct {
 	// Models is the model gateway configuration seeded when the graph holds no provider yet (SeedModels); empty: no
 	// model is seeded.

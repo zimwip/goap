@@ -17,7 +17,7 @@ import (
 )
 
 // Clients are the APIs the bench calls: the graph service and the domain registry (served by the graph service in the
-// distributed stack, by goap-dev locally).
+// distributed stack, by goap-local without docker).
 type Clients struct {
 	Graph   graphv1connect.GraphServiceClient
 	Domains registryv1connect.DomainServiceClient

@@ -1,6 +1,6 @@
 # ADR 0010 — Local mode without containers (SQLite)
 
-**Status**: accepted · **Date**: 2026-09
+**Status**: accepted; its `goap-dev` composition superseded by ADR 0164 (the local stack, a SQLite file per service) · **Date**: 2026-09
 
 ## Context
 The full stack (compose: PostgreSQL, NATS, Vault, services, observability) is heavy for working on

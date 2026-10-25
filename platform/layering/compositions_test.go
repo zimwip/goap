@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-// Both compositions boot through graphsvc.Boot: neither spells the platform seeds by hand.
+// The composition of the graph boots through graphsvc.Boot: neither spells the platform seeds by hand.
 func TestCompositionsUseBoot(t *testing.T) {
-	for _, dir := range []string{"../cmd/goap-dev", "../cmd/graph"} {
-		// a composition may spread its wiring over several files of its package (cmd/goap-dev, ADR 0073)
+	for _, dir := range []string{"../cmd/graph"} {
+		// a composition may spread its wiring over several files of its package (ADR 0073)
 		files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil || len(files) == 0 {
 			t.Fatalf("%s: no source (%v)", dir, err)

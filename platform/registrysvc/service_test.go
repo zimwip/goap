@@ -18,7 +18,7 @@ import (
 )
 
 // domainsOf is the domain registry a registry under test reads (ADR 0125 §3): one in memory, given to it the first
-// time, that tells it of each publication as goap-dev does.
+// time, that tells it of each publication as an in-process composition does.
 func domainsOf(s *Service) *domainsvc.Service {
 	if d, ok := s.Domains.(*domainsvc.Service); ok {
 		return d

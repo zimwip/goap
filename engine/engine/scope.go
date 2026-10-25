@@ -73,7 +73,7 @@ type ToolPort interface {
 
 // AuthzScope is the Scope of the platform: an ABAC authorizer (pkg/authz) and the MCP hub.
 //
-// Convenience for tests and goap-dev paths: a nil Authz grants every permission and a nil Hub binds no MCP. This
+// Convenience for tests: a nil Authz grants every permission and a nil Hub binds no MCP. This
 // is the only place that behaviour lives; the engine itself never tests for them.
 type AuthzScope struct {
 	Authz authz.Authorizer

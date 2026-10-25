@@ -4,12 +4,13 @@
 // behind goap-proxy, and loads it with goap-bench: the performance test of the local machine. `goap-local test` runs
 // the platform on fresh data and the end-to-end test of platform/e2e/stack against its gateway (go test, from -root).
 //
-//	goap-local [flags]                 the platform, until interrupted
+//	goap-local [flags]                 the platform, until interrupted (make local; -watch -web: make dev)
 //	goap-local test [flags] -- args    the platform, then go test ./e2e/stack/ with args, then stop
 //	goap-local bench [flags] -- args   the graph(s) behind goap-proxy, goap-bench with args, the report, then stop
 //
 // The binaries are read from -bin (make local builds them in .goap/bin), the data kept in -dir (.goap/local), each
-// process's output in <dir>/logs/<name>.log and on the standard output, prefixed by its name.
+// process's output in <dir>/logs/<name>.log and on the standard output, prefixed by its name. Each process runs in a
+// group of its own: an interrupt stops them all, what they started included; a second one kills them at once.
 package main
 
 import (
@@ -27,6 +28,9 @@ import (
 	"github.com/zimwip/goap/lib/platform"
 )
 
+// hurry is closed by a second interrupt: the processes still stopping are killed at once.
+var hurry = make(chan struct{})
+
 // config is what the command line and the environment set.
 type config struct {
 	bin, dir, root string
@@ -41,6 +45,8 @@ type config struct {
 	// natsPort is the client port of the embedded NATS server, natsMonitor its monitoring port (0: none).
 	natsPort, natsMonitor int
 	reset                 bool
+	// watch rebuilds and restarts the services a change of the sources touches; web runs the IDE (vite) too.
+	watch, web bool
 }
 
 func main() {
@@ -58,8 +64,18 @@ func main() {
 		fmt.Fprintln(os.Stderr, "goap-local:", err)
 		os.Exit(2)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
+	signals := make(chan os.Signal, 2)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-signals
+		log.Info("stopping every process (interrupt again to kill them at once)")
+		stop()
+		<-signals
+		log.Warn("killing every process")
+		close(hurry)
+	}()
 	switch mode {
 	case "bench":
 		err = runBench(ctx, log, cfg, rest)
@@ -96,6 +112,8 @@ func parse(args []string, mode string) (config, []string, error) {
 	fs.IntVar(&cfg.natsPort, "nats-port", 4222, "client port of the embedded NATS server")
 	fs.IntVar(&cfg.natsMonitor, "nats-monitor", 8222, "monitoring port of the embedded NATS server (0: none)")
 	fs.BoolVar(&cfg.reset, "reset", mode != "", "drop the data of the previous run before starting")
+	fs.BoolVar(&cfg.watch, "watch", false, "rebuild and restart the services a change of the sources touches (make dev)")
+	fs.BoolVar(&cfg.web, "web", false, "run the IDE too, vite on http://localhost:5173 (make dev)")
 	if err := fs.Parse(args); err != nil {
 		return cfg, nil, err
 	}

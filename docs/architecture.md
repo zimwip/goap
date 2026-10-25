@@ -512,7 +512,7 @@ A result produced is not a result accepted. Three small mechanisms, each placed 
 - **Gates**. A transition may list `vetos` (one unmet blocks) and `objectives` (an unmet one needs a derogation in force
   naming it); `condition.CheckGate` evaluates them, the reserve is recorded on the transition item as `unmet` / `reserve`.
 
-`graph/graph` and `contracts/domain` import none of these packages (`platform/layering`); `platform/cmd/graph` and `platform/cmd/goap-dev` plug the
+`graph/graph` and `contracts/domain` import none of these packages (`platform/layering`); `platform/cmd/graph` plugs the
 seams explicitly. Open points (web editors of the policies, sampling enforcement...) are in the ADR's "Not done".
 
 ### 2.7c The EU AI Act floor ([ADR 0129](adr/0129-eu-ai-act-floor.md))
@@ -578,8 +578,8 @@ owner on a project that had one; the graph handler reads a node or a change only
 
 **Reach and owned writes** ([ADR 0161](adr/0161-access-rights-and-data-segregation.md), phase 1): what a caller
 reads of the current graph is decided once, in the view reader (`graph/graph/view.go`, `reach.go`), never per
-handler: `Graph.ReachOf` (`graphsvc.ReachOf(directory.ReachableProjects)`, plugged by `platform/cmd/graph` and
-`goap-dev`) gives the projects whose nodes the caller reads (`access.Snapshot.ReachableProjects`: the projects
+handler: `Graph.ReachOf` (`graphsvc.ReachOf(directory.ReachableProjects)`, plugged by `platform/cmd/graph`)
+gives the projects whose nodes the caller reads (`access.Snapshot.ReachableProjects`: the projects
 `MayAccessProject` allows) and the namespaces read whole (organisation, platform, methodology). `ViewNode`,
 `ViewNeighbourhood`, `ViewNodes`, `ViewNodesOfType`, `QueryView`, `BaselineNodes` / `BaselineLinks` and
 `ExportSnapshot` leave out the nodes out of reach and every link touching one (no stub), the pages and counts filtered
@@ -1139,8 +1139,8 @@ cut halfway: failed, nothing: run again), so a step never writes twice. Core NAT
 
 ### 3.3 Persistence
 
-- **Local without containers**: a single SQLite file shared by `goap-dev` (migrations `migrations_sqlite/`
-  per component, [ADR 0010](adr/0010-local-sqlite-mode.md)).
+- **Local without containers**: a SQLite file per service in `.goap/local` (the local stack, migrations
+  `migrations_sqlite/` per component, [ADR 0010](adr/0010-local-sqlite-mode.md), [ADR 0164](adr/0164-local-stack-replaces-goap-dev.md)).
 - **Dev**: one PostgreSQL instance, **one schema per service** (`graph`, `engine`, `index`,
   `modelgw`, `preferences`, `conversations`, `mcp`) and a dedicated role per service (`deploy/postgres/init.sql`).
 - **Prod**: one database (or cluster) per service; only the DSN changes (`GOAP_DB_DSN`, read from Vault).
@@ -1239,7 +1239,7 @@ and the declared facets are counted per search.
 dropped), then filters the candidates by ABAC (`read` on the node type in its namespace) *before* counting the facets
 and paging. `Reindex` empties the index and has the graph publish everything again (`RepublishIndex`).
 
-| | PostgreSQL | SQLite (`goap-dev`) |
+| | PostgreSQL | SQLite (local stack) |
 |---|---|---|
 | Full text | `tsvector` + GIN | FTS5 |
 | Vectors | pgvector (HNSW created for the model's dimension) | float32 BLOB, exact cosine scan |
@@ -1258,19 +1258,16 @@ is for its subject only (administrators included); another change needs access t
 (`access.Snapshot.MayAccessProject`; the indexer asks it through the `indexersvc.Access` seam, built from
 `access.Directory`).
 
-In `goap-dev` the indexer runs in process (the graph publishes to it directly) and the graph is published again at
-each start (nodes, baselines and changes). The compose image is `pgvector/pgvector`; the `index` schema needs `CREATE EXTENSION vector`
+The indexer follows the graph's events over NATS. The compose image is `pgvector/pgvector`; the `index` schema needs `CREATE EXTENSION vector`
 (`deploy/postgres/init.sql`).
 
 ### 3.5 Deployment
 
 - `deploy/compose/docker-compose.yml`: postgres, nats (JetStream), vault (dev), all services, web,
   otel-collector, Jaeger, Prometheus, Grafana, restricted Docker API proxy (sandboxes).
-- **Local mode without containers** ([ADR 0010](adr/0010-local-sqlite-mode.md)): `make dev` launches
-  `goap-dev` (all services in one process, in-memory event bus) on a **SQLite** file
-  (`.goap/goap.db`, pure Go driver), rebuilt by air on a code change, and the IDE from vite on
-  http://localhost:5173. `GOAP_STORE=memory` (the default of a bare `go run ./platform/cmd/goap-dev`) keeps the
-  ephemeral mode. The file has one writing connection (`platform.OpenSQLite`: SQLite has one writer) and a pool of
+- **SQLite** ([ADR 0010](adr/0010-local-sqlite-mode.md)): every service keeping a store runs on a SQLite file when
+  no PostgreSQL is configured (`GOAP_SQLITE_PATH`, the local stack below); no path at all keeps the
+  ephemeral memory mode. The file has one writing connection (`platform.OpenSQLite`: SQLite has one writer) and a pool of
   read-only ones (`platform.OpenSQLiteReader`, WAL): the plain reads of the engine, job and domain stores go there,
   and so do the graph's transactions in a read-only context (`platform.ReadOnly`, set by `platform.ReadOnlyRequests`
   on a GET or a Connect procedure named `Get…`, `List…`, `Export…`, `Diff…`, `Search…`, `Compare…`, `Is…`,
@@ -1281,14 +1278,21 @@ each start (nodes, baselines and changes). The compose image is `pgvector/pgvect
   transaction gave them no snapshot, only two round trips); a write they try fails with SQLSTATE 25006 (a lock of a
   change or a branch refuses at once) and the transaction runs again on the writer. The graph test variant
   `postgres-readers` runs every transaction there first.
-- **The compose stack without Docker** (`make local`, `.\make.ps1 local`; `platform/cmd/goap-local`): one process per
+- **The compose stack without Docker** (`make dev`, `make local`, `.\make.ps1 dev`; `platform/cmd/goap-local`,
+  [ADR 0164](adr/0164-local-stack-replaces-goap-dev.md): it replaces `goap-dev`): one process per
   binary of `platform/cmd` as the compose stack runs them, on its host ports (gateway 8080, graph 8081 ... jobs 8091,
   content graph 8092), each service on a SQLite file of its own in `.goap/local` (`GOAP_SQLITE_PATH`, read by
   `platform.OptionalSQL` in every service that keeps a store, the graph services included; `GOAP_DB_DSN` wins, neither:
   memory), an embedded NATS server (JetStream, `.goap/local/nats`) instead of the container, the secrets generated
   in `.goap/local/secrets`; the graph is Rust (`LOCAL_GRAPH=go` for the Go one), bootstrapped by its `bootstrap`
   command before it serves; the processes are restarted when they stop, their output prefixed and kept in
-  `.goap/local/logs`. `make local-build` builds the binaries in `.goap/bin` (Go, then `goap-graph-rs` and
+  `.goap/local/logs`; each runs in its own process group (Setpgid, a new process group on Windows) so that Ctrl-C
+  interrupts them and what they started, kills them after 10 s or at a second Ctrl-C. `-watch` (`make dev`,
+  `make dev-backend`) polls the sources every second and, once they settle, builds the Go binaries depending on a
+  changed package (`go list -deps`) and the cargo ones on a change of `rust/` or of the graph's migrations, replaces a
+  binary only when its bytes changed and restarts its services (stopped, binary put in place, started again); a change
+  of `domains/` restarts the graphs, of `methodologies/` the registry. `-web` runs vite (`npm run dev` in `web/`) under
+  the same supervisor. `make local-build` builds the binaries in `.goap/bin` (Go, then `goap-graph-rs` and
   `goap-proxy` with cargo). `goap-local test` (`make local-test`) runs the stack on fresh data, then the end-to-end
   test of a running platform, `platform/e2e/stack` (`GOAP_STACK_URL`: registry, a commit on the content graph read
   back, the index following it over NATS, an export job, the engine), then stops; `goap-local bench`
@@ -1358,7 +1362,7 @@ more than `History` events behind is told `resync`, with the seq it goes on from
 `web/src/lib/graphEdit.ts`), which the organisation and platform views all read, is read once and shared until an event
 moves the namespace or a baseline, or the client writes to the graph (`ownWrites`); a baseline event carries its
 namespace, so a fast-forward of main moves it too. `Heartbeat` / `Leave` and the
-`presence.*` events say who looks at which tab. `platform/cmd/events` follows `goap.>` on NATS (presence is relayed between replicas on `presence.>`); `goap-dev` feeds the hub in process.
+`presence.*` events say who looks at which tab. `platform/cmd/events` follows `goap.>` on NATS (presence is relayed between replicas on `presence.>`).
 
 ### 3.7 Observability (OpenTelemetry)
 
@@ -1369,8 +1373,8 @@ standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` variables:
   PostgreSQL (pgx), NATS (headers), sandboxes (the runner continues the action's trace);
 - **one process = one trace**: root span `process <agent>` (the `traceparent` is kept in the
   process, background executions continue it), an `action <name>` span per action;
-- **LLM calls** (`lib/telemetry/genai.go`, wired on `Router.Instrument` / `InstrumentEmbed` by `platform/cmd/modelgw` and
-  `goap-dev`): span `chat <model>` per completion and `embeddings <model>` per embedding call (GenAI semantic conventions:
+- **LLM calls** (`lib/telemetry/genai.go`, wired on `Router.Instrument` / `InstrumentEmbed` by `platform/cmd/modelgw`):
+  span `chat <model>` per completion and `embeddings <model>` per embedding call (GenAI semantic conventions:
   `gen_ai.system` and its successor `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.output.type`,
   `gen_ai.usage.input_tokens` / `output_tokens` / `cache_read.input_tokens` / `cache_creation.input_tokens`,
   `gen_ai.response.finish_reasons`, `gen_ai.conversation.id`, `error.type`: the HTTP status, `timeout`, `canceled`,
@@ -1514,7 +1518,7 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   `process_id`, put back in the context by `connectorkit`). Defined on every platform, held by no unit by default;
   the local connector `workspace-local` (`mcp/connectors/workspace`, `platform/cmd/connector-workspace`) keeps a
   directory per change, files confined by `os.Root`, commands in a cleaned environment with a timeout but not
-  isolated; `goap-dev` gives it to the default organisation with `GOAP_DEV_WORKSPACE_ROOT`. An llm action coding in
+  isolated; an administrator gives it to a unit with an adapter. An llm action coding in
   it states the budget of its tool loop (`loop: {maxRounds, maxTokens, timeout, maxToolResultBytes, compactBytes}`):
   once spent it is asked for its final answer instead of failing, and its conversation is compacted as it grows.
   Without a model (`engine/engine/condense.go`): a tool result is tidied before the model sees it (terminal escapes,
@@ -1529,7 +1533,7 @@ under the parameter name, and that the code can never read. Runs are bounded (30
 - **Claude coding agent** ([ADR 0123](adr/0123-claude-coding-agent.md)): the MCP `claude-coding-agent` (`run`,
   `answer`, `status`, `cancel`; `lib/mcpbuiltin/claudeagent.go`) hands a coding task to a Claude Code session run by
   the Claude Agent SDK in the workspace of the change (`<root>/<change>`, `workspace.DirName`), held by no unit by
-  default like `workspace`. Its connector (`mcp/connectors/claudeagent`, in `goap-dev`, standalone
+  default like `workspace`. Its connector (`mcp/connectors/claudeagent`,
   `platform/cmd/connector-claude-coding-agent`) starts a Node runner per turn (`runner/runner.mjs`, embedded, written into
   `GOAP_CLAUDE_AGENT_DIR` where `make claude-agent-runner` installs the pinned SDK): one JSON request in, JSON lines
   out. A question (`AskUserQuestion`) or a tool the permissions do not settle ends the turn (`needs_input` /
@@ -1542,7 +1546,7 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   `GOAP_MODEL_PROXY_SECRET`, shared by the hub and the gateway: subject `system:connector:<id>` acting for the caller's
   end user, the unit, the project, the change, the process, source `connector:<id>`), which the session takes as
   `ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY` over the adapter's. `modelgw.AnthropicProxy` (`/anthropic/v1/messages`,
-  `count_tokens` passed on with no row; `goap-dev` at its own address, `platform/cmd/modelgw` with the secret, the hub
+  `count_tokens` passed on with no row; `platform/cmd/modelgw` with the secret, the hub
   with `GOAP_MODEL_PROXY_URL` too) checks the token, resolves the model to a catalog model of an `anthropic`-protocol
   provider (alias, `provider/model` or name), admits it (enabled, the roles of the end user, the quota), passes the
   request as it is with the provider's key (streaming included; no global behaviour added) and writes one `llm_call` row
@@ -1590,8 +1594,8 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   a unit lists the MCPs it can use, own or inherited, built in or not, with their allowed tools, attaches or overrides
   them with an instance of an adapter definition and its parameter values, and restricts them). A new organisation
   is a new unit.
-- `goap-dev` runs the hub, the built-in connectors and the localfs connector in-process (`GOAP_DEV_FS_ROOT` gives the default organisation
-  an adapter instance on a directory, `devseed.LocalFS`); connectors started separately register over HTTP.
+- The hub (`platform/cmd/mcp`) runs the built-in connectors in process; the others (localfs, workspace...) are
+  services of their own that register over HTTP.
 
 ### 3.9b Project ([ADR 0039](adr/0039-project-organisation.md))
 
@@ -1620,7 +1624,7 @@ project at commit.
 **Moving a change** (ADR 0091). `Graph.MoveChange(id, project)` (RPC `MoveChange`, `goap-change/move`, web "Move to
 project…" on the change overview) changes the project of a *root* change, `draft` or `active`, and of its open
 sub-changes, in one transaction; a sub-change cannot move alone, a `committed`, `applied` or `abandoned` change stays,
-the target must be another existing project. `Graph.ProjectMoveGate` (plugged by `platform/cmd/graph` and `goap-dev` with
+the target must be another existing project. `Graph.ProjectMoveGate` (plugged by `platform/cmd/graph` with
 `graphsvc.ProjectMoveGate(authorizer, directory)`, asked outside the transaction) asks `change:move` on the project
 of each change and on the target, the caller's access to both (`Snapshot.MayAccessProject`) and that the methodology of
 each change of the family applies (own or inherited, `Snapshot.ApplicableMethodologies`) to **both** projects; a change
@@ -1691,8 +1695,7 @@ to a person who may answer it, empty to take it back), `ListTaskCandidates`; whi
 or approves it, besides whoever may reassign it (`Engine.holds`); an ask carries `assignee`, `declined`, `mayAccept`,
 `mayAssign`. Each task has its screen (`views/editors/TaskTab.svelte`, tab `task`: accept, turn down, answer, give to
 someone); working on a task makes its change the working change,
-enters change mode and opens the change on it (the change tab's `task` param unfolds its asks on it). The choice of project persists the choice locally (`goap-dev`, with no token to reissue, keeps a
-fixed `GOAP_DEV_PROJECT` env var instead, like `GOAP_DEV_ORG`). Assignment has no nav entry of its own: an
+enters change mode and opens the change on it (the change tab's `task` param unfolds its asks on it). The choice of project is a claim of the token, reissued by the gateway (`AuthMode` `none` has none to reissue: the choice stays local). Assignment has no nav entry of its own: an
 "Assignments" pane on the Organisation, Project and User editors (one `AssignmentsPane.svelte`,
 parametrized by which side is fixed) offers a "+ Assignment" action, and each explorer's context menu
 offers "New assignment", opening the entity's tab with that pane pre-opened.
@@ -1726,21 +1729,21 @@ created in a project; the engine only executes, through changes.
 
 #### Startup sequence ([ADR 0071](adr/0071-one-platform-bootstrap.md))
 
-Every composition (`goap-dev`, `platform/cmd/graph`) seeds the platform through one function, `graphsvc.Boot(ctx, g, Options)`:
+The composition of the Go graph (`platform/cmd/graph`) seeds the platform through one function, `graphsvc.Boot(ctx, g, Options)`:
 
 1. The caller sets every hook of the graph first (`Authorizer`, `ChangeAuthorizer`, `Validators`, `DecisionPolicy`, `Types`;
-   `SubChangeValidator`, `Lifecycles` (the guardian of the changes) where the registry runs in process: only `goap-dev`) and has a type
-   catalogue holding the domains (`goap-dev` and `platform/cmd/graph`: the domain registry's `SeedDomains`, then the catalogue
+   `SubChangeValidator`, `Lifecycles` (the guardian of the changes) where the registry runs in process: none since ADR 0164) and has a type
+   catalogue holding the domains (`platform/cmd/graph`: the domain registry's `SeedDomains`, then the catalogue
    reload). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
    logs one warning, "change lifecycle and activity gating are not available in this composition".
 2. `Boot`: `Graph.Bootstrap` (roots), `SeedAccess` (default policies), `SeedBuiltins` (built-in MCPs, adapter definitions,
    platform roles), `SeedModels` (`Options.Models`), `SeedProtectedAliases` (the `assistant` and `helper` aliases, ADR 0084), `SeedBehaviors` (the built-in `terse` LLM behaviour, disabled, ADR 0093), `SeedSources` (the source `platform`, fixed by `PlatformSourceValidator`, and `Options.Sources`, ADR 0154), then `Options.Dev`. Each step is idempotent.
-3. The registry then seeds the methodologies (`goap-dev`; `platform/cmd/registry` seeds them over RPC): they need the aliases of step 2.
+3. The registry then seeds the methodologies (`platform/cmd/registry` seeds them over RPC): they need the aliases of step 2.
 
 Development and demo data is not part of it (`platform/devseed`: `Demo` the ALM repository, `DocumentRepository` the
 document-repository MCP and its localfs adapter definition, `LocalFS` a directory as the default organisation's repository).
-`goap-dev` passes them as `Options.Dev`, the demo only with `GOAP_DEV_DEMO=1`; `platform/cmd/graph` the document repository
-with `GOAP_GRAPH_SEED=dev`, the demo too with `GOAP_GRAPH_SEED=demo`. Otherwise an administrator loads the demo on demand:
+`platform/cmd/graph` passes the document repository as `Options.Dev`
+with `GOAP_GRAPH_SEED=dev` (the local stack's default), the demo too with `GOAP_GRAPH_SEED=demo`. Otherwise an administrator loads the demo on demand:
 *Settings → Demo data → Load demo data* (RPC `GraphService.LoadDemoData`, `graphsvc.Handler.Demo` = `devseed.DemoLoader`,
 administrators only, idempotent). The demo is the organisation `ORG-ACME` and its teams, the project `PROJ-DEMO` (under
 `PROJ-ROOT`, methodology `sdlc`) bound to `ORG-ACME` by an assignment holding the roles of `sdlc`, and the ALM repository,
@@ -1748,15 +1751,6 @@ written in `PROJ-DEMO`. `platform/cmd/graph` boots through its command `graph bo
 compose's `graph-bootstrap` service before `graph`), the service itself only with `GOAP_GRAPH_BOOTSTRAP=1` or a memory
 store; a content graph boots nothing (ADR 0154 §9). Platform services act as `authz.System(name, roles...)`
 (`system:registry`, `system:graph`, `system:trigger:<key>`).
-
-**`goap-dev` wiring ([ADR 0073](adr/0073-goap-dev-builders-and-web-api-modules.md))**: `newApp(ctx, cfg, log)` strings one builder
-per concern in this order, each returning a small struct: `openStores` (`local.go`), `buildGraph` (graph, background
-compaction, access hooks: `graph.go`), `buildRegistry` (registry, its hooks on the graph, domains, type catalogue,
-`graphsvc.Boot`, methodologies: `registry.go`), `buildPlatform` (model gateway, node index, MCP hub: `platform.go`),
-`buildEngine` (engine, builtins, triggers, built-in connectors: `engine.go`), `buildServer` (auth strategy, routes, event
-stream, status, IDE: `server.go`). The trigger manager needs the engine while the hooks it serves are wired before, so they
-hold a `triggerRef` that ignores events until `buildEngine` sets it. `run(ctx, cfg)` builds and serves until the context ends
-(`platform.Server.RunContext`); `platform/cmd/goap-dev/app_test.go` builds the whole platform on a temporary SQLite database.
 
 ### 3.9c User bootstrap, mandatory parenting, local auth ([ADR 0040](adr/0040-user-bootstrap-org-membership-local-auth.md))
 
@@ -1805,9 +1799,9 @@ name, `Sessions()` says whether sessions are checked server-side); `/api/auth/co
 The preferences service keeps an opaque JSON object per user (size-limited): the web store owns the keys.
 
 **Sign-in by default, users declared at sign-in, the waiting unit** ([ADR 0042](adr/0042-local-sign-in-by-default-and-waiting-unit.md)).
-`"local"` is the default `AuthMode` (`gateway.DefaultAuthMode`) of the gateway, `goap-dev` and the compose
+`"local"` is the default `AuthMode` (`gateway.DefaultAuthMode`) of the gateway, the local stack and the compose
 file, unless an external identity provider issues the tokens (`hs256` today); `"none"` must be asked for.
-`goap-dev` generates its JWT secret when none is configured (kept in `.goap/jwt_secret` with SQLite).
+`goap-local` generates the JWT secret when none is configured (kept in `.goap/local/secrets`).
 `gateway.Config.OnSignIn` declares the user before a register/login returns a token (`graphsvc.EnsureUser`
 in process, `graphclient.Client.DeclareUser` from the gateway) and refreshes the `access.Directory`, so the first
 calls carry the user's unit and roles. `EnsureUser` commits the `User` node and its `member_of` as one change
@@ -2104,8 +2098,8 @@ to any other methodology.
 
 ```
 platform/cmd/<service>/main.go        entry points (gateway, registry, engine, graph, modelgw, indexer, mcp)
-platform/cmd/goap-dev/                all-in-one for local development (memory or SQLite, serves the IDE)
 platform/cmd/goap-runner/             sandbox for executing script actions
+platform/cmd/goap-local/              the compose stack without Docker, make dev (-watch rebuilds and restarts, -web vite; ADR 0164)
 lib/platform/           config, logs, HTTP/Connect server, NATS, Postgres, Vault secrets
 internal/<service>/          Connect handler implementation for a service (graphsvc, registrysvc…)
 lib/identity/           caller identity (headers set by the gateway)
@@ -2114,7 +2108,7 @@ graph/graph/                   Store (memory, PostgreSQL, SQLite), apply, branch
 contracts/journal/                 the execution journal: records, prompts and their entries in the log of a change (ADR 0011, 0066); the graph and the domain import nothing of it
 engine/observe/                 run cost analysis (journal + traces) and improvement proposals
 contracts/builtins/                names of the builtin actions and the static list the compiler and the registry check (ADR 0062); a leaf package
-engine/selfimprove/             the self-observation builtins (`observe.analyze`, `observe.propose`, `methodology.draft`), registered by `platform/cmd/engine` and `platform/cmd/goap-dev`; the engine imports no observer
+engine/selfimprove/             the self-observation builtins (`observe.analyze`, `observe.propose`, `methodology.draft`), registered by `platform/cmd/engine`; the engine imports no observer
 engine/goap/                    A* planner
 engine/condition/               CEL compilation/evaluation, `expects` compilation
 engine/intent/                  intent loop (lexical Ranker, LLM Ranker)
@@ -2188,7 +2182,7 @@ status bar. The gateway configuration is **graph data** ([ADR 0021](adr/0021-mod
 `LlmProvider`, `LlmModel`, `LlmAlias` and `LlmBehavior` nodes of the `platform` namespace (`lib/llmcfg`, the built-in `platform` domain), changed
 through changes like any node (the screen writes them with `web/src/lib/llmEdit.ts`). The gateway reads a snapshot of the
 `platform` namespace's head of `main` and rebuilds its router when it moves. `GOAP_MODELS_CONFIG` / env keys only seed a graph that holds no provider
-(`graphsvc.SeedModels`). At every start the gateway (`goap-dev` after `Boot`, `platform/cmd/modelgw` in the background once the graph seeded the protected aliases) signs on to the providers whose well-known key variable is set (`modelgw.KnownKeys`: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` / `OPENAI_KEY`, `MISTRAL_API_KEY`, `GEMINI_API_KEY` / `GOOGLE_API_KEY`; `DetectProviders`, `SignOn`): one change creating a provider named after its kind, on its kind's default address, key `env:<VAR>`, with no model and no alias (the administrator picks the models in the settings); a kind the graph already holds a provider of, in any state, is left alone. The `modelgw` database keeps the quota counters (`llm_usage`, keyed by the key of the model node and period, for the admission) the ledger of calls (`llm_call`) and the exchanges of the calls no change log keeps (`llm_call_exchange`, ADR 0089, below).
+(`graphsvc.SeedModels`). At every start the gateway (`platform/cmd/modelgw`, in the background once the graph seeded the protected aliases) signs on to the providers whose well-known key variable is set (`modelgw.KnownKeys`: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` / `OPENAI_KEY`, `MISTRAL_API_KEY`, `GEMINI_API_KEY` / `GOOGLE_API_KEY`; `DetectProviders`, `SignOn`): one change creating a provider named after its kind, on its kind's default address, key `env:<VAR>`, with no model and no alias (the administrator picks the models in the settings); a kind the graph already holds a provider of, in any state, is left alone. The `modelgw` database keeps the quota counters (`llm_usage`, keyed by the key of the model node and period, for the admission) the ledger of calls (`llm_call`) and the exchanges of the calls no change log keeps (`llm_call_exchange`, ADR 0089, below).
 
 - **Providers** are pluggable: a `Protocol` (`anthropic`, `openai`, `gemini`, `fake`; `platform/modelgw/protocols.go`)
   knows how to complete and how to list models; a `Kind` is a preset on a protocol (Anthropic, Mistral AI, Google

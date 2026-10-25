@@ -403,7 +403,7 @@ func (Fake) Complete(_ context.Context, model string, req llm.Request) (llm.Resp
 }
 
 // estimateTokens is a rough (~4 chars/token) size for the Fake provider, whose whole point is to
-// run without a real model: it lets a dev running on goap-dev see the actual context size pushed
+// run without a real model: it lets a dev running the local stack see the actual context size pushed
 // to the agent (system + messages) without paying for or needing a real completion.
 func estimateTokens(s string) int {
 	return (len(s) + 3) / 4

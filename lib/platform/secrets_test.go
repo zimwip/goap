@@ -98,7 +98,7 @@ func TestSecretsPutNoVault(t *testing.T) {
 }
 
 // TestSecretsLocalFallback covers the devlocal case (ADR 0010): no Vault running (Addr empty), a local
-// directory configured instead (as cmd/goap-dev does from the SQLite database's directory).
+// directory configured instead (as a service does from the SQLite database's directory).
 func TestSecretsLocalFallback(t *testing.T) {
 	s := &Secrets{Dir: t.TempDir()}
 	if err := s.Put(context.Background(), "goap/modelgw/acme", "api_key", "sk-raw"); err != nil {
