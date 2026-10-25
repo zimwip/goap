@@ -601,12 +601,6 @@ impl Graph {
         } else {
             change::change_heads(&tx, &ids).await.map_err(connect_error)?
         };
-        // a change this graph does not hold, nor held, may live in another graph: Go's router asks it there
-        if self.elsewhere(&tx, &ids, &heads).await.map_err(connect_error)? {
-            return Err(connect_error(GraphError::unimplemented(
-                "a change another graph may hold (ADR 0154): routed by the Go service",
-            )));
-        }
         if !person {
             drop(tx);
             let readable = Readable {
@@ -642,50 +636,14 @@ impl Graph {
         stamp.on(f(&tx, &readable).await.map(Response::new).map_err(connect_error))
     }
 
-    /// Whether a change a request names may live in another graph (Go's `Router.changeBase`): one this graph does not
-    /// hold and was never found holding, while other graphs are declared. The changes it holds are remembered.
-    async fn elsewhere(
-        &self,
-        tx: &Session,
-        ids: &[ChangeId],
-        heads: &HashMap<ChangeId, change::Change>,
-    ) -> Result<bool, GraphError> {
-        let missing = {
-            let mut held = self.state.held.lock().await;
-            held.extend(heads.keys().cloned());
-            ids.iter().any(|id| !held.contains(id))
-        };
-        Ok(missing && other_graphs(tx).await?)
-    }
-
-    /// Runs a read of a request naming neither a namespace nor a change (`read_changes` naming none): with other
-    /// graphs declared, what this graph does not find Go's router asks of them (ADR 0154), so it is left to it.
-    async fn read_unnamed<T, F>(&self, caller: Caller, f: F) -> Answer<T>
-    where
-        F: AsyncFnOnce(&Session, &Readable) -> Result<T, GraphError>,
-    {
-        self.read_changes(caller, &[], async |tx, who| match f(tx, who).await {
-            Err(e) if e.kind == Kind::NotFound && other_graphs(tx).await? => Err(GraphError::unimplemented(
-                "what another graph may hold (ADR 0154): routed by the Go service",
-            )),
-            r => r,
-        })
-        .await
-    }
-
     /// Runs a read through the view a request names: the change of the view decides whether the caller reads it
-    /// (Go's `PersonalScope`); a view naming neither a namespace nor a change is routed by Go's router to the graph
-    /// that finds what it reads.
+    /// (Go's `PersonalScope`).
     async fn read_view<T, F>(&self, caller: Caller, view: Option<&pb::View>, f: F) -> Answer<T>
     where
         F: AsyncFnOnce(&Session, &Readable) -> Result<T, GraphError>,
     {
-        match view {
-            Some(v) if !v.namespace.is_empty() || !v.change_id.is_empty() => {
-                self.read_changes(caller, &[v.change_id.as_str()], f).await
-            }
-            _ => self.read_unnamed(caller, f).await,
-        }
+        let change = view.map_or("", |v| v.change_id.as_str());
+        self.read_changes(caller, &[change], f).await
     }
 
     /// Opens a call any identified caller may make: the first call of a person creates its user (Go's `EnsureCaller`
@@ -862,12 +820,6 @@ impl Graph {
         } else {
             change::change_heads(&tx, &ids).await.map_err(connect_error)?
         };
-        // a change this graph does not hold, nor held, may live in another graph: Go's router asks it there
-        if self.elsewhere(&tx, &ids, &heads).await.map_err(connect_error)? {
-            return Err(connect_error(GraphError::unimplemented(
-                "a change another graph may hold (ADR 0154): routed by the Go service",
-            )));
-        }
         if !caller.person() {
             // a personal change is its subject's alone, a platform service's acting by itself too (`PersonalScope`)
             if let Some(id) = ids
@@ -1254,7 +1206,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ListBaselineLinksResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read_unnamed(caller, async |tx, who| {
+        self.read_changes(caller, &[], async |tx, who| {
             let header = read::header_of(tx, &BaselineId(m.baseline_id.clone())).await?;
             let limit = match m.limit {
                 l if l <= 0 || l as usize > graph_core::model::MAX_BROWSE_LIMIT => graph_core::model::MAX_BROWSE_LIMIT,
@@ -1293,7 +1245,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::DerivedNodesResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read_unnamed(caller, async |tx, _| {
+        self.read_changes(caller, &[], async |tx, _| {
             let r = m
                 .r#ref
                 .map(|r| NodeRef::new(NodeId(r.id), r.version))
@@ -1407,7 +1359,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ListNodeVersionsResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read_unnamed(caller, async |tx, _| {
+        self.read_changes(caller, &[], async |tx, _| {
             let (vs, next) = read::version_page(tx, &NodeId(m.id.clone()), m.before, m.limit.max(0) as usize).await?;
             Ok(pb::ListNodeVersionsResponse {
                 versions: convert::nodes(&vs),
@@ -1499,9 +1451,6 @@ impl pb::GraphService for Graph {
             .reader()
             .await
             .map_err(|e| connect_error(GraphError::internal(e)))?;
-        if other_graphs(&tx).await.map_err(connect_error)? {
-            return Err(connect_error(GraphError::unimplemented(MERGED_LISTING)));
-        }
         let namespaces = tx.namespaces().await.map_err(connect_error)?;
         stamp.on(Ok(Response::new(pb::ListNamespacesResponse { namespaces })))
     }
@@ -1668,7 +1617,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::GetBaselineGraphResponse> {
         let caller = Caller::of(&req)?;
         let id = BaselineId(req.into_inner().id);
-        self.read_unnamed(caller, async |tx, who| {
+        self.read_changes(caller, &[], async |tx, who| {
             let header = read::header_of(tx, &id).await?;
             let state = read::select(tx, &header, None).await?;
             let mut refs: Vec<NodeRef> = state.iter().map(|(n, v)| NodeRef::new(n.clone(), *v)).collect();
@@ -1710,9 +1659,6 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::GetGraphOverviewResponse> {
         let cat = self.catalog().await?;
         self.read_any(&req, async |tx| {
-            if other_graphs(tx).await? {
-                return Err(GraphError::unimplemented(MERGED_LISTING));
-            }
             let mut ns: Vec<String> = cat.domains().keys().cloned().collect();
             for n in tx.namespaces().await? {
                 if !ns.contains(&n) {
@@ -1816,7 +1762,7 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::GetBaselineDeltaResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.read_unnamed(caller, async |tx, who| {
+        self.read_changes(caller, &[], async |tx, who| {
             if m.from.is_empty() || m.to.is_empty() {
                 return Err(GraphError::invalid("a delta goes from a baseline to another"));
             }
@@ -3202,7 +3148,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let subject = caller.subject.clone();
         let m = req.into_inner();
-        self.read_unnamed(caller, async |tx, _| {
+        self.read_changes(caller, &[], async |tx, _| {
             let node = NodeRef::new(NodeId(m.node_id.clone()), m.version);
             let mut s =
                 change::change_stack(tx, &node, &BaselineId(m.baseline_id.clone()), m.limit.max(0) as usize).await?;
@@ -3267,7 +3213,7 @@ impl pb::GraphService for Graph {
         let caller = Caller::of(&req)?;
         let subject = caller.subject.clone();
         let m = req.into_inner();
-        self.read_unnamed(caller, async |tx, who| {
+        self.read_changes(caller, &[], async |tx, who| {
             let (from, to) = (m.from.as_str().into(), m.to.as_str().into());
             let (mut ds, gap) = change::diff_baselines(tx, &from, &to).await?;
             // a node the caller does not read (ADR 0161 §5)
@@ -4578,39 +4524,6 @@ fn review_pb(r: &ReviewObject) -> pb::ReviewResponse {
 /// head of main, followed up through their parent links. A project the structure does not hold is not stopped.
 /// The name of this graph's source in the listings (`graphsvc.PlatformSource`).
 const PLATFORM_SOURCE: &str = "platform";
-
-const MERGED_LISTING: &str = "a listing merged with the other graphs' answers: not served here yet";
-
-/// Whether the platform declares other graphs holding namespaces (`Router.graphs`): their listings are merged into
-/// this graph's, which Rust does not do yet.
-async fn other_graphs(tx: &Session) -> Result<bool, GraphError> {
-    let world = World::open(tx, &graph_core::view::View::branch("platform", MAIN_BRANCH)).await?;
-    let q = NodeQuery {
-        typ: "platform@Source".into(),
-        limit: i32::MAX as usize,
-        ..NodeQuery::default()
-    };
-    let str = |n: &graph_core::model::Node, k: &str| {
-        n.props
-            .as_ref()
-            .and_then(|p| p.get(k))
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .to_string()
-    };
-    Ok(world.page(&q).await?.nodes.iter().any(|n| {
-        !n.deleted
-            && n.state != "retired"
-            && n.key.starts_with("SRC:")
-            && str(n, "kind") == "graph"
-            && !str(n, "location").is_empty()
-            && n.props
-                .as_ref()
-                .and_then(|p| p.get("namespaces"))
-                .and_then(serde_json::Value::as_array)
-                .is_some_and(|a| a.iter().any(|v| v.as_str().is_some_and(|s| !s.is_empty())))
-    }))
-}
 
 async fn project_stopped(tx: &Tx<'_, Session>, project: &str) -> Result<bool, GraphError> {
     let Some(st) = tx.catalog().structure(STRUCTURE_PROJECT).cloned() else {

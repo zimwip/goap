@@ -928,6 +928,7 @@ dependencies = [
  "graph-script",
  "graph-store",
  "pbjson-types",
+ "prost-reflect",
  "reqwest",
  "serde",
  "serde_json",

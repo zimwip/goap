@@ -20,6 +20,7 @@ mod domainyaml;
 pub mod graph;
 mod journal;
 pub mod relay;
+pub mod route;
 mod smarttags;
 
 pub use graph::Graph;
@@ -39,9 +40,6 @@ pub struct State {
     /// The persons this process made sure have a user (Go's `EnsureCaller`), and the creation in progress.
     users: Mutex<std::collections::HashSet<String>>,
     ensuring: Mutex<()>,
-    /// The changes this graph was found to hold, remembered as Go's router does (`Router.changeBase`): one purged since
-    /// is this graph's still, which answers it is not found, rather than a change another graph may hold.
-    pub(crate) held: Mutex<std::collections::HashSet<graph_core::model::ChangeId>>,
     /// The settings calls of each subject, one at a time (Go's `lockSettings`).
     pub(crate) settings: Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>,
 }
@@ -56,7 +54,6 @@ impl State {
             catalog: Mutex::new((None, Catalog::builtin())),
             users: Mutex::new(Default::default()),
             ensuring: Mutex::new(()),
-            held: Mutex::new(Default::default()),
             settings: Mutex::new(Default::default()),
         }
     }
@@ -138,10 +135,14 @@ pub fn app(state: Arc<State>) -> Router {
     let ics = Interceptors::none();
     let ready = state.clone();
     Router::new()
-        .merge(graphpb::graph_service_router(
-            Arc::new(Graph { state: state.clone() }),
-            ics.clone(),
-        ))
+        .merge(
+            graphpb::graph_service_router(Arc::new(Graph { state: state.clone() }), ics.clone()).layer(
+                axum::middleware::from_fn_with_state(
+                    Arc::new(route::Router::new(Arc::new(route::Declared::new(state.clone())))),
+                    route::route,
+                ),
+            ),
+        )
         .merge(registrypb::domain_service_router(
             Arc::new(Domains { state: state.clone() }),
             ics.clone(),

@@ -26,6 +26,8 @@ goap-proto = { workspace = true }
 graph-store = { workspace = true }
 anyhow = { workspace = true }
 axum = { workspace = true }
+prost-reflect = { workspace = true }
+reqwest = { workspace = true }
 async-nats = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

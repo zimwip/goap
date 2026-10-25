@@ -550,4 +550,11 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   from there had it drain, find the relay busy and kick itself again without ever yielding its worker, which held the
   I/O driver: every request of the service then waited, its transaction left open (the service that "stops" under
   load).
+- The router of the two graph spaces is Rust's (`route.rs`, Go's `graphsvc.Router`, ADR 0154 §9), a middleware in
+  front of the graph service: with graph sources declared at the head of main of `platform` (read again when that
+  head moves), a unary call naming a namespace another graph holds (its own or its view's) or a change that lives
+  there (looked up by `GetChange` in each graph, as the caller, remembered) is forwarded as is, headers and body; one
+  naming neither is served here, then tried in the other graphs while it is not found; `GetGraphOverview` and
+  `ListNamespaces` merge every graph's answer, each namespace naming its source. The handler no longer leaves those
+  calls to Go (`State::held`, `other_graphs` are gone).
 - Not done yet: the rest of phase 4.

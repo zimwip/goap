@@ -8,7 +8,7 @@ use crate::{
     Result,
     access::STATE_RETIRED,
     codetext::go_quote,
-    model::{MAIN_BRANCH, NAMESPACE_PLATFORM, Node, NodeRef},
+    model::{Baseline, MAIN_BRANCH, NAMESPACE_PLATFORM, Node, NodeRef},
     read,
     store::ReadTx,
 };
@@ -136,26 +136,10 @@ pub async fn source<T: ReadTx>(tx: &T, name: &str) -> Result<std::result::Result
     if !source_name(name) {
         return Ok(Err(format!("source {}: invalid lnk", go_quote(name))));
     }
-    let head = read::branch_head(tx, NAMESPACE_PLATFORM, MAIN_BRANCH).await?;
-    let at = read::select(tx, &head, None).await?;
-    let refs: Vec<NodeRef> = at.iter().map(|(id, v)| NodeRef::new(id.clone(), *v)).collect();
-    let mut all = Vec::new();
-    let mut broken = HashMap::new();
-    for n in tx.nodes_at(&refs, TYPE_SOURCE).await? {
-        if n.deleted || n.state == STATE_RETIRED {
-            continue;
-        }
-        match source_of(&n) {
-            Ok(src) => all.push(src),
-            Err(e) => {
-                broken.insert(n.key.strip_prefix(KEY_PREFIX).unwrap_or(&n.key).to_string(), e);
-            }
-        }
-    }
+    let (all, mut broken) = declared_at(tx, &read::branch_head(tx, NAMESPACE_PLATFORM, MAIN_BRANCH).await?).await?;
     if let Some(e) = broken.remove(name) {
         return Ok(Err(e));
     }
-    all.sort_by(|a, b| a.name.cmp(&b.name));
     if let Some(src) = all.iter().find(|s| s.name == name) {
         return Ok(Ok(src.clone()));
     }
@@ -174,4 +158,26 @@ pub async fn source<T: ReadTx>(tx: &T, name: &str) -> Result<std::result::Result
         kind: KIND_GRAPH.into(),
         ..Source::default()
     }))
+}
+
+/// The sources declared at a baseline of the platform namespace (Go's `Graph.Sources`), by name, and the malformed
+/// declarations, by name, with Go's words.
+pub async fn declared_at<T: ReadTx>(tx: &T, head: &Baseline) -> Result<(Vec<Source>, HashMap<String, String>)> {
+    let at = read::select(tx, head, None).await?;
+    let refs: Vec<NodeRef> = at.iter().map(|(id, v)| NodeRef::new(id.clone(), *v)).collect();
+    let mut all = Vec::new();
+    let mut broken = HashMap::new();
+    for n in tx.nodes_at(&refs, TYPE_SOURCE).await? {
+        if n.deleted || n.state == STATE_RETIRED {
+            continue;
+        }
+        match source_of(&n) {
+            Ok(src) => all.push(src),
+            Err(e) => {
+                broken.insert(n.key.strip_prefix(KEY_PREFIX).unwrap_or(&n.key).to_string(), e);
+            }
+        }
+    }
+    all.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok((all, broken))
 }
