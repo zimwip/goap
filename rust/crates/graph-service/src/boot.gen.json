@@ -1,0 +1,3203 @@
+{
+  "adapters": {
+    "goap-admin": {
+      "key": "ADP:ORG-DEFAULT/goap-admin",
+      "type": "organisation@Adapter",
+      "props": {
+        "adapter": "goap-admin",
+        "mcp": "goap-admin"
+      },
+      "owner": "ORG-DEFAULT"
+    },
+    "goap-change": {
+      "key": "ADP:ORG-DEFAULT/goap-change",
+      "type": "organisation@Adapter",
+      "props": {
+        "adapter": "goap-change",
+        "mcp": "goap-change"
+      },
+      "owner": "ORG-DEFAULT"
+    },
+    "goap-graph": {
+      "key": "ADP:ORG-DEFAULT/goap-graph",
+      "type": "organisation@Adapter",
+      "props": {
+        "adapter": "goap-graph",
+        "mcp": "goap-graph"
+      },
+      "owner": "ORG-DEFAULT"
+    },
+    "goap-scheduler": {
+      "key": "ADP:ORG-DEFAULT/goap-scheduler",
+      "type": "organisation@Adapter",
+      "props": {
+        "adapter": "goap-scheduler",
+        "mcp": "goap-scheduler"
+      },
+      "owner": "ORG-DEFAULT"
+    }
+  },
+  "behavior": {
+    "key": "LLB:terse",
+    "type": "platform@LlmBehavior",
+    "props": {
+      "description": "Ultra-terse answers (\"caveman\" style): fewer output tokens, same technical content",
+      "enabled": true,
+      "instruction": "Answer tersely: drop articles, filler, pleasantries and hedging; fragments are fine; keep technical terms, code, identifiers and errors exact; never shorten security warnings or irreversible-action confirmations.",
+      "name": "terse",
+      "order": 100,
+      "position": "append"
+    }
+  },
+  "builtinMCPs": [
+    "goap-graph",
+    "goap-change",
+    "goap-scheduler",
+    "goap-admin"
+  ],
+  "builtins": [
+    {
+      "key": "MCP:goap-graph",
+      "type": "platform@MCP",
+      "props": {
+        "description": "Read the versioned graph in a view: a branch at a baseline (default: the head of main), or the change the calling process works on (built in, read-only).",
+        "name": "goap-graph",
+        "tools": [
+          {
+            "description": "Read a node by key: type, version, properties and links.",
+            "inputSchema": {
+              "properties": {
+                "baseline": {
+                  "description": "baseline of the branch to read (default: its head)",
+                  "type": "string"
+                },
+                "branch": {
+                  "description": "lasting branch to read (default: main); a change of the namespace is read instead when one is named or the calling process works on one",
+                  "type": "string"
+                },
+                "change": {
+                  "description": "change to read (default: the change the calling process works on, when it acts on the namespace): its drafts over the branch it forked from",
+                  "type": "string"
+                },
+                "flow": {
+                  "description": "option of the change to read (default: its active option; main: the main flow)",
+                  "type": "string"
+                },
+                "key": {
+                  "description": "key of the node",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "namespace of the graph (alm, organisation, platform, ...)",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "namespace",
+                "key"
+              ],
+              "type": "object"
+            },
+            "name": "read",
+            "readOnly": true
+          },
+          {
+            "description": "List the nodes whose key matches a glob pattern (REQ-*), optionally of one type.",
+            "inputSchema": {
+              "properties": {
+                "baseline": {
+                  "description": "baseline of the branch to read (default: its head)",
+                  "type": "string"
+                },
+                "branch": {
+                  "description": "lasting branch to read (default: main); a change of the namespace is read instead when one is named or the calling process works on one",
+                  "type": "string"
+                },
+                "change": {
+                  "description": "change to read (default: the change the calling process works on, when it acts on the namespace): its drafts over the branch it forked from",
+                  "type": "string"
+                },
+                "flow": {
+                  "description": "option of the change to read (default: its active option; main: the main flow)",
+                  "type": "string"
+                },
+                "limit": {
+                  "description": "maximum number of results (default 50)",
+                  "type": "integer"
+                },
+                "namespace": {
+                  "description": "namespace of the graph (alm, organisation, platform, ...)",
+                  "type": "string"
+                },
+                "pattern": {
+                  "description": "glob on the key (default *)",
+                  "type": "string"
+                },
+                "type": {
+                  "description": "node type, \u003cnamespace\u003e@\u003cType\u003e",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "namespace"
+              ],
+              "type": "object"
+            },
+            "name": "glob",
+            "readOnly": true
+          },
+          {
+            "description": "Search the nodes whose properties match a regular expression.",
+            "inputSchema": {
+              "properties": {
+                "baseline": {
+                  "description": "baseline of the branch to read (default: its head)",
+                  "type": "string"
+                },
+                "branch": {
+                  "description": "lasting branch to read (default: main); a change of the namespace is read instead when one is named or the calling process works on one",
+                  "type": "string"
+                },
+                "change": {
+                  "description": "change to read (default: the change the calling process works on, when it acts on the namespace): its drafts over the branch it forked from",
+                  "type": "string"
+                },
+                "flow": {
+                  "description": "option of the change to read (default: its active option; main: the main flow)",
+                  "type": "string"
+                },
+                "ignoreCase": {
+                  "description": "case-insensitive match",
+                  "type": "boolean"
+                },
+                "limit": {
+                  "description": "maximum number of results (default 50)",
+                  "type": "integer"
+                },
+                "namespace": {
+                  "description": "namespace of the graph (alm, organisation, platform, ...)",
+                  "type": "string"
+                },
+                "pattern": {
+                  "description": "regular expression (RE2)",
+                  "type": "string"
+                },
+                "property": {
+                  "description": "search this property only",
+                  "type": "string"
+                },
+                "type": {
+                  "description": "node type, \u003cnamespace\u003e@\u003cType\u003e",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "namespace",
+                "pattern"
+              ],
+              "type": "object"
+            },
+            "name": "grep",
+            "readOnly": true
+          },
+          {
+            "description": "List the links of a node, with the key and type of the other end.",
+            "inputSchema": {
+              "properties": {
+                "baseline": {
+                  "description": "baseline of the branch to read (default: its head)",
+                  "type": "string"
+                },
+                "branch": {
+                  "description": "lasting branch to read (default: main); a change of the namespace is read instead when one is named or the calling process works on one",
+                  "type": "string"
+                },
+                "change": {
+                  "description": "change to read (default: the change the calling process works on, when it acts on the namespace): its drafts over the branch it forked from",
+                  "type": "string"
+                },
+                "direction": {
+                  "description": "in, out or both (default)",
+                  "type": "string"
+                },
+                "flow": {
+                  "description": "option of the change to read (default: its active option; main: the main flow)",
+                  "type": "string"
+                },
+                "key": {
+                  "description": "key of the node",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "namespace of the graph (alm, organisation, platform, ...)",
+                  "type": "string"
+                },
+                "type": {
+                  "description": "link type, \u003cnamespace\u003e@\u003clink\u003e",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "namespace",
+                "key"
+              ],
+              "type": "object"
+            },
+            "name": "links",
+            "readOnly": true
+          },
+          {
+            "description": "List the baselines of a namespace, the head of main first.",
+            "inputSchema": {
+              "properties": {
+                "limit": {
+                  "description": "maximum number of results (default 50)",
+                  "type": "integer"
+                },
+                "namespace": {
+                  "description": "namespace of the graph (alm, organisation, platform, ...)",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "namespace"
+              ],
+              "type": "object"
+            },
+            "name": "baselines",
+            "readOnly": true
+          },
+          {
+            "description": "List the tags naming versions of a node (key), or the versions a tag name labels in a namespace (name). A tag names one exact version; follow its links to read what it stands for.",
+            "inputSchema": {
+              "properties": {
+                "baseline": {
+                  "description": "baseline of the branch to read (default: its head)",
+                  "type": "string"
+                },
+                "branch": {
+                  "description": "lasting branch to read (default: main); a change of the namespace is read instead when one is named or the calling process works on one",
+                  "type": "string"
+                },
+                "change": {
+                  "description": "change to read (default: the change the calling process works on, when it acts on the namespace): its drafts over the branch it forked from",
+                  "type": "string"
+                },
+                "flow": {
+                  "description": "option of the change to read (default: its active option; main: the main flow)",
+                  "type": "string"
+                },
+                "key": {
+                  "description": "key of the node",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "name of the tag",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "namespace of the graph (alm, organisation, platform, ...)",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "namespace"
+              ],
+              "type": "object"
+            },
+            "name": "tags",
+            "readOnly": true
+          }
+        ]
+      }
+    },
+    {
+      "key": "ADD:goap-graph",
+      "type": "platform@AdapterDef",
+      "props": {
+        "code": "return ctx.call(ctx.tool(), ctx.args());\n",
+        "connector": "goap-graph",
+        "description": "The built-in goap-graph MCP on the built-in connector of the same name",
+        "language": "javascript",
+        "mcp": "goap-graph",
+        "name": "goap-graph"
+      }
+    },
+    {
+      "key": "MCP:goap-change",
+      "type": "platform@MCP",
+      "props": {
+        "description": "Work on a change, the blackboard every modification of the graph goes through (built in).",
+        "name": "goap-change",
+        "tools": [
+          {
+            "description": "Open a change on the head of main of a namespace: its intent (why), unit (who) and methodology (how); with parent, a sub-change forked from the parent's branch, in its namespace and project.",
+            "inputSchema": {
+              "properties": {
+                "criticality": {
+                  "description": "C1, C2 or C3 (default: none)",
+                  "type": "string"
+                },
+                "data": {
+                  "description": "free-form data of the change, read by its methodology",
+                  "type": "object"
+                },
+                "intent": {
+                  "description": "why the change is made",
+                  "type": "string"
+                },
+                "methodology": {
+                  "description": "methodology performing it",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "namespace of the graph (alm, organisation, platform, ...)",
+                  "type": "string"
+                },
+                "parent": {
+                  "description": "id of the parent change: the new change is its sub-change (namespace and project are the parent's)",
+                  "type": "string"
+                },
+                "project": {
+                  "description": "project the change acts in (default: the active project of the caller)",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "title",
+                  "type": "string"
+                },
+                "unit": {
+                  "description": "unit holding the change (default: the unit of the calling change)",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "intent"
+              ],
+              "type": "object"
+            },
+            "name": "create"
+          },
+          {
+            "description": "Abandon an open change, with the reason: a proof of concept concluded, a sub-change that commits nothing. From a process, only the calling change or one of its sub-changes.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "id of the change to close",
+                  "type": "string"
+                },
+                "reason": {
+                  "description": "why it is closed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "change",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "name": "close"
+          },
+          {
+            "description": "Move a root change, draft or active, with its sub-changes, to another project whose methodologies include the change's: the nodes it already acts on keep their project, the nodes it creates take the new one.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "project": {
+                  "description": "key of the target project",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "project"
+              ],
+              "type": "object"
+            },
+            "name": "move"
+          },
+          {
+            "description": "Attach a root change to a change whose methodology integrates its own (a release taking a candidate): it becomes its sub-change, what it committed rebased onto the parent's branch, and merges into it.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "parent": {
+                  "description": "id of the change integrating it",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "parent"
+              ],
+              "type": "object"
+            },
+            "name": "attach"
+          },
+          {
+            "description": "Detach a sub-change from the change integrating it (a candidate deferred or rejected): a root change again, rebased onto the branch its former root ancestor merges into.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "detach"
+          },
+          {
+            "description": "Add or remove changes this change depends on: their work must have reached the branch it merges into (main, or the change integrating it) before it merges. Never a cycle, an ancestor or a sub-change.",
+            "inputSchema": {
+              "properties": {
+                "add": {
+                  "description": "ids of changes it now depends on",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "remove": {
+                  "description": "ids of changes it no longer depends on",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            },
+            "name": "depend"
+          },
+          {
+            "description": "Move an open change to another version of its methodology (by default the latest published one): a change otherwise keeps the version it was created with. Its lifecycle and state must exist in that version.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "version": {
+                  "description": "version of the methodology (default: the latest published one)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "upgrade"
+          },
+          {
+            "description": "Name one exact version of a node (a release, a configuration): by default the version a branch holds (the head of main unless named). Not unique: a name may label several versions.",
+            "inputSchema": {
+              "properties": {
+                "baseline": {
+                  "description": "baseline of the branch to read (default: its head)",
+                  "type": "string"
+                },
+                "branch": {
+                  "description": "lasting branch to read the node in (default: main)",
+                  "type": "string"
+                },
+                "key": {
+                  "description": "key of the node",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "name of the tag",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "namespace of the graph (alm, organisation, platform, ...)",
+                  "type": "string"
+                },
+                "version": {
+                  "description": "version to name (default: the one the branch holds)",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "namespace",
+                "key",
+                "name"
+              ],
+              "type": "object"
+            },
+            "name": "tag"
+          },
+          {
+            "description": "Read the dependencies of a change (satisfied or what each waits for), the open changes depending on it, and the order its open sub-changes merge in.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "dependencies",
+            "readOnly": true
+          },
+          {
+            "description": "Read a change: status, items, the nodes it acts on and their review.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "read",
+            "readOnly": true
+          },
+          {
+            "description": "List changes, the latest first: find the open change a request continues before opening a new one.",
+            "inputSchema": {
+              "properties": {
+                "limit": {
+                  "description": "maximum number of results (default 50)",
+                  "type": "integer"
+                },
+                "namespace": {
+                  "description": "only the changes of this namespace",
+                  "type": "string"
+                },
+                "status": {
+                  "description": "draft, active, committed, applied or abandoned (default: every status)",
+                  "type": "string"
+                },
+                "unit": {
+                  "description": "only the changes held by this unit",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "list",
+            "readOnly": true
+          },
+          {
+            "description": "Revise the title/intent of a change: the previous definition is superseded, not erased, so the change keeps its full history.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "intent": {
+                  "description": "new intent",
+                  "type": "string"
+                },
+                "rationale": {
+                  "description": "why the definition changes",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "new title (default: unchanged)",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "intent",
+                "rationale"
+              ],
+              "type": "object"
+            },
+            "name": "reformulate"
+          },
+          {
+            "description": "Create a node in the change.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "key": {
+                  "description": "key of the new node",
+                  "type": "string"
+                },
+                "properties": {
+                  "description": "properties of the node",
+                  "type": "object"
+                },
+                "rationale": {
+                  "description": "why the change does this",
+                  "type": "string"
+                },
+                "type": {
+                  "description": "node type, \u003cnamespace\u003e@\u003cType\u003e",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "type",
+                "rationale"
+              ],
+              "type": "object"
+            },
+            "name": "write"
+          },
+          {
+            "description": "Modify the properties of a node in the change, on its draft (the node is checked out by the first edit; no version exists until the change commits; a null value clears one), or move it to a lifecycle state (a transition of the draft, the node checked out first when it has none); an edit never reviews; expect guards against a concurrent edit.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "expect": {
+                  "description": "current values the edit expects",
+                  "type": "object"
+                },
+                "key": {
+                  "description": "key of the node",
+                  "type": "string"
+                },
+                "properties": {
+                  "description": "properties to set",
+                  "type": "object"
+                },
+                "rationale": {
+                  "description": "why the change does this",
+                  "type": "string"
+                },
+                "state": {
+                  "description": "lifecycle state to move to (without properties)",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "rationale"
+              ],
+              "type": "object"
+            },
+            "name": "edit"
+          },
+          {
+            "description": "Add a link from a node of the change to a node of the change or of its baseline.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "from": {
+                  "description": "key of the source node",
+                  "type": "string"
+                },
+                "rationale": {
+                  "description": "why the change does this",
+                  "type": "string"
+                },
+                "to": {
+                  "description": "key of the target node",
+                  "type": "string"
+                },
+                "type": {
+                  "description": "link type, \u003cnamespace\u003e@\u003clink\u003e",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "from",
+                "type",
+                "to"
+              ],
+              "type": "object"
+            },
+            "name": "link"
+          },
+          {
+            "description": "Remove a link from a node of the change: removing a child is a modification of its parent (a node is never deleted).",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "from": {
+                  "description": "key of the source node",
+                  "type": "string"
+                },
+                "rationale": {
+                  "description": "why the change does this",
+                  "type": "string"
+                },
+                "to": {
+                  "description": "key of the target node",
+                  "type": "string"
+                },
+                "type": {
+                  "description": "link type, \u003cnamespace\u003e@\u003clink\u003e",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "from",
+                "type",
+                "to"
+              ],
+              "type": "object"
+            },
+            "name": "unlink"
+          },
+          {
+            "description": "Merge nodes into a new one, seen from their parents: the parents (nodes holding a composition link to the sources) lose the links to the sources and gain one to the new node; the sources stay as they are. Every source needs a parent.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "key": {
+                  "description": "key of the new node",
+                  "type": "string"
+                },
+                "properties": {
+                  "description": "properties of the new node",
+                  "type": "object"
+                },
+                "rationale": {
+                  "description": "why the change does this",
+                  "type": "string"
+                },
+                "sources": {
+                  "description": "keys of the nodes to merge (at least two)",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": {
+                  "description": "node type of the new node, \u003cnamespace\u003e@\u003cType\u003e",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sources",
+                "key",
+                "type",
+                "rationale"
+              ],
+              "type": "object"
+            },
+            "name": "merge"
+          },
+          {
+            "description": "Split a node into new ones, seen from its parents: the parents lose the link to it and gain a link to each new node; the node stays as it is. The other links to it are returned as suspect.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "into": {
+                  "description": "the new nodes, at least two: [{key, type, properties, rationale}]",
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "source": {
+                  "description": "key of the node to split",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "source",
+                "into"
+              ],
+              "type": "object"
+            },
+            "name": "split"
+          },
+          {
+            "description": "Cancel the checkout of a node of the change: its draft is dropped; a node the change created goes away.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "key": {
+                  "description": "key of the node",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "type": "object"
+            },
+            "name": "cancel"
+          },
+          {
+            "description": "Take nodes out of the change: their drafts are dropped and they leave the list of change impacts (one key, or several keys at once: all or none).",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "key": {
+                  "description": "key of the node",
+                  "type": "string"
+                },
+                "keys": {
+                  "description": "keys of several nodes, taken out together",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            },
+            "name": "remove"
+          },
+          {
+            "description": "Add a note (an artifact item) to the blackboard of the change.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "data": {
+                  "description": "structured content",
+                  "type": "object"
+                },
+                "target": {
+                  "description": "what the note is (default note)",
+                  "type": "string"
+                },
+                "text": {
+                  "description": "content",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "type": "object"
+            },
+            "name": "note"
+          },
+          {
+            "description": "Emit a named notification other agents or a live parent may react to.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "data": {
+                  "description": "payload",
+                  "type": "object"
+                },
+                "recipient": {
+                  "description": "process id to address it to (default: broadcast)",
+                  "type": "string"
+                },
+                "target": {
+                  "description": "name of the signal",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "target"
+              ],
+              "type": "object"
+            },
+            "name": "signal"
+          },
+          {
+            "description": "Check the consistency of the change: the issues a review would raise.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "validate",
+            "readOnly": true
+          },
+          {
+            "description": "List the options of the change (hypotheses explored on flows of their own) and the active one: the change works on it.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "options",
+            "readOnly": true
+          },
+          {
+            "description": "Open an option of the change: a hypothesis explored on a flow of its own; activate it to work on it.",
+            "inputSchema": {
+              "properties": {
+                "activate": {
+                  "description": "work on the option from now on",
+                  "type": "boolean"
+                },
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "hypothesis": {
+                  "description": "what the option assumes",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "short name of the option",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "hypothesis"
+              ],
+              "type": "object"
+            },
+            "name": "option"
+          },
+          {
+            "description": "Work on an option of the change: every call that names no flow goes to it (\"main\": back to the main flow).",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "option": {
+                  "description": "id of the option, or main",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "option"
+              ],
+              "type": "object"
+            },
+            "name": "activate"
+          },
+          {
+            "description": "Record the evaluation of an option (criteria, scores, rationale): it moves to evaluated.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "comment": {
+                  "description": "the evaluation",
+                  "type": "string"
+                },
+                "option": {
+                  "description": "id of the option",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "option",
+                "comment"
+              ],
+              "type": "object"
+            },
+            "name": "evaluate"
+          },
+          {
+            "description": "Compare the options of the change on the nodes they changed, each against the main flow.",
+            "inputSchema": {
+              "properties": {
+                "all": {
+                  "description": "include the decided options",
+                  "type": "boolean"
+                },
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "level": {
+                  "description": "written (default: every version not rejected) or accepted",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "compare",
+            "readOnly": true
+          },
+          {
+            "description": "List the decision points of the change (open, blocked by questions, ratifying, escalated, decided) and their questions.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "decisions",
+            "readOnly": true
+          },
+          {
+            "description": "Open a decision point: a question the change must settle, among the open options by default.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "criteria": {
+                  "description": "the criteria of the decision",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "decider": {
+                  "description": "agent (default) or human",
+                  "type": "string"
+                },
+                "maxDuration": {
+                  "description": "duration after which a person rules it (48h)",
+                  "type": "string"
+                },
+                "maxRounds": {
+                  "description": "rulings that may fail to settle it before a person rules it (default 3)",
+                  "type": "integer"
+                },
+                "options": {
+                  "description": "option ids or names (default: the open options)",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "question": {
+                  "description": "what to decide",
+                  "type": "string"
+                },
+                "threshold": {
+                  "description": "confidence under which a ruling waits for a person (default 0.7)",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "question"
+              ],
+              "type": "object"
+            },
+            "name": "decision"
+          },
+          {
+            "description": "Rule a decision point: decided (option, confidence 0-1, justification) or undecidable (why, and the questions to answer first). Below the threshold a person ratifies.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "confidence": {
+                  "description": "0 to 1",
+                  "type": "number"
+                },
+                "justification": {
+                  "description": "why",
+                  "type": "string"
+                },
+                "option": {
+                  "description": "the option chosen (id or name)",
+                  "type": "string"
+                },
+                "outcome": {
+                  "description": "decided or undecidable",
+                  "type": "string"
+                },
+                "point": {
+                  "description": "decision point id (default: the only pending one)",
+                  "type": "string"
+                },
+                "questions": {
+                  "description": "what must be known first (undecidable)",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "outcome",
+                "justification"
+              ],
+              "type": "object"
+            },
+            "name": "rule"
+          },
+          {
+            "description": "Answer an open question of a decision point: the point can be ruled again once its questions are answered.",
+            "inputSchema": {
+              "properties": {
+                "answer": {
+                  "description": "the answer",
+                  "type": "string"
+                },
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "question": {
+                  "description": "question id",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "question",
+                "answer"
+              ],
+              "type": "object"
+            },
+            "name": "answer"
+          },
+          {
+            "description": "The change in brief, one line per fact: intent, impacts, decisions, risks, actions, latest artifacts.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "brief",
+            "readOnly": true
+          },
+          {
+            "description": "Follow an information through the change (an item id, a risk or action key, a node key): what produced it, what it derives from, what it led to, what replaced it.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "ref": {
+                  "description": "item id, risk / action key, or node key",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "ref"
+              ],
+              "type": "object"
+            },
+            "name": "trace",
+            "readOnly": true
+          },
+          {
+            "description": "The risk register of the change (key, probability, impact, score, status, owner, actions) and its actions.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "risks",
+            "readOnly": true
+          },
+          {
+            "description": "Raise a risk, or update one by its key (a new version keeps what it does not restate).",
+            "inputSchema": {
+              "properties": {
+                "actions": {
+                  "description": "the keys of its mitigation actions",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "description": {
+                  "description": "cause and consequence",
+                  "type": "string"
+                },
+                "impact": {
+                  "description": "1 to 5",
+                  "type": "integer"
+                },
+                "key": {
+                  "description": "RSK-n to update (default: a new risk)",
+                  "type": "string"
+                },
+                "owner": {
+                  "description": "the role that owns it",
+                  "type": "string"
+                },
+                "probability": {
+                  "description": "1 to 5",
+                  "type": "integer"
+                },
+                "rationale": {
+                  "description": "why this version",
+                  "type": "string"
+                },
+                "status": {
+                  "description": "open, mitigating, accepted, occurred or closed",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "the risk",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "risk"
+          },
+          {
+            "description": "The derogations of the change (rule, target, reason, signatory, expires, status).",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "derogations",
+            "readOnly": true
+          },
+          {
+            "description": "Sign a derogation (a bounded acceptance of a gap), or update / close one by its key. Needs derogation:sign; the signatory is the caller.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "expires": {
+                  "description": "a date (YYYY-MM-DD) or RFC 3339",
+                  "type": "string"
+                },
+                "key": {
+                  "description": "DRG-n to update (default: a new derogation)",
+                  "type": "string"
+                },
+                "reason": {
+                  "description": "why",
+                  "type": "string"
+                },
+                "rule": {
+                  "description": "what is waived",
+                  "type": "string"
+                },
+                "status": {
+                  "description": "open or closed",
+                  "type": "string"
+                },
+                "target": {
+                  "description": "the change impact (id or key), action or gate it applies to",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "derogation"
+          },
+          {
+            "description": "The reviews of the change (global comment, status open / submitted / discarded, one entry per impact with its comment and outcome) and the impacts that await a review.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "flow": {
+                  "description": "flow (default: the active option, else main)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "reviews",
+            "readOnly": true
+          },
+          {
+            "description": "Open a review the reviewer builds up, then submits: a global comment and, optionally, the impacts it takes.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "comment": {
+                  "description": "the global comment",
+                  "type": "string"
+                },
+                "flow": {
+                  "description": "flow (default: the active option, else main)",
+                  "type": "string"
+                },
+                "impacts": {
+                  "description": "keys (or ids) of the impacts that await review",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            },
+            "name": "review_open"
+          },
+          {
+            "description": "Change an open review (only its author or an administrator): comment, impacts to add or remove, and per impact its comment and outcome.",
+            "inputSchema": {
+              "properties": {
+                "add": {
+                  "description": "impacts to add (keys or ids)",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "comment": {
+                  "description": "the global comment",
+                  "type": "string"
+                },
+                "entries": {
+                  "description": "[{impact, comment, outcome: accept | reject}]",
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "remove": {
+                  "description": "impacts to remove",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "review": {
+                  "description": "review key",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "review"
+              ],
+              "type": "object"
+            },
+            "name": "review_update"
+          },
+          {
+            "description": "Submit an open review: every entry is reviewed, with its comment and the global one, in one transaction (all or none). A refusal names the entry and leaves the review open; a submitted review is final.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "review": {
+                  "description": "review key",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "review"
+              ],
+              "type": "object"
+            },
+            "name": "review_submit"
+          },
+          {
+            "description": "Discard an open review that was never submitted (final).",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "review": {
+                  "description": "review key",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "review"
+              ],
+              "type": "object"
+            },
+            "name": "review_discard"
+          },
+          {
+            "description": "Create an action, or update one by its key: what must be done, by which role, for which risk or decision.",
+            "inputSchema": {
+              "properties": {
+                "change": {
+                  "description": "change id (default: the change the calling process works on)",
+                  "type": "string"
+                },
+                "due": {
+                  "description": "due date",
+                  "type": "string"
+                },
+                "for": {
+                  "description": "the risk key or decision point it answers",
+                  "type": "string"
+                },
+                "hypotheses": {
+                  "description": "of a poc: the statements it checks",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "key": {
+                  "description": "ACT-n to update (default: a new action)",
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "mitigation (default) or poc: a proof of concept or a prototype, built in a sub-change",
+                  "type": "string"
+                },
+                "owner": {
+                  "description": "the role that does it",
+                  "type": "string"
+                },
+                "purpose": {
+                  "description": "of a poc: derisk (check its risks) or explore (the need)",
+                  "type": "string"
+                },
+                "result": {
+                  "description": "what was done",
+                  "type": "string"
+                },
+                "risks": {
+                  "description": "of a poc: the risk keys it checks",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "status": {
+                  "description": "open, done or cancelled",
+                  "type": "string"
+                },
+                "subChange": {
+                  "description": "of a poc: the id of the sub-change carrying it",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "what to do",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "action"
+          }
+        ]
+      }
+    },
+    {
+      "key": "ADD:goap-change",
+      "type": "platform@AdapterDef",
+      "props": {
+        "code": "return ctx.call(ctx.tool(), ctx.args());\n",
+        "connector": "goap-change",
+        "description": "The built-in goap-change MCP on the built-in connector of the same name",
+        "language": "javascript",
+        "mcp": "goap-change",
+        "name": "goap-change"
+      }
+    },
+    {
+      "key": "MCP:goap-scheduler",
+      "type": "platform@MCP",
+      "props": {
+        "description": "Start and follow processes (agents running methodologies) and fire triggers (built in, agent level only).",
+        "name": "goap-scheduler",
+        "scope": "agent",
+        "tools": [
+          {
+            "description": "Start a process for an intent: an agent of a methodology on a new change or an existing one.",
+            "inputSchema": {
+              "properties": {
+                "agent": {
+                  "description": "agent of the methodology",
+                  "type": "string"
+                },
+                "change": {
+                  "description": "continue this change",
+                  "type": "string"
+                },
+                "goal": {
+                  "description": "goal (skips the intent loop)",
+                  "type": "string"
+                },
+                "intent": {
+                  "description": "what is wanted",
+                  "type": "string"
+                },
+                "methodology": {
+                  "description": "methodology (default: identified from the intent)",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "namespace of the new change (default: the one of the methodology, else of the calling change)",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "title of the change",
+                  "type": "string"
+                },
+                "unit": {
+                  "description": "unit holding the new change (default: the unit of the calling change)",
+                  "type": "string"
+                },
+                "vars": {
+                  "description": "process variables",
+                  "type": "object"
+                }
+              },
+              "required": [
+                "intent"
+              ],
+              "type": "object"
+            },
+            "name": "start"
+          },
+          {
+            "description": "Bind a process (default: the caller's own) to a change, existing (change) or new (ADR 0031).",
+            "inputSchema": {
+              "properties": {
+                "baseline": {
+                  "description": "baseline of a new change (default: the latest of the namespace)",
+                  "type": "string"
+                },
+                "change": {
+                  "description": "reuse this existing change",
+                  "type": "string"
+                },
+                "intent": {
+                  "description": "intent of a new change",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "namespace of a new change (default: the one of the process's methodology)",
+                  "type": "string"
+                },
+                "process": {
+                  "description": "process id (default: the calling process)",
+                  "type": "string"
+                },
+                "title": {
+                  "description": "title of a new change",
+                  "type": "string"
+                },
+                "unit": {
+                  "description": "unit holding a new change (default: the default organisation)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "attach"
+          },
+          {
+            "description": "List processes, the latest first.",
+            "inputSchema": {
+              "properties": {
+                "limit": {
+                  "description": "maximum number of results (default 50)",
+                  "type": "integer"
+                },
+                "mine": {
+                  "description": "only the processes started by the caller",
+                  "type": "boolean"
+                },
+                "status": {
+                  "description": "clarifying, running, waiting, completed, stuck, failed",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "list",
+            "readOnly": true
+          },
+          {
+            "description": "Read a process: status, plan, steps, pending question or task, error.",
+            "inputSchema": {
+              "properties": {
+                "id": {
+                  "description": "process id",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            },
+            "name": "get",
+            "readOnly": true
+          },
+          {
+            "description": "The steps of the methodology of a change that are possible now towards its goal (the end point of the process): every entry condition holds and nothing carries them out. Each has what makes it possible, what it produces, the roles and how to start it; the steps that wait are only counted. Propose only these (ADR 0097).",
+            "inputSchema": {
+              "properties": {
+                "changeId": {
+                  "description": "change (default: the calling change)",
+                  "type": "string"
+                },
+                "methodology": {
+                  "description": "methodology (default: the one of the change)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "starting_points",
+            "readOnly": true
+          },
+          {
+            "description": "List the triggers of the published methodologies and their state.",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            },
+            "name": "triggers",
+            "readOnly": true
+          },
+          {
+            "description": "Fire a trigger now.",
+            "inputSchema": {
+              "properties": {
+                "agent": {
+                  "description": "agent",
+                  "type": "string"
+                },
+                "methodology": {
+                  "description": "methodology",
+                  "type": "string"
+                },
+                "trigger": {
+                  "description": "trigger",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "methodology",
+                "agent",
+                "trigger"
+              ],
+              "type": "object"
+            },
+            "name": "fire"
+          }
+        ]
+      }
+    },
+    {
+      "key": "ADD:goap-scheduler",
+      "type": "platform@AdapterDef",
+      "props": {
+        "code": "return ctx.call(ctx.tool(), ctx.args());\n",
+        "connector": "goap-scheduler",
+        "description": "The built-in goap-scheduler MCP on the built-in connector of the same name",
+        "language": "javascript",
+        "mcp": "goap-scheduler",
+        "name": "goap-scheduler"
+      }
+    },
+    {
+      "key": "MCP:goap-admin",
+      "type": "platform@MCP",
+      "props": {
+        "description": "Describe the platform: organisation, users, MCPs, connectors, domains and methodologies (built in, read-only).",
+        "name": "goap-admin",
+        "tools": [
+          {
+            "description": "List the organisational units with their parent.",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            },
+            "name": "units",
+            "readOnly": true
+          },
+          {
+            "description": "List the users with their roles and unit.",
+            "inputSchema": {
+              "properties": {
+                "unit": {
+                  "description": "only the members of this unit",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "users",
+            "readOnly": true
+          },
+          {
+            "description": "List the MCPs a unit can use: adapter, where it is defined, allowed tools.",
+            "inputSchema": {
+              "properties": {
+                "unit": {
+                  "description": "unit (default: the unit of the calling change)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "mcps",
+            "readOnly": true
+          },
+          {
+            "description": "List the registered connectors, their operations and liveness.",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            },
+            "name": "connectors",
+            "readOnly": true
+          },
+          {
+            "description": "List the published domains and their node types.",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            },
+            "name": "domains",
+            "readOnly": true
+          },
+          {
+            "description": "List the published methodologies and their agents.",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            },
+            "name": "methodologies",
+            "readOnly": true
+          }
+        ]
+      }
+    },
+    {
+      "key": "ADD:goap-admin",
+      "type": "platform@AdapterDef",
+      "props": {
+        "code": "return ctx.call(ctx.tool(), ctx.args());\n",
+        "connector": "goap-admin",
+        "description": "The built-in goap-admin MCP on the built-in connector of the same name",
+        "language": "javascript",
+        "mcp": "goap-admin",
+        "name": "goap-admin"
+      }
+    },
+    {
+      "key": "MCP:workspace",
+      "type": "platform@MCP",
+      "props": {
+        "description": "The workspace of the change: files, commands and the sources it works on (one per change).",
+        "name": "workspace",
+        "tools": [
+          {
+            "description": "Open the workspace of the change: clone the sources to work on, each on the branch of the change (an already cloned source is kept as it is).",
+            "inputSchema": {
+              "properties": {
+                "sources": {
+                  "description": "repositories to clone",
+                  "items": {
+                    "properties": {
+                      "branch": {
+                        "description": "branch to work on (default: the branch of the change)",
+                        "type": "string"
+                      },
+                      "path": {
+                        "description": "directory at the top of the workspace (default: the name of the repository)",
+                        "type": "string"
+                      },
+                      "ref": {
+                        "description": "branch or tag to start from (default: the default branch)",
+                        "type": "string"
+                      },
+                      "repo": {
+                        "description": "URL or path of the repository",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "repo"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            },
+            "name": "open"
+          },
+          {
+            "description": "Describe the workspace: its directory, its sources (branch, head, changed) and its background commands.",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            },
+            "name": "status",
+            "readOnly": true
+          },
+          {
+            "description": "Close the workspace: stop its background commands and remove its directory (keep: leave the directory).",
+            "inputSchema": {
+              "properties": {
+                "keep": {
+                  "description": "keep the directory",
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            },
+            "name": "close"
+          },
+          {
+            "description": "Read a text file, each line prefixed with its number; offset and limit read a part of a long file.",
+            "inputSchema": {
+              "properties": {
+                "limit": {
+                  "description": "number of lines (default 2000)",
+                  "type": "integer"
+                },
+                "offset": {
+                  "description": "first line, 1-based (default 1)",
+                  "type": "integer"
+                },
+                "path": {
+                  "description": "path in the workspace (relative; a leading / is the workspace itself)",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "type": "object"
+            },
+            "name": "read",
+            "readOnly": true
+          },
+          {
+            "description": "Create or replace a file with the given content (its directories are created).",
+            "inputSchema": {
+              "properties": {
+                "content": {
+                  "description": "whole text of the file",
+                  "type": "string"
+                },
+                "path": {
+                  "description": "path in the workspace (relative; a leading / is the workspace itself)",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ],
+              "type": "object"
+            },
+            "name": "write"
+          },
+          {
+            "description": "Replace an exact string in a file: old must appear once (give more context to make it unique), or set all to replace every occurrence.",
+            "inputSchema": {
+              "properties": {
+                "all": {
+                  "description": "replace every occurrence",
+                  "type": "boolean"
+                },
+                "new": {
+                  "description": "replacement text",
+                  "type": "string"
+                },
+                "old": {
+                  "description": "exact text to replace",
+                  "type": "string"
+                },
+                "path": {
+                  "description": "path in the workspace (relative; a leading / is the workspace itself)",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "old",
+                "new"
+              ],
+              "type": "object"
+            },
+            "name": "edit"
+          },
+          {
+            "description": "List a directory of the workspace.",
+            "inputSchema": {
+              "properties": {
+                "path": {
+                  "description": "path in the workspace (relative; a leading / is the workspace itself)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "ls",
+            "readOnly": true
+          },
+          {
+            "description": "Find files by glob pattern (src/**/*.go: ** for any number of directories), the latest modified first.",
+            "inputSchema": {
+              "properties": {
+                "limit": {
+                  "description": "maximum number of files (default 250)",
+                  "type": "integer"
+                },
+                "path": {
+                  "description": "path in the workspace (relative; a leading / is the workspace itself)",
+                  "type": "string"
+                },
+                "pattern": {
+                  "description": "glob pattern, relative to path",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "pattern"
+              ],
+              "type": "object"
+            },
+            "name": "glob",
+            "readOnly": true
+          },
+          {
+            "description": "Search file contents by regular expression (RE2): the files matching (mode files), the matching lines with their numbers (mode content) or the counts (mode count).",
+            "inputSchema": {
+              "properties": {
+                "context": {
+                  "description": "lines shown around a match (mode content)",
+                  "type": "integer"
+                },
+                "glob": {
+                  "description": "only the files matching this glob (*.go)",
+                  "type": "string"
+                },
+                "ignoreCase": {
+                  "description": "case insensitive",
+                  "type": "boolean"
+                },
+                "limit": {
+                  "description": "maximum number of files (default 250)",
+                  "type": "integer"
+                },
+                "mode": {
+                  "description": "files (default), content or count",
+                  "type": "string"
+                },
+                "path": {
+                  "description": "path in the workspace (relative; a leading / is the workspace itself)",
+                  "type": "string"
+                },
+                "pattern": {
+                  "description": "regular expression",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "pattern"
+              ],
+              "type": "object"
+            },
+            "name": "grep",
+            "readOnly": true
+          },
+          {
+            "description": "Run a shell command in the workspace (build, test, git): exit code, stdout and stderr (long outputs keep their head and tail). Each call starts a new shell: cwd sets its directory. background: start it and follow it with bash_output.",
+            "inputSchema": {
+              "properties": {
+                "background": {
+                  "description": "run in the background (a long build, a server)",
+                  "type": "boolean"
+                },
+                "command": {
+                  "description": "shell command",
+                  "type": "string"
+                },
+                "cwd": {
+                  "description": "directory of the workspace to run in (default: the workspace)",
+                  "type": "string"
+                },
+                "timeout": {
+                  "description": "seconds (default 120, at most 600)",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "type": "object"
+            },
+            "name": "bash"
+          },
+          {
+            "description": "Read the output a background command wrote since the last read, and whether it still runs (else its exit code).",
+            "inputSchema": {
+              "properties": {
+                "id": {
+                  "description": "id given by bash",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            },
+            "name": "bash_output",
+            "readOnly": true
+          },
+          {
+            "description": "Stop a background command.",
+            "inputSchema": {
+              "properties": {
+                "id": {
+                  "description": "id given by bash",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            },
+            "name": "bash_kill"
+          },
+          {
+            "description": "What changed in the sources since the change started from them: the files (git status) and the diff, commits made since included.",
+            "inputSchema": {
+              "properties": {
+                "path": {
+                  "description": "one source (default: every source)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "diff",
+            "readOnly": true
+          },
+          {
+            "description": "Push the branch of the change of a source to its remote (only that branch).",
+            "inputSchema": {
+              "properties": {
+                "path": {
+                  "description": "directory of the source",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "type": "object"
+            },
+            "name": "push"
+          }
+        ]
+      }
+    },
+    {
+      "key": "ADD:workspace-local",
+      "type": "platform@AdapterDef",
+      "props": {
+        "code": "return ctx.call(ctx.tool(), ctx.args());\n",
+        "connector": "workspace-local",
+        "description": "The workspace MCP on the local machine: one directory per change under root; the commands are not isolated (development, trusted hosts)",
+        "language": "javascript",
+        "mcp": "workspace",
+        "name": "workspace-local",
+        "params": [
+          {
+            "description": "Directory holding one workspace per change",
+            "name": "root",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "description": "Variables set for the commands (NAME=value)",
+            "name": "env",
+            "type": "strings"
+          },
+          {
+            "description": "Author of the commits made in the workspace",
+            "name": "gitName",
+            "type": "string"
+          },
+          {
+            "description": "E-mail of that author",
+            "name": "gitEmail",
+            "type": "string"
+          },
+          {
+            "description": "Prefix of the branch of a change in its sources (default goap/)",
+            "name": "branchPrefix",
+            "type": "string"
+          },
+          {
+            "description": "Token the sources are cloned and pushed with (never given to the commands)",
+            "name": "git_token",
+            "type": "secret"
+          },
+          {
+            "description": "Variables of the host environment given to the commands",
+            "name": "passEnv",
+            "type": "strings"
+          }
+        ]
+      }
+    },
+    {
+      "key": "ADD:workspace-docker",
+      "type": "platform@AdapterDef",
+      "props": {
+        "code": "return ctx.call(ctx.tool(), ctx.args());\n",
+        "connector": "workspace-docker",
+        "description": "The workspace MCP with the commands of each workspace in a container of its own (no network by default, limits, read-only image); the files and git stay on the connector's host",
+        "language": "javascript",
+        "mcp": "workspace",
+        "name": "workspace-docker",
+        "params": [
+          {
+            "description": "Directory holding one workspace per change",
+            "name": "root",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "description": "Variables set for the commands (NAME=value)",
+            "name": "env",
+            "type": "strings"
+          },
+          {
+            "description": "Author of the commits made in the workspace",
+            "name": "gitName",
+            "type": "string"
+          },
+          {
+            "description": "E-mail of that author",
+            "name": "gitEmail",
+            "type": "string"
+          },
+          {
+            "description": "Prefix of the branch of a change in its sources (default goap/)",
+            "name": "branchPrefix",
+            "type": "string"
+          },
+          {
+            "description": "Token the sources are cloned and pushed with (never given to the commands)",
+            "name": "git_token",
+            "type": "secret"
+          },
+          {
+            "description": "Image of the containers: the toolchains the changes build with, git and a shell",
+            "name": "image",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "description": "Network of the containers (default none: no network; a network whose egress is filtered for the hosts the unit allows)",
+            "name": "network",
+            "type": "string"
+          },
+          {
+            "description": "User of the commands, uid:gid (default the connector's)",
+            "name": "user",
+            "type": "string"
+          },
+          {
+            "description": "Memory limit of a container, in MiB (default 2048)",
+            "name": "memoryMB",
+            "type": "number"
+          },
+          {
+            "description": "CPUs of a container (default 2)",
+            "name": "cpus",
+            "type": "number"
+          },
+          {
+            "description": "Process limit of a container (default 1024)",
+            "name": "pids",
+            "type": "number"
+          }
+        ]
+      }
+    },
+    {
+      "key": "MCP:claude-coding-agent",
+      "type": "platform@MCP",
+      "props": {
+        "description": "A Claude Code session (Claude Agent SDK) coding in the workspace of the change: run a task, answer its questions, follow it.",
+        "name": "claude-coding-agent",
+        "tools": [
+          {
+            "description": "Run a coding task with Claude Code in the workspace of the change (open it first with workspace/open). Give sessionId to go on with an earlier session of the change. Answers {status, sessionId, summary, questions, permission, turns, costUsd, usage, tools, errors}: status done, needs_input (it asked questions), needs_approval (it asked to use a tool the unit does not allow), budget (turns or budget spent, it can be resumed) or failed.",
+            "inputSchema": {
+              "properties": {
+                "maxBudgetUsd": {
+                  "description": "budget of this run in USD (default: the adapter's)",
+                  "type": "number"
+                },
+                "maxTurns": {
+                  "description": "turns of this run (default: the adapter's, 200)",
+                  "type": "integer"
+                },
+                "model": {
+                  "description": "model of the session (default: the adapter's)",
+                  "type": "string"
+                },
+                "path": {
+                  "description": "directory of the workspace to work in (default: the workspace)",
+                  "type": "string"
+                },
+                "sessionId": {
+                  "description": "session to resume (default: a new session)",
+                  "type": "string"
+                },
+                "task": {
+                  "description": "what to do: the instructions of this turn (the whole brief for a new session, what is new for a resumed one)",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "task"
+              ],
+              "type": "object"
+            },
+            "name": "run"
+          },
+          {
+            "description": "Resume a session waiting for a person: their answer, their answers to its questions (by question), the tools they allow (Claude Code permission rules, Bash(npm test)). Answers {status, sessionId, summary, questions, permission, turns, costUsd, usage, tools, errors}: status done, needs_input (it asked questions), needs_approval (it asked to use a tool the unit does not allow), budget (turns or budget spent, it can be resumed) or failed.",
+            "inputSchema": {
+              "properties": {
+                "allow": {
+                  "description": "tools allowed for this run (permission rules)",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "answer": {
+                  "description": "free answer or instruction",
+                  "type": "string"
+                },
+                "answers": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "answers to the questions of the session, by question text",
+                  "type": "object"
+                },
+                "maxTurns": {
+                  "description": "turns of this run (default: the adapter's)",
+                  "type": "integer"
+                },
+                "sessionId": {
+                  "description": "session to resume",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sessionId"
+              ],
+              "type": "object"
+            },
+            "name": "answer"
+          },
+          {
+            "description": "The session of the change running now, if any, and the outcome of the latest one.",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            },
+            "name": "status",
+            "readOnly": true
+          },
+          {
+            "description": "Stop the session of the change running now (it can be resumed later).",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            },
+            "name": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "key": "ADD:claude-coding-agent",
+      "type": "platform@AdapterDef",
+      "props": {
+        "code": "return ctx.call(ctx.tool(), ctx.args());\n",
+        "connector": "claude-coding-agent",
+        "description": "Claude Code sessions (Claude Agent SDK) in the workspaces of the changes, on the connector's host: the sessions run with its rights and call the model through the model gateway (a row of the ledger per call), else with the unit's key",
+        "language": "javascript",
+        "mcp": "claude-coding-agent",
+        "name": "claude-coding-agent",
+        "params": [
+          {
+            "description": "Directory holding one workspace per change (the root of the unit's workspace adapter)",
+            "name": "root",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "description": "Model of the sessions (default: Claude Code's; through the gateway, a model of the platform catalog, alias or name)",
+            "name": "model",
+            "type": "string"
+          },
+          {
+            "description": "Permission mode of the sessions (default acceptEdits); a call it does not settle ends the turn as needs_approval",
+            "name": "permissionMode",
+            "type": "enum",
+            "values": [
+              "default",
+              "acceptEdits",
+              "plan",
+              "dontAsk",
+              "auto"
+            ]
+          },
+          {
+            "description": "Tools allowed without asking (Claude Code permission rules: Read, Edit, Bash(go test:*))",
+            "name": "allowedTools",
+            "type": "strings"
+          },
+          {
+            "description": "Tools removed from the sessions (WebFetch, WebSearch)",
+            "name": "disallowedTools",
+            "type": "strings"
+          },
+          {
+            "description": "Turns of a run (default 200)",
+            "name": "maxTurns",
+            "type": "number"
+          },
+          {
+            "description": "Budget of a run in USD (default none)",
+            "name": "maxBudgetUsd",
+            "type": "number"
+          },
+          {
+            "description": "Time of a run in minutes (default 60, at most 240)",
+            "name": "timeoutMinutes",
+            "type": "number"
+          },
+          {
+            "description": "Claude Code settings loaded: project (the repository's CLAUDE.md and settings, the default), user, local",
+            "name": "settingSources",
+            "type": "strings"
+          },
+          {
+            "description": "Anthropic API endpoint the sessions call (ANTHROPIC_BASE_URL; default Anthropic's); ignored when the hub knows the model gateway, whose endpoint the sessions then call (ADR 0123 §6)",
+            "name": "baseURL",
+            "type": "string"
+          },
+          {
+            "description": "Variables set for the sessions (NAME=value)",
+            "name": "env",
+            "type": "strings"
+          },
+          {
+            "description": "Variables of the host environment given to the sessions",
+            "name": "passEnv",
+            "type": "strings"
+          },
+          {
+            "description": "Anthropic API key of the sessions (ANTHROPIC_API_KEY); not used when the sessions call the model gateway",
+            "name": "api_key",
+            "type": "secret"
+          }
+        ]
+      }
+    },
+    {
+      "key": "ROLE:admin",
+      "type": "platform@Role",
+      "props": {
+        "description": "Administers the platform: organisation, projects, methodologies, domains, policies, adapters, and everything else.",
+        "name": "admin"
+      }
+    },
+    {
+      "key": "ROLE:reader",
+      "type": "platform@Role",
+      "props": {
+        "description": "Reads everything on the platform, past the usual organisation/project scoping.",
+        "name": "reader"
+      }
+    }
+  ],
+  "comment": "Code generated from platform/devseed (GOAP_UPDATE_RUST=1 go test ./platform/devseed/ -run TestRustBootIsCurrent). DO NOT EDIT.",
+  "documentRepository": [
+    {
+      "key": "MCP:document-repository",
+      "type": "platform@MCP",
+      "props": {
+        "description": "Documents organised in folders.",
+        "name": "document-repository",
+        "tools": [
+          {
+            "description": "List the documents and folders under a path.",
+            "inputSchema": {
+              "properties": {
+                "path": {
+                  "description": "folder path, empty for the root",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "list"
+          },
+          {
+            "description": "Read the text of a document.",
+            "inputSchema": {
+              "properties": {
+                "path": {
+                  "description": "document path",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "type": "object"
+            },
+            "name": "read"
+          },
+          {
+            "description": "Create or replace a document.",
+            "inputSchema": {
+              "properties": {
+                "content": {
+                  "description": "text of the document",
+                  "type": "string"
+                },
+                "path": {
+                  "description": "document path",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ],
+              "type": "object"
+            },
+            "name": "write"
+          }
+        ]
+      }
+    },
+    {
+      "key": "ADD:localfs-document-repository",
+      "type": "platform@AdapterDef",
+      "props": {
+        "code": "switch (ctx.tool()) {\n  case \"list\":\n    return ctx.call(\"list_dir\", { path: ctx.args().path || \"\" });\n  case \"read\":\n    return ctx.call(\"read_file\", { path: ctx.args().path });\n  case \"write\":\n    return ctx.call(\"write_file\", { path: ctx.args().path, content: ctx.args().content });\n}\nctx.fail(\"unknown tool \" + ctx.tool());\n",
+        "connector": "localfs",
+        "description": "The document-repository MCP on the local file system connector (localfs)",
+        "language": "javascript",
+        "mcp": "document-repository",
+        "name": "localfs-document-repository",
+        "params": [
+          {
+            "description": "Directory the unit exposes as its document repository",
+            "name": "root",
+            "required": true,
+            "type": "string"
+          }
+        ]
+      }
+    }
+  ],
+  "floorPolicy": "POL:*/*/d1e4ca45",
+  "modelKinds": {
+    "anthropic": {
+      "id": "anthropic",
+      "protocol": "anthropic"
+    },
+    "fake": {
+      "id": "fake",
+      "protocol": "fake"
+    },
+    "google": {
+      "id": "google",
+      "protocol": "gemini"
+    },
+    "mistral": {
+      "id": "mistral",
+      "protocol": "openai"
+    },
+    "openai": {
+      "id": "openai",
+      "protocol": "openai"
+    },
+    "openai-compatible": {
+      "id": "openai-compatible",
+      "protocol": "openai"
+    }
+  },
+  "models": [
+    {
+      "config": {
+        "aliases": {
+          "default": "anthropic/claude-opus-5",
+          "fast": "anthropic/claude-haiku-4-5"
+        },
+        "providers": {
+          "anthropic": {
+            "apiKeyEnv": "ANTHROPIC_API_KEY",
+            "apiKeySecret": "goap/modelgw#anthropic_api_key",
+            "type": "anthropic"
+          },
+          "fake": {
+            "type": "fake"
+          }
+        }
+      },
+      "nodes": [
+        {
+          "key": "LLP:anthropic",
+          "type": "platform@LlmProvider",
+          "props": {
+            "apiKeyRef": "goap/modelgw#anthropic_api_key | env:ANTHROPIC_API_KEY",
+            "enabled": true,
+            "kind": "anthropic",
+            "name": "anthropic",
+            "protocol": "anthropic"
+          }
+        },
+        {
+          "key": "LLP:fake",
+          "type": "platform@LlmProvider",
+          "props": {
+            "enabled": true,
+            "kind": "fake",
+            "name": "fake",
+            "protocol": "fake"
+          }
+        },
+        {
+          "key": "LLM:anthropic/claude-opus-5",
+          "type": "platform@LlmModel",
+          "props": {
+            "displayName": "claude-opus-5",
+            "enabled": true,
+            "model": "claude-opus-5",
+            "provider": "anthropic",
+            "quotaPeriod": "month"
+          }
+        },
+        {
+          "key": "LLM:anthropic/claude-haiku-4-5",
+          "type": "platform@LlmModel",
+          "props": {
+            "displayName": "claude-haiku-4-5",
+            "enabled": true,
+            "model": "claude-haiku-4-5",
+            "provider": "anthropic",
+            "quotaPeriod": "month"
+          }
+        },
+        {
+          "key": "LLA:default",
+          "type": "platform@LlmAlias",
+          "props": {
+            "alias": "default",
+            "target": "anthropic/claude-opus-5"
+          }
+        },
+        {
+          "key": "LLA:fast",
+          "type": "platform@LlmAlias",
+          "props": {
+            "alias": "fast",
+            "target": "anthropic/claude-haiku-4-5"
+          }
+        }
+      ]
+    },
+    {
+      "config": {
+        "aliases": {
+          "default": "fake/echo",
+          "embed": "fake/hash",
+          "fast": "fake/echo"
+        },
+        "providers": {
+          "anthropic": {
+            "apiKeyEnv": "ANTHROPIC_API_KEY",
+            "apiKeySecret": "goap/modelgw#anthropic_api_key",
+            "type": "anthropic"
+          },
+          "fake": {
+            "type": "fake"
+          }
+        }
+      },
+      "nodes": [
+        {
+          "key": "LLP:anthropic",
+          "type": "platform@LlmProvider",
+          "props": {
+            "apiKeyRef": "goap/modelgw#anthropic_api_key | env:ANTHROPIC_API_KEY",
+            "enabled": true,
+            "kind": "anthropic",
+            "name": "anthropic",
+            "protocol": "anthropic"
+          }
+        },
+        {
+          "key": "LLP:fake",
+          "type": "platform@LlmProvider",
+          "props": {
+            "enabled": true,
+            "kind": "fake",
+            "name": "fake",
+            "protocol": "fake"
+          }
+        },
+        {
+          "key": "LLM:fake/echo",
+          "type": "platform@LlmModel",
+          "props": {
+            "displayName": "echo",
+            "enabled": true,
+            "model": "echo",
+            "provider": "fake",
+            "quotaPeriod": "month"
+          }
+        },
+        {
+          "key": "LLM:fake/hash",
+          "type": "platform@LlmModel",
+          "props": {
+            "displayName": "hash",
+            "enabled": true,
+            "model": "hash",
+            "provider": "fake",
+            "quotaPeriod": "month"
+          }
+        },
+        {
+          "key": "LLA:default",
+          "type": "platform@LlmAlias",
+          "props": {
+            "alias": "default",
+            "target": "fake/echo"
+          }
+        },
+        {
+          "key": "LLA:embed",
+          "type": "platform@LlmAlias",
+          "props": {
+            "alias": "embed",
+            "target": "fake/hash"
+          }
+        },
+        {
+          "key": "LLA:fast",
+          "type": "platform@LlmAlias",
+          "props": {
+            "alias": "fast",
+            "target": "fake/echo"
+          }
+        }
+      ]
+    },
+    {
+      "config": {
+        "aliases": {
+          "bad": "main",
+          "default": "main/claude",
+          "embed": "z/hash",
+          "fast": "local/llama",
+          "other": "nope/x",
+          "same": "main/claude"
+        },
+        "providers": {
+          "local": {
+            "baseURL": "http://localhost:11434/v1",
+            "type": "openai"
+          },
+          "main": {
+            "apiKeyEnv": "MAIN_KEY",
+            "type": "anthropic"
+          },
+          "z": {
+            "type": "fake"
+          }
+        }
+      },
+      "nodes": [
+        {
+          "key": "LLP:local",
+          "type": "platform@LlmProvider",
+          "props": {
+            "baseURL": "http://localhost:11434/v1",
+            "enabled": true,
+            "kind": "openai-compatible",
+            "name": "local",
+            "protocol": "openai"
+          }
+        },
+        {
+          "key": "LLP:main",
+          "type": "platform@LlmProvider",
+          "props": {
+            "apiKeyRef": "env:MAIN_KEY",
+            "enabled": true,
+            "kind": "anthropic",
+            "name": "main",
+            "protocol": "anthropic"
+          }
+        },
+        {
+          "key": "LLP:z",
+          "type": "platform@LlmProvider",
+          "props": {
+            "enabled": true,
+            "kind": "fake",
+            "name": "z",
+            "protocol": "fake"
+          }
+        },
+        {
+          "key": "LLM:main/claude",
+          "type": "platform@LlmModel",
+          "props": {
+            "displayName": "claude",
+            "enabled": true,
+            "model": "claude",
+            "provider": "main",
+            "quotaPeriod": "month"
+          }
+        },
+        {
+          "key": "LLM:z/hash",
+          "type": "platform@LlmModel",
+          "props": {
+            "displayName": "hash",
+            "enabled": true,
+            "model": "hash",
+            "provider": "z",
+            "quotaPeriod": "month"
+          }
+        },
+        {
+          "key": "LLM:local/llama",
+          "type": "platform@LlmModel",
+          "props": {
+            "displayName": "llama",
+            "enabled": true,
+            "model": "llama",
+            "provider": "local",
+            "quotaPeriod": "month"
+          }
+        },
+        {
+          "key": "LLA:default",
+          "type": "platform@LlmAlias",
+          "props": {
+            "alias": "default",
+            "target": "main/claude"
+          }
+        },
+        {
+          "key": "LLA:embed",
+          "type": "platform@LlmAlias",
+          "props": {
+            "alias": "embed",
+            "target": "z/hash"
+          }
+        },
+        {
+          "key": "LLA:fast",
+          "type": "platform@LlmAlias",
+          "props": {
+            "alias": "fast",
+            "target": "local/llama"
+          }
+        },
+        {
+          "key": "LLA:same",
+          "type": "platform@LlmAlias",
+          "props": {
+            "alias": "same",
+            "target": "main/claude"
+          }
+        }
+      ]
+    }
+  ],
+  "platformSource": {
+    "key": "SRC:platform",
+    "type": "platform@Source",
+    "props": {
+      "description": "This graph: the platform, the organisation and the methodologies, and every namespace no other graph holds",
+      "kind": "graph",
+      "name": "platform"
+    }
+  },
+  "policies": [
+    {
+      "key": "POL:*/*/d1e4ca45",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "*",
+        "effect": "allow",
+        "resource": "*",
+        "rule": "hasRole(r.sub, \"admin\")"
+      }
+    },
+    {
+      "key": "POL:*/read/abd53a0c",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "read",
+        "effect": "allow",
+        "resource": "*",
+        "rule": "hasRole(r.sub, \"reader\")"
+      }
+    },
+    {
+      "key": "POL:*/read/04b51d2f",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "read",
+        "effect": "allow",
+        "resource": "*",
+        "rule": "!isAnonymous(r.sub) \u0026\u0026 ((r.obj.Org != \"\" \u0026\u0026 r.obj.Org == r.sub.Org) || onProject(r.sub))"
+      }
+    },
+    {
+      "key": "POL:*/read/c234916f",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "read",
+        "effect": "allow",
+        "resource": "*",
+        "rule": "!isAnonymous(r.sub) \u0026\u0026 r.obj.Namespace != \"\""
+      }
+    },
+    {
+      "key": "POL:trigger/read/07324891",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "read",
+        "effect": "allow",
+        "resource": "trigger",
+        "rule": "!isAnonymous(r.sub)"
+      }
+    },
+    {
+      "key": "POL:*/*/854b56b9",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "*",
+        "effect": "allow",
+        "resource": "*",
+        "rule": "isProjectAdmin(r.sub)"
+      }
+    },
+    {
+      "key": "POL:assignment/flag/1f6b6e19",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "flag",
+        "effect": "deny",
+        "resource": "assignment",
+        "rule": "!isProjectOwner(r.sub) \u0026\u0026 !hasRole(r.sub, \"admin\")"
+      }
+    },
+    {
+      "key": "POL:project/stop/1f6b6e19",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "stop",
+        "effect": "deny",
+        "resource": "project",
+        "rule": "!isProjectOwner(r.sub) \u0026\u0026 !hasRole(r.sub, \"admin\")"
+      }
+    },
+    {
+      "key": "POL:project/move/1f6b6e19",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "move",
+        "effect": "deny",
+        "resource": "project",
+        "rule": "!isProjectOwner(r.sub) \u0026\u0026 !hasRole(r.sub, \"admin\")"
+      }
+    },
+    {
+      "key": "POL:process/*/ea318c3f",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "*",
+        "effect": "allow",
+        "resource": "process",
+        "rule": "onProject(r.sub)"
+      }
+    },
+    {
+      "key": "POL:object/create/ea318c3f",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "create",
+        "effect": "allow",
+        "resource": "object",
+        "rule": "onProject(r.sub)"
+      }
+    },
+    {
+      "key": "POL:node/transition/ea318c3f",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "transition",
+        "effect": "allow",
+        "resource": "node",
+        "rule": "onProject(r.sub)"
+      }
+    },
+    {
+      "key": "POL:requirement/approve/ea318c3f",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "approve",
+        "effect": "allow",
+        "resource": "requirement",
+        "rule": "onProject(r.sub)"
+      }
+    },
+    {
+      "key": "POL:tool/call/ea318c3f",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "call",
+        "effect": "allow",
+        "resource": "tool",
+        "rule": "onProject(r.sub)"
+      }
+    },
+    {
+      "key": "POL:change/transition/ea318c3f",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "transition",
+        "effect": "allow",
+        "resource": "change",
+        "rule": "onProject(r.sub)"
+      }
+    },
+    {
+      "key": "POL:change/move/ea318c3f",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "move",
+        "effect": "allow",
+        "resource": "change",
+        "rule": "onProject(r.sub)"
+      }
+    },
+    {
+      "key": "POL:prompt/inspect/ea318c3f",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "inspect",
+        "effect": "allow",
+        "resource": "prompt",
+        "rule": "onProject(r.sub)"
+      }
+    },
+    {
+      "key": "POL:change/apply/ea318c3f",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "apply",
+        "effect": "allow",
+        "resource": "change",
+        "rule": "onProject(r.sub)"
+      }
+    },
+    {
+      "key": "POL:change/apply/9ed544b8",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "apply",
+        "effect": "deny",
+        "resource": "change",
+        "rule": "r.sub.Subject == r.obj.Owner \u0026\u0026 !hasRole(r.sub, \"admin\")"
+      }
+    },
+    {
+      "key": "POL:release/deploy/58c04a6c",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "deploy",
+        "effect": "allow",
+        "resource": "release",
+        "rule": "hasRole(r.sub, \"release_manager\") \u0026\u0026 r.sub.Subject != r.obj.Owner"
+      }
+    },
+    {
+      "key": "POL:step/perform/6ff8b147",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "perform",
+        "effect": "allow",
+        "resource": "step",
+        "rule": "hasRoleIn(r.sub, r.obj.Role, r.obj)"
+      }
+    },
+    {
+      "key": "POL:step/approve/257ab44c",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "approve",
+        "effect": "allow",
+        "resource": "step",
+        "rule": "hasRoleIn(r.sub, r.obj.Accountable, r.obj)"
+      }
+    },
+    {
+      "key": "POL:step/approve/9ed544b8",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "approve",
+        "effect": "deny",
+        "resource": "step",
+        "rule": "r.sub.Subject == r.obj.Owner \u0026\u0026 !hasRole(r.sub, \"admin\")"
+      }
+    },
+    {
+      "key": "POL:action/run/7cca7f93",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "run",
+        "effect": "allow",
+        "resource": "action",
+        "rule": "mayRun(r.sub, r.obj)"
+      }
+    },
+    {
+      "key": "POL:agent/run/7cca7f93",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "run",
+        "effect": "allow",
+        "resource": "agent",
+        "rule": "mayRun(r.sub, r.obj)"
+      }
+    },
+    {
+      "key": "POL:operation/perform/7cca7f93",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "perform",
+        "effect": "allow",
+        "resource": "operation",
+        "rule": "mayRun(r.sub, r.obj)"
+      }
+    },
+    {
+      "key": "POL:derogation/sign/b8dd4d5c",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "sign",
+        "effect": "allow",
+        "resource": "derogation",
+        "rule": "hasRole(r.sub, \"derogation_signatory\")"
+      }
+    },
+    {
+      "key": "POL:derogation/sign-role/7cca7f93",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "sign-role",
+        "effect": "allow",
+        "resource": "derogation",
+        "rule": "mayRun(r.sub, r.obj)"
+      }
+    },
+    {
+      "key": "POL:decision/sit/7cca7f93",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "sit",
+        "effect": "allow",
+        "resource": "decision",
+        "rule": "mayRun(r.sub, r.obj)"
+      }
+    },
+    {
+      "key": "POL:model/use/7cca7f93",
+      "type": "organisation@Policy",
+      "props": {
+        "action": "use",
+        "effect": "allow",
+        "resource": "model",
+        "rule": "mayRun(r.sub, r.obj)"
+      }
+    }
+  ],
+  "protectedAliases": [
+    "assistant",
+    "helper"
+  ]
+}

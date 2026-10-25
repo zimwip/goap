@@ -1076,3 +1076,65 @@ impl Sample {
         }
     }
 }
+
+impl Domains {
+    /// Publishes the domain versions of the `*.yaml` / `*.yml` files of a directory not stored yet (Go's
+    /// `Service.SeedDomains`, ADR 0113), as the graph service: what it stored, `name@version`, in the order of the
+    /// file names. A file that does not read, or a version with issues (kept as a draft), stops it.
+    pub async fn seed_domains(&self, dir: &std::path::Path) -> Result<Vec<String>, String> {
+        let mut files: Vec<_> = std::fs::read_dir(dir)
+            .map_err(|e| e.to_string())?
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| {
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+                // Go's filepath.Glob("*.y*ml")
+                name.rsplit_once('.')
+                    .is_some_and(|(_, ext)| ext.starts_with('y') && ext.ends_with("ml"))
+            })
+            .collect();
+        files.sort();
+        let mut loaded = Vec::new();
+        for f in files {
+            let shown = f.display().to_string();
+            let src = std::fs::read_to_string(&f).map_err(|e| format!("{shown}: {e}"))?;
+            let def = Definition::read(&src).map_err(|e| format!("{shown}: {e}"))?;
+            let tx = self.writer().await.map_err(|e| e.message().to_string())?;
+            if tx
+                .domain_status(&def.name, &def.version)
+                .await
+                .map_err(|e| e.message)?
+                .is_some()
+            {
+                continue;
+            }
+            if def.name.is_empty() || def.version.is_empty() {
+                return Err(format!("{shown}: name and version are required: invalid domain"));
+            }
+            if is_builtin(&def.name) {
+                return Err(format!("{shown}: {}", builtin_error(&def.name).message()));
+            }
+            let json = def.json.as_ref().map_err(|e| format!("{shown}: {e}"))?;
+            let domain = graph_catalog::Domain::from_json(json).map_err(|e| format!("{shown}: {e}"))?;
+            let issues = issues_of(&tx, &domain).await.map_err(|e| e.message().to_string())?;
+            let status = if issues.is_empty() {
+                STATUS_PUBLISHED
+            } else {
+                STATUS_DRAFT
+            };
+            self.store(tx, &def.name, &def.version, json, status, (SYSTEM_GRAPH, ""))
+                .await
+                .map_err(|e| format!("{shown}: {}", e.message()))?;
+            if !issues.is_empty() {
+                return Err(format!(
+                    "{shown}: invalid domain: cannot publish: {}",
+                    issues_text(&issues)
+                ));
+            }
+            loaded.push(format!("{}@{}", def.name, def.version));
+        }
+        Ok(loaded)
+    }
+}
+
+/// The graph service acting by itself (`authz.System("graph")`).
+const SYSTEM_GRAPH: &str = "system:graph";

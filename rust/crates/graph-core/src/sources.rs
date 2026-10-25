@@ -53,7 +53,7 @@ impl Source {
     }
 
     /// The checks of a definition (`lnk.Source.Validate`), in Go's words.
-    fn validate(&self) -> std::result::Result<(), String> {
+    pub fn validate(&self) -> std::result::Result<(), String> {
         if !source_name(&self.name) {
             return Err(format!(
                 "source {}: want [a-z][a-z0-9_.-]*: invalid lnk",

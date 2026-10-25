@@ -173,6 +173,36 @@ impl Graph {
     }
 }
 
+impl Graph {
+    /// The demo data as the bootstrap loads it (`devseed.Demo` of `GOAP_GRAPH_SEED=demo`), as the graph service:
+    /// whether it wrote anything.
+    pub(super) async fn load_demo(&self) -> Result<bool, String> {
+        let d: Demo = serde_json::from_str(DEMO_JSON).map_err(|e| format!("demo data: {e}"))?;
+        let system = Caller {
+            subject: "system:graph".into(),
+            on_behalf_of: String::new(),
+            at_least: Vec::new(),
+            project: String::new(),
+            command: String::new(),
+            roles: vec![ROLE_ADMIN.into()],
+            org: String::new(),
+        };
+        let org = self
+            .write_on(system.clone(), &[], async |tx, acc| {
+                demo_organisation(tx, acc, &d).await
+            })
+            .await
+            .map_err(|e| e.message().to_string())?
+            .into_inner();
+        let repo = self
+            .write_on(system, &[], async |tx, acc| demo_repository(tx, acc, &d).await)
+            .await
+            .map_err(|e| e.message().to_string())?
+            .into_inner();
+        Ok(org || repo)
+    }
+}
+
 /// The person a call acts for: the caller, or the person a service acts for.
 fn end_user_of(c: &Caller) -> &str {
     if c.subject.starts_with("system:") {

@@ -52,6 +52,7 @@ use graph_store::read::{LogFilter, Session, Tag};
 
 use crate::{State, convert};
 
+pub mod boot;
 mod demo;
 mod import;
 mod imports;

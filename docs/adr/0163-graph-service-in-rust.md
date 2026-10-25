@@ -618,4 +618,14 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   this one does not follow `parse snapshot: …`; an import failing on a change it cannot purge abandons it, as Go's
   does. Nothing the service serves answers `unimplemented` any more, so the split mode of the proxy is gone: `make
   perf-rust` runs mode `rust`, the comparisons (`shadow`, `compare`) still put the Go service beside it.
+- The platform bootstrap (`graphsvc.Boot`, ADR 0071) is Rust's too: `goap-graph-rs bootstrap` boots once and exits
+  (compose's `graph-bootstrap`), the service boots itself with `GOAP_GRAPH_BOOTSTRAP=1` or a memory store, and every
+  start publishes the shipped domains of `GOAP_DOMAINS_DIR` not stored yet (`Domains::seed_domains`, Go's
+  `SeedDomains`). The roots are `Tx::bootstrap` (`graph-core` `write/bootstrap.rs`, one applied change per namespace),
+  the seeds `graph/boot.rs` in Go's order and transactions (access, built-ins, the adapters of the default unit,
+  models, protected aliases, behaviours, sources, then the demo or the document repository of `GOAP_GRAPH_SEED`); the
+  nodes the code states (policies, built-in MCPs and roles, the terse behaviour, the platform source, the model kinds)
+  are read from `boot.gen.json`, written by `platform/devseed` `TestRustBootIsCurrent`. The models come from
+  `GOAP_MODELS_CONFIG`, else `ANTHROPIC_API_KEY` (no Vault). Two bootstraps of an empty database, one Go and one Rust,
+  leave the same tables and the same outbox (`goap-proxy diff-db`).
 - Not done yet: the Go service leaving the compose stack (`graph`, `graph-bootstrap`, `graph-content`).
