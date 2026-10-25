@@ -193,30 +193,25 @@ impl Sqlite {
     }
 }
 
-/// A write transaction on the writer of a SQLite database: each statement runs on the blocking pool with the writer,
-/// which the transaction keeps between them.
+/// A write transaction on the writer of a SQLite database, which the transaction keeps between its statements. Each
+/// statement runs in place, on the task of the transaction: a commit runs a thousand statements or more, each a few
+/// microseconds of SQLite, and a hop to the blocking pool and back costs some 60 µs of each (three times what SQLite
+/// spends), all of it while the one writer is held. The reads keep the blocking pool: they run side by side.
 pub struct SqliteTx {
     conn: AsyncMutex<Option<OwnedMutexGuard<Connection>>>,
 }
 
 impl SqliteTx {
-    /// Runs `f` on the writer, in the transaction.
+    /// Runs `f` on the writer, in the transaction, in place.
     pub async fn run<T: Send + 'static>(
         &self,
         f: impl FnOnce(&Connection) -> Result<T, StoreError> + Send + 'static,
     ) -> Result<T, StoreError> {
-        let mut slot = self.conn.lock().await;
+        let slot = self.conn.lock().await;
         let g = slot
-            .take()
+            .as_ref()
             .ok_or_else(|| StoreError::Other("sqlite transaction over".into()))?;
-        let (g, res) = tokio::task::spawn_blocking(move || {
-            let res = f(&g);
-            (g, res)
-        })
-        .await
-        .map_err(|e| StoreError::Other(format!("sqlite task: {e}")))?;
-        *slot = Some(g);
-        res
+        f(g)
     }
 
     /// Commits, then lets the writer go.
