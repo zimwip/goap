@@ -523,4 +523,25 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   or publishes it now writes through the same store as `SaveDomain` (`Domains::store`, Go's `SQLStore.SaveDomain`: a
   draft replaced keeping its creation, another status refused) and answers the version as stored. A domain whose JSON
   `json.Marshal` refuses (a mapping keyed by other than strings, a NaN among the values of an instance) is still Go's.
+- The check of a domain's definition (`Domain.Validate`, `Schema.check`, `Service.validateDomain`): `graph-catalog`
+  `validate`, every issue at Go's path in Go's words and order (names, extends and cycles, lifecycles and their
+  `Lifecycle.Issues`, gate criteria, documents and child states, algorithms, instances and where they are plugged,
+  search properties, enums and attributes, link types, structures, required links, creation forms, item types,
+  importers). The forms follow `form.CheckForm` (`graph-catalog` `form`) over the registry of widgets as Go writes it
+  for the web (`widgetCatalog.gen.ts`, read at build time, so a new widget reaches the Rust service with its
+  catalogue). A CEL guard or criterion is judged by a type checker following cel-go's over the guard environment
+  (`graph-script` `celcheck`: the variables, the operators, the macros as the parser expands them, the functions guards
+  use; a corpus of expressions gives the same verdicts as `guard.Compile`); a script by QuickJS, with none of the syntax
+  goja may read otherwise. What only Go words stays the Go service's: a guard or script its compilers may refuse, a
+  parameter value its coercion refuses, a pattern its `regexp` refuses, a default checked in words of its own, a
+  timestamp or an unsigned integer in a field of any type (which the JSON no longer carries as yaml.v3 decoded it). So
+  `ImportDomain`, `SaveDomain`, `PublishDomain` and `ValidateDomain` serve every domain, `alm` and `code` included: a
+  draft with issues stored with them, an import to publish with issues kept as a draft and refused with them
+  (`invalid domain: cannot publish: …`), a publish of a draft with issues refused. The domain of a request is read as
+  `domainpb.DomainFromPB` reads it (`domainpb::definition`: the lists Go leaves nil, the form `pbconv.FormFromPB`
+  drops when it does not read) and written as `json.Marshal` writes `def.Domain` (`decode::from_json` over the shape,
+  as `json.Unmarshal` reads it). A catalogue the domains in force would not make with the domain stays Go's to word.
+  The JSON of every answer writes its doubles as protojson does (`goap-connect`'s formatter: `200`, not `200.0`,
+  an exponent below 1e-6 or from 1e21 on), and an empty form or set of instance values is no field, as
+  `pbconv.Struct` gives none.
 - Not done yet: the rest of phase 4.

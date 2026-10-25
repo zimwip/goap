@@ -3,7 +3,7 @@
 //! `registry.v1.Domain`, then decoded. What the protocol has no field for (a structure's bootstrap, the bound
 //! algorithms of a transition) is left out, as the Go converter leaves it out.
 use goap_proto::registry::v1 as pb;
-use graph_catalog::{catalog, def, imported::Imported};
+use graph_catalog::{catalog, def};
 use serde_json::{Map, Value, json};
 
 type Obj = Map<String, Value>;
@@ -77,7 +77,9 @@ fn node_type(o: &Obj) -> Obj {
     });
     flag(&mut m, o, "adminOnly", "adminOnly");
     flag(&mut m, o, "additionalProperties", "additionalProperties");
-    if let Some(f @ Value::Object(_)) = o.get("form") {
+    if let Some(f @ Value::Object(form)) = o.get("form")
+        && !form.is_empty()
+    {
         m.insert("form".into(), f.clone());
     }
     m
@@ -195,7 +197,9 @@ fn instance(o: &Obj) -> Obj {
     for k in ["name", "description", "algorithm"] {
         text(&mut m, o, k, k);
     }
-    if let Some(v @ Value::Object(_)) = o.get("values") {
+    if let Some(v @ Value::Object(values)) = o.get("values")
+        && !values.is_empty()
+    {
         m.insert("values".into(), v.clone());
     }
     m
@@ -355,126 +359,102 @@ pub fn lifecycle_info(l: &def::Lifecycle) -> pb::Lifecycle {
     }
 }
 
-/// An edited domain as the registry stores it (`domainpb.DomainFromPB`, status and times ignored), when it is one read
-/// here ([`Imported::checked`]): none with a lifecycle, an algorithm, a validator, a document, a structure or a form.
-pub fn imported(p: &pb::Domain) -> Option<Imported> {
-    use graph_catalog::imported as im;
-    let attributes = |as_: &[pb::Attribute]| -> Vec<im::Attribute> {
-        as_.iter()
-            .map(|a| im::Attribute {
-                name: a.name.clone(),
-                label: a.label.clone(),
-                description: a.description.clone(),
-                typ: a.r#type.clone(),
-                widget: a.widget.clone(),
-                diff: a.diff.clone(),
-                enumeration: a.r#enum.clone(),
-                default: a.default_value.clone(),
-                section: a.section.clone(),
-                order: a.order.into(),
-                tooltip: a.tooltip.clone(),
-                as_name: a.as_name,
-                validators: a.validators.clone(),
-            })
-            .collect()
-    };
-    if !p.lifecycles.is_empty() || !p.algorithms.is_empty() || !p.algorithm_instances.is_empty() {
-        return None;
-    }
-    let mut node_types = Vec::new();
-    for n in &p.node_types {
-        if !n.lifecycle.is_empty() || n.document.is_some() || n.structure.is_some() || n.form.is_some() {
-            return None;
+/// The definition of a domain a request carries, as `domainpb.DomainFromPB` reads it, in the JSON `json.Marshal`
+/// writes of it (`Err`: its error). A form that does not read as one is left out, as `pbconv.FormFromPB` leaves it.
+pub fn definition(p: &pb::Domain) -> Result<String, String> {
+    use graph_catalog::decode;
+    use serde_json::{Value as J, json};
+    // a list Go builds by appending, or keeps when it holds something: null when empty
+    fn list<T>(xs: &[T], f: impl Fn(&T) -> J) -> J {
+        if xs.is_empty() {
+            J::Null
+        } else {
+            J::Array(xs.iter().map(f).collect())
         }
-        node_types.push(im::NodeType {
-            name: n.name.clone(),
-            description: n.description.clone(),
-            attributes: attributes(&n.attributes),
-            extends: n.extends.clone(),
-            change_controlled: n.change_controlled,
-            validators: n.validators.clone(),
-            search: n
-                .search
-                .iter()
-                .map(|s| im::SearchProperty {
-                    property: s.property.clone(),
-                    text: s.text,
-                    facet: s.facet,
-                })
-                .collect(),
-            editor: n.editor.clone(),
-            icon: n.icon.clone(),
-            color: n.color.clone(),
-            requires: n
-                .requires
-                .iter()
-                .map(|r| im::RequiredLink {
-                    link: r.link.clone(),
-                    count: r.count.into(),
-                })
-                .collect(),
-            admin_only: n.admin_only,
-            additional_properties: n.additional_properties,
-            ..im::NodeType::default()
-        });
     }
-    let link_types: Vec<im::LinkType> = p
-        .link_types
-        .iter()
-        .map(|l| im::LinkType {
-            name: l.name.clone(),
-            description: l.description.clone(),
-            from: l.from.clone(),
-            to: l.to.clone(),
-            attributes: attributes(&l.attributes),
-            validators: l.validators.clone(),
-            compose: l.compose,
-            label: l.label.clone(),
-            inverse_label: l.inverse_label.clone(),
+    let texts = |xs: &[String]| list(xs, |s| J::String(s.clone()));
+    let attributes = |xs: &[pb::Attribute]| {
+        list(xs, |a| {
+            json!({"name": a.name, "label": a.label, "description": a.description, "type": a.r#type, "widget": a.widget,
+                "diff": a.diff, "enum": a.r#enum, "default": a.default_value, "section": a.section, "order": a.order,
+                "tooltip": a.tooltip, "asName": a.as_name, "validators": texts(&a.validators)})
         })
-        .collect();
-    let d = Imported {
-        name: p.name.clone(),
-        version: p.version.clone(),
-        description: p.description.clone(),
-        node_types: (!node_types.is_empty()).then_some(node_types),
-        link_types: (!link_types.is_empty()).then_some(link_types),
-        enums: p
-            .enums
-            .iter()
-            .map(|e| im::Enum {
-                name: e.name.clone(),
-                description: e.description.clone(),
-                values: e
-                    .values
-                    .iter()
-                    .map(|v| im::EnumValue {
-                        value: v.value.clone(),
-                        label: v.label.clone(),
-                    })
-                    .collect(),
-            })
-            .collect(),
-        item_types: p
-            .item_types
-            .iter()
-            .map(|t| im::ItemType {
-                name: t.name.clone(),
-                description: t.description.clone(),
-                attributes: attributes(&t.attributes),
-            })
-            .collect(),
-        importers: p
-            .importers
-            .iter()
-            .map(|i| im::Importer {
-                name: i.name.clone(),
-                label: i.label.clone(),
-                description: i.description.clone(),
-                params: attributes(&i.params),
-            })
-            .collect(),
-        ..Imported::default()
     };
-    d.checked()
+    let form_type = graph_catalog::shape::Type {
+        kind: "struct".into(),
+        name: "form.Form".into(),
+        go: "form.Form".into(),
+        elem: None,
+    };
+    let form = |f: &Option<pbjson_types::Struct>| match f {
+        Some(s) => {
+            let v = J::Object(crate::convert::map(s));
+            if decode::from_json(&form_type, &v).is_ok() {
+                v
+            } else {
+                J::Null
+            }
+        }
+        None => J::Null,
+    };
+    let criteria = |xs: &[pb::Criterion]| {
+        list(
+            xs,
+            |c| json!({"name": c.name, "expr": c.expr, "description": c.description}),
+        )
+    };
+    let d = json!({
+        "name": p.name,
+        "version": p.version,
+        "description": p.description,
+        "nodeTypes": list(&p.node_types, |n| json!({
+            "name": n.name, "description": n.description, "attributes": attributes(&n.attributes),
+            "extends": n.extends, "lifecycle": n.lifecycle,
+            "document": n.document.as_ref().map(|d| json!({"contains": texts(&d.contains)})),
+            "changeControlled": n.change_controlled, "validators": texts(&n.validators),
+            "search": list(&n.search, |s| json!({"property": s.property, "text": s.text, "facet": s.facet})),
+            "editor": n.editor, "icon": n.icon, "color": n.color,
+            "structure": n.structure.as_ref().map(|t| json!({"kind": t.kind, "parent": t.parent, "root": t.root,
+                "selfParent": t.self_parent})),
+            "requires": list(&n.requires, |r| json!({"link": r.link, "count": r.count})),
+            "adminOnly": n.admin_only, "additionalProperties": n.additional_properties, "form": form(&n.form),
+        })),
+        "linkTypes": list(&p.link_types, |l| json!({
+            "name": l.name, "description": l.description, "from": l.from, "to": l.to, "compose": l.compose,
+            "attributes": attributes(&l.attributes), "validators": texts(&l.validators), "label": l.label,
+            "inverseLabel": l.inverse_label,
+        })),
+        "enums": list(&p.enums, |e| json!({"name": e.name, "description": e.description,
+            "values": list(&e.values, |v| json!({"value": v.value, "label": v.label}))})),
+        "lifecycles": list(&p.lifecycles, |l| json!({
+            "name": l.name, "description": l.description, "initial": l.initial,
+            "states": list(&l.states, |s| json!({"name": s.name, "description": s.description,
+                "notCommittable": s.not_committable, "final": s.r#final})),
+            "transitions": list(&l.transitions, |t| json!({
+                "name": t.name, "description": t.description, "from": t.from, "to": t.to,
+                "permission": t.permission, "guard": t.guard,
+                "requires": {"attributes": texts(&t.requires_attributes),
+                    "outgoingLinks": texts(&t.requires_outgoing_links)},
+                "guards": texts(&t.guards), "actions": texts(&t.actions),
+                "vetos": criteria(&t.vetos), "objectives": criteria(&t.objectives),
+                "children": (!t.children_states.is_empty()).then(|| json!({"states": t.children_states})),
+            })),
+        })),
+        "algorithms": list(&p.algorithms, |a| json!({
+            "name": a.name, "description": a.description, "type": a.r#type, "language": a.language, "code": a.code,
+            "params": list(&a.params, |x| json!({"name": x.name, "type": x.r#type, "description": x.description,
+                "required": x.required, "values": texts(&x.values),
+                "default": x.default_value.as_ref().map(crate::convert::json)})),
+        })),
+        "algorithmInstances": list(&p.algorithm_instances, |i| json!({
+            "name": i.name, "description": i.description, "algorithm": i.algorithm,
+            "values": i.values.as_ref().filter(|s| !s.fields.is_empty()).map(|s| J::Object(crate::convert::map(s))),
+        })),
+        "itemTypes": list(&p.item_types, |t| json!({"name": t.name, "description": t.description,
+            "attributes": attributes(&t.attributes)})),
+        "importers": list(&p.importers, |i| json!({"name": i.name, "label": i.label, "description": i.description,
+            "params": attributes(&i.params)})),
+    });
+    let v = decode::from_json(&decode::domain_type(), &d)?;
+    decode::domain_json(&v)
 }

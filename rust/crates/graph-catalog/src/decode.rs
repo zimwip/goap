@@ -585,7 +585,7 @@ impl<'t> Decoder<'t> {
 }
 
 /// A string as Go's `%#v` (and `strconv.Quote`) writes it.
-fn go_quote(s: &str) -> String {
+pub(crate) fn go_quote(s: &str) -> String {
     let mut out = String::from("\"");
     for c in s.chars() {
         match c {
@@ -615,13 +615,88 @@ pub fn to_json(t: &Type, v: &Value) -> Result<String, String> {
 
 /// The JSON of a domain's definition.
 pub fn domain_json(v: &Value) -> Result<String, String> {
-    let root = Type {
+    to_json(&domain_type(), v)
+}
+
+/// A value of a type from its JSON, as `json.Unmarshal` reads it into a zero value: a key matched exactly, else
+/// without regard to case; an unknown key ignored; a number into `any` a float. `Err`: a value of another type, which
+/// `json.Unmarshal` refuses.
+pub fn from_json(t: &Type, v: &serde_json::Value) -> Result<Value, String> {
+    use serde_json::Value as J;
+    let mismatch = || Err(format!("json: cannot unmarshal {v} into {}", t.go));
+    Ok(match (t.kind.as_str(), v) {
+        (_, J::Null) => zero(t),
+        ("ptr", _) => from_json(t.elem(), v)?,
+        ("string", J::String(s)) => Value::Str(s.clone()),
+        ("bool", J::Bool(b)) => Value::Bool(*b),
+        ("int", J::Number(n)) => match n.as_i64().or_else(|| {
+            n.as_f64()
+                .filter(|f| f.fract() == 0.0 && f.abs() < 9e18)
+                .map(|f| f as i64)
+        }) {
+            Some(i) => Value::Int(i),
+            None => return mismatch(),
+        },
+        ("slice", J::Array(xs)) => Value::Slice(xs.iter().map(|x| from_json(t.elem(), x)).collect::<Result<_, _>>()?),
+        ("map", J::Object(m)) => Value::Map(
+            m.iter()
+                .map(|(k, x)| Ok((k.clone(), from_json(t.elem(), x)?)))
+                .collect::<Result<_, String>>()?,
+        ),
+        ("struct", J::Object(m)) => {
+            let s = SHAPE.strukt(&t.name);
+            let mut fields = Vec::with_capacity(s.fields.len());
+            for f in &s.fields {
+                let x = (!f.json.is_empty())
+                    .then(|| {
+                        m.get(&f.json)
+                            .or_else(|| m.iter().find(|(k, _)| k.eq_ignore_ascii_case(&f.json)).map(|(_, x)| x))
+                    })
+                    .flatten();
+                fields.push(match x {
+                    Some(x) => from_json(&f.typ, x)?,
+                    None => zero(&f.typ),
+                });
+            }
+            Value::Struct(fields)
+        }
+        ("any", _) => any_json(v),
+        _ => return mismatch(),
+    })
+}
+
+/// A JSON value in an `interface{}`.
+fn any_json(v: &serde_json::Value) -> Value {
+    use serde_json::Value as J;
+    match v {
+        J::Null => Value::Nil,
+        J::Bool(b) => Value::Bool(*b),
+        J::Number(n) => Value::Float(n.as_f64().unwrap_or_default()),
+        J::String(s) => Value::Str(s.clone()),
+        J::Array(xs) => Value::Slice(xs.iter().map(any_json).collect()),
+        J::Object(m) => Value::Map(m.iter().map(|(k, x)| (k.clone(), any_json(x))).collect()),
+    }
+}
+
+/// The zero value of a type.
+fn zero(t: &Type) -> Value {
+    match t.kind.as_str() {
+        "string" => Value::Str(String::new()),
+        "bool" => Value::Bool(false),
+        "int" => Value::Int(0),
+        "struct" => Value::Struct(SHAPE.strukt(&t.name).fields.iter().map(|f| zero(&f.typ)).collect()),
+        _ => Value::Nil,
+    }
+}
+
+/// The type of the definition of a domain (`def.Domain`).
+pub fn domain_type() -> Type {
+    Type {
         kind: "struct".into(),
         name: SHAPE.root.clone(),
         go: SHAPE.root.clone(),
         elem: None,
-    };
-    to_json(&root, v)
+    }
 }
 
 /// Whether `omitempty` leaves a value out (a pointer only when nil).

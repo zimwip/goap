@@ -2,5 +2,6 @@
 //! JavaScript algorithms of its validators and lifecycle transitions on QuickJS ([`js`]), the CEL guards of its
 //! transitions ([`guard`]).
 pub mod abac;
+pub mod celcheck;
 pub mod guard;
 pub mod js;

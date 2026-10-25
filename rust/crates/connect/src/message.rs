@@ -80,7 +80,12 @@ impl Codec {
     pub fn encode<M: Message>(self, m: &M) -> Result<Vec<u8>, ConnectError> {
         match self {
             Codec::Proto => Ok(m.encode_to_vec()),
-            Codec::Json => serde_json::to_vec(m).map_err(|e| ConnectError::internal(format!("marshal message: {e}"))),
+            Codec::Json => {
+                let mut out = Vec::new();
+                m.serialize(&mut serde_json::Serializer::with_formatter(&mut out, GoFloats))
+                    .map_err(|e| ConnectError::internal(format!("marshal message: {e}")))?;
+                Ok(out)
+            }
         }
     }
 
@@ -156,5 +161,63 @@ impl dyn AnyMessage {
             .downcast::<T>()
             .map(|b| *b)
             .map_err(|_| ConnectError::internal(format!("message is a {name}, not a {}", std::any::type_name::<T>())))
+    }
+}
+
+/// The JSON formatter of the messages: numbers as protojson writes them, a whole double without `.0` (`200`, not
+/// `200.0`), the shortest digits that read back, an exponent below 1e-6 or from 1e21 on (`1e+21`, `1e-7`).
+struct GoFloats;
+
+impl serde_json::ser::Formatter for GoFloats {
+    fn write_f64<W: ?Sized + std::io::Write>(&mut self, w: &mut W, f: f64) -> std::io::Result<()> {
+        w.write_all(go_float(f, format!("{f}"), format!("{f:e}")).as_bytes())
+    }
+
+    fn write_f32<W: ?Sized + std::io::Write>(&mut self, w: &mut W, f: f32) -> std::io::Result<()> {
+        w.write_all(go_float(f64::from(f), format!("{f}"), format!("{f:e}")).as_bytes())
+    }
+}
+
+/// Go's float format given the shortest plain (`plain`) and exponent (`exp`) forms of the number.
+fn go_float(f: f64, plain: String, exp: String) -> String {
+    let abs = f.abs();
+    if abs == 0.0 || (1e-6..1e21).contains(&abs) {
+        return plain;
+    }
+    let (mant, e) = exp.split_once('e').unwrap_or((&exp, "0"));
+    let (sign, digits) = e.strip_prefix('-').map_or(('+', e), |d| ('-', d));
+    let digits = if digits.len() < 2 && sign == '+' {
+        format!("0{digits}")
+    } else {
+        digits.to_string()
+    };
+    format!("{mant}e{sign}{digits}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Serialize;
+
+    fn json(v: serde_json::Value) -> String {
+        let mut out = Vec::new();
+        v.serialize(&mut serde_json::Serializer::with_formatter(&mut out, GoFloats))
+            .unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    #[test]
+    fn doubles_as_go_writes_them() {
+        for (f, want) in [
+            (200.0, "200"),
+            (0.5, "0.5"),
+            (-3.0, "-3"),
+            (1e21, "1e+21"),
+            (1.5e-7, "1.5e-7"),
+            (1e-6, "0.000001"),
+            (123456789012.0, "123456789012"),
+        ] {
+            assert_eq!(json(serde_json::json!(f)), want, "{f}");
+        }
     }
 }

@@ -12,16 +12,20 @@ async fn serve() -> String {
 }
 
 #[tokio::test]
-async fn health_and_a_method_not_written_yet() {
+async fn health_and_a_request_left_to_go() {
     let base = serve().await;
     let c = reqwest::Client::new();
     assert_eq!(c.get(format!("{base}/healthz")).send().await.unwrap().status(), 200);
     assert_eq!(c.get(format!("{base}/readyz")).send().await.unwrap().status(), 200);
+    // a guard cel-go may refuse in words of its own is the Go service's to judge
+    let guarded = serde_json::json!({"domain": {"name": "d", "version": "1", "lifecycles": [{
+        "name": "lc", "initial": "a", "states": [{"name": "a"}],
+        "transitions": [{"name": "t", "from": "a", "to": "a", "guard": "nope == 1"}]}]}});
     for path in ["/goap.registry.v1.DomainService/ValidateDomain"] {
         let res = c
             .post(format!("{base}{path}"))
             .header("content-type", "application/json")
-            .body("{}")
+            .body(guarded.to_string())
             .send()
             .await
             .unwrap();

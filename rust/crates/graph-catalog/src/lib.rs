@@ -5,9 +5,11 @@ pub mod algo;
 pub mod catalog;
 pub mod decode;
 pub mod def;
+pub mod form;
 pub mod imported;
 pub mod record;
 pub mod shape;
+pub mod validate;
 pub mod yamlv3;
 
 pub use catalog::{Catalog, Structure, Type};

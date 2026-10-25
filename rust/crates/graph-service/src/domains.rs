@@ -5,8 +5,9 @@ use goap_proto::registry::v1 as pb;
 use graph_catalog::{
     Catalog,
     catalog::{builtin_sources, builtins, is_builtin},
-    imported::{Definition, Imported},
+    imported::Definition,
     record::{Record, STATUS_ARCHIVED, STATUS_DRAFT, STATUS_PUBLISHED, in_force, latest},
+    validate::Issue,
 };
 use graph_core::{GraphError, gojson, goyaml, store::OutboxMessage};
 use graph_store::read::{NewDomain, StoredDomain};
@@ -232,17 +233,21 @@ impl pb::DomainService for Domains {
         }))
     }
 
-    /// Checks an edited domain (`Handler.ValidateDomain`): one with no issue and nothing the Go service alone checks.
+    /// Checks an edited domain (`Handler.ValidateDomain`): its issues (`Domain.Validate`), none of the catalogue's.
     async fn validate_domain(
         &self,
         _ctx: &Ctx,
         req: Request<pb::ValidateDomainRequest>,
     ) -> Answer<pb::ValidateDomainResponse> {
         let p = req.into_inner().domain.unwrap_or_default();
-        if domainpb::imported(&p).is_none() {
-            return Err(unserved("a domain with issues, or checked by scripts, guards or forms"));
-        }
-        Ok(Response::new(pb::ValidateDomainResponse { issues: Vec::new() }))
+        let domain = domainpb::definition(&p)
+            .ok()
+            .and_then(|j| graph_catalog::Domain::from_json(&j).ok())
+            .ok_or_else(|| unserved("a definition Go's JSON encoder refuses"))?;
+        let issues = graph_catalog::validate::validate(&domain, true).map_err(|u| unserved(u.0))?;
+        Ok(Response::new(pb::ValidateDomainResponse {
+            issues: issues_pb(issues),
+        }))
     }
 
     /// Runs an algorithm on a sample input (`Service.RunAlgorithm`): a platform service's; a declaration or parameter
@@ -297,8 +302,9 @@ impl pb::DomainService for Domains {
         Ok(Response::new(resp))
     }
 
-    /// Creates or replaces a draft (`Service.SaveDomain`): a platform service's, with no issue and nothing the Go
-    /// service alone checks (a draft with issues is stored by Go, which words them).
+    /// Creates or replaces a draft (`Service.SaveDomain`), read as `domainpb.DomainFromPB` reads it, with its issues
+    /// (a draft is stored with them). A check only Go words (a guard cel-go may refuse, a script goja may refuse...) is
+    /// the Go service's.
     async fn save_domain(&self, _ctx: &Ctx, req: Request<pb::SaveDomainRequest>) -> Answer<pb::SaveDomainResponse> {
         let (subject, command) = caller(&req);
         let who = person_of(&req);
@@ -312,29 +318,16 @@ impl pb::DomainService for Domains {
             return Err(builtin_error(&p.name));
         }
         self.authorize(who.as_ref(), "write", &p.name, &p.version).await?;
-        let Some(d) = domainpb::imported(&p) else {
-            return Err(unserved("a domain with issues, or checked by scripts, guards or forms"));
-        };
-        let domain = d.domain().map_err(|e| connect_error(GraphError::internal(e)))?;
+        let json = domainpb::definition(&p).map_err(|_| unserved("a definition Go's JSON encoder refuses"))?;
+        let domain = graph_catalog::Domain::from_json(&json).map_err(|e| connect_error(GraphError::internal(e)))?;
         let tx = self.writer().await?;
-        if !resolves(&tx, domain).await? {
-            return Err(unserved(
-                "a domain whose types do not resolve with the domains in force",
-            ));
-        }
+        let issues = issues_of(&tx, &domain, true).await?;
         let saved = self
-            .store(
-                tx,
-                &d.name,
-                &d.version,
-                &gojson::to_string(&d),
-                STATUS_DRAFT,
-                (&subject, &command),
-            )
+            .store(tx, &p.name, &p.version, &json, STATUS_DRAFT, (&subject, &command))
             .await?;
         Ok(Response::new(pb::SaveDomainResponse {
             domain: Some(stored_pb(saved)?),
-            issues: Vec::new(),
+            issues: issues_pb(issues),
         }))
     }
 
@@ -359,14 +352,14 @@ impl pb::DomainService for Domains {
         if s.status != STATUS_DRAFT {
             return Err(not_a_draft(&format!("{}@{}", r.name, r.version)));
         }
-        let Some(d) = Imported::parse(&s.definition_text) else {
-            return Err(unserved("a domain with issues, or checked by scripts, guards or forms"));
-        };
-        let domain = d.domain().map_err(|e| connect_error(GraphError::internal(e)))?;
-        if !resolves(&tx, domain).await? {
-            return Err(unserved(
-                "a domain whose types do not resolve with the domains in force",
-            ));
+        let domain = graph_catalog::Domain::from_json(&s.definition_text)
+            .map_err(|_| unserved("a stored definition Go reads in its own way"))?;
+        let issues = issues_of(&tx, &domain, true).await?;
+        if !issues.is_empty() {
+            return Err(ConnectError::invalid_argument(format!(
+                "invalid domain: {}",
+                issues_text(&issues)
+            )));
         }
         let now = chrono::Utc::now();
         let events = self.events(
@@ -506,8 +499,8 @@ impl pb::DomainService for Domains {
     }
 
     /// Stores a domain version from its YAML, published on request (`Service.ImportDomain`): read as `def.ParseDomain`
-    /// reads it (a definition that does not read is refused in Go's words), then stored as a draft or published. A
-    /// domain with issues, or one only the Go service checks (a lifecycle, a script...), is the Go service's.
+    /// reads it (a definition that does not read is refused in Go's words), then stored as a draft or published; a
+    /// domain with issues is kept as a draft, the issues in the error when it was to be published.
     async fn import_domain(
         &self,
         _ctx: &Ctx,
@@ -530,23 +523,30 @@ impl pb::DomainService for Domains {
         if r.publish {
             self.authorize(who.as_ref(), "publish", &def.name, &def.version).await?;
         }
-        let (Some(d), Ok(json)) = (def.served(), def.json.as_ref()) else {
-            return Err(unserved("a domain with issues, or checked by scripts, guards or forms"));
+        let Ok(json) = def.json.as_ref() else {
+            return Err(unserved("a definition Go's JSON encoder refuses"));
         };
+        if !def.faithful {
+            return Err(unserved("a definition holding a timestamp or an unsigned integer"));
+        }
         let domain = graph_catalog::Domain::from_json(json).map_err(|e| connect_error(GraphError::internal(e)))?;
         let tx = self.writer().await?;
-        if !resolves(&tx, domain).await? {
-            return Err(unserved(
-                "a domain whose types do not resolve with the domains in force",
-            ));
-        }
-        let status = if r.publish { STATUS_PUBLISHED } else { STATUS_DRAFT };
+        let issues = issues_of(&tx, &domain, false).await?;
+        let draft = !r.publish || !issues.is_empty();
+        let status = if draft { STATUS_DRAFT } else { STATUS_PUBLISHED };
         let saved = self
-            .store(tx, &d.name, &d.version, json, status, (&subject, &command))
+            .store(tx, &def.name, &def.version, json, status, (&subject, &command))
             .await?;
+        if r.publish && !issues.is_empty() {
+            // kept as a draft, the issues in the error
+            return Err(ConnectError::invalid_argument(format!(
+                "invalid domain: cannot publish: {}",
+                issues_text(&issues)
+            )));
+        }
         Ok(Response::new(pb::ImportDomainResponse {
             domain: Some(stored_pb(saved)?),
-            issues: Vec::new(),
+            issues: issues_pb(issues),
         }))
     }
 }
@@ -710,6 +710,48 @@ fn not_found(name: &str, version: &str) -> ConnectError {
 /// A write a version that is no longer a draft refuses (`ErrImmutable`).
 fn not_a_draft(what: &str) -> ConnectError {
     ConnectError::failed_precondition(format!("domain {what}: domain version is not a draft"))
+}
+
+/// The issues of a domain (`Service.validateDomain`): its own, else the catalogue it would not make with the domains
+/// in force (Go's to word). `exact`: read from JSON.
+async fn issues_of(
+    tx: &graph_store::read::Session,
+    d: &graph_catalog::Domain,
+    exact: bool,
+) -> Result<Vec<Issue>, ConnectError> {
+    let issues = graph_catalog::validate::validate(d, exact).map_err(|u| unserved(u.0))?;
+    if issues.is_empty() && !resolves(tx, d.clone()).await? {
+        return Err(unserved(
+            "a domain whose types do not resolve with the domains in force",
+        ));
+    }
+    Ok(issues)
+}
+
+/// The issues as `def.Issues.Error` writes them.
+fn issues_text(issues: &[Issue]) -> String {
+    let parts: Vec<String> = issues
+        .iter()
+        .map(|i| {
+            if i.path.is_empty() {
+                i.message.clone()
+            } else {
+                format!("{}: {}", i.path, i.message)
+            }
+        })
+        .collect();
+    parts.join("; ")
+}
+
+fn issues_pb(issues: Vec<Issue>) -> Vec<pb::Issue> {
+    issues
+        .into_iter()
+        .map(|i| pb::Issue {
+            path: i.path,
+            message: i.message,
+            ..Default::default()
+        })
+        .collect()
 }
 
 /// Whether the domains in force still make a catalogue with this one in place of its domain's (`Service.Types`).
