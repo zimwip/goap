@@ -50,9 +50,41 @@ func run() error {
 			}
 		}
 	}
+	if err := dropTricks(filepath.Join("parser", "cypher_parser.go")); err != nil {
+		return err
+	}
 	gofmt := exec.Command("gofmt", "-w", "parser")
 	gofmt.Stdout, gofmt.Stderr = os.Stdout, os.Stderr
 	return gofmt.Run()
+}
+
+// trick is the statement ANTLR ends each rule with so that its label is used: after the return, go vet reports it
+// unreachable.
+const trick = "\tgoto errorExit // Trick to prevent compiler error if the label is not used\n"
+
+// dropTricks removes the trick, and the label too in the rules that never jump to it (the code after the label is
+// reached by falling through).
+func dropTricks(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	parts := strings.SplitAfter(string(b), trick)
+	var out strings.Builder
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			out.WriteString(part)
+			break
+		}
+		start := strings.LastIndex(part, "\nfunc ") + 1
+		head, body := part[:start], strings.TrimSuffix(part[start:], trick)
+		if !strings.Contains(body, "goto errorExit") {
+			body = strings.Replace(body, "\nerrorExit:\n", "\n", 1)
+		}
+		out.WriteString(head)
+		out.WriteString(body)
+	}
+	return os.WriteFile(path, []byte(out.String()), 0o644)
 }
 
 // tool is the path of the ANTLR jar, fetched into the user cache when missing.

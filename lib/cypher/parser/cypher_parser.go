@@ -1344,7 +1344,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_StatementContext is an interface to support dynamic dispatch.
@@ -1436,7 +1435,6 @@ func (p *CypherParser) OC_Statement() (localctx IOC_StatementContext) {
 		p.OC_Query()
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -1446,7 +1444,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_QueryContext is an interface to support dynamic dispatch.
@@ -1584,7 +1581,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_RegularQueryContext is an interface to support dynamic dispatch.
@@ -1788,7 +1784,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_UnionContext is an interface to support dynamic dispatch.
@@ -1999,7 +1994,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_SingleQueryContext is an interface to support dynamic dispatch.
@@ -2137,7 +2131,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_SinglePartQueryContext is an interface to support dynamic dispatch.
@@ -2509,7 +2502,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_MultiPartQueryContext is an interface to support dynamic dispatch.
@@ -2874,7 +2866,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_UpdatingClauseContext is an interface to support dynamic dispatch.
@@ -3085,7 +3076,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ReadingClauseContext is an interface to support dynamic dispatch.
@@ -3248,7 +3238,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_MatchContext is an interface to support dynamic dispatch.
@@ -3471,7 +3460,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_UnwindContext is an interface to support dynamic dispatch.
@@ -3666,7 +3654,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_MergeContext is an interface to support dynamic dispatch.
@@ -3891,7 +3878,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_MergeActionContext is an interface to support dynamic dispatch.
@@ -4101,7 +4087,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_CreateContext is an interface to support dynamic dispatch.
@@ -4241,7 +4226,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_SetContext is an interface to support dynamic dispatch.
@@ -4485,7 +4469,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_SetItemContext is an interface to support dynamic dispatch.
@@ -4849,7 +4832,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_DeleteContext is an interface to support dynamic dispatch.
@@ -5124,7 +5106,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_RemoveContext is an interface to support dynamic dispatch.
@@ -5358,7 +5339,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_RemoveItemContext is an interface to support dynamic dispatch.
@@ -5517,7 +5497,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_InQueryCallContext is an interface to support dynamic dispatch.
@@ -5720,7 +5699,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_StandaloneCallContext is an interface to support dynamic dispatch.
@@ -5981,7 +5959,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_YieldItemsContext is an interface to support dynamic dispatch.
@@ -6241,7 +6218,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_YieldItemContext is an interface to support dynamic dispatch.
@@ -6411,7 +6387,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_WithContext is an interface to support dynamic dispatch.
@@ -6580,7 +6555,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ReturnContext is an interface to support dynamic dispatch.
@@ -6695,7 +6669,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ProjectionBodyContext is an interface to support dynamic dispatch.
@@ -6967,7 +6940,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ProjectionItemsContext is an interface to support dynamic dispatch.
@@ -7275,7 +7247,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ProjectionItemContext is an interface to support dynamic dispatch.
@@ -7456,7 +7427,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_OrderContext is an interface to support dynamic dispatch.
@@ -7684,7 +7654,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_SkipContext is an interface to support dynamic dispatch.
@@ -7812,7 +7781,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_LimitContext is an interface to support dynamic dispatch.
@@ -7940,7 +7908,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_SortItemContext is an interface to support dynamic dispatch.
@@ -8106,7 +8073,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_WhereContext is an interface to support dynamic dispatch.
@@ -8234,7 +8200,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_PatternContext is an interface to support dynamic dispatch.
@@ -8447,7 +8412,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_PatternPartContext is an interface to support dynamic dispatch.
@@ -8646,7 +8610,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_AnonymousPatternPartContext is an interface to support dynamic dispatch.
@@ -8738,7 +8701,6 @@ func (p *CypherParser) OC_AnonymousPatternPart() (localctx IOC_AnonymousPatternP
 		p.OC_PatternElement()
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -8748,7 +8710,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_PatternElementContext is an interface to support dynamic dispatch.
@@ -9004,7 +8965,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_RelationshipsPatternContext is an interface to support dynamic dispatch.
@@ -9207,7 +9167,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_NodePatternContext is an interface to support dynamic dispatch.
@@ -9481,7 +9440,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_PatternElementChainContext is an interface to support dynamic dispatch.
@@ -9629,7 +9587,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_RelationshipPatternContext is an interface to support dynamic dispatch.
@@ -10149,7 +10106,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_RelationshipDetailContext is an interface to support dynamic dispatch.
@@ -10454,7 +10410,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_PropertiesContext is an interface to support dynamic dispatch.
@@ -10593,7 +10548,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_RelationshipTypesContext is an interface to support dynamic dispatch.
@@ -10850,7 +10804,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_NodeLabelsContext is an interface to support dynamic dispatch.
@@ -11037,7 +10990,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_NodeLabelContext is an interface to support dynamic dispatch.
@@ -11172,7 +11124,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_RangeLiteralContext is an interface to support dynamic dispatch.
@@ -11434,7 +11385,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_LabelNameContext is an interface to support dynamic dispatch.
@@ -11526,7 +11476,6 @@ func (p *CypherParser) OC_LabelName() (localctx IOC_LabelNameContext) {
 		p.OC_SchemaName()
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -11536,7 +11485,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_RelTypeNameContext is an interface to support dynamic dispatch.
@@ -11628,7 +11576,6 @@ func (p *CypherParser) OC_RelTypeName() (localctx IOC_RelTypeNameContext) {
 		p.OC_SchemaName()
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -11638,7 +11585,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_PropertyExpressionContext is an interface to support dynamic dispatch.
@@ -11841,7 +11787,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ExpressionContext is an interface to support dynamic dispatch.
@@ -11933,7 +11878,6 @@ func (p *CypherParser) OC_Expression() (localctx IOC_ExpressionContext) {
 		p.OC_OrExpression()
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -11943,7 +11887,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_OrExpressionContext is an interface to support dynamic dispatch.
@@ -12144,7 +12087,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_XorExpressionContext is an interface to support dynamic dispatch.
@@ -12345,7 +12287,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_AndExpressionContext is an interface to support dynamic dispatch.
@@ -12546,7 +12487,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_NotExpressionContext is an interface to support dynamic dispatch.
@@ -12712,7 +12652,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ComparisonExpressionContext is an interface to support dynamic dispatch.
@@ -12916,7 +12855,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_PartialComparisonExpressionContext is an interface to support dynamic dispatch.
@@ -13229,7 +13167,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_StringListNullPredicateExpressionContext is an interface to support dynamic dispatch.
@@ -13513,7 +13450,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_StringPredicateExpressionContext is an interface to support dynamic dispatch.
@@ -13761,7 +13697,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ListPredicateExpressionContext is an interface to support dynamic dispatch.
@@ -13914,7 +13849,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_NullPredicateExpressionContext is an interface to support dynamic dispatch.
@@ -14115,7 +14049,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_AddOrSubtractExpressionContext is an interface to support dynamic dispatch.
@@ -14390,7 +14323,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_MultiplyDivideModuloExpressionContext is an interface to support dynamic dispatch.
@@ -14715,7 +14647,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_PowerOfExpressionContext is an interface to support dynamic dispatch.
@@ -14928,7 +14859,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_UnaryAddOrSubtractExpressionContext is an interface to support dynamic dispatch.
@@ -15086,7 +15016,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_NonArithmeticOperatorExpressionContext is an interface to support dynamic dispatch.
@@ -15416,7 +15345,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ListOperatorExpressionContext is an interface to support dynamic dispatch.
@@ -15629,7 +15557,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_PropertyLookupContext is an interface to support dynamic dispatch.
@@ -15765,7 +15692,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_AtomContext is an interface to support dynamic dispatch.
@@ -16225,7 +16151,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_CaseExpressionContext is an interface to support dynamic dispatch.
@@ -16643,7 +16568,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_CaseAlternativeContext is an interface to support dynamic dispatch.
@@ -16867,7 +16791,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ListComprehensionContext is an interface to support dynamic dispatch.
@@ -17106,7 +17029,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_PatternComprehensionContext is an interface to support dynamic dispatch.
@@ -17461,7 +17383,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_QuantifierContext is an interface to support dynamic dispatch.
@@ -17941,7 +17862,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_FilterExpressionContext is an interface to support dynamic dispatch.
@@ -18097,7 +18017,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_PatternPredicateContext is an interface to support dynamic dispatch.
@@ -18189,7 +18108,6 @@ func (p *CypherParser) OC_PatternPredicate() (localctx IOC_PatternPredicateConte
 		p.OC_RelationshipsPattern()
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -18199,7 +18117,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ParenthesizedExpressionContext is an interface to support dynamic dispatch.
@@ -18365,7 +18282,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_IdInCollContext is an interface to support dynamic dispatch.
@@ -18527,7 +18443,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_FunctionInvocationContext is an interface to support dynamic dispatch.
@@ -18873,7 +18788,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_FunctionNameContext is an interface to support dynamic dispatch.
@@ -18986,7 +18900,6 @@ func (p *CypherParser) OC_FunctionName() (localctx IOC_FunctionNameContext) {
 		p.OC_SymbolicName()
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -18996,7 +18909,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ExistentialSubqueryContext is an interface to support dynamic dispatch.
@@ -19276,7 +19188,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ExplicitProcedureInvocationContext is an interface to support dynamic dispatch.
@@ -19581,7 +19492,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ImplicitProcedureInvocationContext is an interface to support dynamic dispatch.
@@ -19673,7 +19583,6 @@ func (p *CypherParser) OC_ImplicitProcedureInvocation() (localctx IOC_ImplicitPr
 		p.OC_ProcedureName()
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -19683,7 +19592,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ProcedureResultFieldContext is an interface to support dynamic dispatch.
@@ -19775,7 +19683,6 @@ func (p *CypherParser) OC_ProcedureResultField() (localctx IOC_ProcedureResultFi
 		p.OC_SymbolicName()
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -19785,7 +19692,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ProcedureNameContext is an interface to support dynamic dispatch.
@@ -19898,7 +19804,6 @@ func (p *CypherParser) OC_ProcedureName() (localctx IOC_ProcedureNameContext) {
 		p.OC_SymbolicName()
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -19908,7 +19813,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_NamespaceContext is an interface to support dynamic dispatch.
@@ -20069,7 +19973,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_VariableContext is an interface to support dynamic dispatch.
@@ -20161,7 +20064,6 @@ func (p *CypherParser) OC_Variable() (localctx IOC_VariableContext) {
 		p.OC_SymbolicName()
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -20171,7 +20073,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_LiteralContext is an interface to support dynamic dispatch.
@@ -20390,7 +20291,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_BooleanLiteralContext is an interface to support dynamic dispatch.
@@ -20484,7 +20384,6 @@ func (p *CypherParser) OC_BooleanLiteral() (localctx IOC_BooleanLiteralContext) 
 		}
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -20494,7 +20393,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_NumberLiteralContext is an interface to support dynamic dispatch.
@@ -20633,7 +20531,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_IntegerLiteralContext is an interface to support dynamic dispatch.
@@ -20732,7 +20629,6 @@ func (p *CypherParser) OC_IntegerLiteral() (localctx IOC_IntegerLiteralContext) 
 		}
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -20742,7 +20638,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_DoubleLiteralContext is an interface to support dynamic dispatch.
@@ -20836,7 +20731,6 @@ func (p *CypherParser) OC_DoubleLiteral() (localctx IOC_DoubleLiteralContext) {
 		}
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -20846,7 +20740,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ListLiteralContext is an interface to support dynamic dispatch.
@@ -21112,7 +21005,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_MapLiteralContext is an interface to support dynamic dispatch.
@@ -21517,7 +21409,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_PropertyKeyNameContext is an interface to support dynamic dispatch.
@@ -21609,7 +21500,6 @@ func (p *CypherParser) OC_PropertyKeyName() (localctx IOC_PropertyKeyNameContext
 		p.OC_SchemaName()
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -21619,7 +21509,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ParameterContext is an interface to support dynamic dispatch.
@@ -21757,7 +21646,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_SchemaNameContext is an interface to support dynamic dispatch.
@@ -21896,7 +21784,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_ReservedWordContext is an interface to support dynamic dispatch.
@@ -22245,7 +22132,6 @@ func (p *CypherParser) OC_ReservedWord() (localctx IOC_ReservedWordContext) {
 		}
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -22255,7 +22141,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_SymbolicNameContext is an interface to support dynamic dispatch.
@@ -22384,7 +22269,6 @@ func (p *CypherParser) OC_SymbolicName() (localctx IOC_SymbolicNameContext) {
 		}
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -22394,7 +22278,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_LeftArrowHeadContext is an interface to support dynamic dispatch.
@@ -22474,7 +22357,6 @@ func (p *CypherParser) OC_LeftArrowHead() (localctx IOC_LeftArrowHeadContext) {
 		}
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -22484,7 +22366,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_RightArrowHeadContext is an interface to support dynamic dispatch.
@@ -22564,7 +22445,6 @@ func (p *CypherParser) OC_RightArrowHead() (localctx IOC_RightArrowHeadContext) 
 		}
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -22574,7 +22454,6 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
 
 // IOC_DashContext is an interface to support dynamic dispatch.
@@ -22654,7 +22533,6 @@ func (p *CypherParser) OC_Dash() (localctx IOC_DashContext) {
 		}
 	}
 
-errorExit:
 	if p.HasError() {
 		v := p.GetError()
 		localctx.SetException(v)
@@ -22664,5 +22542,4 @@ errorExit:
 	}
 	p.ExitRule()
 	return localctx
-	goto errorExit // Trick to prevent compiler error if the label is not used
 }
