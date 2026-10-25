@@ -11,11 +11,11 @@ use serde_json::{Map, Value};
 use super::{check, scripts, tx::Tx};
 use crate::{
     GraphError, Result,
-    gojson::{self, time_text},
     impact::{
         ChangeImpact, Draft, DraftLink, INTENT_CREATED, ImpactEvent, ImpactOp, LOG_FACT, LogEntry, REVIEW_ACCEPTED,
         REVIEW_PROPOSED, REVIEW_REJECTED, Review,
     },
+    jsontext::{self, time_text},
     model::{ChangeId, NodeRef, Props, Target},
     store::{ReadTx, WriteTx},
 };
@@ -75,7 +75,7 @@ struct Item<'a> {
     produced_by: &'a str,
     #[serde(skip_serializing_if = "str::is_empty")]
     execution: &'a str,
-    #[serde(with = "gojson::time")]
+    #[serde(with = "jsontext::time")]
     created_at: DateTime<Utc>,
 }
 
@@ -167,7 +167,7 @@ fn props_len(p: &Props) -> usize {
 
 /// Two values the same once marshalled (Go's `sameValue`).
 fn same(a: &Value, b: &Value) -> bool {
-    gojson::to_string(a) == gojson::to_string(b)
+    jsontext::to_string(a) == jsontext::to_string(b)
 }
 
 fn same_props(a: &Props, b: &Props) -> bool {
@@ -352,7 +352,7 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         data.insert("submittedAt".into(), Value::String(time_text(&at)));
         let item = self.env.new_id();
-        let payload = gojson::to_string(&Item {
+        let payload = jsontext::to_string(&Item {
             id: &item,
             typ: TYPE_REVIEW,
             status: ITEM_PROPOSED,
@@ -432,7 +432,7 @@ impl<S: WriteTx> Tx<'_, S> {
         let flow = self.views[id].flows.resolve(&b.flow);
         super::items::validate_review(Some(&data.clone().into_iter().collect()))
             .map_err(|e| GraphError::invalid(format!("item {item}: {e}")))?;
-        let payload = gojson::to_string(&Item {
+        let payload = jsontext::to_string(&Item {
             id: &item,
             typ: TYPE_REVIEW,
             status: ITEM_PROPOSED,

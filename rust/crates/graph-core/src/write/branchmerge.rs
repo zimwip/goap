@@ -15,10 +15,10 @@ use super::{
 use crate::{
     GraphError, Result,
     change::Change,
-    gojson,
     impact::{
         ChangeImpact, INTENT_CREATED, INTENT_MODIFIED, ImpactEvent, ImpactOp, REVIEW_ACCEPTED, REVIEW_PROPOSED, Review,
     },
+    jsontext,
     model::{
         BRANCH_MERGED, BRANCH_OPEN, Baseline, BaselineId, ChangeId, Link, LinkId, MAIN_BRANCH, Node, NodeId, NodeRef,
         Props, REASON_MERGE, Target, Version, branch_of, namespace_of,
@@ -104,7 +104,7 @@ pub struct MergeResult {
 fn same(a: Option<&Value>, b: Option<&Value>) -> bool {
     match (a, b) {
         (None, None) => true,
-        (Some(a), Some(b)) => gojson::to_string(a) == gojson::to_string(b),
+        (Some(a), Some(b)) => jsontext::to_string(a) == jsontext::to_string(b),
         _ => false,
     }
 }

@@ -20,8 +20,8 @@ use super::{
 use crate::{
     GraphError, Result,
     change::Change,
-    gojson,
     impact::{ChangeImpact, Draft, ImpactEvent, ImpactOp, REVIEW_ACCEPTED},
+    jsontext,
     model::{
         Baseline, BaselineId, Branch, ChangeId, Link, LinkId, Node, NodeId, NodeRef, REASON_CREATE, REASON_DERIVE,
         REASON_REBASE, REASON_REVERT, REASON_REVISE, Target, Version, branch_of, namespace_of,
@@ -55,7 +55,7 @@ fn link_key(l: &Link) -> String {
         Target::External(u) => u.to_string(),
     };
     let props = match &l.props {
-        Some(m) if !m.is_empty() => gojson::to_string(&Value::Object(m.clone())),
+        Some(m) if !m.is_empty() => jsontext::to_string(&Value::Object(m.clone())),
         _ => String::new(),
     };
     format!("{}\0{to}\0{props}", l.typ)

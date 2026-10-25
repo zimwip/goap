@@ -94,7 +94,7 @@ struct ItemJson {
     decision: Option<DecisionJson>,
     #[serde(default)]
     flow_event: Option<FlowEvent>,
-    #[serde(with = "crate::gojson::time")]
+    #[serde(with = "crate::jsontext::time")]
     created_at: DateTime<Utc>,
 }
 

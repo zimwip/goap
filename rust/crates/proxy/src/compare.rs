@@ -125,7 +125,14 @@ impl Ignore {
     }
 }
 
-/// The value as compared: times masked (each side stamps its own), ignored fields left out.
+/// A number as compared: by its value, `1` and `1.0` alike.
+pub fn number(n: &serde_json::Number) -> Value {
+    n.as_f64()
+        .and_then(serde_json::Number::from_f64)
+        .map_or_else(|| Value::Number(n.clone()), Value::Number)
+}
+
+/// The value as compared: times masked (each side stamps its own), numbers by their value, ignored fields left out.
 pub fn normalise(v: &Value, method: &str, ignore: &[Ignore]) -> Value {
     fn walk(v: &Value, path: &str, method: &str, ignore: &[Ignore]) -> Value {
         match v {
@@ -139,6 +146,7 @@ pub fn normalise(v: &Value, method: &str, ignore: &[Ignore]) -> Value {
                 }
                 Err(_) => v.clone(),
             },
+            Value::Number(n) => number(n),
             Value::Array(a) => Value::Array(a.iter().map(|x| walk(x, path, method, ignore)).collect()),
             Value::Object(o) => {
                 let mut out = Map::new();
@@ -618,6 +626,14 @@ mod tests {
                 .verdict,
             Verdict::Same
         );
+    }
+
+    #[test]
+    fn numbers_compare_by_value() {
+        let one = normalise(&json!({"a": 1, "b": "{\"c\": [2]}"}), "", &[]);
+        let same = normalise(&json!({"a": 1.0, "b": "{\"c\":[2.0]}"}), "", &[]);
+        assert_eq!(one, same);
+        assert_ne!(one, normalise(&json!({"a": 1.5, "b": "{\"c\": [2]}"}), "", &[]));
     }
 
     #[test]

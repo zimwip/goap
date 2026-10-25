@@ -230,7 +230,7 @@ impl<S: WriteTx> Tx<'_, S> {
     pub async fn emit(&mut self, mut events: Vec<ImpactEvent>) -> Result<()> {
         let now = self.env.now();
         for e in events.iter_mut() {
-            if e.at == crate::gojson::zero_time() {
+            if e.at == crate::jsontext::zero_time() {
                 e.at = now;
             }
             if e.by.is_empty() {
@@ -257,7 +257,7 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         let now = self.env.now();
         for e in events.iter_mut() {
-            if e.at == crate::gojson::zero_time() {
+            if e.at == crate::jsontext::zero_time() {
                 e.at = now;
             }
             if e.by.is_empty() {

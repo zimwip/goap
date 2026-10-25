@@ -7,8 +7,8 @@ use serde_json::{Map, Value};
 use crate::{
     GraphError, Result,
     flow::{FLOW_OPEN, Flow, MAIN_FLOW},
-    gojson,
     impact::{ChangeImpact, Draft, REVIEW_ACCEPTED, REVIEW_REJECTED},
+    jsontext,
     lnk::Url,
     model::{ChangeId, NodeId, NodeRef, Props, Target, Version},
     read::{ViewLevel, World},
@@ -344,7 +344,7 @@ fn match_impacts(out: &mut FlowDiff, left: Vec<ImpactShape>, right: Vec<ImpactSh
 
 /// Two values the same once marshalled (Go's `sameValue`).
 fn same(a: &Value, b: &Value) -> bool {
-    gojson::to_string(a) == gojson::to_string(b)
+    jsontext::to_string(a) == jsontext::to_string(b)
 }
 
 /// The operation of a value that was empty or is: set from nothing is added, to nothing removed (`changeOp`).

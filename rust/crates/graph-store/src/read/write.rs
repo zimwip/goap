@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use graph_core::{
     GraphError,
     change::Change,
-    gojson,
     impact::{ChangeImpact, LogEntry},
+    jsontext,
     model::{Baseline, Branch, ChangeId, Link, LinkId, Node, NodeId, NodeRef, Target, branch_of, namespace_of},
     store::{LinkSet, OutboxMessage, WriteTx},
 };
@@ -113,7 +113,7 @@ fn map_err(e: StoreError, what: &str) -> GraphError {
 /// A JSON object column: `{}` when empty (Go's `jsonb`).
 fn jsonb(p: &graph_core::model::Props) -> String {
     match p {
-        Some(m) => gojson::to_string(m),
+        Some(m) => jsontext::to_string(m),
         None => "{}".into(),
     }
 }
@@ -123,7 +123,7 @@ fn json_list<T: serde::Serialize>(xs: &[T]) -> String {
     if xs.is_empty() {
         "[]".into()
     } else {
-        gojson::to_string(xs)
+        jsontext::to_string(xs)
     }
 }
 
@@ -167,7 +167,7 @@ impl Session {
             let args = vec![
                 m.subject.as_str().into(),
                 m.data.as_str().into(),
-                Arg::Text(gojson::to_string(&m.headers)),
+                Arg::Text(jsontext::to_string(&m.headers)),
                 Arg::Time(m.created_at),
             ];
             self.run((q.clone(), args), "outbox").await?;
@@ -282,7 +282,7 @@ impl WriteTx for Session {
             Arg::or_null(c.baseline_id.as_str()),
             Arg::or_null(c.result_baseline_id.as_str()),
             Arg::Text(jsonb(&c.data)),
-            Arg::Time(c.created_at.unwrap_or_else(gojson::zero_time)),
+            Arg::Time(c.created_at.unwrap_or_else(jsontext::zero_time)),
             Arg::Text(branch_of(&c.branch).to_string()),
             Arg::Text(namespace_of(&c.namespace).to_string()),
             Arg::or_null(c.parent_id.as_str()),
@@ -315,7 +315,7 @@ impl WriteTx for Session {
             Arg::or_null(b.head.as_str()),
             b.origin.as_str().into(),
             b.status.as_str().into(),
-            Arg::Time(b.created_at.unwrap_or_else(gojson::zero_time)),
+            Arg::Time(b.created_at.unwrap_or_else(jsontext::zero_time)),
             b.description.as_str().into(),
             b.intent.as_str().into(),
             Arg::or_null(b.rebased_from.as_str()),
@@ -335,7 +335,7 @@ impl WriteTx for Session {
             Arg::or_null(b.parent_id.as_str()),
             Arg::or_null(b.merged_from.as_str()),
             Arg::or_null(b.change_id.as_str()),
-            Arg::Time(b.created_at.unwrap_or_else(gojson::zero_time)),
+            Arg::Time(b.created_at.unwrap_or_else(jsontext::zero_time)),
             Arg::Text(branch_of(&b.branch).to_string()),
             Arg::Text(namespace_of(&b.namespace).to_string()),
             kind.into(),
@@ -494,7 +494,7 @@ impl WriteTx for Session {
             Arg::Text(jsonb(&n.props)),
             Arg::Bool(n.deleted),
             Arg::or_null(n.change_id.as_str()),
-            Arg::Time(n.created_at.unwrap_or_else(gojson::zero_time)),
+            Arg::Time(n.created_at.unwrap_or_else(jsontext::zero_time)),
             Arg::Text(branch_of(&n.branch).to_string()),
             Arg::Ints(n.parents.clone()),
             n.reason.as_str().into(),
@@ -815,7 +815,7 @@ impl Session {
             t.node.as_str().into(),
             Arg::Int(t.version.into()),
             t.by.as_str().into(),
-            Arg::Time(t.created_at.unwrap_or_else(gojson::zero_time)),
+            Arg::Time(t.created_at.unwrap_or_else(jsontext::zero_time)),
         ];
         self.run((q, args), &format!("tag {}", t.name)).await?;
         Ok(())

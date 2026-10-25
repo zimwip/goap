@@ -243,7 +243,7 @@ pub fn baseline_diff(d: &BaselineDiff) -> pb::BaselineDiff {
 
 /// A time as `pbconv.Time` writes it: none for the zero time.
 fn go_time(t: &DateTime<Utc>) -> Option<goap_proto::wkt::Timestamp> {
-    (*t != graph_core::gojson::zero_time()).then(|| goap_proto::wkt::Timestamp::from(*t))
+    (*t != graph_core::jsontext::zero_time()).then(|| goap_proto::wkt::Timestamp::from(*t))
 }
 
 fn review(r: &graph_core::impact::Review) -> pb::Review {

@@ -6,8 +6,8 @@ use super::{change::change_branch_origin, tx::Tx, whole::WholeChange, work::fold
 use crate::{
     GraphError, Result,
     change::{Change, ChangesFilter},
-    gojson,
     impact::{LOG_FACT, LogEntry},
+    jsontext,
     model::{ChangeId, MAIN_BRANCH, branch_of, namespace_of},
     store::WriteTx,
 };
@@ -87,7 +87,7 @@ impl<S: WriteTx> Tx<'_, S> {
             let data = c.data.get_or_insert_with(Map::new);
             for (k, v) in patch {
                 let old = data.get(&k).cloned();
-                if old.clone().map(gojson::floats) != Some(gojson::floats(v.clone())) {
+                if old.clone().map(jsontext::floats) != Some(jsontext::floats(v.clone())) {
                     let hv = header_value(old, v.clone());
                     edit.insert(format!("data.{k}"), hv.clone());
                     edited.insert(format!("data.{k}"), hv);
@@ -109,7 +109,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 by: self.env.by.clone(),
                 at: self.env.now(),
                 causation: String::new(),
-                payload: gojson::to_string(&json!({ "fields": edit })),
+                payload: jsontext::to_string(&json!({ "fields": edit })),
             };
             self.append_log(&entry).await?;
         }

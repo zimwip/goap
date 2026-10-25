@@ -14,8 +14,9 @@ use super::{
     work::{Authorize, LinkWrite, NodeCheckout, NodeCreate},
 };
 use crate::{
-    GraphError, Result, gojson,
+    GraphError, Result,
     impact::{ChangeImpact, INTENT_MODIFIED, ImpactEvent, ImpactOp},
+    jsontext,
     model::{Baseline, BaselineId, ChangeId, LinkId, MAIN_BRANCH, NodeId, NodeRef, Props, Target},
     operations::{
         CHANGE_COMMIT, CHANGE_MERGE, IMPACT_CHECKOUT, IMPACT_CREATE, IMPACT_LINK_CREATE, IMPACT_LINK_DELETE,
@@ -121,7 +122,7 @@ fn same_link_props(a: &Props, b: &Props) -> bool {
     if len(a) == 0 || len(b) == 0 {
         return len(a) == len(b);
     }
-    let text = |p: &Props| gojson::to_string(&Value::Object(p.clone().unwrap_or_default()));
+    let text = |p: &Props| jsontext::to_string(&Value::Object(p.clone().unwrap_or_default()));
     text(a) == text(b)
 }
 

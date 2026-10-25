@@ -9,7 +9,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value, value::RawValue};
 
 use crate::{
-    gojson::{self, Raw},
+    jsontext::{self, Raw},
     lnk::Url,
     model::{BaselineId, ChangeId, LinkId, NodeId, NodeRef, Props, Version},
 };
@@ -88,14 +88,14 @@ fn no_props(p: &Props) -> bool {
 
 /// Properties read as Go decodes them: every number a float64.
 fn go_props<'de, D: Deserializer<'de>>(d: D) -> Result<Props, D::Error> {
-    Ok(match Option::<Value>::deserialize(d)?.map(gojson::floats) {
+    Ok(match Option::<Value>::deserialize(d)?.map(jsontext::floats) {
         Some(Value::Object(m)) => Some(m),
         _ => None,
     })
 }
 
 fn zero_time() -> DateTime<Utc> {
-    gojson::zero_time()
+    jsontext::zero_time()
 }
 
 /// One entry of the review history of an impact.
@@ -108,7 +108,7 @@ pub struct Review {
     pub by: String,
     #[serde(default)]
     pub comment: String,
-    #[serde(with = "gojson::time", default = "zero_time")]
+    #[serde(with = "jsontext::time", default = "zero_time")]
     pub at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub flow: String,
@@ -177,7 +177,7 @@ pub struct ChangeImpact {
     pub flow: String,
     #[serde(default, skip_serializing_if = "is_false")]
     pub superseded: bool,
-    #[serde(with = "gojson::time", default = "zero_time")]
+    #[serde(with = "jsontext::time", default = "zero_time")]
     pub created_at: DateTime<Utc>,
 }
 
@@ -637,7 +637,7 @@ pub fn payload(e: &ImpactEvent) -> String {
             }
         }
     });
-    gojson::to_string(&PayloadOut {
+    jsontext::to_string(&PayloadOut {
         op: e.op,
         post: e.post.as_ref(),
         from_base: e.from_base.as_ref(),
@@ -702,11 +702,11 @@ pub fn batch_entry(id: &str, events: &[ImpactEvent]) -> Result<LogEntry, String>
             ));
         }
         let mut p = parse_object(&payload(e)).ok_or("payload of an event")?;
-        p.insert("impactId".into(), Raw(gojson::to_string(&e.impact)));
+        p.insert("impactId".into(), Raw(jsontext::to_string(&e.impact)));
         parts.push(p);
     }
     let mut top = hoist(&mut parts);
-    top.insert(BATCH_KEY.into(), Raw(gojson::to_string(&parts)));
+    top.insert(BATCH_KEY.into(), Raw(jsontext::to_string(&parts)));
     Ok(LogEntry {
         seq: 0,
         id: id.to_string(),
@@ -719,7 +719,7 @@ pub fn batch_entry(id: &str, events: &[ImpactEvent]) -> Result<LogEntry, String>
         by: first.by.clone(),
         at: first.at,
         causation: first.causation.clone(),
-        payload: gojson::to_string(&top),
+        payload: jsontext::to_string(&top),
     })
 }
 
@@ -751,9 +751,9 @@ fn hoist(parts: &mut [Parts]) -> Parts {
         if inner.is_empty() {
             continue;
         }
-        top.insert(k.clone(), Raw(gojson::to_string(&inner)));
+        top.insert(k.clone(), Raw(jsontext::to_string(&inner)));
         for (p, s) in parts.iter_mut().zip(subs) {
-            p.insert(k.clone(), Raw(gojson::to_string(&s)));
+            p.insert(k.clone(), Raw(jsontext::to_string(&s)));
         }
     }
     top
@@ -769,7 +769,7 @@ fn unhoist(top: &Parts, part: &mut Parts) -> Result<(), String> {
         let inner = parse_object(&v.0).ok_or("a hoisted object")?;
         let mut sub = parse_object(&w.0).ok_or("a part's object")?;
         unhoist(&inner, &mut sub)?;
-        part.insert(k.clone(), Raw(gojson::to_string(&sub)));
+        part.insert(k.clone(), Raw(jsontext::to_string(&sub)));
     }
     Ok(())
 }
@@ -828,7 +828,7 @@ pub fn event_of(l: &LogEntry) -> Result<ImpactEvent, String> {
         branch: p.branch,
         review: p.review,
         stale: p.stale,
-        patch: match p.patch.map(gojson::floats) {
+        patch: match p.patch.map(jsontext::floats) {
             Some(Value::Object(m)) => Some(m),
             _ => None,
         },
@@ -868,7 +868,7 @@ pub fn events_of(l: &LogEntry) -> Result<Vec<ImpactEvent>, String> {
         unhoist(&top, &mut p)?;
         let mut part = l.clone();
         part.id = part_id(&l.id, i);
-        part.payload = gojson::to_string(&p);
+        part.payload = jsontext::to_string(&p);
         if part.subject.is_empty() {
             part.subject = p
                 .get("impactId")
@@ -1383,12 +1383,16 @@ mod tests {
     }
 
     #[test]
-    fn writes_the_payload_go_writes() {
+    fn writes_the_payload_go_reads() {
         let e = created();
-        // the bytes contracts/domain writes for this event
+        // the content contracts/domain writes for this event
+        let want: Value = serde_json::from_str(
+            r#"{"op":"created","post":{"id":"n1","version":0},"state":{"key":"K-1","type":"bench@T000","intent":"created","rationale":"bench","review":"proposed","createdAt":"2026-10-23T10:00:01.5Z"},"draft":{"node":"n1","key":"K-1","type":"bench@T000","owner":"lnk:organisation/OrgUnit/ORG-DEFAULT","props":{"title":"a\u003cb","value":1},"links":[{"id":"l1","type":"bench@relates","to":{"id":"n0","version":3}}]}}"#,
+        )
+        .unwrap();
         assert_eq!(
-            payload(&e),
-            r#"{"op":"created","post":{"id":"n1","version":0},"state":{"key":"K-1","type":"bench@T000","intent":"created","rationale":"bench","review":"proposed","createdAt":"2026-10-23T10:00:01.5Z"},"draft":{"node":"n1","key":"K-1","type":"bench@T000","owner":"lnk:organisation/OrgUnit/ORG-DEFAULT","props":{"title":"a\u003cb","value":1},"links":[{"id":"l1","type":"bench@relates","to":{"id":"n0","version":3}}]}}"#
+            crate::jsontext::floats(serde_json::from_str(&payload(&e)).unwrap()),
+            crate::jsontext::floats(want)
         );
         let back = event_of(&entry(&e)).unwrap();
         assert_eq!(back.state, e.state);

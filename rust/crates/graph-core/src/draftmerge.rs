@@ -5,8 +5,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use serde_json::{Map, Value, json};
 
 use crate::{
-    gojson,
     impact::{Draft, DraftLink},
+    jsontext,
     lnk::Url,
     model::{NodeId, Props},
 };
@@ -48,7 +48,7 @@ fn links_by_key(ls: &[DraftLink]) -> HashMap<String, &DraftLink> {
 fn same_value(a: Option<&Value>, b: Option<&Value>) -> bool {
     match (a, b) {
         (None, None) => true,
-        (Some(a), Some(b)) => gojson::to_string(a) == gojson::to_string(b),
+        (Some(a), Some(b)) => jsontext::to_string(a) == jsontext::to_string(b),
         _ => false,
     }
 }
@@ -181,7 +181,7 @@ fn deep_equal(a: &Props, b: &Props) -> bool {
     match (a, b) {
         (None, None) => true,
         (Some(a), Some(b)) => {
-            gojson::to_string(&Value::Object(a.clone())) == gojson::to_string(&Value::Object(b.clone()))
+            jsontext::to_string(&Value::Object(a.clone())) == jsontext::to_string(&Value::Object(b.clone()))
         }
         _ => false,
     }
@@ -198,7 +198,10 @@ pub fn draft_diff(from: &Draft, to: &Draft) -> Option<Map<String, Value>> {
     );
     let mut props = Map::new();
     for (k, v) in tp {
-        if fp.get(k).is_none_or(|w| gojson::to_string(v) != gojson::to_string(w)) {
+        if fp
+            .get(k)
+            .is_none_or(|w| jsontext::to_string(v) != jsontext::to_string(w))
+        {
             props.insert(k.clone(), v.clone());
         }
     }

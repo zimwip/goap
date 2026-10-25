@@ -7,8 +7,9 @@ use serde_json::{Map, Value};
 
 use super::{check, tx::Tx, work::fold_change};
 use crate::{
-    GraphError, Result, criticality, gojson,
+    GraphError, Result, criticality,
     impact::{LOG_FACT, LogEntry},
+    jsontext,
     model::ChangeId,
     store::WriteTx,
 };
@@ -75,7 +76,7 @@ struct ItemJson<'a> {
     supersedes: &'a [String],
     #[serde(skip_serializing_if = "str::is_empty")]
     execution: &'a str,
-    #[serde(with = "gojson::time")]
+    #[serde(with = "jsontext::time")]
     created_at: DateTime<Utc>,
 }
 
@@ -323,7 +324,7 @@ impl<S: WriteTx> Tx<'_, S> {
         let at = self.env.now();
         let data = it.data.as_ref().filter(|m| !m.is_empty());
         self.check_item(it, at)?;
-        let payload = gojson::to_string(&ItemJson {
+        let payload = jsontext::to_string(&ItemJson {
             id: &it.id,
             typ: &it.typ,
             target: &it.target,

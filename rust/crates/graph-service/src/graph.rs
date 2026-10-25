@@ -3803,7 +3803,7 @@ impl pb::GraphService for Graph {
             )
             .await?;
             Ok(pb::ExportGraphResponse {
-                document: graph_core::gojson::to_string_indent(&s, "  "),
+                document: graph_core::jsontext::to_string_pretty(&s),
                 filename: format!("graph-{}-{}.json", s.namespace, s.exported_at.format("%Y%m%d-%H%M%S")),
                 media_type: "application/json".into(),
                 nodes: s.nodes.len() as i32,

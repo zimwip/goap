@@ -2,7 +2,7 @@
 //! users, in tables of their own in the database of the graph. The times are `timestamptz` on PostgreSQL and the
 //! RFC 3339 text Go writes on SQLite.
 use chrono::{DateTime, Utc};
-use graph_core::{GraphError, gojson};
+use graph_core::{GraphError, jsontext};
 
 use super::{
     Session,
@@ -46,7 +46,7 @@ impl Session {
         if self.sql.pg {
             Arg::Time(*t)
         } else {
-            Arg::Text(gojson::time_text(t))
+            Arg::Text(jsontext::time_text(t))
         }
     }
 

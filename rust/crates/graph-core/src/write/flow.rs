@@ -19,10 +19,10 @@ use crate::{
         FLOW_ADOPTED, FLOW_DISCARDED, Flow, FlowEvent, Flows, Item, MAIN_FLOW, OP_ACTIVATE, OP_ADOPT, OP_DEACTIVATE,
         OP_DISCARD, OP_EVALUATE, OP_OPEN, OptionSpec, TYPE_FLOW, stale_closure,
     },
-    gojson,
     impact::{
         self, ChangeImpact, Draft, ImpactEvent, ImpactOp, LOG_FACT, LogEntry, REVIEW_ACCEPTED, REVIEW_REJECTED, Review,
     },
+    jsontext,
     model::{ChangeId, NodeId},
     store::{ReadTx, WriteTx},
 };
@@ -38,7 +38,7 @@ struct FlowItemJson<'a> {
     status: &'a str,
     flow_event: &'a FlowEvent,
     produced_by: &'a str,
-    #[serde(with = "gojson::time")]
+    #[serde(with = "jsontext::time")]
     created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -121,7 +121,7 @@ impl<S: WriteTx> Tx<'_, S> {
         let item = self.env.new_id();
         let at = self.env.now();
         let target = format!("flow.{}", e.op);
-        let payload = gojson::to_string(&FlowItemJson {
+        let payload = jsontext::to_string(&FlowItemJson {
             id: &item,
             typ: TYPE_FLOW,
             target: &target,
@@ -586,7 +586,7 @@ fn same_draft(a: &Draft, b: &Draft) -> bool {
         for l in d.links.iter_mut() {
             l.id = Default::default();
         }
-        gojson::to_string(&d)
+        jsontext::to_string(&d)
     };
     norm(a) == norm(b)
 }

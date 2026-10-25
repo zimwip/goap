@@ -13,8 +13,8 @@ use super::{
 use crate::{
     GraphError, Kind, Result,
     flow::{Flows, MAIN_FLOW},
-    gojson::time_text,
     impact::{ChangeImpact, LOG_FACT, REVIEW_PROPOSED},
+    jsontext::time_text,
     model::ChangeId,
     store::{ReadTx, WriteTx},
 };

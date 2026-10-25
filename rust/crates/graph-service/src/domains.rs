@@ -9,7 +9,7 @@ use graph_catalog::{
     record::{Record, STATUS_ARCHIVED, STATUS_DRAFT, STATUS_PUBLISHED, in_force, latest},
     validate::Issue,
 };
-use graph_core::{GraphError, gojson, store::OutboxMessage, yaml};
+use graph_core::{GraphError, jsontext, store::OutboxMessage, yaml};
 use graph_store::read::{NewDomain, StoredDomain};
 
 use crate::{
@@ -172,7 +172,7 @@ impl pb::DomainService for Domains {
                     yaml_document(def)
                 };
                 Ok(Response::new(pb::ExportDomainResponse {
-                    yaml: gojson::to_string_indent(&doc, "  "),
+                    yaml: jsontext::to_string_pretty(&doc),
                     filename: format!("{base}.json"),
                     media_type: "application/json".into(),
                 }))
@@ -371,7 +371,7 @@ impl pb::DomainService for Domains {
             STATUS_PUBLISHED,
             now,
         );
-        let at = gojson::time_text(&now);
+        let at = jsontext::time_text(&now);
         if !tx
             .set_domain_status(&r.name, &r.version, STATUS_PUBLISHED, &at, &events)
             .await
@@ -420,7 +420,7 @@ impl pb::DomainService for Domains {
         self.authorize(who.as_ref(), "write", &r.name, to).await?;
         let definition = renumbered(&src, to);
         let now = chrono::Utc::now();
-        let at = gojson::time_text(&now);
+        let at = jsontext::time_text(&now);
         let events = self.events(&subject, &command, "saved", &r.name, to, STATUS_DRAFT, now);
         tx.insert_domain(
             &NewDomain {
@@ -481,7 +481,7 @@ impl pb::DomainService for Domains {
                 .await
                 .map_err(connect_error)?;
         } else {
-            let at = gojson::time_text(&chrono::Utc::now());
+            let at = jsontext::time_text(&chrono::Utc::now());
             if !tx
                 .set_domain_status(&r.name, &r.version, STATUS_ARCHIVED, &at, &events)
                 .await
@@ -563,7 +563,7 @@ impl Domains {
             return Err(not_a_draft(&format!("{name}@{version}")));
         }
         let now = chrono::Utc::now();
-        let at = gojson::time_text(&now);
+        let at = jsontext::time_text(&now);
         let event = if status == STATUS_PUBLISHED {
             "published"
         } else {
@@ -622,7 +622,7 @@ impl Domains {
         }
         vec![OutboxMessage {
             subject: format!("goap.registry.domain.{event}"),
-            data: gojson::to_string(&serde_json::json!({"name": name, "version": version, "status": status})),
+            data: jsontext::to_string(&serde_json::json!({"name": name, "version": version, "status": status})),
             headers,
             created_at: now,
         }]
@@ -774,21 +774,21 @@ async fn resolves(
 fn renumbered(src: &StoredDomain, to: &str) -> String {
     let head = format!(
         "{{\"name\":{},\"version\":{}",
-        gojson::to_string(&src.name),
-        gojson::to_string(&src.version)
+        jsontext::to_string(&src.name),
+        jsontext::to_string(&src.version)
     );
     if let Some(rest) = src.definition_text.strip_prefix(&head) {
         return format!(
             "{{\"name\":{},\"version\":{}{rest}",
-            gojson::to_string(&src.name),
-            gojson::to_string(&to)
+            jsontext::to_string(&src.name),
+            jsontext::to_string(&to)
         );
     }
     let mut def = src.definition.clone();
     if let Some(o) = def.as_object_mut() {
         o.insert("version".into(), to.into());
     }
-    gojson::to_string(&def)
+    jsontext::to_string(&def)
 }
 
 /// A stored version as the registry answers it (`domainpb.DomainToPB`).

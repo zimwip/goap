@@ -1017,7 +1017,6 @@ dependencies = [
 name = "graph-catalog"
 version = "0.1.0"
 dependencies = [
- "base64 0.23.1",
  "chrono",
  "graph-script",
  "regex",

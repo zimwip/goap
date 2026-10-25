@@ -2,7 +2,7 @@
 //! change on main in the root project, each idempotent, so a second run writes nothing. What the seeds write is the
 //! Go code's (`boot.gen.json`, written by `platform/devseed` `TestRustBootIsCurrent`).
 use super::*;
-use graph_core::{gojson, model::Node, sources::Source, view::View};
+use graph_core::{jsontext, model::Node, sources::Source, view::View};
 use serde::Deserialize;
 use serde_json::{Map, Value as Json};
 
@@ -314,7 +314,7 @@ async fn head_nodes(tx: &Tx<'_, Session>, ns: &str, typ: &str) -> Result<HashMap
 /// Whether the properties of a node hold the wanted ones, compared as Go's JSON (`sameProps`).
 fn same_props(have: &Option<Map<String, Json>>, want: &Map<String, Json>) -> bool {
     let have = have.clone().map(Json::Object).unwrap_or(Json::Null);
-    gojson::to_string(&have) == gojson::to_string(want)
+    jsontext::to_string(&have) == jsontext::to_string(want)
 }
 
 /// The default policies as Policy nodes (`SeedAccess`), unless the floor policy exists: edited or deleted policies stay so.
@@ -705,12 +705,12 @@ mod tests {
                 .nodes()
                 .unwrap()
                 .into_iter()
-                .map(|n| (n.key, n.typ, gojson::to_string(&n.props)))
+                .map(|n| (n.key, n.typ, jsontext::to_string(&n.props)))
                 .collect();
             let want: Vec<_> = c
                 .nodes
                 .into_iter()
-                .map(|n| (n.key, n.typ, gojson::to_string(&n.props)))
+                .map(|n| (n.key, n.typ, jsontext::to_string(&n.props)))
                 .collect();
             assert_eq!(got, want);
         }

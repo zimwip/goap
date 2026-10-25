@@ -151,7 +151,7 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `GetDomain` answers the built-in domains (their YAML read as `def.ParseDomain` reads it) and the stored ones
   (`graph-service` `domainpb.rs`: the definition mapped onto `registry.v1.Domain` as `lib/domainpb` maps it);
   `ExportDomain` the JSON of a stored domain as Go writes it (the definition through YAML and back: empty lists
-  written, empty `requires` and forms dropped, keys sorted, Go's indentation, `gojson::to_string_indent`); the YAML
+  written, empty `requires` and forms dropped, keys sorted, an indentation of two); the YAML
   export and the built-in domains are still Go's. Every built-in, `alm`, `code` and a bench domain, the unknown
   format and the missing domain: `same`. `ListTypes` resolves the catalogue of the domains in force (`Catalog::types` /
   `link_types`, the node validators of each type, a transition's `requires` and `children`). A platform service's
@@ -651,8 +651,9 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   values), the YAML of a domain and of an OKF front matter written by it (`graph_core::yaml`); a snapshot and the log
   payloads are read by `serde_json`. Gone: `crates/libyaml` (the workspace allows no `unsafe` any more),
   `graph-catalog` `yamlv3`, `graph-core` `goyaml` / `godecode`, `graph-script` `casbin` / `govaluate` / `gotime` /
-  `goregexp` / `celcheck`, about 7,700 lines. What stays is what the content needs: `gojson` writes the numbers as Go's
-  `float64` (a draft compared with its base must find `1` and `1.0` equal) and the times as Go stores them. The paragraphs
-  above on yaml.v3's words, govaluate, `celcheck` and `encoding/json`'s errors describe what this replaces. The compare
-  proxy and `diff-db` compare content (ids paired, JSON texts as values, an error by its code, its message apart as
+  `goregexp` / `celcheck`, and `gojson`: JSON is written by `serde_json` (`graph_core::jsontext`), about 8,500 lines. Two values are
+  compared as Go compares them (`jsontext::floats`: `1` and `1.0` equal, so a draft equal to its base is no
+  modification), and the times keep the text Go stores, so that they sort alike. The paragraphs above on yaml.v3's
+  words, govaluate, `celcheck`, `encoding/json`'s errors and Go's JSON bytes describe what this replaces. The compare
+  proxy and `diff-db` compare content (ids paired, JSON texts as values, numbers by their value, an error by its code, its message apart as
   `message_differs`).

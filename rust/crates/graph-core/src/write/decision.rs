@@ -18,8 +18,8 @@ use crate::{
         OUTCOME_UNDECIDABLE, POINT_BLOCKED, POINT_DECIDED, POINT_RATIFYING, PointItem, QUESTION_OPEN,
         TYPE_DECISION_POINT,
     },
-    gojson,
     impact::{LOG_FACT, LogEntry},
+    jsontext,
     model::ChangeId,
     store::{ReadTx, WriteTx},
 };
@@ -35,7 +35,7 @@ struct PointItemJson<'a> {
     status: &'a str,
     decision_event: &'a DecisionEvent,
     produced_by: &'a str,
-    #[serde(with = "gojson::time")]
+    #[serde(with = "jsontext::time")]
     created_at: DateTime<Utc>,
 }
 
@@ -48,7 +48,7 @@ struct ReadItem {
     flow: String,
     #[serde(default)]
     decision_event: Option<DecisionEvent>,
-    #[serde(with = "gojson::time")]
+    #[serde(with = "jsontext::time")]
     created_at: DateTime<Utc>,
 }
 
@@ -130,7 +130,7 @@ impl<S: WriteTx> Tx<'_, S> {
         } else {
             e.by.as_str()
         };
-        let payload = gojson::to_string(&PointItemJson {
+        let payload = jsontext::to_string(&PointItemJson {
             id: &item,
             typ: TYPE_DECISION_POINT,
             target: &target,
@@ -338,7 +338,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 if !(0.0..=1.0).contains(&r#in.confidence) {
                     return Err(GraphError::invalid(format!(
                         "a confidence is between 0 and 1, not {}",
-                        gojson::float(r#in.confidence)
+                        r#in.confidence
                     )));
                 }
                 if r#in.justification.is_empty() {

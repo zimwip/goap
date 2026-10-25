@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::{
-    GraphError, Result, gojson,
+    GraphError, Result, jsontext,
     model::{Baseline, BaselineId, ChangeId, Link, Node, NodeRef, branch_of, namespace_of},
     reach::Reach,
     read,
@@ -111,7 +111,7 @@ where
 }
 
 fn zero_offset() -> DateTime<FixedOffset> {
-    gojson::zero_time().fixed_offset()
+    jsontext::zero_time().fixed_offset()
 }
 
 /// A time with its offset as Go marshals a `time.Time` (RFC 3339, trailing zeros of the fraction dropped, `Z` for no
@@ -130,7 +130,7 @@ mod offset_time {
 
     pub(super) fn text(t: &DateTime<FixedOffset>) -> String {
         if t.offset().local_minus_utc() == 0 {
-            return gojson::time_text(&t.with_timezone(&Utc));
+            return jsontext::time_text(&t.with_timezone(&Utc));
         }
         let s = t.to_rfc3339_opts(chrono::SecondsFormat::Nanos, false);
         let (head, zone) = s.split_at(s.len() - 6);
@@ -213,7 +213,7 @@ pub fn same_value(a: Option<&Value>, b: Option<&Value>) -> bool {
     let norm = |v: Option<&Value>| match v {
         None | Some(Value::Null) => "null".to_string(),
         Some(Value::Object(m)) if m.is_empty() => "null".to_string(),
-        Some(v) => gojson::to_string(v),
+        Some(v) => jsontext::to_string(v),
     };
     norm(a) == norm(b)
 }
@@ -423,7 +423,7 @@ mod tests {
             }],
         };
         assert_eq!(
-            gojson::to_string(&s),
+            jsontext::to_string(&s),
             r#"{"format":"goap.graph.snapshot/v1","namespace":"dv","branch":"main","exportedAt":"0001-01-01T00:00:00Z","nodes":[{"key":"A","type":"dv@Thing","links":[{"type":"dv@of","to":"B"}],"provenance":{"version":1}}]}"#
         );
     }

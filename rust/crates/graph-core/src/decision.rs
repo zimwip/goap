@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::gojson;
+use crate::jsontext;
 
 /// The type of the items of the decision points (`domain.TypeDecisionPoint`).
 pub const TYPE_DECISION_POINT: &str = "decision_point";
@@ -353,10 +353,7 @@ pub fn open_policy(given: &Map<String, Value>, now: DateTime<Utc>) -> Result<Map
         threshold = DEFAULT_THRESHOLD;
     }
     if !(0.0..=1.0).contains(&threshold) {
-        return Err(format!(
-            "a confidence threshold is between 0 and 1, not {}",
-            gojson::float(threshold)
-        ));
+        return Err(format!("a confidence threshold is between 0 and 1, not {}", threshold));
     }
     out.insert(KEY_THRESHOLD.into(), Value::from(threshold));
     let mut rounds = number(given, KEY_MAX_ROUNDS)?;
@@ -371,7 +368,7 @@ pub fn open_policy(given: &Map<String, Value>, now: DateTime<Utc>) -> Result<Map
             let d = parse_duration(s).map_err(|e| format!("max duration: {e}"))?;
             if d > 0 {
                 let deadline = now + chrono::Duration::nanoseconds(d);
-                out.insert(KEY_DEADLINE.into(), gojson::time_text(&deadline).into());
+                out.insert(KEY_DEADLINE.into(), jsontext::time_text(&deadline).into());
             }
         }
         Some(v) => return Err(format!("max duration {}: a duration such as \"24h\"", go_v(v))),
@@ -562,7 +559,7 @@ pub fn go_v(v: &Value) -> String {
     match v {
         Value::Null => "<nil>".into(),
         Value::Bool(b) => b.to_string(),
-        Value::Number(n) => gojson::float(n.as_f64().unwrap_or(0.0)),
+        Value::Number(n) => n.as_f64().unwrap_or(0.0).to_string(),
         Value::String(s) => s.clone(),
         Value::Array(a) => format!("[{}]", a.iter().map(go_v).collect::<Vec<_>>().join(" ")),
         Value::Object(m) => format!(

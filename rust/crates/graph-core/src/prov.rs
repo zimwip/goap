@@ -18,8 +18,8 @@ use serde_json::{Map, Value, json};
 use crate::{
     GraphError, Result,
     change::Change,
-    gojson,
     impact::{ChangeImpact, ImpactOp, LogEntry, events_of},
+    jsontext,
     model::NodeRef,
     write::reviews,
 };
@@ -117,7 +117,7 @@ impl<'de> Deserialize<'de> for Time {
         };
         let t = DateTime::parse_from_rfc3339(&s).map_err(serde::de::Error::custom)?;
         let t = t.with_timezone(&Utc);
-        Ok(Time((t != gojson::zero_time()).then_some(t)))
+        Ok(Time((t != jsontext::zero_time()).then_some(t)))
     }
 }
 
@@ -220,7 +220,7 @@ fn reference(id: &str) -> Value {
 }
 
 fn at(t: &DateTime<Utc>) -> Value {
-    json!({ "@value": gojson::time_text(t), "@type": "xsd:dateTime" })
+    json!({ "@value": jsontext::time_text(t), "@type": "xsd:dateTime" })
 }
 
 fn set(n: &mut Map<String, Value>, prop: &str, v: &str) {
@@ -230,7 +230,7 @@ fn set(n: &mut Map<String, Value>, prop: &str, v: &str) {
 }
 
 fn set_time(n: &mut Map<String, Value>, prop: &str, t: Option<DateTime<Utc>>) {
-    if let Some(t) = t.filter(|t| *t != gojson::zero_time()) {
+    if let Some(t) = t.filter(|t| *t != jsontext::zero_time()) {
         n.insert(prop.into(), at(&t));
     }
 }
@@ -292,7 +292,7 @@ impl Builder {
 
     /// The mark of a record: the same record, the same mark (Go's `add` compares the JSON written).
     fn raw(&mut self, payload: &str) -> Value {
-        let text = gojson::compact_raw(payload);
+        let text = jsontext::normalize(payload).unwrap_or_else(|_| payload.to_string());
         let i = match self.raws.iter().position(|r| *r == text) {
             Some(i) => i,
             None => {
@@ -854,11 +854,11 @@ impl Builder {
         let mut doc = Map::new();
         doc.insert("@context".into(), context);
         doc.insert("@graph".into(), Value::Array(graph));
-        let mut compact = gojson::to_string(&Value::Object(doc));
+        let mut compact = jsontext::to_string(&Value::Object(doc));
         for (i, raw) in self.raws.iter().enumerate() {
             compact = compact.replace(&format!("\"\\u0001{i}\\u0001\""), raw);
         }
-        gojson::indent_text(&compact, "  ")
+        serde_json::from_str::<Value>(&compact).map_or(compact, |v| jsontext::to_string_pretty(&v))
     }
 }
 

@@ -9,7 +9,7 @@ use serde_json::{Map, Value};
 
 use crate::{
     change::{Change, GuardianRef},
-    gojson,
+    jsontext,
     lnk::Url,
     model::{Baseline, BaselineId, ChangeId, NodeId, Version, branch_of},
 };
@@ -106,7 +106,7 @@ pub struct ChangeJson<'a> {
     #[serde(skip_serializing_if = "is_zero")]
     seq: i64,
     items: Option<()>,
-    #[serde(with = "gojson::time")]
+    #[serde(with = "jsontext::time")]
     created_at: DateTime<Utc>,
 }
 
@@ -134,7 +134,7 @@ impl<'a> ChangeJson<'a> {
             data: c.data.as_ref().filter(|m| !m.is_empty()),
             seq,
             items: None,
-            created_at: c.created_at.unwrap_or_else(gojson::zero_time),
+            created_at: c.created_at.unwrap_or_else(jsontext::zero_time),
         }
     }
 }
@@ -160,7 +160,7 @@ pub struct BaselineJson<'a> {
     #[serde(skip_serializing_if = "str::is_empty")]
     kind: &'a str,
     nodes: Option<()>,
-    #[serde(with = "gojson::time")]
+    #[serde(with = "jsontext::time")]
     created_at: DateTime<Utc>,
 }
 
@@ -177,7 +177,7 @@ impl<'a> BaselineJson<'a> {
             change_id: &b.change_id,
             kind: &b.kind,
             nodes: None,
-            created_at: b.created_at.unwrap_or_else(gojson::zero_time),
+            created_at: b.created_at.unwrap_or_else(jsontext::zero_time),
         }
     }
 }
@@ -265,7 +265,7 @@ pub struct ChangeDocEvent<'a> {
     pub branch: &'a str,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub impacts: Vec<DocRef>,
-    #[serde(with = "gojson::time")]
+    #[serde(with = "jsontext::time")]
     pub created_at: DateTime<Utc>,
 }
 
@@ -301,7 +301,7 @@ pub struct NodeEvent<'a> {
     pub text: BTreeMap<String, String>,
     #[serde(skip_serializing_if = "Map::is_empty")]
     pub facets: Map<String, Value>,
-    #[serde(with = "gojson::time")]
+    #[serde(with = "jsontext::time")]
     pub time: DateTime<Utc>,
 }
 
@@ -319,7 +319,7 @@ pub struct BaselineEvent<'a> {
     pub set: BTreeMap<NodeId, Version>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub removed: Vec<NodeId>,
-    #[serde(with = "gojson::time")]
+    #[serde(with = "jsontext::time")]
     pub time: DateTime<Utc>,
 }
 

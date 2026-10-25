@@ -120,7 +120,7 @@ fn dump_sqlite(path: &str) -> anyhow::Result<BTreeMap<String, Vec<Value>>> {
     Ok(out)
 }
 
-/// A row as compared: ids in Go ids, times masked, a JSON text column read as JSON.
+/// A row as compared: ids in Go ids, times masked, a JSON text column read as JSON, numbers by their value.
 fn canonical(v: &Value, ids: &IdMap, toward: Option<Toward>) -> String {
     fn walk(v: &Value, ids: &IdMap, toward: Option<Toward>) -> Value {
         match v {
@@ -136,6 +136,7 @@ fn canonical(v: &Value, ids: &IdMap, toward: Option<Toward>) -> String {
                 }
                 crate::compare::normalise(&Value::String(s), "", &[])
             }
+            Value::Number(n) => crate::compare::number(n),
             Value::Array(a) => Value::Array(a.iter().map(|x| walk(x, ids, toward)).collect()),
             Value::Object(o) => Value::Object(o.iter().map(|(k, x)| (k.clone(), walk(x, ids, toward))).collect()),
             other => other.clone(),

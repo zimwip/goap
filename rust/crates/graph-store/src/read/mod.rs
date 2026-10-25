@@ -300,7 +300,7 @@ fn log_entry_of(r: &Row) -> graph_core::impact::LogEntry {
         subject: r.text(7),
         by: r.text(8),
         causation: r.text(9),
-        at: r.time(10).unwrap_or_else(graph_core::gojson::zero_time),
+        at: r.time(10).unwrap_or_else(graph_core::jsontext::zero_time),
         payload: r.text(11),
     }
 }

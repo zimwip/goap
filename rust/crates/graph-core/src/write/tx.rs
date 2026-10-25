@@ -13,8 +13,8 @@ use super::events::{self, BaselineEvent, ChangeDocEvent, ChangeEvent, ChangeJson
 use crate::{
     GraphError, Result,
     change::Change,
-    gojson,
     impact::{LOG_FACT, LOG_IMPACT, LogEntry},
+    jsontext,
     lnk::Url,
     model::{Baseline, Branch, ChangeId, Link, LinkId, Node, NodeId, NodeRef, branch_of, namespace_of},
     store::{LinkSet, OutboxMessage, WriteTx},
@@ -482,7 +482,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             nodes,
         };
         self.raised
-            .push((events::change_subject(&c.id, typ), gojson::to_string(&ev)));
+            .push((events::change_subject(&c.id, typ), jsontext::to_string(&ev)));
         if typ == events::CHANGE_APPLIED {
             self.raised.extend(self.carried.iter().cloned());
         }
@@ -510,7 +510,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
                 nodes: &[],
             };
             self.raised
-                .push((events::change_subject(&c.id, typ), gojson::to_string(&ev)));
+                .push((events::change_subject(&c.id, typ), jsontext::to_string(&ev)));
         }
     }
 
@@ -528,7 +528,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
         };
         self.raised.push((
             events::change_subject(&c.id, events::CHANGE_EDITED),
-            gojson::to_string(&ev),
+            jsontext::to_string(&ev),
         ));
     }
 
@@ -751,9 +751,9 @@ impl<'s, S: WriteTx> Tx<'s, S> {
                 parent_id: &c.parent_id,
                 branch: &c.branch,
                 impacts: keys.into_iter().map(|(key, typ)| DocRef { key, typ }).collect(),
-                created_at: c.created_at.unwrap_or_else(gojson::zero_time),
+                created_at: c.created_at.unwrap_or_else(jsontext::zero_time),
             };
-            out.push(self.message(events::subject_change_indexed(&id), gojson::to_string(&doc), now));
+            out.push(self.message(events::subject_change_indexed(&id), jsontext::to_string(&doc), now));
         }
         for id in self.purged.clone() {
             let doc = ChangeDocEvent {
@@ -771,9 +771,9 @@ impl<'s, S: WriteTx> Tx<'s, S> {
                 parent_id: &ChangeId::default(),
                 branch: "",
                 impacts: Vec::new(),
-                created_at: gojson::zero_time(),
+                created_at: jsontext::zero_time(),
             };
-            out.push(self.message(events::subject_change_indexed(&id), gojson::to_string(&doc), now));
+            out.push(self.message(events::subject_change_indexed(&id), jsontext::to_string(&doc), now));
         }
         for (subject, data) in std::mem::take(&mut self.raised) {
             out.push(self.message(subject, data, now));
@@ -795,11 +795,11 @@ impl<'s, S: WriteTx> Tx<'s, S> {
                 change_id: &n.change_id,
                 text,
                 facets,
-                time: n.created_at.unwrap_or_else(gojson::zero_time),
+                time: n.created_at.unwrap_or_else(jsontext::zero_time),
             };
             out.push(self.message(
                 events::subject_node_written(&ns, &n.typ, &n.id),
-                gojson::to_string(&ev),
+                jsontext::to_string(&ev),
                 now,
             ));
         }
@@ -811,7 +811,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
                 parent: &b.parent_id,
                 set: BTreeMap::new(),
                 removed: Vec::new(),
-                time: b.created_at.unwrap_or_else(gojson::zero_time),
+                time: b.created_at.unwrap_or_else(jsontext::zero_time),
             };
             if let Some(delta) = &delta {
                 for (id, v) in delta {
@@ -824,7 +824,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             }
             out.push(self.message(
                 events::subject_baseline_advanced(ev.branch),
-                gojson::to_string(&ev),
+                jsontext::to_string(&ev),
                 now,
             ));
         }
@@ -840,7 +840,7 @@ fn touched_json(c: &Change, seq: i64) -> String {
         typ: &'a str,
         change: ChangeJson<'a>,
     }
-    gojson::to_string(&Touched {
+    jsontext::to_string(&Touched {
         typ: "change.updated",
         change: ChangeJson::of(c, seq),
     })

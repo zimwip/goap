@@ -310,7 +310,7 @@ fn render_index(s: &Snapshot, entries: &[Entry]) -> String {
     }
     idx.push((
         Yaml::str("exportedAt"),
-        Yaml::Plain(crate::gojson::time_text(&s.exported_at.with_timezone(&Utc))),
+        Yaml::Plain(crate::jsontext::time_text(&s.exported_at.with_timezone(&Utc))),
     ));
     idx.push((Yaml::str("nodes"), Yaml::int(entries.len() as i64)));
     if !by_type.is_empty() {

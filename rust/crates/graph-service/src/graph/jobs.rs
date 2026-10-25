@@ -617,7 +617,7 @@ impl Graph {
             .await
             .map_err(failure)?;
         } else {
-            let doc = graph_core::gojson::to_string_indent(&s, "  ");
+            let doc = graph_core::jsontext::to_string_pretty(&s);
             j.result(
                 &format!("graph-{}-{stamp}.json", s.namespace),
                 "application/json",
