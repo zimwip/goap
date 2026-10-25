@@ -188,6 +188,10 @@ pub struct Principal {
     pub subject: String,
     pub org: String,
     pub roles: Vec<String>,
+    /// the active project of its token (`X-Goap-Project`)
+    pub project: String,
+    /// the person a platform service acts for (`X-Goap-On-Behalf-Of`, ADR 0114)
+    pub on_behalf_of: String,
 }
 
 /// A hierarchy of a structure by key (`domain.Hierarchy`).
@@ -239,7 +243,7 @@ pub struct Snapshot {
     project_keys: std::collections::HashSet<String>,
     assignments: Vec<Assignment>,
     org_root: String,
-    /// The rules stored as `Policy` nodes, a malformed one left out (`PolicyFromProps`).
+    /// The rules stored as `Policy` nodes, one `authz.Validate` refuses left out (`PolicyFromProps`).
     policies: Vec<abac::Policy>,
     /// The policies of the criticality levels, by the unit owning them and the level (`readCriticality`).
     criticality: HashMap<String, HashMap<&'static str, crate::criticality::Policy>>,
@@ -318,11 +322,7 @@ impl Snapshot {
                         action: text(&n.props, "action").to_string(),
                         effect: text(&n.props, "effect").to_string(),
                     };
-                    if (p.effect == "allow" || p.effect == "deny")
-                        && !p.rule.is_empty()
-                        && !p.resource.is_empty()
-                        && !p.action.is_empty()
-                    {
+                    if abac::validate(&p).is_ok() {
                         s.policies.push(p);
                     }
                 }
@@ -543,6 +543,8 @@ impl Snapshot {
         let mut out = abac::Subject {
             subject: p.subject.clone(),
             org: p.org.clone(),
+            project: p.project.clone(),
+            on_behalf_of: p.on_behalf_of.clone(),
             ..abac::Subject::default()
         };
         if out.org.is_empty()
@@ -565,7 +567,7 @@ impl Snapshot {
         let chain = self.chain_of(&Principal {
             subject: out.subject.clone(),
             org: out.org.clone(),
-            roles: Vec::new(),
+            ..Principal::default()
         });
         for r in self.platform_roles(&chain) {
             add(&mut out.global, &r);
@@ -576,8 +578,7 @@ impl Snapshot {
     /// Decides a request as Go's `access.Authorizer` does (ADR 0020, 0043, 0138): the principal completed, the roles
     /// it holds on the resource's project (the root when it names none) merged, the flags of that project's
     /// Assignments when the resource names one; the floor first (an administrator may do everything), then the
-    /// stored rules, the compiled-in defaults while none is stored. A stored rule this service cannot read is the Go
-    /// service's to judge.
+    /// stored rules, the compiled-in defaults while none is stored, evaluated as Casbin and govaluate evaluate them.
     pub fn authorize(&self, p: &Principal, mut res: abac::Resource, act: &str) -> Result<bool> {
         if p.subject.is_empty() {
             return Ok(false);
@@ -590,7 +591,7 @@ impl Snapshot {
         let chain = self.chain_of(&Principal {
             subject: sub.subject.clone(),
             org: sub.org.clone(),
-            roles: Vec::new(),
+            ..Principal::default()
         });
         for r in self.project_roles(&chain, &projects) {
             if !sub.roles.contains(&r) {
@@ -600,16 +601,14 @@ impl Snapshot {
         if !res.project_id.is_empty() {
             (sub.project_admin, sub.project_owner) = self.project_flags(&chain, &projects);
         }
-        let floor = abac::Enforcer::new(&abac::floor_policies()).map_err(GraphError::internal)?;
+        let floor = abac::Enforcer::new(&abac::floor_policies());
         if floor.authorize(&sub, &res, act).map_err(GraphError::internal)? {
             return Ok(true);
         }
         let rules = if self.policies.is_empty() {
-            abac::Enforcer::new(&abac::default_policies()).map_err(GraphError::internal)?
+            abac::Enforcer::new(&abac::default_policies())
         } else {
-            abac::Enforcer::new(&self.policies).map_err(|e| {
-                GraphError::unimplemented(format!("a rule of the organisation this service cannot read: {e}"))
-            })?
+            abac::Enforcer::new(&self.policies)
         };
         rules.authorize(&sub, &res, act).map_err(GraphError::internal)
     }
@@ -620,7 +619,7 @@ impl Snapshot {
         if p.subject.is_empty() {
             return Ok(false);
         }
-        let floor = abac::Enforcer::new(&abac::floor_policies()).map_err(GraphError::internal)?;
+        let floor = abac::Enforcer::new(&abac::floor_policies());
         floor.authorize(&self.enrich(p), res, act).map_err(GraphError::internal)
     }
 

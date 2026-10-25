@@ -245,7 +245,7 @@ fn go_value(v: &Value) -> String {
     match v {
         Value::Null => "<nil>".into(),
         Value::String(s) => s.clone(),
-        Value::Number(n) => n.as_f64().map(go_float).unwrap_or_else(|| n.to_string()),
+        Value::Number(n) => n.as_f64().map(graph_script::go_float).unwrap_or_else(|| n.to_string()),
         Value::Bool(b) => b.to_string(),
         Value::Array(a) => format!("[{}]", a.iter().map(go_value).collect::<Vec<_>>().join(" ")),
         Value::Object(m) => {
@@ -255,15 +255,6 @@ fn go_value(v: &Value) -> String {
             format!("map[{}]", parts.join(" "))
         }
     }
-}
-
-/// A float64 as Go's `%v` prints it (`strconv.FormatFloat(f, 'g', -1, 64)`, exponent past 21 digits).
-fn go_float(f: f64) -> String {
-    if f.fract() == 0.0 && f.abs() < 1e21 {
-        return format!("{f:.0}");
-    }
-    let s = format!("{f}");
-    if s.len() > 21 { format!("{f:e}") } else { s }
 }
 
 impl Param {

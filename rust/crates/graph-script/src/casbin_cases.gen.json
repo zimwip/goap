@@ -1,0 +1,3147 @@
+{
+  "comment": "Code generated from contracts/authz (GOAP_UPDATE_RUST=1 go test ./contracts/authz/ -run TestRustCasesAreCurrent). DO NOT EDIT.",
+  "requests": [
+    {
+      "Subject": {
+        "subject": "alice",
+        "org": "UNIT",
+        "project": "PROJ-A",
+        "roles": [
+          "dev",
+          "lead@UNIT"
+        ]
+      },
+      "Action": "read",
+      "Resource": {
+        "type": "change",
+        "id": "10.1.2.3",
+        "org": "UNIT",
+        "owner": "alice",
+        "name": "/api/1",
+        "role": "dev",
+        "accountable": "lead",
+        "orgChain": [
+          "UNIT",
+          "ORG-DEFAULT"
+        ],
+        "projectId": "PROJ-A",
+        "roles": [
+          "dev"
+        ]
+      }
+    },
+    {
+      "Subject": {
+        "subject": "system:registry",
+        "projectAdmin": true,
+        "onBehalfOf": "bob"
+      },
+      "Action": "apply",
+      "Resource": {
+        "type": "node",
+        "id": "192.168.0.1",
+        "namespace": "alm",
+        "name": "/api/1/x/1",
+        "roles": [
+          "*"
+        ]
+      }
+    },
+    {
+      "Subject": {
+        "subject": "root",
+        "global": [
+          "admin"
+        ],
+        "projectOwner": true
+      },
+      "Action": "move",
+      "Resource": {
+        "type": "project",
+        "owner": "bob",
+        "name": "/web/1"
+      }
+    }
+  ],
+  "rules": [
+    {
+      "rule": "hasRole(r.sub, \"admin\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "!isAnonymous(r.sub) \u0026\u0026 ((r.obj.Org != \"\" \u0026\u0026 r.obj.Org == r.sub.Org) || onProject(r.sub))",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "hasRoleIn(r.sub, r.obj.Role, r.obj)",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "mayRun(r.sub, r.obj)",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "isProjectAdmin(r.sub)",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "isProjectOwner(r.sub)",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject == r.obj.Owner \u0026\u0026 !hasRole(r.sub, \"admin\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "hasAnyRole(r.sub, \"dev\", \"ops\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "hasAnyRole(r.sub)",
+      "validate": "invalid rule: hasAnyRole(sub, role...)",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "hasAnyRole(sub, role...)"
+        },
+        {
+          "allowed": false,
+          "error": "hasAnyRole(sub, role...)"
+        },
+        {
+          "allowed": false,
+          "error": "hasAnyRole(sub, role...)"
+        }
+      ]
+    },
+    {
+      "rule": "hasRole(r.sub)",
+      "validate": "invalid rule: hasRole(sub, role)",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "hasRole(sub, role)"
+        },
+        {
+          "allowed": false,
+          "error": "hasRole(sub, role)"
+        },
+        {
+          "allowed": false,
+          "error": "hasRole(sub, role)"
+        }
+      ]
+    },
+    {
+      "rule": "isAnonymous()",
+      "validate": "invalid rule: panic: runtime error: index out of range [0] with length 0",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "panic: runtime error: index out of range [0] with length 0"
+        },
+        {
+          "allowed": false,
+          "error": "panic: runtime error: index out of range [0] with length 0"
+        },
+        {
+          "allowed": false,
+          "error": "panic: runtime error: index out of range [0] with length 0"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject == \"alice\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject != \"alice\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject",
+      "validate": "invalid rule: Value 'probe' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value 'alice' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value 'system:registry' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value 'root' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Nope == 1",
+      "validate": "invalid rule: No method or field 'Nope' present on parameter 'r_sub'",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "No method or field 'Nope' present on parameter 'r_sub'"
+        },
+        {
+          "allowed": false,
+          "error": "No method or field 'Nope' present on parameter 'r_sub'"
+        },
+        {
+          "allowed": false,
+          "error": "No method or field 'Nope' present on parameter 'r_sub'"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.subject == \"x\"",
+      "validate": "invalid rule: Unable to access unexported field 'subject' in 'r_sub'",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Unable to access unexported field 'subject' in 'r_sub'"
+        },
+        {
+          "allowed": false,
+          "error": "Unable to access unexported field 'subject' in 'r_sub'"
+        },
+        {
+          "allowed": false,
+          "error": "Unable to access unexported field 'subject' in 'r_sub'"
+        }
+      ]
+    },
+    {
+      "rule": "r.obj.Type.Foo == 1",
+      "validate": "invalid rule: Unable to access 'Foo', 'Type' is not a struct or map",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Unable to access 'Foo', 'Type' is not a struct or map"
+        },
+        {
+          "allowed": false,
+          "error": "Unable to access 'Foo', 'Type' is not a struct or map"
+        },
+        {
+          "allowed": false,
+          "error": "Unable to access 'Foo', 'Type' is not a struct or map"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Anonymous",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Anonymous()",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "!r.sub.Anonymous()",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.HasRole(\"dev\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.HasRole(\"dev\") || r.sub.Subject == \"probe\"",
+      "validate": "invalid rule: Value 'dev' cannot be used with the logical operator '||', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value 'dev' cannot be used with the logical operator '||', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value 'dev' cannot be used with the logical operator '||', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value 'dev' cannot be used with the logical operator '||', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "(r.sub.HasRole(\"dev\")) || r.sub.Subject == \"probe\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.HasRole(1)",
+      "validate": "invalid rule: Method call failed - 'r_sub.HasRole': Argument type conversion failed: failed to convert 'float64' to 'string'",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.HasRole': Argument type conversion failed: failed to convert 'float64' to 'string'"
+        },
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.HasRole': Argument type conversion failed: failed to convert 'float64' to 'string'"
+        },
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.HasRole': Argument type conversion failed: failed to convert 'float64' to 'string'"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.HasRole()",
+      "validate": "invalid rule: Method call failed - 'r_sub.HasRole': Too few arguments to parameter call: got 0 arguments, expected 1",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.HasRole': Too few arguments to parameter call: got 0 arguments, expected 1"
+        },
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.HasRole': Too few arguments to parameter call: got 0 arguments, expected 1"
+        },
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.HasRole': Too few arguments to parameter call: got 0 arguments, expected 1"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.HasRole(\"a\", \"b\")",
+      "validate": "invalid rule: Method call failed - 'r_sub.HasRole': Too many arguments to parameter call: got 2 arguments, expected 1",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.HasRole': Too many arguments to parameter call: got 2 arguments, expected 1"
+        },
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.HasRole': Too many arguments to parameter call: got 2 arguments, expected 1"
+        },
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.HasRole': Too many arguments to parameter call: got 2 arguments, expected 1"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.HasRoleIn(\"dev\", r.obj)",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.HasRoleIn(\"dev\", r.sub)",
+      "validate": "invalid rule: Failed to access 'r_sub.HasRoleIn': reflect: Call using authz.Principal as type authz.Resource",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Failed to access 'r_sub.HasRoleIn': reflect: Call using authz.Principal as type authz.Resource"
+        },
+        {
+          "allowed": false,
+          "error": "Failed to access 'r_sub.HasRoleIn': reflect: Call using authz.Principal as type authz.Resource"
+        },
+        {
+          "allowed": false,
+          "error": "Failed to access 'r_sub.HasRoleIn': reflect: Call using authz.Principal as type authz.Resource"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.MayRun(r.obj)",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.EndUser() == \"bob\"",
+      "validate": "invalid rule: Method call failed - 'r_sub.EndUser': Too many arguments to parameter call: got 1 arguments, expected 0",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.EndUser': Too many arguments to parameter call: got 1 arguments, expected 0"
+        },
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.EndUser': Too many arguments to parameter call: got 1 arguments, expected 0"
+        },
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.EndUser': Too many arguments to parameter call: got 1 arguments, expected 0"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.System()",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.AllRoles() == r.sub.Roles",
+      "validate": "invalid rule: Method call failed - 'r_sub.AllRoles': Too many arguments to parameter call: got 1 arguments, expected 0",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.AllRoles': Too many arguments to parameter call: got 1 arguments, expected 0"
+        },
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.AllRoles': Too many arguments to parameter call: got 1 arguments, expected 0"
+        },
+        {
+          "allowed": false,
+          "error": "Method call failed - 'r_sub.AllRoles': Too many arguments to parameter call: got 1 arguments, expected 0"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.For(\"bob\").OnBehalfOf == \"bob\"",
+      "validate": "invalid rule: error while parsing eval parameter: r_sub.For(\"bob\").OnBehalfOf == \"bob\", Unable to parse numeric value '.' to float64\n",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.For(\"bob\").OnBehalfOf == \"bob\", Unable to parse numeric value '.' to float64\n"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.For(\"bob\").OnBehalfOf == \"bob\", Unable to parse numeric value '.' to float64\n"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.For(\"bob\").OnBehalfOf == \"bob\", Unable to parse numeric value '.' to float64\n"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.OnBehalfOf == \"bob\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Project == \"PROJ-A\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.ProjectAdmin",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.obj.Roles",
+      "validate": "invalid rule: Value '[]' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '[dev]' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[*]' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[]' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "\"dev\" in r.sub.Roles",
+      "validate": "invalid rule: Value '[]' cannot be used with the comparator 'in', it is not a number",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '[dev lead@UNIT]' cannot be used with the comparator 'in', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[]' cannot be used with the comparator 'in', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[]' cannot be used with the comparator 'in', it is not a number"
+        }
+      ]
+    },
+    {
+      "rule": "r.obj.Type in (\"change\", \"node\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.obj.Type in (\"change\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.obj.Type IN (\"change\", \"node\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.act in ()",
+      "validate": "invalid rule: panic: runtime error: invalid memory address or nil pointer dereference",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "panic: runtime error: invalid memory address or nil pointer dereference"
+        },
+        {
+          "allowed": false,
+          "error": "panic: runtime error: invalid memory address or nil pointer dereference"
+        },
+        {
+          "allowed": false,
+          "error": "panic: runtime error: invalid memory address or nil pointer dereference"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub in (r.sub)",
+      "validate": "invalid rule: Value '{probe   [] [] false false }' cannot be used with the comparator 'in', it is not a number",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '{alice UNIT PROJ-A [dev lead@UNIT] [] false false }' cannot be used with the comparator 'in', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value '{system:registry   [] [] true false bob}' cannot be used with the comparator 'in', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value '{root   [] [admin] false true }' cannot be used with the comparator 'in', it is not a number"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Roles in (r.sub.Roles)",
+      "validate": "invalid rule: Value '[]' cannot be used with the comparator 'in', it is not a number",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '[dev lead@UNIT]' cannot be used with the comparator 'in', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[]' cannot be used with the comparator 'in', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[]' cannot be used with the comparator 'in', it is not a number"
+        }
+      ]
+    },
+    {
+      "rule": "1 in (1, 2)",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject =~ \"^al\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject !~ \"^al\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject =~ r.obj.Name",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject =~ \"a(\"",
+      "validate": "invalid rule: error while parsing eval parameter: r_sub.Subject =~ \"a(\", error parsing regexp: missing closing ): `a(`",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject =~ \"a(\", error parsing regexp: missing closing ): `a(`"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject =~ \"a(\", error parsing regexp: missing closing ): `a(`"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject =~ \"a(\", error parsing regexp: missing closing ): `a(`"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject =~ \"[\\\\d]+\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject =~ 5",
+      "validate": "invalid rule: Value '5' cannot be used with the comparator '=~', it is not a number",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '5' cannot be used with the comparator '=~', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value '5' cannot be used with the comparator '=~', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value '5' cannot be used with the comparator '=~', it is not a number"
+        }
+      ]
+    },
+    {
+      "rule": "regexMatch(r.sub.Subject, \"^a.*e$\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "regexMatch(r.sub.Subject, \"a(\")",
+      "validate": "invalid rule: panic: error parsing regexp: missing closing ): `a(`",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "panic: error parsing regexp: missing closing ): `a(`"
+        },
+        {
+          "allowed": false,
+          "error": "panic: error parsing regexp: missing closing ): `a(`"
+        },
+        {
+          "allowed": false,
+          "error": "panic: error parsing regexp: missing closing ): `a(`"
+        }
+      ]
+    },
+    {
+      "rule": "regexMatch(r.sub.Subject)",
+      "validate": "invalid rule: regexMatch: expected 2 arguments, but got 1",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "regexMatch: expected 2 arguments, but got 1"
+        },
+        {
+          "allowed": false,
+          "error": "regexMatch: expected 2 arguments, but got 1"
+        },
+        {
+          "allowed": false,
+          "error": "regexMatch: expected 2 arguments, but got 1"
+        }
+      ]
+    },
+    {
+      "rule": "regexMatch(r.sub.Subject, 1)",
+      "validate": "invalid rule: regexMatch: argument must be a string",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "regexMatch: argument must be a string"
+        },
+        {
+          "allowed": false,
+          "error": "regexMatch: argument must be a string"
+        },
+        {
+          "allowed": false,
+          "error": "regexMatch: argument must be a string"
+        }
+      ]
+    },
+    {
+      "rule": "keyMatch(r.obj.Name, \"/api/*\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "keyMatch2(r.obj.Name, \"/api/:id\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "keyMatch3(r.obj.Name, \"/api/{id}\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "keyMatch4(r.obj.Name, \"/api/{id}/x/{id}\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "keyMatch5(r.obj.Name, \"/api/{id}\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "keyGet(r.obj.Name, \"/api/*\") == \"1\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "keyGet2(r.obj.Name, \"/api/:id\", \"id\") == \"1\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "keyGet3(r.obj.Name, \"/api/{id}\", \"id\") == \"1\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "ipMatch(r.obj.ID, \"10.0.0.0/8\")",
+      "validate": "invalid rule: panic: invalid argument: ip1 in IPMatch() function is not an IP address.",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false,
+          "error": "panic: invalid argument: ip1 in IPMatch() function is not an IP address."
+        }
+      ]
+    },
+    {
+      "rule": "ipMatch(r.obj.ID, \"10.0.0.1\")",
+      "validate": "invalid rule: panic: invalid argument: ip1 in IPMatch() function is not an IP address.",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false,
+          "error": "panic: invalid argument: ip1 in IPMatch() function is not an IP address."
+        }
+      ]
+    },
+    {
+      "rule": "ipMatch(r.obj.Name, \"10.0.0.0/8\")",
+      "validate": "invalid rule: panic: invalid argument: ip1 in IPMatch() function is not an IP address.",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "panic: invalid argument: ip1 in IPMatch() function is not an IP address."
+        },
+        {
+          "allowed": false,
+          "error": "panic: invalid argument: ip1 in IPMatch() function is not an IP address."
+        },
+        {
+          "allowed": false,
+          "error": "panic: invalid argument: ip1 in IPMatch() function is not an IP address."
+        }
+      ]
+    },
+    {
+      "rule": "globMatch(r.obj.Name, \"/api/**\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "globMatch(r.obj.Name, \"/api/[\")",
+      "validate": "invalid rule: syntax error in pattern",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "syntax error in pattern"
+        },
+        {
+          "allowed": false,
+          "error": "syntax error in pattern"
+        },
+        {
+          "allowed": false,
+          "error": "syntax error in pattern"
+        }
+      ]
+    },
+    {
+      "rule": "globMatch(r.obj.Name, \"/api/{a,1}\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "eval(\"true\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "eval(r.sub.Subject)",
+      "validate": "invalid rule: No parameter 'probe' found.",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "No parameter 'alice' found."
+        },
+        {
+          "allowed": false,
+          "error": "No parameter 'system' found."
+        },
+        {
+          "allowed": false,
+          "error": "No parameter 'root' found."
+        }
+      ]
+    },
+    {
+      "rule": "eval(\"r.sub.Subject == \\\"alice\\\"\")",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "eval()",
+      "validate": "invalid rule: function eval(subrule string) expected 1 arguments, but got 0",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "function eval(subrule string) expected 1 arguments, but got 0"
+        },
+        {
+          "allowed": false,
+          "error": "function eval(subrule string) expected 1 arguments, but got 0"
+        },
+        {
+          "allowed": false,
+          "error": "function eval(subrule string) expected 1 arguments, but got 0"
+        }
+      ]
+    },
+    {
+      "rule": "eval(1)",
+      "validate": "invalid rule: argument of eval(subrule string) must be a string",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "argument of eval(subrule string) must be a string"
+        },
+        {
+          "allowed": false,
+          "error": "argument of eval(subrule string) must be a string"
+        },
+        {
+          "allowed": false,
+          "error": "argument of eval(subrule string) must be a string"
+        }
+      ]
+    },
+    {
+      "rule": "nope(r.sub)",
+      "validate": "invalid rule: error while parsing eval parameter: nope(r_sub), Undefined function nope",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: nope(r_sub), Undefined function nope"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: nope(r_sub), Undefined function nope"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: nope(r_sub), Undefined function nope"
+        }
+      ]
+    },
+    {
+      "rule": "1 + 1 == 2",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "1 + \"a\" == \"1a\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "\"a\" + true == \"atrue\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "10 - 2 - 3 == 5",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "2 ** 3 ** 2 == 64",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "7 % 3 == 1",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "8 / 4 / 2 == 1",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "-1 \u003c 0",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "- 1 \u003c 0",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "1 - -1 == 2",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "!true == false",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "~1 == -2",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "3 \u0026 5 == 1",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "3 | 5 == 7",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "3 ^ 5 == 6",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "1 \u003c\u003c 4 == 16",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "256 \u003e\u003e 4 == 16",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "0x1F == 31",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "0x == 0",
+      "validate": "invalid rule: error while parsing eval parameter: 0x == 0, Unable to parse hex value '' to uint64\n",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 0x == 0, Unable to parse hex value '' to uint64\n"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 0x == 0, Unable to parse hex value '' to uint64\n"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 0x == 0, Unable to parse hex value '' to uint64\n"
+        }
+      ]
+    },
+    {
+      "rule": "1.5 * 2 == 3",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "1..2 == 1",
+      "validate": "invalid rule: error while parsing eval parameter: 1..2 == 1, Unable to parse numeric value '1..2' to float64\n",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 1..2 == 1, Unable to parse numeric value '1..2' to float64\n"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 1..2 == 1, Unable to parse numeric value '1..2' to float64\n"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 1..2 == 1, Unable to parse numeric value '1..2' to float64\n"
+        }
+      ]
+    },
+    {
+      "rule": ".5 == 0.5",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "1e3 == 1000",
+      "validate": "invalid rule: error while parsing eval parameter: 1e3 == 1000, Cannot transition token types from NUMERIC [1] to VARIABLE [e3]",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 1e3 == 1000, Cannot transition token types from NUMERIC [1] to VARIABLE [e3]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 1e3 == 1000, Cannot transition token types from NUMERIC [1] to VARIABLE [e3]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 1e3 == 1000, Cannot transition token types from NUMERIC [1] to VARIABLE [e3]"
+        }
+      ]
+    },
+    {
+      "rule": "1000000 == 1e6",
+      "validate": "invalid rule: error while parsing eval parameter: 1000000 == 1e6, Cannot transition token types from NUMERIC [1] to VARIABLE [e6]",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 1000000 == 1e6, Cannot transition token types from NUMERIC [1] to VARIABLE [e6]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 1000000 == 1e6, Cannot transition token types from NUMERIC [1] to VARIABLE [e6]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 1000000 == 1e6, Cannot transition token types from NUMERIC [1] to VARIABLE [e6]"
+        }
+      ]
+    },
+    {
+      "rule": "1000000 + \"x\"",
+      "validate": "invalid rule: Value '1e+06x' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '1e+06x' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1e+06x' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1e+06x' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "0.00001 + \"x\"",
+      "validate": "invalid rule: Value '1e-05x' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '1e-05x' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1e-05x' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1e-05x' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "123456789 + \"x\"",
+      "validate": "invalid rule: Value '1.23456789e+08x' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '1.23456789e+08x' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1.23456789e+08x' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1.23456789e+08x' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "1 / 0 \u003e 1000",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "\"b\" \u003e \"a\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "\"b\" \u003e 1",
+      "validate": "invalid rule: Value 'b' cannot be used with the comparator '\u003e', it is not a number",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value 'b' cannot be used with the comparator '\u003e', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value 'b' cannot be used with the comparator '\u003e', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value 'b' cannot be used with the comparator '\u003e', it is not a number"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Roles \u003e 1",
+      "validate": "invalid rule: Value '[]' cannot be used with the comparator '\u003e', it is not a number",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '[dev lead@UNIT]' cannot be used with the comparator '\u003e', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[]' cannot be used with the comparator '\u003e', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[]' cannot be used with the comparator '\u003e', it is not a number"
+        }
+      ]
+    },
+    {
+      "rule": "true ? true : false",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "false ? true : false",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject == \"alice\" ? true : false",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "1 ? true : false",
+      "validate": "invalid rule: Value '1' cannot be used with the ternary operator '?', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the ternary operator '?', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the ternary operator '?', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the ternary operator '?', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "(false ? true) ?? true",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "(true ? \"x\") == \"x\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject ?? false",
+      "validate": "invalid rule: Value 'probe' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value 'alice' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value 'system:registry' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value 'root' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "true \u0026\u0026 1",
+      "validate": "invalid rule: Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "1 \u0026\u0026 true",
+      "validate": "invalid rule: Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "false \u0026\u0026 1",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "true || 1",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject == \"2006-01-02\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "\"2006-01-02\" == 1136160000",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "\"2006-01-02T15:04:05Z\" \u003e 0",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "\"3:04PM\" \u003c 0",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "'single' == \"single\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "'mixed\" == \"mixed\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "\"esc\\\"aped\" == 'esc\"aped'",
+      "validate": "invalid rule: error while parsing eval parameter: \"esc\\\"aped\" == 'esc\"aped', Unclosed string literal",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"esc\\\"aped\" == 'esc\"aped', Unclosed string literal"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"esc\\\"aped\" == 'esc\"aped', Unclosed string literal"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"esc\\\"aped\" == 'esc\"aped', Unclosed string literal"
+        }
+      ]
+    },
+    {
+      "rule": "\"a\\\\b\" == \"a\\b\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "\"unclosed",
+      "validate": "invalid rule: error while parsing eval parameter: \"unclosed, Unclosed string literal",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"unclosed, Unclosed string literal"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"unclosed, Unclosed string literal"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"unclosed, Unclosed string literal"
+        }
+      ]
+    },
+    {
+      "rule": "(r.sub.Subject == \"a\"",
+      "validate": "invalid rule: error while parsing eval parameter: (r_sub.Subject == \"a\", Unbalanced parenthesis",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: (r_sub.Subject == \"a\", Unbalanced parenthesis"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: (r_sub.Subject == \"a\", Unbalanced parenthesis"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: (r_sub.Subject == \"a\", Unbalanced parenthesis"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject == \"a\")",
+      "validate": "invalid rule: error while parsing eval parameter: r_sub.Subject == \"a\"), Unbalanced parenthesis",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject == \"a\"), Unbalanced parenthesis"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject == \"a\"), Unbalanced parenthesis"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject == \"a\"), Unbalanced parenthesis"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject ==",
+      "validate": "invalid rule: error while parsing eval parameter: r_sub.Subject ==, Unexpected end of expression",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject ==, Unexpected end of expression"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject ==, Unexpected end of expression"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject ==, Unexpected end of expression"
+        }
+      ]
+    },
+    {
+      "rule": "== r.sub.Subject",
+      "validate": "invalid rule: error while parsing eval parameter: == r_sub.Subject, Cannot transition token types from UNKNOWN [\u003cnil\u003e] to COMPARATOR [==]",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: == r_sub.Subject, Cannot transition token types from UNKNOWN [\u003cnil\u003e] to COMPARATOR [==]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: == r_sub.Subject, Cannot transition token types from UNKNOWN [\u003cnil\u003e] to COMPARATOR [==]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: == r_sub.Subject, Cannot transition token types from UNKNOWN [\u003cnil\u003e] to COMPARATOR [==]"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.",
+      "validate": "invalid rule: error while parsing eval parameter: r_sub., Hanging accessor on token 'r_sub.'",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub., Hanging accessor on token 'r_sub.'"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub., Hanging accessor on token 'r_sub.'"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub., Hanging accessor on token 'r_sub.'"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub..Subject == 1",
+      "validate": "invalid rule: No method or field '' present on parameter 'r_sub'",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "No method or field '' present on parameter 'r_sub'"
+        },
+        {
+          "allowed": false,
+          "error": "No method or field '' present on parameter 'r_sub'"
+        },
+        {
+          "allowed": false,
+          "error": "No method or field '' present on parameter 'r_sub'"
+        }
+      ]
+    },
+    {
+      "rule": "[r.sub] == 1",
+      "validate": "invalid rule: No parameter 'r.sub' found.",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "No parameter 'r.sub' found."
+        },
+        {
+          "allowed": false,
+          "error": "No parameter 'r.sub' found."
+        },
+        {
+          "allowed": false,
+          "error": "No parameter 'r.sub' found."
+        }
+      ]
+    },
+    {
+      "rule": "[unclosed",
+      "validate": "invalid rule: error while parsing eval parameter: [unclosed, Unclosed parameter bracket",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: [unclosed, Unclosed parameter bracket"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: [unclosed, Unclosed parameter bracket"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: [unclosed, Unclosed parameter bracket"
+        }
+      ]
+    },
+    {
+      "rule": "r_sub.Subject == \"alice\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "p.act == \"*\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "p.eft == \"allow\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "p.sub_rule != \"\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "r.nope == 1",
+      "validate": "invalid rule: No parameter 'r_nope' found.",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "No parameter 'r_nope' found."
+        },
+        {
+          "allowed": false,
+          "error": "No parameter 'r_nope' found."
+        },
+        {
+          "allowed": false,
+          "error": "No parameter 'r_nope' found."
+        }
+      ]
+    },
+    {
+      "rule": "x == 1",
+      "validate": "invalid rule: No parameter 'x' found.",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "No parameter 'x' found."
+        },
+        {
+          "allowed": false,
+          "error": "No parameter 'x' found."
+        },
+        {
+          "allowed": false,
+          "error": "No parameter 'x' found."
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject == \"alice\" \u0026\u0026! true",
+      "validate": "invalid rule: error while parsing eval parameter: r_sub.Subject == \"alice\" \u0026\u0026! true, Invalid token: '\u0026\u0026!'",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject == \"alice\" \u0026\u0026! true, Invalid token: '\u0026\u0026!'"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject == \"alice\" \u0026\u0026! true, Invalid token: '\u0026\u0026!'"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject == \"alice\" \u0026\u0026! true, Invalid token: '\u0026\u0026!'"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject == \"alice\" \u0026\u0026 ! true",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "a.b.c",
+      "validate": "invalid rule: No parameter 'a' found.",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "No parameter 'a' found."
+        },
+        {
+          "allowed": false,
+          "error": "No parameter 'a' found."
+        },
+        {
+          "allowed": false,
+          "error": "No parameter 'a' found."
+        }
+      ]
+    },
+    {
+      "rule": "hasRole(r.sub, \"admin\") hasRole(r.sub, \"dev\")",
+      "validate": "invalid rule: error while parsing eval parameter: hasRole(r_sub, \"admin\") hasRole(r_sub, \"dev\"), Cannot transition token types from CLAUSE_CLOSE [41] to FUNCTION [0x0]",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: hasRole(r_sub, \"admin\") hasRole(r_sub, \"dev\"), Cannot transition token types from CLAUSE_CLOSE [41] to FUNCTION [0x0]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: hasRole(r_sub, \"admin\") hasRole(r_sub, \"dev\"), Cannot transition token types from CLAUSE_CLOSE [41] to FUNCTION [0x0]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: hasRole(r_sub, \"admin\") hasRole(r_sub, \"dev\"), Cannot transition token types from CLAUSE_CLOSE [41] to FUNCTION [0x0]"
+        }
+      ]
+    },
+    {
+      "rule": "hasRole == 1",
+      "validate": "invalid rule: error while parsing eval parameter: hasRole == 1, Cannot transition token types from FUNCTION [0x0] to COMPARATOR [==]",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: hasRole == 1, Cannot transition token types from FUNCTION [0x0] to COMPARATOR [==]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: hasRole == 1, Cannot transition token types from FUNCTION [0x0] to COMPARATOR [==]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: hasRole == 1, Cannot transition token types from FUNCTION [0x0] to COMPARATOR [==]"
+        }
+      ]
+    },
+    {
+      "rule": "1 2",
+      "validate": "invalid rule: error while parsing eval parameter: 1 2, Cannot transition token types from NUMERIC [1] to NUMERIC [2]",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 1 2, Cannot transition token types from NUMERIC [1] to NUMERIC [2]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 1 2, Cannot transition token types from NUMERIC [1] to NUMERIC [2]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: 1 2, Cannot transition token types from NUMERIC [1] to NUMERIC [2]"
+        }
+      ]
+    },
+    {
+      "rule": "\"a\" \"b\"",
+      "validate": "invalid rule: error while parsing eval parameter: \"a\" \"b\", Cannot transition token types from STRING [a] to STRING [b]",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"a\" \"b\", Cannot transition token types from STRING [a] to STRING [b]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"a\" \"b\", Cannot transition token types from STRING [a] to STRING [b]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"a\" \"b\", Cannot transition token types from STRING [a] to STRING [b]"
+        }
+      ]
+    },
+    {
+      "rule": "true true",
+      "validate": "invalid rule: error while parsing eval parameter: true true, Cannot transition token types from BOOLEAN [true] to BOOLEAN [true]",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: true true, Cannot transition token types from BOOLEAN [true] to BOOLEAN [true]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: true true, Cannot transition token types from BOOLEAN [true] to BOOLEAN [true]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: true true, Cannot transition token types from BOOLEAN [true] to BOOLEAN [true]"
+        }
+      ]
+    },
+    {
+      "rule": "()",
+      "validate": "invalid rule: Value '\u003cnil\u003e' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '\u003cnil\u003e' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '\u003cnil\u003e' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '\u003cnil\u003e' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "(())",
+      "validate": "invalid rule: Value '\u003cnil\u003e' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '\u003cnil\u003e' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '\u003cnil\u003e' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '\u003cnil\u003e' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "(true)",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "((true))",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "true,false",
+      "validate": "invalid rule: Value '[true false]' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '[true false]' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[true false]' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[true false]' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "(true,false)",
+      "validate": "invalid rule: Value '[true false]' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '[true false]' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[true false]' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[true false]' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject == 'alice' # a comment",
+      "validate": "invalid rule: error while parsing eval parameter: r_sub.Subject == 'alice' # a comment, Invalid token: '#'",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject == 'alice' # a comment, Invalid token: '#'"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject == 'alice' # a comment, Invalid token: '#'"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Subject == 'alice' # a comment, Invalid token: '#'"
+        }
+      ]
+    },
+    {
+      "rule": "@",
+      "validate": "invalid rule: error while parsing eval parameter: @, Invalid token: '@'",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: @, Invalid token: '@'"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: @, Invalid token: '@'"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: @, Invalid token: '@'"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject == \"é\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "ré == 1",
+      "validate": "invalid rule: No parameter 'ré' found.",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "No parameter 'ré' found."
+        },
+        {
+          "allowed": false,
+          "error": "No parameter 'ré' found."
+        },
+        {
+          "allowed": false,
+          "error": "No parameter 'ré' found."
+        }
+      ]
+    },
+    {
+      "rule": "r.obj.OrgChain",
+      "validate": "invalid rule: Value '[]' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '[UNIT ORG-DEFAULT]' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[]' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[]' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "\"UNIT\" in r.obj.OrgChain",
+      "validate": "invalid rule: Value '[]' cannot be used with the comparator 'in', it is not a number",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '[UNIT ORG-DEFAULT]' cannot be used with the comparator 'in', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[]' cannot be used with the comparator 'in', it is not a number"
+        },
+        {
+          "allowed": false,
+          "error": "Value '[]' cannot be used with the comparator 'in', it is not a number"
+        }
+      ]
+    },
+    {
+      "rule": "r.obj.ProjectID == \"PROJ-A\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "r.obj.Accountable == \"lead\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "len(r.sub.Roles) \u003e 0",
+      "validate": "invalid rule: error while parsing eval parameter: len(r_sub.Roles) \u003e 0, Undefined function len",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: len(r_sub.Roles) \u003e 0, Undefined function len"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: len(r_sub.Roles) \u003e 0, Undefined function len"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: len(r_sub.Roles) \u003e 0, Undefined function len"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Roles[0] == \"dev\"",
+      "validate": "invalid rule: error while parsing eval parameter: r_sub.Roles[0] == \"dev\", Cannot transition token types from ACCESSOR [[r_sub Roles]] to VARIABLE [0]",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Roles[0] == \"dev\", Cannot transition token types from ACCESSOR [[r_sub Roles]] to VARIABLE [0]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Roles[0] == \"dev\", Cannot transition token types from ACCESSOR [[r_sub Roles]] to VARIABLE [0]"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: r_sub.Roles[0] == \"dev\", Cannot transition token types from ACCESSOR [[r_sub Roles]] to VARIABLE [0]"
+        }
+      ]
+    },
+    {
+      "rule": "r.sub.Subject.Length == 5",
+      "validate": "invalid rule: Unable to access 'Length', 'Subject' is not a struct or map",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Unable to access 'Length', 'Subject' is not a struct or map"
+        },
+        {
+          "allowed": false,
+          "error": "Unable to access 'Length', 'Subject' is not a struct or map"
+        },
+        {
+          "allowed": false,
+          "error": "Unable to access 'Length', 'Subject' is not a struct or map"
+        }
+      ]
+    },
+    {
+      "rule": "true ? 1",
+      "validate": "invalid rule: Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "1 ?? 2 == 1",
+      "validate": "invalid rule: Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "rule": "\"x\" =~ \"a{\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "\"a{\" =~ \"a{\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "\"x.y\" =~ \"\\\\Q.y\\\\E\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "\"A\" =~ \"\\\\101\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "\"aaa\" =~ \"a**\"",
+      "validate": "invalid rule: error while parsing eval parameter: \"aaa\" =~ \"a**\", error parsing regexp: invalid nested repetition operator: `**`",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"aaa\" =~ \"a**\", error parsing regexp: invalid nested repetition operator: `**`"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"aaa\" =~ \"a**\", error parsing regexp: invalid nested repetition operator: `**`"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"aaa\" =~ \"a**\", error parsing regexp: invalid nested repetition operator: `**`"
+        }
+      ]
+    },
+    {
+      "rule": "\"a\" =~ \"*a\"",
+      "validate": "invalid rule: error while parsing eval parameter: \"a\" =~ \"*a\", error parsing regexp: missing argument to repetition operator: `*`",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"a\" =~ \"*a\", error parsing regexp: missing argument to repetition operator: `*`"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"a\" =~ \"*a\", error parsing regexp: missing argument to repetition operator: `*`"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"a\" =~ \"*a\", error parsing regexp: missing argument to repetition operator: `*`"
+        }
+      ]
+    },
+    {
+      "rule": "\"a\" =~ \"[z-a]\"",
+      "validate": "invalid rule: error while parsing eval parameter: \"a\" =~ \"[z-a]\", error parsing regexp: invalid character class range: `z-a`",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"a\" =~ \"[z-a]\", error parsing regexp: invalid character class range: `z-a`"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"a\" =~ \"[z-a]\", error parsing regexp: invalid character class range: `z-a`"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"a\" =~ \"[z-a]\", error parsing regexp: invalid character class range: `z-a`"
+        }
+      ]
+    },
+    {
+      "rule": "\"é\" =~ \"\\\\w\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "rule": "\"é\" =~ \".\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "\"x\" =~ \"(?i)X\"",
+      "validate": "",
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "rule": "\"x\" =~ \"(?x)x\"",
+      "validate": "invalid rule: error while parsing eval parameter: \"x\" =~ \"(?x)x\", error parsing regexp: invalid or unsupported Perl syntax: `(?x`",
+      "answers": [
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"x\" =~ \"(?x)x\", error parsing regexp: invalid or unsupported Perl syntax: `(?x`"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"x\" =~ \"(?x)x\", error parsing regexp: invalid or unsupported Perl syntax: `(?x`"
+        },
+        {
+          "allowed": false,
+          "error": "error while parsing eval parameter: \"x\" =~ \"(?x)x\", error parsing regexp: invalid or unsupported Perl syntax: `(?x`"
+        }
+      ]
+    }
+  ],
+  "sets": [
+    {
+      "policies": [
+        {
+          "rule": "true",
+          "resource": "*",
+          "action": "*",
+          "effect": "allow"
+        },
+        {
+          "rule": "r.sub.Subject == \"alice\"",
+          "resource": "*",
+          "action": "*",
+          "effect": "deny"
+        }
+      ],
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "policies": [
+        {
+          "rule": "r.sub.Subject == \"alice\"",
+          "resource": "*",
+          "action": "*",
+          "effect": "deny"
+        },
+        {
+          "rule": "1 \u0026\u0026 true",
+          "resource": "*",
+          "action": "*",
+          "effect": "allow"
+        }
+      ],
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "policies": [
+        {
+          "rule": "1 \u0026\u0026 true",
+          "resource": "*",
+          "action": "*",
+          "effect": "allow"
+        },
+        {
+          "rule": "true",
+          "resource": "*",
+          "action": "*",
+          "effect": "deny"
+        }
+      ],
+      "answers": [
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        }
+      ]
+    },
+    {
+      "policies": [
+        {
+          "rule": "true",
+          "resource": "change",
+          "action": "read",
+          "effect": "allow"
+        },
+        {
+          "rule": "1 \u0026\u0026 true",
+          "resource": "node",
+          "action": "*",
+          "effect": "allow"
+        }
+      ],
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": false,
+          "error": "Value '1' cannot be used with the logical operator '\u0026\u0026', it is not a bool"
+        },
+        {
+          "allowed": false
+        }
+      ]
+    },
+    {
+      "policies": [
+        {
+          "rule": "true",
+          "resource": "*",
+          "action": "*",
+          "effect": "allow"
+        },
+        {
+          "rule": "true",
+          "resource": "*",
+          "action": "*",
+          "effect": "allow"
+        }
+      ],
+      "answers": [
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        },
+        {
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "policies": [
+        {
+          "rule": "false",
+          "resource": "*",
+          "action": "*",
+          "effect": "allow"
+        }
+      ],
+      "answers": [
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        },
+        {
+          "allowed": false
+        }
+      ]
+    }
+  ]
+}

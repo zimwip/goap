@@ -869,7 +869,7 @@ pub fn go_sprint(v: &serde_json::Value) -> String {
         Value::Bool(b) => b.to_string(),
         Value::Number(n) => match n.as_f64() {
             // %v of a float64: the shortest form, an exponent from 1e21 and below 1e-4
-            Some(f) => go_float_v(f),
+            Some(f) => graph_script::go_float(f),
             None => n.to_string(),
         },
         Value::Null => "<nil>".into(),
@@ -884,22 +884,6 @@ pub fn go_sprint(v: &serde_json::Value) -> String {
     }
 }
 
-/// `%v` of a float64 (`strconv.FormatFloat(f, 'g', -1, 64)` with Go's exponent threshold of 21 digits).
-fn go_float_v(f: f64) -> String {
-    let a = f.abs();
-    if a != 0.0 && !(1e-4..1e21).contains(&a) {
-        let s = format!("{f:e}");
-        let (m, e) = s.split_once('e').unwrap_or((&s, "0"));
-        let (sign, d) = match e.strip_prefix('-') {
-            Some(d) => ('-', d),
-            None => ('+', e),
-        };
-        let d = if d.len() < 2 { format!("0{d}") } else { d.to_string() };
-        return format!("{m}e{sign}{d}");
-    }
-    format!("{f}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -910,6 +894,8 @@ mod tests {
         assert_eq!(go_sprint(&json!(1.0)), "1");
         assert_eq!(go_sprint(&json!(0.00001)), "1e-05");
         assert_eq!(go_sprint(&json!(1e21)), "1e+21");
+        assert_eq!(go_sprint(&json!(1e6)), "1e+06");
+        assert_eq!(go_sprint(&json!(123456)), "123456");
         assert_eq!(go_sprint(&json!("x")), "x");
         assert_eq!(go_sprint(&json!(true)), "true");
     }

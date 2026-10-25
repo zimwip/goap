@@ -43,8 +43,6 @@ fn is_contains(typ: &str) -> bool {
 /// The entries of a log the service folds: the impact events and the review records (ADR 0105).
 /// The facts that make the view of a change (its state, the decisions on its items): the Go service's. The
 /// others (reviews, artifacts, signals, the records of the use cases) are items of the change only.
-const VIEW_FACTS: [&str; 1] = ["fact.transition"];
-
 /// The view of a change: the fold of its log, up to a position.
 #[derive(Debug, Clone, Default)]
 pub struct ChangeView {
@@ -202,10 +200,6 @@ pub fn flow_branch(flow: &str) -> String {
 
 pub(super) fn draft_of(cn: &ChangeImpact) -> String {
     format!("change impact {} ({})", cn.id, cn.key)
-}
-
-fn unserved(what: &str) -> GraphError {
-    GraphError::unimplemented(format!("{what}: not served here yet"))
 }
 
 /// The node a stored link points to, and the URL of another source.
@@ -401,25 +395,9 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(c)
     }
 
-    /// A change whose state moved along its lifecycle is worked on by the Go service, which freezes what the moves
-    /// say (ADR 0058, 0132); with no registry its guardians ask nothing, and its lifecycle, never moved, freezes nothing.
-    async fn check_unmoved(&self, c: &Change) -> Result<()> {
-        if !c.lifecycle.is_empty()
-            && !self
-                .store
-                .log(&c.id, 0, &[&format!("{LOG_FACT}.transition")])
-                .await?
-                .is_empty()
-        {
-            return Err(unserved("a change whose lifecycle moved (ADR 0058)"));
-        }
-        Ok(())
-    }
-
     /// Opens an operation on a change, on a flow (Go's `workOn`): none names the active option, "main" the main flow.
     pub async fn work_on(&mut self, id: &ChangeId, flow: &str) -> Result<Work> {
         let c = self.change_open(id).await?;
-        self.check_unmoved(&c).await?;
         self.view(id).await?;
         let c = self.ensure_own_branch(c).await?;
         let v = &self.views[id];
@@ -643,8 +621,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 )));
             }
         }
-        let c = self.change_open(id).await?;
-        self.check_unmoved(&c).await?;
+        self.change_open(id).await?;
         self.view(id).await?;
         for cn in batch.iter_mut() {
             if cn.id.is_empty() {
@@ -2011,15 +1988,6 @@ pub async fn fold_upto<T: ReadTx>(store: &T, id: &ChangeId, upto: i64) -> Result
         }
         if l.stream() == LOG_IMPACT {
             events.extend(impact::events_of(&l).map_err(GraphError::internal)?);
-        } else if (l.stream() == LOG_FACT && VIEW_FACTS.contains(&l.typ.as_str()))
-            || (l.stream() == "change" && !header_only(&l))
-        {
-            // the other streams (the journal, the prompts of the engine) are records of a use case: the view of a
-            // change reads none
-            return Err(unserved(&format!(
-                "a change whose log records {} entries (transitions, executions)",
-                l.typ
-            )));
         } else if l.stream() == LOG_FACT {
             items.push(crate::flow::Item::of(&l.payload).map_err(GraphError::internal)?);
         }
@@ -2031,12 +1999,6 @@ pub async fn fold_upto<T: ReadTx>(store: &T, id: &ChangeId, upto: i64) -> Result
     out.events = events;
     out.flows = Flows::replay(&items);
     Ok((out, items))
-}
-
-/// Whether a log entry edits the header of its change only, leaving its impacts and drafts as they are: a
-/// `change.updated` entry (a rebase or an attachment moves the fork of its branch, which the branch records).
-fn header_only(l: &crate::impact::LogEntry) -> bool {
-    l.typ == "change.updated" && !l.subject.is_empty()
 }
 
 /// Rebuilds the drafts of the checkouts that copy a stored version (ADR 0142): the version and its links.

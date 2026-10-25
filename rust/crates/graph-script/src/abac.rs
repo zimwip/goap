@@ -1,17 +1,14 @@
 //! The ABAC rules of the organisation (Go's `contracts/authz` Casbin model, ADR 0020, 0043, 0138): a policy line is a
 //! subject rule over `r.sub`, `r.obj` and `r.act`, a resource type (or `*`), an action (or `*`) and an effect; a request
-//! is allowed when an allow rule matches and no deny rule does. The rules are the expressions Casbin evaluates; they
-//! are evaluated here as CEL, whose syntax the rules the platform writes share, with the functions of the Go model.
-use std::{collections::HashMap, sync::Arc};
-
-use cel::{Context, Program, Value, extractors::Arguments};
+//! is allowed when an allow rule matches and no deny rule does. The rules are the expressions Casbin evaluates, read
+//! and run as Casbin runs them ([`crate::casbin`] over [`crate::govaluate`]).
 
 /// The role an agent, an action, an operation or a model lists to be open to every member of the project
 /// (`authz.AnyRole`).
 pub const ANY_ROLE: &str = "*";
 
 /// The principal of a request (`authz.Principal`), as the authorizer completed it.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Subject {
     pub subject: String,
     pub org: String,
@@ -20,6 +17,8 @@ pub struct Subject {
     pub global: Vec<String>,
     pub project_admin: bool,
     pub project_owner: bool,
+    /// the person a platform service acts for (`OnBehalfOf`, ADR 0114)
+    pub on_behalf_of: String,
 }
 
 impl Subject {
@@ -70,7 +69,7 @@ impl Subject {
 }
 
 /// The object of a request (`authz.Resource`).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Resource {
     pub typ: String,
     pub id: String,
@@ -170,131 +169,55 @@ pub fn floor_policies() -> Vec<Policy> {
     default_policies().into_iter().take(1).collect()
 }
 
-/// A set of rules compiled (`authz.Casbin`).
+/// A set of rules (`authz.Casbin`): the policy lines Casbin holds, a line added twice held once.
 pub struct Enforcer {
-    rules: Vec<(Policy, Program)>,
+    rules: Vec<Policy>,
 }
 
 impl Enforcer {
-    /// Compiles rules; one that is no CEL expression is refused (the Go service's Casbin reads it).
-    pub fn new(policies: &[Policy]) -> Result<Enforcer, String> {
-        let mut rules = Vec::with_capacity(policies.len());
+    /// The rules, in their order (`NewCasbinWith`).
+    pub fn new(policies: &[Policy]) -> Enforcer {
+        let mut rules: Vec<Policy> = Vec::with_capacity(policies.len());
         for p in policies {
-            if p.effect != "allow" && p.effect != "deny" {
-                return Err(format!("policy {:?}: effect must be allow or deny", p.rule));
+            if !rules.contains(p) {
+                rules.push(p.clone());
             }
-            let prog = Program::compile(&p.rule).map_err(|e| format!("policy {:?}: {e}", p.rule))?;
-            rules.push((p.clone(), prog));
         }
-        Ok(Enforcer { rules })
+        Enforcer { rules }
     }
 
-    /// Whether a request is allowed: some allow rule matches and no deny rule does (`Casbin.Authorize`); an
-    /// anonymous subject never is.
+    /// Whether a request is allowed (`Casbin.Authorize`): an anonymous subject never is; else Casbin's enforcement,
+    /// its errors in Casbin's words.
     pub fn authorize(&self, sub: &Subject, res: &Resource, act: &str) -> Result<bool, String> {
         if sub.anonymous() {
             return Ok(false);
         }
-        let ctx = context(sub, res, act)?;
-        let (mut allow, mut deny) = (false, false);
-        for (p, prog) in &self.rules {
-            if (p.resource != "*" && p.resource != res.typ) || (p.action != "*" && p.action != act) {
-                continue;
-            }
-            match prog.execute(&ctx) {
-                Ok(Value::Bool(true)) => {
-                    if p.effect == "deny" {
-                        deny = true;
-                    } else {
-                        allow = true;
-                    }
-                }
-                Ok(Value::Bool(false)) => {}
-                Ok(_) => return Err(format!("policy {:?} did not return a bool", p.rule)),
-                Err(e) => return Err(format!("policy {:?}: {e}", p.rule)),
-            }
-        }
-        Ok(allow && !deny)
+        crate::casbin::enforce(&self.rules, sub, res, act)
     }
 }
 
-fn strings(l: &[String]) -> Value {
-    Value::List(Arc::new(l.iter().map(|s| Value::String(Arc::new(s.clone()))).collect()))
-}
-
-fn map(fields: Vec<(&str, Value)>) -> Value {
-    let m: HashMap<String, Value> = fields.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
-    Value::Map(m.into())
-}
-
-/// The variable `r` of the rules and the functions of the model, over the request itself.
-fn context(sub: &Subject, res: &Resource, act: &str) -> Result<Context<'static, 'static>, String> {
-    let s = |v: &str| Value::String(Arc::new(v.to_string()));
-    let r = map(vec![
-        (
-            "sub",
-            map(vec![
-                ("Subject", s(&sub.subject)),
-                ("Org", s(&sub.org)),
-                ("Project", s(&sub.project)),
-                ("Roles", strings(&sub.roles)),
-                ("Global", strings(&sub.global)),
-                ("ProjectAdmin", Value::Bool(sub.project_admin)),
-                ("ProjectOwner", Value::Bool(sub.project_owner)),
-            ]),
-        ),
-        (
-            "obj",
-            map(vec![
-                ("Type", s(&res.typ)),
-                ("ID", s(&res.id)),
-                ("Org", s(&res.org)),
-                ("Namespace", s(&res.namespace)),
-                ("Owner", s(&res.owner)),
-                ("Name", s(&res.name)),
-                ("Role", s(&res.role)),
-                ("Accountable", s(&res.accountable)),
-                ("OrgChain", strings(&res.org_chain)),
-                ("ProjectID", s(&res.project_id)),
-                ("Roles", strings(&res.roles)),
-            ]),
-        ),
-        ("act", s(act)),
-    ]);
-    let mut ctx = Context::default();
-    ctx.add_variable_from_value("r", r);
-    let (sub, res) = (Arc::new(sub.clone()), Arc::new(res.clone()));
-    let text = |args: &Arguments, i: usize| match args.0.get(i) {
-        Some(Value::String(v)) => v.to_string(),
-        _ => String::new(),
+/// Whether a stored rule holds (`authz.Validate`): its effect, its fields, then one evaluation against a probe; a rule
+/// refused here is left out of the organisation's rules.
+pub fn validate(p: &Policy) -> Result<(), String> {
+    if p.effect != "allow" && p.effect != "deny" {
+        return Err("effect must be allow or deny".into());
+    }
+    if p.rule.is_empty() || p.resource.is_empty() || p.action.is_empty() {
+        return Err("rule, resource and action are required".into());
+    }
+    let probe = |v: &str| if v == "*" { "probe".to_string() } else { v.to_string() };
+    let sub = Subject {
+        subject: "probe".into(),
+        ..Subject::default()
     };
-    let p = sub.clone();
-    ctx.add_function("hasRole", move |args: Arguments| p.has_role(&text(&args, 1)))
-        .map_err(|e| e.to_string())?;
-    let p = sub.clone();
-    ctx.add_function("hasAnyRole", move |args: Arguments| {
-        (1..args.0.len()).any(|i| p.has_role(&text(&args, i)))
-    })
-    .map_err(|e| e.to_string())?;
-    let (p, o) = (sub.clone(), res.clone());
-    ctx.add_function("hasRoleIn", move |args: Arguments| p.has_role_in(&text(&args, 1), &o))
-        .map_err(|e| e.to_string())?;
-    let p = sub.clone();
-    ctx.add_function("onProject", move |_: Arguments| p.on_project())
-        .map_err(|e| e.to_string())?;
-    let (p, o) = (sub.clone(), res.clone());
-    ctx.add_function("mayRun", move |_: Arguments| p.may_run(&o))
-        .map_err(|e| e.to_string())?;
-    let p = sub.clone();
-    ctx.add_function("isProjectAdmin", move |_: Arguments| p.project_admin || p.project_owner)
-        .map_err(|e| e.to_string())?;
-    let p = sub.clone();
-    ctx.add_function("isProjectOwner", move |_: Arguments| p.project_owner)
-        .map_err(|e| e.to_string())?;
-    let p = sub;
-    ctx.add_function("isAnonymous", move |_: Arguments| p.anonymous())
-        .map_err(|e| e.to_string())?;
-    Ok(ctx)
+    let res = Resource {
+        typ: probe(&p.resource),
+        ..Resource::default()
+    };
+    Enforcer::new(std::slice::from_ref(p))
+        .authorize(&sub, &res, &probe(&p.action))
+        .map(|_| ())
+        .map_err(|e| format!("invalid rule: {e}"))
 }
 
 #[cfg(test)]
@@ -312,7 +235,7 @@ mod tests {
 
     #[test]
     fn decides_as_the_default_policies() {
-        let e = Enforcer::new(&default_policies()).unwrap();
+        let e = Enforcer::new(&default_policies());
         let change = Resource {
             typ: "change".into(),
             owner: "ann".into(),
@@ -342,6 +265,126 @@ mod tests {
             ..Resource::default()
         };
         assert_eq!(e.authorize(&sub("bob", &[], &[]), &node, "read"), Ok(true));
-        assert!(Enforcer::new(&[Policy::of("r.sub.Subject ==", "*", "*", "allow")]).is_err());
+        for p in default_policies() {
+            assert_eq!(validate(&p), Ok(()), "{}", p.rule);
+        }
+    }
+
+    #[test]
+    fn refuses_what_casbin_refuses() {
+        let refusal = |rule: &str| validate(&Policy::of(rule, "*", "*", "allow")).err().unwrap_or_default();
+        assert_eq!(
+            refusal("r.sub.Subject =="),
+            "invalid rule: error while parsing eval parameter: r_sub.Subject ==, Unexpected end of expression"
+        );
+        assert_eq!(
+            refusal("r.sub.Subject"),
+            "invalid rule: Value 'probe' cannot be used with the logical operator '&&', it is not a bool"
+        );
+        assert_eq!(
+            refusal("r.sub.Nope == 1"),
+            "invalid rule: No method or field 'Nope' present on parameter 'r_sub'"
+        );
+        assert_eq!(
+            refusal("isAnonymous()"),
+            "invalid rule: panic: runtime error: index out of range [0] with length 0"
+        );
+    }
+
+    fn strings(v: &serde_json::Value) -> Vec<String> {
+        v.as_array()
+            .map(|a| a.iter().map(|s| s.as_str().unwrap_or_default().to_string()).collect())
+            .unwrap_or_default()
+    }
+
+    fn text(v: &serde_json::Value, k: &str) -> String {
+        v[k].as_str().unwrap_or_default().to_string()
+    }
+
+    /// The answers of Go's Casbin, recorded by `contracts/authz` `TestRustCasesAreCurrent`.
+    #[test]
+    fn answers_as_go_casbin() {
+        let cases: serde_json::Value = serde_json::from_str(include_str!("casbin_cases.gen.json")).unwrap();
+        let requests: Vec<(Subject, Resource, String)> = cases["requests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                let s = &r["Subject"];
+                let o = &r["Resource"];
+                let sub = Subject {
+                    subject: text(s, "subject"),
+                    org: text(s, "org"),
+                    project: text(s, "project"),
+                    roles: strings(&s["roles"]),
+                    global: strings(&s["global"]),
+                    project_admin: s["projectAdmin"].as_bool().unwrap_or(false),
+                    project_owner: s["projectOwner"].as_bool().unwrap_or(false),
+                    on_behalf_of: text(s, "onBehalfOf"),
+                };
+                let res = Resource {
+                    typ: text(o, "type"),
+                    id: text(o, "id"),
+                    org: text(o, "org"),
+                    namespace: text(o, "namespace"),
+                    owner: text(o, "owner"),
+                    name: text(o, "name"),
+                    role: text(o, "role"),
+                    accountable: text(o, "accountable"),
+                    org_chain: strings(&o["orgChain"]),
+                    project_id: text(o, "projectId"),
+                    roles: strings(&o["roles"]),
+                };
+                (sub, res, text(r, "Action"))
+            })
+            .collect();
+        let check = |what: &str, policies: &[Policy], answers: &serde_json::Value, failures: &mut Vec<String>| {
+            let e = Enforcer::new(policies);
+            for (i, (sub, res, act)) in requests.iter().enumerate() {
+                let want = (
+                    answers[i]["allowed"].as_bool().unwrap_or(false),
+                    text(&answers[i], "error"),
+                );
+                let got = match e.authorize(sub, res, act) {
+                    Ok(b) => (b, String::new()),
+                    Err(m) => (false, m),
+                };
+                if got != want {
+                    failures.push(format!("{what} #{i}: got {got:?}, want {want:?}"));
+                }
+            }
+        };
+        let mut failures = Vec::new();
+        for c in cases["rules"].as_array().unwrap() {
+            let rule = text(c, "rule");
+            let p = Policy::of(&rule, "*", "*", "allow");
+            let got = validate(&p).err().unwrap_or_default();
+            if got != text(c, "validate") {
+                failures.push(format!("validate {rule}: got {got:?}, want {:?}", text(c, "validate")));
+            }
+            check(&rule, &[p], &c["answers"], &mut failures);
+        }
+        for (n, c) in cases["sets"].as_array().unwrap().iter().enumerate() {
+            let policies: Vec<Policy> = c["policies"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| {
+                    Policy::of(
+                        &text(p, "rule"),
+                        &text(p, "resource"),
+                        &text(p, "action"),
+                        &text(p, "effect"),
+                    )
+                })
+                .collect();
+            check(&format!("set {n}"), &policies, &c["answers"], &mut failures);
+        }
+        assert!(
+            failures.is_empty(),
+            "{} divergences:\n{}",
+            failures.len(),
+            failures.join("\n")
+        );
     }
 }

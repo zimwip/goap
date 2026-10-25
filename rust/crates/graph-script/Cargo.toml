@@ -11,5 +11,8 @@ workspace = true
 
 [dependencies]
 cel.workspace = true
+chrono.workspace = true
+regex.workspace = true
 rquickjs.workspace = true
 serde_json.workspace = true
+unicode-properties = "0.1"

@@ -911,8 +911,11 @@ name = "graph-script"
 version = "0.1.0"
 dependencies = [
  "cel",
+ "chrono",
+ "regex",
  "rquickjs",
  "serde_json",
+ "unicode-properties",
 ]
 
 [[package]]

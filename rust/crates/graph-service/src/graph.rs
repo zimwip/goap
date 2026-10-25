@@ -123,13 +123,11 @@ impl Caller {
             project: req.header(HEADER_PROJECT).to_string(),
             command: req.header(HEADER_COMMAND).to_string(),
             org: req.header(HEADER_ORG).to_string(),
-            roles: req
-                .header(HEADER_ROLES)
-                .split(',')
-                .map(str::trim)
-                .filter(|r| !r.is_empty())
-                .map(str::to_string)
-                .collect(),
+            // split as Go's `identity.FromHeaders` splits it: no space trimmed, an empty role kept
+            roles: match req.header(HEADER_ROLES) {
+                "" => Vec::new(),
+                roles => roles.split(',').map(str::to_string).collect(),
+            },
         }
     }
 }
@@ -147,7 +145,9 @@ impl Caller {
         access::Principal {
             subject: self.subject.clone(),
             org: self.org.clone(),
+            project: self.project.clone(),
             roles: self.roles.clone(),
+            on_behalf_of: self.on_behalf_of.clone(),
         }
     }
 
@@ -163,7 +163,9 @@ impl Caller {
         access::Principal {
             subject: self.subject.clone(),
             org: self.org.clone(),
+            project: self.project.clone(),
             roles: self.roles.clone(),
+            ..access::Principal::default()
         }
     }
 }

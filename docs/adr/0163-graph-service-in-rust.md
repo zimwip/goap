@@ -369,10 +369,10 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   changes (a time of each database).
   The rules of the organisation are judged here too (`graph-script` `abac`: Go's Casbin model, its default and floor
   rules and its functions, `hasRole`, `hasAnyRole`, `hasRoleIn`, `onProject`, `mayRun`, `isProjectAdmin`,
-  `isProjectOwner`, `isAnonymous`, the subject rules evaluated as CEL over `r.sub`, `r.obj`, `r.act`;
+  `isProjectOwner`, `isAnonymous`, the subject rules evaluated as govaluate evaluates them over `r.sub`, `r.obj`, `r.act`;
   `access::Snapshot::authorize` as `access.Authorizer.Authorize`: the principal completed, the roles of the
   resource's project merged, its flags, the floor then the stored `Policy` nodes, the defaults while none is stored;
-  a stored rule CEL does not read is Go's to judge). Their first use is `ListChangeLog`, for a person too: the
+  a stored rule `authz.Validate` refuses left out, see below). Their first use is `ListChangeLog`, for a person too: the
   prompts of the model calls asked without `prompt:inspect` are refused, left out of a read naming no type: 2395
   calls, the divergent ones as above.
 - A person's reads of the graph are served with the reach of ADR 0161 §5 (`graph-core` `reach::Reach`: the projects
@@ -589,4 +589,17 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `ExportChangeProvenance` reads the journal and model entries of the log as Go's `json.Unmarshal` reads them
   (`godecode::unmarshal`: the whole text checked first, unknown fields left, the type errors with Go's struct and
   field names), so an entry Go cannot read refuses the export with Go's `log entry N (type): …`.
+- The rules of the organisation are no longer CEL: `graph-script` runs them as Go's Casbin and govaluate do
+  (`casbin`: the model's matcher escaped and evaluated, its effect, the model functions with their arity errors and
+  panics, `keyMatch*`, `keyGet*`, `regexMatch`, `ipMatch`, `globMatch`, `eval`; `govaluate`: its lexer, planner
+  (precedence, mirrored stages, the arguments of a method accessor taking the rest of the expression), types and
+  errors, a string reading as a date a number of seconds (`gotime`, the layouts of `tryParseTime`), a regular
+  expression Go's RE2 (`goregexp`, translated to the `regex` crate with Go's refusals)). A stored rule `authz.Validate`
+  refuses is left out of the organisation's rules as Go leaves it, the defaults applying while none is left. The
+  answers are checked against Go's own Casbin: `contracts/authz` `TestRustCasesAreCurrent` writes
+  `graph-script/src/casbin_cases.gen.json` (`GOAP_UPDATE_RUST=1`), rules and sets of rules with the answer and error
+  of each request, which `abac` `answers_as_go_casbin` replays. The roles of `X-Goap-Roles` are split as
+  `identity.FromHeaders` splits them, and a float64 printed as `%v` takes the exponent from 1e6 as Go's `fmt` does
+  (`graph_script::go_float`; the JSON's 1e21 was used). The fold of a change's log for a write refuses nothing: Go
+  reads past the `change.*` entries and the transitions alike.
 - Not done yet: the rest of phase 4.

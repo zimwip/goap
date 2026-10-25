@@ -590,7 +590,7 @@ fn go_quote(s: &str) -> String {
     out
 }
 
-/// A float as Go's `%v` prints it: the shortest digits, an exponent below 1e-4 and from 1e21.
+/// A float as Go's `%v` prints it: the shortest digits, an exponent below 1e-4 and from 1e6.
 fn go_float_v(f: f64) -> String {
     if f.is_nan() {
         return "NaN".into();
@@ -604,7 +604,7 @@ fn go_float_v(f: f64) -> String {
     let sci = format!("{f:e}");
     let (mant, exp) = sci.split_once('e').unwrap_or((&sci, "0"));
     let exp: i32 = exp.parse().unwrap_or(0);
-    if !(-4..21).contains(&exp) {
+    if !(-4..6).contains(&exp) {
         let sign = if exp < 0 { '-' } else { '+' };
         return format!("{mant}e{sign}{:02}", exp.abs());
     }
@@ -903,6 +903,8 @@ mod tests {
             "count() is an aggregate: it belongs in RETURN"
         );
         assert_eq!(key(&Value::Num(1e21)), "1e+21");
+        assert_eq!(key(&Value::Num(1234567.0)), "1.234567e+06");
+        assert_eq!(key(&Value::Num(123456.0)), "123456");
         assert_eq!(key(&Value::Num(0.0001)), "0.0001");
         assert_eq!(key(&Value::Num(0.00001)), "1e-05");
     }
