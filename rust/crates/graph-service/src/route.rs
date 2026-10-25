@@ -25,6 +25,7 @@ use graph_core::{
     model::{ChangeId, MAIN_BRANCH, NAMESPACE_PLATFORM},
     read,
     sources::{self, Source},
+    store::ReadTx,
 };
 use prost_reflect::{
     DescriptorPool, DeserializeOptions, DynamicMessage, Kind, MethodDescriptor, ReflectMessage, Value,
@@ -102,14 +103,9 @@ impl Graphs for Declared {
     }
 
     async fn holds(&self, id: &str) -> Result<bool, String> {
-        if uuid::Uuid::parse_str(id).is_err() {
-            return Ok(false); // no change of this graph has such an id
-        }
         let tx = self.state.store.reader().await.map_err(|e| e.to_string())?;
-        let held = graph_core::change::change_heads(&tx, &[ChangeId::from(id)])
-            .await
-            .map_err(|e| e.message)?;
-        Ok(!held.is_empty())
+        // an id the store cannot read (not a UUID, on PostgreSQL) is an error, in its words, as Go's `HasChange` says
+        Ok(tx.change(&ChangeId::from(id)).await.map_err(|e| e.message)?.is_some())
     }
 }
 
@@ -196,7 +192,8 @@ impl Router {
 }
 
 fn bad_gateway(msg: String) -> Response {
-    (StatusCode::BAD_GATEWAY, msg).into_response()
+    // in the words of Go's `http.Error`
+    (StatusCode::BAD_GATEWAY, format!("{msg}\n")).into_response()
 }
 
 /// The method of the graph service a path names, none for another service.
