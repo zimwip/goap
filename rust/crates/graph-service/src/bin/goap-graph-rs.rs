@@ -6,14 +6,18 @@
 //! Every start publishes the domain versions of `GOAP_DOMAINS_DIR` (default `domains`) not stored yet. `goap-graph-rs
 //! bootstrap` runs the platform bootstrap once against the database, then exits (its events stay in the outbox: the
 //! service delivers them); the service bootstraps itself only with `GOAP_GRAPH_BOOTSTRAP=1` or a database in memory.
-//! The bootstrap seeds the models of `GOAP_MODELS_CONFIG` (else the default, Anthropic when `ANTHROPIC_API_KEY` is
-//! set), declares the sources of `GOAP_GRAPH_SOURCES`, and with `GOAP_GRAPH_SEED=dev` the development data, `=demo`
+//! The bootstrap seeds the models of `GOAP_MODELS_CONFIG` (else the default, Anthropic when its key is in Vault or
+//! `ANTHROPIC_API_KEY`), declares the sources of `GOAP_GRAPH_SOURCES`, and with `GOAP_GRAPH_SEED=dev` the development data, `=demo`
 //! the demo too.
+//!
+//! `GOAP_GRAPH_SPACE=content` makes it a content graph (ADR 0154 §9): it holds the domains' content and reads the
+//! domains, the organisation, the projects and the methodologies from the platform graph at `GOAP_PLATFORM_GRAPH_URL`
+//! (the domains again on the registry's events), serves the graph service alone, and has nothing to bootstrap.
 use std::sync::Arc;
 
 use anyhow::Context;
 use graph_service::{
-    Domains, Graph, State, app,
+    Domains, Graph, State, app, content_app,
     graph::boot::{BootOptions, DevSeed, ModelsConfig, parse_sources},
     graph::jobs::Jobs,
     relay::Sink,
@@ -33,6 +37,15 @@ async fn main() -> anyhow::Result<()> {
     }
     let memory = matches!(cfg, StoreConfig::Memory);
     let bootstrap_only = std::env::args().nth(1).as_deref() == Some("bootstrap");
+    let content = env("GOAP_GRAPH_SPACE") == "content";
+    let platform_url = env("GOAP_PLATFORM_GRAPH_URL");
+    if content && platform_url.is_empty() {
+        anyhow::bail!("graph space: a content graph needs GOAP_PLATFORM_GRAPH_URL");
+    }
+    if bootstrap_only && content {
+        tracing::info!("a content graph holds no roots nor platform data: nothing to bootstrap");
+        return Ok(());
+    }
     let sources = parse_sources(&env("GOAP_GRAPH_SOURCES")).map_err(anyhow::Error::msg)?;
     let store = Store::open(&cfg).await.context("database")?;
     let nats = env("GOAP_NATS_URL");
@@ -62,6 +75,33 @@ async fn main() -> anyhow::Result<()> {
         let sink = Sink::connect(&nats).await.with_context(|| format!("NATS at {nats}"))?;
         state.relay(sink).to_vec()
     };
+    if content {
+        let remote = Arc::new(graph_service::platform::Remote::new(&platform_url));
+        state.remote = Some(remote.clone());
+        if !nats.is_empty() {
+            // the domains are the platform graph's: read again when its registry publishes or deletes one
+            let client = async_nats::connect(&nats)
+                .await
+                .with_context(|| format!("NATS at {nats}"))?;
+            for subject in ["goap.registry.domain.published", "goap.registry.domain.deleted"] {
+                let mut sub = client.subscribe(subject).await.context("subscribe")?;
+                let remote = remote.clone();
+                tokio::spawn(async move {
+                    while futures::StreamExt::next(&mut sub).await.is_some() {
+                        remote.invalidate().await;
+                    }
+                });
+            }
+        }
+        let state = Arc::new(state);
+        for r in relays {
+            tokio::spawn(r.run(state.clone()));
+        }
+        axum::serve(listener, content_app(state))
+            .with_graceful_shutdown(shutdown())
+            .await?;
+        return Ok(());
+    }
     // the job service (ADR 0149): the exports and the snapshot imports are its jobs, created here with the services'
     // token and run by the worker of this process
     state.jobs = Some(Arc::new(Jobs::from_env()));
@@ -107,10 +147,12 @@ async fn boot(
     state: &Arc<State>,
     sources: Vec<graph_core::sources::Source>,
 ) -> anyhow::Result<graph_service::graph::boot::Report> {
-    let models = ModelsConfig::initial(&env("GOAP_MODELS_CONFIG")).unwrap_or_else(|e| {
-        tracing::error!(err = %e, "models config");
-        ModelsConfig::default()
-    });
+    let models = ModelsConfig::initial(&env("GOAP_MODELS_CONFIG"))
+        .await
+        .unwrap_or_else(|e| {
+            tracing::error!(err = %e, "models config");
+            ModelsConfig::default()
+        });
     let dev = match env("GOAP_GRAPH_SEED").as_str() {
         "demo" => DevSeed::Demo,
         "dev" => DevSeed::Dev,

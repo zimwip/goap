@@ -22,6 +22,7 @@ pub mod model;
 pub mod okf;
 pub mod operations;
 pub mod page;
+pub mod platform;
 pub mod prov;
 pub mod query;
 pub mod reach;

@@ -104,14 +104,22 @@ impl<S: WriteTx> Tx<'_, S> {
             )));
         }
         let key = &u.key;
-        let Some(id) = self.store.node_id_by_key(&st.namespace, key).await? else {
-            return Err(GraphError::invalid(format!(
-                "{what} {key:?} is not a node of namespace {}",
-                st.namespace
-            )));
-        };
-        let Some(n) = self.store.latest_on(&id, crate::model::MAIN_BRANCH).await? else {
-            return Err(GraphError::invalid(format!("{what} {key:?} is not on main yet")));
+        let n = if let Some(p) = self.store.platform() {
+            // the structures of another graph (Go's `Graph.Directory`)
+            p.structure_node(cat, kind, key)
+                .cloned()
+                .ok_or_else(|| GraphError::invalid(format!("{what} {key:?} is not a {kind} of the platform")))?
+        } else {
+            let Some(id) = self.store.node_id_by_key(&st.namespace, key).await? else {
+                return Err(GraphError::invalid(format!(
+                    "{what} {key:?} is not a node of namespace {}",
+                    st.namespace
+                )));
+            };
+            let Some(n) = self.store.latest_on(&id, crate::model::MAIN_BRANCH).await? else {
+                return Err(GraphError::invalid(format!("{what} {key:?} is not on main yet")));
+            };
+            n
         };
         if n.deleted {
             return Err(GraphError::invalid(format!("{what} {key:?} is deleted")));

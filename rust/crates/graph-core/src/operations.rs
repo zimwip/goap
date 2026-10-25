@@ -89,9 +89,22 @@ pub async fn operation_roles<T: ReadTx>(tx: &T, reference: &str, code: &str) -> 
         Some(i) if i > 0 => (&reference[..i], &reference[i + 1..]),
         _ => (reference, ""),
     };
-    let head = read::branch_head(tx, NAMESPACE, MAIN_BRANCH).await?;
-    let at = read::select(tx, &head, None).await?;
-    let refs: Vec<NodeRef> = at.iter().map(|(id, v)| NodeRef::new(id.clone(), *v)).collect();
+    // the methodologies of another graph (a content graph, ADR 0154 §9), else the head of main of their namespace
+    let held = tx.platform().map(|p| &p.methodology.nodes);
+    let refs: Vec<NodeRef> = match held {
+        Some(_) => Vec::new(),
+        None => {
+            let head = read::branch_head(tx, NAMESPACE, MAIN_BRANCH).await?;
+            let at = read::select(tx, &head, None).await?;
+            at.iter().map(|(id, v)| NodeRef::new(id.clone(), *v)).collect()
+        }
+    };
+    let of_type = async |typ: &str| -> Result<Vec<Node>> {
+        match held {
+            Some(ns) => Ok(ns.iter().filter(|n| n.typ == typ).cloned().collect()),
+            None => tx.nodes_at(&refs, typ).await,
+        }
+    };
     let text = |n: &Node, k: &str| -> String {
         n.props
             .as_ref()
@@ -100,7 +113,7 @@ pub async fn operation_roles<T: ReadTx>(tx: &T, reference: &str, code: &str) -> 
             .unwrap_or_default()
             .to_string()
     };
-    let headers = tx.nodes_at(&refs, TYPE_VERSION).await?;
+    let headers = of_type(TYPE_VERSION).await?;
     let mut found = headers.iter().filter(|n| !n.deleted && text(n, "name") == name);
     let header = if version.is_empty() {
         let published_at = |n: &Node| {
@@ -119,8 +132,7 @@ pub async fn operation_roles<T: ReadTx>(tx: &T, reference: &str, code: &str) -> 
     };
     let Some(header) = header else { return Ok(None) };
     let prefix = format!("{}/role/", header.key); // `<header>/<kind>/<name>`, as the registry keys its elements
-    let mut roles: Vec<_> = tx
-        .nodes_at(&refs, TYPE_ROLE)
+    let mut roles: Vec<_> = of_type(TYPE_ROLE)
         .await?
         .into_iter()
         .filter(|n| {

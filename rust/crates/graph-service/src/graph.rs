@@ -527,12 +527,7 @@ impl Graph {
         if caller.at_least.is_empty() {
             return Ok(());
         }
-        let tx = self
-            .state
-            .store
-            .reader()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let tx = self.state.reader().await.map_err(connect_error)?;
         for (id, seq) in &caller.at_least {
             let after = tx
                 .log(&ChangeId::from(id.as_str()), seq - 1, &["impact.", "fact."])
@@ -559,12 +554,7 @@ impl Graph {
         F: AsyncFnOnce(&Session) -> Result<T, GraphError>,
     {
         self.reached(&caller).await?;
-        let tx = self
-            .state
-            .store
-            .reader()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let tx = self.state.reader().await.map_err(connect_error)?;
         f(&tx).await.map(Response::new).map_err(connect_error)
     }
 }
@@ -579,12 +569,7 @@ impl Graph {
     {
         let person = caller.person();
         self.reached(&caller).await?;
-        let tx = self
-            .state
-            .store
-            .reader()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let tx = self.state.reader().await.map_err(connect_error)?;
         let ids: Vec<ChangeId> = named
             .iter()
             .filter(|id| uuid::Uuid::parse_str(id).is_ok())
@@ -616,12 +601,7 @@ impl Graph {
         }
         drop(tx);
         let stamp = self.ensure_caller(&caller).await;
-        let tx = self
-            .state
-            .store
-            .reader()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let tx = self.state.reader().await.map_err(connect_error)?;
         if stamp.0.is_some() {
             // the user just made: the handler reads the organisation with it
             let snap = access::Snapshot::read(&tx).await.map_err(connect_error)?;
@@ -647,12 +627,7 @@ impl Graph {
         if caller.subject.starts_with("system:") {
             return Ok((caller, Stamp(None)));
         }
-        let tx = self
-            .state
-            .store
-            .reader()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let tx = self.state.reader().await.map_err(connect_error)?;
         drop(tx);
         let stamp = self.ensure_caller(&caller).await;
         Ok((caller, stamp))
@@ -708,12 +683,16 @@ impl Graph {
         if subject.is_empty() || subject.starts_with("system:") || self.state.users.lock().await.contains(subject) {
             return Ok(None);
         }
+        if self.state.remote.is_some() {
+            // a content graph holds no organisation: the platform graph declares its users (ADR 0154 §9)
+            return Ok(None);
+        }
         // one creation at a time: the web fires several calls at once right after a sign-in
         let _one = self.state.ensuring.lock().await;
         let key = format!("{}{subject}", access::USER_PREFIX);
         let mut last = None;
         for _ in 0..3 {
-            let tx = self.state.store.reader().await.map_err(GraphError::internal)?;
+            let tx = self.state.reader().await?;
             if tx.has_node(graph_core::model::NAMESPACE_ORGANISATION, &key).await? {
                 self.state.users.lock().await.insert(subject.to_string());
                 return Ok(None);
@@ -757,23 +736,13 @@ impl Graph {
         F: AsyncFnOnce(&Session) -> Result<T, GraphError>,
     {
         let (_, stamp) = self.identified(req).await?;
-        let tx = self
-            .state
-            .store
-            .reader()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let tx = self.state.reader().await.map_err(connect_error)?;
         stamp.on(f(&tx).await.map(Response::new).map_err(connect_error))
     }
 
     /// The type catalogue of the domains in force.
     async fn catalog(&self) -> Result<Arc<Catalog>, ConnectError> {
-        let tx = self
-            .state
-            .store
-            .reader()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let tx = self.state.reader().await.map_err(connect_error)?;
         self.state.catalog(&tx).await.map_err(connect_error)
     }
 
@@ -797,12 +766,7 @@ impl Graph {
         F: for<'a, 'b, 'c> AsyncFnOnce(&'a mut Tx<'b, Session>, &'c Access) -> Result<T, GraphError>,
     {
         self.reached(&caller).await?;
-        let tx = self
-            .state
-            .store
-            .reader()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let tx = self.state.reader().await.map_err(connect_error)?;
         let ids: Vec<ChangeId> = named
             .iter()
             .filter(|id| uuid::Uuid::parse_str(id).is_ok())
@@ -842,12 +806,7 @@ impl Graph {
         }
         drop(tx);
         let stamp = self.ensure_caller(&caller).await;
-        let tx = self
-            .state
-            .store
-            .reader()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let tx = self.state.reader().await.map_err(connect_error)?;
         let acc = Access::of(&caller, &tx).await.map_err(connect_error)?;
         drop(tx);
         let end_user = if caller.subject.starts_with("system:") {
@@ -863,12 +822,7 @@ impl Graph {
     where
         F: for<'a, 'b> AsyncFnOnce(&'a mut Tx<'b, Session>) -> Result<T, GraphError>,
     {
-        let session = self
-            .state
-            .store
-            .writer()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let session = self.state.writer().await.map_err(connect_error)?;
         let catalog = self.state.catalog(&session).await.map_err(connect_error)?;
         let env = Env {
             by: caller.subject.clone(),
@@ -1446,12 +1400,7 @@ impl pb::GraphService for Graph {
         req: Request<pb::ListNamespacesRequest>,
     ) -> Answer<pb::ListNamespacesResponse> {
         let (_, stamp) = self.identified(&req).await?;
-        let tx = self
-            .state
-            .store
-            .reader()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let tx = self.state.reader().await.map_err(connect_error)?;
         let namespaces = tx.namespaces().await.map_err(connect_error)?;
         stamp.on(Ok(Response::new(pb::ListNamespacesResponse { namespaces })))
     }
@@ -2090,12 +2039,7 @@ impl pb::GraphService for Graph {
         req: Request<pb::RepublishIndexRequest>,
     ) -> Answer<pb::RepublishIndexResponse> {
         let (caller, stamp) = self.identified(&req).await?;
-        let session = self
-            .state
-            .store
-            .reader()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let session = self.state.reader().await.map_err(connect_error)?;
         let snap = access::Snapshot::read(&session).await.map_err(connect_error)?;
         let res = abac::Resource {
             typ: "platform".into(),

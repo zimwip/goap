@@ -120,10 +120,10 @@ impl ModelsConfig {
     }
 
     /// The configuration the graph is seeded with (`modelgw.InitialConfig`): the file at `path`, else the default,
-    /// Anthropic when `ANTHROPIC_API_KEY` is set (the Vault reference of the Go service is not read here).
-    pub fn initial(path: &str) -> anyhow::Result<ModelsConfig> {
+    /// Anthropic when its key is a secret (`goap/modelgw#anthropic_api_key` in Vault, else `ANTHROPIC_API_KEY`).
+    pub async fn initial(path: &str) -> anyhow::Result<ModelsConfig> {
         if path.is_empty() {
-            let key = std::env::var("ANTHROPIC_API_KEY").unwrap_or_default();
+            let key = secret("goap/modelgw#anthropic_api_key", "ANTHROPIC_API_KEY").await;
             return Ok(ModelsConfig::default_for(!key.is_empty()));
         }
         let src = std::fs::read_to_string(path)?;
@@ -659,6 +659,38 @@ impl Graph {
         }
         Ok(r)
     }
+}
+
+/// A secret (`platform.Secrets.Get`): the field of a KV v2 path of Vault (`VAULT_ADDR`, `VAULT_TOKEN`, mount
+/// `VAULT_KV_MOUNT`, default `secret`) given as `<path>#<field>`, else the environment variable.
+async fn secret(reference: &str, env: &str) -> String {
+    let var = |k: &str| std::env::var(k).unwrap_or_default();
+    let addr = var("VAULT_ADDR");
+    if let (false, Some((path, field))) = (addr.is_empty(), reference.split_once('#')) {
+        let mount = Some(var("VAULT_KV_MOUNT"))
+            .filter(|m| !m.is_empty())
+            .unwrap_or_else(|| "secret".into());
+        let url = format!("{}/v1/{mount}/data/{path}", addr.trim_end_matches('/'));
+        let got = async {
+            let r = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .build()?
+                .get(&url)
+                .header("X-Vault-Token", var("VAULT_TOKEN"))
+                .send()
+                .await?
+                .error_for_status()?;
+            let body: Json = r.json().await?;
+            anyhow::Ok(body["data"]["data"][field].as_str().unwrap_or_default().to_string())
+        }
+        .await;
+        if let Ok(v) = got
+            && !v.is_empty()
+        {
+            return v;
+        }
+    }
+    var(env)
 }
 
 #[cfg(test)]

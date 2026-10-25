@@ -296,6 +296,9 @@ impl<S: WriteTx> Tx<'_, S> {
             .structure(kind)
             .cloned()
             .ok_or_else(|| GraphError::internal(format!("no {kind} structure in the catalogue")))?;
+        if let Some(p) = self.store.platform() {
+            return Ok(p.structure_chain(self.catalog(), kind, &u.key).contains(&of.key));
+        }
         let mut seen = HashSet::new();
         let mut cur = u.key.clone();
         while !cur.is_empty() && seen.insert(cur.clone()) {

@@ -4,9 +4,9 @@
 # Script sandboxes need the runner image: make runner-image (done by make up)
 name: goap
 
-# every Go service runs the one image goap/goap:dev (Dockerfile, target services), built once by
-# `make up` before the stack starts: build it by hand when starting the stack without make
-#   docker build --target services -t goap/goap:dev .
+# every Go service runs the one image goap/goap:dev (Dockerfile, target services), the graph services goap/rust:dev
+# (target rust), built by `make up` before the stack starts: build them by hand when starting the stack without make
+#   docker build --target services -t goap/goap:dev . && docker build --target rust -t goap/rust:dev .
 x-service: &service
   image: goap/goap:dev
   pull_policy: never
@@ -64,13 +64,17 @@ services:
     volumes: ["../vault/init.sh:/init.sh:ro,z"]
     entrypoint: ["/bin/sh", "/init.sh"]
 
-  # the platform bootstrap (ADR 0154 §9): `graph bootstrap` writes the roots of the organisation and the projects, the
-  # default policies, the built-in MCPs, the models and the sources once, then exits; the graph service starts after it.
+  # the graph services run the Rust graph service (ADR 0163), image goap/rust:dev (Dockerfile, target rust), built by
+  # `make up` with goap/goap:dev
+  # the platform bootstrap (ADR 0154 §9): `goap-graph-rs bootstrap` writes the roots of the organisation and the
+  # projects, the default policies, the built-in MCPs, the models and the sources once, then exits; the graph service
+  # starts after it.
   # Run again at every `make up`, it writes only what is missing (the built-in MCPs follow the code).
   graph-bootstrap:
     <<: *service
+    image: goap/rust:dev
     restart: "no"
-    entrypoint: ["/goap/graph", "bootstrap"]
+    entrypoint: ["/goap/goap-graph-rs", "bootstrap"]
     environment: &graph-env
       <<: *env
       GOAP_DB_DSN: postgres://graph:graph@postgres:5432/goap?sslmode=disable
@@ -89,7 +93,8 @@ services:
 
   graph:
     <<: *service
-    entrypoint: ["/goap/graph"]
+    image: goap/rust:dev
+    entrypoint: ["/goap/goap-graph-rs"]
     environment: *graph-env
     depends_on:
       <<: *deps
@@ -100,7 +105,8 @@ services:
   # the projects and the domains are the platform graph's. Every caller goes through the platform graph.
   graph-content:
     <<: *service
-    entrypoint: ["/goap/graph"]
+    image: goap/rust:dev
+    entrypoint: ["/goap/goap-graph-rs"]
     environment:
       <<: *env
       GOAP_GRAPH_SPACE: content

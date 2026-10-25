@@ -1,6 +1,6 @@
 # ADR 0163 — The graph service in Rust, behind a comparing proxy
 
-**Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets), phase 2 implemented (the reads of the bench, the shadow mode), phase 3 implemented (the writes of the bench), phase 4 under way (the smart tags, the reads of the domain registry) · **Date**: 2026-10
+**Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets), phase 2 implemented (the reads of the bench, the shadow mode), phase 3 implemented (the writes of the bench), phase 4 implemented (every method, the bootstrap, the content graph; the compose stack runs the Rust service) · **Date**: 2026-10
 
 ## Context
 
@@ -144,7 +144,7 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   for ids not paired yet (two new links between new nodes, each side in the order of its own ids) say nothing of
   which is which, so they are left unpaired, compared as ids, until an answer tells them apart (pairing them by
   position mispaired them half the time, and every call after diverged).
-- Phase 4 (everything else), under way. `SmartTagService` is served whole (`graph-service` `smarttags.rs`, the SQL in
+- Phase 4 (everything else), implemented. `SmartTagService` is served whole (`graph-service` `smarttags.rs`, the SQL in
   `graph-store` `read/smarttags.rs`: the times `timestamptz` on PostgreSQL, Go's RFC 3339 text on SQLite), for any
   caller, its errors worded as Go words them; the proxy pairs its ids (32 hex digits) like UUIDs. Driven through the
   compare proxy (create, share, update, list, get, delete, the refusals), every call is `same`, messages included.
@@ -628,4 +628,16 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   are read from `boot.gen.json`, written by `platform/devseed` `TestRustBootIsCurrent`. The models come from
   `GOAP_MODELS_CONFIG`, else `ANTHROPIC_API_KEY` (no Vault). Two bootstraps of an empty database, one Go and one Rust,
   leave the same tables and the same outbox (`goap-proxy diff-db`).
-- Not done yet: the Go service leaving the compose stack (`graph`, `graph-bootstrap`, `graph-content`).
+- A content graph too (`GOAP_GRAPH_SPACE=content`, `GOAP_PLATFORM_GRAPH_URL`, ADR 0154 §9): the domains are read
+  from the platform graph's registry (`platform::Remote::catalog`, every `DOMAINS_TTL` or on its domain events), the
+  organisation, the projects and the versions and roles of the methodologies at the head of main of the platform graph,
+  read again when that head moves (`GetBranch`, then `GetBaselineGraph` / `ListViewNodes`). What was read travels with
+  the session (`graph_core::platform::Platform`, `ReadTx::platform`): the snapshot, the directory, the structure checks
+  of the guard and the roles of an operation take it instead of the store, as Go's `Graph.Directory`. It serves the
+  graph service alone, bootstraps nothing and declares no user. The Go content graph reloaded its catalogue on a domain
+  event from a client still holding what it read: it now drops it first. A Go platform graph driving a Go and a Rust
+  content graph through the compare proxy leaves the same nodes, versions, links and outbox (ids apart). The models
+  of the bootstrap read the Anthropic key in Vault as Go does (`goap/modelgw#anthropic_api_key`).
+- The compose stack runs the Rust service: `graph-bootstrap` (`goap-graph-rs bootstrap`), `graph` and
+  `graph-content` take the image `goap/rust:dev` (`make images` builds it with `goap/goap:dev`). The Go service stays
+  the reference: the performance stack compares the two (`make perf-diff`), and `goap-dev` keeps the graph in process.

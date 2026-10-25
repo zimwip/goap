@@ -39,6 +39,8 @@ use sql::{Sql, Stmt};
 pub struct Session {
     conn: Conn,
     sql: Sql,
+    /// What the request read of the platform graph, in a content graph ([`ReadTx::platform`]).
+    platform: Option<std::sync::Arc<graph_core::platform::Platform>>,
 }
 
 enum Conn {
@@ -74,10 +76,17 @@ impl From<StoreError> for GraphError {
 }
 
 impl Session {
+    /// The session reading the platform's namespaces from what the request read of the platform graph.
+    pub fn with_platform(mut self, p: Option<std::sync::Arc<graph_core::platform::Platform>>) -> Session {
+        self.platform = p;
+        self
+    }
+
     pub(crate) fn postgres(c: deadpool_postgres::Object) -> Session {
         Session {
             conn: Conn::Pg(c),
             sql: Sql { pg: true },
+            platform: None,
         }
     }
 
@@ -85,6 +94,7 @@ impl Session {
         Session {
             conn: Conn::Sqlite(s),
             sql: Sql { pg: false },
+            platform: None,
         }
     }
 
@@ -94,6 +104,7 @@ impl Session {
         Ok(Session {
             conn: Conn::PgTx(Some(c)),
             sql: Sql { pg: true },
+            platform: None,
         })
     }
 
@@ -101,6 +112,7 @@ impl Session {
         Session {
             conn: Conn::SqliteTx(Some(t)),
             sql: Sql { pg: false },
+            platform: None,
         }
     }
 
@@ -367,6 +379,10 @@ pub(crate) fn change_of(r: &Row) -> Result<Change, GraphError> {
 }
 
 impl ReadTx for Session {
+    fn platform(&self) -> Option<&graph_core::platform::Platform> {
+        self.platform.as_deref()
+    }
+
     async fn last_commit(&self, branch: &str) -> Result<i64, GraphError> {
         let p = self.sql.ph(1);
         let q = format!(

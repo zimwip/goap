@@ -926,6 +926,7 @@ dependencies = [
  "async-nats",
  "axum",
  "chrono",
+ "futures",
  "goap-connect",
  "goap-proto",
  "graph-catalog",

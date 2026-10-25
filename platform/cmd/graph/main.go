@@ -153,9 +153,12 @@ func main() {
 	}
 	if content {
 		// the domains are the platform graph's: read from its registry, reloaded on its events
-		types = typecat.NewLive(domainclient.NewClient(platform.H2CClient(), platformURL, telemetry.ClientOptions()...).Domains)
+		client := domainclient.NewClient(platform.H2CClient(), platformURL, telemetry.ClientOptions()...)
+		types = typecat.NewLive(client.Domains)
 		for _, subject := range []string{"goap.registry.domain.published", "goap.registry.domain.deleted"} {
 			if err := events.Subscribe(subject, func([]byte) {
+				// the client keeps what it read for its TTL: the event says it moved
+				client.Invalidate()
 				if err := types.Reload(context.Background()); err != nil {
 					log.Error("type catalogue", "err", err)
 				}

@@ -16,6 +16,13 @@ pub const REVERTED: Version = -1;
 /// The reads of a store, in one session (a read-only connection: PostgreSQL with no transaction around the
 /// statements, SQLite a reader of the WAL).
 pub trait ReadTx: Sync {
+    /// What the transaction read of the platform graph when another graph holds the platform's namespaces (a content
+    /// graph, ADR 0154 §9): the reads of the organisation, the projects and the methodologies take it; none, they
+    /// read the store.
+    fn platform(&self) -> Option<&crate::platform::Platform> {
+        None
+    }
+
     /// The order of the last commit on a branch (0: none).
     fn last_commit(&self, branch: &str) -> impl Future<Output = Result<i64>> + Send;
 

@@ -151,7 +151,7 @@ function DevReset { Remove-Item -Recurse -Force .goap -ErrorAction SilentlyConti
 
 function RunnerImage { Run docker build --build-arg SERVICE=goap-runner -t goap/runner:dev . }
 
-function Images { RunnerImage; Run docker build --target services -t goap/goap:dev . }
+function Images { RunnerImage; Run docker build --target services -t goap/goap:dev .; Run docker build --target rust -t goap/rust:dev . }
 
 function ClaudeAgentRunner { Run go run ./platform/cmd/connector-claude-coding-agent install }
 
@@ -171,7 +171,7 @@ function Down { DockerSock; Run docker @Compose down }
 function Reset {
     DockerSock
     Run docker @Compose down --volumes --remove-orphans
-    & docker image rm goap/goap:dev goap/runner:dev # absent images are not an error
+    & docker image rm goap/goap:dev goap/rust:dev goap/runner:dev # absent images are not an error
 }
 # Performance stack (deploy/compose/perf.yml): the graph service on PostgreSQL, goap-bench, Prometheus and Grafana
 $Perf = @('compose', '-f', 'deploy/compose/perf.yml')
@@ -303,7 +303,7 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   dev-reset         drop the local SQLite database
   web               same as dev-web
   runner-image      image of the script sandboxes (goap-runner)
-  images            the image of every Go service of the compose stack (goap/goap:dev), built once
+  images            the images of the compose stack: goap/goap:dev (Go services), goap/rust:dev (graph services)
   claude-agent-runner  install the Claude Agent SDK of the claude-coding-agent connector
                     (GOAP_CLAUDE_AGENT_DIR, default .goap\claude-agent; needs npm)
   up | down | logs  docker compose stack (up prints its URLs and how to reach its database, DBeaver)

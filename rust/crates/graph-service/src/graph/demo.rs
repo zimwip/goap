@@ -127,12 +127,7 @@ impl Graph {
         let (caller, stamp) = self.identified(&req).await?;
         let d: Demo = serde_json::from_str(DEMO_JSON).map_err(|e| ConnectError::internal(format!("demo data: {e}")))?;
         {
-            let tx = self
-                .state
-                .store
-                .reader()
-                .await
-                .map_err(|e| connect_error(GraphError::internal(e)))?;
+            let tx = self.state.reader().await.map_err(connect_error)?;
             let snap = access::Snapshot::read(&tx).await.map_err(connect_error)?;
             let res = abac::Resource {
                 typ: "policy".into(),

@@ -630,6 +630,15 @@ impl<'s, S: WriteTx> Tx<'s, S> {
                 u.typ
             )));
         }
+        if let Some(p) = self.store.platform() {
+            if p.structure_node(self.catalog(), kind, &u.key).is_none() {
+                return Err(GraphError::invalid(format!(
+                    "{what} {:?} is not a {kind} of the platform",
+                    u.key
+                )));
+            }
+            return Ok(());
+        }
         let Some(id) = self.store.node_id_by_key(&st.namespace, &u.key).await? else {
             return Err(GraphError::invalid(format!(
                 "{what} {:?} is not a node of namespace {}",

@@ -19,6 +19,7 @@ mod domains;
 mod domainyaml;
 pub mod graph;
 mod journal;
+pub mod platform;
 pub mod relay;
 pub mod route;
 mod smarttags;
@@ -35,6 +36,9 @@ pub struct State {
     relays: Option<Relays>,
     /// The job service the long runs are jobs of (ADR 0149), when this process reaches one.
     pub jobs: Option<Arc<graph::jobs::Jobs>>,
+    /// The platform graph, in a content graph (`GOAP_GRAPH_SPACE=content`, ADR 0154 §9): its registry gives the
+    /// domains, its organisation and its methodologies are read there.
+    pub remote: Option<Arc<platform::Remote>>,
     /// The type catalogue of the domains in force, with what told the stored versions apart when it was built.
     catalog: Mutex<(Option<String>, Arc<Catalog>)>,
     /// The persons this process made sure have a user (Go's `EnsureCaller`), and the creation in progress.
@@ -51,6 +55,7 @@ impl State {
             outbox: false,
             relays: None,
             jobs: None,
+            remote: None,
             catalog: Mutex::new((None, Catalog::builtin())),
             users: Mutex::new(Default::default()),
             ensuring: Mutex::new(()),
@@ -95,6 +100,12 @@ impl State {
     /// version published through the Go registry reaches the next write here. Domains that do not make a catalogue
     /// leave the previous one in force, as `Live.Reload` does.
     pub async fn catalog(&self, tx: &Session) -> Result<Arc<Catalog>, GraphError> {
+        if let Some(r) = &self.remote {
+            let mut cur = self.catalog.lock().await;
+            let c = r.catalog(cur.1.clone()).await?;
+            cur.1 = c.clone();
+            return Ok(c);
+        }
         let fp = tx.domain_fingerprint().await?;
         let mut cur = self.catalog.lock().await;
         if cur.0.as_deref() == Some(fp.as_str()) {
@@ -110,6 +121,27 @@ impl State {
             }
         }
         Ok(cur.1.clone())
+    }
+}
+
+impl State {
+    /// A read-only session for the reads of a request; in a content graph, with what the platform graph holds of the
+    /// organisation and the methodologies now.
+    pub async fn reader(&self) -> Result<Session, GraphError> {
+        let s = self.store.reader().await.map_err(GraphError::internal)?;
+        self.with_platform(s).await
+    }
+
+    /// A write transaction on the writer, as [`State::reader`].
+    pub async fn writer(&self) -> Result<Session, GraphError> {
+        let s = self.store.writer().await.map_err(GraphError::internal)?;
+        self.with_platform(s).await
+    }
+
+    async fn with_platform(&self, s: Session) -> Result<Session, GraphError> {
+        let Some(r) = &self.remote else { return Ok(s) };
+        let cat = self.catalog(&s).await?;
+        Ok(s.with_platform(Some(r.platform(&cat).await?)))
     }
 }
 
@@ -132,6 +164,26 @@ pub struct SmartTags {
 /// `goap.importer.v1.ImportService` (ADR 0148).
 pub struct Imports {
     pub state: Arc<State>,
+}
+
+/// The routes of a content graph (ADR 0154 §9): the graph service alone (the jobs, the domain registry, the smart tags
+/// and the imports are the platform graph's), `/healthz` and `/readyz`.
+pub fn content_app(state: Arc<State>) -> Router {
+    let ready = state.clone();
+    Router::new()
+        .merge(graphpb::graph_service_router(
+            Arc::new(Graph { state }),
+            Interceptors::none(),
+        ))
+        .route("/healthz", get(|| async { "ok" }))
+        .route("/readyz", get(move || readiness(ready.clone())))
+}
+
+async fn readiness(s: Arc<State>) -> axum::response::Response {
+    match s.store.ping().await {
+        Ok(()) => (StatusCode::OK, "ready".to_string()).into_response(),
+        Err(e) => (StatusCode::SERVICE_UNAVAILABLE, format!("database: {e}")).into_response(),
+    }
 }
 
 /// The routes of the service: its four services, `/healthz` and `/readyz` (the database answers).
@@ -157,16 +209,5 @@ pub fn app(state: Arc<State>) -> Router {
         ))
         .merge(importerpb::import_service_router(Arc::new(Imports { state }), ics))
         .route("/healthz", get(|| async { "ok" }))
-        .route(
-            "/readyz",
-            get(move || {
-                let s = ready.clone();
-                async move {
-                    match s.store.ping().await {
-                        Ok(()) => (StatusCode::OK, "ready".to_string()).into_response(),
-                        Err(e) => (StatusCode::SERVICE_UNAVAILABLE, format!("database: {e}")).into_response(),
-                    }
-                }
-            }),
-        )
+        .route("/readyz", get(move || readiness(ready.clone())))
 }

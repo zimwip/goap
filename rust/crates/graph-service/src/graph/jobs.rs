@@ -184,12 +184,7 @@ impl Graph {
         }
         let ns = namespace_of(&m.namespace).to_string();
         let at = {
-            let tx = self
-                .state
-                .store
-                .reader()
-                .await
-                .map_err(|e| connect_error(GraphError::internal(e)))?;
+            let tx = self.state.reader().await.map_err(connect_error)?;
             if !m.baseline_id.is_empty() {
                 let b = read::header_of(&tx, &BaselineId(m.baseline_id.clone()))
                     .await
@@ -248,12 +243,7 @@ impl Graph {
         } else if !caller.project.is_empty() {
             caller.project.clone()
         } else {
-            let tx = self
-                .state
-                .store
-                .reader()
-                .await
-                .map_err(|e| connect_error(GraphError::internal(e)))?;
+            let tx = self.state.reader().await.map_err(connect_error)?;
             let catalog = self.state.catalog(&tx).await.map_err(connect_error)?;
             catalog
                 .structure(STRUCTURE_PROJECT)

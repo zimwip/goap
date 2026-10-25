@@ -93,8 +93,9 @@ web: dev-web ## same as dev-web
 runner-image: ## image of the script sandboxes (goap-runner)
 	docker build --build-arg SERVICE=goap-runner -t goap/runner:dev .
 
-images: runner-image ## the image of every Go service of the compose stack (goap/goap:dev), built once
+images: runner-image ## the images of the compose stack: every Go service (goap/goap:dev), the graph services in Rust (goap/rust:dev)
 	docker build --target services -t goap/goap:dev .
+	docker build --target rust -t goap/rust:dev .
 
 claude-agent-runner: ## install the Claude Agent SDK of the claude-coding-agent connector (GOAP_CLAUDE_AGENT_DIR, default .goap/claude-agent; needs npm)
 	go run ./platform/cmd/connector-claude-coding-agent install
@@ -114,7 +115,7 @@ down: ## stop the docker compose stack
 
 reset: ## stop the docker compose stack and drop everything it keeps: containers, volumes (database, NATS, web modules), images built for it
 	$(COMPOSE) down --volumes --remove-orphans
-	-docker image rm goap/goap:dev goap/runner:dev
+	-docker image rm goap/goap:dev goap/rust:dev goap/runner:dev
 
 # Performance stack (deploy/compose/perf.yml): the graph service on PostgreSQL, goap-bench, Prometheus and Grafana
 PERF      := docker compose -f deploy/compose/perf.yml

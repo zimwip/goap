@@ -45,15 +45,30 @@ impl Directory {
             root: st.root.clone(),
             ..Directory::default()
         };
-        let head = read::branch_head(tx, &st.namespace, MAIN_BRANCH).await?;
-        let at = read::select(tx, &head, None).await?;
-        let refs: Vec<NodeRef> = at.iter().map(|(id, v)| NodeRef::new(id.clone(), *v)).collect();
-        let nodes: Vec<_> = tx
-            .nodes_at(&refs, "")
-            .await?
-            .into_iter()
-            .filter(|n| !n.deleted && n.state != STATE_RETIRED && cat.is_a(&n.typ, &st.typ))
-            .collect();
+        let in_force = |n: &crate::model::Node| !n.deleted && n.state != STATE_RETIRED && cat.is_a(&n.typ, &st.typ);
+        let (nodes, links): (Vec<_>, Vec<_>) = match tx.platform() {
+            Some(p) => {
+                let nodes: Vec<_> = p.organisation.nodes.iter().filter(|n| in_force(n)).cloned().collect();
+                let held: std::collections::HashSet<_> = nodes.iter().map(|n| n.node_ref()).collect();
+                let links = p
+                    .organisation
+                    .links
+                    .iter()
+                    .filter(|l| l.typ == st.parent && held.contains(&l.from))
+                    .cloned()
+                    .collect();
+                (nodes, links)
+            }
+            None => {
+                let head = read::branch_head(tx, &st.namespace, MAIN_BRANCH).await?;
+                let at = read::select(tx, &head, None).await?;
+                let refs: Vec<NodeRef> = at.iter().map(|(id, v)| NodeRef::new(id.clone(), *v)).collect();
+                let nodes: Vec<_> = tx.nodes_at(&refs, "").await?.into_iter().filter(in_force).collect();
+                let held: Vec<NodeRef> = nodes.iter().map(|n| n.node_ref()).collect();
+                let links = tx.links_from(&held, Some(std::slice::from_ref(&st.parent))).await?;
+                (nodes, links)
+            }
+        };
         let keys: HashMap<_, _> = nodes.iter().map(|n| (n.id.clone(), n.key.clone())).collect();
         for n in &nodes {
             let props = n.props.as_ref();
@@ -91,8 +106,7 @@ impl Directory {
                 },
             );
         }
-        let held: Vec<NodeRef> = nodes.iter().map(|n| n.node_ref()).collect();
-        for l in tx.links_from(&held, Some(std::slice::from_ref(&st.parent))).await? {
+        for l in links {
             let (Some(from), crate::model::Target::Node(to)) = (keys.get(&l.from.id), &l.to) else {
                 continue;
             };
@@ -406,6 +420,9 @@ impl Snapshot {
     /// the last change applied there wrote).
     pub async fn read<T: ReadTx>(tx: &T) -> Result<Snapshot> {
         use graph_catalog::catalog::STRUCTURE_ORGANISATION;
+        if let Some(p) = tx.platform() {
+            return Ok(Snapshot::build(&p.organisation.nodes, &p.organisation.links));
+        }
         let Some(ns) = Catalog::builtin()
             .structure(STRUCTURE_ORGANISATION)
             .map(|s| s.namespace.clone())
