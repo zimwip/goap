@@ -115,7 +115,7 @@ down: ## stop the docker compose stack
 
 reset: ## stop the docker compose stack and drop everything it keeps: containers, volumes (database, NATS, web modules), images built for it
 	$(COMPOSE) down --volumes --remove-orphans
-	-docker image rm goap/goap:dev goap/rust:dev goap/runner:dev
+	-docker image rm goap/goap:dev goap/rust:dev goap/proxy:dev goap/runner:dev
 
 # Performance stack (deploy/compose/perf.yml): the graph service on PostgreSQL, goap-bench, Prometheus and Grafana
 PERF      := docker compose -f deploy/compose/perf.yml
@@ -148,9 +148,10 @@ PERF_DIFF_ENV := GOAP_PERF_IMPL=$(PERF_DIFF_MODE) GOAP_PERF_RS_DSN='$(if $(filte
 perf: perf-up perf-run ## performance test in docker: the graph service on PostgreSQL loaded by goap-bench through goap-proxy (PERF_ARGS, goap-bench -h; PERF_AUTOSTOP; PERF_PROXY=0 without the proxy), measured in Grafana http://localhost:3300
 	@echo "Grafana: http://localhost:3300/d/goap-perf · Prometheus: http://localhost:9390 · web: http://localhost:5174 · reports: .goap/perf/*.csv"
 
-perf-images: ## the images of the performance stack: the Go services (goap/goap:dev), the Rust graph service and goap-proxy (goap/rust:dev)
+perf-images: ## the images of the performance stack: the Go services (goap/goap:dev), the Rust graph service (goap/rust:dev), goap-proxy (goap/proxy:dev)
 	docker build --target services -t goap/goap:dev .
 	docker build --target rust -t goap/rust:dev .
+	docker build --target proxy -t goap/proxy:dev .
 
 perf-up: perf-images ## start the performance stack (builds its images): graph, goap-proxy, PostgreSQL, collector, Prometheus, Grafana, gateway and web
 	$(PERF_GO_ENV) $(PERF) up -d

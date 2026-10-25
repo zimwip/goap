@@ -1296,8 +1296,9 @@ each start (nodes, baselines and changes). The compose image is `pgvector/pgvect
   graph services: mode `go`, `rust`, `compare` (Go answers, Rust gets the same call on its own database, ids paired, every call judged
   in `calls.jsonl`; `goap-proxy diff-db` compares the two databases) or `shadow` (Go answers, the reads go to Rust too,
   one database). The performance stack goes through it: `make perf` (go), `make perf-rust` (`perf.rust.yml`, rust),
-  `make perf-diff` (`PERF_DIFF_MODE` shadow or compare; `PERF_DIFF_RUST=go` compares Go with Go); image
-  `goap/rust:dev` (`--target rust`).
+  `make perf-diff` (`PERF_DIFF_MODE` shadow or compare; `PERF_DIFF_RUST=go` compares Go with Go). It is a binary
+  of its own, which no crate of the service depends on, in an image of its own: `goap/proxy:dev` (`--target proxy`),
+  the service's being `goap/rust:dev` (`--target rust`).
 - A single multi-target image (`Dockerfile`, `ARG SERVICE`), static binary on `distroless`; its `services` target holds every binary (`/goap/<service>`), the one image `goap/goap:dev` the compose stack runs with an entrypoint per service (`make images`, done by `make up`), so it compiles once.
 - Kubernetes 🟡: one Helm chart per service (or kustomize); engine as a scalable `Deployment` (HPA on
   the work-queue stream depth), NATS via the official chart, Vault Agent Injector.

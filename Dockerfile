@@ -36,8 +36,10 @@ EXPOSE 8080
 USER nonroot
 ENTRYPOINT ["/goap/importer-git"]
 
-# the Rust graph service and the proxy in front of it (ADR 0163): docker build --target rust -t goap/rust:dev .
-# /goap/goap-graph-rs and /goap/goap-proxy (SQLite is compiled in: rusqlite bundled, the one C of the build)
+# the Rust binaries (ADR 0163), each in an image of its own: the graph service, docker build --target rust -t
+# goap/rust:dev . (/goap/goap-graph-rs), and the comparison proxy, a separate binary the service knows nothing of,
+# docker build --target proxy -t goap/proxy:dev . (/goap/goap-proxy); SQLite is compiled in: rusqlite bundled, the one C
+# of the build
 FROM rust:1.97-slim-bookworm AS rust-build
 WORKDIR /src
 COPY proto proto
@@ -51,11 +53,17 @@ COPY platform/devseed/demo.json platform/devseed/demo.json
 COPY rust rust
 RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/src/rust/target \
     cd rust && cargo build --release --locked -p goap-proxy -p graph-service \
-    && mkdir -p /out && cp target/release/goap-proxy target/release/goap-graph-rs /out/
+    && mkdir -p /out/graph /out/proxy && cp target/release/goap-graph-rs /out/graph/ \
+    && cp target/release/goap-proxy /out/proxy/
 
 FROM gcr.io/distroless/cc-debian12:nonroot AS rust
-COPY --from=rust-build /out/ /goap/
+COPY --from=rust-build /out/graph/ /goap/
 COPY domains /domains
+EXPOSE 8080
+USER nonroot
+
+FROM gcr.io/distroless/cc-debian12:nonroot AS proxy
+COPY --from=rust-build /out/proxy/ /goap/
 EXPOSE 8080
 USER nonroot
 

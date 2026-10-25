@@ -84,7 +84,8 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
    the schema `graph`; `compare` once it writes: both schemas dropped, the Go service on `graph`, the Rust one on
    `graph_rs`, then `diff-db`; goap-bench serial and seeded, then the report; `PERF_DIFF_RUST=go` compares Go with
    Go).
-   The image `goap/rust:dev` (`docker build --target rust`) holds both Rust binaries.
+   Each Rust binary has its image: `goap/rust:dev` (`docker build --target rust`) the graph service, `goap/proxy:dev`
+   (`--target proxy`) the proxy, a separate binary no crate of the service depends on.
 4. **Phases, one pull request each**: (1) the workspace, the store and its migrations, the skeleton service, the
    proxy, the targets; (2) the reads (views, `GetNode`, neighbourhoods, baselines, listings, queries); (3) the writes
    of the bench (changes, impacts, review, commit, merge, rebase, the domain registry); (4) everything else, then the

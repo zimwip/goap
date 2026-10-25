@@ -171,7 +171,7 @@ function Down { DockerSock; Run docker @Compose down }
 function Reset {
     DockerSock
     Run docker @Compose down --volumes --remove-orphans
-    & docker image rm goap/goap:dev goap/rust:dev goap/runner:dev # absent images are not an error
+    & docker image rm goap/goap:dev goap/rust:dev goap/proxy:dev goap/runner:dev # absent images are not an error
 }
 # Performance stack (deploy/compose/perf.yml): the graph service on PostgreSQL, goap-bench, Prometheus and Grafana
 $Perf = @('compose', '-f', 'deploy/compose/perf.yml')
@@ -210,7 +210,7 @@ function PerfDiffEnv {
     if ($env:PERF_DIFF_RUST -eq 'go') { $vars.GOAP_PERF_RS_IMAGE = 'goap/goap:dev'; $vars.GOAP_PERF_RS_BIN = '/goap/graph' }
     $vars
 }
-function PerfImages { Run docker build --target services -t goap/goap:dev .; Run docker build --target rust -t goap/rust:dev . }
+function PerfImages { Run docker build --target services -t goap/goap:dev .; Run docker build --target rust -t goap/rust:dev .; Run docker build --target proxy -t goap/proxy:dev . }
 function PerfUp { PerfImages; WithEnv (PerfGoEnv) { Run docker @Perf up -d } }
 function PerfRun { $a = PerfArgs; $h = PerfHold; WithEnv (PerfGoEnv) { Run docker @Perf run --rm bench $h @a } }
 function PerfRustUp { PerfImages; WithEnv (PerfRustEnv) { Run docker @PerfRust up -d } }
@@ -313,7 +313,7 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
                     goap-proxy ($env:PERF_ARGS, goap-bench -h; $env:PERF_PROXY = '0' without the proxy), measured
                     in Grafana http://localhost:3300; goap-bench holds once its run ends until interrupted, or for
                     $env:PERF_AUTOSTOP (e.g. 30m; 0: exits with the run)
-  perf-images       the images of the performance stack: goap/goap:dev and goap/rust:dev (Rust graph, goap-proxy)
+  perf-images       the images of the performance stack: goap/goap:dev, goap/rust:dev (Rust graph) and goap/proxy:dev (goap-proxy)
   perf-up | perf-run | perf-down | perf-reset
                     start the performance stack, one more run of goap-bench, stop it (keeping its data), drop its data
   perf-rust | perf-rust-up | perf-rust-run

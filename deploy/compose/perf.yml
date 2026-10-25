@@ -64,7 +64,7 @@ services:
   # the entry of the graph's clients (the bench, the gateway): the Go service (mode go), the Rust one or both
   # (perf.rust.yml); its calls per method and who served them in /metrics, scraped by Prometheus
   proxy:
-    image: goap/rust:dev
+    image: goap/proxy:dev
     pull_policy: never
     restart: unless-stopped
     entrypoint: ["/goap/goap-proxy"]
