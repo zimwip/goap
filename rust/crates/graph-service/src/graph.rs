@@ -1359,7 +1359,15 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::ListNodeVersionsResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
+        let pg = self.state.store.dialect() == graph_store::Dialect::Postgres;
         self.read_changes(caller, &[], async |tx, _| {
+            if pg && uuid::Uuid::try_parse(&m.id).is_err() {
+                // Go's store passes the id to PostgreSQL, which refuses it in its words
+                return Err(GraphError::internal(format!(
+                    "ERROR: invalid input syntax for type uuid: \"{}\" (SQLSTATE 22P02)",
+                    m.id
+                )));
+            }
             let (vs, next) = read::version_page(tx, &NodeId(m.id.clone()), m.before, m.limit.max(0) as usize).await?;
             Ok(pb::ListNodeVersionsResponse {
                 versions: convert::nodes(&vs),

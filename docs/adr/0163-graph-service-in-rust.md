@@ -557,4 +557,9 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   naming neither is served here, then tried in the other graphs while it is not found; `GetGraphOverview` and
   `ListNamespaces` merge every graph's answer, each namespace naming its source. The handler no longer leaves those
   calls to Go (`State::held`, `other_graphs` are gone).
+  A change id the store cannot read is an error in its words, as Go's `HasChange` answers, and `ListNodeVersions`
+  of an id PostgreSQL cannot read answers PostgreSQL's refusal, as Go's store passes it on (both were hidden by the
+  fallback to Go). The scenario with a graph declared at an unreachable location: outbox and bus the same on both
+  sides; what differs is the transport's words for the unreachable graph (Go's resolver, reqwest's), the lists ordered
+  by ids each database draws (the PROV-O export, pages of links) and the cursors of the pages of changes.
 - Not done yet: the rest of phase 4.
