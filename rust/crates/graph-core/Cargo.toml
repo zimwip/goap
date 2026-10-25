@@ -11,6 +11,7 @@ description = "The pure core of the Rust graph service (ADR 0163): the model, vi
 chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_norway = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 graph-catalog = { workspace = true }

@@ -641,3 +641,18 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
 - The compose stack runs the Rust service: `graph-bootstrap` (`goap-graph-rs bootstrap`), `graph` and
   `graph-content` take the image `goap/rust:dev` (`make images` builds it with `goap/goap:dev`). The Go service stays
   the reference: the performance stack compares the two (`make perf-diff`), and `goap-dev` keeps the graph in process.
+- Native crates, content not bytes: the Rust service no longer copies Go's libraries to answer byte for byte; it
+  answers the same content, with the crate that does the work and its words where it words a refusal. The rules of the
+  organisation run on `casbin` (casbin-rs, rules as rhai expressions: Go's model, its functions and the Go names of the
+  principal and the resource, so the defaults and a rule of the common syntax decide as Go's; govaluate's own operators,
+  `=~`, `??`, `in (…)` and the methods of the principal, are not read; `casbin_cases.gen.json` checks the decisions of
+  the rules both read); patterns are `regex`'s; a CEL guard is judged by the `cel` crate's parser (no type check of
+  its own); a definition is parsed by `serde_norway` and laid into the shape of `def.Domain` (`decode` over JSON
+  values), the YAML of a domain and of an OKF front matter written by it (`graph_core::yaml`); a snapshot and the log
+  payloads are read by `serde_json`. Gone: `crates/libyaml` (the workspace allows no `unsafe` any more),
+  `graph-catalog` `yamlv3`, `graph-core` `goyaml` / `godecode`, `graph-script` `casbin` / `govaluate` / `gotime` /
+  `goregexp` / `celcheck`, about 7,700 lines. What stays is what the content needs: `gojson` writes the numbers as Go's
+  `float64` (a draft compared with its base must find `1` and `1.0` equal) and the times as Go stores them. The paragraphs
+  above on yaml.v3's words, govaluate, `celcheck` and `encoding/json`'s errors describe what this replaces. The compare
+  proxy and `diff-db` compare content (ids paired, JSON texts as values, an error by its code, its message apart as
+  `message_differs`).

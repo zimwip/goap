@@ -24,7 +24,6 @@ graph-catalog = { path = "crates/graph-catalog" }
 graph-core = { path = "crates/graph-core" }
 graph-script = { path = "crates/graph-script" }
 graph-store = { path = "crates/graph-store" }
-libyaml = { path = "crates/libyaml" }
 
 anyhow = "1"
 arc-swap = "1"
@@ -49,6 +48,7 @@ prost-types = "0.14"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["http2", "json", "stream"] }
 rquickjs = { version = "0.14", default-features = false }
+casbin = { version = "2.20", default-features = false, features = ["runtime-tokio", "glob", "ip"] }
 cel = "0.15"
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }

@@ -10,7 +10,6 @@ pub mod imported;
 pub mod record;
 pub mod shape;
 pub mod validate;
-pub mod yamlv3;
 
 pub use catalog::{Catalog, Structure, Type};
 pub use def::Domain;

@@ -595,7 +595,7 @@ impl Snapshot {
     /// Decides a request as Go's `access.Authorizer` does (ADR 0020, 0043, 0138): the principal completed, the roles
     /// it holds on the resource's project (the root when it names none) merged, the flags of that project's
     /// Assignments when the resource names one; the floor first (an administrator may do everything), then the
-    /// stored rules, the compiled-in defaults while none is stored, evaluated as Casbin and govaluate evaluate them.
+    /// stored rules, the compiled-in defaults while none is stored, evaluated by casbin-rs.
     pub fn authorize(&self, p: &Principal, mut res: abac::Resource, act: &str) -> Result<bool> {
         if p.subject.is_empty() {
             return Ok(false);

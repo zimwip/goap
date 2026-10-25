@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use crate::algo::{self, Algorithm, Instance, Set};
 use crate::def::{Attribute, Domain, Lifecycle, LinkType, NodeType};
-use graph_script::celcheck::{self, Verdict};
+use graph_script::guard::Guard;
 
 pub use crate::form::Issue;
 use crate::form::{self, LINK_WIDGET, MARKDOWN_WIDGET, SELF_KEY};
@@ -56,7 +56,7 @@ fn foreign(r: &str) -> bool {
 }
 
 fn go_quote(s: &str) -> String {
-    crate::decode::go_quote(s)
+    format!("{s:?}")
 }
 
 /// A criterion of a gate (`domain.Criterion`).
@@ -232,7 +232,7 @@ impl<'a> Check<'a> {
                 self.add(path.clone(), msg);
             }
             for (j, t) in l.transitions.iter().enumerate() {
-                if let Verdict::Refused(msg) = celcheck::judge(&t.guard) {
+                if let Err(msg) = Guard::compile(&t.guard) {
                     self.add(format!("{path}.transitions[{j}].guard"), msg);
                 }
                 for (list, cs) in [("vetos", &t.vetos), ("objectives", &t.objectives)] {
@@ -248,7 +248,7 @@ impl<'a> Check<'a> {
                         seen.insert(c.name.clone());
                         if c.expr.is_empty() {
                             self.add(format!("{cp}.expr"), "a criterion needs an expression");
-                        } else if let Verdict::Refused(msg) = celcheck::judge(&c.expr) {
+                        } else if let Err(msg) = Guard::compile(&c.expr) {
                             self.add(format!("{cp}.expr"), msg);
                         }
                     }

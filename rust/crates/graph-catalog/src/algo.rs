@@ -245,7 +245,7 @@ fn go_value(v: &Value) -> String {
     match v {
         Value::Null => "<nil>".into(),
         Value::String(s) => s.clone(),
-        Value::Number(n) => n.as_f64().map(graph_script::go_float).unwrap_or_else(|| n.to_string()),
+        Value::Number(n) => n.to_string(),
         Value::Bool(b) => b.to_string(),
         Value::Array(a) => format!("[{}]", a.iter().map(go_value).collect::<Vec<_>>().join(" ")),
         Value::Object(m) => {
@@ -358,7 +358,7 @@ impl Param {
                 _ => Err(format!("expected a string, got {}", go_type(v))),
             },
             "regex" => match v {
-                Value::String(s) => graph_script::goregexp::GoRegex::compile(s)
+                Value::String(s) => regex::Regex::new(s)
                     .map(|_| v.clone())
                     .map_err(|e| format!("invalid regular expression: {e}")),
                 _ => Err(format!("expected a regular expression, got {}", go_type(v))),

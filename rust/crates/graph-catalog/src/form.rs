@@ -1,14 +1,12 @@
 //! The check of a form's definition (`contracts/form`, `CheckForm`, ADR 0115): field names, the widgets of the
 //! registry (read from the catalogue Go writes for the web, `widgetCatalog.gen.ts`), their constraints, the
-//! conditions and the defaults. Go's regular expressions are `graph_script::goregexp`; a condition whose YAML may
+//! conditions and the defaults. Patterns are `regex`'s (RE2 syntax, as Go's); a condition whose YAML may
 //! name an empty list is [`Unsure`].
 use std::collections::{BTreeMap, HashSet};
 use std::sync::LazyLock;
 
 use serde::Deserialize;
 use serde_json::{Map, Value};
-
-use crate::decode::go_quote;
 
 /// An issue of a form: the path below the form, its message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -309,7 +307,7 @@ fn strings_of(v: &Value) -> Option<Vec<&str>> {
 fn define(w: &Widget, fd: &Field) -> Vec<String> {
     match w.name.as_str() {
         "text" | "textarea" => match fd.constraints.get("pattern").and_then(Value::as_str) {
-            Some(p) => match graph_script::goregexp::GoRegex::compile(&format!("^(?:{p})$")) {
+            Some(p) => match regex::Regex::new(&format!("^(?:{p})$")) {
                 Err(e) => vec![format!("invalid pattern: {e}")],
                 Ok(_) => Vec::new(),
             },
@@ -361,13 +359,13 @@ fn value_issues(w: &Widget, fd: &Field, v: &Value) -> Vec<String> {
             let n = s.chars().count() as f64;
             let mut out = Vec::new();
             if let Some(m) = bound("minLength").filter(|m| n < *m) {
-                out.push(format!("at least {} characters", graph_script::go_float(m)));
+                out.push(format!("at least {} characters", m));
             }
             if let Some(m) = bound("maxLength").filter(|m| n > *m) {
-                out.push(format!("at most {} characters", graph_script::go_float(m)));
+                out.push(format!("at most {} characters", m));
             }
             if let Some(p) = fd.constraints.get("pattern").and_then(Value::as_str)
-                && let Ok(re) = graph_script::goregexp::GoRegex::compile(&format!("^(?:{p})$"))
+                && let Ok(re) = regex::Regex::new(&format!("^(?:{p})$"))
                 && !re.is_match(s)
             {
                 out.push(format!("does not match {p}"));
@@ -378,10 +376,10 @@ fn value_issues(w: &Widget, fd: &Field, v: &Value) -> Vec<String> {
             let x = v.as_f64().unwrap_or_default();
             let mut out = Vec::new();
             if let Some(m) = bound("min").filter(|m| x < *m) {
-                out.push(format!("at least {}", graph_script::go_float(m)));
+                out.push(format!("at least {}", m));
             }
             if let Some(m) = bound("max").filter(|m| x > *m) {
-                out.push(format!("at most {}", graph_script::go_float(m)));
+                out.push(format!("at most {}", m));
             }
             // `x != float64(int64(x))` on amd64: out of the int64s, the smallest one
             let whole = (-9_223_372_036_854_775_808.0..9_223_372_036_854_775_808.0).contains(&x) && x.trunc() == x;
@@ -473,10 +471,15 @@ fn count(fd: &Field, n: usize, what: &str) -> Vec<String> {
         let n = n as f64;
         if (more && n > m) || (!more && n < m) {
             let word = if more { "at most" } else { "at least" };
-            out.push(format!("{word} {} {what}", graph_script::go_float(m)));
+            out.push(format!("{word} {} {what}", m));
         }
     }
     out
+}
+
+/// A string quoted (`%q`).
+fn go_quote(s: &str) -> String {
+    format!("{s:?}")
 }
 
 #[cfg(test)]
@@ -512,7 +515,8 @@ mod tests {
         );
     }
 
-    /// The defaults checked as Go's widgets check them (answers of `form.CheckForm`).
+    /// The defaults checked as Go's widgets check them (answers of `form.CheckForm`), a pattern refused in `regex`'s
+    /// words; `\d{2` is one (Go reads its `{` as a letter).
     #[test]
     fn checks_defaults_as_go() {
         let f = fields(&json!({"fields": [
@@ -530,20 +534,23 @@ mod tests {
         ]}));
         let got: Vec<String> = check(&f)
             .into_iter()
-            .map(|i| format!("{}: {}", i.path, i.message))
+            .map(|i| match i.message.split_once(": ") {
+                Some(("invalid pattern", _)) => format!("{}: invalid pattern", i.path),
+                _ => format!("{}: {}", i.path, i.message),
+            })
             .collect();
         assert_eq!(
             got,
             [
                 "fields[0].default: at least 3 characters",
-                "fields[1]: invalid pattern: error parsing regexp: missing closing ): `^(?:(x)$`",
+                "fields[1]: invalid pattern",
                 "fields[2].default: at least 1.5",
                 "fields[3].default: a whole number",
                 "fields[4].default: at most 1",
                 "fields[5].default: expects a date YYYY-MM-DD",
                 "fields[6].default: on or after 2024-01-01",
                 "fields[7].default: expects a date YYYY-MM-DD",
-                "fields[9].default: does not match \\d{2",
+                "fields[9]: invalid pattern",
                 "fields[10].default: \"y\" is not one of the options",
             ]
         );

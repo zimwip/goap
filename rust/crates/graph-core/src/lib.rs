@@ -12,9 +12,7 @@ pub mod draftmerge;
 pub mod error;
 pub mod flow;
 pub mod flowdiff;
-pub mod godecode;
 pub mod gojson;
-pub mod goyaml;
 pub mod impact;
 pub mod items;
 pub mod lnk;
@@ -33,5 +31,6 @@ pub mod stats;
 pub mod store;
 pub mod view;
 pub mod write;
+pub mod yaml;
 
 pub use error::{GraphError, Kind, Result};

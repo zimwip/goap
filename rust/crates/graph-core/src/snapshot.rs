@@ -8,9 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::{
-    GraphError, Result,
-    godecode::{self, Fail, Struct, Ty},
-    gojson,
+    GraphError, Result, gojson,
     model::{Baseline, BaselineId, ChangeId, Link, Node, NodeRef, branch_of, namespace_of},
     reach::Reach,
     read,
@@ -153,59 +151,9 @@ pub fn rfc3339(t: &DateTime<FixedOffset>) -> String {
     }
 }
 
-/// The Go types of a snapshot, as `ParseSnapshot` decodes it.
-static LINK: Struct = Struct {
-    name: "SnapshotLink",
-    go: "graph.SnapshotLink",
-    fields: &[("type", Ty::Str), ("to", Ty::Str), ("props", Ty::Map)],
-};
-static PROVENANCE: Struct = Struct {
-    name: "SnapshotProvenance",
-    go: "graph.SnapshotProvenance",
-    fields: &[
-        ("version", Ty::Int),
-        ("change", Ty::Str),
-        ("producedBy", Ty::Str),
-        ("model", Ty::Bool),
-    ],
-};
-static NODE: Struct = Struct {
-    name: "SnapshotNode",
-    go: "graph.SnapshotNode",
-    fields: &[
-        ("key", Ty::Str),
-        ("type", Ty::Str),
-        ("state", Ty::Str),
-        ("owner", Ty::Str),
-        ("props", Ty::Map),
-        ("links", Ty::Slice(&Ty::Struct(&LINK), "[]graph.SnapshotLink")),
-        ("provenance", Ty::Ptr(&PROVENANCE)),
-    ],
-};
-static SNAPSHOT: Struct = Struct {
-    name: "Snapshot",
-    go: "graph.Snapshot",
-    fields: &[
-        ("format", Ty::Str),
-        ("namespace", Ty::Str),
-        ("branch", Ty::Str),
-        ("baseline", Ty::Str),
-        ("exportedAt", Ty::Time),
-        ("nodes", Ty::Slice(&Ty::Struct(&NODE), "[]graph.SnapshotNode")),
-    ],
-};
-
-/// Decodes a JSON snapshot (Go's `ParseSnapshot`, `encoding/json`'s errors in its words): the snapshot, checked. A
-/// text this decoder does not follow (nested past what it reads, a time Rust's types do not hold) is refused in Rust's
-/// words.
+/// Decodes a JSON snapshot (Go's `ParseSnapshot`): the snapshot, checked; an unknown field refused.
 pub fn parse_snapshot(data: &str) -> Result<Snapshot> {
-    let refused = |e: &dyn std::fmt::Display| GraphError::invalid(format!("parse snapshot: {e}"));
-    let v = match godecode::decode(data.as_bytes(), &SNAPSHOT) {
-        Ok(v) => v,
-        Err(Fail::Go(e)) => return Err(refused(&e)),
-        Err(Fail::Unsure) => return Err(refused(&"nested too deeply, or a time out of range")),
-    };
-    let s = Snapshot::deserialize(v).map_err(|e| refused(&e))?;
+    let s: Snapshot = serde_json::from_str(data).map_err(|e| GraphError::invalid(format!("parse snapshot: {e}")))?;
     s.check().map(|()| s)
 }
 

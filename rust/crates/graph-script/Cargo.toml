@@ -10,6 +10,9 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+casbin.workspace = true
+futures.workspace = true
+serde.workspace = true
 cel.workspace = true
 chrono.workspace = true
 regex.workspace = true

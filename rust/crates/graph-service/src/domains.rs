@@ -9,8 +9,7 @@ use graph_catalog::{
     record::{Record, STATUS_ARCHIVED, STATUS_DRAFT, STATUS_PUBLISHED, in_force, latest},
     validate::Issue,
 };
-use graph_core::godecode::{self, Fail, Struct, Ty};
-use graph_core::{GraphError, gojson, goyaml, store::OutboxMessage};
+use graph_core::{GraphError, gojson, store::OutboxMessage, yaml};
 use graph_store::read::{NewDomain, StoredDomain};
 
 use crate::{
@@ -158,7 +157,7 @@ impl pb::DomainService for Domains {
                 (s.name, s.version, def, false)
             }
         };
-        let yaml = goyaml::to_string_indent(&domainyaml::document(&def), domainyaml::INDENT);
+        let yaml = yaml::to_string(&domainyaml::document(&def));
         let base = format!("domain-{name}-{version}");
         match r.format.as_str() {
             "" | "yaml" => Ok(Response::new(pb::ExportDomainResponse {
@@ -277,14 +276,11 @@ impl pb::DomainService for Domains {
             return invalid(i.clone());
         }
         let input = r.input.as_ref().map(convert::map).unwrap_or_default();
-        // the input marshalled and unmarshalled into the fields of `dsl.AlgorithmInput`, as Go does
-        let raw = gojson::to_string(&serde_json::Value::Object(input));
-        let v = match godecode::unmarshal(raw.as_bytes(), &SAMPLE) {
-            Ok(v) => v,
-            Err(Fail::Go(e)) => return invalid(format!("sample input: {e}")),
-            Err(Fail::Unsure) => serde_json::from_str(&raw).unwrap_or_default(),
+        // the input read into the fields of `dsl.AlgorithmInput`
+        let sample = match serde_json::from_value::<Sample>(serde_json::Value::Object(input)) {
+            Ok(s) => s,
+            Err(e) => return invalid(format!("sample input: {e}")),
         };
-        let sample = serde_json::from_value::<Sample>(v).unwrap_or_default();
         let b = graph_script::js::Bound {
             instance: "try".into(),
             algorithm: a.name.clone(),
@@ -989,57 +985,6 @@ struct Sample {
     transition: Option<SampleNamed>,
     change: Option<SampleNamed>,
 }
-
-/// The Go shapes of a sample input, for its decoding errors.
-static SAMPLE_NODE: Struct = Struct {
-    name: "Node",
-    go: "dsl.Node",
-    fields: &[
-        ("id", Ty::Str),
-        ("version", Ty::Int),
-        ("key", Ty::Str),
-        ("type", Ty::Str),
-        ("state", Ty::Str),
-        ("props", Ty::Map),
-    ],
-};
-static SAMPLE_LINK: Struct = Struct {
-    name: "LinkInfo",
-    go: "dsl.LinkInfo",
-    fields: &[("type", Ty::Str), ("props", Ty::Map)],
-};
-static SAMPLE_TRANSITION: Struct = Struct {
-    name: "TransitionInfo",
-    go: "dsl.TransitionInfo",
-    fields: &[("name", Ty::Str), ("from", Ty::Str), ("to", Ty::Str)],
-};
-static SAMPLE_CHANGE: Struct = Struct {
-    name: "ChangeInfo",
-    go: "dsl.ChangeInfo",
-    fields: &[
-        ("id", Ty::Str),
-        ("title", Ty::Str),
-        ("intent", Ty::Str),
-        ("methodology", Ty::Str),
-        ("goal", Ty::Str),
-    ],
-};
-/// The anonymous struct `Service.RunAlgorithm` decodes the input into.
-static SAMPLE: Struct = Struct {
-    name: "",
-    go: "struct",
-    fields: &[
-        ("node", Ty::Struct(&SAMPLE_NODE)),
-        ("property", Ty::Str),
-        ("value", Ty::Any),
-        ("link", Ty::Struct(&SAMPLE_LINK)),
-        ("from", Ty::Struct(&SAMPLE_NODE)),
-        ("to", Ty::Struct(&SAMPLE_NODE)),
-        ("children", Ty::Slice(&Ty::Struct(&SAMPLE_NODE), "[]dsl.Node")),
-        ("transition", Ty::Struct(&SAMPLE_TRANSITION)),
-        ("change", Ty::Struct(&SAMPLE_CHANGE)),
-    ],
-};
 
 impl Sample {
     fn input(self) -> graph_script::js::Input {

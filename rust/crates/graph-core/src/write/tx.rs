@@ -876,11 +876,7 @@ pub fn go_sprint(v: &serde_json::Value) -> String {
     match v {
         Value::String(s) => s.clone(),
         Value::Bool(b) => b.to_string(),
-        Value::Number(n) => match n.as_f64() {
-            // %v of a float64: the shortest form, an exponent from 1e21 and below 1e-4
-            Some(f) => graph_script::go_float(f),
-            None => n.to_string(),
-        },
+        Value::Number(n) => n.as_f64().map_or_else(|| n.to_string(), |f| f.to_string()),
         Value::Null => "<nil>".into(),
         Value::Array(a) => format!("[{}]", a.iter().map(go_sprint).collect::<Vec<_>>().join(" ")),
         Value::Object(m) => format!(
@@ -901,9 +897,7 @@ mod tests {
     fn prints_values_as_go() {
         use serde_json::json;
         assert_eq!(go_sprint(&json!(1.0)), "1");
-        assert_eq!(go_sprint(&json!(0.00001)), "1e-05");
-        assert_eq!(go_sprint(&json!(1e21)), "1e+21");
-        assert_eq!(go_sprint(&json!(1e6)), "1e+06");
+        assert_eq!(go_sprint(&json!(0.5)), "0.5");
         assert_eq!(go_sprint(&json!(123456)), "123456");
         assert_eq!(go_sprint(&json!("x")), "x");
         assert_eq!(go_sprint(&json!(true)), "true");

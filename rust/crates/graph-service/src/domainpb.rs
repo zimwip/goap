@@ -456,5 +456,5 @@ pub fn definition(p: &pb::Domain) -> Result<String, String> {
             "params": attributes(&i.params)})),
     });
     let v = decode::from_json(&decode::domain_type(), &d)?;
-    decode::domain_json(&v)
+    serde_json::to_string(&v).map_err(|e| e.to_string())
 }

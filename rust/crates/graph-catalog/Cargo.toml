@@ -8,10 +8,8 @@ publish = false
 description = "The type catalogue of the Rust graph service (ADR 0163): the domains in force resolved, as lib/typecat resolves them"
 
 [dependencies]
-base64 = { workspace = true }
 chrono = { workspace = true }
 graph-script = { workspace = true }
-libyaml = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

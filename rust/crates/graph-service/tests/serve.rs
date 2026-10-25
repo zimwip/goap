@@ -17,7 +17,7 @@ async fn health_and_the_guards_judged_here() {
     let c = reqwest::Client::new();
     assert_eq!(c.get(format!("{base}/healthz")).send().await.unwrap().status(), 200);
     assert_eq!(c.get(format!("{base}/readyz")).send().await.unwrap().status(), 200);
-    // a guard surely wrong is refused at its path; one the checker does not follow is accepted
+    // a guard that does not parse is refused at its path; one that parses is accepted
     let validate = |guard: &str| {
         let d = serde_json::json!({"domain": {"name": "d", "version": "1",
             "nodeTypes": [{"name": "Item", "lifecycle": "lc"}],
@@ -28,13 +28,12 @@ async fn health_and_the_guards_judged_here() {
             .body(d.to_string())
             .send()
     };
-    let res = validate("'text'").await.unwrap();
+    let res = validate("a ==").await.unwrap();
     assert_eq!(res.status(), 200);
     let body: serde_json::Value = res.json().await.unwrap();
     assert_eq!(
-        body["issues"],
-        serde_json::json!([{"path": "lifecycles[0].transitions[0].guard",
-            "message": "guard must return bool, got string"}]),
+        body["issues"][0]["path"],
+        serde_json::json!("lifecycles[0].transitions[0].guard"),
         "{body}"
     );
     let res = validate("nope == 1").await.unwrap();

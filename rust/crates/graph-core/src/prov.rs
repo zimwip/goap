@@ -18,7 +18,6 @@ use serde_json::{Map, Value, json};
 use crate::{
     GraphError, Result,
     change::Change,
-    godecode::{self, Fail, Struct, Ty},
     gojson,
     impact::{ChangeImpact, ImpactOp, LogEntry, events_of},
     model::NodeRef,
@@ -126,125 +125,10 @@ fn time_of(t: &Option<Time>) -> Option<DateTime<Utc>> {
     t.and_then(|t| t.0)
 }
 
-/// The Go types a journal record and a model exchange are read into (`journal.Record`, `journal.ModelExchange`), for
-/// the words of `json.Unmarshal`.
-static NODE_REF: Struct = Struct {
-    name: "NodeRef",
-    go: "domain.NodeRef",
-    fields: &[
-        ("id", Ty::Named("domain.NodeID")),
-        ("version", Ty::IntNamed("domain.Version")),
-    ],
-};
-static TOOL_USE: Struct = Struct {
-    name: "ToolUse",
-    go: "journal.ToolUse",
-    fields: &[
-        ("name", Ty::Str),
-        ("durationMs", Ty::IntNamed("int64")),
-        ("error", Ty::Str),
-    ],
-};
-static MODEL_MESSAGE: Struct = Struct {
-    name: "ModelMessage",
-    go: "journal.ModelMessage",
-    fields: &[("role", Ty::Str), ("content", Ty::Str)],
-};
-static EXCHANGE: Struct = Struct {
-    name: "ModelExchange",
-    go: "journal.ModelExchange",
-    fields: &[
-        ("step", Ty::Int),
-        ("call", Ty::Int),
-        ("system", Ty::Str),
-        (
-            "messages",
-            Ty::Slice(&Ty::Struct(&MODEL_MESSAGE), "[]journal.ModelMessage"),
-        ),
-        ("response", Ty::Str),
-        ("behaviors", Ty::Slice(&Ty::Str, "[]string")),
-        ("behaviorTokens", Ty::Int),
-        ("behaviorsEstimated", Ty::Bool),
-        ("truncated", Ty::Bool),
-    ],
-};
-static MODEL_CALL: Struct = Struct {
-    name: "ModelCall",
-    go: "journal.ModelCall",
-    fields: &[
-        ("provider", Ty::Str),
-        ("model", Ty::Str),
-        ("inputTokens", Ty::IntNamed("int64")),
-        ("outputTokens", Ty::IntNamed("int64")),
-        ("durationMs", Ty::IntNamed("int64")),
-        ("error", Ty::Str),
-        ("exchange", Ty::Ptr(&EXCHANGE)),
-    ],
-};
-static RECORD: Struct = Struct {
-    name: "Record",
-    go: "journal.Record",
-    fields: &[
-        ("id", Ty::Str),
-        ("changeId", Ty::Named("domain.ChangeID")),
-        ("processId", Ty::Str),
-        ("parentProcessId", Ty::Str),
-        ("seq", Ty::Int),
-        ("kind", Ty::Str),
-        ("methodology", Ty::Str),
-        ("methodologyVersion", Ty::Str),
-        ("agent", Ty::Str),
-        ("planner", Ty::Str),
-        ("goal", Ty::Str),
-        ("status", Ty::Str),
-        ("step", Ty::Int),
-        ("action", Ty::Str),
-        ("activityRef", Ty::Str),
-        ("actionKind", Ty::Str),
-        ("specialization", Ty::Str),
-        ("plan", Ty::Slice(&Ty::Str, "[]string")),
-        ("before", Ty::MapOf(&Ty::Bool, "map[string]bool")),
-        ("after", Ty::MapOf(&Ty::Bool, "map[string]bool")),
-        ("effectsMet", Ty::PtrTo(&Ty::Bool)),
-        ("subject", Ty::Str),
-        ("subjectRef", Ty::Str),
-        ("items", Ty::Slice(&Ty::Named("domain.ItemID"), "[]domain.ItemID")),
-        (
-            "nodes",
-            Ty::Slice(&Ty::Named("domain.ChangeImpactID"), "[]domain.ChangeImpactID"),
-        ),
-        ("reads", Ty::Slice(&Ty::Struct(&NODE_REF), "[]domain.NodeRef")),
-        ("boardBefore", Ty::Int),
-        ("boardAfter", Ty::Int),
-        ("boardLast", Ty::Named("domain.ItemID")),
-        ("inputTokens", Ty::IntNamed("int64")),
-        ("outputTokens", Ty::IntNamed("int64")),
-        ("modelCalls", Ty::Slice(&Ty::Struct(&MODEL_CALL), "[]journal.ModelCall")),
-        ("toolCalls", Ty::Slice(&Ty::Struct(&TOOL_USE), "[]journal.ToolUse")),
-        ("actor", Ty::Str),
-        ("output", Ty::Str),
-        ("error", Ty::Str),
-        ("traceId", Ty::Str),
-        ("spanId", Ty::Str),
-        ("data", Ty::Map),
-        ("flow", Ty::Str),
-        ("startedAt", Ty::Time),
-        ("endedAt", Ty::Time),
-        ("durationMs", Ty::IntNamed("int64")),
-    ],
-};
-
-/// A payload of the log read as `json.Unmarshal` reads it into `root`, then into the Rust type; Go's refusal in its
-/// words (`log entry <seq> (<type>): …`).
-fn read_entry<T: serde::de::DeserializeOwned>(e: &LogEntry, root: &'static Struct) -> Result<T> {
-    let refused = |why: String| GraphError::internal(format!("log entry {} ({}): {why}", e.seq, e.typ));
-    // the value Go decodes, its keys matched without regard to case as Go matches them
-    let v = match godecode::unmarshal(e.payload.as_bytes(), root) {
-        Ok(v) => v,
-        Err(Fail::Go(why)) => return Err(refused(why)),
-        Err(Fail::Unsure) => serde_json::from_str(&e.payload).map_err(|err| refused(err.to_string()))?,
-    };
-    serde_json::from_value(v).map_err(|err| refused(err.to_string()))
+/// A payload of the log read into its Rust type (`log entry <seq> (<type>): …` when it does not read).
+fn read_entry<T: serde::de::DeserializeOwned>(e: &LogEntry) -> Result<T> {
+    serde_json::from_str(&e.payload)
+        .map_err(|err| GraphError::internal(format!("log entry {} ({}): {err}", e.seq, e.typ)))
 }
 
 /// Exports a change and its log (in the order of the log) as a JSON-LD document, indented as Go's
@@ -257,7 +141,7 @@ pub fn export(c: &Change, entries: &[LogEntry]) -> Result<String> {
         let unread = |why: String| GraphError::internal(format!("log entry {} ({}): {why}", e.seq, e.typ));
         match stream {
             "journal" => {
-                let r: Record = read_entry(e, &RECORD)?;
+                let r: Record = read_entry(e)?;
                 b.execution(c, e, &r);
             }
             "fact" => {
@@ -266,7 +150,7 @@ pub fn export(c: &Change, entries: &[LogEntry]) -> Result<String> {
                 b.fact(c, e, &it, &raw);
             }
             "model" => {
-                let ex: Exchange = read_entry(e, &EXCHANGE)?;
+                let ex: Exchange = read_entry(e)?;
                 b.exchange(c, e, &ex);
             }
             "change" => b.header(c, e),

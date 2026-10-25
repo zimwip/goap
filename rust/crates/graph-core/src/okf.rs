@@ -3,8 +3,8 @@
 //! the namespace, in a zip archive.
 
 use crate::codetext;
-use crate::goyaml::{self, Yaml};
 use crate::snapshot::{Snapshot, SnapshotNode, SnapshotProvenance};
+use crate::yaml::{self, Yaml};
 use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
 use graph_catalog::Catalog;
 use serde_json::Value as Json;
@@ -194,7 +194,7 @@ fn front_matter(
     let mut m: Vec<(String, Yaml)> = Vec::new();
     let has = |m: &[(String, Yaml)], k: &str| m.iter().any(|(x, _)| x == k);
     let put = |m: &mut Vec<(String, Yaml)>, k: &str, v: Yaml| -> Result<(), String> {
-        m.push((k.to_string(), goyaml::round_trip(v)?));
+        m.push((k.to_string(), v));
         Ok(())
     };
     put(&mut m, "key", Yaml::str(&n.key))?;
@@ -289,8 +289,8 @@ fn provenance(p: &SnapshotProvenance) -> Yaml {
 }
 
 fn front_matter_text(m: &[(String, Yaml)]) -> String {
-    let doc = Yaml::Map(m.iter().map(|(k, v)| (Yaml::NodeKey(k.clone()), v.clone())).collect());
-    format!("---\n{}---\n\n", goyaml::to_string(&doc))
+    let doc = Yaml::Map(m.iter().map(|(k, v)| (Yaml::Str(k.clone()), v.clone())).collect());
+    format!("---\n{}---\n\n", yaml::to_string(&doc))
 }
 
 fn render_index(s: &Snapshot, entries: &[Entry]) -> String {
@@ -315,7 +315,7 @@ fn render_index(s: &Snapshot, entries: &[Entry]) -> String {
     idx.push((Yaml::str("nodes"), Yaml::int(entries.len() as i64)));
     if !by_type.is_empty() {
         let mut types: Vec<(&str, usize)> = by_type.iter().map(|(t, es)| (*t, es.len())).collect();
-        types.sort_by(|a, b| goyaml::key_order(a.0, b.0));
+        types.sort_by(|a, b| a.0.cmp(b.0));
         idx.push((
             Yaml::str("types"),
             Yaml::Map(
@@ -326,7 +326,7 @@ fn render_index(s: &Snapshot, entries: &[Entry]) -> String {
             ),
         ));
     }
-    let mut b = format!("---\n{}---\n\n", goyaml::to_string(&Yaml::Map(idx)));
+    let mut b = format!("---\n{}---\n\n", yaml::to_string(&Yaml::Map(idx)));
     b.push_str(&format!("# {}\n", one_line(&s.namespace)));
     if s.baseline.is_empty() {
         b.push_str("\nNothing committed yet: the empty state.\n");

@@ -3951,18 +3951,14 @@ impl pb::GraphService for Graph {
         let m = req.into_inner();
         let by = caller.subject.clone();
         let token_project = caller.project.clone();
-        // Go's JSON check reads a payload as bytes: one that is no UTF-8 is checked as Go reads it, then stands for
-        // the text it holds; PostgreSQL refuses to store it
+        // a payload that is no UTF-8 stands for the text it holds; PostgreSQL refuses to store it
         let mut events = Vec::with_capacity(m.events.len());
         let mut unstorable = None;
         for e in &m.events {
             let payload = match std::str::from_utf8(&e.payload) {
                 Ok(p) => p.to_string(),
                 Err(err) => {
-                    if graph_core::godecode::valid(&e.payload)
-                        && unstorable.is_none()
-                        && self.state.store.dialect() == graph_store::Dialect::Postgres
-                    {
+                    if unstorable.is_none() && self.state.store.dialect() == graph_store::Dialect::Postgres {
                         unstorable = Some(pg_invalid_utf8(&e.payload[err.valid_up_to()..]));
                     }
                     String::from_utf8_lossy(&e.payload).into_owned()

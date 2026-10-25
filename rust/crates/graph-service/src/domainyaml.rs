@@ -1,13 +1,10 @@
-//! The YAML of a domain as Go's `Domain.YAML` writes it (`yaml.Marshal` of `def.Domain`): the fields of each struct in
-//! their order, omitted when empty where their tag says so, the maps with their keys sorted, from the JSON of the
+//! The YAML of a domain as Go's `Domain.YAML` lays it out (`yaml.Marshal` of `def.Domain`): the fields of each struct
+//! in their order, omitted when empty where their tag says so, the maps with their keys sorted, from the JSON of the
 //! definition the registry stores. The shape of `def.Domain` is generated from the Go structs
 //! (`lib/def` `TestRustYAMLSchemaIsCurrent`), so that both stay the same.
 use graph_catalog::shape::{Field, SHAPE, Type};
-use graph_core::goyaml::{Yaml, float_g, key_order};
+use graph_core::yaml::Yaml;
 use serde_json::Value as Json;
-
-/// The indentation of `yaml.Marshal`.
-pub const INDENT: i64 = 4;
 
 /// The YAML document of a definition (Go's JSON of `def.Domain`, or the YAML of a built-in domain read as JSON).
 pub fn document(def: &Json) -> Yaml {
@@ -90,7 +87,7 @@ fn value(t: &Type, v: Option<&Json>) -> Yaml {
                 .unwrap_or(0)
                 .to_string(),
         ),
-        "float" => Yaml::Plain(float_g(v.and_then(Json::as_f64).unwrap_or(0.0))),
+        "float" => Yaml::Plain(v.and_then(Json::as_f64).unwrap_or(0.0).to_string()),
         "any" => v.map_or_else(|| Yaml::Plain("null".into()), Yaml::of_json),
         "slice" => {
             let elem = t.elem.as_deref().expect("a slice's element");
@@ -107,11 +104,9 @@ fn value(t: &Type, v: Option<&Json>) -> Yaml {
             let Some(m) = v.and_then(Json::as_object) else {
                 return Yaml::Map(Vec::new());
             };
-            let mut keys: Vec<&String> = m.keys().collect();
-            keys.sort_by(|a, b| key_order(a, b));
             Yaml::Map(
-                keys.into_iter()
-                    .map(|k| (Yaml::str(k.clone()), value(elem, m.get(k))))
+                m.iter()
+                    .map(|(k, x)| (Yaml::str(k.clone()), value(elem, Some(x))))
                     .collect(),
             )
         }
@@ -127,7 +122,7 @@ fn value(t: &Type, v: Option<&Json>) -> Yaml {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graph_core::goyaml::to_string_indent;
+    use graph_core::yaml::to_string;
     use serde_json::json;
 
     #[test]
@@ -137,9 +132,9 @@ mod tests {
             "nodeTypes": [{"name": "A"}],
             "linkTypes": null,
         });
-        let out = to_string_indent(&document(&def), INDENT);
+        let out = to_string(&document(&def));
         assert!(out.starts_with("name: dt\nversion: 1.0.0\n"), "{out}");
-        assert!(out.contains("nodeTypes:\n    - name: A\n"), "{out}");
+        assert!(out.contains("nodeTypes:\n- name: A\n"), "{out}");
         assert!(out.contains("linkTypes: []\n"), "{out}");
     }
 }

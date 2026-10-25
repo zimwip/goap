@@ -1,6 +1,6 @@
 //! A domain as `ImportDomain` reads it (Go's `def.ParseDomain`, `Domain.Validate`): the YAML (or JSON) of a definition,
-//! decoded as yaml.v3 decodes it into `def.Domain` ([`decode`](crate::decode)), written back as the JSON the registry
-//! stores (`json.Marshal(def.Domain)`), and checked.
+//! laid into the shape of `def.Domain` ([`decode`](crate::decode)), written back as the JSON the registry stores, and
+//! checked.
 //!
 //! Only the domains whose checks run no script nor guard are judged here: lifecycles, algorithms, validators, forms,
 //! documents and structures are the Go service's ([`Definition::served`] answers `None`). A domain with issues is the
@@ -23,23 +23,17 @@ pub struct Definition {
 impl Definition {
     /// Reads a YAML (or JSON) definition; the error is Go's (`parse domain: …`).
     pub fn read(src: &str) -> Result<Definition, String> {
-        let v = decode::parse_domain(src.as_bytes()).map_err(|e| e.0)?;
-        let text = |i: usize| match &v {
-            decode::Value::Struct(fields) => match &fields[i] {
-                decode::Value::Str(s) => s.clone(),
-                _ => String::new(),
-            },
-            _ => String::new(),
-        };
-        let json = decode::domain_json(&v);
+        let v = decode::parse_domain(src).map_err(|e| e.0)?;
+        let text = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+        let json = serde_json::to_string(&v).map_err(|e| e.to_string());
         let domain = json
             .as_ref()
             .ok()
             .and_then(|j| serde_json::from_str::<Imported>(j).ok())
             .and_then(Imported::checked);
         Ok(Definition {
-            name: text(0),
-            version: text(1),
+            name: text("name"),
+            version: text("version"),
             json,
             domain,
         })
@@ -546,9 +540,10 @@ mod tests {
         // a number for a text, an unknown key within a type reading its short form itself
         let d = Definition::read("name: x\nversion: 1.0\nnodeTypes: [{name: A, colour: red}]\n").unwrap();
         assert_eq!(d.version, "1.0");
+        let json: Value = serde_json::from_str(d.json.as_deref().unwrap()).unwrap();
         assert_eq!(
-            d.json.as_deref().unwrap(),
-            r#"{"name":"x","version":"1.0","nodeTypes":[{"name":"A"}],"linkTypes":null}"#
+            json,
+            serde_json::json!({"name": "x", "version": "1.0", "nodeTypes": [{"name": "A"}], "linkTypes": null})
         );
         assert!(d.served().is_some());
         assert!(
