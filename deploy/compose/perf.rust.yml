@@ -1,7 +1,7 @@
 # The Rust graph service in the performance stack (ADR 0163), over perf.yml:
 #   docker compose -f deploy/compose/perf.yml -f deploy/compose/perf.rust.yml up -d
-# make perf-rust: goap-proxy in mode split, the Rust service first and the Go one for what it does not serve yet, both
-# on the database of the stack (GOAP_PERF_RS_DSN: the graph's). make perf-diff: mode compare, the Go service answering
+# make perf-rust: goap-proxy in mode rust, every call to the Rust service, on the database of the stack
+# (GOAP_PERF_RS_DSN: the graph's). make perf-diff: mode compare, the Go service answering
 # and the Rust one on a schema of its own (graph_rs), every call compared (.goap/perf/diff: calls.jsonl, summary.json,
 # ids.json), then the two schemas (goap-proxy diff-db).
 # GOAP_PERF_RS_IMAGE=goap/goap:dev GOAP_PERF_RS_BIN=/goap/graph puts a second Go service in its place: the

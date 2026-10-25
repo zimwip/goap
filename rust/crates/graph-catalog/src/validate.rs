@@ -8,8 +8,10 @@ use serde_json::Value;
 
 use crate::algo::{self, Algorithm, Instance, Set};
 use crate::def::{Attribute, Domain, Lifecycle, LinkType, NodeType};
+use graph_script::celcheck::{self, Verdict};
+
+pub use crate::form::Issue;
 use crate::form::{self, LINK_WIDGET, MARKDOWN_WIDGET, SELF_KEY};
-pub use crate::form::{Issue, Unsure};
 
 /// The types an attribute may have (`def.AttributeTypes`), its widgets and the diffs it may name.
 const ATTRIBUTE_TYPES: [&str; 7] = ["string", "number", "boolean", "date", "enum", "json", "code"];
@@ -89,9 +91,8 @@ impl Check<'_> {
     }
 }
 
-/// Every issue of a domain (`Domain.Validate`). `exact`: the definition was read from JSON (a stored version or a
-/// request), not from YAML.
-pub fn validate(d: &Domain, exact: bool) -> Result<Vec<Issue>, Unsure> {
+/// Every issue of a domain (`Domain.Validate`).
+pub fn validate(d: &Domain) -> Vec<Issue> {
     let mut c = Check {
         d,
         issues: Vec::new(),
@@ -106,16 +107,16 @@ pub fn validate(d: &Domain, exact: bool) -> Result<Vec<Issue>, Unsure> {
         c.add("nodeTypes", "at least one node type required");
     }
     let node_types = c.node_types();
-    c.check_lifecycles(&node_types)?;
-    c.check_algorithms(exact)?;
+    c.check_lifecycles(&node_types);
+    c.check_algorithms();
     c.check_attributes();
     c.link_types(&node_types);
     c.check_structures();
     c.check_requires();
-    c.check_forms(exact)?;
+    c.check_forms();
     c.check_item_types();
     c.check_importers();
-    Ok(c.issues)
+    c.issues
 }
 
 impl<'a> Check<'a> {
@@ -214,7 +215,7 @@ impl<'a> Check<'a> {
         None
     }
 
-    fn check_lifecycles(&mut self, node_types: &HashSet<&str>) -> Result<(), Unsure> {
+    fn check_lifecycles(&mut self, node_types: &HashSet<&str>) {
         let d = self.d;
         let mut names = HashSet::new();
         for (i, l) in d.lifecycles.iter().enumerate() {
@@ -231,8 +232,8 @@ impl<'a> Check<'a> {
                 self.add(path.clone(), msg);
             }
             for (j, t) in l.transitions.iter().enumerate() {
-                if !graph_script::celcheck::surely_compiles(&t.guard) {
-                    return Err(Unsure("a guard cel-go may refuse"));
+                if let Verdict::Refused(msg) = celcheck::judge(&t.guard) {
+                    self.add(format!("{path}.transitions[{j}].guard"), msg);
                 }
                 for (list, cs) in [("vetos", &t.vetos), ("objectives", &t.objectives)] {
                     let mut seen = HashSet::new();
@@ -247,8 +248,8 @@ impl<'a> Check<'a> {
                         seen.insert(c.name.clone());
                         if c.expr.is_empty() {
                             self.add(format!("{cp}.expr"), "a criterion needs an expression");
-                        } else if !graph_script::celcheck::surely_compiles(&c.expr) {
-                            return Err(Unsure("a criterion cel-go may refuse"));
+                        } else if let Verdict::Refused(msg) = celcheck::judge(&c.expr) {
+                            self.add(format!("{cp}.expr"), msg);
                         }
                     }
                 }
@@ -316,25 +317,17 @@ impl<'a> Check<'a> {
                 }
             }
         }
-        Ok(())
     }
 
     /// The algorithms and their instances. Read from YAML, a number is an `int` Go prints as one: the coercions it
     /// refuses are Go's to word.
-    fn check_algorithms(&mut self, exact: bool) -> Result<(), Unsure> {
+    fn check_algorithms(&mut self) {
         let d = self.d;
         let set = Set::of(&d.algorithms, &d.algorithm_instances);
-        if !exact && (set.algorithms.len() != d.algorithms.len() || set.instances.len() != d.algorithm_instances.len())
-        {
-            return Err(Unsure("an algorithm Go reads in its own way"));
-        }
         let mut algs: HashMap<&str, &Algorithm> = HashMap::new();
         for (i, a) in set.algorithms.iter().enumerate() {
             let path = format!("algorithms[{i}]");
             for msg in a.issues() {
-                if !exact && msg.contains(": default: ") {
-                    return Err(Unsure("a parameter default Go's coercion refuses"));
-                }
                 self.add(path.clone(), msg);
             }
             if !a.name.is_empty() {
@@ -343,8 +336,11 @@ impl<'a> Check<'a> {
                 }
                 algs.insert(&a.name, a);
             }
-            if !a.code.is_empty() && a.language == graph_script::js::JAVASCRIPT && !script_compiles(&a.code) {
-                return Err(Unsure("a script goja may refuse"));
+            if !a.code.is_empty()
+                && a.language == graph_script::js::JAVASCRIPT
+                && let Err(msg) = graph_script::js::check_code(&a.language, &a.code)
+            {
+                self.add(format!("{path}.code"), msg);
             }
         }
         let mut insts: HashMap<&str, &Instance> = HashMap::new();
@@ -372,9 +368,6 @@ impl<'a> Check<'a> {
             };
             let (_, issues) = a.resolve(inst.values.as_ref());
             for msg in issues {
-                if !exact && !msg.starts_with("unknown param ") && !msg.ends_with(" is required") {
-                    return Err(Unsure("a parameter value Go's coercion refuses"));
-                }
                 self.add(format!("{path}.values"), msg);
             }
         }
@@ -464,7 +457,6 @@ impl<'a> Check<'a> {
                 }
             }
         }
-        Ok(())
     }
 
     /// The attributes of a node type, its own and the inherited ones (`Schema.propertiesOf`).
@@ -658,13 +650,13 @@ impl<'a> Check<'a> {
         }
     }
 
-    fn check_forms(&mut self, exact: bool) -> Result<(), Unsure> {
+    fn check_forms(&mut self) {
         let d = self.d;
         for (i, n) in d.node_types.iter().enumerate() {
             let Some(f) = &n.form else { continue };
             let path = format!("nodeTypes[{i}].form");
             let fields = form::fields(f);
-            for is in form::check(&fields, exact)? {
+            for is in form::check(&fields) {
                 self.add(format!("{path}.{}", is.path), is.message);
             }
             let mut attrs = HashSet::new();
@@ -716,7 +708,6 @@ impl<'a> Check<'a> {
                 }
             }
         }
-        Ok(())
     }
 
     fn check_item_types(&mut self) {
@@ -862,19 +853,13 @@ fn lifecycle_issues(l: &Lifecycle) -> Vec<String> {
 
 /// Whether goja surely compiles the code of an algorithm: QuickJS compiles it, and it holds none of the syntax goja
 /// may read otherwise (classes and their private names, generators, asynchronous functions, modules).
-fn script_compiles(code: &str) -> bool {
-    const RISKY: [&str; 6] = ["#", "class", "yield", "async", "import", "export"];
-    !RISKY.iter().any(|w| code.contains(w)) && graph_script::js::check_code(graph_script::js::JAVASCRIPT, code).is_ok()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn issues(yaml: &str) -> Vec<String> {
         let d = Domain::parse(yaml).unwrap();
-        validate(&d, true)
-            .unwrap()
+        validate(&d)
             .into_iter()
             .map(|i| format!("{}: {}", i.path, i.message))
             .collect()

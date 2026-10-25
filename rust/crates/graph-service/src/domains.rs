@@ -22,8 +22,9 @@ use crate::{
 const HEADER_SUBJECT: &str = "x-goap-subject";
 const HEADER_COMMAND: &str = "x-goap-command";
 
-fn unserved(what: &str) -> ConnectError {
-    connect_error(GraphError::unimplemented(format!("{what}: not served here yet")))
+/// A request whose definition does not read as a domain (Rust's words: Go's JSON encoder and reader never get there).
+fn unreadable(e: impl std::fmt::Display) -> ConnectError {
+    ConnectError::invalid_argument(format!("invalid domain: {e}"))
 }
 
 type Answer<T> = Result<Response<T>, ConnectError>;
@@ -241,11 +242,9 @@ impl pb::DomainService for Domains {
         req: Request<pb::ValidateDomainRequest>,
     ) -> Answer<pb::ValidateDomainResponse> {
         let p = req.into_inner().domain.unwrap_or_default();
-        let domain = domainpb::definition(&p)
-            .ok()
-            .and_then(|j| graph_catalog::Domain::from_json(&j).ok())
-            .ok_or_else(|| unserved("a definition Go's JSON encoder refuses"))?;
-        let issues = graph_catalog::validate::validate(&domain, true).map_err(|u| unserved(u.0))?;
+        let json = domainpb::definition(&p).map_err(unreadable)?;
+        let domain = graph_catalog::Domain::from_json(&json).map_err(unreadable)?;
+        let issues = graph_catalog::validate::validate(&domain);
         Ok(Response::new(pb::ValidateDomainResponse {
             issues: issues_pb(issues),
         }))
@@ -323,10 +322,10 @@ impl pb::DomainService for Domains {
             return Err(builtin_error(&p.name));
         }
         self.authorize(who.as_ref(), "write", &p.name, &p.version).await?;
-        let json = domainpb::definition(&p).map_err(|_| unserved("a definition Go's JSON encoder refuses"))?;
+        let json = domainpb::definition(&p).map_err(unreadable)?;
         let domain = graph_catalog::Domain::from_json(&json).map_err(|e| connect_error(GraphError::internal(e)))?;
         let tx = self.writer().await?;
-        let issues = issues_of(&tx, &domain, true).await?;
+        let issues = issues_of(&tx, &domain).await?;
         let saved = self
             .store(tx, &p.name, &p.version, &json, STATUS_DRAFT, (&subject, &command))
             .await?;
@@ -357,9 +356,9 @@ impl pb::DomainService for Domains {
         if s.status != STATUS_DRAFT {
             return Err(not_a_draft(&format!("{}@{}", r.name, r.version)));
         }
-        let domain = graph_catalog::Domain::from_json(&s.definition_text)
-            .map_err(|_| unserved("a stored definition Go reads in its own way"))?;
-        let issues = issues_of(&tx, &domain, true).await?;
+        let domain =
+            graph_catalog::Domain::from_json(&s.definition_text).map_err(|e| connect_error(GraphError::internal(e)))?;
+        let issues = issues_of(&tx, &domain).await?;
         if !issues.is_empty() {
             return Err(ConnectError::invalid_argument(format!(
                 "invalid domain: {}",
@@ -528,15 +527,10 @@ impl pb::DomainService for Domains {
         if r.publish {
             self.authorize(who.as_ref(), "publish", &def.name, &def.version).await?;
         }
-        let Ok(json) = def.json.as_ref() else {
-            return Err(unserved("a definition Go's JSON encoder refuses"));
-        };
-        if !def.faithful {
-            return Err(unserved("a definition holding a timestamp or an unsigned integer"));
-        }
+        let json = def.json.as_ref().map_err(|e| connect_error(GraphError::internal(e)))?;
         let domain = graph_catalog::Domain::from_json(json).map_err(|e| connect_error(GraphError::internal(e)))?;
         let tx = self.writer().await?;
-        let issues = issues_of(&tx, &domain, false).await?;
+        let issues = issues_of(&tx, &domain).await?;
         let draft = !r.publish || !issues.is_empty();
         let status = if draft { STATUS_DRAFT } else { STATUS_PUBLISHED };
         let saved = self
@@ -718,13 +712,9 @@ fn not_a_draft(what: &str) -> ConnectError {
 }
 
 /// The issues of a domain (`Service.validateDomain`): its own, else the catalogue it would not make with the domains
-/// in force (Go's to word). `exact`: read from JSON.
-async fn issues_of(
-    tx: &graph_store::read::Session,
-    d: &graph_catalog::Domain,
-    exact: bool,
-) -> Result<Vec<Issue>, ConnectError> {
-    let mut issues = graph_catalog::validate::validate(d, exact).map_err(|u| unserved(u.0))?;
+/// in force (Go's to word).
+async fn issues_of(tx: &graph_store::read::Session, d: &graph_catalog::Domain) -> Result<Vec<Issue>, ConnectError> {
+    let mut issues = graph_catalog::validate::validate(d);
     if issues.is_empty()
         && let Err(e) = resolves(tx, d.clone()).await?
     {

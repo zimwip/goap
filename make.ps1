@@ -183,8 +183,7 @@ function PerfHold { if ($env:PERF_AUTOSTOP) { "-hold=$env:PERF_AUTOSTOP" } else 
 # $env:PERF_PROXY = '0' sends them to the graph service itself
 function PerfNoProxy { $env:PERF_PROXY -eq '0' }
 # the Rust graph service (deploy/compose/perf.rust.yml): perf-rust runs it behind the proxy in mode
-# $env:PERF_RUST_MODE, split while it does not serve every method (the Go service serves the rest: /proxy/coverage),
-# rust once it does; perf-diff compares it with the Go one call by call ($env:PERF_DIFF_ARGS, serial, seeded;
+# $env:PERF_RUST_MODE (rust; go sends the calls to the Go service of the same stack); perf-diff compares it with the Go one call by call ($env:PERF_DIFF_ARGS, serial, seeded;
 # $env:PERF_DIFF_RUST = 'go' compares Go with Go), in mode $env:PERF_DIFF_MODE: shadow (default: the reads sent to both
 # on the Go service's schema) or compare (every call, each on its schema, then their tables)
 $PerfRust = @('compose', '-f', 'deploy/compose/perf.yml', '-f', 'deploy/compose/perf.rust.yml')
@@ -198,7 +197,7 @@ function WithEnv([hashtable]$vars, [scriptblock]$block) {
 }
 function PerfGoEnv { if (PerfNoProxy) { @{ GOAP_PERF_GRAPH_URL = 'http://graph:8080' } } else { @{} } }
 function PerfRustEnv {
-    $mode = if ($env:PERF_RUST_MODE) { $env:PERF_RUST_MODE } else { 'split' }
+    $mode = if ($env:PERF_RUST_MODE) { $env:PERF_RUST_MODE } else { 'rust' }
     $vars = @{ GOAP_PERF_IMPL = $mode }
     if (PerfNoProxy) { $vars.GOAP_PERF_GRAPH_URL = 'http://graph-rs:8080' }
     $vars
@@ -318,8 +317,8 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   perf-up | perf-run | perf-down | perf-reset
                     start the performance stack, one more run of goap-bench, stop it (keeping its data), drop its data
   perf-rust | perf-rust-up | perf-rust-run
-                    the same with the Rust graph service behind goap-proxy in mode $env:PERF_RUST_MODE (split: what
-                    Rust does not serve yet goes to Go, http://localhost:8383/proxy/coverage; rust)
+                    the same with the Rust graph service behind goap-proxy in mode $env:PERF_RUST_MODE (rust; go:
+                    the Go service of the same stack)
   perf-diff         the Go and the Rust graph services compared call by call ($env:PERF_DIFF_MODE: shadow, the
                     reads on one schema; compare, every call each on its schema, then the databases)
                     ($env:PERF_DIFF_ARGS, serial and seeded; $env:PERF_DIFF_RUST = 'go': Go with Go); .goap\perf\diff

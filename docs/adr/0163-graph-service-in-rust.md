@@ -609,4 +609,13 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   the coercion refusals of a definition read from JSON worded here (from YAML, where a number is an `int`, still
   Go's), domains that make no catalogue leaving the previous one in force as `typecat.Live.Reload` does (`ListTypes`
   answers the error, internal), and `MergeChange` answering the items it wrote whatever they hold.
-- Not done yet: the rest of phase 4.
+- Rust decides where it cannot know Go's words: a CEL guard or criterion is refused at its path when it surely does not
+  compile (it does not parse, in the Rust parser's words, or returns another type than a bool, `guard must return bool,
+  got <type>` as cel-go says), and accepted when the checker does not follow it, an error left to its evaluation
+  (`celcheck::judge`); a JavaScript algorithm is judged by QuickJS, the engine that runs it here; a definition read from
+  YAML is judged as Rust reads it (coercions, form conditions, timestamps and unsigned integers); a request whose
+  definition does not read as a domain is `invalid domain: …` in Rust's words, a snapshot Go's decoder would read but
+  this one does not follow `parse snapshot: …`; an import failing on a change it cannot purge abandons it, as Go's
+  does. Nothing the service serves answers `unimplemented` any more, so the split mode of the proxy is gone: `make
+  perf-rust` runs mode `rust`, the comparisons (`shadow`, `compare`) still put the Go service beside it.
+- Not done yet: the Go service leaving the compose stack (`graph`, `graph-bootstrap`, `graph-content`).

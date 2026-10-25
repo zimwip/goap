@@ -2,8 +2,6 @@
 //!
 //! `goap-proxy` serves, with `GOAP_PROXY_MODE`:
 //! - `go` / `rust`: every call to one service, passed as is;
-//! - `split`: every call to the Rust service, replayed on the Go one when it answers `unimplemented` (one database):
-//!   `/proxy/coverage` tells what still falls back;
 //! - `compare`: every call to the Go service, which answers, and to the Rust one, each on its own database, compared
 //!   call by call (`calls.jsonl` in `GOAP_PROXY_REPORT_DIR`, `/proxy/report`);
 //! - `shadow`: every call to the Go service, which answers, a call that only reads to the Rust one too, both on one
@@ -210,22 +208,6 @@ async fn forward(State(p): State<Arc<Proxy>>, req: Request) -> Response {
             p.count(&key, by, up.side, &r);
             reply(r)
         }
-        Mode::Split => {
-            let rust = p.rust.as_ref().expect("checked");
-            let r = rust.call(&parts.method, &path, &headers, body.clone()).await;
-            if !unimplemented(&r) {
-                p.count(&key, ServedBy::Rust, Side::Rust, &r);
-                return reply(r);
-            }
-            p.stats.lock().unwrap().time(&key, Side::Rust.name(), r.elapsed);
-            if let Some(e) = rpc::error_of(r.status, &r.body) {
-                tracing::info!(procedure = %key, reason = %e.message, "replayed on Go");
-            }
-            let go = p.go.as_ref().expect("checked");
-            let g = go.call(&parts.method, &path, &headers, body).await;
-            p.count(&key, ServedBy::GoFallback, Side::Go, &g);
-            reply(g)
-        }
         Mode::Compare | Mode::Shadow => {
             let go = p.go.as_ref().expect("checked");
             let proc = proc.filter(|pr| p.cfg.mode == Mode::Compare || pr.reads_only());
@@ -294,7 +276,7 @@ fn graph_methods() -> Vec<Procedure> {
 }
 
 /// What the Rust service serves, as the traffic told it: per method of the graph's services, who served its calls;
-/// `fallback` the methods the Rust service answered `unimplemented` (mode split) or did not serve (mode compare).
+/// `fallback` the methods the Rust service answered `unimplemented` (modes compare and shadow).
 async fn coverage(State(p): State<Arc<Proxy>>) -> Json<Value> {
     let s = p.stats.lock().unwrap();
     let mut methods = Vec::new();
@@ -303,9 +285,7 @@ async fn coverage(State(p): State<Arc<Proxy>>) -> Json<Value> {
         let k = proc.to_string();
         match s.calls.get(&k) {
             Some(c) => {
-                if c.served.contains_key(&ServedBy::GoFallback)
-                    || c.verdicts.contains_key(&compare::Verdict::RustUnimplemented)
-                {
+                if c.verdicts.contains_key(&compare::Verdict::RustUnimplemented) {
                     fallback.push(k.clone());
                 }
                 methods.push(json!({"procedure": k, "served": c.served, "verdicts": c.verdicts}));

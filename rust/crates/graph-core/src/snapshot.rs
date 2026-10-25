@@ -195,16 +195,18 @@ static SNAPSHOT: Struct = Struct {
     ],
 };
 
-/// Decodes a JSON snapshot (Go's `ParseSnapshot`, `encoding/json`'s errors in its words): the snapshot, checked;
-/// `None` for a text Go reads that is not read here (nested past what is read, a time Rust's types do not hold).
-pub fn parse_snapshot(data: &str) -> Option<Result<Snapshot>> {
+/// Decodes a JSON snapshot (Go's `ParseSnapshot`, `encoding/json`'s errors in its words): the snapshot, checked. A
+/// text this decoder does not follow (nested past what it reads, a time Rust's types do not hold) is refused in Rust's
+/// words.
+pub fn parse_snapshot(data: &str) -> Result<Snapshot> {
+    let refused = |e: &dyn std::fmt::Display| GraphError::invalid(format!("parse snapshot: {e}"));
     let v = match godecode::decode(data.as_bytes(), &SNAPSHOT) {
         Ok(v) => v,
-        Err(Fail::Go(e)) => return Some(Err(GraphError::invalid(format!("parse snapshot: {e}")))),
-        Err(Fail::Unsure) => return None,
+        Err(Fail::Go(e)) => return Err(refused(&e)),
+        Err(Fail::Unsure) => return Err(refused(&"nested too deeply, or a time out of range")),
     };
-    let s = Snapshot::deserialize(v).ok()?;
-    Some(s.check().map(|()| s))
+    let s = Snapshot::deserialize(v).map_err(|e| refused(&e))?;
+    s.check().map(|()| s)
 }
 
 impl Snapshot {

@@ -12,27 +12,35 @@ async fn serve() -> String {
 }
 
 #[tokio::test]
-async fn health_and_a_request_left_to_go() {
+async fn health_and_the_guards_judged_here() {
     let base = serve().await;
     let c = reqwest::Client::new();
     assert_eq!(c.get(format!("{base}/healthz")).send().await.unwrap().status(), 200);
     assert_eq!(c.get(format!("{base}/readyz")).send().await.unwrap().status(), 200);
-    // a guard cel-go may refuse in words of its own is the Go service's to judge
-    let guarded = serde_json::json!({"domain": {"name": "d", "version": "1", "lifecycles": [{
-        "name": "lc", "initial": "a", "states": [{"name": "a"}],
-        "transitions": [{"name": "t", "from": "a", "to": "a", "guard": "nope == 1"}]}]}});
-    for path in ["/goap.registry.v1.DomainService/ValidateDomain"] {
-        let res = c
-            .post(format!("{base}{path}"))
+    // a guard surely wrong is refused at its path; one the checker does not follow is accepted
+    let validate = |guard: &str| {
+        let d = serde_json::json!({"domain": {"name": "d", "version": "1",
+            "nodeTypes": [{"name": "Item", "lifecycle": "lc"}],
+            "lifecycles": [{"name": "lc", "initial": "a", "states": [{"name": "a"}],
+                "transitions": [{"name": "t", "from": "a", "to": "a", "guard": guard}]}]}});
+        c.post(format!("{base}/goap.registry.v1.DomainService/ValidateDomain"))
             .header("content-type", "application/json")
-            .body(guarded.to_string())
+            .body(d.to_string())
             .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 501, "{path}");
-        let body: serde_json::Value = res.json().await.unwrap();
-        assert_eq!(body["code"], "unimplemented", "{path}");
-    }
+    };
+    let res = validate("'text'").await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(
+        body["issues"],
+        serde_json::json!([{"path": "lifecycles[0].transitions[0].guard",
+            "message": "guard must return bool, got string"}]),
+        "{body}"
+    );
+    let res = validate("nope == 1").await.unwrap();
+    assert_eq!(res.status(), 200);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body, serde_json::json!({}), "{body}");
 }
 
 async fn call(base: &str, method: &str, subject: Option<&str>, body: serde_json::Value) -> (u16, serde_json::Value) {
@@ -48,7 +56,7 @@ async fn call(base: &str, method: &str, subject: Option<&str>, body: serde_json:
 }
 
 #[tokio::test]
-async fn reads_a_service_serves_and_the_ones_it_leaves_to_go() {
+async fn reads_of_a_service_and_of_a_person() {
     let base = serve().await;
     let svc = Some("system:test");
     // an anonymous call is refused, as the Go service's Identify does

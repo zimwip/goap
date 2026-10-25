@@ -1,6 +1,7 @@
 //! Whether cel-go compiles a guard (`guard.Compile`): parses and type-checks it in the guard's environment, its
 //! result a bool or dyn. The Rust parser only parses; this checker follows cel-go's typing over the subset guards are
-//! written in and answers `false` for anything else, a guard cel-go may refuse in words of its own.
+//! written in. It refuses only what surely does not compile, in its own words (ADR 0163: Rust decides); a guard it does
+//! not follow is accepted, any error left to its evaluation.
 use cel::Program;
 use cel::common::ast::operators as op;
 use cel::common::ast::{EntryExpr, Expr, IdedExpr, LiteralValue};
@@ -32,15 +33,48 @@ fn variable(name: &str) -> Option<T> {
     })
 }
 
-/// Whether cel-go surely compiles the guard into a program returning a bool or dyn (empty: always true). `false`
-/// when it may not: a syntax or type error, a result of another type, or a construct this checker does not follow.
-pub fn surely_compiles(expr: &str) -> bool {
+/// What the checker says of a guard: it compiles, it is refused (Rust's words: a syntax error, or the type of what
+/// it returns, as cel-go's `guard must return bool`), or the checker does not follow it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Verdict {
+    Compiles,
+    Refused(String),
+    Unknown,
+}
+
+/// Judges a guard: refused only when it surely is (it does not parse, or returns a type that is not a bool).
+pub fn judge(expr: &str) -> Verdict {
     if expr.is_empty() {
-        return true;
+        return Verdict::Compiles;
     }
-    let Ok(p) = Program::compile(expr) else { return false };
+    let p = match Program::compile(expr) {
+        Ok(p) => p,
+        Err(e) => return Verdict::Refused(e.to_string()),
+    };
     let mut scope = Vec::new();
-    matches!(type_of(p.expression(), &mut scope), Some(T::Bool | T::Dyn))
+    match type_of(p.expression(), &mut scope) {
+        Some(T::Bool | T::Dyn) => Verdict::Compiles,
+        Some(t) => Verdict::Refused(format!("guard must return bool, got {}", t.name())),
+        None => Verdict::Unknown,
+    }
+}
+
+impl T {
+    /// The name cel-go prints for the type.
+    fn name(&self) -> String {
+        match self {
+            T::Bool => "bool".into(),
+            T::Int => "int".into(),
+            T::Uint => "uint".into(),
+            T::Double => "double".into(),
+            T::String => "string".into(),
+            T::Bytes => "bytes".into(),
+            T::Null => "null_type".into(),
+            T::List(e) => format!("list({})", e.name()),
+            T::Map(k, v) => format!("map({}, {})", k.name(), v.name()),
+            T::Dyn => "dyn".into(),
+        }
+    }
 }
 
 /// The type both of two types are, as cel-go joins the branches of a conditional or the elements of an aggregate.
@@ -279,7 +313,7 @@ fn arithmetic(a: &T, b: &T, add: bool) -> Option<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::surely_compiles;
+    use super::{Verdict, judge};
 
     #[test]
     fn follows_the_guards_of_the_domains() {
@@ -297,19 +331,23 @@ mod tests {
             "children.exists_one(c, c.key == 'k')",
             "node.props.title.startsWith('x')",
         ] {
-            assert!(surely_compiles(ok), "{ok}");
+            assert_eq!(judge(ok), Verdict::Compiles, "{ok}");
         }
+        for (refused, msg) in [
+            ("'text'", "guard must return bool, got string"),
+            ("size(children)", "guard must return bool, got int"),
+        ] {
+            assert_eq!(judge(refused), Verdict::Refused(msg.into()), "{refused}");
+        }
+        assert!(matches!(judge("node."), Verdict::Refused(_)));
         for unsure in [
             "nope == 1",
-            "'text'",
             "1 + 'a'",
             "node.state == 1u + 1",
-            "children.map(c, c.state)",
             "1 < 1.0",
             "node.x.foo()",
-            "node.",
         ] {
-            assert!(!surely_compiles(unsure), "{unsure}");
+            assert_eq!(judge(unsure), Verdict::Unknown, "{unsure}");
         }
     }
 }

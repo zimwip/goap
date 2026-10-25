@@ -130,12 +130,11 @@ PERF_ANALYSIS := docker compose -f deploy/compose/perf-analysis.yml
 # PERF_PROXY=0 sends them to the graph service itself
 PERF_PROXY ?= 1
 # the Rust graph service (deploy/compose/perf.rust.yml): make perf-rust runs it behind the proxy in mode
-# PERF_RUST_MODE, split while it does not serve every method (the Go service serves the rest: /proxy/coverage), rust
-# once it does; make perf-diff compares it with the Go one call by call (PERF_DIFF_ARGS, serial, seeded;
+# PERF_RUST_MODE (rust; go sends the calls to the Go service of the same stack); make perf-diff compares it with the Go one call by call (PERF_DIFF_ARGS, serial, seeded;
 # PERF_DIFF_RUST=go compares Go with Go), in mode PERF_DIFF_MODE: shadow (the reads sent to both on the Go service's
 # schema: what Rust serves before it writes) or compare (every call, each on its schema, then their tables)
 PERF_RUST := docker compose -f deploy/compose/perf.yml -f deploy/compose/perf.rust.yml
-PERF_RUST_MODE ?= split
+PERF_RUST_MODE ?= rust
 PERF_DIFF_ARGS ?= -versions 5000
 PERF_DIFF_RUST ?= rust
 PERF_DIFF_MODE ?= shadow
@@ -158,8 +157,8 @@ perf-up: perf-images ## start the performance stack (builds its images): graph, 
 perf-run: ## one more run of goap-bench against the performance stack (PERF_ARGS, e.g. PERF_ARGS="-versions 1000000 -workers 8"); it holds once done until interrupted, or for PERF_AUTOSTOP (e.g. 30m; 0: exits with the run)
 	$(PERF_GO_ENV) $(PERF) run --rm bench $(PERF_HOLD) $(PERF_ARGS)
 
-perf-rust: perf-rust-up perf-rust-run ## the performance test of the Rust graph service: make perf with goap-proxy in mode PERF_RUST_MODE (split: what Rust does not serve yet goes to Go, see http://localhost:8383/proxy/coverage)
-	@echo "Grafana: http://localhost:3300/d/goap-perf · coverage: http://localhost:8383/proxy/coverage · reports: .goap/perf/*.csv"
+perf-rust: perf-rust-up perf-rust-run ## the performance test of the Rust graph service: make perf with goap-proxy in mode PERF_RUST_MODE (rust)
+	@echo "Grafana: http://localhost:3300/d/goap-perf · reports: .goap/perf/*.csv"
 
 perf-rust-up: perf-images ## start the performance stack with the Rust graph service behind goap-proxy (PERF_RUST_MODE)
 	$(PERF_RUST_ENV) $(PERF_RUST) up -d

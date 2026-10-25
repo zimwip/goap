@@ -13,7 +13,7 @@ use graph_core::{
     model::Target,
     snapshot::{self, Snapshot, SnapshotNode},
     view::View,
-    write::work::LinkWrite,
+    write::{change::STATUS_ABANDONED, update::ChangePatch, work::LinkWrite},
 };
 
 /// The rationale of the impacts an import writes.
@@ -47,12 +47,7 @@ impl Graph {
         caller: Caller,
         m: pb::ImportGraphRequest,
     ) -> Answer<pb::ImportGraphResponse> {
-        let Some(parsed) = snapshot::parse_snapshot(&m.document) else {
-            return Err(connect_error(GraphError::unimplemented(
-                "a snapshot the decoder refuses, in Go's words: answered by the Go service",
-            )));
-        };
-        let s = parsed.map_err(connect_error)?;
+        let s = snapshot::parse_snapshot(&m.document).map_err(connect_error)?;
         let token_project = caller.project.clone();
         let by = caller.subject.clone();
         let (owner, stamp) = match self.resolve_owner(&caller, &m.owner_org).await {
@@ -205,15 +200,21 @@ async fn import(
     match fill(tx, acc, &c, &mut plans, &mut key_of, &by_key, by, &mut res.warnings).await {
         Ok(()) => {}
         Err(e) if e.kind == Kind::Unimplemented => return Err(e),
-        // the steps before the one refused stay, as in the Go service, which then purges the change it made
-        Err(e) => {
-            if let Err(pe) = tx.purge_change(&c.id).await {
-                if pe.kind == Kind::Conflict {
-                    return Err(GraphError::unimplemented(
-                        "an import failing on a change it cannot purge, abandoned by the Go service",
-                    ));
+        // the steps before the one refused stay, as in the Go service, which then purges the change it made, else
+        // abandons it (the error of the abandon joined to the refusal)
+        Err(mut e) => {
+            let r = tx.rehearse().await?;
+            if tx.purge_change(&c.id).await.is_err() {
+                tx.rewind(r).await?;
+                let r = tx.rehearse().await?;
+                let abandon = ChangePatch {
+                    status: Some(STATUS_ABANDONED.to_string()),
+                    ..ChangePatch::default()
+                };
+                if let Err(ae) = tx.update_change(&c.id, abandon).await {
+                    tx.rewind(r).await?;
+                    e.message = format!("{}\n{}", e.message, ae.message);
                 }
-                return Err(pe);
             }
             tx.checkpoint().await?;
             return Ok(Err(e));

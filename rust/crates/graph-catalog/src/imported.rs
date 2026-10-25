@@ -17,9 +17,6 @@ pub struct Definition {
     pub name: String,
     pub version: String,
     pub json: Result<String, String>,
-    /// Whether its JSON holds every value as Go decoded it: no timestamp nor unsigned integer in a field of any type,
-    /// which the JSON writes as a string or a number.
-    pub faithful: bool,
     domain: Option<Imported>,
 }
 
@@ -44,7 +41,6 @@ impl Definition {
             name: text(0),
             version: text(1),
             json,
-            faithful: faithful(&v),
             domain,
         })
     }
@@ -52,15 +48,6 @@ impl Definition {
     /// The domain when it is one judged here: stored as JSON, with nothing only the Go service checks, and no issue.
     pub fn served(&self) -> Option<&Imported> {
         self.domain.as_ref()
-    }
-}
-
-fn faithful(v: &decode::Value) -> bool {
-    match v {
-        decode::Value::Time(_) | decode::Value::Uint(_) | decode::Value::GeneralMap(_) => false,
-        decode::Value::Slice(xs) | decode::Value::Struct(xs) => xs.iter().all(faithful),
-        decode::Value::Map(m) => m.values().all(faithful),
-        _ => true,
     }
 }
 

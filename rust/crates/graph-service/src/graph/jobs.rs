@@ -237,12 +237,7 @@ impl Graph {
         m: pb::StartGraphImportRequest,
     ) -> Answer<pb::StartGraphImportResponse> {
         let jobs = self.job_caller(&caller)?;
-        let Some(parsed) = graph_core::snapshot::parse_snapshot(&m.document) else {
-            return Err(connect_error(GraphError::unimplemented(
-                "a snapshot the decoder refuses, in Go's words: answered by the Go service",
-            )));
-        };
-        let s = parsed.map_err(connect_error)?;
+        let s = graph_core::snapshot::parse_snapshot(&m.document).map_err(connect_error)?;
         let (owner, owner_stamp) = match self.resolve_owner(&caller, &m.owner_org).await {
             Ok(v) => v,
             Err((e, st)) => return stamp.or(st.0).on(Err(e)),
@@ -655,11 +650,7 @@ impl Graph {
     async fn run_import(&self, j: &Job) -> Result<(), String> {
         let doc = j.input().await.map_err(failure)?;
         let doc = String::from_utf8_lossy(&doc).into_owned();
-        let s = match graph_core::snapshot::parse_snapshot(&doc) {
-            Some(Ok(s)) => s,
-            Some(Err(e)) => return Err(e.message),
-            None => return Err("a snapshot the decoder refuses".into()),
-        };
+        let s = graph_core::snapshot::parse_snapshot(&doc).map_err(|e| e.message)?;
         j.progress(format!("importing {} node(s) into {}", s.nodes.len(), s.namespace));
         let req = pb::ImportGraphRequest {
             document: doc,

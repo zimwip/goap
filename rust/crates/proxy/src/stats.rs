@@ -12,8 +12,6 @@ use crate::compare::Verdict;
 pub enum ServedBy {
     Go,
     Rust,
-    /// The Rust service answered `unimplemented`, the Go one served it (mode split).
-    GoFallback,
 }
 
 impl ServedBy {
@@ -21,7 +19,6 @@ impl ServedBy {
         match self {
             ServedBy::Go => "go",
             ServedBy::Rust => "rust",
-            ServedBy::GoFallback => "go_fallback",
         }
     }
 }

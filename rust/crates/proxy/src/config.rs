@@ -11,9 +11,6 @@ pub enum Mode {
     Go,
     /// Every call to the Rust graph service.
     Rust,
-    /// Every call to the Rust graph service first, replayed on the Go one when it answers `unimplemented`: both on
-    /// one database.
-    Split,
     /// Every call to the Go graph service, which answers, and again to the Rust one, each on its own database: the
     /// two answers are compared call by call.
     Compare,
@@ -27,7 +24,6 @@ impl Mode {
         match self {
             Mode::Go => "go",
             Mode::Rust => "rust",
-            Mode::Split => "split",
             Mode::Compare => "compare",
             Mode::Shadow => "shadow",
         }
@@ -41,10 +37,9 @@ impl FromStr for Mode {
         Ok(match s {
             "go" => Mode::Go,
             "rust" => Mode::Rust,
-            "split" => Mode::Split,
             "compare" => Mode::Compare,
             "shadow" => Mode::Shadow,
-            _ => bail!("GOAP_PROXY_MODE: {s:?} is none of go, rust, split, compare, shadow"),
+            _ => bail!("GOAP_PROXY_MODE: {s:?} is none of go, rust, compare, shadow"),
         })
     }
 }
@@ -64,8 +59,7 @@ pub struct Config {
     pub addr: String,
     /// `GOAP_PROXY_GO`: the Go graph service.
     pub go: Option<Uri>,
-    /// `GOAP_PROXY_RUST`: the Rust graph service (or a proxy in mode split in front of both, for a comparison during
-    /// the transition).
+    /// `GOAP_PROXY_RUST`: the Rust graph service.
     pub rust: Option<Uri>,
     /// `GOAP_PROXY_REPORT_DIR`: where a comparison writes its calls, its summary and its pairs of ids.
     pub report_dir: PathBuf,
@@ -121,8 +115,8 @@ impl Config {
                 Err(_) => 256 << 20,
             },
         };
-        let need_go = matches!(mode, Mode::Go | Mode::Split | Mode::Compare | Mode::Shadow);
-        let need_rust = matches!(mode, Mode::Rust | Mode::Split | Mode::Compare | Mode::Shadow);
+        let need_go = matches!(mode, Mode::Go | Mode::Compare | Mode::Shadow);
+        let need_rust = matches!(mode, Mode::Rust | Mode::Compare | Mode::Shadow);
         if need_go && cfg.go.is_none() {
             bail!("mode {}: GOAP_PROXY_GO is not set", mode.name());
         }

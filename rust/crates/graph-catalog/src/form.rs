@@ -10,10 +10,6 @@ use serde_json::{Map, Value};
 
 use crate::decode::go_quote;
 
-/// A check whose words only Go has: the caller leaves the request to it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Unsure(pub &'static str);
-
 /// An issue of a form: the path below the form, its message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Issue {
@@ -132,12 +128,11 @@ fn field(v: &Value) -> Field {
     }
 }
 
-/// Checks a form (`form.CheckForm`). `exact`: the form was read from JSON (a stored version), not from YAML, whose
-/// empty lists the JSON drops.
-pub fn check(fields: &[Field], exact: bool) -> Result<Vec<Issue>, Unsure> {
+/// Checks a form (`form.CheckForm`).
+pub fn check(fields: &[Field]) -> Vec<Issue> {
     let mut out = Vec::new();
-    check_fields(fields, "fields", false, exact, &mut out)?;
-    Ok(out)
+    check_fields(fields, "fields", false, &mut out);
+    out
 }
 
 fn field_name_ok(s: &str) -> bool {
@@ -152,7 +147,7 @@ fn issue(out: &mut Vec<Issue>, path: impl Into<String>, message: impl Into<Strin
     });
 }
 
-fn check_fields(fields: &[Field], path: &str, nested: bool, exact: bool, out: &mut Vec<Issue>) -> Result<(), Unsure> {
+fn check_fields(fields: &[Field], path: &str, nested: bool, out: &mut Vec<Issue>) {
     let mut seen = HashSet::new();
     for (j, fd) in fields.iter().enumerate() {
         let at = format!("{path}[{j}]");
@@ -173,8 +168,8 @@ fn check_fields(fields: &[Field], path: &str, nested: bool, exact: bool, out: &m
             );
         }
         seen.insert(fd.name.clone());
-        check_conditions(fields, j, "visibleWhen", &fd.visible_when, &at, exact, out)?;
-        check_conditions(fields, j, "requiredWhen", &fd.required_when, &at, exact, out)?;
+        check_conditions(fields, j, "visibleWhen", &fd.visible_when, &at, out);
+        check_conditions(fields, j, "requiredWhen", &fd.required_when, &at, out);
         let Some(w) = lookup(&fd.widget) else {
             let names: Vec<&str> = WIDGETS.iter().map(|w| w.name.as_str()).collect();
             issue(
@@ -197,7 +192,7 @@ fn check_fields(fields: &[Field], path: &str, nested: bool, exact: bool, out: &m
             if fd.fields.is_empty() {
                 issue(out, format!("{at}.fields"), "a group needs at least one sub-field");
             }
-            check_fields(&fd.fields, &format!("{at}.fields"), true, exact, out)?;
+            check_fields(&fd.fields, &format!("{at}.fields"), true, out);
         } else if !fd.fields.is_empty() {
             issue(
                 out,
@@ -262,22 +257,10 @@ fn check_fields(fields: &[Field], path: &str, nested: bool, exact: bool, out: &m
             issue(out, format!("{at}.default"), first);
         }
     }
-    Ok(())
 }
 
-fn check_conditions(
-    fields: &[Field],
-    j: usize,
-    key: &str,
-    cs: &[Condition],
-    at: &str,
-    exact: bool,
-    out: &mut Vec<Issue>,
-) -> Result<(), Unsure> {
+fn check_conditions(fields: &[Field], j: usize, key: &str, cs: &[Condition], at: &str, out: &mut Vec<Issue>) {
     for (i, c) in cs.iter().enumerate() {
-        if !exact && !c.in_list {
-            return Err(Unsure("a form condition whose YAML may name an empty list"));
-        }
         let p = format!("{at}.{key}[{i}]");
         if [c.equals, c.in_list, c.set].iter().filter(|x| **x).count() != 1 {
             issue(out, p.clone(), "a condition tests exactly one of equals, in or set");
@@ -305,7 +288,6 @@ fn check_conditions(
             }
         }
     }
-    Ok(())
 }
 
 /// What a constraint of a type refuses of a value (`ConstraintType.check`).
@@ -513,8 +495,7 @@ mod tests {
             {"name": "l", "widget": "link", "constraints": {"fromKey": "$self", "bad": 1}},
             {"name": "m", "widget": "markdown"},
         ]}));
-        let got: Vec<String> = check(&f, true)
-            .unwrap()
+        let got: Vec<String> = check(&f)
             .into_iter()
             .map(|i| format!("{}: {}", i.path, i.message))
             .collect();
@@ -547,8 +528,7 @@ mod tests {
             {"name": "h", "widget": "text", "constraints": {"pattern": "\\d{2"}, "default": "1"},
             {"name": "i", "widget": "multiselect", "constraints": {"options": ["x"], "max": 0.5}, "default": ["x", "y"]},
         ]}));
-        let got: Vec<String> = check(&f, true)
-            .unwrap()
+        let got: Vec<String> = check(&f)
             .into_iter()
             .map(|i| format!("{}: {}", i.path, i.message))
             .collect();
