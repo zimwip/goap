@@ -719,11 +719,19 @@ async fn issues_of(
     d: &graph_catalog::Domain,
     exact: bool,
 ) -> Result<Vec<Issue>, ConnectError> {
-    let issues = graph_catalog::validate::validate(d, exact).map_err(|u| unserved(u.0))?;
-    if issues.is_empty() && !resolves(tx, d.clone()).await? {
-        return Err(unserved(
-            "a domain whose types do not resolve with the domains in force",
-        ));
+    let mut issues = graph_catalog::validate::validate(d, exact).map_err(|u| unserved(u.0))?;
+    if issues.is_empty()
+        && let Err(e) = resolves(tx, d.clone()).await?
+    {
+        let path = if e.starts_with("item type") {
+            "itemTypes"
+        } else {
+            "nodeTypes"
+        };
+        issues.push(Issue {
+            path: path.into(),
+            message: e,
+        });
     }
     Ok(issues)
 }
@@ -754,15 +762,19 @@ fn issues_pb(issues: Vec<Issue>) -> Vec<pb::Issue> {
         .collect()
 }
 
-/// Whether the domains in force still make a catalogue with this one in place of its domain's (`Service.Types`).
-async fn resolves(tx: &graph_store::read::Session, d: graph_catalog::def::Domain) -> Result<bool, ConnectError> {
+/// Whether the domains in force still make a catalogue with this one in place of its domain's (`Service.Types`), else
+/// why not, in `typecat.New`'s words.
+async fn resolves(
+    tx: &graph_store::read::Session,
+    d: graph_catalog::def::Domain,
+) -> Result<Result<(), String>, ConnectError> {
     let rs = tx.domain_records().await.map_err(connect_error)?;
     let mut ds: Vec<_> = in_force(&rs).into_iter().filter(|x| !is_builtin(&x.name)).collect();
     match ds.iter_mut().find(|x| x.name == d.name) {
         Some(x) => *x = d,
         None => ds.push(d),
     }
-    Ok(Catalog::new(&ds).is_ok())
+    Ok(Catalog::new(&ds).map(|_| ()))
 }
 
 /// The definition of a version under another number, as Go writes it again: its JSON with the version replaced in

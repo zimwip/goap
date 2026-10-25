@@ -540,7 +540,8 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   (`invalid domain: cannot publish: …`), a publish of a draft with issues refused. The domain of a request is read as
   `domainpb.DomainFromPB` reads it (`domainpb::definition`: the lists Go leaves nil, the form `pbconv.FormFromPB`
   drops when it does not read) and written as `json.Marshal` writes `def.Domain` (`decode::from_json` over the shape,
-  as `json.Unmarshal` reads it). A catalogue the domains in force would not make with the domain stays Go's to word.
+  as `json.Unmarshal` reads it). A domain the domains in force would
+  make no catalogue with gets the issue `Service.validateDomain` adds, in `typecat.New`'s words (`Catalog::new`).
   The JSON of every answer writes its doubles as protojson does (`goap-connect`'s formatter: `200`, not `200.0`,
   an exponent below 1e-6 or from 1e21 on), and an empty form or set of instance values is no field, as
   `pbconv.Struct` gives none.
