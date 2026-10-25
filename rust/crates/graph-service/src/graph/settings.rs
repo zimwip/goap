@@ -101,9 +101,6 @@ async fn run(tx: &mut Tx<'_, Session>, acc: &Access, me: &str, op: Op) -> Result
         Op::Get => Ok(None),
         Op::Stage(edits) => {
             let mut by_ns = settings_changes(tx, me).await?;
-            let mut spaces: Vec<&str> = edits.iter().map(|e| e.namespace.as_str()).collect();
-            spaces.extend(by_ns.keys().map(String::as_str));
-            served_spaces(tx, &spaces)?;
             for e in &edits {
                 if let Err(refused) = (Stage { tx, acc, me }).edit(&mut by_ns, e).await? {
                     return Ok(Some(refused));
@@ -113,7 +110,6 @@ async fn run(tx: &mut Tx<'_, Session>, acc: &Access, me: &str, op: Op) -> Result
         }
         Op::Save => {
             let by_ns = settings_changes(tx, me).await?;
-            served_spaces(tx, &by_ns.keys().map(String::as_str).collect::<Vec<_>>())?;
             for c in by_ns.values() {
                 if let Err(refused) = (Stage { tx, acc, me }).save(&c.id).await? {
                     return Ok(Some(refused));
@@ -131,15 +127,6 @@ async fn run(tx: &mut Tx<'_, Session>, acc: &Access, me: &str, op: Op) -> Result
             Ok(None)
         }
     }
-}
-
-/// The settings of the platform's namespaces are served for a caller administering the platform (`platform_served`):
-/// any other caller's are the Go service's.
-fn served_spaces(tx: &Tx<'_, Session>, spaces: &[&str]) -> Result<(), GraphError> {
-    for ns in spaces {
-        platform_served(tx, ns)?;
-    }
-    Ok(())
 }
 
 /// Runs one operation of the graph as the Go service runs it, in a transaction of its own: refused (the inner

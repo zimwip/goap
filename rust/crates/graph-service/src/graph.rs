@@ -394,17 +394,6 @@ async fn served_change(tx: &mut Tx<'_, Session>, id: &str) -> Result<ChangeId, G
     Ok(id)
 }
 
-/// The settings of the platform's namespaces are served for a caller administering the platform; any other caller's
-/// are the Go service's.
-pub(crate) fn platform_served(tx: &Tx<'_, Session>, namespace: &str) -> Result<(), GraphError> {
-    if is_platform_namespace(namespace) && !tx.env.administers {
-        return Err(GraphError::unimplemented(
-            "the settings of the platform's namespaces of a caller not administering the platform: not served here yet",
-        ));
-    }
-    Ok(())
-}
-
 /// The view of a change on a flow (empty: its active option), refusing a change that does not exist; a personal
 /// change is the Go service's.
 async fn change_world<'a, T: ReadTx>(tx: &'a T, id: &str, flow: &str) -> Result<World<'a, T>, GraphError> {
@@ -844,8 +833,7 @@ impl Graph {
     {
         caller.writes().map_err(connect_error)?;
         self.reached(&caller).await?;
-        let administers = caller.roles.iter().any(|r| r == ROLE_ADMIN);
-        self.transact(&caller, String::new(), administers, f).await
+        self.transact(&caller, String::new(), f).await
     }
 
     /// Runs a write naming changes, a person's too (Go's `PersonalScope` and `EnsureCaller` interceptors, then the
@@ -890,9 +878,8 @@ impl Graph {
             }
             let acc = Access::of(&caller, &tx).await.map_err(connect_error)?;
             drop(tx);
-            let administers = caller.roles.iter().any(|r| r == ROLE_ADMIN);
             return self
-                .transact(&caller, String::new(), administers, async |tx| f(tx, &acc).await)
+                .transact(&caller, String::new(), async |tx| f(tx, &acc).await)
                 .await;
         }
         let readable = Readable {
@@ -918,19 +905,16 @@ impl Graph {
             .map_err(|e| connect_error(GraphError::internal(e)))?;
         let acc = Access::of(&caller, &tx).await.map_err(connect_error)?;
         drop(tx);
-        let administers = acc.administers().map_err(connect_error)?;
         let end_user = if caller.subject.starts_with("system:") {
             caller.on_behalf_of.clone()
         } else {
             caller.subject.clone()
         };
-        stamp.on(self
-            .transact(&caller, end_user, administers, async |tx| f(tx, &acc).await)
-            .await)
+        stamp.on(self.transact(&caller, end_user, async |tx| f(tx, &acc).await).await)
     }
 
     /// Runs a write in one transaction of the store for a caller already let through.
-    async fn transact<T, F>(&self, caller: &Caller, end_user: String, administers: bool, f: F) -> Answer<T>
+    async fn transact<T, F>(&self, caller: &Caller, end_user: String, f: F) -> Answer<T>
     where
         F: for<'a, 'b> AsyncFnOnce(&'a mut Tx<'b, Session>) -> Result<T, GraphError>,
     {
@@ -947,7 +931,6 @@ impl Graph {
             actor: caller.subject.clone(),
             command: caller.command.clone(),
             catalog,
-            administers,
             // a platform service is not asked its rights on the projects, even acting for a person
             person: (!caller.subject.starts_with("system:")).then(|| caller.reader_or_self()),
             outbox: self.state.outbox,
@@ -2187,7 +2170,6 @@ impl pb::GraphService for Graph {
             actor: caller.subject.clone(),
             command: caller.command.clone(),
             catalog,
-            administers: false,
             person: None,
             outbox: false,
         };
@@ -4590,17 +4572,6 @@ fn review_pb(r: &ReviewObject) -> pb::ReviewResponse {
             versions: r.versions,
         }),
     }
-}
-
-/// The namespaces the platform graph holds (ADR 0154 §9): their writes are checked by the platform's validators,
-/// which the Go service runs.
-fn is_platform_namespace(ns: &str) -> bool {
-    matches!(
-        graph_core::model::namespace_of(ns),
-        graph_core::model::NAMESPACE_ORGANISATION
-            | graph_core::model::NAMESPACE_PLATFORM
-            | graph_core::model::NAMESPACE_METHODOLOGY
-    )
 }
 
 /// Whether a project or one above it is stopped (`access.Snapshot.ProjectStopped`, ADR 0138): the projects at the

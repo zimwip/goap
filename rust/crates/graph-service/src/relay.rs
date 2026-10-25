@@ -138,13 +138,26 @@ impl Relay {
     }
 
     /// Delivers the pending messages in order until none is left or one fails (`Relay.Drain`); a drain already at
-    /// work is left to deliver them, and this one returns at once (Go's `ErrBusy`, not an error here).
+    /// work is left to deliver them, and this one returns at once (Go's `ErrBusy`, not an error here). It only tells
+    /// the one at work to look again: kicking [`Relay::run`] from here would have it drain, find the relay busy and
+    /// kick itself again, never yielding its worker (and with it the I/O driver every request waits on).
     pub async fn drain(&self, store: &Store) -> anyhow::Result<()> {
-        let Ok(_held) = self.busy.try_lock() else {
-            self.again.store(true, Ordering::SeqCst);
-            self.kick.notify_one();
-            return Ok(());
-        };
+        loop {
+            let Ok(held) = self.busy.try_lock() else {
+                self.again.store(true, Ordering::SeqCst);
+                return Ok(());
+            };
+            self.deliver(store).await?;
+            drop(held);
+            // a drain that found this one at work after its last look: look again for it
+            if !self.again.load(Ordering::SeqCst) {
+                return Ok(());
+            }
+        }
+    }
+
+    /// Delivers what is pending, the relay held.
+    async fn deliver(&self, store: &Store) -> anyhow::Result<()> {
         loop {
             self.again.store(false, Ordering::SeqCst);
             let msgs = store.reader().await?.outbox_pending(self.table, BATCH).await?;
@@ -265,5 +278,20 @@ mod tests {
         assert_eq!(go_duration("24h"), Some(Duration::from_secs(86400)));
         assert_eq!(go_duration("3"), None);
         assert_eq!(go_duration(""), None);
+    }
+
+    #[tokio::test]
+    async fn a_drain_finding_the_relay_at_work_kicks_no_one() {
+        let store = Store::open(&graph_store::StoreConfig::Memory).await.unwrap();
+        let relay = Relay::new("graph", "event_outbox", Arc::new(Sink::Memory(Default::default())));
+        let held = relay.busy.try_lock().unwrap();
+        relay.drain(&store).await.unwrap();
+        assert!(
+            relay.again.load(Ordering::SeqCst),
+            "the one at work is told to look again"
+        );
+        let kicked = tokio::time::timeout(Duration::from_millis(20), relay.kick.notified()).await;
+        assert!(kicked.is_err(), "run is not woken to find the relay busy again");
+        drop(held);
     }
 }

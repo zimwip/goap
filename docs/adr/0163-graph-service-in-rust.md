@@ -434,7 +434,7 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   (`GetPendingSettings`, `StageSettings`, `SaveSettings`, `DiscardSettings`, `graph/settings.rs`) runs in one
   transaction, each of Go's operations a savepoint kept by `Tx::checkpoint` once it succeeds and rewound when refused,
   so a refusal keeps the steps before it as Go's separate transactions do; anything not served undoes the call for Go;
-  the platform's namespaces for a caller administering the platform only. The compare stack's Go graph asks a
+  the platform's namespaces for any caller (a person's edits gated and judged at the commit as Go's are). The compare stack's Go graph asks a
   registry reading it directly (through the compare proxy, a call made inside a call waits behind it). 6276 calls, the
   divergent ones the known ones.
 - The reads and writes around a change's work: `ReopenChangeImpacts` (`write::work`), `ValidateBoard`
@@ -545,4 +545,9 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   The JSON of every answer writes its doubles as protojson does (`goap-connect`'s formatter: `200`, not `200.0`,
   an exponent below 1e-6 or from 1e21 on), and an empty form or set of instance values is no field, as
   `pbconv.Struct` gives none.
+- The relay of an outbox never kicks itself: a drain finding the relay at work only tells the one at work to look
+  again (and that one looks again once it lets go, for a drain that came after its last look). Kicking `Relay::run`
+  from there had it drain, find the relay busy and kick itself again without ever yielding its worker, which held the
+  I/O driver: every request of the service then waited, its transaction left open (the service that "stops" under
+  load).
 - Not done yet: the rest of phase 4.
