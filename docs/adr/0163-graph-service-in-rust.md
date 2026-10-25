@@ -446,13 +446,14 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   (`graph_core::snapshot`: the head of a branch or a baseline, the reach of the reader, the provenance of each version,
   Go's indented JSON) and `ImportGraph` (`graph/import.rs`): one transaction, each of Go's operations a savepoint kept
   by `Tx::checkpoint`, so a step that fails keeps the steps before it, the change then purged in the same call with the
-  error in Go's words, the log positions and events of Go's separate transactions; a document the decoder refuses is
-  Go's (its messages). `ExportChangeProvenance` (`graph_core::prov`, Go's `prov.Export`): the change and its whole log
+  error in Go's words, the log positions and events of Go's separate transactions; a document the decoder refuses in
+  `encoding/json`'s words (below). `ExportChangeProvenance` (`graph_core::prov`, Go's `prov.Export`): the change and its whole log
   as PROV-O JSON-LD, the model calls left out for a reader without `prompt:inspect`.
 - The read queries of ADR 0160, `QueryView`: the openCypher subset in a crate of its own, `crates/cypher` (the tree,
   values and evaluation, RETURN, of `lib/cypher`), its parser written by hand after the grammar's rules (the white space
   each rule asks for or allows, the keywords no variable may take); a query it does not read with certainty (outside
-  ASCII, a parameter, what the subset leaves out) answers `unimplemented`, so the errors of the grammar stay Go's. The
+  ASCII, what the grammar refuses) answers `unimplemented`, so the errors of the grammar stay Go's; what the subset
+  leaves out it refuses in Go's words (below). The
   match (`graph_core::query`) is Go's depth first search in the same order, so the same reads, caps, notes and rows:
   Go's continuations become frames of a list the run follows, the bindings, the links a clause used and the trails of
   its patterns stacks of the run; outside a change the runs that learn what the caller reads (`mayReadNode`) are Go's
@@ -562,4 +563,14 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   fallback to Go). The scenario with a graph declared at an unreachable location: outbox and bus the same on both
   sides; what differs is the transport's words for the unreachable graph (Go's resolver, reqwest's), the lists ordered
   by ids each database draws (the PROV-O export, pages of links) and the cursors of the pages of changes.
+- The refusals no longer left to Go. `QueryView`: the parser reads the constructs the subset refuses as the grammar
+  reads them (UNION, WITH, the writes, UNWIND, list and pattern comprehensions, quantifiers, parameters, functions
+  unknown or in a namespace, a query without MATCH) and, the whole query read, answers the refusal Go's build meets
+  first, in its words and at its line and column (`cypher::parse::read`, `Error`); a `@` within a name is the
+  grammar's lexer refusing it (`token recognition error at: '@'`); what the grammar itself refuses stays Go's.
+  `ImportGraph` and the job `graph.import`: a snapshot is decoded as Go's `json.Decoder` with
+  `DisallowUnknownFields` decodes it (`graph_core::godecode`: the scanner's syntax errors over the first value, the
+  type errors and unknown fields with their struct and field path, the first kept while the decoding goes on, the
+  errors of `Time.UnmarshalJSON` and `time.Parse` with the layout RFC 3339 stopping it); a time Go reads that chrono
+  does not hold (an offset of 24 hours) or a value nested past 128 levels is still Go's.
 - Not done yet: the rest of phase 4.

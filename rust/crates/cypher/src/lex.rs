@@ -1,7 +1,9 @@
 //! The tokens of a query, as the lexer of the openCypher grammar (`lib/cypher/Cypher.g4`) cuts them: white space and
 //! comments are one token, `SP`, which the grammar asks for or allows at given places only, so each token says
-//! whether one precedes it. What this lexer does not read with certainty (a character outside ASCII outside a string,
-//! a parameter) is refused: the Go service then answers in the grammar's words.
+//! whether one precedes it. What this lexer does not read with certainty (a character outside ASCII outside a string)
+//! is refused: the Go service then answers in the grammar's words. A `@` within a name (`alm@Requirement` written
+//! without backticks) is the one character the grammar's lexer skips that is read here: [`lex`] says where it stands,
+//! and the name goes on through it.
 
 /// A token.
 #[derive(Debug, Clone, PartialEq)]
@@ -101,9 +103,23 @@ pub const KEYWORDS: [&str; 61] = [
     "EXTRACT",
 ];
 
-/// The tokens of a query; None when a character is not read here.
+/// The tokens of a query; None when a character is not read here, a `@` within a name included.
 pub fn tokens(src: &str) -> Option<Vec<Token>> {
+    lex(src).filter(|l| l.stray.is_none()).map(|l| l.tokens)
+}
+
+/// The tokens of a query and where the first `@` within a name stands, the character the grammar's lexer refuses
+/// (`token recognition error at: '@'`), skips, and goes on; the name is read here through it, as one.
+pub struct Lexed {
+    pub tokens: Vec<Token>,
+    pub stray: Option<usize>,
+}
+
+/// The tokens of a query, a `@` within a name read as a part of it; None when a character is not read here (a `@`
+/// after a keyword or before no name either).
+pub fn lex(src: &str) -> Option<Lexed> {
     let b = src.as_bytes();
+    let mut stray = None;
     let mut out = Vec::new();
     let mut i = 0;
     let mut sp = false;
@@ -128,7 +144,20 @@ pub fn tokens(src: &str) -> Option<Vec<Token>> {
         }
         let start = i;
         let tok = if c.is_ascii_alphabetic() || c == b'_' {
-            while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
+            loop {
+                while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
+                    i += 1;
+                }
+                // `dv@Thing`: the grammar's lexer cuts `dv`, refuses the `@`, then reads `Thing`; read here as one
+                // name, the tokens before the `@` are the grammar's as long as `dv` is no keyword
+                let more = b.get(i + 1).is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_');
+                if b.get(i) != Some(&b'@') || !more {
+                    break;
+                }
+                if Tok::Word(src[start..i].to_string()).is_keyword() {
+                    return None;
+                }
+                stray.get_or_insert(i);
                 i += 1;
             }
             if i < b.len() && !b[i].is_ascii() {
@@ -161,9 +190,6 @@ pub fn tokens(src: &str) -> Option<Vec<Token>> {
             return None;
         } else {
             let p = PUNCTS.iter().find(|p| src[i..].starts_with(**p))?;
-            if *p == "$" {
-                return None; // a parameter
-            }
             i += p.len();
             Tok::Punct(p)
         };
@@ -176,7 +202,7 @@ pub fn tokens(src: &str) -> Option<Vec<Token>> {
         end: b.len(),
         sp,
     });
-    Some(out)
+    Some(Lexed { tokens: out, stray })
 }
 
 /// A string literal at the start of `s`: its value and its length; None when its escapes are not the grammar's.
@@ -335,7 +361,10 @@ mod tests {
                 Tok::Eof,
             ]
         );
-        assert!(tokens("$p").is_none());
+        assert_eq!(toks("$p")[0], Tok::Punct("$"));
+        assert_eq!(lex("(n:dv@Thing)").unwrap().stray, Some(5));
+        assert!(tokens("(n:dv@Thing)").is_none());
+        assert!(lex("(n:IN@x)").is_none());
         assert!(tokens("'\\q'").is_none());
         assert!(tokens("été").is_none());
     }

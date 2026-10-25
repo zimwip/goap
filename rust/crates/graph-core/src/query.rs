@@ -76,8 +76,8 @@ fn invalid(msg: impl std::fmt::Display) -> GraphError {
     GraphError::new(Kind::Invalid, format!("invalid: {msg}"))
 }
 
-/// Runs a read query in a view. A query the Rust parser does not read is left to the Go service (unimplemented); a
-/// pattern with no anchor is invalid.
+/// Runs a read query in a view. A query the subset refuses is invalid, in Go's words when the Rust parser is certain of
+/// them, else left to the Go service (unimplemented); a pattern with no anchor is invalid.
 pub async fn query_view<T: ReadTx>(
     w: &World<'_, T>,
     is_a: IsA<'_>,
@@ -85,8 +85,10 @@ pub async fn query_view<T: ReadTx>(
     opts: &QueryOptions,
     visible: Option<Visible<'_>>,
 ) -> Result<QueryResult> {
-    let Some(q) = cypher::parse(src) else {
-        return Err(GraphError::unimplemented("a query the Rust parser does not read"));
+    let q = match cypher::parse::read(src) {
+        Ok(q) => q,
+        Err(Some(e)) => return Err(invalid(e)),
+        Err(None) => return Err(GraphError::unimplemented("a query the Rust parser does not read")),
     };
     let plan = plan(q, &opts.bind, visible.is_some()).map_err(invalid)?;
     // what the caller reads, learnt run after run

@@ -9,29 +9,91 @@ use crate::ast::{
     Return, SortItem, Unary,
 };
 use crate::eval::{Value, function};
-use crate::lex::{Tok, Token, tokens};
+use crate::lex::{Tok, Token};
 
 /// The longest query Parse reads (Go's `MaxQueryBytes`).
 pub const MAX_QUERY_BYTES: usize = 16 << 10;
 
+/// A query the subset does not read, in Go's words (`cypher.Error`): a construct it leaves out or the grammar's
+/// lexer refusing a character, at a line and a column of the query (1-based; 0: the query as a whole).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Error {
+    pub line: usize,
+    pub col: usize,
+    pub msg: String,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.line == 0 {
+            return f.write_str(&self.msg);
+        }
+        write!(f, "{}:{}: {}", self.line, self.col, self.msg)
+    }
+}
+
+impl Error {
+    /// The error at a byte of the query: its line, and its column counted in characters, as the grammar's.
+    fn at(src: &str, pos: usize, msg: String) -> Error {
+        let before = &src[..pos];
+        let line_start = before.rfind('\n').map_or(0, |n| n + 1);
+        Error {
+            line: before.matches('\n').count() + 1,
+            col: before[line_start..].chars().count() + 1,
+            msg,
+        }
+    }
+}
+
 /// Reads a query of the subset; None for a query not read here.
 pub fn parse(src: &str) -> Option<Query> {
-    if src.len() > MAX_QUERY_BYTES || src.trim().is_empty() {
-        return None;
+    read(src).ok()
+}
+
+/// Reads a query of the subset: the query, Go's refusal when this parser is certain of it (the whole query read as
+/// the grammar reads it, the construct Go refuses first named), else None: the query is not read here.
+pub fn read(src: &str) -> Result<Query, Option<Error>> {
+    if src.len() > MAX_QUERY_BYTES {
+        let msg = format!("a query is at most {MAX_QUERY_BYTES} bytes");
+        return Err(Some(Error { line: 0, col: 0, msg }));
     }
+    if src.trim().is_empty() {
+        let msg = "empty query".to_string();
+        return Err(Some(Error { line: 0, col: 0, msg }));
+    }
+    let lexed = crate::lex::lex(src).ok_or(None)?;
     let mut p = Parser {
         src,
-        t: tokens(src)?,
+        t: lexed.tokens,
         i: 0,
+        refused: Vec::new(),
     };
-    let q = p.query()?;
-    Some(q)
+    let q = p.query().ok_or(None)?;
+    // the grammar's lexer refuses a `@` within a name before the parser reads past it
+    if let Some(at) = lexed.stray {
+        return Err(Some(Error::at(src, at, "token recognition error at: '@'".into())));
+    }
+    // the refusal Go's build meets first: a UNION, then a WITH, then a write, then the first in the order it reads
+    if let Some((_, at, what)) = p.refused.iter().min_by_key(|(stage, _, _)| *stage) {
+        let msg = format!("{what} is not supported: the query language is read-only MATCH … RETURN (ADR 0160)");
+        return Err(Some(Error::at(src, *at, msg)));
+    }
+    q.ok_or(None)
 }
+
+/// When Go's build refuses a construct, first to last: a UNION, the first WITH, the first write, then the rest in
+/// the order of the query.
+const UNION: u8 = 0;
+const WITH: u8 = 1;
+const WRITE: u8 = 2;
+const READ: u8 = 3;
 
 struct Parser<'s> {
     src: &'s str,
     t: Vec<Token>,
     i: usize,
+    /// the constructs read that Go refuses: when, where, what
+    refused: Vec<(u8, usize, String)>,
 }
 
 impl Parser<'_> {
@@ -88,37 +150,224 @@ impl Parser<'_> {
         self.t[self.i.saturating_sub(1)].end
     }
 
-    fn query(&mut self) -> Option<Query> {
+    fn refuse(&mut self, stage: u8, at: usize, what: impl Into<String>) {
+        self.refused.push((stage, at, what.into()));
+    }
+
+    /// The query: its single queries joined by UNION; Some(None) for a query read but not of the subset (refused).
+    fn query(&mut self) -> Option<Option<Query>> {
+        let q = self.single_query()?;
+        while self.kw("UNION") {
+            let at = self.peek().start;
+            self.bump();
+            if self.kw("ALL") {
+                if !self.sp() {
+                    return None;
+                }
+                self.bump();
+            }
+            self.refuse(UNION, at, "UNION");
+            self.single_query()?;
+        }
+        self.eat(";");
+        matches!(self.peek().tok, Tok::Eof).then_some(q)
+    }
+
+    /// A single query: parts ended by WITH, then reading clauses and RETURN, or writes and an optional RETURN. Some
+    /// query when it is MATCH clauses and RETURN only.
+    fn single_query(&mut self) -> Option<Option<Query>> {
+        let mut part = self.peek().start;
         let mut matches = Vec::new();
+        let mut subset = true;
+        let mut matched = false;
+        let mut writes = false;
         loop {
-            let optional = if self.kw("OPTIONAL") {
+            if self.kw("OPTIONAL") || self.kw("MATCH") {
+                if writes {
+                    return None;
+                }
+                matches.push(self.match_clause()?);
+                matched = true;
+            } else if self.kw("UNWIND") {
+                if writes {
+                    return None;
+                }
+                let at = self.peek().start;
+                self.bump();
+                self.expr()?;
+                self.as_variable()?;
+                self.refuse(READ, at, "UNWIND");
+                subset = false;
+            } else if let Some((at, word)) = self.write_clause()? {
+                self.refuse(WRITE, at, format!("a write ({word})"));
+                writes = true;
+                subset = false;
+            } else if self.kw("WITH") {
+                let at = self.peek().start;
+                self.bump();
+                self.projection()?;
+                self.filter()?;
+                self.refuse(WITH, at, "WITH");
+                subset = false;
+                writes = false;
+                matched = false;
+                part = self.peek().start;
+            } else {
+                break;
+            }
+        }
+        if !self.kw("RETURN") {
+            return writes.then_some(None);
+        }
+        if !matched && !writes {
+            self.refuse(READ, part, "a query without MATCH");
+        }
+        self.bump();
+        let ret = self.projection()?;
+        Some(subset.then_some(Query { matches, ret }))
+    }
+
+    fn match_clause(&mut self) -> Option<Match> {
+        let optional = self.kw("OPTIONAL");
+        if optional {
+            self.bump();
+            if !self.sp() {
+                return None;
+            }
+        }
+        self.expect_kw("MATCH")?;
+        let patterns = self.patterns()?;
+        let filter = self.filter()?;
+        Some(Match {
+            optional,
+            patterns: Arc::new(patterns),
+            filter,
+        })
+    }
+
+    /// `SP AS SP variable`.
+    fn as_variable(&mut self) -> Option<String> {
+        if !self.sp() || !self.kw("AS") {
+            return None;
+        }
+        self.bump();
+        if !self.sp() {
+            return None;
+        }
+        self.variable()
+    }
+
+    /// A write clause, read as the grammar reads it (CREATE, MERGE, DELETE, SET, REMOVE): where it starts and its
+    /// first word as Go names it, None when the clause is no write, refused when the grammar does not read it.
+    fn write_clause(&mut self) -> Option<Option<(usize, String)>> {
+        let start = self.i;
+        if self.kw("CREATE") {
+            self.bump();
+            self.patterns()?;
+        } else if self.kw("MERGE") {
+            self.bump();
+            self.pattern_part()?;
+            while self.sp() && self.kw("ON") {
+                self.bump();
+                if !self.sp() || !(self.kw("MATCH") || self.kw("CREATE")) {
+                    return None;
+                }
                 self.bump();
                 if !self.sp() {
                     return None;
                 }
-                self.expect_kw("MATCH")?;
-                true
-            } else if self.kw("MATCH") {
+                self.set_clause()?;
+            }
+        } else if self.kw("DELETE") || self.kw("DETACH") {
+            if self.kw("DETACH") {
                 self.bump();
-                false
+                if !self.sp() {
+                    return None;
+                }
+            }
+            self.expect_kw("DELETE")?;
+            self.expr()?;
+            while self.eat(",") {
+                self.expr()?;
+            }
+        } else if self.kw("SET") {
+            self.set_clause()?;
+        } else if self.kw("REMOVE") {
+            self.bump();
+            if !self.sp() {
+                return None;
+            }
+            self.remove_item()?;
+            while self.eat(",") {
+                self.remove_item()?;
+            }
+        } else {
+            return Some(None);
+        }
+        // Go's `firstWord`: the clause's text up to its first white space, in capitals
+        let at = self.t[start].start;
+        let text = &self.src[at..self.prev_end()];
+        let word = text.split(char::is_whitespace).next().unwrap_or_default();
+        Some(Some((at, word.to_uppercase())))
+    }
+
+    /// `SET item, …`: a property, a variable set or added to, or labels.
+    fn set_clause(&mut self) -> Option<()> {
+        self.expect_kw("SET")?;
+        loop {
+            if self.symbolic_at(self.i) && matches!(self.next_tok().tok, Tok::Punct("=" | "+=" | ":")) {
+                self.variable()?;
+                if self.punct(":") {
+                    self.labels()?;
+                } else {
+                    self.bump();
+                    self.expr()?;
+                }
             } else {
-                break;
-            };
-            let patterns = self.patterns()?;
-            let filter = self.filter()?;
-            matches.push(Match {
-                optional,
-                patterns: Arc::new(patterns),
-                filter,
-            });
+                self.property_expression()?;
+                self.expect("=")?;
+                self.expr()?;
+            }
+            if !self.eat(",") {
+                return Some(());
+            }
         }
-        if matches.is_empty() {
-            return None;
+    }
+
+    /// A variable and labels, or a property.
+    fn remove_item(&mut self) -> Option<()> {
+        if self.symbolic_at(self.i) && matches!(self.next_tok().tok, Tok::Punct(":")) {
+            self.variable()?;
+            self.labels()?;
+            return Some(());
         }
-        self.expect_kw("RETURN")?;
-        let ret = self.projection()?;
-        self.eat(";");
-        matches!(self.peek().tok, Tok::Eof).then_some(Query { matches, ret })
+        self.property_expression()
+    }
+
+    /// An atom and one property lookup or more.
+    fn property_expression(&mut self) -> Option<()> {
+        self.atom()?;
+        self.expect(".")?;
+        self.schema_name()?;
+        while self.eat(".") {
+            self.schema_name()?;
+        }
+        Some(())
+    }
+
+    /// Whether the token at `i` is a symbolic name of the grammar: a name no keyword but COUNT, FILTER, EXTRACT, ANY,
+    /// NONE and SINGLE, or one between backticks.
+    fn symbolic_at(&self, i: usize) -> bool {
+        match &self.t[i].tok {
+            Tok::Escaped(_) => true,
+            t @ Tok::Word(_) => {
+                !t.is_keyword()
+                    || ["COUNT", "FILTER", "EXTRACT", "ANY", "NONE", "SINGLE"]
+                        .iter()
+                        .any(|k| t.is(k))
+            }
+            _ => false,
+        }
     }
 
     /// `WHERE SP expression`, when there is one.
@@ -179,6 +428,8 @@ impl Parser<'_> {
         }
         if self.punct("{") {
             n.props = self.props()?;
+        } else if self.punct("$") {
+            self.props_parameter()?;
         }
         self.expect(")")?;
         Some(n)
@@ -217,6 +468,8 @@ impl Parser<'_> {
             }
             if self.punct("{") {
                 r.props = self.props()?;
+            } else if self.punct("$") {
+                self.props_parameter()?;
             }
             self.expect("]")?;
         }
@@ -259,6 +512,14 @@ impl Parser<'_> {
             return None;
         }
         Some(r)
+    }
+
+    /// Properties given as a parameter, which Go refuses.
+    fn props_parameter(&mut self) -> Option<()> {
+        let start = self.peek().start;
+        self.parameter()?;
+        self.refuse(READ, start, "a parameter");
+        Some(())
     }
 
     fn props(&mut self) -> Option<Vec<(String, Expr)>> {
@@ -625,6 +886,9 @@ impl Parser<'_> {
                 Some(Expr::Lit(Value::Num(f)))
             }
             Tok::Punct("[") => {
+                if self.comprehension() {
+                    return Some(Expr::Lit(Value::Null));
+                }
                 self.bump();
                 let mut items = Vec::new();
                 if !self.eat("]") {
@@ -639,12 +903,18 @@ impl Parser<'_> {
                 Some(Expr::List(items))
             }
             Tok::Punct("{") => Some(Expr::Map(self.map_literal()?)),
+            Tok::Punct("$") => {
+                self.parameter()?;
+                self.refuse(READ, t.start, "a parameter");
+                Some(Expr::Lit(Value::Null))
+            }
             Tok::Punct("(") => {
-                let at = self.i;
+                let (at, refused) = (self.i, self.refused.len());
                 if let Some(p) = self.chain().filter(|p| !p.rels.is_empty()) {
                     return exists(vec![p], None);
                 }
                 self.i = at;
+                self.refused.truncate(refused);
                 self.bump();
                 let e = self.expr()?;
                 self.expect(")")?;
@@ -682,20 +952,47 @@ impl Parser<'_> {
                     args: Vec::new(),
                 }))
             }
+            Tok::Word(w)
+                if ["ALL", "ANY", "NONE", "SINGLE"]
+                    .iter()
+                    .any(|k| w.eq_ignore_ascii_case(k))
+                    && matches!(self.next_tok().tok, Tok::Punct("(")) =>
+            {
+                if self.quantifier() {
+                    return Some(Expr::Lit(Value::Null));
+                }
+                self.call()
+            }
             Tok::Word(_) | Tok::Escaped(_) if matches!(self.next_tok().tok, Tok::Punct("(")) => self.call(),
+            Tok::Word(_) | Tok::Escaped(_) if self.namespaced_call() => self.call(),
             Tok::Word(_) | Tok::Escaped(_) => Some(Expr::Var(self.variable()?)),
             _ => None,
         }
     }
 
-    /// A function call: a known function or an aggregate, by its name in any case.
+    /// A function call: a known function or an aggregate, by its name in any case; Go refuses any other, and a name
+    /// in a namespace (`a.b(x)`).
     fn call(&mut self) -> Option<Expr> {
+        let start = self.peek().start;
+        let mut namespaced = false;
+        while matches!(self.next_tok().tok, Tok::Punct(".")) {
+            if !self.symbolic_at(self.i) {
+                return None;
+            }
+            self.bump();
+            self.bump();
+            namespaced = true;
+        }
+        if !self.symbolic_at(self.i) {
+            return None;
+        }
         let name = match &self.bump().tok {
             Tok::Word(w) | Tok::Escaped(w) => w.to_lowercase(),
             _ => return None,
         };
-        if function(&name).is_none() && !AGGREGATES.contains(&name.as_str()) {
-            return None;
+        if namespaced || (function(&name).is_none() && !AGGREGATES.contains(&name.as_str())) {
+            let text = self.src[start..self.prev_end()].to_string();
+            self.refuse(READ, start, format!("the function {text}"));
         }
         self.expect("(")?;
         let mut c = Call {
@@ -718,6 +1015,103 @@ impl Parser<'_> {
             }
         }
         Some(Expr::Call(c))
+    }
+
+    /// `$name` or `$1`, with no white space within.
+    fn parameter(&mut self) -> Option<()> {
+        self.expect("$")?;
+        if self.sp() {
+            return None;
+        }
+        let t = self.peek();
+        let decimal = matches!(t.tok, Tok::Int(_)) && self.src[t.start..t.end].bytes().all(|c| c.is_ascii_digit());
+        if !decimal && !self.symbolic_at(self.i) {
+            return None;
+        }
+        self.bump();
+        Some(())
+    }
+
+    /// Whether a name in a namespace and a parenthesis start here (`a.b(`), a function named so: never a property.
+    fn namespaced_call(&self) -> bool {
+        let mut j = self.i;
+        let mut dots = 0;
+        while self.symbolic_at(j)
+            && matches!(self.t.get(j + 1).map(|t| &t.tok), Some(Tok::Punct(".")))
+            && self.t.get(j + 2).is_some_and(|t| !t.sp)
+            && !self.t[j + 1].sp
+        {
+            j += 2;
+            dots += 1;
+        }
+        dots > 0 && self.symbolic_at(j) && matches!(self.t.get(j + 1).map(|t| &t.tok), Some(Tok::Punct("(")))
+    }
+
+    /// `variable SP IN SP expression (SP? WHERE SP expression)?`; whether there is a WHERE.
+    fn filter_expression(&mut self) -> Option<bool> {
+        self.variable()?;
+        if !self.sp() || !self.kw("IN") {
+            return None;
+        }
+        self.bump();
+        if !self.sp() {
+            return None;
+        }
+        self.expr()?;
+        Some(self.filter()?.is_some())
+    }
+
+    /// A quantifier (`all(x IN l WHERE …)`), which Go refuses: whether one is read; else nothing is.
+    fn quantifier(&mut self) -> bool {
+        let (at, refused) = (self.i, self.refused.len());
+        let start = self.peek().start;
+        self.bump();
+        if self.eat("(") && self.filter_expression().is_some() && self.eat(")") {
+            self.refused.truncate(refused);
+            self.refuse(READ, start, "a quantifier (all, any, none, single)");
+            return true;
+        }
+        self.i = at;
+        self.refused.truncate(refused);
+        false
+    }
+
+    /// A list or pattern comprehension (`[x IN l WHERE … | …]`, `[(n)-->(m) | m.key]`), which Go refuses: whether one
+    /// is read; else nothing is. A list of the grammar first: `[x IN l]` is a list.
+    fn comprehension(&mut self) -> bool {
+        let (at, refused) = (self.i, self.refused.len());
+        let start = self.peek().start;
+        self.bump();
+        let read = |p: &mut Self| -> Option<()> {
+            if p.punct("(") || matches!(p.next_tok().tok, Tok::Punct("=")) {
+                if !p.punct("(") {
+                    p.variable()?;
+                    p.expect("=")?;
+                }
+                p.chain().filter(|c| !c.rels.is_empty())?;
+                p.filter()?;
+                p.expect("|")?;
+                p.expr()?;
+            } else {
+                let filtered = p.filter_expression()?;
+                let mapped = p.eat("|");
+                if mapped {
+                    p.expr()?;
+                }
+                if !filtered && !mapped {
+                    return None;
+                }
+            }
+            p.expect("]")
+        };
+        if read(self).is_some() {
+            self.refused.truncate(refused);
+            self.refuse(READ, start, "a list comprehension");
+            return true;
+        }
+        self.i = at;
+        self.refused.truncate(refused);
+        false
     }
 
     fn case(&mut self) -> Option<Expr> {
@@ -807,5 +1201,61 @@ mod tests {
         assert!(
             parse("MATCH (n) WHERE (n)-->(:B) AND NOT n.x IS NULL RETURN n.y STARTS WITH 'a', [1, 2][0..1]").is_some()
         );
+    }
+
+    #[test]
+    fn refuses_in_go_words_what_it_reads_whole() {
+        const RO: &str = "is not supported: the query language is read-only MATCH … RETURN (ADR 0160)";
+        for (src, want) in [
+            (
+                "MATCH (n:dv@Thing) RETURN $p",
+                "1:12: token recognition error at: '@'".to_string(),
+            ),
+            ("RETURN 1", format!("1:1: a query without MATCH {RO}")),
+            ("\n  RETURN 1", format!("2:3: a query without MATCH {RO}")),
+            ("UNWIND [1] AS x MATCH (n) RETURN n", format!("1:1: UNWIND {RO}")),
+            ("MATCH (n) SET n.x = $p RETURN n", format!("1:11: a write (SET) {RO}")),
+            (
+                "MATCH (n) CREATE(m) RETURN m",
+                format!("1:11: a write (CREATE(M)) {RO}"),
+            ),
+            ("MATCH (n) DETACH DELETE n", format!("1:11: a write (DETACH) {RO}")),
+            (
+                "MATCH (n) CREATE (m) WITH m MATCH (o) RETURN o",
+                format!("1:22: WITH {RO}"),
+            ),
+            ("MATCH (n) RETURN n UNION RETURN 1", format!("1:20: UNION {RO}")),
+            (
+                "MATCH (n) RETURN [x IN [1] | $p]",
+                format!("1:18: a list comprehension {RO}"),
+            ),
+            (
+                "MATCH (n) RETURN [(n)-->(m) | m]",
+                format!("1:18: a list comprehension {RO}"),
+            ),
+            (
+                "MATCH (n) RETURN single (x IN [1])",
+                format!("1:18: a quantifier (all, any, none, single) {RO}"),
+            ),
+            ("MATCH (n) RETURN any(x)", format!("1:18: the function any {RO}")),
+            ("MATCH (n) RETURN n.key (1)", format!("1:18: the function n.key {RO}")),
+            (
+                "MATCH (n {k: $p}) WHERE foo(n) RETURN n",
+                format!("1:14: a parameter {RO}"),
+            ),
+        ] {
+            assert_eq!(read(src).err().flatten().map(|e| e.to_string()), Some(want), "{src}");
+        }
+        // what the grammar refuses first, or a list of the grammar, is not refused here
+        for src in [
+            "MATCH (n:dv@Thing RETURN n",
+            "MATCH (n) RETURN $ p",
+            "WITH 1 AS x",
+            "MATCH (n) CREATE (m) MATCH (o) RETURN o",
+            "MATCH (n) RETURN [(n)-->(m) WHERE m.a = 1]",
+        ] {
+            assert_eq!(read(src).err(), Some(None), "{src}");
+        }
+        assert!(read("MATCH (n) RETURN [x IN [1]], [(n)-->(m)]").is_ok());
     }
 }

@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::{
-    GraphError, Result, gojson,
+    GraphError, Result,
+    godecode::{self, Fail, Struct, Ty},
+    gojson,
     model::{Baseline, BaselineId, ChangeId, Link, Node, NodeRef, branch_of, namespace_of},
     reach::Reach,
     read,
@@ -151,11 +153,57 @@ pub fn rfc3339(t: &DateTime<FixedOffset>) -> String {
     }
 }
 
-/// Decodes a JSON snapshot (Go's `ParseSnapshot`): `None` for a text Go would refuse to decode, whose message is
-/// Go's own; else the snapshot, checked.
+/// The Go types of a snapshot, as `ParseSnapshot` decodes it.
+static LINK: Struct = Struct {
+    name: "SnapshotLink",
+    go: "graph.SnapshotLink",
+    fields: &[("type", Ty::Str), ("to", Ty::Str), ("props", Ty::Map)],
+};
+static PROVENANCE: Struct = Struct {
+    name: "SnapshotProvenance",
+    go: "graph.SnapshotProvenance",
+    fields: &[
+        ("version", Ty::Int),
+        ("change", Ty::Str),
+        ("producedBy", Ty::Str),
+        ("model", Ty::Bool),
+    ],
+};
+static NODE: Struct = Struct {
+    name: "SnapshotNode",
+    go: "graph.SnapshotNode",
+    fields: &[
+        ("key", Ty::Str),
+        ("type", Ty::Str),
+        ("state", Ty::Str),
+        ("owner", Ty::Str),
+        ("props", Ty::Map),
+        ("links", Ty::Slice(&Ty::Struct(&LINK), "[]graph.SnapshotLink")),
+        ("provenance", Ty::Ptr(&PROVENANCE)),
+    ],
+};
+static SNAPSHOT: Struct = Struct {
+    name: "Snapshot",
+    go: "graph.Snapshot",
+    fields: &[
+        ("format", Ty::Str),
+        ("namespace", Ty::Str),
+        ("branch", Ty::Str),
+        ("baseline", Ty::Str),
+        ("exportedAt", Ty::Time),
+        ("nodes", Ty::Slice(&Ty::Struct(&NODE), "[]graph.SnapshotNode")),
+    ],
+};
+
+/// Decodes a JSON snapshot (Go's `ParseSnapshot`, `encoding/json`'s errors in its words): the snapshot, checked;
+/// `None` for a text Go reads that is not read here (nested past what is read, a time Rust's types do not hold).
 pub fn parse_snapshot(data: &str) -> Option<Result<Snapshot>> {
-    let mut de = serde_json::Deserializer::from_str(data);
-    let s = Snapshot::deserialize(&mut de).ok()?;
+    let v = match godecode::decode(data.as_bytes(), &SNAPSHOT) {
+        Ok(v) => v,
+        Err(Fail::Go(e)) => return Some(Err(GraphError::invalid(format!("parse snapshot: {e}")))),
+        Err(Fail::Unsure) => return None,
+    };
+    let s = Snapshot::deserialize(v).ok()?;
     Some(s.check().map(|()| s))
 }
 
