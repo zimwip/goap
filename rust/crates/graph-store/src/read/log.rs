@@ -73,9 +73,7 @@ impl Session {
         let s = self.sql;
         let what = format!("log of change {}", f.change);
         if s.pg && !f.change.is_empty() && uuid::Uuid::try_parse(&f.change).is_err() {
-            return Err(GraphError::unimplemented(
-                "a change id PostgreSQL does not read: the error Go words is not served here yet",
-            ));
+            return Err(GraphError::invalid(format!("log: {}", super::not_uuid(&f.change))));
         }
         let (w, args) = self.log_where(f, true);
         let mut q = format!(

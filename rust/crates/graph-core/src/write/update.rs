@@ -152,9 +152,7 @@ impl<S: WriteTx> Tx<'_, S> {
             return Ok(());
         }
         let Some(mut b) = self.store.branch(namespace_of(&c.namespace), &c.branch).await? else {
-            return Err(GraphError::unimplemented(
-                "a change naming a branch the store does not hold: answered by the Go service",
-            ));
+            return Err(GraphError::not_found(format!("branch {}", c.branch)));
         };
         if b.origin == change_branch_origin(&c.id) {
             b.status = "abandoned".into();

@@ -197,8 +197,18 @@ fn sqlite_rows(c: &SqliteConn, text: &str, args: &[Arg]) -> Result<Vec<Row>, Sto
 }
 
 /// A uuid, as the SQL stores key their nodes: an id that is none names no node (Go's `uuidIDs`).
-fn is_uuid(s: &str) -> bool {
+pub(crate) fn is_uuid(s: &str) -> bool {
     uuid::Uuid::try_parse(s).is_ok()
+}
+
+/// What PostgreSQL says of an id that is no uuid (its message of SQLSTATE 22P02).
+pub(crate) fn not_uuid(id: &str) -> String {
+    format!("invalid input syntax for type uuid: \"{id}\"")
+}
+
+/// The error pgx gives of an id that is no uuid, when Go's store passes it on as is.
+pub(crate) fn not_uuid_raw(id: &str) -> GraphError {
+    GraphError::internal(format!("ERROR: {} (SQLSTATE 22P02)", not_uuid(id)))
 }
 
 fn props_of(v: serde_json::Value) -> graph_core::model::Props {
@@ -436,9 +446,7 @@ impl ReadTx for Session {
         if self.sql.pg
             && let Some(id) = ids.iter().find(|i| !is_uuid(i.as_str()))
         {
-            return Err(GraphError::unimplemented(format!(
-                "baseline {id}: not an id PostgreSQL reads, the error Go words is not served here yet"
-            )));
+            return Err(not_uuid_raw(id.as_str()));
         }
         Ok(self
             .rows(self.sql.baseline_headers_of(namespace, ids))

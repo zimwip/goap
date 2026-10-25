@@ -137,18 +137,31 @@ impl SmartTags {
         self.state.store.writer().await.map_err(internal)
     }
 
-    /// Refuses versions that do not exist (`VersionsExist` over the graph's `Node`). A node id that is no UUID is the
-    /// Go service's: its error comes from PostgreSQL.
+    /// Refuses versions that do not exist (`VersionsExist` over the graph's `Node`: a version 0 is the latest on
+    /// main). A node id that is no UUID PostgreSQL refuses, in its words, as Go's store passes them on.
     async fn exists(&self, tx: &Session, rs: &[(String, i32)]) -> Result<(), ConnectError> {
         for (id, v) in rs {
+            let what = if *v == 0 {
+                format!("node {id} on main")
+            } else {
+                format!("node {id}@v{v}")
+            };
+            let refused = |why: &str| invalid(format!("version {id}@v{v}: {what}: {why}"));
             if uuid::Uuid::parse_str(id).is_err() {
-                return Err(connect_error(GraphError::unimplemented(
-                    "a smart tag naming a node id that is no UUID: not served here yet",
-                )));
+                if self.state.store.dialect() == graph_store::Dialect::Postgres {
+                    return Err(refused(&format!(
+                        "invalid input syntax for type uuid: \"{id}\": invalid"
+                    )));
+                }
+                return Err(refused("not found"));
             }
-            let r = NodeRef::new(NodeId(id.clone()), *v);
-            if tx.node(&r).await.map_err(connect_error)?.is_none() {
-                return Err(invalid(format!("version {id}@v{v}: node {id}@v{v}: not found")));
+            let node = if *v == 0 {
+                tx.latest_on(&NodeId(id.clone()), "main").await
+            } else {
+                tx.node(&NodeRef::new(NodeId(id.clone()), *v)).await
+            };
+            if node.map_err(connect_error)?.is_none() {
+                return Err(refused("not found"));
             }
         }
         Ok(())

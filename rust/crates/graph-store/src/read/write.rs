@@ -825,9 +825,7 @@ impl Session {
     pub async fn delete_tag(&self, id: &str) -> Result<(), GraphError> {
         let what = format!("tag {id}");
         if self.sql.pg && uuid::Uuid::try_parse(id).is_err() {
-            return Err(GraphError::unimplemented(format!(
-                "{what}: not an id PostgreSQL reads, the error Go words is not served here yet"
-            )));
+            return Err(GraphError::invalid(format!("{what}: {}", super::not_uuid(id))));
         }
         let n = self
             .run(

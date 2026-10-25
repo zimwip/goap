@@ -53,9 +53,7 @@ impl Session {
     pub async fn tags(&self, namespace: &str, name: &str, node: &str) -> Result<Vec<Tag>, GraphError> {
         let s = self.sql;
         if s.pg && !node.is_empty() && uuid::Uuid::try_parse(node).is_err() {
-            return Err(GraphError::unimplemented(
-                "a node id PostgreSQL does not read: the error Go words is not served here yet",
-            ));
+            return Err(super::not_uuid_raw(node));
         }
         let mut q = format!(
             "SELECT {}, name, namespace, {}, version, by, created_at FROM tag WHERE {}",
