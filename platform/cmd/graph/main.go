@@ -6,6 +6,7 @@ import (
 
 	"context"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -100,7 +101,37 @@ func main() {
 	var domainStore domainsvc.Store = domainsvc.NewMemoryStore()
 	var smartTagStore smarttagsvc.Store = smarttagsvc.NewMemoryStore()
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
-	if pool := platform.OptionalPostgres(ctx, log, graph.Migrations); pool != nil {
+	if path := os.Getenv("GOAP_SQLITE_PATH"); path != "" && os.Getenv("GOAP_DB_DSN") == "" {
+		// a SQLite file (the local stack of goap-local): the graph, its domain registry and its smart tags in it, the
+		// reads on read-only connections
+		db, err := platform.OpenSQLite(ctx, path)
+		if err != nil {
+			platform.Fatal(log, "sqlite", err)
+		}
+		defer db.Close()
+		for _, m := range []struct {
+			component string
+			fs        fs.FS
+		}{{"graph", graph.SQLiteMigrations}, {"registry", domainsvc.SQLiteMigrations}, {"smarttags", smarttagsvc.SQLiteMigrations}} {
+			if err := platform.MigrateSQLite(ctx, db, m.component, m.fs, "migrations_sqlite"); err != nil {
+				platform.Fatal(log, "migrate "+m.component, err)
+			}
+		}
+		if err := graph.CheckReferences(ctx, db); err != nil {
+			platform.Fatal(log, "database", err)
+		}
+		read, err := platform.OpenSQLiteReader(ctx, path, 4)
+		if err != nil {
+			platform.Fatal(log, "sqlite readers", err)
+		}
+		defer read.Close()
+		repo = graph.NewSQLite(db).WithReader(read)
+		memory = false
+		domainStore = domainsvc.SQLStore{DB: db, Read: read}
+		smartTagStore = smarttagsvc.SQLStore{DB: db}
+		srv.Readiness(db.PingContext)
+		log.Info("storage", "sqlite", path)
+	} else if pool := platform.OptionalPostgres(ctx, log, graph.Migrations); pool != nil {
 		defer pool.Close()
 		// the domain registry keeps its versions next to the graph they define
 		if err := platform.Migrate(ctx, log, pool, domainsvc.Migrations, "migrations"); err != nil {
@@ -137,7 +168,11 @@ func main() {
 	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
 	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
 	g.Resolvers = graphsvc.Resolvers()   // the sources of the logical URLs beyond its namespaces (ADR 0154)
-	// the events of the graph (changes, nodes, baselines) go through its outbox to the bus (ADR 0136)
+	// the events of the graph (changes, nodes, baselines) go through its outbox to the bus (ADR 0136), named apart
+	// from the platform graph's in a content graph
+	if content {
+		g.Origin = "graph-content"
+	}
 	outbox.Start(ctx, g.Observe(outbox.NATS(events)), log)
 	// the graph judges nodes by the types of the published domains (ADR 0012): the domain registry served here is the
 	// reference (ADR 0125 §3), the graph holds a copy reloaded when a version is published or archived; the methodology
@@ -292,10 +327,15 @@ func main() {
 	jobs := jobkit.NewClient(platform.H2CClient(), platform.Env("GOAP_JOBS_URL", "http://localhost:8091"), os.Getenv("GOAP_JOB_TOKEN"), telemetry.ClientOptions()...)
 	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor(), Projects: directory.MayAccessProject, Stopped: directory.ProjectStopped,
 		Jobs: jobs}
-	path, graphService := graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), graphHandler.Positions(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...)
 	if content {
-		// the jobs, the domain registry, the smart tags and the imports are the platform graph's (a job of a content
-		// namespace, a smart tag of its versions: steps to come of ADR 0154)
+		graphHandler.Space = "content" // its exports and imports are jobs of kinds of its own
+	}
+	path, graphService := graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), graphHandler.Positions(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...)
+	// the exports and imports of the graph's namespaces, a worker of the job service
+	go (&jobkit.Worker{Queue: jobs, ID: jobkit.WorkerID("graph"), Kinds: graphHandler.JobRunners(), Log: log}).Run(ctx)
+	if content {
+		// the domain registry, the smart tags and the imports are the platform graph's (a smart tag of a content
+		// graph's versions: a step to come of ADR 0154)
 		srv.Mount(path, platform.ReadOnlyRequests(graphService))
 		if err := srv.Run(); err != nil {
 			platform.Fatal(log, "server", err)
@@ -303,7 +343,6 @@ func main() {
 		return
 	}
 	graphHandler.Demo = devseed.DemoLoader(directory) // the "Load demo data" setting; the alm domain must be published
-	go (&jobkit.Worker{Queue: jobs, ID: jobkit.WorkerID("graph"), Kinds: graphHandler.JobRunners(), Log: log}).Run(ctx)
 	// the calls on the namespaces other graphs hold go to them, the declared graph sources driving them (ADR 0154 §9)
 	graphService = &graphsvc.Router{Local: graphService, Sources: g.Sources, LocalSource: graphsvc.PlatformSource, Client: platform.H2CClient(), HasChange: g.HasChange}
 	// the requests that only read (Get…, List…: platform.ReadOnlyRequests) take the readers of the store

@@ -19,7 +19,7 @@ type EventSink interface {
 	Publish(ctx context.Context, subject string, v any) error
 }
 
-// OutboxOrigin names the graph in the ids of its events (ADR 0136).
+// OutboxOrigin names the graph in the ids of its events (ADR 0136), unless Graph.Origin names it otherwise.
 const OutboxOrigin = "graph"
 
 // Observe makes the graph emit its events (ADR 0136): the changes (change.created, change.applied...), the technical
@@ -35,7 +35,11 @@ func (g *Graph) Observe(sink outbox.Sink) *outbox.Relay {
 	if !ok {
 		panic(fmt.Sprintf("graph: repository %T keeps no outbox", g.base))
 	}
-	g.relay = &outbox.Relay{Origin: OutboxOrigin, Store: store, Sink: sink}
+	origin := g.Origin
+	if origin == "" {
+		origin = OutboxOrigin
+	}
+	g.relay = &outbox.Relay{Origin: origin, Store: store, Sink: sink}
 	a := g.repo.(*ambientRepo)
 	a.Repo = &observedRepo{Repo: a.Repo, g: g}
 	return g.relay

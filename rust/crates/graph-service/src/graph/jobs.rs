@@ -212,7 +212,7 @@ impl Graph {
         params.insert("baselineId".into(), m.baseline_id.clone().into());
         params.insert("format".into(), format.into());
         let spec = Spec {
-            kind: KIND_EXPORT.into(),
+            kind: self.kind(KIND_EXPORT),
             label,
             target: ns,
             params,
@@ -255,7 +255,7 @@ impl Graph {
         params.insert("intent".into(), m.intent.clone().into());
         params.insert("methodology".into(), m.methodology.clone().into());
         let spec = Spec {
-            kind: KIND_IMPORT.into(),
+            kind: self.kind(KIND_IMPORT),
             label: format!("Import a snapshot of {} ({} nodes)", s.namespace, s.nodes.len()),
             target: s.namespace.clone(),
             params,
@@ -435,9 +435,18 @@ fn gate_failure(e: ConnectError) -> String {
 }
 
 impl Graph {
+    /// The name of a job kind of this graph (`Handler.Kind`): as is for the platform graph, followed by its space for
+    /// another (`graph.export.content`), so that a job reaches the worker of the graph holding its namespace.
+    fn kind(&self, kind: &str) -> String {
+        match self.state.space {
+            "" => kind.to_string(),
+            space => format!("{kind}.{space}"),
+        }
+    }
+
     /// The kinds the worker of this process claims (`Handler.JobRunners`).
-    fn job_kinds() -> Vec<String> {
-        vec![KIND_EXPORT.into(), KIND_IMPORT.into()]
+    fn job_kinds(&self) -> Vec<String> {
+        vec![self.kind(KIND_EXPORT), self.kind(KIND_IMPORT)]
     }
 
     /// Claims and runs the jobs of the graph's kinds as long as the process (`jobkit.Worker.Run`): two at a time, a claim
@@ -445,7 +454,7 @@ impl Graph {
     pub async fn run_worker(self: Arc<Self>) {
         let Some(jobs) = self.state.jobs.clone() else { return };
         let worker = worker_id("graph");
-        let kinds = Self::job_kinds();
+        let kinds = self.job_kinds();
         let slots = Arc::new(tokio::sync::Semaphore::new(2));
         let mut failing = false;
         loop {
@@ -548,8 +557,8 @@ impl Graph {
         };
         let run = async {
             match kind {
-                KIND_EXPORT => self.run_export(&job).await,
-                KIND_IMPORT => self.run_import(&job).await,
+                k if k == self.kind(KIND_EXPORT) => self.run_export(&job).await,
+                k if k == self.kind(KIND_IMPORT) => self.run_import(&job).await,
                 _ => Err(format!("no runner of kind {kind}")),
             }
         };

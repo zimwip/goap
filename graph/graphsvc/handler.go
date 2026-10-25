@@ -59,6 +59,9 @@ type Handler struct {
 	// Jobs is the job service (ADR 0149): StartGraphExport and StartGraphImport create their jobs there, run by
 	// JobRunners (nil: the two RPCs are unimplemented).
 	Jobs jobkit.Queue
+	// Space is the graph space served (ADR 0154 §9): empty for the platform graph, "content" for a content graph.
+	// Its job kinds are named apart (Kind), since each graph's worker runs only what its own store holds.
+	Space string
 	// Demo loads the demo data of the composition (platform/devseed), reporting whether it wrote anything and the key
 	// of the demo project; nil: the deployment ships no demo (LoadDemoData is unimplemented).
 	Demo func(ctx context.Context, g *graph.Graph) (loaded bool, project string, err error)

@@ -9,8 +9,6 @@ import (
 	"context"
 	"os"
 
-	"github.com/jackc/pgx/v5/stdlib"
-
 	"github.com/zimwip/goap/contracts/gen/goap/jobs/v1/jobsv1connect"
 	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/platform"
@@ -24,10 +22,10 @@ func main() {
 	defer telemetry.Setup(context.Background(), log, "jobs")(context.Background())
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	var store jobsvc.Store = jobsvc.NewMemoryStore()
-	if pool := platform.OptionalPostgres(ctx, log, jobsvc.Migrations); pool != nil {
-		defer pool.Close()
-		store = jobsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
-		srv.Readiness(pool.Ping)
+	if db := platform.OptionalSQL(ctx, log, "jobs", jobsvc.Migrations, jobsvc.SQLiteMigrations); db != nil {
+		defer db.Close()
+		store = jobsvc.SQLStore{DB: db.DB, Dollar: db.Dollar}
+		srv.Readiness(db.Ping)
 	}
 	token := os.Getenv("GOAP_JOB_TOKEN")
 	if token == "" {

@@ -112,6 +112,8 @@ services:
       GOAP_GRAPH_SPACE: content
       GOAP_PLATFORM_GRAPH_URL: http://graph:8080
       GOAP_REGISTRY_URL: http://registry:8080
+      GOAP_JOBS_URL: http://jobs:8080
+      GOAP_JOB_TOKEN: ${GOAP_JOB_TOKEN:-dev-job-token}
       GOAP_DB_DSN: postgres://content:content@postgres:5432/goap?sslmode=disable
     depends_on:
       <<: *deps

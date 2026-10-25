@@ -97,6 +97,10 @@ type Graph struct {
 	// Caller names the principal behind an operation, recorded on the events of the change impacts (ADR 0029).
 	// Set by the services from the authenticated principal; unset, the events carry no caller.
 	Caller func(ctx context.Context) string
+	// Origin names the graph in the ids of its events (ADR 0136), set before Observe: two graphs on one bus (the
+	// platform graph and a content graph, ADR 0154 §9) each need their own, or the bus takes the events of one for
+	// repeats of the other's. Empty: OutboxOrigin.
+	Origin string
 	// EndUser names the person an operation is done for, carried by the events of the changes (ADR 0114). Set by the
 	// services from the authenticated principal; unset, the events name none.
 	EndUser func(ctx context.Context) string

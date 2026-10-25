@@ -6,8 +6,6 @@ package main
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/stdlib"
-
 	"github.com/zimwip/goap/contracts/gen/goap/assistant/v1/assistantv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/conversations/v1/conversationsv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/engine/v1/enginev1connect"
@@ -30,10 +28,10 @@ func main() {
 	defer telemetry.Setup(context.Background(), log, "conversations")(context.Background())
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	var store convsvc.Store = convsvc.NewMemoryStore()
-	if pool := platform.OptionalPostgres(ctx, log, convsvc.Migrations); pool != nil {
-		defer pool.Close()
-		store = convsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
-		srv.Readiness(pool.Ping)
+	if db := platform.OptionalSQL(ctx, log, "conversations", convsvc.Migrations, convsvc.SQLiteMigrations); db != nil {
+		defer db.Close()
+		store = convsvc.SQLStore{DB: db.DB, Dollar: db.Dollar}
+		srv.Readiness(db.Ping)
 	}
 	convs := &convsvc.Service{Store: store}
 	// its events (a conversation created, renamed or deleted, a message appended or updated, an action decided) go

@@ -5,7 +5,7 @@ MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: perf perf-images perf-up perf-run perf-rust perf-rust-up perf-rust-run perf-diff rust-test rust-lint perf-capture perf-analysis perf-analysis-down perf-down perf-reset help all build test test-wasm tidy web-test test-pg lint eval generate cypher tools up urls down reset logs dev dev-backend dev-web dev-reset web runner-image images claude-agent-runner
+.PHONY: perf perf-images perf-up perf-run perf-rust perf-rust-up perf-rust-run perf-diff rust-test rust-lint perf-capture perf-analysis perf-analysis-down perf-down perf-reset help all build test test-wasm tidy web-test test-pg lint eval generate cypher tools up urls down reset logs dev dev-backend dev-web dev-reset local local-build local-test local-bench local-reset web runner-image images claude-agent-runner
 
 .DEFAULT_GOAL := help
 
@@ -83,6 +83,31 @@ dev-web: ## IDE only, hot-reloaded by vite, proxied to the backend: http://local
 
 dev-reset: ## drop the local SQLite database (demo data and methodologies are seeded again)
 	rm -rf .goap
+
+# the platform as the compose stack runs it, one process per binary, without docker (goap-local): an embedded NATS, the
+# graph (LOCAL_GRAPH: rust, or go) and every service on SQLite files of .goap/local, the binaries in .goap/bin
+LOCAL_BIN      := .goap/bin
+LOCAL_SERVICES := graph registry engine modelgw mcp indexer preferences credentials events conversations jobs gateway connector-localfs importer-git goap-bench goap-local
+LOCAL_GRAPH    ?= rust
+LOCAL_ARGS     ?=
+
+local-build: ## the binaries of the local stack in .goap/bin: the Go services, goap-graph-rs and goap-proxy (cargo, release)
+	@mkdir -p $(LOCAL_BIN)
+	cd platform && go build -o ../$(LOCAL_BIN)/ $(addprefix ./cmd/,$(LOCAL_SERVICES))
+	cd rust && cargo build --release --locked -p graph-service -p goap-proxy
+	cp rust/target/release/goap-graph-rs rust/target/release/goap-proxy $(LOCAL_BIN)/
+
+local: local-build ## no docker: the platform one process per binary (embedded NATS, SQLite in .goap/local, LOCAL_GRAPH rust|go, LOCAL_ARGS: goap-local -h): gateway http://localhost:8080, then make dev-web
+	$(LOCAL_BIN)/goap-local -graph $(LOCAL_GRAPH) $(LOCAL_ARGS)
+
+local-test: local-build ## no docker: the platform on fresh data (.goap/local), then the end-to-end test of platform/e2e/stack through its gateway, then stop
+	$(LOCAL_BIN)/goap-local test -graph $(LOCAL_GRAPH) $(LOCAL_ARGS)
+
+local-bench: local-build ## no docker: the graph alone on SQLite behind goap-proxy (LOCAL_PROXY: rust, go, compare, shadow), loaded by goap-bench (PERF_ARGS); reports in .goap/local/bench and .goap/local/diff
+	$(LOCAL_BIN)/goap-local bench -graph $(LOCAL_GRAPH) -proxy $(or $(LOCAL_PROXY),rust) $(LOCAL_ARGS) -- $(PERF_ARGS)
+
+local-reset: ## drop the data of the local stack (.goap/local)
+	rm -rf .goap/local
 
 # static build of the IDE, served by goap-dev itself (when web/dist exists; `make dev` serves it from vite instead)
 web/dist/index.html: web/package.json web/index.html web/vite.config.ts $(shell find web/src -type f 2>/dev/null)

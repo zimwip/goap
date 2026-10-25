@@ -6,8 +6,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jackc/pgx/v5/stdlib"
-
 	"github.com/zimwip/goap/contracts/gen/goap/credentials/v1/credentialsv1connect"
 	"github.com/zimwip/goap/gateway/credsvc"
 	"github.com/zimwip/goap/lib/outbox"
@@ -21,10 +19,10 @@ func main() {
 	defer telemetry.Setup(context.Background(), log, "credentials")(context.Background())
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	var store credsvc.Store = credsvc.NewMemoryStore()
-	if pool := platform.OptionalPostgres(ctx, log, credsvc.Migrations); pool != nil {
-		defer pool.Close()
-		store = credsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
-		srv.Readiness(pool.Ping)
+	if db := platform.OptionalSQL(ctx, log, "credentials", credsvc.Migrations, credsvc.SQLiteMigrations); db != nil {
+		defer db.Close()
+		store = credsvc.SQLStore{DB: db.DB, Dollar: db.Dollar}
+		srv.Readiness(db.Ping)
 	}
 	// the gateway is the only caller: it presents a shared service credential; without one nobody may call
 	token, err := platform.NewSecrets().Get(ctx, "goap/credentials#service_token", "GOAP_CREDENTIALS_TOKEN")

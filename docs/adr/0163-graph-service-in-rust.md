@@ -658,3 +658,14 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   words, govaluate, `celcheck`, `encoding/json`'s errors and Go's JSON bytes describe what this replaces. The compare
   proxy and `diff-db` compare content (ids paired, JSON texts as values, numbers by their value, an error by its code, its message apart as
   `message_differs`).
+
+Addendum, the compose stack without Docker (`platform/cmd/goap-local`, `make local`): the Rust graph (or the Go one)
+runs with every service of the stack, one process per binary, each on a SQLite file, over an embedded NATS. Its first
+end-to-end run found two faults the compose stack shared: the platform graph and the content graph named their events
+alike (`graph:<seq>`), so the bus dropped the content graph's as repeats of the platform graph's (the index never saw
+a content node); and both graphs' workers claimed `graph.export`, so the platform graph could take the export of a
+content namespace it does not hold (the content graph ran none). Each graph now names its events and its job kinds
+by its space (`graph-content`, `graph.export.content`), in Go and in Rust. `make local-test` runs the end-to-end test,
+`make local-bench` the bench through goap-proxy on SQLite: in mode shadow and compare no call diverged; on SQLite with
+four writers the Rust commits take about 970 ms at the median against Go's 755 (its reads two to three times faster),
+a gap still to look at.

@@ -18,7 +18,7 @@ import (
 	"github.com/zimwip/goap/lib/typecat"
 )
 
-// The job kinds of the graph (ADR 0149), run by JobRunners.
+// The job kinds of the platform graph (ADR 0149), run by JobRunners; a content graph's carry its space (Kind).
 const (
 	KindGraphExport = "graph.export"
 	KindGraphImport = "graph.import"
@@ -80,7 +80,7 @@ func (h *Handler) StartGraphExport(ctx context.Context, r *connect.Request[graph
 		return nil, rpcerr.ToConnect(err)
 	}
 	label := fmt.Sprintf("Export %s at %s (%s)", ns, at, map[string]string{FormatJSON: "JSON", FormatOKF: "OKF"}[format])
-	job, err := q.Create(ctx, jobkit.Spec{Kind: KindGraphExport, Label: label, Target: ns, By: p.EndUser(), Principal: p, ProjectID: p.Project,
+	job, err := q.Create(ctx, jobkit.Spec{Kind: h.Kind(KindGraphExport), Label: label, Target: ns, By: p.EndUser(), Principal: p, ProjectID: p.Project,
 		Params: map[string]any{"namespace": ns, "branch": m.Branch, "baselineId": m.BaselineId, "format": format}})
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
@@ -110,7 +110,7 @@ func (h *Handler) StartGraphImport(ctx context.Context, r *connect.Request[graph
 		return nil, err
 	}
 	project := h.projectOf(ctx, m.ProjectId)
-	job, err := q.Create(ctx, jobkit.Spec{Kind: KindGraphImport, Label: fmt.Sprintf("Import a snapshot of %s (%d nodes)", s.Namespace, len(s.Nodes)),
+	job, err := q.Create(ctx, jobkit.Spec{Kind: h.Kind(KindGraphImport), Label: fmt.Sprintf("Import a snapshot of %s (%d nodes)", s.Namespace, len(s.Nodes)),
 		Target: s.Namespace, By: p.EndUser(), Principal: p, ProjectID: project, OwnerOrg: owner,
 		Params: map[string]any{"title": m.Title, "intent": m.Intent, "methodology": m.Methodology}, Input: []byte(m.Document)})
 	if err != nil {
@@ -119,9 +119,18 @@ func (h *Handler) StartGraphImport(ctx context.Context, r *connect.Request[graph
 	return connect.NewResponse(&graphv1.StartGraphImportResponse{Job: job}), nil
 }
 
+// Kind is the name of a job kind of this graph: as is for the platform graph, followed by its space for another
+// (graph.export.content), so that a job reaches the worker of the graph holding its namespace.
+func (h *Handler) Kind(kind string) string {
+	if h.Space == "" {
+		return kind
+	}
+	return kind + "." + h.Space
+}
+
 // JobRunners are the runners of the graph's job kinds, for a jobkit.Worker of the graph's process.
 func (h *Handler) JobRunners() map[string]jobkit.Runner {
-	return map[string]jobkit.Runner{KindGraphExport: h.runExport, KindGraphImport: h.runImport}
+	return map[string]jobkit.Runner{h.Kind(KindGraphExport): h.runExport, h.Kind(KindGraphImport): h.runImport}
 }
 
 func (h *Handler) okfOptions() okf.Options {

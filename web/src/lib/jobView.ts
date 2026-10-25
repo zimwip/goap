@@ -23,8 +23,9 @@ export function kindLabel(kind: string | undefined): string {
     const [domain, importer] = k.slice('import.'.length).split('.');
     return importer ? `Import ${domain} (${importer})` : `Import ${domain}`;
   }
-  if (k === 'graph.export') return 'Graph export';
-  if (k === 'graph.import') return 'Graph import';
+  // a content graph's kinds carry its space (graph.export.content)
+  if (k === 'graph.export' || k.startsWith('graph.export.')) return 'Graph export';
+  if (k === 'graph.import' || k.startsWith('graph.import.')) return 'Graph import';
   return k;
 }
 

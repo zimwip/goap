@@ -9,8 +9,6 @@ import (
 	"maps"
 	"os"
 
-	"github.com/jackc/pgx/v5/stdlib"
-
 	"github.com/zimwip/goap/contracts/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/mcp/v1/mcpv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/registry/v1/registryv1connect"
@@ -32,10 +30,10 @@ func main() {
 	defer telemetry.Setup(context.Background(), log, "mcp")(context.Background())
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	var store mcpsvc.Store = mcpsvc.NewMemoryStore()
-	if pool := platform.OptionalPostgres(ctx, log, mcpsvc.Migrations); pool != nil {
-		defer pool.Close()
-		store = mcpsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
-		srv.Readiness(pool.Ping)
+	if db := platform.OptionalSQL(ctx, log, "mcp", mcpsvc.Migrations, mcpsvc.SQLiteMigrations); db != nil {
+		defer db.Close()
+		store = mcpsvc.SQLStore{DB: db.DB, Dollar: db.Dollar}
+		srv.Readiness(db.Ping)
 	}
 	token := os.Getenv("GOAP_CONNECTOR_TOKEN")
 	if token == "" {

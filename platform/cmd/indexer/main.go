@@ -28,10 +28,14 @@ func main() {
 	defer telemetry.Setup(context.Background(), log, "indexer")(context.Background())
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	var store index.Store = index.NewMemory()
-	if pool := platform.OptionalPostgres(ctx, log, index.Migrations); pool != nil {
-		defer pool.Close()
-		store = index.NewPostgres(pool)
-		srv.Readiness(pool.Ping)
+	if db := platform.OptionalSQL(ctx, log, "index", index.Migrations, index.SQLiteMigrations); db != nil {
+		defer db.Close()
+		if db.SQLite() {
+			store = index.NewSQLite(db.DB)
+		} else {
+			store = index.NewPostgres(db.Pool)
+		}
+		srv.Readiness(db.Ping)
 	}
 	events := platform.OptionalEvents(ctx, log)
 	defer events.Close()

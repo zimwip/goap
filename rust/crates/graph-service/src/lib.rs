@@ -36,6 +36,9 @@ pub struct State {
     relays: Option<Relays>,
     /// The job service the long runs are jobs of (ADR 0149), when this process reaches one.
     pub jobs: Option<Arc<graph::jobs::Jobs>>,
+    /// The graph space served (ADR 0154 §9, Go's `Handler.Space`): empty for the platform graph, `content` for a
+    /// content graph. It names the graph's events and job kinds apart from the platform graph's.
+    pub space: &'static str,
     /// The platform graph, in a content graph (`GOAP_GRAPH_SPACE=content`, ADR 0154 §9): its registry gives the
     /// domains, its organisation and its methodologies are read there.
     pub remote: Option<Arc<platform::Remote>>,
@@ -55,6 +58,7 @@ impl State {
             outbox: false,
             relays: None,
             jobs: None,
+            space: "",
             remote: None,
             catalog: Mutex::new((None, Catalog::builtin())),
             users: Mutex::new(Default::default()),
@@ -64,11 +68,18 @@ impl State {
     }
 
     /// Writes the events in the outboxes and delivers them to `sink` (Go's `outbox.Start` of the graph and of the domain
-    /// registry): returns the relays, for [`relay::Relay::run`].
+    /// registry): returns the relays, for [`relay::Relay::run`]. The graph's events are named by its space (Go's
+    /// `Graph.Origin`): `graph`, `graph-content` for a content graph, so the bus takes neither's events for repeats of
+    /// the other's. Set [`State::space`] first.
     pub fn relay(&mut self, sink: relay::Sink) -> [Arc<relay::Relay>; 2] {
         let sink = Arc::new(sink);
+        let origin = if self.space.is_empty() {
+            "graph"
+        } else {
+            "graph-content"
+        };
         let r = Relays {
-            graph: Arc::new(relay::Relay::new("graph", "event_outbox", sink.clone())),
+            graph: Arc::new(relay::Relay::new(origin, "event_outbox", sink.clone())),
             domains: Arc::new(relay::Relay::new("domains", "domain_outbox", sink)),
         };
         self.outbox = true;

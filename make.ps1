@@ -149,6 +149,42 @@ function Dev {
 
 function DevReset { Remove-Item -Recurse -Force .goap -ErrorAction SilentlyContinue }
 
+# the platform as the compose stack runs it, one process per binary, without docker (goap-local): an embedded NATS, the
+# graph ($env:LOCAL_GRAPH: rust, or go) and every service on SQLite files of .goap\local, the binaries in .goap\bin
+$LocalServices = @('graph', 'registry', 'engine', 'modelgw', 'mcp', 'indexer', 'preferences', 'credentials', 'events',
+    'conversations', 'jobs', 'gateway', 'connector-localfs', 'importer-git', 'goap-bench', 'goap-local')
+
+function LocalBuild {
+    New-Item -ItemType Directory -Force .goap/bin | Out-Null
+    InDir platform { Run go build -o ../.goap/bin/ @($LocalServices | ForEach-Object { "./cmd/$_" }) }
+    InDir rust { Run cargo build --release --locked -p graph-service -p goap-proxy }
+    Copy-Item "rust/target/release/goap-graph-rs$Exe", "rust/target/release/goap-proxy$Exe" .goap/bin/
+}
+
+function LocalArgs { if ($env:LOCAL_ARGS) { $env:LOCAL_ARGS -split ' ' } else { @() } }
+
+function Local {
+    LocalBuild
+    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'rust' }
+    Run ".goap/bin/goap-local$Exe" -graph $graph @(LocalArgs)
+}
+
+function LocalTest {
+    LocalBuild
+    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'rust' }
+    Run ".goap/bin/goap-local$Exe" test -graph $graph @(LocalArgs)
+}
+
+function LocalBench {
+    LocalBuild
+    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'rust' }
+    $proxy = if ($env:LOCAL_PROXY) { $env:LOCAL_PROXY } else { 'rust' }
+    $bench = if ($env:PERF_ARGS) { $env:PERF_ARGS -split ' ' } else { @() }
+    Run ".goap/bin/goap-local$Exe" bench -graph $graph -proxy $proxy @(LocalArgs) -- @bench
+}
+
+function LocalReset { Remove-Item -Recurse -Force .goap/local -ErrorAction SilentlyContinue }
+
 function RunnerImage { Run docker build --build-arg SERVICE=goap-runner -t goap/runner:dev . }
 
 function Images { RunnerImage; Run docker build --target services -t goap/goap:dev .; Run docker build --target rust -t goap/rust:dev . }
@@ -301,6 +337,14 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   dev-backend       SQLite backend only, rebuilt and restarted by air: http://localhost:8080
   dev-web           IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
   dev-reset         drop the local SQLite database
+  local             no docker: the platform one process per binary (embedded NATS, SQLite in .goap\local,
+                    $env:LOCAL_GRAPH rust|go, $env:LOCAL_ARGS: goap-local -h): gateway http://localhost:8080,
+                    then .\make.ps1 dev-web
+  local-build       the binaries of the local stack in .goap\bin (Go services, goap-graph-rs, goap-proxy)
+  local-test        no docker: the platform on fresh data, the end-to-end test of platform\e2e\stack, then stop
+  local-bench       no docker: the graph alone on SQLite behind goap-proxy ($env:LOCAL_PROXY: rust, go,
+                    compare, shadow), loaded by goap-bench ($env:PERF_ARGS); .goap\local\bench, .goap\local\diff
+  local-reset       drop the data of the local stack (.goap\local)
   web               same as dev-web
   runner-image      image of the script sandboxes (goap-runner)
   images            the images of the compose stack: goap/goap:dev (Go services), goap/rust:dev (graph services)
@@ -348,6 +392,11 @@ switch ($Target) {
     'dev-backend'      { DevBackend }
     'dev-web'          { DevWeb }
     'dev-reset'        { DevReset }
+    'local'            { Local }
+    'local-build'      { LocalBuild }
+    'local-test'       { LocalTest }
+    'local-bench'      { LocalBench }
+    'local-reset'      { LocalReset }
     'web'              { DevWeb }
     'runner-image'     { RunnerImage }
     'images'           { Images }

@@ -68,6 +68,12 @@ async fn main() -> anyhow::Result<()> {
         .with_context(|| format!("listening on {addr}"))?;
     tracing::info!(%addr, dialect = ?store.dialect(), "goap-graph-rs serving");
     let mut state = State::new(store);
+    if content {
+        state.space = "content";
+    }
+    // the job service (ADR 0149): the exports and the snapshot imports are its jobs, created here with the services'
+    // token and run by the worker of this process
+    state.jobs = Some(Arc::new(Jobs::from_env()));
     let relays = if nats.is_empty() {
         tracing::warn!("GOAP_NATS_URL not set: events disabled");
         Vec::new()
@@ -94,6 +100,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         let state = Arc::new(state);
+        tokio::spawn(Arc::new(Graph { state: state.clone() }).run_worker());
         for r in relays {
             tokio::spawn(r.run(state.clone()));
         }
@@ -102,9 +109,6 @@ async fn main() -> anyhow::Result<()> {
             .await?;
         return Ok(());
     }
-    // the job service (ADR 0149): the exports and the snapshot imports are its jobs, created here with the services'
-    // token and run by the worker of this process
-    state.jobs = Some(Arc::new(Jobs::from_env()));
     let state = Arc::new(state);
     seed_domains(&state).await;
     if memory || env("GOAP_GRAPH_BOOTSTRAP") == "1" {

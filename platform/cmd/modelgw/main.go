@@ -7,8 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/jackc/pgx/v5/stdlib"
-
 	"github.com/zimwip/goap/contracts/gen/goap/model/v1/modelv1connect"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/graphclient"
@@ -27,10 +25,10 @@ func main() {
 	secrets := platform.NewSecrets()
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	var store modelgw.Store = modelgw.NewMemoryStore()
-	if pool := platform.OptionalPostgres(ctx, log, modelgw.Migrations); pool != nil {
-		defer pool.Close()
-		store = modelgw.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
-		srv.Readiness(pool.Ping)
+	if db := platform.OptionalSQL(ctx, log, "modelgw", modelgw.Migrations, modelgw.SQLiteMigrations); db != nil {
+		defer db.Close()
+		store = modelgw.SQLStore{DB: db.DB, Dollar: db.Dollar}
+		srv.Readiness(db.Ping)
 	}
 	hc := platform.H2CClient()
 	graphURL := platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")

@@ -1281,6 +1281,22 @@ each start (nodes, baselines and changes). The compose image is `pgvector/pgvect
   transaction gave them no snapshot, only two round trips); a write they try fails with SQLSTATE 25006 (a lock of a
   change or a branch refuses at once) and the transaction runs again on the writer. The graph test variant
   `postgres-readers` runs every transaction there first.
+- **The compose stack without Docker** (`make local`, `.\make.ps1 local`; `platform/cmd/goap-local`): one process per
+  binary of `platform/cmd` as the compose stack runs them, on its host ports (gateway 8080, graph 8081 ... jobs 8091,
+  content graph 8092), each service on a SQLite file of its own in `.goap/local` (`GOAP_SQLITE_PATH`, read by
+  `platform.OptionalSQL` in every service that keeps a store, the graph services included; `GOAP_DB_DSN` wins, neither:
+  memory), an embedded NATS server (JetStream, `.goap/local/nats`) instead of the container, the secrets generated
+  in `.goap/local/secrets`; the graph is Rust (`LOCAL_GRAPH=go` for the Go one), bootstrapped by its `bootstrap`
+  command before it serves; the processes are restarted when they stop, their output prefixed and kept in
+  `.goap/local/logs`. `make local-build` builds the binaries in `.goap/bin` (Go, then `goap-graph-rs` and
+  `goap-proxy` with cargo). `goap-local test` (`make local-test`) runs the stack on fresh data, then the end-to-end
+  test of a running platform, `platform/e2e/stack` (`GOAP_STACK_URL`: registry, a commit on the content graph read
+  back, the index following it over NATS, an export job, the engine), then stops; `goap-local bench`
+  (`make local-bench`, `LOCAL_PROXY` go | rust | compare | shadow, `PERF_ARGS`) runs the graph alone behind goap-proxy
+  loaded by goap-bench, then the proxy's report and, in mode compare, `goap-proxy diff-db` over the two SQLite files.
+  Two graphs on one bus name their events apart (`Graph.Origin`, `graph-content` for a content graph: the bus
+  deduplicates by event id) and their job kinds (`Handler.Space`: `graph.export.content`), so that each worker runs
+  what its own store holds.
 - **The graph service in Rust** ([ADR 0163](adr/0163-graph-service-in-rust.md), its four phases done: the compose stack runs it): the Cargo workspace `rust/`
   (outside the `go.work`, generated from the same `proto/`, its JSON timestamps written as Go's `protojson` writes them,
   `goap_proto::wkt::Timestamp`) holds `goap-graph-rs`, the graph's four services on the

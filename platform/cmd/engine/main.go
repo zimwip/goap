@@ -13,8 +13,6 @@ import (
 
 	triggerevents "github.com/zimwip/goap/contracts/events"
 
-	"github.com/jackc/pgx/v5/stdlib"
-
 	"github.com/zimwip/goap/contracts/assess"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/gen/goap/engine/v1/enginev1connect"
@@ -109,13 +107,20 @@ func main() {
 			time.Sleep(delay)
 		}
 	}()
-	// processes: in memory (one replica), or in PostgreSQL (GOAP_DB_DSN), shared by the replicas, which serialize
-	// their work on a process through its locks and resume the runs a stopped replica left (ADR 0124)
+	// processes: in memory (one replica), in PostgreSQL (GOAP_DB_DSN), shared by the replicas, which serialize
+	// their work on a process through its locks and resume the runs a stopped replica left (ADR 0124), or in a SQLite
+	// file (GOAP_SQLITE_PATH, the local stack: one replica, which drops the locks of its previous start to resume its
+	// runs at once)
 	var store engine.Store = engine.NewMemoryStore()
 	var locks engine.Locker
-	if pool := platform.OptionalPostgres(ctx, log, enginesvc.Migrations); pool != nil {
-		defer pool.Close()
-		shared := enginesvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true, Holder: enginesvc.NewHolder()}
+	if db := platform.OptionalSQL(ctx, log, "engine", enginesvc.Migrations, enginesvc.SQLiteMigrations); db != nil {
+		defer db.Close()
+		shared := enginesvc.SQLStore{DB: db.DB, Dollar: db.Dollar, Holder: enginesvc.NewHolder()}
+		if db.SQLite() {
+			if err := shared.ReleaseAll(ctx); err != nil {
+				platform.Fatal(log, "engine locks", err)
+			}
+		}
 		store, locks = shared, shared
 	}
 	builtins := engine.DefaultBuiltins()
