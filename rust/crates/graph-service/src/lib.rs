@@ -92,7 +92,8 @@ impl State {
     }
 
     /// The type catalogue of the domains in force (`typecat.Live`), built again when a stored version changed: a
-    /// version published through the Go registry reaches the next write here.
+    /// version published through the Go registry reaches the next write here. Domains that do not make a catalogue
+    /// leave the previous one in force, as `Live.Reload` does.
     pub async fn catalog(&self, tx: &Session) -> Result<Arc<Catalog>, GraphError> {
         let fp = tx.domain_fingerprint().await?;
         let mut cur = self.catalog.lock().await;
@@ -101,10 +102,13 @@ impl State {
         }
         let rs = tx.domain_records().await?;
         let ds: Vec<_> = in_force(&rs).into_iter().filter(|d| !is_builtin(&d.name)).collect();
-        let c = Catalog::new(&ds).map_err(|e| {
-            GraphError::unimplemented(format!("the domains in force do not make a catalogue here: {e}"))
-        })?;
-        *cur = (Some(fp), Arc::new(c));
+        match Catalog::new(&ds) {
+            Ok(c) => *cur = (Some(fp), Arc::new(c)),
+            Err(e) => {
+                tracing::error!(err = %e, "type catalogue");
+                cur.0 = Some(fp);
+            }
+        }
         Ok(cur.1.clone())
     }
 }

@@ -257,6 +257,98 @@ fn go_value(v: &Value) -> String {
     }
 }
 
+/// `strconv.ParseFloat(s, 64)`: decimal or hexadecimal (`0x1p4`), underscores between digits, `inf`, `infinity`
+/// and `nan` in any case; an overflow is Go's `ErrRange`, nothing.
+fn go_parse_float(s: &str) -> Option<f64> {
+    let (neg, body) = match s.as_bytes().first() {
+        Some(b'+') => (false, &s[1..]),
+        Some(b'-') => (true, &s[1..]),
+        _ => (false, s),
+    };
+    let lower = body.to_ascii_lowercase();
+    if lower == "inf" || lower == "infinity" {
+        return Some(if neg { f64::NEG_INFINITY } else { f64::INFINITY });
+    }
+    if lower == "nan" && body.len() == s.len() {
+        return Some(f64::NAN);
+    }
+    if body.contains('_') && !underscore_ok(body) {
+        return None;
+    }
+    let plain: String = body.chars().filter(|c| *c != '_').collect();
+    let f = if let Some(hex) = plain.strip_prefix("0x").or_else(|| plain.strip_prefix("0X")) {
+        hex_float(hex)?
+    } else {
+        let digits = plain.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
+        let mantissa = &plain[..plain.len() - digits.len()];
+        if mantissa.is_empty() || mantissa == "." || mantissa.matches('.').count() > 1 {
+            return None;
+        }
+        if let Some(e) = digits.strip_prefix(['e', 'E']) {
+            let e = e.strip_prefix(['+', '-']).unwrap_or(e);
+            if e.is_empty() || !e.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+        } else if !digits.is_empty() {
+            return None;
+        }
+        plain.parse::<f64>().ok()?
+    };
+    if f.is_infinite() {
+        return None;
+    }
+    Some(if neg { -f } else { f })
+}
+
+/// Go's `underscoreOK`: an underscore only between digits, or between a base prefix and a digit.
+fn underscore_ok(s: &str) -> bool {
+    let b = s.as_bytes();
+    let (mut saw, mut i, mut hex) = (b'^', 0, false);
+    if b.len() >= 2 && b[0] == b'0' && matches!(b[1].to_ascii_lowercase(), b'b' | b'o' | b'x') {
+        (i, saw, hex) = (2, b'0', b[1].eq_ignore_ascii_case(&b'x'));
+    }
+    while i < b.len() {
+        let c = b[i];
+        i += 1;
+        if c.is_ascii_digit() || hex && c.is_ascii_hexdigit() {
+            saw = b'0';
+        } else if c == b'_' {
+            if saw != b'0' {
+                return false;
+            }
+            saw = b'_';
+        } else if saw == b'_' {
+            return false;
+        } else {
+            saw = b'!';
+        }
+    }
+    saw != b'_'
+}
+
+/// The value of a hexadecimal float after its `0x`: hex digits with a point, then a mandatory binary exponent.
+fn hex_float(s: &str) -> Option<f64> {
+    let (mantissa, exp) = s.split_once(['p', 'P'])?;
+    let e = exp.strip_prefix(['+', '-']).unwrap_or(exp);
+    if e.is_empty() || !e.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let mut n: i64 = e.parse().unwrap_or(i64::MAX / 2);
+    if exp.starts_with('-') {
+        n = -n;
+    }
+    let (int, frac) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    if int.is_empty() && frac.is_empty() || !int.bytes().chain(frac.bytes()).all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let mut m = 0f64;
+    for c in int.chars().chain(frac.chars()) {
+        m = m * 16.0 + f64::from(c.to_digit(16)?);
+    }
+    n -= 4 * frac.len() as i64;
+    Some(m * 2f64.powi(n.clamp(-2000, 2000) as i32))
+}
+
 impl Param {
     /// A value of the parameter in the type its script gets (`Param.Coerce`).
     pub fn coerce(&self, v: &Value) -> Result<Value, String> {
@@ -266,18 +358,14 @@ impl Param {
                 _ => Err(format!("expected a string, got {}", go_type(v))),
             },
             "regex" => match v {
-                Value::String(s) => regex::Regex::new(s)
+                Value::String(s) => graph_script::goregexp::GoRegex::compile(s)
                     .map(|_| v.clone())
                     .map_err(|e| format!("invalid regular expression: {e}")),
                 _ => Err(format!("expected a regular expression, got {}", go_type(v))),
             },
             "number" => match v {
                 Value::Number(n) => Ok(Value::from(n.as_f64().unwrap_or(0.0))),
-                Value::String(s) => s
-                    .trim()
-                    .parse::<f64>()
-                    .ok()
-                    .filter(|_| s.trim() == s)
+                Value::String(s) => go_parse_float(s)
                     .map(Value::from)
                     .ok_or_else(|| format!("expected a number, got {}", go_value(v))),
                 _ => Err(format!("expected a number, got {}", go_value(v))),
@@ -320,6 +408,34 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn parses_floats_as_go() {
+        let cases = [
+            ("inf", Some(f64::INFINITY)),
+            ("-infinity", Some(f64::NEG_INFINITY)),
+            ("0x10", None),
+            ("0x1p4", Some(16.0)),
+            ("0x_1p4", Some(16.0)),
+            ("0x1.8p1", Some(3.0)),
+            ("0X1P-2", Some(0.25)),
+            ("1_0", Some(10.0)),
+            ("1__0", None),
+            ("_1", None),
+            ("1e400", None),
+            ("1e-400", Some(0.0)),
+            (" 1", None),
+            (".5", Some(0.5)),
+            ("5.", Some(5.0)),
+            ("+.5e1", Some(5.0)),
+            ("infinit", None),
+            ("1e", None),
+        ];
+        for (s, want) in cases {
+            assert_eq!(go_parse_float(s), want, "{s}");
+        }
+        assert!(go_parse_float("NaN").unwrap().is_nan());
+    }
 
     #[test]
     fn binds_an_instance() {

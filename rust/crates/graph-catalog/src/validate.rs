@@ -107,7 +107,7 @@ pub fn validate(d: &Domain, exact: bool) -> Result<Vec<Issue>, Unsure> {
     }
     let node_types = c.node_types();
     c.check_lifecycles(&node_types)?;
-    c.check_algorithms()?;
+    c.check_algorithms(exact)?;
     c.check_attributes();
     c.link_types(&node_types);
     c.check_structures();
@@ -319,17 +319,20 @@ impl<'a> Check<'a> {
         Ok(())
     }
 
-    fn check_algorithms(&mut self) -> Result<(), Unsure> {
+    /// The algorithms and their instances. Read from YAML, a number is an `int` Go prints as one: the coercions it
+    /// refuses are Go's to word.
+    fn check_algorithms(&mut self, exact: bool) -> Result<(), Unsure> {
         let d = self.d;
         let set = Set::of(&d.algorithms, &d.algorithm_instances);
-        if set.algorithms.len() != d.algorithms.len() || set.instances.len() != d.algorithm_instances.len() {
+        if !exact && (set.algorithms.len() != d.algorithms.len() || set.instances.len() != d.algorithm_instances.len())
+        {
             return Err(Unsure("an algorithm Go reads in its own way"));
         }
         let mut algs: HashMap<&str, &Algorithm> = HashMap::new();
         for (i, a) in set.algorithms.iter().enumerate() {
             let path = format!("algorithms[{i}]");
             for msg in a.issues() {
-                if msg.contains(": default: ") {
+                if !exact && msg.contains(": default: ") {
                     return Err(Unsure("a parameter default Go's coercion refuses"));
                 }
                 self.add(path.clone(), msg);
@@ -369,7 +372,7 @@ impl<'a> Check<'a> {
             };
             let (_, issues) = a.resolve(inst.values.as_ref());
             for msg in issues {
-                if !msg.starts_with("unknown param ") && !msg.ends_with(" is required") {
+                if !exact && !msg.starts_with("unknown param ") && !msg.ends_with(" is required") {
                     return Err(Unsure("a parameter value Go's coercion refuses"));
                 }
                 self.add(format!("{path}.values"), msg);

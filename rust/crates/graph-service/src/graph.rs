@@ -4155,7 +4155,7 @@ impl pb::GraphService for Graph {
                     .iter()
                     .map(convert::item)
                     .collect::<Result<_, _>>()
-                    .map_err(|e| GraphError::unimplemented(format!("{e}: not served here yet")))?;
+                    .map_err(GraphError::internal)?;
                 c.seq = r.seq;
                 Ok(Ok(pb::MergeChangeResponse { change: Some(c) }))
             })

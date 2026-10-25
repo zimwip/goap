@@ -9,6 +9,7 @@ use graph_catalog::{
     record::{Record, STATUS_ARCHIVED, STATUS_DRAFT, STATUS_PUBLISHED, in_force, latest},
     validate::Issue,
 };
+use graph_core::godecode::{self, Fail, Struct, Ty};
 use graph_core::{GraphError, gojson, goyaml, store::OutboxMessage};
 use graph_store::read::{NewDomain, StoredDomain};
 
@@ -192,8 +193,8 @@ impl pb::DomainService for Domains {
             .map_err(|e| connect_error(GraphError::internal(e)))?;
         let rs = tx.domain_records().await.map_err(connect_error)?;
         let ds: Vec<_> = in_force(&rs).into_iter().filter(|x| !is_builtin(&x.name)).collect();
-        // the domains in force resolve, or the registry refused them; a catalogue that does not is Go's to word
-        let cat = Catalog::new(&ds).map_err(|_| unserved("a catalogue that does not resolve"))?;
+        // the domains in force resolve, or the registry refused them; a catalogue that does not is an internal error
+        let cat = Catalog::new(&ds).map_err(|e| connect_error(GraphError::internal(e)))?;
         let types = cat
             .types()
             .into_iter()
@@ -277,10 +278,14 @@ impl pb::DomainService for Domains {
             return invalid(i.clone());
         }
         let input = r.input.as_ref().map(convert::map).unwrap_or_default();
-        let sample = serde_json::from_value::<Sample>(serde_json::Value::Object(input)).ok();
-        let Some(sample) = sample.filter(Sample::integral) else {
-            return Err(unserved("a sample input Go's decoder words the refusal of"));
+        // the input marshalled and unmarshalled into the fields of `dsl.AlgorithmInput`, as Go does
+        let raw = gojson::to_string(&serde_json::Value::Object(input));
+        let v = match godecode::unmarshal(raw.as_bytes(), &SAMPLE) {
+            Ok(v) => v,
+            Err(Fail::Go(e)) => return invalid(format!("sample input: {e}")),
+            Err(Fail::Unsure) => serde_json::from_str(&raw).unwrap_or_default(),
         };
+        let sample = serde_json::from_value::<Sample>(v).unwrap_or_default();
         let b = graph_script::js::Bound {
             instance: "try".into(),
             algorithm: a.name.clone(),
@@ -995,17 +1000,58 @@ struct Sample {
     change: Option<SampleNamed>,
 }
 
-impl Sample {
-    /// Whether every version is an integer, as `dsl.Node.Version` decodes only one.
-    fn integral(&self) -> bool {
-        let nodes = [&self.node, &self.from, &self.to].into_iter().flatten();
-        nodes.chain(self.children.iter().flatten()).all(|n| {
-            n.version
-                .as_ref()
-                .is_none_or(|v| v.as_f64().is_some_and(|f| f.fract() == 0.0))
-        })
-    }
+/// The Go shapes of a sample input, for its decoding errors.
+static SAMPLE_NODE: Struct = Struct {
+    name: "Node",
+    go: "dsl.Node",
+    fields: &[
+        ("id", Ty::Str),
+        ("version", Ty::Int),
+        ("key", Ty::Str),
+        ("type", Ty::Str),
+        ("state", Ty::Str),
+        ("props", Ty::Map),
+    ],
+};
+static SAMPLE_LINK: Struct = Struct {
+    name: "LinkInfo",
+    go: "dsl.LinkInfo",
+    fields: &[("type", Ty::Str), ("props", Ty::Map)],
+};
+static SAMPLE_TRANSITION: Struct = Struct {
+    name: "TransitionInfo",
+    go: "dsl.TransitionInfo",
+    fields: &[("name", Ty::Str), ("from", Ty::Str), ("to", Ty::Str)],
+};
+static SAMPLE_CHANGE: Struct = Struct {
+    name: "ChangeInfo",
+    go: "dsl.ChangeInfo",
+    fields: &[
+        ("id", Ty::Str),
+        ("title", Ty::Str),
+        ("intent", Ty::Str),
+        ("methodology", Ty::Str),
+        ("goal", Ty::Str),
+    ],
+};
+/// The anonymous struct `Service.RunAlgorithm` decodes the input into.
+static SAMPLE: Struct = Struct {
+    name: "",
+    go: "struct",
+    fields: &[
+        ("node", Ty::Struct(&SAMPLE_NODE)),
+        ("property", Ty::Str),
+        ("value", Ty::Any),
+        ("link", Ty::Struct(&SAMPLE_LINK)),
+        ("from", Ty::Struct(&SAMPLE_NODE)),
+        ("to", Ty::Struct(&SAMPLE_NODE)),
+        ("children", Ty::Slice(&Ty::Struct(&SAMPLE_NODE), "[]dsl.Node")),
+        ("transition", Ty::Struct(&SAMPLE_TRANSITION)),
+        ("change", Ty::Struct(&SAMPLE_CHANGE)),
+    ],
+};
 
+impl Sample {
     fn input(self) -> graph_script::js::Input {
         let link = self.link.unwrap_or_default();
         let t = self.transition.unwrap_or_default();

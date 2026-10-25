@@ -4,7 +4,7 @@
 pub mod abac;
 mod casbin;
 pub mod celcheck;
-mod goregexp;
+pub mod goregexp;
 mod gotime;
 mod govaluate;
 pub mod guard;

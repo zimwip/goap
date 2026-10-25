@@ -602,4 +602,11 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `identity.FromHeaders` splits them, and a float64 printed as `%v` takes the exponent from 1e6 as Go's `fmt` does
   (`graph_script::go_float`; the JSON's 1e21 was used). The fold of a change's log for a write refuses nothing: Go
   reads past the `change.*` entries and the transitions alike.
+- Fewer requests left to Go: a form's pattern compiled by Go's regular expressions (`goregexp`), its defaults
+  checked as Go's widgets check them (text, number, date: `time.Parse(time.DateOnly, …)`, the bounds printed with
+  `%g`), an algorithm's parameters coerced as `Param.Coerce` does (`strconv.ParseFloat`: hexadecimal, underscores,
+  infinities; a regular expression Go's), the sample input of `RunAlgorithm` decoded with `encoding/json`'s errors,
+  the coercion refusals of a definition read from JSON worded here (from YAML, where a number is an `int`, still
+  Go's), domains that make no catalogue leaving the previous one in force as `typecat.Live.Reload` does (`ListTypes`
+  answers the error, internal), and `MergeChange` answering the items it wrote whatever they hold.
 - Not done yet: the rest of phase 4.

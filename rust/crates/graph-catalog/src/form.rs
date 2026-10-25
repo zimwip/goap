@@ -1,7 +1,7 @@
 //! The check of a form's definition (`contracts/form`, `CheckForm`, ADR 0115): field names, the widgets of the
 //! registry (read from the catalogue Go writes for the web, `widgetCatalog.gen.ts`), their constraints, the
-//! conditions and the defaults. What only Go words (a pattern Go's regexp refuses, a default whose check reads a
-//! date, a bound printed in an exponent) is [`Unsure`].
+//! conditions and the defaults. Go's regular expressions are `graph_script::goregexp`; a condition whose YAML may
+//! name an empty list is [`Unsure`].
 use std::collections::{BTreeMap, HashSet};
 use std::sync::LazyLock;
 
@@ -252,12 +252,12 @@ fn check_fields(fields: &[Field], path: &str, nested: bool, exact: bool, out: &m
                 );
             }
         }
-        for msg in define(w, fd)? {
+        for msg in define(w, fd) {
             issue(out, at.clone(), msg);
         }
         if let Some(d) = &fd.default
             && !matches!(w.value.as_str(), "none" | "links" | "objects" | "object")
-            && let Some(first) = value_issues(w, fd, d)?.into_iter().next()
+            && let Some(first) = value_issues(w, fd, d).into_iter().next()
         {
             issue(out, format!("{at}.default"), first);
         }
@@ -324,16 +324,15 @@ fn strings_of(v: &Value) -> Option<Vec<&str>> {
 }
 
 /// The checks of a field's definition beyond its constraints' types (`Widget.Define`).
-fn define(w: &Widget, fd: &Field) -> Result<Vec<String>, Unsure> {
-    Ok(match w.name.as_str() {
-        "text" | "textarea" => {
-            if let Some(p) = fd.constraints.get("pattern").and_then(Value::as_str)
-                && regex::Regex::new(&format!("^(?:{p})$")).is_err()
-            {
-                return Err(Unsure("a pattern Go's regexp words the refusal of"));
-            }
-            Vec::new()
-        }
+fn define(w: &Widget, fd: &Field) -> Vec<String> {
+    match w.name.as_str() {
+        "text" | "textarea" => match fd.constraints.get("pattern").and_then(Value::as_str) {
+            Some(p) => match graph_script::goregexp::GoRegex::compile(&format!("^(?:{p})$")) {
+                Err(e) => vec![format!("invalid pattern: {e}")],
+                Ok(_) => Vec::new(),
+            },
+            None => Vec::new(),
+        },
         "select" | "multiselect" => match fd.constraints.get("options") {
             Some(o) if strings_of(o).is_none_or(|l| l.is_empty()) => {
                 vec!["options must list at least one value".into()]
@@ -350,7 +349,7 @@ fn define(w: &Widget, fd: &Field) -> Result<Vec<String>, Unsure> {
             }
         }
         _ => Vec::new(),
-    })
+    }
 }
 
 fn multiple(fd: &Field) -> bool {
@@ -358,7 +357,7 @@ fn multiple(fd: &Field) -> bool {
 }
 
 /// What a widget refuses of a value given no environment (`Widget.check` with `Env{}`), for a default.
-fn value_issues(w: &Widget, fd: &Field, v: &Value) -> Result<Vec<String>, Unsure> {
+fn value_issues(w: &Widget, fd: &Field, v: &Value) -> Vec<String> {
     let kind = match w.value.as_str() {
         "string" if !v.is_string() => Some("expects a text"),
         "number" if !v.is_number() => Some("expects a number"),
@@ -369,17 +368,64 @@ fn value_issues(w: &Widget, fd: &Field, v: &Value) -> Result<Vec<String>, Unsure
         _ => None,
     };
     if let Some(k) = kind {
-        return Ok(vec![k.into()]);
+        return vec![k.into()];
     }
     let options = || fd.constraints.get("options").and_then(strings_of).unwrap_or_default();
-    Ok(match w.name.as_str() {
+    let bound = |k: &str| fd.constraints.get(k).and_then(Value::as_f64);
+    match w.name.as_str() {
         "boolean" => Vec::new(),
-        "text" | "textarea"
-            if !["minLength", "maxLength", "pattern"]
-                .iter()
-                .any(|k| fd.constraints.contains_key(*k)) =>
-        {
-            Vec::new()
+        "text" | "textarea" => {
+            let s = v.as_str().unwrap_or_default();
+            let n = s.chars().count() as f64;
+            let mut out = Vec::new();
+            if let Some(m) = bound("minLength").filter(|m| n < *m) {
+                out.push(format!("at least {} characters", graph_script::go_float(m)));
+            }
+            if let Some(m) = bound("maxLength").filter(|m| n > *m) {
+                out.push(format!("at most {} characters", graph_script::go_float(m)));
+            }
+            if let Some(p) = fd.constraints.get("pattern").and_then(Value::as_str)
+                && let Ok(re) = graph_script::goregexp::GoRegex::compile(&format!("^(?:{p})$"))
+                && !re.is_match(s)
+            {
+                out.push(format!("does not match {p}"));
+            }
+            out
+        }
+        "number" => {
+            let x = v.as_f64().unwrap_or_default();
+            let mut out = Vec::new();
+            if let Some(m) = bound("min").filter(|m| x < *m) {
+                out.push(format!("at least {}", graph_script::go_float(m)));
+            }
+            if let Some(m) = bound("max").filter(|m| x > *m) {
+                out.push(format!("at most {}", graph_script::go_float(m)));
+            }
+            // `x != float64(int64(x))` on amd64: out of the int64s, the smallest one
+            let whole = (-9_223_372_036_854_775_808.0..9_223_372_036_854_775_808.0).contains(&x) && x.trunc() == x;
+            if fd.constraints.get("integer").and_then(Value::as_bool) == Some(true) && !whole {
+                out.push("a whole number".into());
+            }
+            out
+        }
+        "date" => {
+            let s = v.as_str().unwrap_or_default();
+            if !go_date(s) {
+                vec!["expects a date YYYY-MM-DD".into()]
+            } else {
+                let mut out = Vec::new();
+                if let Some(m) = fd.constraints.get("min").and_then(Value::as_str)
+                    && s < m
+                {
+                    out.push(format!("on or after {m}"));
+                }
+                if let Some(m) = fd.constraints.get("max").and_then(Value::as_str)
+                    && s > m
+                {
+                    out.push(format!("on or before {m}"));
+                }
+                out
+            }
         }
         "select" => {
             let s = v.as_str().unwrap_or_default();
@@ -397,7 +443,7 @@ fn value_issues(w: &Widget, fd: &Field, v: &Value) -> Result<Vec<String>, Unsure
                 .filter(|s| !opts.contains(s))
                 .map(|s| format!("{} is not one of the options", go_quote(s)))
                 .collect();
-            out.extend(count(fd, list.len(), "values")?);
+            out.extend(count(fd, list.len(), "values"));
             out
         }
         "node" => {
@@ -416,16 +462,27 @@ fn value_issues(w: &Widget, fd: &Field, v: &Value) -> Result<Vec<String>, Unsure
                 }
             }
             if multiple(fd) {
-                out.extend(count(fd, keys.len(), "nodes")?);
+                out.extend(count(fd, keys.len(), "nodes"));
             }
             out
         }
-        _ => return Err(Unsure("a default Go's widget checks in words of its own")),
-    })
+        _ => Vec::new(),
+    }
+}
+
+/// Whether a text is a date as `time.Parse(time.DateOnly, …)` reads one: four digits, two, two, a day of the month.
+fn go_date(s: &str) -> bool {
+    let b = s.as_bytes();
+    let digits = |r: std::ops::Range<usize>| b[r].iter().all(u8::is_ascii_digit);
+    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' || !digits(0..4) || !digits(5..7) || !digits(8..10) {
+        return false;
+    }
+    let n = |r: std::ops::Range<usize>| s[r].parse::<u32>().unwrap_or_default();
+    chrono::NaiveDate::from_ymd_opt(n(0..4) as i32, n(5..7), n(8..10)).is_some()
 }
 
 /// The bounds of a count (`checkCount`).
-fn count(fd: &Field, n: usize, what: &str) -> Result<Vec<String>, Unsure> {
+fn count(fd: &Field, n: usize, what: &str) -> Vec<String> {
     let mut out = Vec::new();
     for (k, more) in [("min", false), ("max", true)] {
         let Some(m) = fd.constraints.get(k).and_then(Value::as_f64) else {
@@ -434,19 +491,10 @@ fn count(fd: &Field, n: usize, what: &str) -> Result<Vec<String>, Unsure> {
         let n = n as f64;
         if (more && n > m) || (!more && n < m) {
             let word = if more { "at most" } else { "at least" };
-            out.push(format!("{word} {} {what}", go_g(m)?));
+            out.push(format!("{word} {} {what}", graph_script::go_float(m)));
         }
     }
-    Ok(out)
-}
-
-/// A number as Go's `%g` prints it, where it prints no exponent.
-fn go_g(f: f64) -> Result<String, Unsure> {
-    if f == 0.0 || (1e-4..1e6).contains(&f.abs()) {
-        Ok(format!("{f}"))
-    } else {
-        Err(Unsure("a bound Go prints with an exponent"))
-    }
+    out
 }
 
 #[cfg(test)]
@@ -479,6 +527,44 @@ mod tests {
                 "fields[2].default: \"x\" is not one of the options",
                 "fields[3].constraints.bad: widget link has no constraint \"bad\"",
                 "fields[4].constraints: widget markdown needs the constraint \"text\"",
+            ]
+        );
+    }
+
+    /// The defaults checked as Go's widgets check them (answers of `form.CheckForm`).
+    #[test]
+    fn checks_defaults_as_go() {
+        let f = fields(&json!({"fields": [
+            {"name": "a", "widget": "text", "constraints": {"minLength": 3, "maxLength": 1e6, "pattern": "[a-z]+"}, "default": "AB"},
+            {"name": "b", "widget": "text", "constraints": {"pattern": "(x"}},
+            {"name": "c", "widget": "number", "constraints": {"min": 1.5, "max": 1234567, "integer": true}, "default": 0.5},
+            {"name": "c2", "widget": "number", "constraints": {"integer": true}, "default": 1e19},
+            {"name": "c3", "widget": "number", "constraints": {"max": 1}, "default": 2000000},
+            {"name": "d", "widget": "date", "default": "2024-02-30"},
+            {"name": "e", "widget": "date", "constraints": {"min": "2024-01-01", "max": "2024-03-01"}, "default": "2023-12-31"},
+            {"name": "f", "widget": "date", "default": "2024-2-03"},
+            {"name": "g", "widget": "date", "default": "0000-02-29"},
+            {"name": "h", "widget": "text", "constraints": {"pattern": "\\d{2"}, "default": "1"},
+            {"name": "i", "widget": "multiselect", "constraints": {"options": ["x"], "max": 0.5}, "default": ["x", "y"]},
+        ]}));
+        let got: Vec<String> = check(&f, true)
+            .unwrap()
+            .into_iter()
+            .map(|i| format!("{}: {}", i.path, i.message))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                "fields[0].default: at least 3 characters",
+                "fields[1]: invalid pattern: error parsing regexp: missing closing ): `^(?:(x)$`",
+                "fields[2].default: at least 1.5",
+                "fields[3].default: a whole number",
+                "fields[4].default: at most 1",
+                "fields[5].default: expects a date YYYY-MM-DD",
+                "fields[6].default: on or after 2024-01-01",
+                "fields[7].default: expects a date YYYY-MM-DD",
+                "fields[9].default: does not match \\d{2",
+                "fields[10].default: \"y\" is not one of the options",
             ]
         );
     }
