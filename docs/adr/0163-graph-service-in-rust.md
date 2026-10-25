@@ -567,7 +567,12 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   reads them (UNION, WITH, the writes, UNWIND, list and pattern comprehensions, quantifiers, parameters, functions
   unknown or in a namespace, a query without MATCH) and, the whole query read, answers the refusal Go's build meets
   first, in its words and at its line and column (`cypher::parse::read`, `Error`); a `@` within a name is the
-  grammar's lexer refusing it (`token recognition error at: '@'`); what the grammar itself refuses stays Go's.
+  grammar's lexer refusing it (`token recognition error at: '@'`). What the grammar itself refuses is answered in
+  the parser's own words, at the furthest token it read (`unexpected 'RETURN'`, `the query ends where more is
+  expected`, a character not read: `token recognition error at: '€'`; the words of ANTLR's errors were the Go
+  service's, a choice of the project): the lexer reads the grammar's names, white space, dashes and arrow heads
+  beyond ASCII (`unicode-ident`, `\p{Pc}` and `\p{Sc}`), an integer out of range of an int64 and a nested EXISTS or an
+  EXISTS over a query are refused in Go's words.
   `ImportGraph` and the job `graph.import`: a snapshot is decoded as Go's `json.Decoder` with
   `DisallowUnknownFields` decodes it (`graph_core::godecode`: the scanner's syntax errors over the first value, the
   type errors and unknown fields with their struct and field path, the first kept while the decoding goes on, the
@@ -581,4 +586,7 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   `invalid byte sequence for encoding "UTF8"`, on SQLite it is stored as its text). The timestamps of the JSON
   answers are written as Go's `protojson` writes them (`goap_proto::wkt::Timestamp`: `Z`, 0, 3, 6 or 9 digits;
   pbjson-types wrote `+00:00`), and the proxy compares the form of a time (separator, zone) while it masks its value.
+  `ExportChangeProvenance` reads the journal and model entries of the log as Go's `json.Unmarshal` reads them
+  (`godecode::unmarshal`: the whole text checked first, unknown fields left, the type errors with Go's struct and
+  field names), so an entry Go cannot read refuses the export with Go's `log entry N (type): …`.
 - Not done yet: the rest of phase 4.

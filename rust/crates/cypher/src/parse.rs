@@ -1,7 +1,7 @@
 //! A query of the subset read into its tree (Go's `lib/cypher/parse.go`), by descent over the rules of the openCypher
-//! grammar the subset keeps, with the grammar's white space rules. A query this parser does not read is not answered
-//! here: the Go service, whose parser is generated from the grammar, answers it with the grammar's or the subset's
-//! own words, so nothing the grammar refuses may be read here.
+//! grammar the subset keeps, with the grammar's white space rules. What the subset leaves out is refused in Go's
+//! words; what the grammar refuses, in this parser's own, at the furthest token it read (ADR 0163: the words of
+//! ANTLR's errors were the Go service's).
 use std::sync::Arc;
 
 use crate::ast::{
@@ -9,13 +9,13 @@ use crate::ast::{
     Return, SortItem, Unary,
 };
 use crate::eval::{Value, function};
-use crate::lex::{Tok, Token};
+use crate::lex::{DASH, LEFT_HEAD, RIGHT_HEAD, Tok, Token};
 
 /// The longest query Parse reads (Go's `MaxQueryBytes`).
 pub const MAX_QUERY_BYTES: usize = 16 << 10;
 
-/// A query the subset does not read, in Go's words (`cypher.Error`): a construct it leaves out or the grammar's
-/// lexer refusing a character, at a line and a column of the query (1-based; 0: the query as a whole).
+/// A query the subset does not read (`cypher.Error`): a construct it leaves out in Go's words, or the grammar's
+/// refusal of the query in this parser's words, at a line and a column of the query (1-based; 0: the query as a whole).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Error {
     pub line: usize,
@@ -50,35 +50,46 @@ pub fn parse(src: &str) -> Option<Query> {
     read(src).ok()
 }
 
-/// Reads a query of the subset: the query, Go's refusal when this parser is certain of it (the whole query read as
-/// the grammar reads it, the construct Go refuses first named), else None: the query is not read here.
-pub fn read(src: &str) -> Result<Query, Option<Error>> {
+/// Reads a query of the subset: the query, else its refusal: what the subset leaves out in Go's words (the whole
+/// query read as the grammar reads it, the construct Go refuses first named), what the grammar refuses in this
+/// parser's, at the furthest token read.
+pub fn read(src: &str) -> Result<Query, Error> {
     if src.len() > MAX_QUERY_BYTES {
         let msg = format!("a query is at most {MAX_QUERY_BYTES} bytes");
-        return Err(Some(Error { line: 0, col: 0, msg }));
+        return Err(Error { line: 0, col: 0, msg });
     }
     if src.trim().is_empty() {
         let msg = "empty query".to_string();
-        return Err(Some(Error { line: 0, col: 0, msg }));
+        return Err(Error { line: 0, col: 0, msg });
     }
-    let lexed = crate::lex::lex(src).ok_or(None)?;
+    let lexed = crate::lex::lex(src).map_err(|e| Error::at(src, e.pos, e.msg))?;
     let mut p = Parser {
         src,
         t: lexed.tokens,
         i: 0,
+        far: std::cell::Cell::new(0),
         refused: Vec::new(),
     };
-    let q = p.query().ok_or(None)?;
+    let Some(q) = p.query() else {
+        // the lexer's refusal of a `@` comes first when it stands before the parser's
+        let e = p.syntax_error();
+        return Err(match lexed.stray {
+            Some(at) if at < p.t[p.far.get().min(p.t.len() - 1)].start => {
+                Error::at(src, at, "token recognition error at: '@'".into())
+            }
+            _ => e,
+        });
+    };
     // the grammar's lexer refuses a `@` within a name before the parser reads past it
     if let Some(at) = lexed.stray {
-        return Err(Some(Error::at(src, at, "token recognition error at: '@'".into())));
+        return Err(Error::at(src, at, "token recognition error at: '@'".into()));
     }
     // the refusal Go's build meets first: a UNION, then a WITH, then a write, then the first in the order it reads
     if let Some((_, at, what)) = p.refused.iter().min_by_key(|(stage, _, _)| *stage) {
         let msg = format!("{what} is not supported: the query language is read-only MATCH … RETURN (ADR 0160)");
-        return Err(Some(Error::at(src, *at, msg)));
+        return Err(Error::at(src, *at, msg));
     }
-    q.ok_or(None)
+    q.ok_or_else(|| p.syntax_error())
 }
 
 /// When Go's build refuses a construct, first to last: a UNION, the first WITH, the first write, then the rest in
@@ -92,13 +103,26 @@ struct Parser<'s> {
     src: &'s str,
     t: Vec<Token>,
     i: usize,
+    /// the furthest token read: where the grammar is refused when no rule reads the query
+    far: std::cell::Cell<usize>,
     /// the constructs read that Go refuses: when, where, what
     refused: Vec<(u8, usize, String)>,
 }
 
 impl Parser<'_> {
     fn peek(&self) -> &Token {
+        self.far.set(self.far.get().max(self.i));
         &self.t[self.i]
+    }
+
+    /// The refusal of the grammar, at the furthest token read.
+    fn syntax_error(&self) -> Error {
+        let t = &self.t[self.far.get().min(self.t.len() - 1)];
+        let msg = match t.tok {
+            Tok::Eof => "the query ends where more is expected".to_string(),
+            _ => format!("unexpected '{}'", &self.src[t.start..t.end]),
+        };
+        Error::at(self.src, t.start, msg)
     }
 
     fn next_tok(&self) -> &Token {
@@ -106,6 +130,7 @@ impl Parser<'_> {
     }
 
     fn bump(&mut self) -> &Token {
+        self.far.set(self.far.get().max(self.i));
         let t = &self.t[self.i];
         if self.i < self.t.len() - 1 {
             self.i += 1;
@@ -156,6 +181,13 @@ impl Parser<'_> {
 
     /// The query: its single queries joined by UNION; Some(None) for a query read but not of the subset (refused).
     fn query(&mut self) -> Option<Option<Query>> {
+        let q = self.regular_query()?;
+        self.eat(";");
+        matches!(self.peek().tok, Tok::Eof).then_some(q)
+    }
+
+    /// Single queries joined by UNION (`oC_RegularQuery`).
+    fn regular_query(&mut self) -> Option<Option<Query>> {
         let q = self.single_query()?;
         while self.kw("UNION") {
             let at = self.peek().start;
@@ -169,8 +201,7 @@ impl Parser<'_> {
             self.refuse(UNION, at, "UNION");
             self.single_query()?;
         }
-        self.eat(";");
-        matches!(self.peek().tok, Tok::Eof).then_some(q)
+        Some(q)
     }
 
     /// A single query: parts ended by WITH, then reading clauses and RETURN, or writes and an optional RETURN. Some
@@ -410,7 +441,7 @@ impl Parser<'_> {
             nodes: vec![self.node_pattern()?],
             ..Pattern::default()
         };
-        while self.punct("<") || self.punct("-") {
+        while self.left_head() || self.dash() {
             p.rels.push(self.rel_pattern()?);
             p.nodes.push(self.node_pattern()?);
         }
@@ -443,9 +474,29 @@ impl Parser<'_> {
         Some(out)
     }
 
+    /// A dash of a pattern (`oC_Dash`) and its left arrow head (`oC_LeftArrowHead`), ASCII or not.
+    fn dash(&self) -> bool {
+        self.punct("-") || self.punct(DASH)
+    }
+
+    fn left_head(&self) -> bool {
+        self.punct("<") || self.punct(LEFT_HEAD)
+    }
+
+    fn expect_dash(&mut self) -> Option<()> {
+        if self.dash() {
+            self.bump();
+            return Some(());
+        }
+        None
+    }
+
     fn rel_pattern(&mut self) -> Option<RelPattern> {
-        let left = self.eat("<");
-        self.expect("-")?;
+        let left = self.left_head();
+        if left {
+            self.bump();
+        }
+        self.expect_dash()?;
         let mut r = RelPattern::default();
         if self.eat("[") {
             if matches!(self.peek().tok, Tok::Word(_) | Tok::Escaped(_)) {
@@ -473,8 +524,11 @@ impl Parser<'_> {
             }
             self.expect("]")?;
         }
-        self.expect("-")?;
-        let right = self.eat(">");
+        self.expect_dash()?;
+        let right = self.punct(">") || self.punct(RIGHT_HEAD);
+        if right {
+            self.bump();
+        }
         r.dir = match (left, right) {
             (true, false) => Direction::Left,
             (false, true) => Direction::Right,
@@ -486,13 +540,16 @@ impl Parser<'_> {
     /// `*`, `*n`, `*n..`, `*..m`, `*n..m` once the star is read (Go's `buildRange`).
     fn range(&mut self) -> Option<Range> {
         let bound = |p: &mut Self| -> Option<Option<usize>> {
-            match p.peek().tok {
-                Tok::Int(v) => {
+            let t = p.peek().clone();
+            match t.tok {
+                Tok::Int(v) if (0..=1 << 20).contains(&v) => {
                     p.bump();
-                    if !(0..=1 << 20).contains(&v) {
-                        return None;
-                    }
                     Some(Some(v as usize))
+                }
+                Tok::Int(_) | Tok::Huge(_) => {
+                    p.bump();
+                    p.refuse(READ, t.start, format!("the integer {}", &p.src[t.start..t.end]));
+                    Some(Some(0))
                 }
                 _ => Some(None),
             }
@@ -872,16 +929,18 @@ impl Parser<'_> {
                 self.bump();
                 Some(Expr::Lit(Value::Num(*v as f64)))
             }
+            Tok::Huge(text) => {
+                self.bump();
+                self.refuse(READ, t.start, format!("the integer {text}"));
+                Some(Expr::Lit(Value::Null))
+            }
             Tok::Real(text) => {
                 self.bump();
-                let f: f64 = text.parse().ok()?;
-                // a number Go reads out of range: its words
-                let zero = text
-                    .split(['e', 'E'])
-                    .next()
-                    .is_some_and(|m| m.bytes().all(|c| c == b'0' || c == b'.'));
-                if !f.is_finite() || (f == 0.0 && !zero) {
-                    return None;
+                // a number past the largest float Go refuses; one below the smallest is 0
+                let f: f64 = text.parse().unwrap_or(f64::INFINITY);
+                if !f.is_finite() {
+                    self.refuse(READ, t.start, format!("the number {text}"));
+                    return Some(Expr::Lit(Value::Null));
                 }
                 Some(Expr::Lit(Value::Num(f)))
             }
@@ -911,7 +970,7 @@ impl Parser<'_> {
             Tok::Punct("(") => {
                 let (at, refused) = (self.i, self.refused.len());
                 if let Some(p) = self.chain().filter(|p| !p.rels.is_empty()) {
-                    return exists(vec![p], None);
+                    return Some(self.exists(t.start, vec![p], None));
                 }
                 self.i = at;
                 self.refused.truncate(refused);
@@ -932,10 +991,22 @@ impl Parser<'_> {
             Tok::Word(w) if w.eq_ignore_ascii_case("EXISTS") => {
                 self.bump();
                 self.expect("{")?;
+                const QUERY: [&str; 10] = [
+                    "MATCH", "OPTIONAL", "UNWIND", "CALL", "WITH", "RETURN", "CREATE", "MERGE", "SET", "DELETE",
+                ];
+                if QUERY.iter().any(|k| self.kw(k)) || self.kw("DETACH") || self.kw("REMOVE") {
+                    // Go refuses it before it builds the query
+                    let refused = self.refused.len();
+                    self.regular_query()?;
+                    self.refused.truncate(refused);
+                    self.expect("}")?;
+                    self.refuse(READ, t.start, "EXISTS over a query (write EXISTS { pattern WHERE … })");
+                    return Some(Expr::Lit(Value::Null));
+                }
                 let patterns = self.patterns()?;
                 let filter = self.filter()?;
                 self.expect("}")?;
-                exists(patterns, filter)
+                Some(self.exists(t.start, patterns, filter))
             }
             Tok::Word(w) if w.eq_ignore_ascii_case("COUNT") => {
                 self.bump();
@@ -1015,6 +1086,27 @@ impl Parser<'_> {
             }
         }
         Some(Expr::Call(c))
+    }
+
+    /// An EXISTS of patterns, at `at`: one holding another is refused (Go's `buildExists`).
+    fn exists(&mut self, at: usize, patterns: Vec<Pattern>, filter: Option<Expr>) -> Expr {
+        let x = Exists {
+            patterns: Arc::new(patterns),
+            filter,
+        };
+        let e = Expr::Exists(Arc::new(x));
+        let mut nested = false;
+        let mut first = true;
+        e.walk(&mut |x| {
+            if matches!(x, Expr::Exists(_)) && !std::mem::replace(&mut first, false) {
+                nested = true;
+            }
+            !nested
+        });
+        if nested {
+            self.refuse(READ, at, "an EXISTS or a pattern inside an EXISTS");
+        }
+        e
     }
 
     /// `$name` or `$1`, with no white space within.
@@ -1145,24 +1237,6 @@ impl Parser<'_> {
     }
 }
 
-/// An EXISTS of patterns, holding no other.
-fn exists(patterns: Vec<Pattern>, filter: Option<Expr>) -> Option<Expr> {
-    let x = Exists {
-        patterns: Arc::new(patterns),
-        filter,
-    };
-    let e = Expr::Exists(Arc::new(x));
-    let mut nested = false;
-    let mut first = true;
-    e.walk(&mut |x| {
-        if matches!(x, Expr::Exists(_)) && !std::mem::replace(&mut first, false) {
-            nested = true;
-        }
-        !nested
-    });
-    (!nested).then_some(e)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1244,18 +1318,40 @@ mod tests {
                 format!("1:14: a parameter {RO}"),
             ),
         ] {
-            assert_eq!(read(src).err().flatten().map(|e| e.to_string()), Some(want), "{src}");
+            assert_eq!(read(src).err().map(|e| e.to_string()), Some(want), "{src}");
         }
-        // what the grammar refuses first, or a list of the grammar, is not refused here
-        for src in [
-            "MATCH (n:dv@Thing RETURN n",
-            "MATCH (n) RETURN $ p",
-            "WITH 1 AS x",
-            "MATCH (n) CREATE (m) MATCH (o) RETURN o",
-            "MATCH (n) RETURN [(n)-->(m) WHERE m.a = 1]",
+        // what the grammar refuses, in this parser's words at the furthest token read
+        for (src, want) in [
+            (
+                "MATCH (n:dv@Thing RETURN n",
+                "1:12: token recognition error at: '@'".to_string(),
+            ),
+            ("WITH 1 AS x", "1:12: the query ends where more is expected".into()),
+            (
+                "MATCH (n) CREATE (m) MATCH (o) RETURN o",
+                "1:22: unexpected 'MATCH'".into(),
+            ),
+            (
+                "MATCH (n) RETURN [(n)-->(m) WHERE m.a = 1]",
+                "1:42: unexpected ']'".into(),
+            ),
+            ("MATCH (n) RETURN n €", "1:20: token recognition error at: '€'".into()),
+            (
+                "MATCH (n) WHERE EXISTS { (n)-->(m) WHERE EXISTS { (m)-->() } } RETURN n",
+                format!("1:17: an EXISTS or a pattern inside an EXISTS {RO}"),
+            ),
+            (
+                "MATCH (n) WHERE EXISTS { MATCH (n) RETURN n } RETURN n",
+                format!("1:17: EXISTS over a query (write EXISTS {{ pattern WHERE … }}) {RO}"),
+            ),
+            (
+                "MATCH (n) RETURN 99999999999999999999",
+                format!("1:18: the integer 99999999999999999999 {RO}"),
+            ),
         ] {
-            assert_eq!(read(src).err(), Some(None), "{src}");
+            assert_eq!(read(src).err().map(|e| e.to_string()), Some(want), "{src}");
         }
+        assert!(read("MATCH (é)\u{2014}\u{2014}\u{27e9}(a$b) RETURN é, a$b, 1e-400").is_ok());
         assert!(read("MATCH (n) RETURN [x IN [1]], [(n)-->(m)]").is_ok());
     }
 }

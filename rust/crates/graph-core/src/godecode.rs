@@ -10,8 +10,12 @@ use serde_json::{Map, Value};
 /// A Go type of the shape decoded.
 pub enum Ty {
     Str,
+    /// a string type of another name (`domain.ItemID`)
+    Named(&'static str),
     Bool,
     Int,
+    /// an integer of another name (`int64`, `domain.Version`)
+    IntNamed(&'static str),
     /// `interface{}`
     Any,
     /// `time.Time`, decoded by its `UnmarshalJSON`
@@ -20,8 +24,12 @@ pub enum Ty {
     Slice(&'static Ty, &'static str),
     /// `map[string]interface{}`
     Map,
+    /// a map of string keys to values of a type: the type, its Go name
+    MapOf(&'static Ty, &'static str),
     /// a pointer to a struct
     Ptr(&'static Struct),
+    /// a pointer to a value of a type that is no struct
+    PtrTo(&'static Ty),
     Struct(&'static Struct),
 }
 
@@ -48,11 +56,34 @@ pub const MAX_DEPTH: usize = 128;
 /// `DisallowUnknownFields`: the value with the struct's JSON names, or why it does not decode.
 pub fn decode(data: &[u8], root: &'static Struct) -> Result<Value, Fail> {
     let end = first_value(data).map_err(Fail::Go)?;
-    let tree = Reader { b: &data[..end], i: 0 }.value(0).ok_or(Fail::Unsure)?;
+    into(&data[..end], root, true)
+}
+
+/// Decodes a JSON text into a struct as `json.Unmarshal` does: the whole text checked first, a field the struct does
+/// not have ignored.
+pub fn unmarshal(data: &[u8], root: &'static Struct) -> Result<Value, Fail> {
+    let end = first_value(data).map_err(|e| {
+        Fail::Go(match e.as_str() {
+            "EOF" | "unexpected EOF" => "unexpected end of JSON input".into(),
+            _ => e,
+        })
+    })?;
+    if let Some(&c) = data[end..].iter().find(|c| !space(**c)) {
+        return Err(Fail::Go(format!(
+            "invalid character {} after top-level value",
+            quote_char(c)
+        )));
+    }
+    into(&data[..end], root, false)
+}
+
+fn into(data: &[u8], root: &'static Struct, strict: bool) -> Result<Value, Fail> {
+    let tree = Reader { b: data, i: 0 }.value(0).ok_or(Fail::Unsure)?;
     let mut d = Decoder {
         saved: None,
         within: None,
         fields: Vec::new(),
+        strict,
     };
     let out = d.value(&Ty::Struct(root), &tree)?;
     if let Some(e) = d.saved {
@@ -498,6 +529,8 @@ struct Decoder {
     /// the struct and the JSON names of the fields being decoded, as Go's `errorContext`
     within: Option<&'static str>,
     fields: Vec<&'static str>,
+    /// a field the struct does not have refused (`DisallowUnknownFields`)
+    strict: bool,
 }
 
 impl Decoder {
@@ -524,10 +557,10 @@ impl Decoder {
                 Ty::Str => "string",
                 Ty::Bool => "bool",
                 Ty::Int => "int",
-                Ty::Slice(_, go) => go,
+                Ty::Named(go) | Ty::IntNamed(go) | Ty::Slice(_, go) | Ty::MapOf(_, go) => go,
                 Ty::Map => "map[string]interface {}",
                 Ty::Ptr(s) | Ty::Struct(s) => s.go,
-                Ty::Any | Ty::Time => "",
+                Ty::PtrTo(_) | Ty::Any | Ty::Time => "",
             }
         };
         if let Ty::Time = t {
@@ -544,15 +577,36 @@ impl Decoder {
         if let Ty::Any = t {
             return Ok(Out::Set(self.any(j)));
         }
+        // a pointer is followed before the value is checked: its errors name the type pointed to
+        if let Ty::PtrTo(inner) = t {
+            return Ok(match j {
+                Json::Null => Out::Clear,
+                _ => self.value(inner, j)?,
+            });
+        }
         Ok(match (t, j) {
-            (Ty::Slice(..) | Ty::Map | Ty::Ptr(_), Json::Null) => Out::Clear,
+            (Ty::Slice(..) | Ty::Map | Ty::MapOf(..) | Ty::Ptr(_), Json::Null) => Out::Clear,
             (_, Json::Null) => Out::Keep,
-            (Ty::Str, Json::Str(s, _)) => Out::Set(Value::String(s.clone())),
+            (Ty::Str | Ty::Named(_), Json::Str(s, _)) => Out::Set(Value::String(s.clone())),
             (Ty::Bool, Json::Bool(b)) => Out::Set(Value::Bool(*b)),
-            (Ty::Int, Json::Num(s)) => match s.parse::<i64>() {
+            (Ty::Int | Ty::IntNamed(_), Json::Num(s)) => match s.parse::<i64>() {
                 Ok(n) => Out::Set(Value::from(n)),
-                Err(_) => self.mismatch(&format!("number {s}"), "int"),
+                Err(_) => self.mismatch(&format!("number {s}"), name(t)),
             },
+            (Ty::MapOf(elem, _), Json::Obj(kv)) => {
+                let mut out = Map::new();
+                for (k, x) in kv {
+                    match self.value(elem, x)? {
+                        Out::Set(v) => {
+                            out.insert(k.clone(), v);
+                        }
+                        _ => {
+                            out.insert(k.clone(), zero(elem));
+                        }
+                    }
+                }
+                Out::Set(Value::Object(out))
+            }
             (Ty::Slice(elem, _), Json::Arr(xs)) => {
                 let mut out = Vec::with_capacity(xs.len());
                 for x in xs {
@@ -593,7 +647,9 @@ impl Decoder {
                 .find(|(n, _)| n == k)
                 .or_else(|| s.fields.iter().find(|(n, _)| fold(n) == fold(k)));
             let Some((name, t)) = field else {
-                self.save(format!("json: unknown field {}", go_quote(k)));
+                if self.strict {
+                    self.save(format!("json: unknown field {}", go_quote(k)));
+                }
                 continue;
             };
             let (within, depth) = (self.within, self.fields.len());

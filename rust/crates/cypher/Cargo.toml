@@ -9,6 +9,7 @@ description = "The read-only subset of openCypher the graph answers (ADR 0160), 
 
 [dependencies]
 serde_json = { workspace = true }
+unicode-ident = "1"
 
 [lints]
 workspace = true

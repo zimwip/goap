@@ -132,29 +132,6 @@ impl Caller {
                 .collect(),
         }
     }
-
-    /// The reads served here: a platform service acting by itself reads the whole graph (no reach, ADR 0161 §5). A
-    /// person, or a service acting for one, reads through the access snapshot of the organisation, and a read
-    /// requiring the position of a change log waits on the fold of that log: the Go service serves those for now.
-    fn serves(&self) -> Result<(), GraphError> {
-        if !self.subject.starts_with("system:") || !self.on_behalf_of.is_empty() {
-            return Err(GraphError::unimplemented(
-                "a person's read goes through the reach of its caller (ADR 0161): not served here yet",
-            ));
-        }
-        Ok(())
-    }
-
-    /// The writes served here: a platform service acting by itself. A person's write goes through the organisation's
-    /// access (reach, owned writes, project roles): the Go service serves those for now.
-    fn writes(&self) -> Result<(), GraphError> {
-        if !self.subject.starts_with("system:") || !self.on_behalf_of.is_empty() {
-            return Err(GraphError::unimplemented(
-                "a person's write goes through the access of the organisation: not served here yet",
-            ));
-        }
-        Ok(())
-    }
 }
 
 impl Caller {
@@ -578,7 +555,6 @@ impl Graph {
     where
         F: AsyncFnOnce(&Session) -> Result<T, GraphError>,
     {
-        caller.serves().map_err(connect_error)?;
         self.reached(&caller).await?;
         let tx = self
             .state
@@ -804,7 +780,6 @@ impl Graph {
     where
         F: for<'a, 'b> AsyncFnOnce(&'a mut Tx<'b, Session>) -> Result<T, GraphError>,
     {
-        caller.writes().map_err(connect_error)?;
         self.reached(&caller).await?;
         self.transact(&caller, String::new(), f).await
     }
