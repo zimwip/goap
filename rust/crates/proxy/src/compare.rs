@@ -15,7 +15,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::{
-    ids::{Clash, IdMap, TIME, Toward},
+    ids::{Clash, IdMap, Toward, masked_time},
     rpc::{self, Codec, Procedure, RpcError},
     upstream::{Reply, Upstream},
 };
@@ -129,7 +129,7 @@ impl Ignore {
 pub fn normalise(v: &Value, method: &str, ignore: &[Ignore]) -> Value {
     fn walk(v: &Value, path: &str, method: &str, ignore: &[Ignore]) -> Value {
         match v {
-            Value::String(s) if TIME.is_match(s) => Value::String("<time>".into()),
+            Value::String(s) if let Some(t) = masked_time(s) => Value::String(t),
             // a JSON text (the payload of a log entry) is compared as what it holds, its times masked too
             Value::String(s) if s.starts_with(['{', '[']) => match serde_json::from_str::<Value>(s) {
                 Ok(x) => {

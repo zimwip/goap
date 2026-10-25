@@ -304,6 +304,7 @@ fn check_item(
             comment: String::new(),
         }),
         created_at: None,
+        ..ItemWrite::default()
     };
     if let Err(e) = validate_item(&w, now) {
         return Ok(Err(e));

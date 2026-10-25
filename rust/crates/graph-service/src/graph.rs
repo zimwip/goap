@@ -415,17 +415,32 @@ async fn known_change<T: ReadTx>(tx: &T, id: &ChangeId) -> Result<(), GraphError
     Ok(())
 }
 
-/// The items a request writes; one carrying a flow event or a decision event is the Go service's.
+/// What pgx says of a text PostgreSQL refuses for its first sequence that is no UTF-8 (`report_invalid_encoding`:
+/// the bytes the lead byte announces, at most those left).
+fn pg_invalid_utf8(rest: &[u8]) -> String {
+    let lead = rest.first().copied().unwrap_or_default();
+    let len = match lead {
+        b if b < 0x80 => 1,
+        b if b & 0xe0 == 0xc0 => 2,
+        b if b & 0xf0 == 0xe0 => 3,
+        b if b & 0xf8 == 0xf0 => 4,
+        _ => 1,
+    };
+    let bytes: Vec<String> = rest.iter().take(len).map(|b| format!("0x{b:02x}")).collect();
+    format!(
+        "ERROR: invalid byte sequence for encoding \"UTF8\": {} (SQLSTATE 22021)",
+        bytes.join(" ")
+    )
+}
+
+/// The items a request writes.
 fn item_writes(items: Vec<pb::ChangeItem>) -> Result<Vec<ItemWrite>, ConnectError> {
     items
         .into_iter()
         .map(|it| {
-            if it.flow_event.is_some() || it.decision_event.is_some() {
-                return Err(connect_error(GraphError::unimplemented(
-                    "an item of a flow or of a decision point: written by the Go service",
-                )));
-            }
             Ok(ItemWrite {
+                flow_event: it.flow_event.map(convert::flow_event_from),
+                decision_event: it.decision_event.map(convert::decision_event_from),
                 id: it.id,
                 typ: it.r#type,
                 target: it.target,
@@ -4014,13 +4029,22 @@ impl pb::GraphService for Graph {
         let m = req.into_inner();
         let by = caller.subject.clone();
         let token_project = caller.project.clone();
-        // a payload Go's JSON check reads as bytes, not text: left to it
+        // Go's JSON check reads a payload as bytes: one that is no UTF-8 is checked as Go reads it, then stands for
+        // the text it holds; PostgreSQL refuses to store it
         let mut events = Vec::with_capacity(m.events.len());
+        let mut unstorable = None;
         for e in &m.events {
-            let Ok(payload) = String::from_utf8(e.payload.to_vec()) else {
-                return Err(connect_error(GraphError::unimplemented(
-                    "a carried event whose payload is not UTF-8: not served here",
-                )));
+            let payload = match std::str::from_utf8(&e.payload) {
+                Ok(p) => p.to_string(),
+                Err(err) => {
+                    if graph_core::godecode::valid(&e.payload)
+                        && unstorable.is_none()
+                        && self.state.store.dialect() == graph_store::Dialect::Postgres
+                    {
+                        unstorable = Some(pg_invalid_utf8(&e.payload[err.valid_up_to()..]));
+                    }
+                    String::from_utf8_lossy(&e.payload).into_owned()
+                }
             };
             events.push((e.subject.clone(), payload));
         }
@@ -4110,6 +4134,7 @@ impl pb::GraphService for Graph {
                             owner_org: owner.clone(),
                             project_id: project,
                             events: events.clone(),
+                            unstorable: unstorable.clone(),
                         },
                         &|node: &str, key: &str, t: &Transition| acc.transition(node, key, t),
                         &|c: &graph_core::change::Change, op: &str| match roles.get(op) {

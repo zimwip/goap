@@ -13,6 +13,7 @@ prost-types = { workspace = true }
 pbjson = { workspace = true }
 pbjson-types = { workspace = true }
 serde = { workspace = true }
+chrono = { workspace = true }
 goap-connect = { workspace = true }
 
 [build-dependencies]

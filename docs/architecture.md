@@ -1282,7 +1282,8 @@ each start (nodes, baselines and changes). The compose image is `pgvector/pgvect
   change or a branch refuses at once) and the transaction runs again on the writer. The graph test variant
   `postgres-readers` runs every transaction there first.
 - **The graph service in Rust** ([ADR 0163](adr/0163-graph-service-in-rust.md), phases 1 to 3, phase 4 under way): the Cargo workspace `rust/`
-  (outside the `go.work`, generated from the same `proto/`) holds `goap-graph-rs`, the graph's four services on the
+  (outside the `go.work`, generated from the same `proto/`, its JSON timestamps written as Go's `protojson` writes them,
+  `goap_proto::wkt::Timestamp`) holds `goap-graph-rs`, the graph's four services on the
   same schema (PostgreSQL or SQLite, the migrations of the Go services embedded), a method not written yet answering
   `unimplemented`; the reads of the bench are written (`graph-core`: views, selection, neighbourhood, pages, change
   headers, baseline differences, over the store trait `ReadTx`; `graph-store` `read/`: the SQL of both dialects) and so

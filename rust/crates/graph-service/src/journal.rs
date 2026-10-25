@@ -84,7 +84,7 @@ struct Record {
 }
 
 /// A time as the protocol sends it: Go's zero time is none.
-fn time(t: Option<DateTime<Utc>>) -> Option<pbjson_types::Timestamp> {
+fn time(t: Option<DateTime<Utc>>) -> Option<goap_proto::wkt::Timestamp> {
     convert::time(&t.filter(|t| t.year() > 1))
 }
 

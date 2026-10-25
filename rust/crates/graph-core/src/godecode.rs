@@ -149,6 +149,12 @@ fn printable(c: char) -> bool {
         | 0x2060..=0x2064 | 0x2066..=0x206f | 0xfeff | 0xfff9..=0xfffb | 0xd800..=0xf8ff | 0xe0000..)
 }
 
+/// Whether a text is one JSON value, spaces around it, as Go's `json.Valid` tells (its strings may hold bytes that
+/// are no UTF-8).
+pub fn valid(b: &[u8]) -> bool {
+    first_value(b).is_ok_and(|n| b[n..].iter().all(|&c| space(c)))
+}
+
 /// Where the first value of a text ends, as `Decoder.readValue` scans it; its error otherwise.
 fn first_value(b: &[u8]) -> Result<usize, String> {
     let mut st = State::BeginValue;
@@ -825,6 +831,16 @@ fn time_quote(s: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tells_valid_texts_as_go_does() {
+        for ok in [&b"1"[..], b" {\"a\": [1, 2]} ", b"\"\xff\"", b"null\n"] {
+            assert!(valid(ok), "{ok:?}");
+        }
+        for bad in [&b""[..], b" ", b"1 2", b"{\"a\":\"\\\xff\"}", b"\xff", b"[1,]"] {
+            assert!(!valid(bad), "{bad:?}");
+        }
+    }
 
     static INNER: Struct = Struct {
         name: "Inner",

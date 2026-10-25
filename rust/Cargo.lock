@@ -834,6 +834,7 @@ dependencies = [
 name = "goap-proto"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "futures",
  "goap-connect",
  "pbjson",

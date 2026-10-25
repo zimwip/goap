@@ -14,6 +14,8 @@ fn main() {
 
     let mut cfg = prost_build::Config::new();
     cfg.compile_well_known_types();
+    // a timestamp is written as Go's protojson writes it (`wkt`), the other well-known types as pbjson-types does
+    cfg.extern_path(".google.protobuf.Timestamp", "crate::wkt::Timestamp");
     cfg.extern_path(".google.protobuf", "::pbjson_types");
     cfg.service_generator(Box::new(Services));
     cfg.compile_fds(fds.clone()).expect("prost");
@@ -23,6 +25,7 @@ fn main() {
     pbjson_build::Builder::new()
         .register_descriptors(&set)
         .unwrap()
+        .extern_path(".google.protobuf.Timestamp", "crate::wkt::Timestamp")
         .extern_path(".google.protobuf", "::pbjson_types")
         // connect-go reads JSON with DiscardUnknown: a field this version does not know is ignored, not refused
         .ignore_unknown_fields()

@@ -9,7 +9,6 @@ use super::{check, tx::Tx, work::fold_change};
 use crate::{
     GraphError, Result, criticality, gojson,
     impact::{LOG_FACT, LogEntry},
-    items,
     model::ChangeId,
     store::WriteTx,
 };
@@ -33,6 +32,10 @@ pub struct ItemWrite {
     pub decision: Option<ItemDecision>,
     /// When its writer says it was made: only the policy of a derogation reads it (the log stamps the item itself).
     pub created_at: Option<DateTime<Utc>>,
+    /// A flow event or a decision event its writer gives: kept as written, read only on a `flow` or a
+    /// `decision_point` item (which `AddItems` refuses).
+    pub flow_event: Option<crate::flow::FlowEvent>,
+    pub decision_event: Option<crate::decision::DecisionEvent>,
 }
 
 /// What a `decision` item decides (`domain.Decision`): another item accepted or rejected.
@@ -44,7 +47,7 @@ pub struct ItemDecision {
     pub comment: String,
 }
 
-/// An item as Go marshals a `domain.ChangeItem` with no flow event, decision event nor recipient.
+/// An item as Go marshals a `domain.ChangeItem` with no recipient.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ItemJson<'a> {
@@ -56,6 +59,10 @@ struct ItemJson<'a> {
     status: &'a str,
     #[serde(skip_serializing_if = "str::is_empty")]
     flow: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    flow_event: Option<&'a crate::flow::FlowEvent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    decision_event: Option<&'a crate::decision::DecisionEvent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     decision: Option<&'a ItemDecision>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -70,24 +77,6 @@ struct ItemJson<'a> {
     execution: &'a str,
     #[serde(with = "gojson::time")]
     created_at: DateTime<Utc>,
-}
-
-/// Whether the items of a type are served here: an artifact, a signal, or a type no code gives a meaning.
-pub(crate) fn served(t: &str) -> bool {
-    matches!(
-        t,
-        "artifact"
-            | "decision"
-            | "signal"
-            | TYPE_REVIEW
-            | "risk"
-            | "action"
-            | "derogation"
-            | "hypothesis"
-            | "assessment"
-            | "comment"
-            | "verification"
-    ) || !items::has_code(t)
 }
 
 /// The item type of the record of a review (`domain.TypeReview`).
@@ -340,6 +329,8 @@ impl<S: WriteTx> Tx<'_, S> {
             target: &it.target,
             status,
             flow: &it.flow,
+            flow_event: it.flow_event.as_ref(),
+            decision_event: it.decision_event.as_ref(),
             decision: it.decision.as_ref(),
             data,
             produced_by: &it.produced_by,
@@ -369,15 +360,6 @@ impl<S: WriteTx> Tx<'_, S> {
     /// Appends items to the log of an open change, on its main flow; a draft change becomes active. The items come
     /// back as written (`domain.ChangeItem` JSON).
     pub async fn add_items(&mut self, id: &ChangeId, mut its: Vec<ItemWrite>) -> Result<Vec<Value>> {
-        if let Some(it) = its
-            .iter()
-            .find(|it| !served(&it.typ) && recorded_elsewhere(&it.typ).is_none())
-        {
-            return Err(GraphError::unimplemented(format!(
-                "an item of type {}: written by the Go service",
-                it.typ
-            )));
-        }
         self.lock_change(id).await?;
         let mut c = self.change_head(id).await?;
         // the change as read: its position

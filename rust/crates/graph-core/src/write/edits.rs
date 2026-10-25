@@ -67,6 +67,9 @@ pub struct Commit {
     pub project_id: String,
     /// the writer's own events, riding on the commit (subject, JSON payload; ADR 0136)
     pub events: Vec<(String, String)>,
+    /// What the store says of a carried payload it cannot hold (PostgreSQL, of bytes that are no UTF-8): the commit
+    /// fails with it once everything else holds, when the store writes its outbox.
+    pub unstorable: Option<String>,
 }
 
 /// The subjects the graph emits itself: a writer may not carry one (ADR 0136).
@@ -426,6 +429,7 @@ impl<S: WriteTx> Tx<'_, S> {
             super::merge::Merge::Applied(done) => done,
             super::merge::Merge::Rebased(err) => return Err(err),
         };
+        self.unstorable = inp.unstorable.clone();
         let mut res = CommitResult {
             change: id,
             baseline: Baseline::default(),

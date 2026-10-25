@@ -5,4 +5,6 @@
 /// The encoded `FileDescriptorSet` of proto/ (the proxy decodes any message with it).
 pub const DESCRIPTOR: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/descriptor.bin"));
 
+pub mod wkt;
+
 include!(concat!(env!("OUT_DIR"), "/packages.rs"));

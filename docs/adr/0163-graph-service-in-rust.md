@@ -573,4 +573,12 @@ time. The rewrite must not be a translation: only the behaviour of the RPCs and 
   type errors and unknown fields with their struct and field path, the first kept while the decoding goes on, the
   errors of `Time.UnmarshalJSON` and `time.Parse` with the layout RFC 3339 stopping it); a time Go reads that chrono
   does not hold (an offset of 24 hours) or a value nested past 128 levels is still Go's.
+- What Go answered of odd inputs, now Rust's too: an id that is no uuid on PostgreSQL (`ListTags`, `ListBaselines`,
+  `DeleteTag`, the log of a change: pgx's text or Go's `mapErr`, `graph-store` `not_uuid`), a change naming a branch
+  the store does not hold (`branch X: not found`), an item carrying a flow or a decision event (kept in its payload as
+  Go keeps it, read only on a `flow` / `decision_point` item), a carried event whose payload is no UTF-8 (checked as
+  `json.Valid` checks bytes, `godecode::valid`; on PostgreSQL the commit then fails as the outbox refuses it,
+  `invalid byte sequence for encoding "UTF8"`, on SQLite it is stored as its text). The timestamps of the JSON
+  answers are written as Go's `protojson` writes them (`goap_proto::wkt::Timestamp`: `Z`, 0, 3, 6 or 9 digits;
+  pbjson-types wrote `+00:00`), and the proxy compares the form of a time (separator, zone) while it masks its value.
 - Not done yet: the rest of phase 4.

@@ -34,7 +34,18 @@ static TOKEN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// A time (RFC 3339, or as a database writes it): each side stamps its own.
 pub static TIME: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$").unwrap());
+    LazyLock::new(|| Regex::new(r"^\d{4}-\d{2}-\d{2}([T ])\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$").unwrap());
+
+/// A time masked: each side stamps its own, but its form (the separator, the zone as written) is compared.
+pub fn masked_time(s: &str) -> Option<String> {
+    let c = TIME.captures(s)?;
+    let sep = &c[1];
+    let zone = c.get(3).map_or("", |m| m.as_str());
+    Some(match (sep, zone) {
+        ("T", "Z") => "<time>".into(),
+        _ => format!("<time{sep}{zone}>"),
+    })
+}
 
 /// Whether an id is the key of a review object, whose case is its own.
 fn is_review_key(id: &str) -> bool {
@@ -305,7 +316,7 @@ impl IdMap {
                 .into_owned()
         };
         match v {
-            Value::String(s) if TIME.is_match(s) => Value::String("<time>".into()),
+            Value::String(s) if let Some(t) = masked_time(s) => Value::String(t),
             Value::String(s) => Value::String(token(s)),
             Value::Array(a) => Value::Array(a.iter().map(|x| self.masked(x, side)).collect()),
             Value::Object(o) => Value::Object(o.iter().map(|(k, x)| (token(k), self.masked(x, side))).collect()),

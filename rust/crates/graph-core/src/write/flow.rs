@@ -7,7 +7,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use super::{
-    items::{ItemWrite, served},
+    items::ItemWrite,
     tx::Tx,
     work::{fold_any, node_of},
 };
@@ -499,16 +499,6 @@ impl<S: WriteTx> Tx<'_, S> {
     /// Opens a flow branch (Go's `OpenFlow`): the items it invalidates (the closure of the seeds over the provenance
     /// of its parent's view) are stale until it is adopted; the items given are written on it.
     pub async fn open_flow(&mut self, id: &ChangeId, r#in: OpenFlow) -> Result<Flow> {
-        if let Some(it) = r#in.items.iter().find(|it| !served(&it.typ)) {
-            if matches!(it.typ.as_str(), "flow" | "transition" | "decision_point") {
-                // refused below, as the Go service does
-            } else {
-                return Err(GraphError::unimplemented(format!(
-                    "an item of type {}: written by the Go service",
-                    it.typ
-                )));
-            }
-        }
         let mut c = self.flow_change(id).await?;
         let items = items_of(self.store, id).await?;
         let fx = Flows::replay(&items);

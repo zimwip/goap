@@ -83,6 +83,8 @@ pub struct Tx<'s, S: WriteTx> {
     pub(super) views: HashMap<ChangeId, super::work::ChangeView>,
     /// the events a writer carries on its commit, raised after `change.applied` (ADR 0136)
     pub(super) carried: Vec<(String, String)>,
+    /// the refusal of the store of a carried payload, raised when the outbox is written
+    pub(super) unstorable: Option<String>,
 }
 
 /// What a transaction holds in memory when a rehearsal starts (the locks taken stay).
@@ -130,6 +132,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             positions: BTreeMap::new(),
             views: HashMap::new(),
             carried: Vec::new(),
+            unstorable: None,
         }
     }
 
@@ -705,6 +708,9 @@ impl<'s, S: WriteTx> Tx<'s, S> {
 
     /// The events of what the transaction wrote, in Go's order (`Graph.eventsOf`).
     async fn events(&mut self) -> Result<Vec<OutboxMessage>> {
+        if let Some(e) = self.unstorable.take() {
+            return Err(GraphError::internal(e));
+        }
         let now = self.env.now();
         let mut out = Vec::new();
         for id in self.touched.clone() {

@@ -14,8 +14,8 @@ use graph_core::{
 use pbjson_types::value::Kind;
 use serde_json::Value as Json;
 
-pub fn time(t: &Option<DateTime<Utc>>) -> Option<pbjson_types::Timestamp> {
-    t.map(pbjson_types::Timestamp::from)
+pub fn time(t: &Option<DateTime<Utc>>) -> Option<goap_proto::wkt::Timestamp> {
+    t.map(goap_proto::wkt::Timestamp::from)
 }
 
 pub fn value(v: &Json) -> pbjson_types::Value {
@@ -242,8 +242,8 @@ pub fn baseline_diff(d: &BaselineDiff) -> pb::BaselineDiff {
 }
 
 /// A time as `pbconv.Time` writes it: none for the zero time.
-fn go_time(t: &DateTime<Utc>) -> Option<pbjson_types::Timestamp> {
-    (*t != graph_core::gojson::zero_time()).then(|| pbjson_types::Timestamp::from(*t))
+fn go_time(t: &DateTime<Utc>) -> Option<goap_proto::wkt::Timestamp> {
+    (*t != graph_core::gojson::zero_time()).then(|| goap_proto::wkt::Timestamp::from(*t))
 }
 
 fn review(r: &graph_core::impact::Review) -> pb::Review {
@@ -539,5 +539,50 @@ pub fn merge_plan(p: &graph_core::write::branchmerge::MergePlan) -> pb::MergePla
                 conflicts: c.conflicts.clone(),
             })
             .collect(),
+    }
+}
+
+/// A flow event a writer gives (`pbconv.FlowEventFromPB`).
+pub fn flow_event_from(e: pb::FlowEvent) -> graph_core::flow::FlowEvent {
+    graph_core::flow::FlowEvent {
+        op: e.op,
+        flow: e.flow,
+        parent: e.parent,
+        fork_after: e.fork_after,
+        stale: e.stale,
+        stale_runs: e.stale_runs,
+        origin: e.origin.as_ref().map(map).unwrap_or_default(),
+        by: e.by,
+        option: e.option.map(|o| graph_core::flow::OptionSpec {
+            name: o.name,
+            hypothesis: o.hypothesis,
+            ..Default::default()
+        }),
+        comment: e.comment,
+    }
+}
+
+/// A decision event a writer gives (`pbconv.DecisionEventFromPB`: the seat is not read).
+pub fn decision_event_from(e: pb::DecisionEvent) -> graph_core::decision::DecisionEvent {
+    graph_core::decision::DecisionEvent {
+        op: e.op,
+        point: e.point,
+        question: e.question,
+        options: e.options,
+        criteria: e.criteria,
+        policy: e.policy.as_ref().map(map).unwrap_or_default(),
+        outcome: e.outcome,
+        option: e.option,
+        confidence: e.confidence,
+        justification: e.justification,
+        questions: e.questions,
+        human: e.human,
+        question_id: e.question_id,
+        answer: e.answer,
+        process: e.process,
+        accept: e.accept,
+        comment: e.comment,
+        by: e.by,
+        role: String::new(),
     }
 }
