@@ -269,7 +269,7 @@ impl ChangeWorld {
             typ: d.typ.clone(),
             props: d.props.clone(),
             state: d.state.clone(),
-            owner: d.owner.clone(),
+            responsible: d.owner.clone(),
             origins: d.origins.clone(),
             change_id: self.change.id.clone(),
             change_impact: d.impact.clone(),

@@ -35,7 +35,7 @@ func BaseLinkID(event string, link LinkID) LinkID {
 func CopyDraft(e ImpactEvent, base Node, links []Link) Draft {
 	b := base.Ref()
 	d := Draft{Change: e.Change, Impact: e.Impact, Flow: e.Flow, Execution: e.Execution, Node: base.ID, Key: base.Key, Type: base.Type,
-		State: base.State, Owner: base.Owner, Properties: cloneProps(base.Properties), Base: &b}
+		State: base.State, Owner: base.Responsible, Properties: cloneProps(base.Properties), Base: &b}
 	if e.Draft != nil {
 		d.Execution = e.Draft.Execution
 		if m := e.Draft.MergedWith; m != nil {

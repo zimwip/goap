@@ -63,7 +63,7 @@
   const ownNodes = $derived.by(() => {
     const m = new Map<string, string>();
     for (const a of head?.nodes ?? []) {
-      if (a.type === nodeTypes.adapter && a.namespace === ns.organisation && unit && refKey(a.owner) === unit.key) m.set(String(a.props?.['mcp'] ?? ''), a.key ?? '');
+      if (a.type === nodeTypes.adapter && a.namespace === ns.organisation && unit && refKey(a.responsible) === unit.key) m.set(String(a.props?.['mcp'] ?? ''), a.key ?? '');
     }
     return m;
   });
@@ -278,7 +278,7 @@
       const akey = `ADP:${key}/${a.mcp}`;
       const existing = findNode(h, ns.organisation, nodeTypes.adapter, akey);
       const props: Struct = { mcp: a.mcp ?? '', adapter: a.adapter ?? '', params: a.params ?? {} };
-      await applyOnMain(ns.organisation, `Adapter ${a.mcp} of ${key}`, `${existing ? 'Update' : 'Create'} the adapter of ${a.mcp} for ${key}`, h.baselineId, existing ? [updateNodeItem(existing, props)] : [{ ...createNodeItem(akey, nodeTypes.adapter, props), owner: key }]);
+      await applyOnMain(ns.organisation, `Adapter ${a.mcp} of ${key}`, `${existing ? 'Update' : 'Create'} the adapter of ${a.mcp} for ${key}`, h.baselineId, existing ? [updateNodeItem(existing, props)] : [{ ...createNodeItem(akey, nodeTypes.adapter, props), responsible: key }]);
       notify(`Adapter ${a.mcp} saved for ${key}.`, 'ok');
       editing = false;
     } catch (e) {
@@ -362,7 +362,7 @@
       } else if (existing) {
         await applyOnMain(ns.organisation, title, `Restrict ${m} for ${key}`, h.baselineId, [updateNodeItem(existing, props)]);
       } else if (restricts) {
-        await applyOnMain(ns.organisation, title, `Restrict ${m} for ${key}`, h.baselineId, [{ ...createNodeItem(`ADP:${key}/${m}`, nodeTypes.adapter, props), owner: key }]);
+        await applyOnMain(ns.organisation, title, `Restrict ${m} for ${key}`, h.baselineId, [{ ...createNodeItem(`ADP:${key}/${m}`, nodeTypes.adapter, props), responsible: key }]);
       }
       notify(`Restrictions of ${m} saved for ${key}.`, 'ok');
       restricting = undefined;

@@ -78,8 +78,8 @@ func TestContentGraph(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if n.Owner.Key != "ORG-SALES" || n.Project.Key != "PROJ-CRM" {
-			t.Fatalf("owner %q, project %q", n.Owner, n.Project)
+		if n.Responsible.Key != "ORG-SALES" || n.Project.Key != "PROJ-CRM" {
+			t.Fatalf("owner %q, project %q", n.Responsible, n.Project)
 		}
 	})
 }

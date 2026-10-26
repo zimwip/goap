@@ -191,7 +191,7 @@ func demoRepository(ctx context.Context, g *graph.Graph, d demoData) error {
 	edits := make([]graph.NodeEdit, 0, len(nodes))
 	for _, n := range nodes {
 		e := graphsvc.SeedNode(n.Key, n.Type, n.Properties)
-		e.Owner, e.State = owners[n.Key], n.State
+		e.Responsible, e.State = owners[n.Key], n.State
 		edits = append(edits, e)
 	}
 	// the nodes of a change link each other, cycles included (an application is composed of components that

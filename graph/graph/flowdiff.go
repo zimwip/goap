@@ -119,7 +119,7 @@ func (g *Graph) flowImpactShapes(ctx context.Context, tx Tx, c domain.Change, fl
 				return nil, err
 			}
 			is.key, is.typ = n.Key, n.Type
-			is.shape = domain.NodeShape{Key: n.Key, Type: n.Type, State: n.State, Owner: n.Owner, Properties: n.Properties}
+			is.shape = domain.NodeShape{Key: n.Key, Type: n.Type, State: n.State, Owner: n.Responsible, Properties: n.Properties}
 			links, err := reader.outLinks(ctx, tx, *ref)
 			if err != nil {
 				return nil, err
@@ -131,7 +131,7 @@ func (g *Graph) flowImpactShapes(ctx context.Context, tx Tx, c domain.Change, fl
 				}
 				is.shape.Links = append(is.shape.Links, domain.LinkShape{Type: l.Type, To: l.To.ID, ToKey: keyOf(l.To), Properties: l.Properties})
 			}
-			is.side.State, is.side.Owner = n.State, n.Owner
+			is.side.State, is.side.Owner = n.State, n.Responsible
 		}
 		out = append(out, is)
 	}

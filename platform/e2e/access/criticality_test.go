@@ -17,7 +17,7 @@ import (
 // winning, the compiled-in table where none does (ADR 0075 §3, design rule 3).
 func TestCriticalityPolicyResolution(t *testing.T) {
 	node := func(id, key, typ, owner string, props map[string]any) domain.Node {
-		return domain.Node{ID: domain.NodeID(id), Key: key, Type: typ, Namespace: "organisation", Properties: props, Owner: access.UnitURL(owner)}
+		return domain.Node{ID: domain.NodeID(id), Key: key, Type: typ, Namespace: "organisation", Properties: props, Responsible: access.UnitURL(owner)}
 	}
 	pol := func(id, owner string, l criticality.Level, p criticality.Policy) domain.Node {
 		return node(id, "CP-"+id, access.NodeTypeCriticalityPolicy, owner, access.CriticalityProps(l, p))

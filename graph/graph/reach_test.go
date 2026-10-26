@@ -260,7 +260,7 @@ func TestReachScopes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cn, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: key, Type: typ, Owner: owner, Rationale: "create " + key})
+			cn, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: key, Type: typ, Responsible: owner, Rationale: "create " + key})
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -269,7 +269,7 @@ func scanNode(row pgx.Row) (domain.Node, error) {
 	}
 	n.ID, n.Version, n.Properties, n.ChangeID = domain.NodeID(id), domain.Version(version), props(p), domain.ChangeID(str(change))
 	n.ChangeImpact = domain.ChangeImpactID(str(cnode))
-	n.Owner, n.Project, n.Creator.Unit = lnk.Of(owner), lnk.Of(project), lnk.Of(creatorUnit)
+	n.Responsible, n.Project, n.Creator.Unit = lnk.Of(owner), lnk.Of(project), lnk.Of(creatorUnit)
 	return n, nil
 }
 
@@ -884,7 +884,7 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 		parents[i] = int32(pv)
 	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node_version", nodeVersionColumns, ""),
-		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Owner.String(), originsJSON(n.Origins), n.Committed, n.Editor, n.Visibility)
+		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Responsible.String(), originsJSON(n.Origins), n.Committed, n.Editor, n.Visibility)
 	return mapErr(err, "node "+n.Ref().String())
 }
 

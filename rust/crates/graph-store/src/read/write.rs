@@ -509,7 +509,7 @@ impl WriteTx for Session {
             Arg::or_null(&n.change_impact),
             n.comment.as_str().into(),
             n.execution.as_str().into(),
-            Arg::Text(n.owner.to_string()),
+            Arg::Text(n.responsible.to_string()),
             Arg::Text(json_list(&n.origins)),
             Arg::Int(committed),
             n.editor.as_str().into(),

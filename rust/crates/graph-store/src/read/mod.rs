@@ -303,7 +303,7 @@ fn node_of(r: &Row) -> Node {
         comment: r.text(14),
         execution: r.text(15),
         joined: Vec::new(),
-        owner: Url::of(&r.text(16)),
+        responsible: Url::of(&r.text(16)),
         project: Url::of(&r.text(17)),
         origins,
         creator: graph_core::model::Creator {

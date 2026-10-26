@@ -2035,7 +2035,7 @@ fn base_node(n: &Node) -> BaseNode {
         key: n.key.clone(),
         typ: n.typ.clone(),
         state: n.state.clone(),
-        owner: n.owner.clone(),
+        owner: n.responsible.clone(),
         props: n.props.clone(),
     }
 }

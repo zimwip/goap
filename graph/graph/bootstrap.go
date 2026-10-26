@@ -88,7 +88,7 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 		c := changes[st.Namespace]
 		n := domain.Node{ID: ids[st.Kind], Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Namespace: st.Namespace,
 			Key: st.Root, Type: st.Type, Properties: maps.Clone(st.Bootstrap), ChangeID: c.ID, Comment: c.Intent,
-			Owner: g.StructureURL(org.Kind, org.Root), Project: g.StructureURL(proj.Kind, proj.Root), CreatedAt: now}
+			Responsible: g.StructureURL(org.Kind, org.Root), Project: g.StructureURL(proj.Kind, proj.Root), CreatedAt: now}
 		if err := tx.PutNode(ctx, n); err != nil {
 			return err
 		}

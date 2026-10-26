@@ -181,7 +181,7 @@ func (h *Handler) inViews(ctx context.Context, m *indexv1.SearchRequest, q *inde
 		}
 		for _, n := range drafts {
 			q.Extra = append(q.Extra, index.Hit{Kind: index.KindNode, ID: n.ID, Namespace: n.Namespace, Type: n.Type, Key: n.Key, State: n.State,
-				Branch: n.Branch, Project: n.Project.Key, Responsible: n.Owner.Key, Visibility: domain.VisibilityOf(n.Visibility), Creator: n.Creator.Subject})
+				Branch: n.Branch, Project: n.Project.Key, Responsible: n.Responsible.Key, Visibility: domain.VisibilityOf(n.Visibility), Creator: n.Creator.Subject})
 		}
 	}
 	if every {

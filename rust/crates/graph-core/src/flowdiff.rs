@@ -204,7 +204,7 @@ async fn shapes<T: ReadTx>(
             is.typ = n.typ.clone();
             is.shape = NodeShape {
                 state: n.state.clone(),
-                owner: n.owner.clone(),
+                owner: n.responsible.clone(),
                 props: n.props.clone(),
                 links: Vec::new(),
             };
@@ -238,7 +238,7 @@ async fn shapes<T: ReadTx>(
                 }
             }
             is.side.state = n.state;
-            is.side.owner = n.owner;
+            is.side.owner = n.responsible;
         }
         out.push(is);
     }

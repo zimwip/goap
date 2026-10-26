@@ -55,7 +55,7 @@ impl Reach {
         match visibility_of(&n.visibility) {
             VISIBILITY_PUBLIC => true,
             VISIBILITY_TREE => self.trees.contains(p) || self.projects.contains(p),
-            VISIBILITY_PRIVATE => self.projects.contains(p) && self.units.contains(&n.owner.key),
+            VISIBILITY_PRIVATE => self.projects.contains(p) && self.units.contains(&n.responsible.key),
             VISIBILITY_PERSONAL => {
                 self.projects.contains(p) && !self.subject.is_empty() && n.creator.subject == self.subject
             }

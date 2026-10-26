@@ -249,7 +249,7 @@ pub(crate) async fn stored_draft<T: ReadTx>(store: &T, r: &NodeRef) -> Result<Dr
         key: n.key.clone(),
         typ: n.typ.clone(),
         state: n.state.clone(),
-        owner: n.owner.clone(),
+        owner: n.responsible.clone(),
         props: n.props.clone(),
         base: Some(r.clone()),
         links,

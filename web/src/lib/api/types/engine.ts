@@ -633,7 +633,7 @@ export interface NodeCreateSpec {
   key: string;
   type: string;
   props?: Struct;
-  owner?: string;
+  responsible?: string;
   rationale?: string;
   links?: LinkWrite[];
 }

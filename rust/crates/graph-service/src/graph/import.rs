@@ -152,7 +152,7 @@ async fn import(
                 )));
             }
             p.props = snapshot::props_patch(&n.props, &sn.props);
-            if !owner.is_empty() && !n.owner.names(&owner) {
+            if !owner.is_empty() && !n.responsible.names(&owner) {
                 p.owner = owner;
             }
             let state = !sn.state.is_empty() && sn.state != n.state;

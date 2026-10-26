@@ -217,7 +217,7 @@ impl<S: WriteTx> Tx<'_, S> {
             props: d.props.clone(),
             state: d.state.clone(),
             change_id: c.id.clone(),
-            owner: d.owner.clone(),
+            responsible: d.owner.clone(),
             change_impact: cn.id.clone(),
             comment,
             execution: d.execution.clone(),
@@ -631,7 +631,7 @@ impl<S: WriteTx> Tx<'_, S> {
                         .ok_or_else(|| GraphError::not_found(format!("node {id} v{v}")))?;
                     n.props = f.props.clone();
                     n.state = f.state.clone();
-                    n.owner = f.owner.clone();
+                    n.responsible = f.responsible.clone();
                     n.origins = f.origins.clone();
                     let links = self.out_links(&src).await?;
                     (links, vec![src, latest.node_ref()])

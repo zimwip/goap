@@ -136,8 +136,8 @@ pub struct Node {
     pub execution: String,
     /// The branches the version joined as is (filled by the reads of a history only).
     pub joined: Vec<String>,
-    /// The unit owning the version and the project of the node, logical URLs (ADR 0154).
-    pub owner: Url,
+    /// The unit responsible for the version (ADR 0161) and the project of the node, logical URLs (ADR 0154).
+    pub responsible: Url,
     pub project: Url,
     pub origins: Vec<NodeRef>,
     /// Who created the node (ADR 0161 §3), the same for every version: stamped by its first one.
@@ -323,7 +323,7 @@ impl ReachFilter {
         match visibility_of(&n.visibility) {
             VISIBILITY_PUBLIC => true,
             VISIBILITY_TREE => is_in(&self.trees, &n.project) || is_in(&self.projects, &n.project),
-            VISIBILITY_PRIVATE => is_in(&self.projects, &n.project) && is_in(&self.units, &n.owner),
+            VISIBILITY_PRIVATE => is_in(&self.projects, &n.project) && is_in(&self.units, &n.responsible),
             VISIBILITY_PERSONAL => {
                 is_in(&self.projects, &n.project) && !self.subject.is_empty() && n.creator.subject == self.subject
             }

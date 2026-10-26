@@ -41,7 +41,7 @@ func Import(ctx context.Context, g *graph.Graph, in Node) (domain.Node, error) {
 	if err != nil {
 		return domain.Node{}, err
 	}
-	cn, err := g.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: in.Key, Type: in.Type, Properties: in.Properties, Owner: in.Owner, Rationale: "Import " + in.Key, Links: in.Links})
+	cn, err := g.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: in.Key, Type: in.Type, Properties: in.Properties, Responsible: in.Owner, Rationale: "Import " + in.Key, Links: in.Links})
 	if err != nil {
 		return domain.Node{}, err
 	}

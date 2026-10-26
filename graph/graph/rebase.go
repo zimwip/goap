@@ -149,7 +149,7 @@ func (g *Graph) storedVersion(ctx context.Context, tx Tx, ref domain.NodeRef, wi
 		return domain.Draft{}, err
 	}
 	b := n.Ref()
-	out := domain.Draft{Node: n.ID, Key: n.Key, Type: n.Type, State: n.State, Owner: n.Owner, Properties: cloneMap(n.Properties), Base: &b}
+	out := domain.Draft{Node: n.ID, Key: n.Key, Type: n.Type, State: n.State, Owner: n.Responsible, Properties: cloneMap(n.Properties), Base: &b}
 	if !withLinks {
 		return out, nil
 	}

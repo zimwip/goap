@@ -559,7 +559,7 @@ impl<S: WriteTx> Tx<'_, S> {
             key: n.key.clone(),
             typ: n.typ.clone(),
             state: n.state.clone(),
-            owner: n.owner.clone(),
+            owner: n.responsible.clone(),
             props: n.props.clone(),
             base: Some(r.clone()),
             ..Draft::default()

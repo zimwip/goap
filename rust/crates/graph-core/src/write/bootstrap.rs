@@ -96,7 +96,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 props: Some(st.bootstrap.clone()),
                 change_id: c.id.clone(),
                 comment: c.intent.clone(),
-                owner: owner.clone(),
+                responsible: owner.clone(),
                 project: project.clone(),
                 created_at: Some(now),
                 ..Node::default()

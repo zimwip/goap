@@ -426,7 +426,7 @@ impl Snapshot {
             .map(|n| n.key.as_str())
             .collect();
         for n in nodes.iter().filter(|n| n.typ == TYPE_CRITICALITY_POLICY) {
-            let unit = n.owner.key.as_str();
+            let unit = n.responsible.key.as_str();
             if !units.contains(unit) {
                 continue;
             }
@@ -928,7 +928,7 @@ mod tests {
         let version = |project: &str, vis: &str, owner: &str, creator: &str| Node {
             namespace: "alm".into(),
             project: Url::new("organisation", "ProjectUnit", project),
-            owner: Url::new("organisation", "OrgUnit", owner),
+            responsible: Url::new("organisation", "OrgUnit", owner),
             creator: crate::model::Creator {
                 subject: creator.into(),
                 ..Default::default()

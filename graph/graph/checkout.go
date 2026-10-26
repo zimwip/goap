@@ -475,8 +475,8 @@ func (g *Graph) newDraft(ctx context.Context, tx Tx, w *work, in NodeCreate, ori
 	if err := w.checkDraftAttributes(d, d.Properties); err != nil {
 		return d, err
 	}
-	if in.Owner != "" {
-		unit, _, err := g.resolveStructure(ctx, tx, domain.StructureOrganisation, in.Owner)
+	if in.Responsible != "" {
+		unit, _, err := g.resolveStructure(ctx, tx, domain.StructureOrganisation, in.Responsible)
 		if err != nil {
 			return d, err
 		}
@@ -619,7 +619,7 @@ func (g *Graph) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact
 	if err := g.allow(ctx, id, operations.ImpactUpdate); err != nil {
 		return cn, err
 	}
-	if len(in.Properties) == 0 && in.Owner == "" {
+	if len(in.Properties) == 0 && in.Responsible == "" {
 		return cn, invalidf("nothing to update")
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
@@ -643,8 +643,8 @@ func (g *Graph) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact
 			}
 			patch["props"] = in.Properties
 		}
-		if in.Owner != "" {
-			unit, _, err := g.resolveStructure(ctx, tx, domain.StructureOrganisation, in.Owner)
+		if in.Responsible != "" {
+			unit, _, err := g.resolveStructure(ctx, tx, domain.StructureOrganisation, in.Responsible)
 			if err != nil {
 				return err
 			}

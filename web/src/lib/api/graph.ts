@@ -347,7 +347,7 @@ export const graph = {
   // lifecycle (a transition on a node with no draft checks it out first). An edit never reviews: the review is explicit. flow: the flow or
   // option written on ('main' names the main flow, '' is the active option).
   /** Creates a node in a change: the impact (intent created) and its draft. */
-  impactNodeCreate: (changeId: string, n: { key: string; type: string; props?: Struct; owner?: string; rationale: string; links?: LinkWrite[] }, flow = '') =>
+  impactNodeCreate: (changeId: string, n: { key: string; type: string; props?: Struct; responsible?: string; rationale: string; links?: LinkWrite[] }, flow = '') =>
     rpc<typeof n & { changeId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeCreate', { changeId, ...n, flow }),
   /** Merges nodes into a new one, from the side of their parents (ADR 0077): the parents lose the links to the sources and gain one to the new node; the sources stay as they are, their impacts carry the impact of their parent as via. */
   impactNodeMerge: (changeId: string, m: { sources: NodeName[]; into: NodeCreateSpec; rationale?: string }, flow = '') =>
@@ -360,9 +360,9 @@ export const graph = {
   /** Checks out a node (by its impact, or by the node: the impact is declared) for editing: the draft of the flow; refused (conflict 'already checked out') while the flow already holds its own (update it). A draft held by a parent flow is not the flow's own. */
   impactNodeCheckout: (changeId: string, target: { changeImpactId?: string; nodeId?: string }, rationale = '', flow = '') =>
     rpc<{ changeId: string; changeImpactId?: string; nodeId?: string; rationale: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeCheckout', { changeId, ...target, rationale, flow }),
-  /** Merges properties into (and transfers the owner of) a draft, in place; an accepted review goes back to proposed. */
-  impactNodeUpdate: (changeId: string, changeImpactId: string, u: { props?: Struct; owner?: string }, flow = '') =>
-    rpc<{ changeId: string; changeImpactId: string; props?: Struct; owner?: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeUpdate', { changeId, changeImpactId, ...u, flow }),
+  /** Merges properties into (and transfers the responsible unit of) a draft, in place; an accepted review goes back to proposed. */
+  impactNodeUpdate: (changeId: string, changeImpactId: string, u: { props?: Struct; responsible?: string }, flow = '') =>
+    rpc<{ changeId: string; changeImpactId: string; props?: Struct; responsible?: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeUpdate', { changeId, changeImpactId, ...u, flow }),
   /** Adds an outgoing link to a draft, in place. `to` is an exact version, or a draft reference {id, version: 0} of a node the change holds a draft of. */
   impactLinkCreate: (changeId: string, changeImpactId: string, l: LinkWrite, flow = '') =>
     rpc<{ changeId: string; changeImpactId: string; type: string; to: NodeRef; props?: Struct; flow: string }, { link?: Link }>(GRAPH, 'ImpactLinkCreate', {

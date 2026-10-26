@@ -60,7 +60,7 @@ func (r *Reach) sees(n domain.Node) bool {
 	case domain.VisibilityTree:
 		return r.Trees[p] || r.Projects[p]
 	case domain.VisibilityPrivate:
-		return r.Projects[p] && r.Units[n.Owner.Key]
+		return r.Projects[p] && r.Units[n.Responsible.Key]
 	case domain.VisibilityPersonal:
 		return r.Projects[p] && r.Subject != "" && n.Creator.Subject == r.Subject
 	default:

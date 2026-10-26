@@ -293,7 +293,7 @@ message Node {
   // the branches the version joined besides the one it was written on (ADR 0032; filled by ListNodeVersions)
   repeated string joined = 17;
   // the organisational unit responsible for the version and the project the node was created in (node ids, ADR 0054)
-  string owner = 18;
+  string responsible = 18;
   string project = 19;
   // the draft of a node in a change (ADR 0079): the node has no version while the change works, version is 0; the version
   // is written when the change commits
@@ -1713,7 +1713,7 @@ message NodeEdit {
   repeated string remove_links = 7;
   // key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged, or the unit holding the
   // commit for a created node
-  string owner = 8;
+  string responsible = 8;
   // the lifecycle state the node is moved to (a transition of its own, ADR 0076): after the other edits, or before
   // them (a retired entry restored)
   string state = 9;
@@ -1773,8 +1773,8 @@ message ImpactNodeCreateRequest {
   string key = 2;
   string type = 3;
   google.protobuf.Struct props = 4;
-  // key of the organisational unit owning the node (ADR 0054); empty: the unit holding the change
-  string owner = 5;
+  // key of the organisational unit answering for the node (ADR 0054); empty: the unit holding the change
+  string responsible = 5;
   string rationale = 6;
   repeated NodeLinkWrite links = 7;
   string flow = 8;
@@ -1786,7 +1786,7 @@ message NodeCreateSpec {
   string key = 1;
   string type = 2;
   google.protobuf.Struct props = 3;
-  string owner = 4;
+  string responsible = 4;
   string rationale = 5;
   repeated NodeLinkWrite links = 6;
 }
@@ -1887,7 +1887,7 @@ message ImpactNodeUpdateRequest {
   // merged over the properties of the draft
   google.protobuf.Struct props = 3;
   // key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged
-  string owner = 4;
+  string responsible = 4;
   string flow = 5;
   string execution = 6;
 }

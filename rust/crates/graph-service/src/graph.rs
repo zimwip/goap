@@ -3350,7 +3350,7 @@ impl pb::GraphService for Graph {
                         key: m.key.clone(),
                         typ: m.r#type.clone(),
                         props: m.props.as_ref().map(convert::map).filter(|p| !p.is_empty()),
-                        owner: m.owner.clone(),
+                        owner: m.responsible.clone(),
                         rationale: m.rationale.clone(),
                         links,
                         execution: m.execution.clone(),
@@ -3513,7 +3513,7 @@ impl pb::GraphService for Graph {
             acc.allow(tx, &m.change_id, operations::IMPACT_UPDATE).await?;
             let props = m.props.as_ref().map(convert::map).unwrap_or_default();
             let cn = tx
-                .impact_node_update(&id, &m.change_impact_id, props, &m.owner, &m.flow, &m.execution)
+                .impact_node_update(&id, &m.change_impact_id, props, &m.responsible, &m.flow, &m.execution)
                 .await?;
             Ok(pb::ImpactNodeUpdateResponse {
                 node: Some(convert::change_impact(&cn)),
@@ -3977,7 +3977,7 @@ impl pb::GraphService for Graph {
                     })
                     .collect(),
                 remove_links: e.remove_links.iter().map(|l| l.as_str().into()).collect(),
-                owner: e.owner.clone(),
+                owner: e.responsible.clone(),
                 state: e.state.clone(),
             })
             .collect();
@@ -4743,7 +4743,7 @@ fn create_spec(s: Option<&pb::NodeCreateSpec>, execution: &str, by: &str) -> Res
         key: s.key.clone(),
         typ: s.r#type.clone(),
         props: s.props.as_ref().map(convert::map).filter(|p| !p.is_empty()),
-        owner: s.owner.clone(),
+        owner: s.responsible.clone(),
         rationale: s.rationale.clone(),
         links: convert::link_writes(&s.links).map_err(|e| GraphError::new(Kind::Invalid, e))?,
         execution: execution.to_string(),

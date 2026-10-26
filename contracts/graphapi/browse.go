@@ -85,7 +85,7 @@ func (f *ReachFilter) Holds(n domain.Node) bool {
 	case domain.VisibilityTree:
 		return in(f.Trees, n.Project) || in(f.Projects, n.Project)
 	case domain.VisibilityPrivate:
-		return in(f.Projects, n.Project) && in(f.Units, n.Owner)
+		return in(f.Projects, n.Project) && in(f.Units, n.Responsible)
 	case domain.VisibilityPersonal:
 		return in(f.Projects, n.Project) && f.Subject != "" && n.Creator.Subject == f.Subject
 	default:

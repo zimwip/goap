@@ -1019,7 +1019,7 @@ func (h *Handler) ImpactNodeCreate(ctx context.Context, r *connect.Request[graph
 	if err := checkTargets(targetsOf(m.Links)...); err != nil {
 		return nil, err
 	}
-	cn, err := h.Graph.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: m.Key, Type: m.Type, Properties: pbconv.Map(m.Props), Owner: m.Owner, Rationale: m.Rationale,
+	cn, err := h.Graph.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: m.Key, Type: m.Type, Properties: pbconv.Map(m.Props), Responsible: m.Responsible, Rationale: m.Rationale,
 		Links: linkWrites(m.Links), Flow: m.Flow, Execution: m.Execution, ProducedBy: who.Subject})
 	return res(&graphv1.ImpactNodeCreateResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
@@ -1035,7 +1035,7 @@ func nameOf(n *graphv1.NodeName) graph.NodeName {
 }
 
 func createSpec(s *graphv1.NodeCreateSpec, flow, execution, by string) graph.NodeCreate {
-	return graph.NodeCreate{Key: s.GetKey(), Type: s.GetType(), Properties: pbconv.Map(s.GetProps()), Owner: s.GetOwner(), Rationale: s.GetRationale(),
+	return graph.NodeCreate{Key: s.GetKey(), Type: s.GetType(), Properties: pbconv.Map(s.GetProps()), Responsible: s.GetResponsible(), Rationale: s.GetRationale(),
 		Links: linkWrites(s.GetLinks()), Flow: flow, Execution: execution, ProducedBy: by}
 }
 
@@ -1131,7 +1131,7 @@ func (h *Handler) ImpactNodeUpdate(ctx context.Context, r *connect.Request[graph
 		return nil, err
 	}
 	cn, err := h.Graph.ImpactNodeUpdate(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId),
-		graph.NodeUpdate{Properties: pbconv.Map(m.Props), Owner: m.Owner, Flow: m.Flow, Execution: m.Execution})
+		graph.NodeUpdate{Properties: pbconv.Map(m.Props), Responsible: m.Responsible, Flow: m.Flow, Execution: m.Execution})
 	return res(&graphv1.ImpactNodeUpdateResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 

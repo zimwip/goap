@@ -99,7 +99,7 @@ func cloneProps(m map[string]any) map[string]any {
 // AsNode is the draft seen as a node (Version 0): what a reader of the change sees of the node. Branch and Namespace are
 // set by the graph.
 func (d Draft) AsNode() Node {
-	return Node{ID: d.Node, Key: d.Key, Type: d.Type, State: d.State, Owner: d.Owner, Properties: cloneProps(d.Properties), Origins: slices.Clone(d.Origins),
+	return Node{ID: d.Node, Key: d.Key, Type: d.Type, State: d.State, Responsible: d.Owner, Properties: cloneProps(d.Properties), Origins: slices.Clone(d.Origins),
 		ChangeID: d.Change, ChangeImpact: d.Impact, Execution: d.Execution, Reason: draftReason(d)}
 }
 

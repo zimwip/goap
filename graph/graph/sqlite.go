@@ -158,7 +158,7 @@ func sqliteScanNode(row scanner) (domain.Node, error) {
 	}
 	n.ID, n.Version, n.Properties, n.ChangeID = domain.NodeID(id), domain.Version(version), props([]byte(p)), domain.ChangeID(change.String)
 	n.ChangeImpact = domain.ChangeImpactID(cnode.String)
-	n.Owner, n.Project, n.Creator.Unit = lnk.Of(owner), lnk.Of(project), lnk.Of(creatorUnit)
+	n.Responsible, n.Project, n.Creator.Unit = lnk.Of(owner), lnk.Of(project), lnk.Of(creatorUnit)
 	n.CreatedAt = tsParse(created)
 	return n, nil
 }
@@ -733,7 +733,7 @@ func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 	pj, _ := json.Marshal(parents)
 	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("node_version", nodeVersionColumns, ""),
 		string(n.ID), int(n.Version), string(jsonb(n.Properties)), n.Deleted, nullUUID(string(n.ChangeID)), tsText(n.CreatedAt),
-		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Owner.String(), string(originsJSON(n.Origins)), n.Committed, n.Editor, n.Visibility)
+		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Responsible.String(), string(originsJSON(n.Origins)), n.Committed, n.Editor, n.Visibility)
 	return sqliteErr(err, "node "+n.Ref().String())
 }
 

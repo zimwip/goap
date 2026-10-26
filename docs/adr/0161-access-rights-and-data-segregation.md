@@ -1,6 +1,6 @@
 # ADR 0161 — Access rights and data segregation: roles as action lists, projects own the data, the lifecycle opens it
 
-**Status**: accepted, phase 1 implemented · **Date**: 2026-10 ·
+**Status**: accepted, phases 1 and 2 implemented · **Date**: 2026-10 ·
 Builds on ADR 0039 (projects, Assignments), ADR 0043 / 0047 (project and platform roles), ADR 0054 (owner and project
 of a version), ADR 0103 (operation catalogue), ADR 0138 (deny by default), ADR 0157 (every read names its view).
 Revises ADR 0138 §2 (the `owner` / `admin` flags become built-in roles).
@@ -132,7 +132,16 @@ only when both hold. A role never widens reach; reach never grants an action.
    namespaces (organisation, platform, methodology) are read whole and administered, not owned.
 2. **Creator, editor, scopes.** `Node.Creator`, `Node.Editor`, `node_version.visibility` stamped at commit (both
    dialects), `visibility:` on lifecycle states and node types, `node:share`, the reach set, the index fields; the
-   rename to `Responsible`.
+   rename to `Responsible`. *Done*, in the Go and the Rust graph: `domain.Creator` (subject, unit) and `Node.Editor`
+   (the end user an agent acts for, `Graph.author`; `ImpactEvent.For` records it beside `By`), stamped by the guard
+   (`node.creator`, `node.creator_unit`, `node_version.editor`, `node_version.visibility`, migration
+   `0021_access_scopes.sql`); `LifecycleState.Visibility` / `NodeType.Visibility` (inherited, `TypeCatalog.Visibility`:
+   the state's, else the type's, else project; the built-in domains declare public); `Reach` with `Projects`, `Trees`,
+   `Units`, `Subject` (`access.Snapshot.ReachSet`, kept per subject and organisation head by `Directory.ReachSet`),
+   filtered in SQL by `reachHolds` and by `graphapi.ReachFilter.Holds`; `checkShare` at a transition out of a personal
+   state; the index's `visibility`, `creator` and `responsible` (`access.ReachSet.Holds` in `indexersvc.readFilter`);
+   `Node.Responsible` in the model, the protocol and the web (the column stays `owner`, the draft and its patches keep
+   `owner`, Cypher reads `n.responsible` and `n.owner`).
 3. **The last release** in the view reader and the index, links resolved to it.
 4. **Roles as action lists.** The catalogue extended, built-in roles grantable per project, the flags folded into
    built-in roles, Casbin left with the deny conditions, `node:reown`.

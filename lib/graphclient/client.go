@@ -189,7 +189,7 @@ func (c *Client) ProposeImpact(ctx context.Context, id domain.ChangeID, nodes []
 
 // ImpactNodeCreate creates a node in a change (ADR 0076).
 func (c *Client) ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in graphapi.NodeCreate) (domain.ChangeImpact, error) {
-	req := &graphv1.ImpactNodeCreateRequest{ChangeId: string(id), Key: in.Key, Type: in.Type, Props: pbconv.Struct(in.Properties), Owner: in.Owner,
+	req := &graphv1.ImpactNodeCreateRequest{ChangeId: string(id), Key: in.Key, Type: in.Type, Props: pbconv.Struct(in.Properties), Responsible: in.Responsible,
 		Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution}
 	for _, l := range in.Links {
 		req.Links = append(req.Links, &graphv1.NodeLinkWrite{Type: l.Type, To: pbconv.RefToPB(l.To), Target: pbconv.TargetToPB(l.Target), Props: pbconv.Struct(l.Properties)})
@@ -206,7 +206,7 @@ func nameToPB(n graphapi.NodeName) *graphv1.NodeName {
 }
 
 func specToPB(c graphapi.NodeCreate) *graphv1.NodeCreateSpec {
-	s := &graphv1.NodeCreateSpec{Key: c.Key, Type: c.Type, Props: pbconv.Struct(c.Properties), Owner: c.Owner, Rationale: c.Rationale}
+	s := &graphv1.NodeCreateSpec{Key: c.Key, Type: c.Type, Props: pbconv.Struct(c.Properties), Responsible: c.Responsible, Rationale: c.Rationale}
 	for _, l := range c.Links {
 		s.Links = append(s.Links, &graphv1.NodeLinkWrite{Type: l.Type, To: pbconv.RefToPB(l.To), Target: pbconv.TargetToPB(l.Target), Props: pbconv.Struct(l.Properties)})
 	}
@@ -281,7 +281,7 @@ func (c *Client) ImpactNodeCheckoutBatch(ctx context.Context, id domain.ChangeID
 // ImpactNodeUpdate implements engine.GraphPort.
 func (c *Client) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in graphapi.NodeUpdate) (domain.ChangeImpact, error) {
 	r, err := c.rpc.ImpactNodeUpdate(ctx, connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: string(id), ChangeImpactId: string(impact), Props: pbconv.Struct(in.Properties),
-		Owner: in.Owner, Flow: in.Flow, Execution: in.Execution}))
+		Responsible: in.Responsible, Flow: in.Flow, Execution: in.Execution}))
 	if err != nil {
 		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
 	}

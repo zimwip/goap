@@ -95,7 +95,7 @@ pub fn node(n: &Node) -> pb::Node {
         comment: n.comment.clone(),
         execution: n.execution.clone(),
         joined: n.joined.clone(),
-        owner: url(&n.owner),
+        responsible: url(&n.responsible),
         project: url(&n.project),
         draft: n.version == 0,
         origins: n.origins.iter().map(node_ref).collect(),

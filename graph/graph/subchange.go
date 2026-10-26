@@ -297,23 +297,23 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if err != nil {
 				return err
 			}
-			if pre.Owner == parent.OwnerOrg {
+			if pre.Responsible == parent.OwnerOrg {
 				continue // the unit holding the change owns it
 			}
-			unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, pre.Owner)
+			unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, pre.Responsible)
 			if err != nil {
 				return err
 			}
-			if below, err := g.within(ctx, tx, domain.StructureOrganisation, pre.Owner, parent.OwnerOrg); err != nil {
+			if below, err := g.within(ctx, tx, domain.StructureOrganisation, pre.Responsible, parent.OwnerOrg); err != nil {
 				return err
 			} else if !below {
 				continue // owned outside the unit holding the change: nothing to delegate to
 			}
-			gr := byOrg[pre.Owner]
+			gr := byOrg[pre.Responsible]
 			if gr == nil {
 				name, _ := unit.Properties["name"].(string)
-				gr = &group{org: pre.Owner, name: firstNonEmpty(name, unit.Key)}
-				byOrg[pre.Owner] = gr
+				gr = &group{org: pre.Responsible, name: firstNonEmpty(name, unit.Key)}
+				byOrg[pre.Responsible] = gr
 				groups = append(groups, gr)
 			}
 			gr.nodes = append(gr.nodes, cn)

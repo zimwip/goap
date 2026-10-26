@@ -34,7 +34,7 @@ export function nodeChanges(before: NodeSide | undefined, after: NodeSide | unde
   };
   scalar('state', b?.state, a?.state);
   // a created node's owner is the change's unit: not a modification worth a line
-  if (b) scalar('owner', b.owner, a?.owner);
+  if (b) scalar('owner', b.responsible, a?.responsible);
 
   const bp = (b?.props ?? {}) as Record<string, unknown>;
   const ap = (a?.props ?? {}) as Record<string, unknown>;

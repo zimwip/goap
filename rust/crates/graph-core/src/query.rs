@@ -1433,7 +1433,7 @@ impl Entity for QNode {
         vec![self.0.typ.clone()]
     }
 
-    /// The node's own fields first (key, type, state, id, version, namespace, owner, project), then its properties.
+    /// The node's own fields first (key, type, state, id, version, namespace, responsible (alias owner), project), then its properties.
     fn property(&self, key: &str) -> Option<Value> {
         let text = |s: &str| {
             if s.is_empty() {
@@ -1450,7 +1450,7 @@ impl Entity for QNode {
             "id" => Value::Str(n.id.to_string()),
             "version" => Value::Num(f64::from(n.version)),
             "namespace" => Value::Str(n.namespace.clone()),
-            "owner" => text(&n.owner.key),
+            "responsible" | "owner" => text(&n.responsible.key),
             "project" => text(&n.project.key),
             _ => return n.props.as_ref()?.get(key).map(Value::from_json),
         })
