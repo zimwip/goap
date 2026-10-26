@@ -79,8 +79,8 @@ func main() {
 		Routes: []gateway.Route{
 			{Prefix: "/goap.graph.v1.GraphService/", Upstream: platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")},
 			{Prefix: "/goap.registry.v1.RegistryService/", Upstream: platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082")},
-			// the domain registry is the graph's (ADR 0125 §3)
-			{Prefix: "/goap.registry.v1.DomainService/", Upstream: platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")},
+			// the domain registry, a service of its own (ADR 0125 §3, ADR 0167)
+			{Prefix: "/goap.registry.v1.DomainService/", Upstream: platform.Env("GOAP_DOMAINS_URL", "http://localhost:8096")},
 			// the smart tags select versions of the graph and are kept next to it (ADR 0143 §7)
 			{Prefix: "/goap.smarttag.v1.SmartTagService/", Upstream: platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")},
 			// the import registry is the graph's, next to the domains declaring the importers (ADR 0148)

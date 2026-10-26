@@ -7,7 +7,6 @@ import (
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/graphapi"
-	"github.com/zimwip/goap/lib/typecat"
 )
 
 // AdminFloorValidator refuses a change that would leave the graph with no active administrator (ADR 0020's
@@ -30,7 +29,10 @@ func (AdminFloorValidator) Types() []string {
 func (AdminFloorValidator) Validate(ctx context.Context, q graphapi.ValidatorQuery, impacted []graphapi.ValidatedNode) error {
 	var nodes []domain.Node
 	var links []domain.Link
-	st := typecat.Builtin().Structures()
+	st, err := q.Structures(ctx)
+	if err != nil {
+		return err
+	}
 	for _, typ := range []string{NodeTypeUser, NodeTypeAssignment, st.Organisation().Type} {
 		ns, err := q.NodesOfType(ctx, st.Organisation().Namespace, typ)
 		if err != nil {

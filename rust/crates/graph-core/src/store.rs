@@ -23,6 +23,12 @@ pub trait ReadTx: Sync {
         None
     }
 
+    /// The type catalogue of the domains in force the session was opened with (the registry's, ADR 0167); none, the
+    /// built-in domains of a checkout (tests).
+    fn catalog(&self) -> Option<std::sync::Arc<graph_catalog::Catalog>> {
+        None
+    }
+
     /// The order of the last commit on a branch (0: none).
     fn last_commit(&self, branch: &str) -> impl Future<Output = Result<i64>> + Send;
 

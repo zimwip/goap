@@ -80,8 +80,8 @@ func testIterateOnTheBranchOfAChange(t *testing.T, repo Repo) {
 		t.Fatalf("the draft starts from the committed version: %+v", d)
 	}
 	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, req.ID, NodeUpdate{Properties: map[string]any{"title": "two"}}))
-	if _, err := g.IntegrateChange(ctx, c.ID, nil); !errors.Is(err, ErrConflict) {
-		t.Fatalf("an uncommitted modification holds the merge: %v", err)
+	if _, err := g.CloseChange(ctx, c.ID); !errors.Is(err, ErrConflict) {
+		t.Fatalf("an uncommitted modification holds the close: %v", err)
 	}
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, req.ID, domain.ReviewAccepted, "bob", "ok"))
 	// a node it created is checked out again too, then left as it was
@@ -96,7 +96,7 @@ func testIterateOnTheBranchOfAChange(t *testing.T, repo Repo) {
 		t.Fatalf("the version of the second commit derives from the first: %+v", n)
 	}
 	must[domain.ChangeImpact](t)(g.ImpactNodeCancel(ctx, c.ID, created.ID, "", ""))
-	ch, err := g.IntegrateChange(ctx, c.ID, nil)
+	ch, err := g.CloseChange(ctx, c.ID)
 	if err != nil || ch.Status != domain.ChangeApplied {
 		t.Fatalf("merge: %+v %v", ch, err)
 	}
@@ -123,7 +123,7 @@ func testWithdrawACommittedImpact(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, req.ID, domain.ReviewAccepted, "bob", "ok"))
 	made := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "D-2", Type: "Design", Rationale: "new"}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, made.ID, domain.ReviewAccepted, "bob", "ok"))
-	if st := must[CommitState](t)(g.CommitState(ctx, c.ID)); !st.CanCommit || st.CanMerge || len(st.ToCommit) != 2 || len(st.Unsettled) != 2 {
+	if st := must[CommitState](t)(g.CommitState(ctx, c.ID)); !st.CanCommit || st.CanMerge || st.CanClose || len(st.ToCommit) != 2 || len(st.Unsettled) != 2 {
 		t.Fatalf("two modifications to commit, nothing to merge: %+v", st)
 	}
 	first := g.withState(t, ctx, must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, "")))
@@ -134,20 +134,20 @@ func testWithdrawACommittedImpact(t *testing.T, repo Repo) {
 	if err := g.WithdrawImpact(ctx, c.ID, made.ID, "", ""); err != nil {
 		t.Fatalf("a committed impact is withdrawn: %v", err)
 	}
-	if _, err := g.IntegrateChange(ctx, c.ID, nil); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "withdrawn") {
+	if _, err := g.CloseChange(ctx, c.ID); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "withdrawn") {
 		t.Fatalf("the withdrawal waits for a commit: %v", err)
 	}
-	if st := must[CommitState](t)(g.CommitState(ctx, c.ID)); !st.CanCommit || st.CanMerge || st.Reverts != 1 || !st.Commits || len(st.ToCommit) != 0 {
+	if st := must[CommitState](t)(g.CommitState(ctx, c.ID)); !st.CanCommit || st.CanClose || st.Reverts != 1 || !st.Commits || len(st.ToCommit) != 0 {
 		t.Fatalf("a revert to commit, nothing else: %+v", st)
 	}
 	second := g.withState(t, ctx, must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, "")))
-	if st := must[CommitState](t)(g.CommitState(ctx, c.ID)); st.CanCommit || !st.CanMerge || len(st.Unsettled) != 0 {
+	if st := must[CommitState](t)(g.CommitState(ctx, c.ID)); st.CanCommit || !st.CanMerge || !st.CanClose || len(st.Unsettled) != 0 {
 		t.Fatalf("committed, ready to merge: %+v", st)
 	}
 	if _, ok := second.Nodes[nodeOf(made)]; ok || second.Nodes[f.req.ID] != first.Nodes[f.req.ID] || second.Kind != domain.BaselineRevert {
 		t.Fatalf("D-2 reverted, REQ-1 kept: %+v", second)
 	}
-	ch := must[domain.Change](t)(g.IntegrateChange(ctx, c.ID, nil))
+	ch := must[domain.Change](t)(g.CloseChange(ctx, c.ID))
 	head := must[domain.Baseline](t)(g.Baseline(ctx, ch.ResultBaselineID))
 	if _, ok := head.Nodes[nodeOf(made)]; ok || head.Nodes[f.req.ID] != first.Nodes[f.req.ID] {
 		t.Fatalf("main holds REQ-1's commit and no D-2: %+v", head.Nodes)

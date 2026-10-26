@@ -246,7 +246,7 @@ export async function acceptAliasProposal(p: AliasProposal, target: string): Pro
   await graph.impactNodeUpdate(p.changeId, p.impactId, { props: { alias: p.alias, target } });
   await graph.impactNodeReview(p.changeId, p.impactId, true, `Accepted with target ${target}`);
   await graph.commitChange(p.changeId, '');
-  await graph.mergeChange(p.changeId);
+  await graph.closeChange(p.changeId);
 }
 
 /** Declines a proposed alias: the change that proposed it is abandoned. */

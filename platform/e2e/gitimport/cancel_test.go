@@ -82,9 +82,9 @@ func (c *cancelling) CommitChange(ctx context.Context, id domain.ChangeID, basel
 	return c.Port.CommitChange(c.at(ctx), id, baselineName)
 }
 
-func (c *cancelling) IntegrateChange(ctx context.Context, id domain.ChangeID, r map[domain.NodeID]graphapi.Resolution) (domain.Change, error) {
+func (c *cancelling) CloseChange(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
 	defer c.done()
-	return c.Port.IntegrateChange(c.at(ctx), id, r)
+	return c.Port.CloseChange(c.at(ctx), id)
 }
 
 // TestImportCancelled cancels a run at every write it makes, before and after the write: the run stops with the

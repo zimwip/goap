@@ -28,13 +28,14 @@ services:
     environment:
       GOAP_HTTP_ADDR: ":8080"
       GOAP_DB_DSN: ${GOAP_PERF_RS_DSN:-postgres://graph:graph@postgres:5432/goap?sslmode=disable}
-      GOAP_DOMAINS_DIR: /domains
+      GOAP_DOMAINS_URL: http://domains:8080
       GOAP_GRAPH_BOOTSTRAP: "1"
       GOAP_LOG_FORMAT: text
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_TRACES_SAMPLER: always_off
     depends_on:
       postgres-init: {condition: service_completed_successfully}
+      domains: {condition: service_started}
     ports: ["8384:8080"]
 
   # the Go service waits for the schemas too (make perf-diff drops them before it starts)

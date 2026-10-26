@@ -349,6 +349,7 @@ pub async fn lineage_gap<T: ReadTx>(tx: &T, from: &BaselineId, to: &BaselineId) 
     w.reach(from, FROM).await?;
     w.reach(to, TO).await?;
     let mut seen: Vec<(crate::model::Baseline, u8)> = Vec::new();
+    let mut landed: HashMap<ChangeId, Vec<crate::model::Baseline>> = HashMap::new();
     while !w.todo.is_empty() && w.todo.iter().any(|id| w.paint[id] != BOTH) {
         if seen.len() >= MAX_DIFF_CHANGES {
             return Err(GraphError::invalid(format!(
@@ -359,6 +360,23 @@ pub async fn lineage_gap<T: ReadTx>(tx: &T, from: &BaselineId, to: &BaselineId) 
         let (b, side) = (w.headers[&id].clone(), w.paint[&id]);
         for next in [&b.parent_id, &b.merged_from] {
             w.reach(next, side).await?;
+        }
+        // a change open after its merge (ADR 0166) lands on a branch more than once: its earlier landings there are in
+        // the stack of a later one, which they precede
+        if !b.change_id.is_empty() && side != BOTH {
+            if !landed.contains_key(&b.change_id) {
+                let ls = tx
+                    .change_baseline_headers(&w.namespace, std::slice::from_ref(&b.change_id))
+                    .await?;
+                landed.insert(b.change_id.clone(), ls);
+            }
+            for l in landed[&b.change_id].clone() {
+                if l.id != b.id && l.seq < b.seq && l.branch == b.branch {
+                    let lid = l.id.clone();
+                    w.headers.insert(lid.clone(), l);
+                    w.reach(&lid, side).await?;
+                }
+            }
         }
         seen.push((b, side));
     }

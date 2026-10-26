@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commitButtons, modifies, notAcceptableWhy, unmodified } from './changeCommit';
+import { commitButtons, commitSelection, modifies, notAcceptableWhy, unmodified } from './changeCommit';
 import type { ChangeImpact } from './api';
 
 const draft = { id: 'n1', version: 0 };
@@ -20,16 +20,40 @@ describe('changeCommit', () => {
       canCommit: true,
       commitWhat: 'REQ-1, 1 withdrawn node(s) reverted',
       canMerge: false,
-      mergeWhy: 'Settle first: REQ-1 is not committed',
+      mergeWhy: 'Nothing committed on the branch of the change yet',
+      canClose: false,
+      closeWhy: 'Settle first: REQ-1 is not committed',
     });
-    expect(commitButtons({ commits: true, canMerge: true }, false)).toMatchObject({ canCommit: false, canMerge: true });
+    // what is committed merges while the rest is worked on; the close waits for it (ADR 0166)
+    expect(commitButtons({ commits: true, canMerge: true, unmerged: 1, unsettled: ['REQ-2 is not committed'] }, false)).toMatchObject({
+      canCommit: false,
+      canMerge: true,
+      canClose: false,
+    });
+    expect(commitButtons({ commits: true, canClose: true }, false)).toMatchObject({ canMerge: false, mergeWhy: 'Everything committed is merged already', canClose: true });
     expect(commitButtons({}, false).mergeWhy).toMatch(/Nothing committed/);
-    expect(commitButtons({ canCommit: true, canMerge: true }, true)).toMatchObject({ canCommit: false, canMerge: false });
+    expect(commitButtons({ canCommit: true, canMerge: true, canClose: true }, true)).toMatchObject({ canCommit: false, canMerge: false, canClose: false });
   });
   it('reads an unmodified draft as the server sends it (false is omitted from the JSON)', () => {
     const wire: ChangeImpact = { id: 'i3', key: 'LLA-1', post: { id: 'n3', version: 0 }, review: 'proposed', validation: { valid: true } };
     expect(unmodified(wire)).toBe(true);
     expect(modifies(wire)).toBe(false);
     expect(unmodified({ id: 'i4', post: { id: 'n4', version: 0 } })).toBe(false);
+  });
+});
+
+describe('commitSelection', () => {
+  const candidates = [
+    { nodeId: 'a', key: 'A', kind: 'modified' },
+    { nodeId: 'b', key: 'B', kind: 'created' },
+  ];
+  it('names no node when every candidate is chosen', () => {
+    expect(commitSelection(candidates, new Set(['b', 'a']))).toEqual({ nodes: [] });
+  });
+  it('names the nodes chosen, in the order of the candidates', () => {
+    expect(commitSelection(candidates, new Set(['b']))).toEqual({ nodes: ['b'] });
+  });
+  it('is nothing when none is chosen', () => {
+    expect(commitSelection(candidates, new Set())).toBeUndefined();
   });
 });

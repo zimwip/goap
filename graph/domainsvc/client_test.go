@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/authz"
@@ -16,7 +17,7 @@ import (
 // registry (ADR 0125 §3).
 func TestClient(t *testing.T) {
 	enf, _ := authz.NewCasbin(nil)
-	s := &Service{Store: NewMemoryStore(), Authz: enf}
+	s := seeded(t, &Service{Store: NewMemoryStore(), Authz: enf})
 	withALM(t, s)
 	path, h := registryv1connect.NewDomainServiceHandler(&Handler{Service: s})
 	mux := http.NewServeMux()
@@ -27,12 +28,12 @@ func TestClient(t *testing.T) {
 	c := domainclient.NewClient(srv.Client(), srv.URL)
 	ctx := t.Context()
 	ds, err := c.Domains(ctx)
-	if err != nil || len(ds) != 1 || ds[0].Name != "alm" {
+	if err != nil || len(ds) != 4 || !slices.ContainsFunc(ds, func(d *def.Domain) bool { return d.Name == "alm" }) {
 		t.Fatalf("domains in force: %v %v", ds, err)
 	}
 	all, err := c.DomainVersions(ctx, true)
-	if err != nil || len(all) != 4 || !all[0].Builtin {
-		t.Fatalf("every version, the built-in ones first: %d %v", len(all), err)
+	if err != nil || len(all) != 4 || !slices.ContainsFunc(all, func(r def.Record) bool { return r.Domain.Name == "platform" && r.Protected }) {
+		t.Fatalf("every version, the built-in ones protected: %d %v", len(all), err)
 	}
 	alm, err := c.GetDomain(ctx, "alm", "")
 	if err != nil || alm.Status != def.StatusPublished || alm.PublishedAt.IsZero() || len(alm.Domain.NodeTypes) == 0 {

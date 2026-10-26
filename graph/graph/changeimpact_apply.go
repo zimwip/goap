@@ -63,6 +63,9 @@ func (a *applier) prepareChangeImpacts() error {
 		} else if !ok {
 			continue
 		}
+		if !a.takesImpact(cn, impacts) {
+			continue
+		}
 		if err := a.g.checkOrigins(impacts, cn, d); err != nil {
 			return err
 		}
@@ -284,12 +287,13 @@ func joinSorted(s []string) string {
 }
 
 // commit records, once the branch of a change is merged into its parent (the baseline result), the
-// version each change impact committed as: the version it wrote, joined to the parent, or the merge
+// version each change impact committed as (only: the impacts of the nodes this merge moved; nil: every one): the version it wrote, joined to the parent, or the merge
 // version of mergeChange. The other open changes on the same nodes are not read: each starts from the latest version
 // of its nodes when it is rebased, at its own merge (ADR 0101, 0140).
-func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.BaselineID) error {
+func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.BaselineID, only map[domain.NodeID]bool) error {
 	commits := func(cn domain.ChangeImpact) bool {
-		return cn.Post != nil && (cn.Review == domain.ReviewAccepted || cn.Committed != nil) && cn.Flow == "" && !cn.Superseded
+		return cn.Post != nil && (cn.Review == domain.ReviewAccepted || cn.Committed != nil) && cn.Flow == "" && !cn.Superseded &&
+			(only == nil || only[cn.Post.ID])
 	}
 	// the latest version of each node on the target, read in two statements
 	var ids []domain.NodeID

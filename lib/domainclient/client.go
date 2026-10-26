@@ -73,7 +73,7 @@ func (c *Client) versions(ctx context.Context) ([]def.Record, error) {
 		}
 		p := d.Msg.Domain
 		all = append(all, def.Record{Domain: domainpb.DomainFromPB(p), Status: def.Status(p.Status), CreatedAt: pbconv.FromTime(p.CreatedAt),
-			UpdatedAt: pbconv.FromTime(p.UpdatedAt), PublishedAt: pbconv.FromTime(p.PublishedAt), UpdatedBy: p.UpdatedBy, Builtin: p.Builtin})
+			UpdatedAt: pbconv.FromTime(p.UpdatedAt), PublishedAt: pbconv.FromTime(p.PublishedAt), UpdatedBy: p.UpdatedBy, Protected: p.Protected})
 	}
 	c.all, c.loaded = all, time.Now()
 	return all, nil

@@ -131,6 +131,7 @@ func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, 
 		return g, err
 	}
 	var seen []walked
+	landed := map[domain.ChangeID][]domain.Baseline{}
 	for len(todo) > 0 && slices.ContainsFunc(todo, func(id domain.BaselineID) bool { return paint[id] != both }) {
 		if len(seen) >= MaxDiffChanges {
 			return g, invalidf("baselines %s and %s are more than %d changes apart: compare closer baselines", from, to, MaxDiffChanges)
@@ -142,6 +143,25 @@ func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, 
 		for _, next := range []domain.BaselineID{b.ParentID, b.MergedFrom} {
 			if err := reach(next, side); err != nil {
 				return g, err
+			}
+		}
+		// a change open after its merge (ADR 0166) lands on a branch more than once: its earlier landings there are in
+		// the stack of a later one, which they precede
+		if b.ChangeID != "" && side != both {
+			landings, ok := landed[b.ChangeID]
+			if !ok {
+				if landings, err = tx.ChangeBaselineHeaders(ctx, namespace, []domain.ChangeID{b.ChangeID}); err != nil {
+					return g, err
+				}
+				landed[b.ChangeID] = landings
+			}
+			for _, l := range landings {
+				if l.ID != b.ID && l.Seq < b.Seq && l.Branch == b.Branch {
+					headers[l.ID] = l
+					if err := reach(l.ID, side); err != nil {
+						return g, err
+					}
+				}
 			}
 		}
 	}

@@ -31,7 +31,7 @@ func testEphemeralBranch(t *testing.T, repo Repo) {
 		if _, err := g.ImpactNodeReviewBatch(ctx, c.ID, domain.ReviewBatch{By: "t", Verdicts: []domain.ImpactVerdict{{Impact: cn.ID, Status: domain.ReviewAccepted, Comment: "ok"}}}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.commitChange(ctx, c.ID, ""); err != nil {
+		if _, err := g.commitChange(ctx, c.ID, "", nil); err != nil {
 			t.Fatal(err)
 		}
 	}

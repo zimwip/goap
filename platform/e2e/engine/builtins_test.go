@@ -62,13 +62,18 @@ func (s *applyStub) PlanMerge(_ context.Context, _, from, into string) (graph.Me
 	}}, nil
 }
 
+// CloseChange is the close of graph.apply (ADR 0166): the status given.
+func (s *applyStub) CloseChange(_ context.Context, id domain.ChangeID) (domain.Change, error) {
+	c, _ := s.Change(context.Background(), id)
+	if c.Status == domain.ChangeApplied {
+		c.ResultBaselineID = "b1"
+	}
+	return c, nil
+}
+
 func (s *applyStub) IntegrateChange(_ context.Context, id domain.ChangeID, rs map[domain.NodeID]graph.Resolution) (domain.Change, error) {
-	if rs == nil { // the merge of graph.apply: the status given
-		c, _ := s.Change(context.Background(), id)
-		if c.Status == domain.ChangeApplied {
-			c.ResultBaselineID = "b1"
-		}
-		return c, nil
+	if rs == nil {
+		return s.CloseChange(context.Background(), id)
 	}
 	s.integrated = rs
 	s.status = domain.ChangeApplied

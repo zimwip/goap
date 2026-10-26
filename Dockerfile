@@ -24,6 +24,8 @@ FROM gcr.io/distroless/static-debian12:nonroot AS services
 COPY --from=build /out/ /goap/
 COPY methodologies /methodologies
 COPY domains /domains
+# the built-in domains, which the domain registry seeds protected (ADR 0167)
+COPY lib/domains/builtin /domains/builtin
 EXPOSE 8080
 USER nonroot
 
@@ -36,8 +38,9 @@ EXPOSE 8080
 USER nonroot
 ENTRYPOINT ["/goap/importer-git"]
 
-# the Rust binaries (ADR 0163), each in an image of its own: the graph service, docker build --target rust -t
-# goap/rust:dev . (/goap/goap-graph-rs), and the comparison proxy, a separate binary the service knows nothing of,
+# the Rust binaries (ADR 0163), each in an image of its own: the graph service and the domain registry, docker build
+# --target rust -t goap/rust:dev . (/goap/goap-graph-rs, /goap/goap-domains-rs, ADR 0167), and the comparison proxy, a
+# separate binary the service knows nothing of,
 # docker build --target proxy -t goap/proxy:dev . (/goap/goap-proxy); SQLite is compiled in: rusqlite bundled, the one C
 # of the build
 FROM rust:1.97-slim-bookworm AS rust-build
@@ -50,15 +53,20 @@ COPY graph/domainsvc/migrations_sqlite graph/domainsvc/migrations_sqlite
 COPY graph/smarttagsvc/migrations graph/smarttagsvc/migrations
 COPY graph/smarttagsvc/migrations_sqlite graph/smarttagsvc/migrations_sqlite
 COPY platform/devseed/demo.json platform/devseed/demo.json
+# read by graph-catalog with include_str!: the widget catalogue of the forms (the built-in domains are the registry's,
+# read from /domains/builtin at its start, ADR 0167)
+COPY web/src/lib/forms/widgetCatalog.gen.ts web/src/lib/forms/widgetCatalog.gen.ts
 COPY rust rust
 RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/src/rust/target \
     cd rust && cargo build --release --locked -p goap-proxy -p graph-service \
-    && mkdir -p /out/graph /out/proxy && cp target/release/goap-graph-rs /out/graph/ \
+    && mkdir -p /out/graph /out/proxy && cp target/release/goap-graph-rs target/release/goap-domains-rs /out/graph/ \
     && cp target/release/goap-proxy /out/proxy/
 
 FROM gcr.io/distroless/cc-debian12:nonroot AS rust
 COPY --from=rust-build /out/graph/ /goap/
 COPY domains /domains
+# the built-in domains, which the domain registry seeds protected (ADR 0167)
+COPY lib/domains/builtin /domains/builtin
 EXPOSE 8080
 USER nonroot
 
@@ -73,6 +81,8 @@ ARG SERVICE
 COPY --from=build /out/${SERVICE} /service
 COPY methodologies /methodologies
 COPY domains /domains
+# the built-in domains, which the domain registry seeds protected (ADR 0167)
+COPY lib/domains/builtin /domains/builtin
 EXPOSE 8080
 USER nonroot
 ENTRYPOINT ["/service"]

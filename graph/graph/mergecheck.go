@@ -13,7 +13,7 @@ import (
 // What the methodology says about the work, its guardians, is asked at each commit (commitcheck.go).
 
 // checkMerge refuses the merge of a change whose dependencies or lifecycle do not allow it yet.
-func (g *Graph) checkMerge(ctx context.Context, tx Tx, c domain.Change) error {
+func (g *Graph) checkMerge(ctx context.Context, tx Tx, c domain.Change, closing bool) error {
 	deps, err := dependenciesOf(ctx, tx, c)
 	if err != nil {
 		return err
@@ -22,7 +22,8 @@ func (g *Graph) checkMerge(ctx context.Context, tx Tx, c domain.Change) error {
 	if err := checkDependencies(c, deps); err != nil {
 		return err
 	}
-	if c.Lifecycle != "" {
+	// the final state of its lifecycle is the close's (ADR 0166): a change merges what it committed in any state
+	if c.Lifecycle != "" && closing {
 		lc, err := g.changeLifecycle(ctx, c)
 		if err != nil {
 			return err

@@ -59,9 +59,10 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 one domain ([ADR 0013](adr/0013-domains.md)): `alm` (delivery), `organisation`, `platform` (MCPs, adapter definitions,
 model configuration), and the meta-domain `methodology` that holds the definitions of the methodologies
 ([ADR 0023](adr/0023-definitions-in-the-graph.md)). `methodology`, `organisation` and `platform` are **built in and
-frozen**: the platform reads them in its own way, so they are initialised at startup from `lib/domains/builtin/`, change
-with the code and are read-only in the domain editor; a new namespace is a new domain published from the domain editor.
-Domains themselves are not graph data: the domain registry, served by the graph, keeps them in its database ([ADR 0125](adr/0125-source-components.md) §3). Keys are unique per namespace. A change acts on one namespace: it can
+protected**: the platform reads them in its own way, so the domain registry publishes them at each start from the files
+of `lib/domains/builtin/` and protects them; they change with the code (or the registry's command line) and are
+read-only in the domain editor; a new namespace is a new domain published from the domain editor.
+Domains themselves are not graph data: the domain registry, a service of its own, keeps them in its database ([ADR 0125](adr/0125-source-components.md) §3, [ADR 0167](adr/0167-domain-registry-a-service-of-its-own.md)). Keys are unique per namespace. A change acts on one namespace: it can
 only create and modify nodes of that namespace, but may link to nodes of another one. So that an action or agent's
 default queries (a prompt's `.Baseline.Nodes`, a script's `Host.Node`/`Nodes`/`Links`, a human task's node picker)
 are bound to the change's own declared namespace rather than exposing every namespace at once, baselines and
@@ -136,7 +137,7 @@ codes or kinds; none listed anywhere: nothing restricted), so a reviewer (`opera
 and never edits or withdraws; the graph asks `Graph.OperationAuthorizer` (`graphsvc.OperationAuthorizer`:
 `operation:perform` with the roles allowed, from `registrysvc.Service.OperationRoles`).
 
-A **root change** is rebased the same way onto the head of the branch it was forked from ([ADR 0101](adr/0101-a-change-is-rebased-onto-its-target-before-it-commits.md), `RebaseChange` / `GetRebaseState` also serve root changes; `MergeChange` rebases it first, conflicts stop with `ErrConflict`): a clean rebase keeps the reviews, the change and its branch move to the head (one `change.updated` entry with a `baselineId` `{from, to}` field, `Branch.rebasedFrom` set once), and commit is a fast-forward, so the history of the target is linear. Since [ADR 0102](adr/0102-iterate-on-the-branch-of-a-change.md) a change commits on its branch without being rebased and is rebased when it is merged: its fork moves onto the head (no baseline: the branch of a change holds none, ADR 0140), the nodes changed on both sides merged into drafts whose version takes the target's as second parent; a change that committed nothing has nothing to rebase. The same sync pane (`SubChangeSync.svelte`) shows "Behind <branch> (now at <head>)", Rebase and "Keep mine" for a root change.
+A **root change** is rebased the same way onto the head of the branch it was forked from ([ADR 0101](adr/0101-a-change-is-rebased-onto-its-target-before-it-commits.md), `RebaseChange` / `GetRebaseState` also serve root changes; `MergeChange` rebases it first, conflicts stop with `ErrConflict`): a clean rebase keeps the reviews, the change and its branch move to the head (one `change.updated` entry with a `baselineId` `{from, to}` field, `Branch.rebasedFrom` set once), and commit is a fast-forward, so the history of the target is linear. Since [ADR 0102](adr/0102-iterate-on-the-branch-of-a-change.md) a change commits on its branch without being rebased and is rebased when it is merged: its fork moves onto the head (no baseline: the branch of a change holds none, ADR 0140), the nodes changed on both sides merged into drafts whose version takes the target's as second parent; a change that committed nothing has nothing to rebase. Since [ADR 0165](adr/0165-a-commit-rebases-its-drafts-onto-the-head.md) the commit first rebases the drafts it writes onto the head of its target (a draft checked out again from the head's version, the difference of the three-way merge as an update, the state moved only by moves its lifecycle allows from the head's state: the moves the change recorded replayed, or one move when both sides moved it, else a `state` conflict); a conflict stops the commit and the rebase is kept, a clean one commits versions deriving from the head's, and the merge, following the lineage of each node, is a fast-forward. Since [ADR 0166](adr/0166-a-change-stays-open-until-closed.md) the merge leaves the change open: it merges what the change committed (its branch forked again from what it merged), whatever the change still works on, and `CloseChange` ends it: everything settled, the lifecycle in a final state, what is left merged, the change applied. The same sync pane (`SubChangeSync.svelte`) shows "Behind <branch> (now at <head>)", Rebase and "Keep mine" for a root change.
 
 **Organisations** ([ADR 0019](adr/0019-organisations-mcp-connectors.md)) are the `OrgUnit` nodes above. A
 change is held by one unit (`ownerOrg`; empty: the default organisation `ORG-DEFAULT`, created at the first start
@@ -259,7 +260,7 @@ REQ-1  v1(main) ── v2(change-A, derive) ═══ joins main (fast-forward o
 | **Review** (object) | A review the reviewer builds up and submits ([ADR 0080](adr/0080-review-object.md)): a change item of the built-in kind `review` (`domain.TypeReview`; `contracts/review` the use case), each version the whole record of its `key` (`REV-…`): a global comment, a status `open` → `submitted` or `discarded` (both final) and one entry per change impact (own comment, outcome `accept` / `reject`). Submitting applies every entry as an ordinary review in one transaction (`ImpactNodeReviewBatch`: all or none), each `reviewed` event carrying the review id. Every verdict is made by a submitted review ([ADR 0105](adr/0105-every-verdict-is-a-submitted-review.md)): a single verdict, a producer's commit, an action's review and a merge each write the record of a submitted review first, and each decided `impact.reviewed` log entry names it as its `causation`. |
 | **Risk**, **Action** | Records of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): each item is a version of the risk or action of its `key` (`RSK-1`, `ACT-1`); the register is the last version of each. A risk has a probability, an impact, a status and an owner role; an action answers a risk or a decision. The register is a use case outside the core: `contracts/risk` registers the item types (`risk.Register()`, [ADR 0065](adr/0065-item-kinds-required-links-change-data.md)) and folds them (`risk.Risks`, `risk.Actions`, `risk.Derogations`). `goap-change` serves `risks`, `risk`, `action`, and `brief` (the change in one line per fact, also given to every LLM action on a change in its system prompt) and `trace` (where an item, a risk or a node comes from and what it led to). |
 
-Applying a Change is two acts (ADR 0102): *Commit* (`CommitChange`) writes its accepted modifications on its branch, *Merge* (`MergeChange`) takes them into what it was forked from, creating a new baseline; there is no single Apply call, and both answer the header of the baseline, never its state (a caller reading nodes asks for them). The Change remains the explainable history of *why* the graph changed.
+Applying a Change is three acts (ADR 0102, 0166): *Commit* (`CommitChange`) writes its accepted modifications on its branch, *Merge* (`MergeChange`) takes them into what it was forked from, creating a new baseline and leaving the change open, *Close* (`CloseChange`) merges what is left once everything is settled and applies the change; there is no single Apply call, and both answer the header of the baseline, never its state (a caller reading nodes asks for them). The Change remains the explainable history of *why* the graph changed.
 
 #### Operating the graph by hand
 
@@ -283,8 +284,9 @@ makes for the person.
 | Review several impacts | Change → Reviews: *New review* (prefilled with every proposed impact), a global comment, one table of the proposed impacts (include / remove box, inline comment, accept / reject per row, Accept all / Reject all), *Submit review* (all or none) or *Discard* | `ReviewOpen`, `ReviewUpdate`, `ReviewSubmit`, `ReviewDiscard` (over `ImpactNodeReviewBatch`) |
 | Options, decisions | Scope bar in the header of every tab (labelled "Flow: Main flow" or "Option: name", its colour, a status line; the Impacts, Reviews and Artifacts tabs follow it, marked by a dot of its colour), Compare & decide dialog (opened from the scope bar), Decisions pane (a ruling made there is a person's) | `OpenOption` … `SelectOption`, `OpenDecision` … `RuleDecision` |
 | Adopt or discard a flow | Change → Overview (a flow no run works on is adopted straight on the graph) | `AdoptFlow`, `DiscardFlow` |
-| Commit | Change → Overview: *Commit* (enabled from `GetCommitState`): the accepted modifications are written as versions on the change's own branch and the nodes withdrawn since their commit reverted; the change stays open, edited and committed again; the methodology is not asked ([ADR 0102](adr/0102-iterate-on-the-branch-of-a-change.md)). Only a modification is accepted and committed: a candidate or a draft left as it was checked out is not; a rejected impact is reworked (an edit proposes it again) or withdrawn, and an impact is withdrawn at any time, several at once by checking them in the impacts tab | `CommitChange`, `GetCommitState`, `WithdrawImpact`, `WithdrawImpacts` |
-| Merge a change | Change → Overview / toolbar: *Merge* (a sub-change: *Merge into parent*, into its parent's branch, ADR 0103), once everything in the change is settled (every impact committed, none rejected or a candidate, no open flow, decision point or sub-change): rebased onto the head of its target when it moved (a clean rebase commits its merges, mechanically: the links of a node merged only when both sides changed its link set), its dependencies merged and its lifecycle in a final state (no guardian: it judged each commit, `ChangeLifecycles.Commit`, ADR 0146), then a fast-forward; the change is closed (`applied`) | `MergeChange` (`IntegrateChange`) |
+| Commit | Change → Overview: *Commit* (enabled from `GetCommitState`): the accepted modifications are written as versions on the change's own branch and the nodes withdrawn since their commit reverted; the change stays open, edited and committed again; the methodology is not asked ([ADR 0102](adr/0102-iterate-on-the-branch-of-a-change.md)). The button opens the choice of the nodes to commit (`CommitDialog.svelte`, the `candidates` of `GetCommitState`), all ticked: a partial commit (`CommitChangeRequest.nodes`, `Graph.CommitChangeNodes`) writes the ones named, an impact merged or split via one named following it, and refuses a node with nothing to commit and a version linking to the draft of a node left out; the others stay drafts for a later commit. Only a modification is accepted and committed: a candidate or a draft left as it was checked out is not; a rejected impact is reworked (an edit proposes it again) or withdrawn, and an impact is withdrawn at any time, several at once by checking them in the impacts tab | `CommitChange`, `GetCommitState`, `WithdrawImpact`, `WithdrawImpacts` |
+| Merge a change | Change → Overview / toolbar: *Merge* (a sub-change: *Merge into parent*, into its parent's branch, ADR 0103), once it committed nodes it has not merged yet, whatever it still works on (ADR 0166): rebased onto the head of its target when it moved (a clean rebase commits its merges, mechanically: the links of a node merged only when both sides changed its link set), its dependencies closed (no guardian: it judged each commit, `ChangeLifecycles.Commit`, ADR 0146), then a fast-forward; the change stays open, its branch forked again from what it merged | `MergeChange` (`IntegrateChange`) |
+| Close a change | Change → Overview / toolbar: *Close*, once everything in the change is settled (every impact committed, none rejected or a candidate, no open flow, decision point or sub-change) and its lifecycle in a final state: what is left merged as above, then the change applied (`applied`) and its branch merged | `CloseChange` |
 | Rebase a change | Change → Overview: when a change is behind the head of the branch it was forked from (a sub-change: its parent's), *Rebase* (ADR 0101, 0103); *Keep mine* settles an impact's conflicts | `RebaseChange`, `GetRebaseState`, `ImpactNodeResolve` |
 | Merge a committed change | A `committed` change (its merge into the branch it was forked from, a release branch for instance, waits until someone merges it) shows each node changed on both sides: keep the target, or merge taking a side per conflicting property | `PlanMerge`, `MergeChange` (`IntegrateChange`) |
 | Merge in a run | The `graph.apply` action commits and merges; when the three-way merge cannot settle a property (both branches changed it apart) the run waits on a `merge` human task listing the value of each side and proposing the change's; *Merge and go on* completes the merge and resumes the run. Before that, when the rebase of the change onto its target (or parent) left conflicts, the apply stops and the run waits on a `rebase` task listing them per impact; once settled and reviewed again in the change tab, *Settled, continue* applies again (ADR 0101) | `ResolveMerge`, `ResolveRebase` (engine), `Engine.ResolveMerge`, `Engine.ResolveRebase` |
@@ -692,7 +694,8 @@ to a type or a link type (in a domain, a methodology, CEL, `expects`) is qualifi
 ([ADR 0023](adr/0023-definitions-in-the-graph.md)) to its properties, `extends` chain, lifecycle, validators, document,
 change control, search declarations and editor, and checks the references of a methodology or a domain when saving
 and publishing. The graph and the engine hold an in-memory copy (the **type catalogue**), loaded from the registry at
-startup and kept in sync with its events, plus the built-in domains `methodology`, `organisation` and `platform`. The graph judges
+startup and kept in sync with its events, the built-in domains `methodology`, `organisation` and `platform` among them (stored
+and protected by the registry, ADR 0167). The graph judges
 a change by the catalogue in force and refuses a node whose type it does not resolve. Nothing is projected onto the
 graph.
 
@@ -1013,7 +1016,8 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | **gateway** | Single entry point, authentication (JWT/OIDC), routing to services, CORS, rate-limit | Echo HTTP, Connect reverse proxy | — | 🟢 core |
 | **registry** | Methodologies (graph data, ADR 0023): editing (draft), validation against the domains of the domain registry, publishing, versions, suspension of a version the domains in force break (ADR 0125 §3), YAML import/export | Connect `registry.v1.RegistryService` | the graph | 🟢 |
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
-| **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, change impacts, facts, apply); the **domain registry**, its definition (ADR 0125 §3): domain versions, the type catalogue, YAML / JSON import-export ([ADR 0104](adr/0104-domain-and-graph-import-export.md)) | Connect `graph.v1`, `registry.v1.DomainService` | `graph` (with `domain_version`) | 🟢 |
+| **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, change impacts, facts, apply); its type catalogue read from the domain registry | Connect `graph.v1` | `graph` | 🟢 |
+| **domains** | The **domain registry**, the definition of the graphs (ADR 0125 §3, [ADR 0167](adr/0167-domain-registry-a-service-of-its-own.md)): domain versions, the built-in domains protected, the type catalogue, YAML / JSON import-export ([ADR 0104](adr/0104-domain-and-graph-import-export.md)), a command line for the protected domains | Connect `registry.v1.DomainService` | `domains` (`domain_version`, `domain_protection`) | 🟢 |
 | **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces; `Suggest`, the stateless contextual helper over the `helper` alias (ADR 0086); the **one ledger of LLM calls**: `ListUsage` / `UsageSummary` (ADR 0089) | Connect `model.v1` | `modelgw` (quota counters and the ledger of LLM calls, ADR 0089; the configuration is graph data, ADR 0021) | 🟢 core |
 | **preferences** | Personal preferences of the users (theme, voice input, dashboard defaults), one document per subject, outside the graph ([ADR 0038](adr/0038-user-preferences-service.md)); a caller reaches only their own, saved as they change it | Connect `preferences.v1` | `preferences` (`user_preference`) | 🟢 |
 | **conversations** | Conversations of the users with the assistant (messages, structured UI actions), per subject, outside the graph ([ADR 0085](adr/0085-conversation-service.md)); the owner reads and writes, a system principal appends and updates the assistant's messages | Connect `conversations.v1` | `conversations` (`conversation`, `conversation_message`) | 🟢 |
@@ -1041,8 +1045,15 @@ modules it may depend on (contracts ← lib ← graph / engine / mcp / gateway �
 every import, the tests' included (`TestComponents`), and each `go.mod` (`TestModuleRequirements`); every
 `platform/cmd/*` is the platform's composition.
 
-Two registries: the **domain registry** (`graph/domainsvc`, `registry.v1.DomainService`) goes with the graph, which
-serves it, seeds the shipped domains and loads its type catalogue from it in process; it names no methodology. The
+Two registries: the **domain registry** (`graph/domainsvc`, `registry.v1.DomainService`) is a service of its own
+([ADR 0167](adr/0167-domain-registry-a-service-of-its-own.md): `platform/cmd/domains`, Rust `goap-domains-rs`, port
+8096, a database of its own): it seeds the built-in domains protected at each start (`SeedBuiltinDomains`, from
+`GOAP_BUILTIN_DOMAINS_DIR`, else `GOAP_DOMAINS_DIR/builtin`, else `lib/domains/builtin`), then the shipped domains; a
+protected domain (`domain_protection`) is refused every write over RPC and written by its command line only (`publish`,
+`protect`, `unprotect`, `list`, on a context marked `domainsvc.Local`); it reads the organisation's rules from the
+platform graph; it names no methodology. Every graph is its client (`GOAP_DOMAINS_URL`): it waits at its start for the
+built-in domains, then reads the domains in force again on the registry's events (`typecat.NewLive` over
+`lib/domainclient`; Rust `platform::Registry`), and its catalogue is exactly those domains (`typecat.Of`). The
 **methodology registry** (`platform/registrysvc`, `platform/cmd/registry`) goes with the engine: it reads the domains through a
 port (`registrysvc.Domains`: the service in process, `lib/domainclient` over RPC) and the graph through
 `graphapi`. Publishing or archiving a domain is never refused for a methodology: the domain registry emits
@@ -1104,7 +1115,7 @@ hand-written API types are checked against it field by field (`web/src/lib/api/c
 | `goap.baseline.<branch>.advanced` | graph | `BaselineEvent`: diff with the parent baseline (the `main` facet of the index follows the head of each namespace's own main) |
 | `goap.registry.methodology.saved` / `.published` / `.deleted` | methodology registry, carried by the graph commit that stores the version (graph outbox) | name + version + status |
 | `goap.registry.methodology.suspended` / `.resumed` | methodology registry, published directly (recomputed, ADR 0136 §4) | name + version + reason |
-| `goap.registry.domain.saved` / `.published` / `.deleted` | domain registry (graph), through its outbox (`domain_outbox`) | name + version + status |
+| `goap.registry.domain.saved` / `.published` / `.deleted` | domain registry (`domains`), through its outbox (`domain_outbox`) | name + version + status |
 | `goap.credentials.<subject>.registered` / `.password_changed` / `.session_started` / `.session_ended` | credentials, through its outbox | subject + session + time (never a password or a token) |
 | `goap.preferences.<subject>.updated` / `.reset` | preferences, through its outbox | subject + the keys changed (never the values) |
 | `goap.conversation.<id>.created` / `.renamed` / `.deleted` / `.message_appended` / `.message_updated` / `.action_updated` / `.summarized` | conversations, through its outbox | conversation, owner, message, role, action index, status (never a text); the event stream delivers it to the owner only |
@@ -1281,7 +1292,8 @@ The indexer follows the graph's events over NATS. The compose image is `pgvector
 - **The compose stack without Docker** (`make dev`, `make local`, `.\make.ps1 dev`; `platform/cmd/goap-local`,
   [ADR 0164](adr/0164-local-stack-replaces-goap-dev.md): it replaces `goap-dev`): one process per
   binary of `platform/cmd` as the compose stack runs them, on its host ports (gateway 8080, graph 8081 ... jobs 8091,
-  content graph 8092), each service on a SQLite file of its own in `.goap/local` (`GOAP_SQLITE_PATH`, read by
+  content graph 8092, domain registry 8096, started first: `goap-domains-rs` with the Rust graph, else the Go
+  `domains`), each service on a SQLite file of its own in `.goap/local` (`GOAP_SQLITE_PATH`, read by
   `platform.OptionalSQL` in every service that keeps a store, the graph services included; `GOAP_DB_DSN` wins, neither:
   memory), an embedded NATS server (JetStream, `.goap/local/nats`) instead of the container, the secrets generated
   in `.goap/local/secrets`; the graph is Rust (`LOCAL_GRAPH=go` for the Go one), bootstrapped by its `bootstrap`
@@ -1415,7 +1427,7 @@ standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` variables:
   service's port.
 
 **Performance stack** (`make perf`, `.\make.ps1 perf`, `deploy/compose/perf.yml`, project `goap-perf`): the graph service alone
-on PostgreSQL (with the domain registry it serves), `goap-bench` (`platform/cmd/goap-bench`, `platform/bench`), the
+on PostgreSQL (with the domain registry, `domains`), `goap-bench` (`platform/cmd/goap-bench`, `platform/bench`), the
 collector (`deploy/otel/collector-perf.yaml`: metrics only, the services sample no trace), Prometheus every 5 s
 (`deploy/prometheus/prometheus-perf.yml`, with `postgres-exporter`) and Grafana (http://localhost:3300, dashboard
 `deploy/grafana/dashboards/goap-perf.json`, provisioned in both stacks). `goap-bench` writes only through the API, as a client
@@ -1743,8 +1755,8 @@ The composition of the Go graph (`platform/cmd/graph`) seeds the platform throug
 
 1. The caller sets every hook of the graph first (`Authorizer`, `ChangeAuthorizer`, `Validators`, `DecisionPolicy`, `Types`;
    `SubChangeValidator`, `Lifecycles` (the guardian of the changes) where the registry runs in process: none since ADR 0164) and has a type
-   catalogue holding the domains (`platform/cmd/graph`: the domain registry's `SeedDomains`, then the catalogue
-   reload). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
+   catalogue holding the domains (`platform/cmd/graph`: `loadTypes`, the domains of the registry at
+   `GOAP_DOMAINS_URL`, ADR 0167). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
    logs one warning, "change lifecycle and activity gating are not available in this composition".
 2. `Boot`: `Graph.Bootstrap` (roots), `SeedAccess` (default policies), `SeedBuiltins` (built-in MCPs, adapter definitions,
    platform roles), `SeedModels` (`Options.Models`), `SeedProtectedAliases` (the `assistant` and `helper` aliases, ADR 0084), `SeedBehaviors` (the built-in `terse` LLM behaviour, disabled, ADR 0093), `SeedSources` (the source `platform`, fixed by `PlatformSourceValidator`, and `Options.Sources`, ADR 0154), then `Options.Dev`. Each step is idempotent.
@@ -1890,8 +1902,8 @@ reached through `sub_activity` only; no element stands alone (a modelling princi
 a change applied on main; editing an action versions that node only (`registrysvc.GraphStore`, through a graph
 client). **Domains** are the definition of a graph (namespace, node types, link types, lifecycles, algorithms): each
 graph holds them in memory (the type catalogue) to keep its data coherent, and the registry keeps their versions in its
-database, the **domain registry** the graph serves (`domain_version`, PostgreSQL or SQLite, `domainsvc.SQLStore`,
-ADR 0125 §3). The methodology registry validates, compiles, publishes, suspends the versions the domains in force
+database, the **domain registry**, a service of its own (`domain_version`, `domain_protection`, PostgreSQL or SQLite,
+`domainsvc.SQLStore`, ADR 0125 §3, ADR 0167). The methodology registry validates, compiles, publishes, suspends the versions the domains in force
 break, and emits the `goap.registry.methodology.*` events. Compilation is one pipeline with a policy
 (`Methodology.CompileWith(CompileOptions{Lenient, Stored})`; `Compile`, `CompileLenient`, `Validate`, `ValidateStored` are `def.Issue.Severity` (`error` default, `warning`; ADR 0097): only errors refuse a compile, a validation or a publish (`Issues.HasErrors`), and `CompileWith` adds the `Compiled.Hints()` remarks as `goal` warnings, shown by the editor without blocking Save or Publish.
 its policies, [ADR 0072](adr/0072-one-compile-pipeline-split-apply-compile-cache.md)); the registry caches the compiled
@@ -1937,7 +1949,8 @@ can only be published on published domains; a published methodology compiles aga
 the methodology registry (ADR 0125 §3; `GetDomainUsage` lists the methodologies using a domain).
 
 **YAML** is only an **import / export** format (`ImportMethodology`, `ExportMethodology`, `ImportDomain`, ...); the
-files in `domains/` are imported and published by the graph at startup (`GOAP_DOMAINS_DIR`), those of
+files in `domains/` are imported and published by the domain registry at its start (`GOAP_DOMAINS_DIR`, after the
+built-in domains, ADR 0167), those of
 `methodologies/` by the methodology registry (`GOAP_METHODOLOGIES_DIR`), when they don't already exist (a changed file
 needs a new version number).
 Example YAML definition (target format of ADR 0012):
@@ -2142,10 +2155,10 @@ lib/importerkit/               kit of an importer service: a worker of the job s
 lib/jobkit/                    kit of the long runs: the job queue (in process or over RPC), the worker, the job of a runner (ADR 0149)
 graph/index/                   document index (nodes and changes): hybrid search, facets, similar_to, stores (memory, SQLite FTS5, PostgreSQL pgvector)
 proto/                       connect-rpc contracts (buf)
-rust/                        Cargo workspace (ADR 0163): goap-proto, goap-connect, graph-core, graph-store, graph-service (goap-graph-rs), proxy (goap-proxy)
+rust/                        Cargo workspace (ADR 0163): goap-proto, goap-connect, graph-core, graph-store, graph-service (goap-graph-rs, goap-domains-rs), proxy (goap-proxy)
 contracts/gen/                         generated code (committed)
 methodologies/               example methodologies (active part)
-domains/                     domains: seeded at startup (alm, code), builtin/ embedded and frozen except domain (one per namespace)
+domains/                     domains: seeded by the domain registry at its start (alm, code), after the built-in ones of lib/domains/builtin, protected (one per namespace)
 deploy/                      compose, postgres init, otel collector, prometheus, grafana, k8s (sandboxes)
 web/                         Svelte frontend
 docs/                        architecture, ADRs

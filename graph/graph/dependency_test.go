@@ -83,11 +83,11 @@ func testChangeDependencies(t *testing.T, repo Repo) {
 		t.Fatalf("B merges before A: %v", err)
 	}
 	modify(a, w.cmp2, "two by A")
-	if _, err := g.IntegrateChange(ctx, a.ID, nil); err != nil {
+	if _, err := g.CloseChange(ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.IntegrateChange(ctx, b.ID, nil); err != nil {
-		t.Fatalf("B merges once A merged into the release: %v", err)
+	if _, err := g.CloseChange(ctx, b.ID); err != nil {
+		t.Fatalf("B merges once A closed into the release: %v", err)
 	}
 	if _, err := g.SetChangeDependencies(ctx, b.ID, nil); !errors.Is(err, ErrConflict) {
 		t.Fatalf("the dependencies of a merged change no longer change: %v", err)
@@ -102,7 +102,7 @@ func testChangeDependencies(t *testing.T, repo Repo) {
 	if _, err := g.IntegrateChange(ctx, x.ID, nil); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "has not committed") {
 		t.Fatalf("X merges before the release committed: %v", err)
 	}
-	if _, err := g.IntegrateChange(ctx, release.ID, nil); err != nil {
+	if _, err := g.CloseChange(ctx, release.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.IntegrateChange(ctx, x.ID, nil); err != nil {

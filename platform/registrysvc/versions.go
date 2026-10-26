@@ -111,7 +111,7 @@ func (s *Service) domainsInForceAt(ctx context.Context, at time.Time) (map[strin
 	out := map[string]*def.Domain{}
 	when := map[string]time.Time{}
 	for _, r := range rs {
-		if r.Builtin || r.Status == StatusDraft || r.PublishedAt.IsZero() || r.PublishedAt.After(at) {
+		if typecat.IsBuiltin(r.Domain.Name) || r.Status == StatusDraft || r.PublishedAt.IsZero() || r.PublishedAt.After(at) {
 			continue
 		}
 		if t, ok := when[r.Domain.Name]; !ok || r.PublishedAt.After(t) {
@@ -172,8 +172,8 @@ func (s *Service) pinDomains(ctx context.Context, m *methodology.Methodology) er
 		return err
 	}
 	for _, d := range ds {
-		if _, ok := m.Domains[d.Name]; ok {
-			continue
+		if _, ok := m.Domains[d.Name]; ok || typecat.IsBuiltin(d.Name) {
+			continue // a built-in domain is never pinned: it follows the platform
 		}
 		if m.Domains == nil {
 			m.Domains = map[string]string{}

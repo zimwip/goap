@@ -3,21 +3,22 @@
 //! database in memory. `GOAP_NATS_URL` set, the events of the graph and of the domain registry are written in their
 //! outboxes and delivered to the bus (ADR 0136; `GOAP_OUTBOX_POLL`, `GOAP_OUTBOX_RETENTION`).
 //!
-//! Every start publishes the domain versions of `GOAP_DOMAINS_DIR` (default `domains`) not stored yet. `goap-graph-rs
-//! bootstrap` runs the platform bootstrap once against the database, then exits (its events stay in the outbox: the
+//! The domains are the domain registry's (ADR 0167, `goap-domains-rs`, `GOAP_DOMAINS_URL`, default
+//! `http://localhost:8096`): read at the start (the service waits for the built-in ones), then again on the registry's
+//! events (`goap.registry.domain.published|deleted`) and after `platform::DOMAINS_TTL`. `goap-graph-rs bootstrap` runs the platform bootstrap once against the database, then exits (its events stay in the outbox: the
 //! service delivers them); the service bootstraps itself only with `GOAP_GRAPH_BOOTSTRAP=1` or a database in memory.
 //! The bootstrap seeds the models of `GOAP_MODELS_CONFIG` (else the default, Anthropic when its key is in Vault or
 //! `ANTHROPIC_API_KEY`), declares the sources of `GOAP_GRAPH_SOURCES`, and with `GOAP_GRAPH_SEED=dev` the development data, `=demo`
 //! the demo too.
 //!
 //! `GOAP_GRAPH_SPACE=content` makes it a content graph (ADR 0154 §9): it holds the domains' content and reads the
-//! domains, the organisation, the projects and the methodologies from the platform graph at `GOAP_PLATFORM_GRAPH_URL`
-//! (the domains again on the registry's events), serves the graph service alone, and has nothing to bootstrap.
+//! organisation, the projects and the methodologies from the platform graph at `GOAP_PLATFORM_GRAPH_URL`, serves the
+//! graph service alone, and has nothing to bootstrap.
 use std::sync::Arc;
 
 use anyhow::Context;
 use graph_service::{
-    Domains, Graph, State, app, content_app,
+    DomainSource, Graph, State, app, content_app,
     graph::boot::{BootOptions, DevSeed, ModelsConfig, parse_sources},
     graph::jobs::Jobs,
     relay::Sink,
@@ -49,12 +50,17 @@ async fn main() -> anyhow::Result<()> {
     let sources = parse_sources(&env("GOAP_GRAPH_SOURCES")).map_err(anyhow::Error::msg)?;
     let store = Store::open(&cfg).await.context("database")?;
     let nats = env("GOAP_NATS_URL");
+    let registry = Arc::new(graph_service::platform::Registry::new(
+        &std::env::var("GOAP_DOMAINS_URL").unwrap_or_else(|_| "http://localhost:8096".into()),
+    ));
+    // a graph types nothing without the built-in domains: the registry, started first, seeds them
+    registry.wait_for_builtins(60).await.context("domain registry")?;
     if bootstrap_only {
         let mut state = State::new(store);
+        state.domains = Some(DomainSource::Remote(registry));
         // the events of the bootstrap stay in the outbox: the service delivers them
         state.outbox = !nats.is_empty();
         let state = Arc::new(state);
-        seed_domains(&state).await;
         let r = boot(&state, sources).await?;
         tracing::info!(?r, "platform bootstrapped");
         return Ok(());
@@ -68,6 +74,7 @@ async fn main() -> anyhow::Result<()> {
         .with_context(|| format!("listening on {addr}"))?;
     tracing::info!(%addr, dialect = ?store.dialect(), "goap-graph-rs serving");
     let mut state = State::new(store);
+    state.domains = Some(DomainSource::Remote(registry.clone()));
     if content {
         state.space = "content";
     }
@@ -79,26 +86,25 @@ async fn main() -> anyhow::Result<()> {
         Vec::new()
     } else {
         let sink = Sink::connect(&nats).await.with_context(|| format!("NATS at {nats}"))?;
-        state.relay(sink).to_vec()
+        vec![state.relay(sink)]
     };
-    if content {
-        let remote = Arc::new(graph_service::platform::Remote::new(&platform_url));
-        state.remote = Some(remote.clone());
-        if !nats.is_empty() {
-            // the domains are the platform graph's: read again when its registry publishes or deletes one
-            let client = async_nats::connect(&nats)
-                .await
-                .with_context(|| format!("NATS at {nats}"))?;
-            for subject in ["goap.registry.domain.published", "goap.registry.domain.deleted"] {
-                let mut sub = client.subscribe(subject).await.context("subscribe")?;
-                let remote = remote.clone();
-                tokio::spawn(async move {
-                    while futures::StreamExt::next(&mut sub).await.is_some() {
-                        remote.invalidate().await;
-                    }
-                });
-            }
+    // the domains are the registry's: read again when it publishes or deletes one (and after `DOMAINS_TTL` anyway)
+    if !nats.is_empty() {
+        let client = async_nats::connect(&nats)
+            .await
+            .with_context(|| format!("NATS at {nats}"))?;
+        for subject in ["goap.registry.domain.published", "goap.registry.domain.deleted"] {
+            let mut sub = client.subscribe(subject).await.context("subscribe")?;
+            let registry = registry.clone();
+            tokio::spawn(async move {
+                while futures::StreamExt::next(&mut sub).await.is_some() {
+                    registry.invalidate().await;
+                }
+            });
         }
+    }
+    if content {
+        state.remote = Some(Arc::new(graph_service::platform::Remote::new(&platform_url)));
         let state = Arc::new(state);
         tokio::spawn(Arc::new(Graph { state: state.clone() }).run_worker());
         for r in relays {
@@ -110,7 +116,6 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     let state = Arc::new(state);
-    seed_domains(&state).await;
     if memory || env("GOAP_GRAPH_BOOTSTRAP") == "1" {
         match boot(&state, sources).await {
             Ok(r) => tracing::info!(?r, "platform bootstrapped"),
@@ -129,21 +134,6 @@ async fn main() -> anyhow::Result<()> {
 
 fn env(name: &str) -> String {
     std::env::var(name).unwrap_or_default()
-}
-
-/// Publishes the domain versions of `GOAP_DOMAINS_DIR` not stored yet (ADR 0113): a failure is logged.
-async fn seed_domains(state: &Arc<State>) {
-    let dir = std::env::var("GOAP_DOMAINS_DIR").unwrap_or_else(|_| "domains".into());
-    if dir.is_empty() {
-        return;
-    }
-    match (Domains { state: state.clone() })
-        .seed_domains(std::path::Path::new(&dir))
-        .await
-    {
-        Ok(doms) => tracing::info!(%dir, ?doms, "domains imported"),
-        Err(err) => tracing::error!(%dir, %err, "import domains"),
-    }
 }
 
 /// The platform bootstrap with the options of the environment.

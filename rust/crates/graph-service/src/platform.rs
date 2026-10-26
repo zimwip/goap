@@ -1,7 +1,9 @@
-//! The platform graph a content graph reads (ADR 0154 §9, `GOAP_GRAPH_SPACE=content` of `platform/cmd/graph`): the
-//! domains of its registry, the organisation and the projects its changes and versions are placed in, the roles of the
-//! methodologies of its changes. The domains are read again after [`DOMAINS_TTL`] or when a domain event says one
-//! moved; the namespaces of the platform at each request, read again only when their head moved.
+//! What a graph reads from the other services (ADR 0154 §9, ADR 0167): the domain registry ([`Registry`], a service of
+//! its own at `GOAP_DOMAINS_URL`) gives the domains of every graph; in a content graph (`GOAP_GRAPH_SPACE=content` of
+//! `platform/cmd/graph`) the platform graph ([`Remote`]) gives the organisation and the projects its changes and
+//! versions are placed in, the roles of the methodologies of its changes. The domains are read again after
+//! [`DOMAINS_TTL`] or when a domain event says one moved; the namespaces of the platform at each request, read again
+//! only when their head moved.
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -12,7 +14,7 @@ use goap_proto::graph::v1::{self as pb, GraphService as _};
 use goap_proto::registry::v1::{self as registrypb, DomainService as _};
 use graph_catalog::{
     Catalog,
-    catalog::{STRUCTURE_ORGANISATION, is_builtin},
+    catalog::{BUILTIN_NAMES, STRUCTURE_ORGANISATION},
     def::Domain,
     imported::Definition,
     record::{Record, latest},
@@ -28,37 +30,39 @@ use tokio::sync::Mutex;
 /// How long the domains read are kept when no event says they moved (`domainclient.DefaultTTL`).
 pub const DOMAINS_TTL: Duration = Duration::from_secs(30);
 
-/// The subject the content graph calls the platform graph as (`graphclient.ClientPrincipal`).
+/// The subject a graph calls the other services as (`graphclient.ClientPrincipal`).
 const CLIENT_SUBJECT: &str = "system:client";
 
 const TYPE_VERSION: &str = "methodology@MethodologyVersion";
 const TYPE_ROLE: &str = "methodology@Role";
 const STATUS_PUBLISHED: &str = "published";
 
-/// The platform graph at `GOAP_PLATFORM_GRAPH_URL`.
-pub struct Remote {
-    graph: pb::GraphServiceClient,
+fn client(url: &str) -> goap_connect::Client {
+    goap_connect::Client::builder(url)
+        .header("X-Goap-Subject", CLIENT_SUBJECT)
+        .build()
+}
+
+/// The domain registry at `GOAP_DOMAINS_URL` (ADR 0167): the domains in force, the built-in ones included.
+pub struct Registry {
     domains: registrypb::DomainServiceClient,
-    /// the catalogue of the domains in force, the versions it was built from and when they were read
-    catalog: Mutex<Option<(Instant, String, Arc<Catalog>)>>,
-    /// what was read of the platform's namespaces
-    heads: Mutex<Arc<Platform>>,
+    /// what was read last: when, the versions in force, their catalogue and their definitions
+    catalog: Mutex<Option<Read>>,
 }
 
-fn unavailable(what: &str, e: ConnectError) -> GraphError {
-    GraphError::internal(format!("platform graph: {what}: {}", e.message()))
+/// What a registry answered.
+struct Read {
+    at: Instant,
+    versions: String,
+    catalog: Arc<Catalog>,
+    domains: Arc<Vec<Domain>>,
 }
 
-impl Remote {
-    pub fn new(url: &str) -> Remote {
-        let client = goap_connect::Client::builder(url)
-            .header("X-Goap-Subject", CLIENT_SUBJECT)
-            .build();
-        Remote {
-            graph: pb::GraphServiceClient::new(client.clone()),
-            domains: registrypb::DomainServiceClient::new(client),
+impl Registry {
+    pub fn new(url: &str) -> Registry {
+        Registry {
+            domains: registrypb::DomainServiceClient::new(client(url)),
             catalog: Mutex::new(None),
-            heads: Mutex::new(Arc::new(Platform::default())),
         }
     }
 
@@ -67,14 +71,50 @@ impl Remote {
         *self.catalog.lock().await = None;
     }
 
-    /// The type catalogue of the domains in force in the platform's registry (`typecat.Live` over a `domainclient`):
-    /// built again when the versions in force changed; domains that make no catalogue leave the previous one.
+    /// Waits until the registry holds the built-in domains (Go's `loadTypes` at start): a graph with no domains types
+    /// nothing. Tried every second, `attempts` times.
+    pub async fn wait_for_builtins(&self, attempts: usize) -> Result<Arc<Catalog>, GraphError> {
+        let mut last = GraphError::internal("domain registry: no built-in domain");
+        for _ in 0..attempts.max(1) {
+            match self
+                .catalog(Arc::new(Catalog::of(&[]).map_err(GraphError::internal)?))
+                .await
+            {
+                Ok(c) if BUILTIN_NAMES.iter().all(|n| c.domains().contains_key(*n)) => return Ok(c),
+                Ok(_) => {
+                    self.invalidate().await;
+                    last = GraphError::internal(format!(
+                        "domain registry: the built-in domains ({}) are not published",
+                        BUILTIN_NAMES.join(", ")
+                    ));
+                }
+                Err(e) => last = e,
+            }
+            tracing::info!(err = %last.message, "waiting for the domain registry");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+        Err(last)
+    }
+
+    /// The type catalogue of the domains in force in the registry (`typecat.Live` over a `domainclient`): built again
+    /// when the versions in force changed; domains that make no catalogue leave the previous one (else `current`).
     pub async fn catalog(&self, current: Arc<Catalog>) -> Result<Arc<Catalog>, GraphError> {
+        Ok(self.read().await?.map(|r| r.0).unwrap_or(current))
+    }
+
+    /// The definitions of the domains in force (`domainclient.Client.Domains`).
+    pub async fn domains(&self) -> Result<Arc<Vec<Domain>>, GraphError> {
+        Ok(self.read().await?.map(|r| r.1).unwrap_or_default())
+    }
+
+    /// The catalogue and the domains in force, read again after [`DOMAINS_TTL`] or an invalidation; none while no
+    /// read made a catalogue.
+    async fn read(&self) -> Result<Option<(Arc<Catalog>, Arc<Vec<Domain>>)>, GraphError> {
         let mut cur = self.catalog.lock().await;
-        if let Some((at, _, c)) = cur.as_ref()
-            && at.elapsed() < DOMAINS_TTL
+        if let Some(r) = cur.as_ref()
+            && r.at.elapsed() < DOMAINS_TTL
         {
-            return Ok(c.clone());
+            return Ok(Some((r.catalog.clone(), r.domains.clone())));
         }
         let ctx = Ctx::background();
         let list = self
@@ -84,12 +124,11 @@ impl Remote {
                 Request::new(registrypb::ListDomainsRequest { all_versions: true }),
             )
             .await
-            .map_err(|e| unavailable("list domains", e))?
+            .map_err(|e| unavailable("domain registry: list domains", e))?
             .into_inner();
         let records: Vec<Record> = list
             .domains
             .iter()
-            .filter(|s| !s.builtin && !is_builtin(&s.name))
             .map(|s| Record {
                 domain: Domain {
                     name: s.name.clone(),
@@ -108,16 +147,16 @@ impl Remote {
             .filter(|r| r.status == STATUS_PUBLISHED)
             .map(|r| (r.domain.name.clone(), r.domain.version.clone()))
             .collect();
-        let fp = force
+        let versions = force
             .iter()
             .map(|(n, v)| format!("{n}@{v}"))
             .collect::<Vec<_>>()
             .join(",");
-        if let Some((_, was, c)) = cur.as_ref()
-            && *was == fp
+        if let Some(r) = cur.as_mut()
+            && r.versions == versions
         {
-            *cur = Some((Instant::now(), fp, c.clone()));
-            return Ok(cur.as_ref().map(|c| c.2.clone()).unwrap_or(current));
+            r.at = Instant::now();
+            return Ok(Some((r.catalog.clone(), r.domains.clone())));
         }
         let mut ds = Vec::new();
         for (name, version) in &force {
@@ -132,24 +171,53 @@ impl Remote {
                     }),
                 )
                 .await
-                .map_err(|e| unavailable("export domain", e))?
+                .map_err(|e| unavailable("domain registry: export domain", e))?
                 .into_inner()
                 .yaml;
             let d = Definition::read(&yaml)
                 .and_then(|d| d.json)
                 .and_then(|j| Domain::from_json(&j))
-                .map_err(|e| GraphError::internal(format!("platform graph: domain {name}@{version}: {e}")))?;
+                .map_err(|e| GraphError::internal(format!("domain registry: domain {name}@{version}: {e}")))?;
             ds.push(d);
         }
-        let c = match Catalog::new(&ds) {
-            Ok(c) => Arc::new(c),
+        match Catalog::of(&ds) {
+            Ok(c) => {
+                *cur = Some(Read {
+                    at: Instant::now(),
+                    versions,
+                    catalog: Arc::new(c),
+                    domains: Arc::new(ds),
+                });
+            }
             Err(e) => {
                 tracing::error!(err = %e, "type catalogue");
-                cur.as_ref().map(|c| c.2.clone()).unwrap_or(current)
+                if let Some(r) = cur.as_mut() {
+                    r.at = Instant::now();
+                }
             }
-        };
-        *cur = Some((Instant::now(), fp, c.clone()));
-        Ok(c)
+        }
+        Ok(cur.as_ref().map(|r| (r.catalog.clone(), r.domains.clone())))
+    }
+}
+
+/// The platform graph at `GOAP_PLATFORM_GRAPH_URL`, read by a content graph, and by the domain registry for the
+/// organisation's rules.
+pub struct Remote {
+    graph: pb::GraphServiceClient,
+    /// what was read of the platform's namespaces
+    heads: Mutex<Arc<Platform>>,
+}
+
+fn unavailable(what: &str, e: ConnectError) -> GraphError {
+    GraphError::internal(format!("{what}: {}", e.message()))
+}
+
+impl Remote {
+    pub fn new(url: &str) -> Remote {
+        Remote {
+            graph: pb::GraphServiceClient::new(client(url)),
+            heads: Mutex::new(Arc::new(Platform::default())),
+        }
     }
 
     /// What the platform graph holds of the organisation and the methodologies now: read again where a head moved.
@@ -196,7 +264,7 @@ impl Remote {
         match r {
             Ok(r) => Ok(r.into_inner().head.map(|b| b.id).unwrap_or_default()),
             Err(e) if e.code() == goap_connect::Code::NotFound => Ok(String::new()),
-            Err(e) => Err(unavailable("branch head", e)),
+            Err(e) => Err(unavailable("platform graph: branch head", e)),
         }
     }
 
@@ -212,7 +280,7 @@ impl Remote {
                 Request::new(pb::GetBaselineGraphRequest { id: baseline.into() }),
             )
             .await
-            .map_err(|e| unavailable("organisation", e))?
+            .map_err(|e| unavailable("platform graph: organisation", e))?
             .into_inner();
         Ok(Held {
             baseline: baseline.into(),
@@ -246,7 +314,7 @@ impl Remote {
                     }),
                 )
                 .await
-                .map_err(|e| unavailable("methodologies", e))?
+                .map_err(|e| unavailable("platform graph: methodologies", e))?
                 .into_inner();
             out.nodes.extend(r.nodes.iter().map(node).filter(|n| !n.deleted));
         }

@@ -228,13 +228,15 @@ export const graph = {
     rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'SplitChange', { changeId }),
   listSubChanges: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'ListSubChanges', { changeId }, signal),
-  /** Merges the branch of a change that committed into the branch it was forked from, rebased first (ADR 0102); or
-   * integrates a committed change that waits for a resolution (resolutions are by node id). */
+  /** Merges what a change committed into the branch it was forked from, rebased first (ADR 0102), the change left open
+   * (ADR 0166); or integrates a committed change that waits for a resolution (resolutions are by node id). */
   mergeChange: (changeId: string, resolutions: Record<string, Resolution> = {}) =>
     rpc<
       { changeId: string; resolutions: Record<string, Resolution> },
       { change?: Change }
     >(GRAPH, 'MergeChange', { changeId, resolutions }),
+  /** Closes a change (ADR 0166): settled, what is left merged, then applied. */
+  closeChange: (changeId: string) => rpc<{ changeId: string }, { change?: Change }>(GRAPH, 'CloseChange', { changeId }),
   /** Flow branches of a change (relaunched steps). */
   validateBoard: (changeId: string, flow = '', signal?: AbortSignal) =>
     rpc<{ changeId: string; flow: string }, { issues?: BoardIssue[] }>(GRAPH, 'ValidateBoard', { changeId, flow }, signal),
@@ -461,9 +463,10 @@ export const graph = {
       ...(decision ? { decision } : {}),
     }),
   /** Step one of apply (ADR 0056): the versions are written on the change's own branch; mergeChange integrates them. */
-  commitChange: (changeId: string, baselineName: string) =>
-    rpc<{ changeId: string; baselineName: string }, { baseline?: Baseline }>(GRAPH, 'CommitChange', {
+  commitChange: (changeId: string, baselineName: string, nodes?: string[]) =>
+    rpc<{ changeId: string; baselineName: string; nodes?: string[] }, { baseline?: Baseline }>(GRAPH, 'CommitChange', {
       changeId,
       baselineName,
+      ...(nodes?.length ? { nodes } : {}),
     }),
 };

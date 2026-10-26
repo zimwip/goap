@@ -5,7 +5,7 @@
 # Every call goes through goap-proxy (ADR 0163), mode go here: the Go graph service; perf.rust.yml adds the Rust one
 # (make perf-rust: mode rust, make perf-diff: mode shadow or compare). GOAP_PERF_GRAPH_URL=http://graph:8080 (make perf
 # PERF_PROXY=0) leaves the proxy out.
-# The graph service alone on PostgreSQL (with the domain registry it serves), measured by goap-bench, the load generator,
+# The graph service alone on PostgreSQL (with the domain registry it reads, a service of its own: ADR 0167), measured by goap-bench, the load generator,
 # which writes nodes and versions through its API on the domain and change axes. Every measure goes to Prometheus (the
 # graph's RPCs, its database calls and Go runtime, goap-bench's calls, PostgreSQL's tables) and is drawn by the Grafana
 # dashboard "GOAP performance"; goap-bench also writes a CSV per run in .goap/perf (GOAP_PERF_RESULTS).
@@ -43,6 +43,23 @@ services:
       interval: 2s
       retries: 30
 
+  # the domain registry (ADR 0167): the graphs read their types there, at start (no bus in this stack: again every
+  # minute)
+  domains:
+    image: goap/goap:dev
+    pull_policy: never
+    restart: unless-stopped
+    entrypoint: ["/goap/domains"]
+    environment:
+      <<: *telemetry
+      GOAP_HTTP_ADDR: ":8080"
+      GOAP_DB_DSN: postgres://domains:domains@postgres:5432/goap?sslmode=disable
+      GOAP_DOMAINS_DIR: /domains
+      GOAP_GRAPH_URL: ${GOAP_PERF_GRAPH_URL:-http://proxy:8080}
+    depends_on:
+      postgres: {condition: service_healthy}
+    ports: ["8382:8080"]
+
   graph:
     image: goap/goap:dev
     pull_policy: never
@@ -52,13 +69,14 @@ services:
       <<: *telemetry
       GOAP_HTTP_ADDR: ":8080"
       GOAP_DB_DSN: postgres://graph:graph@postgres:5432/goap?sslmode=disable
-      GOAP_DOMAINS_DIR: /domains
+      GOAP_DOMAINS_URL: http://domains:8080
       # no `graph bootstrap` in this stack: the service bootstraps the platform itself
       GOAP_GRAPH_BOOTSTRAP: "1"
       GOAP_PPROF_ADDR: ":6060"
       # baselines storing their whole state (ADR 0056): 1 every baseline, the default otherwise
     depends_on:
       postgres: {condition: service_healthy}
+      domains: {condition: service_started}
     ports: ["8380:8080", "6060:6060"]
 
   # the entry of the graph's clients (the bench, the gateway): the Go service (mode go), the Rust one or both
@@ -90,6 +108,7 @@ services:
       GOAP_HTTP_ADDR: ":8080"
       GOAP_AUTH_MODE: none
       GOAP_GRAPH_URL: ${GOAP_PERF_GRAPH_URL:-http://proxy:8080}
+      GOAP_DOMAINS_URL: http://domains:8080
       GOAP_LOG_FORMAT: text
     depends_on: [graph, proxy]
     ports: ["8381:8080"]
@@ -118,6 +137,7 @@ services:
     environment:
       <<: *telemetry
       GOAP_GRAPH_URL: ${GOAP_PERF_GRAPH_URL:-http://proxy:8080}
+      GOAP_DOMAINS_URL: http://domains:8080
     volumes: ["${GOAP_PERF_RESULTS:-../../.goap/perf}:/results:z"]
     depends_on: [graph, proxy, otel-collector]
 

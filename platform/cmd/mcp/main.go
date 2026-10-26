@@ -70,7 +70,7 @@ func main() {
 	maps.Copy(connectors, builtin.Connectors(builtin.Ports{
 		Graph:         graphclient.NewClient(hc, graphURL, copts...),
 		Engine:        enginev1connect.NewEngineServiceClient(hc, platform.Env("GOAP_ENGINE_URL", "http://localhost:8083"), copts...),
-		Domains:       domainclient.NewClient(hc, graphURL, copts...),
+		Domains:       domainclient.NewClient(hc, platform.Env("GOAP_DOMAINS_URL", "http://localhost:8096"), copts...),
 		Methodologies: registryv1connect.NewRegistryServiceClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), copts...),
 		Hub:           svc,
 		Authz:         iam,

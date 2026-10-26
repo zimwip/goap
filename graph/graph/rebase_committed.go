@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -145,12 +146,13 @@ func (g *Graph) unsettled(ctx context.Context, tx Tx, c domain.Change) ([]string
 // merge merges a change into what it was forked from (ADR 0102): settled, brought up to date (a root change: its branch
 // rebased onto the head of its target; a sub-change: rebased onto its parent), asked to the merge guards, then integrated
 // (a fast-forward; a target moving in between falls back to the three-way merge with the resolutions given).
-func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (c domain.Change, err error) {
+// closing: the close of the change (ADR 0166), which needs it settled and leaves it applied; else the change stays open.
+func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution, closing bool) (c domain.Change, err error) {
 	// one transaction (ADR 0140): the guardians judge what is merged; a rebase that changed the branch is kept, the merge
 	// waits for the change to be looked at again
 	var rebased error
 	err = g.inChange(ctx, id, func(ctx context.Context) error {
-		c, rebased, err = g.mergeIn(ctx, id, resolutions)
+		c, rebased, err = g.mergeIn(ctx, id, resolutions, closing)
 		return err
 	})
 	if err == nil && rebased != nil {
@@ -159,15 +161,18 @@ func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[d
 	return c, err
 }
 
-func (g *Graph) mergeIn(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (c domain.Change, rebased error, err error) {
+func (g *Graph) mergeIn(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution, closing bool) (c domain.Change, rebased error, err error) {
 	err = g.changeTx(ctx, id, func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
 		}
-		if left, err := g.unsettled(ctx, tx, c); err != nil {
-			return err
-		} else if len(left) > 0 {
-			return fmt.Errorf("change %s cannot be merged yet: %s: %w", id, strings.Join(left, "; "), ErrConflict)
+		// what the change committed is merged whatever it still works on; its close needs everything settled (ADR 0166)
+		if closing {
+			if left, err := g.unsettled(ctx, tx, c); err != nil {
+				return err
+			} else if len(left) > 0 {
+				return fmt.Errorf("change %s cannot be closed yet: %s: %w", id, strings.Join(left, "; "), ErrConflict)
+			}
 		}
 		if !hasCommits(c) {
 			return fmt.Errorf("change %s committed nothing on its branch: %w", id, ErrNothingToCommit)
@@ -201,7 +206,7 @@ func (g *Graph) mergeIn(ctx context.Context, id domain.ChangeID, resolutions map
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
 		}
-		if err := g.checkMerge(ctx, tx, c); err != nil {
+		if err := g.checkMerge(ctx, tx, c, closing); err != nil {
 			return err
 		}
 		own, ok, err := ownBranch(ctx, tx, c)
@@ -217,11 +222,11 @@ func (g *Graph) mergeIn(ctx context.Context, id domain.ChangeID, resolutions map
 			return err
 		}
 		if c.ParentID == "" {
-			c, err = g.integrate(ctx, tx, c, own, resolutions)
+			c, err = g.integrate(ctx, tx, c, own, resolutions, closing)
 			return err
 		}
 		// a sub-change fast-forwards the branch of its parent, which takes its work as its own (ADR 0103)
-		if ff, err := g.fastForward(ctx, tx, c, own); err != nil {
+		if ff, err := g.fastForward(ctx, tx, c, own, closing); err != nil {
 			return err
 		} else if !ff {
 			return fmt.Errorf("the branch of parent change %s moved meanwhile: merge %s again: %w", c.ParentID, id, ErrConflict)
@@ -287,8 +292,10 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 	var todo []committedIn
 	var entries []domain.ReviewEntry
 	held := map[domain.NodeID]domain.ChangeImpactID{} // the parent's impact of each node, the last one
+	parentImpact := map[domain.ChangeImpactID]domain.ChangeImpact{}
 	for _, p := range mainImpactsOf(parent) {
 		held[nodeOf(p)] = p.ID
+		parentImpact[p.ID] = p
 	}
 	for _, cn := range mainImpactsOf(c) {
 		if cn.Committed == nil {
@@ -297,6 +304,9 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 		ref := *cn.Committed
 		var events []domain.ImpactEvent
 		id := held[ref.ID]
+		if p, ok := parentImpact[id]; ok && p.Committed != nil && *p.Committed == ref {
+			continue // merged before (ADR 0166): the parent holds it already
+		}
 		if id == "" {
 			id = domain.ChangeImpactID(g.newID())
 			st := domain.ChangeImpact{ID: id, Key: cn.Key, Type: cn.Type, Intent: cn.Intent, Rationale: cn.Rationale, Review: domain.ReviewProposed,
@@ -437,6 +447,14 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 		if inHead == inFork && tv == fv {
 			continue // changed by the change only
 		}
+		if inHead && inFork {
+			// a version over the target's already (a draft rebased at its commit, ADR 0165): nothing to merge
+			if anc, err := CommonAncestor(ctx, tx, id, hv, tv); err == nil && anc.Version == tv {
+				continue
+			} else if err != nil && !errors.Is(err, ErrNotFound) {
+				return res, err
+			}
+		}
 		cn, ok := impactOf[id]
 		if !ok {
 			return res, fmt.Errorf("node %s changed on the branch of change %s by no impact of it: %w", id, c.ID, ErrConflict)
@@ -520,7 +538,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 	var wrote []domain.Node
 	if len(res.Impacts) > 0 && !res.Changed() {
 		var err error
-		if _, wrote, err = g.commitOnBranch(ctx, tx, c.ID, "", true); err != nil {
+		if _, wrote, err = g.commitOnBranch(ctx, tx, c.ID, "", true, nil); err != nil {
 			return res, err
 		}
 	}
@@ -604,8 +622,30 @@ type CommitState struct {
 	Unsettled []string `json:"unsettled,omitempty"`
 	Commits   bool     `json:"commits"`
 	CanCommit bool     `json:"canCommit"`
-	CanMerge  bool     `json:"canMerge"`
+	// CanMerge: the change committed nodes it has not merged yet (Unmerged); CanClose: nothing holds its close (ADR 0166)
+	CanMerge bool `json:"canMerge"`
+	Unmerged int  `json:"unmerged,omitempty"`
+	CanClose bool `json:"canClose"`
+	// Candidates are what the next commit may write, node by node: the choices of a partial commit (CommitChangeNodes)
+	Candidates []CommitCandidate `json:"candidates,omitempty"`
 }
+
+// A CommitCandidate is a node the next commit of a change may write.
+type CommitCandidate struct {
+	Node domain.NodeID `json:"nodeId"`
+	Key  string        `json:"key"`
+	Type string        `json:"type"`
+	// Kind is created, modified or reverted (withdrawn since its commit)
+	Kind   string                `json:"kind"`
+	Impact domain.ChangeImpactID `json:"changeImpactId,omitempty"`
+}
+
+// The kinds of a commit candidate.
+const (
+	CandidateCreated  = "created"
+	CandidateModified = "modified"
+	CandidateReverted = "reverted"
+)
 
 // CommitState reads what a change can commit and merge.
 func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitState, err error) {
@@ -629,19 +669,75 @@ func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitS
 				return err
 			} else if ok {
 				st.ToCommit = append(st.ToCommit, cn.Key)
+				kind := CandidateModified
+				if cn.Intent == domain.IntentCreated {
+					kind = CandidateCreated
+				}
+				st.Candidates = append(st.Candidates, CommitCandidate{Node: nodeOf(cn), Key: cn.Key, Type: cn.Type, Kind: kind, Impact: cn.ID})
 			}
 		}
 		w, _, err := g.withdrawnSince(ctx, tx, c)
 		if err != nil {
 			return err
 		}
+		if len(w) > 0 {
+			own, _, err := ownBranch(ctx, tx, c)
+			if err != nil {
+				return err
+			}
+			for _, id := range w {
+				n, err := tx.LatestOn(ctx, id, own.Name)
+				if err != nil {
+					return err
+				}
+				st.Candidates = append(st.Candidates, CommitCandidate{Node: id, Key: n.Key, Type: n.Type, Kind: CandidateReverted})
+			}
+		}
 		if st.Unsettled, err = g.unsettled(ctx, tx, c); err != nil {
 			return err
 		}
 		st.Reverts, st.Commits = len(w), hasCommits(c)
+		if st.Commits {
+			if st.Unmerged, err = g.unmerged(ctx, tx, c); err != nil {
+				return err
+			}
+		}
 		st.CanCommit = len(st.ToCommit) > 0 || st.Reverts > 0
-		st.CanMerge = len(st.Unsettled) == 0 && st.Commits
+		st.CanMerge = st.Unmerged > 0
+		st.CanClose = len(st.Unsettled) == 0 && st.Commits
 		return nil
 	})
 	return
+}
+
+// unmerged counts the nodes the branch of a change holds a version of that what it is forked from does not hold (ADR
+// 0166): what its next merge moves.
+func (g *Graph) unmerged(ctx context.Context, tx Tx, c domain.Change) (int, error) {
+	own, ok, err := ownBranch(ctx, tx, c)
+	if err != nil || !ok {
+		return 0, err
+	}
+	to, err := ontoOf(ctx, tx, own)
+	if err != nil {
+		return 0, err
+	}
+	ids, err := tx.BranchNodeIDs(ctx, own.Name)
+	if err != nil {
+		return 0, err
+	}
+	from, err := branchVersions(ctx, tx, own, ids)
+	if err != nil {
+		return 0, err
+	}
+	into, err := to.versions(ctx, tx, ids)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, id := range ids {
+		if v, ok := from[id]; ok && into[id] != v {
+			n++
+		}
+	}
+	return n, nil
 }

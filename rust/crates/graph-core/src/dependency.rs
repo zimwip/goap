@@ -63,7 +63,7 @@ pub async fn dependency_of<T: ReadTx>(tx: &T, c: &Change, d: &ChangeId) -> Resul
         }
         "applied" => {}
         _ => {
-            out.reason = "not merged yet".into();
+            out.reason = "not closed yet".into();
             return Ok(out);
         }
     }

@@ -926,8 +926,8 @@ message Domain {
   google.protobuf.Timestamp updated_at = 8;
   google.protobuf.Timestamp published_at = 9;
   string updated_by = 10;
-  // built into the platform (methodology, organisation, platform): published and frozen, it changes with the code
-  bool builtin = 14;
+  // refused every write over RPC (ADR 0167): only the local command line of the graph process writes it (read only)
+  bool protected = 19;
 }
 
 message DomainSummary {
@@ -939,9 +939,9 @@ message DomainSummary {
   int32 link_type_count = 6;
   google.protobuf.Timestamp updated_at = 7;
   google.protobuf.Timestamp published_at = 8;
-  // built into the platform: published and frozen
-  bool builtin = 9;
   int32 item_type_count = 10;
+  // refused every write over RPC (ADR 0167)
+  bool protected = 11;
 }
 
 message ListDomainsRequest {

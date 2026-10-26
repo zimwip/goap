@@ -19,6 +19,8 @@
 !rust/
 !proto/
 rust/target/
+# the widget catalogue of the forms, compiled into the Rust graph (graph-catalog form.rs)
+!web/src/lib/forms/widgetCatalog.gen.ts
 
 # what go build never reads, inside the modules
 **/*_test.go

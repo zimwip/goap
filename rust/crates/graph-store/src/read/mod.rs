@@ -11,7 +11,10 @@ mod smarttags;
 pub use smarttags::{SmartTag, Which};
 mod sql;
 mod value;
+mod versions;
 mod write;
+
+pub use versions::Versions;
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -41,6 +44,11 @@ pub struct Session {
     sql: Sql,
     /// What the request read of the platform graph, in a content graph ([`ReadTx::platform`]).
     platform: Option<std::sync::Arc<graph_core::platform::Platform>>,
+    /// The type catalogue in force ([`ReadTx::catalog`]).
+    catalog: Option<std::sync::Arc<graph_catalog::Catalog>>,
+    /// The versions kept between the transactions of the store, and what this one read ([`versions`]).
+    versions: std::sync::Arc<Versions>,
+    tx: versions::Read,
 }
 
 enum Conn {
@@ -76,43 +84,64 @@ impl From<StoreError> for GraphError {
 }
 
 impl Session {
+    /// The session knowing the type catalogue in force.
+    pub fn with_catalog(mut self, c: std::sync::Arc<graph_catalog::Catalog>) -> Session {
+        self.catalog = Some(c);
+        self
+    }
+
     /// The session reading the platform's namespaces from what the request read of the platform graph.
     pub fn with_platform(mut self, p: Option<std::sync::Arc<graph_core::platform::Platform>>) -> Session {
         self.platform = p;
         self
     }
 
-    pub(crate) fn postgres(c: deadpool_postgres::Object) -> Session {
+    pub(crate) fn postgres(c: deadpool_postgres::Object, versions: std::sync::Arc<Versions>) -> Session {
         Session {
             conn: Conn::Pg(c),
             sql: Sql { pg: true },
             platform: None,
+            catalog: None,
+            versions,
+            tx: Default::default(),
         }
     }
 
-    pub(crate) fn sqlite(s: SqliteSession) -> Session {
+    pub(crate) fn sqlite(s: SqliteSession, versions: std::sync::Arc<Versions>) -> Session {
         Session {
             conn: Conn::Sqlite(s),
             sql: Sql { pg: false },
             platform: None,
+            catalog: None,
+            versions,
+            tx: Default::default(),
         }
     }
 
     /// A write transaction on a writer of PostgreSQL.
-    pub(crate) async fn postgres_tx(c: deadpool_postgres::Object) -> Result<Session, StoreError> {
+    pub(crate) async fn postgres_tx(
+        c: deadpool_postgres::Object,
+        versions: std::sync::Arc<Versions>,
+    ) -> Result<Session, StoreError> {
         c.batch_execute("BEGIN").await?;
         Ok(Session {
             conn: Conn::PgTx(Some(c)),
             sql: Sql { pg: true },
             platform: None,
+            catalog: None,
+            versions,
+            tx: Default::default(),
         })
     }
 
-    pub(crate) fn sqlite_tx(t: SqliteTx) -> Session {
+    pub(crate) fn sqlite_tx(t: SqliteTx, versions: std::sync::Arc<Versions>) -> Session {
         Session {
             conn: Conn::SqliteTx(Some(t)),
             sql: Sql { pg: false },
             platform: None,
+            catalog: None,
+            versions,
+            tx: Default::default(),
         }
     }
 
@@ -379,6 +408,10 @@ pub(crate) fn change_of(r: &Row) -> Result<Change, GraphError> {
 }
 
 impl ReadTx for Session {
+    fn catalog(&self) -> Option<std::sync::Arc<graph_catalog::Catalog>> {
+        self.catalog.clone()
+    }
+
     fn platform(&self) -> Option<&graph_core::platform::Platform> {
         self.platform.as_deref()
     }
@@ -599,7 +632,17 @@ impl ReadTx for Session {
                 r.id
             )));
         }
-        Ok(self.nodes(self.sql.node(r)).await?.into_iter().next())
+        let fixed = self.tx.fixed(r);
+        if fixed && let Some(n) = self.tx.node(r) {
+            return Ok(Some(n));
+        }
+        let era = self.versions.generation();
+        let n = self.nodes(self.sql.node(r)).await?.into_iter().next();
+        if fixed && let Some(n) = &n {
+            self.tx.keep(n);
+            self.versions.known(era, r);
+        }
+        Ok(n)
     }
 
     async fn latest_on(&self, id: &NodeId, branch: &str) -> Result<Option<Node>, GraphError> {
@@ -623,7 +666,16 @@ impl ReadTx for Session {
         if refs.is_empty() {
             return Ok(Vec::new());
         }
-        self.nodes(self.sql.nodes_at(refs, typ)).await
+        let era = self.versions.generation();
+        let ns = self.nodes(self.sql.nodes_at(refs, typ)).await?;
+        for n in &ns {
+            let r = n.node_ref();
+            if self.tx.fixed(&r) {
+                self.tx.keep(n);
+                self.versions.known(era, &r);
+            }
+        }
+        Ok(ns)
     }
 
     async fn link(&self, id: &LinkId) -> Result<Option<Link>, GraphError> {
@@ -637,7 +689,38 @@ impl ReadTx for Session {
         if refs.is_empty() {
             return Ok(Vec::new());
         }
-        self.links(self.sql.links_from(refs, types)).await
+        // The links of the versions already read come from the cache (filtered by type when asked), the others from one
+        // statement; all the links of a version read whole are kept.
+        let era = self.versions.generation();
+        let mut out = Vec::new();
+        let mut missing = Vec::new();
+        for r in refs {
+            match self.tx.fixed(r).then(|| self.versions.links(r)).flatten() {
+                Some(ls) => out.extend(ls.into_iter().filter(|l| types.is_none_or(|ts| ts.contains(&l.typ)))),
+                None => missing.push(r.clone()),
+            }
+        }
+        if missing.len() == refs.len() && types.is_some() {
+            return self.links(self.sql.links_from(refs, types)).await;
+        }
+        if !missing.is_empty() {
+            let got = self.links(self.sql.links_from(&missing, types)).await?;
+            if types.is_none() {
+                let mut held: HashMap<&NodeRef, Vec<Link>> = HashMap::new();
+                for l in &got {
+                    held.entry(&l.from).or_default().push(l.clone());
+                }
+                for r in missing.iter().filter(|r| self.tx.fixed(r)) {
+                    self.versions.keep_links(era, r, held.remove(r).unwrap_or_default());
+                }
+            }
+            if missing.len() == refs.len() {
+                return Ok(got);
+            }
+            out.extend(got);
+        }
+        out.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+        Ok(out)
     }
 
     async fn links_from_into(&self, refs: &[NodeRef], to: &NodeId) -> Result<Vec<Link>, GraphError> {

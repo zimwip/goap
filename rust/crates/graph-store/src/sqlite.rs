@@ -5,12 +5,14 @@ use std::sync::{Arc, Mutex};
 use rusqlite::{Connection, OpenFlags};
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard, OwnedSemaphorePermit, Semaphore};
 
-use crate::{StoreError, migrate};
+use crate::{StoreError, migrate, migrate::Part};
 
 pub struct Sqlite {
     /// The writer: held by a write transaction from its BEGIN to its COMMIT, across the awaits between its statements.
     writer: Arc<AsyncMutex<Connection>>,
     readers: Option<Arc<Readers>>,
+    /// The versions kept between transactions ([`crate::read::Versions`]).
+    pub(crate) versions: Arc<crate::read::Versions>,
 }
 
 struct Readers {
@@ -63,7 +65,7 @@ async fn blocking<T: Send + 'static>(
 
 impl Sqlite {
     /// Opens (and creates) the database file, migrates it, then opens its readers.
-    pub async fn open(path: &str, readers: usize) -> Result<Sqlite, StoreError> {
+    pub async fn open(path: &str, readers: usize, part: Part) -> Result<Sqlite, StoreError> {
         let p = path.to_string();
         let writer = blocking(move || {
             if let Some(dir) = std::path::Path::new(&p).parent().filter(|d| !d.as_os_str().is_empty()) {
@@ -71,7 +73,7 @@ impl Sqlite {
             }
             let c = Connection::open(&p)?;
             c.execute_batch(WRITER_PRAGMAS)?;
-            migrate_sqlite(&c)?;
+            migrate_sqlite(&c, part)?;
             Ok(c)
         })
         .await?;
@@ -98,21 +100,23 @@ impl Sqlite {
                 idle: Mutex::new(conns),
                 slots: Arc::new(Semaphore::new(n)),
             })),
+            versions: Default::default(),
         })
     }
 
     /// A database in memory: one connection, which reads too.
-    pub async fn memory() -> Result<Sqlite, StoreError> {
-        let c = blocking(|| {
+    pub async fn memory(part: Part) -> Result<Sqlite, StoreError> {
+        let c = blocking(move || {
             let c = Connection::open_in_memory()?;
             c.execute_batch("PRAGMA foreign_keys = ON;")?;
-            migrate_sqlite(&c)?;
+            migrate_sqlite(&c, part)?;
             Ok(c)
         })
         .await?;
         Ok(Sqlite {
             writer: Arc::new(AsyncMutex::new(c)),
             readers: None,
+            versions: Default::default(),
         })
     }
 
@@ -193,30 +197,25 @@ impl Sqlite {
     }
 }
 
-/// A write transaction on the writer of a SQLite database: each statement runs on the blocking pool with the writer,
-/// which the transaction keeps between them.
+/// A write transaction on the writer of a SQLite database, which the transaction keeps between its statements. Each
+/// statement runs in place, on the task of the transaction: a commit runs a thousand statements or more, each a few
+/// microseconds of SQLite, and a hop to the blocking pool and back costs some 60 µs of each (three times what SQLite
+/// spends), all of it while the one writer is held. The reads keep the blocking pool: they run side by side.
 pub struct SqliteTx {
     conn: AsyncMutex<Option<OwnedMutexGuard<Connection>>>,
 }
 
 impl SqliteTx {
-    /// Runs `f` on the writer, in the transaction.
+    /// Runs `f` on the writer, in the transaction, in place.
     pub async fn run<T: Send + 'static>(
         &self,
         f: impl FnOnce(&Connection) -> Result<T, StoreError> + Send + 'static,
     ) -> Result<T, StoreError> {
-        let mut slot = self.conn.lock().await;
+        let slot = self.conn.lock().await;
         let g = slot
-            .take()
+            .as_ref()
             .ok_or_else(|| StoreError::Other("sqlite transaction over".into()))?;
-        let (g, res) = tokio::task::spawn_blocking(move || {
-            let res = f(&g);
-            (g, res)
-        })
-        .await
-        .map_err(|e| StoreError::Other(format!("sqlite task: {e}")))?;
-        *slot = Some(g);
-        res
+        f(g)
     }
 
     /// Commits, then lets the writer go.
@@ -244,13 +243,13 @@ impl Drop for SqliteTx {
     }
 }
 
-fn migrate_sqlite(c: &Connection) -> Result<(), StoreError> {
+fn migrate_sqlite(c: &Connection, part: Part) -> Result<(), StoreError> {
     c.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migrations (
 		component TEXT NOT NULL, name TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
 		PRIMARY KEY (component, name))",
     )?;
-    for (component, files) in migrate::sets(false) {
+    for (component, files) in migrate::sets(false, part) {
         for (name, sql) in files {
             let n: i64 = c.query_row(
                 "SELECT count(*) FROM schema_migrations WHERE component = ? AND name = ?",
@@ -305,23 +304,19 @@ mod tests {
     async fn migrates_once_and_reads_on_readers() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("graph.db").display().to_string();
-        let db = Sqlite::open(&path, 2).await.unwrap();
+        let db = Sqlite::open(&path, 2, Part::Graph).await.unwrap();
         let names = db.read(|c| Ok(tables(c))).await.unwrap();
-        for t in [
-            "node_version",
-            "change",
-            "change_log",
-            "domain_version",
-            "smart_tag",
-            "schema_migrations",
-        ] {
+        for t in ["node_version", "change", "change_log", "smart_tag", "schema_migrations"] {
             assert!(names.iter().any(|n| n == t), "{t} missing in {names:?}");
         }
         let applied: i64 = db
             .read(|c| Ok(c.query_row("SELECT count(*) FROM schema_migrations", [], |r| r.get(0))?))
             .await
             .unwrap();
-        let expected = migrate::sets(false).iter().map(|(_, f)| f.len() as i64).sum::<i64>();
+        let expected = migrate::sets(false, Part::Graph)
+            .iter()
+            .map(|(_, f)| f.len() as i64)
+            .sum::<i64>();
         assert_eq!(applied, expected);
         // a reader refuses a write: the request runs again on the writer
         let err = db
@@ -331,13 +326,13 @@ mod tests {
         assert!(err.is_read_only(), "{err}");
         drop(db);
         // a second start applies nothing
-        let db = Sqlite::open(&path, 1).await.unwrap();
+        let db = Sqlite::open(&path, 1, Part::Graph).await.unwrap();
         db.ping().await.unwrap();
     }
 
     #[tokio::test]
     async fn in_memory() {
-        let db = Sqlite::memory().await.unwrap();
+        let db = Sqlite::memory(Part::Graph).await.unwrap();
         db.ping().await.unwrap();
         assert!(
             db.read(|c| Ok(tables(c)))

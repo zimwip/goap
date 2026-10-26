@@ -295,7 +295,7 @@ impl Access {
     /// write; the Assignments and the projects are also the owners' and administrators' of the caller's active
     /// project, whose writes the validators of the organisation then judge at the commit (`ProjectScopeValidator`).
     fn gate_access(&self, catalog: &Catalog, typ: &str) -> Result<(), GraphError> {
-        if !(catalog.admin_only(typ) || Catalog::builtin().admin_only(typ)) || self.administers()? {
+        if !catalog.admin_only(typ) || self.administers()? {
             return Ok(());
         }
         let res = match typ {
@@ -1334,7 +1334,7 @@ impl pb::GraphService for Graph {
         let cat = self.catalog().await?;
         let t = req.into_inner().r#type;
         stamp.on(Ok(Response::new(pb::IsAdminOnlyTypeResponse {
-            admin_only: cat.admin_only(&t) || Catalog::builtin().admin_only(&t),
+            admin_only: cat.admin_only(&t),
         })))
     }
 
@@ -1803,6 +1803,19 @@ impl pb::GraphService for Graph {
                 commits: st.commits,
                 can_commit: st.can_commit,
                 can_merge: st.can_merge,
+                unmerged: st.unmerged as i32,
+                can_close: st.can_close,
+                candidates: st
+                    .candidates
+                    .into_iter()
+                    .map(|c| pb::CommitCandidate {
+                        node_id: c.node.0,
+                        key: c.key,
+                        r#type: c.typ,
+                        kind: c.kind,
+                        change_impact_id: c.impact,
+                    })
+                    .collect(),
             })
         })
         .await
@@ -3935,15 +3948,33 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::CommitChangeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
-            let id = served_change(tx, &m.change_id).await?;
-            acc.allow(tx, &m.change_id, operations::CHANGE_COMMIT).await?;
-            let b = tx.commit_change(&id, &m.baseline_name).await?;
-            Ok(pb::CommitChangeResponse {
-                baseline: Some(convert::baseline(&b, None)),
+        let res = self
+            .write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+                let id = served_change(tx, &m.change_id).await?;
+                acc.allow(tx, &m.change_id, operations::CHANGE_COMMIT).await?;
+                let nodes: Vec<NodeId> = m.nodes.iter().map(|n| NodeId(n.clone())).collect();
+                // the rebase of the drafts is kept when it left conflicts: committed, then the commit refused
+                Ok(tx
+                    .commit_rebased(&id, &m.baseline_name, &nodes)
+                    .await?
+                    .map(|b| pb::CommitChangeResponse {
+                        baseline: Some(convert::baseline(&b, None)),
+                    }))
             })
-        })
-        .await
+            .await?;
+        match res.msg {
+            Ok(msg) => Ok(Response {
+                headers: res.headers,
+                trailers: res.trailers,
+                msg,
+            }),
+            Err(err) => {
+                // the positions the kept rebase left go back with the refusal
+                let mut e = connect_error(err);
+                e.meta_mut().extend(res.headers);
+                Err(e)
+            }
+        }
     }
 
     async fn commit_edits(&self, _ctx: &Ctx, req: Request<pb::CommitEditsRequest>) -> Answer<pb::CommitEditsResponse> {
@@ -4099,6 +4130,45 @@ impl pb::GraphService for Graph {
                     .map_err(GraphError::internal)?;
                 c.seq = r.seq;
                 Ok(Ok(pb::MergeChangeResponse { change: Some(c) }))
+            })
+            .await?;
+        match res.msg {
+            Ok(msg) => Ok(Response {
+                headers: res.headers,
+                trailers: res.trailers,
+                msg,
+            }),
+            Err(err) => {
+                // the positions the kept rebase left go back with the refusal
+                let mut e = connect_error(err);
+                e.meta_mut().extend(res.headers);
+                Err(e)
+            }
+        }
+    }
+
+    async fn close_change(&self, _ctx: &Ctx, req: Request<pb::CloseChangeRequest>) -> Answer<pb::CloseChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let res = self
+            .write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+                let id = served_change(tx, &m.change_id).await?;
+                acc.allow(tx, &m.change_id, operations::CHANGE_CLOSE).await?;
+                let r = match tx.close_change(&id).await? {
+                    Merge::Applied(r) => r,
+                    // the rebase is kept: committed, then the close refused
+                    Merge::Rebased(err) => return Ok(Err(err)),
+                };
+                let mut c = convert::change(&r.change);
+                c.nodes = r.impacts.iter().map(convert::change_impact).collect();
+                c.items = r
+                    .items
+                    .iter()
+                    .map(convert::item)
+                    .collect::<Result<_, _>>()
+                    .map_err(GraphError::internal)?;
+                c.seq = r.seq;
+                Ok(Ok(pb::CloseChangeResponse { change: Some(c) }))
             })
             .await?;
         match res.msg {

@@ -201,8 +201,24 @@ func checkStates(t *testing.T, repo Repo) {
 						}
 						last := domain.Version(0)
 						for _, j := range js {
-							if j.Branch == domain.BranchOf(b.Branch) && j.Change == b.ChangeID && j.Version > last {
-								last = j.Version
+							if j.Branch != domain.BranchOf(b.Branch) || j.Change != b.ChangeID || j.Version <= last {
+								continue
+							}
+							last = j.Version
+						}
+						if last > 0 {
+							// a change open after its merge (ADR 0166) joins its later commits at its later merges: the
+							// version this one took is the last its branch committed before it
+							ch, err := tx.ChangeHead(ctx, b.ChangeID)
+							if err != nil {
+								return err
+							}
+							cv, err := tx.BranchCommits(ctx, b.Namespace, ch.Branch, b.Seq, []domain.NodeID{id})
+							if err != nil {
+								return err
+							}
+							if v, ok := cv[id]; ok {
+								last = v.Version
 							}
 						}
 						if last > 0 {

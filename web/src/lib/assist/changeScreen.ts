@@ -45,8 +45,8 @@ export interface ChangeFacts {
   methodology?: string;
   namespace?: string;
   parentId?: string;
-  /** what the change can commit and merge (ADR 0102, graph.getCommitState); unknown: left out of the summary */
-  commit?: { canCommit?: boolean; canMerge?: boolean; committed?: boolean; mergeInto?: string; mergeWhy?: string };
+  /** what the change can commit, merge and close (ADR 0102, 0166, graph.getCommitState); unknown: left out of the summary */
+  commit?: { canCommit?: boolean; canMerge?: boolean; committed?: boolean; mergeInto?: string; mergeWhy?: string; canClose?: boolean; closeWhy?: string };
 }
 
 /** One sentence on a change and what its screen shows. */
@@ -68,7 +68,7 @@ export function changeSummary(c: ChangeFacts, impacts: ImpactFacts[], view: { pa
   return parts.filter(Boolean).join('; ') + '.';
 }
 
-/** The commit and merge state of a change, in the words of the summary. */
+/** The commit, merge and close state of a change, in the words of the summary. */
 function commitParts(c: ChangeFacts): string[] {
   const st = c.commit;
   if (!st) return [];
@@ -76,6 +76,7 @@ function commitParts(c: ChangeFacts): string[] {
     st.committed ? 'committed on its branch' : '',
     st.canCommit ? 'commit possible' : 'nothing to commit',
     st.canMerge ? `merge possible${st.mergeInto ? ` into ${st.mergeInto}` : ''}` : `merge not possible${st.mergeWhy ? ` (${st.mergeWhy})` : ''}`,
+    st.canClose === undefined ? '' : st.canClose ? 'close possible' : `close not possible${st.closeWhy ? ` (${st.closeWhy})` : ''}`,
   ];
 }
 

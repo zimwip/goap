@@ -19,7 +19,7 @@ func runBench(ctx context.Context, log *slog.Logger, cfg config, args []string) 
 		return err
 	}
 	graphs, graphURL := cfg.graphs()
-	uses := []portUse{}
+	uses := []portUse{{portDomains, "domains"}}
 	for _, g := range graphs {
 		uses = append(uses, portUse{g.port, "graph-" + g.name})
 	}
@@ -34,11 +34,15 @@ func runBench(ctx context.Context, log *slog.Logger, cfg config, args []string) 
 	defer sup.wait()
 	defer cancel()
 
+	// the domain registry first: the graphs wait for its domains (ADR 0167)
+	if err := sup.start(ctx, cfg.domainsService(map[string]string{"GOAP_GRAPH_URL": graphURL})); err != nil {
+		return err
+	}
 	for i, g := range graphs {
 		env := map[string]string{
 			"GOAP_HTTP_ADDR":   addr(g.port),
 			"GOAP_SQLITE_PATH": g.db,
-			"GOAP_DOMAINS_DIR": filepath.Join(cfg.root, "domains"),
+			"GOAP_DOMAINS_URL": url(portDomains),
 			"GOAP_LOG_FORMAT":  "text",
 			// no bootstrap command in this stack: the service bootstraps the platform itself (shadow: the Go one)
 			"GOAP_GRAPH_BOOTSTRAP": "1",
@@ -65,7 +69,7 @@ func runBench(ctx context.Context, log *slog.Logger, cfg config, args []string) 
 	if !slices.ContainsFunc(args, func(a string) bool { return strings.HasPrefix(strings.TrimLeft(a, "-"), "versions") }) {
 		bench = append(bench, "-versions", "20000")
 	}
-	if err := sup.start(ctx, service{name: "bench", bin: "goap-bench", args: bench, env: map[string]string{"GOAP_GRAPH_URL": graphURL}, once: true}); err != nil {
+	if err := sup.start(ctx, service{name: "bench", bin: "goap-bench", args: bench, env: map[string]string{"GOAP_GRAPH_URL": graphURL, "GOAP_DOMAINS_URL": url(portDomains)}, once: true}); err != nil {
 		return err
 	}
 	log.Info("bench done", "csv", results)

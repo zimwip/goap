@@ -33,6 +33,9 @@ describe('change screen facts', () => {
     expect(changeSummary({ title: 'T', status: 'active', commit: { committed: true, canMerge: true, mergeInto: 'parent change C1' } }, [])).toBe(
       'Change “T”, active; 0 impacts, 0 awaiting review; committed on its branch; nothing to commit; merge possible into parent change C1.',
     );
+    expect(changeSummary({ title: 'T', status: 'active', commit: { committed: true, canMerge: false, canClose: false, closeWhy: 'Settle first: REQ-1' } }, [])).toBe(
+      'Change “T”, active; 0 impacts, 0 awaiting review; committed on its branch; nothing to commit; merge not possible; close not possible (Settle first: REQ-1).',
+    );
   });
 
   it('summarises a diff by property names, never values', () => {

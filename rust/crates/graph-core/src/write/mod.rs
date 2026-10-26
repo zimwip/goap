@@ -14,6 +14,7 @@ pub mod items;
 pub mod merge;
 pub mod project;
 pub mod rebase;
+mod rebase_drafts;
 pub mod restructure;
 pub mod review;
 pub mod reviews;

@@ -85,18 +85,18 @@ dev-reset: ## drop the data of the local stack (.goap/local; demo data and metho
 # the platform as the compose stack runs it, one process per binary, without docker (goap-local): an embedded NATS, the
 # graph (LOCAL_GRAPH: rust, or go) and every service on SQLite files of .goap/local, the binaries in .goap/bin
 LOCAL_BIN      := .goap/bin
-LOCAL_SERVICES := graph registry engine modelgw mcp indexer preferences credentials events conversations jobs gateway connector-localfs importer-git goap-bench goap-local
+LOCAL_SERVICES := domains graph registry engine modelgw mcp indexer preferences credentials events conversations jobs gateway connector-localfs importer-git goap-bench goap-local
 LOCAL_GRAPH    ?= rust
 LOCAL_ARGS     ?=
 # the cargo profile of goap-graph-rs and goap-proxy (make dev: dev-local), and the directory of target/ it builds in
 LOCAL_CARGO_PROFILE ?= release
 LOCAL_CARGO_DIR = $(if $(filter dev,$(LOCAL_CARGO_PROFILE)),debug,$(LOCAL_CARGO_PROFILE))
 
-local-build: ## the binaries of the local stack in .goap/bin: the Go services, goap-graph-rs and goap-proxy (cargo, LOCAL_CARGO_PROFILE: release, dev-local for make dev)
+local-build: ## the binaries of the local stack in .goap/bin: the Go services, goap-graph-rs, goap-domains-rs and goap-proxy (cargo, LOCAL_CARGO_PROFILE: release, dev-local for make dev)
 	@mkdir -p $(LOCAL_BIN)
 	cd platform && go build -o ../$(LOCAL_BIN)/ $(addprefix ./cmd/,$(LOCAL_SERVICES))
 	cd rust && cargo build --profile $(LOCAL_CARGO_PROFILE) --locked -p graph-service -p goap-proxy
-	cp rust/target/$(LOCAL_CARGO_DIR)/goap-graph-rs rust/target/$(LOCAL_CARGO_DIR)/goap-proxy $(LOCAL_BIN)/
+	cp rust/target/$(LOCAL_CARGO_DIR)/goap-graph-rs rust/target/$(LOCAL_CARGO_DIR)/goap-domains-rs rust/target/$(LOCAL_CARGO_DIR)/goap-proxy $(LOCAL_BIN)/
 
 local: local-build ## no docker: the platform one process per binary (embedded NATS, SQLite in .goap/local, LOCAL_GRAPH rust|go, LOCAL_ARGS: goap-local -h): gateway http://localhost:8080, then make dev-web
 	$(LOCAL_BIN)/goap-local -graph $(LOCAL_GRAPH) $(LOCAL_ARGS)

@@ -171,7 +171,7 @@ func TestDomainEventsGoThroughTheOutbox(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			ctx := authz.With(context.Background(), authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
-			s := &Service{Store: open(t)}
+			s := seeded(t, &Service{Store: open(t)})
 			var got []string
 			relay := s.Emit(outbox.SinkFunc(func(_ context.Context, m outbox.Message) error {
 				var ev DomainEvent

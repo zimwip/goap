@@ -139,7 +139,7 @@ func TestGraphEmitsTheEventsOfAChange(t *testing.T) {
 			}
 		}
 		for _, ch := range []domain.Change{a, b} {
-			if _, err := g.IntegrateChange(ctx, ch.ID, nil); err != nil {
+			if _, err := g.CloseChange(ctx, ch.ID); err != nil {
 				t.Fatal(err)
 			}
 		}

@@ -181,10 +181,16 @@ func (ts testTypes) CheckNode(_, typ string) error {
 
 func (ts testTypes) CheckLink(string, string, string) error { return nil }
 
-// Structure resolves none: the graph falls back to the built-in structures (the built-in domains).
-func (ts testTypes) Structure(string) (domain.Structure, bool) { return domain.Structure{}, false }
+// Structure, IsA, Requires and AdminOnly answer as the built-in domains for their types: the test types stand beside
+// them, as a registry's domains in force do (ADR 0167: a typed graph asks its catalogue alone).
+func (ts testTypes) Structure(kind string) (domain.Structure, bool) {
+	return typecat.Builtin().Structure(kind)
+}
 
 func (ts testTypes) IsA(typ, base string) bool {
+	if _, ok := ts[typ]; !ok {
+		return typecat.Builtin().IsA(typ, base)
+	}
 	for seen := map[string]bool{}; typ != "" && !seen[typ]; typ = ts[typ].Extends {
 		if typ == base {
 			return true
@@ -196,12 +202,12 @@ func (ts testTypes) IsA(typ, base string) bool {
 
 func (ts testTypes) Structures() domain.Structures { return typecat.Builtin().Structures() }
 
-// Requires resolves none: the graph falls back to the built-in ones (the built-in domains).
-func (ts testTypes) Requires(string) []domain.RequiredLink { return nil }
+func (ts testTypes) Requires(typ string) []domain.RequiredLink {
+	return typecat.Builtin().Requires(typ)
+}
 
-// AdminOnly resolves none: the graph falls back to the built-in ones (the built-in domains).
-func (ts testTypes) AdminOnly(string) bool { return false }
-func (ts testTypes) Composes(string) bool  { return false }
+func (ts testTypes) AdminOnly(typ string) bool { return typecat.Builtin().AdminOnly(typ) }
+func (ts testTypes) Composes(string) bool      { return false }
 
 // A node type flagged `adminOnly:` in a domain is restricted, and its subtypes with it, without any code naming it
 // (ADR 0068); a type the domain does not flag is not.

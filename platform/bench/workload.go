@@ -642,8 +642,8 @@ func (r *Runner) lifecycle(ctx context.Context, w *worker, edits []edit) error {
 	}); err != nil {
 		return abandon(err)
 	}
-	if _, err := shaped(ctx, m, "MergeChange", held, func(ctx context.Context) (*connect.Response[graphv1.MergeChangeResponse], error) {
-		return g.MergeChange(ctx, connect.NewRequest(&graphv1.MergeChangeRequest{ChangeId: id}))
+	if _, err := shaped(ctx, m, "CloseChange", held, func(ctx context.Context) (*connect.Response[graphv1.CloseChangeResponse], error) {
+		return g.CloseChange(ctx, connect.NewRequest(&graphv1.CloseChangeRequest{ChangeId: id}))
 	}); err != nil {
 		return err // committed: it stays, as a change waiting for its merge
 	}

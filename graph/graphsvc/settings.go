@@ -352,7 +352,7 @@ func (h *Handler) saveSettings(ctx context.Context, id domain.ChangeID, me strin
 	if _, err := h.Graph.CommitChange(ctx, id, ""); err != nil {
 		return err
 	}
-	_, err = h.Graph.IntegrateChange(ctx, id, nil)
+	_, err = h.Graph.CloseChange(ctx, id)
 	return err
 }
 

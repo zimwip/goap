@@ -60,8 +60,13 @@ export const TOOLS = {
     args: { properties: { name: str('the name of the commit, optional') } },
   },
   merge_change: {
-    description: 'Merge the commits of this change into the branch it was forked from (a sub-change: into its parent); closes it.',
-    guidance: 'Only when the summary says merge is possible: committed, every impact settled, the lifecycle in a final state.',
+    description: 'Merge what this change committed into the branch it was forked from (a sub-change: into its parent); the change stays open.',
+    guidance: 'Only when the summary says merge is possible: it committed nodes it has not merged yet.',
+    level: 'write',
+  },
+  close_change: {
+    description: 'Close this change: merge what is left of it, then apply it; it takes no more work.',
+    guidance: 'Only when the summary says close is possible: committed, every impact settled, the lifecycle in a final state.',
     level: 'write',
   },
   rename_change: {

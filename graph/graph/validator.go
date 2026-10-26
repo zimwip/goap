@@ -11,8 +11,13 @@ import (
 // Apply is about to persist as the new baseline's Nodes, ADR 0024), not a branch read: an impacted node's new
 // version only joins its branch once Apply advances it, after validators run.
 type txQuery struct {
+	g      *Graph
 	tx     Tx
 	target *stateView
+}
+
+func (q txQuery) Structures(ctx context.Context) (domain.Structures, error) {
+	return q.g.Structures(ctx)
 }
 
 func (q txQuery) NodesOfType(ctx context.Context, namespace, typ string) ([]domain.Node, error) {
@@ -55,7 +60,7 @@ func (g *Graph) runNodeValidators(ctx context.Context, tx Tx, target *stateView,
 	if len(g.Validators) == 0 {
 		return nil
 	}
-	q := txQuery{tx: tx, target: target}
+	q := txQuery{g: g, tx: tx, target: target}
 	for _, v := range g.Validators {
 		types := v.Types()
 		var impacted []ValidatedNode

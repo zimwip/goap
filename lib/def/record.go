@@ -20,8 +20,9 @@ type Record struct {
 	UpdatedAt   time.Time
 	PublishedAt time.Time
 	UpdatedBy   string
-	// Builtin marks a domain shipped with the platform (BuiltinDomains): published, frozen, not stored.
-	Builtin bool
+	// Protected marks a domain the RPCs never write (ADR 0167): only the local command line of the process owning the
+	// registry's database does (the built-in domains are seeded protected).
+	Protected bool
 }
 
 // Latest keeps the latest version of each domain of rs, in their first order: the latest published one if any, the
@@ -48,12 +49,11 @@ func Latest(rs []Record) []Record {
 	return out
 }
 
-// InForce keeps the latest published version of each stored domain of rs (the built-in ones left out: a type catalogue
-// adds them itself).
+// InForce keeps the latest published version of each stored domain of rs, the built-in ones included (ADR 0167).
 func InForce(rs []Record) []*Domain {
 	var out []*Domain
 	for _, r := range Latest(rs) {
-		if r.Status == StatusPublished && !r.Builtin {
+		if r.Status == StatusPublished {
 			d := r.Domain
 			out = append(out, &d)
 		}

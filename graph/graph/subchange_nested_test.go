@@ -114,7 +114,7 @@ func testSubSubChangeBranches(t *testing.T, repo Repo) {
 	cmp3 := must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3"))
 	commitProps(t, g, leaf, cmp3, map[string]any{"title": "leaf's"})
 	rootHead, mainHead := headOf(t, g, root), must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)).ID
-	if _, err := g.IntegrateChange(ctx, leaf.ID, nil); err != nil {
+	if _, err := g.CloseChange(ctx, leaf.ID); err != nil {
 		t.Fatal(err)
 	}
 	if got := seen(t, g, mid, "CMP-3", "title"); got != "leaf's" {

@@ -13,8 +13,9 @@ use crate::{
 };
 
 /// The operations of the catalogue with their kind (`operations.All`, generated from the annotations of the Go graph).
-pub const CATALOGUE: [(&str, &str); 22] = [
+pub const CATALOGUE: [(&str, &str); 23] = [
     ("change.attach", DOER),
+    ("change.close", DOER),
     ("change.commit", DOER),
     ("change.depend", DOER),
     ("change.detach", DOER),
@@ -44,6 +45,7 @@ pub const DOER: &str = "doer";
 pub const REVIEWER: &str = "reviewer";
 
 pub const CHANGE_ATTACH: &str = "change.attach";
+pub const CHANGE_CLOSE: &str = "change.close";
 pub const CHANGE_COMMIT: &str = "change.commit";
 pub const CHANGE_DEPEND: &str = "change.depend";
 pub const CHANGE_DETACH: &str = "change.detach";

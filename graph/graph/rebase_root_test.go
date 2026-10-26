@@ -148,14 +148,14 @@ func testRebaseRootSameNodeLinear(t *testing.T, repo Repo) {
 	g := f.g
 	t1, _ := propChange(t, g, f.base.ID, "test1", f.req.Ref(), map[string]any{"a": 1})
 	t2, i2 := propChange(t, g, f.base.ID, "test2", f.req.Ref(), map[string]any{"b": 2})
+	// test2 commits on its branch before test1 lands (a draft is rebased at its commit, ADR 0165): what it committed is
+	// rebased at its merge (ADR 0102)
+	must[domain.Baseline](t)(g.CommitChange(ctx, t2.ID, ""))
+	if st := must[RebaseState](t)(g.RebaseState(ctx, t2.ID)); st.Onto != "" {
+		t.Fatalf("a change over the head is not behind: %+v", st)
+	}
 	b1 := must[domain.Baseline](t)(g.apply(ctx, t1.ID, ""))
 	v1 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID}))
-
-	// before its commit there is nothing to rebase (ADR 0102); committed, test2 is behind main
-	if st := must[RebaseState](t)(g.RebaseState(ctx, t2.ID)); st.Onto != "" {
-		t.Fatalf("an uncommitted change is not behind: %+v", st)
-	}
-	must[domain.Baseline](t)(g.CommitChange(ctx, t2.ID, ""))
 	st := must[RebaseState](t)(g.RebaseState(ctx, t2.ID))
 	if st.Branch != domain.MainBranch || st.Onto != b1.ID || !slices.Equal(st.Behind, []domain.ChangeImpactID{i2}) {
 		t.Fatalf("test2 is behind main: %+v", st)
@@ -306,7 +306,7 @@ func testRebaseRootCommittedRebasedAtMerge(t *testing.T, repo Repo) {
 		t.Fatalf("test2 is behind test1 on REQ-1: %+v", st)
 	}
 	ch, err := g.IntegrateChange(ctx, t2.ID, nil)
-	if err != nil || ch.Status != domain.ChangeApplied {
+	if err != nil || ch.Status != domain.ChangeActive {
 		t.Fatalf("merge: %+v %v", ch, err)
 	}
 	res := must[domain.Baseline](t)(g.Baseline(ctx, ch.ResultBaselineID))
@@ -317,8 +317,10 @@ func testRebaseRootCommittedRebasedAtMerge(t *testing.T, repo Repo) {
 	if n.Properties["a"] == nil || n.Properties["b"] == nil || len(n.Parents) != 2 || n.Reason != domain.ReasonRebase {
 		t.Fatalf("REQ-1 holds both changes, merged from both versions: %+v", n)
 	}
-	if moves := rebaseMoves(t, g, t2.ID); len(moves) != 1 || moves[0].From != string(f.base.ID) || moves[0].To != string(b1.ID) {
-		t.Fatalf("the rebase moved test2's fork from B to T1: %+v", moves)
+	// the rebase moved test2's fork from B to T1, then its merge to what it merged (the change open, ADR 0166)
+	if moves := rebaseMoves(t, g, t2.ID); len(moves) != 2 || moves[0].From != string(f.base.ID) || moves[0].To != string(b1.ID) ||
+		moves[1].From != string(b1.ID) || moves[1].To != string(res.ID) {
+		t.Fatalf("the moves of test2's fork: %+v", moves)
 	}
 }
 

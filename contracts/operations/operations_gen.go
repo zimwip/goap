@@ -5,6 +5,7 @@ package operations
 // The operations of the catalogue.
 const (
 	ChangeAttach      = "change.attach"      // Graph.AttachChange, doer
+	ChangeClose       = "change.close"       // Graph.CloseChange, doer
 	ChangeCommit      = "change.commit"      // Graph.CommitChange, doer
 	ChangeDepend      = "change.depend"      // Graph.SetChangeDependencies, doer
 	ChangeDetach      = "change.detach"      // Graph.DetachChange, doer
@@ -30,10 +31,11 @@ const (
 
 var catalog = []Operation{
 	{Code: ChangeAttach, Kind: Doer, Method: "Graph.AttachChange", Doc: "AttachChange makes a root change a sub-change of another change, whose methodology integrates its own (ADR 0106): both open, in one namespace, the change acting in the parent's project or one below it, held by the parent's unit or one below it."},
+	{Code: ChangeClose, Kind: Doer, Method: "Graph.CloseChange", Doc: "CloseChange closes a change (ADR 0166): nothing of it left uncommitted or unsettled (every impact committed, none rejected or a candidate, no open flow, decision point or sub-change, no pending revert), its lifecycle in a final state, what it committed and has not merged yet merged into what it was forked from; the change is then applied and its branch merged."},
 	{Code: ChangeCommit, Kind: Doer, Method: "Graph.CommitChange", Doc: "CommitChange writes the accepted modifications of a change on its own branch and reverts there the nodes it no longer changes; it returns the header of the commit baseline, without its state (ADR 0137): a caller that reads the nodes asks for them (ChangeNodeView, BranchHead, the versions of the change)."},
 	{Code: ChangeDepend, Kind: Doer, Method: "Graph.SetChangeDependencies", Doc: "SetChangeDependencies replaces the changes a change depends on."},
 	{Code: ChangeDetach, Kind: Doer, Method: "Graph.DetachChange", Doc: "DetachChange gives a sub-change back as a root change (ADR 0106: deferred, rejected by the change integrating it), still open and not merged: its branch is forked again from the head of the branch its root ancestor merges into (what it committed rebased there; ErrConflict when that leaves conflicts), its guardian chain recomputed for its methodology and project."},
-	{Code: ChangeMerge, Kind: Doer, Method: "Graph.IntegrateChange", Doc: "IntegrateChange merges a change into what it was forked from (ADR 0102, merge): a root change that committed on its own branch into the branch it was forked from, a sub-change into its parent."},
+	{Code: ChangeMerge, Kind: Doer, Method: "Graph.IntegrateChange", Doc: "IntegrateChange merges what a change committed into what it was forked from (ADR 0102, merge): a root change that committed on its own branch into the branch it was forked from, a sub-change into its parent."},
 	{Code: ChangeMethodology, Kind: Doer, Method: "Graph.SetChangeMethodology", Doc: "SetChangeMethodology gives an open change (draft or active) that follows no methodology the one named, as a creation would have: the latest published version, its main goal when the change has none, its lifecycle starting in its initial state, the guardian chain of its project (or under its parent)."},
 	{Code: ChangeRebase, Kind: Doer, Method: "Graph.RebaseChange", Doc: "RebaseChange brings what a change committed up to date with the head of the branch it was forked from (the branch of its parent change for a sub-change, ADR 0103)."},
 	{Code: ChangeUpgrade, Kind: Doer, Method: "Graph.UpgradeChange", Doc: "UpgradeChange moves an open change to another version of its methodology (ADR 0113): the version named, else the latest published one."},

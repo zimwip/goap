@@ -255,6 +255,33 @@ func (s SQLStore) DeleteDomain(ctx context.Context, name, version string, events
 	return tx.Commit()
 }
 
+func (s SQLStore) Protected(ctx context.Context) (map[string]bool, error) {
+	rows, err := s.reader().QueryContext(ctx, `SELECT name FROM domain_protection`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		out[n] = true
+	}
+	return out, rows.Err()
+}
+
+func (s SQLStore) SetProtected(ctx context.Context, name string, on bool, by string, at time.Time) error {
+	if !on {
+		_, err := s.DB.ExecContext(ctx, s.q(`DELETE FROM domain_protection WHERE name = ?`), name)
+		return err
+	}
+	_, err := s.DB.ExecContext(ctx, s.q(`INSERT INTO domain_protection (name, protected_by, protected_at) VALUES (?, ?, ?)
+		ON CONFLICT (name) DO UPDATE SET protected_by = excluded.protected_by, protected_at = excluded.protected_at`), name, by, sqlTime(at))
+	return err
+}
+
 // reader is the database the plain reads go to.
 func (s SQLStore) reader() *sql.DB {
 	if s.Read != nil {

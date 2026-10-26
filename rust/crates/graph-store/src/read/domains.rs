@@ -57,6 +57,32 @@ impl Session {
             .join("\u{1e}"))
     }
 
+    /// The names of the protected domains (`SQLStore.Protected`, ADR 0167).
+    pub async fn protected_domains(&self) -> Result<std::collections::BTreeSet<String>, GraphError> {
+        let rows = self
+            .rows(("SELECT name FROM domain_protection".into(), Vec::new()))
+            .await?;
+        Ok(rows.iter().map(|r| r.text(0)).collect())
+    }
+
+    /// Protects a domain or lifts its protection (`SQLStore.SetProtected`), `at` an RFC 3339 text.
+    pub async fn set_domain_protected(&self, name: &str, on: bool, by: &str, at: &str) -> Result<(), GraphError> {
+        if !on {
+            let q = format!("DELETE FROM domain_protection WHERE name = {}", self.sql.ph(1));
+            self.run((q, vec![name.into()]), "domain").await?;
+            return Ok(());
+        }
+        let q = format!(
+            "INSERT INTO domain_protection (name, protected_by, protected_at) VALUES ({}, {}, {}) \
+             ON CONFLICT (name) DO UPDATE SET protected_by = excluded.protected_by, protected_at = excluded.protected_at",
+            self.sql.ph(1),
+            self.sql.ph(2),
+            self.sql.ph(3)
+        );
+        self.run((q, vec![name.into(), by.into(), at.into()]), "domain").await?;
+        Ok(())
+    }
+
     /// The status of a stored version, none when it is not stored.
     pub async fn domain_status(&self, name: &str, version: &str) -> Result<Option<String>, GraphError> {
         let q = format!(

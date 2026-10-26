@@ -30,13 +30,13 @@ func main() {
 	events := platform.OptionalEvents(ctx, log)
 	defer events.Close()
 
-	// methodologies are nodes of the graph; the domains are the graph's (ADR 0125 §3), read from its domain registry
+	// methodologies are nodes of the graph; the domains are the domain registry's (ADR 0125 §3, ADR 0167)
 	graphURL := platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")
 	graphClient := graphclient.NewClient(platform.H2CClient(), graphURL, telemetry.ClientOptions()...)
 	// one reader of the graph for the methodologies, the access and the scopes of the MCPs (ADR 0145)
 	reader := graphsnap.NewReader(graphClient)
 	store := registrysvc.NewGraphStore(graphClient).ShareReader(reader)
-	domains := domainclient.NewClient(platform.H2CClient(), graphURL, telemetry.ClientOptions()...)
+	domains := domainclient.NewClient(platform.H2CClient(), platform.Env("GOAP_DOMAINS_URL", "http://localhost:8096"), telemetry.ClientOptions()...)
 	directory := &access.Directory{Graph: graphClient, Reader: reader}
 	// the policies, the organisation and the projects the platform graph delivers, read again when its baseline
 	// events say the organisation moved (ADR 0154 §9)

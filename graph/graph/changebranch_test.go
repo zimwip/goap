@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -62,9 +63,11 @@ func testChangeBranch(t *testing.T, repo Repo) {
 	if br, _ := g.Branch(ctx, "", a.Branch); br.Status != domain.BranchMerged {
 		t.Fatalf("A branch = %s", br.Status)
 	}
-	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "A title" {
+	n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID})
+	if n.Properties["title"] != "A title" {
 		t.Fatalf("main not updated: %v", n.Properties)
 	}
+	aVersion := n.Version
 
 	// B changes the same property from the same base: the apply commits it, rebases its branch onto A and stops on the
 	// conflict (ADR 0102)
@@ -88,7 +91,8 @@ func testChangeBranch(t *testing.T, repo Repo) {
 	if bb.Kind != domain.BaselineFastForward || bb.ParentID != ba.ID {
 		t.Fatalf("B's baseline = %s on %s, want a fast-forward of %s", bb.Kind, bb.ParentID, ba.ID)
 	}
-	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "B title" || len(n.Parents) != 2 {
+	// its draft was rebased onto A at its commit (ADR 0165): its version derives from A's alone
+	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "B title" || !slices.Equal(n.Parents, []domain.Version{aVersion}) {
 		t.Fatalf("B not committed on A: %v %v", n.Properties, n.Parents)
 	}
 }

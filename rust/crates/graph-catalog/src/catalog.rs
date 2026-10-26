@@ -154,20 +154,35 @@ pub struct Catalog {
     scripted: Vec<String>,
 }
 
-const BUILTIN_SOURCES: [(&str, &str); 3] = [
-    (
-        "methodology.yaml",
-        include_str!("../../../../lib/domains/builtin/methodology.yaml"),
-    ),
-    (
-        "organisation.yaml",
-        include_str!("../../../../lib/domains/builtin/organisation.yaml"),
-    ),
-    (
-        "platform.yaml",
-        include_str!("../../../../lib/domains/builtin/platform.yaml"),
-    ),
-];
+/// The names of the built-in domains (methodology, organisation, platform): the domains of the platform itself, which
+/// the domain registry seeds protected (ADR 0167) and a methodology never pins.
+pub const BUILTIN_NAMES: [&str; 3] = ["methodology", "organisation", "platform"];
+
+/// The directory of the built-in domains of a checkout (`lib/domains/builtin`), read by the tests and the tools: a
+/// service reads its domains from the registry, nothing is compiled in (ADR 0167).
+pub fn builtin_dir() -> std::path::PathBuf {
+    match std::env::var("GOAP_BUILTIN_DOMAINS_DIR") {
+        Ok(d) if !d.is_empty() => d.into(),
+        _ => std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../lib/domains/builtin"),
+    }
+}
+
+/// The YAML of the built-in domains of [`builtin_dir`], by file name.
+pub fn builtin_sources() -> &'static [(String, String)] {
+    &BUILTIN_SOURCES
+}
+
+static BUILTIN_SOURCES: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
+    let dir = builtin_dir();
+    BUILTIN_NAMES
+        .iter()
+        .map(|n| {
+            let f = dir.join(format!("{n}.yaml"));
+            let src = std::fs::read_to_string(&f).unwrap_or_else(|e| panic!("{}: {e}", f.display()));
+            (format!("{n}.yaml"), src)
+        })
+        .collect()
+});
 
 static BUILTINS: LazyLock<Vec<Domain>> = LazyLock::new(|| {
     BUILTIN_SOURCES
@@ -179,38 +194,42 @@ static BUILTINS: LazyLock<Vec<Domain>> = LazyLock::new(|| {
 static BUILTIN: LazyLock<Arc<Catalog>> =
     LazyLock::new(|| Arc::new(Catalog::new(&[]).expect("the catalogue of the built-in domains")));
 
-/// The domains that ship with the platform (methodology, organisation, platform).
+/// The built-in domains of [`builtin_dir`] (tests and tools).
 pub fn builtins() -> &'static [Domain] {
     &BUILTINS
 }
 
-/// The YAML of the domains that ship with the platform, in their order.
-pub fn builtin_sources() -> impl Iterator<Item = &'static str> {
-    BUILTIN_SOURCES.iter().map(|(_, src)| *src)
-}
-
 /// Whether a namespace is the one of a built-in domain.
 pub fn is_builtin(ns: &str) -> bool {
-    BUILTINS.iter().any(|d| d.name == ns)
+    BUILTIN_NAMES.contains(&ns)
 }
 
 impl Catalog {
-    /// The catalogue of the built-in domains alone: what the graph knows before it reads the registry.
+    /// The catalogue of the built-in domains of a checkout alone (tests and tools, [`builtin_dir`]); a service's
+    /// catalogue is the registry's domains in force ([`Catalog::of`]).
     pub fn builtin() -> Arc<Catalog> {
         BUILTIN.clone()
     }
 
-    /// The catalogue of the given domains (one per namespace) and of the built-in ones (typecat.New).
+    /// The catalogue of the given domains (one per namespace) and of the built-in domains of [`builtin_dir`] none of
+    /// them replaces (typecat.New): the catalogue of files and tests.
     pub fn new(ds: &[Domain]) -> Result<Catalog, String> {
-        let nb = BUILTINS.len();
-        let all: Vec<&Domain> = BUILTINS.iter().chain(ds.iter()).collect();
+        let mut all: Vec<Domain> = BUILTINS
+            .iter()
+            .filter(|b| !ds.iter().any(|d| d.name == b.name))
+            .cloned()
+            .collect();
+        all.extend(ds.iter().cloned());
+        Catalog::of(&all)
+    }
+
+    /// The catalogue of exactly the given domains, the built-in ones only when given (typecat.Of): a service's, over
+    /// the registry's domains in force (ADR 0167).
+    pub fn of(all: &[Domain]) -> Result<Catalog, String> {
         let mut c = Catalog::default();
         let mut decl: HashMap<String, (&Domain, &def::NodeType)> = HashMap::new();
-        for (i, d) in all.iter().enumerate() {
+        for d in all {
             if c.domains.contains_key(&d.name) {
-                if i >= nb && is_builtin(&d.name) {
-                    return Err(format!("domain {}: the name of a built-in domain: invalid", d.name));
-                }
                 return Err(format!("domain {} given twice: invalid", d.name));
             }
             c.domains.insert(d.name.clone(), d.version.clone());

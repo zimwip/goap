@@ -39,6 +39,7 @@
   import { availableTransitions, decisionLabel, findLifecycle, movable as lifecycleMovable, pickableDecisions, resolveCall, runTransition, type Refusal, type TransitionOffer } from '../../changeTransition';
   import ChangeTransitions from '../../components/ChangeTransitions.svelte';
   import MoveChange from '../../components/MoveChange.svelte';
+  import CommitDialog from '../../components/CommitDialog.svelte';
   import AttachChange from '../../components/AttachChange.svelte';
   import ChangeDependencies from '../../components/ChangeDependencies.svelte';
   import { attachable, detach, detachable, guardianChain } from '../../changeAttach';
@@ -815,18 +816,27 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     return true;
   }
 
-  /** Merges the branch of the change into the branch it was forked from (ADR 0102): rebased first when that branch
-   * moved (conflicts stop it: settle them, commit, merge again), held by the methodology (final state, commit gate). */
+  /** Merges what the change committed into the branch it was forked from (ADR 0102), the change left open (ADR 0166):
+   * rebased first when that branch moved (conflicts stop it: settle them, commit, merge again). */
   async function mergeBranch(): Promise<string | undefined> {
+    return land(false);
+  }
+
+  /** Closes the change (ADR 0166): settled, what is left merged, then applied. */
+  async function closeChange(): Promise<string | undefined> {
+    return land(true);
+  }
+
+  async function land(closing: boolean): Promise<string | undefined> {
     if (!change?.id) return 'No change is open.';
     applying = true;
     error = '';
     try {
-      const res = await graph.mergeChange(change.id, {});
+      const res = closing ? await graph.closeChange(change.id) : await graph.mergeChange(change.id, {});
       await load(change.id);
-      if (res.change?.status === 'applied') {
-        notify(`Merged into ${mergeTarget}.`, 'ok');
-        recordAction('merged the change');
+      if (res.change?.status !== 'committed') {
+        notify(closing ? 'Change closed.' : `Merged into ${mergeTarget}; the change stays open.`, 'ok');
+        recordAction(closing ? 'closed the change' : 'merged the change');
         return undefined;
       }
       notify('The merge waits for its conflicts to be resolved.', 'info');
@@ -879,18 +889,25 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
   /** Step one of apply (ADR 0056): the versions are written on the change's own branch; the merge into the branch it
    * was forked from stays a separate act (the "Committed" box below), e.g. when a release branch collects changes. */
-  async function commit(): Promise<string | undefined> {
+  // the Commit button opens the choice of the nodes to commit, all ticked (a partial commit leaves the others drafts)
+  let commitOpen = $state(false);
+  let commitError = $state('');
+
+  async function commit(nodes?: string[]): Promise<string | undefined> {
     if (!change?.id) return 'No change is open.';
     applying = true;
     error = '';
+    commitError = '';
     try {
-      await graph.commitChange(change.id, baselineName.trim());
+      await graph.commitChange(change.id, baselineName.trim(), nodes);
+      commitOpen = false;
       await load(change.id);
       notify(`Committed on ${change.branch || 'its own branch'}: the change stays open, merge it when ready.`, 'ok');
       recordAction('committed the change on its branch');
       return undefined;
     } catch (e) {
       error = errorMessage(e);
+      if (commitOpen) commitError = error;
       return error;
     } finally {
       applying = false;
@@ -1059,6 +1076,11 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       run: () => (commits.canMerge ? mergeBranch() : (commits.mergeWhy ?? 'The change cannot be merged yet.')),
     },
     {
+      name: 'close_change',
+      enabled: () => !!change && !closed && !applying && commits.canClose,
+      run: () => (commits.canClose ? closeChange() : (commits.closeWhy ?? 'The change cannot be closed yet.')),
+    },
+    {
       name: 'rename_change',
       enabled: () => !!change && !closed && !defining,
       run: async (a) => {
@@ -1110,7 +1132,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
                   methodology: change.methodology,
                   namespace: change.namespace,
                   parentId: change.parentId,
-                  commit: commitInfo && !closed ? { canCommit: commits.canCommit, canMerge: commits.canMerge, committed: committedOnBranch, mergeInto: commits.canMerge ? mergeTarget : undefined, mergeWhy: commits.mergeWhy } : undefined,
+                  commit: commitInfo && !closed ? { canCommit: commits.canCommit, canMerge: commits.canMerge, committed: committedOnBranch, mergeInto: commits.canMerge ? mergeTarget : undefined, mergeWhy: commits.mergeWhy, canClose: commits.canClose, closeWhy: commits.closeWhy } : undefined,
                 },
                 impactFacts,
                 { pane, scope, filter: impactFilter },
@@ -1155,10 +1177,18 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         id: 'merge',
         label: applying ? 'Merging…' : 'Merge',
         icon: 'check',
-        primary: true,
         disabled: !change || applying || !commits.canMerge,
-        title: commits.mergeWhy ?? `Merge the commits of the change into ${mergeTarget} (rebased first when it moved)`,
+        title: commits.mergeWhy ?? `Merge the commits of the change into ${mergeTarget} (rebased first when it moved); the change stays open`,
         run: () => void mergeBranch(),
+      },
+      {
+        id: 'close',
+        label: applying ? 'Closing…' : 'Close',
+        icon: 'check',
+        primary: true,
+        disabled: !change || applying || !commits.canClose,
+        title: commits.closeWhy ?? `Close the change: merge what is left into ${mergeTarget}, then apply it`,
+        run: () => void closeChange(),
       },
     ],
   );
@@ -1409,13 +1439,26 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             <label for="bname">Name of the new baseline</label>
             <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
           </div>
-          <button onclick={() => void commit()} disabled={applying || unnamed || !commits.canCommit} title={commits.commitWhy ?? `Write ${commits.commitWhat} on the change's own branch: the change stays open`}>
+          <button onclick={() => ((commitError = ''), (commitOpen = true))} disabled={applying || unnamed || !commits.canCommit} title={commits.commitWhy ?? `Write ${commits.commitWhat} on the change's own branch: the change stays open`}>
             {applying ? 'Working…' : 'Commit'}
           </button>
-          <button class="primary" onclick={() => void mergeBranch()} disabled={applying || !commits.canMerge} title={commits.mergeWhy ?? `Merge the commits of the change into ${mergeTarget} (rebased first when it moved); closes the change`}>
+          <button onclick={() => void mergeBranch()} disabled={applying || !commits.canMerge} title={commits.mergeWhy ?? `Merge the commits of the change into ${mergeTarget} (rebased first when it moved); the change stays open`}>
             {applying ? 'Working…' : isSub ? 'Merge into parent' : 'Merge'}
           </button>
+          <button class="primary" onclick={() => void closeChange()} disabled={applying || !commits.canClose} title={commits.closeWhy ?? `Merge what is left into ${mergeTarget}, then apply the change: it takes no more work`}>
+            {applying ? 'Working…' : 'Close'}
+          </button>
         </div>
+        {#if commitOpen && commitInfo?.candidates?.length}
+          <CommitDialog
+            candidates={commitInfo.candidates}
+            branch={ch.branch || 'its own branch'}
+            busy={applying}
+            error={commitError}
+            oncommit={(nodes) => void commit(nodes)}
+            onclose={() => (commitOpen = false)}
+          />
+        {/if}
         {#if committedOnBranch && !closed}
           <p class="hint" style="margin: 0.5rem 0 0">
             Committed on {ch.branch}: the change stays open, edit and commit again, then merge it into {mergeTarget}.

@@ -319,6 +319,13 @@ impl<S: WriteTx> Tx<'_, S> {
             if tv == fv {
                 continue; // changed by the change only
             }
+            if let (Some(_), Some(tv)) = (fv, tv)
+                && super::branchmerge::common_ancestor(self.store, id, hv, tv)
+                    .await?
+                    .is_some_and(|a| a.version == tv)
+            {
+                continue; // a version over the target's already (a draft rebased at its commit, ADR 0165)
+            }
             let Some(cn) = impact_of.get(id).cloned() else {
                 return Err(GraphError::conflict(format!(
                     "node {id} changed on the branch of change {} by no impact of it",
@@ -413,7 +420,7 @@ impl<S: WriteTx> Tx<'_, S> {
         self.emit(repre).await?;
         let mut wrote = Vec::new();
         if !res.impacts.is_empty() && !res.changed() {
-            wrote = self.commit_on_branch(&c.id, "", true).await?.1;
+            wrote = self.commit_on_branch(&c.id, "", true, &[]).await?.1;
         }
         self.raise_rebased(&c.id, &own.name, &wrote).await?;
         Ok(res)
@@ -429,8 +436,7 @@ impl<S: WriteTx> Tx<'_, S> {
         rebased: Value,
         why: &str,
     ) -> Result<()> {
-        let mut entries = Vec::new();
-        let (mut accepted, mut reopened) = (Vec::new(), Vec::new());
+        let mut done = Vec::with_capacity(nodes.len());
         for n in nodes {
             let event = self.env.new_id();
             let base = n.ours.base.clone().unwrap_or_default();
@@ -479,10 +485,26 @@ impl<S: WriteTx> Tx<'_, S> {
                 ..ImpactEvent::default()
             };
             self.emit(vec![checkout, update]).await?;
-            if n.conflicts.is_empty() {
-                entries.push((n.cn.id.clone(), why.to_string()));
-                accepted.push(n.cn.id.clone());
-            } else if n.cn.review != REVIEW_PROPOSED {
+            done.push((n.cn, n.conflicts));
+        }
+        self.review_rebased(id, done, why).await
+    }
+
+    /// Reviews the nodes a rebase merged (Go's `reviewRebased`): the clean ones accepted by a review of graph.merge,
+    /// the conflicting ones sent back to proposed (why).
+    pub(super) async fn review_rebased(
+        &mut self,
+        id: &ChangeId,
+        nodes: Vec<(ChangeImpact, Vec<String>)>,
+        why: &str,
+    ) -> Result<()> {
+        let mut entries = Vec::new();
+        let (mut accepted, mut reopened) = (Vec::new(), Vec::new());
+        for (cn, conflicts) in nodes {
+            if conflicts.is_empty() {
+                entries.push((cn.id.clone(), why.to_string()));
+                accepted.push(cn.id.clone());
+            } else if cn.review != REVIEW_PROPOSED {
                 let r = Review {
                     status: REVIEW_PROPOSED.into(),
                     by: self.env.by.clone(),
@@ -492,7 +514,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 };
                 reopened.push(ImpactEvent {
                     change: id.clone(),
-                    impact: n.cn.id.clone(),
+                    impact: cn.id.clone(),
                     op: ImpactOp::Reviewed,
                     by: r.by.clone(),
                     review: Some(r),

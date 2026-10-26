@@ -196,7 +196,7 @@
   <div role="tree" aria-label="Domains">
     {#each groups as g (g.name)}
       {@const gk = `dm:${g.name}`}
-      <TreeRow icon="graph" label={g.name} detail={g.builtin ? 'built-in' : ''} expanded={isOpen(gk, true)} title={g.builtin ? `${g.name}: changes with the platform code` : g.description || g.name} ontoggle={() => toggle(gk, true)} />
+      <TreeRow icon="graph" label={g.name} detail={g.protected ? 'protected' : ''} expanded={isOpen(gk, true)} title={g.protected ? `${g.name}: protected, written by the local command line only` : g.description || g.name} ontoggle={() => toggle(gk, true)} />
       {#if isOpen(gk, true)}
         {#each g.versions as v (v.version)}
           {@const k = vkey(v)}

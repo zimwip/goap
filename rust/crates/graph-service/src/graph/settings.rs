@@ -501,8 +501,8 @@ impl Stage<'_, '_, '_, '_> {
         };
         step!(self.tx, async |tx| tx.impact_node_review_batch(id, b).await);
         step!(self.tx, async |tx| tx.commit_change(id, "").await);
-        // a merge that rebased and found conflicts keeps the rebase (Go's `IntegrateChange`)
-        let merged = step!(self.tx, async |tx| tx.merge_change(id, &Default::default()).await);
+        // a close whose merge rebased and found conflicts keeps the rebase (Go's `CloseChange`)
+        let merged = step!(self.tx, async |tx| tx.close_change(id).await);
         if let Merge::Rebased(err) = merged {
             return Ok(Err(err));
         }

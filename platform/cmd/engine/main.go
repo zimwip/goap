@@ -100,8 +100,8 @@ func main() {
 		platform.Fatal(log, "authorizer", err)
 	}
 	registry := registrysvc.NewClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), copts...)
-	// the type catalogue (ADR 0012): the ancestors behind x.types, from the domain registry the graph serves (ADR 0125 §3)
-	types := typecat.NewLive(domainclient.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), copts...).Domains)
+	// the type catalogue (ADR 0012): the ancestors behind x.types, from the domain registry (ADR 0125 §3, ADR 0167)
+	types := typecat.NewLive(domainclient.NewClient(hc, platform.Env("GOAP_DOMAINS_URL", "http://localhost:8096"), copts...).Domains)
 	go func() {
 		for delay := time.Second; types.Reload(ctx) != nil; delay = min(2*delay, time.Minute) {
 			time.Sleep(delay)

@@ -136,11 +136,13 @@ var ErrUnknown = errors.New("unknown type")
 // ErrInvalid marks a node or a link that breaks the types of the catalogue.
 var ErrInvalid = errors.New("invalid")
 
-// Builtins returns the built-in domains (methodology, organisation, platform).
+// Builtins returns the built-in domains (methodology, organisation, platform) as the library embeds them: the files a
+// registry seeds (protected, ADR 0167) and what a catalogue built with New falls back to. A service's catalogue holds
+// the registry's versions instead (Of).
 func Builtins() []*def.Domain { return def.BuiltinDomains() }
 
-// IsBuiltin reports the namespace of a built-in domain (methodology, organisation, platform): frozen, it changes with
-// the code.
+// IsBuiltin reports the namespace of a built-in domain (methodology, organisation, platform): the domains of the
+// platform itself, which a methodology never pins.
 func IsBuiltin(ns string) bool { return def.IsBuiltinDomain(ns) }
 
 var (
@@ -161,21 +163,35 @@ func Builtin() *Catalog {
 	return builtinCat
 }
 
-// New builds the catalogue of the given domains (one per namespace) and of the built-in domains. A bare reference inside
-// a domain (extends, link ends, document) is a type of that domain.
+// New builds the catalogue of the given domains (one per namespace) and of the built-in domains the library embeds that
+// none of them replaces (a built-in domain given is the version in force): the catalogue of files and tests. A bare
+// reference inside a domain (extends, link ends, document) is a type of that domain.
 func New(ds ...*def.Domain) (*Catalog, error) {
-	all := append(slices.Clone(Builtins()), ds...)
-	nb := len(Builtins())
+	given := map[string]bool{}
+	for _, d := range ds {
+		if d != nil {
+			given[d.Name] = true
+		}
+	}
+	var all []*def.Domain
+	for _, b := range Builtins() {
+		if !given[b.Name] {
+			all = append(all, b)
+		}
+	}
+	return Of(append(all, ds...)...)
+}
+
+// Of builds the catalogue of exactly the given domains (one per namespace), the built-in ones only when given: the
+// catalogue of a service, whose domains are the registry's in force, the built-in ones included (ADR 0167).
+func Of(all ...*def.Domain) (*Catalog, error) {
 	c := &Catalog{types: map[domain.TypeRef]*Type{}, links: map[domain.TypeRef]*LinkType{}, domains: map[string]string{}, structures: map[string]domain.Structure{}, items: map[string]*ItemType{}}
 	decl := map[domain.TypeRef]declared{}
-	for i, d := range all {
+	for _, d := range all {
 		if d == nil {
 			continue
 		}
 		if _, dup := c.domains[d.Name]; dup {
-			if i >= nb && IsBuiltin(d.Name) {
-				return nil, fmt.Errorf("domain %s: the name of a built-in domain: %w", d.Name, ErrInvalid)
-			}
 			return nil, fmt.Errorf("domain %s given twice: %w", d.Name, ErrInvalid)
 		}
 		c.domains[d.Name] = d.Version
@@ -689,17 +705,21 @@ func (c *Catalog) CheckLink(typ, from, to string) error {
 // Source returns the latest published version of every domain (the registry: registrysvc.Service or its client).
 type Source func(ctx context.Context) ([]*def.Domain, error)
 
-// Live holds the catalogue in force of a service: the built-in domains until Reload succeeds, then the published
-// domains of its source, reloaded when the registry reports a domain event.
+// Live holds the catalogue in force of a service: empty until Reload succeeds (the service waits for its registry), then
+// the published domains of its source, the built-in ones included, reloaded when the registry reports a domain event
+// (ADR 0167).
 type Live struct {
 	src Source
 	cur atomic.Pointer[Catalog]
 }
 
-// NewLive returns a holder of the catalogue of src, starting with the built-in domains.
+// empty is the catalogue of no domain.
+var empty = func() *Catalog { c, _ := Of(); return c }()
+
+// NewLive returns a holder of the catalogue of src, empty until its first Reload.
 func NewLive(src Source) *Live {
 	l := &Live{src: src}
-	l.cur.Store(Builtin())
+	l.cur.Store(empty)
 	return l
 }
 
@@ -712,7 +732,7 @@ func (l *Live) Reload(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	c, err := New(ds...)
+	c, err := Of(ds...)
 	if err != nil {
 		return err
 	}

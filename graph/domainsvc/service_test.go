@@ -26,6 +26,18 @@ func almDomain(version string) def.Domain {
 	}}
 }
 
+// builtinDir holds the built-in domains the registry seeds (ADR 0167).
+var builtinDir = filepath.Join("..", "..", "lib", "domains", "builtin")
+
+// seeded seeds the built-in domains in a registry, as a start does.
+func seeded(t *testing.T, s *Service) *Service {
+	t.Helper()
+	if _, err := s.SeedBuiltinDomains(authz.With(context.Background(), authz.System("test")), builtinDir); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
 // as is a caller with roles (the default policies: admin may write the domains).
 func as(roles ...string) context.Context {
 	return authz.With(context.Background(), authz.Principal{Subject: "mia", Org: "acme", Roles: roles})
@@ -48,9 +60,10 @@ func TestDomainLifecycle(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			enf, _ := authz.NewCasbin(nil)
 			var changed []string
-			s := &Service{Store: mk(t), Authz: enf, Changed: func(_ context.Context, r def.Record) {
+			s := seeded(t, &Service{Store: mk(t), Authz: enf})
+			s.Changed = func(_ context.Context, r def.Record) {
 				changed = append(changed, r.Domain.Name+"@"+r.Domain.Version+":"+string(r.Status))
-			}}
+			}
 			ctx := as("admin")
 
 			if _, _, err := s.SaveDomain(as("contributor"), almDomain("1")); !errors.Is(err, authz.ErrForbidden) {
@@ -131,10 +144,10 @@ func TestDomainLifecycle(t *testing.T) {
 			}
 			var builtin []string
 			stored := slices.DeleteFunc(list, func(r def.Record) bool {
-				if r.Builtin {
+				if r.Protected {
 					builtin = append(builtin, r.Domain.Name)
 				}
-				return r.Builtin
+				return r.Protected
 			})
 			if len(stored) != 1 || stored[0].Domain.Version != "3" || !slices.Equal(builtin, []string{"methodology", "organisation", "platform"}) {
 				t.Fatalf("latest: %v %+v", builtin, stored)
@@ -145,19 +158,19 @@ func TestDomainLifecycle(t *testing.T) {
 
 func TestBuiltinDomainsAndReferences(t *testing.T) {
 	enf, _ := authz.NewCasbin(nil)
-	s := &Service{Store: NewMemoryStore(), Authz: enf}
+	s := seeded(t, &Service{Store: NewMemoryStore(), Authz: enf})
 	ctx := as("admin")
 	if _, _, err := s.ImportDomain(ctx, []byte("name: alm\nversion: \"1\"\nnodeTypes: [Requirement]\n"), true); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"methodology", "organisation", "platform"} {
 		if _, _, err := s.SaveDomain(ctx, def.Domain{Name: name, Version: "9", Schema: def.Schema{NodeTypes: []def.NodeType{{Name: "X"}}}}); !errors.Is(err, ErrImmutable) {
-			t.Fatalf("the built-in domain %s is frozen: %v", name, err)
+			t.Fatalf("the built-in domain %s is protected: %v", name, err)
 		}
 		if _, err := s.CreateDomainVersion(ctx, name, "", "9"); !errors.Is(err, ErrImmutable) {
 			t.Fatalf("no new version of the frozen domain %s: %v", name, err)
 		}
-		if r, err := s.GetDomain(ctx, name, ""); err != nil || !r.Builtin || r.Status != def.StatusPublished {
+		if r, err := s.GetDomain(ctx, name, ""); err != nil || !r.Protected || r.Status != def.StatusPublished {
 			t.Fatalf("the built-in domain %s is readable: %+v %v", name, r, err)
 		}
 	}
@@ -172,7 +185,7 @@ func TestBuiltinDomainsAndReferences(t *testing.T) {
 
 func TestDomainImportExport(t *testing.T) {
 	enf, _ := authz.NewCasbin(nil)
-	s := &Service{Store: NewMemoryStore(), Authz: enf}
+	s := seeded(t, &Service{Store: NewMemoryStore(), Authz: enf})
 	ctx := as("admin")
 	src := "name: alm\nversion: \"1\"\nnodeTypes:\n  - name: Need\n  - name: Requirement\n    extends: Need\nlinkTypes:\n  - name: derives\n    from: Requirement\n    to: Need\n"
 	r, _, err := s.ImportDomain(ctx, []byte(src), true)
@@ -203,7 +216,7 @@ func TestSeedDomains(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "alm.yaml"), []byte(src), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := &Service{Authz: authz.AllowAll{}, Store: NewMemoryStore()}
+	s := seeded(t, &Service{Authz: authz.AllowAll{}, Store: NewMemoryStore()})
 	got, err := s.SeedDomains(as("admin"), dir)
 	if err != nil || len(got) != 1 || got[0] != "alm@1" {
 		t.Fatalf("seed: %v %v", got, err)
@@ -243,7 +256,7 @@ linkTypes:
 	for name, mk := range domainStores(t) {
 		t.Run(name, func(t *testing.T) {
 			enf, _ := authz.NewCasbin(nil)
-			s := &Service{Store: mk(t), Authz: enf}
+			s := seeded(t, &Service{Store: mk(t), Authz: enf})
 			ctx := as("admin")
 			if _, issues, err := s.SaveDomain(ctx, *d); err != nil || len(issues) > 0 {
 				t.Fatalf("save: %v %v", err, issues)
@@ -294,7 +307,7 @@ func TestDomainAlgorithms(t *testing.T) {
 	for name, mk := range domainStores(t) {
 		t.Run(name, func(t *testing.T) {
 			enf, _ := authz.NewCasbin(nil)
-			s := &Service{Store: mk(t), Authz: enf}
+			s := seeded(t, &Service{Store: mk(t), Authz: enf})
 			ctx := as("admin")
 			if _, issues, err := s.SaveDomain(ctx, *d); err != nil || len(issues) > 0 {
 				t.Fatalf("save: %v %v", issues, err)
@@ -324,7 +337,7 @@ func TestDomainAlgorithms(t *testing.T) {
 
 func TestRunAlgorithm(t *testing.T) {
 	enf, _ := authz.NewCasbin(nil)
-	s := &Service{Store: NewMemoryStore(), Authz: enf}
+	s := seeded(t, &Service{Store: NewMemoryStore(), Authz: enf})
 	a := algo.Algorithm{Name: "len", Type: algo.UsagePropertyValidator, Language: "javascript",
 		Params: []algo.Param{{Name: "max", Type: "number", Required: true}},
 		Code:   `if (String(ctx.value()).length > ctx.param("max")) ctx.fail("too long")`}
@@ -342,7 +355,7 @@ func TestRunAlgorithm(t *testing.T) {
 
 func TestRunLinkValidator(t *testing.T) {
 	enf, _ := authz.NewCasbin(nil)
-	s := &Service{Store: NewMemoryStore(), Authz: enf}
+	s := seeded(t, &Service{Store: NewMemoryStore(), Authz: enf})
 	a := algo.Algorithm{Name: "same-state", Type: algo.UsageLinkValidator, Language: "javascript",
 		Code: `if (ctx.from().state !== ctx.to().state) ctx.fail(ctx.link().type + ": " + ctx.from().state + " vs " + ctx.to().state)`}
 	in := map[string]any{"link": map[string]any{"type": "refines"},
@@ -379,7 +392,7 @@ func TestDomainNodeTypeEditors(t *testing.T) {
 }
 
 func TestListTypes(t *testing.T) {
-	s := &Service{Authz: authz.AllowAll{}, Store: NewMemoryStore()}
+	s := seeded(t, &Service{Authz: authz.AllowAll{}, Store: NewMemoryStore()})
 	withALM(t, s)
 	res, err := (&Handler{Service: s}).ListTypes(as("contributor"), connect.NewRequest(&registryv1.ListTypesRequest{}))
 	if err != nil {
@@ -409,7 +422,7 @@ func TestListTypes(t *testing.T) {
 // the organisation and the project; a domain tagging one of them again is reported and never published.
 func TestDomainStructures(t *testing.T) {
 	enf, _ := authz.NewCasbin(nil)
-	s := &Service{Store: NewMemoryStore(), Authz: enf}
+	s := seeded(t, &Service{Store: NewMemoryStore(), Authz: enf})
 	ctx := as("admin")
 	cat, err := s.Types(ctx)
 	if err != nil {
@@ -440,7 +453,8 @@ func (r *recorder) Publish(_ context.Context, subject string, _ any) error {
 func TestImportPublishedIsOneEvent(t *testing.T) {
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
 	ev := &recorder{}
-	s := &Service{Authz: authz.AllowAll{}, Store: NewMemoryStore(), Events: ev}
+	s := seeded(t, &Service{Authz: authz.AllowAll{}, Store: NewMemoryStore()})
+	s.Events = ev
 	r, _, err := s.ImportDomain(ctx, []byte("name: imp\nversion: \"1\"\nnodeTypes: [{name: A}]\n"), true)
 	if err != nil || r.Status != def.StatusPublished || r.PublishedAt.IsZero() {
 		t.Fatalf("imported as published: %+v %v", r, err)
@@ -453,5 +467,55 @@ func TestImportPublishedIsOneEvent(t *testing.T) {
 	r, issues, err := s.ImportDomain(ctx, []byte("name: bad\nversion: \"1\"\nnodeTypes: [{name: A, extends: Nope}]\n"), true)
 	if err == nil || len(issues) == 0 || r.Status != def.StatusDraft {
 		t.Fatalf("a domain with issues stays a draft: %+v %v %v", r, issues, err)
+	}
+}
+
+// A protected domain is refused every write but the local command line's (ADR 0167).
+func TestProtectedDomain(t *testing.T) {
+	for name, mk := range domainStores(t) {
+		t.Run(name, func(t *testing.T) {
+			enf, _ := authz.NewCasbin(nil)
+			s := seeded(t, &Service{Store: mk(t), Authz: enf})
+			ctx := as("admin")
+			if _, _, err := s.SaveDomain(ctx, almDomain("1")); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.Protect(ctx, "alm", true); !errors.Is(err, ErrImmutable) {
+				t.Fatalf("protect over RPC: %v", err)
+			}
+			if err := s.Protect(Local(ctx), "alm", true); err != nil {
+				t.Fatal(err)
+			}
+			if r, err := s.GetDomain(ctx, "alm", "1"); err != nil || !r.Protected {
+				t.Fatalf("get: %+v %v", r.Protected, err)
+			}
+			if rs, err := s.DomainVersions(ctx, true); err != nil || !slices.ContainsFunc(rs, func(r def.Record) bool { return r.Domain.Name == "alm" && r.Protected }) {
+				t.Fatalf("list: %v", err)
+			}
+			if _, _, err := s.SaveDomain(ctx, almDomain("1")); !errors.Is(err, ErrImmutable) {
+				t.Fatalf("save: %v", err)
+			}
+			if _, err := s.PublishDomain(ctx, "alm", "1"); !errors.Is(err, ErrImmutable) {
+				t.Fatalf("publish: %v", err)
+			}
+			if err := s.DeleteDomain(ctx, "alm", "1"); !errors.Is(err, ErrImmutable) {
+				t.Fatalf("delete: %v", err)
+			}
+			if _, err := s.CreateDomainVersion(ctx, "alm", "1", "2"); !errors.Is(err, ErrImmutable) {
+				t.Fatalf("new version: %v", err)
+			}
+			if _, err := s.PublishDomain(Local(ctx), "alm", "1"); err != nil {
+				t.Fatalf("local publish: %v", err)
+			}
+			if err := s.Protect(Local(ctx), "alm", false); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.CreateDomainVersion(ctx, "alm", "1", "2"); err != nil {
+				t.Fatalf("unprotected: %v", err)
+			}
+			if _, err := s.CreateDomainVersion(ctx, "organisation", "", "99.0.0"); !errors.Is(err, ErrImmutable) {
+				t.Fatalf("the built-in domains are seeded protected: %v", err)
+			}
+		})
 	}
 }
