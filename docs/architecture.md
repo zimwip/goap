@@ -1296,7 +1296,8 @@ The indexer follows the graph's events over NATS. The compose image is `pgvector
   `domains`), each service on a SQLite file of its own in `.goap/local` (`GOAP_SQLITE_PATH`, read by
   `platform.OptionalSQL` in every service that keeps a store, the graph services included; `GOAP_DB_DSN` wins, neither:
   memory), an embedded NATS server (JetStream, `.goap/local/nats`) instead of the container, the secrets generated
-  in `.goap/local/secrets`; the graph is Rust (`LOCAL_GRAPH=go` for the Go one), bootstrapped by its `bootstrap`
+  in `.goap/local/secrets`; the graph is Rust (`LOCAL_GRAPH=go` for the Go one; `make dev` runs the Go one unless `LOCAL_GRAPH` is set, the Rust graph
+  instantiating no lifecycle or guardian of the methodologies yet), bootstrapped by its `bootstrap`
   command before it serves; before anything starts, every port of the stack (NATS and vite included) must be free,
   else it stops naming each port taken and, on Linux, the process holding it (`ports.go`: a previous run's service
   would answer the readiness checks in place of the new one); a service starts once the services whose URL its

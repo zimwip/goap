@@ -36,7 +36,8 @@ binary, an embedded NATS, a SQLite file per service) already ran what compose ru
 
 ## Consequences
 
-- What runs locally is what compose runs: the Rust graph by default (`LOCAL_GRAPH=go` for the Go one), the services
+- What runs locally is what compose runs: the Rust graph by default (`LOCAL_GRAPH=go` for the Go one; `make dev` / `dev-backend` the Go one unless
+  `LOCAL_GRAPH` is set, while the Rust graph instantiates no lifecycle or guardian of the methodologies), the services
   talking over RPC and NATS.
 - The hooks `goap-dev` wired from its in-process registry are the graph's own: the registry declares the
   methodologies (nodes of the platform graph, ADR 0023), and the graph instantiates from them what it asks of a
