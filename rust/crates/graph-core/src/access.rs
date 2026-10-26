@@ -261,6 +261,18 @@ pub struct Snapshot {
     policies: Vec<abac::Policy>,
     /// The policies of the criticality levels, by the unit owning them and the level (`readCriticality`).
     criticality: HashMap<String, HashMap<&'static str, crate::criticality::Policy>>,
+    /// The enforcer of the stored rules, built at the first decision and shared by the copies of the snapshot.
+    rules: Rules,
+}
+
+/// The enforcer of a snapshot's stored rules, built once (building one parses the model and compiles its functions).
+#[derive(Clone, Default)]
+struct Rules(std::sync::Arc<std::sync::OnceLock<abac::Enforcer>>);
+
+impl std::fmt::Debug for Rules {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Rules")
+    }
 }
 
 fn flag(props: &crate::model::Props, k: &str) -> bool {
@@ -621,14 +633,16 @@ impl Snapshot {
         if !res.project_id.is_empty() {
             (sub.project_admin, sub.project_owner) = self.project_flags(&chain, &projects);
         }
-        let floor = abac::Enforcer::new(&abac::floor_policies());
-        if floor.authorize(&sub, &res, act).map_err(GraphError::internal)? {
+        if abac::Enforcer::floor()
+            .authorize(&sub, &res, act)
+            .map_err(GraphError::internal)?
+        {
             return Ok(true);
         }
         let rules = if self.policies.is_empty() {
-            abac::Enforcer::new(&abac::default_policies())
+            abac::Enforcer::defaults()
         } else {
-            abac::Enforcer::new(&self.policies)
+            self.rules.0.get_or_init(|| abac::Enforcer::new(&self.policies))
         };
         rules.authorize(&sub, &res, act).map_err(GraphError::internal)
     }
@@ -639,8 +653,9 @@ impl Snapshot {
         if p.subject.is_empty() {
             return Ok(false);
         }
-        let floor = abac::Enforcer::new(&abac::floor_policies());
-        floor.authorize(&self.enrich(p), res, act).map_err(GraphError::internal)
+        abac::Enforcer::floor()
+            .authorize(&self.enrich(p), res, act)
+            .map_err(GraphError::internal)
     }
 
     /// The projects whose nodes a principal reads (`ReachableProjects`, ADR 0161 §5): those it works on, sorted.

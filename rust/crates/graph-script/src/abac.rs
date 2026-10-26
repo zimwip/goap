@@ -97,7 +97,7 @@ pub struct Resource {
 }
 
 /// One rule (`authz.Policy`).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct Policy {
     pub rule: String,
     pub resource: String,
@@ -283,6 +283,20 @@ impl Enforcer {
         Enforcer { e }
     }
 
+    /// The floor (`floor_policies`), built once: building an enforcer parses the model and compiles its functions,
+    /// far dearer than a decision.
+    pub fn floor() -> &'static Enforcer {
+        static FLOOR: std::sync::LazyLock<Enforcer> = std::sync::LazyLock::new(|| Enforcer::new(&floor_policies()));
+        &FLOOR
+    }
+
+    /// The compiled-in defaults (`default_policies`), built once.
+    pub fn defaults() -> &'static Enforcer {
+        static DEFAULTS: std::sync::LazyLock<Enforcer> =
+            std::sync::LazyLock::new(|| Enforcer::new(&default_policies()));
+        &DEFAULTS
+    }
+
     /// Whether a request is allowed (`Casbin.Authorize`): an anonymous subject never is; else Casbin's enforcement,
     /// a rule failing to evaluate an error, one that panics in rhai (built `unchecked` by casbin: a division by zero)
     /// too.
@@ -300,6 +314,23 @@ impl Enforcer {
 /// Whether a stored rule holds (`authz.Validate`): its effect, its fields, then one evaluation against a probe; a rule
 /// refused here is left out of the organisation's rules.
 pub fn validate(p: &Policy) -> Result<(), String> {
+    // a verdict is a function of the rule alone, and every read of the organisation's snapshot asks it of each stored
+    // rule: kept, rather than an enforcer built per rule and per read
+    static VERDICTS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<Policy, Result<(), String>>>> =
+        std::sync::LazyLock::new(Default::default);
+    if let Some(v) = VERDICTS.lock().unwrap_or_else(|e| e.into_inner()).get(p) {
+        return v.clone();
+    }
+    let v = judge(p);
+    let mut kept = VERDICTS.lock().unwrap_or_else(|e| e.into_inner());
+    if kept.len() >= 4096 {
+        kept.clear();
+    }
+    kept.insert(p.clone(), v.clone());
+    v
+}
+
+fn judge(p: &Policy) -> Result<(), String> {
     if p.effect != "allow" && p.effect != "deny" {
         return Err("effect must be allow or deny".into());
     }

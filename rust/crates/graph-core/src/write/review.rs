@@ -267,7 +267,17 @@ impl<S: WriteTx> Tx<'_, S> {
     /// properties, the links its type requires, the attributes of its links, the validators of its type and of its
     /// links (their targets read through the drafts the flow sees).
     async fn check_draft(&self, change: &ChangeId, flow: &str, d: &Draft) -> Result<()> {
-        let drafts = self.views[change].seen_drafts(flow);
+        // the drafts the flow sees, only when a link validator reads the target of a link (copying them all for each
+        // acceptance made a commit quadratic in its edits)
+        let reads_targets = d
+            .links
+            .iter()
+            .any(|l| l.target.is_zero() && !self.catalog().link_type_validators(&l.typ).is_empty());
+        let drafts = if reads_targets {
+            self.views[change].seen_drafts(flow)
+        } else {
+            HashMap::new()
+        };
         let to = scripts::draft_targets(self.store, self.catalog(), &d.links, &drafts).await?;
         let links: Vec<_> = d
             .links

@@ -2,7 +2,7 @@
 //! database inferred for its placeholder (PostgreSQL), a row holds plain values the readers convert by column.
 use std::error::Error;
 
-use bytes::BytesMut;
+use bytes::{BufMut, BytesMut};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde_json::Value as Json;
 use tokio_postgres::types::{IsNull, ToSql, Type, to_sql_checked};
@@ -76,7 +76,16 @@ impl ToSql for Arg {
             (Arg::Null, _) => Ok(IsNull::Yes),
             (Arg::Time(t), _) => t.to_sql(ty, out),
             (Arg::Text(s), &Type::UUID) => uuid(s)?.to_sql(ty, out),
-            (Arg::Text(s), &Type::JSONB | &Type::JSON) => serde_json::from_str::<Json>(s)?.to_sql(ty, out),
+            // the text as is (PostgreSQL parses it): jsonb's binary form is its version, 1, then the text
+            (Arg::Text(s), &Type::JSONB) => {
+                out.put_u8(1);
+                out.put_slice(s.as_bytes());
+                Ok(IsNull::No)
+            }
+            (Arg::Text(s), &Type::JSON) => {
+                out.put_slice(s.as_bytes());
+                Ok(IsNull::No)
+            }
             (Arg::Text(s), _) => s.as_str().to_sql(ty, out),
             (Arg::Int(n), &Type::INT2) => i16::try_from(*n)?.to_sql(ty, out),
             (Arg::Int(n), &Type::INT4) => i32::try_from(*n)?.to_sql(ty, out),
