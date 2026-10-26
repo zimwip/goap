@@ -461,9 +461,10 @@ export const graph = {
       ...(decision ? { decision } : {}),
     }),
   /** Step one of apply (ADR 0056): the versions are written on the change's own branch; mergeChange integrates them. */
-  commitChange: (changeId: string, baselineName: string) =>
-    rpc<{ changeId: string; baselineName: string }, { baseline?: Baseline }>(GRAPH, 'CommitChange', {
+  commitChange: (changeId: string, baselineName: string, nodes?: string[]) =>
+    rpc<{ changeId: string; baselineName: string; nodes?: string[] }, { baseline?: Baseline }>(GRAPH, 'CommitChange', {
       changeId,
       baselineName,
+      ...(nodes?.length ? { nodes } : {}),
     }),
 };

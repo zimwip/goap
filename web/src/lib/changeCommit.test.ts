@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commitButtons, modifies, notAcceptableWhy, unmodified } from './changeCommit';
+import { commitButtons, commitSelection, modifies, notAcceptableWhy, unmodified } from './changeCommit';
 import type { ChangeImpact } from './api';
 
 const draft = { id: 'n1', version: 0 };
@@ -31,5 +31,21 @@ describe('changeCommit', () => {
     expect(unmodified(wire)).toBe(true);
     expect(modifies(wire)).toBe(false);
     expect(unmodified({ id: 'i4', post: { id: 'n4', version: 0 } })).toBe(false);
+  });
+});
+
+describe('commitSelection', () => {
+  const candidates = [
+    { nodeId: 'a', key: 'A', kind: 'modified' },
+    { nodeId: 'b', key: 'B', kind: 'created' },
+  ];
+  it('names no node when every candidate is chosen', () => {
+    expect(commitSelection(candidates, new Set(['b', 'a']))).toEqual({ nodes: [] });
+  });
+  it('names the nodes chosen, in the order of the candidates', () => {
+    expect(commitSelection(candidates, new Set(['b']))).toEqual({ nodes: ['b'] });
+  });
+  it('is nothing when none is chosen', () => {
+    expect(commitSelection(candidates, new Set())).toBeUndefined();
   });
 });

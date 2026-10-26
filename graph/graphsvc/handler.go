@@ -1241,8 +1241,12 @@ func (h *Handler) GetRebaseState(ctx context.Context, r *connect.Request[graphv1
 
 func (h *Handler) GetCommitState(ctx context.Context, r *connect.Request[graphv1.GetCommitStateRequest]) (*connect.Response[graphv1.GetCommitStateResponse], error) {
 	st, err := h.Graph.CommitState(ctx, domain.ChangeID(r.Msg.ChangeId))
+	candidates := make([]*graphv1.CommitCandidate, len(st.Candidates))
+	for i, c := range st.Candidates {
+		candidates[i] = &graphv1.CommitCandidate{NodeId: string(c.Node), Key: c.Key, Type: c.Type, Kind: c.Kind, ChangeImpactId: string(c.Impact)}
+	}
 	return res(&graphv1.GetCommitStateResponse{ToCommit: st.ToCommit, Reverts: int32(st.Reverts), Unsettled: st.Unsettled, Commits: st.Commits,
-		CanCommit: st.CanCommit, CanMerge: st.CanMerge}, err)
+		CanCommit: st.CanCommit, CanMerge: st.CanMerge, Candidates: candidates}, err)
 }
 
 func (h *Handler) ImpactNodeReview(ctx context.Context, r *connect.Request[graphv1.ImpactNodeReviewRequest]) (*connect.Response[graphv1.ImpactNodeReviewResponse], error) {
@@ -1359,7 +1363,11 @@ func (h *Handler) GetBlackboard(ctx context.Context, r *connect.Request[graphv1.
 // integration (MergeChange) is a later, separate act; it answers the header of the commit, never its state. The change header write publishes change.updated by itself.
 func (h *Handler) CommitChange(ctx context.Context, r *connect.Request[graphv1.CommitChangeRequest]) (*connect.Response[graphv1.CommitChangeResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header()) // lifecycle transitions are authorized for the caller
-	b, err := h.Graph.CommitChange(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName)
+	nodes := make([]domain.NodeID, len(r.Msg.Nodes))
+	for i, n := range r.Msg.Nodes {
+		nodes[i] = domain.NodeID(n)
+	}
+	b, err := h.Graph.CommitChangeNodes(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName, nodes)
 	return res(&graphv1.CommitChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
 }
 

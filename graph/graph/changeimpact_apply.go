@@ -63,6 +63,9 @@ func (a *applier) prepareChangeImpacts() error {
 		} else if !ok {
 			continue
 		}
+		if !a.takesImpact(cn, impacts) {
+			continue
+		}
 		if err := a.g.checkOrigins(impacts, cn, d); err != nil {
 			return err
 		}

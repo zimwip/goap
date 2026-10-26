@@ -281,7 +281,19 @@ impl<S: WriteTx> Tx<'_, S> {
     /// Commits a change on its own branch (Go's `CommitChange` for a root change of the main flow, no methodology to
     /// ask: the committable states of its lifecycles are its guardian): the header of the commit.
     pub async fn commit_change(&mut self, id: &ChangeId, baseline_name: &str) -> Result<Baseline> {
-        Ok(self.commit_on_branch(id, baseline_name, false).await?.0)
+        Ok(self.commit_on_branch(id, baseline_name, false, &[]).await?.0)
+    }
+
+    /// A partial commit (Go's `CommitChangeNodes`): the commit of the nodes named only, each an accepted modification of
+    /// the change or a node withdrawn since its commit (an impact merged or split via one named follows it); none named:
+    /// every one.
+    pub async fn commit_change_nodes(
+        &mut self,
+        id: &ChangeId,
+        baseline_name: &str,
+        nodes: &[NodeId],
+    ) -> Result<Baseline> {
+        Ok(self.commit_on_branch(id, baseline_name, false, nodes).await?.0)
     }
 
     /// Writes the accepted modifications of a change on its own branch and reverts the nodes it no longer changes (Go's
@@ -292,6 +304,7 @@ impl<S: WriteTx> Tx<'_, S> {
         id: &ChangeId,
         baseline_name: &str,
         mechanical: bool,
+        only: &[NodeId],
     ) -> Result<(Baseline, Vec<Node>)> {
         let w = self.work_on(id, crate::flow::MAIN_FLOW).await?;
         let c = w.c.clone();
@@ -315,10 +328,30 @@ impl<S: WriteTx> Tx<'_, S> {
             {
                 continue;
             }
+            if !takes_impact(only, &impacts, cn) {
+                continue;
+            }
             super::review::check_origins(&impacts, cn, d)?;
             todo.push(((*cn).clone(), d.clone()));
         }
-        let withdrawn = withdrawn_since(self.store, &own, &impacts).await?;
+        let mut withdrawn = withdrawn_since(self.store, &own, &impacts).await?;
+        if !only.is_empty() {
+            withdrawn.retain(|(n, _)| only.contains(n));
+            let taken: HashSet<&NodeId> = todo
+                .iter()
+                .map(|(_, d)| &d.node)
+                .chain(withdrawn.iter().map(|(n, _)| n))
+                .collect();
+            let mut left: Vec<&str> = only.iter().filter(|n| !taken.contains(n)).map(|n| n.as_str()).collect();
+            left.sort();
+            left.dedup();
+            if !left.is_empty() {
+                return Err(GraphError::invalid(format!(
+                    "change {id}: nothing to commit for node(s) {}: neither an accepted modification of the change nor a node withdrawn since its commit",
+                    left.join(", ")
+                )));
+            }
+        }
         if todo.is_empty() && withdrawn.is_empty() {
             return Err(GraphError::invalid(format!(
                 "change {id}: no accepted change impact modifies a node, and nothing it committed is withdrawn: {NOTHING_TO_COMMIT}"
@@ -483,6 +516,19 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         Ok((result, wrote))
     }
+}
+
+/// Whether a partial commit writes the node of an impact (Go's `takesImpact`): its node is named, or the impact it was
+/// merged or split via is; nothing named: every one.
+fn takes_impact(only: &[NodeId], impacts: &[&ChangeImpact], cn: &ChangeImpact) -> bool {
+    if only.is_empty() || node_of(cn).is_some_and(|n| only.contains(&n)) {
+        return true;
+    }
+    !cn.via.is_empty()
+        && impacts
+            .iter()
+            .find(|p| p.id == cn.via)
+            .is_some_and(|p| takes_impact(only, impacts, p))
 }
 
 /// The nodes the branch of a change changed that no impact of it holds any more, withdrawn after their commit, each with

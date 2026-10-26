@@ -1297,6 +1297,9 @@ message GetBlackboardResponse {
 message CommitChangeRequest {
   string change_id = 1;
   string baseline_name = 2;
+  // the nodes to commit, by node id (a partial commit): each an accepted modification of the change or a node withdrawn
+  // since its commit; none: every one of them
+  repeated string nodes = 3;
 }
 
 message CommitChangeResponse {
@@ -2021,6 +2024,19 @@ message GetCommitStateResponse {
   bool commits = 4;
   bool can_commit = 5;
   bool can_merge = 6;
+  // what the next commit may write, node by node: the choices of a partial commit
+  repeated CommitCandidate candidates = 7;
+}
+
+// A node the next commit of a change may write.
+message CommitCandidate {
+  string node_id = 1;
+  string key = 2;
+  string type = 3;
+  // created, modified or reverted (withdrawn since its commit)
+  string kind = 4;
+  // the change impact that holds it; none for a revert
+  string change_impact_id = 5;
 }
 
 // The conflicts a rebase left on a change impact, not settled yet.

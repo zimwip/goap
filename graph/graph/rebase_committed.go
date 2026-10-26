@@ -520,7 +520,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 	var wrote []domain.Node
 	if len(res.Impacts) > 0 && !res.Changed() {
 		var err error
-		if _, wrote, err = g.commitOnBranch(ctx, tx, c.ID, "", true); err != nil {
+		if _, wrote, err = g.commitOnBranch(ctx, tx, c.ID, "", true, nil); err != nil {
 			return res, err
 		}
 	}
@@ -605,7 +605,26 @@ type CommitState struct {
 	Commits   bool     `json:"commits"`
 	CanCommit bool     `json:"canCommit"`
 	CanMerge  bool     `json:"canMerge"`
+	// Candidates are what the next commit may write, node by node: the choices of a partial commit (CommitChangeNodes)
+	Candidates []CommitCandidate `json:"candidates,omitempty"`
 }
+
+// A CommitCandidate is a node the next commit of a change may write.
+type CommitCandidate struct {
+	Node domain.NodeID `json:"nodeId"`
+	Key  string        `json:"key"`
+	Type string        `json:"type"`
+	// Kind is created, modified or reverted (withdrawn since its commit)
+	Kind   string                `json:"kind"`
+	Impact domain.ChangeImpactID `json:"changeImpactId,omitempty"`
+}
+
+// The kinds of a commit candidate.
+const (
+	CandidateCreated  = "created"
+	CandidateModified = "modified"
+	CandidateReverted = "reverted"
+)
 
 // CommitState reads what a change can commit and merge.
 func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitState, err error) {
@@ -629,11 +648,29 @@ func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitS
 				return err
 			} else if ok {
 				st.ToCommit = append(st.ToCommit, cn.Key)
+				kind := CandidateModified
+				if cn.Intent == domain.IntentCreated {
+					kind = CandidateCreated
+				}
+				st.Candidates = append(st.Candidates, CommitCandidate{Node: nodeOf(cn), Key: cn.Key, Type: cn.Type, Kind: kind, Impact: cn.ID})
 			}
 		}
 		w, _, err := g.withdrawnSince(ctx, tx, c)
 		if err != nil {
 			return err
+		}
+		if len(w) > 0 {
+			own, _, err := ownBranch(ctx, tx, c)
+			if err != nil {
+				return err
+			}
+			for _, id := range w {
+				n, err := tx.LatestOn(ctx, id, own.Name)
+				if err != nil {
+					return err
+				}
+				st.Candidates = append(st.Candidates, CommitCandidate{Node: id, Key: n.Key, Type: n.Type, Kind: CandidateReverted})
+			}
 		}
 		if st.Unsettled, err = g.unsettled(ctx, tx, c); err != nil {
 			return err

@@ -39,6 +39,7 @@
   import { availableTransitions, decisionLabel, findLifecycle, movable as lifecycleMovable, pickableDecisions, resolveCall, runTransition, type Refusal, type TransitionOffer } from '../../changeTransition';
   import ChangeTransitions from '../../components/ChangeTransitions.svelte';
   import MoveChange from '../../components/MoveChange.svelte';
+  import CommitDialog from '../../components/CommitDialog.svelte';
   import AttachChange from '../../components/AttachChange.svelte';
   import ChangeDependencies from '../../components/ChangeDependencies.svelte';
   import { attachable, detach, detachable, guardianChain } from '../../changeAttach';
@@ -879,18 +880,25 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
   /** Step one of apply (ADR 0056): the versions are written on the change's own branch; the merge into the branch it
    * was forked from stays a separate act (the "Committed" box below), e.g. when a release branch collects changes. */
-  async function commit(): Promise<string | undefined> {
+  // the Commit button opens the choice of the nodes to commit, all ticked (a partial commit leaves the others drafts)
+  let commitOpen = $state(false);
+  let commitError = $state('');
+
+  async function commit(nodes?: string[]): Promise<string | undefined> {
     if (!change?.id) return 'No change is open.';
     applying = true;
     error = '';
+    commitError = '';
     try {
-      await graph.commitChange(change.id, baselineName.trim());
+      await graph.commitChange(change.id, baselineName.trim(), nodes);
+      commitOpen = false;
       await load(change.id);
       notify(`Committed on ${change.branch || 'its own branch'}: the change stays open, merge it when ready.`, 'ok');
       recordAction('committed the change on its branch');
       return undefined;
     } catch (e) {
       error = errorMessage(e);
+      if (commitOpen) commitError = error;
       return error;
     } finally {
       applying = false;
@@ -1409,13 +1417,23 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             <label for="bname">Name of the new baseline</label>
             <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
           </div>
-          <button onclick={() => void commit()} disabled={applying || unnamed || !commits.canCommit} title={commits.commitWhy ?? `Write ${commits.commitWhat} on the change's own branch: the change stays open`}>
+          <button onclick={() => ((commitError = ''), (commitOpen = true))} disabled={applying || unnamed || !commits.canCommit} title={commits.commitWhy ?? `Write ${commits.commitWhat} on the change's own branch: the change stays open`}>
             {applying ? 'Working…' : 'Commit'}
           </button>
           <button class="primary" onclick={() => void mergeBranch()} disabled={applying || !commits.canMerge} title={commits.mergeWhy ?? `Merge the commits of the change into ${mergeTarget} (rebased first when it moved); closes the change`}>
             {applying ? 'Working…' : isSub ? 'Merge into parent' : 'Merge'}
           </button>
         </div>
+        {#if commitOpen && commitInfo?.candidates?.length}
+          <CommitDialog
+            candidates={commitInfo.candidates}
+            branch={ch.branch || 'its own branch'}
+            busy={applying}
+            error={commitError}
+            oncommit={(nodes) => void commit(nodes)}
+            onclose={() => (commitOpen = false)}
+          />
+        {/if}
         {#if committedOnBranch && !closed}
           <p class="hint" style="margin: 0.5rem 0 0">
             Committed on {ch.branch}: the change stays open, edit and commit again, then merge it into {mergeTarget}.

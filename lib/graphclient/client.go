@@ -674,6 +674,19 @@ func (c *Client) CommitChange(ctx context.Context, id domain.ChangeID, baselineN
 	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
 }
 
+// CommitChangeNodes is a partial commit (graph.CommitChangeNodes): the header of the commit.
+func (c *Client) CommitChangeNodes(ctx context.Context, id domain.ChangeID, baselineName string, nodes []domain.NodeID) (domain.Baseline, error) {
+	ids := make([]string, len(nodes))
+	for i, n := range nodes {
+		ids[i] = string(n)
+	}
+	r, err := c.rpc.CommitChange(ctx, connect.NewRequest(&graphv1.CommitChangeRequest{ChangeId: string(id), BaselineName: baselineName, Nodes: ids}))
+	if err != nil {
+		return domain.Baseline{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
+}
+
 // Branch implements engine.GraphPort.
 func (c *Client) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {
 	r, err := c.rpc.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Namespace: namespace, Name: name}))

@@ -49,6 +49,9 @@ async fn call(base: &str, method: &str, subject: Option<&str>, body: serde_json:
         .body(body.to_string());
     if let Some(s) = subject {
         req = req.header("x-goap-subject", s);
+        if s == ADMIN {
+            req = req.header("x-goap-roles", "admin");
+        }
     }
     let res = req.send().await.unwrap();
     (res.status().as_u16(), res.json().await.unwrap())
@@ -176,4 +179,89 @@ async fn smart_tags_are_their_owners_and_shared() {
     assert_eq!(status, 200);
     let (_, body) = tags(&base, "ListSmartTags", "ann", serde_json::json!({})).await;
     assert!(body.get("smartTags").is_none(), "{body}");
+}
+
+/// A platform service holding the admin role: the writes of a test.
+const ADMIN: &str = "system:test-admin";
+
+#[tokio::test]
+async fn a_partial_commit_writes_the_nodes_named() {
+    let store = Store::open(&StoreConfig::Memory).await.unwrap();
+    let state = Arc::new(State::new(store));
+    graph_service::Graph { state: state.clone() }
+        .boot(&Default::default())
+        .await
+        .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(axum::serve(listener, app(state)).into_future());
+    let base = format!("http://{addr}");
+    let svc = Some(ADMIN);
+    let (status, body) = call(
+        &base,
+        "CreateChange",
+        svc,
+        serde_json::json!({"title": "partial", "namespace": "platform", "ownBranch": true, "projectId": "PROJ-ROOT"}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let change = body["change"]["id"].as_str().unwrap().to_string();
+    let mut nodes = Vec::new();
+    for key in ["FP:one", "FP:two"] {
+        let (status, body) = call(
+            &base,
+            "ImpactNodeCreate",
+            svc,
+            serde_json::json!({"changeId": change, "key": key, "type": "platform@FormPattern", "rationale": "new"}),
+        )
+        .await;
+        assert_eq!(status, 200, "{body}");
+        let impact = body["node"]["id"].as_str().unwrap().to_string();
+        nodes.push(body["node"]["post"]["id"].as_str().unwrap().to_string());
+        let (status, body) = call(
+            &base,
+            "ImpactNodeReview",
+            svc,
+            serde_json::json!({"changeId": change, "changeImpactId": impact, "accept": true, "comment": "ok"}),
+        )
+        .await;
+        assert_eq!(status, 200, "{body}");
+    }
+    let state = async || call(&base, "GetCommitState", svc, serde_json::json!({"changeId": change})).await;
+    let (status, body) = state().await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["candidates"].as_array().map(Vec::len), Some(2), "{body}");
+    assert_eq!(body["candidates"][0]["kind"], "created", "{body}");
+    // a node with nothing to commit is refused
+    let (status, body) = call(
+        &base,
+        "CommitChange",
+        svc,
+        serde_json::json!({"changeId": change, "nodes": [nodes[0], "no-such-node"]}),
+    )
+    .await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (400, Some("invalid_argument")),
+        "{body}"
+    );
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("nothing to commit for node(s) no-such-node"),
+        "{body}"
+    );
+    let (status, body) = call(
+        &base,
+        "CommitChange",
+        svc,
+        serde_json::json!({"changeId": change, "nodes": [nodes[0]]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let (_, body) = state().await;
+    assert_eq!(body["candidates"].as_array().map(Vec::len), Some(1), "{body}");
+    assert_eq!(body["candidates"][0]["nodeId"], nodes[1].as_str(), "{body}");
+    assert_eq!(body["canCommit"], true, "{body}");
 }

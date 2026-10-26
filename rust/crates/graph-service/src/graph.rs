@@ -1803,6 +1803,17 @@ impl pb::GraphService for Graph {
                 commits: st.commits,
                 can_commit: st.can_commit,
                 can_merge: st.can_merge,
+                candidates: st
+                    .candidates
+                    .into_iter()
+                    .map(|c| pb::CommitCandidate {
+                        node_id: c.node.0,
+                        key: c.key,
+                        r#type: c.typ,
+                        kind: c.kind,
+                        change_impact_id: c.impact,
+                    })
+                    .collect(),
             })
         })
         .await
@@ -3938,7 +3949,8 @@ impl pb::GraphService for Graph {
         self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
             acc.allow(tx, &m.change_id, operations::CHANGE_COMMIT).await?;
-            let b = tx.commit_change(&id, &m.baseline_name).await?;
+            let nodes: Vec<NodeId> = m.nodes.iter().map(|n| NodeId(n.clone())).collect();
+            let b = tx.commit_change_nodes(&id, &m.baseline_name, &nodes).await?;
             Ok(pb::CommitChangeResponse {
                 baseline: Some(convert::baseline(&b, None)),
             })

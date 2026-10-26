@@ -179,7 +179,7 @@ func TestOperationCost(t *testing.T) {
 			batch.Verdicts = append(batch.Verdicts, domain.ImpactVerdict{Impact: id, Status: domain.ReviewAccepted, Comment: "c"})
 		}
 		op("ImpactNodeReviewBatch", func() error { _, err := g.ImpactNodeReviewBatch(ctx, c.ID, batch); return err })
-		op("CommitChange", func() error { _, err := g.commitChange(ctx, c.ID, ""); return err })
+		op("CommitChange", func() error { _, err := g.commitChange(ctx, c.ID, "", nil); return err })
 		op("IntegrateChange", func() error { _, err := g.IntegrateChange(ctx, c.ID, nil); return err })
 	}
 	for _, create := range []bool{false, true} {

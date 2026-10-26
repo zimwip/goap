@@ -2,7 +2,7 @@
 // modifications there (and reverts the nodes withdrawn since their commit) and leaves the change open; the merge takes the
 // branch into the one it was forked from once everything in it is settled, and closes the change. The server judges both
 // (graph.getCommitState): this module only words its answer and says why an impact cannot be accepted.
-import { isDraft, type ChangeImpact, type CommitState } from './api';
+import { isDraft, type ChangeImpact, type CommitCandidate, type CommitState } from './api';
 
 /** The server's validation says the draft of the impact modifies nothing (ADR 0102). The JSON of a validation omits
  * `modified` when it is false, so a validation without it is one of an unmodified draft; no validation: unknown. */
@@ -39,3 +39,15 @@ export function commitButtons(st: CommitState | undefined, closed: boolean): Com
   if (!out.canMerge) out.mergeWhy = st.unsettled?.length ? `Settle first: ${st.unsettled.join('; ')}` : 'Nothing committed on the branch of the change yet';
   return out;
 }
+
+/** The nodes a commit writes from the choices of the commit dialog: none named when every candidate is chosen (the whole
+ * commit), else the ones chosen, in the order of the candidates; undefined when none is chosen (nothing to commit). */
+export function commitSelection(candidates: CommitCandidate[], chosen: ReadonlySet<string>): { nodes: string[] } | undefined {
+  const ids = candidates.map((c) => c.nodeId ?? '').filter((id) => id && chosen.has(id));
+  if (!ids.length) return undefined;
+  return { nodes: ids.length === candidates.length ? [] : ids };
+}
+
+/** How the commit dialog names what a candidate commit does to its node. */
+export const candidateLabel = (kind: string | undefined): string =>
+  kind === 'created' ? 'created' : kind === 'reverted' ? 'reverted (withdrawn since its commit)' : 'modified';

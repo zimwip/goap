@@ -135,6 +135,19 @@ export interface CommitState {
   commits?: boolean;
   canCommit?: boolean;
   canMerge?: boolean;
+  /** what the next commit may write, node by node: the choices of a partial commit */
+  candidates?: CommitCandidate[];
+}
+
+/** A node the next commit of a change may write. */
+export interface CommitCandidate {
+  nodeId?: string;
+  key?: string;
+  type?: string;
+  /** created, modified or reverted (withdrawn since its commit) */
+  kind?: string;
+  /** the change impact that holds it; none for a revert */
+  changeImpactId?: string;
 }
 
 /** Where a change stands against the head of the branch it was forked from (ADR 0101, 0103). */

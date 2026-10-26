@@ -65,6 +65,19 @@ pub struct CommitState {
     pub commits: bool,
     pub can_commit: bool,
     pub can_merge: bool,
+    /// what the next commit may write, node by node: the choices of a partial commit
+    pub candidates: Vec<CommitCandidate>,
+}
+
+/// A node the next commit of a change may write (Go's `CommitCandidate`).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CommitCandidate {
+    pub node: NodeId,
+    pub key: String,
+    pub typ: String,
+    /// created, modified or reverted (withdrawn since its commit)
+    pub kind: String,
+    pub impact: String,
 }
 
 impl<S: WriteTx> Tx<'_, S> {
@@ -86,6 +99,18 @@ impl<S: WriteTx> Tx<'_, S> {
         for cn in &impacts {
             if cn.review == REVIEW_ACCEPTED && self.modifies(id, &cn.id).await? {
                 st.to_commit.push(cn.key.clone());
+                st.candidates.push(CommitCandidate {
+                    node: super::work::node_of(cn).unwrap_or_default(),
+                    key: cn.key.clone(),
+                    typ: cn.typ.clone(),
+                    kind: if cn.intent == crate::impact::INTENT_CREATED {
+                        "created"
+                    } else {
+                        "modified"
+                    }
+                    .into(),
+                    impact: cn.id.clone(),
+                });
             }
         }
         let own = match self.store.branch(&c.namespace, &c.branch).await? {
@@ -98,7 +123,22 @@ impl<S: WriteTx> Tx<'_, S> {
         };
         if let Some(own) = &own {
             let held: Vec<&ChangeImpact> = impacts.iter().collect();
-            st.reverts = super::commit::withdrawn_since(self.store, own, &held).await?.len();
+            let withdrawn = super::commit::withdrawn_since(self.store, own, &held).await?;
+            st.reverts = withdrawn.len();
+            for (n, _) in withdrawn {
+                let at = self
+                    .store
+                    .latest_on(&n, &own.name)
+                    .await?
+                    .ok_or_else(|| GraphError::not_found(format!("node {n} on branch {}", own.name)))?;
+                st.candidates.push(CommitCandidate {
+                    node: n,
+                    key: at.key,
+                    typ: at.typ,
+                    kind: "reverted".into(),
+                    impact: String::new(),
+                });
+            }
         }
         st.unsettled = self.unsettled(&c, &impacts, own.as_ref()).await?;
         st.commits = impacts.iter().any(|cn| cn.committed.is_some());

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/graphapi"
@@ -42,7 +43,7 @@ func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName stri
 	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
 		return result, err
 	}
-	if _, err := g.commitChange(ctx, id, baselineName); err != nil && !errors.Is(err, ErrNothingToCommit) {
+	if _, err := g.commitChange(ctx, id, baselineName, nil); err != nil && !errors.Is(err, ErrNothingToCommit) {
 		return result, err
 	}
 	c, err := g.IntegrateChange(ctx, id, nil)
@@ -84,14 +85,26 @@ func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineNa
 	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
 		return domain.Baseline{}, err
 	}
-	return g.commitChange(ctx, id, baselineName)
+	return g.commitChange(ctx, id, baselineName, nil)
 }
 
-// commitChange is CommitChange once allowed, its baseline returned without its state (ADR 0137).
-func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, baselineName string) (result domain.Baseline, err error) {
+// CommitChangeNodes is a partial commit: CommitChange of the nodes named only, each an accepted modification of the
+// change or a node withdrawn since its commit (an impact merged or split via one named follows it); none named: every
+// one. A node named that the commit would not write is refused (ErrInvalid), so is a version linking to the draft of a
+// node left out.
+func (g *Graph) CommitChangeNodes(ctx context.Context, id domain.ChangeID, baselineName string, nodes []domain.NodeID) (domain.Baseline, error) {
+	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
+		return domain.Baseline{}, err
+	}
+	return g.commitChange(ctx, id, baselineName, nodes)
+}
+
+// commitChange is CommitChange once allowed, of the nodes named (none: every one), its baseline returned without its
+// state (ADR 0137).
+func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, baselineName string, nodes []domain.NodeID) (result domain.Baseline, err error) {
 	// one transaction: the guardian judges the versions written and a refusal undoes them (ADR 0146)
 	err = g.inChange(ctx, id, func(ctx context.Context) error {
-		if err := g.commitTx(ctx, id, baselineName, &result); err != nil {
+		if err := g.commitTx(ctx, id, baselineName, nodes, &result); err != nil {
 			return err
 		}
 		return g.checkCommit(ctx, id)
@@ -100,7 +113,7 @@ func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, baselineNa
 }
 
 // commitTx writes the commit of a change, in the transaction of ctx.
-func (g *Graph) commitTx(ctx context.Context, id domain.ChangeID, baselineName string, result *domain.Baseline) error {
+func (g *Graph) commitTx(ctx context.Context, id domain.ChangeID, baselineName string, nodes []domain.NodeID, result *domain.Baseline) error {
 	return g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
@@ -114,7 +127,7 @@ func (g *Graph) commitTx(ctx context.Context, id domain.ChangeID, baselineName s
 				return err
 			}
 		}
-		if *result, _, err = g.commitOnBranch(ctx, tx, id, baselineName, false); err != nil {
+		if *result, _, err = g.commitOnBranch(ctx, tx, id, baselineName, false, nodes); err != nil {
 			return err
 		}
 		if c, err = tx.Change(ctx, id); err != nil {
@@ -170,19 +183,29 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 // commitOnBranch writes the accepted modifications of a change on its own branch and reverts the nodes it no longer
 // changes. A rebase (mechanical) writes its merges and checks nothing of what they mean (ADR 0146): the lifecycle moves
 // and the validators judged the work of each side when it was committed. The branch of a change holds no baseline (ADR 0140): the header returned is the commit as an event tells it,
-// its order the commit of the versions written, stored nowhere.
-func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, mechanical bool) (domain.Baseline, []domain.Node, error) {
+// its order the commit of the versions written, stored nowhere. Nodes named make it a partial commit (none: every node).
+func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, mechanical bool, nodes []domain.NodeID) (domain.Baseline, []domain.Node, error) {
 	a, own, err := g.newApplier(ctx, tx, id)
 	if err != nil {
 		return domain.Baseline{}, nil, err
 	}
 	c := a.change
+	if len(nodes) > 0 {
+		a.only = map[domain.NodeID]bool{}
+		for _, n := range nodes {
+			a.only[n] = true
+		}
+		a.taken = map[domain.NodeID]bool{}
+	}
 	if err := a.prepareChangeImpacts(); err != nil {
 		return domain.Baseline{}, nil, err
 	}
 	reverted, err := a.revertWithdrawn(own)
 	if err != nil {
 		return domain.Baseline{}, nil, err
+	}
+	if left := a.notTaken(); len(left) > 0 {
+		return domain.Baseline{}, nil, invalidf("change %s: nothing to commit for node(s) %s: neither an accepted modification of the change nor a node withdrawn since its commit", id, strings.Join(left, ", "))
 	}
 	if len(a.cposts) == 0 && len(reverted) == 0 {
 		return domain.Baseline{}, nil, fmt.Errorf("change %s: no accepted change impact modifies a node, and nothing it committed is withdrawn: %w", id, ErrNothingToCommit)
@@ -250,6 +273,9 @@ func (a *applier) revertWithdrawn(own domain.Branch) ([]domain.Node, error) {
 	}
 	var wrote []domain.Node
 	for _, id := range ids {
+		if !a.takes(id) {
+			continue
+		}
 		latest, err := a.tx.LatestOn(a.ctx, id, a.branch)
 		if err != nil {
 			return nil, err
@@ -344,4 +370,44 @@ type applier struct {
 	drafts *draftReader
 	// events caches the impact log of the change for the walk of the transitions
 	events *[]domain.ImpactEvent
+	// only names the nodes a partial commit writes (nil: every one), taken those it found to write
+	only, taken map[domain.NodeID]bool
+}
+
+// takes reports whether the commit writes the node, noting it found when it is one named.
+func (a *applier) takes(id domain.NodeID) bool {
+	if a.only == nil {
+		return true
+	}
+	if a.only[id] {
+		a.taken[id] = true
+		return true
+	}
+	return false
+}
+
+// takesImpact reports whether the commit writes the node of an impact: its node is named, or the impact it was merged or
+// split via is.
+func (a *applier) takesImpact(cn domain.ChangeImpact, impacts []domain.ChangeImpact) bool {
+	if a.only == nil || a.takes(nodeOf(cn)) {
+		return true
+	}
+	for _, p := range impacts {
+		if cn.Via != "" && p.ID == cn.Via {
+			return a.takesImpact(p, impacts)
+		}
+	}
+	return false
+}
+
+// notTaken lists the nodes named that the commit found nothing to write for.
+func (a *applier) notTaken() []string {
+	var out []string
+	for id := range a.only {
+		if !a.taken[id] {
+			out = append(out, string(id))
+		}
+	}
+	slices.Sort(out)
+	return out
 }

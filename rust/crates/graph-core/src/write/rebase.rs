@@ -413,7 +413,7 @@ impl<S: WriteTx> Tx<'_, S> {
         self.emit(repre).await?;
         let mut wrote = Vec::new();
         if !res.impacts.is_empty() && !res.changed() {
-            wrote = self.commit_on_branch(&c.id, "", true).await?.1;
+            wrote = self.commit_on_branch(&c.id, "", true, &[]).await?.1;
         }
         self.raise_rebased(&c.id, &own.name, &wrote).await?;
         Ok(res)
