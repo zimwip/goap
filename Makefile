@@ -164,16 +164,17 @@ PERF_DIFF_MODE ?= shadow
 PERF_DIFF_DSN_GO := postgres://graph:graph@postgres:5432/goap?sslmode=disable
 PERF_DIFF_DSN_RS := postgres://graph_rs:graph_rs@postgres:5432/goap?sslmode=disable
 # make perf-compare: the Go and the Rust graph services side by side (deploy/compose/perf.compare.yml), each on its
-# schema (graph, graph_rs) loaded by its own goap-bench with PERF_COMPARE_ARGS (the same seed for both), at the same time
+# schema (graph, graph_rs) behind its own goap-proxy (proxy, proxy-rs: the time of each service as the server sees it),
+# loaded by its own goap-bench with PERF_COMPARE_ARGS (default -seed 1 and PERF_ARGS, as make perf), at the same time
 # or one after the other (PERF_COMPARE_SERIAL=1: Go, then Rust), each with its domain registry (domains, domains_rs);
 # the four schemas dropped first unless PERF_COMPARE_KEEP=1;
-# drawn by the Grafana dashboard "GOAP performance: Go vs Rust"
+# cAdvisor gives the CPU and memory of each container; drawn by the Grafana dashboard "GOAP performance: Go vs Rust"
 PERF_CMP := docker compose -f deploy/compose/perf.yml -f deploy/compose/perf.rust.yml -f deploy/compose/perf.compare.yml
-PERF_COMPARE_ARGS ?= -versions 100000 -seed 1
+PERF_COMPARE_ARGS ?= -seed 1 $(PERF_ARGS)
 PERF_COMPARE_SERIAL ?=
 PERF_COMPARE_KEEP ?=
 PERF_CMP_ENV := GOAP_PERF_RS_DSN='$(PERF_DIFF_DSN_RS)'
-PERF_CMP_STACK := postgres-init domains domains-rs graph graph-rs otel-collector postgres-exporter prometheus grafana
+PERF_CMP_STACK := postgres-init domains domains-rs graph graph-rs proxy proxy-rs cadvisor otel-collector postgres-exporter prometheus grafana
 PERF_GO_ENV := $(if $(filter 0,$(PERF_PROXY)),GOAP_PERF_GRAPH_URL=http://graph:8080)
 PERF_RUST_ENV := GOAP_PERF_IMPL=$(PERF_RUST_MODE) $(if $(filter 0,$(PERF_PROXY)),GOAP_PERF_GRAPH_URL=http://graph-rs:8080)
 PERF_DIFF_ENV := GOAP_PERF_IMPL=$(PERF_DIFF_MODE) GOAP_PERF_RS_DSN='$(if $(filter shadow,$(PERF_DIFF_MODE)),$(PERF_DIFF_DSN_GO),$(PERF_DIFF_DSN_RS))' $(if $(filter go,$(PERF_DIFF_RUST)),GOAP_PERF_RS_IMAGE=goap/goap:dev GOAP_PERF_RS_BIN=/goap/graph)
@@ -211,7 +212,7 @@ perf-diff: perf-images ## the Go and the Rust graph services compared call by ca
 	$(if $(filter shadow,$(PERF_DIFF_MODE)),@true,$(PERF_DIFF_ENV) $(PERF_RUST) run --rm --no-deps --entrypoint /goap/goap-proxy proxy diff-db \
 		--go '$(PERF_DIFF_DSN_GO)' --rust '$(PERF_DIFF_DSN_RS)' --ids /results/diff/ids.json)
 
-perf-compare: perf-compare-up perf-compare-run ## the Go and the Rust graph services measured side by side: each on its schema, loaded by its own goap-bench (PERF_COMPARE_ARGS, same seed; PERF_COMPARE_SERIAL=1 one after the other; PERF_AUTOSTOP), schemas dropped first unless PERF_COMPARE_KEEP=1; Grafana http://localhost:3300/d/goap-perf-compare
+perf-compare: perf-compare-up perf-compare-run ## the Go and the Rust graph services measured side by side: each on its schema, behind its own goap-proxy, loaded by its own goap-bench (PERF_ARGS as make perf, PERF_COMPARE_ARGS default -seed 1 plus PERF_ARGS; PERF_COMPARE_SERIAL=1 one after the other; PERF_AUTOSTOP), schemas dropped first unless PERF_COMPARE_KEEP=1; Grafana http://localhost:3300/d/goap-perf-compare
 	@echo "Grafana: http://localhost:3300/d/goap-perf-compare · reports: .goap/perf/compare/{go,rust}/*.csv"
 
 perf-compare-up: perf-images ## start the stack of make perf-compare: the Go and the Rust graph services, each on its schema with its domain registry (dropped first unless PERF_COMPARE_KEEP=1)
@@ -256,10 +257,10 @@ perf-analysis-down: ## stop the replay of a capture (the capture stays)
 	GOAP_PERF_CAPTURE=. $(PERF_ANALYSIS) down
 
 perf-down: ## stop the performance stack, keeping its data (the graph grows run after run)
-	$(PERF_CMP) --profile bench down
+	$(PERF_CMP) --profile bench --profile cadvisor down
 
 perf-reset: ## stop the performance stack and drop its data (database, Prometheus)
-	$(PERF_CMP) --profile bench down --volumes --remove-orphans
+	$(PERF_CMP) --profile bench --profile cadvisor down --volumes --remove-orphans
 
 rust-test: ## cargo test of the Rust workspace (rust/: the Rust graph service and goap-proxy, ADR 0163; GOAP_TEST_PG_DSN for its PostgreSQL tests)
 	cd rust && cargo test --locked

@@ -153,6 +153,21 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
 
+  # the CPU, memory, network and disk of every container (make perf-compare: the Go and the Rust graph side by side);
+  # it reads the Docker daemon of the host (Linux, or the VM of Docker Desktop); started when named (profile cadvisor)
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    profiles: [cadvisor]
+    restart: unless-stopped
+    privileged: true
+    command: ["-docker_only=true", "-housekeeping_interval=5s", "-store_container_labels=true"]
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    devices: ["/dev/kmsg"]
+
   prometheus:
     image: prom/prometheus:v3.6.0
     # the admin API takes the snapshots of make perf-capture

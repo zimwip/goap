@@ -269,12 +269,14 @@ function PerfDiff {
     }
 }
 # perf-compare: the Go and the Rust graph services side by side (deploy/compose/perf.compare.yml), each on its schema
-# (graph, graph_rs) loaded by its own goap-bench with $env:PERF_COMPARE_ARGS (the same seed for both), at the same time
+# (graph, graph_rs) behind its own goap-proxy (proxy, proxy-rs: the time of each service as the server sees it), loaded
+# by its own goap-bench with $env:PERF_COMPARE_ARGS (default -seed 1 and PERF_ARGS, as perf), at the same time
 # or one after the other ($env:PERF_COMPARE_SERIAL = '1': Go, then Rust), each with its domain registry (domains,
-# domains_rs); the four schemas dropped first unless $env:PERF_COMPARE_KEEP = '1'; drawn by the Grafana dashboard "GOAP performance: Go vs Rust"
+# domains_rs); the four schemas dropped first unless $env:PERF_COMPARE_KEEP = '1'; cAdvisor gives the CPU and memory of
+# each container; drawn by the Grafana dashboard "GOAP performance: Go vs Rust"
 $PerfCmp = @('compose', '-f', 'deploy/compose/perf.yml', '-f', 'deploy/compose/perf.rust.yml', '-f', 'deploy/compose/perf.compare.yml')
-$PerfCmpStack = @('postgres-init', 'domains', 'domains-rs', 'graph', 'graph-rs', 'otel-collector', 'postgres-exporter', 'prometheus', 'grafana')
-function PerfCompareArgs { if ($env:PERF_COMPARE_ARGS) { $env:PERF_COMPARE_ARGS } else { '-versions 100000 -seed 1' } }
+$PerfCmpStack = @('postgres-init', 'domains', 'domains-rs', 'graph', 'graph-rs', 'proxy', 'proxy-rs', 'cadvisor', 'otel-collector', 'postgres-exporter', 'prometheus', 'grafana')
+function PerfCompareArgs { if ($env:PERF_COMPARE_ARGS) { $env:PERF_COMPARE_ARGS } else { '-seed 1 ' + ((PerfArgs) -join ' ') } }
 function PerfCompareUp {
     PerfImages
     WithEnv @{ GOAP_PERF_RS_DSN = $PerfDiffDsnRs } {
@@ -341,8 +343,8 @@ function Perf {
     PerfRun
     Write-Host 'Grafana: http://localhost:3300/d/goap-perf - Prometheus: http://localhost:9390 - web: http://localhost:5174 - reports: .goap\perf\*.csv'
 }
-function PerfDown { Run docker @PerfCmp --profile bench down }
-function PerfReset { Run docker @PerfCmp --profile bench down --volumes --remove-orphans }
+function PerfDown { Run docker @PerfCmp --profile bench --profile cadvisor down }
+function PerfReset { Run docker @PerfCmp --profile bench --profile cadvisor down --volumes --remove-orphans }
 function RustTest { InDir rust { Run cargo test --locked } }
 function RustLint { InDir rust { Run cargo fmt --check; Run cargo clippy --locked --all-targets -- -D warnings } }
 
@@ -401,8 +403,9 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
                     reads on one schema; compare, every call each on its schema, then the databases)
                     ($env:PERF_DIFF_ARGS, serial and seeded; $env:PERF_DIFF_RUST = 'go': Go with Go); .goap\perf\diff
   perf-compare | perf-compare-up | perf-compare-run
-                    the Go and the Rust graph services measured side by side, each on its schema and loaded by its
-                    own goap-bench ($env:PERF_COMPARE_ARGS, same seed; $env:PERF_COMPARE_SERIAL = '1' one after the
+                    the Go and the Rust graph services measured side by side, each on its schema behind its own
+                    goap-proxy and loaded by its own goap-bench ($env:PERF_ARGS as perf; $env:PERF_COMPARE_ARGS,
+                    default -seed 1 and PERF_ARGS; $env:PERF_COMPARE_SERIAL = '1' one after the
                     other; $env:PERF_COMPARE_KEEP = '1' keeps the schemas); http://localhost:3300/d/goap-perf-compare
   rust-test | rust-lint
                     cargo test, cargo fmt + clippy of the Rust workspace (rust\)
