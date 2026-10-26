@@ -1123,6 +1123,7 @@ hand-written API types are checked against it field by field (`web/src/lib/api/c
 | `goap.registry.methodology.saved` / `.published` / `.deleted` | methodology registry, carried by the graph commit that stores the version (graph outbox) | name + version + status |
 | `goap.registry.methodology.suspended` / `.resumed` | methodology registry, published directly (recomputed, ADR 0136 §4) | name + version + reason |
 | `goap.registry.domain.saved` / `.published` / `.deleted` | domain registry (`domains`), through its outbox (`domain_outbox`) | name + version + status |
+| `service.ready.domains`, `service.ready.graph.platform` / `.content` | domain registry, graphs, core NATS once they listen ([ADR 0169](adr/0169-a-service-waits-for-another-by-its-announcement.md)), nothing kept | `{service}`: a service waiting for it at its start (`platform.Events.Await`) tries again at once |
 | `goap.credentials.<subject>.registered` / `.password_changed` / `.session_started` / `.session_ended` | credentials, through its outbox | subject + session + time (never a password or a token) |
 | `goap.preferences.<subject>.updated` / `.reset` | preferences, through its outbox | subject + the keys changed (never the values) |
 | `goap.conversation.<id>.created` / `.renamed` / `.deleted` / `.message_appended` / `.message_updated` / `.action_updated` / `.summarized` | conversations, through its outbox | conversation, owner, message, role, action index, status (never a text); the event stream delivers it to the owner only |

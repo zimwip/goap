@@ -57,21 +57,14 @@ func main() {
 		go func() {
 			system := authz.With(ctx, authz.System("registry", access.RoleAdmin))
 			seed := &registrysvc.Service{Store: store, Domains: domains, Events: events}
-			for delay := time.Second; ; delay = min(2*delay, time.Minute) {
-				err := func() error {
-					loaded, err := seed.Seed(system, dir)
-					if err != nil {
-						return fmt.Errorf("import methodologies: %w", err)
-					}
-					log.Info("methodologies imported", "dir", dir, "methodologies", loaded)
-					return nil
-				}()
-				if err == nil {
-					return
+			_ = events.Await(ctx, []string{platform.ReadyGraph, platform.ReadyDomains}, func(context.Context) error {
+				loaded, err := seed.Seed(system, dir)
+				if err != nil {
+					return fmt.Errorf("import methodologies: %w", err)
 				}
-				log.Warn("registry bootstrap", "err", err, "retry", delay)
-				time.Sleep(delay)
-			}
+				log.Info("methodologies imported", "dir", dir, "methodologies", loaded)
+				return nil
+			}, func(err error, delay time.Duration) { log.Warn("registry bootstrap", "err", err, "retry", delay) })
 		}()
 	}
 	// a domain published or archived: the methodologies are checked again, the ones it breaks are suspended (ADR 0125 §3)
@@ -87,12 +80,11 @@ func main() {
 	}
 	go func() {
 		// the domains of a new start may break a methodology too (a built-in domain changes with the platform)
-		for delay := time.Second; ; delay = min(2*delay, time.Minute) {
-			if _, err := svc.Recheck(ctx); err == nil {
-				return
-			}
-			time.Sleep(delay)
-		}
+		// tried again when the domain registry or the graph announces it serves (ADR 0169)
+		_ = events.Await(ctx, []string{platform.ReadyDomains, platform.ReadyGraph}, func(ctx context.Context) error {
+			_, err := svc.Recheck(ctx)
+			return err
+		}, nil)
 	}()
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: svc}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	if err := srv.Run(); err != nil {

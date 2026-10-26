@@ -103,9 +103,8 @@ func main() {
 	// the type catalogue (ADR 0012): the ancestors behind x.types, from the domain registry (ADR 0125 §3, ADR 0167)
 	types := typecat.NewLive(domainclient.NewClient(hc, platform.Env("GOAP_DOMAINS_URL", "http://localhost:8096"), copts...).Domains)
 	go func() {
-		for delay := time.Second; types.Reload(ctx) != nil; delay = min(2*delay, time.Minute) {
-			time.Sleep(delay)
-		}
+		// tried again when the domain registry announces it serves (ADR 0169)
+		_ = events.Await(ctx, []string{platform.ReadyDomains}, types.Reload, nil)
 	}()
 	// processes: in memory (one replica), in PostgreSQL (GOAP_DB_DSN), shared by the replicas, which serialize
 	// their work on a process through its locks and resume the runs a stopped replica left (ADR 0124), or in a SQLite

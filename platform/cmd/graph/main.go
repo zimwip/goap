@@ -42,26 +42,24 @@ import (
 	"github.com/zimwip/goap/platform/modelgw"
 )
 
-// loadTypes loads the type catalogue until it holds the domains the seeds write to, then runs the seeds.
-func loadTypes(ctx context.Context, log *slog.Logger, types *typecat.Live, need []string, seed func()) {
-	for delay := time.Second; ; delay = min(2*delay, time.Minute) {
-		err := types.Reload(ctx)
-		if err == nil {
-			missing := slices.DeleteFunc(slices.Clone(need), func(ns string) bool { _, ok := types.Get().Domains()[ns]; return ok })
-			if len(missing) == 0 {
-				log.Info("type catalogue loaded", "domains", len(types.Get().Domains()))
-				seed()
-				return
-			}
-			err = fmt.Errorf("domains %v not published yet", missing)
+// loadTypes loads the type catalogue until it holds the domains the seeds write to, then runs the seeds: tried at
+// once, then again when the domain registry announces it serves or publishes a domain (ADR 0169), else after a delay.
+func loadTypes(ctx context.Context, log *slog.Logger, events *platform.Events, types *typecat.Live, invalidate func(), need []string, seed func()) {
+	err := events.Await(ctx, []string{platform.ReadyDomains, "goap.registry.domain.published"}, func(ctx context.Context) error {
+		invalidate() // what the client kept says nothing of the registry now
+		if err := types.Reload(ctx); err != nil {
+			return err
 		}
-		log.Warn("type catalogue", "err", err, "retry", delay)
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(delay):
+		if missing := slices.DeleteFunc(slices.Clone(need), func(ns string) bool { _, ok := types.Get().Domains()[ns]; return ok }); len(missing) > 0 {
+			return fmt.Errorf("domains %v not published yet", missing)
 		}
+		return nil
+	}, func(err error, delay time.Duration) { log.Warn("type catalogue", "err", err, "retry", delay) })
+	if err != nil {
+		return
 	}
+	log.Info("type catalogue loaded", "domains", len(types.Get().Domains()))
+	seed()
 }
 
 func main() {
@@ -280,7 +278,7 @@ func main() {
 		log.Info("a content graph holds no roots nor platform data: nothing to bootstrap")
 		return
 	case bootstrapOnly:
-		loadTypes(ctx, log, types, need, func() {
+		loadTypes(ctx, log, events, types, client.Invalidate, need, func() {
 			if err := boot(); err != nil {
 				platform.Fatal(log, "boot", err)
 			}
@@ -289,16 +287,19 @@ func main() {
 		return
 	case content:
 		// nothing to seed: the platform graph holds the platform data
-		go loadTypes(ctx, log, types, need, func() {})
+		go loadTypes(ctx, log, events, types, client.Invalidate, need, func() {})
 	case memory || platform.Env("GOAP_GRAPH_BOOTSTRAP", "") == "1":
-		go loadTypes(ctx, log, types, need, func() {
+		go loadTypes(ctx, log, events, types, client.Invalidate, need, func() {
 			if err := boot(); err != nil {
 				log.Error("boot", "err", err)
+				return
 			}
+			// the services waiting for the platform data try again now (ADR 0169)
+			_ = events.PublishCore(platform.ReadyGraph, map[string]string{"service": platform.ServiceName()})
 		})
 	default:
 		// bootstrapped by `graph bootstrap`; the catalogue is loaded all the same
-		go loadTypes(ctx, log, types, need, func() {})
+		go loadTypes(ctx, log, events, types, client.Invalidate, need, func() {})
 	}
 	// the job service (ADR 0149): the exports, the snapshot imports and the imports from a source are its jobs; this
 	// process creates them with the services' token and runs the graph's kinds as a worker
@@ -315,6 +316,7 @@ func main() {
 		// the smart tags and the imports are the platform graph's (a smart tag of a content
 		// graph's versions: a step to come of ADR 0154)
 		srv.Mount(path, platform.ReadOnlyRequests(graphService))
+		srv.Announce(events, platform.ReadyGraphContent)
 		if err := srv.Run(); err != nil {
 			platform.Fatal(log, "server", err)
 		}
@@ -330,6 +332,7 @@ func main() {
 	// the import registry (ADR 0148): a run is a job of the job service, an importer available when a worker claims it
 	imports := &importsvc.Service{Domains: client, Authz: authorizer, Jobs: jobs}
 	srv.Mount(importerv1connect.NewImportServiceHandler(&importsvc.Handler{Service: imports}, telemetry.HandlerOptions()...))
+	srv.Announce(events, platform.ReadyGraph)
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

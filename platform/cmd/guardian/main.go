@@ -7,7 +7,6 @@ package main
 
 import (
 	"context"
-	"time"
 
 	"github.com/zimwip/goap/contracts/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/lib/access"
@@ -57,12 +56,11 @@ func main() {
 		}
 	}
 	go func() {
-		for delay := time.Second; ; delay = min(2*delay, time.Minute) {
-			if _, err := svc.Recheck(ctx); err == nil {
-				return
-			}
-			time.Sleep(delay)
-		}
+		// tried again when the domain registry or the graph announces it serves (ADR 0169)
+		_ = events.Await(ctx, []string{platform.ReadyDomains, platform.ReadyGraph}, func(ctx context.Context) error {
+			_, err := svc.Recheck(ctx)
+			return err
+		}, nil)
 	}()
 	srv.Mount(registryv1connect.NewChangeGuardianServiceHandler(&registrysvc.GuardianHandler{Service: svc}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {

@@ -84,6 +84,22 @@ async fn main() -> anyhow::Result<()> {
         .await
         .with_context(|| format!("listening on {addr}"))?;
     tracing::info!(%addr, dialect = ?state.store.dialect(), "goap-domains-rs serving");
+    // the graphs wait for the domains at their start: told at once that they are there (Go's `platform.ReadyDomains`,
+    // ADR 0169), on core NATS, nothing kept
+    if !nats.is_empty() {
+        match async_nats::connect(&nats).await {
+            Ok(c) => {
+                if let Err(e) = c
+                    .publish("service.ready.domains", r#"{"service":"domains"}"#.into())
+                    .await
+                {
+                    tracing::warn!(err = %e, "announce");
+                }
+                let _ = c.flush().await;
+            }
+            Err(e) => tracing::warn!(err = %e, "announce"),
+        }
+    }
     axum::serve(listener, domains_app(state))
         .with_graceful_shutdown(shutdown())
         .await?;

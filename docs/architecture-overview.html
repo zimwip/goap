@@ -295,7 +295,7 @@ footer { font-size: 13px; color: var(--muted); }
           <text class="s" x="740" y="548" text-anchor="middle">a schema per service · secrets by reference · traces</text></g>
       </svg>
     </div>
-    <div class="legend"><span><i></i>connect-rpc call</span><span><i class="d"></i>event over NATS</span><span>not drawn: preferences and credentials (called by the gateway only), the MCP hub calling the graph and engine for the built-in MCPs, the events the hub, the gateway, the preferences and the credentials publish through their outboxes; the jobs: the gateway routing its RPCs and its SSE stream (<code>/api/jobs/</code>), the graph creating the jobs and running the graph's kinds as a worker, its events through its outbox</span></div>
+    <div class="legend"><span><i></i>connect-rpc call</span><span><i class="d"></i>event over NATS</span><span>not drawn: preferences and credentials (called by the gateway only), the MCP hub calling the graph and engine for the built-in MCPs, the events the hub, the gateway, the preferences and the credentials publish through their outboxes; the jobs: the gateway routing its RPCs and its SSE stream (<code>/api/jobs/</code>), the graph creating the jobs and running the graph's kinds as a worker, its events through its outbox; the start-up announcements on NATS (<code>service.ready.*</code>, ADR 0169): the domain registry and the graphs once they listen, which the graphs, the engine, the registry and the guardian wait for</span></div>
   </section>
 
   <section>

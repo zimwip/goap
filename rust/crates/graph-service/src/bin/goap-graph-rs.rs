@@ -72,8 +72,27 @@ async fn serve() -> anyhow::Result<()> {
     let registry = Arc::new(graph_service::platform::Registry::new(
         &std::env::var("GOAP_DOMAINS_URL").unwrap_or_else(|_| "http://localhost:8096".into()),
     ));
-    // a graph types nothing without the built-in domains: the registry, started first, seeds them
-    registry.wait_for_builtins(60).await.context("domain registry")?;
+    // the bus, when there is one: the announcements of the services this one waits for, and its own (ADR 0169)
+    let bus = if nats.is_empty() {
+        None
+    } else {
+        Some(
+            async_nats::connect(&nats)
+                .await
+                .with_context(|| format!("NATS at {nats}"))?,
+        )
+    };
+    // a graph types nothing without the built-in domains: the registry, started first, seeds them and announces it
+    // serves, which brings the next try at once
+    let mut ready = match &bus {
+        Some(c) => Some(c.subscribe(READY_DOMAINS).await.context("subscribe")?),
+        None => None,
+    };
+    registry
+        .wait_for_builtins(60, ready.as_mut())
+        .await
+        .context("domain registry")?;
+    drop(ready);
     // the graph knows no methodology (ADR 0168): the guardian service answers for the methodologies of the changes
     let guardian: Arc<dyn graph_core::guardian::Guardian> = Arc::new(graph_service::guardian::Client::new(
         &std::env::var("GOAP_GUARDIAN_URL").unwrap_or_else(|_| "http://localhost:8097".into()),
@@ -114,10 +133,7 @@ async fn serve() -> anyhow::Result<()> {
         vec![state.relay(sink)]
     };
     // the domains are the registry's: read again when it publishes or deletes one (and after `DOMAINS_TTL` anyway)
-    if !nats.is_empty() {
-        let client = async_nats::connect(&nats)
-            .await
-            .with_context(|| format!("NATS at {nats}"))?;
+    if let Some(client) = &bus {
         for subject in ["goap.registry.domain.published", "goap.registry.domain.deleted"] {
             let mut sub = client.subscribe(subject).await.context("subscribe")?;
             let registry = registry.clone();
@@ -135,6 +151,7 @@ async fn serve() -> anyhow::Result<()> {
         for r in relays {
             tokio::spawn(r.run(state.clone()));
         }
+        announce(&bus, READY_GRAPH_CONTENT).await;
         axum::serve(listener, content_app(state))
             .with_graceful_shutdown(shutdown())
             .await?;
@@ -151,10 +168,28 @@ async fn serve() -> anyhow::Result<()> {
     for r in relays {
         tokio::spawn(r.run(state.clone()));
     }
+    announce(&bus, READY_GRAPH).await;
     axum::serve(listener, app(state))
         .with_graceful_shutdown(shutdown())
         .await?;
     Ok(())
+}
+
+/// The registry announces it serves (Go's `platform.ReadyDomains`, ADR 0169).
+const READY_DOMAINS: &str = "service.ready.domains";
+/// This graph announces it serves (Go's `platform.ReadyGraph` / `ReadyGraphContent`).
+const READY_GRAPH: &str = "service.ready.graph.platform";
+const READY_GRAPH_CONTENT: &str = "service.ready.graph.content";
+
+/// Publishes `subject` on core NATS once the graph listens (Go's `Server.Announce`): a service waiting for this one
+/// tries again at once.
+async fn announce(bus: &Option<async_nats::Client>, subject: &'static str) {
+    let Some(c) = bus else { return };
+    let payload = r#"{"service":"graph"}"#;
+    if let Err(e) = c.publish(subject, payload.into()).await {
+        tracing::warn!(subject, err = %e, "announce");
+    }
+    let _ = c.flush().await;
 }
 
 fn env(name: &str) -> String {

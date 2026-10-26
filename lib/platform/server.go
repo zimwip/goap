@@ -22,6 +22,8 @@ type Server struct {
 	Addr  string
 	log   *slog.Logger
 	ready []func(context.Context) error
+	// listening run once the server listens (Announce)
+	listening []func()
 }
 
 // NewServer returns a server with health endpoints, request logging and
@@ -88,10 +90,15 @@ func (s *Server) Run() error { return s.RunContext(context.Background()) }
 func (s *Server) RunContext(ctx context.Context) error {
 	srv, endStreams := s.httpServer()
 	errc := make(chan error, 1)
-	go func() {
-		s.log.Info("listening", "addr", s.Addr)
-		errc <- srv.ListenAndServe()
-	}()
+	ln, err := net.Listen("tcp", s.Addr)
+	if err != nil {
+		return err
+	}
+	s.log.Info("listening", "addr", s.Addr)
+	go func() { errc <- srv.Serve(ln) }()
+	for _, f := range s.listening {
+		f()
+	}
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	select {

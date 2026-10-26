@@ -102,6 +102,8 @@ func main() {
 	srv.Readiness(events.Ready)
 	srv.Mount(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: svc},
 		append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
+	// the graphs wait for the domains at their start: told at once that they are there (ADR 0169)
+	srv.Announce(events, platform.ReadyDomains)
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

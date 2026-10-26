@@ -70,8 +70,13 @@ impl Registry {
     }
 
     /// Waits until the registry holds the built-in domains (Go's `loadTypes` at start): a graph with no domains types
-    /// nothing. Tried every second, `attempts` times.
-    pub async fn wait_for_builtins(&self, attempts: usize) -> Result<Arc<Catalog>, GraphError> {
+    /// nothing. Tried at once, then again when a message reaches `wake` (the registry announcing it serves,
+    /// `service.ready.domains`, ADR 0169), else after a second; `attempts` times.
+    pub async fn wait_for_builtins(
+        &self,
+        attempts: usize,
+        mut wake: Option<&mut async_nats::Subscriber>,
+    ) -> Result<Arc<Catalog>, GraphError> {
         let mut last = GraphError::internal("domain registry: no built-in domain");
         for _ in 0..attempts.max(1) {
             match self
@@ -89,7 +94,16 @@ impl Registry {
                 Err(e) => last = e,
             }
             tracing::info!(err = %last.message, "waiting for the domain registry");
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            let delay = tokio::time::sleep(Duration::from_secs(1));
+            match wake.as_deref_mut() {
+                Some(sub) => {
+                    tokio::select! {
+                        _ = delay => {}
+                        _ = futures::StreamExt::next(sub) => self.invalidate().await,
+                    }
+                }
+                None => delay.await,
+            }
         }
         Err(last)
     }
