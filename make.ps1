@@ -166,7 +166,7 @@ function LocalBench {
 function Dev {
     $cargo = CargoProfile 'dev-local'
     LocalBuild $cargo
-    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'rust' }
+    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'go' }
     Run ".goap/bin/goap-local$Exe" -watch -web -graph $graph -cargo-profile $cargo @(LocalArgs)
 }
 
@@ -174,7 +174,7 @@ function Dev {
 function DevBackend {
     $cargo = CargoProfile 'dev-local'
     LocalBuild $cargo
-    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'rust' }
+    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'go' }
     Run ".goap/bin/goap-local$Exe" -watch -graph $graph -cargo-profile $cargo @(LocalArgs)
 }
 
@@ -370,6 +370,7 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   eval              offline evaluation cases of evals\ (or $env:EVAL) against a running gateway, as GOAP_TOKEN
   dev               no docker: the local stack (see local) watching the sources, a change rebuilding and
                     restarting what it touches, with vite: http://localhost:5173; Ctrl-C stops every process
+                    (the Go graph unless $env:LOCAL_GRAPH is set)
   dev-backend       the same without the IDE: gateway http://localhost:8080
   dev-web           IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
   dev-reset         drop the data of the local stack (.goap\local)

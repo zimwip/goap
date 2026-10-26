@@ -211,8 +211,11 @@ type Result struct {
 
 // Evaluate evaluates every condition against the blackboard: the scoped conditions per subject first (their values
 // are then visible as `conditions` on the entries of their scope), the conditions of the change, then the aggregates.
-func (s *Set) Evaluate(bb domain.Blackboard) Result {
-	act := Activation(bb)
+func (s *Set) Evaluate(bb domain.Blackboard) Result { return s.EvaluateActivation(Activation(bb)) }
+
+// EvaluateActivation is Evaluate over the variables of a blackboard (Activation); the entries of the scopes it
+// evaluates get their `conditions`.
+func (s *Set) EvaluateActivation(act map[string]any) Result {
 	res := Result{State: map[string]bool{}, Errors: map[string]string{}}
 	entries := s.evaluateScoped(act, &res)
 	for _, p := range s.progs {

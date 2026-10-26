@@ -1,0 +1,1999 @@
+{
+  "cases": [
+    {
+      "name": "empty",
+      "wire": {
+        "at": "2026-03-01T00:00:00Z",
+        "change": {
+          "id": "c1",
+          "status": "draft"
+        }
+      },
+      "facets": {
+        "dependencies": [],
+        "history": {
+          "last": {},
+          "runs": [],
+          "steps": []
+        },
+        "types": null,
+        "vars": {}
+      },
+      "activation": {
+        "actions": [],
+        "activeOption": "",
+        "artifacts": [],
+        "assessments": [],
+        "attestations": {},
+        "change": {
+          "baseline": "",
+          "branch": "main",
+          "consumed": [],
+          "criticality": "C2",
+          "data": {},
+          "dependsOn": [],
+          "goal": "",
+          "id": "c1",
+          "intent": "",
+          "lifecycle": "",
+          "methodology": "",
+          "passed": [],
+          "resultBaseline": "",
+          "state": "",
+          "status": "draft",
+          "title": ""
+        },
+        "changeImpacts": [],
+        "criticalityPolicy": {
+          "maxDerogationHours": {
+            "#int": 336
+          },
+          "oracles": [
+            "tool",
+            "human"
+          ],
+          "sampling": true,
+          "signatoryRole": ""
+        },
+        "decisionPoints": [],
+        "decisions": [],
+        "dependencies": [],
+        "derogations": [],
+        "history": {
+          "last": {},
+          "runs": [],
+          "steps": []
+        },
+        "items": [],
+        "options": [],
+        "questions": [],
+        "risks": [],
+        "vars": {},
+        "verifications": []
+      }
+    },
+    {
+      "name": "header and impacts",
+      "wire": {
+        "at": "2026-03-01T00:00:00Z",
+        "change": {
+          "baselineId": "b1",
+          "branch": "change-c2",
+          "data": {
+            "criticality": "C3",
+            "n": 2
+          },
+          "dependsOn": [
+            "d1",
+            "d2"
+          ],
+          "goal": "deliver",
+          "id": "c2",
+          "intent": "Do \u0026 see",
+          "lifecycle": "delivery",
+          "methodology": "sdlc",
+          "nodes": [
+            {
+              "id": "i1",
+              "intent": "modified",
+              "items": [
+                "it1"
+              ],
+              "key": "REQ-1",
+              "post": {
+                "id": "n1"
+              },
+              "pre": {
+                "id": "n1",
+                "version": 2
+              },
+              "producedBy": "agent",
+              "rationale": "why",
+              "recheck": true,
+              "review": "accepted",
+              "reviews": [
+                {
+                  "by": "a",
+                  "status": "proposed"
+                },
+                {
+                  "by": "b",
+                  "comment": "ok",
+                  "status": "accepted"
+                }
+              ],
+              "type": "alm@Requirement"
+            },
+            {
+              "id": "i2",
+              "intent": "created",
+              "key": "REQ-2",
+              "type": "alm@Requirement"
+            },
+            {
+              "id": "i3",
+              "intent": "created",
+              "key": "REQ-3",
+              "post": {
+                "id": "n3"
+              },
+              "type": "alm@Requirement",
+              "via": "i1"
+            }
+          ],
+          "state": "framing",
+          "status": "active",
+          "title": "T \u003ca\u003e"
+        },
+        "neighbors": [
+          {
+            "id": "n9",
+            "key": "F-1",
+            "type": "alm@Function",
+            "version": 1
+          }
+        ],
+        "nodes": [
+          {
+            "in": [
+              {
+                "from": {
+                  "id": "n8",
+                  "version": 5
+                },
+                "id": "l2",
+                "to": {
+                  "id": "n1",
+                  "version": 2
+                },
+                "type": "alm@traces"
+              }
+            ],
+            "latest": 4,
+            "node": {
+              "id": "n1",
+              "key": "REQ-1",
+              "props": {
+                "size": 3,
+                "title": "old"
+              },
+              "state": "draft",
+              "type": "alm@Requirement",
+              "version": 2
+            },
+            "out": [
+              {
+                "from": {
+                  "id": "n1",
+                  "version": 2
+                },
+                "id": "l1",
+                "to": {
+                  "id": "n9",
+                  "version": 1
+                },
+                "type": "alm@refines"
+              }
+            ]
+          },
+          {
+            "latest": 4,
+            "node": {
+              "id": "n1",
+              "key": "REQ-1",
+              "props": {
+                "size": 3.5,
+                "title": "new"
+              },
+              "state": "review",
+              "type": "alm@Requirement"
+            },
+            "notCommittable": true
+          },
+          {
+            "node": {
+              "deleted": true,
+              "id": "n3",
+              "key": "REQ-3",
+              "type": "alm@Requirement"
+            }
+          }
+        ]
+      },
+      "facets": {
+        "dependencies": [
+          {
+            "id": "d1",
+            "methodology": "sdlc",
+            "parent": "",
+            "reason": "",
+            "satisfied": true,
+            "state": "",
+            "status": "applied",
+            "title": "first"
+          },
+          {
+            "id": "d2",
+            "methodology": "",
+            "parent": "p",
+            "reason": "not merged",
+            "satisfied": false,
+            "state": "build",
+            "status": "active",
+            "title": ""
+          }
+        ],
+        "history": {
+          "last": {
+            "proc/a": {
+              "action": "act",
+              "current": true,
+              "error": "",
+              "execution": "e1",
+              "methodology": "sdlc",
+              "outcome": "succeeded",
+              "path": "proc/a",
+              "process": "p1",
+              "runs": {
+                "#int": 2
+              },
+              "seq": {
+                "#int": 5
+              },
+              "staleBy": "",
+              "subject": "",
+              "succeeded": true
+            },
+            "proc/b": {
+              "action": "",
+              "current": false,
+              "error": "boom",
+              "execution": "",
+              "methodology": "",
+              "outcome": "failed",
+              "path": "proc/b",
+              "process": "p1",
+              "runs": {
+                "#int": 1
+              },
+              "seq": {
+                "#int": 7
+              },
+              "staleBy": "proc/a",
+              "subject": "s",
+              "succeeded": false
+            }
+          },
+          "runs": [
+            {
+              "agent": "a",
+              "goal": "g",
+              "methodology": "sdlc",
+              "parent": "",
+              "process": "p1",
+              "seq": {
+                "#int": 4
+              },
+              "status": "completed"
+            }
+          ],
+          "steps": [
+            {
+              "action": "act",
+              "current": true,
+              "error": "",
+              "execution": "e1",
+              "methodology": "sdlc",
+              "outcome": "succeeded",
+              "path": "proc/a",
+              "process": "p1",
+              "runs": {
+                "#int": 2
+              },
+              "seq": {
+                "#int": 5
+              },
+              "staleBy": "",
+              "subject": "",
+              "succeeded": true
+            },
+            {
+              "action": "",
+              "current": false,
+              "error": "boom",
+              "execution": "",
+              "methodology": "",
+              "outcome": "failed",
+              "path": "proc/b",
+              "process": "p1",
+              "runs": {
+                "#int": 1
+              },
+              "seq": {
+                "#int": 7
+              },
+              "staleBy": "proc/a",
+              "subject": "s",
+              "succeeded": false
+            }
+          ]
+        },
+        "types": {
+          "alm@Function": [
+            "alm@Item",
+            "alm@Element"
+          ],
+          "alm@Requirement": [
+            "alm@Item"
+          ]
+        },
+        "vars": {
+          "event": {
+            "at": 3,
+            "name": "x"
+          }
+        }
+      },
+      "activation": {
+        "actions": [],
+        "activeOption": "",
+        "artifacts": [],
+        "assessments": [],
+        "attestations": {},
+        "change": {
+          "baseline": "b1",
+          "branch": "change-c2",
+          "consumed": [],
+          "criticality": "C3",
+          "data": {
+            "criticality": "C3",
+            "n": 2
+          },
+          "dependsOn": [
+            "d1",
+            "d2"
+          ],
+          "goal": "deliver",
+          "id": "c2",
+          "intent": "Do \u0026 see",
+          "lifecycle": "delivery",
+          "methodology": "sdlc",
+          "passed": [],
+          "resultBaseline": "",
+          "state": "framing",
+          "status": "active",
+          "title": "T \u003ca\u003e"
+        },
+        "changeImpacts": [
+          {
+            "comment": "ok",
+            "committed": null,
+            "drafted": true,
+            "hasPost": true,
+            "id": "i1",
+            "intent": "modified",
+            "items": [
+              "it1"
+            ],
+            "key": "REQ-1",
+            "planned": false,
+            "post": {
+              "committable": false,
+              "deleted": false,
+              "id": "n1",
+              "in": [],
+              "key": "REQ-1",
+              "latest": {
+                "#int": 4
+              },
+              "out": [],
+              "props": {
+                "size": 3.5,
+                "title": "new"
+              },
+              "state": "review",
+              "type": "alm@Requirement",
+              "types": [
+                "alm@Requirement",
+                "alm@Item"
+              ],
+              "version": {
+                "#int": 0
+              }
+            },
+            "pre": {
+              "committable": true,
+              "deleted": false,
+              "id": "n1",
+              "in": [
+                {
+                  "from": {
+                    "id": "n8",
+                    "key": "",
+                    "type": "",
+                    "types": [
+                      ""
+                    ],
+                    "version": {
+                      "#int": 5
+                    }
+                  },
+                  "id": "l2",
+                  "type": "alm@traces"
+                }
+              ],
+              "key": "REQ-1",
+              "latest": {
+                "#int": 4
+              },
+              "out": [
+                {
+                  "id": "l1",
+                  "to": {
+                    "id": "n9",
+                    "key": "F-1",
+                    "type": "alm@Function",
+                    "types": [
+                      "alm@Function",
+                      "alm@Item",
+                      "alm@Element"
+                    ],
+                    "version": {
+                      "#int": 1
+                    }
+                  },
+                  "type": "alm@refines"
+                }
+              ],
+              "props": {
+                "size": 3,
+                "title": "old"
+              },
+              "state": "draft",
+              "type": "alm@Requirement",
+              "types": [
+                "alm@Requirement",
+                "alm@Item"
+              ],
+              "version": {
+                "#int": 2
+              }
+            },
+            "producedBy": "agent",
+            "props": {
+              "size": 3.5,
+              "title": "new"
+            },
+            "rationale": "why",
+            "recheck": true,
+            "review": "accepted",
+            "reviews": [
+              {
+                "by": "a",
+                "comment": "",
+                "status": "proposed"
+              },
+              {
+                "by": "b",
+                "comment": "ok",
+                "status": "accepted"
+              }
+            ],
+            "type": "alm@Requirement",
+            "types": [
+              "alm@Requirement",
+              "alm@Item"
+            ],
+            "via": ""
+          },
+          {
+            "comment": "",
+            "committed": null,
+            "drafted": false,
+            "hasPost": false,
+            "id": "i2",
+            "intent": "created",
+            "items": [],
+            "key": "REQ-2",
+            "planned": true,
+            "post": null,
+            "pre": null,
+            "producedBy": "",
+            "props": {},
+            "rationale": "",
+            "recheck": false,
+            "review": "",
+            "reviews": [],
+            "type": "alm@Requirement",
+            "types": [
+              "alm@Requirement",
+              "alm@Item"
+            ],
+            "via": ""
+          },
+          {
+            "comment": "",
+            "committed": null,
+            "drafted": true,
+            "hasPost": true,
+            "id": "i3",
+            "intent": "created",
+            "items": [],
+            "key": "REQ-3",
+            "planned": false,
+            "post": {
+              "committable": true,
+              "deleted": true,
+              "id": "n3",
+              "in": [],
+              "key": "REQ-3",
+              "latest": {
+                "#int": 0
+              },
+              "out": [],
+              "props": {},
+              "state": "",
+              "type": "alm@Requirement",
+              "types": [
+                "alm@Requirement",
+                "alm@Item"
+              ],
+              "version": {
+                "#int": 0
+              }
+            },
+            "pre": null,
+            "producedBy": "",
+            "props": {},
+            "rationale": "",
+            "recheck": false,
+            "review": "",
+            "reviews": [],
+            "type": "alm@Requirement",
+            "types": [
+              "alm@Requirement",
+              "alm@Item"
+            ],
+            "via": "i1"
+          }
+        ],
+        "criticalityPolicy": {
+          "maxDerogationHours": {
+            "#int": 168
+          },
+          "oracles": [
+            "human"
+          ],
+          "sampling": false,
+          "signatoryRole": "derogation_signatory"
+        },
+        "decisionPoints": [],
+        "decisions": [],
+        "dependencies": [
+          {
+            "id": "d1",
+            "methodology": "sdlc",
+            "parent": "",
+            "reason": "",
+            "satisfied": true,
+            "state": "",
+            "status": "applied",
+            "title": "first"
+          },
+          {
+            "id": "d2",
+            "methodology": "",
+            "parent": "p",
+            "reason": "not merged",
+            "satisfied": false,
+            "state": "build",
+            "status": "active",
+            "title": ""
+          }
+        ],
+        "derogations": [],
+        "history": {
+          "last": {
+            "proc/a": {
+              "action": "act",
+              "current": true,
+              "error": "",
+              "execution": "e1",
+              "methodology": "sdlc",
+              "outcome": "succeeded",
+              "path": "proc/a",
+              "process": "p1",
+              "runs": {
+                "#int": 2
+              },
+              "seq": {
+                "#int": 5
+              },
+              "staleBy": "",
+              "subject": "",
+              "succeeded": true
+            },
+            "proc/b": {
+              "action": "",
+              "current": false,
+              "error": "boom",
+              "execution": "",
+              "methodology": "",
+              "outcome": "failed",
+              "path": "proc/b",
+              "process": "p1",
+              "runs": {
+                "#int": 1
+              },
+              "seq": {
+                "#int": 7
+              },
+              "staleBy": "proc/a",
+              "subject": "s",
+              "succeeded": false
+            }
+          },
+          "runs": [
+            {
+              "agent": "a",
+              "goal": "g",
+              "methodology": "sdlc",
+              "parent": "",
+              "process": "p1",
+              "seq": {
+                "#int": 4
+              },
+              "status": "completed"
+            }
+          ],
+          "steps": [
+            {
+              "action": "act",
+              "current": true,
+              "error": "",
+              "execution": "e1",
+              "methodology": "sdlc",
+              "outcome": "succeeded",
+              "path": "proc/a",
+              "process": "p1",
+              "runs": {
+                "#int": 2
+              },
+              "seq": {
+                "#int": 5
+              },
+              "staleBy": "",
+              "subject": "",
+              "succeeded": true
+            },
+            {
+              "action": "",
+              "current": false,
+              "error": "boom",
+              "execution": "",
+              "methodology": "",
+              "outcome": "failed",
+              "path": "proc/b",
+              "process": "p1",
+              "runs": {
+                "#int": 1
+              },
+              "seq": {
+                "#int": 7
+              },
+              "staleBy": "proc/a",
+              "subject": "s",
+              "succeeded": false
+            }
+          ]
+        },
+        "items": [],
+        "options": [],
+        "questions": [],
+        "risks": [],
+        "vars": {
+          "event": {
+            "at": 3,
+            "name": "x"
+          }
+        },
+        "verifications": []
+      }
+    },
+    {
+      "name": "items",
+      "wire": {
+        "activeOption": "o1",
+        "at": "2026-03-01T00:00:00Z",
+        "change": {
+          "id": "c3",
+          "intent": "Intent",
+          "items": [
+            {
+              "createdAt": "2026-02-01T10:00:00.500Z",
+              "data": {
+                "x": 1
+              },
+              "derivedFrom": [
+                "a0"
+              ],
+              "id": "a1",
+              "producedBy": "p",
+              "status": "proposed",
+              "target": "spec",
+              "type": "artifact"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:01Z",
+              "id": "a2",
+              "status": "proposed",
+              "supersedes": [
+                "a1"
+              ],
+              "target": "spec",
+              "type": "artifact"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:02Z",
+              "decision": {
+                "comment": "no",
+                "item": "a2"
+              },
+              "id": "dc",
+              "status": "accepted",
+              "type": "decision"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:03Z",
+              "data": {
+                "actions": [
+                  "A1"
+                ],
+                "impact": 3,
+                "key": "R1",
+                "owner": " o ",
+                "probability": 4,
+                "title": "Risk"
+              },
+              "id": "r1",
+              "producedBy": "x",
+              "status": "proposed",
+              "type": "risk"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:04Z",
+              "data": {
+                "key": "R1",
+                "status": "mitigating"
+              },
+              "id": "r2",
+              "status": "proposed",
+              "type": "risk"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:05Z",
+              "data": {
+                "key": "R2",
+                "title": "Gone"
+              },
+              "id": "r3",
+              "status": "rejected",
+              "type": "risk"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:05Z",
+              "data": {
+                "impact": 1,
+                "key": "R3",
+                "probability": 1,
+                "status": "closed",
+                "title": "Low"
+              },
+              "id": "r4",
+              "status": "proposed",
+              "type": "risk"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:06Z",
+              "data": {
+                "due": "2026-04-01",
+                "for": "R1",
+                "key": "A1",
+                "risks": [
+                  "R3"
+                ],
+                "title": "Act"
+              },
+              "id": "x1",
+              "status": "proposed",
+              "type": "action"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:07Z",
+              "data": {
+                "hypotheses": [
+                  "H1"
+                ],
+                "key": "A2",
+                "kind": "poc",
+                "risks": [
+                  "R1"
+                ],
+                "status": "done",
+                "title": "Poc"
+              },
+              "id": "x2",
+              "status": "proposed",
+              "type": "action"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:08Z",
+              "data": {
+                "expires": "2026-03-15",
+                "key": "D1",
+                "reason": "r",
+                "rule": "covered",
+                "signatory": "s",
+                "target": "T"
+              },
+              "id": "g1",
+              "status": "proposed",
+              "type": "derogation"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:09Z",
+              "data": {
+                "expires": "2026-02-15T12:00:00+02:00",
+                "key": "D2",
+                "reason": "r",
+                "rule": "old",
+                "signatory": "s",
+                "target": "T"
+              },
+              "id": "g2",
+              "status": "proposed",
+              "type": "derogation"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:09Z",
+              "data": {
+                "expires": "2026-01-01",
+                "key": "D3",
+                "reason": "r",
+                "rule": "x",
+                "signatory": "s",
+                "status": "closed",
+                "target": "T"
+              },
+              "id": "g3",
+              "status": "proposed",
+              "type": "derogation"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:10Z",
+              "data": {
+                "action": "build",
+                "impacts": [
+                  "i1",
+                  "i2"
+                ],
+                "independent": true,
+                "oracle": "tool",
+                "state": "produced"
+              },
+              "execution": "e1",
+              "id": "v1",
+              "producedBy": "agent",
+              "status": "proposed",
+              "type": "verification"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:11Z",
+              "data": {
+                "action": "build",
+                "by": "rev",
+                "derogation": "D1",
+                "impact": "i1",
+                "state": "accepted_with_reserve"
+              },
+              "id": "v2",
+              "status": "proposed",
+              "type": "verification"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:12Z",
+              "data": {
+                "action": "test",
+                "state": "produced"
+              },
+              "execution": "e2",
+              "id": "v3",
+              "status": "proposed",
+              "type": "verification"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:13Z",
+              "data": {
+                "findings": [
+                  "one",
+                  {
+                    "severity": "high",
+                    "text": "two"
+                  }
+                ],
+                "key": "description",
+                "rated": "Title\n\nIntent",
+                "score": 4,
+                "suggestion": "s",
+                "verdict": "clear"
+              },
+              "id": "s1",
+              "producedBy": "rater",
+              "status": "proposed",
+              "type": "assessment"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:14Z",
+              "data": {
+                "key": "title",
+                "rated": "f1dba3a9",
+                "score": 2
+              },
+              "id": "s2",
+              "status": "proposed",
+              "type": "assessment"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:15Z",
+              "data": {
+                "about": "title",
+                "text": "hm"
+              },
+              "id": "k1",
+              "status": "proposed",
+              "type": "comment"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:16Z",
+              "data": {
+                "key": "item:R1",
+                "rated": "x",
+                "score": 3
+              },
+              "id": "s3",
+              "status": "proposed",
+              "type": "assessment"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:17Z",
+              "data": {
+                "comment": "fine",
+                "verdict": "met"
+              },
+              "id": "t1",
+              "producedBy": "p",
+              "status": "proposed",
+              "target": "attestation:proc/gate/arch",
+              "type": "artifact"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:18Z",
+              "data": {
+                "decision": "dp1",
+                "from": "framing",
+                "to": "analysis",
+                "transition": "start"
+              },
+              "id": "m1",
+              "status": "accepted",
+              "target": "transition.start",
+              "type": "transition"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:19Z",
+              "data": {
+                "from": "analysis",
+                "to": "design",
+                "transition": "next"
+              },
+              "id": "m2",
+              "status": "accepted",
+              "target": "transition.next",
+              "type": "transition"
+            },
+            {
+              "createdAt": "2026-02-01T10:00:20Z",
+              "data": {
+                "from": "design",
+                "to": "analysis",
+                "transition": "back"
+              },
+              "id": "m3",
+              "status": "accepted",
+              "target": "transition.back",
+              "type": "transition"
+            }
+          ],
+          "status": "active",
+          "title": "Title"
+        },
+        "decisionPoints": [
+          {
+            "criteria": [
+              "cost"
+            ],
+            "decidedBy": "u",
+            "escalation": "board",
+            "humanOnly": true,
+            "id": "dp1",
+            "option": "go",
+            "options": [
+              "go",
+              "no_go"
+            ],
+            "policy": {
+              "maxRounds": 3,
+              "rule": "consent",
+              "threshold": 0.7
+            },
+            "question": "go?",
+            "questions": [
+              {
+                "answer": "because",
+                "answeredBy": "u",
+                "id": "q1",
+                "point": "dp1",
+                "status": "answered",
+                "text": "why"
+              },
+              {
+                "id": "q2",
+                "point": "dp1",
+                "status": "open",
+                "text": "how"
+              }
+            ],
+            "ruling": {
+              "by": "u",
+              "confidence": 0.75,
+              "human": true,
+              "justification": "j",
+              "option": "go",
+              "outcome": "decided"
+            },
+            "status": "decided"
+          },
+          {
+            "id": "dp2",
+            "question": "which?",
+            "status": "open"
+          }
+        ],
+        "options": [
+          {
+            "active": true,
+            "evaluation": "good",
+            "id": "o1",
+            "option": {
+              "hypothesis": "h",
+              "name": "plan A"
+            },
+            "optionStatus": "evaluated",
+            "status": "open"
+          },
+          {
+            "id": "o2",
+            "option": {
+              "name": "plan B"
+            },
+            "status": "discarded"
+          }
+        ]
+      },
+      "facets": {
+        "criticalityPolicy": {
+          "maxDerogationHours": {
+            "#int": 48
+          },
+          "oracles": [
+            "human"
+          ],
+          "sampling": false,
+          "signatoryRole": "sig"
+        },
+        "dependencies": [],
+        "history": {
+          "last": {},
+          "runs": [],
+          "steps": []
+        },
+        "types": null,
+        "vars": {}
+      },
+      "activation": {
+        "actions": [
+          {
+            "change": "",
+            "covers": [
+              "R1",
+              "R3"
+            ],
+            "due": "2026-04-01",
+            "for": "R1",
+            "hypotheses": [],
+            "item": "x1",
+            "key": "A1",
+            "kind": "mitigation",
+            "owner": "",
+            "purpose": "",
+            "result": "",
+            "risks": [
+              "R3"
+            ],
+            "status": "open",
+            "title": "Act",
+            "versions": {
+              "#int": 1
+            }
+          },
+          {
+            "change": "",
+            "covers": [],
+            "due": "",
+            "for": "",
+            "hypotheses": [
+              "H1"
+            ],
+            "item": "x2",
+            "key": "A2",
+            "kind": "poc",
+            "owner": "",
+            "purpose": "derisk",
+            "result": "",
+            "risks": [
+              "R1"
+            ],
+            "status": "done",
+            "title": "Poc",
+            "versions": {
+              "#int": 1
+            }
+          }
+        ],
+        "activeOption": "o1",
+        "artifacts": [
+          {
+            "at": {
+              "#int": 1769940001000
+            },
+            "data": {},
+            "decision": null,
+            "derivedFrom": [],
+            "id": "a2",
+            "producedBy": "",
+            "status": "rejected",
+            "target": "spec",
+            "type": "artifact"
+          },
+          {
+            "at": {
+              "#int": 1769940017000
+            },
+            "data": {
+              "comment": "fine",
+              "verdict": "met"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "t1",
+            "producedBy": "p",
+            "status": "proposed",
+            "target": "attestation:proc/gate/arch",
+            "type": "artifact"
+          }
+        ],
+        "assessments": [
+          {
+            "answered": true,
+            "current": true,
+            "findings": [
+              {
+                "severity": "",
+                "text": "one"
+              },
+              {
+                "severity": "high",
+                "text": "two"
+              }
+            ],
+            "item": "s1",
+            "key": "description",
+            "rated": "Title\n\nIntent",
+            "score": {
+              "#int": 4
+            },
+            "suggestion": "s",
+            "verdict": "clear",
+            "versions": {
+              "#int": 1
+            }
+          },
+          {
+            "answered": false,
+            "current": false,
+            "findings": [],
+            "item": "s2",
+            "key": "title",
+            "rated": "f1dba3a9",
+            "score": {
+              "#int": 2
+            },
+            "suggestion": "",
+            "verdict": "",
+            "versions": {
+              "#int": 1
+            }
+          },
+          {
+            "answered": true,
+            "current": false,
+            "findings": [],
+            "item": "s3",
+            "key": "item:R1",
+            "rated": "x",
+            "score": {
+              "#int": 3
+            },
+            "suggestion": "",
+            "verdict": "",
+            "versions": {
+              "#int": 1
+            }
+          }
+        ],
+        "attestations": {
+          "proc/gate/arch": {
+            "by": "p",
+            "comment": "fine",
+            "item": "t1",
+            "verdict": "met"
+          }
+        },
+        "change": {
+          "baseline": "",
+          "branch": "main",
+          "consumed": [
+            "dp1"
+          ],
+          "criticality": "C2",
+          "data": {},
+          "dependsOn": [],
+          "goal": "",
+          "id": "c3",
+          "intent": "Intent",
+          "lifecycle": "",
+          "methodology": "",
+          "passed": [
+            "start",
+            "back"
+          ],
+          "resultBaseline": "",
+          "state": "",
+          "status": "active",
+          "title": "Title"
+        },
+        "changeImpacts": [],
+        "criticalityPolicy": {
+          "maxDerogationHours": {
+            "#int": 48
+          },
+          "oracles": [
+            "human"
+          ],
+          "sampling": false,
+          "signatoryRole": "sig"
+        },
+        "decisionPoints": [
+          {
+            "criteria": [
+              "cost"
+            ],
+            "decidedBy": "u",
+            "escalation": "board",
+            "humanOnly": true,
+            "id": "dp1",
+            "openQuestions": {
+              "#int": 1
+            },
+            "option": "go",
+            "options": [
+              "go",
+              "no_go"
+            ],
+            "policy": {
+              "maxRounds": {
+                "#int": 3
+              },
+              "rule": "consent",
+              "threshold": 0.7
+            },
+            "question": "go?",
+            "questions": [
+              {
+                "answer": "because",
+                "answeredBy": "u",
+                "id": "q1",
+                "point": "dp1",
+                "status": "answered",
+                "text": "why"
+              },
+              {
+                "answer": "",
+                "answeredBy": "",
+                "id": "q2",
+                "point": "dp1",
+                "status": "open",
+                "text": "how"
+              }
+            ],
+            "ruling": {
+              "by": "u",
+              "confidence": 0.75,
+              "human": true,
+              "justification": "j",
+              "option": "go",
+              "outcome": "decided"
+            },
+            "status": "decided"
+          },
+          {
+            "criteria": [],
+            "decidedBy": "",
+            "escalation": "",
+            "humanOnly": false,
+            "id": "dp2",
+            "openQuestions": {
+              "#int": 0
+            },
+            "option": "",
+            "options": [],
+            "policy": {},
+            "question": "which?",
+            "questions": [],
+            "ruling": null,
+            "status": "open"
+          }
+        ],
+        "decisions": [
+          {
+            "at": {
+              "#int": 1769940002000
+            },
+            "data": {},
+            "decision": {
+              "accept": false,
+              "comment": "no",
+              "item": "a2"
+            },
+            "derivedFrom": [],
+            "id": "dc",
+            "producedBy": "",
+            "status": "accepted",
+            "target": "",
+            "type": "decision"
+          }
+        ],
+        "dependencies": [],
+        "derogations": [
+          {
+            "expired": false,
+            "expires": "2026-03-15T23:59:59Z",
+            "item": "g1",
+            "key": "D1",
+            "open": true,
+            "reason": "r",
+            "rule": "covered",
+            "signatory": "s",
+            "status": "open",
+            "target": "T",
+            "versions": {
+              "#int": 1
+            }
+          },
+          {
+            "expired": true,
+            "expires": "2026-02-15T10:00:00Z",
+            "item": "g2",
+            "key": "D2",
+            "open": true,
+            "reason": "r",
+            "rule": "old",
+            "signatory": "s",
+            "status": "open",
+            "target": "T",
+            "versions": {
+              "#int": 1
+            }
+          },
+          {
+            "expired": false,
+            "expires": "2026-01-01T23:59:59Z",
+            "item": "g3",
+            "key": "D3",
+            "open": false,
+            "reason": "r",
+            "rule": "x",
+            "signatory": "s",
+            "status": "closed",
+            "target": "T",
+            "versions": {
+              "#int": 1
+            }
+          }
+        ],
+        "history": {
+          "last": {},
+          "runs": [],
+          "steps": []
+        },
+        "items": [
+          {
+            "at": {
+              "#int": 1769940001000
+            },
+            "data": {},
+            "decision": null,
+            "derivedFrom": [],
+            "id": "a2",
+            "producedBy": "",
+            "status": "rejected",
+            "target": "spec",
+            "type": "artifact"
+          },
+          {
+            "at": {
+              "#int": 1769940002000
+            },
+            "data": {},
+            "decision": {
+              "accept": false,
+              "comment": "no",
+              "item": "a2"
+            },
+            "derivedFrom": [],
+            "id": "dc",
+            "producedBy": "",
+            "status": "accepted",
+            "target": "",
+            "type": "decision"
+          },
+          {
+            "at": {
+              "#int": 1769940003000
+            },
+            "data": {
+              "actions": [
+                "A1"
+              ],
+              "impact": 3,
+              "key": "R1",
+              "owner": " o ",
+              "probability": 4,
+              "title": "Risk"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "r1",
+            "producedBy": "x",
+            "status": "proposed",
+            "target": "",
+            "type": "risk"
+          },
+          {
+            "at": {
+              "#int": 1769940004000
+            },
+            "data": {
+              "key": "R1",
+              "status": "mitigating"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "r2",
+            "producedBy": "",
+            "status": "proposed",
+            "target": "",
+            "type": "risk"
+          },
+          {
+            "at": {
+              "#int": 1769940005000
+            },
+            "data": {
+              "key": "R2",
+              "title": "Gone"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "r3",
+            "producedBy": "",
+            "status": "rejected",
+            "target": "",
+            "type": "risk"
+          },
+          {
+            "at": {
+              "#int": 1769940005000
+            },
+            "data": {
+              "impact": 1,
+              "key": "R3",
+              "probability": 1,
+              "status": "closed",
+              "title": "Low"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "r4",
+            "producedBy": "",
+            "status": "proposed",
+            "target": "",
+            "type": "risk"
+          },
+          {
+            "at": {
+              "#int": 1769940006000
+            },
+            "data": {
+              "due": "2026-04-01",
+              "for": "R1",
+              "key": "A1",
+              "risks": [
+                "R3"
+              ],
+              "title": "Act"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "x1",
+            "producedBy": "",
+            "status": "proposed",
+            "target": "",
+            "type": "action"
+          },
+          {
+            "at": {
+              "#int": 1769940007000
+            },
+            "data": {
+              "hypotheses": [
+                "H1"
+              ],
+              "key": "A2",
+              "kind": "poc",
+              "risks": [
+                "R1"
+              ],
+              "status": "done",
+              "title": "Poc"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "x2",
+            "producedBy": "",
+            "status": "proposed",
+            "target": "",
+            "type": "action"
+          },
+          {
+            "at": {
+              "#int": 1769940008000
+            },
+            "data": {
+              "expires": "2026-03-15",
+              "key": "D1",
+              "reason": "r",
+              "rule": "covered",
+              "signatory": "s",
+              "target": "T"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "g1",
+            "producedBy": "",
+            "status": "proposed",
+            "target": "",
+            "type": "derogation"
+          },
+          {
+            "at": {
+              "#int": 1769940009000
+            },
+            "data": {
+              "expires": "2026-02-15T12:00:00+02:00",
+              "key": "D2",
+              "reason": "r",
+              "rule": "old",
+              "signatory": "s",
+              "target": "T"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "g2",
+            "producedBy": "",
+            "status": "proposed",
+            "target": "",
+            "type": "derogation"
+          },
+          {
+            "at": {
+              "#int": 1769940009000
+            },
+            "data": {
+              "expires": "2026-01-01",
+              "key": "D3",
+              "reason": "r",
+              "rule": "x",
+              "signatory": "s",
+              "status": "closed",
+              "target": "T"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "g3",
+            "producedBy": "",
+            "status": "proposed",
+            "target": "",
+            "type": "derogation"
+          },
+          {
+            "at": {
+              "#int": 1769940010000
+            },
+            "data": {
+              "action": "build",
+              "impacts": [
+                "i1",
+                "i2"
+              ],
+              "independent": true,
+              "oracle": "tool",
+              "state": "produced"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "v1",
+            "producedBy": "agent",
+            "status": "proposed",
+            "target": "",
+            "type": "verification"
+          },
+          {
+            "at": {
+              "#int": 1769940011000
+            },
+            "data": {
+              "action": "build",
+              "by": "rev",
+              "derogation": "D1",
+              "impact": "i1",
+              "state": "accepted_with_reserve"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "v2",
+            "producedBy": "",
+            "status": "proposed",
+            "target": "",
+            "type": "verification"
+          },
+          {
+            "at": {
+              "#int": 1769940012000
+            },
+            "data": {
+              "action": "test",
+              "state": "produced"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "v3",
+            "producedBy": "",
+            "status": "proposed",
+            "target": "",
+            "type": "verification"
+          },
+          {
+            "at": {
+              "#int": 1769940013000
+            },
+            "data": {
+              "findings": [
+                "one",
+                {
+                  "severity": "high",
+                  "text": "two"
+                }
+              ],
+              "key": "description",
+              "rated": "Title\n\nIntent",
+              "score": 4,
+              "suggestion": "s",
+              "verdict": "clear"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "s1",
+            "producedBy": "rater",
+            "status": "proposed",
+            "target": "",
+            "type": "assessment"
+          },
+          {
+            "at": {
+              "#int": 1769940014000
+            },
+            "data": {
+              "key": "title",
+              "rated": "f1dba3a9",
+              "score": 2
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "s2",
+            "producedBy": "",
+            "status": "proposed",
+            "target": "",
+            "type": "assessment"
+          },
+          {
+            "at": {
+              "#int": 1769940015000
+            },
+            "data": {
+              "about": "title",
+              "text": "hm"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "k1",
+            "producedBy": "",
+            "status": "proposed",
+            "target": "",
+            "type": "comment"
+          },
+          {
+            "at": {
+              "#int": 1769940016000
+            },
+            "data": {
+              "key": "item:R1",
+              "rated": "x",
+              "score": 3
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "s3",
+            "producedBy": "",
+            "status": "proposed",
+            "target": "",
+            "type": "assessment"
+          },
+          {
+            "at": {
+              "#int": 1769940017000
+            },
+            "data": {
+              "comment": "fine",
+              "verdict": "met"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "t1",
+            "producedBy": "p",
+            "status": "proposed",
+            "target": "attestation:proc/gate/arch",
+            "type": "artifact"
+          },
+          {
+            "at": {
+              "#int": 1769940018000
+            },
+            "data": {
+              "decision": "dp1",
+              "from": "framing",
+              "to": "analysis",
+              "transition": "start"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "m1",
+            "producedBy": "",
+            "status": "accepted",
+            "target": "transition.start",
+            "type": "transition"
+          },
+          {
+            "at": {
+              "#int": 1769940019000
+            },
+            "data": {
+              "from": "analysis",
+              "to": "design",
+              "transition": "next"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "m2",
+            "producedBy": "",
+            "status": "accepted",
+            "target": "transition.next",
+            "type": "transition"
+          },
+          {
+            "at": {
+              "#int": 1769940020000
+            },
+            "data": {
+              "from": "design",
+              "to": "analysis",
+              "transition": "back"
+            },
+            "decision": null,
+            "derivedFrom": [],
+            "id": "m3",
+            "producedBy": "",
+            "status": "accepted",
+            "target": "transition.back",
+            "type": "transition"
+          }
+        ],
+        "options": [
+          {
+            "active": true,
+            "evaluated": true,
+            "evaluation": "good",
+            "hypothesis": "h",
+            "id": "o1",
+            "name": "plan A",
+            "status": "evaluated"
+          },
+          {
+            "active": false,
+            "evaluated": false,
+            "evaluation": "",
+            "hypothesis": "",
+            "id": "o2",
+            "name": "plan B",
+            "status": "rejected"
+          }
+        ],
+        "questions": [
+          {
+            "answer": "because",
+            "answeredBy": "u",
+            "id": "q1",
+            "point": "dp1",
+            "status": "answered",
+            "text": "why"
+          },
+          {
+            "answer": "",
+            "answeredBy": "",
+            "id": "q2",
+            "point": "dp1",
+            "status": "open",
+            "text": "how"
+          }
+        ],
+        "risks": [
+          {
+            "actions": [
+              "A1"
+            ],
+            "description": "",
+            "impact": {
+              "#int": 3
+            },
+            "item": "r2",
+            "key": "R1",
+            "live": true,
+            "owner": "o",
+            "probability": {
+              "#int": 4
+            },
+            "score": {
+              "#int": 12
+            },
+            "status": "mitigating",
+            "step": "",
+            "title": "Risk",
+            "versions": {
+              "#int": 2
+            }
+          },
+          {
+            "actions": [],
+            "description": "",
+            "impact": {
+              "#int": 1
+            },
+            "item": "r4",
+            "key": "R3",
+            "live": false,
+            "owner": "",
+            "probability": {
+              "#int": 1
+            },
+            "score": {
+              "#int": 1
+            },
+            "status": "closed",
+            "step": "",
+            "title": "Low",
+            "versions": {
+              "#int": 1
+            }
+          }
+        ],
+        "vars": {},
+        "verifications": [
+          {
+            "action": "build",
+            "by": "rev",
+            "execution": "e1",
+            "impact": "i1",
+            "independent": true,
+            "open": false,
+            "oracle": "tool",
+            "producer": "agent",
+            "state": "accepted_with_reserve"
+          },
+          {
+            "action": "build",
+            "by": "",
+            "execution": "e1",
+            "impact": "i2",
+            "independent": true,
+            "open": true,
+            "oracle": "tool",
+            "producer": "agent",
+            "state": "produced"
+          },
+          {
+            "action": "test",
+            "by": "",
+            "execution": "e2",
+            "impact": "",
+            "independent": false,
+            "open": true,
+            "oracle": "",
+            "producer": "",
+            "state": "produced"
+          }
+        ]
+      }
+    }
+  ],
+  "comment": "Code generated from engine/condition (GOAP_UPDATE_RUST=1 go test ./engine/condition/ -run TestRustActivationCasesAreCurrent). DO NOT EDIT."
+}

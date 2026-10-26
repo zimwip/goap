@@ -22,6 +22,7 @@ use graph_catalog::{
 use graph_core::{
     GraphError,
     lnk::Url,
+    methodologies,
     model::{ChangeId, Link, LinkId, MAIN_BRANCH, NAMESPACE_METHODOLOGY, Node, NodeId, NodeRef, Target},
     platform::{Held, Platform},
 };
@@ -33,7 +34,6 @@ pub const DOMAINS_TTL: Duration = Duration::from_secs(30);
 /// The subject a graph calls the other services as (`graphclient.ClientPrincipal`).
 const CLIENT_SUBJECT: &str = "system:client";
 
-const TYPE_VERSION: &str = "methodology@MethodologyVersion";
 const TYPE_ROLE: &str = "methodology@Role";
 const STATUS_PUBLISHED: &str = "published";
 
@@ -289,36 +289,38 @@ impl Remote {
         })
     }
 
-    /// The versions of the methodologies and their roles at a baseline: what the roles of an operation are read from.
+    /// The versions of the methodologies at a baseline, their roles, goals and processes and the links naming their
+    /// main goals: what the roles of an operation and what a change follows are read from.
     async fn methodologies(&self, baseline: &str) -> Result<Held, GraphError> {
-        let mut out = Held {
-            baseline: baseline.into(),
-            ..Held::default()
-        };
         if baseline.is_empty() {
-            return Ok(out);
+            return Ok(Held::default());
         }
-        for typ in [TYPE_VERSION, TYPE_ROLE] {
-            let r = self
-                .graph
-                .list_view_nodes(
-                    &Ctx::background(),
-                    Request::new(pb::ListViewNodesRequest {
-                        view: Some(pb::View {
-                            namespace: NAMESPACE_METHODOLOGY.into(),
-                            branch: MAIN_BRANCH.into(),
-                            baseline_id: baseline.into(),
-                            ..pb::View::default()
-                        }),
-                        r#type: typ.into(),
-                    }),
-                )
-                .await
-                .map_err(|e| unavailable("platform graph: methodologies", e))?
-                .into_inner();
-            out.nodes.extend(r.nodes.iter().map(node).filter(|n| !n.deleted));
-        }
-        Ok(out)
+        let g = self
+            .graph
+            .get_baseline_graph(
+                &Ctx::background(),
+                Request::new(pb::GetBaselineGraphRequest { id: baseline.into() }),
+            )
+            .await
+            .map_err(|e| unavailable("platform graph: methodologies", e))?
+            .into_inner();
+        let held = |t: &str| t == TYPE_ROLE || methodologies::TYPES.contains(&t);
+        Ok(Held {
+            baseline: baseline.into(),
+            nodes: g
+                .nodes
+                .iter()
+                .filter(|n| held(&n.r#type))
+                .map(node)
+                .filter(|n| !n.deleted)
+                .collect(),
+            links: g
+                .links
+                .iter()
+                .filter(|l| l.r#type == methodologies::LINK_MAIN_GOAL)
+                .map(link)
+                .collect(),
+        })
     }
 }
 

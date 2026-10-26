@@ -2,12 +2,20 @@
 //! as a `change.updated` entry of its log, `change.edited` raised for what a reactive activity may look at again.
 use serde_json::{Map, Value, json};
 
-use super::{change::change_branch_origin, tx::Tx, whole::WholeChange, work::fold_change};
+use super::{
+    attach::{HEADER_GUARDIANS, chain_value},
+    change::{STATUS_ACTIVE, STATUS_DRAFT, change_branch_origin},
+    project::HEADER_METHODOLOGY_VERSION,
+    tx::Tx,
+    whole::WholeChange,
+    work::fold_change,
+};
 use crate::{
     GraphError, Result,
     change::{Change, ChangesFilter},
     impact::{LOG_FACT, LogEntry},
     jsontext,
+    methodologies::{self, Declared},
     model::{ChangeId, MAIN_BRANCH, branch_of, namespace_of},
     store::WriteTx,
 };
@@ -175,17 +183,67 @@ impl<S: WriteTx> Tx<'_, S> {
         Err(unresolved_lifecycle(&c))
     }
 
-    /// Moves an open change to another version of its methodology (Go's `UpgradeChange`, ADR 0113): with no registry
-    /// to resolve the versions, refused.
-    pub async fn upgrade_change(&mut self, id: &ChangeId) -> Result<Change> {
+    /// Moves an open change to another version of its methodology (Go's `UpgradeChange`, ADR 0113): the version named,
+    /// else the latest published one. The change keeps its state, so the lifecycle of that version must be its own and
+    /// know the state; its guardian chain names the new version of its own methodology. Nothing is journaled when it
+    /// follows that version already.
+    pub async fn upgrade_change(&mut self, id: &ChangeId, version: &str) -> Result<Change> {
         let c = self.change_head(id).await?;
         if c.methodology.is_empty() {
             return Err(GraphError::invalid(format!("change {id} follows no methodology")));
         }
-        Err(GraphError::invalid(format!(
-            "no registry resolves the versions of methodology {}",
-            c.methodology
-        )))
+        let declared = Declared::read(self.store).await?;
+        let target = declared.version_of(&methodologies::reference(&c.methodology, version))?;
+        if target.is_empty() {
+            return Err(GraphError::invalid(format!("methodology {} is unknown", c.methodology)));
+        }
+        if target == c.methodology_version {
+            return Ok(c);
+        }
+        let r = methodologies::reference(&c.methodology, &target);
+        let lc = declared.lifecycle(self.catalog(), &r)?;
+        match lc {
+            None if c.lifecycle.is_empty() => {}
+            Some(lc) if lc.name == c.lifecycle => {
+                if !c.state.is_empty() && !lc.states.iter().any(|s| s.name == c.state) {
+                    return Err(GraphError::conflict(format!(
+                        "the lifecycle {} of {r} has no state {:?}, the state of change {id}",
+                        lc.name, c.state
+                    )));
+                }
+            }
+            _ => {
+                return Err(GraphError::conflict(format!(
+                    "{r} follows lifecycle {:?}, change {id} follows {:?}",
+                    lc.map(|l| l.name.as_str()).unwrap_or_default(),
+                    c.lifecycle
+                )));
+            }
+        }
+        self.lock_change(id).await?;
+        let mut c = self.change_head(id).await?;
+        if !matches!(c.status.as_str(), STATUS_DRAFT | STATUS_ACTIVE) {
+            return Err(GraphError::conflict(format!(
+                "change {id} is {}: it no longer changes version",
+                c.status
+            )));
+        }
+        if c.methodology_version == target {
+            return Ok(c);
+        }
+        let mut fields = json!({HEADER_METHODOLOGY_VERSION: {"from": c.methodology_version, "to": target}});
+        let mut chain = c.guardians.clone();
+        for g in chain.iter_mut().filter(|g| g.methodology == c.methodology) {
+            g.version = target.clone();
+        }
+        if chain != c.guardians {
+            fields[HEADER_GUARDIANS] = json!({"from": chain_value(&c.guardians), "to": chain_value(&chain)});
+            c.guardians = chain;
+        }
+        self.header_entry(id, fields).await?;
+        c.methodology_version = target;
+        self.put_change(&c).await?;
+        Ok(c)
     }
 }
 

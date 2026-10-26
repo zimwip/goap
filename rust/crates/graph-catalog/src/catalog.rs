@@ -150,6 +150,8 @@ pub struct Catalog {
     domains: BTreeMap<String, String>,
     structures: BTreeMap<String, Structure>,
     items: BTreeMap<String, ItemType>,
+    /// The lifecycles each domain declares, bound, by domain name: the lifecycles a methodology names for its changes.
+    lifecycles: BTreeMap<String, Vec<Arc<Lifecycle>>>,
     /// The namespaces whose domain runs algorithms (validators, transition guards or actions).
     scripted: Vec<String>,
 }
@@ -236,6 +238,10 @@ impl Catalog {
             if d.has_algorithms() {
                 c.scripted.push(d.name.clone());
             }
+            c.lifecycles.insert(
+                d.name.clone(),
+                d.lifecycles.iter().map(|l| Arc::new(bind_lifecycle(d, l))).collect(),
+            );
             for it in &d.item_types {
                 if let Some(prev) = c.items.get(&it.name) {
                     return Err(format!(
@@ -417,6 +423,13 @@ impl Catalog {
 
     pub fn lifecycle(&self, typ: &str) -> Option<&Arc<Lifecycle>> {
         self.typ(typ).and_then(|t| t.lifecycle.as_ref())
+    }
+
+    /// The lifecycle of a name the changes of a methodology of a namespace follow (registrysvc's `lifecycleIn`): the one
+    /// the domain of the namespace declares, else the first of the domains by name.
+    pub fn named_lifecycle(&self, name: &str, namespace: &str) -> Option<&Arc<Lifecycle>> {
+        let of = |d: &str| self.lifecycles.get(d)?.iter().find(|l| l.name == name);
+        of(namespace).or_else(|| self.lifecycles.keys().find_map(|d| of(d)))
     }
 
     /// The names of the attributes of a node type and whether the type is open (`additionalProperties`, or unknown).

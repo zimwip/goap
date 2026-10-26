@@ -2,7 +2,6 @@ package registrysvc
 
 import (
 	"encoding/json"
-	"fmt"
 	"maps"
 	"sort"
 	"strconv"
@@ -133,16 +132,4 @@ func encodeMethodology(m methodology.Methodology) (map[string]any, []defEl, erro
 	}
 	header, els := split(raw)
 	return header, els, nil
-}
-
-func decodeInto(header map[string]any, els []map[string]any, kinds []string, out any) error {
-	raw := join(header, els, kinds)
-	b, err := json.Marshal(raw)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(b, out); err != nil {
-		return fmt.Errorf("definition: %w", err)
-	}
-	return nil
 }

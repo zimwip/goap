@@ -5,8 +5,10 @@ use serde_json::{Map, Value};
 use super::{events, tx::Tx};
 use crate::{
     GraphError, Result,
-    change::Change,
+    access::Directory,
+    change::{Change, GuardianRef},
     lnk::Url,
+    methodologies::{self, Declared},
     model::{BRANCH_OPEN, Branch, ChangeId, Node, branch_of, namespace_of},
     read,
     store::WriteTx,
@@ -57,7 +59,71 @@ fn what(kind: &str) -> &'static str {
     }
 }
 
+/// What a change of a methodology follows, as the registry declares it (what Go's `CreateChange` asks of
+/// `ChangeLifecycles`).
+#[derive(Debug, Default)]
+pub(crate) struct Followed {
+    pub version: String,
+    pub goal: String,
+    pub lifecycle: String,
+    pub initial: String,
+    pub guardians: Vec<GuardianRef>,
+}
+
 impl<S: WriteTx> Tx<'_, S> {
+    /// What a change of a methodology at a version (none: the latest published), under a parent or in a project,
+    /// follows: the version, the main goal, the lifecycle and its initial state, the guardian chain (ADR 0106: a
+    /// sub-change takes its parent's and adds its own methodology, a root change the chain of the methodologies
+    /// integrating it in its project). Nothing for no methodology.
+    pub(crate) async fn resolve_methodology(
+        &mut self,
+        methodology: &str,
+        version: &str,
+        parent: &ChangeId,
+        project: &Url,
+    ) -> Result<Followed> {
+        let mut out = Followed {
+            version: version.to_string(),
+            ..Followed::default()
+        };
+        if methodology.is_empty() {
+            return Ok(out);
+        }
+        let declared = Declared::read(self.store).await?;
+        out.version = declared.version_of(&methodologies::reference(methodology, version))?;
+        let r = methodologies::reference(methodology, &out.version);
+        out.goal = declared.default_goal(&r);
+        if let Some(lc) = declared.lifecycle(self.catalog(), &r)? {
+            (out.lifecycle, out.initial) = (lc.name.clone(), lc.initial.clone());
+        }
+        out.guardians = if parent.is_empty() {
+            self.root_chain(&declared, &r, project).await?
+        } else {
+            let parent = self.change_head(parent).await?;
+            super::attach::chain_under(
+                &parent,
+                methodology,
+                Some(GuardianRef {
+                    methodology: methodology.to_string(),
+                    version: out.version.clone(),
+                }),
+            )
+        };
+        Ok(out)
+    }
+
+    /// The guardian chain of a root change of a methodology reference in a project (Go's `guardianChain` without a
+    /// parent, `registrysvc.Service.Guardians`): the methodologies integrating it among those applying to the project.
+    pub(crate) async fn root_chain(&mut self, declared: &Declared, r: &str, project: &Url) -> Result<Vec<GuardianRef>> {
+        let applicable = match project.key.is_empty() {
+            true => Vec::new(),
+            false => Directory::read(self.store, self.catalog())
+                .await?
+                .applicable(&project.key),
+        };
+        Ok(declared.guardians(r, &applicable))
+    }
+
     /// The URL of the node of a structure of a key (`Graph.StructureURL`).
     pub fn structure_url(&self, kind: &str, key: &str) -> Result<Url> {
         let st = self
@@ -175,8 +241,9 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(())
     }
 
-    /// Opens a root change (Go's `createChange` without a parent, a lifecycle or a guardian: the service has no
-    /// registry, as `platform/cmd/graph`).
+    /// Opens a change (Go's `CreateChange`): of a methodology the registry declares, it follows a version of it, starts
+    /// with its main goal and in the initial state of the lifecycle it names, its guardian chain computed once (ADR
+    /// 0058, 0096, 0106, 0113).
     pub async fn create_change(&mut self, mut inp: NewChange) -> Result<Change> {
         let org = STRUCTURE_ORGANISATION;
         let proj = STRUCTURE_PROJECT;
@@ -186,12 +253,30 @@ impl<S: WriteTx> Tx<'_, S> {
         let project = self
             .structure_ref(proj, &inp.project_id)
             .map_err(|e| e.context("project of the change"))?;
+        // the version of the methodology the change follows (ADR 0113): a sub-change stays on its parent's, a new change
+        // takes the latest published one; it keeps it while it runs
+        let mut version = inp.methodology_version.clone();
+        if version.is_empty()
+            && !inp.methodology.is_empty()
+            && !inp.parent_id.is_empty()
+            && let Ok(parent) = self.change_head(&inp.parent_id).await
+            && parent.methodology == inp.methodology
+        {
+            version = parent.methodology_version;
+        }
+        let m = self
+            .resolve_methodology(&inp.methodology, &version, &inp.parent_id, &project)
+            .await?;
         let mut c = Change {
             id: ChangeId(self.env.new_id()),
             title: inp.title.clone(),
             intent: inp.intent.clone(),
             methodology: inp.methodology.clone(),
-            methodology_version: inp.methodology_version.clone(),
+            methodology_version: m.version,
+            goal: m.goal,
+            lifecycle: m.lifecycle,
+            state: m.initial,
+            guardians: m.guardians,
             namespace: namespace_of(&inp.namespace).to_string(),
             status: STATUS_DRAFT.into(),
             baseline_id: inp.baseline_id.clone(),

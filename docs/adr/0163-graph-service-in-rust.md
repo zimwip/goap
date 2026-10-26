@@ -669,3 +669,17 @@ by its space (`graph-content`, `graph.export.content`), in Go and in Rust. `make
 `make local-bench` the bench through goap-proxy on SQLite: in mode shadow and compare no call diverged; on SQLite with
 four writers the Rust commits take about 970 ms at the median against Go's 755 (its reads two to three times faster),
 a gap still to look at.
+
+Addendum, what a change follows: the graph instantiates the hooks of the methodologies the registry declares (ADR
+0164), and the Rust graph reads them as Go's `platform/cmd/graph` does, in stages. First what a change follows
+(`graph_core::methodologies::Declared`, over the `MethodologyVersion` headers, their goals and processes and the links
+naming their main goals, at the head of main of `methodology`, or held from the platform graph in a content graph): the
+version a change follows (the one named, published or archived, else the latest published; a draft refused), its main
+goal, the lifecycle its methodology names (`Catalog::named_lifecycle`, Go's `lifecycleIn`) and its initial state, its
+guardian chain (the methodologies applying to its project that integrate it, followed upwards); at `CreateChange`,
+`SetChangeMethodology`, `UpgradeChange` (same lifecycle, knowing the state), `AttachChange` (the parent's methodology
+integrates the change's), `DetachChange` and `MoveChange` (the chain computed again). Not yet: a version suspended by
+the domains in force (the methodology is not compiled here), the domain versions a methodology pins (the lifecycle is
+read in the domains in force), the gates merged into the lifecycle; next, the conditions of the methodology (guards,
+gates, guardians: `TransitionChange` and the merge of a change following a lifecycle stay refused), then the cascade of
+the sub-changes and the standing of the steps.

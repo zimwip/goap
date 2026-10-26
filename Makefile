@@ -69,12 +69,15 @@ lint: ## go vet + gofmt + tidy go.mod files + dsl.md sync check
 
 # make dev builds the Rust binaries with the cargo profile dev-local, rebuilt in a fraction of release's time
 dev dev-backend: LOCAL_CARGO_PROFILE = dev-local
+# make dev runs the Go graph unless LOCAL_GRAPH says otherwise: the Rust graph does not run the lifecycle transitions and
+# guardians of the methodologies yet (ADR 0164)
+DEV_GRAPH = $(if $(filter environment command line,$(origin LOCAL_GRAPH)),$(LOCAL_GRAPH),go)
 
-dev: local-build ## on this machine, no docker: the local stack (make local) with the IDE, rebuilt and restarted on a change of the sources (Go and Rust): http://localhost:5173; Ctrl-C stops every process
-	$(LOCAL_BIN)/goap-local -watch -web -graph $(LOCAL_GRAPH) -cargo-profile $(LOCAL_CARGO_PROFILE) $(LOCAL_ARGS)
+dev: local-build ## on this machine, no docker: the local stack (make local, the Go graph unless LOCAL_GRAPH is set) with the IDE, rebuilt and restarted on a change of the sources (Go and Rust): http://localhost:5173; Ctrl-C stops every process
+	$(LOCAL_BIN)/goap-local -watch -web -graph $(DEV_GRAPH) -cargo-profile $(LOCAL_CARGO_PROFILE) $(LOCAL_ARGS)
 
 dev-backend: local-build ## the local stack without the IDE, rebuilt and restarted on a change of the sources: http://localhost:8080
-	$(LOCAL_BIN)/goap-local -watch -graph $(LOCAL_GRAPH) -cargo-profile $(LOCAL_CARGO_PROFILE) $(LOCAL_ARGS)
+	$(LOCAL_BIN)/goap-local -watch -graph $(DEV_GRAPH) -cargo-profile $(LOCAL_CARGO_PROFILE) $(LOCAL_ARGS)
 
 dev-web: ## IDE only, hot-reloaded by vite, proxied to the gateway: http://localhost:5173
 	cd web && npm install --no-audit --no-fund && npm run dev

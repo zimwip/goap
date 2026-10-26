@@ -3278,7 +3278,7 @@ impl pb::GraphService for Graph {
         .await
     }
 
-    /// Moves a change to another version of its methodology: with no registry wired, refused (`Graph.UpgradeChange`).
+    /// Moves a change to another version of its methodology (`Graph.UpgradeChange`).
     async fn upgrade_change(
         &self,
         _ctx: &Ctx,
@@ -3288,7 +3288,7 @@ impl pb::GraphService for Graph {
         let m = req.into_inner();
         self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             acc.allow(tx, &m.change_id, operations::CHANGE_UPGRADE).await?;
-            let c = tx.upgrade_change(&m.change_id.as_str().into()).await?;
+            let c = tx.upgrade_change(&m.change_id.as_str().into(), &m.version).await?;
             Ok(pb::UpgradeChangeResponse {
                 change: Some(convert::change(&c)),
             })

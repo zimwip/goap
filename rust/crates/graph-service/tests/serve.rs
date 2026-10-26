@@ -452,3 +452,144 @@ async fn a_protected_domain_refuses_every_write_over_rpc() {
         );
     }
 }
+
+#[tokio::test]
+async fn a_change_follows_what_its_methodology_declares() {
+    let (state, _registry) = states().await;
+    graph_service::Graph { state: state.clone() }
+        .boot(&Default::default())
+        .await
+        .unwrap();
+    let base = listen(app(state)).await;
+    let svc = Some(ADMIN);
+    let header = |name: &str, version: &str, at: &str, extra: serde_json::Value| {
+        let mut props = serde_json::json!({"name": name, "version": version, "status": "published", "publishedAt": at,
+            "namespace": "platform"});
+        props
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        serde_json::json!({"key": format!("MV:{name}@{version}"), "type": "methodology@MethodologyVersion", "props": props})
+    };
+    // a methodology in two versions, the later one with a lifecycle and a goal; another integrating it
+    let edits = serde_json::json!([
+        header("work", "1.0.0", "2026-01-01T00:00:00Z", serde_json::json!({})),
+        header("work", "1.1.0", "2026-02-01T00:00:00Z", serde_json::json!({"lifecycle": "config"})),
+        {"key": "MV:work@1.1.0/goal/second", "type": "methodology@Goal", "props": {"name": "second", "position": 1}},
+        {"key": "MV:work@1.1.0/goal/first", "type": "methodology@Goal", "props": {"name": "first", "position": 0}},
+        header("release", "2.0.0", "2026-01-01T00:00:00Z",
+            serde_json::json!({"integrates": [{"methodologies": ["work"], "exclusive": true}]})),
+    ]);
+    let (status, body) = call(
+        &base,
+        "CommitEdits",
+        svc,
+        serde_json::json!({"namespace": "methodology", "title": "declare", "projectId": "PROJ-ROOT", "edits": edits}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let (status, body) = call(
+        &base,
+        "CommitEdits",
+        svc,
+        serde_json::json!({"namespace": "organisation", "title": "project", "projectId": "PROJ-ROOT", "edits": [
+            {"key": "PROJ-W", "type": "organisation@ProjectUnit", "props": {"name": "W", "methodologies": ["work", "release"]},
+             "links": [{"type": "organisation@project_part_of", "toKey": "PROJ-ROOT"}]}]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let create = async |methodology: &str, version: &str| {
+        call(
+            &base,
+            "CreateChange",
+            svc,
+            serde_json::json!({"title": "c", "namespace": "platform", "ownBranch": true, "projectId": "PROJ-W",
+                "methodology": methodology, "methodologyVersion": version}),
+        )
+        .await
+    };
+    let (status, body) = create("work", "").await;
+    assert_eq!(status, 200, "{body}");
+    let c = &body["change"];
+    assert_eq!(c["methodologyVersion"], "1.1.0", "{body}");
+    assert_eq!(c["goal"], "first", "{body}");
+    assert_eq!(
+        (&c["lifecycle"], &c["state"]),
+        (&"config".into(), &"active".into()),
+        "{body}"
+    );
+    assert_eq!(
+        c["guardians"],
+        serde_json::json!([{"methodology": "release", "version": "2.0.0"}, {"methodology": "work", "version": "1.1.0"}]),
+        "{body}"
+    );
+    let id = c["id"].as_str().unwrap().to_string();
+    // the earlier version names no lifecycle: an upgrade to it would leave the change where no lifecycle knows it
+    let (_, body) = call(
+        &base,
+        "UpgradeChange",
+        svc,
+        serde_json::json!({"changeId": id, "version": "1.0.0"}),
+    )
+    .await;
+    assert_eq!(body["code"], "failed_precondition", "{body}");
+    let (status, body) = create("work", "9.9.9").await;
+    assert_eq!(status, 400, "{body}");
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("methodology work has no version 9.9.9"),
+        "{body}"
+    );
+    // the earlier version: no lifecycle, its goal none
+    let (status, body) = create("work", "1.0.0").await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["change"]["lifecycle"], serde_json::Value::Null, "{body}");
+    let old = body["change"]["id"].as_str().unwrap().to_string();
+    let (_, body) = call(&base, "UpgradeChange", svc, serde_json::json!({"changeId": old})).await;
+    assert_eq!(body["code"], "failed_precondition", "{body}");
+    // a change attaches under a change whose methodology integrates its own, never the other way
+    let (status, body) = create("release", "").await;
+    assert_eq!(status, 200, "{body}");
+    let release = body["change"]["id"].as_str().unwrap().to_string();
+    let (_, body) = call(
+        &base,
+        "AttachChange",
+        svc,
+        serde_json::json!({"changeId": release, "parentId": old}),
+    )
+    .await;
+    assert_eq!(body["code"], "invalid_argument", "{body}");
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("does not integrate the changes of"),
+        "{body}"
+    );
+    let (status, body) = call(
+        &base,
+        "AttachChange",
+        svc,
+        serde_json::json!({"changeId": old, "parentId": release}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    // detached, its chain is computed again for its project
+    let (status, body) = call(&base, "DetachChange", svc, serde_json::json!({"changeId": old})).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["change"]["guardians"],
+        serde_json::json!([{"methodology": "release", "version": "2.0.0"}, {"methodology": "work", "version": "1.0.0"}]),
+        "{body}"
+    );
+    // a methodology no one declares: no version, no lifecycle, its own guardian
+    let (status, body) = create("unknown", "").await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["change"]["guardians"],
+        serde_json::json!([{"methodology": "unknown"}]),
+        "{body}"
+    );
+}
