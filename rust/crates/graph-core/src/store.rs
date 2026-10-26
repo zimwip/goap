@@ -29,6 +29,12 @@ pub trait ReadTx: Sync {
         None
     }
 
+    /// What the methodologies of the changes are asked through (ADR 0168), plugged by the composition; none, the
+    /// changes follow no lifecycle and their commits rest on the committable states alone.
+    fn guardian(&self) -> Option<std::sync::Arc<dyn crate::guardian::Guardian>> {
+        None
+    }
+
     /// The order of the last commit on a branch (0: none).
     fn last_commit(&self, branch: &str) -> impl Future<Output = Result<i64>> + Send;
 

@@ -14,7 +14,6 @@ use super::{
 use crate::{
     GraphError, Result,
     change::{Change, GuardianRef},
-    methodologies::Declared,
     model::{Branch, ChangeId, branch_of, namespace_of},
     read,
     store::WriteTx,
@@ -78,11 +77,11 @@ impl<S: WriteTx> Tx<'_, S> {
     /// what it committed rebased there (a conflict refuses the move), its chain the parent's plus its methodology.
     pub async fn attach_change(&mut self, id: &ChangeId, parent: &ChangeId) -> Result<(Change, i64)> {
         let (c, p) = self.attachable(id, parent).await?;
-        if !c.methodology.is_empty()
-            && !Declared::read(self.store)
-                .await?
-                .integrates(&p.methodology_ref(), &c.methodology)
-        {
+        let integrates = match self.store.guardian() {
+            Some(g) if !c.methodology.is_empty() => g.integrates(&p.methodology_ref(), &c.methodology).await?,
+            _ => true,
+        };
+        if !integrates {
             return Err(GraphError::invalid(format!(
                 "methodology {:?} does not integrate the changes of {:?}",
                 p.methodology, c.methodology
@@ -127,10 +126,7 @@ impl<S: WriteTx> Tx<'_, S> {
         // its guardian chain computed again for its methodology and project
         let chain = match c.methodology.is_empty() {
             true => Vec::new(),
-            false => {
-                let declared = Declared::read(self.store).await?;
-                self.root_chain(&declared, &c.methodology_ref(), &c.project_id).await?
-            }
+            false => self.root_chain(&c.methodology_ref(), &c.project_id).await?,
         };
         let seq = super::work::fold_change(self.store, id).await?.seq;
         let target = self.root_target(&cur).await?;

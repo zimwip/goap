@@ -1,16 +1,15 @@
 //! The lifecycle of a change (ADR 0058): the domain defines the lifecycle, the methodology of the change names it and
-//! the graph instantiates it from what the registry declares (ADR 0163 addendum) — the states and the transitions of
-//! the domain, the criteria and the freezes of the gates of the methodology merged in. A move is checked by the CEL
-//! guard of the transition in the environment of the conditions of the methodology, by the vetos and objectives of its
-//! criteria (ADR 0075 §3), and by the guardians of the chain of the change (ADR 0106), all in the transaction of the
-//! move (ADR 0140); it is journaled as a `transition` item and moves the state. Going back to a state the change
+//! its guardian declares it (ADR 0168) — the states and the transitions of the domain, the criteria and the freezes of
+//! the gates of the methodology merged in. A move is checked by the guardian: the CEL guard of the transition in the
+//! environment of the conditions of the methodology, the vetos and objectives of its criteria (ADR 0075 §3), and the
+//! guardians of the chain of the change (ADR 0106), all asked in the transaction of the move (ADR 0140); it is
+//! journaled as a `transition` item and moves the state. Going back to a state the change
 //! already occupied asks for a new review of what was written after it left it.
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use graph_catalog::def::{Lifecycle, Transition};
-use graph_script::guard::{self, Guard};
 
 use super::{
     change::{STATUS_ACTIVE, STATUS_DRAFT},
@@ -23,7 +22,7 @@ use super::{
 use crate::{
     GraphError, Result,
     change::Change,
-    conditions::{activation::activation, board},
+    guardian::{self, Board, GateResult, Guardian},
     impact::{ImpactEvent, ImpactOp, LOG_FACT, LOG_IMPACT, Review, events_of},
     model::ChangeId,
     store::{ReadTx, WriteTx},
@@ -217,111 +216,14 @@ pub fn passed(moves: &[Move]) -> Vec<String> {
     out
 }
 
-/// A criterion of a transition (`domain.Criterion`), as the lifecycle of the domain or a gate of the methodology
-/// declares it.
-#[derive(Debug, Clone, Default, serde::Deserialize)]
-#[serde(default)]
-struct Criterion {
-    name: String,
-    expr: String,
-}
-
-/// What the criteria of a transition said (`domain.GateResult`): the vetos that do not hold, the objectives not met and
-/// the derogation covering each of those.
-#[derive(Debug, Clone, Default)]
-struct GateResult {
-    vetoed: Vec<String>,
-    unmet: Vec<String>,
-    reserve: BTreeMap<String, String>,
-}
-
-impl GateResult {
-    /// The objectives not met that no derogation covers (`GateResult.Uncovered`).
-    fn uncovered(&self) -> Vec<&str> {
-        self.unmet
-            .iter()
-            .filter(|u| !self.reserve.contains_key(*u))
-            .map(String::as_str)
-            .collect()
-    }
-
-    fn with_reserve(&self) -> bool {
-        !self.reserve.is_empty()
-    }
-}
-
-/// The variables a guard of a change reads (`condition.guardInputs`): the change with the transition asked for and the
-/// decision point gating it, the facts of the blackboard and the world state of the conditions.
-fn guard_env(
-    act: &Map<String, Value>,
-    world: &BTreeMap<String, bool>,
-    transition: &str,
-    decision: &str,
-    integrator: Option<Value>,
-) -> guard::Env {
-    let mut change = act
-        .get("change")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    change.insert("transition".into(), transition.into());
-    change.insert("decision".into(), decision.into());
-    let mut facts = Map::new();
-    for k in guard::FACTS {
-        if let Some(v) = act.get(k) {
-            facts.insert(k.into(), v.clone());
-        }
-    }
-    facts.insert(
-        "world".into(),
-        Value::Object(world.iter().map(|(k, v)| (k.clone(), Value::from(*v))).collect()),
-    );
-    if let Some(i) = integrator {
-        facts.insert("integrator".into(), i);
-    }
-    guard::Env {
-        change,
-        facts,
-        ..guard::Env::default()
-    }
-}
-
-/// Evaluates a guard expression over the blackboard of a change.
-fn check(env: &guard::Env, expr: &str) -> Result<bool> {
-    Guard::compile(expr)
-        .and_then(|g| g.check(env))
-        .map_err(GraphError::invalid)
-}
-
-/// The criteria of a transition (`condition.CheckGate`): a veto or an objective that does not hold is listed; an
-/// objective not met is covered when a derogation in force names it (its rule is the name of the objective).
-fn check_criteria(env: &guard::Env, t: &Transition, derogations: &[Value]) -> Result<GateResult> {
-    let mut res = GateResult::default();
-    let read = |v: &Value| serde_json::from_value::<Criterion>(v.clone()).unwrap_or_default();
-    for c in t.vetos.iter().map(read) {
-        if !check(env, &c.expr)? {
-            res.vetoed.push(c.name);
-        }
-    }
-    for c in t.objectives.iter().map(read) {
-        if check(env, &c.expr)? {
-            continue;
-        }
-        fn s<'v>(v: &'v Value, k: &str) -> &'v str {
-            v.get(k).and_then(Value::as_str).unwrap_or_default()
-        }
-        fn b(v: &Value, k: &str) -> bool {
-            v.get(k).and_then(Value::as_bool).unwrap_or_default()
-        }
-        if let Some(d) = derogations
-            .iter()
-            .find(|d| s(d, "rule") == c.name && b(d, "open") && !b(d, "expired"))
-        {
-            res.reserve.insert(c.name.clone(), s(d, "key").to_string());
-        }
-        res.unmet.push(c.name);
-    }
-    Ok(res)
+/// Whether a freeze freezes nothing beyond the phase of the state left (`Freezes.Empty`).
+fn freezes_empty(f: &Value) -> bool {
+    let none = |k: &str| {
+        f.get(k)
+            .and_then(Value::as_array)
+            .is_none_or(|a| !a.iter().any(Value::is_string))
+    };
+    none("fields") && none("types") && !keeps_phase(f)
 }
 
 /// The transition of a lifecycle out of a state, by name (`domain.Lifecycle.Transition`).
@@ -348,7 +250,7 @@ impl<S: WriteTx> Tx<'_, S> {
         if c.lifecycle.is_empty() {
             return Err(GraphError::invalid(format!("change {id} follows no lifecycle")));
         }
-        let (lc, instance) = self.change_lifecycle(&c).await?;
+        let (lc, raw) = self.change_lifecycle(&c).await?;
         let t = transition_of(&lc, &c.state, transition)
             .ok_or_else(|| {
                 GraphError::invalid(format!(
@@ -358,6 +260,18 @@ impl<S: WriteTx> Tx<'_, S> {
             })?
             .clone();
         authorize(&c, &t)?;
+        // the transition as the registry declares it, gates merged in: what its gate is asked on
+        let raw = raw
+            .get("transitions")
+            .and_then(Value::as_array)
+            .and_then(|ts| {
+                ts.iter().find(|r| {
+                    r.get("from").and_then(Value::as_str) == Some(t.from.as_str())
+                        && r.get("name").and_then(Value::as_str) == Some(t.name.as_str())
+                })
+            })
+            .cloned()
+            .unwrap_or(Value::Null);
         let hist = history(self.store, id).await?;
         let consumed = hist.consumed();
         if !decision.is_empty() {
@@ -373,21 +287,9 @@ impl<S: WriteTx> Tx<'_, S> {
                 )));
             }
         }
-        let at = self.env.now();
-        let wire = board::wire(self.store, self.catalog(), id, None, at).await?;
-        let facets = board::facets(self.store, &c).await?;
-        let mut act = activation(&wire, &facets);
-        let world = instance.set.evaluate(&act).state;
-        // the decision points that already gated a transition are left out of the gate (`checkGate`)
-        if let Some(points) = act.get_mut("decisionPoints").and_then(Value::as_array_mut) {
-            points.retain(|d| {
-                let id = d.get("id").and_then(Value::as_str).unwrap_or_default();
-                !consumed.contains(&id)
-            });
-        }
-        let env = guard_env(&act, &world, &t.name, decision, None);
-        let gate = self.check_gate(&c, &t, &env, &act).await?;
-        self.check_guardians(&c, &act, &world, &t.name).await?;
+        let mut board = guardian::judged(self.store, self.catalog(), &c, self.env.now()).await?;
+        let gate = self.check_gate(&c, &t, &raw, decision, &consumed, &mut board).await?;
+        self.check_guardians(&c, &board, &t.name).await?;
         let mut cur = self.change_head(id).await?;
         if cur.state != c.state {
             return Err(GraphError::conflict(format!(
@@ -404,11 +306,11 @@ impl<S: WriteTx> Tx<'_, S> {
         if !decision.is_empty() {
             data.insert("decision".into(), decision.into());
         }
-        if let Some(f) = t.freezes.as_ref().filter(|f| !crate::methodologies::freezes_empty(f)) {
+        if let Some(f) = t.freezes.as_ref().filter(|f| !freezes_empty(f)) {
             // what the move freezes beyond its phase (ADR 0132 §4), read back from the move by the guards of the edits
             data.insert("freezes".into(), f.clone());
         }
-        if gate.with_reserve() {
+        if !gate.reserve.is_empty() {
             // go with reserve (ADR 0075 §3): which objectives were not met and the derogation that covered each
             data.insert("unmet".into(), gate.unmet.clone().into());
             data.insert(
@@ -448,15 +350,19 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(cur)
     }
 
-    /// The lifecycle a change follows and the methodology version it is instantiated from (`changeLifecycle`).
-    pub(super) async fn change_lifecycle(&self, c: &Change) -> Result<(Lifecycle, crate::methodologies::Instance)> {
-        let declared = crate::methodologies::Declared::read(self.store).await?;
-        let instance = declared.instance(self.store, &c.methodology_ref()).await?;
-        let Some(instance) = instance else {
+    /// The lifecycle a change follows, as its guardian declares it for the version of its methodology, with the JSON
+    /// it was read from (`changeLifecycle`).
+    pub(super) async fn change_lifecycle(&self, c: &Change) -> Result<(Lifecycle, Value)> {
+        let Some(g) = self.store.guardian() else {
             return Err(unresolved_lifecycle(c));
         };
-        match instance.lifecycle(self.catalog())? {
-            Some(lc) if lc.name == c.lifecycle => Ok((lc, instance)),
+        let raw = g.lifecycle(&c.methodology_ref()).await?;
+        let lc = match &raw {
+            Some(v) => Some(serde_json::from_value::<Lifecycle>(v.clone()).map_err(GraphError::internal)?),
+            None => None,
+        };
+        match (lc, raw) {
+            (Some(lc), Some(raw)) if lc.name == c.lifecycle => Ok((lc, raw)),
             _ => Err(GraphError::invalid(format!(
                 "lifecycle {} of change {} is not the one of its methodology {:?}",
                 c.lifecycle, c.id, c.methodology
@@ -464,21 +370,45 @@ impl<S: WriteTx> Tx<'_, S> {
         }
     }
 
-    /// The guard of a transition, then its criteria (`checkGate`).
+    /// The guard of a transition, then its criteria (`checkGate`), asked of the guardian on the blackboard of the
+    /// change without the decision points that already gated a transition.
     async fn check_gate(
         &self,
         c: &Change,
         t: &Transition,
-        env: &guard::Env,
-        act: &Map<String, Value>,
+        raw: &Value,
+        decision: &str,
+        consumed: &[&str],
+        board: &mut Board,
     ) -> Result<GateResult> {
         let res = GateResult::default();
         if t.guard.is_empty() && t.vetos.is_empty() && t.objectives.is_empty() {
             return Ok(res);
         }
+        let Some(g) = self.store.guardian() else {
+            return Err(unresolved_lifecycle(c));
+        };
+        let points = board.decision_points.clone();
+        board.decision_points.retain(|d| !consumed.contains(&d.id.as_str()));
+        let res = self.gate_of(&*g, c, t, raw, decision, board).await;
+        board.decision_points = points;
+        res
+    }
+
+    async fn gate_of(
+        &self,
+        g: &dyn Guardian,
+        c: &Change,
+        t: &Transition,
+        raw: &Value,
+        decision: &str,
+        board: &Board,
+    ) -> Result<GateResult> {
         if !t.guard.is_empty() {
-            let ok = check(env, &t.guard)
-                .map_err(|e| GraphError::invalid(format!("guard of {} on change {}: {e}", t.name, c.id)))?;
+            let ok = g
+                .guard(board, &t.guard, &t.name, decision)
+                .await
+                .map_err(|e| GraphError::invalid(format!("guard of {} on change {}: {}", t.name, c.id, e.message)))?;
             if !ok {
                 return Err(GraphError::conflict(format!(
                     "change {} cannot take {}: gate not satisfied ({})",
@@ -487,15 +417,12 @@ impl<S: WriteTx> Tx<'_, S> {
             }
         }
         if t.vetos.is_empty() && t.objectives.is_empty() {
-            return Ok(res);
+            return Ok(GateResult::default());
         }
-        let derogations = act
-            .get("derogations")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        let res = check_criteria(env, t, &derogations)
-            .map_err(|e| GraphError::invalid(format!("criteria of {} on change {}: {e}", t.name, c.id)))?;
+        let res = g
+            .gate(board, raw, decision)
+            .await
+            .map_err(|e| GraphError::invalid(format!("criteria of {} on change {}: {}", t.name, c.id, e.message)))?;
         if !res.vetoed.is_empty() {
             return Err(GraphError::conflict(format!(
                 "change {} cannot take {}: vetoed by {}",
@@ -516,72 +443,32 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(res)
     }
 
-    /// The outer guardians of the chain of a change (ADR 0106), innermost first, each with its guard for a transition
-    /// or, with none, for a commit (`checkGuardians` over `registrysvc.Service.CheckGuardians`).
-    pub(super) async fn check_guardians(
-        &self,
-        c: &Change,
-        act: &Map<String, Value>,
-        world: &BTreeMap<String, bool>,
-        transition: &str,
-    ) -> Result<()> {
-        let outer: Vec<_> = c
-            .guardians
-            .iter()
-            .filter(|g| g.methodology != c.methodology)
-            .cloned()
-            .collect();
-        if outer.is_empty() {
+    /// The outer guardians of the chain of a change (ADR 0106), asked of the guardian about a transition or, with
+    /// none, a commit (`checkGuardians`).
+    pub(super) async fn check_guardians(&self, c: &Change, board: &Board, transition: &str) -> Result<()> {
+        if !c.guardians.iter().any(|g| g.methodology != c.methodology) {
             return Ok(());
         }
-        let declared = crate::methodologies::Declared::read(self.store).await?;
+        let Some(g) = self.store.guardian() else {
+            return Ok(());
+        };
         let ancestors = self.ancestors(c).await?;
-        for (i, g) in c.guardians.iter().enumerate().rev() {
-            if g.methodology == c.methodology {
-                continue; // its own: the lifecycle and the commits of the change
-            }
-            let reference = crate::methodologies::reference(&g.methodology, &g.version);
-            // the version saved in the chain, else the latest one (`guardianMethodology`)
-            let Some(d) = declared
-                .get(&reference)
-                .or_else(|| declared.get(&g.methodology))
-                .cloned()
-            else {
-                continue; // a guardian the registry no longer knows says nothing
-            };
-            let inner = c
-                .guardians
-                .get(i + 1)
-                .map_or(c.methodology.as_str(), |n| n.methodology.as_str());
-            let expr = if transition.is_empty() {
-                d.commit_guard(inner)
-            } else {
-                d.transition_guard(transition)
-            };
-            if expr.is_empty() {
-                continue;
-            }
-            let integrator = ancestors.iter().find(|a| a.methodology == g.methodology).map(|a| {
-                json!({"attached": true, "id": a.id.as_str(), "methodology": a.methodology, "state": a.state,
-                        "status": a.status})
-            });
-            let env = guard_env(act, world, transition, "", integrator);
-            let ok = check(&env, &expr).map_err(|e| {
-                GraphError::invalid(format!("guardians of change {}: guardian {}: {e}", c.id, g.methodology))
-            })?;
-            if !ok {
-                let what = if transition.is_empty() {
-                    "commit".to_string()
-                } else {
-                    format!("take {transition}")
-                };
-                return Err(GraphError::conflict(format!(
-                    "change {} cannot {what}: its guardian {} requires {expr}",
-                    c.id, g.methodology
-                )));
-            }
+        let refusal = g
+            .check_guardians(board, transition, &ancestors)
+            .await
+            .map_err(|e| GraphError::invalid(format!("guardians of change {}: {}", c.id, e.message)))?;
+        if refusal.is_empty() {
+            return Ok(());
         }
-        Ok(())
+        let what = if transition.is_empty() {
+            "commit".to_string()
+        } else {
+            format!("take {transition}")
+        };
+        Err(GraphError::conflict(format!(
+            "change {} cannot {what}: its guardian {refusal}",
+            c.id
+        )))
     }
 
     /// The parent changes of a change, nearest first.

@@ -30,6 +30,7 @@ import (
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/domainclient"
 	"github.com/zimwip/goap/lib/graphclient"
+	"github.com/zimwip/goap/lib/guardianclient"
 	"github.com/zimwip/goap/lib/identity"
 	"github.com/zimwip/goap/lib/jobkit"
 	"github.com/zimwip/goap/lib/llmcfg"
@@ -39,7 +40,6 @@ import (
 	"github.com/zimwip/goap/lib/typecat"
 	"github.com/zimwip/goap/platform/devseed"
 	"github.com/zimwip/goap/platform/modelgw"
-	"github.com/zimwip/goap/platform/registrysvc"
 )
 
 // loadTypes loads the type catalogue until it holds the domains the seeds write to, then runs the seeds.
@@ -227,27 +227,16 @@ func main() {
 	g.Facets = map[string]graph.BlackboardFacet{domain.FacetCriticalityPolicy: directory.CriticalityFacet()}
 	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, access.ProjectScopeValidator{}, access.ProjectOwnerValidator{},
 		llmcfg.ProtectedAliasValidator{}, graphsvc.PlatformSourceValidator{}}
-	// the methodology registry declares the methodologies, nodes of the platform graph (this one, else the platform's
-	// in a content graph: ADR 0023, 0154 §9); the graph instantiates from them what it asks of a change's methodology:
-	// its lifecycle, guards and gates (ADR 0058), the guardian of its commits and its chain of guardians (ADR 0106,
-	// 0146), the cascade of its sub-changes (ADR 0066), the standing of its steps (ADR 0109) and the roles of its
-	// operations (ADR 0103). A reader of the methodologies only: it seeds, publishes and announces nothing
-	var declared registrysvc.StoreGraph = g
-	if content {
-		declared = graphclient.NewClient(platform.H2CClient(), platformURL, telemetry.ClientOptions()...)
-	}
-	methodologies := &registrysvc.Service{Store: registrysvc.NewGraphStore(declared), Domains: client, Authz: authorizer,
-		Applicable: applicable(directory), Log: log}
-	g.Lifecycles = methodologies
-	g.SubChangeValidator = methodologies.SubChangeValidator
-	g.LogFacets = graphsvc.LogFacets(func(ctx context.Context, name string) map[string]map[string]bool {
-		m, err := methodologies.Methodology(ctx, name)
-		if err != nil {
-			return nil
-		}
-		return m.StepDependencies()
-	})
-	g.OperationAuthorizer = graphsvc.OperationAuthorizer(authorizer, methodologies.OperationRoles)
+	// the graph knows no methodology (ADR 0168): what it asks of the methodology of a change (its lifecycle, guards and
+	// gates, ADR 0058; the guardian of its commits and its chain of guardians, ADR 0106, 0146; the cascade of its
+	// sub-changes, ADR 0066; the standing of its steps, ADR 0109; the roles of its operations, ADR 0103) its hooks ask
+	// the methodology registry, which compiles the methodologies it declares and answers on the blackboard sent
+	guardian := guardianclient.NewClient(platform.H2CClient(), platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"),
+		telemetry.ClientOptions()...)
+	g.Lifecycles = guardian
+	g.SubChangeValidator = guardian.SubChangeValidator
+	g.LogFacets = graphsvc.LogFacets(guardian.StepDependencies)
+	g.OperationAuthorizer = graphsvc.OperationAuthorizer(authorizer, guardian.OperationRoles)
 	// the bootstrap writes to the built-in domains (the registry's, ADR 0167: the graph waits for them); the demo seed
 	// needs alm. GOAP_GRAPH_SEED=dev seeds
 	// the development data (the document-repository MCP), =demo the demo data too; otherwise an administrator loads the
@@ -343,17 +332,5 @@ func main() {
 	srv.Mount(importerv1connect.NewImportServiceHandler(&importsvc.Handler{Service: imports}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
-	}
-}
-
-// applicable lists the methodologies applicable to a project from the snapshot of the organisation (ADR 0106: where
-// the guardian chain of a change finds the methodologies integrating its own).
-func applicable(d *access.Directory) func(ctx context.Context, project string) ([]string, error) {
-	return func(ctx context.Context, project string) ([]string, error) {
-		s, err := d.Snapshot(ctx)
-		if err != nil || s == nil {
-			return nil, err
-		}
-		return s.ApplicableMethodologies(project), nil
 	}
 }

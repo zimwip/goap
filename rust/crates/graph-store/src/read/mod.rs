@@ -46,6 +46,8 @@ pub struct Session {
     platform: Option<std::sync::Arc<graph_core::platform::Platform>>,
     /// The type catalogue in force ([`ReadTx::catalog`]).
     catalog: Option<std::sync::Arc<graph_catalog::Catalog>>,
+    /// What the methodologies of the changes are asked through ([`ReadTx::guardian`]).
+    guardian: Option<std::sync::Arc<dyn graph_core::guardian::Guardian>>,
     /// The versions kept between the transactions of the store, and what this one read ([`versions`]).
     versions: std::sync::Arc<Versions>,
     tx: versions::Read,
@@ -90,6 +92,12 @@ impl Session {
         self
     }
 
+    /// The session asking the methodologies of its changes of a guardian (ADR 0168).
+    pub fn with_guardian(mut self, g: Option<std::sync::Arc<dyn graph_core::guardian::Guardian>>) -> Session {
+        self.guardian = g;
+        self
+    }
+
     /// The session reading the platform's namespaces from what the request read of the platform graph.
     pub fn with_platform(mut self, p: Option<std::sync::Arc<graph_core::platform::Platform>>) -> Session {
         self.platform = p;
@@ -102,6 +110,7 @@ impl Session {
             sql: Sql { pg: true },
             platform: None,
             catalog: None,
+            guardian: None,
             versions,
             tx: Default::default(),
         }
@@ -113,6 +122,7 @@ impl Session {
             sql: Sql { pg: false },
             platform: None,
             catalog: None,
+            guardian: None,
             versions,
             tx: Default::default(),
         }
@@ -129,6 +139,7 @@ impl Session {
             sql: Sql { pg: true },
             platform: None,
             catalog: None,
+            guardian: None,
             versions,
             tx: Default::default(),
         })
@@ -140,6 +151,7 @@ impl Session {
             sql: Sql { pg: false },
             platform: None,
             catalog: None,
+            guardian: None,
             versions,
             tx: Default::default(),
         }
@@ -414,6 +426,10 @@ impl ReadTx for Session {
 
     fn platform(&self) -> Option<&graph_core::platform::Platform> {
         self.platform.as_deref()
+    }
+
+    fn guardian(&self) -> Option<std::sync::Arc<dyn graph_core::guardian::Guardian>> {
+        self.guardian.clone()
     }
 
     async fn last_commit(&self, branch: &str) -> Result<i64, GraphError> {

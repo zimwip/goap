@@ -4,13 +4,12 @@
 use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::{
     Result,
     change::Change,
     impact::{LOG_FACT, LOG_IMPACT, LogEntry},
-    methodologies::{self, Declared},
     store::ReadTx,
 };
 
@@ -119,31 +118,6 @@ pub struct StepRun {
 pub struct History {
     pub runs: Vec<Run>,
     pub steps: Vec<StepRun>,
-}
-
-impl History {
-    /// The history as the conditions read it: `{runs, steps, last}`, `last` mapping each step path to its latest run.
-    pub fn value(&self) -> Value {
-        let runs: Vec<Value> = self
-            .runs
-            .iter()
-            .map(|r| {
-                json!({"process": r.process, "parent": r.parent, "methodology": r.methodology, "agent": r.agent,
-                    "goal": r.goal, "status": r.status, "seq": r.seq})
-            })
-            .collect();
-        let mut steps = Vec::with_capacity(self.steps.len());
-        let mut last = Map::new();
-        for s in &self.steps {
-            let m = json!({"path": s.path, "methodology": s.methodology, "process": s.process, "action": s.action,
-                "execution": s.execution, "outcome": s.outcome, "succeeded": s.outcome == OUTCOME_SUCCEEDED,
-                "error": s.error, "seq": s.seq, "runs": s.runs, "current": s.current, "staleBy": s.stale_by,
-                "subject": s.subject});
-            steps.push(m.clone());
-            last.insert(s.path.clone(), m);
-        }
-        json!({"runs": runs, "steps": steps, "last": last})
-    }
 }
 
 /// A write that may move what a step started from: an event on an impact, or a version of a keyed item (`writeOf`).
@@ -442,28 +416,24 @@ fn current(
 }
 
 /// The history facet of the blackboard of a change, as the graph folds it (`graphsvc.LogFacets` with
-/// `journal.FoldWith`): the entries of its log the fold reads, with the step dependencies of each methodology that ran
-/// on it (the change's own at the version it follows, ADR 0113).
-pub async fn of<T: ReadTx>(tx: &T, c: &Change) -> Result<Value> {
+/// `journal.FoldWith`): the entries of its log the fold reads, with the step dependencies the guardian gives of each
+/// methodology that ran on it (the change's own at the version it follows, ADR 0113); none relying on another with no
+/// guardian.
+pub async fn of<T: ReadTx>(tx: &T, c: &Change) -> Result<History> {
     let prefixes: Vec<&str> = TYPES.to_vec();
     let entries = tx.log(&c.id, 0, &prefixes).await?;
     let mut relies = Relies::new();
-    let mut declared: Option<Declared> = None;
-    for name in methodologies_of(&entries) {
-        let d = match &declared {
-            Some(d) => d,
-            None => declared.insert(Declared::read(tx).await?),
-        };
-        let reference = if name == c.methodology {
-            methodologies::reference(&c.methodology, &c.methodology_version)
-        } else {
-            name.clone()
-        };
-        if let Some(i) = d.instance(tx, &reference).await? {
-            relies.insert(name, i.derived.step_deps);
+    if let Some(g) = tx.guardian() {
+        for name in methodologies_of(&entries) {
+            let reference = if name == c.methodology {
+                c.methodology_ref()
+            } else {
+                name.clone()
+            };
+            relies.insert(name, g.step_dependencies(&reference).await?);
         }
     }
-    Ok(fold(&entries, &relies).value())
+    Ok(fold(&entries, &relies))
 }
 
 /// The methodologies the runs of a log name, in the order they appear.
@@ -516,7 +486,7 @@ mod tests {
             let mut want = c["history"].clone();
             for k in ["runs", "steps"] {
                 if want[k].is_null() {
-                    want[k] = json!([]);
+                    want[k] = serde_json::json!([]);
                 }
             }
             assert_eq!(got, want, "{}", c["name"]);

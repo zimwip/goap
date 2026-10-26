@@ -9,10 +9,12 @@
 //! service delivers them); the service bootstraps itself only with `GOAP_GRAPH_BOOTSTRAP=1` or a database in memory.
 //! The bootstrap seeds the models of `GOAP_MODELS_CONFIG` (else the default, Anthropic when its key is in Vault or
 //! `ANTHROPIC_API_KEY`), declares the sources of `GOAP_GRAPH_SOURCES`, and with `GOAP_GRAPH_SEED=dev` the development data, `=demo`
-//! the demo too.
+//! the demo too. The methodologies of the changes are asked of the guardian service of the methodology registry at
+//! `GOAP_REGISTRY_URL` (ADR 0168, default `http://localhost:8082`): what a change follows, the guards and the gates of
+//! its moves, the guardians of its commits, the roles of its operations.
 //!
 //! `GOAP_GRAPH_SPACE=content` makes it a content graph (ADR 0154 §9): it holds the domains' content and reads the
-//! organisation, the projects and the methodologies from the platform graph at `GOAP_PLATFORM_GRAPH_URL`, serves the
+//! organisation and the projects from the platform graph at `GOAP_PLATFORM_GRAPH_URL`, serves the
 //! graph service alone, and has nothing to bootstrap.
 use std::sync::Arc;
 
@@ -55,9 +57,14 @@ async fn main() -> anyhow::Result<()> {
     ));
     // a graph types nothing without the built-in domains: the registry, started first, seeds them
     registry.wait_for_builtins(60).await.context("domain registry")?;
+    // the methodologies of the changes are the methodology registry's (ADR 0168): their guardian is asked there
+    let guardian: Arc<dyn graph_core::guardian::Guardian> = Arc::new(graph_service::guardian::Client::new(
+        &std::env::var("GOAP_REGISTRY_URL").unwrap_or_else(|_| "http://localhost:8082".into()),
+    ));
     if bootstrap_only {
         let mut state = State::new(store);
         state.domains = Some(DomainSource::Remote(registry));
+        state.guardian = Some(guardian);
         // the events of the bootstrap stay in the outbox: the service delivers them
         state.outbox = !nats.is_empty();
         let state = Arc::new(state);
@@ -75,6 +82,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(%addr, dialect = ?store.dialect(), "goap-graph-rs serving");
     let mut state = State::new(store);
     state.domains = Some(DomainSource::Remote(registry.clone()));
+    state.guardian = Some(guardian);
     if content {
         state.space = "content";
     }

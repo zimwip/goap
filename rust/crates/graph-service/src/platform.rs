@@ -22,7 +22,7 @@ use graph_catalog::{
 use graph_core::{
     GraphError,
     lnk::Url,
-    model::{ChangeId, Link, LinkId, MAIN_BRANCH, NAMESPACE_METHODOLOGY, Node, NodeId, NodeRef, Target},
+    model::{ChangeId, Link, LinkId, MAIN_BRANCH, Node, NodeId, NodeRef, Target},
     platform::{Held, Platform},
 };
 use tokio::sync::Mutex;
@@ -33,10 +33,9 @@ pub const DOMAINS_TTL: Duration = Duration::from_secs(30);
 /// The subject a graph calls the other services as (`graphclient.ClientPrincipal`).
 const CLIENT_SUBJECT: &str = "system:client";
 
-const TYPE_ROLE: &str = "methodology@Role";
 const STATUS_PUBLISHED: &str = "published";
 
-fn client(url: &str) -> goap_connect::Client {
+pub(crate) fn client(url: &str) -> goap_connect::Client {
     goap_connect::Client::builder(url)
         .header("X-Goap-Subject", CLIENT_SUBJECT)
         .build()
@@ -219,30 +218,19 @@ impl Remote {
         }
     }
 
-    /// What the platform graph holds of the organisation and the methodologies now: read again where a head moved.
+    /// What the platform graph holds of the organisation now: read again when its head moved.
     pub async fn platform(&self, cat: &Catalog) -> Result<Arc<Platform>, GraphError> {
         let org = cat
             .structure(STRUCTURE_ORGANISATION)
             .map(|s| s.namespace.clone())
             .unwrap_or_default();
-        let (org_head, meth_head) = (self.head(&org).await?, self.head(NAMESPACE_METHODOLOGY).await?);
+        let org_head = self.head(&org).await?;
         let mut cur = self.heads.lock().await;
-        if cur.organisation.baseline == org_head && cur.methodology.baseline == meth_head {
+        if cur.organisation.baseline == org_head {
             return Ok(cur.clone());
         }
-        let organisation = if cur.organisation.baseline == org_head {
-            cur.organisation.clone()
-        } else {
-            self.organisation(&org_head).await?
-        };
-        let methodology = if cur.methodology.baseline == meth_head {
-            cur.methodology.clone()
-        } else {
-            self.methodologies(&meth_head).await?
-        };
         *cur = Arc::new(Platform {
-            organisation,
-            methodology,
+            organisation: self.organisation(&org_head).await?,
         });
         Ok(cur.clone())
     }
@@ -284,37 +272,6 @@ impl Remote {
         Ok(Held {
             baseline: baseline.into(),
             nodes: g.nodes.iter().map(node).filter(|n| !n.deleted).collect(),
-            links: g.links.iter().map(link).collect(),
-        })
-    }
-
-    /// The versions of the methodologies at a baseline, their roles, goals and processes and the links naming their
-    /// main goals: what the roles of an operation and what a change follows are read from.
-    async fn methodologies(&self, baseline: &str) -> Result<Held, GraphError> {
-        if baseline.is_empty() {
-            return Ok(Held::default());
-        }
-        let g = self
-            .graph
-            .get_baseline_graph(
-                &Ctx::background(),
-                Request::new(pb::GetBaselineGraphRequest { id: baseline.into() }),
-            )
-            .await
-            .map_err(|e| unavailable("platform graph: methodologies", e))?
-            .into_inner();
-        // the roles the operations read, and every element of a methodology version: the graph instantiates the
-        // lifecycle, the gates and the conditions of a change from them (ADR 0163 addendum)
-        let held = |t: &str| t == TYPE_ROLE || t.starts_with("methodology@");
-        Ok(Held {
-            baseline: baseline.into(),
-            nodes: g
-                .nodes
-                .iter()
-                .filter(|n| held(&n.r#type))
-                .map(node)
-                .filter(|n| !n.deleted)
-                .collect(),
             links: g.links.iter().map(link).collect(),
         })
     }

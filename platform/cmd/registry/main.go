@@ -44,6 +44,11 @@ func main() {
 		if err := directory.FollowEvents(events); err != nil {
 			platform.Fatal(log, "subscribe", err)
 		}
+		// the methodologies, compiled once, until a commit of them moves their head (ADR 0168): the graphs asking about
+		// a change are answered without the registry reading them back
+		if err := store.FollowEvents(events); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
 	}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
@@ -95,6 +100,8 @@ func main() {
 		}
 	}()
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: svc}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
+	// what the graphs ask of the methodologies of their changes (ADR 0168)
+	srv.Mount(registryv1connect.NewChangeGuardianServiceHandler(&registrysvc.GuardianHandler{Service: svc}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

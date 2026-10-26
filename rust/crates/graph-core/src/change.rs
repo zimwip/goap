@@ -61,7 +61,7 @@ impl Change {
     /// The reference of the version of its methodology the change follows (`domain.Change.MethodologyRef`): a bare name
     /// for the latest.
     pub fn methodology_ref(&self) -> String {
-        crate::methodologies::reference(&self.methodology, &self.methodology_version)
+        reference(&self.methodology, &self.methodology_version)
     }
 
     /// Whether a personal unit holds the change: only its subject reads it.
@@ -787,6 +787,16 @@ async fn diff_states<T: ReadTx>(
     }
     out.sort_by(|x, y| x.key.cmp(&y.key));
     Ok(out)
+}
+
+/// A reference of a methodology at a version (`domain.MethodologyRef`): a bare name for none, its latest published
+/// version.
+pub fn reference(name: &str, version: &str) -> String {
+    if version.is_empty() {
+        name.to_string()
+    } else {
+        format!("{name}@{version}")
+    }
 }
 
 #[cfg(test)]

@@ -735,3 +735,9 @@ the nodes of its version and compiles its conditions, where Go's registry keeps 
 is not validated again (what the registry refuses to publish generates nothing here); a scoped condition reading the
 conditions of other subjects through the lists of the activation sees them empty; the entry of a step naming a nested
 process does not carry what that process needs from outside, so a dependency only that would show is not seen.
+
+Addendum, the guardian over RPC (ADR 0168): the two addenda above, the graph instantiating what a change follows and
+the conditions, the gates and the guardians, are superseded. The graph knows no methodology: the Rust graph asks the
+methodology registry's `ChangeGuardianService` through its `graph_core::guardian::Guardian` (`GOAP_REGISTRY_URL`), as
+Go's `platform/cmd/graph` does through `lib/guardianclient`; `graph_core::methodologies`, `conditions` and
+`graph_script::conditions`, with their golden cases, are removed. The history fold stays the graph's.

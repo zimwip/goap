@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -154,6 +155,34 @@ func TestStack(t *testing.T) {
 			}
 			return slices.ContainsFunc(resp.Msg.Hits, func(h *indexv1.Hit) bool { return h.Key == key }), nil
 		})
+	})
+
+	t.Run("the methodology of a change is asked of the registry", func(t *testing.T) {
+		// the graph knows no methodology (ADR 0168): what a change follows and the gate of its moves are the
+		// registry's answers, on the blackboard the graph sends
+		created, err := graph.CreateChange(ctx, connect.NewRequest(&graphv1.CreateChangeRequest{
+			Title: "Stack test change " + run, Namespace: "alm", ProjectId: "PROJ-ROOT", Methodology: "sdlc", OwnBranch: true,
+		}))
+		if err != nil {
+			t.Fatalf("create: %v", err)
+		}
+		c := created.Msg.Change
+		if c.Lifecycle != "maturity_of_change" || c.State != "framing" || c.MethodologyVersion == "" || len(c.Guardians) == 0 {
+			t.Fatalf("change follows %s@%s, lifecycle %q in %q, guardians %v", c.Methodology, c.MethodologyVersion, c.Lifecycle, c.State, c.Guardians)
+		}
+		// the framing is not confirmed: its gate refuses the analysis (a blackboard the registry could not read would be
+		// an invalid argument, an unreachable registry unavailable)
+		_, err = graph.TransitionChange(ctx, connect.NewRequest(&graphv1.TransitionChangeRequest{ChangeId: c.Id, Transition: "analyse"}))
+		if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "cannot take analyse") {
+			t.Fatalf("analyse before the framing is confirmed: %v, want a refusal of its gate", err)
+		}
+		moved, err := graph.TransitionChange(ctx, connect.NewRequest(&graphv1.TransitionChangeRequest{ChangeId: c.Id, Transition: "abandon"}))
+		if err != nil {
+			t.Fatalf("abandon: %v", err)
+		}
+		if moved.Msg.Change.State != "abandoned" {
+			t.Fatalf("state %q, want abandoned", moved.Msg.Change.State)
+		}
 	})
 
 	t.Run("an export job runs on the graph's worker", func(t *testing.T) {

@@ -146,3 +146,6 @@ func ItemPolicy(resolve Resolver) func(ctx context.Context, c domain.Change, it 
 		return nil
 	}
 }
+
+// the policy of the level of a change travels with its blackboard as a Policy (ADR 0168)
+func init() { domain.RegisterFacet[Policy](domain.FacetCriticalityPolicy) }

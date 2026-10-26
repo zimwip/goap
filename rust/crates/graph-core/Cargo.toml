@@ -8,6 +8,7 @@ publish = false
 description = "The pure core of the Rust graph service (ADR 0163): the model, views, selections and pages, with no I/O"
 
 [dependencies]
+async-trait = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

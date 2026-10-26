@@ -1,0 +1,176 @@
+syntax = "proto3";
+
+package goap.registry.v1;
+
+import "goap/graph/v1/graph.proto";
+import "google/protobuf/timestamp.proto";
+
+// ChangeGuardianService is what a graph asks of the methodologies of its changes (ADR 0168). The graph knows no
+// methodology: it offers the hooks (the lifecycle of a change, its guards and gates, the guardian of its commits and
+// the chain of guardians, the cascade of its sub-changes, the roles of its operations, the steps its history weighs) and
+// the composition plugs them with a client of this service, which compiles the methodologies the registry declares
+// (with its cache, invalidated when a commit moves them) and answers on the blackboard the graph sends. A methodology
+// is named by a reference, `<name>@<version>`, a bare name being its latest published version.
+service ChangeGuardianService {
+  // The version a new change of a methodology follows; empty when the registry does not know it.
+  rpc ResolveMethodologyVersion(ResolveMethodologyVersionRequest) returns (ResolveMethodologyVersionResponse);
+  // The lifecycle the changes of a methodology follow, gates merged in; none when it names none.
+  rpc GetChangeLifecycle(GetChangeLifecycleRequest) returns (GetChangeLifecycleResponse);
+  // The main goal the changes of a methodology start with.
+  rpc GetDefaultGoal(GetDefaultGoalRequest) returns (GetDefaultGoalResponse);
+  // The guard of a transition of the lifecycle of a change, on its blackboard.
+  rpc CheckGuard(CheckGuardRequest) returns (CheckGuardResponse);
+  // The vetos and objectives of a transition, on the blackboard of the change.
+  rpc CheckGate(CheckGateRequest) returns (CheckGateResponse);
+  // The say of the methodology on a commit of a change, on the blackboard of what it committed.
+  rpc CheckCommit(CheckCommitRequest) returns (CheckCommitResponse);
+  // The guardian chain of a new root change of a methodology in a project.
+  rpc GetGuardians(GetGuardiansRequest) returns (GetGuardiansResponse);
+  // Whether the changes of a methodology integrate the changes of another.
+  rpc CheckIntegrates(CheckIntegratesRequest) returns (CheckIntegratesResponse);
+  // The outer guardians of the chain of a change on a transition, or on its commit when none is named.
+  rpc CheckGuardians(CheckGuardiansRequest) returns (CheckGuardiansResponse);
+  // The activity of a sub-change against its parent's: an invalid argument when it is not part of it.
+  rpc CheckSubChange(CheckSubChangeRequest) returns (CheckSubChangeResponse);
+  // The roles of a methodology allowed an operation on its changes.
+  rpc GetOperationRoles(GetOperationRolesRequest) returns (GetOperationRolesResponse);
+  // Which steps of a methodology rely on which, to weigh the history of a change.
+  rpc GetStepDependencies(GetStepDependenciesRequest) returns (GetStepDependenciesResponse);
+}
+
+// The blackboard of a change as the graph observes it (GetBlackboard's answer, with what the graph adds): the options,
+// the active option and the decision points as GetBlackboard carries them; the other facets (dependencies, history,
+// criticality policy...) each the JSON of its value.
+message Blackboard {
+  goap.graph.v1.Change change = 1;
+  repeated goap.graph.v1.NodeView nodes = 2;
+  repeated goap.graph.v1.Node neighbors = 3;
+  // JSON object
+  bytes vars = 4;
+  map<string, Names> supertypes = 5;
+  map<string, bytes> facets = 6;
+  google.protobuf.Timestamp at = 7;
+  repeated goap.graph.v1.Flow options = 8;
+  string active_option = 9;
+  repeated goap.graph.v1.DecisionPoint decision_points = 10;
+}
+
+message Names {
+  repeated string names = 1;
+}
+
+message ResolveMethodologyVersionRequest {
+  string methodology = 1;
+}
+
+message ResolveMethodologyVersionResponse {
+  string version = 1;
+}
+
+message GetChangeLifecycleRequest {
+  string methodology = 1;
+}
+
+message GetChangeLifecycleResponse {
+  // the JSON of the lifecycle (its states, its transitions with their criteria and freezes); empty: none
+  bytes lifecycle = 1;
+}
+
+message GetDefaultGoalRequest {
+  string methodology = 1;
+}
+
+message GetDefaultGoalResponse {
+  string goal = 1;
+}
+
+message CheckGuardRequest {
+  Blackboard blackboard = 1;
+  string expr = 2;
+  string transition = 3;
+  string decision = 4;
+}
+
+message CheckGuardResponse {
+  bool ok = 1;
+}
+
+message CheckGateRequest {
+  Blackboard blackboard = 1;
+  // the JSON of the transition
+  bytes transition = 2;
+  string decision = 3;
+}
+
+message CheckGateResponse {
+  // the JSON of what the criteria came to
+  bytes result = 1;
+}
+
+message CheckCommitRequest {
+  goap.graph.v1.Change change = 1;
+  Blackboard blackboard = 2;
+}
+
+message CheckCommitResponse {
+  // false: the methodology has no say and the committable states decide
+  bool decided = 1;
+  bool ok = 2;
+}
+
+message GetGuardiansRequest {
+  string methodology = 1;
+  string project = 2;
+}
+
+message GetGuardiansResponse {
+  repeated goap.graph.v1.GuardianRef guardians = 1;
+}
+
+message CheckIntegratesRequest {
+  string integrator = 1;
+  string methodology = 2;
+}
+
+message CheckIntegratesResponse {
+  bool integrates = 1;
+}
+
+message CheckGuardiansRequest {
+  Blackboard blackboard = 1;
+  // empty: the commit
+  string transition = 2;
+  // the parent changes, nearest first
+  repeated goap.graph.v1.Change ancestors = 3;
+}
+
+message CheckGuardiansResponse {
+  // the guardian that refused and why; empty when they all agree
+  string refusal = 1;
+}
+
+message CheckSubChangeRequest {
+  goap.graph.v1.Change parent = 1;
+  goap.graph.v1.Change child = 2;
+}
+
+message CheckSubChangeResponse {}
+
+message GetOperationRolesRequest {
+  string methodology = 1;
+  string operation = 2;
+}
+
+message GetOperationRolesResponse {
+  repeated string roles = 1;
+  bool restricted = 2;
+}
+
+message GetStepDependenciesRequest {
+  string methodology = 1;
+}
+
+message GetStepDependenciesResponse {
+  // the steps each step relies on
+  map<string, Names> steps = 1;
+}

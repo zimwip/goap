@@ -1,5 +1,10 @@
 use std::sync::Arc;
 
+use graph_core::{
+    GraphError, Result as GraphResult,
+    change::{Change, GuardianRef},
+    guardian::{Board, GateResult, Guardian, StepDeps, activity_of},
+};
 use graph_service::{State, app, domains_app};
 use graph_store::{Store, StoreConfig};
 
@@ -453,41 +458,127 @@ async fn a_protected_domain_refuses_every_write_over_rpc() {
     }
 }
 
-#[tokio::test]
-async fn a_change_follows_what_its_methodology_declares() {
-    let (state, _registry) = states().await;
+/// A guardian answering as the methodology registry would for the methodologies of these tests (ADR 0168): the
+/// graph asks, the stub answers; what the registry compiles is the registry's tests'.
+struct Stub;
+
+fn transitions_of_review() -> serde_json::Value {
+    serde_json::json!({"name": "review", "initial": "drafting",
+        "states": [{"name": "drafting"}, {"name": "reviewed"}, {"name": "done", "final": true}],
+        "transitions": [
+            {"name": "submit", "from": "drafting", "to": "reviewed", "guard": "world[\"titled\"]"},
+            {"name": "rework", "from": "reviewed", "to": "drafting"},
+            {"name": "finish", "from": "reviewed", "to": "done", "guard": "world[\"step_ran\"]"}]})
+}
+
+#[async_trait::async_trait]
+impl Guardian for Stub {
+    async fn methodology_version(&self, m: &str) -> GraphResult<String> {
+        Ok(match m {
+            "work" | "work@1.1.0" => "1.1.0",
+            "work@1.0.0" => "1.0.0",
+            "release" | "release@2.0.0" => "2.0.0",
+            "review" | "review@1.0.0" => "1.0.0",
+            "work@9.9.9" => return Err(GraphError::invalid("methodology work has no version 9.9.9")),
+            _ => "",
+        }
+        .into())
+    }
+
+    async fn lifecycle(&self, m: &str) -> GraphResult<Option<serde_json::Value>> {
+        Ok(match m {
+            "work@1.1.0" => Some(serde_json::json!({"name": "config", "initial": "active",
+                "states": [{"name": "active"}, {"name": "retired"}]})),
+            "review@1.0.0" => Some(transitions_of_review()),
+            _ => None,
+        })
+    }
+
+    async fn default_goal(&self, m: &str) -> GraphResult<String> {
+        Ok(if m == "work@1.1.0" { "first" } else { "" }.into())
+    }
+
+    async fn guard(&self, board: &Board, expr: &str, _: &str, _: &str) -> GraphResult<bool> {
+        let history = &board.facets["history"];
+        Ok(match expr {
+            "world[\"titled\"]" => board.change.change.title != "c",
+            "world[\"step_ran\"]" => history["steps"]
+                .as_array()
+                .is_some_and(|s| s.iter().any(|r| r["path"] == "p/s" && r["current"] == true)),
+            _ => false,
+        })
+    }
+
+    async fn gate(&self, _: &Board, _: &serde_json::Value, _: &str) -> GraphResult<GateResult> {
+        Ok(GateResult::default())
+    }
+
+    async fn commit(&self, _: &Change, _: &Board) -> GraphResult<(bool, bool)> {
+        Ok((false, false))
+    }
+
+    async fn guardians(&self, m: &str, project: &str) -> GraphResult<Vec<GuardianRef>> {
+        let (name, _) = m.split_once('@').unwrap_or((m, ""));
+        let own = GuardianRef {
+            methodology: name.into(),
+            version: self.methodology_version(m).await?,
+        };
+        if name == "work" && project == "PROJ-W" {
+            let release = GuardianRef {
+                methodology: "release".into(),
+                version: "2.0.0".into(),
+            };
+            return Ok(vec![release, own]);
+        }
+        Ok(vec![own])
+    }
+
+    async fn integrates(&self, integrator: &str, m: &str) -> GraphResult<bool> {
+        Ok(integrator.starts_with("release") && m == "work")
+    }
+
+    async fn check_guardians(&self, _: &Board, _: &str, _: &[Change]) -> GraphResult<String> {
+        Ok(String::new())
+    }
+
+    async fn check_sub_change(&self, parent: &Change, child: &Change) -> GraphResult<()> {
+        let (r, ancestor) = (activity_of(child), activity_of(parent));
+        if r.ends_with("/other") {
+            return Err(GraphError::invalid(format!(
+                "activity {r} is not part of {ancestor}, the activity of the parent change"
+            )));
+        }
+        Ok(())
+    }
+
+    async fn operation_roles(&self, _: &str, _: &str) -> GraphResult<Option<Vec<String>>> {
+        Ok(None)
+    }
+
+    async fn step_dependencies(&self, _: &str) -> GraphResult<StepDeps> {
+        Ok(StepDeps::new())
+    }
+}
+
+/// A graph whose changes ask their methodologies of [`Stub`].
+async fn guarded() -> Arc<State> {
+    let store = Store::open(&StoreConfig::Memory).await.unwrap();
+    let (mut graph, _) = State::with_local_domains(store, &graph_catalog::catalog::builtin_dir())
+        .await
+        .unwrap();
+    graph.guardian = Some(Arc::new(Stub));
+    let state = Arc::new(graph);
     graph_service::Graph { state: state.clone() }
         .boot(&Default::default())
         .await
         .unwrap();
-    let base = listen(app(state)).await;
+    state
+}
+
+#[tokio::test]
+async fn a_change_follows_what_its_guardian_declares() {
+    let base = listen(app(guarded().await)).await;
     let svc = Some(ADMIN);
-    let header = |name: &str, version: &str, at: &str, extra: serde_json::Value| {
-        let mut props = serde_json::json!({"name": name, "version": version, "status": "published", "publishedAt": at,
-            "namespace": "platform"});
-        props
-            .as_object_mut()
-            .unwrap()
-            .extend(extra.as_object().unwrap().clone());
-        serde_json::json!({"key": format!("MV:{name}@{version}"), "type": "methodology@MethodologyVersion", "props": props})
-    };
-    // a methodology in two versions, the later one with a lifecycle and a goal; another integrating it
-    let edits = serde_json::json!([
-        header("work", "1.0.0", "2026-01-01T00:00:00Z", serde_json::json!({})),
-        header("work", "1.1.0", "2026-02-01T00:00:00Z", serde_json::json!({"lifecycle": "config"})),
-        {"key": "MV:work@1.1.0/goal/second", "type": "methodology@Goal", "props": {"name": "second", "position": 1}},
-        {"key": "MV:work@1.1.0/goal/first", "type": "methodology@Goal", "props": {"name": "first", "position": 0}},
-        header("release", "2.0.0", "2026-01-01T00:00:00Z",
-            serde_json::json!({"integrates": [{"methodologies": ["work"], "exclusive": true}]})),
-    ]);
-    let (status, body) = call(
-        &base,
-        "CommitEdits",
-        svc,
-        serde_json::json!({"namespace": "methodology", "title": "declare", "projectId": "PROJ-ROOT", "edits": edits}),
-    )
-    .await;
-    assert_eq!(status, 200, "{body}");
     let (status, body) = call(
         &base,
         "CommitEdits",
@@ -508,6 +599,7 @@ async fn a_change_follows_what_its_methodology_declares() {
         )
         .await
     };
+    // the version, the goal, the lifecycle and its initial state, the chain: what the guardian says
     let (status, body) = create("work", "").await;
     assert_eq!(status, 200, "{body}");
     let c = &body["change"];
@@ -533,6 +625,7 @@ async fn a_change_follows_what_its_methodology_declares() {
     )
     .await;
     assert_eq!(body["code"], "failed_precondition", "{body}");
+    // the refusal of the guardian is the graph's
     let (status, body) = create("work", "9.9.9").await;
     assert_eq!(status, 400, "{body}");
     assert!(
@@ -542,7 +635,6 @@ async fn a_change_follows_what_its_methodology_declares() {
             .contains("methodology work has no version 9.9.9"),
         "{body}"
     );
-    // the earlier version: no lifecycle, its goal none
     let (status, body) = create("work", "1.0.0").await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["change"]["lifecycle"], serde_json::Value::Null, "{body}");
@@ -576,7 +668,7 @@ async fn a_change_follows_what_its_methodology_declares() {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    // detached, its chain is computed again for its project
+    // detached, its chain is asked again for its project
     let (status, body) = call(&base, "DetachChange", svc, serde_json::json!({"changeId": old})).await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(
@@ -584,7 +676,7 @@ async fn a_change_follows_what_its_methodology_declares() {
         serde_json::json!([{"methodology": "release", "version": "2.0.0"}, {"methodology": "work", "version": "1.0.0"}]),
         "{body}"
     );
-    // a methodology no one declares: no version, no lifecycle, its own guardian
+    // a methodology the guardian does not know: no version, no lifecycle, its own guardian
     let (status, body) = create("unknown", "").await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(
@@ -595,59 +687,9 @@ async fn a_change_follows_what_its_methodology_declares() {
 }
 
 #[tokio::test]
-async fn a_change_moves_along_the_lifecycle_its_methodology_names() {
-    let (state, registry) = states().await;
-    graph_service::Graph { state: state.clone() }
-        .boot(&Default::default())
-        .await
-        .unwrap();
-    let base = listen(app(state)).await;
-    let domains = listen(domains_app(registry)).await;
+async fn a_change_moves_along_the_lifecycle_its_guardian_names() {
+    let base = listen(app(guarded().await)).await;
     let svc = Some(ADMIN);
-    let c = reqwest::Client::new();
-    // a domain whose lifecycle guards its move with a condition of the methodology, and ends in a final state
-    let domain = serde_json::json!({"name": "flow", "version": "1.0.0",
-        "nodeTypes": [{"name": "Note"}],
-        "lifecycles": [{"name": "review", "initial": "drafting",
-            "states": [{"name": "drafting"}, {"name": "reviewed"}, {"name": "done", "final": true}],
-            "transitions": [
-                {"name": "submit", "from": "drafting", "to": "reviewed", "guard": "world[\"titled\"]"},
-                {"name": "rework", "from": "reviewed", "to": "drafting"},
-                {"name": "finish", "from": "reviewed", "to": "done", "guard": "world[\"step_ran\"]"}]}]});
-    for (method, body) in [
-        ("SaveDomain", serde_json::json!({"domain": domain})),
-        ("PublishDomain", serde_json::json!({"name": "flow", "version": "1.0.0"})),
-    ] {
-        let res = c
-            .post(format!("{domains}/goap.registry.v1.DomainService/{method}"))
-            .header("content-type", "application/json")
-            .header("x-goap-subject", ADMIN)
-            .header("x-goap-roles", "admin")
-            .body(body.to_string())
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), 200, "{method}: {:?}", res.text().await);
-    }
-    // the methodology the registry declares: the lifecycle of that domain and the condition its guard reads
-    let edits = serde_json::json!([
-        {"key": "MV:review@1.0.0", "type": "methodology@MethodologyVersion",
-         "props": {"name": "review", "version": "1.0.0", "status": "published", "publishedAt": "2026-01-01T00:00:00Z",
-                   "namespace": "platform", "lifecycle": "review"}},
-        {"key": "MV:review@1.0.0/condition/titled", "type": "methodology@Condition",
-         "props": {"name": "titled", "expr": "change.title != \"c\"", "description": "the change has a title of its own"}},
-        {"key": "MV:review@1.0.0/condition/step_ran", "type": "methodology@Condition",
-         "props": {"name": "step_ran", "description": "the step p/s has run, and what it did still stands",
-                   "expr": "\"p/s\" in history.last && history.last[\"p/s\"].current"}},
-    ]);
-    let (status, body) = call(
-        &base,
-        "CommitEdits",
-        svc,
-        serde_json::json!({"namespace": "methodology", "title": "declare", "projectId": "PROJ-ROOT", "edits": edits}),
-    )
-    .await;
-    assert_eq!(status, 200, "{body}");
     let (status, body) = call(
         &base,
         "CommitEdits",
@@ -692,7 +734,7 @@ async fn a_change_moves_along_the_lifecycle_its_methodology_names() {
             .contains("has no transition \"finish\""),
         "{body}"
     );
-    // its guard reads the world state of the conditions of the methodology: the title is still the one it refuses
+    // the guard is asked on the blackboard of the change: the title is still the one it refuses
     let (_, body) = move_to("submit").await;
     assert_eq!(body["code"], "failed_precondition", "{body}");
     assert!(
@@ -720,7 +762,7 @@ async fn a_change_moves_along_the_lifecycle_its_methodology_names() {
     .await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["entries"][0]["subject"], "transition.submit", "{body}");
-    // the guard of the last transition reads the history of the change: nothing ran yet
+    // the blackboard carries the history of the change: nothing ran yet
     let (_, body) = move_to("finish").await;
     assert_eq!(body["code"], "failed_precondition", "{body}");
     let record = |kind: &str, id: &str| {
@@ -743,19 +785,7 @@ async fn a_change_moves_along_the_lifecycle_its_methodology_names() {
     let (status, body) = move_to("finish").await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["change"]["state"], "done", "{body}");
-    // the cascade of the activities (ADR 0066): a sub-change is scoped to its parent's activity or to one it is made of
-    let (status, body) = call(
-        &base,
-        "CommitEdits",
-        svc,
-        serde_json::json!({"namespace": "methodology", "title": "activities", "projectId": "PROJ-ROOT", "edits": [
-            {"key": "MV:review@1.0.0/step/p/s", "type": "methodology@Step", "props": {"name": "s"}},
-            {"key": "MV:review@1.0.0/process/p", "type": "methodology@Process", "props": {"name": "p"},
-             "links": [{"type": "methodology@sub_activity", "toKey": "MV:review@1.0.0/step/p/s"}]},
-            {"key": "MV:review@1.0.0/process/other", "type": "methodology@Process", "props": {"name": "other"}}]}),
-    )
-    .await;
-    assert_eq!(status, 200, "{body}");
+    // the cascade of the activities (ADR 0066) is the guardian's
     let (status, body) = call(
         &base,
         "CreateChange",

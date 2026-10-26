@@ -1,8 +1,8 @@
 //! The namespaces of the platform when another graph holds them (ADR 0154 §9, Go's `Graph.Directory`): a content graph
-//! places its changes and its versions in the organisation and the projects of the platform graph, and asks the
-//! roles of the methodologies of its changes there. What it read of the platform graph, the head of main of those
-//! namespaces, travels with the transaction ([`crate::store::ReadTx::platform`]): the reads of the organisation, the
-//! projects and the methodology registry take it instead of the store.
+//! places its changes and its versions in the organisation and the projects of the platform graph. What it read of the
+//! platform graph, the head of main of the organisation, travels with the transaction
+//! ([`crate::store::ReadTx::platform`]): the reads of the organisation and the projects take it instead of the store.
+//! The methodologies of its changes are asked of their guardian (ADR 0168).
 use std::collections::{HashMap, HashSet};
 
 use graph_catalog::Catalog;
@@ -23,8 +23,6 @@ pub struct Held {
 pub struct Platform {
     /// The organisation and the projects (the namespace of their structures).
     pub organisation: Held,
-    /// The versions of the methodologies and their roles (`methodology@MethodologyVersion`, `methodology@Role`).
-    pub methodology: Held,
 }
 
 impl Platform {

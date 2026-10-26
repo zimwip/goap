@@ -1029,6 +1029,7 @@ dependencies = [
 name = "graph-core"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "cypher",
  "flate2",
@@ -1062,6 +1063,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-nats",
+ "async-trait",
  "axum",
  "chrono",
  "futures",

@@ -70,6 +70,9 @@ type GraphStore struct {
 	Graph StoreGraph
 
 	view *graphsnap.View[*defs]
+	// follow keeps the head the methodologies were read at until a commit of them moves it (Follow); nil: the head is
+	// asked at each read
+	follow *graphsnap.Heads
 }
 
 var _ Store = (*GraphStore)(nil)
@@ -89,7 +92,42 @@ func NewGraphStore(g StoreGraph) *GraphStore {
 // before its first read.
 func (s *GraphStore) ShareReader(r *graphsnap.Reader) *GraphStore {
 	s.view = graphsnap.One(r, NamespaceMethodology, true, buildDefs)
+	s.view.Heads = s.follow
 	return s
+}
+
+// Follow makes the store keep the methodologies it read, compiled ones included, until a commit of them moves the head
+// of their namespace (ADR 0168): Moved, called on the graph's baseline events (FollowEvents) and after the store's own
+// commits. A graph asking the registry about a change while it holds the transaction of that change (the guardian of
+// a commit) is then answered without being read again.
+func (s *GraphStore) Follow() *GraphStore {
+	s.follow = &graphsnap.Heads{MaxAge: access.FollowAge}
+	s.view.Heads = s.follow
+	return s
+}
+
+// FollowEvents follows the graph's baseline events on bus (Follow).
+func (s *GraphStore) FollowEvents(bus access.Subscriber) error {
+	s.Follow()
+	return bus.Subscribe(fmt.Sprintf(domain.SubjectBaselineAdvanced, domain.MainBranch), s.Moved)
+}
+
+// Moved takes a baseline event of the graph (a domain.BaselineEvent): a commit on the main branch of the namespace of
+// the methodologies makes the store read them again at its next use. Other events are left alone.
+func (s *GraphStore) Moved(data []byte) {
+	if s.follow == nil {
+		return
+	}
+	var ev domain.BaselineEvent
+	if json.Unmarshal(data, &ev) != nil || (ev.Branch == domain.MainBranch && (ev.Namespace == "" || ev.Namespace == NamespaceMethodology)) {
+		s.follow.Moved()
+	}
+}
+
+func (s *GraphStore) moved() {
+	if s.follow != nil {
+		s.follow.Moved()
+	}
 }
 
 // withSuspects reads a baseline with its suspect links too: a link to an element is a link to the version the element
@@ -105,6 +143,9 @@ func (w withSuspects) BaselineGraph(ctx context.Context, id domain.BaselineID) (
 type defs struct {
 	methodologies map[string]stored[Record]
 	problems      []string
+	// parentOf is the activity each activity is a part of, by key, following the sub_activity links, suspect ones
+	// included (a step edited since keeps its parent)
+	parentOf map[string]string
 }
 
 // stored is a decoded version with the nodes it comes from: the header and every element node (removed ones too, so that
@@ -135,7 +176,7 @@ func kindOfType(t string) string {
 }
 
 func buildDefs(_ domain.BaselineID, nodes []domain.Node, links []domain.Link) *defs {
-	d := &defs{methodologies: map[string]stored[Record]{}}
+	d := &defs{methodologies: map[string]stored[Record]{}, parentOf: parentsOf(nodes, links)}
 	type owner struct{ ns, key string }
 	children := map[owner]map[string]domain.Node{} // header -> element nodes
 	byID := map[domain.NodeID]domain.Node{}
@@ -438,6 +479,7 @@ func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*d
 			return rerr
 		}
 		_, err = s.Graph.Commit(ctx, graphapi.Commit{Namespace: ns, Title: title, Intent: title, Baseline: head.ID, By: "registrysvc", BaselineName: title, Edits: edits, ProjectID: root, Events: events})
+		s.moved() // its own commit: read again, whatever the event says later
 		if errors.Is(err, graphapi.ErrConflict) && attempt < 3 {
 			continue // main moved: read again and rebuild
 		}

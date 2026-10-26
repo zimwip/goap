@@ -18,6 +18,7 @@ path = "src/bin/goap-domains-rs.rs"
 [dependencies]
 goap-connect = { workspace = true }
 graph-core = { workspace = true }
+async-trait = { workspace = true }
 graph-catalog = { workspace = true }
 graph-script = { workspace = true }
 chrono = { workspace = true }

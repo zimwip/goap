@@ -17,7 +17,6 @@ use crate::{
     change::{Change, ChangesFilter},
     impact::LogEntry,
     lnk::Url,
-    methodologies::Declared,
     model::ChangeId,
     store::WriteTx,
 };
@@ -72,12 +71,11 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         // the guardian chain of the root computed again for the new project (ADR 0106), its sub-changes' from it
         let root = &family[0];
-        let root_chain = match root.methodology.is_empty() {
+        // with no guardian the chains stay as they are (Go's nil `ChangeLifecycles`)
+        let guarded = self.store.guardian().is_some();
+        let root_chain = match root.methodology.is_empty() || !guarded {
             true => Vec::new(),
-            false => {
-                let declared = Declared::read(self.store).await?;
-                self.root_chain(&declared, &root.methodology_ref(), &project).await?
-            }
+            false => self.root_chain(&root.methodology_ref(), &project).await?,
         };
         self.lock_change(id).await?;
         let seq = super::work::fold_change(self.store, id).await?.seq;
@@ -85,7 +83,7 @@ impl<S: WriteTx> Tx<'_, S> {
         for mut c in family {
             let mut fields = json!({HEADER_PROJECT_ID: {"from": c.project_id.to_string(), "to": project.to_string()}});
             let mut chain = c.guardians.clone();
-            if !c.methodology.is_empty() {
+            if guarded && !c.methodology.is_empty() {
                 if &c.id == id {
                     chain = root_chain.clone();
                 } else if let Some(p) = moved_to.get(&c.parent_id) {

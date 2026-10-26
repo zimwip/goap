@@ -20,6 +20,7 @@ mod domainpb;
 mod domains;
 mod domainyaml;
 pub mod graph;
+pub mod guardian;
 mod journal;
 pub mod platform;
 pub mod relay;
@@ -47,6 +48,9 @@ pub struct State {
     pub remote: Option<Arc<platform::Remote>>,
     /// Where the domains come from (ADR 0167): none, the store of this state holds them (the domain registry).
     pub domains: Option<DomainSource>,
+    /// What the methodologies of the changes are asked through (ADR 0168): the methodology registry's guardian
+    /// service; none, the changes follow their methodologies by name alone.
+    pub guardian: Option<Arc<dyn graph_core::guardian::Guardian>>,
     /// The type catalogue of the domains in force, with what told the stored versions apart when it was built.
     catalog: Mutex<(Option<String>, Arc<Catalog>)>,
     /// The persons this process made sure have a user (Go's `EnsureCaller`), and the creation in progress.
@@ -66,6 +70,7 @@ impl State {
             space: "",
             remote: None,
             domains: None,
+            guardian: None,
             catalog: Mutex::new((None, Arc::new(Catalog::of(&[]).expect("an empty catalogue")))),
             users: Mutex::new(Default::default()),
             ensuring: Mutex::new(()),
@@ -200,8 +205,8 @@ pub enum DomainSource {
 }
 
 impl State {
-    /// A read-only session for the reads of a request; in a content graph, with what the platform graph holds of the
-    /// organisation and the methodologies now.
+    /// A read-only session for the reads of a request, asking the guardian of the changes; in a content graph, with
+    /// what the platform graph holds of the organisation now.
     pub async fn reader(&self) -> Result<Session, GraphError> {
         let s = self.store.reader().await.map_err(GraphError::internal)?;
         self.with_platform(s).await
@@ -217,7 +222,7 @@ impl State {
     /// from afar.
     async fn with_platform(&self, s: Session) -> Result<Session, GraphError> {
         let cat = self.catalog(&s).await?;
-        let s = s.with_catalog(cat.clone());
+        let s = s.with_catalog(cat.clone()).with_guardian(self.guardian.clone());
         let Some(r) = &self.remote else { return Ok(s) };
         Ok(s.with_platform(Some(r.platform(&cat).await?)))
     }

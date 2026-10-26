@@ -2,6 +2,8 @@
 //! as a `change.updated` entry of its log, `change.edited` raised for what a reactive activity may look at again.
 use serde_json::{Map, Value, json};
 
+use graph_catalog::def::Lifecycle;
+
 use super::{
     attach::{HEADER_GUARDIANS, chain_value},
     change::{STATUS_ACTIVE, STATUS_DRAFT, change_branch_origin},
@@ -13,10 +15,9 @@ use super::{
 };
 use crate::{
     GraphError, Result,
-    change::{Change, ChangesFilter},
+    change::{Change, ChangesFilter, reference},
     impact::{LOG_FACT, LogEntry},
     jsontext,
-    methodologies::{self, Declared},
     model::{ChangeId, MAIN_BRANCH, branch_of, namespace_of},
     store::WriteTx,
 };
@@ -191,16 +192,24 @@ impl<S: WriteTx> Tx<'_, S> {
         if c.methodology.is_empty() {
             return Err(GraphError::invalid(format!("change {id} follows no methodology")));
         }
-        let declared = Declared::read(self.store).await?;
-        let target = declared.version_of(&methodologies::reference(&c.methodology, version))?;
+        let Some(g) = self.store.guardian() else {
+            return Err(GraphError::invalid(format!(
+                "no registry resolves the versions of methodology {}",
+                c.methodology
+            )));
+        };
+        let target = g.methodology_version(&reference(&c.methodology, version)).await?;
         if target.is_empty() {
             return Err(GraphError::invalid(format!("methodology {} is unknown", c.methodology)));
         }
         if target == c.methodology_version {
             return Ok(c);
         }
-        let r = methodologies::reference(&c.methodology, &target);
-        let lc = declared.lifecycle(self.catalog(), &r)?;
+        let r = reference(&c.methodology, &target);
+        let lc = match g.lifecycle(&r).await? {
+            Some(v) => Some(serde_json::from_value::<Lifecycle>(v).map_err(GraphError::internal)?),
+            None => None,
+        };
         match lc {
             None if c.lifecycle.is_empty() => {}
             Some(lc) if lc.name == c.lifecycle => {
@@ -211,10 +220,10 @@ impl<S: WriteTx> Tx<'_, S> {
                     )));
                 }
             }
-            _ => {
+            lc => {
                 return Err(GraphError::conflict(format!(
                     "{r} follows lifecycle {:?}, change {id} follows {:?}",
-                    lc.map(|l| l.name.as_str()).unwrap_or_default(),
+                    lc.map(|l| l.name).unwrap_or_default(),
                     c.lifecycle
                 )));
             }

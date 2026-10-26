@@ -2506,60 +2506,9 @@ impl pb::GraphService for Graph {
         self.read_changes(caller, &[m.change_id.as_str()], async |tx, _| {
             let cat = state.catalog(tx).await?;
             let id = ChangeId(m.change_id.clone());
-            let items = wflow::items_of(tx, &id).await?;
-            let fx = graph_core::flow::Flows::replay(&items);
-            let flow = fx.resolve(&m.flow); // no flow: the active option (ADR 0032 §6)
-            let w = whole::whole_change_on(tx, &cat, &id, Some(&flow)).await?;
-            let at = chrono::Utc::now();
-            let points = decision::points_of(tx, &id, at).await?;
-            let view = graph_core::view::View {
-                change: id,
-                flow: if flow.is_empty() {
-                    graph_core::flow::MAIN_FLOW.into()
-                } else {
-                    flow.clone()
-                },
-                ..Default::default()
-            };
-            let world = World::open(tx, &view).await?;
-            let (views, neighbours) = world.blackboard().await?;
-            let nodes = views
-                .iter()
-                .map(|v| pb::NodeView {
-                    node: Some(convert::node(&v.node)),
-                    latest: v.latest,
-                    out: convert::links(&v.out),
-                    r#in: convert::links(&v.r#in),
-                    not_committable: !v.node.state.is_empty()
-                        && cat
-                            .lifecycle(&v.node.typ)
-                            .is_some_and(|lc| !lc.committable(&v.node.state)),
-                    ..Default::default()
-                })
-                .collect();
-            let mut change = whole_pb(&w)?;
-            // the items the flow sees (`Change.View`): those of its chain plain, the view carries no flow events
-            let chain: Vec<&str> = fx.chain(&flow).iter().map(|f| f.id.as_str()).collect();
-            change.items = fx
-                .view(&items, &flow)
-                .into_iter()
-                .map(|i| {
-                    let mut it = change.items[i].clone();
-                    if chain.contains(&items[i].flow.as_str()) {
-                        it.flow = String::new();
-                    }
-                    it
-                })
-                .collect();
-            Ok(pb::GetBlackboardResponse {
-                change: Some(change),
-                options: fx.options().map(convert::flow).collect(),
-                active_option: fx.active.clone(),
-                nodes,
-                neighbors: convert::nodes(&neighbours),
-                decision_points: points.iter().map(convert::decision_point).collect(),
-                at: convert::time(&Some(at)),
-            })
+            // no flow: the active option (ADR 0032 §6)
+            let b = graph_core::guardian::board(tx, &cat, &id, Some(&m.flow), chrono::Utc::now()).await?;
+            board_pb(&b)
         })
         .await
     }
@@ -4461,8 +4410,8 @@ impl Access {
     /// Whether the methodology of a change allows the caller an operation on it (Go's `Graph.allow` over
     /// `graphsvc.OperationAuthorizer`, ADR 0103, 0138): `operation:perform` with the roles the methodology allows it
     /// to, no role allowing it leaving it to the administrators. A platform service, a change that does not exist and
-    /// one following no methodology are not asked; a methodology the registry does not hold refuses. The registry
-    /// would also refuse a version the domains in force suspend: that is not seen here (ADR 0125 §3).
+    /// one following no methodology are not asked; the roles are the guardian's answer (ADR 0168), none when the
+    /// methodology restricts nothing.
     async fn allow(&self, tx: &Tx<'_, Session>, id: &str, op: &str) -> Result<(), GraphError> {
         if self.who.subject.starts_with("system:") || uuid::Uuid::parse_str(id).is_err() {
             return Ok(());
@@ -4489,14 +4438,11 @@ impl Access {
         }
     }
 
-    /// The check of `allow` once the roles the methodology allows the operation to are read (`None`: a methodology
-    /// the registry does not hold).
+    /// The check of `allow` once the roles the methodology allows the operation to are read (`None`: it restricts
+    /// nothing).
     fn check_op(&self, c: &graph_core::change::Change, op: &str, allowed: Option<&[String]>) -> Result<(), GraphError> {
         let Some(allowed) = allowed else {
-            return Err(GraphError::internal(format!(
-                "unknown methodology {}",
-                Self::methodology_ref(c)
-            )));
+            return Ok(()); // the methodology restricts nothing
         };
         let allowed: Vec<String> = if allowed.is_empty() {
             vec![NO_ROLE.into()]
@@ -4723,6 +4669,45 @@ fn state_stats_pb(s: stats::StateStats) -> pb::StateStats {
 }
 
 /// A change read whole, for an answer: its header, its impacts (with their validation) and items, its position.
+/// The blackboard of a change as `GetBlackboard` answers it: the change with the items its flow sees (those of its
+/// chain plain, the view carries no flow events).
+pub(crate) fn board_pb(b: &graph_core::guardian::Board) -> Result<pb::GetBlackboardResponse, GraphError> {
+    let mut change = whole_pb(&b.change)?;
+    change.items = b
+        .seen_items()
+        .into_iter()
+        .map(|(i, plain)| {
+            let mut it = change.items[i].clone();
+            if plain {
+                it.flow = String::new();
+            }
+            it
+        })
+        .collect();
+    let nodes = b
+        .nodes
+        .iter()
+        .zip(&b.not_committable)
+        .map(|(v, &not_committable)| pb::NodeView {
+            node: Some(convert::node(&v.node)),
+            latest: v.latest,
+            out: convert::links(&v.out),
+            r#in: convert::links(&v.r#in),
+            not_committable,
+            ..Default::default()
+        })
+        .collect();
+    Ok(pb::GetBlackboardResponse {
+        change: Some(change),
+        options: b.flows.options().map(convert::flow).collect(),
+        active_option: b.flows.active.clone(),
+        nodes,
+        neighbors: convert::nodes(&b.neighbors),
+        decision_points: b.decision_points.iter().map(convert::decision_point).collect(),
+        at: convert::time(&Some(b.at)),
+    })
+}
+
 fn whole_pb(w: &whole::WholeChange) -> Result<pb::Change, GraphError> {
     let mut c = convert::change(&w.change);
     c.nodes = w

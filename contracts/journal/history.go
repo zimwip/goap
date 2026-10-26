@@ -341,3 +341,6 @@ func FoldWith(deps StepDependencies) func(ctx context.Context, c domain.Change, 
 		return Fold(entries, relies)
 	}
 }
+
+// the history travels with the blackboard of a change as a History (ADR 0168)
+func init() { domain.RegisterFacet[History](domain.FacetHistory) }

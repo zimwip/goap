@@ -104,7 +104,8 @@ services:
       # the job service (ADR 0149): the exports, the snapshot imports and the imports from a source are its jobs
       GOAP_JOBS_URL: http://jobs:8080
       GOAP_JOB_TOKEN: ${GOAP_JOB_TOKEN:-dev-job-token}
-      # the roles each operation on a change allows, asked of the methodology registry (ADR 0103)
+      # the methodologies of the changes, asked of the methodology registry's guardian service (ADR 0168): what a change
+      # follows, the guards and gates of its moves, the guardians of its commits, the roles of its operations
       GOAP_REGISTRY_URL: http://registry:8080
 
   graph:
@@ -119,7 +120,7 @@ services:
     ports: ["8081:8080"]
 
   # the content graph (ADR 0154 §9): the domains' content and its changes, on a database of its own; the organisation
-  # and the projects are the platform graph's, the domains the domain registry's. Every caller goes through the platform graph.
+  # and the projects are the platform graph's, the domains the domain registry's, the methodologies the registry's. Every caller goes through the platform graph.
   graph-content:
     <<: *service
     image: goap/rust:dev

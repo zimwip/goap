@@ -3,8 +3,13 @@ package registrysvc
 import (
 	"context"
 	"errors"
-	"github.com/zimwip/goap/contracts/authz"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/contracts/gen/goap/registry/v1/registryv1connect"
+	"github.com/zimwip/goap/lib/guardianclient"
 
 	"github.com/zimwip/goap/contracts/decision"
 	"github.com/zimwip/goap/contracts/domain"
@@ -16,13 +21,29 @@ import (
 
 // End-to-end (ADR 0058): a methodology names a lifecycle of its domain; its changes start in the initial state, and
 // a gate of the lifecycle is a CEL guard over a decided decision point and the world state of the methodology,
-// where "state:<name>" is the generated condition of a state.
+// where "state:<name>" is the generated condition of a state. The graph asks the registry in process, then over the
+// guardian service (ADR 0168), with the same answers.
 func TestChangeLifecycleGate(t *testing.T) {
+	t.Run("in process", func(t *testing.T) { testChangeLifecycleGate(t, false) })
+	t.Run("over RPC", func(t *testing.T) { testChangeLifecycleGate(t, true) })
+}
+
+func testChangeLifecycleGate(t *testing.T, remote bool) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	store := NewGraphStore(g)
 	reg := &Service{Authz: authz.AllowAll{}, Store: store}
 	g.Lifecycles = reg
+	if remote {
+		// the registry keeps what it read until the methodologies move: the graph asks it inside the transaction of a
+		// change, and a memory graph serves one transaction at a time
+		store.Follow()
+		mux := http.NewServeMux()
+		mux.Handle(registryv1connect.NewChangeGuardianServiceHandler(&GuardianHandler{Service: reg}))
+		srv := httptest.NewServer(mux)
+		t.Cleanup(srv.Close)
+		g.Lifecycles = guardianclient.NewClient(srv.Client(), srv.URL)
+	}
 	g.DecisionPolicy = decision.Policy{}
 
 	d := def.Domain{Name: "alm", Version: "1", Schema: def.Schema{Lifecycles: []domain.Lifecycle{{

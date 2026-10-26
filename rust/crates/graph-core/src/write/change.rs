@@ -5,10 +5,8 @@ use serde_json::{Map, Value};
 use super::{events, tx::Tx};
 use crate::{
     GraphError, Result,
-    access::Directory,
-    change::{Change, GuardianRef},
+    change::{Change, GuardianRef, reference},
     lnk::Url,
-    methodologies::{self, Declared},
     model::{BRANCH_OPEN, Branch, ChangeId, Node, branch_of, namespace_of},
     read,
     store::WriteTx,
@@ -89,15 +87,19 @@ impl<S: WriteTx> Tx<'_, S> {
         if methodology.is_empty() {
             return Ok(out);
         }
-        let declared = Declared::read(self.store).await?;
-        out.version = declared.version_of(&methodologies::reference(methodology, version))?;
-        let r = methodologies::reference(methodology, &out.version);
-        out.goal = declared.default_goal(&r);
-        if let Some(lc) = declared.lifecycle(self.catalog(), &r)? {
-            (out.lifecycle, out.initial) = (lc.name.clone(), lc.initial.clone());
+        // with no guardian the change follows its methodology by name alone (Go's nil `ChangeLifecycles`)
+        let Some(g) = self.store.guardian() else {
+            return Ok(out);
+        };
+        out.version = g.methodology_version(&reference(methodology, version)).await?;
+        let r = reference(methodology, &out.version);
+        out.goal = g.default_goal(&r).await?;
+        if let Some(lc) = g.lifecycle(&r).await? {
+            let s = |k: &str| lc.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+            (out.lifecycle, out.initial) = (s("name"), s("initial"));
         }
         out.guardians = if parent.is_empty() {
-            self.root_chain(&declared, &r, project).await?
+            self.root_chain(&r, project).await?
         } else {
             let parent = self.change_head(parent).await?;
             super::attach::chain_under(
@@ -113,15 +115,13 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     /// The guardian chain of a root change of a methodology reference in a project (Go's `guardianChain` without a
-    /// parent, `registrysvc.Service.Guardians`): the methodologies integrating it among those applying to the project.
-    pub(crate) async fn root_chain(&mut self, declared: &Declared, r: &str, project: &Url) -> Result<Vec<GuardianRef>> {
-        let applicable = match project.key.is_empty() {
-            true => Vec::new(),
-            false => Directory::read(self.store, self.catalog())
-                .await?
-                .applicable(&project.key),
-        };
-        Ok(declared.guardians(r, &applicable))
+    /// parent): the methodologies integrating it among those applying to the project, as its guardian computes it;
+    /// none with no guardian.
+    pub(crate) async fn root_chain(&mut self, r: &str, project: &Url) -> Result<Vec<GuardianRef>> {
+        match self.store.guardian() {
+            Some(g) => g.guardians(r, &project.key).await,
+            None => Ok(Vec::new()),
+        }
     }
 
     /// The URL of the node of a structure of a key (`Graph.StructureURL`).
@@ -291,7 +291,9 @@ impl<S: WriteTx> Tx<'_, S> {
         if !c.parent_id.is_empty() {
             // the cascade of the activities, in the transaction of the creation: it reads the methodology namespace
             let parent = self.change_head(&c.parent_id).await?;
-            methodologies::check_sub_activity(self.store, &parent, &c).await?;
+            if let Some(g) = self.store.guardian() {
+                g.check_sub_change(&parent, &c).await?;
+            }
         }
         self.prepare_sub_change(&mut c, &mut inp).await?;
         self.scope_change(&mut c).await?;
