@@ -73,8 +73,6 @@ type rebasedNode struct {
 // makes (DraftDiff, with the rebase and its conflicts), never a copy of the merge; then the merge is reviewed: the
 // clean ones accepted by a review of graph.merge, the conflicting ones sent back to proposed (why) for a person.
 func (g *Graph) installRebased(ctx context.Context, tx Tx, c domain.Change, nodes []rebasedNode, rebased map[string]any, why string) error {
-	var entries []domain.ReviewEntry
-	var accepted, reopened []domain.ImpactEvent
 	for _, n := range nodes {
 		event := g.newID()
 		base := *n.ours.Base
@@ -101,6 +99,16 @@ func (g *Graph) installRebased(ctx context.Context, tx Tx, c domain.Change, node
 		if err := g.emit(ctx, tx, checkout, domain.ImpactEvent{Change: c.ID, Impact: n.cn.ID, Op: domain.ImpactUpdated, Execution: n.ours.Execution, Post: &ref, Patch: patch}); err != nil {
 			return err
 		}
+	}
+	return g.reviewRebased(ctx, tx, c, nodes, why)
+}
+
+// reviewRebased reviews the nodes a rebase merged: the clean ones accepted by a review of graph.merge, the conflicting
+// ones sent back to proposed (why) for a person.
+func (g *Graph) reviewRebased(ctx context.Context, tx Tx, c domain.Change, nodes []rebasedNode, why string) error {
+	var entries []domain.ReviewEntry
+	var accepted, reopened []domain.ImpactEvent
+	for _, n := range nodes {
 		if len(n.conflicts) == 0 {
 			entries = append(entries, domain.ReviewEntry{Impact: string(n.cn.ID), Comment: why, Outcome: domain.ReviewOutcomeAccept})
 			accepted = append(accepted, domain.ImpactEvent{Change: c.ID, Impact: n.cn.ID, Op: domain.ImpactReviewed})

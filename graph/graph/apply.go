@@ -109,8 +109,17 @@ func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, baselineNa
 		}
 		return g.checkCommit(ctx, id)
 	})
+	if errors.Is(err, errRebaseLeftConflicts) {
+		// the drafts rebased onto the head with conflicts: the rebase is kept, in a transaction of its own, for the
+		// person or the agent to settle (ADR 0165)
+		err = g.rebaseDrafts(ctx, id, nodes)
+	}
 	return result, err
 }
+
+// errRebaseLeftConflicts stops a commit whose drafts the rebase left with conflicts (rebaseDraftsTx): the commit's
+// transaction rolls back, the rebase is made again on its own.
+var errRebaseLeftConflicts = errors.New("the rebase of the drafts left conflicts")
 
 // commitTx writes the commit of a change, in the transaction of ctx.
 func (g *Graph) commitTx(ctx context.Context, id domain.ChangeID, baselineName string, nodes []domain.NodeID, result *domain.Baseline) error {
@@ -126,6 +135,12 @@ func (g *Graph) commitTx(ctx context.Context, id domain.ChangeID, baselineName s
 			if _, _, err := g.ensureOwnBranch(ctx, tx, c); err != nil {
 				return err
 			}
+		}
+		// what the commit writes is brought up to date with the head first (ADR 0165)
+		if _, left, err := g.rebaseDraftsTx(ctx, tx, c, nodes); err != nil {
+			return err
+		} else if len(left) > 0 {
+			return errRebaseLeftConflicts
 		}
 		if *result, _, err = g.commitOnBranch(ctx, tx, id, baselineName, false, nodes); err != nil {
 			return err

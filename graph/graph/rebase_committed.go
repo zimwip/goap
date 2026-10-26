@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -436,6 +437,14 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 		tv, inHead := headNodes[id]
 		if inHead == inFork && tv == fv {
 			continue // changed by the change only
+		}
+		if inHead && inFork {
+			// a version over the target's already (a draft rebased at its commit, ADR 0165): nothing to merge
+			if anc, err := CommonAncestor(ctx, tx, id, hv, tv); err == nil && anc.Version == tv {
+				continue
+			} else if err != nil && !errors.Is(err, ErrNotFound) {
+				return res, err
+			}
 		}
 		cn, ok := impactOf[id]
 		if !ok {

@@ -254,8 +254,16 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	if err != nil {
 		return false, err
 	}
+	fromNodes, err := branchVersions(ctx, tx, own, ids)
+	if err != nil {
+		return false, err
+	}
 	if !maps.Equal(forkNodes, intoNodes) {
-		return false, nil // the target moved on a node the branch changed: a merge, not a fast-forward
+		// the target moved on a node the branch changed: a fast-forward still when the branch's version derives from the
+		// target's (a draft rebased at its commit, ADR 0165), a merge otherwise
+		if ok, err := overTarget(ctx, tx, ids, forkNodes, intoNodes, fromNodes); err != nil || !ok {
+			return false, err
+		}
 	}
 	if moved, err := to.moved(ctx, tx, own); err != nil {
 		return false, err
@@ -269,10 +277,6 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		if c, err = tx.Change(ctx, c.ID); err != nil {
 			return false, err
 		}
-	}
-	fromNodes, err := branchVersions(ctx, tx, own, ids)
-	if err != nil {
-		return false, err
 	}
 	var moves []domain.NodeRef
 	delta := map[domain.NodeID]domain.Version{}
@@ -335,6 +339,35 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	}
 	g.raiseApplied(ctx, tx, c, res)
 	return true, tx.PutChange(ctx, c)
+}
+
+// overTarget reports whether every node the target moved since the fork is one the branch holds a version of deriving
+// from the target's: the branch then stands over the target as it is.
+func overTarget(ctx context.Context, tx Tx, ids []domain.NodeID, fork, into, from map[domain.NodeID]domain.Version) (bool, error) {
+	for _, id := range ids {
+		fv, inFork := fork[id]
+		tv, inInto := into[id]
+		if inFork == inInto && fv == tv {
+			continue
+		}
+		v, ok := from[id]
+		if !ok || !inInto {
+			return false, nil
+		}
+		if v == tv {
+			continue
+		}
+		anc, err := CommonAncestor(ctx, tx, id, v, tv)
+		if errors.Is(err, ErrNotFound) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
+		if anc.Version != tv {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // ensureOwnBranch gives a change the branch of its own that the versions it writes live on

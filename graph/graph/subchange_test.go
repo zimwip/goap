@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -480,9 +481,9 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 	if _, err := g.apply(ctx, parent.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3"); err != nil || n.Properties["title"] != "from A and B" || n.Version != w.cmp3.Version+3 ||
-		len(n.Parents) != 2 || n.Parents[1] != w.cmp3.Version+1 {
-		// A's commit, B's commit, then B's rebased merge of both (its second parent A's version)
+	if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3"); err != nil || n.Properties["title"] != "from A and B" || n.Version != w.cmp3.Version+2 ||
+		!slices.Equal(n.Parents, []domain.Version{w.cmp3.Version + 1}) {
+		// A's commit, then B's: its draft rebased onto A's version at its commit (ADR 0165)
 		t.Fatalf("CMP-3 on main = %+v, %v", n, err)
 	}
 }

@@ -333,9 +333,9 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 	if head.Properties["title"] != "B" || head.Properties["owner"] != "carol" || head.ChangeID != b.ID || list[0].Committed == nil || *list[0].Committed != head.Ref() {
 		t.Fatalf("the rebased change must commit as the version of b: %+v %+v", head, list)
 	}
-	// b committed on its branch, then its rebase merged its version with main's: both are parents (ADR 0102)
-	if len(head.Parents) != 2 || head.Parents[1] != before.Version {
-		t.Fatalf("a rebased version is parented to b's commit and to the version on main: %+v", head.Parents)
+	// b's draft was rebased onto main's version at its commit: its version derives from main's (ADR 0165)
+	if len(head.Parents) != 1 || head.Parents[0] != before.Version {
+		t.Fatalf("a rebased draft's version is parented to the version on main: %+v", head.Parents)
 	}
 }
 
