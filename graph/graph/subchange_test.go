@@ -533,7 +533,7 @@ func testNestedSubChanges(t *testing.T, repo Repo) {
 	}
 
 	// cancelled, the leaf merges (no guardian: ADR 0146)
-	if _, err := g.IntegrateChange(ctx, leaf.ID, nil); err != nil {
+	if _, err := g.CloseChange(ctx, leaf.ID); err != nil {
 		t.Fatal(err)
 	}
 	if v := must[domain.NodeView](t)(g.ChangeNodeViewByKey(ctx, mid.ID, "", domain.DefaultNamespace, "CMP-3")); v.Properties["title"] != "from the leaf" {

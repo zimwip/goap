@@ -306,7 +306,7 @@ func testRebaseRootCommittedRebasedAtMerge(t *testing.T, repo Repo) {
 		t.Fatalf("test2 is behind test1 on REQ-1: %+v", st)
 	}
 	ch, err := g.IntegrateChange(ctx, t2.ID, nil)
-	if err != nil || ch.Status != domain.ChangeApplied {
+	if err != nil || ch.Status != domain.ChangeActive {
 		t.Fatalf("merge: %+v %v", ch, err)
 	}
 	res := must[domain.Baseline](t)(g.Baseline(ctx, ch.ResultBaselineID))
@@ -317,8 +317,10 @@ func testRebaseRootCommittedRebasedAtMerge(t *testing.T, repo Repo) {
 	if n.Properties["a"] == nil || n.Properties["b"] == nil || len(n.Parents) != 2 || n.Reason != domain.ReasonRebase {
 		t.Fatalf("REQ-1 holds both changes, merged from both versions: %+v", n)
 	}
-	if moves := rebaseMoves(t, g, t2.ID); len(moves) != 1 || moves[0].From != string(f.base.ID) || moves[0].To != string(b1.ID) {
-		t.Fatalf("the rebase moved test2's fork from B to T1: %+v", moves)
+	// the rebase moved test2's fork from B to T1, then its merge to what it merged (the change open, ADR 0166)
+	if moves := rebaseMoves(t, g, t2.ID); len(moves) != 2 || moves[0].From != string(f.base.ID) || moves[0].To != string(b1.ID) ||
+		moves[1].From != string(b1.ID) || moves[1].To != string(res.ID) {
+		t.Fatalf("the moves of test2's fork: %+v", moves)
 	}
 }
 

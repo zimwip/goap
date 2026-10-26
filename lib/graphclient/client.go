@@ -734,6 +734,15 @@ func (c *Client) IntegrateChange(ctx context.Context, id domain.ChangeID, resolu
 	return pbconv.ChangeFromPB(r.Msg.Change), nil
 }
 
+// CloseChange implements engine.GraphPort (CloseChange over RPC).
+func (c *Client) CloseChange(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
+	r, err := c.rpc.CloseChange(ctx, connect.NewRequest(&graphv1.CloseChangeRequest{ChangeId: string(id)}))
+	if err != nil {
+		return domain.Change{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeFromPB(r.Msg.Change), nil
+}
+
 // TransitionChange moves the state of a change along a transition of its lifecycle (ADR 0058).
 func (c *Client) TransitionChange(ctx context.Context, id domain.ChangeID, in graphapi.TransitionRequest) (domain.Change, error) {
 	r, err := c.rpc.TransitionChange(ctx, connect.NewRequest(&graphv1.TransitionChangeRequest{ChangeId: string(id), Transition: in.Transition, Decision: in.Decision}))

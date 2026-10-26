@@ -43,8 +43,17 @@ func testPartialCommit(t *testing.T, repo Repo) {
 	if len(st.Candidates) != 1 || st.Candidates[0].Node != f.req.ID || !st.CanCommit {
 		t.Fatalf("the node left out is still to commit: %+v", st)
 	}
-	if _, err := g.IntegrateChange(ctx, c.ID, nil); !errors.Is(err, ErrConflict) {
-		t.Fatalf("an uncommitted modification holds the merge: %v", err)
+	// what is committed merges, the change still open (ADR 0166); its close waits for the rest
+	if st.Unmerged != 1 || !st.CanMerge || st.CanClose {
+		t.Fatalf("one node to merge, the close held: %+v", st)
+	}
+	merged := must[domain.Change](t)(g.IntegrateChange(ctx, c.ID, nil))
+	onMain := g.withState(t, ctx, must[domain.Baseline](t)(g.Baseline(ctx, merged.ResultBaselineID)))
+	if merged.Status != domain.ChangeActive || onMain.Branch != domain.MainBranch || onMain.Nodes[nodeOf(created)] == 0 || onMain.Nodes[f.req.ID] != f.req.Version {
+		t.Fatalf("the committed node merges, the change open: %+v %+v", merged, onMain.Nodes)
+	}
+	if _, err := g.CloseChange(ctx, c.ID); !errors.Is(err, ErrConflict) {
+		t.Fatalf("an uncommitted modification holds the close: %v", err)
 	}
 	b = g.withState(t, ctx, must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, "")))
 	if b.Nodes[f.req.ID] == f.req.Version {

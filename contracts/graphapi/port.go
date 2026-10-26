@@ -98,6 +98,9 @@ type Port interface {
 	Branch(ctx context.Context, namespace, name string) (domain.Branch, error)
 	PlanMerge(ctx context.Context, namespace, from, into string) (MergePlan, error)
 	IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (domain.Change, error)
+	// CloseChange closes a change (ADR 0166): settled, what it has not merged yet merged, then applied. A merge leaves
+	// the change open.
+	CloseChange(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	// RebaseState tells where a change stands against what it builds on: the conflicts a rebase left to settle (ADR 0101).
 	RebaseState(ctx context.Context, id domain.ChangeID) (RebaseState, error)
 	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)

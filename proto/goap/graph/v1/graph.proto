@@ -186,10 +186,14 @@ service GraphService {
   // The change-stack of a node version or a baseline (ADR 0133): the changes it is the application of, oldest first,
   // and the lineage they are read from.
   rpc GetChangeStack(GetChangeStackRequest) returns (GetChangeStackResponse);
-  // Merges a change into what it was forked from (ADR 0102): a root change into the branch it forked from, a sub-change
-  // into its parent. It must be settled; it is rebased onto the target's head, its guardian is asked, then it is
-  // fast-forwarded. A change whose three-way merge waits for its resolutions (committed) is integrated with them.
+  // Merges what a change committed into what it was forked from (ADR 0102, 0166): a root change into the branch it
+  // forked from, a sub-change into its parent. It is rebased onto the target's head, then fast-forwarded; the change
+  // stays open (CloseChange closes it). A change whose three-way merge waits for its resolutions (committed) is
+  // integrated with them, and closed.
   rpc MergeChange(MergeChangeRequest) returns (MergeChangeResponse);
+  // Close a change (ADR 0166): nothing left uncommitted or unsettled, what it committed and has not merged yet merged
+  // into what it was forked from, then the change applied and its branch merged.
+  rpc CloseChange(CloseChangeRequest) returns (CloseChangeResponse);
   // Nodes the change shares with other open changes (a merge will be needed).
   rpc GetSharedNodes(GetSharedNodesRequest) returns (GetSharedNodesResponse);
   // Splits a change along organisational boundaries: one sub-change per unit owning impacted nodes.
@@ -2026,6 +2030,10 @@ message GetCommitStateResponse {
   bool can_merge = 6;
   // what the next commit may write, node by node: the choices of a partial commit
   repeated CommitCandidate candidates = 7;
+  // the nodes the change committed and has not merged yet (ADR 0166)
+  int32 unmerged = 8;
+  // nothing holds the close of the change (ADR 0166): it is settled and committed something
+  bool can_close = 9;
 }
 
 // A node the next commit of a change may write.
@@ -2197,6 +2205,14 @@ message MergeChangeRequest {
 }
 
 message MergeChangeResponse {
+  Change change = 1;
+}
+
+message CloseChangeRequest {
+  string change_id = 1;
+}
+
+message CloseChangeResponse {
   Change change = 1;
 }
 

@@ -42,18 +42,22 @@ func (g *Graph) integrateTx(ctx context.Context, tx Tx, c domain.Change, resolut
 	if !ok {
 		return c, fmt.Errorf("change %s has no branch of its own: %w", c.ID, ErrInvalid)
 	}
-	return g.integrate(ctx, tx, c, own, resolutions)
+	return g.integrate(ctx, tx, c, own, resolutions, true)
 }
 
 // integrate merges the branch of a change into its parent branch and marks the change applied. Unresolved conflicts
 // leave the change committed: its integration waits for IntegrateChange.
-func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, resolutions map[domain.NodeID]Resolution) (domain.Change, error) {
-	if ff, err := g.fastForward(ctx, tx, c, own); err != nil || ff {
+func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, resolutions map[domain.NodeID]Resolution, closing bool) (domain.Change, error) {
+	if ff, err := g.fastForward(ctx, tx, c, own, closing); err != nil || ff {
 		if err != nil {
 			return c, err
 		}
 		c, err = tx.Change(ctx, c.ID)
 		return c, err
+	}
+	if !closing {
+		// the rebase brought the branch over the head under the target's lock: only a target moved meanwhile gets here
+		return c, fmt.Errorf("the target of change %s moved meanwhile: merge it again: %w", c.ID, ErrConflict)
 	}
 	plan, err := planMerge(ctx, tx, c.Namespace, own.Name, own.Parent)
 	if err != nil {
@@ -73,7 +77,7 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 	}
 	c.Status = domain.ChangeApplied
 	c.ResultBaselineID = res.Baseline.ID
-	if err := g.commit(ctx, tx, c, own, res.Change.ID, res.Baseline.ID); err != nil {
+	if err := g.commit(ctx, tx, c, own, res.Change.ID, res.Baseline.ID, nil); err != nil {
 		return c, err
 	}
 	g.raiseMerged(ctx, tx, c, own.Parent, &res.Baseline, res.merged)
@@ -81,9 +85,10 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 	return c, tx.PutChange(ctx, c)
 }
 
-// IntegrateChange merges a change into what it was forked from (ADR 0102, merge): a root change that committed on its
-// own branch into the branch it was forked from, a sub-change into its parent. A root change whose three-way merge waits
-// for its resolutions (committed) is integrated with them.
+// IntegrateChange merges what a change committed into what it was forked from (ADR 0102, merge): a root change that
+// committed on its own branch into the branch it was forked from, a sub-change into its parent. The change stays open
+// (ADR 0166): it goes on working, committing and merging until it is closed (CloseChange). A root change whose three-way
+// merge waits for its resolutions (committed) is integrated with them, and closed.
 //
 //goap:operation change.merge doer
 func (g *Graph) IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (c domain.Change, err error) {
@@ -95,7 +100,7 @@ func (g *Graph) IntegrateChange(ctx context.Context, id domain.ChangeID, resolut
 	}
 	switch {
 	case c.Status == domain.ChangeDraft || c.Status == domain.ChangeActive:
-		return g.merge(ctx, id, resolutions)
+		return g.merge(ctx, id, resolutions, false)
 	case c.Status != domain.ChangeCommitted || c.ParentID != "":
 		return c, fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
 	}
@@ -121,10 +126,34 @@ func (g *Graph) IntegrateChange(ctx context.Context, id domain.ChangeID, resolut
 		} else if un := unresolved(plan, resolutions); len(un) > 0 {
 			return fmt.Errorf("merge %s into %s: unresolved conflicts on %v: %w", own.Name, own.Parent, un, ErrConflict)
 		}
-		c, err = g.integrate(ctx, tx, c, own, resolutions)
+		c, err = g.integrate(ctx, tx, c, own, resolutions, true)
 		return err
 	})
 	return c, err
+}
+
+// CloseChange closes a change (ADR 0166): nothing of it left uncommitted or unsettled (every impact committed, none
+// rejected or a candidate, no open flow, decision point or sub-change, no pending revert), its lifecycle in a final
+// state, what it committed and has not merged yet merged into what it was forked from; the change is then applied and
+// its branch merged.
+//
+//goap:operation change.close doer
+func (g *Graph) CloseChange(ctx context.Context, id domain.ChangeID) (c domain.Change, err error) {
+	if err := g.allow(ctx, id, operations.ChangeClose); err != nil {
+		return c, err
+	}
+	return g.closeChange(ctx, id)
+}
+
+// closeChange is CloseChange once allowed.
+func (g *Graph) closeChange(ctx context.Context, id domain.ChangeID) (c domain.Change, err error) {
+	if c, err = g.Change(ctx, id); err != nil {
+		return c, err
+	}
+	if c.Status != domain.ChangeDraft && c.Status != domain.ChangeActive {
+		return c, fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
+	}
+	return g.merge(ctx, id, nil, true)
 }
 
 func unresolved(p MergePlan, resolutions map[domain.NodeID]Resolution) []string {
@@ -232,7 +261,7 @@ func latestOnTx(ctx context.Context, tx Tx, namespace, branch string, id domain.
 // forked: the versions of the branch join the target (ADR 0032), no merge version is made, and each change impact
 // commits as the version it wrote. The target is a lasting branch, which records the commit in a baseline, or the branch
 // of the parent change of a sub-change (ADR 0103), which holds no baseline (ADR 0140).
-func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch) (bool, error) {
+func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, closing bool) (bool, error) {
 	to, err := ontoOf(ctx, tx, own)
 	if err != nil {
 		return false, err
@@ -300,26 +329,48 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 			return false, err
 		}
 	}
+	if len(moves) == 0 && len(delta) == 0 {
+		if !closing {
+			return false, fmt.Errorf("change %s: what it committed is merged already, nothing to merge: %w", c.ID, ErrNothingToCommit)
+		}
+		if c.ResultBaselineID != "" || to.parent.Ephemeral {
+			// merged before (ADR 0166): the close only closes
+			return true, g.closeMerged(ctx, tx, c, own, target)
+		}
+	}
 	for _, r := range moves {
 		if err := tx.JoinBranch(ctx, r, target, c.ID, 0); err != nil {
 			return false, err
 		}
 	}
-	own.Status = domain.BranchMerged
-	if err := tx.PutBranch(ctx, own); err != nil {
-		return false, err
+	// the impacts whose node this merge moves record their version on the target, the ones merged before kept
+	only := make(map[domain.NodeID]bool, len(delta))
+	for id := range delta {
+		only[id] = true
 	}
-	c.Status = domain.ChangeApplied
+	if closing {
+		own.Status = domain.BranchMerged
+		if err := tx.PutBranch(ctx, own); err != nil {
+			return false, err
+		}
+		c.Status = domain.ChangeApplied
+	}
 	if to.parent.Ephemeral {
 		// the branch of the parent holds what the sub-change committed, its impacts committed there (recordInParent)
 		endCommit(tx, target)
-		if err := g.commit(ctx, tx, c, own, c.ID, ""); err != nil {
+		if err := g.commit(ctx, tx, c, own, c.ID, "", only); err != nil {
 			return false, err
 		}
 		if err := g.raiseMergedRefs(ctx, tx, c, target, nil, moves); err != nil {
 			return false, err
 		}
-		return true, tx.PutChange(ctx, c)
+		if err := tx.PutChange(ctx, c); err != nil {
+			return false, err
+		}
+		if closing {
+			return true, nil
+		}
+		return true, g.forkAfterMerge(ctx, tx, c.ID, own, onto{parent: to.parent, head: to.parent.ForkBaseline})
 	}
 	// a fast-forward, not a merge (the target did not move since the fork): name it after the change, not "merge …"
 	res := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: c.Title, Namespace: c.Namespace, Branch: target, ParentID: to.head, ChangeID: c.ID,
@@ -331,14 +382,65 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		return false, err
 	}
 	c.ResultBaselineID = res.ID
-	if err := g.commit(ctx, tx, c, own, c.ID, res.ID); err != nil {
+	if err := g.commit(ctx, tx, c, own, c.ID, res.ID, only); err != nil {
 		return false, err
 	}
 	if err := g.raiseMergedRefs(ctx, tx, c, target, &res, moves); err != nil {
 		return false, err
 	}
-	g.raiseApplied(ctx, tx, c, res)
-	return true, tx.PutChange(ctx, c)
+	if closing {
+		g.raiseApplied(ctx, tx, c, res)
+		return true, tx.PutChange(ctx, c)
+	}
+	if err := tx.PutChange(ctx, c); err != nil {
+		return false, err
+	}
+	// the change stays open (ADR 0166): its branch now starts from what it merged
+	return true, g.forkAfterMerge(ctx, tx, c.ID, own, onto{parent: to.parent, head: res.ID})
+}
+
+// forkAfterMerge forks the branch of a change that stays open after its merge (ADR 0166) from what it merged into: the
+// fork and the change's reference baseline move there, journaled as a rebase is (HeaderBaselineID); the branch keeps
+// what it committed, now on the target too.
+func (g *Graph) forkAfterMerge(ctx context.Context, tx Tx, id domain.ChangeID, own domain.Branch, to onto) error {
+	c, err := tx.Change(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := to.forkOnHead(ctx, tx, &own); err != nil {
+		return err
+	}
+	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
+		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderBaselineID: {From: string(c.BaselineID), To: string(own.ForkBaseline)}}})
+	if err != nil {
+		return err
+	}
+	if _, err := tx.AppendLog(ctx, e); err != nil {
+		return err
+	}
+	if err := tx.PutBranch(ctx, own); err != nil {
+		return err
+	}
+	c.BaselineID = own.ForkBaseline
+	return tx.PutChange(ctx, c)
+}
+
+// closeMerged closes a change whose work is all merged already (ADR 0166): its branch merged, the change applied at the
+// baseline its last merge left.
+func (g *Graph) closeMerged(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, target string) error {
+	own.Status = domain.BranchMerged
+	if err := tx.PutBranch(ctx, own); err != nil {
+		return err
+	}
+	c.Status = domain.ChangeApplied
+	if c.ResultBaselineID != "" {
+		res, err := tx.BaselineHeader(ctx, c.ResultBaselineID)
+		if err != nil {
+			return err
+		}
+		g.raiseApplied(ctx, tx, c, res)
+	}
+	return tx.PutChange(ctx, c)
 }
 
 // overTarget reports whether every node the target moved since the fork is one the branch holds a version of deriving

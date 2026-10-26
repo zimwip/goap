@@ -129,13 +129,24 @@ func testCommitThenIntegrate(t *testing.T, repo Repo) {
 	if err := g.WithdrawImpact(ctx, c.ID, late[0].ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	// integrated: applied, a fast-forward onto main
+	// merged: a fast-forward onto main, the change still open (ADR 0166)
 	done, err := g.IntegrateChange(ctx, c.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if done.Status != domain.ChangeApplied || done.ResultBaselineID == commit.ID {
-		t.Fatalf("integrated change %+v", done)
+	if done.Status != domain.ChangeActive || done.ResultBaselineID == commit.ID {
+		t.Fatalf("merged change %+v", done)
+	}
+	if _, err := g.IntegrateChange(ctx, c.ID, nil); !errors.Is(err, ErrNothingToCommit) {
+		t.Fatalf("merging again with nothing new: %v", err)
+	}
+	// closed: applied at the baseline its merge left
+	closed, err := g.CloseChange(ctx, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if closed.Status != domain.ChangeApplied || closed.ResultBaselineID != done.ResultBaselineID {
+		t.Fatalf("closed change %+v, merged at %s", closed, done.ResultBaselineID)
 	}
 	onMain := must[domain.Baseline](t)(g.Baseline(ctx, done.ResultBaselineID))
 	if onMain.Branch != domain.MainBranch || onMain.Kind != domain.BaselineFastForward || onMain.ChangeID != c.ID || !maps.Equal(onMain.Nodes, commit.Nodes) {

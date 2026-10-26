@@ -1246,7 +1246,7 @@ func (h *Handler) GetCommitState(ctx context.Context, r *connect.Request[graphv1
 		candidates[i] = &graphv1.CommitCandidate{NodeId: string(c.Node), Key: c.Key, Type: c.Type, Kind: c.Kind, ChangeImpactId: string(c.Impact)}
 	}
 	return res(&graphv1.GetCommitStateResponse{ToCommit: st.ToCommit, Reverts: int32(st.Reverts), Unsettled: st.Unsettled, Commits: st.Commits,
-		CanCommit: st.CanCommit, CanMerge: st.CanMerge, Candidates: candidates}, err)
+		CanCommit: st.CanCommit, CanMerge: st.CanMerge, Candidates: candidates, Unmerged: int32(st.Unmerged), CanClose: st.CanClose}, err)
 }
 
 func (h *Handler) ImpactNodeReview(ctx context.Context, r *connect.Request[graphv1.ImpactNodeReviewRequest]) (*connect.Response[graphv1.ImpactNodeReviewResponse], error) {
@@ -1498,6 +1498,12 @@ func (h *Handler) MergeChange(ctx context.Context, r *connect.Request[graphv1.Me
 	ctx = h.Identity.Context(ctx, r.Header()) // the merge asks the change's methodology for the caller (ADR 0102)
 	c, err := h.Graph.IntegrateChange(ctx, domain.ChangeID(r.Msg.ChangeId), resolutions)
 	return res(&graphv1.MergeChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
+}
+
+func (h *Handler) CloseChange(ctx context.Context, r *connect.Request[graphv1.CloseChangeRequest]) (*connect.Response[graphv1.CloseChangeResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	c, err := h.Graph.CloseChange(ctx, domain.ChangeID(r.Msg.ChangeId))
+	return res(&graphv1.CloseChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }
 
 func (h *Handler) GetSharedNodes(ctx context.Context, r *connect.Request[graphv1.GetSharedNodesRequest]) (*connect.Response[graphv1.GetSharedNodesResponse], error) {

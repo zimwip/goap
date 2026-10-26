@@ -858,8 +858,8 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	return ActionResult{Items: items, Nodes: ops, Output: fmt.Sprintf("%d propagated impacts", len(ops))}, nil
 }
 
-// ApplyChange commits what the change has pending, then merges it into what it was forked from (graph.apply): the two
-// acts of a change (ADR 0102). The change is then "applied": conditions observe it through change.status and
+// ApplyChange commits what the change has pending, then closes it (graph.apply): merged into what it was forked from,
+// applied (ADR 0102, 0166). The change is then "applied": conditions observe it through change.status and
 // change.resultBaseline. Param baselineName defaults to the change title. Every impact must be accepted: the commit
 // writes the versions from the drafts (ADR 0079); one still proposed keeps the change from merging.
 func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
@@ -871,7 +871,7 @@ func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	}
 	var merged domain.Change
 	if err == nil {
-		merged, err = ac.Graph.IntegrateChange(ctx, c.ID, nil)
+		merged, err = ac.Graph.CloseChange(ctx, c.ID) // merged and closed (ADR 0166)
 	}
 	if err != nil {
 		// the rebase before the merge left conflicts: a person settles them (TaskRebase); any other refusal is an error

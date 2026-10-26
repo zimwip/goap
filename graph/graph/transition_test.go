@@ -197,7 +197,7 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 		if err != nil {
 			return err
 		}
-		return g.checkMerge(ctx, tx, cur)
+		return g.checkMerge(ctx, tx, cur, true)
 	}); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "final state") {
 		t.Fatalf("a change is merged in a final state only: %v", err)
 	}

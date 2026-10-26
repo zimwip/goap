@@ -35,7 +35,7 @@ import (
 // ErrNothingToCommit refuses a commit that would write nothing: no accepted modification, nothing to revert (ADR 0102).
 var ErrNothingToCommit = graphapi.ErrNothingToCommit
 
-// apply commits what the change has pending, then merges it (IntegrateChange): Graph.Commit's landing. It returns the
+// apply commits what the change has pending, then closes it (CloseChange: merged, applied): Graph.Commit's landing. It returns the
 // header of the baseline the change left on the branch it was forked from (reading its state costs the size of the
 // namespace, ADR 0137), none when the merge waits for a resolution.
 func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
@@ -46,7 +46,7 @@ func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName stri
 	if _, err := g.commitChange(ctx, id, baselineName, nil); err != nil && !errors.Is(err, ErrNothingToCommit) {
 		return result, err
 	}
-	c, err := g.IntegrateChange(ctx, id, nil)
+	c, err := g.closeChange(ctx, id)
 	if err != nil {
 		return result, err
 	}

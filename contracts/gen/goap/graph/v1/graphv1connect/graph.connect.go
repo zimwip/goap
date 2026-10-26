@@ -286,6 +286,9 @@ const (
 	// GraphServiceMergeChangeProcedure is the fully-qualified name of the GraphService's MergeChange
 	// RPC.
 	GraphServiceMergeChangeProcedure = "/goap.graph.v1.GraphService/MergeChange"
+	// GraphServiceCloseChangeProcedure is the fully-qualified name of the GraphService's CloseChange
+	// RPC.
+	GraphServiceCloseChangeProcedure = "/goap.graph.v1.GraphService/CloseChange"
 	// GraphServiceGetSharedNodesProcedure is the fully-qualified name of the GraphService's
 	// GetSharedNodes RPC.
 	GraphServiceGetSharedNodesProcedure = "/goap.graph.v1.GraphService/GetSharedNodes"
@@ -535,10 +538,14 @@ type GraphServiceClient interface {
 	// The change-stack of a node version or a baseline (ADR 0133): the changes it is the application of, oldest first,
 	// and the lineage they are read from.
 	GetChangeStack(context.Context, *connect.Request[v1.GetChangeStackRequest]) (*connect.Response[v1.GetChangeStackResponse], error)
-	// Merges a change into what it was forked from (ADR 0102): a root change into the branch it forked from, a sub-change
-	// into its parent. It must be settled; it is rebased onto the target's head, its guardian is asked, then it is
-	// fast-forwarded. A change whose three-way merge waits for its resolutions (committed) is integrated with them.
+	// Merges what a change committed into what it was forked from (ADR 0102, 0166): a root change into the branch it
+	// forked from, a sub-change into its parent. It is rebased onto the target's head, then fast-forwarded; the change
+	// stays open (CloseChange closes it). A change whose three-way merge waits for its resolutions (committed) is
+	// integrated with them, and closed.
 	MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error)
+	// Close a change (ADR 0166): nothing left uncommitted or unsettled, what it committed and has not merged yet merged
+	// into what it was forked from, then the change applied and its branch merged.
+	CloseChange(context.Context, *connect.Request[v1.CloseChangeRequest]) (*connect.Response[v1.CloseChangeResponse], error)
 	// Nodes the change shares with other open changes (a merge will be needed).
 	GetSharedNodes(context.Context, *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error)
 	// Splits a change along organisational boundaries: one sub-change per unit owning impacted nodes.
@@ -1123,6 +1130,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("MergeChange")),
 			connect.WithClientOptions(opts...),
 		),
+		closeChange: connect.NewClient[v1.CloseChangeRequest, v1.CloseChangeResponse](
+			httpClient,
+			baseURL+GraphServiceCloseChangeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("CloseChange")),
+			connect.WithClientOptions(opts...),
+		),
 		getSharedNodes: connect.NewClient[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse](
 			httpClient,
 			baseURL+GraphServiceGetSharedNodesProcedure,
@@ -1372,6 +1385,7 @@ type graphServiceClient struct {
 	diffBaselines           *connect.Client[v1.DiffBaselinesRequest, v1.DiffBaselinesResponse]
 	getChangeStack          *connect.Client[v1.GetChangeStackRequest, v1.GetChangeStackResponse]
 	mergeChange             *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
+	closeChange             *connect.Client[v1.CloseChangeRequest, v1.CloseChangeResponse]
 	getSharedNodes          *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
 	splitChange             *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
 	listSubChanges          *connect.Client[v1.ListSubChangesRequest, v1.ListSubChangesResponse]
@@ -1840,6 +1854,11 @@ func (c *graphServiceClient) MergeChange(ctx context.Context, req *connect.Reque
 	return c.mergeChange.CallUnary(ctx, req)
 }
 
+// CloseChange calls goap.graph.v1.GraphService.CloseChange.
+func (c *graphServiceClient) CloseChange(ctx context.Context, req *connect.Request[v1.CloseChangeRequest]) (*connect.Response[v1.CloseChangeResponse], error) {
+	return c.closeChange.CallUnary(ctx, req)
+}
+
 // GetSharedNodes calls goap.graph.v1.GraphService.GetSharedNodes.
 func (c *graphServiceClient) GetSharedNodes(ctx context.Context, req *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error) {
 	return c.getSharedNodes.CallUnary(ctx, req)
@@ -2145,10 +2164,14 @@ type GraphServiceHandler interface {
 	// The change-stack of a node version or a baseline (ADR 0133): the changes it is the application of, oldest first,
 	// and the lineage they are read from.
 	GetChangeStack(context.Context, *connect.Request[v1.GetChangeStackRequest]) (*connect.Response[v1.GetChangeStackResponse], error)
-	// Merges a change into what it was forked from (ADR 0102): a root change into the branch it forked from, a sub-change
-	// into its parent. It must be settled; it is rebased onto the target's head, its guardian is asked, then it is
-	// fast-forwarded. A change whose three-way merge waits for its resolutions (committed) is integrated with them.
+	// Merges what a change committed into what it was forked from (ADR 0102, 0166): a root change into the branch it
+	// forked from, a sub-change into its parent. It is rebased onto the target's head, then fast-forwarded; the change
+	// stays open (CloseChange closes it). A change whose three-way merge waits for its resolutions (committed) is
+	// integrated with them, and closed.
 	MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error)
+	// Close a change (ADR 0166): nothing left uncommitted or unsettled, what it committed and has not merged yet merged
+	// into what it was forked from, then the change applied and its branch merged.
+	CloseChange(context.Context, *connect.Request[v1.CloseChangeRequest]) (*connect.Response[v1.CloseChangeResponse], error)
 	// Nodes the change shares with other open changes (a merge will be needed).
 	GetSharedNodes(context.Context, *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error)
 	// Splits a change along organisational boundaries: one sub-change per unit owning impacted nodes.
@@ -2729,6 +2752,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("MergeChange")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceCloseChangeHandler := connect.NewUnaryHandler(
+		GraphServiceCloseChangeProcedure,
+		svc.CloseChange,
+		connect.WithSchema(graphServiceMethods.ByName("CloseChange")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceGetSharedNodesHandler := connect.NewUnaryHandler(
 		GraphServiceGetSharedNodesProcedure,
 		svc.GetSharedNodes,
@@ -3063,6 +3092,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetChangeStackHandler.ServeHTTP(w, r)
 		case GraphServiceMergeChangeProcedure:
 			graphServiceMergeChangeHandler.ServeHTTP(w, r)
+		case GraphServiceCloseChangeProcedure:
+			graphServiceCloseChangeHandler.ServeHTTP(w, r)
 		case GraphServiceGetSharedNodesProcedure:
 			graphServiceGetSharedNodesHandler.ServeHTTP(w, r)
 		case GraphServiceSplitChangeProcedure:
@@ -3474,6 +3505,10 @@ func (UnimplementedGraphServiceHandler) GetChangeStack(context.Context, *connect
 
 func (UnimplementedGraphServiceHandler) MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.MergeChange is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) CloseChange(context.Context, *connect.Request[v1.CloseChangeRequest]) (*connect.Response[v1.CloseChangeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CloseChange is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) GetSharedNodes(context.Context, *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error) {

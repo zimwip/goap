@@ -138,7 +138,7 @@ func dependencyOf(ctx context.Context, tx Tx, c domain.Change, d domain.ChangeID
 		return out, nil
 	case domain.ChangeApplied:
 	default:
-		out.Reason = "not merged yet"
+		out.Reason = "not closed yet"
 		return out, nil
 	}
 	x := dc
