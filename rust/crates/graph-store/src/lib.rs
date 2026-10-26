@@ -9,6 +9,7 @@ pub mod migrate;
 mod postgres;
 pub mod read;
 mod sqlite;
+pub mod stats;
 
 pub use error::StoreError;
 pub use migrate::Part;

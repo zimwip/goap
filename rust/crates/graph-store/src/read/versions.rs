@@ -41,7 +41,7 @@ pub struct Versions {
     /// The snapshot of the organisation last read, with the head of its main branch and the catalogue it was read
     /// at ([`graph_core::store::ReadTx::kept_snapshot`]).
     pub(crate) organisation: Mutex<Option<KeptSnapshot>>,
-    /// The folds of the logs of the changes last read ([`graph_core::store::ReadTx::kept_fold`]).
+    /// The folds of the logs of the changes last read ([`graph_core::store::ReadTx::take_fold`]).
     folds: Mutex<Folds>,
 }
 
@@ -232,6 +232,16 @@ impl Versions {
         }
     }
 
+    /// Takes the fold of the log of a change out of what is kept.
+    pub fn take_fold(&self, change: &str) -> Option<std::sync::Arc<graph_core::write::work::KeptFold>> {
+        self.folds
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entries
+            .remove(change)
+            .map(|(k, _)| k)
+    }
+
     /// Forgets the fold of a change whose log is deleted.
     pub fn forget_fold(&self, change: &str) {
         self.folds
@@ -306,6 +316,13 @@ impl Read {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push((change.to_string(), fold));
+    }
+
+    /// Takes back the fold of a change the transaction staged last.
+    pub fn take_staged(&self, change: &str) -> Option<std::sync::Arc<graph_core::write::work::KeptFold>> {
+        let mut f = self.folds.lock().unwrap_or_else(|e| e.into_inner());
+        let i = f.iter().rposition(|(c, _)| c == change)?;
+        Some(f.remove(i).1)
     }
 
     /// What the transaction keeps once it commits: the folds staged, the logs it wrote.

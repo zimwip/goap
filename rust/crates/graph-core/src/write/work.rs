@@ -48,8 +48,9 @@ fn is_contains(typ: &str) -> bool {
 pub struct ChangeView {
     pub fold: Fold,
     pub seq: i64,
-    /// the impact events of the log, in order, the checkouts hydrated
-    pub events: Vec<ImpactEvent>,
+    /// the impact events of the log, in order, the checkouts hydrated (shared with the fold kept between transactions:
+    /// only the fold of the log extends them)
+    pub events: std::sync::Arc<Vec<ImpactEvent>>,
     /// the flows and options of the change, replayed from its items
     pub flows: Flows,
     /// the moves of its state and the phase of each of its impacts (ADR 0058)
@@ -87,7 +88,7 @@ impl ChangeView {
         if stale.is_empty() {
             for f in chain.iter().map(String::as_str).chain([""]) {
                 for d in self.fold.drafts.iter().filter(|d| d.flow == f) {
-                    out.entry(d.impact.clone()).or_insert_with(|| d.clone());
+                    out.entry(d.impact.clone()).or_insert_with(|| (**d).clone());
                 }
             }
             return out;
@@ -1598,7 +1599,7 @@ impl<S: WriteTx> Tx<'_, S> {
             .drafts
             .iter()
             .filter(|d| stored.as_ref().is_none_or(|s| d.node == s.from.id))
-            .cloned()
+            .map(|d| (**d).clone())
             .collect();
         let mut other = false;
         for d in drafts {
@@ -2185,12 +2186,10 @@ pub async fn fold_upto<T: ReadTx>(store: &T, id: &ChangeId, upto: i64) -> Result
         extend_fold(store, &mut k, id, upto).await?;
         return Ok((k.view, k.items));
     }
-    let mut k = store.kept_fold(id).map(|k| (*k).clone()).unwrap_or_default();
+    let mut k = store.take_fold(id).unwrap_or_default();
     let last = k.last;
     extend_fold(store, &mut k, id, 0).await?;
-    if k.last != last {
-        store.keep_fold(id, std::sync::Arc::new(k.clone()));
-    }
+    store.keep_fold(id, &k, k.last != last);
     Ok((k.view, k.items))
 }
 
@@ -2225,7 +2224,7 @@ async fn extend_fold<T: ReadTx>(store: &T, k: &mut KeptFold, id: &ChangeId, upto
     for e in &events {
         out.fold.apply(e);
     }
-    out.events.extend(events);
+    std::sync::Arc::make_mut(&mut out.events).extend(events);
     if new_items || k.last == 0 {
         out.flows = Flows::replay(&k.items);
     }

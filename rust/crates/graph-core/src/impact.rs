@@ -1277,7 +1277,8 @@ pub fn apply_draft(d: Option<&Draft>, e: &ImpactEvent) -> Option<Draft> {
 #[derive(Debug, Clone, Default)]
 pub struct Fold {
     pub impacts: Vec<ChangeImpact>,
-    pub drafts: Vec<Draft>,
+    /// shared with the fold kept between transactions: an event replaces the draft it changes
+    pub drafts: Vec<std::sync::Arc<Draft>>,
     /// The conflicts a rebase left on the impacts that have some, not settled yet (Go's `draftState.conflicts`).
     pub conflicts: HashMap<String, Vec<String>>,
     /// The position of each impact in `impacts`.
@@ -1291,7 +1292,10 @@ impl Fold {
 
     /// The draft of an impact on a flow.
     pub fn draft(&self, impact: &str, flow: &str) -> Option<&Draft> {
-        self.drafts.iter().find(|d| d.impact == impact && d.flow == flow)
+        self.drafts
+            .iter()
+            .find(|d| d.impact == impact && d.flow == flow)
+            .map(|d| &**d)
     }
 
     /// The impact of a node on the main flow, by its key or its node id.
@@ -1327,12 +1331,12 @@ impl Fold {
             | ImpactOp::CheckedOut
             | ImpactOp::Transitioned
             | ImpactOp::Updated
-            | ImpactOp::Cancelled => match (apply_draft(at.map(|i| &self.drafts[i]), e), at) {
+            | ImpactOp::Cancelled => match (apply_draft(at.map(|i| &*self.drafts[i]), e), at) {
                 (None, Some(i)) => {
                     self.drafts.remove(i);
                 }
-                (Some(n), Some(i)) => self.drafts[i] = n,
-                (Some(n), None) => self.drafts.push(n),
+                (Some(n), Some(i)) => self.drafts[i] = std::sync::Arc::new(n),
+                (Some(n), None) => self.drafts.push(std::sync::Arc::new(n)),
                 (None, None) => {}
             },
             ImpactOp::Withdrawn | ImpactOp::Committed => self.drafts.retain(|d| d.impact != e.impact),

@@ -281,9 +281,43 @@ pub fn domains_app(state: Arc<State>) -> Router {
         .route("/readyz", get(move || readiness(ready.clone())))
 }
 
+/// Logs each request with the statements it ran on its database (`goap::rpc` at debug: `RUST_LOG=goap::rpc=debug`),
+/// the number to watch for a call whose round trips grow with its batch.
+struct Counted;
+
+#[goap_connect::async_trait]
+impl goap_connect::Interceptor for Counted {
+    async fn unary(
+        &self,
+        ctx: goap_connect::Ctx,
+        req: goap_connect::AnyRequest,
+        next: goap_connect::Next<'_>,
+    ) -> Result<goap_connect::AnyResponse, goap_connect::ConnectError> {
+        if !tracing::enabled!(target: "goap::rpc", tracing::Level::DEBUG) {
+            return next.run(ctx, req).await;
+        }
+        let procedure = req.spec.procedure.clone();
+        let start = std::time::Instant::now();
+        let texts = tracing::enabled!(target: "goap::rpc", tracing::Level::TRACE);
+        let (out, n) = graph_store::stats::counted(next.run(ctx, req), texts).await;
+        if let Some(texts) = &n.texts {
+            tracing::trace!(target: "goap::rpc", procedure, statements = ?texts);
+        }
+        tracing::debug!(
+            target: "goap::rpc",
+            procedure,
+            statements = n.statements,
+            rows = n.rows,
+            ms = start.elapsed().as_secs_f64() * 1000.0,
+            ok = out.is_ok(),
+        );
+        out
+    }
+}
+
 /// The routes of the graph service: its three services, `/healthz` and `/readyz` (the database answers).
 pub fn app(state: Arc<State>) -> Router {
-    let ics = Interceptors::none();
+    let ics = Interceptors::none().with(Counted);
     let ready = state.clone();
     Router::new()
         .merge(

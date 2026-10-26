@@ -134,6 +134,7 @@ impl Session {
         versions: std::sync::Arc<Versions>,
     ) -> Result<Session, StoreError> {
         c.batch_execute("BEGIN").await?;
+        crate::stats::note("BEGIN", 0);
         Ok(Session {
             conn: Conn::PgTx(Some(c)),
             sql: Sql { pg: true },
@@ -181,6 +182,7 @@ impl Session {
         match &mut self.conn {
             Conn::PgTx(c) => {
                 let c = c.take().ok_or_else(|| StoreError::Other("transaction over".into()))?;
+                crate::stats::note("COMMIT", 0);
                 match c.batch_execute("COMMIT").await {
                     Ok(()) => Ok(()),
                     Err(e) => {
@@ -198,7 +200,16 @@ impl Session {
     }
 
     /// Runs a statement that writes and returns the number of rows it touched.
-    pub async fn exec(&self, (text, args): Stmt) -> Result<u64, StoreError> {
+    pub async fn exec(&self, stmt: Stmt) -> Result<u64, StoreError> {
+        let text = crate::stats::texts().then(|| stmt.0.clone());
+        let n = self.exec_counted(stmt).await;
+        if let Ok(n) = &n {
+            crate::stats::note(text.as_deref().unwrap_or(""), *n);
+        }
+        n
+    }
+
+    async fn exec_counted(&self, (text, args): Stmt) -> Result<u64, StoreError> {
         match &self.conn {
             Conn::Pg(c) | Conn::PgTx(Some(c)) => {
                 let st = c.prepare_cached(&text).await?;
@@ -227,7 +238,16 @@ impl Session {
     }
 
     /// Runs a statement and returns its rows.
-    pub async fn query(&self, (text, args): Stmt) -> Result<Vec<Row>, StoreError> {
+    pub async fn query(&self, stmt: Stmt) -> Result<Vec<Row>, StoreError> {
+        let text = crate::stats::texts().then(|| stmt.0.clone());
+        let rows = self.query_counted(stmt).await;
+        if let Ok(r) = &rows {
+            crate::stats::note(text.as_deref().unwrap_or(""), r.len() as u64);
+        }
+        rows
+    }
+
+    async fn query_counted(&self, (text, args): Stmt) -> Result<Vec<Row>, StoreError> {
         match &self.conn {
             Conn::Pg(c) | Conn::PgTx(Some(c)) => {
                 let st = c.prepare_cached(&text).await?;
@@ -452,18 +472,27 @@ impl ReadTx for Session {
         self.guardian.clone()
     }
 
-    fn kept_fold(&self, change: &ChangeId) -> Option<std::sync::Arc<graph_core::write::work::KeptFold>> {
-        if self.writes() && self.tx.wrote_log_of(&change.0) {
+    fn take_fold(&self, change: &ChangeId) -> Option<graph_core::write::work::KeptFold> {
+        if !self.writes() {
+            return self.versions.fold(&change.0).map(|k| (*k).clone());
+        }
+        if self.tx.wrote_log_of(&change.0) {
             return None;
         }
-        self.versions.fold(&change.0)
+        // the writers of a change follow each other under its lock: the one taking the fold gives it back at commit
+        self.tx
+            .take_staged(&change.0)
+            .or_else(|| self.versions.take_fold(&change.0))
+            .map(|k| std::sync::Arc::try_unwrap(k).unwrap_or_else(|k| (*k).clone()))
     }
 
-    fn keep_fold(&self, change: &ChangeId, fold: std::sync::Arc<graph_core::write::work::KeptFold>) {
+    fn keep_fold(&self, change: &ChangeId, fold: &graph_core::write::work::KeptFold, moved: bool) {
         if !self.writes() {
-            self.versions.keep_fold(&change.0, fold);
+            if moved {
+                self.versions.keep_fold(&change.0, std::sync::Arc::new(fold.clone()));
+            }
         } else if !self.tx.wrote_log_of(&change.0) {
-            self.tx.stage_fold(&change.0, fold);
+            self.tx.stage_fold(&change.0, std::sync::Arc::new(fold.clone()));
         }
     }
 
