@@ -3478,9 +3478,13 @@ impl pb::GraphService for Graph {
         self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
             acc.allow(tx, &m.change_id, operations::IMPACT_CHECKOUT).await?;
-            for n in m.nodes.iter().filter(|n| n.change_impact_id.is_empty()) {
-                acc.gate_node(tx, &n.node_id).await?;
-            }
+            let named: Vec<&str> = m
+                .nodes
+                .iter()
+                .filter(|n| n.change_impact_id.is_empty())
+                .map(|n| n.node_id.as_str())
+                .collect();
+            acc.gate_nodes(tx, &named).await?;
             let nodes = m
                 .nodes
                 .iter()
@@ -4467,6 +4471,22 @@ impl Access {
     }
 
     /// The gate of the access nodes for a node a call names by its id (`gateImpact`): the type of its latest version.
+    /// [`Self::gate_node`] of several nodes, their latest versions on main read at once.
+    async fn gate_nodes(&self, tx: &Tx<'_, Session>, nodes: &[&str]) -> Result<(), GraphError> {
+        let ids: Vec<graph_core::model::NodeId> = nodes.iter().filter(|n| !n.is_empty()).map(|n| (*n).into()).collect();
+        if ids.len() < 2 || !ids.iter().all(|i| uuid::Uuid::parse_str(i.as_str()).is_ok()) {
+            for n in nodes {
+                self.gate_node(tx, n).await?;
+            }
+            return Ok(());
+        }
+        let latest = tx.store.latest_on_all(&ids, MAIN_BRANCH).await?;
+        for n in ids.iter().filter_map(|i| latest.get(i)) {
+            self.gate_access(tx.catalog(), &n.typ)?;
+        }
+        Ok(())
+    }
+
     async fn gate_node(&self, tx: &Tx<'_, Session>, node: &str) -> Result<(), GraphError> {
         if node.is_empty() {
             return Ok(());

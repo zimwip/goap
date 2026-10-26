@@ -16,7 +16,7 @@ use crate::{
     impact::{LOG_FACT, LOG_IMPACT, LogEntry},
     jsontext,
     lnk::Url,
-    model::{Baseline, Branch, ChangeId, Link, LinkId, Node, NodeId, NodeRef, branch_of, namespace_of},
+    model::{Baseline, BaselineId, Branch, ChangeId, Link, LinkId, Node, NodeId, NodeRef, branch_of, namespace_of},
     store::{LinkSet, OutboxMessage, WriteTx},
 };
 
@@ -95,6 +95,11 @@ pub struct Tx<'s, S: WriteTx> {
     pub(super) carried: Vec<(String, String)>,
     /// the refusal of the store of a carried payload, raised when the outbox is written
     pub(super) unstorable: Option<String>,
+    /// the versions nodes have in a baseline, read for a batch of them ([`read::select`]: a baseline never changes)
+    pub(super) selected: HashMap<BaselineId, (HashSet<NodeId>, HashMap<NodeId, i32>)>,
+    /// the latest versions of nodes on a branch, read for a batch of checkouts and kept for it only (a checkout
+    /// writes no version)
+    pub(super) latest: Option<(String, HashMap<NodeId, Option<Node>>)>,
 }
 
 /// What a transaction holds in memory when a rehearsal starts (the locks taken stay).
@@ -143,6 +148,8 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             views: HashMap::new(),
             carried: Vec::new(),
             unstorable: None,
+            selected: HashMap::new(),
+            latest: None,
         }
     }
 

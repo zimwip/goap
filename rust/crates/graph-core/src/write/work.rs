@@ -586,8 +586,7 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         let mut pre = None;
         if !nid.is_empty() {
-            let header = read::header_of(self.store, &w.c.baseline_id).await?;
-            let at = read::select(self.store, &header, Some(std::slice::from_ref(&nid))).await?;
+            let at = self.selected(&w.c.baseline_id, std::slice::from_ref(&nid)).await?;
             pre = at.get(&nid).map(|v| NodeRef::new(nid.clone(), *v));
         }
         let mut decl = ChangeImpact::default();
@@ -800,12 +799,11 @@ impl<S: WriteTx> Tx<'_, S> {
             }
         }
         if let Some(pre) = cn.pre.clone() {
-            let header = read::header_of(self.store, &c.baseline_id).await?;
-            let at = read::select(self.store, &header, Some(std::slice::from_ref(&pre.id))).await?;
+            let at = self.selected(&c.baseline_id, std::slice::from_ref(&pre.id)).await?;
             if at.get(&pre.id) != Some(&pre.version) {
                 return Err(GraphError::conflict(format!(
                     "change impact {}: pre {pre} is not in baseline {} (the node moved on)",
-                    cn.id, header.id
+                    cn.id, c.baseline_id
                 )));
             }
             // a node appears once per flow: what the flow sees (the stale impacts of a relaunched step do not count)
@@ -970,13 +968,88 @@ impl<S: WriteTx> Tx<'_, S> {
                 return Ok(None);
             }
             let Some(id) = node_of(&w.cn) else { return Ok(None) };
-            return self.store.latest_on(&id, &w.branch).await;
+            return self.latest_on(&id, &w.branch).await;
         };
         let n = read::stored_node(self.store, pre).await?;
         if !w.flow.is_empty() {
             return Ok(Some(n));
         }
-        Ok(Some(self.store.latest_on(&n.id, &w.branch).await?.unwrap_or(n)))
+        Ok(Some(self.latest_on(&n.id, &w.branch).await?.unwrap_or(n)))
+    }
+
+    /// The latest version of a node on a branch, from what a batch of checkouts read at once when it did.
+    async fn latest_on(&self, id: &NodeId, branch: &str) -> Result<Option<Node>> {
+        if let Some((b, kept)) = &self.latest
+            && b == branch
+            && let Some(n) = kept.get(id)
+        {
+            return Ok(n.clone());
+        }
+        self.store.latest_on(id, branch).await
+    }
+
+    /// The versions some nodes have in a baseline ([`read::select`]), each node read once per transaction.
+    pub(super) async fn selected(
+        &mut self,
+        baseline: &crate::model::BaselineId,
+        ids: &[NodeId],
+    ) -> Result<HashMap<NodeId, crate::model::Version>> {
+        let known = self.selected.get(baseline);
+        let missing: Vec<NodeId> = ids
+            .iter()
+            .filter(|id| !known.is_some_and(|(asked, _)| asked.contains(*id)))
+            .cloned()
+            .collect();
+        if !missing.is_empty() {
+            let header = read::header_of(self.store, baseline).await?;
+            let got = read::select(self.store, &header, Some(&missing)).await?;
+            let e = self.selected.entry(baseline.clone()).or_default();
+            e.0.extend(missing);
+            e.1.extend(got);
+        }
+        let (_, found) = &self.selected[baseline];
+        Ok(ids
+            .iter()
+            .filter_map(|id| found.get(id).map(|v| (id.clone(), *v)))
+            .collect())
+    }
+
+    /// Reads at once what a batch of checkouts of stored nodes starts from (Go's `guardTx.prefetch`): their versions
+    /// in the baseline of the change, those versions, the latest of each on the branch of the change and their links.
+    async fn prefetch_checkouts(&mut self, id: &ChangeId, flow: &str, nodes: &[NodeCheckout]) -> Result<()> {
+        let ids: Vec<NodeId> = nodes
+            .iter()
+            .filter(|n| n.impact.is_empty() && !n.node.is_empty())
+            .map(|n| n.node.clone())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        // a node id that is no uuid is refused by the reads of each checkout, in their words
+        if ids.len() < 2 || !ids.iter().all(|i| looks_uuid(i.as_str())) {
+            return Ok(());
+        }
+        let w = self.work_on(id, flow).await?;
+        let at = self.selected(&w.c.baseline_id, &ids).await?;
+        let refs: Vec<NodeRef> = at.iter().map(|(n, v)| NodeRef::new(n.clone(), *v)).collect();
+        self.store.nodes_at(&refs, "").await?;
+        if w.flow.is_empty() {
+            let mut latest = self.store.latest_on_all(&ids, &w.branch).await?;
+            let kept: HashMap<NodeId, Option<Node>> = ids.iter().map(|i| (i.clone(), latest.remove(i))).collect();
+            let bases: Vec<NodeRef> = ids
+                .iter()
+                .filter_map(|i| {
+                    kept[i]
+                        .as_ref()
+                        .map(Node::node_ref)
+                        .or_else(|| at.get(i).map(|v| NodeRef::new(i.clone(), *v)))
+                })
+                .collect();
+            self.store.links_from(&bases, None).await?;
+            self.latest = Some((w.branch.clone(), kept));
+        } else {
+            self.store.links_from(&refs, None).await?;
+        }
+        Ok(())
     }
 
     /// The draft of the impact on the flow itself, editable (Go's `working`): a parent flow's draft is that flow's to
@@ -1270,6 +1343,18 @@ impl<S: WriteTx> Tx<'_, S> {
         if nodes.is_empty() {
             return Err(GraphError::invalid("no node to check out"));
         }
+        self.prefetch_checkouts(id, flow, &nodes).await?;
+        let out = self.checkout_each(id, flow, nodes).await;
+        self.latest = None;
+        out
+    }
+
+    async fn checkout_each(
+        &mut self,
+        id: &ChangeId,
+        flow: &str,
+        nodes: Vec<NodeCheckout>,
+    ) -> Result<Vec<ChangeImpact>> {
         let mut out = Vec::with_capacity(nodes.len());
         for n in nodes {
             let t = Named {
@@ -2145,6 +2230,18 @@ async fn extend_fold<T: ReadTx>(store: &T, k: &mut KeptFold, id: &ChangeId, upto
         out.flows = Flows::replay(&k.items);
     }
     Ok(())
+}
+
+/// Whether a text has the shape of a uuid (the ids the graph gives its nodes).
+fn looks_uuid(s: &str) -> bool {
+    s.len() == 36
+        && s.char_indices().all(|(i, c)| {
+            if matches!(i, 8 | 13 | 18 | 23) {
+                c == '-'
+            } else {
+                c.is_ascii_hexdigit()
+            }
+        })
 }
 
 /// Rebuilds the drafts of the checkouts that copy a stored version (ADR 0142): the version and its links.
