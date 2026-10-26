@@ -20,11 +20,19 @@ describe('changeCommit', () => {
       canCommit: true,
       commitWhat: 'REQ-1, 1 withdrawn node(s) reverted',
       canMerge: false,
-      mergeWhy: 'Settle first: REQ-1 is not committed',
+      mergeWhy: 'Nothing committed on the branch of the change yet',
+      canClose: false,
+      closeWhy: 'Settle first: REQ-1 is not committed',
     });
-    expect(commitButtons({ commits: true, canMerge: true }, false)).toMatchObject({ canCommit: false, canMerge: true });
+    // what is committed merges while the rest is worked on; the close waits for it (ADR 0166)
+    expect(commitButtons({ commits: true, canMerge: true, unmerged: 1, unsettled: ['REQ-2 is not committed'] }, false)).toMatchObject({
+      canCommit: false,
+      canMerge: true,
+      canClose: false,
+    });
+    expect(commitButtons({ commits: true, canClose: true }, false)).toMatchObject({ canMerge: false, mergeWhy: 'Everything committed is merged already', canClose: true });
     expect(commitButtons({}, false).mergeWhy).toMatch(/Nothing committed/);
-    expect(commitButtons({ canCommit: true, canMerge: true }, true)).toMatchObject({ canCommit: false, canMerge: false });
+    expect(commitButtons({ canCommit: true, canMerge: true, canClose: true }, true)).toMatchObject({ canCommit: false, canMerge: false, canClose: false });
   });
   it('reads an unmodified draft as the server sends it (false is omitted from the JSON)', () => {
     const wire: ChangeImpact = { id: 'i3', key: 'LLA-1', post: { id: 'n3', version: 0 }, review: 'proposed', validation: { valid: true } };

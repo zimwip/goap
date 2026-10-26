@@ -1803,6 +1803,8 @@ impl pb::GraphService for Graph {
                 commits: st.commits,
                 can_commit: st.can_commit,
                 can_merge: st.can_merge,
+                unmerged: st.unmerged as i32,
+                can_close: st.can_close,
                 candidates: st
                     .candidates
                     .into_iter()
@@ -4128,6 +4130,45 @@ impl pb::GraphService for Graph {
                     .map_err(GraphError::internal)?;
                 c.seq = r.seq;
                 Ok(Ok(pb::MergeChangeResponse { change: Some(c) }))
+            })
+            .await?;
+        match res.msg {
+            Ok(msg) => Ok(Response {
+                headers: res.headers,
+                trailers: res.trailers,
+                msg,
+            }),
+            Err(err) => {
+                // the positions the kept rebase left go back with the refusal
+                let mut e = connect_error(err);
+                e.meta_mut().extend(res.headers);
+                Err(e)
+            }
+        }
+    }
+
+    async fn close_change(&self, _ctx: &Ctx, req: Request<pb::CloseChangeRequest>) -> Answer<pb::CloseChangeResponse> {
+        let caller = Caller::of(&req)?;
+        let m = req.into_inner();
+        let res = self
+            .write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+                let id = served_change(tx, &m.change_id).await?;
+                acc.allow(tx, &m.change_id, operations::CHANGE_CLOSE).await?;
+                let r = match tx.close_change(&id).await? {
+                    Merge::Applied(r) => r,
+                    // the rebase is kept: committed, then the close refused
+                    Merge::Rebased(err) => return Ok(Err(err)),
+                };
+                let mut c = convert::change(&r.change);
+                c.nodes = r.impacts.iter().map(convert::change_impact).collect();
+                c.items = r
+                    .items
+                    .iter()
+                    .map(convert::item)
+                    .collect::<Result<_, _>>()
+                    .map_err(GraphError::internal)?;
+                c.seq = r.seq;
+                Ok(Ok(pb::CloseChangeResponse { change: Some(c) }))
             })
             .await?;
         match res.msg {

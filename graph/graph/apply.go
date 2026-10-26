@@ -46,7 +46,7 @@ func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName stri
 	if _, err := g.commitChange(ctx, id, baselineName, nil); err != nil && !errors.Is(err, ErrNothingToCommit) {
 		return result, err
 	}
-	c, err := g.closeChange(ctx, id)
+	c, err := g.CloseChange(ctx, id)
 	if err != nil {
 		return result, err
 	}

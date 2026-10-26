@@ -363,7 +363,17 @@ async fn a_commit_rebases_its_drafts_onto_the_head() {
     assert_eq!(b_head["state"], "retired", "{b_head}");
     assert_eq!(b_head["parents"], serde_json::json!([after_a["version"]]), "{b_head}");
     assert_eq!(b_head["reason"], "derive", "{b_head}");
-    assert_eq!(merged["change"]["status"], "applied", "{merged}");
+    // the merge leaves the change open, its close applies it (ADR 0166)
+    assert_eq!(merged["change"]["status"], "active", "{merged}");
+    let st = ok("GetCommitState", serde_json::json!({"changeId": b})).await;
+    assert!(st.get("unmerged").is_none() && st["canClose"] == true, "{st}");
+    let closed = ok("CloseChange", serde_json::json!({"changeId": b})).await;
+    assert_eq!(closed["change"]["status"], "applied", "{closed}");
+    assert_eq!(
+        at_main().await["version"],
+        b_head["version"],
+        "a close with nothing left to merge writes nothing"
+    );
     // C changed A's label too: the commit stops on the conflict, the rebase kept
     let (status, body) = call(&base, "CommitChange", svc, serde_json::json!({"changeId": c})).await;
     assert_eq!(

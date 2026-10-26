@@ -1,7 +1,8 @@
-// What a change can commit and merge (ADR 0102). A change works on its own branch: a commit writes the accepted
-// modifications there (and reverts the nodes withdrawn since their commit) and leaves the change open; the merge takes the
-// branch into the one it was forked from once everything in it is settled, and closes the change. The server judges both
-// (graph.getCommitState): this module only words its answer and says why an impact cannot be accepted.
+// What a change can commit, merge and close (ADR 0102, 0166). A change works on its own branch: a commit writes the
+// accepted modifications there (and reverts the nodes withdrawn since their commit); the merge takes what it committed
+// into the branch it was forked from and leaves the change open; the close merges what is left once everything in it is
+// settled, and applies the change. The server judges them (graph.getCommitState): this module only words its answer and
+// says why an impact cannot be accepted.
 import { isDraft, type ChangeImpact, type CommitCandidate, type CommitState } from './api';
 
 /** The server's validation says the draft of the impact modifies nothing (ADR 0102). The JSON of a validation omits
@@ -28,15 +29,21 @@ export interface CommitButtons {
   commitWhat?: string;
   canMerge: boolean;
   mergeWhy?: string;
+  canClose: boolean;
+  closeWhy?: string;
 }
 
-/** The Commit and Merge buttons of a change from the server's state; closed: both off. */
+/** The Commit, Merge and Close buttons of a change from the server's state; closed: all off. */
 export function commitButtons(st: CommitState | undefined, closed: boolean): CommitButtons {
-  if (closed || !st) return { canCommit: false, commitWhy: closed ? 'The change is closed' : undefined, canMerge: false, mergeWhy: closed ? 'The change is closed' : undefined };
-  const out: CommitButtons = { canCommit: !!st.canCommit, canMerge: !!st.canMerge };
+  if (closed || !st) {
+    const why = closed ? 'The change is closed' : undefined;
+    return { canCommit: false, commitWhy: why, canMerge: false, mergeWhy: why, canClose: false, closeWhy: why };
+  }
+  const out: CommitButtons = { canCommit: !!st.canCommit, canMerge: !!st.canMerge, canClose: !!st.canClose };
   if (!out.canCommit) out.commitWhy = 'Nothing to commit: no accepted impact modifies a node, nothing withdrawn to revert';
   else out.commitWhat = [...(st.toCommit ?? []), ...(st.reverts ? [`${st.reverts} withdrawn node(s) reverted`] : [])].join(', ');
-  if (!out.canMerge) out.mergeWhy = st.unsettled?.length ? `Settle first: ${st.unsettled.join('; ')}` : 'Nothing committed on the branch of the change yet';
+  if (!out.canMerge) out.mergeWhy = st.commits ? 'Everything committed is merged already' : 'Nothing committed on the branch of the change yet';
+  if (!out.canClose) out.closeWhy = st.unsettled?.length ? `Settle first: ${st.unsettled.join('; ')}` : 'Nothing committed on the branch of the change yet';
   return out;
 }
 

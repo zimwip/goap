@@ -123,20 +123,25 @@ export interface ImpactConflicts {
   conflicts?: string[];
 }
 
-/** What a change can commit and merge (ADR 0102), as the server judges it: the one source of the Commit and Merge buttons. */
+/** What a change can commit, merge and close (ADR 0102, 0166), as the server judges it: the one source of the Commit,
+ * Merge and Close buttons. */
 export interface CommitState {
   /** keys of the accepted modifications the next commit writes */
   toCommit?: string[];
   /** nodes withdrawn after their commit that the next commit reverts */
   reverts?: number;
-  /** what holds the merge */
+  /** what holds the close */
   unsettled?: string[];
   /** the change committed on its branch something it has not merged yet */
   commits?: boolean;
   canCommit?: boolean;
+  /** the change committed nodes it has not merged yet (unmerged of them) */
   canMerge?: boolean;
   /** what the next commit may write, node by node: the choices of a partial commit */
   candidates?: CommitCandidate[];
+  unmerged?: number;
+  /** nothing holds the close of the change */
+  canClose?: boolean;
 }
 
 /** A node the next commit of a change may write. */

@@ -19,7 +19,7 @@ use crate::{
     jsontext,
     model::{Baseline, BaselineId, ChangeId, LinkId, MAIN_BRANCH, NodeId, NodeRef, Props, Target},
     operations::{
-        CHANGE_COMMIT, CHANGE_MERGE, IMPACT_CHECKOUT, IMPACT_CREATE, IMPACT_LINK_CREATE, IMPACT_LINK_DELETE,
+        CHANGE_CLOSE, CHANGE_COMMIT, IMPACT_CHECKOUT, IMPACT_CREATE, IMPACT_LINK_CREATE, IMPACT_LINK_DELETE,
         IMPACT_PROPOSE, IMPACT_REVIEW, IMPACT_TRANSITION, IMPACT_UPDATE, IMPACT_WITHDRAW,
     },
     read,
@@ -413,7 +413,7 @@ impl<S: WriteTx> Tx<'_, S> {
         )
         .await
         .map_err(|err| err.context(format!("commit {:?}", inp.title)))?;
-        // the apply: commit what is pending, then merge (Go's `apply`)
+        // the apply: commit what is pending, then close (Go's `apply`: merged, applied)
         allow(&c, CHANGE_COMMIT)?;
         if let Err(err) = self.commit_change(&id, &inp.baseline_name).await
             && !err.message.ends_with(&format!("{NOTHING_TO_COMMIT}: invalid"))
@@ -421,10 +421,10 @@ impl<S: WriteTx> Tx<'_, S> {
             return Err(err);
         }
         // a rebase the merge keeps is refused with the whole commit: one transaction
-        allow(&c, CHANGE_MERGE)?;
+        allow(&c, CHANGE_CLOSE)?;
         // the writer's events follow `change.applied` (Go's `raiseApplied` over `withCarried`)
         self.carried = inp.events.clone();
-        let merged = self.merge_change(&id, &HashMap::new()).await;
+        let merged = self.close_change(&id).await;
         self.carried.clear();
         let done = match merged? {
             super::merge::Merge::Applied(done) => done,
