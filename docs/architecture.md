@@ -1464,7 +1464,9 @@ time (they share the machine) or one after the other (`PERF_COMPARE_SERIAL=1`: G
 series with the resource attribute `goap.perf.impl` (`go` / `rust`, Prometheus label `goap_perf_impl`), each proxy times
 the service behind it (`goap_proxy_upstream_duration_seconds`, a histogram per service, method and `side`), and cAdvisor
 (`cadvisor`, profile `cadvisor` of `perf.yml`, started by `make perf-compare`) gives the CPU, memory, network and threads
-of each container; drawn by the dashboard *GOAP performance: Go vs Rust* (`deploy/grafana/dashboards/goap-perf-compare.json`, http://localhost:3300/d/goap-perf-compare:
+of each container, or under podman (the `docker` command being podman's; rootless included) the podman exporter
+(`podman-exporter`, profile `podman`, over the socket of the podman service, `PERF_PODMAN_SOCK`; `PERF_CONTAINERS`
+`cadvisor` | `podman` | `none`, guessed from `docker --version`), the dashboard reading either; drawn by the dashboard *GOAP performance: Go vs Rust* (`deploy/grafana/dashboards/goap-perf-compare.json`, http://localhost:3300/d/goap-perf-compare:
 throughput, the server's latency, CPU and memory per service, p95 per call over the range and its ratio Rust / Go as
 the client and as the server see them, each service's calls over time, the size and scans of each schema); reports in
 `.goap/perf/compare/go` and `rust`. The Rust service exports no metrics of its own yet: the comparison is what the

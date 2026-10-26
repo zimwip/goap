@@ -171,13 +171,17 @@ PERF_DIFF_DSN_RS := postgres://graph_rs:graph_rs@postgres:5432/goap?sslmode=disa
 # loaded by its own goap-bench with PERF_COMPARE_ARGS (default -seed 1 and PERF_ARGS, as make perf), at the same time
 # or one after the other (PERF_COMPARE_SERIAL=1: Go, then Rust), each with its domain registry (domains, domains_rs);
 # the four schemas dropped first unless PERF_COMPARE_KEEP=1;
-# cAdvisor gives the CPU and memory of each container; drawn by the Grafana dashboard "GOAP performance: Go vs Rust"
+# cAdvisor (or the podman exporter, PERF_CONTAINERS) gives the CPU and memory of each container; drawn by the Grafana dashboard "GOAP performance: Go vs Rust"
 PERF_CMP := docker compose -f deploy/compose/perf.yml -f deploy/compose/perf.rust.yml -f deploy/compose/perf.compare.yml
 PERF_COMPARE_ARGS ?= -seed 1 $(PERF_ARGS)
 PERF_COMPARE_SERIAL ?=
 PERF_COMPARE_KEEP ?=
-PERF_CMP_ENV := GOAP_PERF_RS_DSN='$(PERF_DIFF_DSN_RS)'
-PERF_CMP_STACK := postgres-init domains domains-rs graph graph-rs proxy proxy-rs cadvisor otel-collector postgres-exporter prometheus grafana
+# the CPU and memory of the containers: cadvisor (Docker), podman (the podman exporter: the docker command is podman's) or
+# none; PERF_PODMAN_SOCK the socket of the podman service (DOCKER_HOST, else the rootless one, else the root one)
+PERF_CONTAINERS ?= $(if $(shell docker --version 2>/dev/null | grep -i podman),podman,cadvisor)
+PERF_PODMAN_SOCK ?= $(or $(patsubst unix://%,%,$(filter unix://%,$(DOCKER_HOST))),$(wildcard $(XDG_RUNTIME_DIR)/podman/podman.sock),/run/podman/podman.sock)
+PERF_CMP_ENV := GOAP_PERF_RS_DSN='$(PERF_DIFF_DSN_RS)' GOAP_PODMAN_SOCK='$(PERF_PODMAN_SOCK)'
+PERF_CMP_STACK := postgres-init domains domains-rs graph graph-rs proxy proxy-rs $(filter cadvisor,$(PERF_CONTAINERS)) $(if $(filter podman,$(PERF_CONTAINERS)),podman-exporter) otel-collector postgres-exporter prometheus grafana
 PERF_GO_ENV := $(if $(filter 0,$(PERF_PROXY)),GOAP_PERF_GRAPH_URL=http://graph:8080)
 PERF_RUST_ENV := GOAP_PERF_IMPL=$(PERF_RUST_MODE) $(if $(filter 0,$(PERF_PROXY)),GOAP_PERF_GRAPH_URL=http://graph-rs:8080)
 PERF_DIFF_ENV := GOAP_PERF_IMPL=$(PERF_DIFF_MODE) GOAP_PERF_RS_DSN='$(if $(filter shadow,$(PERF_DIFF_MODE)),$(PERF_DIFF_DSN_GO),$(PERF_DIFF_DSN_RS))' $(if $(filter go,$(PERF_DIFF_RUST)),GOAP_PERF_RS_IMAGE=goap/goap:dev GOAP_PERF_RS_BIN=/goap/graph)
@@ -215,7 +219,7 @@ perf-diff: perf-images ## the Go and the Rust graph services compared call by ca
 	$(if $(filter shadow,$(PERF_DIFF_MODE)),@true,$(PERF_DIFF_ENV) $(PERF_RUST) run --rm --no-deps --entrypoint /goap/goap-proxy proxy diff-db \
 		--go '$(PERF_DIFF_DSN_GO)' --rust '$(PERF_DIFF_DSN_RS)' --ids /results/diff/ids.json)
 
-perf-compare: perf-compare-up perf-compare-run ## the Go and the Rust graph services measured side by side: each on its schema, behind its own goap-proxy, loaded by its own goap-bench (PERF_ARGS as make perf, PERF_COMPARE_ARGS default -seed 1 plus PERF_ARGS; PERF_COMPARE_SERIAL=1 one after the other; PERF_AUTOSTOP), schemas dropped first unless PERF_COMPARE_KEEP=1; Grafana http://localhost:3300/d/goap-perf-compare
+perf-compare: perf-compare-up perf-compare-run ## the Go and the Rust graph services measured side by side: each on its schema, behind its own goap-proxy, loaded by its own goap-bench (PERF_ARGS as make perf, PERF_COMPARE_ARGS default -seed 1 plus PERF_ARGS; PERF_COMPARE_SERIAL=1 one after the other; PERF_AUTOSTOP; CPU and memory from cAdvisor, or the podman exporter under podman: PERF_CONTAINERS), schemas dropped first unless PERF_COMPARE_KEEP=1; Grafana http://localhost:3300/d/goap-perf-compare
 	@echo "Grafana: http://localhost:3300/d/goap-perf-compare · reports: .goap/perf/compare/{go,rust}/*.csv"
 
 perf-compare-up: perf-images ## start the stack of make perf-compare: the Go and the Rust graph services, each on its schema with its domain registry (dropped first unless PERF_COMPARE_KEEP=1)
@@ -260,10 +264,10 @@ perf-analysis-down: ## stop the replay of a capture (the capture stays)
 	GOAP_PERF_CAPTURE=. $(PERF_ANALYSIS) down
 
 perf-down: ## stop the performance stack, keeping its data (the graph grows run after run)
-	$(PERF_CMP) --profile bench --profile cadvisor down
+	$(PERF_CMP_ENV) $(PERF_CMP) --profile bench --profile cadvisor --profile podman down
 
 perf-reset: ## stop the performance stack and drop its data (database, Prometheus)
-	$(PERF_CMP) --profile bench --profile cadvisor down --volumes --remove-orphans
+	$(PERF_CMP_ENV) $(PERF_CMP) --profile bench --profile cadvisor --profile podman down --volumes --remove-orphans
 
 rust-test: ## cargo test of the Rust workspace (rust/: the Rust graph service and goap-proxy, ADR 0163; GOAP_TEST_PG_DSN for its PostgreSQL tests)
 	cd rust && cargo test --locked

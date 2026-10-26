@@ -16,7 +16,7 @@
  },
  "editable": true,
  "graphTooltip": 1,
- "description": "make perf-compare: the Go and the Rust graph services, each on its schema behind its own goap-proxy, loaded by two goap-bench with the same flags and seed (label goap_perf_impl). Latencies seen by the client and by the server (the proxy), CPU and memory of each container (cAdvisor), throughput, failures and what PostgreSQL holds for each. Blue Go, orange Rust.",
+ "description": "make perf-compare: the Go and the Rust graph services, each on its schema behind its own goap-proxy, loaded by two goap-bench with the same flags and seed (label goap_perf_impl). Latencies seen by the client and by the server (the proxy), CPU and memory of each container (cAdvisor with Docker, the podman exporter with podman), throughput, failures and what PostgreSQL holds for each. Blue Go, orange Rust.",
  "links": [
   {
    "title": "GOAP performance",
@@ -737,7 +737,7 @@
   },
   {
    "type": "row",
-   "title": "Server side: latency seen by goap-proxy, CPU and memory (cAdvisor)",
+   "title": "Server side: latency seen by goap-proxy, CPU and memory of the containers",
    "id": 10,
    "collapsed": false,
    "gridPos": {
@@ -749,20 +749,20 @@
   },
   {
    "type": "stat",
-   "title": "Peak memory (working set)",
+   "title": "Peak memory",
    "id": 11,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
    },
-   "description": "Highest working set of each graph container over the range (cAdvisor).",
+   "description": "Highest memory of each graph container over the range (working set; cAdvisor with Docker, the podman exporter with podman).",
    "targets": [
     {
      "datasource": {
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(label_replace(max by (container_label_com_docker_compose_service) (max_over_time(container_memory_working_set_bytes{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__range])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "expr": "(sum by (impl) (label_replace(label_replace(max by (container_label_com_docker_compose_service) (max_over_time(container_memory_working_set_bytes{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__range])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\"))) or (sum by (impl) (label_replace(label_replace(max by (name) (max_over_time(podman_container_mem_usage_bytes[$__range]) * on (id) group_left (name) podman_container_info{name=~\"goap-perf-graph(-rs)?-1\"}), \"impl\", \"go\", \"name\", \"goap-perf-graph-1\"), \"impl\", \"rust\", \"name\", \"goap-perf-graph-rs-1\")))",
      "legendFormat": "{{impl}}",
      "refId": "A",
      "range": true
@@ -830,14 +830,14 @@
     "type": "prometheus",
     "uid": "prometheus"
    },
-   "description": "CPU seconds each graph container used over the range: the same work done, the lower the better.",
+   "description": "CPU seconds each graph container used over the range: the same work done, the lower the better (cAdvisor with Docker, the podman exporter with podman).",
    "targets": [
     {
      "datasource": {
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (increase(container_cpu_usage_seconds_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__range])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "expr": "(sum by (impl) (label_replace(label_replace(sum by (container_label_com_docker_compose_service) (increase(container_cpu_usage_seconds_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__range])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\"))) or (sum by (impl) (label_replace(label_replace(sum by (name) (increase(podman_container_cpu_seconds_total[$__range]) * on (id) group_left (name) podman_container_info{name=~\"goap-perf-graph(-rs)?-1\"}), \"impl\", \"go\", \"name\", \"goap-perf-graph-1\"), \"impl\", \"rust\", \"name\", \"goap-perf-graph-rs-1\")))",
      "legendFormat": "{{impl}}",
      "refId": "A",
      "range": true
@@ -912,7 +912,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (increase(container_cpu_usage_seconds_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__range])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\") / on (impl) (label_replace(max by (goap_perf_impl) (goap_bench_versions{service_name=\"goap-bench\"}), \"impl\", \"$1\", \"goap_perf_impl\", \"(.*)\") / 1000)",
+     "expr": "((sum by (impl) (label_replace(label_replace(sum by (container_label_com_docker_compose_service) (increase(container_cpu_usage_seconds_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__range])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\"))) or (sum by (impl) (label_replace(label_replace(sum by (name) (increase(podman_container_cpu_seconds_total[$__range]) * on (id) group_left (name) podman_container_info{name=~\"goap-perf-graph(-rs)?-1\"}), \"impl\", \"go\", \"name\", \"goap-perf-graph-1\"), \"impl\", \"rust\", \"name\", \"goap-perf-graph-rs-1\")))) / on (impl) (label_replace(max by (goap_perf_impl) (goap_bench_versions{service_name=\"goap-bench\"}), \"impl\", \"$1\", \"goap_perf_impl\", \"(.*)\") / 1000)",
      "legendFormat": "{{impl}}",
      "refId": "A",
      "range": true
@@ -1056,14 +1056,14 @@
     "type": "prometheus",
     "uid": "prometheus"
    },
-   "description": "CPU used by each graph container, in cores (cAdvisor).",
+   "description": "CPU used by each graph container, in cores (cAdvisor with Docker, the podman exporter with podman).",
    "targets": [
     {
      "datasource": {
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__rate_interval])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "expr": "(sum by (impl) (label_replace(label_replace(sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__rate_interval])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\"))) or (sum by (impl) (label_replace(label_replace(sum by (name) (rate(podman_container_cpu_seconds_total[$__rate_interval]) * on (id) group_left (name) podman_container_info{name=~\"goap-perf-graph(-rs)?-1\"}), \"impl\", \"go\", \"name\", \"goap-perf-graph-1\"), \"impl\", \"rust\", \"name\", \"goap-perf-graph-rs-1\")))",
      "legendFormat": "{{impl}}",
      "refId": "A",
      "range": true
@@ -1144,14 +1144,14 @@
     "type": "prometheus",
     "uid": "prometheus"
    },
-   "description": "Working set (solid) and RSS of each graph container (cAdvisor).",
+   "description": "Working set and, with cAdvisor, RSS of each graph container (cAdvisor with Docker, the podman exporter with podman).",
    "targets": [
     {
      "datasource": {
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "expr": "(sum by (impl) (label_replace(label_replace(sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\"))) or (sum by (impl) (label_replace(label_replace(sum by (name) (podman_container_mem_usage_bytes * on (id) group_left (name) podman_container_info{name=~\"goap-perf-graph(-rs)?-1\"}), \"impl\", \"go\", \"name\", \"goap-perf-graph-1\"), \"impl\", \"rust\", \"name\", \"goap-perf-graph-rs-1\")))",
      "legendFormat": "{{impl}} working set",
      "refId": "A",
      "range": true
@@ -1161,7 +1161,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (container_memory_rss{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "expr": "(sum by (impl) (label_replace(label_replace(sum by (container_label_com_docker_compose_service) (container_memory_rss{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")))",
      "legendFormat": "{{impl}} rss",
      "refId": "B",
      "range": true
@@ -1575,14 +1575,14 @@
     "type": "prometheus",
     "uid": "prometheus"
    },
-   "description": "Bytes per second in and out of each graph container (cAdvisor).",
+   "description": "Bytes per second in and out of each graph container (cAdvisor with Docker, the podman exporter with podman).",
    "targets": [
     {
      "datasource": {
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__rate_interval])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "expr": "(sum by (impl) (label_replace(label_replace(sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__rate_interval])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\"))) or (sum by (impl) (label_replace(label_replace(sum by (name) (rate(podman_container_net_input_total[$__rate_interval]) * on (id) group_left (name) podman_container_info{name=~\"goap-perf-graph(-rs)?-1\"}), \"impl\", \"go\", \"name\", \"goap-perf-graph-1\"), \"impl\", \"rust\", \"name\", \"goap-perf-graph-rs-1\")))",
      "legendFormat": "{{impl}} in",
      "refId": "A",
      "range": true
@@ -1592,7 +1592,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__rate_interval])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "expr": "(sum by (impl) (label_replace(label_replace(sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__rate_interval])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\"))) or (sum by (impl) (label_replace(label_replace(sum by (name) (rate(podman_container_net_output_total[$__rate_interval]) * on (id) group_left (name) podman_container_info{name=~\"goap-perf-graph(-rs)?-1\"}), \"impl\", \"go\", \"name\", \"goap-perf-graph-1\"), \"impl\", \"rust\", \"name\", \"goap-perf-graph-rs-1\")))",
      "legendFormat": "{{impl}} out",
      "refId": "B",
      "range": true
@@ -1673,14 +1673,14 @@
     "type": "prometheus",
     "uid": "prometheus"
    },
-   "description": "Threads of each graph container (cAdvisor).",
+   "description": "Threads (tasks) of each graph container (cAdvisor with Docker, the podman exporter with podman).",
    "targets": [
     {
      "datasource": {
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (container_threads{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "expr": "(sum by (impl) (label_replace(label_replace(sum by (container_label_com_docker_compose_service) (container_threads{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\"))) or (sum by (impl) (label_replace(label_replace(sum by (name) (podman_container_pids * on (id) group_left (name) podman_container_info{name=~\"goap-perf-graph(-rs)?-1\"}), \"impl\", \"go\", \"name\", \"goap-perf-graph-1\"), \"impl\", \"rust\", \"name\", \"goap-perf-graph-rs-1\")))",
      "legendFormat": "{{impl}}",
      "refId": "A",
      "range": true
