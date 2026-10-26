@@ -69,7 +69,7 @@ func SeedCriticalityPolicy(ctx context.Context, g *graph.Graph, unit string, l c
 
 // ownedBy makes the unit with key unit the owner of a node an edit creates or modifies (ADR 0054).
 func ownedBy(e graph.NodeEdit, unit string) graph.NodeEdit {
-	e.Owner = unit
+	e.Responsible = unit
 	return e
 }
 

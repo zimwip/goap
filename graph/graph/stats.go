@@ -384,8 +384,8 @@ func stateStats(head domain.Baseline, nodes []domain.Node, links []domain.Link) 
 			s.Isolated++
 			t.isolated++
 		}
-		if !n.Owner.IsZero() {
-			owners[n.Owner] = true
+		if !n.Responsible.IsZero() {
+			owners[n.Responsible] = true
 		}
 		if !n.Project.IsZero() {
 			projects[n.Project] = true

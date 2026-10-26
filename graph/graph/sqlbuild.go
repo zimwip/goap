@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/graphapi"
 )
 
 // The SQL text and the arguments of the queries both SQL repositories run (ADR 0074). The repositories keep their own
@@ -106,7 +107,7 @@ func linkTo(prefix string) []sqlCol {
 func (d dialect) nodeCols() string {
 	return d.cols(su("n.id"), sc("v.version"), sc("n.namespace"), sc("n.key"), sc("n.type"), sc("v.props"), sc("v.deleted"), su("v.change_id"),
 		sc("v.created_at"), sc("v.branch"), sc("v.parents"), sc("v.reason"), sc("v.state"), su("v.change_impact"), sc("v.comment"),
-		sc("v.execution"), sc("v.owner"), sc("n.project"), sc("v.origins"))
+		sc("v.execution"), sc("v.owner"), sc("n.project"), sc("v.origins"), sc("n.creator"), sc("n.creator_unit"), sc("v.editor"), sc("v.visibility"))
 }
 
 const nodeFrom = ` FROM node n JOIN node_version v ON v.node_id = n.id`
@@ -804,7 +805,7 @@ func (d dialect) sqlDeleteChange() string { return `DELETE FROM change WHERE id 
 
 // The columns of the inserts both repositories run, in the order of their arguments.
 var (
-	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner", "origins", "committed"}
+	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner", "origins", "committed", "editor", "visibility"}
 	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id", "removes", "to_url"}
 	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "kind", "rebased_from", "seq"}
 	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "causation", "at", "payload"}
@@ -874,11 +875,27 @@ func (d dialect) nodeRefsWhere(refs []domain.NodeRef, q NodeQuery) (string, []an
 	where := nodeFrom + d.refsJoin("r", "v.node_id", "v.version", 1) + ` WHERE ` + d.textMatch(n, "v.props", "n.key", "n.type") +
 		` AND (` + d.ph(n+1) + ` OR NOT v.deleted)`
 	n += 2
-	if q.Projects != nil { // the reach of the caller (ADR 0161 §5)
-		in, arg := d.textList("n.project", n, q.Projects)
-		where, args, n = where+` AND `+in, append(args, arg), n+1
+	if q.Reach != nil { // the reach of the caller (ADR 0161 §5)
+		in, more, next := d.reachHolds("n", "v", n, q.Reach)
+		where, args, n = where+` AND `+in, append(args, more...), next
 	}
 	return where, args, n
+}
+
+// reachHolds is the condition a version (node n, version v) is held by a reach (ADR 0161 §4-5, graphapi.ReachFilter):
+// its scope, stamped on the version, reaches the caller. Its arguments start at placeholder p; next is the first after
+// them.
+func (d dialect) reachHolds(n, v string, p int, f *graphapi.ReachFilter) (string, []any, int) {
+	projects, pa := d.textList(n+".project", p, f.Projects)
+	trees, ta := d.textList(n+".project", p+1, f.Trees)
+	units, ua := d.textList(v+".owner", p+2, f.Units)
+	vis := v + ".visibility"
+	return `(` + vis + ` = 'public'` +
+			` OR (` + vis + ` = 'tree' AND (` + trees + ` OR ` + projects + `))` +
+			` OR (` + vis + ` IN ('', 'project') AND ` + projects + `)` +
+			` OR (` + vis + ` = 'private' AND ` + projects + ` AND ` + units + `)` +
+			` OR (` + vis + ` = 'personal' AND ` + projects + ` AND ` + n + `.creator = ` + d.ph(p+3) + ` AND ` + d.ph(p+3) + ` <> ''))`,
+		[]any{pa, ta, ua, f.Subject}, p + 4
 }
 
 // sqlNodePage reads the page of q of the node versions refs, ordered by key.
@@ -929,16 +946,17 @@ func (d dialect) sqlLinksFromInto(refs []domain.NodeRef, to domain.NodeID) (stri
 func (d dialect) linkRefsWhere(refs []domain.NodeRef, q LinkQuery) (string, []any, int) {
 	args, n := d.refsArgs(refs)
 	args = append(args, likePattern(q.Text))
-	if q.Projects == nil {
+	if q.Reach == nil {
 		return ` FROM (` + d.heldLinks(1) + `) l` + d.refsJoin("t", "l.to_id", "l.to_version", 1) +
 			` WHERE ` + d.textMatch(n, "l.props", "l.type"), args, n + 1
 	}
-	// the reach of the caller (ADR 0161 §5): both ends of a link are nodes of its projects
-	from, fa := d.textList("nf.project", n+1, q.Projects)
-	to, ta := d.textList("nt.project", n+2, q.Projects)
+	// the reach of the caller (ADR 0161 §5): both ends of a link are versions it reads
+	from, fa, next := d.reachHolds("nf", "vf", n+1, q.Reach)
+	to, ta, next := d.reachHolds("nt", "vt", next, q.Reach)
 	return ` FROM (` + d.heldLinks(1) + `) l` + d.refsJoin("t", "l.to_id", "l.to_version", 1) +
-		` JOIN node nf ON nf.id = l.from_id JOIN node nt ON nt.id = l.to_id` +
-		` WHERE ` + d.textMatch(n, "l.props", "l.type") + ` AND ` + from + ` AND ` + to, append(args, fa, ta), n + 3
+		` JOIN node nf ON nf.id = l.from_id JOIN node_version vf ON vf.node_id = l.from_id AND vf.version = l.from_version` +
+		` JOIN node nt ON nt.id = l.to_id JOIN node_version vt ON vt.node_id = l.to_id AND vt.version = l.to_version` +
+		` WHERE ` + d.textMatch(n, "l.props", "l.type") + ` AND ` + from + ` AND ` + to, append(append(args, fa...), ta...), next
 }
 
 // sqlLinkPage reads the page of q of the links between two of the versions refs, by type then id.

@@ -53,6 +53,9 @@ type TypeCatalog interface {
 	Requires(typ string) []domain.RequiredLink
 	// AdminOnly reports a node type written by platform administrators only (`adminOnly:` on a node type, ADR 0068).
 	AdminOnly(typ string) bool
+	// Visibility is how far a version of a node of the type is seen in a state (ADR 0161 §4: the state's, else the
+	// type's, else project).
+	Visibility(typ, state string) string
 	// Composes reports a composition link type (`compose: true`): its target is a part of its source, so its source is
 	// the parent of its target (ADR 0077, merge and split work from the parent side).
 	Composes(linkType string) bool

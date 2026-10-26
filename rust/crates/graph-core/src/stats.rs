@@ -304,8 +304,8 @@ pub fn state_stats(head: &HashMap<NodeId, Version>, nodes: &[Node], links: &[Lin
             s.isolated += 1;
             t.isolated += 1;
         }
-        if !n.owner.is_zero() {
-            owners.insert(n.owner.to_string());
+        if !n.responsible.is_zero() {
+            owners.insert(n.responsible.to_string());
         }
         if !n.project.is_zero() {
             projects.insert(n.project.to_string());

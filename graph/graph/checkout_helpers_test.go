@@ -37,7 +37,7 @@ func importNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) 
 	if err != nil {
 		return domain.Node{}, err
 	}
-	cn, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: in.Key, Type: in.Type, Properties: in.Properties, Owner: in.Owner, Rationale: "Import " + in.Key, Links: in.Links})
+	cn, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: in.Key, Type: in.Type, Properties: in.Properties, Responsible: in.Owner, Rationale: "Import " + in.Key, Links: in.Links})
 	if err != nil {
 		return domain.Node{}, err
 	}
@@ -192,7 +192,7 @@ func (g *Graph) edit(ctx context.Context, id domain.ChangeID, impact domain.Chan
 			}
 		}
 		if len(e.Properties) > 0 || e.Owner != "" {
-			if _, err := g.ImpactNodeUpdate(ctx, id, impact, NodeUpdate{Properties: e.Properties, Owner: e.Owner, Flow: e.Flow, Execution: e.Execution}); err != nil {
+			if _, err := g.ImpactNodeUpdate(ctx, id, impact, NodeUpdate{Properties: e.Properties, Responsible: e.Owner, Flow: e.Flow, Execution: e.Execution}); err != nil {
 				return domain.ChangeImpact{}, err
 			}
 		}

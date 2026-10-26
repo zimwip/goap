@@ -31,7 +31,7 @@ export interface QueryScope {
 }
 
 /** The node's own fields a query reads before its properties (graph/graph/query.go, qNode.Property). */
-export const NODE_FIELDS = ['key', 'type', 'state', 'id', 'version', 'namespace', 'owner', 'project'];
+export const NODE_FIELDS = ['key', 'type', 'state', 'id', 'version', 'namespace', 'responsible', 'project'];
 const LINK_FIELDS = ['type', 'id'];
 
 const KEYWORDS = [

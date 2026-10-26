@@ -309,9 +309,15 @@ fn node(n: &pb::Node) -> Node {
         comment: n.comment.clone(),
         execution: n.execution.clone(),
         joined: n.joined.clone(),
-        owner: url(&n.owner),
+        responsible: url(&n.responsible),
         project: url(&n.project),
         origins: n.origins.iter().map(|r| node_ref(Some(r))).collect(),
+        creator: graph_core::model::Creator {
+            subject: n.creator.clone(),
+            unit: url(&n.creator_unit),
+        },
+        editor: n.editor.clone(),
+        visibility: n.visibility.clone(),
     }
 }
 

@@ -303,9 +303,15 @@ fn node_of(r: &Row) -> Node {
         comment: r.text(14),
         execution: r.text(15),
         joined: Vec::new(),
-        owner: Url::of(&r.text(16)),
+        responsible: Url::of(&r.text(16)),
         project: Url::of(&r.text(17)),
         origins,
+        creator: graph_core::model::Creator {
+            subject: r.text(19),
+            unit: Url::of(&r.text(20)),
+        },
+        editor: r.text(21),
+        visibility: r.text(22),
     }
 }
 

@@ -9,9 +9,9 @@ import (
 type NodeCreate struct {
 	Key, Type  string
 	Properties map[string]any
-	// Owner is the key of the organisational unit owning the node (ADR 0054); empty: the unit holding the change.
-	Owner     string
-	Rationale string
+	// Responsible is the key of the organisational unit owning the node (ADR 0054); empty: the unit holding the change.
+	Responsible string
+	Rationale   string
 	// Links are outgoing links of the draft.
 	Links []LinkWrite
 	// Flow is the flow the call works on ("": the active option, else the main flow; domain.MainFlow names the main
@@ -47,8 +47,8 @@ type NodeUpdate struct {
 	Key  string
 	// Properties are merged over the ones of the draft.
 	Properties map[string]any
-	// Owner transfers the node to another organisational unit (its key, ADR 0054).
-	Owner           string
+	// Responsible transfers the node to another organisational unit (its key, ADR 0054).
+	Responsible     string
 	Flow, Execution string
 }
 

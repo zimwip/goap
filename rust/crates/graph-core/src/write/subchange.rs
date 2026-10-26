@@ -140,17 +140,17 @@ impl<S: WriteTx> Tx<'_, S> {
                 continue; // only a candidate moves: a node the change works on already stays with it
             };
             let pre = read::stored_node(self.store, pre).await?;
-            if pre.owner == parent.owner_org {
+            if pre.responsible == parent.owner_org {
                 continue; // the unit holding the change owns it
             }
-            let unit = self.structure_node(STRUCTURE_ORGANISATION, &pre.owner).await?;
+            let unit = self.structure_node(STRUCTURE_ORGANISATION, &pre.responsible).await?;
             if !self
-                .within(STRUCTURE_ORGANISATION, &pre.owner, &parent.owner_org)
+                .within(STRUCTURE_ORGANISATION, &pre.responsible, &parent.owner_org)
                 .await?
             {
                 continue; // owned outside the unit holding the change: nothing to delegate to
             }
-            match groups.iter_mut().find(|g| g.0 == pre.owner) {
+            match groups.iter_mut().find(|g| g.0 == pre.responsible) {
                 Some(g) => g.2.push(cn),
                 None => {
                     let name = unit
@@ -164,7 +164,7 @@ impl<S: WriteTx> Tx<'_, S> {
                     } else {
                         name.to_string()
                     };
-                    groups.push((pre.owner.clone(), name, vec![cn]));
+                    groups.push((pre.responsible.clone(), name, vec![cn]));
                 }
             }
         }

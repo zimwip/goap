@@ -123,7 +123,7 @@ func importersFromPB(ims []*registryv1.ImporterDecl) []def.Importer {
 
 func nodeTypeToPB(n def.NodeType) *registryv1.NodeType {
 	out := &registryv1.NodeType{Name: n.Name, Description: n.Description, Attributes: attributesToPB(n.Attributes), Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: n.Validators, Search: searchToPB(n.Search), Editor: n.Editor, Icon: n.Icon, Color: n.Color, AdminOnly: n.AdminOnly, AdditionalProperties: n.AdditionalProperties, Form: pbconv.FormToPB(n.Form)}
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: n.Validators, Search: searchToPB(n.Search), Editor: n.Editor, Icon: n.Icon, Color: n.Color, AdminOnly: n.AdminOnly, AdditionalProperties: n.AdditionalProperties, Form: pbconv.FormToPB(n.Form), Visibility: n.Visibility}
 	if d := n.Document; d != nil {
 		out.Document = &registryv1.DocumentSpec{Contains: d.Contains}
 	}
@@ -138,7 +138,7 @@ func nodeTypeToPB(n def.NodeType) *registryv1.NodeType {
 
 func nodeTypeFromPB(n *registryv1.NodeType) def.NodeType {
 	out := def.NodeType{Name: n.Name, Description: n.Description, Attributes: attributesFromPB(n.Attributes), Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: nilIfNone(n.Validators), Search: searchFromPB(n.Search), Editor: n.Editor, Icon: n.Icon, Color: n.Color, AdminOnly: n.AdminOnly, AdditionalProperties: n.AdditionalProperties, Form: pbconv.FormFromPB(n.Form)}
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: nilIfNone(n.Validators), Search: searchFromPB(n.Search), Editor: n.Editor, Icon: n.Icon, Color: n.Color, AdminOnly: n.AdminOnly, AdditionalProperties: n.AdditionalProperties, Form: pbconv.FormFromPB(n.Form), Visibility: n.Visibility}
 	if d := n.Document; d != nil {
 		out.Document = &domain.DocumentSpec{Contains: nilIfNone(d.Contains)}
 	}
@@ -156,7 +156,7 @@ func LifecyclesToPB(ls []domain.Lifecycle) []*registryv1.Lifecycle {
 	for _, l := range ls {
 		pl := &registryv1.Lifecycle{Name: l.Name, Description: l.Description, Initial: l.Initial}
 		for _, s := range l.States {
-			pl.States = append(pl.States, &registryv1.LifecycleState{Name: s.Name, Description: s.Description, NotCommittable: s.NotCommittable, Final: s.Final})
+			pl.States = append(pl.States, &registryv1.LifecycleState{Name: s.Name, Description: s.Description, NotCommittable: s.NotCommittable, Final: s.Final, Visibility: s.Visibility})
 		}
 		for _, t := range l.Transitions {
 			pt := &registryv1.LifecycleTransition{Name: t.Name, Description: t.Description, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,
@@ -193,7 +193,7 @@ func lifecyclesFromPB(ls []*registryv1.Lifecycle) []domain.Lifecycle {
 	for _, l := range ls {
 		dl := domain.Lifecycle{Name: l.Name, Description: l.Description, Initial: l.Initial}
 		for _, s := range l.States {
-			dl.States = append(dl.States, domain.LifecycleState{Name: s.Name, Description: s.Description, NotCommittable: s.NotCommittable, Final: s.Final})
+			dl.States = append(dl.States, domain.LifecycleState{Name: s.Name, Description: s.Description, NotCommittable: s.NotCommittable, Final: s.Final, Visibility: s.Visibility})
 		}
 		for _, t := range l.Transitions {
 			dt := domain.Transition{Name: t.Name, Description: t.Description, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,

@@ -300,7 +300,7 @@ func (a *applier) revertWithdrawn(own domain.Branch) ([]domain.Node, error) {
 			return nil, err
 		}
 		n := domain.Node{ID: id, Version: next, Branch: a.branch, Namespace: latest.Namespace, Key: latest.Key, Type: latest.Type, ChangeID: a.change.ID,
-			Reason: domain.ReasonRevert, Parents: []domain.Version{latest.Version}, Owner: latest.Owner, Project: latest.Project,
+			Reason: domain.ReasonRevert, Parents: []domain.Version{latest.Version}, Responsible: latest.Responsible, Project: latest.Project,
 			Comment: "reverted: its impact was withdrawn from the change", CreatedAt: a.g.now()}
 		v, inFork := fork[id]
 		var links []domain.Link
@@ -310,7 +310,7 @@ func (a *applier) revertWithdrawn(own domain.Branch) ([]domain.Node, error) {
 			if err != nil {
 				return nil, err
 			}
-			n.Properties, n.State, n.Owner, n.Origins = cloneMap(src.Properties), src.State, src.Owner, slices.Clone(src.Origins)
+			n.Properties, n.State, n.Responsible, n.Origins = cloneMap(src.Properties), src.State, src.Responsible, slices.Clone(src.Origins)
 			if links, err = a.tx.OutLinks(a.ctx, src.Ref()); err != nil {
 				return nil, err
 			}

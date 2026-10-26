@@ -19,6 +19,7 @@ import (
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/lnk"
+	"github.com/zimwip/goap/lib/cache"
 	"github.com/zimwip/goap/lib/graphsnap"
 )
 
@@ -572,6 +573,7 @@ type Directory struct {
 
 	mu        sync.Mutex
 	cache     *graphsnap.View[*Snapshot]
+	reach     *cache.Cache[reachKey, ReachSet]
 	namespace string // of the structures, once read
 }
 

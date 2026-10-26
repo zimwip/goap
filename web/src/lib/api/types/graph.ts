@@ -34,13 +34,20 @@ export interface GraphNode {
   execution?: string;
   /** the branches the version joined besides the one it was written on (ADR 0032; filled by listNodeVersions) */
   joined?: string[];
-  /** the organisational unit owning the version and the project the node was created in (ADR 0054): logical URLs with no version, lnk:<namespace>/<type>/<key> (ADR 0154 §9; refKey gives the key) */
-  owner?: string;
+  /** the organisational unit responsible for the version and the project the node was created in (ADR 0054): logical URLs with no version, lnk:<namespace>/<type>/<key> (ADR 0154 §9; refKey gives the key) */
+  responsible?: string;
   project?: string;
   /** this view is the draft a change holds of the node (version 0): the node has no version until the change commits (ADR 0079) */
   draft?: boolean;
   /** the nodes this one derives from (ADR 0077): set on the first version of the successor of a merge or a split */
   origins?: NodeRef[];
+  /** who created the node (ADR 0161 §3): the subject, and the unit it was created in (a logical URL); the same for every version */
+  creator?: string;
+  creatorUnit?: string;
+  /** the person whose edits made the version (attribution) */
+  editor?: string;
+  /** how far the version is seen, stamped at commit: personal | private | project | tree | public (ADR 0161 §4) */
+  visibility?: string;
 }
 
 export interface Link {
@@ -469,7 +476,7 @@ export interface NodeEdit {
   links?: { type: string; to?: NodeRef; toKey?: string; props?: Struct }[];
   removeLinks?: string[];
   /** key of the organisational unit the node goes to (ADR 0054); unset: unchanged, or the unit holding the commit */
-  owner?: string;
+  responsible?: string;
 }
 
 export interface ImpactValidation {

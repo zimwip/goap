@@ -397,10 +397,10 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 			n.Project = p.Project
 		}
 	}
-	if n.Owner.IsZero() && prev != nil {
-		n.Owner = prev.Owner
+	if n.Responsible.IsZero() && prev != nil {
+		n.Responsible = prev.Responsible
 	}
-	if n.Owner.IsZero() || n.Project.IsZero() {
+	if n.Responsible.IsZero() || n.Project.IsZero() {
 		c, err := t.change(ctx, n.ChangeID)
 		if errors.Is(err, ErrNotFound) {
 			return fmt.Errorf("%s: change %s does not exist: %w", what, n.ChangeID, ErrInvalid)
@@ -408,17 +408,37 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 		if err != nil {
 			return err
 		}
-		if n.Owner.IsZero() {
-			n.Owner = c.OwnerOrg
+		if n.Responsible.IsZero() {
+			n.Responsible = c.OwnerOrg
 		}
 		if n.Project.IsZero() {
 			n.Project = c.ProjectID
 		}
 	}
+	// who created the node, who edited the version, how far it is seen (ADR 0161 §3-4): the creator is the first
+	// version's; the editor, the person the write is done for unless the commit names the draft's; the scope, the
+	// domain's for the type and the state now
+	if n.Editor == "" {
+		n.Editor = t.g.author(ctx)
+	}
+	if prev != nil {
+		n.Creator = prev.Creator
+	} else {
+		if n.Creator.Subject == "" {
+			n.Creator.Subject = n.Editor
+		}
+		n.Editor = n.Creator.Subject // the first version's editor is the creator
+		if n.Creator.Unit.IsZero() {
+			n.Creator.Unit = n.Responsible
+		}
+	}
+	if n.Visibility == "" {
+		n.Visibility = t.g.visibilityOf(n.Type, n.State)
+	}
 	if t.owners == nil {
 		t.owners, t.projects = map[lnk.URL]string{}, map[lnk.URL]string{}
 	}
-	t.owners[n.Owner] = what
+	t.owners[n.Responsible] = what
 	t.projects[n.Project] = what
 	if n.Committed >= 0 { // a negative order commits the version in no baseline (a test fixture)
 		committed, err := t.commitOn(ctx, n.Branch)

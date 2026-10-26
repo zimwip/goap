@@ -173,13 +173,24 @@ func typeCountsToPB(cs []graph.TypeCount) []*graphv1.TypeCount {
 	return out
 }
 
-// mayReadNode tells whether the caller reads a node outside a change (ADR 0138): those who work on its project; the
-// nodes of the built-in namespaces (the organisation, the platform, the methodologies) describe the platform and are
-// every person's to read. Read through a change, a node is the change's (PersonalScope).
+// mayReadNode tells whether the caller reads a node version outside a change (ADR 0161 §4-5): its scope reaches the
+// caller, as the view reader decides (Graph.Reach). Without a reach plugged, those who work on its project read it,
+// and every identified person reads a public version (the built-in namespaces declare their types public). Read
+// through a change, a node is the change's (PersonalScope).
 func (h *Handler) mayReadNode(ctx context.Context, n domain.Node) bool {
-	switch n.Namespace {
-	case access.NamespaceOrganisation, domain.NamespacePlatform, domain.NamespaceMethodology:
-		return !authz.From(ctx).Anonymous()
+	if authz.From(ctx).Anonymous() {
+		return false
+	}
+	if h.Graph.ReachOf != nil {
+		r, err := h.Graph.Reach(ctx)
+		return err == nil && r.Sees(n)
+	}
+	vis := n.Visibility
+	if vis == "" { // a version stamped by no commit: as its domain declares it
+		vis = h.Graph.Visibility(n.Type, n.State)
+	}
+	if vis == domain.VisibilityPublic {
+		return true
 	}
 	if n.Project.IsZero() {
 		return h.worksOn(ctx, "")
@@ -1008,7 +1019,7 @@ func (h *Handler) ImpactNodeCreate(ctx context.Context, r *connect.Request[graph
 	if err := checkTargets(targetsOf(m.Links)...); err != nil {
 		return nil, err
 	}
-	cn, err := h.Graph.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: m.Key, Type: m.Type, Properties: pbconv.Map(m.Props), Owner: m.Owner, Rationale: m.Rationale,
+	cn, err := h.Graph.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: m.Key, Type: m.Type, Properties: pbconv.Map(m.Props), Responsible: m.Responsible, Rationale: m.Rationale,
 		Links: linkWrites(m.Links), Flow: m.Flow, Execution: m.Execution, ProducedBy: who.Subject})
 	return res(&graphv1.ImpactNodeCreateResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
@@ -1024,7 +1035,7 @@ func nameOf(n *graphv1.NodeName) graph.NodeName {
 }
 
 func createSpec(s *graphv1.NodeCreateSpec, flow, execution, by string) graph.NodeCreate {
-	return graph.NodeCreate{Key: s.GetKey(), Type: s.GetType(), Properties: pbconv.Map(s.GetProps()), Owner: s.GetOwner(), Rationale: s.GetRationale(),
+	return graph.NodeCreate{Key: s.GetKey(), Type: s.GetType(), Properties: pbconv.Map(s.GetProps()), Responsible: s.GetResponsible(), Rationale: s.GetRationale(),
 		Links: linkWrites(s.GetLinks()), Flow: flow, Execution: execution, ProducedBy: by}
 }
 
@@ -1120,7 +1131,7 @@ func (h *Handler) ImpactNodeUpdate(ctx context.Context, r *connect.Request[graph
 		return nil, err
 	}
 	cn, err := h.Graph.ImpactNodeUpdate(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId),
-		graph.NodeUpdate{Properties: pbconv.Map(m.Props), Owner: m.Owner, Flow: m.Flow, Execution: m.Execution})
+		graph.NodeUpdate{Properties: pbconv.Map(m.Props), Responsible: m.Responsible, Flow: m.Flow, Execution: m.Execution})
 	return res(&graphv1.ImpactNodeUpdateResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 

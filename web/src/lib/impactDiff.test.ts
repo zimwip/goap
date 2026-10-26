@@ -3,7 +3,7 @@ import { nodeChanges } from './impactDiff';
 
 describe('nodeChanges', () => {
   const base = {
-    node: { id: 'n1', version: 2, key: 'REQ-1', state: 'draft', owner: 'u1', props: { title: 'Old', tags: ['a'], keep: { x: 1, y: 2 } } },
+    node: { id: 'n1', version: 2, key: 'REQ-1', state: 'draft', responsible: 'u1', props: { title: 'Old', tags: ['a'], keep: { x: 1, y: 2 } } },
     out: [
       { id: 'l1', type: 'alm@satisfies', to: { id: 'n2', version: 1 } },
       { id: 'l2', type: 'alm@traces', to: { id: 'n3', version: 4 }, props: { weight: 1 } },
@@ -12,7 +12,7 @@ describe('nodeChanges', () => {
 
   it('lists state, owner, properties and links in a stable order', () => {
     const after = {
-      node: { id: 'n1', version: 0, key: 'REQ-1', state: 'approved', owner: 'u2', props: { title: 'New', keep: { y: 2, x: 1 }, extra: 3 } },
+      node: { id: 'n1', version: 0, key: 'REQ-1', state: 'approved', responsible: 'u2', props: { title: 'New', keep: { y: 2, x: 1 }, extra: 3 } },
       out: [
         // the same link, now to a draft of its target: not a modification
         { id: 'd1', type: 'alm@satisfies', to: { id: 'n2', version: 0 } },
@@ -37,7 +37,7 @@ describe('nodeChanges', () => {
   });
 
   it('adds everything of a node the change creates, but its owner', () => {
-    const changes = nodeChanges(undefined, { node: { id: 'n9', state: 'draft', owner: 'u1', props: { title: 'T' } }, out: [{ type: 'alm@satisfies', to: { id: 'n2' } }] });
+    const changes = nodeChanges(undefined, { node: { id: 'n9', state: 'draft', responsible: 'u1', props: { title: 'T' } }, out: [{ type: 'alm@satisfies', to: { id: 'n2' } }] });
     expect(changes).toEqual([
       { kind: 'state', op: 'added', old: undefined, new: 'draft' },
       { kind: 'property', name: 'title', op: 'added', new: 'T' },

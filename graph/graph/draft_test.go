@@ -98,7 +98,7 @@ func testCommitWritesOneVersionPerDraft(t *testing.T, repo Repo) {
 	res := g.withState(t, ctx, must[domain.Baseline](t)(g.apply(ctx, c.ID, "")))
 
 	req2 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Nodes[f.req.ID]}))
-	if req2.Version != pre.Version+1 || !slices.Equal(req2.Parents, []domain.Version{pre.Version}) || req2.Owner != f.req.Owner || req2.ChangeID != c.ID || req2.ChangeImpact != mod.ID {
+	if req2.Version != pre.Version+1 || !slices.Equal(req2.Parents, []domain.Version{pre.Version}) || req2.Responsible != f.req.Responsible || req2.ChangeID != c.ID || req2.ChangeImpact != mod.ID {
 		t.Fatalf("REQ-1 v2: %+v", req2)
 	}
 	for _, d := range []struct {
@@ -106,7 +106,7 @@ func testCommitWritesOneVersionPerDraft(t *testing.T, repo Repo) {
 		cn  domain.ChangeImpact
 	}{{"TST-A", a}, {"TST-B", b}} {
 		n := must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, d.key))
-		if n.Version != 1 || len(n.Parents) != 0 || n.Reason != domain.ReasonCreate || n.ID != d.cn.Post.ID || res.Nodes[n.ID] != 1 || n.Owner.IsZero() || n.Project.IsZero() {
+		if n.Version != 1 || len(n.Parents) != 0 || n.Reason != domain.ReasonCreate || n.ID != d.cn.Post.ID || res.Nodes[n.ID] != 1 || n.Responsible.IsZero() || n.Project.IsZero() {
 			t.Fatalf("%s: %+v", d.key, n)
 		}
 		if g.versionCount(ctx, n.ID) != 1 {

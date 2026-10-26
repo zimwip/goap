@@ -632,6 +632,9 @@ impl<'a> Check<'a> {
     fn check_requires(&mut self) {
         let d = self.d;
         for (i, n) in d.node_types.iter().enumerate() {
+            if let Err(e) = crate::def::check_visibility(&n.visibility) {
+                self.add(format!("nodeTypes[{i}].visibility"), e);
+            }
             let mut seen = HashSet::new();
             for (j, r) in n.requires.iter().enumerate() {
                 let path = format!("nodeTypes[{i}].requires[{j}]");
@@ -770,6 +773,9 @@ fn lifecycle_issues(l: &Lifecycle) -> Vec<String> {
         if !names.insert(s.name.as_str()) {
             out.push(format!("duplicate state {}", s.name));
             continue;
+        }
+        if let Err(e) = crate::def::check_visibility(&s.visibility) {
+            out.push(format!("state {}: {e}", s.name));
         }
         if !s.not_committable {
             committable += 1;

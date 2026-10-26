@@ -131,19 +131,19 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit) (res CommitResult, e
 		}
 		switch {
 		case e.Pre == nil:
-			cn, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: e.Key, Type: e.Type, Properties: e.Props, Owner: e.Owner, Rationale: why(e), Links: links, ProducedBy: in.By})
+			cn, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: e.Key, Type: e.Type, Properties: e.Props, Responsible: e.Responsible, Rationale: why(e), Links: links, ProducedBy: in.By})
 			if err != nil {
 				return res, fmt.Errorf("%s: %w", nodeName(e), err)
 			}
 			impacts[i], posts[i], written[e.Key] = cn.ID, cn.Post, i
-		case len(e.Props) > 0 || e.Owner != "" || len(links) > 0 || len(e.RemoveLinks) > 0:
+		case len(e.Props) > 0 || e.Responsible != "" || len(links) > 0 || len(e.RemoveLinks) > 0:
 			cn, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: impacts[i]})
 			if err != nil {
 				return res, fmt.Errorf("%s: %w", nodeName(e), err)
 			}
 			posts[i] = cn.Post
-			if len(e.Props) > 0 || e.Owner != "" {
-				if _, err := g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: e.Props, Owner: e.Owner}); err != nil {
+			if len(e.Props) > 0 || e.Responsible != "" {
+				if _, err := g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: e.Props, Responsible: e.Responsible}); err != nil {
 					return res, fmt.Errorf("%s: %w", nodeName(e), err)
 				}
 			}

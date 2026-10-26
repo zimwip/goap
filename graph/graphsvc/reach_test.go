@@ -22,15 +22,15 @@ func TestReachOf(t *testing.T) {
 		t.Fatalf("a service by itself reads as %+v", r)
 	}
 	asked := ""
-	reachOf := graphsvc.ReachOf(func(_ context.Context, p authz.Principal) ([]string, error) {
+	reachOf := graphsvc.ReachOf(func(_ context.Context, p authz.Principal) (access.ReachSet, error) {
 		asked = p.Subject
-		return []string{"PROJ-A"}, nil
+		return access.ReachSet{Projects: []string{"PROJ-A"}, Subject: p.Subject}, nil
 	})
 	r, err := reachOf(authz.With(context.Background(), agent))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if asked != "ada" || r == nil || !r.Projects["PROJ-A"] || len(r.Projects) != 1 {
+	if asked != "ada" || r == nil || !r.Projects["PROJ-A"] || len(r.Projects) != 1 || r.Subject != "ada" {
 		t.Fatalf("reach for ada: %+v (asked for %q)", r, asked)
 	}
 	org := domain.Node{Namespace: access.NamespaceOrganisation}

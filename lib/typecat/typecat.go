@@ -54,6 +54,8 @@ type Type struct {
 	Requires []domain.RequiredLink
 	// AdminOnly: the nodes are written by platform administrators only (own or inherited, ADR 0068).
 	AdminOnly bool
+	// Visibility is the scope of the type (own or the nearest ancestor's, ADR 0161 §4); empty: none declared.
+	Visibility string
 	// AdditionalProperties: the nodes may carry properties that are no attribute of the type (own or inherited, strict
 	// attributes opt-out).
 	AdditionalProperties bool
@@ -395,6 +397,9 @@ func resolve(ref domain.TypeRef, decl map[domain.TypeRef]declared) (*Type, error
 		if t.Form == nil {
 			t.Form = dc.t.Form
 		}
+		if t.Visibility == "" {
+			t.Visibility = dc.t.Visibility
+		}
 		if dc.t.AdminOnly {
 			t.AdminOnly = true
 		}
@@ -605,6 +610,19 @@ func (c *Catalog) Requires(typ string) []domain.RequiredLink {
 func (c *Catalog) AdminOnly(typ string) bool {
 	t, ok := c.Type(typ)
 	return ok && t.AdminOnly
+}
+
+// Visibility is the scope a version of a node of the type is stamped with in a state (ADR 0161 §4): the state's, else
+// the type's (own or inherited), else project.
+func (c *Catalog) Visibility(typ, state string) string {
+	t, ok := c.Type(typ)
+	if !ok {
+		return domain.VisibilityProject
+	}
+	if v := t.Lifecycle.StateVisibility(state); v != "" {
+		return v
+	}
+	return domain.VisibilityOf(t.Visibility)
 }
 
 // Composes reports a composition link type (`compose: true`): its target is a part of its source (ADR 0077).

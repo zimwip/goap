@@ -324,6 +324,13 @@ pub struct Draft {
     pub execution: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub links: Vec<DraftLink>,
+    /// On a creation, the person who created the draft (ADR 0161 §3): the creator of the node it commits.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub creator: String,
+    /// The person who last edited the draft: the editor of the version it commits as. Not stored: rebuilt from the
+    /// log.
+    #[serde(skip)]
+    pub editor: String,
 }
 
 impl Draft {
@@ -434,6 +441,8 @@ pub struct ImpactEvent {
     pub flow: String,
     pub execution: String,
     pub by: String,
+    /// The person the author acted for (ADR 0114), when it is not the author: whose edits a version records.
+    pub for_: String,
     pub at: DateTime<Utc>,
     pub causation: String,
     pub state: Option<ChangeImpact>,
@@ -460,6 +469,7 @@ impl Default for ImpactEvent {
             flow: String::new(),
             execution: String::new(),
             by: String::new(),
+            for_: String::new(),
             at: zero_time(),
             causation: String::new(),
             state: None,
@@ -478,6 +488,11 @@ impl Default for ImpactEvent {
 }
 
 impl ImpactEvent {
+    /// The person the event is attributed to: the person the author acted for, else the author.
+    pub fn author(&self) -> &str {
+        if self.for_.is_empty() { &self.by } else { &self.for_ }
+    }
+
     /// Whether the event installs a draft for its impact on its flow.
     pub fn starts_draft(&self) -> bool {
         self.draft.is_some() && self.op.writes_post()
@@ -551,6 +566,7 @@ impl ImpactEvent {
             && self.flow == b.flow
             && self.execution == b.execution
             && self.by == b.by
+            && self.for_ == b.for_
             && self.causation == b.causation
     }
 }
@@ -586,6 +602,8 @@ impl LogEntry {
 #[serde(rename_all = "camelCase")]
 struct PayloadOut<'a> {
     op: ImpactOp,
+    #[serde(rename = "for", skip_serializing_if = "str::is_empty")]
+    for_: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     post: Option<&'a NodeRef>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -639,6 +657,7 @@ pub fn payload(e: &ImpactEvent) -> String {
     });
     jsontext::to_string(&PayloadOut {
         op: e.op,
+        for_: &e.for_,
         post: e.post.as_ref(),
         from_base: e.from_base.as_ref(),
         pre: e.pre.as_ref(),
@@ -782,6 +801,8 @@ struct PayloadIn {
     change_id: ChangeId,
     impact_id: String,
     op: ImpactOp,
+    #[serde(rename = "for")]
+    for_: String,
     state: Option<ChangeImpact>,
     post: Option<NodeRef>,
     draft: Option<Draft>,
@@ -816,6 +837,7 @@ pub fn event_of(l: &LogEntry) -> Result<ImpactEvent, String> {
         flow: l.flow.clone(),
         execution: l.execution.clone(),
         by: l.by.clone(),
+        for_: p.for_,
         at: l.at,
         causation: l.causation.clone(),
         state: p.state,
@@ -1188,12 +1210,21 @@ pub fn apply_draft(d: Option<&Draft>, e: &ImpactEvent) -> Option<Draft> {
         n.change = e.change.clone();
         n.impact = e.impact.clone();
         n.flow = e.flow.clone();
+        if e.op == ImpactOp::Created && n.creator.is_empty() {
+            n.creator = e.author().to_string();
+        }
+        if !e.author().is_empty() {
+            n.editor = e.author().to_string();
+        }
         return Some(n);
     }
     let d = d?;
     match e.op {
         ImpactOp::Updated | ImpactOp::Transitioned => {
             let mut n = d.clone();
+            if !e.author().is_empty() {
+                n.editor = e.author().to_string();
+            }
             let p: DraftPatch = e
                 .patch
                 .as_ref()

@@ -33,6 +33,8 @@ const NODE_VERSION_COLUMNS: &[&str] = &[
     "owner",
     "origins",
     "committed",
+    "editor",
+    "visibility",
 ];
 const LINK_COLUMNS: &[&str] = &[
     "id",
@@ -454,12 +456,14 @@ impl WriteTx for Session {
         let s = self.sql;
         if n.version == 1 {
             let q = format!(
-                "INSERT INTO node (id, namespace, key, type, latest, project) VALUES ({}, {}, {}, {}, 1, {})",
+                "INSERT INTO node (id, namespace, key, type, latest, project, creator, creator_unit) VALUES ({}, {}, {}, {}, 1, {}, {}, {})",
                 s.ph(1),
                 s.ph(2),
                 s.ph(3),
                 s.ph(4),
-                s.ph(5)
+                s.ph(5),
+                s.ph(6),
+                s.ph(7)
             );
             let args = vec![
                 Arg::Text(n.id.to_string()),
@@ -467,6 +471,8 @@ impl WriteTx for Session {
                 n.key.as_str().into(),
                 n.typ.as_str().into(),
                 Arg::Text(n.project.to_string()),
+                n.creator.subject.as_str().into(),
+                Arg::Text(n.creator.unit.to_string()),
             ];
             self.run((q, args), &format!("node {}", n.key)).await?;
         } else {
@@ -503,9 +509,11 @@ impl WriteTx for Session {
             Arg::or_null(&n.change_impact),
             n.comment.as_str().into(),
             n.execution.as_str().into(),
-            Arg::Text(n.owner.to_string()),
+            Arg::Text(n.responsible.to_string()),
             Arg::Text(json_list(&n.origins)),
             Arg::Int(committed),
+            n.editor.as_str().into(),
+            n.visibility.as_str().into(),
         ];
         self.run((q, args), &format!("node {}", n.node_ref())).await?;
         Ok(())

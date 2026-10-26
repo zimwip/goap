@@ -21,6 +21,16 @@ func (g *Graph) caller(ctx context.Context) string {
 	return g.Caller(ctx)
 }
 
+// author is the person behind an operation (ADR 0161 §3): the end user it is done for, else the caller.
+func (g *Graph) author(ctx context.Context) string {
+	if g.EndUser != nil {
+		if u := g.EndUser(ctx); u != "" {
+			return u
+		}
+	}
+	return g.caller(ctx)
+}
+
 // emit appends events to the impact logs and applies each one to the projection. The events of one batched operation
 // that follow each other with one envelope (domain.SameEntry: the verdicts of a review, the versions of a commit) are
 // one log entry (ADR 0144).
@@ -48,6 +58,11 @@ func (g *Graph) envelope(ctx context.Context, e *domain.ImpactEvent) {
 	}
 	if e.By == "" {
 		e.By = g.caller(ctx)
+		if g.EndUser != nil {
+			if u := g.EndUser(ctx); u != e.By {
+				e.For = u // a service acting for a person: the edits are the person's (ADR 0161 §3)
+			}
+		}
 	}
 }
 

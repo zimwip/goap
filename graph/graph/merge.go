@@ -634,6 +634,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 				return res, err
 			}
 			n.Version, n.Branch, n.Deleted, n.ChangeID, n.ChangeImpact, n.Comment, n.CreatedAt = v, plan.Into, deleted, c.ID, cn.ID, why, g.now()
+			n.Editor, n.Visibility = "", "" // the merger's version, seen as the domain says now (ADR 0161)
 			if err := tx.PutNode(ctx, n); err != nil {
 				return res, err
 			}

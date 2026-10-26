@@ -100,6 +100,8 @@ pub struct NodeType {
     #[serde(deserialize_with = "nullable")]
     pub requires: Vec<RequiredLink>,
     pub admin_only: bool,
+    /// How far a version is seen when its state declares none (ADR 0161 §4); inherited; empty: project.
+    pub visibility: String,
     pub additional_properties: bool,
     pub form: Option<Value>,
 }
@@ -235,6 +237,8 @@ pub struct LifecycleState {
     pub not_committable: bool,
     #[serde(rename = "final")]
     pub is_final: bool,
+    /// How far a version in the state is seen (ADR 0161 §4); empty: the node type's.
+    pub visibility: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -373,6 +377,34 @@ fn scalar(v: Value) -> String {
     match v {
         Value::String(s) => s,
         other => other.to_string(),
+    }
+}
+
+/// The scopes of a version (ADR 0161 §4, Go's `domain.Visibility...`), narrowest first.
+pub const VISIBILITY_PERSONAL: &str = "personal";
+pub const VISIBILITY_PRIVATE: &str = "private";
+pub const VISIBILITY_PROJECT: &str = "project";
+pub const VISIBILITY_TREE: &str = "tree";
+pub const VISIBILITY_PUBLIC: &str = "public";
+pub const VISIBILITIES: [&str; 5] = [
+    VISIBILITY_PERSONAL,
+    VISIBILITY_PRIVATE,
+    VISIBILITY_PROJECT,
+    VISIBILITY_TREE,
+    VISIBILITY_PUBLIC,
+];
+
+/// The scope a stamped value says: empty is the default, project (Go's `VisibilityOf`).
+pub fn visibility_of(v: &str) -> &str {
+    if v.is_empty() { VISIBILITY_PROJECT } else { v }
+}
+
+/// Refuses a value that names no scope (empty: not declared; Go's `CheckVisibility`).
+pub fn check_visibility(v: &str) -> Result<(), String> {
+    if v.is_empty() || VISIBILITIES.contains(&v) {
+        Ok(())
+    } else {
+        Err(format!("visibility {v:?}: one of [{}]", VISIBILITIES.join(" ")))
     }
 }
 

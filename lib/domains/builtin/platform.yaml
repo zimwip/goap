@@ -1,5 +1,5 @@
 name: platform
-version: 2.8.0
+version: 2.9.0
 description: >
   The platform configuration, in its own namespace ("platform"): the MCPs (the generic usage of a tool by an LLM), the
   adapter definitions (AdapterDef: code mapping an MCP onto a connector; an organisation implements an MCP with an Adapter
@@ -11,6 +11,7 @@ nodeTypes:
   # the MCPs (MCP:<name>) and the adapter definitions (ADD:<name>, ADR 0019)
   # scope: where a methodology may use the MCP, action | agent | both (default; ADR 0028)
   - name: MCP
+    visibility: public # the platform describes itself to every identified person (ADR 0161 §4)
     description: "Generic usage of a tool by an LLM: its tool signatures and scope"
     lifecycle: config
     editor: mcp
@@ -20,6 +21,7 @@ nodeTypes:
       - {name: scope, label: Scope, description: "Where a methodology may use it: actions, agents or both", type: enum, enum: mcp-scope, section: Identity, order: 3}
       - {name: tools, label: Tools, description: "Signatures of the tools", type: json, widget: textarea, section: Tools, order: 4}
   - name: AdapterDef
+    visibility: public
     description: "Code implementing the tools of an MCP with the operations of a connector"
     adminOnly: true
     lifecycle: config
@@ -34,6 +36,7 @@ nodeTypes:
       - {name: params, label: Parameters, description: "Parameters the units give values to", type: json, widget: textarea, section: Code, order: 7}
   # the model gateway configuration is taken out of force by a transition, never deleted (ADR 0076): lifecycle config
   - name: LlmProvider
+    visibility: public
     description: "LLM provider: a kind (preset) on a wire protocol"
     lifecycle: config
     attributes:
@@ -44,6 +47,7 @@ nodeTypes:
       - {name: enabled, label: Enabled, description: "The provider is usable", type: boolean, section: Connection, order: 5}
       - {name: apiKeyRef, label: "API key", description: "Reference to the secret holding the key", type: string, section: Connection, order: 6}
   - name: LlmModel
+    visibility: public
     description: "Model offered on the platform, with its global quota and the roles that may call it"
     lifecycle: config
     attributes:
@@ -55,6 +59,7 @@ nodeTypes:
       - {name: quotaPeriod, label: "Quota period", description: "Period the quota applies to", type: string, section: Quota, order: 6}
       - {name: roles, label: Roles, description: "Roles allowed to call the model", type: json, widget: textarea, section: Access, order: 7}
   - name: LlmAlias
+    visibility: public
     description: "Name (default, fast, ...) of a model, as provider/model"
     lifecycle: config
     validators: [alias-needs-target]
@@ -63,6 +68,7 @@ nodeTypes:
       - {name: target, label: Target, description: "The model, as provider/model", type: string, section: Identity, order: 2}
       - {name: protected, label: Protected, description: "Alias the platform itself uses (assistant, helper): it may not be retired nor renamed, only retargeted", type: boolean, section: Identity, order: 3}
   - name: LlmBehavior
+    visibility: public
     description: "Global behaviour of the LLM calls: an instruction the gateway adds to the system text of the calls matching its scope (ADR 0093)"
     adminOnly: true
     lifecycle: config
@@ -81,6 +87,7 @@ nodeTypes:
   # a pattern of the form designer (ADR 0115 §9): a ready-made set of fields the methodologies of the platform share,
   # offered next to the patterns shipped with the web (FP:<name>)
   - name: FormPattern
+    visibility: public
     description: "A ready-made set of form fields the form designer offers (ADR 0115)"
     lifecycle: config
     attributes:
@@ -95,6 +102,7 @@ nodeTypes:
   # decide what it may do (authz.DefaultPolicies) or to validate an Assignment's roles (not checked server-side).
   # Administration (RoleAdmin) is one too (ADR 0047), granted the same way.
   - name: Role
+    visibility: public
     description: "Built-in platform-wide role, granted by an Assignment naming no project"
     editor: role
     attributes:
@@ -103,6 +111,7 @@ nodeTypes:
   # the sources of the logical URLs (ADR 0154, SRC:<name>): a URL lnk:<source>/<type>/<key> whose source is no
   # namespace of this graph names one of them; the kind picks the resolver the services plug (graph, files...)
   - name: Source
+    visibility: public
     description: "Where the things a logical URL names live: another graph, a directory of files..."
     adminOnly: true
     lifecycle: config

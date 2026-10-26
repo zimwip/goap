@@ -175,7 +175,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 key: theirs.key.clone(),
                 typ: theirs.typ.clone(),
                 state: theirs.state.clone(),
-                owner: theirs.owner.clone(),
+                owner: theirs.responsible.clone(),
                 props: theirs.props.clone(),
             };
             let copied = copy_draft(&checkout, &base_node, &links);

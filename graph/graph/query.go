@@ -1123,8 +1123,8 @@ func (q *qNode) Property(key string) (any, bool) {
 		return float64(q.n.Version), true
 	case "namespace":
 		return q.n.Namespace, true
-	case "owner":
-		return nilIfEmpty(q.n.Owner.Key), true
+	case "responsible", "owner":
+		return nilIfEmpty(q.n.Responsible.Key), true
 	case "project":
 		return nilIfEmpty(q.n.Project.Key), true
 	}

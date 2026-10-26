@@ -30,9 +30,9 @@ func (s *Snapshot) readCriticality(nodes []domain.Node, byID map[domain.NodeID]d
 		}
 	}
 	for _, n := range nodes {
-		owner, ok := units[n.Owner.Key]
+		owner, ok := units[n.Responsible.Key]
 		if !ok || !s.structures.In(domain.StructureOrganisation, owner.Type) {
-			s.Problems = append(s.Problems, fmt.Sprintf("%s: its owner %s is not a unit of the organisation", n.Key, n.Owner))
+			s.Problems = append(s.Problems, fmt.Sprintf("%s: its owner %s is not a unit of the organisation", n.Key, n.Responsible))
 			continue
 		}
 		lvl, p, err := CriticalityPolicyFromProps(n.Properties)

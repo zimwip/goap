@@ -136,11 +136,29 @@ pub struct Node {
     pub execution: String,
     /// The branches the version joined as is (filled by the reads of a history only).
     pub joined: Vec<String>,
-    /// The unit owning the version and the project of the node, logical URLs (ADR 0154).
-    pub owner: Url,
+    /// The unit responsible for the version (ADR 0161) and the project of the node, logical URLs (ADR 0154).
+    pub responsible: Url,
     pub project: Url,
     pub origins: Vec<NodeRef>,
+    /// Who created the node (ADR 0161 §3), the same for every version: stamped by its first one.
+    pub creator: Creator,
+    /// The person whose edits made the version (attribution; the first version's is the creator), stamped at commit.
+    pub editor: String,
+    /// How far the version is seen (ADR 0161 §4: `personal`...), stamped at commit; empty reads as `project`.
+    pub visibility: String,
 }
+
+/// Who created a node (Go's `domain.Creator`): the subject, and the unit it was created in.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Creator {
+    pub subject: String,
+    pub unit: Url,
+}
+
+pub use graph_catalog::def::{
+    VISIBILITIES, VISIBILITY_PERSONAL, VISIBILITY_PRIVATE, VISIBILITY_PROJECT, VISIBILITY_PUBLIC, VISIBILITY_TREE,
+    check_visibility, visibility_of,
+};
 
 impl Node {
     pub fn node_ref(&self) -> NodeRef {
@@ -279,8 +297,39 @@ pub struct NodeQuery {
     pub change: ChangeId,
     pub offset: usize,
     pub limit: usize,
-    /// The projects the caller reads, as the nodes store them (None: every node).
-    pub projects: Option<Vec<String>>,
+    /// The reach of the caller (None: every node).
+    pub reach: Option<ReachFilter>,
+}
+
+/// A caller's reach as the stores filter it (Go's `graphapi.ReachFilter`, ADR 0161 §4-5): the keys of the structures
+/// as the nodes store them (their logical URLs and their bare keys).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ReachFilter {
+    /// The projects it works on.
+    pub projects: Vec<String>,
+    /// The projects whose versions of scope tree it reads.
+    pub trees: Vec<String>,
+    /// The units whose private versions it reads.
+    pub units: Vec<String>,
+    /// The caller: the personal versions of the nodes it created.
+    pub subject: String,
+}
+
+impl ReachFilter {
+    /// Whether the reach holds a version (`ReachFilter.Holds`).
+    pub fn holds(&self, n: &Node) -> bool {
+        let is_in =
+            |list: &[String], u: &Url| !u.key.is_empty() && list.iter().any(|x| *x == u.key || *x == u.to_string());
+        match visibility_of(&n.visibility) {
+            VISIBILITY_PUBLIC => true,
+            VISIBILITY_TREE => is_in(&self.trees, &n.project) || is_in(&self.projects, &n.project),
+            VISIBILITY_PRIVATE => is_in(&self.projects, &n.project) && is_in(&self.units, &n.responsible),
+            VISIBILITY_PERSONAL => {
+                is_in(&self.projects, &n.project) && !self.subject.is_empty() && n.creator.subject == self.subject
+            }
+            _ => is_in(&self.projects, &n.project),
+        }
+    }
 }
 
 /// The largest page of a browse.

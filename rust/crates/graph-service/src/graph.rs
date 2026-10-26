@@ -12,7 +12,7 @@ use graph_catalog::{
 };
 use graph_core::access;
 use graph_core::operations;
-use graph_core::reach::{OPEN_NAMESPACES, Reach};
+use graph_core::reach::Reach;
 use graph_core::write::branchmerge;
 use graph_core::write::merge::Merge;
 use graph_core::write::restructure::{NodeName, Restructured};
@@ -213,9 +213,7 @@ impl Access {
 
     /// Whether the caller reads a node outside a change (Go's `Handler.mayReadNode`).
     fn may_read_node(&self, n: &graph_core::model::Node) -> bool {
-        !self.person
-            || OPEN_NAMESPACES.contains(&n.namespace.as_str())
-            || self.snap.may_access_project(&self.reader, &n.project.key)
+        Reach::holds(self.reach().as_ref(), n)
     }
 
     /// The seat a person rules a decision point of a board in (Go's `graphsvc.SeatAuthorizer`): `decision:sit` with
@@ -348,20 +346,16 @@ impl Readable {
         }
     }
 
-    /// What the caller reads of the current graph (Go's `graphsvc.ReachOf`, ADR 0161 §5): the nodes of the projects
-    /// it works on; a platform service acting by itself, everything.
+    /// What the caller reads of the current graph (Go's `graphsvc.ReachOf`, ADR 0161 §5): the versions whose scope
+    /// reaches it; a platform service acting by itself, everything.
     pub(crate) fn reach(&self) -> Option<Reach> {
         self.person.as_ref().map(|(p, snap)| Reach::of(snap, p))
     }
 
-    /// Whether the caller reads a node outside a change (Go's `Handler.mayReadNode`, ADR 0138): the nodes of the
-    /// open namespaces are every person's, the others those of who works on their project (the root for a node of
-    /// none).
+    /// Whether the caller reads a node outside a change (Go's `Handler.mayReadNode`, ADR 0161 §4): the nodes of the
+    /// open namespaces are every person's, the others those whose scope reaches it.
     pub(crate) fn may_read_node(&self, n: &graph_core::model::Node) -> bool {
-        let Some((p, snap)) = &self.person else {
-            return true;
-        };
-        OPEN_NAMESPACES.contains(&n.namespace.as_str()) || snap.may_access_project(p, &n.project.key)
+        Reach::holds(self.reach().as_ref(), n)
     }
 }
 
@@ -1131,7 +1125,7 @@ impl pb::GraphService for Graph {
                 change: m.change_id.as_str().into(),
                 offset: m.offset.max(0) as usize,
                 limit: read::view_page_limit(m.limit.into()),
-                projects: None,
+                reach: None,
             };
             let page = w.page(&q).await?;
             let header = read::header_of(tx, &page.baseline).await?; // the header: the page is what is sent
@@ -1160,7 +1154,7 @@ impl pb::GraphService for Graph {
                 l => l as usize,
             };
             let reach = who.reach();
-            let projects = Reach::within(reach.as_ref(), &header.namespace).map(Reach::filter);
+            let filter = Reach::within(reach.as_ref(), &header.namespace).map(Reach::filter);
             let state = read::select(tx, &header, None).await?;
             let mut refs: Vec<NodeRef> = state.iter().map(|(n, v)| NodeRef::new(n.clone(), *v)).collect();
             refs.sort();
@@ -1169,7 +1163,7 @@ impl pb::GraphService for Graph {
                     &refs,
                     &m.r#type,
                     &m.query,
-                    projects.as_deref(),
+                    filter.as_ref(),
                     m.offset.max(0) as usize,
                     limit,
                 )
@@ -3356,7 +3350,7 @@ impl pb::GraphService for Graph {
                         key: m.key.clone(),
                         typ: m.r#type.clone(),
                         props: m.props.as_ref().map(convert::map).filter(|p| !p.is_empty()),
-                        owner: m.owner.clone(),
+                        owner: m.responsible.clone(),
                         rationale: m.rationale.clone(),
                         links,
                         execution: m.execution.clone(),
@@ -3519,7 +3513,7 @@ impl pb::GraphService for Graph {
             acc.allow(tx, &m.change_id, operations::IMPACT_UPDATE).await?;
             let props = m.props.as_ref().map(convert::map).unwrap_or_default();
             let cn = tx
-                .impact_node_update(&id, &m.change_impact_id, props, &m.owner, &m.flow, &m.execution)
+                .impact_node_update(&id, &m.change_impact_id, props, &m.responsible, &m.flow, &m.execution)
                 .await?;
             Ok(pb::ImpactNodeUpdateResponse {
                 node: Some(convert::change_impact(&cn)),
@@ -3983,7 +3977,7 @@ impl pb::GraphService for Graph {
                     })
                     .collect(),
                 remove_links: e.remove_links.iter().map(|l| l.as_str().into()).collect(),
-                owner: e.owner.clone(),
+                owner: e.responsible.clone(),
                 state: e.state.clone(),
             })
             .collect();
@@ -4749,7 +4743,7 @@ fn create_spec(s: Option<&pb::NodeCreateSpec>, execution: &str, by: &str) -> Res
         key: s.key.clone(),
         typ: s.r#type.clone(),
         props: s.props.as_ref().map(convert::map).filter(|p| !p.is_empty()),
-        owner: s.owner.clone(),
+        owner: s.responsible.clone(),
         rationale: s.rationale.clone(),
         links: convert::link_writes(&s.links).map_err(|e| GraphError::new(Kind::Invalid, e))?,
         execution: execution.to_string(),

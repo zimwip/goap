@@ -154,7 +154,8 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 		comment = cn.Reviews[len(cn.Reviews)-1].Comment
 	}
 	n := domain.Node{ID: d.Node, Branch: a.branch, Namespace: domain.NamespaceOf(a.change.Namespace), Key: d.Key, Type: d.Type, Properties: cloneMap(d.Properties),
-		State: d.State, ChangeID: a.change.ID, Owner: d.Owner, ChangeImpact: cn.ID, Comment: comment, Execution: d.Execution, Origins: slices.Clone(d.Origins), CreatedAt: a.g.now()}
+		State: d.State, ChangeID: a.change.ID, Responsible: d.Owner, ChangeImpact: cn.ID, Comment: comment, Execution: d.Execution, Origins: slices.Clone(d.Origins), CreatedAt: a.g.now(),
+		Creator: domain.Creator{Subject: d.Creator}, Editor: d.Editor}
 	if d.Base == nil {
 		// a key is one node's: another change may have created it meanwhile
 		id, err := a.tx.NodeIDByKey(a.ctx, n.Namespace, n.Key)

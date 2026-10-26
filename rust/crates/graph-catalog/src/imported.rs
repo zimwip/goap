@@ -106,6 +106,8 @@ pub struct NodeType {
     pub requires: Vec<RequiredLink>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub admin_only: bool,
+    #[serde(default, deserialize_with = "text", skip_serializing_if = "String::is_empty")]
+    pub visibility: String,
     #[serde(default, skip_serializing_if = "is_false")]
     pub additional_properties: bool,
     #[serde(default, skip_serializing)]

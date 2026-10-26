@@ -55,6 +55,8 @@
 import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, removeFromChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
 
   import NotFound from '../../shell/NotFound.svelte';
+  import { refKey } from '../../lnk';
+  import { visibilityLabel } from '../../visibility';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -689,6 +691,9 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
               <dt>Version</dt><dd>{stored.draft || !stored.version ? 'draft (no version yet)' : `v${stored.version}`}{#if stored.reason} <span class="hint">({stored.reason})</span>{/if}</dd>
               {#if stored.state}<dt>Stored state</dt><dd><span class="state">{stored.state}</span></dd>{/if}
               <dt>Created</dt><dd>{formatDate(stored.createdAt)}</dd>
+              {#if stored.creator}<dt>Creator</dt><dd>{stored.creator}{#if stored.creatorUnit} <span class="hint">({refKey(stored.creatorUnit)})</span>{/if}</dd>{/if}
+              {#if stored.editor && !stored.draft}<dt>Edited by</dt><dd>{stored.editor}</dd>{/if}
+              {#if !stored.draft}<dt>Visibility</dt><dd title={visibilityLabel(stored.visibility)}>{stored.visibility || 'project'}</dd>{/if}
               {#if stored.changeId}<dt>Change</dt><dd><button type="button" class="link" onclick={() => openTab({ kind: 'change', params: { id: stored.changeId ?? '' } }, { pin: true })}>{changes.items.find((c) => c.id === stored.changeId)?.title ?? shortId(stored.changeId)}</button></dd>{/if}
             </dl>
           </section>

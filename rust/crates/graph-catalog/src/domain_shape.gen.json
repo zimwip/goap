@@ -883,6 +883,16 @@
           }
         },
         {
+          "yaml": "visibility",
+          "json": "visibility",
+          "omit": true,
+          "jsonOmit": true,
+          "type": {
+            "kind": "string",
+            "go": "string"
+          }
+        },
+        {
           "yaml": "additionalProperties",
           "json": "additionalProperties",
           "omit": true,
@@ -1204,6 +1214,16 @@
           "type": {
             "kind": "bool",
             "go": "bool"
+          }
+        },
+        {
+          "yaml": "visibility",
+          "json": "visibility",
+          "omit": true,
+          "jsonOmit": true,
+          "type": {
+            "kind": "string",
+            "go": "string"
           }
         }
       ]

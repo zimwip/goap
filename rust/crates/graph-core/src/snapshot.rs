@@ -305,10 +305,10 @@ pub async fn export_snapshot<T: ReadTx>(
             key: n.key,
             typ: n.typ,
             state: n.state,
-            owner: if n.owner.is_zero() {
+            owner: if n.responsible.is_zero() {
                 String::new()
             } else {
-                n.owner.to_string()
+                n.responsible.to_string()
             },
             props: n.props,
             links,

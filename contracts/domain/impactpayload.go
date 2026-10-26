@@ -35,7 +35,7 @@ func BaseLinkID(event string, link LinkID) LinkID {
 func CopyDraft(e ImpactEvent, base Node, links []Link) Draft {
 	b := base.Ref()
 	d := Draft{Change: e.Change, Impact: e.Impact, Flow: e.Flow, Execution: e.Execution, Node: base.ID, Key: base.Key, Type: base.Type,
-		State: base.State, Owner: base.Owner, Properties: cloneProps(base.Properties), Base: &b}
+		State: base.State, Owner: base.Responsible, Properties: cloneProps(base.Properties), Base: &b}
 	if e.Draft != nil {
 		d.Execution = e.Draft.Execution
 		if m := e.Draft.MergedWith; m != nil {
@@ -131,7 +131,7 @@ func (o ImpactOp) Batched() bool { return o == ImpactReviewed || o == ImpactComm
 
 // SameEntry reports events one log entry can carry: of one change and one batched operation, with one envelope.
 func SameEntry(a, b ImpactEvent) bool {
-	return a.Op.Batched() && a.Change == b.Change && a.Op == b.Op && a.Flow == b.Flow && a.Execution == b.Execution && a.By == b.By &&
+	return a.Op.Batched() && a.Change == b.Change && a.Op == b.Op && a.Flow == b.Flow && a.Execution == b.Execution && a.By == b.By && a.For == b.For &&
 		a.Causation == b.Causation
 }
 

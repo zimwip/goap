@@ -1,5 +1,5 @@
 name: methodology
-version: 1.17.0
+version: 1.18.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
   "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
@@ -8,6 +8,7 @@ enums:
   - {name: action-kind, description: How an action is carried out, values: [{value: llm, label: LLM}, {value: tool, label: Tool}, {value: human, label: Human}, {value: builtin, label: Built-in}, {value: script, label: Script}, {value: abstract, label: Abstract}]}
 nodeTypes:
   - name: MethodologyVersion
+    visibility: public # the platform describes itself to every identified person (ADR 0161 §4)
     description: "A version of a methodology: its scalar fields, status and timestamps"
     editor: methodology
     search: [{property: name, text: true}, {property: description, text: true}, {property: status, facet: true}]
@@ -34,6 +35,7 @@ nodeTypes:
       - {name: publishedAt, label: "Published at", description: "When the version was published", type: string, section: History, order: 8}
       - {name: updatedBy, label: "Updated by", description: "Who last modified the version", type: string, section: History, order: 9}
   - name: Agent
+    visibility: public
     description: "Agent of a methodology version, with its triggers"
     editor: agent
     search: [{property: name, text: true}, {property: description, text: true}, {property: examples, text: true}, {property: planner, facet: true}]
@@ -94,6 +96,7 @@ nodeTypes:
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   - name: Condition
+    visibility: public
     description: "Condition of a methodology version"
     editor: condition
     search: [{property: name, text: true}, {property: description, text: true}]
@@ -110,6 +113,7 @@ nodeTypes:
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   - name: Goal
+    visibility: public
     description: "Goal of a methodology version"
     editor: goal
     search: [{property: name, text: true}, {property: description, text: true}, {property: examples, text: true}]
@@ -124,6 +128,7 @@ nodeTypes:
   # ADR 0035 §2: a role processes and methods assign RACI style; ADR 0039: what Assignment (organisation namespace)
   # grants a unit or user on a project is named from a project's applicable methodologies' roles.
   - name: Role
+    visibility: public
     description: "Role of a methodology version: assigned RACI style by its processes and methods, allowed to run its agents and actions, held on a project through an Assignment"
     editor: role
     search: [{property: name, text: true}, {property: description, text: true}]
@@ -138,6 +143,7 @@ nodeTypes:
   # sub-activities (sub_activity link) that feed it. A Change scopes to one Activity node (Change.Data["activityRef"], ADR 0066);
   # an Activity Run (pkg/journal.Record) is one execution instance of one, against one Change.
   - name: Activity
+    visibility: public
     description: "Common shape of Process/Step/Method/MethodStep: the conditions it requires (input) and produces (output), composed from sub-activities"
     editor: activity
     search: [{property: name, text: true}, {property: description, text: true}]
@@ -231,6 +237,7 @@ nodeTypes:
       - {name: gate, label: "Gate", description: "Refused in a method: a method says how, the gate belongs to the process (ADR 0132); kept so a definition reads back as written", type: json, widget: textarea, section: Execution, order: 16}
   # an MCP tool the self-observation asks the platform for (ADR 0011): not part of a definition
   - name: ToolRequest
+    visibility: public
     description: "MCP tool requested by the self-observation of a methodology"
     search: [{property: name, text: true}, {property: description, text: true}, {property: motivation, text: true}]
     attributes:

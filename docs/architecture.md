@@ -578,20 +578,27 @@ stopped project, or one below it, takes no new change) and moves it. `access.Pro
 write of an Assignment or a project at commit against the state it started from, `ProjectOwnerValidator` keeps an
 owner on a project that had one; the graph handler reads a node or a change only for who may access its project.
 
-**Reach and owned writes** ([ADR 0161](adr/0161-access-rights-and-data-segregation.md), phase 1): what a caller
-reads of the current graph is decided once, in the view reader (`graph/graph/view.go`, `reach.go`), never per
-handler: `Graph.ReachOf` (`graphsvc.ReachOf(directory.ReachableProjects)`, plugged by `platform/cmd/graph`)
-gives the projects whose nodes the caller reads (`access.Snapshot.ReachableProjects`: the projects
-`MayAccessProject` allows) and the namespaces read whole (organisation, platform, methodology). `ViewNode`,
-`ViewNeighbourhood`, `ViewNodes`, `ViewNodesOfType`, `QueryView`, `BaselineNodes` / `BaselineLinks` and
-`ExportSnapshot` leave out the nodes out of reach and every link touching one (no stub), the pages and counts filtered
-in the store (`NodeQuery.Projects` / `LinkQuery.Projects`, `n.project IN …`); `GetBaselineGraph`, `GetBaselineDelta`
-and `DiffBaselines` keep what `Reach.Keep` / `Sees` keep. A platform service acting for a person (`OnBehalfOf`) reads
-as that person (`graphsvc.Reader`); a service acting by itself, or an in-process call naming no principal, reads
-everything. A change checks out a stored node only when its project, or one above the node's, owns it
-(`Graph.OwnedWrites` = `graphsvc.OwnedWrites`: every namespace but the open ones; `checkOwned`, `authz.ErrForbidden`).
-The creator, the editor, the visibility scopes of the lifecycle states and the roles as action lists are the next
-phases of the ADR.
+**Reach and owned writes** ([ADR 0161](adr/0161-access-rights-and-data-segregation.md), phases 1 and 2): what a
+caller reads of the current graph is decided once, in the view reader (`graph/graph/view.go`, `reach.go`), never per
+handler. Every node version carries its scope (`Node.Visibility`, stamped at commit from the lifecycle state, else the
+node type, else `project`: `personal`, `private`, `project`, `tree`, `public`; the built-in namespaces declare
+`public`), its creator (`Node.Creator`: subject and unit, set by the first version) and its editor (`Node.Editor`: the
+person behind the write, the end user an agent acts for). `Graph.ReachOf` (`graphsvc.ReachOf(directory.ReachSet)`,
+plugged by `platform/cmd/graph`) gives the reach of the caller (`access.Snapshot.ReachSet`, kept per subject and head
+of the organisation by `Directory.ReachSet`): the projects it works on (`MayAccessProject`), the projects of their
+parent trees, its units and itself. A version is held when its scope reaches it: `public` always, `tree` in a tree it
+reaches, `project` in a project it works on, `private` there when one of its units answers for the version
+(`Node.Responsible`), `personal` there when it created the node; the namespaces organisation, platform and methodology
+are read whole. `ViewNode`, `ViewNeighbourhood`, `ViewNodes`, `ViewNodesOfType`, `QueryView`, `BaselineNodes` /
+`BaselineLinks` and `ExportSnapshot` leave out the versions out of reach and every link touching one (no stub), the
+pages and counts filtered in the store (`NodeQuery.Reach` / `LinkQuery.Reach`, `graphapi.ReachFilter`, `reachHolds`);
+`GetBaselineGraph`, `GetBaselineDelta` and `DiffBaselines` keep what `Reach.Keep` / `Sees` keep; the index filters its
+hits by the same rule (`ReachSet.Holds` over the documents' project, visibility, responsible and creator). Only the
+creator moves a node out of a personal state (`checkShare`, `node:share`). A platform service acting for a person
+(`OnBehalfOf`) reads as that person (`graphsvc.Reader`); a service acting by itself, or an in-process call naming no
+principal, reads everything. A change checks out a stored node only when its project, or one above the node's, owns
+it (`Graph.OwnedWrites` = `graphsvc.OwnedWrites`: every namespace but the open ones; `checkOwned`,
+`authz.ErrForbidden`). The last release and the roles as action lists are the next phases of the ADR.
 
 **Batched reads**: a read of the current graph reads what it meets in batches, never one row per element, so its
 round trips do not grow with the links of a hub or the length of a history (`graph/graph/batchread.go`): the

@@ -40,7 +40,7 @@ func (g *Graph) BaselineNodes(ctx context.Context, id domain.BaselineID, q NodeQ
 		if err != nil {
 			return err
 		}
-		q.Projects = g.projectsOf(reach.in(h.Namespace))
+		q.Reach = g.filterOf(reach.in(h.Namespace))
 		if q.Change != "" {
 			nodes, err := changeNodesIn(ctx, tx, id, q.Change)
 			page = pageNodes(nodes, q)
@@ -62,7 +62,7 @@ func pageNodes(nodes []domain.Node, q NodeQuery) (page NodePage) {
 	counts := map[string]int{}
 	var matched []domain.Node
 	for _, n := range nodes {
-		if (n.Deleted && !q.IncludeDeleted) || (text != "" && !nodeMatches(n, text)) || !inProjects(n, q.Projects) {
+		if (n.Deleted && !q.IncludeDeleted) || (text != "" && !nodeMatches(n, text)) || !q.Reach.Holds(n) {
 			continue
 		}
 		counts[n.Type]++
@@ -75,11 +75,6 @@ func pageNodes(nodes []domain.Node, q NodeQuery) (page NodePage) {
 		page.Nodes = matched[q.Offset:min(q.Offset+q.Limit, len(matched))]
 	}
 	return page
-}
-
-// inProjects reports whether a node is of one of some projects as the nodes store them (nil: every project).
-func inProjects(n domain.Node, projects []string) bool {
-	return projects == nil || slices.Contains(projects, n.Project.String()) || slices.Contains(projects, n.Project.Key)
 }
 
 // typeCounts sorts the counts by type, and the total of typ (every type when empty).
@@ -133,9 +128,8 @@ type LinkQuery struct {
 	Type string
 	// Text keeps the links whose type or a string property contains it (case-insensitive).
 	Text string
-	// Projects keeps the links both ends of which are nodes of these projects, as the nodes store them (nil: every
-	// project): the reach of the caller (ADR 0161 §5).
-	Projects      []string
+	// Reach keeps the links both ends of which are versions the caller reads (nil: every link, ADR 0161 §5).
+	Reach         *graphapi.ReachFilter
 	Offset, Limit int
 }
 
@@ -164,7 +158,7 @@ func (g *Graph) BaselineLinks(ctx context.Context, id domain.BaselineID, q LinkQ
 		if err != nil || len(b.Nodes) == 0 {
 			return err
 		}
-		q.Projects = g.projectsOf(reach.in(b.Namespace))
+		q.Reach = g.filterOf(reach.in(b.Namespace))
 		page, err = tx.LinkPage(ctx, refsOf(b.Nodes), q)
 		return err
 	})

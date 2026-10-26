@@ -70,7 +70,7 @@ nodeTypes:
 	if h.ID != domain.NodeID(c.ID) || h.Title != "Reset the password" || h.Project != root || h.Methodology != "sdlc" || h.Status != string(c.Status) || h.Namespace != "docs" {
 		t.Fatalf("hit %+v", h)
 	}
-	if h.Owner == "" {
+	if h.Responsible == "" {
 		t.Fatalf("the holding unit is indexed: %+v", h)
 	}
 

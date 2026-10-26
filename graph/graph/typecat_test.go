@@ -208,6 +208,12 @@ func (ts testTypes) Requires(typ string) []domain.RequiredLink {
 
 func (ts testTypes) AdminOnly(typ string) bool { return typecat.Builtin().AdminOnly(typ) }
 func (ts testTypes) Composes(string) bool      { return false }
+func (ts testTypes) Visibility(typ, state string) string {
+	if v := ts.Lifecycle(typ).StateVisibility(state); v != "" {
+		return v
+	}
+	return typecat.Builtin().Visibility(typ, state)
+}
 
 // A node type flagged `adminOnly:` in a domain is restricted, and its subtypes with it, without any code naming it
 // (ADR 0068); a type the domain does not flag is not.

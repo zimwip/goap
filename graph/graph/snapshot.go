@@ -117,8 +117,8 @@ func (g *Graph) ExportSnapshot(ctx context.Context, namespace, branch string, ba
 			continue
 		}
 		sn := SnapshotNode{Key: n.Key, Type: n.Type, State: n.State, Properties: n.Properties, Links: out[n.ID], Provenance: provenance(n)}
-		if !n.Owner.IsZero() {
-			sn.Owner = n.Owner.String()
+		if !n.Responsible.IsZero() {
+			sn.Owner = n.Responsible.String()
 		}
 		slices.SortFunc(sn.Links, func(a, b SnapshotLink) int {
 			if c := strings.Compare(a.Type, b.Type); c != 0 {
@@ -333,7 +333,7 @@ func (g *Graph) ImportSnapshot(ctx context.Context, in SnapshotImport) (res Snap
 			}
 			p.node = &n
 			p.props = propsPatch(n.Properties, sn.Properties)
-			if owner != "" && !n.Owner.Names(owner) {
+			if owner != "" && !n.Responsible.Names(owner) {
 				p.owner = owner
 			}
 			p.state = sn.State != "" && sn.State != n.State
@@ -393,7 +393,7 @@ func (g *Graph) ImportSnapshot(ctx context.Context, in SnapshotImport) (res Snap
 	for i, p := range plans {
 		in.progress(i, 2*len(plans))
 		if p.node == nil {
-			cn, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: p.sn.Key, Type: p.sn.Type, Properties: p.sn.Properties, Owner: p.owner, Rationale: why, ProducedBy: in.By})
+			cn, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: p.sn.Key, Type: p.sn.Type, Properties: p.sn.Properties, Responsible: p.owner, Rationale: why, ProducedBy: in.By})
 			if err != nil {
 				return res, fmt.Errorf("%s: %w", p.sn.Key, err)
 			}
@@ -408,7 +408,7 @@ func (g *Graph) ImportSnapshot(ctx context.Context, in SnapshotImport) (res Snap
 		}
 		p.impact, p.draftID = cn.ID, p.node.ID
 		if len(p.props) > 0 || p.owner != "" {
-			if _, err := g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: p.props, Owner: p.owner}); err != nil {
+			if _, err := g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: p.props, Responsible: p.owner}); err != nil {
 				return res, fmt.Errorf("%s: %w", p.sn.Key, err)
 			}
 		}

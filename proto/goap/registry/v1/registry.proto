@@ -99,6 +99,9 @@ message NodeType {
   string icon = 16;
   // color of the nodes (#rrggbb); inherited
   string color = 17;
+  // how far a version is seen when its state declares none (ADR 0161 §4: personal, private, project, tree,
+  // public); inherited; empty: project
+  string visibility = 18;
 }
 
 // RequiredLink: a node of the type has exactly count outgoing links of the link type (ADR 0065).
@@ -239,6 +242,8 @@ message LifecycleState {
   // a node in a not committable state blocks the commit of its change (ADR 0078)
   bool not_committable = 3;
   bool final = 4;
+  // how far a version in the state is seen (ADR 0161 §4); empty: the node type's
+  string visibility = 5;
 }
 
 message LifecycleTransition {

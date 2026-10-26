@@ -53,15 +53,15 @@ func (p *Postgres) Upsert(ctx context.Context, d Doc) error {
 	if d.Facets == nil {
 		facets = []byte("{}")
 	}
-	_, err := p.pool.Exec(ctx, `INSERT INTO node_index (kind, node_id, version, namespace, type, key, state, branch, main, deleted, project, owner, status, methodology, parent, personal_to, title, facets, doc, hash, embedding)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21::public.vector)
+	_, err := p.pool.Exec(ctx, `INSERT INTO node_index (kind, node_id, version, namespace, type, key, state, branch, main, deleted, project, owner, visibility, creator, status, methodology, parent, personal_to, title, facets, doc, hash, embedding)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23::public.vector)
 		ON CONFLICT (kind, node_id, version) DO UPDATE SET namespace=EXCLUDED.namespace, type=EXCLUDED.type, key=EXCLUDED.key, state=EXCLUDED.state,
-			branch=EXCLUDED.branch, main = node_index.main OR EXCLUDED.main, deleted=EXCLUDED.deleted, project=EXCLUDED.project, owner=EXCLUDED.owner,
+			branch=EXCLUDED.branch, main = node_index.main OR EXCLUDED.main, deleted=EXCLUDED.deleted, project=EXCLUDED.project, owner=EXCLUDED.owner, visibility=EXCLUDED.visibility, creator=EXCLUDED.creator,
 			status=EXCLUDED.status, methodology=EXCLUDED.methodology, parent=EXCLUDED.parent, personal_to=EXCLUDED.personal_to, title=EXCLUDED.title,
 			facets=EXCLUDED.facets, doc=EXCLUDED.doc,
 			embedding = COALESCE(EXCLUDED.embedding, CASE WHEN node_index.hash = EXCLUDED.hash THEN node_index.embedding END),
 			hash=EXCLUDED.hash, updated=now()`,
-		kindOf(d.Kind), string(d.ID), int(d.Version), d.Namespace, d.Type, d.Key, d.State, d.Branch, d.Main, d.Deleted, d.Project, d.Owner, d.Status,
+		kindOf(d.Kind), string(d.ID), int(d.Version), d.Namespace, d.Type, d.Key, d.State, d.Branch, d.Main, d.Deleted, d.Project, d.Responsible, d.Visibility, d.Creator, d.Status,
 		d.Methodology, d.Parent, d.PersonalTo, d.Title, facets, d.Text, d.Hash, vecText(d.Embedding))
 	return err
 }
@@ -150,7 +150,7 @@ func (p *Postgres) Reset(ctx context.Context) error {
 	return err
 }
 
-const pgCols = `kind, node_id, version, namespace, type, key, state, branch, main, deleted, project, owner, status, methodology, parent, personal_to, title, facets`
+const pgCols = `kind, node_id, version, namespace, type, key, state, branch, main, deleted, project, owner, visibility, creator, status, methodology, parent, personal_to, title, facets`
 
 // pgWhere renders the filter with numbered placeholders appended to args.
 func pgWhere(f Filter, args []any) (string, []any) {
@@ -180,8 +180,8 @@ func pgWhere(f Filter, args []any) (string, []any) {
 	if len(f.Project) > 0 {
 		add("project = ANY($$)", f.Project)
 	}
-	if len(f.Owner) > 0 {
-		add("owner = ANY($$)", f.Owner)
+	if len(f.Responsible) > 0 {
+		add("owner = ANY($$)", f.Responsible)
 	}
 	if len(f.Status) > 0 {
 		add("status = ANY($$)", f.Status)
@@ -216,7 +216,7 @@ func (p *Postgres) query(ctx context.Context, q string, args []any, withScore bo
 		var id string
 		var v int32
 		var facets map[string]string
-		dest := []any{&h.Kind, &id, &v, &h.Namespace, &h.Type, &h.Key, &h.State, &h.Branch, &h.Main, &h.Deleted, &h.Project, &h.Owner, &h.Status,
+		dest := []any{&h.Kind, &id, &v, &h.Namespace, &h.Type, &h.Key, &h.State, &h.Branch, &h.Main, &h.Deleted, &h.Project, &h.Responsible, &h.Visibility, &h.Creator, &h.Status,
 			&h.Methodology, &h.Parent, &h.PersonalTo, &h.Title, &facets}
 		if withScore {
 			dest = append(dest, &h.Score)

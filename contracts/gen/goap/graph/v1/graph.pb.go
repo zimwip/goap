@@ -266,13 +266,20 @@ type Node struct {
 	// the branches the version joined besides the one it was written on (ADR 0032; filled by ListNodeVersions)
 	Joined []string `protobuf:"bytes,17,rep,name=joined,proto3" json:"joined,omitempty"`
 	// the organisational unit responsible for the version and the project the node was created in (node ids, ADR 0054)
-	Owner   string `protobuf:"bytes,18,opt,name=owner,proto3" json:"owner,omitempty"`
-	Project string `protobuf:"bytes,19,opt,name=project,proto3" json:"project,omitempty"`
+	Responsible string `protobuf:"bytes,18,opt,name=responsible,proto3" json:"responsible,omitempty"`
+	Project     string `protobuf:"bytes,19,opt,name=project,proto3" json:"project,omitempty"`
 	// the draft of a node in a change (ADR 0079): the node has no version while the change works, version is 0; the version
 	// is written when the change commits
 	Draft bool `protobuf:"varint,20,opt,name=draft,proto3" json:"draft,omitempty"`
 	// the nodes this one derives from (ADR 0077, merge and split): set on the first version of a successor
-	Origins       []*NodeRef `protobuf:"bytes,21,rep,name=origins,proto3" json:"origins,omitempty"`
+	Origins []*NodeRef `protobuf:"bytes,21,rep,name=origins,proto3" json:"origins,omitempty"`
+	// who created the node (ADR 0161 §3): the subject and the unit it was created in, the same for every version
+	Creator     string `protobuf:"bytes,22,opt,name=creator,proto3" json:"creator,omitempty"`
+	CreatorUnit string `protobuf:"bytes,23,opt,name=creator_unit,json=creatorUnit,proto3" json:"creator_unit,omitempty"`
+	// the person whose edits made the version (attribution, ADR 0161 §3)
+	Editor string `protobuf:"bytes,24,opt,name=editor,proto3" json:"editor,omitempty"`
+	// how far the version is seen, stamped at commit (ADR 0161 §4: personal, private, project, tree, public)
+	Visibility    string `protobuf:"bytes,25,opt,name=visibility,proto3" json:"visibility,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -426,9 +433,9 @@ func (x *Node) GetJoined() []string {
 	return nil
 }
 
-func (x *Node) GetOwner() string {
+func (x *Node) GetResponsible() string {
 	if x != nil {
-		return x.Owner
+		return x.Responsible
 	}
 	return ""
 }
@@ -452,6 +459,34 @@ func (x *Node) GetOrigins() []*NodeRef {
 		return x.Origins
 	}
 	return nil
+}
+
+func (x *Node) GetCreator() string {
+	if x != nil {
+		return x.Creator
+	}
+	return ""
+}
+
+func (x *Node) GetCreatorUnit() string {
+	if x != nil {
+		return x.CreatorUnit
+	}
+	return ""
+}
+
+func (x *Node) GetEditor() string {
+	if x != nil {
+		return x.Editor
+	}
+	return ""
+}
+
+func (x *Node) GetVisibility() string {
+	if x != nil {
+		return x.Visibility
+	}
+	return ""
 }
 
 type Link struct {
@@ -11746,7 +11781,7 @@ type NodeEdit struct {
 	RemoveLinks []string `protobuf:"bytes,7,rep,name=remove_links,json=removeLinks,proto3" json:"remove_links,omitempty"`
 	// key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged, or the unit holding the
 	// commit for a created node
-	Owner string `protobuf:"bytes,8,opt,name=owner,proto3" json:"owner,omitempty"`
+	Responsible string `protobuf:"bytes,8,opt,name=responsible,proto3" json:"responsible,omitempty"`
 	// the lifecycle state the node is moved to (a transition of its own, ADR 0076): after the other edits, or before
 	// them (a retired entry restored)
 	State         string `protobuf:"bytes,9,opt,name=state,proto3" json:"state,omitempty"`
@@ -11833,9 +11868,9 @@ func (x *NodeEdit) GetRemoveLinks() []string {
 	return nil
 }
 
-func (x *NodeEdit) GetOwner() string {
+func (x *NodeEdit) GetResponsible() string {
 	if x != nil {
-		return x.Owner
+		return x.Responsible
 	}
 	return ""
 }
@@ -12254,8 +12289,8 @@ type ImpactNodeCreateRequest struct {
 	Key      string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	Type     string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
 	Props    *structpb.Struct       `protobuf:"bytes,4,opt,name=props,proto3" json:"props,omitempty"`
-	// key of the organisational unit owning the node (ADR 0054); empty: the unit holding the change
-	Owner         string           `protobuf:"bytes,5,opt,name=owner,proto3" json:"owner,omitempty"`
+	// key of the organisational unit answering for the node (ADR 0054); empty: the unit holding the change
+	Responsible   string           `protobuf:"bytes,5,opt,name=responsible,proto3" json:"responsible,omitempty"`
 	Rationale     string           `protobuf:"bytes,6,opt,name=rationale,proto3" json:"rationale,omitempty"`
 	Links         []*NodeLinkWrite `protobuf:"bytes,7,rep,name=links,proto3" json:"links,omitempty"`
 	Flow          string           `protobuf:"bytes,8,opt,name=flow,proto3" json:"flow,omitempty"`
@@ -12322,9 +12357,9 @@ func (x *ImpactNodeCreateRequest) GetProps() *structpb.Struct {
 	return nil
 }
 
-func (x *ImpactNodeCreateRequest) GetOwner() string {
+func (x *ImpactNodeCreateRequest) GetResponsible() string {
 	if x != nil {
-		return x.Owner
+		return x.Responsible
 	}
 	return ""
 }
@@ -12363,7 +12398,7 @@ type NodeCreateSpec struct {
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
 	Props         *structpb.Struct       `protobuf:"bytes,3,opt,name=props,proto3" json:"props,omitempty"`
-	Owner         string                 `protobuf:"bytes,4,opt,name=owner,proto3" json:"owner,omitempty"`
+	Responsible   string                 `protobuf:"bytes,4,opt,name=responsible,proto3" json:"responsible,omitempty"`
 	Rationale     string                 `protobuf:"bytes,5,opt,name=rationale,proto3" json:"rationale,omitempty"`
 	Links         []*NodeLinkWrite       `protobuf:"bytes,6,rep,name=links,proto3" json:"links,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -12421,9 +12456,9 @@ func (x *NodeCreateSpec) GetProps() *structpb.Struct {
 	return nil
 }
 
-func (x *NodeCreateSpec) GetOwner() string {
+func (x *NodeCreateSpec) GetResponsible() string {
 	if x != nil {
-		return x.Owner
+		return x.Responsible
 	}
 	return ""
 }
@@ -13269,7 +13304,7 @@ type ImpactNodeUpdateRequest struct {
 	// merged over the properties of the draft
 	Props *structpb.Struct `protobuf:"bytes,3,opt,name=props,proto3" json:"props,omitempty"`
 	// key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged
-	Owner         string `protobuf:"bytes,4,opt,name=owner,proto3" json:"owner,omitempty"`
+	Responsible   string `protobuf:"bytes,4,opt,name=responsible,proto3" json:"responsible,omitempty"`
 	Flow          string `protobuf:"bytes,5,opt,name=flow,proto3" json:"flow,omitempty"`
 	Execution     string `protobuf:"bytes,6,opt,name=execution,proto3" json:"execution,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -13327,9 +13362,9 @@ func (x *ImpactNodeUpdateRequest) GetProps() *structpb.Struct {
 	return nil
 }
 
-func (x *ImpactNodeUpdateRequest) GetOwner() string {
+func (x *ImpactNodeUpdateRequest) GetResponsible() string {
 	if x != nil {
-		return x.Owner
+		return x.Responsible
 	}
 	return ""
 }
@@ -20197,7 +20232,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04flow\x18\x05 \x01(\tR\x04flow\"3\n" +
 	"\aNodeRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x05R\aversion\"\xe2\x04\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\"\xe3\x05\n" +
 	"\x04Node\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x10\n" +
@@ -20217,11 +20252,17 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\rchange_impact\x18\x0e \x01(\tR\fchangeImpact\x12\x18\n" +
 	"\acomment\x18\x0f \x01(\tR\acomment\x12\x1c\n" +
 	"\texecution\x18\x10 \x01(\tR\texecution\x12\x16\n" +
-	"\x06joined\x18\x11 \x03(\tR\x06joined\x12\x14\n" +
-	"\x05owner\x18\x12 \x01(\tR\x05owner\x12\x18\n" +
+	"\x06joined\x18\x11 \x03(\tR\x06joined\x12 \n" +
+	"\vresponsible\x18\x12 \x01(\tR\vresponsible\x12\x18\n" +
 	"\aproject\x18\x13 \x01(\tR\aproject\x12\x14\n" +
 	"\x05draft\x18\x14 \x01(\bR\x05draft\x120\n" +
-	"\aorigins\x18\x15 \x03(\v2\x16.goap.graph.v1.NodeRefR\aorigins\"\xe2\x01\n" +
+	"\aorigins\x18\x15 \x03(\v2\x16.goap.graph.v1.NodeRefR\aorigins\x12\x18\n" +
+	"\acreator\x18\x16 \x01(\tR\acreator\x12!\n" +
+	"\fcreator_unit\x18\x17 \x01(\tR\vcreatorUnit\x12\x16\n" +
+	"\x06editor\x18\x18 \x01(\tR\x06editor\x12\x1e\n" +
+	"\n" +
+	"visibility\x18\x19 \x01(\tR\n" +
+	"visibility\"\xe2\x01\n" +
 	"\x04Link\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12*\n" +
@@ -21176,7 +21217,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12&\n" +
 	"\x02to\x18\x02 \x01(\v2\x16.goap.graph.v1.NodeRefR\x02to\x12\x15\n" +
 	"\x06to_key\x18\x03 \x01(\tR\x05toKey\x12-\n" +
-	"\x05props\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05props\"\xa5\x02\n" +
+	"\x05props\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05props\"\xb1\x02\n" +
 	"\bNodeEdit\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12(\n" +
@@ -21184,8 +21225,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x05props\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05props\x12\x1c\n" +
 	"\trationale\x18\x05 \x01(\tR\trationale\x12-\n" +
 	"\x05links\x18\x06 \x03(\v2\x17.goap.graph.v1.LinkEditR\x05links\x12!\n" +
-	"\fremove_links\x18\a \x03(\tR\vremoveLinks\x12\x14\n" +
-	"\x05owner\x18\b \x01(\tR\x05owner\x12\x14\n" +
+	"\fremove_links\x18\a \x03(\tR\vremoveLinks\x12 \n" +
+	"\vresponsible\x18\b \x01(\tR\vresponsible\x12\x14\n" +
 	"\x05state\x18\t \x01(\tR\x05state\"\x95\x03\n" +
 	"\x12CommitEditsRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x14\n" +
@@ -21217,22 +21258,22 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12&\n" +
 	"\x02to\x18\x02 \x01(\v2\x16.goap.graph.v1.NodeRefR\x02to\x12-\n" +
 	"\x05props\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x05props\x12\x16\n" +
-	"\x06target\x18\x04 \x01(\tR\x06target\"\xa5\x02\n" +
+	"\x06target\x18\x04 \x01(\tR\x06target\"\xb1\x02\n" +
 	"\x17ImpactNodeCreateRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12-\n" +
-	"\x05props\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05props\x12\x14\n" +
-	"\x05owner\x18\x05 \x01(\tR\x05owner\x12\x1c\n" +
+	"\x05props\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05props\x12 \n" +
+	"\vresponsible\x18\x05 \x01(\tR\vresponsible\x12\x1c\n" +
 	"\trationale\x18\x06 \x01(\tR\trationale\x122\n" +
 	"\x05links\x18\a \x03(\v2\x1c.goap.graph.v1.NodeLinkWriteR\x05links\x12\x12\n" +
 	"\x04flow\x18\b \x01(\tR\x04flow\x12\x1c\n" +
-	"\texecution\x18\t \x01(\tR\texecution\"\xcd\x01\n" +
+	"\texecution\x18\t \x01(\tR\texecution\"\xd9\x01\n" +
 	"\x0eNodeCreateSpec\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12-\n" +
-	"\x05props\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x05props\x12\x14\n" +
-	"\x05owner\x18\x04 \x01(\tR\x05owner\x12\x1c\n" +
+	"\x05props\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x05props\x12 \n" +
+	"\vresponsible\x18\x04 \x01(\tR\vresponsible\x12\x1c\n" +
 	"\trationale\x18\x05 \x01(\tR\trationale\x122\n" +
 	"\x05links\x18\x06 \x03(\v2\x1c.goap.graph.v1.NodeLinkWriteR\x05links\"_\n" +
 	"\bNodeName\x12(\n" +
@@ -21292,12 +21333,12 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\texecution\x18\x03 \x01(\tR\texecution\x125\n" +
 	"\x05nodes\x18\x04 \x03(\v2\x1f.goap.graph.v1.NodeCheckoutSpecR\x05nodes\"T\n" +
 	"\x1fImpactNodeCheckoutBatchResponse\x121\n" +
-	"\x05nodes\x18\x01 \x03(\v2\x1b.goap.graph.v1.ChangeImpactR\x05nodes\"\xd7\x01\n" +
+	"\x05nodes\x18\x01 \x03(\v2\x1b.goap.graph.v1.ChangeImpactR\x05nodes\"\xe3\x01\n" +
 	"\x17ImpactNodeUpdateRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12(\n" +
 	"\x10change_impact_id\x18\x02 \x01(\tR\x0echangeImpactId\x12-\n" +
-	"\x05props\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x05props\x12\x14\n" +
-	"\x05owner\x18\x04 \x01(\tR\x05owner\x12\x12\n" +
+	"\x05props\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x05props\x12 \n" +
+	"\vresponsible\x18\x04 \x01(\tR\vresponsible\x12\x12\n" +
 	"\x04flow\x18\x05 \x01(\tR\x04flow\x12\x1c\n" +
 	"\texecution\x18\x06 \x01(\tR\texecution\"K\n" +
 	"\x18ImpactNodeUpdateResponse\x12/\n" +

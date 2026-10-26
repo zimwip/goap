@@ -120,14 +120,22 @@ type Node struct {
 	State string `json:"state,omitempty"`
 	// ChangeID is the change that wrote the version: every version has one (ADR 0049, 0054).
 	ChangeID ChangeID `json:"changeId,omitempty"`
-	// Owner is the organisational unit responsible for the version (a node of the organisation structure, ADR 0054):
+	// Responsible is the organisational unit responsible for the version (a node of the organisation structure, ADR 0054):
 	// the unit holding the change that created the node, carried over by the next versions unless a change transfers
 	// it. A logical URL with no version (lnk:<namespace>/<unit type>/<key>, ADR 0154 §9): a reference to a node is a
 	// link, resolved like one, never a node id; the organisation may live in another graph.
-	Owner lnk.URL `json:"owner,omitzero"`
+	Responsible lnk.URL `json:"responsible,omitzero"`
 	// Project is the project the node was created in (a node of the project structure, ADR 0054): the project of the
-	// change that created it, the same for every version. A logical URL, as Owner.
+	// change that created it, the same for every version. A logical URL, as Responsible.
 	Project lnk.URL `json:"project,omitzero"`
+	// Creator is who created the node (ADR 0161 §3), the same for every version: stamped by its first one.
+	Creator Creator `json:"creator,omitzero"`
+	// Editor is the person whose edits made the version (ADR 0161 §3: the end user when an agent edited for them; the
+	// first version's is the creator), stamped at commit: attribution only.
+	Editor string `json:"editor,omitempty"`
+	// Visibility is how far the version is seen (ADR 0161 §4: VisibilityPersonal...), stamped at commit from its type
+	// and state as the domain said then. Empty: project.
+	Visibility string `json:"visibility,omitempty"`
 	// ChangeImpact is the change impact that produced this version, Comment the acceptance
 	// comment (else the rationale): the origin of the version (ADR 0024).
 	ChangeImpact ChangeImpactID `json:"changeImpact,omitempty"`

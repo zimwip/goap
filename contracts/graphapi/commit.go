@@ -19,9 +19,9 @@ type NodeEdit struct {
 	// State moves the node to a lifecycle state, after its other edits: a transition of its draft, the node checked out
 	// first when it has none (ImpactNodeTransition, ADR 0076, 0079): a retired entry is edited and restored in the same change.
 	State string
-	// Owner transfers the node to another organisational unit (its key, ADR 0054); empty: unchanged, or the unit
+	// Responsible transfers the node to another organisational unit (its key, ADR 0054); empty: unchanged, or the unit
 	// holding the commit for a created node.
-	Owner string
+	Responsible string
 	// Rationale says why; the title of the commit when empty.
 	Rationale string
 	Links     []LinkEdit
