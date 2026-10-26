@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"net/http"
 	"os"
 	"slices"
 	"time"
@@ -226,16 +225,29 @@ func main() {
 	g.SeatAuthorizer = graphsvc.SeatAuthorizer(authorizer)
 	g.ItemPolicy = criticality.ItemPolicy(directory.CriticalityResolver()) // the oracle and the lifetime a level accepts (ADR 0075 §3)
 	g.Facets = map[string]graph.BlackboardFacet{domain.FacetCriticalityPolicy: directory.CriticalityFacet()}
-	// the history of a change (ADR 0109): no registry here, so no step relies on another for its standing
-	g.LogFacets = graphsvc.LogFacets(nil)
 	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, access.ProjectScopeValidator{}, access.ProjectOwnerValidator{},
 		llmcfg.ProtectedAliasValidator{}, graphsvc.PlatformSourceValidator{}}
-	// the roles a methodology allows each operation to (ADR 0103, 0138), asked of the methodology registry: without
-	// them, an operation on a change would be the administrators' only
-	registry := registrysvc.NewClient(&http.Client{Timeout: 30 * time.Second}, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), telemetry.ClientOptions()...)
-	g.OperationAuthorizer = graphsvc.OperationAuthorizer(authorizer, registryOperationRoles(registry))
-	// SubChangeValidator and Lifecycles, the guardian of the changes (ADR 0058, 0102), need the registry service itself
-	// (its methodology store), which no composition holds in process any more; the registry client has no RPC for them, so this graph merges by the committable states of the domains only
+	// the methodology registry declares the methodologies, nodes of the platform graph (this one, else the platform's
+	// in a content graph: ADR 0023, 0154 §9); the graph instantiates from them what it asks of a change's methodology:
+	// its lifecycle, guards and gates (ADR 0058), the guardian of its commits and its chain of guardians (ADR 0106,
+	// 0146), the cascade of its sub-changes (ADR 0066), the standing of its steps (ADR 0109) and the roles of its
+	// operations (ADR 0103). A reader of the methodologies only: it seeds, publishes and announces nothing
+	var declared registrysvc.StoreGraph = g
+	if content {
+		declared = graphclient.NewClient(platform.H2CClient(), platformURL, telemetry.ClientOptions()...)
+	}
+	methodologies := &registrysvc.Service{Store: registrysvc.NewGraphStore(declared), Domains: client, Authz: authorizer,
+		Applicable: applicable(directory), Log: log}
+	g.Lifecycles = methodologies
+	g.SubChangeValidator = methodologies.SubChangeValidator
+	g.LogFacets = graphsvc.LogFacets(func(ctx context.Context, name string) map[string]map[string]bool {
+		m, err := methodologies.Methodology(ctx, name)
+		if err != nil {
+			return nil
+		}
+		return m.StepDependencies()
+	})
+	g.OperationAuthorizer = graphsvc.OperationAuthorizer(authorizer, methodologies.OperationRoles)
 	// the bootstrap writes to the built-in domains (the registry's, ADR 0167: the graph waits for them); the demo seed
 	// needs alm. GOAP_GRAPH_SEED=dev seeds
 	// the development data (the document-repository MCP), =demo the demo data too; otherwise an administrator loads the
@@ -334,22 +346,14 @@ func main() {
 	}
 }
 
-// registryOperationRoles reads the roles that allow an operation from the methodology of the change, compiled by the
-// registry (registrysvc.Service.OperationRoles in process): a change of no methodology, or of one the registry does
-// not know, is not restricted by roles (the ABAC rules and the gates still apply).
-func registryOperationRoles(c *registrysvc.Client) graphsvc.OperationRoles {
-	return func(ctx context.Context, ref, op string) ([]string, bool, error) {
-		if ref == "" {
-			return nil, false, nil
+// applicable lists the methodologies applicable to a project from the snapshot of the organisation (ADR 0106: where
+// the guardian chain of a change finds the methodologies integrating its own).
+func applicable(d *access.Directory) func(ctx context.Context, project string) ([]string, error) {
+	return func(ctx context.Context, project string) ([]string, error) {
+		s, err := d.Snapshot(ctx)
+		if err != nil || s == nil {
+			return nil, err
 		}
-		m, err := c.Methodology(ctx, ref)
-		if err != nil {
-			if connect.CodeOf(err) == connect.CodeNotFound {
-				return nil, false, nil
-			}
-			return nil, false, err
-		}
-		roles, restricted := m.Definition().OperationRoles(op)
-		return roles, restricted, nil
+		return s.ApplicableMethodologies(project), nil
 	}
 }

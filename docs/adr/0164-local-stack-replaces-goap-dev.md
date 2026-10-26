@@ -38,11 +38,17 @@ binary, an embedded NATS, a SQLite file per service) already ran what compose ru
 
 - What runs locally is what compose runs: the Rust graph by default (`LOCAL_GRAPH=go` for the Go one), the services
   talking over RPC and NATS.
-- Lost with `goap-dev`, as in compose: the hooks only an in-process registry could give the graph (`ChangeLifecycles`:
-  the lifecycle of a change, its guardians, the default goal and version of its methodology; `SubChangeValidator`), so
-  a change following a lifecycle is refused at its transition and merge until the registry serves them over RPC; the
-  in-process workspace and Claude coding agent connectors seeded by `GOAP_DEV_WORKSPACE_ROOT` /
-  `GOAP_DEV_WORKSPACE_IMAGE` (run `connector-workspace` and give a unit an adapter); `GOAP_DEV_DEMO`
-  (`GOAP_GRAPH_SEED=demo`); the IDE served from `web/dist` (vite serves it).
+- The hooks `goap-dev` wired from its in-process registry are the graph's own: the registry declares the
+  methodologies (nodes of the platform graph, ADR 0023), and the graph instantiates from them what it asks of a
+  change's methodology: the version and goal a change starts with, its lifecycle, guards and gates (ADR 0058), the
+  guardian of its commits and its chain of guardians (ADR 0106, 0146), the cascade of its sub-changes (ADR 0066), the
+  standing of its steps (ADR 0109), the roles of its operations (ADR 0103). `platform/cmd/graph` holds for this a
+  read-only `registrysvc.Service` over the platform graph (in a content graph, the platform graph's client), which
+  seeds, publishes and announces nothing. The Rust graph reads the roles of the operations so; the rest of the
+  instantiation is still to be written there (a change following a lifecycle is refused at its transition and merge,
+  `unresolved_lifecycle`).
+- Lost with `goap-dev`: the in-process workspace and Claude coding agent connectors seeded by
+  `GOAP_DEV_WORKSPACE_ROOT` / `GOAP_DEV_WORKSPACE_IMAGE` (run `connector-workspace` and give a unit an adapter);
+  `GOAP_DEV_DEMO` (`GOAP_GRAPH_SEED=demo`); the IDE served from `web/dist` (vite serves it).
 - A start takes longer (a dozen processes, cargo the first time); a rebuild restarts only what the change touches.
 - `platform/layering` `TestCompositionsUseBoot` checks `platform/cmd/graph` only.

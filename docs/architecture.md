@@ -1771,7 +1771,7 @@ created in a project; the engine only executes, through changes.
 The composition of the Go graph (`platform/cmd/graph`) seeds the platform through one function, `graphsvc.Boot(ctx, g, Options)`:
 
 1. The caller sets every hook of the graph first (`Authorizer`, `ChangeAuthorizer`, `Validators`, `DecisionPolicy`, `Types`;
-   `SubChangeValidator`, `Lifecycles` (the guardian of the changes) where the registry runs in process: none since ADR 0164) and has a type
+   `SubChangeValidator`, `Lifecycles` (the guardian of the changes): the methodologies the registry declares in the platform graph, instantiated by the graph, a read-only `registrysvc.Service`) and has a type
    catalogue holding the domains (`platform/cmd/graph`: `loadTypes`, the domains of the registry at
    `GOAP_DOMAINS_URL`, ADR 0167). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
    logs one warning, "change lifecycle and activity gating are not available in this composition".
