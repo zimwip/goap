@@ -63,6 +63,8 @@ type Config struct {
 	ProbeEvery     time.Duration // reads measured against the growing graph (0: none)
 	ReportEvery    time.Duration // window of the CSV and of the progress lines
 	Seed           uint64
+	// TypeWait bounds the wait, at the start, for the graph to know the types of the bench domain (default 3m)
+	TypeWait time.Duration
 }
 
 // Defaults fills what a config leaves out.
@@ -84,6 +86,9 @@ func (c *Config) Defaults() {
 	}
 	if c.Seed == 0 {
 		c.Seed = uint64(time.Now().UnixNano())
+	}
+	if c.TypeWait <= 0 {
+		c.TypeWait = 3 * time.Minute
 	}
 }
 
@@ -129,6 +134,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		return fmt.Errorf("publish the bench domain: %w", err)
 	}
 	r.types = cfg.Domain.Types + r.step
+	// the graph reads its types from the domain registry (ADR 0167): on the registry's events, else again after a
+	// while; the writers start once it knows the newest type of the first publication
+	if err := r.awaitType(ctx, TypeName(r.types-1)); err != nil {
+		return fmt.Errorf("the graph does not know the bench domain: %w", err)
+	}
 	r.logf("run %s: %d workers, %d edits per change on average (±%.0f%%, %.0f%% creations), mode %s, domain %s with %d types",
 		cfg.Run, cfg.Workers, cfg.Edits, 100*cfg.Spread, 100*cfg.CreateRatio, cfg.Mode, DomainVersion(r.step), r.types)
 
@@ -228,6 +238,39 @@ func (r *Runner) publishDomain(ctx context.Context, first bool) error {
 	r.Metrics.Totals.DomainVersions.Add(1)
 	r.Metrics.Totals.DomainTypes.Store(int64(r.Config.Domain.Types + next))
 	return nil
+}
+
+// awaitType waits, for TypeWait at most, until the graph accepts a node of type typ: a change creating one, purged at
+// once. Not measured: what it waits for is the graph reading the registry, not a call of the workload.
+func (r *Runner) awaitType(ctx context.Context, typ string) error {
+	g := r.Clients.Graph
+	deadline := time.Now().Add(r.Config.TypeWait)
+	for i := 0; ; i++ {
+		ch, err := g.CreateChange(ctx, connect.NewRequest(&graphv1.CreateChangeRequest{Namespace: Namespace, Title: fmt.Sprintf("bench %s: probe of %s", r.Config.Run, typ), ProjectId: access.DefaultProject}))
+		if err != nil {
+			return err
+		}
+		id := ch.Msg.Change.GetId()
+		_, err = g.ImpactNodeCreate(ctx, connect.NewRequest(&graphv1.ImpactNodeCreateRequest{ChangeId: id, Key: fmt.Sprintf("%s-probe-%d", r.Config.Run, i), Type: typ, Rationale: "bench: is the type known"}))
+		_, _ = g.DeleteChange(ctx, connect.NewRequest(&graphv1.DeleteChangeRequest{ChangeId: id}))
+		if err == nil {
+			if i > 0 {
+				r.logf("the graph knows %s after %s", typ, time.Since(r.start).Round(time.Second))
+			}
+			return nil
+		}
+		if connect.CodeOf(err) != connect.CodeInvalidArgument || time.Now().After(deadline) {
+			return err
+		}
+		if i == 0 {
+			r.logf("waiting for the graph to read %s from the domain registry", typ)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
 }
 
 // growDomain publishes a version of the domain each time DomainEvery more versions are written.

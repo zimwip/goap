@@ -28,6 +28,13 @@ import (
 // server is a graph service with its domain registry in memory, wired as platform/cmd/graph wires them.
 func server(t *testing.T) (*graph.Graph, string) {
 	t.Helper()
+	return lagging(t, 0)
+}
+
+// lagging is server whose graph reads a published domain only lag later, as a graph does reading the registry's
+// events or its TTL (ADR 0167).
+func lagging(t *testing.T, lag time.Duration) (*graph.Graph, string) {
+	t.Helper()
 	ctx := t.Context()
 	enf, err := authz.NewCasbin(nil)
 	if err != nil {
@@ -39,9 +46,13 @@ func server(t *testing.T) (*graph.Graph, string) {
 	}
 	types := typecat.NewLive(domains.Domains)
 	domains.Changed = func(ctx context.Context, _ def.Record) {
-		if err := types.Reload(ctx); err != nil {
-			t.Error(err)
+		if lag == 0 {
+			if err := types.Reload(ctx); err != nil {
+				t.Error(err)
+			}
+			return
 		}
+		time.AfterFunc(lag, func() { _ = types.Reload(context.Background()) })
 	}
 	if err := types.Reload(ctx); err != nil {
 		t.Fatal(err)
@@ -165,6 +176,19 @@ func TestDomainGrows(t *testing.T) {
 	}
 	if !strings.Contains(bench.DomainYAML(cfg.Domain, 3), "T004") {
 		t.Fatal("step 3 holds 2+3 types")
+	}
+}
+
+// The writers start once the graph knows the types of the domain the run published, however late it reads them.
+func TestWaitsForTheGraphToKnowTheDomain(t *testing.T) {
+	_, url := lagging(t, 1500*time.Millisecond)
+	r, _ := runner(t, url, bench.Config{Run: "t", Domain: bench.DomainShape{Types: 2}, Workers: 2, Edits: 4, CreateRatio: 1, MaxChanges: 4,
+		ReportEvery: time.Hour, Seed: 1})
+	if err := r.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if tot := &r.Metrics.Totals; tot.Errors.Load() != 0 || tot.Changes.Load() < 4 {
+		t.Fatalf("changes %d, errors %d", tot.Changes.Load(), tot.Errors.Load())
 	}
 }
 

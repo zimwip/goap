@@ -3,12 +3,12 @@ CREATE EXTENSION IF NOT EXISTS vector SCHEMA public;
 
 -- Dev only: one database, one schema and one role per service.
 -- In production each service gets its own database (only GOAP_DB_DSN changes). graph_rs: the second graph of a
--- comparison (make perf-diff, ADR 0163).
+-- comparison (make perf-diff, ADR 0163); domains_rs: its own domain registry (make perf-compare).
 DO $$
 DECLARE
     svc text;
 BEGIN
-    FOREACH svc IN ARRAY ARRAY['domains', 'graph', 'graph_rs', 'content', 'engine', 'modelgw', 'preferences', 'conversations', 'mcp', 'index', 'credentials', 'jobs'] LOOP
+    FOREACH svc IN ARRAY ARRAY['domains', 'domains_rs', 'graph', 'graph_rs', 'content', 'engine', 'modelgw', 'preferences', 'conversations', 'mcp', 'index', 'credentials', 'jobs'] LOOP
         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = svc) THEN
             EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', svc, svc);
         END IF;
