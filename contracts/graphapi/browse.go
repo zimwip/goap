@@ -1,6 +1,11 @@
 package graphapi
 
-import "github.com/zimwip/goap/contracts/domain"
+import (
+	"slices"
+
+	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/lnk"
+)
 
 // Browsing a view without shipping it whole: list the node types, page through the nodes of one type with a text
 // filter, and show the neighbourhood of a selected node (ADR 0137, 0157).
@@ -19,9 +24,9 @@ type NodeQuery struct {
 	// Change keeps the nodes the impacts of that change act on, at their version in the baseline: they are read node
 	// by node, so the answer and its cost follow the change, not the size of the baseline.
 	Change domain.ChangeID
-	// Projects keeps the nodes of these projects, as the nodes store them (nil: every project): the reach of the
-	// caller (ADR 0161 §5), set by the graph's view reader, never by a caller.
-	Projects      []string
+	// Reach keeps the versions the caller reads (nil: every version, ADR 0161 §5), set by the graph's view reader,
+	// never by a caller.
+	Reach         *ReachFilter
 	Offset, Limit int
 }
 
@@ -52,4 +57,38 @@ type Neighbourhood struct {
 	Links []domain.Link
 	// Suspect are the links whose target changed since they were created (the baseline holds another version).
 	Suspect []domain.LinkID
+}
+
+// ReachFilter is the reach of a caller as the stores filter the versions they read (ADR 0161 §5): the keys as the
+// nodes store them (logical URLs and bare keys), set by the graph's view reader, never by a caller. A version is held
+// by its scope (Node.Visibility): public by every identified person, tree by the projects of Trees, project by those of
+// Projects, private by those of Projects when its responsible unit is one of Units, personal by those of Projects when
+// its creator is Subject.
+type ReachFilter struct {
+	Projects []string
+	Trees    []string
+	Units    []string
+	Subject  string
+}
+
+// Holds reports whether the reach holds a version (nil: every version).
+func (f *ReachFilter) Holds(n domain.Node) bool {
+	if f == nil {
+		return true
+	}
+	in := func(list []string, u lnk.URL) bool {
+		return !u.IsZero() && (slices.Contains(list, u.String()) || slices.Contains(list, u.Key))
+	}
+	switch domain.VisibilityOf(n.Visibility) {
+	case domain.VisibilityPublic:
+		return true
+	case domain.VisibilityTree:
+		return in(f.Trees, n.Project) || in(f.Projects, n.Project)
+	case domain.VisibilityPrivate:
+		return in(f.Projects, n.Project) && in(f.Units, n.Owner)
+	case domain.VisibilityPersonal:
+		return in(f.Projects, n.Project) && f.Subject != "" && n.Creator.Subject == f.Subject
+	default:
+		return in(f.Projects, n.Project)
+	}
 }

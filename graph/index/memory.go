@@ -117,7 +117,7 @@ func (m *Memory) Reset(context.Context) error {
 
 func (d *Doc) hit() Hit {
 	return Hit{Kind: kindOf(d.Kind), ID: d.ID, Version: d.Version, Namespace: d.Namespace, Type: d.Type, Key: d.Key, State: d.State, Branch: d.Branch,
-		Main: d.Main, Deleted: d.Deleted, Project: d.Project, Owner: d.Owner, Status: d.Status, Methodology: d.Methodology, Parent: d.Parent,
+		Main: d.Main, Deleted: d.Deleted, Project: d.Project, Responsible: d.Responsible, Visibility: d.Visibility, Creator: d.Creator, Status: d.Status, Methodology: d.Methodology, Parent: d.Parent,
 		PersonalTo: d.PersonalTo, Title: d.Title, Facets: d.Facets}
 }
 

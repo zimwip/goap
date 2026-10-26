@@ -113,7 +113,7 @@
   function addState(d: DomainDraft, li: number) {
     if (d.readonly) return;
     const lc = d.form.lifecycles[li];
-    lc.states.push({ name: '', description: '', notCommittable: false, final: false });
+    lc.states.push({ name: '', description: '', notCommittable: false, final: false, visibility: '' });
     revealDomainPath(d.name, d.version, `lifecycles[${li}].states[${lc.states.length - 1}]`);
   }
 

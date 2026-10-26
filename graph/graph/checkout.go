@@ -1015,6 +1015,9 @@ func (g *Graph) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in
 		moved := d.Clone()
 		from := d.State
 		moved.State = t.To
+		if err := g.checkShare(ctx, tx, d, from, t.To); err != nil {
+			return err
+		}
 		n := draftNode(w.c, moved)
 		reader, err := g.newDraftReader(ctx, tx, w.c, w.flow, w.seen)
 		if err != nil {

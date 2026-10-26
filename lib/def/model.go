@@ -70,6 +70,10 @@ type NodeType struct {
 	// govern access itself (who may do what, the organisation and project structure, what a unit may reach), not
 	// domain data the ordinary change / object / node rules let a project's members write. A subtype inherits it.
 	AdminOnly bool `yaml:"adminOnly,omitempty" json:"adminOnly,omitempty"`
+	// Visibility is how far a version of a node of the type is seen when its lifecycle state declares none, or the type
+	// has no lifecycle (ADR 0161 §4: personal, private, project, tree, public). Inherited through extends; empty:
+	// project.
+	Visibility string `yaml:"visibility,omitempty" json:"visibility,omitempty"`
 	// AdditionalProperties opts the type out of strict attributes: its nodes may carry properties that are no attribute
 	// of it (a free-form type). By default a property that is not an attribute of the type, or of a supertype, is
 	// refused by the graph. A subtype inherits it.

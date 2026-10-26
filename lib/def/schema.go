@@ -234,6 +234,9 @@ func (s Schema) checkStructures(prefix string, add func(path, format string, arg
 // domain, and a count that is not negative.
 func (s Schema) checkRequires(prefix string, add func(path, format string, args ...any)) {
 	for i, n := range s.NodeTypes {
+		if err := domain.CheckVisibility(n.Visibility); err != nil {
+			add(fmt.Sprintf(prefix+"nodeTypes[%d].visibility", i), "%v", err)
+		}
 		seen := map[string]bool{}
 		for j, r := range n.Requires {
 			path := fmt.Sprintf(prefix+"nodeTypes[%d].requires[%d]", i, j)

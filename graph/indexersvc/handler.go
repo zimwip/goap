@@ -39,7 +39,7 @@ func (h *Handler) Search(ctx context.Context, r *connect.Request[indexv1.SearchR
 	}
 	q := index.Query{Text: m.Text, Facets: m.Facets, Limit: int(m.Limit), Offset: int(m.Offset), Mode: m.Mode, MinSimilarity: m.MinSimilarity, Snippet: m.Snippet,
 		Filter: index.Filter{Kind: m.Kinds, Namespace: m.Namespaces, Type: m.Types, State: m.States, Branch: m.Branches,
-			Project: m.Projects, Owner: m.OwnerUnits, Status: m.Statuses, Methodology: m.Methodologies, RootsOnly: m.RootsOnly}}
+			Project: m.Projects, Responsible: m.OwnerUnits, Status: m.Statuses, Methodology: m.Methodologies, RootsOnly: m.RootsOnly}}
 	if err := h.inViews(ctx, m, &q); err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
@@ -77,11 +77,11 @@ func (h *Handler) Search(ctx context.Context, r *connect.Request[indexv1.SearchR
 	out := &indexv1.SearchResponse{Total: int32(res.Total), Semantic: res.Semantic, Truncated: res.Truncated}
 	for _, x := range res.Hits {
 		hit := &indexv1.Hit{Kind: x.Kind, Id: string(x.ID), Version: int32(x.Version), Namespace: x.Namespace, Type: x.Type, Key: x.Key,
-			State: x.State, Branch: x.Branch, Main: x.Main, Deleted: x.Deleted, Project: x.Project, OwnerUnit: x.Owner, Facets: x.Facets,
+			State: x.State, Branch: x.Branch, Main: x.Main, Deleted: x.Deleted, Project: x.Project, OwnerUnit: x.Responsible, Facets: x.Facets,
 			Score: x.Score, Similarity: x.Similarity, Snippet: x.Snippet}
 		if x.Kind == index.KindChange {
 			hit.Change = &indexv1.ChangeInfo{ChangeId: string(x.ID), Title: x.Title, Status: x.Status, ProjectId: x.Project, Methodology: x.Methodology,
-				OwnerOrg: x.Owner, ParentId: x.Parent}
+				OwnerOrg: x.Responsible, ParentId: x.Parent}
 		}
 		out.Hits = append(out.Hits, hit)
 	}
@@ -181,7 +181,7 @@ func (h *Handler) inViews(ctx context.Context, m *indexv1.SearchRequest, q *inde
 		}
 		for _, n := range drafts {
 			q.Extra = append(q.Extra, index.Hit{Kind: index.KindNode, ID: n.ID, Namespace: n.Namespace, Type: n.Type, Key: n.Key, State: n.State,
-				Branch: n.Branch, Project: n.Project.Key, Owner: n.Owner.Key})
+				Branch: n.Branch, Project: n.Project.Key, Responsible: n.Owner.Key, Visibility: domain.VisibilityOf(n.Visibility), Creator: n.Creator.Subject})
 		}
 	}
 	if every {

@@ -81,10 +81,14 @@ type Doc struct {
 	Branch    string
 	Main      bool
 	Deleted   bool
-	// Project and Owner are keys: the project and the unit owning the node version; for a change its project and its
-	// holding unit.
-	Project string
-	Owner   string
+	// Project and Responsible are keys: the project and the unit answering for the node version; for a change its
+	// project and its holding unit.
+	Project     string
+	Responsible string
+	// Visibility and Creator are, for a node, the scope of the version and the subject who created the node (ADR 0161
+	// §5): with the project and the responsible unit, what decides who finds it.
+	Visibility string
+	Creator    string
 	// Change documents only.
 	Status      string
 	Methodology string
@@ -100,19 +104,21 @@ type Doc struct {
 
 // Hit is a search result.
 type Hit struct {
-	Kind      string            `json:"kind"`
-	ID        domain.NodeID     `json:"id"`
-	Version   domain.Version    `json:"version"`
-	Namespace string            `json:"namespace"`
-	Type      string            `json:"type,omitempty"`
-	Key       string            `json:"key"`
-	State     string            `json:"state,omitempty"`
-	Branch    string            `json:"branch"`
-	Main      bool              `json:"main"`
-	Deleted   bool              `json:"deleted,omitempty"`
-	Project   string            `json:"project,omitempty"`
-	Owner     string            `json:"owner,omitempty"`
-	Facets    map[string]string `json:"facets,omitempty"`
+	Kind        string            `json:"kind"`
+	ID          domain.NodeID     `json:"id"`
+	Version     domain.Version    `json:"version"`
+	Namespace   string            `json:"namespace"`
+	Type        string            `json:"type,omitempty"`
+	Key         string            `json:"key"`
+	State       string            `json:"state,omitempty"`
+	Branch      string            `json:"branch"`
+	Main        bool              `json:"main"`
+	Deleted     bool              `json:"deleted,omitempty"`
+	Project     string            `json:"project,omitempty"`
+	Responsible string            `json:"responsible,omitempty"`
+	Visibility  string            `json:"visibility,omitempty"`
+	Creator     string            `json:"creator,omitempty"`
+	Facets      map[string]string `json:"facets,omitempty"`
 	// Change documents only.
 	Status      string `json:"status,omitempty"`
 	Methodology string `json:"methodology,omitempty"`
@@ -142,7 +148,7 @@ type Filter struct {
 	Kind                           []string // empty: every kind (Searcher.Search defaults to nodes)
 	Namespace, Type, State, Branch []string
 	Main                           *bool
-	Project, Owner                 []string
+	Project, Responsible           []string
 	Status, Methodology            []string            // of changes
 	RootsOnly                      bool                // changes with no parent (a node is no root change)
 	Facets                         map[string][]string // declared facets
@@ -549,7 +555,7 @@ func (h Hit) facet(name string) (string, bool) {
 	case FacetProject:
 		return h.Project, h.Project != ""
 	case FacetOwner:
-		return h.Owner, h.Owner != ""
+		return h.Responsible, h.Responsible != ""
 	case FacetStatus:
 		return h.Status, h.Status != ""
 	case FacetMethodology:
@@ -582,7 +588,7 @@ func (f Filter) matches(h Hit) bool {
 		return false
 	}
 	if !in(f.Kind, kindOf(h.Kind)) || !in(f.Namespace, h.Namespace) || !in(f.Type, h.Type) || !in(f.State, h.State) || !in(f.Branch, h.Branch) ||
-		!in(f.Project, h.Project) || !in(f.Owner, h.Owner) || !in(f.Status, h.Status) || !in(f.Methodology, h.Methodology) {
+		!in(f.Project, h.Project) || !in(f.Responsible, h.Responsible) || !in(f.Status, h.Status) || !in(f.Methodology, h.Methodology) {
 		return false
 	}
 	if f.RootsOnly && (kindOf(h.Kind) != KindChange || h.Parent != "") {

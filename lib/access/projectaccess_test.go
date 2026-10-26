@@ -1,6 +1,7 @@
 package access_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -54,6 +55,28 @@ func TestMayAccessProject(t *testing.T) {
 	}
 	if got := s.ReachableProjects(authz.Principal{}); got != nil {
 		t.Errorf("reach of no one: %v", got)
+	}
+	// the reach set (ADR 0161 §5): the parent tree of each project worked on, siblings included, and the units
+	r := s.ReachSet(dev)
+	if got := strings.Join(r.Trees, ","); got != "PROJ-A,PROJ-A1,PROJ-B" {
+		t.Errorf("trees of dev: %s", got)
+	}
+	if !slices.Contains(r.Units, "DEP-ONE") || !slices.Contains(r.Units, access.UserKey("dev")) || r.Subject != "dev" {
+		t.Errorf("units of dev: %v (%q)", r.Units, r.Subject)
+	}
+	for _, c := range []struct {
+		project, vis, unit, creator string
+		want                        bool
+	}{
+		{"PROJ-A1", "", "", "", true}, {"PROJ-B", domain.VisibilityProject, "", "", false}, {"PROJ-B", domain.VisibilityTree, "", "", true},
+		{"PROJ-ROOT", domain.VisibilityTree, "", "", false}, {"PROJ-ROOT", domain.VisibilityPublic, "", "", true},
+		{"PROJ-A", domain.VisibilityPrivate, "DEP-ONE", "", true}, {"PROJ-A", domain.VisibilityPrivate, "DEP-TWO", "", false},
+		{"PROJ-A", domain.VisibilityPersonal, "", "dev", true}, {"PROJ-A", domain.VisibilityPersonal, "", "ada", false},
+		{"PROJ-B", domain.VisibilityPersonal, "", "dev", false},
+	} {
+		if got := r.Holds(c.project, c.vis, c.unit, c.creator); got != c.want {
+			t.Errorf("dev holds %s %s (unit %s, creator %s) = %v, want %v", c.project, c.vis, c.unit, c.creator, got, c.want)
+		}
 	}
 }
 

@@ -6,7 +6,7 @@
 // between this model and the proto message.
 
 import { subsToForm, subsFromForm, declaredNames, eventIssues, subscriptionIssues, emitIssues, isStandardEvent as isStandard, type SubscriptionForm, type EventForm } from './subscriptions';
-import type { Action, ActionLoop, Agent, AssessmentView, Attribute, Persistence, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, StepGate, Struct, Trigger } from './api';
+import type { Action, ActionLoop, Agent, AssessmentView, Attribute, Persistence, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, StepGate, Struct, Trigger, Visibility } from './api';
 import { SCRIPT_LANGUAGE } from './dsl';
 
 export interface CondRow {
@@ -53,6 +53,8 @@ export interface LifecycleStateForm {
   description: string;
   notCommittable: boolean;
   final: boolean;
+  /** how far a version in the state is seen ("" : the node type's, ADR 0161 §4) */
+  visibility: string;
 }
 
 export interface LifecycleTransitionForm {
@@ -136,6 +138,8 @@ export interface NodeTypeForm {
   changeControlled: boolean;
   /** true: free-form type, its nodes may carry properties that are no attribute of it (strict attributes opt-out) */
   additionalProperties: boolean;
+  /** how far a version is seen when its state declares none ("" : inherited, else project; ADR 0161 §4) */
+  visibility: string;
   /** node_validator instances, in call order */
   validators: string[];
   /** editor the UI opens the nodes with ("" : inherited, or the default node editor) */
@@ -507,7 +511,7 @@ export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 
 // --- constructors --------------------------------------------------------------
 
-export const emptyNodeType = (): NodeTypeForm => ({ uid: newUid(), name: '', description: '', attributes: [], extends: '', lifecycle: '', document: '', changeControlled: true, additionalProperties: false, validators: [], editor: '', icon: '', color: '', form: '', search: [] });
+export const emptyNodeType = (): NodeTypeForm => ({ uid: newUid(), name: '', description: '', attributes: [], extends: '', lifecycle: '', document: '', changeControlled: true, additionalProperties: false, visibility: '', validators: [], editor: '', icon: '', color: '', form: '', search: [] });
 export const emptyLinkType = (): LinkTypeForm => ({ uid: newUid(), name: '', description: '', from: '', to: '', attributes: [], compose: false, validators: [], label: '', inverseLabel: '' });
 let uidSeq = 0;
 /** New local id (elements created in the UI). */
@@ -827,6 +831,7 @@ export function nodeTypeToForm(n: NodeType): NodeTypeForm {
     document: (n.document?.contains ?? []).join(', '),
     changeControlled: n.changeControlled !== false,
     additionalProperties: n.additionalProperties === true,
+    visibility: n.visibility ?? '',
     validators: [...(n.validators ?? [])],
     editor: n.editor ?? '',
     icon: n.icon ?? '',
@@ -848,7 +853,7 @@ export function lifecycleToForm(l: Lifecycle): LifecycleForm {
     name: l.name ?? '',
     description: l.description ?? '',
     initial: l.initial ?? '',
-    states: (l.states ?? []).map((s) => ({ name: s.name ?? '', description: s.description ?? '', notCommittable: !!s.notCommittable, final: !!s.final })),
+    states: (l.states ?? []).map((s) => ({ name: s.name ?? '', description: s.description ?? '', notCommittable: !!s.notCommittable, final: !!s.final, visibility: s.visibility ?? '' })),
     transitions: (l.transitions ?? []).map((t) => ({
       name: t.name ?? '',
       description: t.description ?? '',
@@ -873,6 +878,7 @@ export function lifecycleFromForm(l: LifecycleForm): Lifecycle {
     put(st, 'description', s.description.trim());
     if (s.notCommittable) st.notCommittable = true;
     if (s.final) st.final = true;
+    if (s.visibility) st.visibility = s.visibility as Visibility;
     return st;
   });
   o.transitions = l.transitions.map((t) => {
@@ -898,9 +904,9 @@ export function defaultLifecycle(name = ''): LifecycleForm {
     description: '',
     initial: 'proposed',
     states: [
-      { name: 'proposed', description: '', notCommittable: false, final: false },
-      { name: 'draft', description: 'Being worked on in a change', notCommittable: true, final: false },
-      { name: 'approved', description: '', notCommittable: false, final: false },
+      { name: 'proposed', description: '', notCommittable: false, final: false, visibility: '' },
+      { name: 'draft', description: 'Being worked on in a change', notCommittable: true, final: false, visibility: '' },
+      { name: 'approved', description: '', notCommittable: false, final: false, visibility: '' },
     ],
     transitions: [
       { name: 'start', description: '', from: 'proposed', to: 'draft', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] },
@@ -978,6 +984,7 @@ export function nodeTypeFromForm(n: NodeTypeForm): NodeType {
   if (contains.length) o.document = { contains };
   if (!n.changeControlled) o.changeControlled = false;
   if (n.additionalProperties) o.additionalProperties = true;
+  if (n.visibility) o.visibility = n.visibility as Visibility;
   put(o, 'validators', n.validators.map((v) => v.trim()).filter(Boolean));
   if (n.search.length) o.search = n.search.map((s) => ({ ...s }));
   put(o, 'editor', n.editor.trim());

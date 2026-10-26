@@ -131,7 +131,7 @@ func (o ImpactOp) Batched() bool { return o == ImpactReviewed || o == ImpactComm
 
 // SameEntry reports events one log entry can carry: of one change and one batched operation, with one envelope.
 func SameEntry(a, b ImpactEvent) bool {
-	return a.Op.Batched() && a.Change == b.Change && a.Op == b.Op && a.Flow == b.Flow && a.Execution == b.Execution && a.By == b.By &&
+	return a.Op.Batched() && a.Change == b.Change && a.Op == b.Op && a.Flow == b.Flow && a.Execution == b.Execution && a.By == b.By && a.For == b.For &&
 		a.Causation == b.Causation
 }
 

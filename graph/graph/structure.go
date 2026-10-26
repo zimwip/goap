@@ -78,6 +78,20 @@ func (g *Graph) AdminOnlyType(_ context.Context, typ string) (bool, error) {
 	return builtinTypes().AdminOnly(typ), nil
 }
 
+// Visibility is the scope a version of a node of the type is stamped with in a state (ADR 0161 §4).
+func (g *Graph) Visibility(typ, state string) string { return g.visibilityOf(typ, state) }
+
+// visibilityOf is the scope a version of a node of the type is stamped with in a state (ADR 0161 §4): the catalogue's,
+// the built-in domains' for an untyped graph.
+func (g *Graph) visibilityOf(typ, state string) string {
+	if g.Types != nil {
+		if c := g.catalog(); c != nil {
+			return c.Visibility(typ, state)
+		}
+	}
+	return builtinTypes().Visibility(typ, state)
+}
+
 // isA reports whether the node type typ is base or a subtype of it.
 func (g *Graph) isA(typ, base string) bool {
 	if typ == base {

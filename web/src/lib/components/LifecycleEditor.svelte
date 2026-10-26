@@ -1,6 +1,7 @@
 <script lang="ts">
   // One lifecycle of a domain (ADR 0014): states (not committable / final) and transitions.
   import { moveItem, type LifecycleForm } from '../methodologyForm';
+  import { VISIBILITIES } from '../visibility';
   import RowTools from './RowTools.svelte';
   import LifecyclePreview from './LifecyclePreview.svelte';
 
@@ -28,7 +29,7 @@
   const states = $derived(lc.states.map((s) => s.name).filter(Boolean));
 
   function addState() {
-    lc.states.push({ name: '', description: '', notCommittable: false, final: false });
+    lc.states.push({ name: '', description: '', notCommittable: false, final: false, visibility: '' });
   }
   function addTransition() {
     lc.transitions.push({ name: '', description: '', from: states[0] ?? '', to: states[1] ?? '', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] });
@@ -53,6 +54,10 @@
       <input type="text" aria-label="Description" bind:value={s.description} placeholder="Description" disabled={readonly} />
       <label class="check" title="A change cannot commit while a node it holds rests in this state (a draft, a review to pass)"><input type="checkbox" bind:checked={s.notCommittable} disabled={readonly} /> Not committable</label>
       <label class="check" title="No way out"><input type="checkbox" bind:checked={s.final} disabled={readonly} /> final</label>
+      <select aria-label="Visibility" title="How far a version in this state is seen (ADR 0161): empty, the node type's" bind:value={s.visibility} disabled={readonly}>
+        <option value="">— type's scope —</option>
+        {#each VISIBILITIES as v (v)}<option value={v}>{v}</option>{/each}
+      </select>
       {#if !readonly}<button type="button" class="small ghost" aria-label="Remove the state" onclick={() => lc.states.splice(i, 1)}>×</button>{/if}
     </div>
   {/each}

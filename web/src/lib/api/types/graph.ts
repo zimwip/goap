@@ -41,6 +41,13 @@ export interface GraphNode {
   draft?: boolean;
   /** the nodes this one derives from (ADR 0077): set on the first version of the successor of a merge or a split */
   origins?: NodeRef[];
+  /** who created the node (ADR 0161 §3): the subject, and the unit it was created in (a logical URL); the same for every version */
+  creator?: string;
+  creatorUnit?: string;
+  /** the person whose edits made the version (attribution) */
+  editor?: string;
+  /** how far the version is seen, stamped at commit: personal | private | project | tree | public (ADR 0161 §4) */
+  visibility?: string;
 }
 
 export interface Link {

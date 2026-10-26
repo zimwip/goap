@@ -1,5 +1,5 @@
 name: organisation
-version: 1.16.0
+version: 1.17.0
 description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units,
   mirrored by a hierarchy of projects (ADR 0039). Every node version, whatever its namespace, is owned by a unit and
@@ -19,6 +19,7 @@ nodeTypes:
   # `adminOnly: true` (ADR 0068) says only platform administrators write the nodes of a type (inherited by its
   # subtypes): the types that govern access itself (units, projects, users, assignments, policies, adapters).
   - name: OrgUnit
+    visibility: public # the platform describes itself to every identified person (ADR 0161 §4)
     description: "Organisational unit (company, direction, department, team)"
     adminOnly: true
     editor: unit
@@ -44,6 +45,7 @@ nodeTypes:
   # restrictions of the chain add up, so a unit narrows what it inherits and never widens it. An instance without
   # adapter only restricts (the implementation is inherited): this is how a unit limits the built-in MCPs.
   - name: Adapter
+    visibility: public
     description: "Instance, by an organisational unit, of an adapter definition, or a restriction of an MCP"
     adminOnly: true
     lifecycle: config
@@ -83,6 +85,7 @@ nodeTypes:
   # r.sub / r.obj / r.act holds. Changes to Policy and User nodes need the "policy:write" permission, checked
   # against the compiled-in floor (administrators) only, so that no policy can lock them out.
   - name: Policy
+    visibility: public
     description: "ABAC rule"
     adminOnly: true
     lifecycle: config
@@ -99,6 +102,7 @@ nodeTypes:
   # whoever signs a derogation holds on the project (empty: any signatory); maxDerogationHours: the longest a derogation
   # may last (0: unbounded).
   - name: CriticalityPolicy
+    visibility: public
     description: "What a criticality level requires of the changes of a unit"
     adminOnly: true
     lifecycle: config
@@ -115,6 +119,7 @@ nodeTypes:
   # tags the type building the project hierarchy: every node is created in a project and every change acts in one.
   # A change names its project (ADR 0091): none is defaulted, a caller with no active project works in the root one.
   - name: ProjectUnit
+    visibility: public
     description: "Project or sub-project"
     adminOnly: true
     editor: project
@@ -147,6 +152,7 @@ nodeTypes:
   # assigns_project is optional: an Assignment naming none grants one of the built-in platform roles (ADR
   # 0046, e.g. "reader") to the org unit everywhere, independent of any project's methodologies.
   - name: Assignment
+    visibility: public
     description: "Roles an organisational unit or user locally holds on a project, or platform-wide when it names no project"
     adminOnly: true
     lifecycle: config

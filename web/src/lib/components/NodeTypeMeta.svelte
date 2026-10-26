@@ -3,6 +3,7 @@
   // node types it embeds when it is a document, whether it is change controlled,
   // the editor the user interface opens its nodes with, and the icon and color it draws them with.
   import type { NodeTypeForm } from '../methodologyForm';
+  import { VISIBILITIES } from '../visibility';
   import { nodeEditorNames } from '../shell/registry';
   import Icon, { iconNames, type IconName } from '../shell/Icon.svelte';
 
@@ -32,13 +33,14 @@
   } = $props();
 </script>
 
-<details class="meta" open={!!n.lifecycle || !!n.document || !n.changeControlled || n.additionalProperties || !!n.editor || !!n.icon || !!n.color}>
+<details class="meta" open={!!n.lifecycle || !!n.document || !n.changeControlled || n.additionalProperties || !!n.visibility || !!n.editor || !!n.icon || !!n.color}>
   <summary>
     Lifecycle, documents &amp; editor
     {#if n.lifecycle}<span class="tag">lifecycle: {n.lifecycle}</span>{:else if inherited}<span class="tag muted">inherits {inherited.lifecycle} from {inherited.type}</span>{/if}
     {#if n.document}<span class="tag">document</span>{/if}
     {#if !n.changeControlled}<span class="tag muted">direct writes</span>{/if}
     {#if n.additionalProperties}<span class="tag muted">free-form</span>{/if}
+    {#if n.visibility}<span class="tag">visibility: {n.visibility}</span>{/if}
     {#if n.editor}<span class="tag">editor: {n.editor}</span>{/if}
     {#if n.icon || n.color}<span class="tag look" style:color={COLOR.test(n.color) ? n.color : undefined}><Icon name={(iconNames.includes(n.icon as IconName) ? n.icon : 'node') as IconName} size={12} /></span>{/if}
   </summary>
@@ -56,6 +58,13 @@
       {/if}
       <label class="check" title="Off: the nodes are written directly, outside changes (no lifecycle)"><input type="checkbox" bind:checked={n.changeControlled} disabled={readonly || !!n.lifecycle} /> modified through changes only</label>
       <label class="check" title="Off (the default): a node carries the attributes of its type, and of its supertypes, only. On: it may carry any other property too"><input type="checkbox" bind:checked={n.additionalProperties} disabled={readonly} /> free-form: accepts properties that are no attribute</label>
+    </div>
+    <div class="line" data-path="{path}.visibility">
+      <label for="{path}-vis">Visibility</label>
+      <select id="{path}-vis" bind:value={n.visibility} disabled={readonly} title="How far a version is seen when its lifecycle state declares none (ADR 0161): personal its creator, private its responsible unit, project the project, tree the projects around it, public everyone">
+        <option value="">— inherited, else project —</option>
+        {#each VISIBILITIES as v (v)}<option value={v}>{v}</option>{/each}
+      </select>
     </div>
     <div class="field">
       <label for="{path}-doc">Embedded node types <span class="hint">(a document: comma-separated, attached by outgoing “contains” links)</span></label>

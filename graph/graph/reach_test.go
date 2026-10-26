@@ -217,3 +217,166 @@ func TestOwnedWrites(t *testing.T) {
 		}
 	})
 }
+
+// TestReachScopes: the scope a lifecycle state declares is stamped on the version at commit, with its creator and
+// editor, and decides who reads it (ADR 0161 §4): public every identified person, tree the projects of the parent
+// tree, project those who work on it, private the members of its responsible unit, personal its creator.
+func TestReachScopes(t *testing.T) {
+	forEachRepo(t, func(t *testing.T, repo Repo) {
+		ctx := context.Background()
+		g := New(repo)
+		who := "alice"
+		g.Caller = func(context.Context) string { return who }
+		if err := g.Bootstrap(ctx); err != nil {
+			t.Fatal(err)
+		}
+		f := reachFixture{t: t, ctx: ctx, g: g}
+		root := g.Structure(domain.StructureProject).Root
+		f.project("P-J", root)
+		f.project("P-A", "P-J")
+		f.project("P-B", "P-J")
+		f.project("P-C", root)
+		org := g.Structure(domain.StructureOrganisation)
+		top, err := g.NodeByKey(ctx, org.Namespace, org.Root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.commit(root, org.Namespace, "U-1", org.Type, LinkWrite{Type: org.Parent, To: top.Ref()})
+		f.commit(root, org.Namespace, "U-2", org.Type, LinkWrite{Type: org.Parent, To: top.Ref()})
+
+		scoped := func(vis string) testType {
+			return testType{Lifecycle: &domain.Lifecycle{Initial: "s", States: []domain.LifecycleState{{Name: "s", Visibility: vis}}}}
+		}
+		types := testTypes{"alm@Public": scoped(domain.VisibilityPublic), "alm@Tree": scoped(domain.VisibilityTree),
+			"alm@Project": scoped(""), "alm@Private": scoped(domain.VisibilityPrivate), "alm@Personal": scoped(domain.VisibilityPersonal)}
+		for _, typ := range []string{"organisation@ProjectUnit", "organisation@OrgUnit", "organisation@User"} {
+			types[typ] = testType{}
+		}
+		g.Types = func() TypeCatalog { return types }
+		create := func(project, key, typ, owner string) {
+			t.Helper()
+			head, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
+			c, err := g.CreateChange(ctx, NewChange{ProjectID: project, Namespace: "alm", Title: "create " + key, BaselineID: head.ID, OwnBranch: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			cn, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: key, Type: typ, Owner: owner, Rationale: "create " + key})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := g.ImpactNodeReviewOn(ctx, c.ID, domain.MainFlow, "", cn.ID, domain.ReviewAccepted, "tester", "ok"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := g.CommitChange(ctx, c.ID, ""); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := g.IntegrateChange(ctx, c.ID, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		create("P-C", "PUB", "alm@Public", "")
+		create("P-B", "TREE-B", "alm@Tree", "")
+		create("P-C", "TREE-C", "alm@Tree", "")
+		create("P-A", "PROJ-A", "alm@Project", "")
+		create("P-B", "PROJ-B", "alm@Project", "")
+		create("P-A", "PRIV-1", "alm@Private", "U-1")
+		create("P-A", "PRIV-2", "alm@Private", "U-2")
+		create("P-A", "PERS-ALICE", "alm@Personal", "")
+		who = "bob"
+		create("P-A", "PERS-BOB", "alm@Personal", "")
+
+		n, err := g.NodeByKey(ctx, "alm", "PERS-BOB")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n.Visibility != domain.VisibilityPersonal || n.Creator.Subject != "bob" || n.Editor != "bob" || n.Creator.Unit.IsZero() {
+			t.Fatalf("stamped: visibility %q creator %+v editor %q, want personal, bob", n.Visibility, n.Creator, n.Editor)
+		}
+		if n, _ := g.NodeByKey(ctx, "alm", "PROJ-A"); n.Visibility != domain.VisibilityProject {
+			t.Fatalf("default scope: %q, want project", n.Visibility)
+		}
+
+		// alice works on P-A: its tree is the projects under P-J, and under the root
+		reach := &Reach{Projects: map[string]bool{"P-A": true}, Trees: map[string]bool{"P-A": true, "P-B": true},
+			Units: map[string]bool{"U-1": true}, Subject: "alice"}
+		g.ReachOf = func(context.Context) (*Reach, error) { return reach, nil }
+		main := View{Namespace: "alm", Branch: domain.MainBranch}
+		want := []string{"PERS-ALICE", "PRIV-1", "PROJ-A", "PUB", "TREE-B"}
+		page, err := g.ViewNodes(ctx, main, NodeQuery{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var keys []string
+		for _, n := range page.Nodes {
+			keys = append(keys, n.Key)
+		}
+		if page.Total != len(want) || !slices.Equal(keys, want) {
+			t.Fatalf("page: %d %v, want %v", page.Total, keys, want)
+		}
+		for _, k := range []string{"PERS-BOB", "PRIV-2", "PROJ-B", "TREE-C"} {
+			if _, err := g.ViewNode(ctx, main, "", k); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("%s: %v, want not found", k, err)
+			}
+		}
+		all, err := g.ViewNodesOfType(ctx, main, "alm@Personal")
+		if err != nil || len(all) != 1 || all[0].Key != "PERS-ALICE" {
+			t.Fatalf("personal nodes: %v, %v, want PERS-ALICE only", all, err)
+		}
+		bpage, err := g.BaselineNodes(ctx, page.Baseline, NodeQuery{})
+		if err != nil || bpage.Total != len(want) {
+			t.Fatalf("baseline nodes: %d, %v, want %d", bpage.Total, err, len(want))
+		}
+	})
+}
+
+// TestShare: leaving a personal state for a wider scope is the creator's act only (ADR 0161 §4, node:share), whoever
+// else the lifecycle lets move the node; moving inside the personal scope is anyone's the lifecycle allows.
+func TestShare(t *testing.T) {
+	forEachRepo(t, func(t *testing.T, repo Repo) {
+		ctx := context.Background()
+		g := New(repo)
+		who := "alice"
+		g.Caller = func(context.Context) string { return who }
+		if err := g.Bootstrap(ctx); err != nil {
+			t.Fatal(err)
+		}
+		f := reachFixture{t: t, ctx: ctx, g: g}
+		f.project("P-A", g.Structure(domain.StructureProject).Root)
+		lc := &domain.Lifecycle{Initial: "note", States: []domain.LifecycleState{
+			{Name: "note", Visibility: domain.VisibilityPersonal}, {Name: "kept", Visibility: domain.VisibilityPersonal}, {Name: "shared"}},
+			Transitions: []domain.Transition{{Name: "keep", From: "note", To: "kept"}, {Name: "share", From: "note", To: "shared"}, {Name: "share", From: "kept", To: "shared"}}}
+		types := testTypes{"alm@Note": {Lifecycle: lc}}
+		for _, typ := range []string{"organisation@ProjectUnit", "organisation@OrgUnit", "organisation@User"} {
+			types[typ] = testType{}
+		}
+		g.Types = func() TypeCatalog { return types }
+		note := f.commit("P-A", "alm", "N-1", "alm@Note")
+		if note.Visibility != domain.VisibilityPersonal || note.Creator.Subject != "alice" {
+			t.Fatalf("note: %q by %q, want personal by alice", note.Visibility, note.Creator.Subject)
+		}
+		move := func(to string) error {
+			head, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
+			c, err := g.CreateChange(ctx, NewChange{ProjectID: "P-A", Namespace: "alm", Title: "move", BaselineID: head.ID, OwnBranch: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = g.ImpactNodeTransition(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Node: note.ID, Rationale: "move"}, To: to})
+			return err
+		}
+		who = "bob"
+		if err := move("shared"); !errors.Is(err, authz.ErrForbidden) {
+			t.Fatalf("another person shares: %v, want forbidden", err)
+		}
+		if err := move("kept"); err != nil {
+			t.Fatalf("a move inside the personal scope: %v", err)
+		}
+		who = "system:engine"
+		if err := move("shared"); !errors.Is(err, authz.ErrForbidden) {
+			t.Fatalf("a service shares: %v, want forbidden", err)
+		}
+		who = "alice"
+		if err := move("shared"); err != nil {
+			t.Fatalf("the creator shares: %v", err)
+		}
+	})
+}

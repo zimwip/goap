@@ -7,14 +7,23 @@ import (
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/graphapi"
 )
 
-// Reach is what a caller reads of the current graph (ADR 0161 §5, phase 1: the project rule): the nodes of the
-// projects it works on, every node of the open namespaces. A nil *Reach reads everything (a service acting by itself,
-// a graph with no ReachOf).
+// Reach is what a caller reads of the current graph (ADR 0161 §4-5): the versions whose scope (Node.Visibility)
+// reaches it. A nil *Reach reads everything (a service acting by itself, a graph with no ReachOf).
 type Reach struct {
-	// Projects are the keys of the projects whose nodes the caller reads.
+	// Projects are the keys of the projects the caller works on, with the projects below them: it reads their versions
+	// of scope project, and of scope private or personal when it is their responsible unit or their creator.
 	Projects map[string]bool
+	// Trees are the keys of the projects whose versions of scope tree the caller reads: the projects of the parent tree
+	// of a project it works on (the children of every project above it, siblings included).
+	Trees map[string]bool
+	// Units are the keys of the caller's units (its own personal unit, its unit and the units above it): it reads the
+	// private versions they answer for.
+	Units map[string]bool
+	// Subject is the caller: it reads the personal versions of the nodes it created.
+	Subject string
 	// Namespaces are the namespaces read whole (the built-in organisation, platform and methodology).
 	Namespaces map[string]bool
 }
@@ -39,16 +48,31 @@ func (r *Reach) in(namespace string) *Reach {
 	return r
 }
 
-// sees reports whether the reach holds a node: a node of a project it works on.
+// sees reports whether the reach holds a version: its scope reaches the caller (ADR 0161 §4).
 func (r *Reach) sees(n domain.Node) bool {
-	return r == nil || r.Projects[n.Project.Key]
+	if r == nil {
+		return true
+	}
+	p := n.Project.Key
+	switch domain.VisibilityOf(n.Visibility) {
+	case domain.VisibilityPublic:
+		return true
+	case domain.VisibilityTree:
+		return r.Trees[p] || r.Projects[p]
+	case domain.VisibilityPrivate:
+		return r.Projects[p] && r.Units[n.Owner.Key]
+	case domain.VisibilityPersonal:
+		return r.Projects[p] && r.Subject != "" && n.Creator.Subject == r.Subject
+	default:
+		return r.Projects[p]
+	}
 }
 
 // Reach is the reach of the caller of a read (nil: everything), for the read paths that return a state whole (a
 // baseline's graph, a delta, a diff, an export): they keep what Reach.Keep keeps (ADR 0161 §5).
 func (g *Graph) Reach(ctx context.Context) (*Reach, error) { return g.reachOf(ctx) }
 
-// Sees reports whether the reach holds a node of any namespace.
+// Sees reports whether the reach holds a version of any namespace.
 func (r *Reach) Sees(n domain.Node) bool { return r.in(n.Namespace).sees(n) }
 
 // Keep keeps the nodes the reach holds and the links none of whose ends is a node it leaves out (no stub: a link to a
@@ -66,20 +90,24 @@ func (r *Reach) Keep(nodes []domain.Node, links []domain.Link) ([]domain.Node, [
 	return nodes, links
 }
 
-// projects is the reach as the stores filter it: the projects as the nodes store them (their logical URLs, and the
-// bare keys), sorted; nil reads everything.
-func (g *Graph) projectsOf(r *Reach) []string {
+// filterOf is the reach as the stores filter it: the keys as the nodes store them (their logical URLs, and the bare
+// keys), sorted; nil reads everything.
+func (g *Graph) filterOf(r *Reach) *graphapi.ReachFilter {
 	if r == nil {
 		return nil
 	}
-	out := []string{}
-	for k, ok := range r.Projects {
-		if ok {
-			out = append(out, k, g.StructureURL(domain.StructureProject, k).String())
+	keys := func(kind string, set map[string]bool) []string {
+		out := []string{}
+		for k, ok := range set {
+			if ok {
+				out = append(out, k, g.StructureURL(kind, k).String())
+			}
 		}
+		slices.Sort(out)
+		return slices.Compact(out)
 	}
-	slices.Sort(out)
-	return slices.Compact(out)
+	return &graphapi.ReachFilter{Projects: keys(domain.StructureProject, r.Projects), Trees: keys(domain.StructureProject, r.Trees),
+		Units: keys(domain.StructureOrganisation, r.Units), Subject: r.Subject}
 }
 
 // sees reports whether the caller reads a node of the world: in its reach, or a draft of the change it reads (a draft
@@ -91,8 +119,8 @@ func (w *world) sees(n domain.Node) bool {
 	return w.reach.sees(n)
 }
 
-// hidden tells which of the nodes some refs name the caller does not read (the project of a node is the one of all its
-// versions: any version answers): one read for the stored ones, the drafts of the change seen.
+// hidden tells which of the nodes some refs name the caller does not read, by the scope of the version named: one read
+// for the stored ones, the drafts of the change seen.
 func (w *world) hidden(ctx context.Context, tx Tx, refs []domain.NodeRef) (map[domain.NodeID]bool, error) {
 	out := map[domain.NodeID]bool{}
 	if w.reach == nil {
@@ -100,7 +128,7 @@ func (w *world) hidden(ctx context.Context, tx Tx, refs []domain.NodeRef) (map[d
 	}
 	var stored []domain.NodeRef
 	for _, r := range refs {
-		if _, ok := w.vis[r.ID]; ok || r.Version == 0 {
+		if _, ok := w.vis[r]; ok || r.Version == 0 {
 			continue
 		}
 		stored = append(stored, r)
@@ -111,11 +139,11 @@ func (w *world) hidden(ctx context.Context, tx Tx, refs []domain.NodeRef) (map[d
 			return nil, err
 		}
 		for _, n := range nodes {
-			w.vis[n.ID] = w.reach.sees(n)
+			w.vis[n.Ref()] = w.reach.sees(n)
 		}
 	}
 	for _, r := range refs {
-		if v, ok := w.vis[r.ID]; ok && !v {
+		if v, ok := w.vis[r]; ok && !v {
 			out[r.ID] = true
 		}
 	}
@@ -166,6 +194,27 @@ func (g *Graph) checkOwned(ctx context.Context, tx Tx, c domain.Change, n domain
 	}
 	if !ok {
 		return fmt.Errorf("node %s belongs to project %s, which change %s (project %s) does not own: %w", n.Key, n.Project.Key, c.ID, c.ProjectID.Key, authz.ErrForbidden)
+	}
+	return nil
+}
+
+// checkShare refuses a move out of a personal state to a wider scope by anyone but the node's creator (ADR 0161 §4,
+// node:share): whatever the lifecycle says, neither an administrator nor an agent acting for the creator widens a
+// personal node; the creator does it themselves.
+func (g *Graph) checkShare(ctx context.Context, tx Tx, d domain.Draft, from, to string) error {
+	if g.visibilityOf(d.Type, from) != domain.VisibilityPersonal || g.visibilityOf(d.Type, to) == domain.VisibilityPersonal {
+		return nil
+	}
+	creator := d.Creator
+	if d.Base != nil {
+		n, err := tx.Node(ctx, *d.Base)
+		if err != nil {
+			return err
+		}
+		creator = n.Creator.Subject
+	}
+	if caller := g.caller(ctx); caller != creator {
+		return fmt.Errorf("%s leaves the personal scope for %s: only its creator %s shares it (node:share): %w", d.Key, g.visibilityOf(d.Type, to), creator, authz.ErrForbidden)
 	}
 	return nil
 }

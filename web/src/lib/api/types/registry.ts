@@ -16,7 +16,12 @@ export interface LifecycleState {
   /** a change cannot commit while a node rests in this state (ADR 0078) */
   notCommittable?: boolean;
   final?: boolean;
+  /** how far a version in the state is seen (ADR 0161 §4); absent: the node type's */
+  visibility?: Visibility;
 }
+
+/** The scopes of a version (ADR 0161 §4), narrowest first. */
+export type Visibility = 'personal' | 'private' | 'project' | 'tree' | 'public';
 
 /** A named CEL predicate of a gate (ADR 0075 §3): a veto not met blocks, an objective not met needs a derogation. */
 export interface Criterion {
@@ -177,6 +182,8 @@ export interface NodeType {
   requires?: RequiredLinkJson[];
   /** nodes of the type are written by platform administrators only (ADR 0068) */
   adminOnly?: boolean;
+  /** how far a version is seen when its state declares none (ADR 0161 §4); inherited; absent: project */
+  visibility?: Visibility;
 }
 
 /** How the node index uses a property: text (full text and embedding), facet (filter and count). */

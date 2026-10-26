@@ -570,6 +570,7 @@ func (t *memTx) PutNode(_ context.Context, n domain.Node) error {
 	}
 	if n.Version > 1 {
 		n.Project = vs[0].Project // the project is the node's, set by its first version
+		n.Creator = vs[0].Creator
 	}
 	t.st.versions[n.ID] = append(vs, n)
 	return nil
@@ -1165,14 +1166,14 @@ func (t *memTx) NodePage(ctx context.Context, refs []domain.NodeRef, q NodeQuery
 }
 
 func (t *memTx) LinkPage(ctx context.Context, refs []domain.NodeRef, q LinkQuery) (LinkPage, error) {
-	if q.Projects != nil {
+	if q.Reach != nil {
 		nodes, err := t.NodesAt(ctx, refs, "")
 		if err != nil {
 			return LinkPage{}, err
 		}
 		refs = refs[:0:0]
 		for _, n := range nodes {
-			if inProjects(n, q.Projects) {
+			if q.Reach.Holds(n) {
 				refs = append(refs, n.Ref())
 			}
 		}

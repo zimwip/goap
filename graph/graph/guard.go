@@ -415,6 +415,26 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 			n.Project = c.ProjectID
 		}
 	}
+	// who created the node, who edited the version, how far it is seen (ADR 0161 §3-4): the creator is the first
+	// version's; the editor, the person the write is done for unless the commit names the draft's; the scope, the
+	// domain's for the type and the state now
+	if n.Editor == "" {
+		n.Editor = t.g.author(ctx)
+	}
+	if prev != nil {
+		n.Creator = prev.Creator
+	} else {
+		if n.Creator.Subject == "" {
+			n.Creator.Subject = n.Editor
+		}
+		n.Editor = n.Creator.Subject // the first version's editor is the creator
+		if n.Creator.Unit.IsZero() {
+			n.Creator.Unit = n.Owner
+		}
+	}
+	if n.Visibility == "" {
+		n.Visibility = t.g.visibilityOf(n.Type, n.State)
+	}
 	if t.owners == nil {
 		t.owners, t.projects = map[lnk.URL]string{}, map[lnk.URL]string{}
 	}

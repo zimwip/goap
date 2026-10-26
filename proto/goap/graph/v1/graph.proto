@@ -300,6 +300,13 @@ message Node {
   bool draft = 20;
   // the nodes this one derives from (ADR 0077, merge and split): set on the first version of a successor
   repeated NodeRef origins = 21;
+  // who created the node (ADR 0161 §3): the subject and the unit it was created in, the same for every version
+  string creator = 22;
+  string creator_unit = 23;
+  // the person whose edits made the version (attribution, ADR 0161 §3)
+  string editor = 24;
+  // how far the version is seen, stamped at commit (ADR 0161 §4: personal, private, project, tree, public)
+  string visibility = 25;
 }
 
 message Link {

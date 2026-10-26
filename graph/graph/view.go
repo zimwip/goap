@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/graphapi"
 )
 
 // The reads of the current graph through a view (ADR 0157): a lasting branch at a baseline, or a change on a flow
@@ -33,9 +34,9 @@ type world struct {
 	reader *draftReader
 	// reach is what the caller reads (nil: everything), vis what it was found to read of the nodes met
 	reach *Reach
-	vis   map[domain.NodeID]bool
-	// projects is the reach as the stores filter a page (nil: every node)
-	projects []string
+	vis   map[domain.NodeRef]bool
+	// filter is the reach as the stores filter a page (nil: every node)
+	filter *graphapi.ReachFilter
 }
 
 // openWorld opens a view in a transaction, read by a caller of some reach (nil: everything; asked of g.reachOf before
@@ -44,11 +45,11 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View, reach *Reach) (*wo
 	if err := v.Check(); err != nil {
 		return nil, err
 	}
-	w := &world{view: v, reader: &draftReader{byNode: map[domain.NodeID]domain.Draft{}}, vis: map[domain.NodeID]bool{}}
+	w := &world{view: v, reader: &draftReader{byNode: map[domain.NodeID]domain.Draft{}}, vis: map[domain.NodeRef]bool{}}
 	if !v.IsChange() {
 		w.baseline, w.namespace = v.Baseline, domain.NamespaceOf(v.Namespace)
 		w.reach = reach.in(w.namespace)
-		w.projects = g.projectsOf(w.reach)
+		w.filter = g.filterOf(w.reach)
 		if w.baseline == "" {
 			head, err := branchHeadHeader(ctx, tx, w.namespace, v.Branch)
 			if err != nil {
@@ -72,7 +73,7 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View, reach *Reach) (*wo
 	}
 	w.change, w.flow, w.baseline, w.namespace = &c, c.ResolveFlow(v.Flow), c.BaselineID, domain.NamespaceOf(c.Namespace)
 	w.reach = reach.in(w.namespace)
-	w.projects = g.projectsOf(w.reach)
+	w.filter = g.filterOf(w.reach)
 	if w.impacts, err = g.newFlowNodes(tx, c, w.flow).nodes(ctx); err != nil {
 		return nil, err
 	}
@@ -519,7 +520,7 @@ func (g *Graph) ViewNodesOfType(ctx context.Context, v View, typ string) (out []
 
 // page is a page of the nodes of the world the caller reads.
 func (w *world) page(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error) {
-	q.Projects = w.projects
+	q.Reach = w.filter
 	if w.change != nil {
 		return w.nodes(ctx, tx, q)
 	}

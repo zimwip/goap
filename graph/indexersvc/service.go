@@ -34,6 +34,13 @@ type Access interface {
 	SubProjects(ctx context.Context, project string) ([]string, error)
 }
 
+// Reacher is an Access that also compiles the reach of a principal (access.Directory, ADR 0161 §5): a node document is
+// then found by those its scope reaches (its project, its scope, its responsible unit, its creator), not only by those
+// who work on its project.
+type Reacher interface {
+	ReachSet(ctx context.Context, p authz.Principal) (access.ReachSet, error)
+}
+
 // Views answers what a view holds of some nodes (ADR 0157): graph.Graph in process, graphclient.Client over RPC.
 type Views interface {
 	ViewVersions(ctx context.Context, v graphapi.View, ids []domain.NodeID) (graphapi.ViewState, error)
@@ -86,14 +93,15 @@ func New(store index.Store, embedder llm.Embedder, authorizer authz.Authorizer, 
 }
 
 // readFilter keeps the documents the caller may see (ABAC, ADR 0095), before anything is counted or quoted:
-//   - a node: action "read" on its type, in its namespace, and access to the project it was created in (a platform
-//     role, or a role on the project or above it; administrators see all);
+//   - a node: action "read" on its type, in its namespace, and its scope reaching the caller (ADR 0161 §5: with a
+//     Reacher, the reach set; else access to the project it was created in, a platform role or a role on the project
+//     or above it);
 //   - a change: a personal one (held by a personal unit, ADR 0037) only for its subject, administrators included; any
 //     other one needs access to its project.
 //
 // Callers without identity are trusted internal services and see everything (the gateway always identifies the
 // callers of the public API; the index port is not exposed).
-func readFilter(a authz.Authorizer, access func() Access) index.Authorizer {
+func readFilter(a authz.Authorizer, accessOf func() Access) index.Authorizer {
 	return func(ctx context.Context, hits []index.Hit) ([]index.Hit, error) {
 		who := authz.From(ctx)
 		if who.Anonymous() {
@@ -103,7 +111,7 @@ func readFilter(a authz.Authorizer, access func() Access) index.Authorizer {
 		decided := map[key]bool{}
 		projects := map[string]bool{}
 		mayProject := func(project string) (bool, error) {
-			acc := access()
+			acc := accessOf()
 			if project == "" || acc == nil {
 				return true, nil
 			}
@@ -117,6 +125,7 @@ func readFilter(a authz.Authorizer, access func() Access) index.Authorizer {
 			}
 			return ok, nil
 		}
+		var reach *access.ReachSet // compiled at the first node met
 		out := hits[:0:0]
 		for _, h := range hits {
 			if h.Kind == index.KindChange {
@@ -143,6 +152,19 @@ func readFilter(a authz.Authorizer, access func() Access) index.Authorizer {
 				decided[k] = ok
 			}
 			if !ok {
+				continue
+			}
+			if r, ok := accessOf().(Reacher); ok && h.Project != "" {
+				if reach == nil {
+					set, err := r.ReachSet(ctx, who)
+					if err != nil {
+						return nil, err
+					}
+					reach = &set
+				}
+				if reach.Holds(h.Project, h.Visibility, h.Responsible, h.Creator) {
+					out = append(out, h)
+				}
 				continue
 			}
 			if ok, err := mayProject(h.Project); err != nil {

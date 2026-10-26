@@ -32,6 +32,9 @@ type LifecycleState struct {
 	NotCommittable bool `yaml:"notCommittable,omitempty" json:"notCommittable,omitempty"`
 	// Final states have no way out.
 	Final bool `yaml:"final,omitempty" json:"final,omitempty"`
+	// Visibility is how far a version in the state is seen (ADR 0161 §4, VisibilityPersonal...): empty, the node
+	// type's, else project.
+	Visibility string `yaml:"visibility,omitempty" json:"visibility,omitempty"`
 }
 
 // Transition moves a node from one state to another.
@@ -232,6 +235,9 @@ func (l *Lifecycle) Issues() []string {
 			continue
 		}
 		names[s.Name] = true
+		if err := CheckVisibility(s.Visibility); err != nil {
+			out = append(out, fmt.Sprintf("state %s: %v", s.Name, err))
+		}
 		if !s.NotCommittable {
 			committable++
 		} else if s.Final {
@@ -333,4 +339,20 @@ func (l *Lifecycle) Clone() *Lifecycle {
 		}
 	}
 	return c
+}
+
+// StateVisibility is the scope a state declares (empty: none, the type's applies).
+func (l *Lifecycle) StateVisibility(state string) string {
+	if l == nil {
+		return ""
+	}
+	if state == "" {
+		state = l.Initial
+	}
+	for _, s := range l.States {
+		if s.Name == state {
+			return s.Visibility
+		}
+	}
+	return ""
 }

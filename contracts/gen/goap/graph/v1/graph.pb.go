@@ -272,7 +272,14 @@ type Node struct {
 	// is written when the change commits
 	Draft bool `protobuf:"varint,20,opt,name=draft,proto3" json:"draft,omitempty"`
 	// the nodes this one derives from (ADR 0077, merge and split): set on the first version of a successor
-	Origins       []*NodeRef `protobuf:"bytes,21,rep,name=origins,proto3" json:"origins,omitempty"`
+	Origins []*NodeRef `protobuf:"bytes,21,rep,name=origins,proto3" json:"origins,omitempty"`
+	// who created the node (ADR 0161 §3): the subject and the unit it was created in, the same for every version
+	Creator     string `protobuf:"bytes,22,opt,name=creator,proto3" json:"creator,omitempty"`
+	CreatorUnit string `protobuf:"bytes,23,opt,name=creator_unit,json=creatorUnit,proto3" json:"creator_unit,omitempty"`
+	// the person whose edits made the version (attribution, ADR 0161 §3)
+	Editor string `protobuf:"bytes,24,opt,name=editor,proto3" json:"editor,omitempty"`
+	// how far the version is seen, stamped at commit (ADR 0161 §4: personal, private, project, tree, public)
+	Visibility    string `protobuf:"bytes,25,opt,name=visibility,proto3" json:"visibility,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -452,6 +459,34 @@ func (x *Node) GetOrigins() []*NodeRef {
 		return x.Origins
 	}
 	return nil
+}
+
+func (x *Node) GetCreator() string {
+	if x != nil {
+		return x.Creator
+	}
+	return ""
+}
+
+func (x *Node) GetCreatorUnit() string {
+	if x != nil {
+		return x.CreatorUnit
+	}
+	return ""
+}
+
+func (x *Node) GetEditor() string {
+	if x != nil {
+		return x.Editor
+	}
+	return ""
+}
+
+func (x *Node) GetVisibility() string {
+	if x != nil {
+		return x.Visibility
+	}
+	return ""
 }
 
 type Link struct {
@@ -20197,7 +20232,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04flow\x18\x05 \x01(\tR\x04flow\"3\n" +
 	"\aNodeRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x05R\aversion\"\xe2\x04\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\"\xd7\x05\n" +
 	"\x04Node\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x10\n" +
@@ -20221,7 +20256,13 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x05owner\x18\x12 \x01(\tR\x05owner\x12\x18\n" +
 	"\aproject\x18\x13 \x01(\tR\aproject\x12\x14\n" +
 	"\x05draft\x18\x14 \x01(\bR\x05draft\x120\n" +
-	"\aorigins\x18\x15 \x03(\v2\x16.goap.graph.v1.NodeRefR\aorigins\"\xe2\x01\n" +
+	"\aorigins\x18\x15 \x03(\v2\x16.goap.graph.v1.NodeRefR\aorigins\x12\x18\n" +
+	"\acreator\x18\x16 \x01(\tR\acreator\x12!\n" +
+	"\fcreator_unit\x18\x17 \x01(\tR\vcreatorUnit\x12\x16\n" +
+	"\x06editor\x18\x18 \x01(\tR\x06editor\x12\x1e\n" +
+	"\n" +
+	"visibility\x18\x19 \x01(\tR\n" +
+	"visibility\"\xe2\x01\n" +
 	"\x04Link\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12*\n" +

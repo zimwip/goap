@@ -128,6 +128,14 @@ type Node struct {
 	// Project is the project the node was created in (a node of the project structure, ADR 0054): the project of the
 	// change that created it, the same for every version. A logical URL, as Owner.
 	Project lnk.URL `json:"project,omitzero"`
+	// Creator is who created the node (ADR 0161 §3), the same for every version: stamped by its first one.
+	Creator Creator `json:"creator,omitzero"`
+	// Editor is the person whose edits made the version (ADR 0161 §3: the end user when an agent edited for them; the
+	// first version's is the creator), stamped at commit: attribution only.
+	Editor string `json:"editor,omitempty"`
+	// Visibility is how far the version is seen (ADR 0161 §4: VisibilityPersonal...), stamped at commit from its type
+	// and state as the domain said then. Empty: project.
+	Visibility string `json:"visibility,omitempty"`
 	// ChangeImpact is the change impact that produced this version, Comment the acceptance
 	// comment (else the rationale): the origin of the version (ADR 0024).
 	ChangeImpact ChangeImpactID `json:"changeImpact,omitempty"`

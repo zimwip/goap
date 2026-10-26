@@ -36,13 +36,16 @@ type NodeEvent struct {
 	Type      string  `json:"type"`
 	State     string  `json:"state,omitempty"`
 	Deleted   bool    `json:"deleted,omitempty"`
-	// Project and Owner are the project and the unit owning the version (ADR 0054), used to authorize search results.
-	Project  string            `json:"project,omitempty"`
-	Owner    string            `json:"owner,omitempty"`
-	ChangeID ChangeID          `json:"changeId,omitempty"`
-	Text     map[string]string `json:"text,omitempty"`
-	Facets   map[string]any    `json:"facets,omitempty"`
-	Time     time.Time         `json:"time"`
+	// Project and Responsible are the project of the node and the unit answering for the version (ADR 0054), keys; with
+	// Visibility and Creator (ADR 0161 §5) they authorize search results.
+	Project     string            `json:"project,omitempty"`
+	Responsible string            `json:"responsible,omitempty"`
+	Visibility  string            `json:"visibility,omitempty"`
+	Creator     string            `json:"creator,omitempty"`
+	ChangeID    ChangeID          `json:"changeId,omitempty"`
+	Text        map[string]string `json:"text,omitempty"`
+	Facets      map[string]any    `json:"facets,omitempty"`
+	Time        time.Time         `json:"time"`
 }
 
 // BaselineEvent is published when a baseline is created: the diff with its parent

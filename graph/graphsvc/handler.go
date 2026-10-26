@@ -173,13 +173,24 @@ func typeCountsToPB(cs []graph.TypeCount) []*graphv1.TypeCount {
 	return out
 }
 
-// mayReadNode tells whether the caller reads a node outside a change (ADR 0138): those who work on its project; the
-// nodes of the built-in namespaces (the organisation, the platform, the methodologies) describe the platform and are
-// every person's to read. Read through a change, a node is the change's (PersonalScope).
+// mayReadNode tells whether the caller reads a node version outside a change (ADR 0161 §4-5): its scope reaches the
+// caller, as the view reader decides (Graph.Reach). Without a reach plugged, those who work on its project read it,
+// and every identified person reads a public version (the built-in namespaces declare their types public). Read
+// through a change, a node is the change's (PersonalScope).
 func (h *Handler) mayReadNode(ctx context.Context, n domain.Node) bool {
-	switch n.Namespace {
-	case access.NamespaceOrganisation, domain.NamespacePlatform, domain.NamespaceMethodology:
-		return !authz.From(ctx).Anonymous()
+	if authz.From(ctx).Anonymous() {
+		return false
+	}
+	if h.Graph.ReachOf != nil {
+		r, err := h.Graph.Reach(ctx)
+		return err == nil && r.Sees(n)
+	}
+	vis := n.Visibility
+	if vis == "" { // a version stamped by no commit: as its domain declares it
+		vis = h.Graph.Visibility(n.Type, n.State)
+	}
+	if vis == domain.VisibilityPublic {
+		return true
 	}
 	if n.Project.IsZero() {
 		return h.worksOn(ctx, "")

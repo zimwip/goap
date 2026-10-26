@@ -57,7 +57,10 @@ type NodeType struct {
 	// icon the user interface draws the nodes with (a name of its icon set); inherited
 	Icon string `protobuf:"bytes,16,opt,name=icon,proto3" json:"icon,omitempty"`
 	// color of the nodes (#rrggbb); inherited
-	Color         string `protobuf:"bytes,17,opt,name=color,proto3" json:"color,omitempty"`
+	Color string `protobuf:"bytes,17,opt,name=color,proto3" json:"color,omitempty"`
+	// how far a version is seen when its state declares none (ADR 0161 §4: personal, private, project, tree,
+	// public); inherited; empty: project
+	Visibility    string `protobuf:"bytes,18,opt,name=visibility,proto3" json:"visibility,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -207,6 +210,13 @@ func (x *NodeType) GetIcon() string {
 func (x *NodeType) GetColor() string {
 	if x != nil {
 		return x.Color
+	}
+	return ""
+}
+
+func (x *NodeType) GetVisibility() string {
+	if x != nil {
+		return x.Visibility
 	}
 	return ""
 }
@@ -1185,8 +1195,10 @@ type LifecycleState struct {
 	// a node in a not committable state blocks the commit of its change (ADR 0078)
 	NotCommittable bool `protobuf:"varint,3,opt,name=not_committable,json=notCommittable,proto3" json:"not_committable,omitempty"`
 	Final          bool `protobuf:"varint,4,opt,name=final,proto3" json:"final,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// how far a version in the state is seen (ADR 0161 §4); empty: the node type's
+	Visibility    string `protobuf:"bytes,5,opt,name=visibility,proto3" json:"visibility,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LifecycleState) Reset() {
@@ -1245,6 +1257,13 @@ func (x *LifecycleState) GetFinal() bool {
 		return x.Final
 	}
 	return false
+}
+
+func (x *LifecycleState) GetVisibility() string {
+	if x != nil {
+		return x.Visibility
+	}
+	return ""
 }
 
 type LifecycleTransition struct {
@@ -9801,7 +9820,7 @@ var File_goap_registry_v1_registry_proto protoreflect.FileDescriptor
 
 const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
-	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd0\x05\n" +
+	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf0\x05\n" +
 	"\bNodeType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12;\n" +
@@ -9825,7 +9844,10 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x15additional_properties\x18\x0e \x01(\bR\x14additionalProperties\x12+\n" +
 	"\x04form\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x04form\x12\x12\n" +
 	"\x04icon\x18\x10 \x01(\tR\x04icon\x12\x14\n" +
-	"\x05color\x18\x11 \x01(\tR\x05colorB\x14\n" +
+	"\x05color\x18\x11 \x01(\tR\x05color\x12\x1e\n" +
+	"\n" +
+	"visibility\x18\x12 \x01(\tR\n" +
+	"visibilityB\x14\n" +
 	"\x12_change_controlled\"8\n" +
 	"\fRequiredLink\x12\x12\n" +
 	"\x04link\x18\x01 \x01(\tR\x04link\x12\x14\n" +
@@ -9903,12 +9925,15 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\vdescription\x18\x05 \x01(\tR\vdescription\x12\x18\n" +
 	"\ainitial\x18\x01 \x01(\tR\ainitial\x128\n" +
 	"\x06states\x18\x02 \x03(\v2 .goap.registry.v1.LifecycleStateR\x06states\x12G\n" +
-	"\vtransitions\x18\x03 \x03(\v2%.goap.registry.v1.LifecycleTransitionR\vtransitions\"\x85\x01\n" +
+	"\vtransitions\x18\x03 \x03(\v2%.goap.registry.v1.LifecycleTransitionR\vtransitions\"\xa5\x01\n" +
 	"\x0eLifecycleState\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12'\n" +
 	"\x0fnot_committable\x18\x03 \x01(\bR\x0enotCommittable\x12\x14\n" +
-	"\x05final\x18\x04 \x01(\bR\x05final\"\xd9\x03\n" +
+	"\x05final\x18\x04 \x01(\bR\x05final\x12\x1e\n" +
+	"\n" +
+	"visibility\x18\x05 \x01(\tR\n" +
+	"visibility\"\xd9\x03\n" +
 	"\x13LifecycleTransition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +

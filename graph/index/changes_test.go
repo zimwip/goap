@@ -11,7 +11,7 @@ import (
 
 func nodeIn(id, key, title, project, owner string) domain.NodeEvent {
 	ev := node(id, 1, key, "Requirement", title, "high", "main")
-	ev.Project, ev.Owner = project, owner
+	ev.Project, ev.Responsible = project, owner
 	return ev
 }
 
@@ -93,7 +93,7 @@ func TestChangeDocumentsAndFilters(t *testing.T) {
 		}
 		h := r.Hits[0]
 		if h.Kind != KindChange || h.ID != "C2" || h.Key != "C2" || h.Title != "Export report as PDF" || h.Status != "applied" || h.Project != "P2" ||
-			h.Methodology != "sdlc" || h.Owner != "ORG-B" || h.Parent != "C1" || h.Version != 0 || !h.Main || h.Namespace != "alm" {
+			h.Methodology != "sdlc" || h.Responsible != "ORG-B" || h.Parent != "C1" || h.Version != 0 || !h.Main || h.Namespace != "alm" {
 			t.Fatalf("hit = %+v", h)
 		}
 		// the keys of the impacts are searchable
@@ -107,7 +107,7 @@ func TestChangeDocumentsAndFilters(t *testing.T) {
 		}{
 			"project":     {Filter{Kind: both, Project: []string{"P1"}}, "C1,C3,REQ-1"},
 			"project 2":   {Filter{Kind: both, Project: []string{"P2"}}, "C2,REQ-2"},
-			"owner":       {Filter{Kind: both, Owner: []string{"ORG-A"}}, "C1,REQ-1"},
+			"owner":       {Filter{Kind: both, Responsible: []string{"ORG-A"}}, "C1,REQ-1"},
 			"status":      {Filter{Kind: both, Status: []string{"active"}}, "C1,C3"},
 			"methodology": {Filter{Kind: both, Methodology: []string{"sdlc"}}, "C1,C2,C3"},
 			"roots":       {Filter{Kind: both, RootsOnly: true}, "C1,C3"},
@@ -418,7 +418,7 @@ func TestNodeProjectAndOwnerFacets(t *testing.T) {
 		ctx := context.Background()
 		seedDocs(t, s, nil)
 		r, err := (&Searcher{Store: s}).Search(ctx, Query{Facets: []string{FacetProject, FacetOwner}, Filter: Filter{Project: []string{"P1"}}})
-		if err != nil || r.Total != 1 || r.Hits[0].Project != "P1" || r.Hits[0].Owner != "ORG-A" || r.Facets[FacetProject][0] != (FacetCount{"P1", 1}) {
+		if err != nil || r.Total != 1 || r.Hits[0].Project != "P1" || r.Hits[0].Responsible != "ORG-A" || r.Facets[FacetProject][0] != (FacetCount{"P1", 1}) {
 			t.Fatalf("%v %+v", err, r)
 		}
 	})

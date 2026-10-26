@@ -59,6 +59,12 @@ type Draft struct {
 	// Execution is the action run that checked the node out (what a relaunch of a step marks stale, ADR 0025).
 	Execution string      `json:"execution,omitempty"`
 	Links     []DraftLink `json:"links,omitempty"`
+	// Creator is, on a creation, the person who created the draft (ADR 0161 §3: the author of its created event, the end
+	// user when an agent created it for them), the creator of the node it commits.
+	Creator string `json:"creator,omitempty"`
+	// Editor is the person who last edited the draft (the author of its last event): the editor of the version it
+	// commits as. Not stored: rebuilt from the log.
+	Editor string `json:"-"`
 }
 
 // Ref is the draft reference of the node.
@@ -263,6 +269,12 @@ func applyDraft(d *Draft, e ImpactEvent) *Draft {
 		if e.Draft != nil {
 			n := e.Draft.Clone()
 			n.Change, n.Impact, n.Flow = e.Change, e.Impact, e.Flow
+			if e.Op == ImpactCreated && n.Creator == "" {
+				n.Creator = e.Author()
+			}
+			if a := e.Author(); a != "" {
+				n.Editor = a
+			}
 			return &n
 		}
 	}
@@ -272,6 +284,9 @@ func applyDraft(d *Draft, e ImpactEvent) *Draft {
 	switch e.Op {
 	case ImpactUpdated, ImpactTransitioned:
 		n := d.Clone()
+		if a := e.Author(); a != "" {
+			n.Editor = a
+		}
 		p := patchOf(e.Patch)
 		if len(p.Props) > 0 || len(p.Unset) > 0 {
 			if n.Properties == nil {

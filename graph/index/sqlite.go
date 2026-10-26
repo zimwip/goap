@@ -38,16 +38,16 @@ func (s *SQLite) Upsert(ctx context.Context, d Doc) error {
 	err = tx.QueryRowContext(ctx, `SELECT rowid FROM node_index WHERE kind = ? AND node_id = ? AND version = ?`, d.Kind, string(d.ID), int(d.Version)).Scan(&rowid)
 	switch err {
 	case nil:
-		_, err = tx.ExecContext(ctx, `UPDATE node_index SET namespace=?, type=?, key=?, state=?, branch=?, main = main OR ?, deleted=?, project=?, owner=?, status=?, methodology=?, parent=?, personal_to=?, title=?, facets=?, doc=?, embedding = COALESCE(?, CASE WHEN hash = ? THEN embedding END), hash=?, updated=? WHERE rowid=?`,
-			d.Namespace, d.Type, d.Key, d.State, d.Branch, d.Main, d.Deleted, d.Project, d.Owner, d.Status, d.Methodology, d.Parent, d.PersonalTo, d.Title, string(facets), d.Text, packVec(d.Embedding), d.Hash, d.Hash, ts(d.Time), rowid)
+		_, err = tx.ExecContext(ctx, `UPDATE node_index SET namespace=?, type=?, key=?, state=?, branch=?, main = main OR ?, deleted=?, project=?, owner=?, visibility=?, creator=?, status=?, methodology=?, parent=?, personal_to=?, title=?, facets=?, doc=?, embedding = COALESCE(?, CASE WHEN hash = ? THEN embedding END), hash=?, updated=? WHERE rowid=?`,
+			d.Namespace, d.Type, d.Key, d.State, d.Branch, d.Main, d.Deleted, d.Project, d.Responsible, d.Visibility, d.Creator, d.Status, d.Methodology, d.Parent, d.PersonalTo, d.Title, string(facets), d.Text, packVec(d.Embedding), d.Hash, d.Hash, ts(d.Time), rowid)
 		if err == nil {
 			_, err = tx.ExecContext(ctx, `DELETE FROM node_fts WHERE rowid = ?`, rowid)
 		}
 	case sql.ErrNoRows:
 		var res sql.Result
-		res, err = tx.ExecContext(ctx, `INSERT INTO node_index (kind, node_id, version, namespace, type, key, state, branch, main, deleted, project, owner, status, methodology, parent, personal_to, title, facets, doc, hash, embedding, updated)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, d.Kind, string(d.ID), int(d.Version), d.Namespace, d.Type, d.Key, d.State, d.Branch, d.Main, d.Deleted,
-			d.Project, d.Owner, d.Status, d.Methodology, d.Parent, d.PersonalTo, d.Title, string(facets), d.Text, d.Hash, packVec(d.Embedding), ts(d.Time))
+		res, err = tx.ExecContext(ctx, `INSERT INTO node_index (kind, node_id, version, namespace, type, key, state, branch, main, deleted, project, owner, visibility, creator, status, methodology, parent, personal_to, title, facets, doc, hash, embedding, updated)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, d.Kind, string(d.ID), int(d.Version), d.Namespace, d.Type, d.Key, d.State, d.Branch, d.Main, d.Deleted,
+			d.Project, d.Responsible, d.Visibility, d.Creator, d.Status, d.Methodology, d.Parent, d.PersonalTo, d.Title, string(facets), d.Text, d.Hash, packVec(d.Embedding), ts(d.Time))
 		if err == nil {
 			rowid, err = res.LastInsertId()
 		}
@@ -145,7 +145,7 @@ func (s *SQLite) Reset(ctx context.Context) error {
 	return nil
 }
 
-const hitCols = `i.kind, i.node_id, i.version, i.namespace, i.type, i.key, i.state, i.branch, i.main, i.deleted, i.project, i.owner, i.status, i.methodology, i.parent, i.personal_to, i.title, i.facets`
+const hitCols = `i.kind, i.node_id, i.version, i.namespace, i.type, i.key, i.state, i.branch, i.main, i.deleted, i.project, i.owner, i.visibility, i.creator, i.status, i.methodology, i.parent, i.personal_to, i.title, i.facets`
 
 // where renders the filter as SQL conditions on alias i.
 func (f Filter) where() (string, []any) {
@@ -166,7 +166,7 @@ func (f Filter) where() (string, []any) {
 	in("i.state", f.State)
 	in("i.branch", f.Branch)
 	in("i.project", f.Project)
-	in("i.owner", f.Owner)
+	in("i.owner", f.Responsible)
 	in("i.status", f.Status)
 	in("i.methodology", f.Methodology)
 	if f.RootsOnly {
@@ -202,7 +202,7 @@ func scanHit(r interface{ Scan(...any) error }, extra ...any) (Hit, error) {
 	var h Hit
 	var id, facets string
 	var v int
-	dest := append([]any{&h.Kind, &id, &v, &h.Namespace, &h.Type, &h.Key, &h.State, &h.Branch, &h.Main, &h.Deleted, &h.Project, &h.Owner, &h.Status,
+	dest := append([]any{&h.Kind, &id, &v, &h.Namespace, &h.Type, &h.Key, &h.State, &h.Branch, &h.Main, &h.Deleted, &h.Project, &h.Responsible, &h.Visibility, &h.Creator, &h.Status,
 		&h.Methodology, &h.Parent, &h.PersonalTo, &h.Title, &facets}, extra...)
 	if err := r.Scan(dest...); err != nil {
 		return h, err

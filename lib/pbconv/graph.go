@@ -101,7 +101,8 @@ func NodeToPB(n domain.Node) *graphv1.Node {
 		Deleted: n.Deleted, ChangeId: string(n.ChangeID), CreatedAt: Time(n.CreatedAt),
 		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason, State: n.State,
 		ChangeImpact: string(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined,
-		Owner: n.Owner.String(), Project: n.Project.String(), Draft: n.IsDraft(), Origins: refsToPB(n.Origins)}
+		Owner: n.Owner.String(), Project: n.Project.String(), Draft: n.IsDraft(), Origins: refsToPB(n.Origins),
+		Creator: n.Creator.Subject, CreatorUnit: n.Creator.Unit.String(), Editor: n.Editor, Visibility: n.Visibility}
 }
 
 func refsToPB(rs []domain.NodeRef) []*graphv1.NodeRef {
@@ -136,7 +137,8 @@ func NodeFromPB(n *graphv1.Node) domain.Node {
 		Deleted: n.Deleted, ChangeID: domain.ChangeID(n.ChangeId), CreatedAt: FromTime(n.CreatedAt),
 		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason, State: n.State,
 		ChangeImpact: domain.ChangeImpactID(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined,
-		Owner: lnk.Of(n.Owner), Project: lnk.Of(n.Project), Origins: refsFromPB(n.Origins)}
+		Owner: lnk.Of(n.Owner), Project: lnk.Of(n.Project), Origins: refsFromPB(n.Origins),
+		Creator: domain.Creator{Subject: n.Creator, Unit: lnk.Of(n.CreatorUnit)}, Editor: n.Editor, Visibility: n.Visibility}
 }
 
 func versionsFromPB(vs []int32) []domain.Version {

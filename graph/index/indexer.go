@@ -24,7 +24,7 @@ type Indexer struct {
 // excluded by the main facet and stay searchable in the history of a branch.
 func (x *Indexer) OnNode(ctx context.Context, ev domain.NodeEvent) error {
 	return x.put(ctx, Doc{Kind: KindNode, ID: ev.ID, Version: ev.Version, Namespace: ev.Namespace, Type: ev.Type, Key: ev.Key, State: ev.State, Branch: ev.Branch,
-		Deleted: ev.Deleted, Project: ev.Project, Owner: ev.Owner, Text: DocumentText(ev.Key, ev.Text), Time: ev.Time, Facets: facetStrings(ev.Facets)})
+		Deleted: ev.Deleted, Project: ev.Project, Responsible: ev.Responsible, Visibility: ev.Visibility, Creator: ev.Creator, Text: DocumentText(ev.Key, ev.Text), Time: ev.Time, Facets: facetStrings(ev.Facets)})
 }
 
 // Bounds of the text of a change document (ADR 0095): the title, the intent and the goal are short by nature, and a
@@ -45,7 +45,7 @@ func (x *Indexer) OnChange(ctx context.Context, ev domain.ChangeDocEvent, person
 		branch = domain.MainBranch
 	}
 	return x.put(ctx, Doc{Kind: KindChange, ID: domain.NodeID(ev.ID), Namespace: ev.Namespace, Key: string(ev.ID), State: ev.State, Branch: branch,
-		Main: true, Project: ev.ProjectID, Owner: ev.OwnerOrg, Status: string(ev.Status), Methodology: ev.Methodology, Parent: string(ev.ParentID),
+		Main: true, Project: ev.ProjectID, Responsible: ev.OwnerOrg, Status: string(ev.Status), Methodology: ev.Methodology, Parent: string(ev.ParentID),
 		PersonalTo: personalTo, Title: ev.Title, Text: ChangeText(ev), Time: ev.CreatedAt})
 }
 

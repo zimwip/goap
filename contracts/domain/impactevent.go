@@ -75,10 +75,13 @@ type ImpactEvent struct {
 	Op     ImpactOp       `json:"op"`
 	// The caller: the flow branch the operation was made on ("" = the main flow), the journal record of the action
 	// run (process, step, action: ADR 0011) and the principal or component.
-	Flow      string    `json:"flow,omitempty"`
-	Execution string    `json:"execution,omitempty"`
-	By        string    `json:"by,omitempty"`
-	At        time.Time `json:"at"`
+	Flow      string `json:"flow,omitempty"`
+	Execution string `json:"execution,omitempty"`
+	By        string `json:"by,omitempty"`
+	// For is the person the author acted for (ADR 0114: the end user of a service's call), when it is not the author:
+	// whose edits a version records (Draft.Editor, ADR 0161 §3).
+	For string    `json:"for,omitempty"`
+	At  time.Time `json:"at"`
 	// Causation is the log entry the event follows from (ADR 0105): on a decided reviewed event, the fact.review entry of
 	// the submitted review that decided it.
 	Causation string `json:"causation,omitempty"`
@@ -105,6 +108,14 @@ type ImpactEvent struct {
 	// to}}; a transitioned event: {"state": {"from", "to"}} and the "props" / "unset" its actions made. ApplyDraftEvent
 	// reads it.
 	Patch map[string]any `json:"patch,omitempty"`
+}
+
+// Author is the person an event is attributed to: the person the author acted for, else the author.
+func (e ImpactEvent) Author() string {
+	if e.For != "" {
+		return e.For
+	}
+	return e.By
 }
 
 // Validate checks that an event carries what its operation needs.
