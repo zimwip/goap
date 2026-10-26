@@ -1,6 +1,6 @@
 # Prometheus of the performance stack (make perf): the collector (graph service, goap-bench), PostgreSQL, goap-proxy
 # (its calls by who served them and the time of the service behind it, ADR 0163; proxy-rs in make perf-compare) and
-# cAdvisor (CPU and memory per container), every 5 s. A target that does not run is only down.
+# cAdvisor or the podman exporter (CPU and memory per container), every 5 s. A target that does not run is only down.
 global:
   scrape_interval: 5s
 scrape_configs:
@@ -19,3 +19,6 @@ scrape_configs:
   - job_name: cadvisor
     static_configs:
       - targets: ["cadvisor:8080"]
+  - job_name: podman-exporter
+    static_configs:
+      - targets: ["podman-exporter:9882"]
