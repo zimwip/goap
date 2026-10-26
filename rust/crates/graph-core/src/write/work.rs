@@ -52,6 +52,8 @@ pub struct ChangeView {
     pub events: Vec<ImpactEvent>,
     /// the flows and options of the change, replayed from its items
     pub flows: Flows,
+    /// the moves of its state and the phase of each of its impacts (ADR 0058)
+    pub history: super::transition::History,
 }
 
 impl ChangeView {
@@ -118,6 +120,8 @@ pub struct Work {
     /// the node a creation takes over: the node of its key, which only abandoned changes or other lasting lines of
     /// work wrote (`take_key`)
     pub reuse: NodeId,
+    /// the operation moves the lifecycle of the node (`Named.transition`)
+    pub transition: bool,
 }
 
 impl Work {
@@ -157,6 +161,8 @@ pub struct Named {
     pub produced_by: String,
     /// the flow it works on, as the request names it
     pub flow: String,
+    /// the operation moves the lifecycle of the node: a freeze may let it through (ADR 0132 §4)
+    pub transition: bool,
 }
 
 /// An outgoing link a write gives a draft: to an exact version or a draft of the change (a URL of another source is
@@ -306,6 +312,7 @@ impl<S: WriteTx> Tx<'_, S> {
             self.project(e).await?;
             let v = self.views.get_mut(&change).expect("the view of the change");
             v.fold.apply(e);
+            v.history.apply_event(e);
             v.seq = seq;
         }
         Ok(())
@@ -423,6 +430,7 @@ impl<S: WriteTx> Tx<'_, S> {
             vcn: ChangeImpact::default(),
             planned: false,
             reuse: NodeId::default(),
+            transition: false,
         })
     }
 
@@ -452,11 +460,78 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(())
     }
 
+    /// Selects the impact an operation works on, to edit it (Go's `impact`): one written in a state of the lifecycle
+    /// of the change that the change has left is frozen (ADR 0058), and so are the nodes of a type a move froze
+    /// (ADR 0132 §4).
+    async fn impact(&mut self, w: &mut Work, id: &str) -> Result<()> {
+        self.select_impact(w, id)?;
+        if let Some(p) = self.frozen(w, id) {
+            return Err(GraphError::conflict(format!(
+                "change impact {id} was written in state {p}, which the change has left (now {}): go back to it first",
+                w.c.state
+            )));
+        }
+        let mut typ = w.cn.typ.clone();
+        if typ.is_empty()
+            && let Some(n) = self.base(w).await?
+        {
+            typ = n.typ;
+        }
+        self.check_type_freeze(w, &typ)
+    }
+
+    /// The state an impact was written in when the change has left it, so that its draft no longer changes (Go's
+    /// `frozen`): the move that left it may keep its phase editable (ADR 0132 §4).
+    fn frozen(&self, w: &Work, id: &str) -> Option<String> {
+        if w.c.state.is_empty() {
+            return None;
+        }
+        let hist = &self.views[&w.c.id].history;
+        let p = hist.phase_of(id)?;
+        if p.state == w.c.state {
+            return None;
+        }
+        let keeps = hist
+            .moves
+            .iter()
+            .rfind(|m| m.from == p.state)
+            .map(|m| m.freezes.as_ref().is_some_and(super::transition::keeps_phase));
+        match keeps {
+            Some(true) => None,
+            _ => Some(p.state),
+        }
+    }
+
+    /// Refuses to touch a node of a type a move of the lifecycle of the change froze (Go's `checkTypeFreeze`): no
+    /// creation, checkout or edit of it until the change goes back; a move of its own lifecycle when the freeze lets
+    /// it.
+    fn check_type_freeze(&self, w: &Work, typ: &str) -> Result<()> {
+        if typ.is_empty() {
+            return Ok(());
+        }
+        let cat = self.catalog();
+        for f in super::transition::in_force_freezes(&self.views[&w.c.id].history.moves) {
+            if w.transition && super::transition::freezes_transitions(&f) {
+                continue;
+            }
+            for frozen in super::transition::frozen_types(&f) {
+                if typ == frozen || cat.is_a(typ, &frozen) {
+                    return Err(GraphError::conflict(format!(
+                        "the nodes of type {frozen} are frozen in change {} since it left a state of its lifecycle (now {}): go back first",
+                        w.c.id, w.c.state
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Finds the impact an operation names, declaring it when the change holds none (Go's `resolve`).
     pub async fn resolve(&mut self, id: &ChangeId, t: Named) -> Result<Work> {
         let mut w = self.work_on(id, &t.flow).await?;
+        w.transition = t.transition;
         if !t.impact.is_empty() {
-            self.select_impact(&mut w, &t.impact)?;
+            self.impact(&mut w, &t.impact).await?;
             return Ok(w);
         }
         if t.node.is_empty() && t.key.is_empty() {
@@ -464,6 +539,9 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         if t.create && (t.key.is_empty() || t.typ.is_empty()) {
             return Err(GraphError::invalid("a node needs a key and a type"));
+        }
+        if t.create {
+            self.check_type_freeze(&w, &t.typ)?;
         }
         let found = w
             .seen
@@ -479,8 +557,8 @@ impl<S: WriteTx> Tx<'_, S> {
             .cloned();
         if let Some(found) = found {
             if t.create && found.planned_creation() && found.typ == t.typ {
-                self.select_impact(&mut w, &found.id)?;
                 w.planned = true;
+                self.impact(&mut w, &found.id).await?;
                 return Ok(w);
             }
             if t.create {
@@ -489,7 +567,7 @@ impl<S: WriteTx> Tx<'_, S> {
                     t.key, t.typ, found.id, found.intent
                 )));
             }
-            self.select_impact(&mut w, &found.id)?;
+            self.impact(&mut w, &found.id).await?;
             return Ok(w);
         }
         let mut nid = t.node.clone();
@@ -1571,6 +1649,7 @@ impl<S: WriteTx> Tx<'_, S> {
                     execution: n.execution,
                     produced_by: n.produced_by,
                     flow: flow.to_string(),
+                    transition: true,
                     ..Named::default()
                 },
             )
@@ -1987,8 +2066,14 @@ pub async fn fold_upto<T: ReadTx>(store: &T, id: &ChangeId, upto: i64) -> Result
             out.seq = out.seq.max(l.seq); // the position of the view: its impact events and facts
         }
         if l.stream() == LOG_IMPACT {
-            events.extend(impact::events_of(&l).map_err(GraphError::internal)?);
+            let got = impact::events_of(&l).map_err(GraphError::internal)?;
+            for e in &got {
+                out.history.apply_event(e);
+            }
+            events.extend(got);
         } else if l.stream() == LOG_FACT {
+            let it: Value = serde_json::from_str(&l.payload).map_err(GraphError::internal)?;
+            out.history.apply_item(&it, l.seq);
             items.push(crate::flow::Item::of(&l.payload).map_err(GraphError::internal)?);
         }
     }

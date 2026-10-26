@@ -16,7 +16,24 @@ pub struct Env {
     pub change: Map<String, Json>,
     pub impact: Map<String, Json>,
     pub draft: Map<String, Json>,
+    /// The facts of a change transition, by variable (`guard.Facts`): its decision points, actions, risks,
+    /// verifications, derogations, criticality policy, dependencies, history and assessments, the `world` state and
+    /// the `integrator`; a variable left out is empty.
+    pub facts: Map<String, Json>,
 }
+
+/// The variables of the facts of a change, as the conditions read them (`condition.guardInputs`).
+pub const FACTS: [&str; 9] = [
+    "decisionPoints",
+    "actions",
+    "risks",
+    "verifications",
+    "derogations",
+    "criticalityPolicy",
+    "dependencies",
+    "history",
+    "assessments",
+];
 
 impl Guard {
     /// Compiles a guard.
@@ -58,10 +75,10 @@ impl Guard {
             ("history", serde_json::json!({"runs": [], "steps": [], "last": {}})),
         ];
         for (k, v) in vars {
-            ctx.add_variable_from_value(k, value(&v));
+            ctx.add_variable_from_value(k, value(env.facts.get(k).unwrap_or(&v)));
         }
         for k in lists {
-            ctx.add_variable_from_value(k, value(&Json::Array(Vec::new())));
+            ctx.add_variable_from_value(k, value(env.facts.get(k).unwrap_or(&Json::Array(Vec::new()))));
         }
         match prog.execute(&ctx) {
             Ok(Value::Bool(b)) => Ok(b),

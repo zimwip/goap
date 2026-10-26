@@ -43,6 +43,13 @@ const KINDS: [(&str, &str, &str); 9] = [
     ("methodStep", "", "methodology@MethodStep"),
 ];
 
+/// The node types a version is stored as: its header and one per element kind.
+pub fn node_types() -> Vec<&'static str> {
+    let mut out = vec![TYPE_VERSION];
+    out.extend(KINDS.iter().map(|k| k.2));
+    out
+}
+
 fn kind_of_type(t: &str) -> &'static str {
     KINDS.iter().find(|k| k.2 == t).map_or("", |k| k.0)
 }

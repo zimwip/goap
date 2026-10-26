@@ -317,6 +317,7 @@ impl Move<'_> {
             draft: obj(json!({"key": d.key, "type": d.typ, "state": d.state,
                 "props": d.props.clone().unwrap_or_default(), "owner": d.owner.to_string(), "links": links,
                 "base": d.base.as_ref().map_or(0, |b| b.version), "new": d.base.is_none()})),
+            facts: Map::new(),
         }
     }
 }

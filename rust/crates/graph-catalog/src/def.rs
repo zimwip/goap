@@ -252,6 +252,9 @@ pub struct Transition {
     pub vetos: Vec<Value>,
     #[serde(deserialize_with = "nullable")]
     pub objectives: Vec<Value>,
+    /// What the move freezes beyond its phase (`domain.Freezes`, ADR 0132 §4): read as it is written, the graph
+    /// records it on the move.
+    pub freezes: Option<Value>,
     #[serde(deserialize_with = "nullable")]
     pub guards: Vec<String>,
     #[serde(deserialize_with = "nullable")]

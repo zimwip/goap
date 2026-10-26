@@ -3269,8 +3269,12 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::TransitionChangeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, _| {
-            let c = tx.transition_change(&m.change_id.as_str().into()).await?;
+        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+            let c = tx
+                .transition_change(&m.change_id.as_str().into(), &m.transition, &m.decision, &|c, t| {
+                    acc.change_transition(c, t)
+                })
+                .await?;
             Ok(pb::TransitionChangeResponse {
                 change: Some(convert::change(&c)),
             })
@@ -4406,6 +4410,28 @@ impl Access {
     fn reviewer(&self, mut who: Actor) -> Result<Actor, GraphError> {
         who.admin = !self.person || self.administers()?;
         Ok(who)
+    }
+
+    /// Whether the caller moves a change along a transition of its lifecycle (Go's
+    /// `graphsvc.ChangeTransitionAuthorizer`): the permission the transition declares, by default
+    /// `change:transition`, on the unit and the project of the change.
+    fn change_transition(&self, c: &change::Change, t: &Transition) -> Result<(), GraphError> {
+        let (typ, act) = match t.permission.split_once(':') {
+            Some((typ, act)) if !typ.is_empty() && !act.is_empty() => (typ, act),
+            _ if t.permission.is_empty() => ("change", "transition"),
+            _ => return Err(GraphError::internal("permission must be <resource>:<action>")),
+        };
+        self.check(
+            act,
+            abac::Resource {
+                typ: typ.into(),
+                id: c.id.0.clone(),
+                name: c.title.clone(),
+                org: c.owner_org.key.clone(),
+                project_id: c.project_id.key.clone(),
+                ..abac::Resource::default()
+            },
+        )
     }
 
     /// Whether the caller takes a transition of a lifecycle on a node (Go's `graphsvc.TransitionAuthorizer`): the

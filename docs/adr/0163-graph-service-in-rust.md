@@ -683,3 +683,40 @@ the domains in force (the methodology is not compiled here), the domain versions
 read in the domains in force), the gates merged into the lifecycle; next, the conditions of the methodology (guards,
 gates, guardians: `TransitionChange` and the merge of a change following a lifecycle stay refused), then the cascade of
 the sub-changes and the standing of the steps.
+
+Addendum, the conditions, the gates and the guardians: the graph instantiates what a change follows from the nodes of
+its methodology version, so the Rust graph compiles the parts of `engine/methodology` and `engine/condition` a change
+needs, and nothing of the engine. Four pieces, each checked against what Go computes by golden cases a Go test writes
+(`GOAP_UPDATE_RUST=1`): the variables a condition reads on the blackboard of a change
+(`graph_core::conditions::activation`, Go's `condition.Activation`, cases written by `engine/condition`
+`TestRustActivationCasesAreCurrent`); the definition read back from the stored nodes of a version
+(`conditions::stored`, Go's `registrysvc` `versionJSON`, the references put back from the links, the steps from the
+sub-activities); the conditions that definition compiles to (`conditions::derive`, the declared ones, those of the
+libraries it imports — shipped as `libraries.gen.json` — and those generated for expectations, scoped actions, steps,
+gates and states); and their evaluation (`graph_script::conditions::Set`, the scoped conditions per subject, the
+conditions of the change, then the aggregates). `registrysvc` `TestRustMethodologyCasesAreCurrent` writes every shipped
+methodology as the store holds it, with the definition, the condition expressions and their values on the activation
+cases; the Rust tests read them back and compare. A guard reads the same variables as the conditions
+(`graph_script::guard::Env::facts`), so one compiled expression serves the lifecycle, the criteria of a gate and a
+guardian.
+
+`Declared::instance` is the version instantiated: the nodes of its header and its elements, the definition, the
+conditions and, with `Instance::lifecycle`, the lifecycle of the domains in force with the criteria and the freezes of
+its gates merged into the transitions they take (Go's `WithGates`). `Tx::transition_change` is then Go's
+`TransitionChange`: the transition out of the current state, the permission of the caller (the service passes
+`Access::change_transition`, Go's `ChangeTransitionAuthorizer`), the decision point that gates it (one gates one move),
+the CEL guard over the world state, the vetos and the objectives with the derogation in force covering each one unmet,
+the guardians of the chain innermost first (`integrator` the nearest ancestor change of that methodology), the
+`transition` item, the state, `change.transitioned`, and the new review of what was written after the state the change
+goes back to (`reopenPhase`). The commit asks the same guardians and, when the change is scoped to an Activity, that
+activity's own goal condition in place of the committable states (Go's `checkCommit` over `ActivityGoalsMet`); the
+close asks for a final state. The freezes are enforced where Go enforces them: the phase of an impact and the node
+types a move froze (`Tx::impact`, `check_type_freeze` over the moves folded in the view of the change,
+`ChangeView::history`), and the frozen fields of the header at `UpdateChange`.
+
+Not yet, and the approximations to remove: the compiled methodologies are not cached (each transition and commit reads
+the nodes of its version and compiles its conditions, where Go's registry keeps a bounded cache); a stored definition
+is not validated again (what the registry refuses to publish generates nothing here); a scoped condition reading the
+conditions of other subjects through the lists of the activation sees them empty; the history of the change (ADR 0109)
+is empty, so a condition over `history` is false and the default exit of a step never holds — the next stage, with the
+cascade of the sub-changes (`SubChangeValidator`).

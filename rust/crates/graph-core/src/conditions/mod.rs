@@ -2,6 +2,7 @@
 //! addendum): the definition read back from its nodes ([`stored`]), the conditions it compiles to ([`derive`]) and
 //! the variables they read on a blackboard ([`activation`]).
 pub mod activation;
+pub mod board;
 pub mod derive;
 pub mod stored;
 

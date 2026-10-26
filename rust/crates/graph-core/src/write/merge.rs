@@ -605,9 +605,15 @@ impl<S: WriteTx> Tx<'_, S> {
                 wait.join("; ")
             )));
         }
-        // the final state of its lifecycle is the close's (ADR 0166)
+        // the final state of its lifecycle is the close's (ADR 0166): a change merges what it committed in any state
         if !c.lifecycle.is_empty() && closing {
-            return Err(super::update::unresolved_lifecycle(c));
+            let (lc, _) = self.change_lifecycle(c).await?;
+            if !lc.state(&c.state).is_some_and(|s| s.is_final) {
+                return Err(GraphError::conflict(format!(
+                    "change {} is in state {} of lifecycle {}: it is merged once it is in a final state",
+                    c.id, c.state, c.lifecycle
+                )));
+            }
         }
         Ok(())
     }

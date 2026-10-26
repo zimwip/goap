@@ -20,6 +20,7 @@ use super::{
 use crate::{
     GraphError, Result,
     change::Change,
+    conditions::{activation::activation, board},
     impact::{ChangeImpact, Draft, ImpactEvent, ImpactOp, REVIEW_ACCEPTED},
     jsontext,
     model::{
@@ -33,6 +34,20 @@ use graph_catalog::def::Lifecycle;
 
 /// How many deltas deep a link set may be before a version writes its links whole (ADR 0141).
 const MAX_LINK_DEPTH: i32 = 16;
+
+/// The key of `Change.Data` holding the Activity a change is scoped to (`registrysvc.DataActivity`): the node key of
+/// an element of a methodology, whose goal condition the change must satisfy to commit.
+const DATA_ACTIVITY: &str = "activityRef";
+
+/// A methodology element key split into the name and version of its methodology, the kind of the element and its name
+/// or step path (`parseActivityRef`).
+fn activity_ref(reference: &str) -> Option<(&str, &str, &str, &str)> {
+    let rest = reference.strip_prefix("MV:")?;
+    let (head, rest) = rest.split_once('/')?;
+    let (kind, item) = rest.split_once('/')?;
+    let (name, version) = head.split_once('@')?;
+    Some((name, version, kind, item))
+}
 
 /// The kind of the baseline a commit tells (`domain.BaselineCommit`).
 const BASELINE_COMMIT: &str = "commit";
@@ -518,7 +533,7 @@ impl<S: WriteTx> Tx<'_, S> {
             .collect();
         self.emit(committed).await?;
         if !mechanical {
-            self.check_committable(id, &own, &nodes).await?;
+            self.check_commit(id, &own, &nodes).await?;
         }
         let mut c = self.change_head(id).await?;
         if c.status == STATUS_DRAFT {
@@ -640,6 +655,74 @@ impl<S: WriteTx> Tx<'_, S> {
             wrote.push(n);
         }
         Ok(wrote)
+    }
+
+    /// The guardian of a commit (Go's `checkCommit`, ADR 0146): the say of the methodology of the change on what it
+    /// committed — the goal of the Activity the change is scoped to, else the committable states of the domain — then
+    /// the outer guardians of its chain, innermost first (ADR 0106). A change following no methodology the registry
+    /// declares is judged by the committable states alone.
+    async fn check_commit(&mut self, id: &ChangeId, own: &Branch, wrote: &[Node]) -> Result<()> {
+        let c = self.change_head(id).await?;
+        if c.methodology.is_empty() {
+            return self.check_committable(id, own, wrote).await;
+        }
+        let declared = crate::methodologies::Declared::read(self.store).await?;
+        let Some(instance) = declared.instance(self.store, &c.methodology_ref()).await? else {
+            return self.check_committable(id, own, wrote).await;
+        };
+        let at = self.env.now();
+        let wire = board::wire(self.store, self.catalog(), id, None, at).await?;
+        let facets = board::facets(self.store, &c).await?;
+        let act = activation(&wire, &facets);
+        let world = instance.set.evaluate(&act).state;
+        // the goal of the Activity the change is scoped to decides, in place of the committable states (ADR 0066)
+        match self.activity_goal(&declared, &c, &act).await? {
+            Some(true) => {}
+            Some(false) => {
+                return Err(GraphError::invalid(
+                    "the change does not satisfy the goal of its methodology",
+                ));
+            }
+            None => self.check_committable(id, own, wrote).await?,
+        }
+        self.check_guardians(&c, &act, &world, "").await
+    }
+
+    /// Whether the change satisfies the goal condition of the Activity it is scoped to (`registrysvc.Service.Commit`
+    /// over `ActivityGoalsMet`): none when it is scoped to none.
+    async fn activity_goal(
+        &self,
+        declared: &crate::methodologies::Declared,
+        c: &Change,
+        act: &serde_json::Map<String, Value>,
+    ) -> Result<Option<bool>> {
+        let Some(reference) = c
+            .data
+            .as_ref()
+            .and_then(|d| d.get(DATA_ACTIVITY))
+            .and_then(Value::as_str)
+        else {
+            return Ok(None);
+        };
+        let Some((name, version, kind, item)) = activity_ref(reference) else {
+            return Err(GraphError::not_found(format!("{reference}: not an activity key")));
+        };
+        let r = crate::methodologies::reference(name, version);
+        let Some(instance) = declared.instance(self.store, &r).await? else {
+            return Err(GraphError::not_found(format!("methodology {r}")));
+        };
+        let d = &instance.derived;
+        let goal = match kind {
+            "process" => d.process_goals.get(item),
+            "method" => d.method_goals.get(item),
+            "step" | "methodStep" => d.criteria.get(item).map(|(_, exit)| exit),
+            _ => return Err(GraphError::invalid(format!("unknown activity kind {kind:?}"))),
+        };
+        let Some(goal) = goal else {
+            return Err(GraphError::not_found(format!("{reference}: no such activity")));
+        };
+        let state = instance.set.evaluate(act).state;
+        Ok(Some(goal.iter().all(|(k, want)| state.get(k) == Some(want))))
     }
 
     /// The guardian of a commit with no methodology to ask (Go's `ownGuardian`, ADR 0078, 0146): what the change

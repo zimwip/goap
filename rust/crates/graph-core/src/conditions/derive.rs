@@ -82,6 +82,8 @@ pub struct Derived {
     pub criteria: BTreeMap<String, (Bools, Bools)>,
     /// The goal of each valid method (its exit criteria), by name.
     pub method_goals: BTreeMap<String, Bools>,
+    /// The goal generated for each valid process (its exit criteria), by name.
+    pub process_goals: BTreeMap<String, Bools>,
 }
 
 fn s<'a>(m: &'a Map<String, Value>, k: &str) -> &'a str {
@@ -811,9 +813,15 @@ pub fn derive(m: &Map<String, Value>) -> Derived {
         criteria: BTreeMap::new(),
         done: HashMap::new(),
     };
+    let mut process_goals = BTreeMap::new();
     for i in 0..objects(m, "processes").count() {
-        w.process(i);
+        if let Some(goal) = w.process(i)
+            && let Some(p) = objects(m, "processes").nth(i)
+        {
+            process_goals.insert(s(p, "name").to_string(), goal);
+        }
     }
+    out.process_goals = process_goals;
     let refs = std::mem::take(&mut w.refs);
     let infos = std::mem::take(&mut w.infos);
     narrowed.append(&mut w.narrowed);

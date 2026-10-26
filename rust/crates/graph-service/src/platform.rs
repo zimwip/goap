@@ -22,7 +22,6 @@ use graph_catalog::{
 use graph_core::{
     GraphError,
     lnk::Url,
-    methodologies,
     model::{ChangeId, Link, LinkId, MAIN_BRANCH, NAMESPACE_METHODOLOGY, Node, NodeId, NodeRef, Target},
     platform::{Held, Platform},
 };
@@ -304,7 +303,9 @@ impl Remote {
             .await
             .map_err(|e| unavailable("platform graph: methodologies", e))?
             .into_inner();
-        let held = |t: &str| t == TYPE_ROLE || methodologies::TYPES.contains(&t);
+        // the roles the operations read, and every element of a methodology version: the graph instantiates the
+        // lifecycle, the gates and the conditions of a change from them (ADR 0163 addendum)
+        let held = |t: &str| t == TYPE_ROLE || t.starts_with("methodology@");
         Ok(Held {
             baseline: baseline.into(),
             nodes: g
@@ -314,12 +315,7 @@ impl Remote {
                 .map(node)
                 .filter(|n| !n.deleted)
                 .collect(),
-            links: g
-                .links
-                .iter()
-                .filter(|l| l.r#type == methodologies::LINK_MAIN_GOAL)
-                .map(link)
-                .collect(),
+            links: g.links.iter().map(link).collect(),
         })
     }
 }

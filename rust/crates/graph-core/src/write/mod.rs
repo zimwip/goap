@@ -20,6 +20,7 @@ pub mod review;
 pub mod reviews;
 pub mod scripts;
 pub mod subchange;
+pub mod transition;
 pub mod tx;
 pub mod update;
 pub mod validators;

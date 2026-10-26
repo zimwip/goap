@@ -6,6 +6,7 @@ use super::{
     attach::{HEADER_GUARDIANS, chain_value},
     change::{STATUS_ACTIVE, STATUS_DRAFT, change_branch_origin},
     project::HEADER_METHODOLOGY_VERSION,
+    transition,
     tx::Tx,
     whole::WholeChange,
     work::fold_change,
@@ -72,6 +73,18 @@ impl<S: WriteTx> Tx<'_, S> {
                 edit.insert(name.into(), v.clone());
                 edited.insert(name.into(), v);
                 *field = to.clone();
+            }
+        }
+        // the fields a move of the lifecycle froze no longer change (ADR 0132 §4); the goal is never one of them
+        for f in edit.keys().filter(|f| *f != "goal") {
+            if transition::in_force_freezes(&view.history.moves)
+                .iter()
+                .any(|fr| transition::frozen_field(fr, f))
+            {
+                return Err(GraphError::conflict(format!(
+                    "the {f} of change {id} is frozen since it left a state of its lifecycle (now {})",
+                    c.state
+                )));
             }
         }
         if let Some(to) = p.status.as_ref().filter(|to| **to != c.status) {
@@ -167,20 +180,6 @@ impl<S: WriteTx> Tx<'_, S> {
             self.put_branch(&b).await?;
         }
         Ok(())
-    }
-
-    /// Moves the state of a change along a transition of its lifecycle (Go's `TransitionChange`, ADR 0058): with no
-    /// registry, nothing resolves the lifecycle a change follows, so the move is refused once the change is known to be
-    /// open.
-    pub async fn transition_change(&mut self, id: &ChangeId) -> Result<Change> {
-        let c = self.change_head(id).await?;
-        if matches!(c.status.as_str(), "applied" | "abandoned" | "committed") {
-            return Err(GraphError::conflict(format!("change {id} is {}", c.status)));
-        }
-        if c.lifecycle.is_empty() {
-            return Err(GraphError::invalid(format!("change {id} follows no lifecycle")));
-        }
-        Err(unresolved_lifecycle(&c))
     }
 
     /// Moves an open change to another version of its methodology (Go's `UpgradeChange`, ADR 0113): the version named,

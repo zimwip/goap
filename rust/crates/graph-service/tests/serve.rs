@@ -593,3 +593,131 @@ async fn a_change_follows_what_its_methodology_declares() {
         "{body}"
     );
 }
+
+#[tokio::test]
+async fn a_change_moves_along_the_lifecycle_its_methodology_names() {
+    let (state, registry) = states().await;
+    graph_service::Graph { state: state.clone() }
+        .boot(&Default::default())
+        .await
+        .unwrap();
+    let base = listen(app(state)).await;
+    let domains = listen(domains_app(registry)).await;
+    let svc = Some(ADMIN);
+    let c = reqwest::Client::new();
+    // a domain whose lifecycle guards its move with a condition of the methodology, and ends in a final state
+    let domain = serde_json::json!({"name": "flow", "version": "1.0.0",
+        "nodeTypes": [{"name": "Note"}],
+        "lifecycles": [{"name": "review", "initial": "drafting",
+            "states": [{"name": "drafting"}, {"name": "reviewed"}, {"name": "done", "final": true}],
+            "transitions": [
+                {"name": "submit", "from": "drafting", "to": "reviewed", "guard": "world[\"titled\"]"},
+                {"name": "rework", "from": "reviewed", "to": "drafting"},
+                {"name": "finish", "from": "reviewed", "to": "done"}]}]});
+    for (method, body) in [
+        ("SaveDomain", serde_json::json!({"domain": domain})),
+        ("PublishDomain", serde_json::json!({"name": "flow", "version": "1.0.0"})),
+    ] {
+        let res = c
+            .post(format!("{domains}/goap.registry.v1.DomainService/{method}"))
+            .header("content-type", "application/json")
+            .header("x-goap-subject", ADMIN)
+            .header("x-goap-roles", "admin")
+            .body(body.to_string())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 200, "{method}: {:?}", res.text().await);
+    }
+    // the methodology the registry declares: the lifecycle of that domain and the condition its guard reads
+    let edits = serde_json::json!([
+        {"key": "MV:review@1.0.0", "type": "methodology@MethodologyVersion",
+         "props": {"name": "review", "version": "1.0.0", "status": "published", "publishedAt": "2026-01-01T00:00:00Z",
+                   "namespace": "platform", "lifecycle": "review"}},
+        {"key": "MV:review@1.0.0/condition/titled", "type": "methodology@Condition",
+         "props": {"name": "titled", "expr": "change.title != \"c\"", "description": "the change has a title of its own"}},
+    ]);
+    let (status, body) = call(
+        &base,
+        "CommitEdits",
+        svc,
+        serde_json::json!({"namespace": "methodology", "title": "declare", "projectId": "PROJ-ROOT", "edits": edits}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let (status, body) = call(
+        &base,
+        "CommitEdits",
+        svc,
+        serde_json::json!({"namespace": "organisation", "title": "project", "projectId": "PROJ-ROOT", "edits": [
+            {"key": "PROJ-R", "type": "organisation@ProjectUnit", "props": {"name": "R", "methodologies": ["review"]},
+             "links": [{"type": "organisation@project_part_of", "toKey": "PROJ-ROOT"}]}]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let (status, body) = call(
+        &base,
+        "CreateChange",
+        svc,
+        serde_json::json!({"title": "c", "namespace": "platform", "ownBranch": true, "projectId": "PROJ-R",
+            "methodology": "review"}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        (&body["change"]["lifecycle"], &body["change"]["state"]),
+        (&"review".into(), &"drafting".into()),
+        "{body}"
+    );
+    let id = body["change"]["id"].as_str().unwrap().to_string();
+    let move_to = async |transition: &str| {
+        call(
+            &base,
+            "TransitionChange",
+            svc,
+            serde_json::json!({"changeId": id, "transition": transition}),
+        )
+        .await
+    };
+    // a transition the state has not
+    let (status, body) = move_to("finish").await;
+    assert_eq!(status, 400, "{body}");
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("has no transition \"finish\""),
+        "{body}"
+    );
+    // its guard reads the world state of the conditions of the methodology: the title is still the one it refuses
+    let (_, body) = move_to("submit").await;
+    assert_eq!(body["code"], "failed_precondition", "{body}");
+    assert!(
+        body["message"].as_str().unwrap().contains("gate not satisfied"),
+        "{body}"
+    );
+    let (status, body) = call(
+        &base,
+        "UpdateChange",
+        svc,
+        serde_json::json!({"id": id, "title": "a change of its own"}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let (status, body) = move_to("submit").await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["change"]["state"], "reviewed", "{body}");
+    // the move is journaled as a transition item of the change
+    let (status, body) = call(
+        &base,
+        "ListChangeLog",
+        svc,
+        serde_json::json!({"changeId": id, "types": ["fact.transition"]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["entries"][0]["subject"], "transition.submit", "{body}");
+    let (status, body) = move_to("finish").await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["change"]["state"], "done", "{body}");
+}
