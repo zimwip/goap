@@ -171,8 +171,15 @@ PERF_DIFF_DSN_RS := postgres://graph_rs:graph_rs@postgres:5432/goap?sslmode=disa
 # loaded by its own goap-bench with PERF_COMPARE_ARGS (default -seed 1 and PERF_ARGS, as make perf), at the same time
 # or one after the other (PERF_COMPARE_SERIAL=1: Go, then Rust), each with its domain registry (domains, domains_rs);
 # the four schemas dropped first unless PERF_COMPARE_KEEP=1;
-# cAdvisor (or the podman exporter, PERF_CONTAINERS) gives the CPU and memory of each container; drawn by the Grafana dashboard "GOAP performance: Go vs Rust"
+# cAdvisor (or the podman exporter, PERF_CONTAINERS) gives the CPU and memory of each container; drawn by the Grafana dashboard "GOAP performance: Go vs Rust".
+# PERF_COMPARE_MODE: parallel (the above: throughput and latency of each service under its own load) or mirror (one
+# goap-bench through goap-proxy in mode compare: every call sent to the Go service, then to the Rust one, each on its
+# schema, both timed by the proxy and their answers compared, goap_proxy_compare_total; the same calls on both sides,
+# one at a time; report in .goap/perf/diff)
+PERF_COMPARE_MODE ?= parallel
 PERF_CMP := docker compose -f deploy/compose/perf.yml -f deploy/compose/perf.rust.yml -f deploy/compose/perf.compare.yml
+# the files of the stack of perf-compare: mirror's is perf-rust's, one domain registry and one proxy for both services
+PERF_CMP_UP := $(if $(filter mirror,$(PERF_COMPARE_MODE)),$(PERF_RUST),$(PERF_CMP))
 PERF_COMPARE_ARGS ?= -seed 1 $(PERF_ARGS)
 PERF_COMPARE_SERIAL ?=
 PERF_COMPARE_KEEP ?=
@@ -180,8 +187,8 @@ PERF_COMPARE_KEEP ?=
 # none; PERF_PODMAN_SOCK the socket of the podman service (DOCKER_HOST, else the rootless one, else the root one)
 PERF_CONTAINERS ?= $(if $(shell docker --version 2>/dev/null | grep -i podman),podman,cadvisor)
 PERF_PODMAN_SOCK ?= $(or $(patsubst unix://%,%,$(filter unix://%,$(DOCKER_HOST))),$(wildcard $(XDG_RUNTIME_DIR)/podman/podman.sock),/run/podman/podman.sock)
-PERF_CMP_ENV := GOAP_PERF_RS_DSN='$(PERF_DIFF_DSN_RS)' GOAP_PODMAN_SOCK='$(PERF_PODMAN_SOCK)'
-PERF_CMP_STACK := postgres-init domains domains-rs graph graph-rs proxy proxy-rs $(filter cadvisor,$(PERF_CONTAINERS)) $(if $(filter podman,$(PERF_CONTAINERS)),podman-exporter) otel-collector postgres-exporter prometheus grafana
+PERF_CMP_ENV := GOAP_PERF_RS_DSN='$(PERF_DIFF_DSN_RS)' GOAP_PODMAN_SOCK='$(PERF_PODMAN_SOCK)' $(if $(filter mirror,$(PERF_COMPARE_MODE)),GOAP_PERF_IMPL=compare)
+PERF_CMP_STACK := postgres-init domains $(if $(filter mirror,$(PERF_COMPARE_MODE)),,domains-rs) graph graph-rs proxy $(if $(filter mirror,$(PERF_COMPARE_MODE)),,proxy-rs) $(filter cadvisor,$(PERF_CONTAINERS)) $(if $(filter podman,$(PERF_CONTAINERS)),podman-exporter) otel-collector postgres-exporter prometheus grafana
 PERF_GO_ENV := $(if $(filter 0,$(PERF_PROXY)),GOAP_PERF_GRAPH_URL=http://graph:8080)
 PERF_RUST_ENV := GOAP_PERF_IMPL=$(PERF_RUST_MODE) $(if $(filter 0,$(PERF_PROXY)),GOAP_PERF_GRAPH_URL=http://graph-rs:8080)
 PERF_DIFF_ENV := GOAP_PERF_IMPL=$(PERF_DIFF_MODE) GOAP_PERF_RS_DSN='$(if $(filter shadow,$(PERF_DIFF_MODE)),$(PERF_DIFF_DSN_GO),$(PERF_DIFF_DSN_RS))' $(if $(filter go,$(PERF_DIFF_RUST)),GOAP_PERF_RS_IMAGE=goap/goap:dev GOAP_PERF_RS_BIN=/goap/graph)
@@ -219,7 +226,7 @@ perf-diff: perf-images ## the Go and the Rust graph services compared call by ca
 	$(if $(filter shadow,$(PERF_DIFF_MODE)),@true,$(PERF_DIFF_ENV) $(PERF_RUST) run --rm --no-deps --entrypoint /goap/goap-proxy proxy diff-db \
 		--go '$(PERF_DIFF_DSN_GO)' --rust '$(PERF_DIFF_DSN_RS)' --ids /results/diff/ids.json)
 
-perf-compare: perf-compare-up perf-compare-run ## the Go and the Rust graph services measured side by side: each on its schema, behind its own goap-proxy, loaded by its own goap-bench (PERF_ARGS as make perf, PERF_COMPARE_ARGS default -seed 1 plus PERF_ARGS; PERF_COMPARE_SERIAL=1 one after the other; PERF_AUTOSTOP; CPU and memory from cAdvisor, or the podman exporter under podman: PERF_CONTAINERS), schemas dropped first unless PERF_COMPARE_KEEP=1; Grafana http://localhost:3300/d/goap-perf-compare
+perf-compare: perf-compare-up perf-compare-run ## the Go and the Rust graph services measured side by side: each on its schema, behind its own goap-proxy, loaded by its own goap-bench (PERF_ARGS as make perf, PERF_COMPARE_ARGS default -seed 1 plus PERF_ARGS; PERF_COMPARE_SERIAL=1 one after the other; PERF_COMPARE_MODE=mirror the same calls sent to both by goap-proxy, their answers compared; PERF_AUTOSTOP; CPU and memory from cAdvisor, or the podman exporter under podman: PERF_CONTAINERS), schemas dropped first unless PERF_COMPARE_KEEP=1; Grafana http://localhost:3300/d/goap-perf-compare
 	@echo "Grafana: http://localhost:3300/d/goap-perf-compare · reports: .goap/perf/compare/{go,rust}/*.csv"
 
 perf-compare-up: perf-images ## start the stack of make perf-compare: the Go and the Rust graph services, each on its schema with its domain registry (dropped first unless PERF_COMPARE_KEEP=1)
@@ -228,13 +235,15 @@ ifeq ($(PERF_COMPARE_KEEP),)
 	$(PERF_CMP) run --rm --no-deps --entrypoint psql postgres-init -v ON_ERROR_STOP=1 -h postgres -U goap -d goap \
 		-c 'DROP SCHEMA IF EXISTS graph CASCADE' -c 'DROP SCHEMA IF EXISTS graph_rs CASCADE' \
 		-c 'DROP SCHEMA IF EXISTS domains CASCADE' -c 'DROP SCHEMA IF EXISTS domains_rs CASCADE'
-	$(PERF_CMP_ENV) $(PERF_CMP) up -d --force-recreate $(PERF_CMP_STACK)
+	$(PERF_CMP_ENV) $(PERF_CMP_UP) up -d --force-recreate --remove-orphans $(PERF_CMP_STACK)
 else
-	$(PERF_CMP_ENV) $(PERF_CMP) up -d $(PERF_CMP_STACK)
+	$(PERF_CMP_ENV) $(PERF_CMP_UP) up -d $(PERF_CMP_STACK)
 endif
 
-perf-compare-run: ## one more run of both goap-bench against the stack of make perf-compare-up (PERF_COMPARE_ARGS, PERF_COMPARE_SERIAL, PERF_AUTOSTOP)
-ifeq ($(PERF_COMPARE_SERIAL),)
+perf-compare-run: ## one more run of both goap-bench against the stack of make perf-compare-up (PERF_COMPARE_ARGS, PERF_COMPARE_SERIAL, PERF_AUTOSTOP; PERF_COMPARE_MODE=mirror: the one goap-bench of the mirror)
+ifeq ($(PERF_COMPARE_MODE),mirror)
+	$(PERF_CMP_ENV) $(PERF_RUST) run --rm -e OTEL_RESOURCE_ATTRIBUTES=goap.perf.impl=mirror bench $(PERF_HOLD) $(PERF_COMPARE_ARGS)
+else ifeq ($(PERF_COMPARE_SERIAL),)
 	$(PERF_CMP_ENV) GOAP_PERF_GO_ARGS='$(PERF_HOLD) $(PERF_COMPARE_ARGS)' GOAP_PERF_RS_ARGS='$(PERF_HOLD) $(PERF_COMPARE_ARGS)' \
 		$(PERF_CMP) up --no-deps --force-recreate bench bench-rs
 else

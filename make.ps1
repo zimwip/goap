@@ -275,36 +275,49 @@ function PerfDiff {
 # domains_rs); the four schemas dropped first unless $env:PERF_COMPARE_KEEP = '1'; cAdvisor gives the CPU and memory of
 # each container, the podman exporter when the docker command is podman's ($env:PERF_CONTAINERS: cadvisor, podman or
 # none; $env:PERF_PODMAN_SOCK the socket of the podman service in its machine, the rootless one by default); drawn by the
-# Grafana dashboard "GOAP performance: Go vs Rust"
+# Grafana dashboard "GOAP performance: Go vs Rust". $env:PERF_COMPARE_MODE: parallel (the above) or mirror (one
+# goap-bench through goap-proxy in mode compare: every call sent to both services, timed and compared; the stack of
+# perf-rust, one domain registry and one proxy)
 $PerfCmp = @('compose', '-f', 'deploy/compose/perf.yml', '-f', 'deploy/compose/perf.rust.yml', '-f', 'deploy/compose/perf.compare.yml')
 function PerfContainers {
     if ($env:PERF_CONTAINERS) { return $env:PERF_CONTAINERS }
     if ((docker --version 2>$null) -match 'podman') { 'podman' } else { 'cadvisor' }
 }
+function PerfMirror { $env:PERF_COMPARE_MODE -eq 'mirror' }
 function PerfCmpStack {
     $metrics = switch (PerfContainers) { 'cadvisor' { @('cadvisor') } 'podman' { @('podman-exporter') } default { @() } }
-    @('postgres-init', 'domains', 'domains-rs', 'graph', 'graph-rs', 'proxy', 'proxy-rs') + $metrics + @('otel-collector', 'postgres-exporter', 'prometheus', 'grafana')
+    $graphs = if (PerfMirror) { @('postgres-init', 'domains', 'graph', 'graph-rs', 'proxy') } else { @('postgres-init', 'domains', 'domains-rs', 'graph', 'graph-rs', 'proxy', 'proxy-rs') }
+    $graphs + $metrics + @('otel-collector', 'postgres-exporter', 'prometheus', 'grafana')
+}
+function PerfCmpUp { if (PerfMirror) { $PerfRust } else { $PerfCmp } }
+function PerfCmpEnv {
+    $vars = @{ GOAP_PERF_RS_DSN = $PerfDiffDsnRs; GOAP_PODMAN_SOCK = (PerfPodmanSock) }
+    if (PerfMirror) { $vars.GOAP_PERF_IMPL = 'compare' }
+    $vars
 }
 function PerfPodmanSock { if ($env:PERF_PODMAN_SOCK) { $env:PERF_PODMAN_SOCK } else { '/run/user/1000/podman/podman.sock' } }
 function PerfCompareArgs { if ($env:PERF_COMPARE_ARGS) { $env:PERF_COMPARE_ARGS } else { '-seed 1 ' + ((PerfArgs) -join ' ') } }
 function PerfCompareUp {
     PerfImages
-    $stack = PerfCmpStack
-    WithEnv @{ GOAP_PERF_RS_DSN = $PerfDiffDsnRs; GOAP_PODMAN_SOCK = (PerfPodmanSock) } {
+    $stack = PerfCmpStack; $files = PerfCmpUp
+    WithEnv (PerfCmpEnv) {
         if ($env:PERF_COMPARE_KEEP) {
-            Run docker @PerfCmp up -d @stack
+            Run docker @files up -d @stack
         } else {
             Run docker @PerfCmp up -d --wait postgres
             Run docker @PerfCmp run --rm --no-deps --entrypoint psql postgres-init -v ON_ERROR_STOP=1 -h postgres -U goap -d goap `
                 -c 'DROP SCHEMA IF EXISTS graph CASCADE' -c 'DROP SCHEMA IF EXISTS graph_rs CASCADE' `
                 -c 'DROP SCHEMA IF EXISTS domains CASCADE' -c 'DROP SCHEMA IF EXISTS domains_rs CASCADE'
-            Run docker @PerfCmp up -d --force-recreate @stack
+            Run docker @files up -d --force-recreate --remove-orphans @stack
         }
     }
 }
 function PerfCompareRun {
     $a = PerfCompareArgs; $h = PerfHold
-    if ($env:PERF_COMPARE_SERIAL) {
+    if (PerfMirror) {
+        $flags = -split $a
+        WithEnv (PerfCmpEnv) { Run docker @PerfRust run --rm -e OTEL_RESOURCE_ATTRIBUTES=goap.perf.impl=mirror bench $h @flags }
+    } elseif ($env:PERF_COMPARE_SERIAL) {
         WithEnv @{ GOAP_PERF_RS_DSN = $PerfDiffDsnRs; GOAP_PERF_GO_ARGS = "-hold=0 $a" } { Run docker @PerfCmp up --no-deps --force-recreate bench }
         WithEnv @{ GOAP_PERF_RS_DSN = $PerfDiffDsnRs; GOAP_PERF_RS_ARGS = "$h $a" } { Run docker @PerfCmp up --no-deps --force-recreate bench-rs }
     } else {
@@ -419,7 +432,8 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
                     goap-proxy and loaded by its own goap-bench ($env:PERF_ARGS as perf; $env:PERF_COMPARE_ARGS,
                     default -seed 1 and PERF_ARGS; $env:PERF_COMPARE_SERIAL = '1' one after the
                     other; $env:PERF_COMPARE_KEEP = '1' keeps the schemas; $env:PERF_CONTAINERS cadvisor, podman
-                    or none); http://localhost:3300/d/goap-perf-compare
+                    or none; $env:PERF_COMPARE_MODE = 'mirror': the same calls sent to both by goap-proxy, their
+                    answers compared); http://localhost:3300/d/goap-perf-compare
   rust-test | rust-lint
                     cargo test, cargo fmt + clippy of the Rust workspace (rust\)
   perf-capture      save what the performance stack's Prometheus holds in .goap\perf\captures\<$env:PERF_CAPTURE>

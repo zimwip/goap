@@ -1470,7 +1470,13 @@ of each container, or under podman (the `docker` command being podman's; rootles
 throughput, the server's latency, CPU and memory per service, p95 per call over the range and its ratio Rust / Go as
 the client and as the server see them, each service's calls over time, the size and scans of each schema); reports in
 `.goap/perf/compare/go` and `rust`. The Rust service exports no metrics of its own yet: the comparison is what the
-client, the proxies, cAdvisor and PostgreSQL see. The web looks at the data of the bench (http://localhost:5174): a `gateway` (:8381, `GOAP_AUTH_MODE=none`, the
+client, the proxies, cAdvisor and PostgreSQL see. Each bench runs as fast as its service answers, so in this mode
+(`PERF_COMPARE_MODE=parallel`, the default) the volumes written differ: the throughput is the result.
+`PERF_COMPARE_MODE=mirror` sends the same calls to both instead: the stack of `make perf-diff` in mode compare (one
+domain registry, `proxy` in mode compare, the Rust service on `graph_rs`) loaded by one `goap-bench` (`goap.perf.impl`
+`mirror`, `PERF_COMPARE_ARGS`), each call answered by the Go service then sent to the Rust one, one call at a time, both
+timed by the proxy (`side`) and their answers compared (`goap_proxy_compare_total` by `verdict`, the *Mirror* row of the
+dashboard; `calls.jsonl` and http://localhost:8383/proxy/report). The web looks at the data of the bench (http://localhost:5174): a `gateway` (:8381, `GOAP_AUTH_MODE=none`, the
 fixed development administrator) routing to the graph alone, and the `web` dev server; what needs another service answers
 an error.
 
