@@ -142,6 +142,10 @@ pub trait ReadTx: Sync {
     /// The latest version of a node on a branch.
     fn latest_on(&self, id: &NodeId, branch: &str) -> impl Future<Output = Result<Option<Node>>> + Send;
 
+    /// The latest version on a branch of each of some nodes, in one statement (a node with none is left out).
+    fn latest_on_all(&self, ids: &[NodeId], branch: &str)
+    -> impl Future<Output = Result<HashMap<NodeId, Node>>> + Send;
+
     /// The node of a key in a namespace.
     fn node_id_by_key(&self, namespace: &str, key: &str) -> impl Future<Output = Result<Option<NodeId>>> + Send;
 
@@ -276,6 +280,15 @@ pub trait WriteTx: ReadTx {
     fn join_branch(
         &self,
         r: &NodeRef,
+        branch: &str,
+        change: &ChangeId,
+        committed: i64,
+    ) -> impl Future<Output = Result<()>> + Send;
+
+    /// Makes some versions join a branch, at the order of the baseline they commit in, in one statement.
+    fn join_branch_all(
+        &self,
+        refs: &[NodeRef],
         branch: &str,
         change: &ChangeId,
         committed: i64,

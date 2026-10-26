@@ -700,6 +700,25 @@ impl ReadTx for Session {
         Ok(self.nodes(self.sql.latest_on(id, branch)).await?.into_iter().next())
     }
 
+    async fn latest_on_all(&self, ids: &[NodeId], branch: &str) -> Result<HashMap<NodeId, Node>, GraphError> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        if self.sql.pg
+            && let Some(id) = ids.iter().find(|id| !is_uuid(id.as_str()))
+        {
+            return Err(GraphError::invalid(format!(
+                "node {id} on {branch}: invalid input syntax for type uuid: \"{id}\""
+            )));
+        }
+        Ok(self
+            .nodes(self.sql.latest_on_all(ids, branch))
+            .await?
+            .into_iter()
+            .map(|n| (n.id.clone(), n))
+            .collect())
+    }
+
     async fn node_id_by_key(&self, namespace: &str, key: &str) -> Result<Option<NodeId>, GraphError> {
         Ok(self
             .rows(self.sql.node_id_by_key(namespace, key))

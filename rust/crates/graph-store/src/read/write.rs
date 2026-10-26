@@ -644,6 +644,24 @@ impl WriteTx for Session {
         Ok(())
     }
 
+    async fn join_branch_all(
+        &self,
+        refs: &[NodeRef],
+        branch: &str,
+        change: &ChangeId,
+        committed: i64,
+    ) -> Result<(), GraphError> {
+        if refs.is_empty() {
+            return Ok(());
+        }
+        self.run(
+            self.sql.join_branch_all(refs, branch, change, committed),
+            &format!("{} nodes joining {branch}", refs.len()),
+        )
+        .await?;
+        Ok(())
+    }
+
     async fn set_node_origin(
         &self,
         r: &NodeRef,

@@ -474,9 +474,7 @@ impl<S: WriteTx> Tx<'_, S> {
                 return self.close_merged(c, own).await.map(Some);
             }
         }
-        for r in &moves {
-            self.join_branch(r, &target, &c.id).await?;
-        }
+        self.join_branch_all(&moves, &target, &c.id).await?;
         // the impacts whose node this merge moves record their version on the target, the ones merged before kept
         let only: HashSet<NodeId> = delta.keys().cloned().collect();
         if closing {
@@ -676,22 +674,28 @@ impl<S: WriteTx> Tx<'_, S> {
         only: Option<&HashSet<NodeId>>,
     ) -> Result<()> {
         let mut committed = Vec::new();
-        for cn in impacts {
-            if cn.post.is_none() || (cn.review != REVIEW_ACCEPTED && cn.committed.is_none()) {
-                continue;
-            }
-            if let (Some(only), Some(p)) = (only, &cn.post)
-                && !only.contains(&p.id)
-            {
-                continue;
-            }
-            let mut post = cn.post.clone().unwrap_or_default();
-            if post.is_draft()
-                && let Some(c) = &cn.committed
-            {
-                post = c.clone();
-            }
-            let Some(head) = self.store.latest_on(&post.id, target).await? else {
+        let posts: Vec<(&ChangeImpact, NodeRef)> = impacts
+            .iter()
+            .filter(|cn| cn.post.is_some() && (cn.review == REVIEW_ACCEPTED || cn.committed.is_some()))
+            .filter(|cn| match (only, &cn.post) {
+                (Some(only), Some(p)) => only.contains(&p.id),
+                _ => true,
+            })
+            .map(|cn| {
+                let mut post = cn.post.clone().unwrap_or_default();
+                if post.is_draft()
+                    && let Some(c) = &cn.committed
+                {
+                    post = c.clone();
+                }
+                (cn, post)
+            })
+            .collect();
+        // the heads of the target read at once: the merge holds the lock of its target (ADR 0127)
+        let ids: Vec<NodeId> = posts.iter().map(|(_, p)| p.id.clone()).collect();
+        let heads = self.store.latest_on_all(&ids, target).await?;
+        for (cn, post) in posts {
+            let Some(head) = heads.get(&post.id).cloned() else {
                 return Err(GraphError::not_found(format!("node {} on {target}", post.id)));
             };
             if (merge_change.0.is_empty() || head.change_id != *merge_change) && head.node_ref() != post {

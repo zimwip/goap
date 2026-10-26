@@ -453,6 +453,16 @@ impl<'s, S: WriteTx> Tx<'s, S> {
         self.store.join_branch(r, branch, change, committed).await
     }
 
+    /// Makes some versions join a branch in one statement ([`Tx::join_branch`] for each).
+    pub async fn join_branch_all(&mut self, refs: &[NodeRef], branch: &str, change: &ChangeId) -> Result<()> {
+        if refs.is_empty() {
+            return Ok(());
+        }
+        self.need_change(change, &format!("{} nodes joining {branch}", refs.len()))?;
+        let committed = self.commit_on(branch).await?;
+        self.store.join_branch_all(refs, branch, change, committed).await
+    }
+
     /// Gives a version the change and impact it commits for (Go's guarded `SetNodeOrigin`).
     pub async fn set_node_origin(&mut self, r: &NodeRef, change: &ChangeId, impact: &str, comment: &str) -> Result<()> {
         self.need_change(change, &format!("the origin of node {r}"))?;

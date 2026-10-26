@@ -177,6 +177,38 @@ impl Sql {
         )
     }
 
+    /// The latest version on a branch of each of some nodes: [`Sql::latest_on`] for a list.
+    pub fn latest_on_all(self, ids: &[NodeId], branch: &str) -> Stmt {
+        let (cond, list) = self.in_list("n.id", 1, ids.iter().map(|i| i.0.clone()).collect(), true);
+        (
+            format!(
+                "SELECT {}{NODE_FROM} WHERE {cond} AND v.version = {}",
+                self.node_cols(),
+                self.latest_on_expr("n.id", &self.ph(2))
+            ),
+            vec![list, branch_of(branch).into()],
+        )
+    }
+
+    /// Some versions joining a branch at an order (each one written on another branch).
+    pub fn join_branch_all(self, refs: &[NodeRef], branch: &str, change: &ChangeId, committed: i64) -> Stmt {
+        let (mut args, n) = self.refs_args(refs);
+        let (b, c, k) = (self.ph(n), self.ph(n + 1), self.ph(n + 2));
+        args.extend([
+            Arg::Text(branch_of(branch).to_string()),
+            Arg::or_null(change.as_str()),
+            Arg::Int(committed),
+        ]);
+        (
+            format!(
+                "INSERT INTO node_branch (node_id, version, branch, change_id, committed) SELECT v.node_id, v.version, {b}, {c}, {k} \
+                 FROM node_version v{} WHERE v.branch <> {b} ON CONFLICT DO NOTHING",
+                self.refs_join("r", "v.node_id", "v.version", 1)
+            ),
+            args,
+        )
+    }
+
     pub fn node_id_by_key(self, namespace: &str, key: &str) -> Stmt {
         (
             format!(

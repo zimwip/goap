@@ -557,14 +557,14 @@
     "type": "prometheus",
     "uid": "prometheus"
    },
-   "description": "p95 of CommitEdits and MergeChange, the calls whose cost grows with the graph.",
+   "description": "p95 of the commits and merges (CommitEdits, or CommitChange and CloseChange in -mode lifecycle; MergeChange), the calls whose cost grows with the graph.",
    "targets": [
     {
      "datasource": {
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "histogram_quantile(0.95, sum by (le, goap_perf_impl) (rate(goap_bench_op_duration_seconds_bucket{service_name=\"goap-bench\", outcome=\"ok\", op=~\"CommitEdits|MergeChange\"}[$__rate_interval])))",
+     "expr": "histogram_quantile(0.95, sum by (le, goap_perf_impl) (rate(goap_bench_op_duration_seconds_bucket{service_name=\"goap-bench\", outcome=\"ok\", op=~\"CommitEdits|CommitChange|MergeChange|CloseChange\"}[$__rate_interval])))",
      "legendFormat": "{{goap_perf_impl}} p95",
      "refId": "A",
      "range": true
@@ -574,7 +574,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "histogram_quantile(0.5, sum by (le, goap_perf_impl) (rate(goap_bench_op_duration_seconds_bucket{service_name=\"goap-bench\", outcome=\"ok\", op=~\"CommitEdits|MergeChange\"}[$__rate_interval])))",
+     "expr": "histogram_quantile(0.5, sum by (le, goap_perf_impl) (rate(goap_bench_op_duration_seconds_bucket{service_name=\"goap-bench\", outcome=\"ok\", op=~\"CommitEdits|CommitChange|MergeChange|CloseChange\"}[$__rate_interval])))",
      "legendFormat": "{{goap_perf_impl}} p50",
      "refId": "B",
      "range": true
