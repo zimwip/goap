@@ -61,6 +61,29 @@ impl Policy {
         }
     }
 
+    /// The policy as an expression sees it (`Policy.Map`): its longest derogation in whole hours.
+    pub fn map(&self) -> Map<String, Value> {
+        let mut m = Map::new();
+        m.insert("oracles".into(), self.oracles.clone().into());
+        m.insert("sampling".into(), self.sampling.into());
+        m.insert("signatoryRole".into(), self.signatory_role.clone().into());
+        m.insert("maxDerogationHours".into(), self.max_derogation.num_hours().into());
+        m
+    }
+
+    /// The policy of its map form, the reverse of [`Policy::map`].
+    pub fn from_map(m: &Value) -> Policy {
+        Policy {
+            oracles: m["oracles"]
+                .as_array()
+                .map(|l| l.iter().filter_map(Value::as_str).map(str::to_string).collect())
+                .unwrap_or_default(),
+            sampling: m["sampling"].as_bool() == Some(true),
+            signatory_role: m["signatoryRole"].as_str().unwrap_or_default().into(),
+            max_derogation: TimeDelta::hours(m["maxDerogationHours"].as_f64().unwrap_or_default() as i64),
+        }
+    }
+
     /// The level and the policy of a `CriticalityPolicy` node (`access.CriticalityPolicyFromProps`).
     pub fn from_props(props: Option<&Map<String, Value>>) -> Result<(&'static str, Policy), String> {
         let get = |k: &str| props.and_then(|p| p.get(k));
