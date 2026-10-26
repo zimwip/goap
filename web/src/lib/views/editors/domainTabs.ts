@@ -92,7 +92,7 @@ export function domainActions(d: DomainDraft): ToolbarAction[] {
   if (!d.isNew) {
     acts.push({ id: 'export', label: 'Export', icon: 'download', title: 'Export to YAML', disabled: busy, run: () => d.exportAs('yaml') });
     acts.push({ id: 'exportJson', label: 'Export JSON', icon: 'download', title: 'Export to JSON', disabled: busy, run: () => d.exportAs('json') });
-    if (!d.builtin) acts.push({
+    if (!d.protected) acts.push({
       id: 'version',
       label: 'New version',
       icon: 'copy',
@@ -114,7 +114,7 @@ export function domainActions(d: DomainDraft): ToolbarAction[] {
         void d.reload();
       },
     });
-    if (d.status !== 'archived' && !d.builtin) {
+    if (d.status !== 'archived' && !d.protected) {
       acts.push({
         id: 'delete',
         label: d.status === 'draft' ? 'Delete version' : 'Archive',

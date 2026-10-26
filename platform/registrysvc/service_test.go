@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sync"
 	"testing"
@@ -23,8 +24,12 @@ func domainsOf(s *Service) *domainsvc.Service {
 	if d, ok := s.Domains.(*domainsvc.Service); ok {
 		return d
 	}
-	d := &domainsvc.Service{Store: domainsvc.NewMemoryStore(), Authz: s.Authz,
-		Changed: func(ctx context.Context, _ def.Record) { _, _ = s.DomainsChanged(ctx) }}
+	d := &domainsvc.Service{Store: domainsvc.NewMemoryStore(), Authz: s.Authz}
+	// the built-in domains, as a start seeds them (ADR 0167)
+	if _, err := d.SeedBuiltinDomains(authz.With(context.Background(), authz.System("test")), filepath.Join("..", "..", "lib", "domains", "builtin")); err != nil {
+		panic(err)
+	}
+	d.Changed = func(ctx context.Context, _ def.Record) { _, _ = s.DomainsChanged(ctx) }
 	s.Domains = d
 	return d
 }

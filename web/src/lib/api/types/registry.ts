@@ -897,8 +897,8 @@ export interface Domain {
   updatedAt?: string;
   publishedAt?: string;
   updatedBy?: string;
-  /** built into the platform (methodology, organisation, platform): published and frozen, it changes with the code */
-  builtin?: boolean;
+  /** refused every write over RPC (ADR 0167): only the local command line of the graph process writes it (read only) */
+  protected?: boolean;
 }
 
 export interface DomainSummary {
@@ -911,8 +911,8 @@ export interface DomainSummary {
   itemTypeCount?: number;
   updatedAt?: string;
   publishedAt?: string;
-  /** built into the platform: published and frozen */
-  builtin?: boolean;
+  /** refused every write over RPC (ADR 0167) */
+  protected?: boolean;
 }
 
 /** Methodology version referencing a domain version. */

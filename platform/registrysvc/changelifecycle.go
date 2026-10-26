@@ -32,7 +32,7 @@ func (s *Service) Lifecycle(ctx context.Context, methodology string) (*domain.Li
 	if err != nil {
 		return nil, err
 	}
-	recs := builtinRecords()
+	var recs []def.Record
 	for _, d := range ds {
 		recs = append(recs, def.Record{Domain: *d, Status: StatusPublished})
 	}

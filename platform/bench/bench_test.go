@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -33,6 +34,9 @@ func server(t *testing.T) (*graph.Graph, string) {
 		t.Fatal(err)
 	}
 	domains := &domainsvc.Service{Store: domainsvc.NewMemoryStore(), Authz: enf}
+	if _, err := domains.SeedBuiltinDomains(authz.With(ctx, authz.System("test")), filepath.Join("..", "..", "lib", "domains", "builtin")); err != nil {
+		t.Fatal(err)
+	}
 	types := typecat.NewLive(domains.Domains)
 	domains.Changed = func(ctx context.Context, _ def.Record) {
 		if err := types.Reload(ctx); err != nil {

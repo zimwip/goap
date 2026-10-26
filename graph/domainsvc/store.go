@@ -25,6 +25,11 @@ type Store interface {
 	SetDomainStatus(ctx context.Context, name, version string, s def.Status, at time.Time, events ...outbox.Message) error
 	// DeleteDomain removes a draft.
 	DeleteDomain(ctx context.Context, name, version string, events ...outbox.Message) error
+	// Protected returns the names of the protected domains (ADR 0167).
+	Protected(ctx context.Context) (map[string]bool, error)
+	// SetProtected protects a domain (on) or lifts its protection, whatever its versions (a name not stored yet
+	// included: the versions written later are protected).
+	SetProtected(ctx context.Context, name string, on bool, by string, at time.Time) error
 }
 
 func sortDomainRecords(rs []def.Record) {
@@ -45,9 +50,10 @@ var (
 
 // MemoryStore is an in-memory Store.
 type MemoryStore struct {
-	mu  sync.RWMutex
-	m   map[string]def.Record // key name@version
-	out outbox.Memory
+	mu        sync.RWMutex
+	m         map[string]def.Record // key name@version
+	protected map[string]bool
+	out       outbox.Memory
 }
 
 var _ outbox.Store = (*MemoryStore)(nil)
@@ -154,5 +160,29 @@ func (s *MemoryStore) DeleteDomain(_ context.Context, name, version string, even
 	}
 	delete(s.m, k)
 	s.out.Append(events...)
+	return nil
+}
+
+func (s *MemoryStore) Protected(context.Context) (map[string]bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]bool, len(s.protected))
+	for n := range s.protected {
+		out[n] = true
+	}
+	return out, nil
+}
+
+func (s *MemoryStore) SetProtected(_ context.Context, name string, on bool, _ string, _ time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.protected == nil {
+		s.protected = map[string]bool{}
+	}
+	if on {
+		s.protected[name] = true
+	} else {
+		delete(s.protected, name)
+	}
 	return nil
 }

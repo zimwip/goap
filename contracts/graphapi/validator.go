@@ -36,4 +36,7 @@ type ValidatorQuery interface {
 	OutLinksOf(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
 	// Node resolves a node: an exact version if ref.Version is set, else the version the change leaves it at.
 	Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error)
+	// Structures returns the structures of the graph's type catalogue (ADR 0054): a validator names no type of the
+	// organisation itself.
+	Structures(ctx context.Context) (domain.Structures, error)
 }

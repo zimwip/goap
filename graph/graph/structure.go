@@ -16,17 +16,16 @@ import (
 // catalogue tags (`structure:` on a node type of a domain), with their parent link, root and default flag; an
 // untyped graph uses the catalogue of the built-in domains.
 
-// builtinTypes is the catalogue of the built-in domains alone: what an untyped graph (tests, tools) and a catalogue
-// that does not resolve a question fall back to, so that the built-in definitions have one source (their yaml).
+// builtinTypes is the catalogue of the built-in domains the library embeds: what an untyped graph (tests, tools) falls
+// back to. A typed graph asks its catalogue alone, the registry's domains in force (ADR 0167).
 func builtinTypes() TypeCatalog { return typecat.Builtin() }
 
 // Structure returns the hierarchy of a kind (domain.StructureOrganisation, domain.StructureProject) in force.
 func (g *Graph) Structure(kind string) domain.Structure {
 	if g.Types != nil {
 		if c := g.catalog(); c != nil {
-			if s, ok := c.Structure(kind); ok {
-				return s
-			}
+			s, _ := c.Structure(kind)
+			return s
 		}
 	}
 	s, _ := builtinTypes().Structure(kind)
@@ -62,21 +61,18 @@ func (g *Graph) structures() []domain.Structure {
 func (g *Graph) requires(typ string) []domain.RequiredLink {
 	if g.Types != nil {
 		if c := g.catalog(); c != nil {
-			if rs := c.Requires(typ); rs != nil {
-				return rs
-			}
+			return c.Requires(typ)
 		}
 	}
 	return builtinTypes().Requires(typ)
 }
 
 // AdminOnlyType reports a node type whose nodes only platform administrators write (ADR 0068): the type
-// catalogue's `adminOnly:` flag, plus the built-in ones for an untyped graph. The one
-// question every write path asks.
+// catalogue's `adminOnly:` flag, the built-in domains' for an untyped graph. The one question every write path asks.
 func (g *Graph) AdminOnlyType(_ context.Context, typ string) (bool, error) {
 	if g.Types != nil {
-		if c := g.catalog(); c != nil && c.AdminOnly(typ) {
-			return true, nil
+		if c := g.catalog(); c != nil {
+			return c.AdminOnly(typ), nil
 		}
 	}
 	return builtinTypes().AdminOnly(typ), nil

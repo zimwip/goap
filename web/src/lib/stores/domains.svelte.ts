@@ -36,8 +36,8 @@ export interface DomainGroup {
   name: string;
   description: string;
   versions: DomainSummary[];
-  /** built into the platform: frozen, changes with the platform code */
-  builtin: boolean;
+  /** protected (ADR 0167): no write over RPC, the local command line only */
+  protected: boolean;
 }
 
 /** Versions grouped by name, from most recent to oldest. */
@@ -48,7 +48,7 @@ export function groupedDomains(): DomainGroup[] {
   for (const [name, versions] of byName) {
     versions.sort((a, b) => compareVersions(b.version, a.version));
     const ref = versions.find((v) => v.status === 'published') ?? versions[0];
-    out.push({ name, description: ref?.description ?? '', versions, builtin: versions.some((v) => v.builtin) });
+    out.push({ name, description: ref?.description ?? '', versions, protected: versions.some((v) => v.protected) });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -70,8 +70,8 @@ export class DomainDraft {
   form = $state<DomainForm>(emptyDomainForm());
   snapshot = $state(JSON.stringify(emptyDomainForm()));
   status = $state('draft');
-  /** built into the platform (methodology, organisation, platform): frozen, it changes with the platform code */
-  builtin = $state(false);
+  /** protected (ADR 0167): no write over RPC, the local command line only */
+  protected = $state(false);
   meta = $state<Pick<Domain, 'createdAt' | 'updatedAt' | 'publishedAt' | 'updatedBy'>>({});
   loading = $state(true);
   loadError = $state('');
@@ -102,7 +102,7 @@ export class DomainDraft {
 
   readonly current = $derived(JSON.stringify(this.form));
   readonly dirty = $derived(this.current !== this.snapshot);
-  readonly readonly = $derived(this.status !== 'draft');
+  readonly readonly = $derived(this.status !== 'draft' || this.protected);
   readonly allIssues = $derived<NormIssue[]>((this.issues ?? []).map((i) => ({ ...i, norm: normalizePath(i.path) })));
   readonly nodeTypeNames = $derived([...new Set(this.form.nodeTypes.map((n) => n.name.trim()).filter(Boolean))]);
   /** types a link end or a parent can name: the domain's own (bare), then those of the other domains (qualified) */
@@ -128,7 +128,7 @@ export class DomainDraft {
     this.snapshot = JSON.stringify(this.form);
     this.remote = undefined;
     this.status = d.status || 'draft';
-    this.builtin = !!d.builtin;
+    this.protected = !!d.protected;
     this.meta = { createdAt: d.createdAt, updatedAt: d.updatedAt, publishedAt: d.publishedAt, updatedBy: d.updatedBy };
   }
 

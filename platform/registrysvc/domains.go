@@ -20,11 +20,12 @@ type Domains interface {
 	GetDomain(ctx context.Context, name, version string) (def.Record, error)
 }
 
-// builtinRecords are the records of the domains shipped with the platform: published, frozen, never stored.
+// builtinRecords are the records of the domains shipped with the platform, as the library embeds them: the domains of a
+// registry with no domain registry (tests); a domain registry stores them (ADR 0167).
 func builtinRecords() []def.Record {
 	var out []def.Record
 	for _, d := range typecat.Builtins() {
-		out = append(out, def.Record{Domain: *d, Status: StatusPublished, UpdatedBy: "platform", Builtin: true})
+		out = append(out, def.Record{Domain: *d, Status: StatusPublished, UpdatedBy: "platform", Protected: true})
 	}
 	return out
 }
@@ -50,8 +51,7 @@ func (s *Service) getDomain(ctx context.Context, name, version string) (def.Reco
 	return def.Record{}, fmt.Errorf("domain %s@%s: %w", name, version, ErrNotFound)
 }
 
-// domainsInForce are the latest published version of every stored domain (the built-in ones left out: a type
-// catalogue adds them itself).
+// domainsInForce are the latest published version of every stored domain, the built-in ones included (ADR 0167).
 func (s *Service) domainsInForce(ctx context.Context) ([]*def.Domain, error) {
 	rs, err := s.domainVersions(ctx, false)
 	if err != nil {
@@ -59,7 +59,7 @@ func (s *Service) domainsInForce(ctx context.Context) ([]*def.Domain, error) {
 	}
 	var out []*def.Domain
 	for _, r := range rs {
-		if r.Status == StatusPublished && !r.Builtin {
+		if r.Status == StatusPublished {
 			d := r.Domain
 			out = append(out, &d)
 		}

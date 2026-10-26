@@ -8,7 +8,6 @@ import (
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/graphapi"
-	"github.com/zimwip/goap/lib/typecat"
 )
 
 // ProjectScopeValidator keeps the writes of Assignments and projects within the rights of the person committing them
@@ -179,7 +178,10 @@ func snapshots(ctx context.Context, q graphapi.ValidatorQuery, impacted []grapha
 	}
 	var nodes, was []domain.Node
 	var links, wasLinks []domain.Link
-	st := typecat.Builtin().Structures()
+	st, err := q.Structures(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	for _, typ := range []string{NodeTypeUser, NodeTypeAssignment, st.Organisation().Type, st.Project().Type} {
 		ns, err := q.NodesOfType(ctx, st.Organisation().Namespace, typ)
 		if err != nil {

@@ -5948,8 +5948,8 @@ type Domain struct {
 	UpdatedAt          *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	PublishedAt        *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
 	UpdatedBy          string                 `protobuf:"bytes,10,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
-	// built into the platform (methodology, organisation, platform): published and frozen, it changes with the code
-	Builtin       bool `protobuf:"varint,14,opt,name=builtin,proto3" json:"builtin,omitempty"`
+	// refused every write over RPC (ADR 0167): only the local command line of the graph process writes it (read only)
+	Protected     bool `protobuf:"varint,19,opt,name=protected,proto3" json:"protected,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6096,9 +6096,9 @@ func (x *Domain) GetUpdatedBy() string {
 	return ""
 }
 
-func (x *Domain) GetBuiltin() bool {
+func (x *Domain) GetProtected() bool {
 	if x != nil {
-		return x.Builtin
+		return x.Protected
 	}
 	return false
 }
@@ -6113,9 +6113,9 @@ type DomainSummary struct {
 	LinkTypeCount int32                  `protobuf:"varint,6,opt,name=link_type_count,json=linkTypeCount,proto3" json:"link_type_count,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	PublishedAt   *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
-	// built into the platform: published and frozen
-	Builtin       bool  `protobuf:"varint,9,opt,name=builtin,proto3" json:"builtin,omitempty"`
-	ItemTypeCount int32 `protobuf:"varint,10,opt,name=item_type_count,json=itemTypeCount,proto3" json:"item_type_count,omitempty"`
+	ItemTypeCount int32                  `protobuf:"varint,10,opt,name=item_type_count,json=itemTypeCount,proto3" json:"item_type_count,omitempty"`
+	// refused every write over RPC (ADR 0167)
+	Protected     bool `protobuf:"varint,11,opt,name=protected,proto3" json:"protected,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6206,18 +6206,18 @@ func (x *DomainSummary) GetPublishedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *DomainSummary) GetBuiltin() bool {
-	if x != nil {
-		return x.Builtin
-	}
-	return false
-}
-
 func (x *DomainSummary) GetItemTypeCount() int32 {
 	if x != nil {
 		return x.ItemTypeCount
 	}
 	return 0
+}
+
+func (x *DomainSummary) GetProtected() bool {
+	if x != nil {
+		return x.Protected
+	}
+	return false
 }
 
 type ListDomainsRequest struct {
@@ -10346,7 +10346,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\tR\aversion\"K\n" +
 	"\x19ExportMethodologyResponse\x12\x12\n" +
 	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\"\xcb\x06\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\"\xcf\x06\n" +
 	"\x06Domain\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -10374,8 +10374,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\fpublished_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\x12\x1d\n" +
 	"\n" +
 	"updated_by\x18\n" +
-	" \x01(\tR\tupdatedBy\x12\x18\n" +
-	"\abuiltin\x18\x0e \x01(\bR\abuiltin\"\x83\x03\n" +
+	" \x01(\tR\tupdatedBy\x12\x1c\n" +
+	"\tprotected\x18\x13 \x01(\bR\tprotected\"\x87\x03\n" +
 	"\rDomainSummary\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -10385,10 +10385,10 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x0flink_type_count\x18\x06 \x01(\x05R\rlinkTypeCount\x129\n" +
 	"\n" +
 	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12=\n" +
-	"\fpublished_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\x12\x18\n" +
-	"\abuiltin\x18\t \x01(\bR\abuiltin\x12&\n" +
+	"\fpublished_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\x12&\n" +
 	"\x0fitem_type_count\x18\n" +
-	" \x01(\x05R\ritemTypeCount\"7\n" +
+	" \x01(\x05R\ritemTypeCount\x12\x1c\n" +
+	"\tprotected\x18\v \x01(\bR\tprotected\"7\n" +
 	"\x12ListDomainsRequest\x12!\n" +
 	"\fall_versions\x18\x01 \x01(\bR\vallVersions\"P\n" +
 	"\x13ListDomainsResponse\x129\n" +

@@ -77,8 +77,8 @@
     {#if d.error}<div class="alert">{d.error}</div>{/if}
     {#if d.readonly}
       <div class="alert info">
-        {d.builtin
-          ? 'Built-in domain: it changes with the platform code.'
+        {d.protected
+          ? 'Protected domain: written by the local command line of the graph only.'
           : d.status === 'published'
             ? 'Published version: it is immutable. Create a new version of the domain to modify it.'
             : 'Archived version: read-only.'}

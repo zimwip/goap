@@ -203,9 +203,16 @@ func main() {
 		}
 	}
 	g.Types = func() graph.TypeCatalog { return types.Get() }
-	// every start publishes the domain versions of GOAP_DOMAINS_DIR not stored yet (ADR 0113)
+	// every start publishes the domain versions of GOAP_DOMAINS_DIR not stored yet (ADR 0113), the built-in ones first,
+	// protected (ADR 0167): the graph types its nodes with what the registry holds, nothing compiled in
 	if dir := platform.Env("GOAP_DOMAINS_DIR", "domains"); dir != "" && !content {
 		system := authz.With(ctx, authz.System("graph", access.RoleAdmin))
+		builtins := domainsvc.BuiltinDir(dir)
+		if doms, err := domains.SeedBuiltinDomains(system, builtins); err != nil {
+			platform.Fatal(log, "built-in domains", err)
+		} else {
+			log.Info("built-in domains", "dir", builtins, "domains", doms)
+		}
 		if doms, err := domains.SeedDomains(system, dir); err != nil {
 			log.Error("import domains", "dir", dir, "err", err)
 		} else {
