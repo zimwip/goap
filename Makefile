@@ -5,7 +5,7 @@ MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: perf perf-images perf-up perf-run perf-rust perf-rust-up perf-rust-run perf-diff rust-test rust-lint perf-capture perf-analysis perf-analysis-down perf-down perf-reset help all build test test-wasm tidy web-test test-pg lint eval generate cypher tools up urls down reset logs dev dev-backend dev-web dev-reset local local-build local-test local-bench local-reset web runner-image images claude-agent-runner
+.PHONY: perf perf-images perf-up perf-run perf-rust perf-rust-up perf-rust-run perf-diff perf-compare perf-compare-up perf-compare-run rust-test rust-lint perf-capture perf-analysis perf-analysis-down perf-down perf-reset help all build test test-wasm tidy web-test test-pg lint eval generate cypher tools up urls down reset logs dev dev-backend dev-web dev-reset local local-build local-test local-bench local-reset web runner-image images claude-agent-runner
 
 .DEFAULT_GOAL := help
 
@@ -163,6 +163,16 @@ PERF_DIFF_RUST ?= rust
 PERF_DIFF_MODE ?= shadow
 PERF_DIFF_DSN_GO := postgres://graph:graph@postgres:5432/goap?sslmode=disable
 PERF_DIFF_DSN_RS := postgres://graph_rs:graph_rs@postgres:5432/goap?sslmode=disable
+# make perf-compare: the Go and the Rust graph services side by side (deploy/compose/perf.compare.yml), each on its
+# schema (graph, graph_rs) loaded by its own goap-bench with PERF_COMPARE_ARGS (the same seed for both), at the same time
+# or one after the other (PERF_COMPARE_SERIAL=1: Go, then Rust); both schemas dropped first unless PERF_COMPARE_KEEP=1;
+# drawn by the Grafana dashboard "GOAP performance: Go vs Rust"
+PERF_CMP := docker compose -f deploy/compose/perf.yml -f deploy/compose/perf.rust.yml -f deploy/compose/perf.compare.yml
+PERF_COMPARE_ARGS ?= -versions 100000 -seed 1
+PERF_COMPARE_SERIAL ?=
+PERF_COMPARE_KEEP ?=
+PERF_CMP_ENV := GOAP_PERF_RS_DSN='$(PERF_DIFF_DSN_RS)'
+PERF_CMP_STACK := postgres-init graph graph-rs otel-collector postgres-exporter prometheus grafana
 PERF_GO_ENV := $(if $(filter 0,$(PERF_PROXY)),GOAP_PERF_GRAPH_URL=http://graph:8080)
 PERF_RUST_ENV := GOAP_PERF_IMPL=$(PERF_RUST_MODE) $(if $(filter 0,$(PERF_PROXY)),GOAP_PERF_GRAPH_URL=http://graph-rs:8080)
 PERF_DIFF_ENV := GOAP_PERF_IMPL=$(PERF_DIFF_MODE) GOAP_PERF_RS_DSN='$(if $(filter shadow,$(PERF_DIFF_MODE)),$(PERF_DIFF_DSN_GO),$(PERF_DIFF_DSN_RS))' $(if $(filter go,$(PERF_DIFF_RUST)),GOAP_PERF_RS_IMAGE=goap/goap:dev GOAP_PERF_RS_BIN=/goap/graph)
@@ -200,6 +210,28 @@ perf-diff: perf-images ## the Go and the Rust graph services compared call by ca
 	$(if $(filter shadow,$(PERF_DIFF_MODE)),@true,$(PERF_DIFF_ENV) $(PERF_RUST) run --rm --no-deps --entrypoint /goap/goap-proxy proxy diff-db \
 		--go '$(PERF_DIFF_DSN_GO)' --rust '$(PERF_DIFF_DSN_RS)' --ids /results/diff/ids.json)
 
+perf-compare: perf-compare-up perf-compare-run ## the Go and the Rust graph services measured side by side: each on its schema, loaded by its own goap-bench (PERF_COMPARE_ARGS, same seed; PERF_COMPARE_SERIAL=1 one after the other; PERF_AUTOSTOP), schemas dropped first unless PERF_COMPARE_KEEP=1; Grafana http://localhost:3300/d/goap-perf-compare
+	@echo "Grafana: http://localhost:3300/d/goap-perf-compare · reports: .goap/perf/compare/{go,rust}/*.csv"
+
+perf-compare-up: perf-images ## start the stack of make perf-compare: the Go and the Rust graph services, each on its schema (dropped first unless PERF_COMPARE_KEEP=1)
+ifeq ($(PERF_COMPARE_KEEP),)
+	$(PERF_CMP) up -d --wait postgres
+	$(PERF_CMP) run --rm --no-deps --entrypoint psql postgres-init -v ON_ERROR_STOP=1 -h postgres -U goap -d goap \
+		-c 'DROP SCHEMA IF EXISTS graph CASCADE' -c 'DROP SCHEMA IF EXISTS graph_rs CASCADE'
+	$(PERF_CMP_ENV) $(PERF_CMP) up -d --force-recreate $(PERF_CMP_STACK)
+else
+	$(PERF_CMP_ENV) $(PERF_CMP) up -d $(PERF_CMP_STACK)
+endif
+
+perf-compare-run: ## one more run of both goap-bench against the stack of make perf-compare-up (PERF_COMPARE_ARGS, PERF_COMPARE_SERIAL, PERF_AUTOSTOP)
+ifeq ($(PERF_COMPARE_SERIAL),)
+	$(PERF_CMP_ENV) GOAP_PERF_GO_ARGS='$(PERF_HOLD) $(PERF_COMPARE_ARGS)' GOAP_PERF_RS_ARGS='$(PERF_HOLD) $(PERF_COMPARE_ARGS)' \
+		$(PERF_CMP) up --no-deps --force-recreate bench bench-rs
+else
+	$(PERF_CMP_ENV) GOAP_PERF_GO_ARGS='-hold=0 $(PERF_COMPARE_ARGS)' $(PERF_CMP) up --no-deps --force-recreate bench
+	$(PERF_CMP_ENV) GOAP_PERF_RS_ARGS='$(PERF_HOLD) $(PERF_COMPARE_ARGS)' $(PERF_CMP) up --no-deps --force-recreate bench-rs
+endif
+
 perf-capture: ## save what the performance stack's Prometheus holds in .goap/perf/captures/<PERF_CAPTURE, default the time>, for make perf-analysis
 	@set -e; name="$${PERF_CAPTURE:-$$(date +%Y%m%d-%H%M%S)}"; dir="$(PERF_CAPTURES)/$$name"; \
 	test ! -e "$$dir" || { echo "perf-capture: $$dir exists"; exit 1; }; \
@@ -222,10 +254,10 @@ perf-analysis-down: ## stop the replay of a capture (the capture stays)
 	GOAP_PERF_CAPTURE=. $(PERF_ANALYSIS) down
 
 perf-down: ## stop the performance stack, keeping its data (the graph grows run after run)
-	$(PERF_RUST) --profile bench down
+	$(PERF_CMP) --profile bench down
 
 perf-reset: ## stop the performance stack and drop its data (database, Prometheus)
-	$(PERF_RUST) --profile bench down --volumes --remove-orphans
+	$(PERF_CMP) --profile bench down --volumes --remove-orphans
 
 rust-test: ## cargo test of the Rust workspace (rust/: the Rust graph service and goap-proxy, ADR 0163; GOAP_TEST_PG_DSN for its PostgreSQL tests)
 	cd rust && cargo test --locked

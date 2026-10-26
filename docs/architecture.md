@@ -1338,7 +1338,8 @@ The indexer follows the graph's events over NATS. The compose image is `pgvector
   graph services: mode `go`, `rust`, `compare` (Go answers, Rust gets the same call on its own database, ids paired, every call judged
   in `calls.jsonl`; `goap-proxy diff-db` compares the two databases) or `shadow` (Go answers, the reads go to Rust too,
   one database). The performance stack goes through it: `make perf` (go), `make perf-rust` (`perf.rust.yml`, rust),
-  `make perf-diff` (`PERF_DIFF_MODE` shadow or compare; `PERF_DIFF_RUST=go` compares Go with Go). It is a binary
+  `make perf-diff` (`PERF_DIFF_MODE` shadow or compare; `PERF_DIFF_RUST=go` compares Go with Go); `make perf-compare`
+  leaves it out (see *Performance stack*). It is a binary
   of its own, which no crate of the service depends on, in an image of its own: `goap/proxy:dev` (`--target proxy`),
   the service's being `goap/rust:dev` (`--target rust`).
 - A single multi-target image (`Dockerfile`, `ARG SERVICE`), static binary on `distroless`; its `services` target holds every binary (`/goap/<service>`), the one image `goap/goap:dev` the compose stack runs with an entrypoint per service (`make images`, done by `make up`), so it compiles once.
@@ -1450,7 +1451,16 @@ drawing them) until interrupted, or for `PERF_AUTOSTOP` (`make perf PERF_AUTOSTO
 `.goap/perf/captures/<PERF_CAPTURE>`, and `make perf-analysis` replays one (the latest by default) in a stack of its own
 (`deploy/compose/perf-analysis.yml`, project `goap-perf-analysis`: Prometheus on the capture, scraping nothing, and Grafana on
 http://localhost:3301, its link set to the capture's range; `make perf-analysis-down`), so a run stays readable once its
-stack is down or reset. The web looks at the data of the bench (http://localhost:5174): a `gateway` (:8381, `GOAP_AUTH_MODE=none`, the
+stack is down or reset. `make perf-compare` (`.\make.ps1 perf-compare`, `deploy/compose/perf.compare.yml` over `perf.yml`
+and `perf.rust.yml`) measures the Go and the Rust graph services side by side: each on its schema of the same PostgreSQL
+(`graph`, `graph_rs`; both dropped first unless `PERF_COMPARE_KEEP=1`), each loaded by its own `goap-bench` (`bench`,
+`bench-rs`) with the flags `PERF_COMPARE_ARGS` (default `-versions 100000 -seed 1`: the same workload for both), called
+directly, at the same time (they share the machine) or one after the other (`PERF_COMPARE_SERIAL=1`: Go, then Rust); the
+benches tag their series with the resource attribute `goap.perf.impl` (`go` / `rust`, Prometheus label `goap_perf_impl`),
+drawn by the dashboard *GOAP performance: Go vs Rust* (`deploy/grafana/dashboards/goap-perf-compare.json`, http://localhost:3300/d/goap-perf-compare:
+throughput, p95 per call over the range and its ratio Rust / Go, each service's calls over time, the size and scans of
+each schema); reports in `.goap/perf/compare/go` and `rust`. The Rust service exports no metrics of its own yet: the
+comparison is what the client sees and what PostgreSQL holds. The web looks at the data of the bench (http://localhost:5174): a `gateway` (:8381, `GOAP_AUTH_MODE=none`, the
 fixed development administrator) routing to the graph alone, and the `web` dev server; what needs another service answers
 an error.
 

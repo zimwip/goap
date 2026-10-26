@@ -268,6 +268,42 @@ function PerfDiff {
         }
     }
 }
+# perf-compare: the Go and the Rust graph services side by side (deploy/compose/perf.compare.yml), each on its schema
+# (graph, graph_rs) loaded by its own goap-bench with $env:PERF_COMPARE_ARGS (the same seed for both), at the same time
+# or one after the other ($env:PERF_COMPARE_SERIAL = '1': Go, then Rust); both schemas dropped first unless
+# $env:PERF_COMPARE_KEEP = '1'; drawn by the Grafana dashboard "GOAP performance: Go vs Rust"
+$PerfCmp = @('compose', '-f', 'deploy/compose/perf.yml', '-f', 'deploy/compose/perf.rust.yml', '-f', 'deploy/compose/perf.compare.yml')
+$PerfCmpStack = @('postgres-init', 'graph', 'graph-rs', 'otel-collector', 'postgres-exporter', 'prometheus', 'grafana')
+function PerfCompareArgs { if ($env:PERF_COMPARE_ARGS) { $env:PERF_COMPARE_ARGS } else { '-versions 100000 -seed 1' } }
+function PerfCompareUp {
+    PerfImages
+    WithEnv @{ GOAP_PERF_RS_DSN = $PerfDiffDsnRs } {
+        if ($env:PERF_COMPARE_KEEP) {
+            Run docker @PerfCmp up -d @PerfCmpStack
+        } else {
+            Run docker @PerfCmp up -d --wait postgres
+            Run docker @PerfCmp run --rm --no-deps --entrypoint psql postgres-init -v ON_ERROR_STOP=1 -h postgres -U goap -d goap `
+                -c 'DROP SCHEMA IF EXISTS graph CASCADE' -c 'DROP SCHEMA IF EXISTS graph_rs CASCADE'
+            Run docker @PerfCmp up -d --force-recreate @PerfCmpStack
+        }
+    }
+}
+function PerfCompareRun {
+    $a = PerfCompareArgs; $h = PerfHold
+    if ($env:PERF_COMPARE_SERIAL) {
+        WithEnv @{ GOAP_PERF_RS_DSN = $PerfDiffDsnRs; GOAP_PERF_GO_ARGS = "-hold=0 $a" } { Run docker @PerfCmp up --no-deps --force-recreate bench }
+        WithEnv @{ GOAP_PERF_RS_DSN = $PerfDiffDsnRs; GOAP_PERF_RS_ARGS = "$h $a" } { Run docker @PerfCmp up --no-deps --force-recreate bench-rs }
+    } else {
+        WithEnv @{ GOAP_PERF_RS_DSN = $PerfDiffDsnRs; GOAP_PERF_GO_ARGS = "$h $a"; GOAP_PERF_RS_ARGS = "$h $a" } {
+            Run docker @PerfCmp up --no-deps --force-recreate bench bench-rs
+        }
+    }
+}
+function PerfCompare {
+    PerfCompareUp
+    PerfCompareRun
+    Write-Host 'Grafana: http://localhost:3300/d/goap-perf-compare - reports: .goap\perf\compare\{go,rust}\*.csv'
+}
 # captures of the performance stack's Prometheus (perf-capture), replayed by perf-analysis
 $PerfCaptures = '.goap/perf/captures'
 $PerfAnalysis = @('compose', '-f', 'deploy/compose/perf-analysis.yml')
@@ -304,8 +340,8 @@ function Perf {
     PerfRun
     Write-Host 'Grafana: http://localhost:3300/d/goap-perf - Prometheus: http://localhost:9390 - web: http://localhost:5174 - reports: .goap\perf\*.csv'
 }
-function PerfDown { Run docker @PerfRust --profile bench down }
-function PerfReset { Run docker @PerfRust --profile bench down --volumes --remove-orphans }
+function PerfDown { Run docker @PerfCmp --profile bench down }
+function PerfReset { Run docker @PerfCmp --profile bench down --volumes --remove-orphans }
 function RustTest { InDir rust { Run cargo test --locked } }
 function RustLint { InDir rust { Run cargo fmt --check; Run cargo clippy --locked --all-targets -- -D warnings } }
 
@@ -363,6 +399,10 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   perf-diff         the Go and the Rust graph services compared call by call ($env:PERF_DIFF_MODE: shadow, the
                     reads on one schema; compare, every call each on its schema, then the databases)
                     ($env:PERF_DIFF_ARGS, serial and seeded; $env:PERF_DIFF_RUST = 'go': Go with Go); .goap\perf\diff
+  perf-compare | perf-compare-up | perf-compare-run
+                    the Go and the Rust graph services measured side by side, each on its schema and loaded by its
+                    own goap-bench ($env:PERF_COMPARE_ARGS, same seed; $env:PERF_COMPARE_SERIAL = '1' one after the
+                    other; $env:PERF_COMPARE_KEEP = '1' keeps the schemas); http://localhost:3300/d/goap-perf-compare
   rust-test | rust-lint
                     cargo test, cargo fmt + clippy of the Rust workspace (rust\)
   perf-capture      save what the performance stack's Prometheus holds in .goap\perf\captures\<$env:PERF_CAPTURE>
@@ -411,6 +451,9 @@ switch ($Target) {
     'perf-rust-up'     { PerfRustUp }
     'perf-rust-run'    { PerfRustRun }
     'perf-diff'        { PerfDiff }
+    'perf-compare'     { PerfCompare }
+    'perf-compare-up'  { PerfCompareUp }
+    'perf-compare-run' { PerfCompareRun }
     'rust-test'        { RustTest }
     'rust-lint'        { RustLint }
     'perf-down'        { PerfDown }
