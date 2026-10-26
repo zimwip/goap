@@ -50,6 +50,9 @@ COPY graph/domainsvc/migrations_sqlite graph/domainsvc/migrations_sqlite
 COPY graph/smarttagsvc/migrations graph/smarttagsvc/migrations
 COPY graph/smarttagsvc/migrations_sqlite graph/smarttagsvc/migrations_sqlite
 COPY platform/devseed/demo.json platform/devseed/demo.json
+# read by graph-catalog with include_str!: the built-in domains and the widget catalogue of the forms
+COPY lib/domains/builtin lib/domains/builtin
+COPY web/src/lib/forms/widgetCatalog.gen.ts web/src/lib/forms/widgetCatalog.gen.ts
 COPY rust rust
 RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/src/rust/target \
     cd rust && cargo build --release --locked -p goap-proxy -p graph-service \
