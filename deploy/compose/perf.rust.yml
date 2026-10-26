@@ -3,7 +3,8 @@
 # make perf-rust: goap-proxy in mode rust, every call to the Rust service, on the database of the stack
 # (GOAP_PERF_RS_DSN: the graph's). make perf-diff: mode compare, the Go service answering
 # and the Rust one on a schema of its own (graph_rs), every call compared (.goap/perf/diff: calls.jsonl, summary.json,
-# ids.json), then the two schemas (goap-proxy diff-db).
+# ids.json), then the two schemas (goap-proxy diff-db). make perf-compare PERF_COMPARE_MODE=mirror: the same mode compare,
+# its divergences counted in Grafana (goap_proxy_compare_total).
 # GOAP_PERF_RS_IMAGE=goap/goap:dev GOAP_PERF_RS_BIN=/goap/graph puts a second Go service in its place: the
 # comparison of Go with Go, which must find no divergence (make perf-diff PERF_DIFF_RUST=go).
 name: goap-perf

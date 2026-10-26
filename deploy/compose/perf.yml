@@ -155,9 +155,10 @@ services:
 
   # the CPU, memory, network and disk of every container (make perf-compare: the Go and the Rust graph side by side);
   # it reads the Docker daemon of the host (Linux, or the VM of Docker Desktop); started when named (profile cadvisor:
-  # make perf-compare under Docker)
+  # make perf-compare under Docker); v0.55 reads the containers of Docker 29's containerd image store, through the
+  # containerd socket of the host (/run/containerd/containerd.sock)
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    image: gcr.io/cadvisor/cadvisor:v0.55.1
     profiles: [cadvisor]
     restart: unless-stopped
     privileged: true
