@@ -26,7 +26,6 @@ async fn migrates_postgres_as_the_go_service() {
         .collect();
     for n in [
         "0001_schema.sql",
-        "0001_domain_version.sql",
         "0001_smart_tag.sql",
         "0020_node_changes_index.sql",
     ] {

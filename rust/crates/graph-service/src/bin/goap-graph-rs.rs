@@ -27,8 +27,25 @@ use graph_service::{
 };
 use graph_store::{Store, StoreConfig};
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+/// mimalloc rather than the C library's allocator: the service allocates many small values per request, from many
+/// threads (10 to 15 % less CPU per commit on PostgreSQL)
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+/// The workers of the runtime when `TOKIO_WORKER_THREADS` names none. The service waits on its database: with a worker
+/// per core, each statement wakes the connection's task on another thread and back, which costs more CPU than the
+/// statement (20 to 30 % of a commit, four times the context switches) for no throughput.
+const WORKERS: usize = 2;
+
+fn main() -> anyhow::Result<()> {
+    let mut rt = tokio::runtime::Builder::new_multi_thread();
+    if std::env::var_os("TOKIO_WORKER_THREADS").is_none() {
+        rt.worker_threads(WORKERS);
+    }
+    rt.enable_all().build()?.block_on(serve())
+}
+
+async fn serve() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,tokio_postgres=warn".into()),

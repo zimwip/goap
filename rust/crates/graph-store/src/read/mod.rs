@@ -432,6 +432,30 @@ impl ReadTx for Session {
         self.guardian.clone()
     }
 
+    fn kept_snapshot(
+        &self,
+        head: &str,
+        catalog: &std::sync::Arc<graph_catalog::Catalog>,
+    ) -> Option<std::sync::Arc<graph_core::access::Snapshot>> {
+        let kept = self.versions.organisation.lock().unwrap_or_else(|e| e.into_inner());
+        kept.as_ref()
+            .filter(|k| k.head == head && std::sync::Arc::ptr_eq(&k.catalog, catalog))
+            .map(|k| k.snapshot.clone())
+    }
+
+    fn keep_snapshot(
+        &self,
+        head: &str,
+        catalog: &std::sync::Arc<graph_catalog::Catalog>,
+        snapshot: std::sync::Arc<graph_core::access::Snapshot>,
+    ) {
+        *self.versions.organisation.lock().unwrap_or_else(|e| e.into_inner()) = Some(versions::KeptSnapshot {
+            head: head.to_string(),
+            catalog: catalog.clone(),
+            snapshot,
+        });
+    }
+
     async fn last_commit(&self, branch: &str) -> Result<i64, GraphError> {
         let p = self.sql.ph(1);
         let q = format!(

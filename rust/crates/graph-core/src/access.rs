@@ -444,6 +444,16 @@ impl Snapshot {
         let Some(ns) = cat.structure(STRUCTURE_ORGANISATION).map(|s| s.namespace.clone()) else {
             return Ok(Snapshot::default());
         };
+        // the head of main names what the snapshot holds: the one kept for it, if any, is the same
+        let kept_at = match tx.branch(&ns, MAIN_BRANCH).await? {
+            Some(b) if !b.ephemeral && !b.head.is_empty() => b.head.0.clone(),
+            _ => String::new(),
+        };
+        if !kept_at.is_empty()
+            && let Some(s) = tx.kept_snapshot(&kept_at, &cat)
+        {
+            return Ok((*s).clone());
+        }
         let head = read::branch_head(tx, &ns, MAIN_BRANCH).await?;
         let at = read::select(tx, &head, None).await?;
         let refs: Vec<NodeRef> = at.iter().map(|(id, v)| NodeRef::new(id.clone(), *v)).collect();
@@ -455,7 +465,11 @@ impl Snapshot {
             .collect();
         let held: Vec<NodeRef> = nodes.iter().map(|n| n.node_ref()).collect();
         let links = tx.links_from(&held, None).await?;
-        Ok(Snapshot::build(&cat, &nodes, &links))
+        let s = Snapshot::build(&cat, &nodes, &links);
+        if !kept_at.is_empty() {
+            tx.keep_snapshot(&kept_at, &cat, std::sync::Arc::new(s.clone()));
+        }
+        Ok(s)
     }
 
     /// What a level of criticality requires of the changes held by a unit: the policy of the nearest unit of its chain

@@ -38,6 +38,16 @@ struct Entry {
 #[derive(Default)]
 pub struct Versions {
     inner: Mutex<Inner>,
+    /// The snapshot of the organisation last read, with the head of its main branch and the catalogue it was read
+    /// at ([`graph_core::store::ReadTx::kept_snapshot`]).
+    pub(crate) organisation: Mutex<Option<KeptSnapshot>>,
+}
+
+/// A snapshot of the organisation, and what it was read at.
+pub(crate) struct KeptSnapshot {
+    pub head: String,
+    pub catalog: std::sync::Arc<graph_catalog::Catalog>,
+    pub snapshot: std::sync::Arc<graph_core::access::Snapshot>,
 }
 
 #[derive(Default)]

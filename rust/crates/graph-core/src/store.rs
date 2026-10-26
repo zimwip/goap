@@ -35,6 +35,25 @@ pub trait ReadTx: Sync {
         None
     }
 
+    /// The snapshot of the organisation the store keeps between its sessions, when it was read at that head of the
+    /// organisation's main branch with that type catalogue; none, it is read.
+    fn kept_snapshot(
+        &self,
+        _head: &str,
+        _catalog: &std::sync::Arc<graph_catalog::Catalog>,
+    ) -> Option<std::sync::Arc<crate::access::Snapshot>> {
+        None
+    }
+
+    /// Keeps the snapshot of the organisation read at a head of its main branch with a type catalogue.
+    fn keep_snapshot(
+        &self,
+        _head: &str,
+        _catalog: &std::sync::Arc<graph_catalog::Catalog>,
+        _snapshot: std::sync::Arc<crate::access::Snapshot>,
+    ) {
+    }
+
     /// The order of the last commit on a branch (0: none).
     fn last_commit(&self, branch: &str) -> impl Future<Output = Result<i64>> + Send;
 
