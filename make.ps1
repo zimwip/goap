@@ -270,10 +270,10 @@ function PerfDiff {
 }
 # perf-compare: the Go and the Rust graph services side by side (deploy/compose/perf.compare.yml), each on its schema
 # (graph, graph_rs) loaded by its own goap-bench with $env:PERF_COMPARE_ARGS (the same seed for both), at the same time
-# or one after the other ($env:PERF_COMPARE_SERIAL = '1': Go, then Rust); both schemas dropped first unless
-# $env:PERF_COMPARE_KEEP = '1'; drawn by the Grafana dashboard "GOAP performance: Go vs Rust"
+# or one after the other ($env:PERF_COMPARE_SERIAL = '1': Go, then Rust), each with its domain registry (domains,
+# domains_rs); the four schemas dropped first unless $env:PERF_COMPARE_KEEP = '1'; drawn by the Grafana dashboard "GOAP performance: Go vs Rust"
 $PerfCmp = @('compose', '-f', 'deploy/compose/perf.yml', '-f', 'deploy/compose/perf.rust.yml', '-f', 'deploy/compose/perf.compare.yml')
-$PerfCmpStack = @('postgres-init', 'graph', 'graph-rs', 'otel-collector', 'postgres-exporter', 'prometheus', 'grafana')
+$PerfCmpStack = @('postgres-init', 'domains', 'domains-rs', 'graph', 'graph-rs', 'otel-collector', 'postgres-exporter', 'prometheus', 'grafana')
 function PerfCompareArgs { if ($env:PERF_COMPARE_ARGS) { $env:PERF_COMPARE_ARGS } else { '-versions 100000 -seed 1' } }
 function PerfCompareUp {
     PerfImages
@@ -283,7 +283,8 @@ function PerfCompareUp {
         } else {
             Run docker @PerfCmp up -d --wait postgres
             Run docker @PerfCmp run --rm --no-deps --entrypoint psql postgres-init -v ON_ERROR_STOP=1 -h postgres -U goap -d goap `
-                -c 'DROP SCHEMA IF EXISTS graph CASCADE' -c 'DROP SCHEMA IF EXISTS graph_rs CASCADE'
+                -c 'DROP SCHEMA IF EXISTS graph CASCADE' -c 'DROP SCHEMA IF EXISTS graph_rs CASCADE' `
+                -c 'DROP SCHEMA IF EXISTS domains CASCADE' -c 'DROP SCHEMA IF EXISTS domains_rs CASCADE'
             Run docker @PerfCmp up -d --force-recreate @PerfCmpStack
         }
     }

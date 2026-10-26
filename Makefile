@@ -165,14 +165,15 @@ PERF_DIFF_DSN_GO := postgres://graph:graph@postgres:5432/goap?sslmode=disable
 PERF_DIFF_DSN_RS := postgres://graph_rs:graph_rs@postgres:5432/goap?sslmode=disable
 # make perf-compare: the Go and the Rust graph services side by side (deploy/compose/perf.compare.yml), each on its
 # schema (graph, graph_rs) loaded by its own goap-bench with PERF_COMPARE_ARGS (the same seed for both), at the same time
-# or one after the other (PERF_COMPARE_SERIAL=1: Go, then Rust); both schemas dropped first unless PERF_COMPARE_KEEP=1;
+# or one after the other (PERF_COMPARE_SERIAL=1: Go, then Rust), each with its domain registry (domains, domains_rs);
+# the four schemas dropped first unless PERF_COMPARE_KEEP=1;
 # drawn by the Grafana dashboard "GOAP performance: Go vs Rust"
 PERF_CMP := docker compose -f deploy/compose/perf.yml -f deploy/compose/perf.rust.yml -f deploy/compose/perf.compare.yml
 PERF_COMPARE_ARGS ?= -versions 100000 -seed 1
 PERF_COMPARE_SERIAL ?=
 PERF_COMPARE_KEEP ?=
 PERF_CMP_ENV := GOAP_PERF_RS_DSN='$(PERF_DIFF_DSN_RS)'
-PERF_CMP_STACK := postgres-init graph graph-rs otel-collector postgres-exporter prometheus grafana
+PERF_CMP_STACK := postgres-init domains domains-rs graph graph-rs otel-collector postgres-exporter prometheus grafana
 PERF_GO_ENV := $(if $(filter 0,$(PERF_PROXY)),GOAP_PERF_GRAPH_URL=http://graph:8080)
 PERF_RUST_ENV := GOAP_PERF_IMPL=$(PERF_RUST_MODE) $(if $(filter 0,$(PERF_PROXY)),GOAP_PERF_GRAPH_URL=http://graph-rs:8080)
 PERF_DIFF_ENV := GOAP_PERF_IMPL=$(PERF_DIFF_MODE) GOAP_PERF_RS_DSN='$(if $(filter shadow,$(PERF_DIFF_MODE)),$(PERF_DIFF_DSN_GO),$(PERF_DIFF_DSN_RS))' $(if $(filter go,$(PERF_DIFF_RUST)),GOAP_PERF_RS_IMAGE=goap/goap:dev GOAP_PERF_RS_BIN=/goap/graph)
@@ -213,11 +214,12 @@ perf-diff: perf-images ## the Go and the Rust graph services compared call by ca
 perf-compare: perf-compare-up perf-compare-run ## the Go and the Rust graph services measured side by side: each on its schema, loaded by its own goap-bench (PERF_COMPARE_ARGS, same seed; PERF_COMPARE_SERIAL=1 one after the other; PERF_AUTOSTOP), schemas dropped first unless PERF_COMPARE_KEEP=1; Grafana http://localhost:3300/d/goap-perf-compare
 	@echo "Grafana: http://localhost:3300/d/goap-perf-compare · reports: .goap/perf/compare/{go,rust}/*.csv"
 
-perf-compare-up: perf-images ## start the stack of make perf-compare: the Go and the Rust graph services, each on its schema (dropped first unless PERF_COMPARE_KEEP=1)
+perf-compare-up: perf-images ## start the stack of make perf-compare: the Go and the Rust graph services, each on its schema with its domain registry (dropped first unless PERF_COMPARE_KEEP=1)
 ifeq ($(PERF_COMPARE_KEEP),)
 	$(PERF_CMP) up -d --wait postgres
 	$(PERF_CMP) run --rm --no-deps --entrypoint psql postgres-init -v ON_ERROR_STOP=1 -h postgres -U goap -d goap \
-		-c 'DROP SCHEMA IF EXISTS graph CASCADE' -c 'DROP SCHEMA IF EXISTS graph_rs CASCADE'
+		-c 'DROP SCHEMA IF EXISTS graph CASCADE' -c 'DROP SCHEMA IF EXISTS graph_rs CASCADE' \
+		-c 'DROP SCHEMA IF EXISTS domains CASCADE' -c 'DROP SCHEMA IF EXISTS domains_rs CASCADE'
 	$(PERF_CMP_ENV) $(PERF_CMP) up -d --force-recreate $(PERF_CMP_STACK)
 else
 	$(PERF_CMP_ENV) $(PERF_CMP) up -d $(PERF_CMP_STACK)

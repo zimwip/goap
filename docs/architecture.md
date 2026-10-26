@@ -1441,7 +1441,9 @@ within `-spread` (0.5 by default) of these four values, their means staying the 
 `-hot-ratio` of the modifications for deep histories; `-mode commit`: one `CommitEdits`, `-mode lifecycle`: `CreateChange`,
 `ImpactNodeCreate`, one `ImpactNodeCheckoutBatch` of the modified nodes (`-node-checkout`: one `ImpactNodeCheckout` each), `ImpactNodeUpdate` + `ImpactLinkCreate` per node, one `ImpactNodeReviewBatch` of the change by `system:bench-reviewer`, `CommitChange`, `MergeChange`), and every
 `-probe` it measures the reads (`GetBranch`, `GetNode`, `ListNodeVersions` of a hot node, `ListNodeChanges`,
-`GetNodeNeighbourhood`, `ListBaselineNodes` by type and by text, `DiffBaselines`, `ListChanges`). It records `bench.op.duration`
+`GetNodeNeighbourhood`, `ListBaselineNodes` by type and by text, `DiffBaselines`, `ListChanges`). Its writers start once the graph knows the types of the domain it published (a graph reads the
+registry on its events, else after a while, ADR 0167: the bench creates a node of the newest type in a change it purges,
+until the graph accepts it, for three minutes at most, unmeasured). It records `bench.op.duration`
 (by `op`, `outcome` ok / conflict / error), `bench.response.size` and the gauges `bench.versions`, `nodes`, `links`,
 `changes`, `domain.versions`, `domain.types`, `errors` (Prometheus `goap_bench_*`), and a CSV per run (`.goap/perf/<run>.csv`:
 one row per operation and window, the totals at its end). Runs add to the same graph (`make perf-run`, keys prefixed by the
@@ -1453,7 +1455,8 @@ drawing them) until interrupted, or for `PERF_AUTOSTOP` (`make perf PERF_AUTOSTO
 http://localhost:3301, its link set to the capture's range; `make perf-analysis-down`), so a run stays readable once its
 stack is down or reset. `make perf-compare` (`.\make.ps1 perf-compare`, `deploy/compose/perf.compare.yml` over `perf.yml`
 and `perf.rust.yml`) measures the Go and the Rust graph services side by side: each on its schema of the same PostgreSQL
-(`graph`, `graph_rs`; both dropped first unless `PERF_COMPARE_KEEP=1`), each loaded by its own `goap-bench` (`bench`,
+(`graph`, `graph_rs`) with its own domain registry (`domains`, `domains-rs` on `domains_rs`: each bench publishes its
+versions of the bench domain; the four schemas dropped first unless `PERF_COMPARE_KEEP=1`), each loaded by its own `goap-bench` (`bench`,
 `bench-rs`) with the flags `PERF_COMPARE_ARGS` (default `-versions 100000 -seed 1`: the same workload for both), called
 directly, at the same time (they share the machine) or one after the other (`PERF_COMPARE_SERIAL=1`: Go, then Rust); the
 benches tag their series with the resource attribute `goap.perf.impl` (`go` / `rust`, Prometheus label `goap_perf_impl`),
