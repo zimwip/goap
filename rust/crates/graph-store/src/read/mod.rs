@@ -164,6 +164,20 @@ impl Session {
 
     /// Commits a write transaction (a read session has nothing to commit).
     pub async fn commit(mut self) -> Result<(), StoreError> {
+        let res = self.commit_conn().await;
+        if res.is_ok() {
+            let (folds, logs) = self.tx.take_folds();
+            for c in &logs {
+                self.versions.forget_fold(c);
+            }
+            for (c, f) in folds {
+                self.versions.keep_fold(&c, f);
+            }
+        }
+        res
+    }
+
+    async fn commit_conn(&mut self) -> Result<(), StoreError> {
         match &mut self.conn {
             Conn::PgTx(c) => {
                 let c = c.take().ok_or_else(|| StoreError::Other("transaction over".into()))?;
@@ -436,6 +450,21 @@ impl ReadTx for Session {
 
     fn guardian(&self) -> Option<std::sync::Arc<dyn graph_core::guardian::Guardian>> {
         self.guardian.clone()
+    }
+
+    fn kept_fold(&self, change: &ChangeId) -> Option<std::sync::Arc<graph_core::write::work::KeptFold>> {
+        if self.writes() && self.tx.wrote_log_of(&change.0) {
+            return None;
+        }
+        self.versions.fold(&change.0)
+    }
+
+    fn keep_fold(&self, change: &ChangeId, fold: std::sync::Arc<graph_core::write::work::KeptFold>) {
+        if !self.writes() {
+            self.versions.keep_fold(&change.0, fold);
+        } else if !self.tx.wrote_log_of(&change.0) {
+            self.tx.stage_fold(&change.0, fold);
+        }
     }
 
     fn kept_snapshot(

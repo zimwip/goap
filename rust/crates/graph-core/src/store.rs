@@ -139,6 +139,17 @@ pub trait ReadTx: Sync {
     /// A version of a node.
     fn node(&self, r: &NodeRef) -> impl Future<Output = Result<Option<Node>>> + Send;
 
+    /// The fold of the log of a change the store kept from an earlier transaction, if any ([`KeptFold`]).
+    ///
+    /// [`KeptFold`]: crate::write::work::KeptFold
+    fn kept_fold(&self, _change: &ChangeId) -> Option<std::sync::Arc<crate::write::work::KeptFold>> {
+        None
+    }
+
+    /// Keeps the fold of the log of a change for the next transactions: a write transaction keeps it once it commits,
+    /// and only when it had written nothing in that log before it read it.
+    fn keep_fold(&self, _change: &ChangeId, _fold: std::sync::Arc<crate::write::work::KeptFold>) {}
+
     /// The latest version of a node on a branch.
     fn latest_on(&self, id: &NodeId, branch: &str) -> impl Future<Output = Result<Option<Node>>> + Send;
 

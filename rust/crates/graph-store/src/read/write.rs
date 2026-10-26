@@ -349,6 +349,7 @@ impl WriteTx for Session {
     }
 
     async fn append_log(&self, e: &LogEntry) -> Result<i64, GraphError> {
+        self.tx.wrote_log(&e.change.0);
         let q = self.insert("change_log", CHANGE_LOG_COLUMNS, " RETURNING seq");
         let payload = if e.payload.is_empty() && self.sql.pg {
             "null".to_string() // the column holds JSON, never NULL
@@ -750,6 +751,8 @@ impl WriteTx for Session {
     async fn delete_change(&self, id: &ChangeId, namespace: &str, branch: &str) -> Result<(), GraphError> {
         // the versions it deletes leave the cache, and a read in flight is not kept (again once they are gone)
         self.tx.clear();
+        self.tx.wrote_log(&id.0);
+        self.versions.forget_fold(&id.0);
         self.versions.reset();
         let res = self.purge_change(id, namespace, branch).await;
         self.versions.reset();

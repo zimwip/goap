@@ -2083,15 +2083,42 @@ pub async fn fold_any<T: ReadTx>(store: &T, id: &ChangeId) -> Result<(ChangeView
     fold_upto(store, id, 0).await
 }
 
+/// The fold of the log of a change as it stood after an entry, kept by the store between transactions (Go's
+/// `draftCache`, ADR 0153): the next fold reads only the entries written since.
+#[derive(Debug, Clone, Default)]
+pub struct KeptFold {
+    pub view: ChangeView,
+    pub items: Vec<crate::flow::Item>,
+    /// the position of the last entry folded, whatever its stream
+    pub last: i64,
+}
+
 /// The fold of the log of a change as it stood at a position (0: as it stands).
 pub async fn fold_upto<T: ReadTx>(store: &T, id: &ChangeId, upto: i64) -> Result<(ChangeView, Vec<crate::flow::Item>)> {
-    let mut out = ChangeView::default();
+    if upto > 0 {
+        let mut k = KeptFold::default();
+        extend_fold(store, &mut k, id, upto).await?;
+        return Ok((k.view, k.items));
+    }
+    let mut k = store.kept_fold(id).map(|k| (*k).clone()).unwrap_or_default();
+    let last = k.last;
+    extend_fold(store, &mut k, id, 0).await?;
+    if k.last != last {
+        store.keep_fold(id, std::sync::Arc::new(k.clone()));
+    }
+    Ok((k.view, k.items))
+}
+
+/// Folds the entries of the log after the last one a fold holds (up to a position, 0: all).
+async fn extend_fold<T: ReadTx>(store: &T, k: &mut KeptFold, id: &ChangeId, upto: i64) -> Result<()> {
+    let out = &mut k.view;
     let mut events = Vec::new();
-    let mut items = Vec::new();
-    for l in store.log(id, 0, &[]).await? {
+    let mut new_items = false;
+    for l in store.log(id, k.last, &[]).await? {
         if upto > 0 && l.seq > upto {
             break;
         }
+        k.last = k.last.max(l.seq);
         if l.stream() == LOG_IMPACT || l.stream() == LOG_FACT {
             out.seq = out.seq.max(l.seq); // the position of the view: its impact events and facts
         }
@@ -2104,16 +2131,20 @@ pub async fn fold_upto<T: ReadTx>(store: &T, id: &ChangeId, upto: i64) -> Result
         } else if l.stream() == LOG_FACT {
             let it: Value = serde_json::from_str(&l.payload).map_err(GraphError::internal)?;
             out.history.apply_item(&it, l.seq);
-            items.push(crate::flow::Item::of(&l.payload).map_err(GraphError::internal)?);
+            k.items
+                .push(crate::flow::Item::of(&l.payload).map_err(GraphError::internal)?);
+            new_items = true;
         }
     }
     hydrate(store, &mut events).await?;
     for e in &events {
         out.fold.apply(e);
     }
-    out.events = events;
-    out.flows = Flows::replay(&items);
-    Ok((out, items))
+    out.events.extend(events);
+    if new_items || k.last == 0 {
+        out.flows = Flows::replay(&k.items);
+    }
+    Ok(())
 }
 
 /// Rebuilds the drafts of the checkouts that copy a stored version (ADR 0142): the version and its links.

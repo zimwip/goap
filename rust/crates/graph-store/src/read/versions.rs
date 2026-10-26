@@ -41,7 +41,21 @@ pub struct Versions {
     /// The snapshot of the organisation last read, with the head of its main branch and the catalogue it was read
     /// at ([`graph_core::store::ReadTx::kept_snapshot`]).
     pub(crate) organisation: Mutex<Option<KeptSnapshot>>,
+    /// The folds of the logs of the changes last read ([`graph_core::store::ReadTx::kept_fold`]).
+    folds: Mutex<Folds>,
 }
+
+/// The folds of change logs kept between transactions, the least recently read evicted first. A fold is the prefix of
+/// a log up to an order: the writers of a change append under the lock of its tree and in order, so what a later read
+/// finds past that order extends it.
+#[derive(Default)]
+struct Folds {
+    tick: u64,
+    entries: HashMap<String, (std::sync::Arc<graph_core::write::work::KeptFold>, u64)>,
+}
+
+/// The number of change folds kept.
+const MAX_FOLDS: usize = 128;
 
 /// A snapshot of the organisation, and what it was read at.
 pub(crate) struct KeptSnapshot {
@@ -192,6 +206,41 @@ impl Versions {
         }
     }
 
+    /// The fold of the log of a change, when kept.
+    pub fn fold(&self, change: &str) -> Option<std::sync::Arc<graph_core::write::work::KeptFold>> {
+        let mut f = self.folds.lock().unwrap_or_else(|e| e.into_inner());
+        f.tick += 1;
+        let tick = f.tick;
+        let e = f.entries.get_mut(change)?;
+        e.1 = tick;
+        Some(e.0.clone())
+    }
+
+    /// Keeps the fold of the log of a change, unless one further along is kept already.
+    pub fn keep_fold(&self, change: &str, fold: std::sync::Arc<graph_core::write::work::KeptFold>) {
+        let mut f = self.folds.lock().unwrap_or_else(|e| e.into_inner());
+        f.tick += 1;
+        let tick = f.tick;
+        if f.entries.get(change).is_some_and(|(k, _)| k.last >= fold.last) {
+            return;
+        }
+        f.entries.insert(change.to_string(), (fold, tick));
+        if f.entries.len() > MAX_FOLDS
+            && let Some(old) = f.entries.iter().min_by_key(|(_, (_, t))| *t).map(|(k, _)| k.clone())
+        {
+            f.entries.remove(&old);
+        }
+    }
+
+    /// Forgets the fold of a change whose log is deleted.
+    pub fn forget_fold(&self, change: &str) {
+        self.folds
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entries
+            .remove(change);
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -202,6 +251,11 @@ impl Versions {
 pub struct Read {
     nodes: Mutex<HashMap<NodeRef, Node>>,
     written: Mutex<HashSet<NodeRef>>,
+    /// The changes whose log the transaction wrote or deleted: a fold read after is not kept (a savepoint may undo
+    /// what it holds).
+    logs: Mutex<HashSet<String>>,
+    /// The folds a write transaction keeps once it commits.
+    folds: Mutex<Vec<(String, std::sync::Arc<graph_core::write::work::KeptFold>)>>,
 }
 
 impl Read {
@@ -231,6 +285,45 @@ impl Read {
     /// A version whose origin the transaction sets: read again.
     pub fn forget(&self, r: &NodeRef) {
         self.nodes.lock().unwrap_or_else(|e| e.into_inner()).remove(r);
+    }
+
+    /// A change whose log the transaction writes.
+    pub fn wrote_log(&self, change: &str) {
+        self.logs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(change.to_string());
+    }
+
+    /// Whether the transaction wrote the log of a change.
+    pub fn wrote_log_of(&self, change: &str) -> bool {
+        self.logs.lock().unwrap_or_else(|e| e.into_inner()).contains(change)
+    }
+
+    /// A fold to keep once the transaction commits.
+    pub fn stage_fold(&self, change: &str, fold: std::sync::Arc<graph_core::write::work::KeptFold>) {
+        self.folds
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push((change.to_string(), fold));
+    }
+
+    /// What the transaction keeps once it commits: the folds staged, the logs it wrote.
+    pub fn take_folds(
+        &self,
+    ) -> (
+        Vec<(String, std::sync::Arc<graph_core::write::work::KeptFold>)>,
+        Vec<String>,
+    ) {
+        let folds = std::mem::take(&mut *self.folds.lock().unwrap_or_else(|e| e.into_inner()));
+        let logs = self
+            .logs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .cloned()
+            .collect();
+        (folds, logs)
     }
 
     pub fn clear(&self) {
