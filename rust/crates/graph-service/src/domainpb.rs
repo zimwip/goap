@@ -76,6 +76,7 @@ fn node_type(o: &Obj) -> Obj {
         p
     });
     flag(&mut m, o, "adminOnly", "adminOnly");
+    text(&mut m, o, "visibility", "visibility");
     flag(&mut m, o, "additionalProperties", "additionalProperties");
     if let Some(f @ Value::Object(form)) = o.get("form")
         && !form.is_empty()
@@ -142,6 +143,7 @@ fn lifecycle(o: &Obj) -> Obj {
         text(&mut p, s, "description", "description");
         flag(&mut p, s, "notCommittable", "notCommittable");
         flag(&mut p, s, "final", "final");
+        text(&mut p, s, "visibility", "visibility");
         p
     });
     list(&mut m, o, "transitions", "transitions", None, |t| {
@@ -332,6 +334,7 @@ pub fn lifecycle_info(l: &def::Lifecycle) -> pb::Lifecycle {
                 description: s.description.clone(),
                 not_committable: s.not_committable,
                 r#final: s.is_final,
+                visibility: s.visibility.clone(),
             })
             .collect(),
         transitions: l
@@ -417,7 +420,7 @@ pub fn definition(p: &pb::Domain) -> Result<String, String> {
             "structure": n.structure.as_ref().map(|t| json!({"kind": t.kind, "parent": t.parent, "root": t.root,
                 "selfParent": t.self_parent})),
             "requires": list(&n.requires, |r| json!({"link": r.link, "count": r.count})),
-            "adminOnly": n.admin_only, "additionalProperties": n.additional_properties, "form": form(&n.form),
+            "adminOnly": n.admin_only, "visibility": n.visibility, "additionalProperties": n.additional_properties, "form": form(&n.form),
         })),
         "linkTypes": list(&p.link_types, |l| json!({
             "name": l.name, "description": l.description, "from": l.from, "to": l.to, "compose": l.compose,
@@ -429,7 +432,7 @@ pub fn definition(p: &pb::Domain) -> Result<String, String> {
         "lifecycles": list(&p.lifecycles, |l| json!({
             "name": l.name, "description": l.description, "initial": l.initial,
             "states": list(&l.states, |s| json!({"name": s.name, "description": s.description,
-                "notCommittable": s.not_committable, "final": s.r#final})),
+                "notCommittable": s.not_committable, "final": s.r#final, "visibility": s.visibility})),
             "transitions": list(&l.transitions, |t| json!({
                 "name": t.name, "description": t.description, "from": t.from, "to": t.to,
                 "permission": t.permission, "guard": t.guard,

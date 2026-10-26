@@ -79,6 +79,8 @@ pub struct Type {
     /// The link types qualified.
     pub requires: Vec<def::RequiredLink>,
     pub admin_only: bool,
+    /// The scope of the type (own or the nearest ancestor's, ADR 0161 §4); empty: none declared.
+    pub visibility: String,
     pub additional_properties: bool,
 }
 
@@ -472,6 +474,23 @@ impl Catalog {
         self.typ(typ).is_some_and(|t| t.admin_only)
     }
 
+    /// The scope a version of a node of the type is stamped with in a state (Go's `Catalog.Visibility`, ADR 0161
+    /// §4): the state's, else the type's (own or inherited), else project.
+    pub fn visibility(&self, typ: &str, state: &str) -> &str {
+        let Some(t) = self.typ(typ) else {
+            return def::VISIBILITY_PROJECT;
+        };
+        if let Some(l) = &t.lifecycle {
+            let state = if state.is_empty() { l.initial.as_str() } else { state };
+            if let Some(s) = l.states.iter().find(|s| s.name == state)
+                && !s.visibility.is_empty()
+            {
+                return &s.visibility;
+            }
+        }
+        def::visibility_of(&t.visibility)
+    }
+
     pub fn composes(&self, typ: &str) -> bool {
         self.link_type(typ).is_some_and(|l| l.compose)
     }
@@ -565,6 +584,7 @@ fn resolve(r: &str, decl: &HashMap<String, (&Domain, &def::NodeType)>) -> Result
         form: None,
         requires: Vec::new(),
         admin_only: false,
+        visibility: String::new(),
         additional_properties: false,
     };
     let (mut lifecycle_set, mut control_set) = (false, false);
@@ -602,6 +622,9 @@ fn resolve(r: &str, decl: &HashMap<String, (&Domain, &def::NodeType)>) -> Result
         }
         if t.form.is_none() {
             t.form = dt.form.clone();
+        }
+        if t.visibility.is_empty() {
+            t.visibility = dt.visibility.clone();
         }
         t.admin_only |= dt.admin_only;
         t.additional_properties |= dt.additional_properties;

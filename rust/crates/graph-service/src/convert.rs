@@ -99,6 +99,10 @@ pub fn node(n: &Node) -> pb::Node {
         project: url(&n.project),
         draft: n.version == 0,
         origins: n.origins.iter().map(node_ref).collect(),
+        creator: n.creator.subject.clone(),
+        creator_unit: url(&n.creator.unit),
+        editor: n.editor.clone(),
+        visibility: n.visibility.clone(),
     }
 }
 

@@ -39,6 +39,16 @@ pub struct Env {
 }
 
 impl Env {
+    /// The person behind an operation (ADR 0161 §3, Go's `Graph.author`): the end user it is done for, else the
+    /// caller.
+    pub fn author(&self) -> &str {
+        if self.end_user.is_empty() {
+            &self.by
+        } else {
+            &self.end_user
+        }
+    }
+
     pub fn now(&self) -> DateTime<Utc> {
         Utc::now()
     }
@@ -359,6 +369,27 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             if n.project.is_zero() {
                 n.project = c.project_id.clone();
             }
+        }
+        // who created the node, who edited the version, how far it is seen (ADR 0161 §3-4): the creator is the first
+        // version's; the editor, the person the write is done for unless the commit names the draft's; the scope, the
+        // domain's for the type and the state now
+        if n.editor.is_empty() {
+            n.editor = self.env.author().to_string();
+        }
+        match &prev {
+            Some(p) => n.creator = p.creator.clone(),
+            None => {
+                if n.creator.subject.is_empty() {
+                    n.creator.subject = n.editor.clone();
+                }
+                n.editor = n.creator.subject.clone(); // the first version's editor is the creator
+                if n.creator.unit.is_zero() {
+                    n.creator.unit = n.owner.clone();
+                }
+            }
+        }
+        if n.visibility.is_empty() {
+            n.visibility = self.env.catalog.visibility(&n.typ, &n.state).to_string();
         }
         self.owners.insert(n.owner.to_string(), (n.owner.clone(), what.clone()));
         self.projects
@@ -793,7 +824,9 @@ impl<'s, S: WriteTx> Tx<'s, S> {
                 state: &n.state,
                 deleted: n.deleted,
                 project: &n.project.key,
-                owner: &n.owner.key,
+                responsible: &n.owner.key,
+                visibility: crate::model::visibility_of(&n.visibility),
+                creator: &n.creator.subject,
                 change_id: &n.change_id,
                 text,
                 facets,

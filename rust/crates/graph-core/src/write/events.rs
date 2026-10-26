@@ -295,7 +295,11 @@ pub struct NodeEvent<'a> {
     #[serde(skip_serializing_if = "str::is_empty")]
     pub project: &'a str,
     #[serde(skip_serializing_if = "str::is_empty")]
-    pub owner: &'a str,
+    pub responsible: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    pub visibility: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    pub creator: &'a str,
     #[serde(skip_serializing_if = "ChangeId::is_empty")]
     pub change_id: &'a ChangeId,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]

@@ -9,7 +9,7 @@
 use std::collections::{HashMap, HashSet};
 
 use graph_catalog::catalog::STRUCTURE_ORGANISATION;
-use graph_catalog::def::Transition;
+use graph_catalog::def::{Transition, VISIBILITY_PERSONAL};
 use graph_script::js;
 use serde_json::{Map, Value};
 
@@ -241,6 +241,10 @@ impl<S: WriteTx> Tx<'_, S> {
             }
             if e.by.is_empty() {
                 e.by = self.env.by.clone();
+                if self.env.end_user != e.by {
+                    // a service acting for a person: the edits are the person's (ADR 0161 §3)
+                    e.for_ = self.env.end_user.clone();
+                }
             }
         }
         while !events.is_empty() {
@@ -268,6 +272,10 @@ impl<S: WriteTx> Tx<'_, S> {
             }
             if e.by.is_empty() {
                 e.by = self.env.by.clone();
+                if self.env.end_user != e.by {
+                    // a service acting for a person: the edits are the person's (ADR 0161 §3)
+                    e.for_ = self.env.end_user.clone();
+                }
             }
         }
         if let Some(e) = events.iter().skip(1).find(|e| !events[0].same_entry(e)) {
@@ -931,6 +939,27 @@ impl<S: WriteTx> Tx<'_, S> {
             }
         };
         Ok(at.get(node).copied())
+    }
+
+    /// Refuses a move of a draft out of the personal scope by anyone but the creator of its node (`checkShare`, ADR
+    /// 0161 §4, `node:share`): a personal node becomes private, project... only by its creator's own act.
+    async fn check_share(&self, d: &Draft, from: &str, to: &str) -> Result<()> {
+        let cat = self.catalog();
+        if cat.visibility(&d.typ, from) != VISIBILITY_PERSONAL || cat.visibility(&d.typ, to) == VISIBILITY_PERSONAL {
+            return Ok(());
+        }
+        let creator = match &d.base {
+            Some(b) => read::stored_node(self.store, b).await?.creator.subject,
+            None => d.creator.clone(),
+        };
+        if self.env.by != creator {
+            return Err(GraphError::forbidden(format!(
+                "{} leaves the personal scope for {}: only its creator {creator} shares it (node:share)",
+                d.key,
+                cat.visibility(&d.typ, to)
+            )));
+        }
+        Ok(())
     }
 
     /// The stored version a draft of the impact starts from (Go's `work.base`): its pre version, the latest of the
@@ -1692,6 +1721,7 @@ impl<S: WriteTx> Tx<'_, S> {
             self.select_impact(&mut w, &impact)?;
         }
         let d = self.working(&w)?;
+        self.check_share(&d, &from, &t.to).await?;
         if let Some(req) = &t.requires {
             for k in &req.attributes {
                 let v = d.props.as_ref().and_then(|p| p.get(k));

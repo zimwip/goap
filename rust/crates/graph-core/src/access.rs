@@ -184,6 +184,7 @@ pub const PLATFORM_SCOPE: &str = "PLATFORM";
 pub const TYPE_USER: &str = "organisation@User";
 pub const TYPE_ASSIGNMENT: &str = "organisation@Assignment";
 pub const TYPE_PROJECT_UNIT: &str = "organisation@ProjectUnit";
+pub const TYPE_ORG_UNIT: &str = "organisation@OrgUnit";
 /// The resource of the rules of the organisation (`access.ResourcePolicy`).
 pub const RESOURCE_POLICY: &str = "policy";
 pub const TYPE_POLICY: &str = "organisation@Policy";
@@ -206,6 +207,21 @@ pub struct Principal {
     pub project: String,
     /// the person a platform service acts for (`X-Goap-On-Behalf-Of`, ADR 0114)
     pub on_behalf_of: String,
+}
+
+/// What a principal reads of the content of the graphs (Go's `access.ReachSet`, ADR 0161 §5), by the structures'
+/// keys: the versions whose scope reaches it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ReachSet {
+    /// The projects it works on: their versions of scope project, private or personal ones when `units` or `subject`
+    /// match.
+    pub projects: Vec<String>,
+    /// The projects whose versions of scope tree it reads.
+    pub trees: Vec<String>,
+    /// Its personal unit, its unit and the units above it: the private versions they answer for.
+    pub units: Vec<String>,
+    /// The principal: the personal versions of the nodes it created.
+    pub subject: String,
 }
 
 /// A hierarchy of a structure by key (`domain.Hierarchy`).
@@ -684,6 +700,35 @@ impl Snapshot {
         out
     }
 
+    /// What a principal reads of the content of the graphs (`ReachSet`, ADR 0161 §5): the projects it works on, the
+    /// projects of the parent tree of each (the children of every project above it), its units and itself; empty for
+    /// an anonymous one.
+    pub fn reach_set(&self, p: &Principal) -> ReachSet {
+        if p.subject.is_empty() {
+            return ReachSet::default();
+        }
+        let projects = self.reachable_projects(p);
+        let mut children: HashMap<String, Vec<String>> = HashMap::new();
+        for k in &self.project_keys {
+            if let Some(parent) = self.projects.chain(k).get(1) {
+                children.entry(parent.clone()).or_default().push(k.clone());
+            }
+        }
+        let mut trees: Vec<String> = projects
+            .iter()
+            .flat_map(|w| self.projects.chain(w))
+            .flat_map(|a| children.get(&a).cloned().unwrap_or_default())
+            .collect();
+        trees.sort();
+        trees.dedup();
+        ReachSet {
+            projects,
+            trees,
+            units: self.chain_of(p),
+            subject: p.subject.clone(),
+        }
+    }
+
     /// Whether a project, or one above it, is owned by an owner Assignment (`ProjectOwned`).
     pub fn project_owned(&self, project: &str) -> bool {
         let chain = self.projects.chain(project);
@@ -737,6 +782,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::lnk::Url;
     use crate::model::{Link, Node, NodeId, NodeRef, Target};
 
     fn node(id: &str, key: &str, typ: &str, state: &str, props: Value) -> Node {
@@ -837,5 +883,73 @@ mod tests {
         assert!(!s.may_access_project(&who("zed", &[]), "PROJ-Q"));
         assert!(s.may_access_project(&who("zed", &["admin"]), "PROJ-Q"));
         assert!(!s.may_access_project(&who("", &["admin"]), "PROJ-Q"));
+    }
+
+    /// The reach set of a principal (`ReachSet`, ADR 0161 §5): the projects it works on, the parent tree of each
+    /// (siblings included), its units and itself; and what a reach sees by the scope of a version.
+    #[test]
+    fn compiles_the_reach_of_a_principal() {
+        let nodes = vec![
+            node("o", "ORG-DEFAULT", TYPE_ORG_UNIT, "", json!({})),
+            node("t", "TEAM", TYPE_ORG_UNIT, "", json!({})),
+            node("c", "USR:cy", TYPE_USER, "active", json!({"subject": "cy"})),
+            node("p", "PROJ-ROOT", TYPE_PROJECT_UNIT, "", json!({})),
+            node("q", "PROJ-Q", TYPE_PROJECT_UNIT, "", json!({})),
+            node("s", "PROJ-S", TYPE_PROJECT_UNIT, "", json!({})),
+            node(
+                "d",
+                "ASG:USR:cy/PROJ-Q",
+                TYPE_ASSIGNMENT,
+                "active",
+                json!({"roles": ["dev"]}),
+            ),
+        ];
+        let links = vec![
+            link("organisation@part_of", "t", "o"),
+            link(LINK_MEMBER_OF, "c", "t"),
+            link(LINK_PROJECT_PART_OF, "q", "p"),
+            link(LINK_PROJECT_PART_OF, "s", "p"),
+            link(LINK_ASSIGNS_ORG, "d", "c"),
+            link(LINK_ASSIGNS_PROJECT, "d", "q"),
+        ];
+        let s = Snapshot::build(&Catalog::builtin(), &nodes, &links);
+        let cy = Principal {
+            subject: "cy".into(),
+            ..Principal::default()
+        };
+        let r = s.reach_set(&cy);
+        assert_eq!(r.projects, ["PROJ-Q"]);
+        assert_eq!(r.trees, ["PROJ-Q", "PROJ-S"]);
+        assert_eq!(r.units, ["USR:cy", "TEAM", "ORG-DEFAULT"]);
+        assert_eq!(s.reach_set(&Principal::default()), ReachSet::default());
+
+        let reach = crate::reach::Reach::from_set(r);
+        let filter = reach.filter();
+        let version = |project: &str, vis: &str, owner: &str, creator: &str| Node {
+            namespace: "alm".into(),
+            project: Url::new("organisation", "ProjectUnit", project),
+            owner: Url::new("organisation", "OrgUnit", owner),
+            creator: crate::model::Creator {
+                subject: creator.into(),
+                ..Default::default()
+            },
+            visibility: vis.into(),
+            ..Node::default()
+        };
+        for (n, want) in [
+            (version("PROJ-Q", "", "X", "x"), true),
+            (version("PROJ-S", "project", "X", "x"), false),
+            (version("PROJ-S", "tree", "X", "x"), true),
+            (version("PROJ-ROOT", "tree", "X", "x"), false),
+            (version("PROJ-ROOT", "public", "X", "x"), true),
+            (version("PROJ-Q", "private", "TEAM", "x"), true),
+            (version("PROJ-Q", "private", "OTHER", "x"), false),
+            (version("PROJ-Q", "personal", "TEAM", "cy"), true),
+            (version("PROJ-Q", "personal", "TEAM", "ann"), false),
+            (version("PROJ-S", "personal", "TEAM", "cy"), false),
+        ] {
+            assert_eq!(reach.sees(&n), want, "{n:?}");
+            assert_eq!(filter.holds(&n), want, "filter {n:?}");
+        }
     }
 }

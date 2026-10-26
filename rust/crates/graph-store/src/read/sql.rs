@@ -1,6 +1,7 @@
 //! The statements of the reads, written once for both dialects (as `graph/graph/sqlbuild.go` writes them for the Go
 //! service): the placeholder, the text cast of a uuid, lists (arrays on PostgreSQL, JSON texts on SQLite) and the
 //! order tie-break are the words that differ.
+use graph_core::model::ReachFilter;
 use graph_core::{
     change::ChangesFilter,
     model::{BaselineId, ChangeId, LinkId, NodeId, NodeQuery, NodeRef, branch_of, namespace_of},
@@ -61,6 +62,10 @@ impl Sql {
             "v.owner".into(),
             "n.project".into(),
             "v.origins".into(),
+            "n.creator".into(),
+            "n.creator_unit".into(),
+            "v.editor".into(),
+            "v.visibility".into(),
         ]
         .join(", ")
     }
@@ -532,9 +537,9 @@ impl Sql {
         )
     }
 
-    /// The links between two of the versions refs matching a text (`linkRefsWhere`), both ends nodes of the projects
-    /// of a caller's reach when it has one (ADR 0161 §5).
-    fn link_refs_where(self, refs: &[NodeRef], text: &str, projects: Option<&[String]>) -> (String, Vec<Arg>, usize) {
+    /// The links between two of the versions refs matching a text (`linkRefsWhere`), both ends versions a caller's
+    /// reach holds when it has one (ADR 0161 §4-5).
+    fn link_refs_where(self, refs: &[NodeRef], text: &str, reach: Option<&ReachFilter>) -> (String, Vec<Arg>, usize) {
         let (mut args, n) = self.refs_args(refs);
         args.push(like_pattern(text).into());
         let from = format!(
@@ -543,19 +548,44 @@ impl Sql {
             self.refs_join("t", "l.to_id", "l.to_version", 1)
         );
         let text = self.text_match(n, "l.props", &["l.type"]);
-        let Some(ps) = projects else {
+        let Some(r) = reach else {
             return (format!("{from} WHERE {text}"), args, n + 1);
         };
-        let (f, fa) = self.in_list("nf.project", n + 1, ps.to_vec(), false);
-        let (t, ta) = self.in_list("nt.project", n + 2, ps.to_vec(), false);
-        args.push(fa);
-        args.push(ta);
+        let (f, fa, next) = self.reach_holds("nf", "vf", n + 1, r);
+        let (t, ta, next) = self.reach_holds("nt", "vt", next, r);
+        args.extend(fa);
+        args.extend(ta);
         (
             format!(
-                "{from} JOIN node nf ON nf.id = l.from_id JOIN node nt ON nt.id = l.to_id WHERE {text} AND {f} AND {t}"
+                "{from} JOIN node nf ON nf.id = l.from_id \
+                 JOIN node_version vf ON vf.node_id = l.from_id AND vf.version = l.from_version \
+                 JOIN node nt ON nt.id = l.to_id \
+                 JOIN node_version vt ON vt.node_id = l.to_id AND vt.version = l.to_version \
+                 WHERE {text} AND {f} AND {t}"
             ),
             args,
-            n + 3,
+            next,
+        )
+    }
+
+    /// The condition a version (node n, version v) is held by a reach (`reachHolds`, ADR 0161 §4-5): its scope,
+    /// stamped on the version, reaches the caller. Its arguments start at placeholder p; next is the first after them.
+    fn reach_holds(self, n: &str, v: &str, p: usize, r: &ReachFilter) -> (String, Vec<Arg>, usize) {
+        let (projects, pa) = self.in_list(&format!("{n}.project"), p, r.projects.clone(), false);
+        let (trees, ta) = self.in_list(&format!("{n}.project"), p + 1, r.trees.clone(), false);
+        let (units, ua) = self.in_list(&format!("{v}.owner"), p + 2, r.units.clone(), false);
+        let vis = format!("{v}.visibility");
+        let subject = self.ph(p + 3);
+        (
+            format!(
+                "({vis} = 'public' \
+                 OR ({vis} = 'tree' AND ({trees} OR {projects})) \
+                 OR ({vis} IN ('', 'project') AND {projects}) \
+                 OR ({vis} = 'private' AND {projects} AND {units}) \
+                 OR ({vis} = 'personal' AND {projects} AND {n}.creator = {subject} AND {subject} <> ''))"
+            ),
+            vec![pa, ta, ua, r.subject.clone().into()],
+            p + 4,
         )
     }
 
@@ -565,11 +595,11 @@ impl Sql {
         refs: &[NodeRef],
         typ: &str,
         text: &str,
-        projects: Option<&[String]>,
+        reach: Option<&ReachFilter>,
         offset: usize,
         limit: usize,
     ) -> Stmt {
-        let (w, mut args, n) = self.link_refs_where(refs, text, projects);
+        let (w, mut args, n) = self.link_refs_where(refs, text, reach);
         args.push(typ.to_string().into());
         args.push((limit as i64).into());
         args.push((offset as i64).into());
@@ -587,8 +617,8 @@ impl Sql {
     }
 
     /// The counts by type of the links a page reads (`sqlLinkTypeCounts`).
-    pub fn link_type_counts(self, refs: &[NodeRef], text: &str, projects: Option<&[String]>) -> Stmt {
-        let (w, args, _) = self.link_refs_where(refs, text, projects);
+    pub fn link_type_counts(self, refs: &[NodeRef], text: &str, reach: Option<&ReachFilter>) -> Stmt {
+        let (w, args, _) = self.link_refs_where(refs, text, reach);
         (format!("SELECT l.type, count(*){w} GROUP BY l.type"), args)
     }
 
@@ -717,11 +747,11 @@ impl Sql {
             self.ph(n + 1)
         );
         n += 2;
-        if let Some(ps) = &q.projects {
-            let (cond, arg) = self.in_list("n.project", n, ps.clone(), false);
+        if let Some(r) = &q.reach {
+            let (cond, more, next) = self.reach_holds("n", "v", n, r);
             w.push_str(&format!(" AND {cond}"));
-            args.push(arg);
-            n += 1;
+            args.extend(more);
+            n = next;
         }
         (w, args, n)
     }

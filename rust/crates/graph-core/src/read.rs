@@ -1077,7 +1077,7 @@ impl<'a, T: ReadTx> World<'a, T> {
             None => q,
             Some(r) => {
                 filtered = NodeQuery {
-                    projects: Some(r.filter()),
+                    reach: Some(r.filter()),
                     ..q.clone()
                 };
                 &filtered

@@ -223,6 +223,11 @@ impl<S: WriteTx> Tx<'_, S> {
             execution: d.execution.clone(),
             origins: d.origins.clone(),
             created_at: Some(self.env.now()),
+            creator: crate::model::Creator {
+                subject: d.creator.clone(),
+                ..Default::default()
+            },
+            editor: d.editor.clone(),
             ..Node::default()
         };
         let Some(base) = &d.base else {

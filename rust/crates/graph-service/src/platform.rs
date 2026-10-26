@@ -312,6 +312,12 @@ fn node(n: &pb::Node) -> Node {
         owner: url(&n.owner),
         project: url(&n.project),
         origins: n.origins.iter().map(|r| node_ref(Some(r))).collect(),
+        creator: graph_core::model::Creator {
+            subject: n.creator.clone(),
+            unit: url(&n.creator_unit),
+        },
+        editor: n.editor.clone(),
+        visibility: n.visibility.clone(),
     }
 }
 

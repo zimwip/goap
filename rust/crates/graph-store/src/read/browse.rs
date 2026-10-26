@@ -93,13 +93,13 @@ impl Session {
 
 impl Session {
     /// A page of the links between two of the versions refs (`Tx.LinkPage`): the links, how many the type keeps, the
-    /// counts of every type; both ends nodes of some projects when `projects` names them (a caller's reach).
+    /// counts of every type; both ends versions a caller's reach holds when it has one.
     pub async fn link_page(
         &self,
         refs: &[graph_core::model::NodeRef],
         typ: &str,
         text: &str,
-        projects: Option<&[String]>,
+        reach: Option<&graph_core::model::ReachFilter>,
         offset: usize,
         limit: usize,
     ) -> Result<(Vec<graph_core::model::Link>, usize, Vec<graph_core::model::TypeCount>), GraphError> {
@@ -107,14 +107,14 @@ impl Session {
             return Ok((Vec::new(), 0, Vec::new()));
         }
         let counts: std::collections::BTreeMap<String, usize> = self
-            .rows(self.sql.link_type_counts(refs, text, projects))
+            .rows(self.sql.link_type_counts(refs, text, reach))
             .await?
             .iter()
             .map(|r| (r.text(0), r.int(1) as usize))
             .collect();
         let (types, total) = graph_core::page::type_counts(&counts, typ);
         let links = self
-            .links(self.sql.link_page(refs, typ, text, projects, offset, limit))
+            .links(self.sql.link_page(refs, typ, text, reach, offset, limit))
             .await?;
         Ok((links, total, types))
     }

@@ -42,7 +42,9 @@ pub fn page_nodes(nodes: Vec<Node>, q: &NodeQuery) -> NodePage {
     let mut counts = BTreeMap::new();
     let mut matched = Vec::new();
     for n in nodes {
-        if (n.deleted && !q.include_deleted) || (!text.is_empty() && !n.matches(&text)) || !in_projects(&n, &q.projects)
+        if (n.deleted && !q.include_deleted)
+            || (!text.is_empty() && !n.matches(&text))
+            || !q.reach.as_ref().is_none_or(|r| r.holds(&n))
         {
             continue;
         }
@@ -57,16 +59,5 @@ pub fn page_nodes(nodes: Vec<Node>, q: &NodeQuery) -> NodePage {
         total,
         types,
         ..NodePage::default()
-    }
-}
-
-/// Whether a node is of one of some projects as the nodes store them (None: every project).
-pub fn in_projects(n: &Node, projects: &Option<Vec<String>>) -> bool {
-    match projects {
-        None => true,
-        Some(ps) => {
-            let url = n.project.to_string();
-            ps.iter().any(|p| *p == url || *p == n.project.key)
-        }
     }
 }
