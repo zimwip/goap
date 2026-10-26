@@ -1,0 +1,35 @@
+# The Go and the Rust graph services measured side by side (make perf-compare, .\make.ps1 perf-compare), over perf.yml
+# and perf.rust.yml:
+#   docker compose -f deploy/compose/perf.yml -f deploy/compose/perf.rust.yml -f deploy/compose/perf.compare.yml up bench bench-rs
+# Each service on its own schema of the same PostgreSQL (graph: Go, graph_rs: Rust; GOAP_PERF_RS_DSN), each loaded by
+# its own goap-bench with the same flags and seed, called directly (no goap-proxy between them). The benches tag their
+# series with the resource attribute goap.perf.impl (go | rust: the label goap_perf_impl in Prometheus), drawn by the
+# Grafana dashboard "GOAP performance: Go vs Rust" (http://localhost:3300/d/goap-perf-compare). Their reports go to
+# .goap/perf/compare/go and .goap/perf/compare/rust.
+# GOAP_PERF_GO_ARGS / GOAP_PERF_RS_ARGS: the flags of each bench (make perf-compare sets them from PERF_COMPARE_ARGS).
+name: goap-perf
+
+services:
+  bench:
+    entrypoint: ["/goap/goap-bench", "-wait", "3m", "-csv", "/results/compare/go/"]
+    command: ${GOAP_PERF_GO_ARGS:--versions 100000 -seed 1}
+    environment:
+      GOAP_GRAPH_URL: http://graph:8080
+      OTEL_RESOURCE_ATTRIBUTES: goap.perf.impl=go
+
+  bench-rs:
+    image: goap/goap:dev
+    pull_policy: never
+    profiles: [bench]
+    user: "0"
+    entrypoint: ["/goap/goap-bench", "-wait", "3m", "-csv", "/results/compare/rust/"]
+    command: ${GOAP_PERF_RS_ARGS:--versions 100000 -seed 1}
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_METRIC_EXPORT_INTERVAL: "5000"
+      OTEL_TRACES_SAMPLER: always_off
+      GOAP_LOG_FORMAT: text
+      GOAP_GRAPH_URL: http://graph-rs:8080
+      OTEL_RESOURCE_ATTRIBUTES: goap.perf.impl=rust
+    volumes: ["${GOAP_PERF_RESULTS:-../../.goap/perf}:/results:z"]
+    depends_on: [graph-rs, otel-collector]
