@@ -188,6 +188,22 @@ func buildDefs(_ domain.BaselineID, nodes []domain.Node, links []domain.Link) *d
 // decodeVersion assembles a definition from its header node, its live element nodes and their links: the references
 // back in the properties (methodology.DecodeRefs), the steps of a process or a method from its sub_activity links.
 func decodeVersion(n domain.Node, elements map[string]domain.Node, out map[domain.NodeID][]keyedLink, byID map[domain.NodeID]domain.Node, def any, status *Status, created, updated, published *time.Time, by *string) error {
+	raw, err := versionJSON(n, elements, out, byID, status, created, updated, published, by)
+	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, def); err != nil {
+		return fmt.Errorf("definition: %w", err)
+	}
+	return nil
+}
+
+// versionJSON is the JSON of the definition decodeVersion assembles, before it is read into a methodology.
+func versionJSON(n domain.Node, elements map[string]domain.Node, out map[domain.NodeID][]keyedLink, byID map[domain.NodeID]domain.Node, status *Status, created, updated, published *time.Time, by *string) (map[string]any, error) {
 	props := maps.Clone(n.Properties)
 	s, _ := props["status"].(string)
 	*status = Status(s)
@@ -196,7 +212,7 @@ func decodeVersion(n domain.Node, elements map[string]domain.Node, out map[domai
 		if s, _ := props[k].(string); s != "" {
 			t, err := time.Parse(time.RFC3339Nano, s)
 			if err != nil {
-				return fmt.Errorf("%s: %w", k, err)
+				return nil, fmt.Errorf("%s: %w", k, err)
 			}
 			*dst = t
 		}
@@ -259,7 +275,7 @@ func decodeVersion(n domain.Node, elements map[string]domain.Node, out map[domai
 		els = append(els, p)
 		kinds = append(kinds, kind)
 	}
-	return decodeInto(props, els, kinds, def)
+	return join(props, els, kinds), nil
 }
 
 func ts(t time.Time) any {

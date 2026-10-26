@@ -20,6 +20,42 @@ import (
 // 0163 addendum, what a change follows): the Rust activation of the same wire must be the same.
 const rustActivationCases = "../../rust/crates/graph-core/src/conditions/activation_cases.gen.json"
 
+// rustLibraries is where the Rust graph reads the conditions of the libraries a methodology imports (ADR 0064).
+const rustLibraries = "../../rust/crates/graph-core/src/conditions/libraries.gen.json"
+
+// TestRustLibrariesAreCurrent writes (GOAP_UPDATE_RUST=1) or checks the libraries of the Rust graph.
+func TestRustLibrariesAreCurrent(t *testing.T) {
+	type def struct {
+		Name        string `json:"name"`
+		Expr        string `json:"expr"`
+		Description string `json:"description,omitempty"`
+	}
+	libs := map[string][]def{}
+	for _, n := range LibraryNames {
+		ds, _ := Library(n)
+		for _, d := range ds {
+			libs[n] = append(libs[n], def{d.Name, d.Expr, d.Description})
+		}
+	}
+	raw, err := json.MarshalIndent(map[string]any{
+		"comment":   "Code generated from engine/condition (GOAP_UPDATE_RUST=1 go test ./engine/condition/ -run TestRustLibrariesAreCurrent). DO NOT EDIT.",
+		"libraries": libs, "order": LibraryNames,
+	}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := string(raw) + "\n"
+	if os.Getenv("GOAP_UPDATE_RUST") != "" {
+		if err := os.WriteFile(rustLibraries, []byte(want), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	if got, err := os.ReadFile(rustLibraries); err != nil || string(got) != want {
+		t.Fatalf("%s is not current: run GOAP_UPDATE_RUST=1 go test ./engine/condition/ -run TestRustLibrariesAreCurrent", rustLibraries)
+	}
+}
+
 // rustBoards are blackboards as the graph answers GetBlackboard, with the facets the graph adds.
 var rustBoards = []struct {
 	Name  string

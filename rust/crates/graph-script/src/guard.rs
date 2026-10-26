@@ -72,7 +72,7 @@ impl Guard {
 }
 
 /// An evaluation error as cel-go words it: its messages start in lower case (`no such key: x`).
-fn go_message(m: &str) -> String {
+pub(crate) fn go_message(m: &str) -> String {
     let mut c = m.chars();
     match c.next() {
         Some(f) => f.to_lowercase().chain(c).collect(),
@@ -82,7 +82,7 @@ fn go_message(m: &str) -> String {
 
 /// A JSON value as a CEL one; a number is a double, as cel-go reads one from a decoded JSON value, an integer kept
 /// an int where it is one.
-fn value(v: &Json) -> Value {
+pub(crate) fn value(v: &Json) -> Value {
     match v {
         Json::Null => Value::Null,
         Json::Bool(b) => Value::Bool(*b),
