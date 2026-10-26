@@ -16,6 +16,7 @@ Services, each on its own port (Connect RPC, /healthz):
   conversations         http://localhost:8090
   jobs                  http://localhost:8091
   graph-content         http://localhost:8092   (the content graph, called through graph)
+  domains               http://localhost:8096   (the domain registry)
 
 Around them:
   Jaeger (traces)       http://localhost:16686
@@ -27,5 +28,5 @@ Around them:
 PostgreSQL (DBeaver: New connection > PostgreSQL):
   host localhost, port 5432, database goap, user goap, password goap
   JDBC URL: jdbc:postgresql://localhost:5432/goap
-  one schema per service (graph, engine, modelgw, preferences, conversations, mcp, index, credentials, jobs),
+  one schema per service (domains, graph, engine, modelgw, preferences, conversations, mcp, index, credentials, jobs),
   each also reachable as its own role, password = name (e.g. graph / graph)

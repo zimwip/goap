@@ -1,10 +1,10 @@
-//! `goap.registry.v1.DomainService` (Go's `graph/domainsvc`, ADR 0125 §3): the domain registry the graph serves. The
-//! built-in domains come first, published and frozen, then the stored versions by name and creation.
+//! `goap.registry.v1.DomainService` (Go's `graph/domainsvc`, ADR 0125 §3, ADR 0167): the domain registry, a service of
+//! its own. The built-in domains are stored versions like any other, seeded at each start and protected: a protected
+//! domain is refused every write over RPC, the local command line of `goap-domains-rs` writes it.
 use goap_connect::{ConnectError, Ctx, Request, Response, async_trait};
 use goap_proto::registry::v1 as pb;
 use graph_catalog::{
     Catalog,
-    catalog::{builtin_sources, builtins, is_builtin},
     imported::Definition,
     record::{Record, STATUS_ARCHIVED, STATUS_DRAFT, STATUS_PUBLISHED, in_force, latest},
     validate::Issue,
@@ -29,7 +29,7 @@ fn unreadable(e: impl std::fmt::Display) -> ConnectError {
 type Answer<T> = Result<Response<T>, ConnectError>;
 
 /// The summary of a version (`domainpb.DomainSummaryToPB`).
-fn summary(r: &Record, builtin: bool) -> pb::DomainSummary {
+fn summary(r: &Record, protected: bool) -> pb::DomainSummary {
     let d = &r.domain;
     pb::DomainSummary {
         name: d.name.clone(),
@@ -41,7 +41,7 @@ fn summary(r: &Record, builtin: bool) -> pb::DomainSummary {
         item_type_count: d.item_types.len() as i32,
         updated_at: convert::time(&r.updated_at),
         published_at: convert::time(&r.published_at),
-        builtin,
+        protected,
     }
 }
 
@@ -62,52 +62,18 @@ impl pb::DomainService for Domains {
                 .cmp(&b.domain.name)
                 .then(a.created_at.unwrap_or_default().cmp(&b.created_at.unwrap_or_default()))
         });
-        let mut rs: Vec<(Record, bool)> = builtins()
-            .iter()
-            .map(|d| {
-                let r = Record {
-                    domain: d.clone(),
-                    status: STATUS_PUBLISHED.into(),
-                    created_at: None,
-                    updated_at: None,
-                    published_at: None,
-                    updated_by: "platform".into(),
-                };
-                (r, true)
-            })
-            .collect();
-        rs.extend(stored.into_iter().map(|r| (r, false)));
-        let records: Vec<Record> = rs.iter().map(|(r, _)| r.clone()).collect();
-        let shown: Vec<&Record> = if all {
-            records.iter().collect()
-        } else {
-            latest(&records)
-        };
+        let protected = tx.protected_domains().await.map_err(connect_error)?;
+        let shown: Vec<&Record> = if all { stored.iter().collect() } else { latest(&stored) };
         let domains = shown
             .into_iter()
-            .map(|r| {
-                let builtin = rs.iter().any(|(b, is)| *is && b.domain.name == r.domain.name);
-                summary(r, builtin)
-            })
+            .map(|r| summary(r, protected.contains(&r.domain.name)))
             .collect();
         Ok(Response::new(pb::ListDomainsResponse { domains }))
     }
 
-    /// A version (`Service.GetDomain`): a built-in domain (any version asked, or its own), else the one stored, else
-    /// with no version the latest published.
+    /// A version (`Service.GetDomain`): the one stored, else with no version the latest published.
     async fn get_domain(&self, _ctx: &Ctx, req: Request<pb::GetDomainRequest>) -> Answer<pb::GetDomainResponse> {
         let r = req.into_inner();
-        for src in builtin_sources() {
-            let def: serde_json::Value =
-                serde_norway::from_str(src).map_err(|e| connect_error(GraphError::internal(e.to_string())))?;
-            let mut d = domainpb::domain(&def).map_err(|e| connect_error(GraphError::internal(e)))?;
-            if d.name == r.name && (r.version.is_empty() || r.version == d.version) {
-                d.status = STATUS_PUBLISHED.into();
-                d.updated_by = "platform".into();
-                d.builtin = true;
-                return Ok(Response::new(pb::GetDomainResponse { domain: Some(d) }));
-            }
-        }
         let tx = self
             .state
             .store
@@ -117,46 +83,35 @@ impl pb::DomainService for Domains {
         let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
             return Err(not_found(&r.name, &r.version));
         };
-        let d = stored_pb(s)?;
+        let protected = tx.protected_domains().await.map_err(connect_error)?;
+        let mut d = stored_pb(s)?;
+        d.protected = protected.contains(&d.name);
         Ok(Response::new(pb::GetDomainResponse { domain: Some(d) }))
     }
 
     /// A version as YAML or JSON (`Service.ExportDomain`): its YAML as `Domain.YAML` writes it (`domainyaml`), the
-    /// JSON the YAML document read back, keys sorted, indented. A stored version's JSON is written from its stored
-    /// definition, a built-in domain's from its YAML read back.
+    /// JSON the YAML document read back, keys sorted, indented, written from its stored definition.
     async fn export_domain(
         &self,
         _ctx: &Ctx,
         req: Request<pb::ExportDomainRequest>,
     ) -> Answer<pb::ExportDomainResponse> {
         let r = req.into_inner();
-        let (name, version, def, builtin) = match builtin_definition(&r.name, &r.version)? {
-            Some(def) => {
-                let version = def
-                    .get("version")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_owned();
-                (r.name.clone(), version, def, true)
-            }
-            None => {
-                let tx = self
-                    .state
-                    .store
-                    .reader()
-                    .await
-                    .map_err(|e| connect_error(GraphError::internal(e)))?;
-                let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
-                    return Err(not_found(&r.name, &r.version));
-                };
-                let mut def = s.definition;
-                if let Some(o) = def.as_object_mut() {
-                    o.insert("name".into(), s.name.clone().into());
-                    o.insert("version".into(), s.version.clone().into());
-                }
-                (s.name, s.version, def, false)
-            }
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
+            return Err(not_found(&r.name, &r.version));
         };
+        let mut def = s.definition;
+        if let Some(o) = def.as_object_mut() {
+            o.insert("name".into(), s.name.clone().into());
+            o.insert("version".into(), s.version.clone().into());
+        }
+        let (name, version) = (s.name, s.version);
         let yaml = yaml::to_string(&domainyaml::document(&def));
         let base = format!("domain-{name}-{version}");
         match r.format.as_str() {
@@ -166,11 +121,7 @@ impl pb::DomainService for Domains {
                 media_type: "application/yaml".into(),
             })),
             "json" => {
-                let doc = if builtin {
-                    serde_norway::from_str(&yaml).map_err(|e| connect_error(GraphError::internal(e.to_string())))?
-                } else {
-                    yaml_document(def)
-                };
+                let doc = yaml_document(def);
                 Ok(Response::new(pb::ExportDomainResponse {
                     yaml: jsontext::to_string_pretty(&doc),
                     filename: format!("{base}.json"),
@@ -192,9 +143,8 @@ impl pb::DomainService for Domains {
             .await
             .map_err(|e| connect_error(GraphError::internal(e)))?;
         let rs = tx.domain_records().await.map_err(connect_error)?;
-        let ds: Vec<_> = in_force(&rs).into_iter().filter(|x| !is_builtin(&x.name)).collect();
         // the domains in force resolve, or the registry refused them; a catalogue that does not is an internal error
-        let cat = Catalog::new(&ds).map_err(|e| connect_error(GraphError::internal(e)))?;
+        let cat = Catalog::of(&in_force(&rs)).map_err(|e| connect_error(GraphError::internal(e)))?;
         let types = cat
             .types()
             .into_iter()
@@ -314,9 +264,7 @@ impl pb::DomainService for Domains {
                 "name and version are required: invalid domain",
             ));
         }
-        if is_builtin(&p.name) {
-            return Err(builtin_error(&p.name));
-        }
+        self.writable(&p.name, false).await?;
         self.authorize(who.as_ref(), "write", &p.name, &p.version).await?;
         let json = domainpb::definition(&p).map_err(unreadable)?;
         let domain = graph_catalog::Domain::from_json(&json).map_err(|e| connect_error(GraphError::internal(e)))?;
@@ -341,9 +289,7 @@ impl pb::DomainService for Domains {
         let (subject, command) = caller(&req);
         let who = person_of(&req);
         let r = req.into_inner();
-        if is_builtin(&r.name) {
-            return Err(builtin_error(&r.name));
-        }
+        self.writable(&r.name, false).await?;
         let tx = self.writer().await?;
         let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
             return Err(not_found(&r.name, &r.version));
@@ -397,9 +343,7 @@ impl pb::DomainService for Domains {
         let (subject, command) = caller(&req);
         let who = person_of(&req);
         let r = req.into_inner();
-        if is_builtin(&r.name) {
-            return Err(builtin_error(&r.name));
-        }
+        self.writable(&r.name, false).await?;
         let tx = self.writer().await?;
         let Some(src) = tx
             .stored_domain(&r.name, &r.from_version)
@@ -455,9 +399,7 @@ impl pb::DomainService for Domains {
         let (subject, command) = caller(&req);
         let who = person_of(&req);
         let r = req.into_inner();
-        if is_builtin(&r.name) {
-            return Err(builtin_error(&r.name));
-        }
+        self.writable(&r.name, false).await?;
         let tx = self.writer().await?;
         let Some(s) = tx.stored_domain(&r.name, &r.version).await.map_err(connect_error)? else {
             return Err(not_found(&r.name, &r.version));
@@ -516,9 +458,7 @@ impl pb::DomainService for Domains {
                 "name and version are required: invalid domain",
             ));
         }
-        if is_builtin(&def.name) {
-            return Err(builtin_error(&def.name));
-        }
+        self.writable(&def.name, false).await?;
         self.authorize(who.as_ref(), "write", &def.name, &def.version).await?;
         if r.publish {
             self.authorize(who.as_ref(), "publish", &def.name, &def.version).await?;
@@ -642,12 +582,8 @@ impl Domains {
         let Some(who) = who else {
             return Ok(());
         };
-        let tx = self
-            .state
-            .store
-            .reader()
-            .await
-            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        // the organisation is the platform graph's: read there (ADR 0167)
+        let tx = self.state.reader().await.map_err(connect_error)?;
         let snap = graph_core::access::Snapshot::read(&tx).await.map_err(connect_error)?;
         let id = format!("{name}@{version}");
         let res = graph_script::abac::Resource {
@@ -672,27 +608,14 @@ fn caller<T>(req: &Request<T>) -> (String, String) {
     )
 }
 
-/// A write to a built-in domain (`builtinError`).
-fn builtin_error(name: &str) -> ConnectError {
+/// A write over RPC to a protected domain (`protectedError`, ADR 0167).
+fn protected_error(name: &str) -> ConnectError {
     ConnectError::failed_precondition(format!(
-        "domain {name} is built into the platform: it changes with the platform code"
+        "domain {name} is protected: it is written by the local command line only"
     ))
 }
 
 /// A version the registry does not hold (`SQLStore.GetDomain`).
-/// The definition of a built-in domain of that name, any version asked or its own (`Service.GetDomain`), as JSON.
-fn builtin_definition(name: &str, version: &str) -> Result<Option<serde_json::Value>, ConnectError> {
-    for src in builtin_sources() {
-        let def: serde_json::Value =
-            serde_norway::from_str(src).map_err(|e| connect_error(GraphError::internal(e.to_string())))?;
-        let field = |k: &str| def.get(k).and_then(|v| v.as_str()).unwrap_or_default().to_owned();
-        if field("name") == name && (version.is_empty() || field("version") == version) {
-            return Ok(Some(def));
-        }
-    }
-    Ok(None)
-}
-
 fn not_found(name: &str, version: &str) -> ConnectError {
     let what = if version.is_empty() {
         format!("{name} (published)")
@@ -760,12 +683,12 @@ async fn resolves(
     d: graph_catalog::def::Domain,
 ) -> Result<Result<(), String>, ConnectError> {
     let rs = tx.domain_records().await.map_err(connect_error)?;
-    let mut ds: Vec<_> = in_force(&rs).into_iter().filter(|x| !is_builtin(&x.name)).collect();
+    let mut ds = in_force(&rs);
     match ds.iter_mut().find(|x| x.name == d.name) {
         Some(x) => *x = d,
         None => ds.push(d),
     }
-    Ok(Catalog::new(&ds).map(|_| ()))
+    Ok(Catalog::of(&ds).map(|_| ()))
 }
 
 /// The definition of a version under another number, as Go writes it again: its JSON with the version replaced in
@@ -1022,64 +945,200 @@ impl Sample {
     }
 }
 
+/// The `*.yaml` / `*.yml` files of a directory, in name order (Go's `filepath.Glob("*.y*ml")`).
+fn yaml_files(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> {
+    let mut files: Vec<_> = std::fs::read_dir(dir)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+            name.rsplit_once('.')
+                .is_some_and(|(_, ext)| ext.starts_with('y') && ext.ends_with("ml"))
+        })
+        .collect();
+    files.sort();
+    Ok(files)
+}
+
 impl Domains {
-    /// Publishes the domain versions of the `*.yaml` / `*.yml` files of a directory not stored yet (Go's
-    /// `Service.SeedDomains`, ADR 0113), as the graph service: what it stored, `name@version`, in the order of the
-    /// file names. A file that does not read, or a version with issues (kept as a draft), stops it.
-    pub async fn seed_domains(&self, dir: &std::path::Path) -> Result<Vec<String>, String> {
-        let mut files: Vec<_> = std::fs::read_dir(dir)
-            .map_err(|e| e.to_string())?
-            .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| {
-                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
-                // Go's filepath.Glob("*.y*ml")
-                name.rsplit_once('.')
-                    .is_some_and(|(_, ext)| ext.starts_with('y') && ext.ends_with("ml"))
+    /// Refuses a write over RPC to a protected domain (`Service.writable`, ADR 0167); the local command line and the
+    /// seeds write it.
+    async fn writable(&self, name: &str, local: bool) -> Result<(), ConnectError> {
+        if local {
+            return Ok(());
+        }
+        let tx = self
+            .state
+            .store
+            .reader()
+            .await
+            .map_err(|e| connect_error(GraphError::internal(e)))?;
+        if tx.protected_domains().await.map_err(connect_error)?.contains(name) {
+            return Err(protected_error(name));
+        }
+        Ok(())
+    }
+
+    /// Protects a domain or lifts its protection (`Service.Protect`): the local command line's, a name with no version
+    /// stored yet included.
+    pub async fn protect(&self, name: &str, on: bool, by: &str) -> Result<(), String> {
+        if name.is_empty() {
+            return Err("a domain name is required: invalid domain".into());
+        }
+        let tx = self.writer().await.map_err(|e| e.message().to_string())?;
+        let at = jsontext::time_text(&chrono::Utc::now());
+        tx.set_domain_protected(name, on, by, &at)
+            .await
+            .map_err(|e| e.message)?;
+        tx.commit().await.map_err(|e| GraphError::from(e).message)?;
+        Ok(())
+    }
+
+    /// The stored versions with their status and protection, for the command line: `(name, version, status,
+    /// protected)`, by name and creation.
+    pub async fn versions(&self) -> Result<Vec<(String, String, String, bool)>, String> {
+        let tx = self.state.store.reader().await.map_err(|e| e.to_string())?;
+        let mut rs = tx.domain_records().await.map_err(|e| e.message)?;
+        rs.sort_by(|a, b| {
+            a.domain
+                .name
+                .cmp(&b.domain.name)
+                .then(a.created_at.unwrap_or_default().cmp(&b.created_at.unwrap_or_default()))
+        });
+        let protected = tx.protected_domains().await.map_err(|e| e.message)?;
+        Ok(rs
+            .into_iter()
+            .map(|r| {
+                let p = protected.contains(&r.domain.name);
+                (r.domain.name, r.domain.version, r.status, p)
             })
-            .collect();
-        files.sort();
-        let mut loaded = Vec::new();
-        for f in files {
-            let shown = f.display().to_string();
-            let src = std::fs::read_to_string(&f).map_err(|e| format!("{shown}: {e}"))?;
-            let def = Definition::read(&src).map_err(|e| format!("{shown}: {e}"))?;
-            let tx = self.writer().await.map_err(|e| e.message().to_string())?;
-            if tx
+            .collect())
+    }
+
+    /// Publishes a domain version from its YAML as the local command line (`ImportDomain` on a local context): a
+    /// protected domain included. `None` when the version is stored already and `skip_stored`; a version with issues is
+    /// kept as a draft and refused.
+    pub async fn publish_local(&self, src: &str, skip_stored: bool, by: &str) -> Result<Option<String>, String> {
+        let def = Definition::read(src)?;
+        if def.name.is_empty() || def.version.is_empty() {
+            return Err("name and version are required: invalid domain".into());
+        }
+        let tx = self.writer().await.map_err(|e| e.message().to_string())?;
+        if skip_stored
+            && tx
                 .domain_status(&def.name, &def.version)
                 .await
                 .map_err(|e| e.message)?
                 .is_some()
-            {
-                continue;
-            }
-            if def.name.is_empty() || def.version.is_empty() {
-                return Err(format!("{shown}: name and version are required: invalid domain"));
-            }
-            if is_builtin(&def.name) {
-                return Err(format!("{shown}: {}", builtin_error(&def.name).message()));
-            }
-            let json = def.json.as_ref().map_err(|e| format!("{shown}: {e}"))?;
-            let domain = graph_catalog::Domain::from_json(json).map_err(|e| format!("{shown}: {e}"))?;
-            let issues = issues_of(&tx, &domain).await.map_err(|e| e.message().to_string())?;
-            let status = if issues.is_empty() {
-                STATUS_PUBLISHED
-            } else {
-                STATUS_DRAFT
-            };
-            self.store(tx, &def.name, &def.version, json, status, (SYSTEM_GRAPH, ""))
+        {
+            return Ok(None);
+        }
+        let json = def.json.as_ref().map_err(|e| e.to_string())?;
+        let domain = graph_catalog::Domain::from_json(json)?;
+        let issues = issues_of(&tx, &domain).await.map_err(|e| e.message().to_string())?;
+        let status = if issues.is_empty() {
+            STATUS_PUBLISHED
+        } else {
+            STATUS_DRAFT
+        };
+        self.store(tx, &def.name, &def.version, json, status, (by, ""))
+            .await
+            .map_err(|e| e.message().to_string())?;
+        if !issues.is_empty() {
+            return Err(format!("invalid domain: cannot publish: {}", issues_text(&issues)));
+        }
+        Ok(Some(format!("{}@{}", def.name, def.version)))
+    }
+
+    /// Publishes the domain versions of the files of a directory not stored yet (Go's `Service.SeedDomains`, ADR
+    /// 0113), as the local command line: what it stored, `name@version`, in the order of the file names. A file that
+    /// does not read, or a version with issues (kept as a draft), stops it.
+    pub async fn seed_domains(&self, dir: &std::path::Path) -> Result<Vec<String>, String> {
+        let mut loaded = Vec::new();
+        for f in yaml_files(dir)? {
+            let shown = f.display().to_string();
+            let src = std::fs::read_to_string(&f).map_err(|e| format!("{shown}: {e}"))?;
+            if let Some(d) = self
+                .publish_local(&src, true, SYSTEM_DOMAINS)
                 .await
-                .map_err(|e| format!("{shown}: {}", e.message()))?;
-            if !issues.is_empty() {
-                return Err(format!(
-                    "{shown}: invalid domain: cannot publish: {}",
-                    issues_text(&issues)
-                ));
+                .map_err(|e| format!("{shown}: {e}"))?
+            {
+                loaded.push(d);
             }
-            loaded.push(format!("{}@{}", def.name, def.version));
+        }
+        Ok(loaded)
+    }
+
+    /// Publishes the built-in domains of a directory whose version is not stored yet, and protects them (Go's
+    /// `Service.SeedBuiltinDomains`, ADR 0167). They reference each other, so a file is tried again once another one
+    /// landed; with no file found it fails: a registry without them cannot type a graph.
+    pub async fn seed_builtin_domains(&self, dir: &std::path::Path) -> Result<Vec<String>, String> {
+        let files = yaml_files(dir)?;
+        if files.is_empty() {
+            return Err(format!(
+                "no built-in domain in {} (GOAP_BUILTIN_DOMAINS_DIR): domain not found",
+                dir.display()
+            ));
+        }
+        let mut todo = Vec::new();
+        for f in files {
+            let shown = f.display().to_string();
+            let src = std::fs::read_to_string(&f).map_err(|e| format!("{shown}: {e}"))?;
+            let def = Definition::read(&src).map_err(|e| format!("{shown}: {e}"))?;
+            self.protect(&def.name, true, SYSTEM_DOMAINS).await?;
+            let tx = self.state.store.reader().await.map_err(|e| e.to_string())?;
+            if tx
+                .domain_status(&def.name, &def.version)
+                .await
+                .map_err(|e| e.message)?
+                .is_none()
+            {
+                todo.push((shown, src, def.name, def.version));
+            }
+        }
+        let mut loaded = Vec::new();
+        while !todo.is_empty() {
+            let mut left = Vec::new();
+            let mut last = String::new();
+            let before = todo.len();
+            for (shown, src, name, version) in todo {
+                match self.publish_local(&src, false, SYSTEM_DOMAINS).await {
+                    Ok(d) => loaded.extend(d),
+                    Err(e) => {
+                        last = format!("{shown}: {e}");
+                        // kept as a draft: removed, to be tried again whole
+                        let tx = self.writer().await.map_err(|e| e.message().to_string())?;
+                        tx.delete_domain_draft(&name, &version, &[])
+                            .await
+                            .map_err(|e| e.message)?;
+                        tx.commit().await.map_err(|e| GraphError::from(e).message)?;
+                        left.push((shown, src, name, version));
+                    }
+                }
+            }
+            if left.len() == before {
+                return Err(last);
+            }
+            todo = left;
         }
         Ok(loaded)
     }
 }
 
-/// The graph service acting by itself (`authz.System("graph")`).
-const SYSTEM_GRAPH: &str = "system:graph";
+/// The domain registry acting by itself (`authz.System("domains")`): the seeds and the command line.
+pub const SYSTEM_DOMAINS: &str = "system:domains";
+
+/// `GOAP_BUILTIN_DOMAINS_DIR`, else `<domains>/builtin` when it is a directory, else `lib/domains/builtin` (Go's
+/// `domainsvc.BuiltinDir`).
+pub fn builtin_dir(domains: &std::path::Path) -> std::path::PathBuf {
+    if let Ok(d) = std::env::var("GOAP_BUILTIN_DOMAINS_DIR")
+        && !d.is_empty()
+    {
+        return d.into();
+    }
+    let d = domains.join("builtin");
+    if d.is_dir() {
+        return d;
+    }
+    std::path::Path::new("lib").join("domains").join("builtin")
+}

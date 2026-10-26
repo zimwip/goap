@@ -284,13 +284,18 @@ fn strings(props: &crate::model::Props, k: &str) -> Option<Vec<String>> {
     }
 }
 
+/// The type catalogue a session was opened with (the registry's domains in force, ADR 0167); a session opened with
+/// none (tests), the built-in domains of a checkout.
+pub fn catalog_of<T: ReadTx>(tx: &T) -> std::sync::Arc<Catalog> {
+    tx.catalog().unwrap_or_else(Catalog::builtin)
+}
+
 impl Snapshot {
     /// Reads the snapshot of some nodes of the organisation and their outgoing links (`BuildSnapshot`, the types of the
-    /// structures those of the built-in catalogue).
-    pub fn build(nodes: &[crate::model::Node], links: &[crate::model::Link]) -> Snapshot {
+    /// structures those of the catalogue in force).
+    pub fn build(cat: &Catalog, nodes: &[crate::model::Node], links: &[crate::model::Link]) -> Snapshot {
         use graph_catalog::catalog::STRUCTURE_ORGANISATION;
         use std::collections::HashSet;
-        let cat = Catalog::builtin();
         let (Some(org), Some(proj)) = (cat.structure(STRUCTURE_ORGANISATION), cat.structure(STRUCTURE_PROJECT)) else {
             return Snapshot::default();
         };
@@ -420,13 +425,11 @@ impl Snapshot {
     /// the last change applied there wrote).
     pub async fn read<T: ReadTx>(tx: &T) -> Result<Snapshot> {
         use graph_catalog::catalog::STRUCTURE_ORGANISATION;
+        let cat = catalog_of(tx);
         if let Some(p) = tx.platform() {
-            return Ok(Snapshot::build(&p.organisation.nodes, &p.organisation.links));
+            return Ok(Snapshot::build(&cat, &p.organisation.nodes, &p.organisation.links));
         }
-        let Some(ns) = Catalog::builtin()
-            .structure(STRUCTURE_ORGANISATION)
-            .map(|s| s.namespace.clone())
-        else {
+        let Some(ns) = cat.structure(STRUCTURE_ORGANISATION).map(|s| s.namespace.clone()) else {
             return Ok(Snapshot::default());
         };
         let head = read::branch_head(tx, &ns, MAIN_BRANCH).await?;
@@ -440,7 +443,7 @@ impl Snapshot {
             .collect();
         let held: Vec<NodeRef> = nodes.iter().map(|n| n.node_ref()).collect();
         let links = tx.links_from(&held, None).await?;
-        Ok(Snapshot::build(&nodes, &links))
+        Ok(Snapshot::build(&cat, &nodes, &links))
     }
 
     /// What a level of criticality requires of the changes held by a unit: the policy of the nearest unit of its chain
@@ -780,7 +783,7 @@ mod tests {
             link(LINK_ASSIGNS_ORG, "d", "c"),
             link(LINK_ASSIGNS_PROJECT, "d", "q"),
         ];
-        let s = Snapshot::build(&nodes, &links);
+        let s = Snapshot::build(&Catalog::builtin(), &nodes, &links);
         assert_eq!(s.subject_chain("ann"), ["USR:ann", "TEAM", "ORG-DEFAULT"]);
         assert!(s.administers("ann"));
         assert!(!s.administers("bob"));

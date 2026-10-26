@@ -44,6 +44,8 @@ pub struct Session {
     sql: Sql,
     /// What the request read of the platform graph, in a content graph ([`ReadTx::platform`]).
     platform: Option<std::sync::Arc<graph_core::platform::Platform>>,
+    /// The type catalogue in force ([`ReadTx::catalog`]).
+    catalog: Option<std::sync::Arc<graph_catalog::Catalog>>,
     /// The versions kept between the transactions of the store, and what this one read ([`versions`]).
     versions: std::sync::Arc<Versions>,
     tx: versions::Read,
@@ -82,6 +84,12 @@ impl From<StoreError> for GraphError {
 }
 
 impl Session {
+    /// The session knowing the type catalogue in force.
+    pub fn with_catalog(mut self, c: std::sync::Arc<graph_catalog::Catalog>) -> Session {
+        self.catalog = Some(c);
+        self
+    }
+
     /// The session reading the platform's namespaces from what the request read of the platform graph.
     pub fn with_platform(mut self, p: Option<std::sync::Arc<graph_core::platform::Platform>>) -> Session {
         self.platform = p;
@@ -93,6 +101,7 @@ impl Session {
             conn: Conn::Pg(c),
             sql: Sql { pg: true },
             platform: None,
+            catalog: None,
             versions,
             tx: Default::default(),
         }
@@ -103,6 +112,7 @@ impl Session {
             conn: Conn::Sqlite(s),
             sql: Sql { pg: false },
             platform: None,
+            catalog: None,
             versions,
             tx: Default::default(),
         }
@@ -118,6 +128,7 @@ impl Session {
             conn: Conn::PgTx(Some(c)),
             sql: Sql { pg: true },
             platform: None,
+            catalog: None,
             versions,
             tx: Default::default(),
         })
@@ -128,6 +139,7 @@ impl Session {
             conn: Conn::SqliteTx(Some(t)),
             sql: Sql { pg: false },
             platform: None,
+            catalog: None,
             versions,
             tx: Default::default(),
         }
@@ -396,6 +408,10 @@ pub(crate) fn change_of(r: &Row) -> Result<Change, GraphError> {
 }
 
 impl ReadTx for Session {
+    fn catalog(&self) -> Option<std::sync::Arc<graph_catalog::Catalog>> {
+        self.catalog.clone()
+    }
+
     fn platform(&self) -> Option<&graph_core::platform::Platform> {
         self.platform.as_deref()
     }

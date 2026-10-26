@@ -11,6 +11,10 @@ description = "The Rust graph service (ADR 0163): the RPCs of the Go graph servi
 name = "goap-graph-rs"
 path = "src/bin/goap-graph-rs.rs"
 
+[[bin]]
+name = "goap-domains-rs"
+path = "src/bin/goap-domains-rs.rs"
+
 [dependencies]
 goap-connect = { workspace = true }
 graph-core = { workspace = true }

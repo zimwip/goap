@@ -16,23 +16,19 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/zimwip/goap/contracts/assess"
-	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/criticality"
 	"github.com/zimwip/goap/contracts/decision"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/importer/v1/importerv1connect"
-	"github.com/zimwip/goap/contracts/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/smarttag/v1/smarttagv1connect"
 	"github.com/zimwip/goap/contracts/risk"
 	"github.com/zimwip/goap/contracts/verify"
-	"github.com/zimwip/goap/graph/domainsvc"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/graph/graphsvc"
 	"github.com/zimwip/goap/graph/importsvc"
 	"github.com/zimwip/goap/graph/smarttagsvc"
 	"github.com/zimwip/goap/lib/access"
-	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/domainclient"
 	"github.com/zimwip/goap/lib/graphclient"
 	"github.com/zimwip/goap/lib/identity"
@@ -78,9 +74,10 @@ func main() {
 	log := platform.Logger("graph")
 	defer telemetry.Setup(context.Background(), log, "graph")(context.Background())
 	// two graph spaces (ADR 0154 §9): the platform graph (the default) holds the platform, the organisation and the
-	// methodologies, serves the domain registry and forwards the calls on the namespaces of GOAP_GRAPH_ROUTES to the
+	// methodologies and forwards the calls on the namespaces of GOAP_GRAPH_ROUTES to the
 	// graphs holding them; a content graph (GOAP_GRAPH_SPACE=content) holds the domains' content and reads the
-	// organisation, the projects and the domains from the platform graph at GOAP_PLATFORM_GRAPH_URL
+	// organisation and the projects from the platform graph at GOAP_PLATFORM_GRAPH_URL. Both read their domains from the
+	// domain registry, a service of its own (GOAP_DOMAINS_URL, ADR 0167)
 	content := platform.Env("GOAP_GRAPH_SPACE", "platform") == "content"
 	platformURL := os.Getenv("GOAP_PLATFORM_GRAPH_URL")
 	if content && platformURL == "" {
@@ -98,11 +95,10 @@ func main() {
 	}
 	var repo graph.Repo = graph.NewMemory()
 	memory := true
-	var domainStore domainsvc.Store = domainsvc.NewMemoryStore()
 	var smartTagStore smarttagsvc.Store = smarttagsvc.NewMemoryStore()
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	if path := os.Getenv("GOAP_SQLITE_PATH"); path != "" && os.Getenv("GOAP_DB_DSN") == "" {
-		// a SQLite file (the local stack of goap-local): the graph, its domain registry and its smart tags in it, the
+		// a SQLite file (the local stack of goap-local): the graph and its smart tags in it, the
 		// reads on read-only connections
 		db, err := platform.OpenSQLite(ctx, path)
 		if err != nil {
@@ -112,7 +108,7 @@ func main() {
 		for _, m := range []struct {
 			component string
 			fs        fs.FS
-		}{{"graph", graph.SQLiteMigrations}, {"registry", domainsvc.SQLiteMigrations}, {"smarttags", smarttagsvc.SQLiteMigrations}} {
+		}{{"graph", graph.SQLiteMigrations}, {"smarttags", smarttagsvc.SQLiteMigrations}} {
 			if err := platform.MigrateSQLite(ctx, db, m.component, m.fs, "migrations_sqlite"); err != nil {
 				platform.Fatal(log, "migrate "+m.component, err)
 			}
@@ -127,16 +123,11 @@ func main() {
 		defer read.Close()
 		repo = graph.NewSQLite(db).WithReader(read)
 		memory = false
-		domainStore = domainsvc.SQLStore{DB: db, Read: read}
 		smartTagStore = smarttagsvc.SQLStore{DB: db}
 		srv.Readiness(db.PingContext)
 		log.Info("storage", "sqlite", path)
 	} else if pool := platform.OptionalPostgres(ctx, log, graph.Migrations); pool != nil {
 		defer pool.Close()
-		// the domain registry keeps its versions next to the graph they define
-		if err := platform.Migrate(ctx, log, pool, domainsvc.Migrations, "migrations"); err != nil {
-			platform.Fatal(log, "migrate domains", err)
-		}
 		// the smart tags select versions of this graph, in a store of their own (ADR 0143 §7)
 		if err := platform.Migrate(ctx, log, pool, smarttagsvc.Migrations, "migrations"); err != nil {
 			platform.Fatal(log, "migrate smart tags", err)
@@ -153,7 +144,6 @@ func main() {
 			platform.Fatal(log, "database", err)
 		}
 		memory = false
-		domainStore = domainsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
 		smartTagStore = smarttagsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
 		srv.Readiness(pool.Ping)
 	}
@@ -174,51 +164,32 @@ func main() {
 		g.Origin = "graph-content"
 	}
 	outbox.Start(ctx, g.Observe(outbox.NATS(events)), log)
-	// the graph judges nodes by the types of the published domains (ADR 0012): the domain registry served here is the
-	// reference (ADR 0125 §3), the graph holds a copy reloaded when a version is published or archived; the methodology
-	// registry follows the same publications through the events
-	// the domain registry's events (a version saved, published, deleted) go through its outbox to the bus (ADR 0136)
-	domains := &domainsvc.Service{Store: domainStore}
-	outbox.Start(ctx, domains.Emit(outbox.NATS(events)), log)
-	types := typecat.NewLive(domains.Domains)
-	domains.Changed = func(ctx context.Context, r def.Record) {
-		if err := types.Reload(ctx); err != nil {
-			log.Error("type catalogue", "domain", r.Domain.Name, "err", err)
+	// the graph judges nodes by the types of the published domains (ADR 0012), read from the domain registry, a service
+	// of its own (ADR 0167): at start (loadTypes), then again on its events (a version published or archived); with no
+	// bus, every minute
+	client := domainclient.NewClient(platform.H2CClient(), platform.Env("GOAP_DOMAINS_URL", "http://localhost:8096"), telemetry.ClientOptions()...)
+	types := typecat.NewLive(client.Domains)
+	reload := func() {
+		// the client keeps what it read for its TTL: the event says it moved
+		client.Invalidate()
+		if err := types.Reload(context.Background()); err != nil {
+			log.Error("type catalogue", "err", err)
 		}
 	}
-	if content {
-		// the domains are the platform graph's: read from its registry, reloaded on its events
-		client := domainclient.NewClient(platform.H2CClient(), platformURL, telemetry.ClientOptions()...)
-		types = typecat.NewLive(client.Domains)
+	if events != nil {
 		for _, subject := range []string{"goap.registry.domain.published", "goap.registry.domain.deleted"} {
-			if err := events.Subscribe(subject, func([]byte) {
-				// the client keeps what it read for its TTL: the event says it moved
-				client.Invalidate()
-				if err := types.Reload(context.Background()); err != nil {
-					log.Error("type catalogue", "err", err)
-				}
-			}); err != nil {
+			if err := events.Subscribe(subject, func([]byte) { reload() }); err != nil {
 				platform.Fatal(log, "subscribe", err)
 			}
 		}
+	} else {
+		go func() {
+			for range time.Tick(time.Minute) {
+				reload()
+			}
+		}()
 	}
 	g.Types = func() graph.TypeCatalog { return types.Get() }
-	// every start publishes the domain versions of GOAP_DOMAINS_DIR not stored yet (ADR 0113), the built-in ones first,
-	// protected (ADR 0167): the graph types its nodes with what the registry holds, nothing compiled in
-	if dir := platform.Env("GOAP_DOMAINS_DIR", "domains"); dir != "" && !content {
-		system := authz.With(ctx, authz.System("graph", access.RoleAdmin))
-		builtins := domainsvc.BuiltinDir(dir)
-		if doms, err := domains.SeedBuiltinDomains(system, builtins); err != nil {
-			platform.Fatal(log, "built-in domains", err)
-		} else {
-			log.Info("built-in domains", "dir", builtins, "domains", doms)
-		}
-		if doms, err := domains.SeedDomains(system, dir); err != nil {
-			log.Error("import domains", "dir", dir, "err", err)
-		} else {
-			log.Info("domains imported", "dir", dir, "domains", doms)
-		}
-	}
 	// the hooks of the graph are set before the seeds start (they run in the background, and write through them).
 	// The platform graph delivers the policies, the organisation and the projects to every graph, itself included, the
 	// same way (ADR 0154 §9): a directory over the platform graph (this one in process, else its client) keeps its
@@ -265,10 +236,11 @@ func main() {
 	g.OperationAuthorizer = graphsvc.OperationAuthorizer(authorizer, registryOperationRoles(registry))
 	// SubChangeValidator and Lifecycles, the guardian of the changes (ADR 0058, 0102), need the registry service itself
 	// (its methodology store), which no composition holds in process any more; the registry client has no RPC for them, so this graph merges by the committable states of the domains only
-	// the built-in domains (organisation, platform) are always there; the demo seed needs alm. GOAP_GRAPH_SEED=dev seeds
+	// the bootstrap writes to the built-in domains (the registry's, ADR 0167: the graph waits for them); the demo seed
+	// needs alm. GOAP_GRAPH_SEED=dev seeds
 	// the development data (the document-repository MCP), =demo the demo data too; otherwise an administrator loads the
 	// demo from the settings (LoadDemoData)
-	var need []string
+	need := []string{"methodology", "organisation", "platform"}
 	seed := platform.Env("GOAP_GRAPH_SEED", "")
 	demo := seed == "demo"
 	if demo {
@@ -316,7 +288,7 @@ func main() {
 		return
 	case content:
 		// nothing to seed: the platform graph holds the platform data
-		go loadTypes(ctx, log, types, nil, func() {})
+		go loadTypes(ctx, log, types, need, func() {})
 	case memory || platform.Env("GOAP_GRAPH_BOOTSTRAP", "") == "1":
 		go loadTypes(ctx, log, types, need, func() {
 			if err := boot(); err != nil {
@@ -325,9 +297,8 @@ func main() {
 		})
 	default:
 		// bootstrapped by `graph bootstrap`; the catalogue is loaded all the same
-		go loadTypes(ctx, log, types, nil, func() {})
+		go loadTypes(ctx, log, types, need, func() {})
 	}
-	domains.Authz = authorizer
 	// the job service (ADR 0149): the exports, the snapshot imports and the imports from a source are its jobs; this
 	// process creates them with the services' token and runs the graph's kinds as a worker
 	jobs := jobkit.NewClient(platform.H2CClient(), platform.Env("GOAP_JOBS_URL", "http://localhost:8091"), os.Getenv("GOAP_JOB_TOKEN"), telemetry.ClientOptions()...)
@@ -340,7 +311,7 @@ func main() {
 	// the exports and imports of the graph's namespaces, a worker of the job service
 	go (&jobkit.Worker{Queue: jobs, ID: jobkit.WorkerID("graph"), Kinds: graphHandler.JobRunners(), Log: log}).Run(ctx)
 	if content {
-		// the domain registry, the smart tags and the imports are the platform graph's (a smart tag of a content
+		// the smart tags and the imports are the platform graph's (a smart tag of a content
 		// graph's versions: a step to come of ADR 0154)
 		srv.Mount(path, platform.ReadOnlyRequests(graphService))
 		if err := srv.Run(); err != nil {
@@ -353,11 +324,10 @@ func main() {
 	graphService = &graphsvc.Router{Local: graphService, Sources: g.Sources, LocalSource: graphsvc.PlatformSource, Client: platform.H2CClient(), HasChange: g.HasChange}
 	// the requests that only read (Get…, List…: platform.ReadOnlyRequests) take the readers of the store
 	srv.Mount(path, platform.ReadOnlyRequests(graphService))
-	srv.Mount(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: domains}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	smartTags := &smarttagsvc.Service{Store: smartTagStore, Exists: smarttagsvc.VersionsExist(g.Node)}
 	srv.Mount(smarttagv1connect.NewSmartTagServiceHandler(&smarttagsvc.Handler{Service: smartTags}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	// the import registry (ADR 0148): a run is a job of the job service, an importer available when a worker claims it
-	imports := &importsvc.Service{Domains: domains, Authz: authorizer, Jobs: jobs}
+	imports := &importsvc.Service{Domains: client, Authz: authorizer, Jobs: jobs}
 	srv.Mount(importerv1connect.NewImportServiceHandler(&importsvc.Handler{Service: imports}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)

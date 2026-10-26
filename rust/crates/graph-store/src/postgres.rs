@@ -5,7 +5,7 @@ use std::time::Duration;
 use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use tokio_postgres::NoTls;
 
-use crate::{StoreError, migrate};
+use crate::{StoreError, migrate, migrate::Part};
 
 pub struct Postgres {
     pub write: Pool,
@@ -27,7 +27,7 @@ fn pool(cfg: tokio_postgres::Config, size: usize) -> Result<Pool, StoreError> {
 
 impl Postgres {
     /// Connects (retrying for twenty seconds, as the Go service does while the database starts) and migrates.
-    pub async fn open(dsn: &str) -> Result<Postgres, StoreError> {
+    pub async fn open(dsn: &str, part: Part) -> Result<Postgres, StoreError> {
         let cfg: tokio_postgres::Config = dsn.parse()?;
         let size = std::thread::available_parallelism().map_or(8, |n| n.get() * 4).max(8);
         let write = pool(cfg.clone(), size)?;
@@ -52,12 +52,12 @@ impl Postgres {
             read,
             versions: Default::default(),
         };
-        pg.migrate().await?;
+        pg.migrate(part).await?;
         drop(pg.read.get().await?);
         Ok(pg)
     }
 
-    async fn migrate(&self) -> Result<(), StoreError> {
+    async fn migrate(&self, part: Part) -> Result<(), StoreError> {
         let mut conn = self.write.get().await?;
         conn.batch_execute("SELECT pg_advisory_lock(hashtext(current_schema()))")
             .await?;
@@ -66,7 +66,7 @@ impl Postgres {
                 "CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())",
             )
             .await?;
-            for (component, files) in migrate::sets(true) {
+            for (component, files) in migrate::sets(true, part) {
                 for (name, sql) in files {
                     let done: bool = conn
                         .query_one("SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE name = $1)", &[name])

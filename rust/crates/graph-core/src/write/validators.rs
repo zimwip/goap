@@ -41,6 +41,7 @@ pub(super) struct Validated<'a> {
 /// The state a commit leaves, read the way the validators ask it (Go's `txQuery`): the nodes of the namespace of the
 /// organisation it holds and their outgoing links.
 struct Query {
+    cat: std::sync::Arc<Catalog>,
     nodes: Vec<Node>,
     links: HashMap<NodeRef, Vec<Link>>,
 }
@@ -48,7 +49,8 @@ struct Query {
 impl Query {
     async fn read<T: ReadTx>(tx: &T, state: &HashMap<NodeId, Version>) -> Result<Query> {
         let refs: Vec<NodeRef> = state.iter().map(|(id, v)| NodeRef::new(id.clone(), *v)).collect();
-        let ns = Catalog::builtin()
+        let cat = crate::access::catalog_of(tx);
+        let ns = cat
             .structure(STRUCTURE_ORGANISATION)
             .map(|s| s.namespace.clone())
             .unwrap_or_default();
@@ -63,7 +65,7 @@ impl Query {
         for l in tx.links_from(&held, None).await? {
             links.entry(l.from.clone()).or_default().push(l);
         }
-        Ok(Query { nodes, links })
+        Ok(Query { cat, nodes, links })
     }
 
     fn of_types(&self, types: &[&str]) -> Vec<&Node> {
@@ -103,8 +105,7 @@ fn flag(props: &Props, k: &str) -> bool {
 }
 
 /// The types a structure's nodes are, the organisation's units, users, Assignments, then the projects.
-fn access_types(with_projects: bool) -> Vec<String> {
-    let cat = Catalog::builtin();
+fn access_types(cat: &Catalog, with_projects: bool) -> Vec<String> {
     let mut out = vec![TYPE_USER.to_string(), TYPE_ASSIGNMENT.to_string()];
     if let Some(s) = cat.structure(STRUCTURE_ORGANISATION) {
         out.push(s.typ.clone());
@@ -120,14 +121,14 @@ fn after(q: &Query, types: &[String]) -> Snapshot {
     let types: Vec<&str> = types.iter().map(String::as_str).collect();
     let nodes: Vec<Node> = q.of_types(&types).into_iter().cloned().collect();
     let links: Vec<Link> = nodes.iter().flat_map(|n| q.links_of(&n.node_ref()).to_vec()).collect();
-    Snapshot::build(&nodes, &links)
+    Snapshot::build(&q.cat, &nodes, &links)
 }
 
 /// The snapshots as the commit leaves the organisation and as it found it (`snapshots`): each node written taken back
 /// to the version it started from, left out when the commit creates it.
 async fn snapshots<T: ReadTx>(tx: &T, q: &Query, impacted: &[&Validated<'_>]) -> Result<(Snapshot, Snapshot)> {
     let written: HashMap<&NodeId, Option<&Node>> = impacted.iter().map(|v| (&v.post.id, v.pre.as_ref())).collect();
-    let types = access_types(true);
+    let types = access_types(&q.cat, true);
     let types: Vec<&str> = types.iter().map(String::as_str).collect();
     let (mut nodes, mut links, mut was, mut was_links) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for n in q.of_types(&types) {
@@ -146,7 +147,10 @@ async fn snapshots<T: ReadTx>(tx: &T, q: &Query, impacted: &[&Validated<'_>]) ->
             Some(None) => {}
         }
     }
-    Ok((Snapshot::build(&nodes, &links), Snapshot::build(&was, &was_links)))
+    Ok((
+        Snapshot::build(&q.cat, &nodes, &links),
+        Snapshot::build(&q.cat, &was, &was_links),
+    ))
 }
 
 impl<S: WriteTx> Tx<'_, S> {
@@ -351,7 +355,7 @@ impl<T: ReadTx> Scope<'_, T> {
 /// At least one active user administers the platform as the commit leaves it, unless there is no user at all
 /// (`AdminFloorValidator`).
 fn admin_floor(q: &Query) -> Result<()> {
-    let snap = after(q, &access_types(false));
+    let snap = after(q, &access_types(&q.cat, false));
     let mut users = false;
     for n in q.of_types(&[TYPE_USER]) {
         users = true;

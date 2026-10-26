@@ -5,12 +5,13 @@
 //! other wrote). Each dialect keeps a writer and a pool of read-only connections: a request that only reads takes a
 //! reader, and a write met there runs again on the writer ([`StoreError::is_read_only`]).
 mod error;
-mod migrate;
+pub mod migrate;
 mod postgres;
 pub mod read;
 mod sqlite;
 
 pub use error::StoreError;
+pub use migrate::Part;
 pub use postgres::Postgres;
 pub use sqlite::Sqlite;
 
@@ -59,12 +60,22 @@ pub enum Store {
 }
 
 impl Store {
-    /// Connects and migrates.
+    /// Connects and migrates the graph's tables.
     pub async fn open(cfg: &StoreConfig) -> Result<Store, StoreError> {
+        Store::open_part(cfg, Part::Graph).await
+    }
+
+    /// Connects and migrates the domain registry's tables (ADR 0167).
+    pub async fn open_domains(cfg: &StoreConfig) -> Result<Store, StoreError> {
+        Store::open_part(cfg, Part::Domains).await
+    }
+
+    /// Connects and migrates the tables of a part.
+    pub async fn open_part(cfg: &StoreConfig, part: Part) -> Result<Store, StoreError> {
         Ok(match cfg {
-            StoreConfig::Postgres { dsn } => Store::Postgres(Postgres::open(dsn).await?),
-            StoreConfig::Sqlite { path, readers } => Store::Sqlite(Sqlite::open(path, *readers).await?),
-            StoreConfig::Memory => Store::Sqlite(Sqlite::memory().await?),
+            StoreConfig::Postgres { dsn } => Store::Postgres(Postgres::open(dsn, part).await?),
+            StoreConfig::Sqlite { path, readers } => Store::Sqlite(Sqlite::open(path, *readers, part).await?),
+            StoreConfig::Memory => Store::Sqlite(Sqlite::memory(part).await?),
         })
     }
 

@@ -64,6 +64,22 @@ services:
     volumes: ["../vault/init.sh:/init.sh:ro,z"]
     entrypoint: ["/bin/sh", "/init.sh"]
 
+  # the domain registry (ADR 0125 §3, ADR 0167), a service of its own in the Rust image (goap-domains-rs): it publishes the
+  # built-in domains (protected: no write over RPC) and the shipped ones at start; the graphs read it at their start
+  # and follow its events. `docker compose exec domains /goap/goap-domains-rs publish|protect|unprotect|list ...` writes
+  # its database directly.
+  domains:
+    <<: *service
+    image: goap/rust:dev
+    entrypoint: ["/goap/goap-domains-rs"]
+    environment:
+      <<: *env
+      GOAP_DB_DSN: postgres://domains:domains@postgres:5432/goap?sslmode=disable
+      GOAP_DOMAINS_DIR: /domains
+      # who may write a domain: the organisation's rules, read from the platform graph
+      GOAP_GRAPH_URL: http://graph:8080
+    ports: ["8096:8080"]
+
   # the graph services run the Rust graph service (ADR 0163), image goap/rust:dev (Dockerfile, target rust), built by
   # `make up` with goap/goap:dev
   # the platform bootstrap (ADR 0154 §9): `goap-graph-rs bootstrap` writes the roots of the organisation and the
@@ -80,8 +96,8 @@ services:
       GOAP_DB_DSN: postgres://graph:graph@postgres:5432/goap?sslmode=disable
       # dev: the document-repository MCP; demo: the demo data too (else loaded from the settings, "Load demo data")
       GOAP_GRAPH_SEED: dev
-      # the domain registry is the graph's (ADR 0125 §3): it publishes the shipped domains at start
-      GOAP_DOMAINS_DIR: /domains
+      # the domain registry (ADR 0167): the types of the graph, read at start then on its events
+      GOAP_DOMAINS_URL: http://domains:8080
       # the graphs the platform graph drives (ADR 0154 §9): declared as sources of kind graph by the bootstrap, then
       # edited in Settings -> Sources; the calls on their namespaces go to them
       GOAP_GRAPH_SOURCES: content=alm,code@http://graph-content:8080
@@ -99,10 +115,11 @@ services:
     depends_on:
       <<: *deps
       graph-bootstrap: {condition: service_completed_successfully}
+      domains: {condition: service_started}
     ports: ["8081:8080"]
 
-  # the content graph (ADR 0154 §9): the domains' content and its changes, on a database of its own; the organisation,
-  # the projects and the domains are the platform graph's. Every caller goes through the platform graph.
+  # the content graph (ADR 0154 §9): the domains' content and its changes, on a database of its own; the organisation
+  # and the projects are the platform graph's, the domains the domain registry's. Every caller goes through the platform graph.
   graph-content:
     <<: *service
     image: goap/rust:dev
@@ -111,6 +128,7 @@ services:
       <<: *env
       GOAP_GRAPH_SPACE: content
       GOAP_PLATFORM_GRAPH_URL: http://graph:8080
+      GOAP_DOMAINS_URL: http://domains:8080
       GOAP_REGISTRY_URL: http://registry:8080
       GOAP_JOBS_URL: http://jobs:8080
       GOAP_JOB_TOKEN: ${GOAP_JOB_TOKEN:-dev-job-token}
@@ -127,6 +145,7 @@ services:
       <<: *env
       GOAP_METHODOLOGIES_DIR: /methodologies
       GOAP_GRAPH_URL: http://graph:8080
+      GOAP_DOMAINS_URL: http://domains:8080
     ports: ["8082:8080"]
 
   modelgw:
@@ -214,6 +233,7 @@ services:
       # processes shared by the engine replicas (ADR 0124)
       GOAP_DB_DSN: postgres://engine:engine@postgres:5432/goap?sslmode=disable
       GOAP_GRAPH_URL: http://graph:8080
+      GOAP_DOMAINS_URL: http://domains:8080
       GOAP_REGISTRY_URL: http://registry:8080
       GOAP_MODELGW_URL: http://modelgw:8080
       GOAP_MCP_URL: http://mcp:8080
@@ -276,6 +296,7 @@ services:
       <<: *env
       GOAP_DB_DSN: postgres://mcp:mcp@postgres:5432/goap?sslmode=disable
       GOAP_GRAPH_URL: http://graph:8080
+      GOAP_DOMAINS_URL: http://domains:8080
       # the built-in connectors (ADR 0028) call the platform's own services
       GOAP_ENGINE_URL: http://engine:8080
       GOAP_REGISTRY_URL: http://registry:8080
@@ -324,6 +345,7 @@ services:
       GOAP_DEV_TOKENS: "true"
       GOAP_CORS_ORIGINS: http://localhost:5173
       GOAP_GRAPH_URL: http://graph:8080
+      GOAP_DOMAINS_URL: http://domains:8080
       GOAP_REGISTRY_URL: http://registry:8080
       GOAP_ENGINE_URL: http://engine:8080
       GOAP_MODELGW_URL: http://modelgw:8080

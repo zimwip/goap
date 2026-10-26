@@ -1,22 +1,39 @@
 use std::sync::Arc;
 
-use graph_service::{State, app};
+use graph_service::{State, app, domains_app};
 use graph_store::{Store, StoreConfig};
 
-async fn serve() -> String {
+/// A graph on a database in memory, its domains read from a registry in this process (ADR 0167): the graph's state,
+/// the registry's.
+async fn states() -> (Arc<State>, Arc<State>) {
     let store = Store::open(&StoreConfig::Memory).await.unwrap();
+    let (graph, registry) = State::with_local_domains(store, &graph_catalog::catalog::builtin_dir())
+        .await
+        .unwrap();
+    (Arc::new(graph), registry)
+}
+
+async fn listen(router: axum::Router) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    tokio::spawn(axum::serve(listener, app(Arc::new(State::new(store)))).into_future());
+    tokio::spawn(axum::serve(listener, router).into_future());
     format!("http://{addr}")
+}
+
+/// The graph service and the domain registry, each at its address.
+async fn serve() -> (String, String) {
+    let (graph, registry) = states().await;
+    (listen(app(graph)).await, listen(domains_app(registry)).await)
 }
 
 #[tokio::test]
 async fn health_and_the_guards_judged_here() {
-    let base = serve().await;
+    let (graph, base) = serve().await;
     let c = reqwest::Client::new();
-    assert_eq!(c.get(format!("{base}/healthz")).send().await.unwrap().status(), 200);
-    assert_eq!(c.get(format!("{base}/readyz")).send().await.unwrap().status(), 200);
+    for b in [&graph, &base] {
+        assert_eq!(c.get(format!("{b}/healthz")).send().await.unwrap().status(), 200);
+        assert_eq!(c.get(format!("{b}/readyz")).send().await.unwrap().status(), 200);
+    }
     // a guard that does not parse is refused at its path; one that parses is accepted
     let validate = |guard: &str| {
         let d = serde_json::json!({"domain": {"name": "d", "version": "1",
@@ -59,7 +76,7 @@ async fn call(base: &str, method: &str, subject: Option<&str>, body: serde_json:
 
 #[tokio::test]
 async fn reads_of_a_service_and_of_a_person() {
-    let base = serve().await;
+    let (base, _) = serve().await;
     let svc = Some("system:test");
     // an anonymous call is refused, as the Go service's Identify does
     let (status, body) = call(&base, "GetNode", None, serde_json::json!({})).await;
@@ -124,7 +141,7 @@ async fn tags(base: &str, method: &str, subject: &str, body: serde_json::Value) 
 
 #[tokio::test]
 async fn smart_tags_are_their_owners_and_shared() {
-    let base = serve().await;
+    let (base, _) = serve().await;
     let (status, body) = tags(
         &base,
         "CreateSmartTag",
@@ -186,8 +203,7 @@ const ADMIN: &str = "system:test-admin";
 
 #[tokio::test]
 async fn a_partial_commit_writes_the_nodes_named() {
-    let store = Store::open(&StoreConfig::Memory).await.unwrap();
-    let state = Arc::new(State::new(store));
+    let (state, _registry) = states().await;
     graph_service::Graph { state: state.clone() }
         .boot(&Default::default())
         .await
@@ -268,8 +284,7 @@ async fn a_partial_commit_writes_the_nodes_named() {
 
 #[tokio::test]
 async fn a_commit_rebases_its_drafts_onto_the_head() {
-    let store = Store::open(&StoreConfig::Memory).await.unwrap();
-    let state = Arc::new(State::new(store));
+    let (state, _registry) = states().await;
     graph_service::Graph { state: state.clone() }
         .boot(&Default::default())
         .await
@@ -391,4 +406,49 @@ async fn a_commit_rebases_its_drafts_onto_the_head() {
     let rs = ok("GetRebaseState", serde_json::json!({"changeId": c})).await;
     assert_eq!(rs["conflicts"][0]["changeImpactId"], c_impact.as_str(), "{rs}");
     assert_eq!(at_main().await["version"], b_head["version"]);
+}
+
+#[tokio::test]
+async fn a_protected_domain_refuses_every_write_over_rpc() {
+    let (_, base) = serve().await;
+    let c = reqwest::Client::new();
+    let post = |method: &str, body: serde_json::Value| {
+        c.post(format!("{base}/goap.registry.v1.DomainService/{method}"))
+            .header("content-type", "application/json")
+            .header("x-goap-subject", ADMIN)
+            .header("x-goap-roles", "admin")
+            .body(body.to_string())
+            .send()
+    };
+    // the built-in domains are stored, published and protected
+    let res = post("GetDomain", serde_json::json!({"name": "organisation"}))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["domain"]["status"], "published", "{body}");
+    assert_eq!(body["domain"]["protected"], true, "{body}");
+    for (method, body) in [
+        (
+            "SaveDomain",
+            serde_json::json!({"domain": {"name": "organisation", "version": "99", "nodeTypes": [{"name": "X"}]}}),
+        ),
+        (
+            "DeleteDomain",
+            serde_json::json!({"name": "organisation", "version": ""}),
+        ),
+        (
+            "CreateDomainVersion",
+            serde_json::json!({"name": "organisation", "newVersion": "99"}),
+        ),
+    ] {
+        let res = post(method, body).await.unwrap();
+        assert_eq!(res.status(), 400, "{method}");
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(body["code"], "failed_precondition", "{method}: {body}");
+        assert!(
+            body["message"].as_str().unwrap_or_default().contains("is protected"),
+            "{method}: {body}"
+        );
+    }
 }

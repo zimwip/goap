@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -36,6 +37,8 @@ const (
 	// behind goap-proxy, which takes portGraph, the graph services take these
 	portGraphGo   = 8094
 	portGraphRust = 8095
+	// the domain registry, a service of its own (ADR 0167)
+	portDomains = 8096
 )
 
 func url(port int) string { return fmt.Sprintf("http://127.0.0.1:%d", port) }
@@ -49,6 +52,21 @@ type graphImpl struct {
 	port int
 	// db is its SQLite file
 	db string
+}
+
+// domainsService is the domain registry the graphs read (ADR 0167): the implementation of -graph (Go's behind a proxy,
+// which compares the graphs only), on its own SQLite file, seeding the built-in domains and those of domains/.
+func (c config) domainsService(env map[string]string) service {
+	bin := "domains"
+	if c.proxy == "" && c.graph == "rust" {
+		bin = "goap-domains-rs"
+	}
+	env["GOAP_HTTP_ADDR"] = addr(portDomains)
+	env["GOAP_SQLITE_PATH"] = filepath.Join(c.dir, "domains.db")
+	env["GOAP_DOMAINS_DIR"] = filepath.Join(c.root, "domains")
+	env["GOAP_BUILTIN_DOMAINS_DIR"] = filepath.Join(c.root, "lib", "domains", "builtin")
+	env["GOAP_LOG_FORMAT"] = "text"
+	return service{name: "domains", bin: bin, port: portDomains, ready: "/readyz", env: env}
 }
 
 // graphs are the graph services of the stack and the URL its clients call: the one of -graph on portGraph, or
@@ -161,6 +179,7 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 		return err
 	}
 	graphs, graphURL := cfg.graphs()
+	domainsURL := url(portDomains)
 	common := func(port int, extra map[string]string) map[string]string {
 		env := map[string]string{
 			"GOAP_NATS_URL":   cfg.natsURL(),
@@ -181,7 +200,7 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 	platformGraph := func(g graphImpl) map[string]string {
 		return common(g.port, map[string]string{
 			"GOAP_SQLITE_PATH":   g.db,
-			"GOAP_DOMAINS_DIR":   filepath.Join(cfg.root, "domains"),
+			"GOAP_DOMAINS_URL":   domainsURL,
 			"GOAP_GRAPH_SEED":    envOr("GOAP_GRAPH_SEED", "dev"),
 			"GOAP_GRAPH_SOURCES": sources,
 			"GOAP_JOBS_URL":      url(portJobs),
@@ -189,8 +208,16 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 			"GOAP_REGISTRY_URL":  url(portRegistry),
 		})
 	}
-	// the graphs, then everything else: started in the order of their dependencies
+	// the domain registry, the graphs, then everything else: started in the order of their dependencies
 	var all []service
+	// the domain registry reads the organisation's rules from the graph only when a person writes a domain, the graphs
+	// read its domains at their start (ADR 0167)
+	domains := cfg.domainsService(common(0, map[string]string{"GOAP_GRAPH_URL": graphURL}))
+	domains.lazy = []string{"proxy"}
+	for _, g := range graphs {
+		domains.lazy = append(domains.lazy, "graph-"+g.name)
+	}
+	all = append(all, domains)
 	for _, g := range graphs {
 		// the registry, the jobs and the content graph are called once serving; the registry calls the graph at start
 		all = append(all, service{name: "graph-" + g.name, bin: g.bin, port: g.port, env: platformGraph(g),
@@ -203,6 +230,7 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 		all = append(all, service{name: "graph-content", bin: graphs[0].bin, port: portContent, env: common(portContent, map[string]string{
 			"GOAP_GRAPH_SPACE":        "content",
 			"GOAP_PLATFORM_GRAPH_URL": graphURL,
+			"GOAP_DOMAINS_URL":        domainsURL,
 			"GOAP_REGISTRY_URL":       url(portRegistry),
 			"GOAP_JOBS_URL":           url(portJobs),
 			"GOAP_JOB_TOKEN":          sec.jobs,
@@ -218,7 +246,7 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 		service{name: "jobs", bin: "jobs", port: portJobs, env: common(portJobs, map[string]string{
 			"GOAP_SQLITE_PATH": db("jobs"), "GOAP_JOB_TOKEN": sec.jobs})},
 		service{name: "registry", bin: "registry", port: portRegistry, env: common(portRegistry, map[string]string{
-			"GOAP_METHODOLOGIES_DIR": filepath.Join(cfg.root, "methodologies"), "GOAP_GRAPH_URL": graphURL})},
+			"GOAP_METHODOLOGIES_DIR": filepath.Join(cfg.root, "methodologies"), "GOAP_GRAPH_URL": graphURL, "GOAP_DOMAINS_URL": domainsURL})},
 		service{name: "modelgw", bin: "modelgw", port: portModelGW, env: common(portModelGW, map[string]string{
 			"GOAP_SQLITE_PATH": db("modelgw"), "GOAP_GRAPH_URL": graphURL, "GOAP_MODEL_PROXY_SECRET": sec.modelProxy})},
 		service{name: "preferences", bin: "preferences", port: portPreferences, env: common(portPreferences, map[string]string{
@@ -234,11 +262,11 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 			"GOAP_GRAPH_URL": graphURL})},
 		service{name: "mcp", bin: "mcp", port: portMCP, env: common(portMCP, map[string]string{
 			"GOAP_SQLITE_PATH": db("mcp"), "GOAP_GRAPH_URL": graphURL, "GOAP_ENGINE_URL": url(portEngine),
-			"GOAP_REGISTRY_URL": url(portRegistry), "GOAP_CONNECTOR_TOKEN": sec.connectors,
+			"GOAP_REGISTRY_URL": url(portRegistry), "GOAP_CONNECTOR_TOKEN": sec.connectors, "GOAP_DOMAINS_URL": domainsURL,
 			"GOAP_MODEL_PROXY_SECRET": sec.modelProxy, "GOAP_MODEL_PROXY_URL": url(portModelGW) + "/anthropic"}),
 			lazy: []string{"engine"}}, // the engine calls the hub at start, the hub calls the engine back when asked
 		service{name: "engine", bin: "engine", port: portEngine, env: common(portEngine, map[string]string{
-			"GOAP_SQLITE_PATH": db("engine"), "GOAP_GRAPH_URL": graphURL, "GOAP_REGISTRY_URL": url(portRegistry),
+			"GOAP_SQLITE_PATH": db("engine"), "GOAP_GRAPH_URL": graphURL, "GOAP_REGISTRY_URL": url(portRegistry), "GOAP_DOMAINS_URL": domainsURL,
 			"GOAP_MODELGW_URL": url(portModelGW), "GOAP_MCP_URL": url(portMCP), "GOAP_RUNTIME_URL": url(portEngine)})},
 		service{name: "connector-localfs", bin: "connector-localfs", port: portLocalFS, env: common(portLocalFS, map[string]string{
 			"GOAP_MCP_URL": url(portMCP), "GOAP_CONNECTOR_URL": url(portLocalFS), "GOAP_CONNECTOR_TOKEN": sec.connectors,
@@ -252,6 +280,7 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 			"GOAP_CORS_ORIGINS":      "http://localhost:5173",
 			"GOAP_JWT_SECRET":        sec.jwt,
 			"GOAP_GRAPH_URL":         graphURL,
+			"GOAP_DOMAINS_URL":       domainsURL,
 			"GOAP_REGISTRY_URL":      url(portRegistry),
 			"GOAP_ENGINE_URL":        url(portEngine),
 			"GOAP_MODELGW_URL":       url(portModelGW),
@@ -313,6 +342,18 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 			log.Warn("npm install failed, the web runs on the modules in place", "err", err)
 		}
 	}
+	// the domain registry first: the bootstrap and the graphs read their domains there (ADR 0167)
+	var rest []service
+	for _, svc := range started {
+		if svc.name != "domains" {
+			svc.after = slices.DeleteFunc(slices.Clone(svc.after), func(n string) bool { return n == "domains" })
+			rest = append(rest, svc)
+			continue
+		}
+		if err := sup.start(ctx, svc); err != nil {
+			return err
+		}
+	}
 	// the platform bootstrap, once per database (shadow: the Go service's)
 	booted := map[string]bool{}
 	for _, g := range graphs {
@@ -324,7 +365,7 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 			return err
 		}
 	}
-	if err := sup.startAll(ctx, started); err != nil {
+	if err := sup.startAll(ctx, rest); err != nil {
 		if ready != nil || ctx.Err() != nil {
 			return err
 		}

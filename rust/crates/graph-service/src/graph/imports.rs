@@ -12,7 +12,7 @@ use goap_proto::importer::v1 as ipb;
 use goap_proto::jobs::v1 as jobspb;
 use goap_proto::jobs::v1::JobService as _;
 use goap_proto::registry::v1 as rpb;
-use graph_catalog::{catalog::AttributeCheck, def, record::in_force};
+use graph_catalog::{catalog::AttributeCheck, def};
 use graph_core::write::check::check_value;
 use serde::Deserialize;
 use serde_json::{Map, Value as Json, json};
@@ -76,9 +76,7 @@ impl Imports {
 
     /// The latest published version of each domain (`domainsvc.Service.Domains`).
     async fn domains(&self) -> Result<Vec<def::Domain>, ConnectError> {
-        let tx = self.state.store.reader().await.map_err(internal)?;
-        let rs = tx.domain_records().await.map_err(connect_error)?;
-        Ok(in_force(&rs))
+        self.state.domains_in_force().await.map_err(connect_error)
     }
 
     /// The importer `d/i` the domains in force declare, with its domain.
@@ -121,7 +119,7 @@ impl Imports {
 
     /// import:run of `d/i` on the project for the caller (`authz.Check`).
     async fn authorize(&self, c: &Caller, d: &str, i: &str, project: &str) -> Result<(), ConnectError> {
-        let tx = self.state.store.reader().await.map_err(internal)?;
+        let tx = self.state.reader().await.map_err(connect_error)?;
         let snap = access::Snapshot::read(&tx).await.map_err(connect_error)?;
         let res = abac::Resource {
             typ: "import".into(),

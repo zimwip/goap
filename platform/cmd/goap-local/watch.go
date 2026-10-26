@@ -22,11 +22,11 @@ var goModules = []string{"contracts", "lib", "graph", "engine", "mcp", "gateway"
 const modulePath = "github.com/zimwip/goap/"
 
 // The binaries built by cargo: the graph service and the proxy.
-var cargoBinaries = map[string]string{"goap-graph-rs": "graph-service", "goap-proxy": "goap-proxy"}
+var cargoBinaries = map[string]string{"goap-graph-rs": "graph-service", "goap-domains-rs": "graph-service", "goap-proxy": "goap-proxy"}
 
 // watcher rebuilds what a change of the sources touches and restarts the services running it (-watch, make dev):
-// the Go binaries depending on a package changed, the Rust ones on a change of rust/, the graph services on a change
-// of domains/ (they publish the shipped domains at start), the registry on one of methodologies/.
+// the Go binaries depending on a package changed, the Rust ones on a change of rust/, the domain registry on a change
+// of domains/ or of the built-in domains (it publishes them at start, ADR 0167), the registry on one of methodologies/.
 type watcher struct {
 	cfg      config
 	sup      *supervisor
@@ -132,7 +132,7 @@ func (w *watcher) scan() map[string]stamp {
 		}
 		return false
 	})
-	for _, dir := range []string{"domains", "methodologies"} {
+	for _, dir := range []string{"domains", "methodologies", "lib/domains/builtin"} {
 		walk(dir, func(rel string) bool { return strings.HasSuffix(rel, ".yaml") && !strings.Contains(rel, "/examples/") })
 	}
 	return out
@@ -166,12 +166,8 @@ func (w *watcher) apply(ctx context.Context, changed []string) {
 		switch {
 		case top == "rust":
 			rust = true
-		case top == "domains":
-			for _, s := range w.services {
-				if s.bin == "goap-graph-rs" || s.bin == "graph" {
-					restart[s.name] = true
-				}
-			}
+		case top == "domains" || strings.HasPrefix(f, "lib/domains/builtin/") && strings.HasSuffix(f, ".yaml"):
+			restart["domains"] = true
 		case top == "methodologies":
 			restart["registry"] = true
 		case slices.Contains(goModules, top):

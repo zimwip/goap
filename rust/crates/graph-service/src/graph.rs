@@ -295,7 +295,7 @@ impl Access {
     /// write; the Assignments and the projects are also the owners' and administrators' of the caller's active
     /// project, whose writes the validators of the organisation then judge at the commit (`ProjectScopeValidator`).
     fn gate_access(&self, catalog: &Catalog, typ: &str) -> Result<(), GraphError> {
-        if !(catalog.admin_only(typ) || Catalog::builtin().admin_only(typ)) || self.administers()? {
+        if !catalog.admin_only(typ) || self.administers()? {
             return Ok(());
         }
         let res = match typ {
@@ -1334,7 +1334,7 @@ impl pb::GraphService for Graph {
         let cat = self.catalog().await?;
         let t = req.into_inner().r#type;
         stamp.on(Ok(Response::new(pb::IsAdminOnlyTypeResponse {
-            admin_only: cat.admin_only(&t) || Catalog::builtin().admin_only(&t),
+            admin_only: cat.admin_only(&t),
         })))
     }
 

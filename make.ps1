@@ -124,7 +124,7 @@ function DevWeb {
 
 # the platform as the compose stack runs it, one process per binary, without docker (goap-local): an embedded NATS, the
 # graph ($env:LOCAL_GRAPH: rust, or go) and every service on SQLite files of .goap\local, the binaries in .goap\bin
-$LocalServices = @('graph', 'registry', 'engine', 'modelgw', 'mcp', 'indexer', 'preferences', 'credentials', 'events',
+$LocalServices = @('domains', 'graph', 'registry', 'engine', 'modelgw', 'mcp', 'indexer', 'preferences', 'credentials', 'events',
     'conversations', 'jobs', 'gateway', 'connector-localfs', 'importer-git', 'goap-bench', 'goap-local')
 
 # the cargo profile of goap-graph-rs and goap-proxy ($env:LOCAL_CARGO_PROFILE, default release; Dev: dev-local, rebuilt
@@ -136,7 +136,7 @@ function LocalBuild([string] $cargo = (CargoProfile)) {
     InDir platform { Run go build -o ../.goap/bin/ @($LocalServices | ForEach-Object { "./cmd/$_" }) }
     InDir rust { Run cargo build --profile $cargo --locked -p graph-service -p goap-proxy }
     $dir = if ($cargo -eq 'dev') { 'debug' } else { $cargo }
-    Copy-Item "rust/target/$dir/goap-graph-rs$Exe", "rust/target/$dir/goap-proxy$Exe" .goap/bin/
+    Copy-Item "rust/target/$dir/goap-graph-rs$Exe", "rust/target/$dir/goap-domains-rs$Exe", "rust/target/$dir/goap-proxy$Exe" .goap/bin/
 }
 
 function LocalArgs { if ($env:LOCAL_ARGS) { $env:LOCAL_ARGS -split ' ' } else { @() } }
@@ -337,7 +337,7 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   local             no docker: the platform one process per binary (embedded NATS, SQLite in .goap\local,
                     $env:LOCAL_GRAPH rust|go, $env:LOCAL_ARGS: goap-local -h): gateway http://localhost:8080,
                     then .\make.ps1 dev-web
-  local-build       the binaries of the local stack in .goap\bin (Go services, goap-graph-rs, goap-proxy)
+  local-build       the binaries of the local stack in .goap\bin (Go services, goap-graph-rs, goap-domains-rs, goap-proxy)
   local-test        no docker: the platform on fresh data, the end-to-end test of platform\e2e\stack, then stop
   local-bench       no docker: the graph alone on SQLite behind goap-proxy ($env:LOCAL_PROXY: rust, go,
                     compare, shadow), loaded by goap-bench ($env:PERF_ARGS); .goap\local\bench, .goap\local\diff
