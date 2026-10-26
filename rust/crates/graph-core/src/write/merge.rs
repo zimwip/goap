@@ -390,7 +390,10 @@ impl<S: WriteTx> Tx<'_, S> {
         ids.sort();
         let fork = read::fork_versions(self.store, &own, &ids).await?;
         let into = self.onto_versions(&to, &ids).await?;
-        if fork != into {
+        let from = read::branch_versions(self.store, &own, &ids).await?;
+        // the target moved on a node the branch changed: a fast-forward still when the branch's version derives from the
+        // target's (a draft rebased at its commit, ADR 0165), a merge otherwise
+        if fork != into && !super::rebase_drafts::over_target(self.store, &ids, &fork, &into, &from).await? {
             return Ok(None);
         }
         if self.moved(&to, &own).await? {
@@ -401,7 +404,6 @@ impl<S: WriteTx> Tx<'_, S> {
         }
         self.view(id).await?;
         let impacts = main_impacts(&self.views[id].fold.impacts);
-        let from = read::branch_versions(self.store, &own, &ids).await?;
         let (moves, delta) = self.moves(&own, &ids, &into, &from).await?;
         let target = to.parent.name.clone();
         for r in &moves {

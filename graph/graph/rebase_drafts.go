@@ -215,6 +215,9 @@ func (g *Graph) rebaseDraftsTx(ctx context.Context, tx Tx, c domain.Change, node
 			}
 			merged.State = copied.State // the state moves by the moves replayed, never by the update
 		}
+		if len(conflicts) == 0 {
+			conflicts = nil
+		}
 		merged.Change, merged.Impact, merged.Flow, merged.Base, merged.MergedWith = c.ID, r.cn.ID, "", &r.head, nil
 		draftRef := domain.DraftRef(r.head.ID)
 		checkout := domain.ImpactEvent{ID: event, Change: c.ID, Impact: r.cn.ID, Op: domain.ImpactCheckedOut, Execution: d.Execution, Post: &draftRef,

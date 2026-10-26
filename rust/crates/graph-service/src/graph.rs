@@ -3946,16 +3946,33 @@ impl pb::GraphService for Graph {
     ) -> Answer<pb::CommitChangeResponse> {
         let caller = Caller::of(&req)?;
         let m = req.into_inner();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
-            let id = served_change(tx, &m.change_id).await?;
-            acc.allow(tx, &m.change_id, operations::CHANGE_COMMIT).await?;
-            let nodes: Vec<NodeId> = m.nodes.iter().map(|n| NodeId(n.clone())).collect();
-            let b = tx.commit_change_nodes(&id, &m.baseline_name, &nodes).await?;
-            Ok(pb::CommitChangeResponse {
-                baseline: Some(convert::baseline(&b, None)),
+        let res = self
+            .write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
+                let id = served_change(tx, &m.change_id).await?;
+                acc.allow(tx, &m.change_id, operations::CHANGE_COMMIT).await?;
+                let nodes: Vec<NodeId> = m.nodes.iter().map(|n| NodeId(n.clone())).collect();
+                // the rebase of the drafts is kept when it left conflicts: committed, then the commit refused
+                Ok(tx
+                    .commit_rebased(&id, &m.baseline_name, &nodes)
+                    .await?
+                    .map(|b| pb::CommitChangeResponse {
+                        baseline: Some(convert::baseline(&b, None)),
+                    }))
             })
-        })
-        .await
+            .await?;
+        match res.msg {
+            Ok(msg) => Ok(Response {
+                headers: res.headers,
+                trailers: res.trailers,
+                msg,
+            }),
+            Err(err) => {
+                // the positions the kept rebase left go back with the refusal
+                let mut e = connect_error(err);
+                e.meta_mut().extend(res.headers);
+                Err(e)
+            }
+        }
     }
 
     async fn commit_edits(&self, _ctx: &Ctx, req: Request<pb::CommitEditsRequest>) -> Answer<pb::CommitEditsResponse> {

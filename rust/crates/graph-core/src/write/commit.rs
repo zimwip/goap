@@ -281,7 +281,7 @@ impl<S: WriteTx> Tx<'_, S> {
     /// Commits a change on its own branch (Go's `CommitChange` for a root change of the main flow, no methodology to
     /// ask: the committable states of its lifecycles are its guardian): the header of the commit.
     pub async fn commit_change(&mut self, id: &ChangeId, baseline_name: &str) -> Result<Baseline> {
-        Ok(self.commit_on_branch(id, baseline_name, false, &[]).await?.0)
+        self.commit_change_nodes(id, baseline_name, &[]).await
     }
 
     /// A partial commit (Go's `CommitChangeNodes`): the commit of the nodes named only, each an accepted modification of
@@ -293,7 +293,23 @@ impl<S: WriteTx> Tx<'_, S> {
         baseline_name: &str,
         nodes: &[NodeId],
     ) -> Result<Baseline> {
-        Ok(self.commit_on_branch(id, baseline_name, false, nodes).await?.0)
+        self.commit_rebased(id, baseline_name, nodes).await?
+    }
+
+    /// The commit of a change once its drafts are rebased onto the head (ADR 0165): the inner error when the rebase left
+    /// conflicts, the rebase kept by the caller that commits the transaction (Go runs it again in a transaction of its
+    /// own).
+    pub async fn commit_rebased(
+        &mut self,
+        id: &ChangeId,
+        baseline_name: &str,
+        nodes: &[NodeId],
+    ) -> Result<std::result::Result<Baseline, GraphError>> {
+        let (target, left) = self.rebase_drafts(id, nodes).await?;
+        if !left.is_empty() {
+            return Ok(Err(super::rebase_drafts::rebase_conflict(id, &target, &left)));
+        }
+        Ok(Ok(self.commit_on_branch(id, baseline_name, false, nodes).await?.0))
     }
 
     /// Writes the accepted modifications of a change on its own branch and reverts the nodes it no longer changes (Go's
@@ -520,7 +536,7 @@ impl<S: WriteTx> Tx<'_, S> {
 
 /// Whether a partial commit writes the node of an impact (Go's `takesImpact`): its node is named, or the impact it was
 /// merged or split via is; nothing named: every one.
-fn takes_impact(only: &[NodeId], impacts: &[&ChangeImpact], cn: &ChangeImpact) -> bool {
+pub(super) fn takes_impact(only: &[NodeId], impacts: &[&ChangeImpact], cn: &ChangeImpact) -> bool {
     if only.is_empty() || node_of(cn).is_some_and(|n| only.contains(&n)) {
         return true;
     }
