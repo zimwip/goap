@@ -21,6 +21,8 @@
   import ConfirmDialog from './ConfirmDialog.svelte';
   import ConditionExplainDialog from './ConditionExplainDialog.svelte';
   import ModelExchangeDialog from './ModelExchangeDialog.svelte';
+  import JobDialog from '../components/JobDialog.svelte';
+  import { closeJob, jobDetail } from '../stores/jobs.svelte';
   import SettingsDialog from './SettingsDialog.svelte';
   import UsageDialog from './UsageDialog.svelte';
   import PlatformStatusModal from './PlatformStatusModal.svelte';
@@ -278,6 +280,8 @@
 <ConfirmDialog />
 <ConditionExplainDialog />
 <ModelExchangeDialog />
+<!-- the detail of a job, opened from any list of jobs (ADR 0149) -->
+{#if jobDetail.job}<JobDialog job={jobDetail.job} onclose={closeJob} />{/if}
 <SettingsDialog />
 <UsageDialog />
 <PlatformStatusModal />

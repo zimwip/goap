@@ -15,8 +15,7 @@
   import { domainSpec } from './domainTabs';
   import { importKind, IMPORT_KINDS } from './importKinds';
   import { registerAssist } from '../../assist/registry.svelte';
-  import JobRow from '../../components/JobRow.svelte';
-  import { followJob, knownJobs } from '../../stores/jobs.svelte';
+  import { followJob, knownJobs, openJob } from '../../stores/jobs.svelte';
   import { graphImportResult } from '../../jobView';
   import { contentFacts, importSummary } from '../../assist/importScreen';
 
@@ -32,7 +31,8 @@
   let error = $state('');
   /** a methodology or domain imported: its name, version, status and issues */
   let definition = $state<{ name: string; version: string; status?: string; issues: Issue[] } | null>(null);
-  /** the job of a graph import (ADR 0149), live from the job stream; its result once it is done */
+  /** the job of a graph import (ADR 0149), live from the job stream (its progress in its detail and the Jobs); its result
+   *  once it is done */
   let graphJobId = $state('');
   const graphJob = $derived(graphJobId ? knownJobs.get(graphJobId) : undefined);
   const graphResult = $derived<GraphImportResult | null>(graphJob?.status === 'done' ? graphImportResult(graphJob) : null);
@@ -57,6 +57,7 @@
       if (what === 'graph') {
         const { job } = await graph.startGraphImport({ document: text, ...(title.trim() ? { title: title.trim() } : {}) });
         graphJobId = job.id ?? '';
+        openJob(job);
         followJob(job, (j) => {
           if (j.status !== 'done') return;
           const r = graphImportResult(j);
@@ -193,8 +194,9 @@
         </ul>
       {/if}
     {/if}
-    {#if graphJob && !graphResult}
-      <div class="job"><JobRow job={graphJob} /></div>
+    {#if graphJob && !graphResult && graphJob.status !== 'failed' && graphJob.status !== 'cancelled'}
+      {@const j = graphJob}
+      <p class="hint">Importing the snapshot: it goes on under Jobs. <button type="button" class="link" onclick={() => openJob(j)}>Details</button></p>
     {/if}
     {#if graphResult}
       {@const r = graphResult}
@@ -221,9 +223,6 @@
 </div>
 
 <style>
-  .job {
-    margin: 0.5rem 0;
-  }
   .issues {
     margin: -0.3rem 0 0.8rem;
     padding-left: 1.2rem;

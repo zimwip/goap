@@ -59,7 +59,8 @@ review, a report) would have invented a fourth way.
    counters, the whole log, cancel, download, the change), a *Jobs* indicator in the status bar (the jobs going and their overall progress; its
    list shows the recent ones and opens the `jobs` tab: every job, its progress bar, cancel, download, the change it
    created; an administrator may list every person's), a toast when a job ends, and the three runs on it: *Import from a source* opens the detail of the run it
-   starts (its runs are followed in the Jobs, the tab lists none), the snapshot import of the Import tab shows its progress and opens the change, the exports of the Baseline
+   starts (its runs are followed in the Jobs, the tab lists none), the snapshot import of the Import tab opens the detail of its job and, once done, links
+   the change, the exports of the Baseline
    explorer and tab download the result when the job ends (and the Jobs tab keeps it to download again). The
    streaming `ExportGraphOkf` and the web's chunk collector are gone; `ExportGraph` and `ImportGraph` stay for the
    API clients that want an answer in the request.

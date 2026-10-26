@@ -9,8 +9,7 @@
   import { shortId } from '../api';
   import StatusBadge from '../components/StatusBadge.svelte';
   import JobRow from '../components/JobRow.svelte';
-  import JobDialog from '../components/JobDialog.svelte';
-  import { activeJobs, closeJob, jobDetail, jobList, onJobEnded, startJobs } from '../stores/jobs.svelte';
+  import { activeJobs, jobList, onJobEnded, startJobs } from '../stores/jobs.svelte';
   import { fraction, jobTitle } from '../jobView';
   import { notify } from './workbench.svelte';
   import { layout, toggleNavigation, toggleTool } from './layout.svelte';
@@ -150,9 +149,6 @@
     <button type="button" class="item" aria-pressed={on} title={v.title} onclick={() => toggleTool('right', v.id)}><Icon name={v.icon} size={12} />{v.title}</button>
   {/each}
 </footer>
-
-<!-- the detail of a job, opened from any list of jobs -->
-{#if jobDetail.job}<JobDialog job={jobDetail.job} onclose={closeJob} />{/if}
 
 <style>
   .status {
