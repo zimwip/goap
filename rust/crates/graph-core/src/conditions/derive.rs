@@ -84,6 +84,9 @@ pub struct Derived {
     pub method_goals: BTreeMap<String, Bools>,
     /// The goal generated for each valid process (its exit criteria), by name.
     pub process_goals: BTreeMap<String, Bools>,
+    /// The steps each step relies on, directly or through other steps (`Compiled.StepDependencies`, ADR 0109 §5): a
+    /// step relies on one whose exit gives a condition its own actions require, with the same value.
+    pub step_deps: BTreeMap<String, BTreeSet<String>>,
 }
 
 fn s<'a>(m: &'a Map<String, Value>, k: &str) -> &'a str {
@@ -137,6 +140,8 @@ struct Act {
     scoped_effects: Bools,
     lifted: BTreeSet<String>,
     narrowed: bool,
+    /// The exit criteria of the step a narrowed action runs for, its effects too (`Action.stepDone`).
+    step_done: Bools,
     implements: String,
     specializes: String,
 }
@@ -394,6 +399,34 @@ impl State<'_> {
         a
     }
 
+    /// Lets the planner chain two scoped actions of one scope (`chainScoped`, ADR 0118): when what one makes true on
+    /// its subject is what another needs on its own, running the first is planned to leave a subject pending for the
+    /// second, its pending condition joining the effects of the first, for the plan only (lifted, never checked once
+    /// it ran).
+    fn chain_scoped(&mut self) {
+        let mut names: Vec<String> = self.actions.keys().cloned().collect();
+        names.sort();
+        for name in &names {
+            let a = &self.actions[name];
+            if !a.is_scoped() || a.scoped_effects.is_empty() {
+                continue;
+            }
+            let pendings: Vec<String> = names
+                .iter()
+                .filter(|other| *other != name)
+                .map(|other| &self.actions[other])
+                .filter(|b| b.is_scoped() && b.scope == a.scope && !b.scoped_effects.is_empty())
+                .filter(|b| a.scoped_effects.iter().any(|(k, v)| b.scoped_pre.get(k) == Some(v)))
+                .map(Act::pending)
+                .collect();
+            let a = self.actions.get_mut(name).expect("one of its own names");
+            for p in pendings {
+                a.effects.get_or_insert_with(Bools::new).insert(p.clone(), true);
+                a.lifted.insert(p);
+            }
+        }
+    }
+
     /// The aggregates a scoped effect is lifted to (`liftedAggregates`).
     fn lifted(&self, cond: &str, value: bool, r#where: &str) -> Vec<String> {
         let (mut within, mut plain) = (Vec::new(), Vec::new());
@@ -431,9 +464,19 @@ struct Walker<'a, 'b> {
     narrowed: Vec<Act>,
     criteria: BTreeMap<String, (Bools, Bools)>,
     done: HashMap<String, Option<Bools>>,
+    /// What the actions generated for each step require and make true, unions by path: what the dependencies between
+    /// the steps are read from (`Compiled.StepDependencies` over the actions carrying a `Step`).
+    acts: BTreeMap<String, (Bools, Bools)>,
 }
 
 impl Walker<'_, '_> {
+    /// Records what an action generated for a step requires and makes true.
+    fn record(&mut self, path: &str, pre: &Bools, exit: &Bools) {
+        let e = self.acts.entry(path.to_string()).or_default();
+        merge(&mut e.0, pre);
+        merge(&mut e.1, exit);
+    }
+
     fn walk(&mut self, steps: &[Value], prefix: &str, inherited: &Bools) -> Bools {
         let mut all = Bools::new();
         let mut seen = HashSet::new();
@@ -462,7 +505,7 @@ impl Walker<'_, '_> {
     fn step(&mut self, step: &Map<String, Value>, path: &str, need: &Bools) -> Option<Bools> {
         if step.get("gate").is_some_and(Value::is_object) {
             self.gates.as_ref()?;
-            return self.gate(step, path);
+            return self.gate(step, path, need);
         }
         let (foreach, capability) = (s(step, "foreach"), s(step, "method"));
         if (!s(step, "groupBy").is_empty() && foreach.is_empty()) || (!foreach.is_empty() && capability.is_empty()) {
@@ -496,7 +539,7 @@ impl Walker<'_, '_> {
             };
             let r#where = s(step, "where");
             for name in &names {
-                let a = self.st.actions.get(name)?;
+                let a = self.st.actions.get(name)?.clone();
                 if !a.specializes.is_empty() {
                     return None;
                 }
@@ -512,11 +555,23 @@ impl Walker<'_, '_> {
                 alt.implements = name.clone();
                 alt.pre = need.clone();
                 merge(&mut alt.pre, &a.pre);
-                if !r#where.is_empty() {
-                    if !a.is_scoped() || bools(step, "done").is_none_or(|d| d.is_empty()) {
-                        return None;
-                    }
-                    self.narrowed.push(narrow(alt, r#where, need));
+                let scoped = !r#where.is_empty();
+                if scoped && (!a.is_scoped() || bools(step, "done").is_none_or(|d| d.is_empty())) {
+                    return None;
+                }
+                if scoped {
+                    alt = narrow(alt, r#where, need);
+                }
+                let exit = alt.effects.get_or_insert_with(Bools::new);
+                merge(exit, done.as_ref().unwrap_or(&Bools::new()));
+                if alt.narrowed {
+                    // its subjects are narrowed: it is lifted again over them once the steps are compiled, and what
+                    // it requires and makes true is read from that form
+                    alt.step_done = done.clone().unwrap_or_default();
+                    self.narrowed.push(alt);
+                } else {
+                    let (pre, exit) = (alt.pre.clone(), exit.clone());
+                    self.record(path, &pre, &exit);
                 }
             }
             return done;
@@ -562,6 +617,9 @@ impl Walker<'_, '_> {
             }
             done = Some(Bools::from([(name, true)]));
         }
+        if let Some(d) = &done {
+            self.record(path, need, d);
+        }
         done
     }
 
@@ -586,7 +644,7 @@ impl Walker<'_, '_> {
     }
 
     /// A gate step (`stepWalker.gate`): the conditions of its passage, of its decision and of its attested items.
-    fn gate(&mut self, step: &Map<String, Value>, path: &str) -> Option<Bools> {
+    fn gate(&mut self, step: &Map<String, Value>, path: &str, need: &Bools) -> Option<Bools> {
         let g = step.get("gate").and_then(Value::as_object)?;
         let transition = s(g, "transition");
         let busy = !list(step, "steps").is_empty()
@@ -707,8 +765,16 @@ impl Walker<'_, '_> {
         if let Some(gs) = self.gates.as_mut() {
             gs.insert(transition.into(), path.into());
         }
+        // what the actions of the gate require: the entry of the step and the applicable vetos of its checklist,
+        // needed before its decision is opened (`open`); what they make true is its own passage
+        let mut pre = need.clone();
+        for it in info.items.iter().filter(|it| it.veto && it.when.is_empty()) {
+            pre.insert(it.condition.clone(), true);
+        }
+        let done = Bools::from([(format!("gate:{path}"), true)]);
+        self.record(path, &pre, &done);
         self.infos.push(info);
-        Some(Bools::from([(format!("gate:{path}"), true)]))
+        Some(done)
     }
 }
 
@@ -740,6 +806,35 @@ fn narrow(mut a: Act, r#where: &str, need: &Bools) -> Act {
     a
 }
 
+/// The steps each step relies on, directly or through other steps (`Compiled.StepDependencies`, ADR 0109 §5), from
+/// what the actions of each step require and make true: a step relies on another when one of its own requirements is
+/// an exit of that other with the same value. The entry of a step naming a nested process does not carry what that
+/// process needs from outside, so a dependency only that would show is not seen.
+fn step_deps(acts: &BTreeMap<String, (Bools, Bools)>) -> BTreeMap<String, BTreeSet<String>> {
+    let mut direct: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for (later, (pre, _)) in acts {
+        for (earlier, (_, exit)) in acts.iter().filter(|(e, _)| *e != later) {
+            if pre.iter().any(|(k, v)| exit.get(k) == Some(v)) {
+                direct.entry(later).or_default().push(earlier);
+            }
+        }
+    }
+    let mut out = BTreeMap::new();
+    for later in direct.keys() {
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        let mut todo = vec![*later];
+        while let Some(p) = todo.pop() {
+            for e in direct.get(p).map(Vec::as_slice).unwrap_or_default() {
+                if *e != *later && seen.insert((*e).to_string()) {
+                    todo.push(e);
+                }
+            }
+        }
+        out.insert((*later).to_string(), seen);
+    }
+    out
+}
+
 /// The conditions every method's goal makes true with the same value (`sharedCriteria`).
 fn shared_criteria(goals: &[&Bools]) -> Bools {
     let mut out: Option<Bools> = None;
@@ -765,10 +860,12 @@ pub fn derive(m: &Map<String, Value>) -> Derived {
     st.conditions();
     st.libraries();
     st.actions();
+    st.chain_scoped();
     let mut out = Derived::default();
     // the methods, before the processes that name their capabilities
     let mut methods = Vec::new();
     let mut narrowed = Vec::new();
+    let mut acts: BTreeMap<String, (Bools, Bools)> = BTreeMap::new();
     {
         let mut w = Walker {
             st: &mut st,
@@ -779,6 +876,7 @@ pub fn derive(m: &Map<String, Value>) -> Derived {
             narrowed: Vec::new(),
             criteria: BTreeMap::new(),
             done: HashMap::new(),
+            acts: BTreeMap::new(),
         };
         let mut seen = HashSet::new();
         for me in objects(m, "methods") {
@@ -802,6 +900,7 @@ pub fn derive(m: &Map<String, Value>) -> Derived {
         }
         narrowed.append(&mut w.narrowed);
         out.criteria.append(&mut w.criteria);
+        acts.append(&mut w.acts);
     }
     let mut w = Walker {
         st: &mut st,
@@ -812,6 +911,7 @@ pub fn derive(m: &Map<String, Value>) -> Derived {
         narrowed: Vec::new(),
         criteria: BTreeMap::new(),
         done: HashMap::new(),
+        acts: BTreeMap::new(),
     };
     let mut process_goals = BTreeMap::new();
     for i in 0..objects(m, "processes").count() {
@@ -826,6 +926,7 @@ pub fn derive(m: &Map<String, Value>) -> Derived {
     let infos = std::mem::take(&mut w.infos);
     narrowed.append(&mut w.narrowed);
     out.criteria.append(&mut w.criteria);
+    acts.append(&mut w.acts);
     for r in refs {
         // "state:<name>" is generated (ADR 0058): true while the change is in that state of its lifecycle
         if let Some(state) = r.strip_prefix("state:")
@@ -841,8 +942,14 @@ pub fn derive(m: &Map<String, Value>) -> Derived {
     }
     for a in narrowed {
         // a step narrowing the subjects of a scoped action: lifted again over its own subjects
-        st.scope(a);
+        let a = st.scope(a);
+        let mut exit = a.effects.clone().unwrap_or_default();
+        merge(&mut exit, &a.step_done);
+        let e: &mut (Bools, Bools) = acts.entry(a.name.clone()).or_default();
+        merge(&mut e.0, &a.pre);
+        merge(&mut e.1, &exit);
     }
+    out.step_deps = step_deps(&acts);
     out.conditions = st.defs;
     out.gates = infos;
     out

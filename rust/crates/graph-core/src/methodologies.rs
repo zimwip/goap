@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use crate::{
     GraphError, Result,
-    change::GuardianRef,
+    change::{Change, GuardianRef},
     conditions::{
         derive::{self, Derived, Gate},
         stored,
@@ -398,13 +398,85 @@ pub fn version_key(name: &str, version: &str) -> String {
     format!("MV:{name}@{version}")
 }
 
+/// The key of `Change.Data` holding the Activity a change is scoped to (`registrysvc.DataActivity`): the node key of an
+/// element of a methodology, whose goal condition the change must satisfy to commit and whose tree holds the activities
+/// of its sub-changes.
+pub const DATA_ACTIVITY: &str = "activityRef";
+
+/// The link of an activity to the activities it is made of (`linkSubActivity`): parent to child.
+const LINK_SUB_ACTIVITY: &str = "methodology@sub_activity";
+
+/// The Activity a change is scoped to, empty when it is scoped to none (`registrysvc.ActivityOf`).
+pub fn activity_of(c: &Change) -> &str {
+    c.data
+        .as_ref()
+        .and_then(|d| d.get(DATA_ACTIVITY))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+}
+
+/// The check a sub-change passes before it is stored (`registrysvc.Service.SubChangeValidator`, the cascade of the
+/// Activity concept): the Activity it is scoped to is its parent's or one it is made of, following the `sub_activity`
+/// links. An unset activity is not inherited, on either side: a sub-change is usually scoped to a more specific
+/// activity than its parent, not to the same one.
+pub async fn check_sub_activity<T: ReadTx>(tx: &T, parent: &Change, child: &Change) -> Result<()> {
+    let (reference, ancestor) = (activity_of(child), activity_of(parent));
+    if reference.is_empty() || ancestor.is_empty() || reference == ancestor {
+        return Ok(());
+    }
+    if !activity_within(tx, reference, ancestor).await? {
+        return Err(GraphError::invalid(format!(
+            "activity {reference} is not part of {ancestor}, the activity of the parent change"
+        )));
+    }
+    Ok(())
+}
+
+/// Whether the activity of key `reference` is `ancestor` or a descendant of it, walking up the `sub_activity` links of
+/// the head of main of the methodology namespace, suspect ones included: a step edited since keeps its parent
+/// (`activityWithin`).
+async fn activity_within<T: ReadTx>(tx: &T, reference: &str, ancestor: &str) -> Result<bool> {
+    let (nodes, links) = elements_of(tx, &|_| true, Some(LINK_SUB_ACTIVITY)).await?;
+    let key = |id: &NodeId| nodes.iter().find(|n| &n.id == id).map(|n| n.key.as_str());
+    let mut parent_of: HashMap<&str, &str> = HashMap::new();
+    for l in &links {
+        if let Some(to) = l.to_node()
+            && let (Some(from), Some(to)) = (key(&l.from.id), key(&to.id))
+        {
+            parent_of.insert(to, from);
+        }
+    }
+    let mut seen: Vec<&str> = Vec::new();
+    let mut cur = reference;
+    while !cur.is_empty() && !seen.contains(&cur) {
+        if cur == ancestor {
+            return Ok(true);
+        }
+        seen.push(cur);
+        cur = parent_of.get(cur).copied().unwrap_or_default();
+    }
+    Ok(false)
+}
+
 static EMPTY: std::sync::LazyLock<Map<String, Value>> = std::sync::LazyLock::new(Map::new);
 
 /// The nodes of a stored version (its header and its elements) and the links leaving them, at the head of main of the
 /// namespace of the methodologies, or of the platform graph for a content graph.
 async fn elements<T: ReadTx>(tx: &T, header: &str) -> Result<(Vec<Node>, Vec<Link>)> {
     let prefix = format!("{header}/");
-    let keep = |n: &Node| !n.deleted && (n.key == header || n.key.starts_with(&prefix));
+    elements_of(tx, &|n: &Node| n.key == header || n.key.starts_with(&prefix), None).await
+}
+
+/// The element nodes of the methodology namespace a predicate keeps, with the links of the types named leaving them
+/// (every type when none is).
+async fn elements_of<T: ReadTx>(
+    tx: &T,
+    of: &(dyn Fn(&Node) -> bool + Sync),
+    link_type: Option<&str>,
+) -> Result<(Vec<Node>, Vec<Link>)> {
+    let types = link_type.map(|t| vec![t.to_string()]);
+    let types = types.as_deref();
+    let keep = |n: &Node| !n.deleted && of(n);
     if let Some(p) = tx.platform() {
         let nodes: Vec<Node> = p.methodology.nodes.iter().filter(|n| keep(n)).cloned().collect();
         let held: Vec<&NodeId> = nodes.iter().map(|n| &n.id).collect();
@@ -412,7 +484,7 @@ async fn elements<T: ReadTx>(tx: &T, header: &str) -> Result<(Vec<Node>, Vec<Lin
             .methodology
             .links
             .iter()
-            .filter(|l| held.contains(&&l.from.id))
+            .filter(|l| held.contains(&&l.from.id) && types.is_none_or(|t| t.contains(&l.typ)))
             .cloned()
             .collect();
         return Ok((nodes, links));
@@ -425,7 +497,7 @@ async fn elements<T: ReadTx>(tx: &T, header: &str) -> Result<(Vec<Node>, Vec<Lin
         nodes.extend(tx.nodes_at(&refs, typ).await?.into_iter().filter(keep));
     }
     let held: Vec<NodeRef> = nodes.iter().map(Node::node_ref).collect();
-    let links = tx.links_from(&held, None).await?;
+    let links = tx.links_from(&held, types).await?;
     Ok((nodes, links))
 }
 

@@ -35,10 +35,6 @@ use graph_catalog::def::Lifecycle;
 /// How many deltas deep a link set may be before a version writes its links whole (ADR 0141).
 const MAX_LINK_DEPTH: i32 = 16;
 
-/// The key of `Change.Data` holding the Activity a change is scoped to (`registrysvc.DataActivity`): the node key of
-/// an element of a methodology, whose goal condition the change must satisfy to commit.
-const DATA_ACTIVITY: &str = "activityRef";
-
 /// A methodology element key split into the name and version of its methodology, the kind of the element and its name
 /// or step path (`parseActivityRef`).
 fn activity_ref(reference: &str) -> Option<(&str, &str, &str, &str)> {
@@ -696,14 +692,10 @@ impl<S: WriteTx> Tx<'_, S> {
         c: &Change,
         act: &serde_json::Map<String, Value>,
     ) -> Result<Option<bool>> {
-        let Some(reference) = c
-            .data
-            .as_ref()
-            .and_then(|d| d.get(DATA_ACTIVITY))
-            .and_then(Value::as_str)
-        else {
+        let reference = crate::methodologies::activity_of(c);
+        if reference.is_empty() {
             return Ok(None);
-        };
+        }
         let Some((name, version, kind, item)) = activity_ref(reference) else {
             return Err(GraphError::not_found(format!("{reference}: not an activity key")));
         };

@@ -13,6 +13,7 @@ pub mod draftmerge;
 pub mod error;
 pub mod flow;
 pub mod flowdiff;
+pub mod history;
 pub mod impact;
 pub mod items;
 pub mod jsontext;

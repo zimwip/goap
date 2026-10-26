@@ -1,0 +1,983 @@
+{
+ "cases": [
+  {
+   "name": "outcomes",
+   "log": [
+    {
+     "seq": 1,
+     "id": "I1createdx0",
+     "type": "impact.created",
+     "subject": "I1",
+     "execution": "x0",
+     "payload": "{\"op\":\"created\"}"
+    },
+    {
+     "seq": 2,
+     "id": "x1/ended",
+     "type": "journal.step.ended",
+     "subject": "collect",
+     "execution": "x1/ended",
+     "payload": "{\"id\":\"x1/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x1\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 3,
+     "id": "x1",
+     "type": "journal.action",
+     "subject": "collect",
+     "execution": "x1",
+     "payload": "{\"id\":\"x1\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 4,
+     "id": "x2/ended",
+     "type": "journal.step.ended",
+     "subject": "analyse",
+     "execution": "x2/ended",
+     "payload": "{\"id\":\"x2/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x2\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 5,
+     "id": "x2",
+     "type": "journal.action",
+     "subject": "analyse",
+     "execution": "x2",
+     "payload": "{\"id\":\"x2\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"effectsMet\":false,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    }
+   ],
+   "relies": {
+    "m": {
+     "analyse": [
+      "collect"
+     ],
+     "report": [
+      "analyse",
+      "collect"
+     ]
+    }
+   },
+   "history": {
+    "runs": null,
+    "steps": [
+     {
+      "path": "collect",
+      "methodology": "m",
+      "process": "p",
+      "action": "collect",
+      "execution": "x1",
+      "outcome": "succeeded",
+      "seq": 2,
+      "runs": 1,
+      "current": true
+     },
+     {
+      "path": "analyse",
+      "methodology": "m",
+      "process": "p",
+      "action": "analyse",
+      "execution": "x2",
+      "outcome": "failed",
+      "seq": 5,
+      "runs": 1,
+      "current": false
+     }
+    ]
+   }
+  },
+  {
+   "name": "all stand",
+   "log": [
+    {
+     "seq": 1,
+     "id": "I1createdx0",
+     "type": "impact.created",
+     "subject": "I1",
+     "execution": "x0",
+     "payload": "{\"op\":\"created\"}"
+    },
+    {
+     "seq": 2,
+     "id": "x1/ended",
+     "type": "journal.step.ended",
+     "subject": "collect",
+     "execution": "x1/ended",
+     "payload": "{\"id\":\"x1/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x1\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 3,
+     "id": "x1",
+     "type": "journal.action",
+     "subject": "collect",
+     "execution": "x1",
+     "payload": "{\"id\":\"x1\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 4,
+     "id": "x2/ended",
+     "type": "journal.step.ended",
+     "subject": "analyse",
+     "execution": "x2/ended",
+     "payload": "{\"id\":\"x2/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x2\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 5,
+     "id": "x2",
+     "type": "journal.action",
+     "subject": "analyse",
+     "execution": "x2",
+     "payload": "{\"id\":\"x2\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 6,
+     "id": "x3/ended",
+     "type": "journal.step.ended",
+     "subject": "report",
+     "execution": "x3/ended",
+     "payload": "{\"id\":\"x3/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"report\",\"activityRef\":\"report\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x3\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 7,
+     "id": "x3",
+     "type": "journal.action",
+     "subject": "report",
+     "execution": "x3",
+     "payload": "{\"id\":\"x3\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"report\",\"activityRef\":\"report\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    }
+   ],
+   "relies": {
+    "m": {
+     "analyse": [
+      "collect"
+     ],
+     "report": [
+      "analyse",
+      "collect"
+     ]
+    }
+   },
+   "history": {
+    "runs": null,
+    "steps": [
+     {
+      "path": "collect",
+      "methodology": "m",
+      "process": "p",
+      "action": "collect",
+      "execution": "x1",
+      "outcome": "succeeded",
+      "seq": 2,
+      "runs": 1,
+      "current": true
+     },
+     {
+      "path": "analyse",
+      "methodology": "m",
+      "process": "p",
+      "action": "analyse",
+      "execution": "x2",
+      "outcome": "succeeded",
+      "seq": 4,
+      "runs": 1,
+      "current": true
+     },
+     {
+      "path": "report",
+      "methodology": "m",
+      "process": "p",
+      "action": "report",
+      "execution": "x3",
+      "outcome": "succeeded",
+      "seq": 6,
+      "runs": 1,
+      "current": true
+     }
+    ]
+   }
+  },
+  {
+   "name": "a rebase makes them stale",
+   "log": [
+    {
+     "seq": 1,
+     "id": "I1createdx0",
+     "type": "impact.created",
+     "subject": "I1",
+     "execution": "x0",
+     "payload": "{\"op\":\"created\"}"
+    },
+    {
+     "seq": 2,
+     "id": "x1/ended",
+     "type": "journal.step.ended",
+     "subject": "collect",
+     "execution": "x1/ended",
+     "payload": "{\"id\":\"x1/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x1\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 3,
+     "id": "x1",
+     "type": "journal.action",
+     "subject": "collect",
+     "execution": "x1",
+     "payload": "{\"id\":\"x1\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 4,
+     "id": "x2/ended",
+     "type": "journal.step.ended",
+     "subject": "analyse",
+     "execution": "x2/ended",
+     "payload": "{\"id\":\"x2/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x2\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 5,
+     "id": "x2",
+     "type": "journal.action",
+     "subject": "analyse",
+     "execution": "x2",
+     "payload": "{\"id\":\"x2\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 6,
+     "id": "x3/ended",
+     "type": "journal.step.ended",
+     "subject": "report",
+     "execution": "x3/ended",
+     "payload": "{\"id\":\"x3/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"report\",\"activityRef\":\"report\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x3\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 7,
+     "id": "x3",
+     "type": "journal.action",
+     "subject": "report",
+     "execution": "x3",
+     "payload": "{\"id\":\"x3\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"report\",\"activityRef\":\"report\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 8,
+     "id": "I1rebased",
+     "type": "impact.rebased",
+     "subject": "I1",
+     "execution": "",
+     "payload": "{\"op\":\"rebased\"}"
+    }
+   ],
+   "relies": {
+    "m": {
+     "analyse": [
+      "collect"
+     ],
+     "report": [
+      "analyse",
+      "collect"
+     ]
+    }
+   },
+   "history": {
+    "runs": null,
+    "steps": [
+     {
+      "path": "collect",
+      "methodology": "m",
+      "process": "p",
+      "action": "collect",
+      "execution": "x1",
+      "outcome": "succeeded",
+      "seq": 2,
+      "runs": 1,
+      "current": false,
+      "staleBy": "log entry I1rebased"
+     },
+     {
+      "path": "analyse",
+      "methodology": "m",
+      "process": "p",
+      "action": "analyse",
+      "execution": "x2",
+      "outcome": "succeeded",
+      "seq": 4,
+      "runs": 1,
+      "current": false,
+      "staleBy": "log entry I1rebased"
+     },
+     {
+      "path": "report",
+      "methodology": "m",
+      "process": "p",
+      "action": "report",
+      "execution": "x3",
+      "outcome": "succeeded",
+      "seq": 6,
+      "runs": 1,
+      "current": false,
+      "staleBy": "log entry I1rebased"
+     }
+    ]
+   }
+  },
+  {
+   "name": "collect stands again",
+   "log": [
+    {
+     "seq": 1,
+     "id": "I1createdx0",
+     "type": "impact.created",
+     "subject": "I1",
+     "execution": "x0",
+     "payload": "{\"op\":\"created\"}"
+    },
+    {
+     "seq": 2,
+     "id": "x1/ended",
+     "type": "journal.step.ended",
+     "subject": "collect",
+     "execution": "x1/ended",
+     "payload": "{\"id\":\"x1/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x1\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 3,
+     "id": "x1",
+     "type": "journal.action",
+     "subject": "collect",
+     "execution": "x1",
+     "payload": "{\"id\":\"x1\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 4,
+     "id": "x2/ended",
+     "type": "journal.step.ended",
+     "subject": "analyse",
+     "execution": "x2/ended",
+     "payload": "{\"id\":\"x2/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x2\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 5,
+     "id": "x2",
+     "type": "journal.action",
+     "subject": "analyse",
+     "execution": "x2",
+     "payload": "{\"id\":\"x2\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 6,
+     "id": "x3/ended",
+     "type": "journal.step.ended",
+     "subject": "report",
+     "execution": "x3/ended",
+     "payload": "{\"id\":\"x3/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"report\",\"activityRef\":\"report\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x3\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 7,
+     "id": "x3",
+     "type": "journal.action",
+     "subject": "report",
+     "execution": "x3",
+     "payload": "{\"id\":\"x3\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"report\",\"activityRef\":\"report\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 8,
+     "id": "I1rebased",
+     "type": "impact.rebased",
+     "subject": "I1",
+     "execution": "",
+     "payload": "{\"op\":\"rebased\"}"
+    },
+    {
+     "seq": 9,
+     "id": "x4/ended",
+     "type": "journal.step.ended",
+     "subject": "collect",
+     "execution": "x4/ended",
+     "payload": "{\"id\":\"x4/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x4\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 10,
+     "id": "x4",
+     "type": "journal.action",
+     "subject": "collect",
+     "execution": "x4",
+     "payload": "{\"id\":\"x4\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    }
+   ],
+   "relies": {
+    "m": {
+     "analyse": [
+      "collect"
+     ],
+     "report": [
+      "analyse",
+      "collect"
+     ]
+    }
+   },
+   "history": {
+    "runs": null,
+    "steps": [
+     {
+      "path": "collect",
+      "methodology": "m",
+      "process": "p",
+      "action": "collect",
+      "execution": "x1",
+      "outcome": "succeeded",
+      "seq": 2,
+      "runs": 1,
+      "current": false,
+      "staleBy": "log entry I1rebased"
+     },
+     {
+      "path": "analyse",
+      "methodology": "m",
+      "process": "p",
+      "action": "analyse",
+      "execution": "x2",
+      "outcome": "succeeded",
+      "seq": 4,
+      "runs": 1,
+      "current": false,
+      "staleBy": "log entry I1rebased"
+     },
+     {
+      "path": "report",
+      "methodology": "m",
+      "process": "p",
+      "action": "report",
+      "execution": "x3",
+      "outcome": "succeeded",
+      "seq": 6,
+      "runs": 1,
+      "current": false,
+      "staleBy": "log entry I1rebased"
+     },
+     {
+      "path": "collect",
+      "methodology": "m",
+      "process": "p",
+      "action": "collect",
+      "execution": "x4",
+      "outcome": "succeeded",
+      "seq": 9,
+      "runs": 2,
+      "current": true
+     }
+    ]
+   }
+  },
+  {
+   "name": "all stand again",
+   "log": [
+    {
+     "seq": 1,
+     "id": "I1createdx0",
+     "type": "impact.created",
+     "subject": "I1",
+     "execution": "x0",
+     "payload": "{\"op\":\"created\"}"
+    },
+    {
+     "seq": 2,
+     "id": "x1/ended",
+     "type": "journal.step.ended",
+     "subject": "collect",
+     "execution": "x1/ended",
+     "payload": "{\"id\":\"x1/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x1\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 3,
+     "id": "x1",
+     "type": "journal.action",
+     "subject": "collect",
+     "execution": "x1",
+     "payload": "{\"id\":\"x1\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 4,
+     "id": "x2/ended",
+     "type": "journal.step.ended",
+     "subject": "analyse",
+     "execution": "x2/ended",
+     "payload": "{\"id\":\"x2/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x2\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 5,
+     "id": "x2",
+     "type": "journal.action",
+     "subject": "analyse",
+     "execution": "x2",
+     "payload": "{\"id\":\"x2\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 6,
+     "id": "x3/ended",
+     "type": "journal.step.ended",
+     "subject": "report",
+     "execution": "x3/ended",
+     "payload": "{\"id\":\"x3/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"report\",\"activityRef\":\"report\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x3\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 7,
+     "id": "x3",
+     "type": "journal.action",
+     "subject": "report",
+     "execution": "x3",
+     "payload": "{\"id\":\"x3\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"report\",\"activityRef\":\"report\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 8,
+     "id": "I1rebased",
+     "type": "impact.rebased",
+     "subject": "I1",
+     "execution": "",
+     "payload": "{\"op\":\"rebased\"}"
+    },
+    {
+     "seq": 9,
+     "id": "x4/ended",
+     "type": "journal.step.ended",
+     "subject": "collect",
+     "execution": "x4/ended",
+     "payload": "{\"id\":\"x4/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x4\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 10,
+     "id": "x4",
+     "type": "journal.action",
+     "subject": "collect",
+     "execution": "x4",
+     "payload": "{\"id\":\"x4\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 11,
+     "id": "x5/ended",
+     "type": "journal.step.ended",
+     "subject": "analyse",
+     "execution": "x5/ended",
+     "payload": "{\"id\":\"x5/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x5\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 12,
+     "id": "x5",
+     "type": "journal.action",
+     "subject": "analyse",
+     "execution": "x5",
+     "payload": "{\"id\":\"x5\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 13,
+     "id": "x6/ended",
+     "type": "journal.step.ended",
+     "subject": "report",
+     "execution": "x6/ended",
+     "payload": "{\"id\":\"x6/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"report\",\"activityRef\":\"report\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x6\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 14,
+     "id": "x6",
+     "type": "journal.action",
+     "subject": "report",
+     "execution": "x6",
+     "payload": "{\"id\":\"x6\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"report\",\"activityRef\":\"report\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    }
+   ],
+   "relies": {
+    "m": {
+     "analyse": [
+      "collect"
+     ],
+     "report": [
+      "analyse",
+      "collect"
+     ]
+    }
+   },
+   "history": {
+    "runs": null,
+    "steps": [
+     {
+      "path": "collect",
+      "methodology": "m",
+      "process": "p",
+      "action": "collect",
+      "execution": "x1",
+      "outcome": "succeeded",
+      "seq": 2,
+      "runs": 1,
+      "current": false,
+      "staleBy": "log entry I1rebased"
+     },
+     {
+      "path": "analyse",
+      "methodology": "m",
+      "process": "p",
+      "action": "analyse",
+      "execution": "x2",
+      "outcome": "succeeded",
+      "seq": 4,
+      "runs": 1,
+      "current": false,
+      "staleBy": "log entry I1rebased"
+     },
+     {
+      "path": "report",
+      "methodology": "m",
+      "process": "p",
+      "action": "report",
+      "execution": "x3",
+      "outcome": "succeeded",
+      "seq": 6,
+      "runs": 1,
+      "current": false,
+      "staleBy": "log entry I1rebased"
+     },
+     {
+      "path": "collect",
+      "methodology": "m",
+      "process": "p",
+      "action": "collect",
+      "execution": "x4",
+      "outcome": "succeeded",
+      "seq": 9,
+      "runs": 2,
+      "current": true
+     },
+     {
+      "path": "analyse",
+      "methodology": "m",
+      "process": "p",
+      "action": "analyse",
+      "execution": "x5",
+      "outcome": "succeeded",
+      "seq": 11,
+      "runs": 2,
+      "current": true
+     },
+     {
+      "path": "report",
+      "methodology": "m",
+      "process": "p",
+      "action": "report",
+      "execution": "x6",
+      "outcome": "succeeded",
+      "seq": 13,
+      "runs": 2,
+      "current": true
+     }
+    ]
+   }
+  },
+  {
+   "name": "a successor's write does not count",
+   "log": [
+    {
+     "seq": 1,
+     "id": "I1createdx0",
+     "type": "impact.created",
+     "subject": "I1",
+     "execution": "x0",
+     "payload": "{\"op\":\"created\"}"
+    },
+    {
+     "seq": 2,
+     "id": "x1/ended",
+     "type": "journal.step.ended",
+     "subject": "collect",
+     "execution": "x1/ended",
+     "payload": "{\"id\":\"x1/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x1\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 3,
+     "id": "x1",
+     "type": "journal.action",
+     "subject": "collect",
+     "execution": "x1",
+     "payload": "{\"id\":\"x1\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 4,
+     "id": "x2/ended",
+     "type": "journal.step.ended",
+     "subject": "analyse",
+     "execution": "x2/ended",
+     "payload": "{\"id\":\"x2/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x2\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 5,
+     "id": "x2",
+     "type": "journal.action",
+     "subject": "analyse",
+     "execution": "x2",
+     "payload": "{\"id\":\"x2\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 6,
+     "id": "I1updatedx2",
+     "type": "impact.updated",
+     "subject": "I1",
+     "execution": "x2",
+     "payload": "{\"op\":\"updated\"}"
+    }
+   ],
+   "relies": {
+    "m": {
+     "analyse": [
+      "collect"
+     ],
+     "report": [
+      "analyse",
+      "collect"
+     ]
+    }
+   },
+   "history": {
+    "runs": null,
+    "steps": [
+     {
+      "path": "collect",
+      "methodology": "m",
+      "process": "p",
+      "action": "collect",
+      "execution": "x1",
+      "outcome": "succeeded",
+      "seq": 2,
+      "runs": 1,
+      "current": true
+     },
+     {
+      "path": "analyse",
+      "methodology": "m",
+      "process": "p",
+      "action": "analyse",
+      "execution": "x2",
+      "outcome": "succeeded",
+      "seq": 4,
+      "runs": 1,
+      "current": true
+     }
+    ]
+   }
+  },
+  {
+   "name": "a new impact moves nothing",
+   "log": [
+    {
+     "seq": 1,
+     "id": "I1createdx0",
+     "type": "impact.created",
+     "subject": "I1",
+     "execution": "x0",
+     "payload": "{\"op\":\"created\"}"
+    },
+    {
+     "seq": 2,
+     "id": "x1/ended",
+     "type": "journal.step.ended",
+     "subject": "collect",
+     "execution": "x1/ended",
+     "payload": "{\"id\":\"x1/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x1\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 3,
+     "id": "x1",
+     "type": "journal.action",
+     "subject": "collect",
+     "execution": "x1",
+     "payload": "{\"id\":\"x1\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 4,
+     "id": "x2/ended",
+     "type": "journal.step.ended",
+     "subject": "analyse",
+     "execution": "x2/ended",
+     "payload": "{\"id\":\"x2/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x2\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 5,
+     "id": "x2",
+     "type": "journal.action",
+     "subject": "analyse",
+     "execution": "x2",
+     "payload": "{\"id\":\"x2\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 6,
+     "id": "I1updatedx2",
+     "type": "impact.updated",
+     "subject": "I1",
+     "execution": "x2",
+     "payload": "{\"op\":\"updated\"}"
+    },
+    {
+     "seq": 7,
+     "id": "I2created",
+     "type": "impact.created",
+     "subject": "I2",
+     "execution": "",
+     "payload": "{\"op\":\"created\"}"
+    },
+    {
+     "seq": 8,
+     "id": "I2updated",
+     "type": "impact.updated",
+     "subject": "I2",
+     "execution": "",
+     "payload": "{\"op\":\"updated\"}"
+    }
+   ],
+   "relies": {
+    "m": {
+     "analyse": [
+      "collect"
+     ],
+     "report": [
+      "analyse",
+      "collect"
+     ]
+    }
+   },
+   "history": {
+    "runs": null,
+    "steps": [
+     {
+      "path": "collect",
+      "methodology": "m",
+      "process": "p",
+      "action": "collect",
+      "execution": "x1",
+      "outcome": "succeeded",
+      "seq": 2,
+      "runs": 1,
+      "current": true
+     },
+     {
+      "path": "analyse",
+      "methodology": "m",
+      "process": "p",
+      "action": "analyse",
+      "execution": "x2",
+      "outcome": "succeeded",
+      "seq": 4,
+      "runs": 1,
+      "current": true
+     }
+    ]
+   }
+  },
+  {
+   "name": "an edit from outside makes them stale",
+   "log": [
+    {
+     "seq": 1,
+     "id": "I1createdx0",
+     "type": "impact.created",
+     "subject": "I1",
+     "execution": "x0",
+     "payload": "{\"op\":\"created\"}"
+    },
+    {
+     "seq": 2,
+     "id": "x1/ended",
+     "type": "journal.step.ended",
+     "subject": "collect",
+     "execution": "x1/ended",
+     "payload": "{\"id\":\"x1/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x1\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 3,
+     "id": "x1",
+     "type": "journal.action",
+     "subject": "collect",
+     "execution": "x1",
+     "payload": "{\"id\":\"x1\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"collect\",\"activityRef\":\"collect\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 4,
+     "id": "x2/ended",
+     "type": "journal.step.ended",
+     "subject": "analyse",
+     "execution": "x2/ended",
+     "payload": "{\"id\":\"x2/ended\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"step.ended\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"boardBefore\":0,\"boardAfter\":0,\"data\":{\"execution\":\"x2\"},\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 5,
+     "id": "x2",
+     "type": "journal.action",
+     "subject": "analyse",
+     "execution": "x2",
+     "payload": "{\"id\":\"x2\",\"changeId\":\"\",\"processId\":\"p\",\"seq\":0,\"kind\":\"action\",\"methodology\":\"m\",\"step\":0,\"action\":\"analyse\",\"activityRef\":\"analyse\",\"effectsMet\":true,\"boardBefore\":0,\"boardAfter\":0,\"startedAt\":\"0001-01-01T00:00:00Z\",\"endedAt\":\"0001-01-01T00:00:00Z\"}"
+    },
+    {
+     "seq": 6,
+     "id": "I1updatedx2",
+     "type": "impact.updated",
+     "subject": "I1",
+     "execution": "x2",
+     "payload": "{\"op\":\"updated\"}"
+    },
+    {
+     "seq": 7,
+     "id": "I2created",
+     "type": "impact.created",
+     "subject": "I2",
+     "execution": "",
+     "payload": "{\"op\":\"created\"}"
+    },
+    {
+     "seq": 8,
+     "id": "I2updated",
+     "type": "impact.updated",
+     "subject": "I2",
+     "execution": "",
+     "payload": "{\"op\":\"updated\"}"
+    },
+    {
+     "seq": 9,
+     "id": "I1updated",
+     "type": "impact.updated",
+     "subject": "I1",
+     "execution": "",
+     "payload": "{\"op\":\"updated\"}"
+    }
+   ],
+   "relies": {
+    "m": {
+     "analyse": [
+      "collect"
+     ],
+     "report": [
+      "analyse",
+      "collect"
+     ]
+    }
+   },
+   "history": {
+    "runs": null,
+    "steps": [
+     {
+      "path": "collect",
+      "methodology": "m",
+      "process": "p",
+      "action": "collect",
+      "execution": "x1",
+      "outcome": "succeeded",
+      "seq": 2,
+      "runs": 1,
+      "current": false,
+      "staleBy": "log entry I1updated"
+     },
+     {
+      "path": "analyse",
+      "methodology": "m",
+      "process": "p",
+      "action": "analyse",
+      "execution": "x2",
+      "outcome": "succeeded",
+      "seq": 4,
+      "runs": 1,
+      "current": false,
+      "staleBy": "log entry I1updated"
+     }
+    ]
+   }
+  }
+ ]
+}

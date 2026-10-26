@@ -43,6 +43,9 @@ type rustMethodology struct {
 	Conditions map[string]string `json:"conditions"`
 	// Evaluations are the values of the conditions on the activations of the Rust activation cases.
 	Evaluations []rustEvaluation `json:"evaluations"`
+	// StepDeps are the steps each step relies on (Compiled.StepDependencies), what the history of a change is folded
+	// with (ADR 0109 §5).
+	StepDeps map[string][]string `json:"stepDeps,omitempty"`
 }
 
 type rustEvaluation struct {
@@ -131,6 +134,15 @@ func TestRustMethodologyCasesAreCurrent(t *testing.T) {
 		cs := storedCase(MethodologyVersionKey(m.Name, m.Version), eg)
 		cs.File = strings.TrimPrefix(f, "../../")
 		cs.Conditions = c.Conditions.Exprs()
+		for later, on := range c.StepDependencies() {
+			if len(on) == 0 {
+				continue
+			}
+			if cs.StepDeps == nil {
+				cs.StepDeps = map[string][]string{}
+			}
+			cs.StepDeps[later] = slices.Sorted(maps.Keys(on))
+		}
 		for _, b := range boards {
 			res := c.Conditions.EvaluateActivation(b.act())
 			ev := rustEvaluation{Board: b.name, State: res.State, Subjects: res.Subjects}

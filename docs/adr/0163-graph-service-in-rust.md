@@ -714,9 +714,24 @@ close asks for a final state. The freezes are enforced where Go enforces them: t
 types a move froze (`Tx::impact`, `check_type_freeze` over the moves folded in the view of the change,
 `ChangeView::history`), and the frozen fields of the header at `UpdateChange`.
 
+The history of the change (ADR 0109 §4) comes with every blackboard the graph builds, as it does in Go
+(`graphsvc.LogFacets`): `history::of` reads the entries of the log the fold looks at (`history::TYPES`, Go's
+`journal.HistoryTypes`) and `history::fold` is Go's `journal.Fold` — the runs, the run of each step with its outcome,
+and whether a success still stands, a write on what a step started from or a step it relies on running again making it
+stale, in cascade. Which steps rely on which is read from the methodology itself (`Derived::step_deps`, Go's
+`Compiled.StepDependencies`): the union of what the actions generated for each step require and make true, the scoped
+actions chained as the planner chains them (`chain_scoped`, ADR 0118). `contracts/journal`
+`TestRustHistoryCasesAreCurrent` writes the logs its own tests fold and the history Go folds from each, and
+`registrysvc`'s cases carry the step dependencies of every shipped methodology; the Rust tests read both back and
+compare. So a condition over `history` holds here, and the default exit of a step (`step:<path>`) with it.
+
+The cascade of the activities is `methodologies::check_sub_activity`, Go's `registrysvc.Service.SubChangeValidator`,
+asked by `create_change` in the transaction of the creation: the Activity a sub-change is scoped to
+(`Change.Data["activityRef"]`) is its parent's or one it is made of, up the `sub_activity` links at the head of main of
+the methodology namespace, suspect ones included. An unset activity is inherited on neither side.
+
 Not yet, and the approximations to remove: the compiled methodologies are not cached (each transition and commit reads
 the nodes of its version and compiles its conditions, where Go's registry keeps a bounded cache); a stored definition
 is not validated again (what the registry refuses to publish generates nothing here); a scoped condition reading the
-conditions of other subjects through the lists of the activation sees them empty; the history of the change (ADR 0109)
-is empty, so a condition over `history` is false and the default exit of a step never holds — the next stage, with the
-cascade of the sub-changes (`SubChangeValidator`).
+conditions of other subjects through the lists of the activation sees them empty; the entry of a step naming a nested
+process does not carry what that process needs from outside, so a dependency only that would show is not seen.

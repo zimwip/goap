@@ -613,7 +613,7 @@ async fn a_change_moves_along_the_lifecycle_its_methodology_names() {
             "transitions": [
                 {"name": "submit", "from": "drafting", "to": "reviewed", "guard": "world[\"titled\"]"},
                 {"name": "rework", "from": "reviewed", "to": "drafting"},
-                {"name": "finish", "from": "reviewed", "to": "done"}]}]});
+                {"name": "finish", "from": "reviewed", "to": "done", "guard": "world[\"step_ran\"]"}]}]});
     for (method, body) in [
         ("SaveDomain", serde_json::json!({"domain": domain})),
         ("PublishDomain", serde_json::json!({"name": "flow", "version": "1.0.0"})),
@@ -636,6 +636,9 @@ async fn a_change_moves_along_the_lifecycle_its_methodology_names() {
                    "namespace": "platform", "lifecycle": "review"}},
         {"key": "MV:review@1.0.0/condition/titled", "type": "methodology@Condition",
          "props": {"name": "titled", "expr": "change.title != \"c\"", "description": "the change has a title of its own"}},
+        {"key": "MV:review@1.0.0/condition/step_ran", "type": "methodology@Condition",
+         "props": {"name": "step_ran", "description": "the step p/s has run, and what it did still stands",
+                   "expr": "\"p/s\" in history.last && history.last[\"p/s\"].current"}},
     ]);
     let (status, body) = call(
         &base,
@@ -717,7 +720,71 @@ async fn a_change_moves_along_the_lifecycle_its_methodology_names() {
     .await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["entries"][0]["subject"], "transition.submit", "{body}");
+    // the guard of the last transition reads the history of the change: nothing ran yet
+    let (_, body) = move_to("finish").await;
+    assert_eq!(body["code"], "failed_precondition", "{body}");
+    let record = |kind: &str, id: &str| {
+        serde_json::json!({"id": id, "changeId": id, "processId": "p", "kind": kind, "methodology": "review",
+            "activityRef": "p/s", "action": "p/s", "effectsMet": true, "data": {"execution": "x1"}})
+        .to_string()
+    };
+    let (status, body) = call(
+        &base,
+        "AppendLog",
+        svc,
+        serde_json::json!({"entries": [
+            {"changeId": id, "id": "x1/ended", "type": "journal.step.ended", "subject": "p/s", "execution": "x1/ended",
+             "payload": record("step.ended", "x1/ended")},
+            {"changeId": id, "id": "x1", "type": "journal.action", "subject": "p/s", "execution": "x1",
+             "payload": record("action", "x1")}]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
     let (status, body) = move_to("finish").await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["change"]["state"], "done", "{body}");
+    // the cascade of the activities (ADR 0066): a sub-change is scoped to its parent's activity or to one it is made of
+    let (status, body) = call(
+        &base,
+        "CommitEdits",
+        svc,
+        serde_json::json!({"namespace": "methodology", "title": "activities", "projectId": "PROJ-ROOT", "edits": [
+            {"key": "MV:review@1.0.0/step/p/s", "type": "methodology@Step", "props": {"name": "s"}},
+            {"key": "MV:review@1.0.0/process/p", "type": "methodology@Process", "props": {"name": "p"},
+             "links": [{"type": "methodology@sub_activity", "toKey": "MV:review@1.0.0/step/p/s"}]},
+            {"key": "MV:review@1.0.0/process/other", "type": "methodology@Process", "props": {"name": "other"}}]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let (status, body) = call(
+        &base,
+        "CreateChange",
+        svc,
+        serde_json::json!({"title": "scoped", "namespace": "platform", "ownBranch": true, "projectId": "PROJ-R",
+            "methodology": "review", "data": {"activityRef": "MV:review@1.0.0/process/p"}}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let parent = body["change"]["id"].as_str().unwrap().to_string();
+    let sub = async |activity: &str| {
+        call(
+            &base,
+            "CreateChange",
+            svc,
+            serde_json::json!({"title": "sub", "namespace": "platform", "projectId": "PROJ-R",
+                "methodology": "review", "parentId": parent, "data": {"activityRef": activity}}),
+        )
+        .await
+    };
+    let (status, body) = sub("MV:review@1.0.0/step/p/s").await;
+    assert_eq!(status, 200, "{body}");
+    let (status, body) = sub("MV:review@1.0.0/process/other").await;
+    assert_eq!(status, 400, "{body}");
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("is not part of MV:review@1.0.0/process/p"),
+        "{body}"
+    );
 }

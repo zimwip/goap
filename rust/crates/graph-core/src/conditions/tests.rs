@@ -91,6 +91,23 @@ fn derives_the_conditions_go_compiles() {
 }
 
 #[test]
+fn reads_the_step_dependencies_go_compiles() {
+    for c in cases() {
+        let got: BTreeMap<String, Vec<String>> = derive::derive(&definition(&c))
+            .step_deps
+            .into_iter()
+            .filter(|(_, on)| !on.is_empty())
+            .map(|(later, on)| (later, on.into_iter().collect()))
+            .collect();
+        let want: BTreeMap<String, Vec<String>> = serde_json::from_value(c["stepDeps"].clone()).unwrap_or_default();
+        for (k, w) in &want {
+            assert_eq!(got.get(k), Some(w), "{}: {k}", c["file"]);
+        }
+        assert_eq!(got, want, "{}", c["file"]);
+    }
+}
+
+#[test]
 fn evaluates_the_conditions_as_go_does() {
     let acts: Value = serde_json::from_str(include_str!("activation_cases.gen.json")).unwrap();
     let acts: BTreeMap<String, Map<String, Value>> = acts["cases"]

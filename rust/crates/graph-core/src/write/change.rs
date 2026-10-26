@@ -288,6 +288,11 @@ impl<S: WriteTx> Tx<'_, S> {
             project_id: project,
             ..Change::default()
         };
+        if !c.parent_id.is_empty() {
+            // the cascade of the activities, in the transaction of the creation: it reads the methodology namespace
+            let parent = self.change_head(&c.parent_id).await?;
+            methodologies::check_sub_activity(self.store, &parent, &c).await?;
+        }
         self.prepare_sub_change(&mut c, &mut inp).await?;
         self.scope_change(&mut c).await?;
         if c.baseline_id.is_empty() && c.parent_id.is_empty() {

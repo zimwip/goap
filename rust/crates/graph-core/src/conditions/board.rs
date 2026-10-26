@@ -147,9 +147,9 @@ pub async fn wire<T: ReadTx>(
     }))
 }
 
-/// What the graph adds to the blackboard of a change: the changes it depends on and what its organisation requires of
-/// its criticality (Go's `FacetDependencies` and `Graph.CriticalityOf`). The history of the change (ADR 0109) is not
-/// folded yet, and the graph keeps no supertypes nor variables on a blackboard.
+/// What the graph adds to the blackboard of a change: the changes it depends on, what its organisation requires of its
+/// criticality and the history of its runs (Go's `FacetDependencies`, `Graph.CriticalityOf` and `LogFacets`). The graph
+/// keeps no supertypes nor variables on a blackboard.
 pub async fn facets<T: ReadTx>(tx: &T, c: &Change) -> Result<Facets> {
     let deps = dependency::dependencies_of(tx, c).await?;
     let dependencies = deps
@@ -166,6 +166,7 @@ pub async fn facets<T: ReadTx>(tx: &T, c: &Change) -> Result<Facets> {
     Ok(Facets {
         dependencies,
         criticality_policy: Some(policy),
+        history: Some(crate::history::of(tx, c).await?),
         ..Facets::default()
     })
 }
