@@ -30,7 +30,16 @@ pub struct Counts {
     pub verdicts: BTreeMap<Verdict, u64>,
     #[serde(skip)]
     pub seconds: BTreeMap<&'static str, (f64, u64)>,
+    /// Per side, the calls whose time is at most each of [`BUCKETS`] (not cumulated: one bucket per call).
+    #[serde(skip)]
+    pub buckets: BTreeMap<&'static str, [u64; BUCKETS.len()]>,
 }
+
+/// The upper bounds, in seconds, of the histogram of the time of the services behind the proxy (the calls above the last
+/// are counted in `+Inf` only).
+pub const BUCKETS: [f64; 14] = [
+    0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0,
+];
 
 #[derive(Debug, Default)]
 pub struct Stats {
@@ -59,6 +68,15 @@ impl Stats {
             .or_default();
         e.0 += d.as_secs_f64();
         e.1 += 1;
+        let secs = d.as_secs_f64();
+        if let Some(i) = BUCKETS.iter().position(|b| secs <= *b) {
+            self.calls
+                .get_mut(procedure)
+                .expect("entered above")
+                .buckets
+                .entry(side)
+                .or_default()[i] += 1;
+        }
     }
 
     pub fn verdict(&mut self, procedure: &str, v: Verdict) {
@@ -141,6 +159,56 @@ impl Stats {
                 );
             }
         }
+        let _ = writeln!(
+            s,
+            "# HELP goap_proxy_upstream_duration_seconds The time of the services behind the proxy.\n# TYPE goap_proxy_upstream_duration_seconds histogram"
+        );
+        for (p, c) in &self.calls {
+            let (svc, m) = split(p);
+            for (side, (sum, n)) in &c.seconds {
+                let labels = format!("service=\"{svc}\",method=\"{m}\",side=\"{side}\"");
+                let mut acc = 0;
+                let none = [0; BUCKETS.len()];
+                let counts = c.buckets.get(side).unwrap_or(&none);
+                for (b, k) in BUCKETS.iter().zip(counts) {
+                    acc += k;
+                    let _ = writeln!(
+                        s,
+                        "goap_proxy_upstream_duration_seconds_bucket{{{labels},le=\"{b}\"}} {acc}"
+                    );
+                }
+                let _ = writeln!(
+                    s,
+                    "goap_proxy_upstream_duration_seconds_bucket{{{labels},le=\"+Inf\"}} {n}"
+                );
+                let _ = writeln!(s, "goap_proxy_upstream_duration_seconds_sum{{{labels}}} {sum}");
+                let _ = writeln!(s, "goap_proxy_upstream_duration_seconds_count{{{labels}}} {n}");
+            }
+        }
         s
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_histogram_cumulates_the_buckets() {
+        let mut st = Stats::default();
+        let p = "/goap.graph.v1.GraphService/GetNode";
+        st.time(p, "rust", Duration::from_micros(800));
+        st.time(p, "rust", Duration::from_millis(20));
+        st.time(p, "rust", Duration::from_secs(60));
+        let m = st.metrics("rust");
+        let at = |le: &str| {
+            format!(
+                "goap_proxy_upstream_duration_seconds_bucket{{service=\"GraphService\",method=\"GetNode\",side=\"rust\",le=\"{le}\"}}"
+            )
+        };
+        for (le, n) in [("0.001", 1), ("0.01", 1), ("0.025", 2), ("30", 2), ("+Inf", 3)] {
+            assert!(m.contains(&format!("{} {n}\n", at(le))), "{le}: {m}");
+        }
+        assert!(m.contains("goap_proxy_upstream_duration_seconds_count{service=\"GraphService\",method=\"GetNode\",side=\"rust\"} 3\n"), "{m}");
     }
 }

@@ -1457,13 +1457,17 @@ stack is down or reset. `make perf-compare` (`.\make.ps1 perf-compare`, `deploy/
 and `perf.rust.yml`) measures the Go and the Rust graph services side by side: each on its schema of the same PostgreSQL
 (`graph`, `graph_rs`) with its own domain registry (`domains`, `domains-rs` on `domains_rs`: each bench publishes its
 versions of the bench domain; the four schemas dropped first unless `PERF_COMPARE_KEEP=1`), each loaded by its own `goap-bench` (`bench`,
-`bench-rs`) with the flags `PERF_COMPARE_ARGS` (default `-versions 100000 -seed 1`: the same workload for both), called
-directly, at the same time (they share the machine) or one after the other (`PERF_COMPARE_SERIAL=1`: Go, then Rust); the
-benches tag their series with the resource attribute `goap.perf.impl` (`go` / `rust`, Prometheus label `goap_perf_impl`),
-drawn by the dashboard *GOAP performance: Go vs Rust* (`deploy/grafana/dashboards/goap-perf-compare.json`, http://localhost:3300/d/goap-perf-compare:
-throughput, p95 per call over the range and its ratio Rust / Go, each service's calls over time, the size and scans of
-each schema); reports in `.goap/perf/compare/go` and `rust`. The Rust service exports no metrics of its own yet: the
-comparison is what the client sees and what PostgreSQL holds. The web looks at the data of the bench (http://localhost:5174): a `gateway` (:8381, `GOAP_AUTH_MODE=none`, the
+`bench-rs`) with the flags `PERF_COMPARE_ARGS` (default `-seed 1` then `PERF_ARGS`, the flags of `make perf`: the same
+workload for both), each through its own `goap-proxy` (`proxy` in mode go, `proxy-rs` in mode rust, :8385), at the same
+time (they share the machine) or one after the other (`PERF_COMPARE_SERIAL=1`: Go, then Rust); the benches tag their
+series with the resource attribute `goap.perf.impl` (`go` / `rust`, Prometheus label `goap_perf_impl`), each proxy times
+the service behind it (`goap_proxy_upstream_duration_seconds`, a histogram per service, method and `side`), and cAdvisor
+(`cadvisor`, profile `cadvisor` of `perf.yml`, started by `make perf-compare`) gives the CPU, memory, network and threads
+of each container; drawn by the dashboard *GOAP performance: Go vs Rust* (`deploy/grafana/dashboards/goap-perf-compare.json`, http://localhost:3300/d/goap-perf-compare:
+throughput, the server's latency, CPU and memory per service, p95 per call over the range and its ratio Rust / Go as
+the client and as the server see them, each service's calls over time, the size and scans of each schema); reports in
+`.goap/perf/compare/go` and `rust`. The Rust service exports no metrics of its own yet: the comparison is what the
+client, the proxies, cAdvisor and PostgreSQL see. The web looks at the data of the bench (http://localhost:5174): a `gateway` (:8381, `GOAP_AUTH_MODE=none`, the
 fixed development administrator) routing to the graph alone, and the `web` dev server; what needs another service answers
 an error.
 

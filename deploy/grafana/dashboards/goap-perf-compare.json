@@ -16,7 +16,7 @@
  },
  "editable": true,
  "graphTooltip": 1,
- "description": "make perf-compare: the Go and the Rust graph services, each on its schema, loaded by two goap-bench with the same flags and seed (label goap_perf_impl). Latencies seen by the client, throughput, failures and what PostgreSQL holds for each. Blue Go, orange Rust.",
+ "description": "make perf-compare: the Go and the Rust graph services, each on its schema behind its own goap-proxy, loaded by two goap-bench with the same flags and seed (label goap_perf_impl). Latencies seen by the client and by the server (the proxy), CPU and memory of each container (cAdvisor), throughput, failures and what PostgreSQL holds for each. Blue Go, orange Rust.",
  "links": [
   {
    "title": "GOAP performance",
@@ -737,7 +737,7 @@
   },
   {
    "type": "row",
-   "title": "Writes: Go vs Rust",
+   "title": "Server side: latency seen by goap-proxy, CPU and memory (cAdvisor)",
    "id": 10,
    "collapsed": false,
    "gridPos": {
@@ -748,9 +748,1027 @@
    }
   },
   {
+   "type": "stat",
+   "title": "Peak memory (working set)",
+   "id": 11,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "Highest working set of each graph container over the range (cAdvisor).",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "label_replace(label_replace(max by (container_label_com_docker_compose_service) (max_over_time(container_memory_working_set_bytes{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__range])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "legendFormat": "{{impl}}",
+     "refId": "A",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^go"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3274D9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rust"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF780A"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "graphMode": "area",
+    "colorMode": "value",
+    "textMode": "value_and_name"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 0,
+    "y": 22
+   }
+  },
+  {
+   "type": "stat",
+   "title": "CPU used over the range",
+   "id": 12,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "CPU seconds each graph container used over the range: the same work done, the lower the better.",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (increase(container_cpu_usage_seconds_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__range])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "legendFormat": "{{impl}}",
+     "refId": "A",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^go"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3274D9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rust"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF780A"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "graphMode": "area",
+    "colorMode": "value",
+    "textMode": "value_and_name"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 6,
+    "y": 22
+   }
+  },
+  {
+   "type": "stat",
+   "title": "CPU per 1000 versions",
+   "id": 13,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "CPU seconds used per thousand versions written by its bench.",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (increase(container_cpu_usage_seconds_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__range])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\") / on (impl) (label_replace(max by (goap_perf_impl) (goap_bench_versions{service_name=\"goap-bench\"}), \"impl\", \"$1\", \"goap_perf_impl\", \"(.*)\") / 1000)",
+     "legendFormat": "{{impl}}",
+     "refId": "A",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "decimals": 2
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^go"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3274D9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rust"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF780A"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "graphMode": "area",
+    "colorMode": "value",
+    "textMode": "value_and_name"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 12,
+    "y": 22
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Server p95, all calls",
+   "id": 14,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "p95 of every call over the range, timed by the proxy in front of each service (no network of the bench, no client).",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "histogram_quantile(0.95, sum by (le, side) (increase(goap_proxy_upstream_duration_seconds_bucket{job=~\"proxy|proxy-rs\"}[$__range])))",
+     "legendFormat": "{{side}}",
+     "refId": "A",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^go"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3274D9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rust"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF780A"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "graphMode": "area",
+    "colorMode": "value",
+    "textMode": "value_and_name"
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 18,
+    "y": 22
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "CPU (cores)",
+   "id": 15,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "CPU used by each graph container, in cores (cAdvisor).",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__rate_interval])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "legendFormat": "{{impl}}",
+     "refId": "A",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      }
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^go"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3274D9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rust"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF780A"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 26
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Memory",
+   "id": 16,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "Working set (solid) and RSS of each graph container (cAdvisor).",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "legendFormat": "{{impl}} working set",
+     "refId": "A",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (container_memory_rss{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "legendFormat": "{{impl}} rss",
+     "refId": "B",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      }
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^go"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3274D9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rust"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF780A"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 26
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Server p95 and p50, all calls",
+   "id": 17,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "Quantiles of every call, timed by the proxy in front of each service.",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "histogram_quantile(0.95, sum by (le, side) (rate(goap_proxy_upstream_duration_seconds_bucket{job=~\"proxy|proxy-rs\"}[$__rate_interval])))",
+     "legendFormat": "{{side}} p95",
+     "refId": "A",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "histogram_quantile(0.5, sum by (le, side) (rate(goap_proxy_upstream_duration_seconds_bucket{job=~\"proxy|proxy-rs\"}[$__rate_interval])))",
+     "legendFormat": "{{side}} p50",
+     "refId": "B",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      }
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^go"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3274D9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rust"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF780A"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 34
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Server call rate",
+   "id": 18,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "Calls per second each service answers.",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum by (side) (rate(goap_proxy_upstream_duration_seconds_count{job=~\"proxy|proxy-rs\"}[$__rate_interval]))",
+     "legendFormat": "{{side}}",
+     "refId": "A",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "reqps",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      }
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^go"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3274D9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rust"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF780A"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 34
+   }
+  },
+  {
+   "type": "bargauge",
+   "title": "Server p95 per method over the range",
+   "id": 19,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "p95 of each RPC over the range, timed by the proxy: blue Go, orange Rust.",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "histogram_quantile(0.95, sum by (le, method, side) (increase(goap_proxy_upstream_duration_seconds_bucket{job=~\"proxy|proxy-rs\"}[$__range])))",
+     "legendFormat": "{{side}} \u00b7 {{method}}",
+     "refId": "A",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "min": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^go"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3274D9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rust"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF780A"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "basic",
+    "showUnfilled": true,
+    "valueMode": "color",
+    "namePlacement": "left",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "gridPos": {
+    "h": 12,
+    "w": 12,
+    "x": 0,
+    "y": 42
+   }
+  },
+  {
+   "type": "bargauge",
+   "title": "Server p95 per method, Rust / Go",
+   "id": 20,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "Ratio of the server p95 over the range: below 1 Rust is faster (green), above 1.25 slower (red).",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "histogram_quantile(0.95, sum by (le, method) (increase(goap_proxy_upstream_duration_seconds_bucket{job=~\"proxy|proxy-rs\", side=\"rust\"}[$__range]))) / histogram_quantile(0.95, sum by (le, method) (increase(goap_proxy_upstream_duration_seconds_bucket{job=~\"proxy|proxy-rs\", side=\"go\"}[$__range])))",
+     "legendFormat": "{{method}}",
+     "refId": "A",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "suffix:\u00d7",
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 1
+       },
+       {
+        "color": "red",
+        "value": 1.25
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "basic",
+    "showUnfilled": true,
+    "valueMode": "color",
+    "namePlacement": "left",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   },
+   "gridPos": {
+    "h": 12,
+    "w": 12,
+    "x": 12,
+    "y": 42
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Network received and sent",
+   "id": 21,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "Bytes per second in and out of each graph container (cAdvisor).",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__rate_interval])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "legendFormat": "{{impl}} in",
+     "refId": "A",
+     "range": true
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}[$__rate_interval])), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "legendFormat": "{{impl}} out",
+     "refId": "B",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "Bps",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      }
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^go"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3274D9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rust"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF780A"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 54
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Threads",
+   "id": 22,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "Threads of each graph container (cAdvisor).",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "label_replace(label_replace(sum by (container_label_com_docker_compose_service) (container_threads{container_label_com_docker_compose_project=\"goap-perf\", container_label_com_docker_compose_service=~\"graph|graph-rs\"}), \"impl\", \"go\", \"container_label_com_docker_compose_service\", \"graph\"), \"impl\", \"rust\", \"container_label_com_docker_compose_service\", \"graph-rs\")",
+     "legendFormat": "{{impl}}",
+     "refId": "A",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      }
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^go"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3274D9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rust"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF780A"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 54
+   }
+  },
+  {
+   "type": "row",
+   "title": "Writes: Go vs Rust",
+   "id": 23,
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 62
+   }
+  },
+  {
    "type": "bargauge",
    "title": "Writes p95 over the range",
-   "id": 11,
+   "id": 24,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -823,13 +1841,13 @@
     "h": 12,
     "w": 12,
     "x": 0,
-    "y": 22
+    "y": 63
    }
   },
   {
    "type": "bargauge",
    "title": "Writes p95, Rust / Go",
-   "id": 12,
+   "id": 25,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -891,13 +1909,13 @@
     "h": 12,
     "w": 12,
     "x": 12,
-    "y": 22
+    "y": 63
    }
   },
   {
    "type": "timeseries",
    "title": "Writes p95: Go",
-   "id": 13,
+   "id": 26,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -948,13 +1966,13 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 34
+    "y": 75
    }
   },
   {
    "type": "timeseries",
    "title": "Writes p95: Rust",
-   "id": 14,
+   "id": 27,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -1005,25 +2023,25 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 34
+    "y": 75
    }
   },
   {
    "type": "row",
    "title": "Reads: Go vs Rust",
-   "id": 15,
+   "id": 28,
    "collapsed": false,
    "gridPos": {
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 42
+    "y": 83
    }
   },
   {
    "type": "bargauge",
    "title": "Reads p95 over the range",
-   "id": 16,
+   "id": 29,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -1096,13 +2114,13 @@
     "h": 12,
     "w": 12,
     "x": 0,
-    "y": 43
+    "y": 84
    }
   },
   {
    "type": "bargauge",
    "title": "Reads p95, Rust / Go",
-   "id": 17,
+   "id": 30,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -1164,13 +2182,13 @@
     "h": 12,
     "w": 12,
     "x": 12,
-    "y": 43
+    "y": 84
    }
   },
   {
    "type": "timeseries",
    "title": "Reads p95: Go",
-   "id": 18,
+   "id": 31,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -1221,13 +2239,13 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 55
+    "y": 96
    }
   },
   {
    "type": "timeseries",
    "title": "Reads p95: Rust",
-   "id": 19,
+   "id": 32,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -1278,25 +2296,25 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 55
+    "y": 96
    }
   },
   {
    "type": "row",
    "title": "Selected calls ($op)",
-   "id": 20,
+   "id": 33,
    "collapsed": false,
    "gridPos": {
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 63
+    "y": 104
    }
   },
   {
    "type": "timeseries",
    "title": "p95 ($op)",
-   "id": 21,
+   "id": 34,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -1378,13 +2396,13 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 64
+    "y": 105
    }
   },
   {
    "type": "timeseries",
    "title": "Call rate ($op)",
-   "id": 22,
+   "id": 35,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -1466,13 +2484,13 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 64
+    "y": 105
    }
   },
   {
    "type": "timeseries",
    "title": "Answer size ($op, mean)",
-   "id": 23,
+   "id": 36,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -1554,13 +2572,13 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 72
+    "y": 113
    }
   },
   {
    "type": "timeseries",
    "title": "p50 ($op)",
-   "id": 24,
+   "id": 37,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -1642,25 +2660,25 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 72
+    "y": 113
    }
   },
   {
    "type": "row",
    "title": "PostgreSQL: schema graph (Go) vs graph_rs (Rust)",
-   "id": 25,
+   "id": 38,
    "collapsed": false,
    "gridPos": {
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 80
+    "y": 121
    }
   },
   {
    "type": "timeseries",
    "title": "Size per schema (with indexes)",
-   "id": 26,
+   "id": 39,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -1742,13 +2760,13 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 81
+    "y": 122
    }
   },
   {
    "type": "timeseries",
    "title": "Bytes stored per version written",
-   "id": 27,
+   "id": 40,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -1830,13 +2848,13 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 81
+    "y": 122
    }
   },
   {
    "type": "timeseries",
    "title": "Rows read by sequential scans",
-   "id": 28,
+   "id": 41,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -1918,13 +2936,13 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 89
+    "y": 130
    }
   },
   {
    "type": "timeseries",
    "title": "Rows read through indexes",
-   "id": 29,
+   "id": 42,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -2006,13 +3024,13 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 89
+    "y": 130
    }
   },
   {
    "type": "timeseries",
    "title": "Rows per table",
-   "id": 30,
+   "id": 43,
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -2063,7 +3081,7 @@
     "h": 8,
     "w": 24,
     "x": 0,
-    "y": 97
+    "y": 138
    }
   }
  ]
