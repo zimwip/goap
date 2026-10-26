@@ -450,6 +450,7 @@ impl WriteTx for Session {
     }
 
     async fn put_node(&self, n: &Node, committed: i64) -> Result<(), GraphError> {
+        self.tx.wrote(&n.node_ref());
         let s = self.sql;
         if n.version == 1 {
             let q = format!(
@@ -511,6 +512,9 @@ impl WriteTx for Session {
     }
 
     async fn put_links(&self, ls: &[Link]) -> Result<(), GraphError> {
+        for l in ls {
+            self.tx.wrote(&l.from);
+        }
         for rows in ls.chunks(LINK_ROWS_PER_INSERT) {
             let mut args = Vec::with_capacity(rows.len() * LINK_COLUMNS.len());
             for l in rows {
@@ -523,6 +527,7 @@ impl WriteTx for Session {
     }
 
     async fn drop_link(&self, from: &NodeRef, row: &LinkId, l: &Link) -> Result<(), GraphError> {
+        self.tx.wrote(from);
         let mut drop = l.clone();
         drop.id = row.clone();
         drop.from = from.clone();
@@ -533,6 +538,7 @@ impl WriteTx for Session {
     }
 
     async fn put_link_set(&self, from: &NodeRef, set: LinkSet) -> Result<(), GraphError> {
+        self.tx.wrote(from);
         let s = self.sql;
         let q = format!(
             "UPDATE node_version SET links = {}, links_base = {}, links_depth = {}, links_seq = {} WHERE node_id = {} AND version = {}",
@@ -570,8 +576,21 @@ impl WriteTx for Session {
         if refs.is_empty() {
             return Ok(out);
         }
-        for r in self.select(self.sql.link_sets_of(refs), "link sets").await? {
-            out.insert(
+        let mut missing = Vec::new();
+        for r in refs {
+            match self.tx.fixed(r).then(|| self.versions.set(r)).flatten() {
+                Some(set) => {
+                    out.insert(r.clone(), set);
+                }
+                None => missing.push(r.clone()),
+            }
+        }
+        if missing.is_empty() {
+            return Ok(out);
+        }
+        let era = self.versions.generation();
+        for r in self.select(self.sql.link_sets_of(&missing), "link sets").await? {
+            let r = (
                 NodeRef::new(NodeId(r.text(0)), r.int32(1)),
                 LinkSet {
                     of: r.int32(2),
@@ -580,6 +599,10 @@ impl WriteTx for Session {
                     seq: r.int(5),
                 },
             );
+            if self.tx.fixed(&r.0) {
+                self.versions.keep_set(era, &r.0, r.1);
+            }
+            out.insert(r.0, r.1);
         }
         Ok(out)
     }
@@ -620,6 +643,7 @@ impl WriteTx for Session {
         impact: &str,
         comment: &str,
     ) -> Result<(), GraphError> {
+        self.tx.forget(r);
         let s = self.sql;
         let q = format!(
             "UPDATE node_version SET change_id = {}, change_impact = {}, comment = {} WHERE node_id = {} AND version = {}",
@@ -669,6 +693,8 @@ impl WriteTx for Session {
     async fn rollback_to_savepoint(&self) -> Result<(), GraphError> {
         self.run(("ROLLBACK TO SAVEPOINT rehearsal".into(), vec![]), "savepoint")
             .await?;
+        // an origin set since is undone
+        self.tx.clear();
         Ok(())
     }
 
@@ -696,6 +722,17 @@ impl WriteTx for Session {
     }
 
     async fn delete_change(&self, id: &ChangeId, namespace: &str, branch: &str) -> Result<(), GraphError> {
+        // the versions it deletes leave the cache, and a read in flight is not kept (again once they are gone)
+        self.tx.clear();
+        self.versions.reset();
+        let res = self.purge_change(id, namespace, branch).await;
+        self.versions.reset();
+        res
+    }
+}
+
+impl Session {
+    async fn purge_change(&self, id: &ChangeId, namespace: &str, branch: &str) -> Result<(), GraphError> {
         let s = self.sql;
         let p = s.ph(1);
         let differs = |col: &str| {

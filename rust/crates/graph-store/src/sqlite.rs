@@ -11,6 +11,8 @@ pub struct Sqlite {
     /// The writer: held by a write transaction from its BEGIN to its COMMIT, across the awaits between its statements.
     writer: Arc<AsyncMutex<Connection>>,
     readers: Option<Arc<Readers>>,
+    /// The versions kept between transactions ([`crate::read::Versions`]).
+    pub(crate) versions: Arc<crate::read::Versions>,
 }
 
 struct Readers {
@@ -98,6 +100,7 @@ impl Sqlite {
                 idle: Mutex::new(conns),
                 slots: Arc::new(Semaphore::new(n)),
             })),
+            versions: Default::default(),
         })
     }
 
@@ -113,6 +116,7 @@ impl Sqlite {
         Ok(Sqlite {
             writer: Arc::new(AsyncMutex::new(c)),
             readers: None,
+            versions: Default::default(),
         })
     }
 

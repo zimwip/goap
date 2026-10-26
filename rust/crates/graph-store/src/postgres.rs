@@ -10,6 +10,8 @@ use crate::{StoreError, migrate};
 pub struct Postgres {
     pub write: Pool,
     pub read: Pool,
+    /// The versions kept between transactions ([`crate::read::Versions`]).
+    pub(crate) versions: std::sync::Arc<crate::read::Versions>,
 }
 
 fn pool(cfg: tokio_postgres::Config, size: usize) -> Result<Pool, StoreError> {
@@ -45,7 +47,11 @@ impl Postgres {
                 }
             }
         }
-        let pg = Postgres { write, read };
+        let pg = Postgres {
+            write,
+            read,
+            versions: Default::default(),
+        };
         pg.migrate().await?;
         drop(pg.read.get().await?);
         Ok(pg)

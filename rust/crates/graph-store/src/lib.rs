@@ -78,16 +78,16 @@ impl Store {
     /// A read-only session for the reads of a request.
     pub async fn reader(&self) -> Result<read::Session, StoreError> {
         Ok(match self {
-            Store::Postgres(p) => read::Session::postgres(p.read.get().await?),
-            Store::Sqlite(s) => read::Session::sqlite(s.session().await?),
+            Store::Postgres(p) => read::Session::postgres(p.read.get().await?, p.versions.clone()),
+            Store::Sqlite(s) => read::Session::sqlite(s.session().await?, s.versions.clone()),
         })
     }
 
     /// A write transaction on the writer: committed by [`read::Session::commit`], rolled back when dropped.
     pub async fn writer(&self) -> Result<read::Session, StoreError> {
         Ok(match self {
-            Store::Postgres(p) => read::Session::postgres_tx(p.write.get().await?).await?,
-            Store::Sqlite(s) => read::Session::sqlite_tx(s.begin().await?),
+            Store::Postgres(p) => read::Session::postgres_tx(p.write.get().await?, p.versions.clone()).await?,
+            Store::Sqlite(s) => read::Session::sqlite_tx(s.begin().await?, s.versions.clone()),
         })
     }
 
