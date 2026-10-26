@@ -37,7 +37,7 @@ binary, an embedded NATS, a SQLite file per service) already ran what compose ru
 ## Consequences
 
 - What runs locally is what compose runs: the Rust graph by default (`LOCAL_GRAPH=go` for the Go one; `make dev` / `dev-backend` the Go one unless
-  `LOCAL_GRAPH` is set, while the Rust graph instantiates no lifecycle or guardian of the methodologies), the services
+  `LOCAL_GRAPH` is set, while the Rust graph runs no lifecycle transition or guardian of the methodologies), the services
   talking over RPC and NATS.
 - The hooks `goap-dev` wired from its in-process registry are the graph's own: the registry declares the
   methodologies (nodes of the platform graph, ADR 0023), and the graph instantiates from them what it asks of a
@@ -45,9 +45,11 @@ binary, an embedded NATS, a SQLite file per service) already ran what compose ru
   guardian of its commits and its chain of guardians (ADR 0106, 0146), the cascade of its sub-changes (ADR 0066), the
   standing of its steps (ADR 0109), the roles of its operations (ADR 0103). `platform/cmd/graph` holds for this a
   read-only `registrysvc.Service` over the platform graph (in a content graph, the platform graph's client), which
-  seeds, publishes and announces nothing. The Rust graph reads the roles of the operations so; the rest of the
-  instantiation is still to be written there (a change following a lifecycle is refused at its transition and merge,
-  `unresolved_lifecycle`).
+  seeds, publishes and announces nothing. The Rust graph reads the roles of the operations so, and what a change
+  follows (`graph_core::methodologies::Declared`: its version, main goal, lifecycle and initial state, guardian chain,
+  at its creation, when it takes a methodology, is upgraded, attached, detached or moved); the guards, gates and
+  guardians, the cascade of the sub-changes and the standing of the steps are still to be written there (a change
+  following a lifecycle is refused at its transition and merge, `unresolved_lifecycle`).
 - Lost with `goap-dev`: the in-process workspace and Claude coding agent connectors seeded by
   `GOAP_DEV_WORKSPACE_ROOT` / `GOAP_DEV_WORKSPACE_IMAGE` (run `connector-workspace` and give a unit an adapter);
   `GOAP_DEV_DEMO` (`GOAP_GRAPH_SEED=demo`); the IDE served from `web/dist` (vite serves it).

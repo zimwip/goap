@@ -1,7 +1,7 @@
 //! Attaching and detaching a change (Go's `attach.go`, ADR 0106): a root change becomes a sub-change of another one,
 //! forked again from its parent's branch with what it committed rebased there; detached, it is a root change again,
-//! forked from the head of the branch its root ancestor merges into. With no registry no methodology is asked whether
-//! it integrates another, and a detached change's guardian chain is none.
+//! forked from the head of the branch its root ancestor merges into, its guardian chain computed again. Whether a
+//! methodology integrates another is read from the methodologies the registry declares.
 use graph_catalog::catalog::{STRUCTURE_ORGANISATION, STRUCTURE_PROJECT};
 use serde_json::{Value, json};
 
@@ -14,6 +14,7 @@ use super::{
 use crate::{
     GraphError, Result,
     change::{Change, GuardianRef},
+    methodologies::Declared,
     model::{Branch, ChangeId, branch_of, namespace_of},
     read,
     store::WriteTx,
@@ -26,13 +27,13 @@ pub const HEADER_GUARDIANS: &str = "guardians";
 const BRANCH_OPEN: &str = "open";
 
 /// A guardian chain as a header edit records it: none is null.
-fn chain_value(chain: &[GuardianRef]) -> Value {
+pub(super) fn chain_value(chain: &[GuardianRef]) -> Value {
     if chain.is_empty() { Value::Null } else { json!(chain) }
 }
 
 /// The chain of a change of a methodology under a parent (Go's `chainUnder`): the parent's chain (its own methodology
 /// when it has none) then the methodology, unless it is the last one already.
-fn chain_under(parent: &Change, methodology: &str, own: Option<GuardianRef>) -> Vec<GuardianRef> {
+pub(super) fn chain_under(parent: &Change, methodology: &str, own: Option<GuardianRef>) -> Vec<GuardianRef> {
     let mut chain = parent.guardians.clone();
     if chain.is_empty() && !parent.methodology.is_empty() {
         chain.push(GuardianRef {
@@ -50,7 +51,7 @@ fn chain_under(parent: &Change, methodology: &str, own: Option<GuardianRef>) -> 
 }
 
 /// The reference of the change's own methodology in its chain, its version kept (Go's `ownRef`).
-fn own_ref(c: &Change) -> Option<GuardianRef> {
+pub(super) fn own_ref(c: &Change) -> Option<GuardianRef> {
     if !c.methodology_version.is_empty() {
         return Some(GuardianRef {
             methodology: c.methodology.clone(),
@@ -76,7 +77,17 @@ impl<S: WriteTx> Tx<'_, S> {
     /// parent's project or one below it, held by its unit or one below it; its branch forked again from the parent's,
     /// what it committed rebased there (a conflict refuses the move), its chain the parent's plus its methodology.
     pub async fn attach_change(&mut self, id: &ChangeId, parent: &ChangeId) -> Result<(Change, i64)> {
-        self.attachable(id, parent).await?;
+        let (c, p) = self.attachable(id, parent).await?;
+        if !c.methodology.is_empty()
+            && !Declared::read(self.store)
+                .await?
+                .integrates(&p.methodology_ref(), &c.methodology)
+        {
+            return Err(GraphError::invalid(format!(
+                "methodology {:?} does not integrate the changes of {:?}",
+                p.methodology, c.methodology
+            )));
+        }
         self.lock_change(id).await?;
         self.lock_change(parent).await?;
         let (mut cur, mut pc) = self.attachable(id, parent).await?;
@@ -113,19 +124,27 @@ impl<S: WriteTx> Tx<'_, S> {
             return Err(GraphError::conflict(format!("change {id} is not a sub-change")));
         }
         open_to_move(&cur)?;
+        // its guardian chain computed again for its methodology and project
+        let chain = match c.methodology.is_empty() {
+            true => Vec::new(),
+            false => {
+                let declared = Declared::read(self.store).await?;
+                self.root_chain(&declared, &c.methodology_ref(), &c.project_id).await?
+            }
+        };
         let seq = super::work::fold_change(self.store, id).await?.seq;
         let target = self.root_target(&cur).await?;
         self.header_entry(
             &cur.id,
             json!({
                 HEADER_PARENT_ID: {"from": cur.parent_id.to_string(), "to": ""},
-                HEADER_GUARDIANS: {"from": chain_value(&cur.guardians), "to": Value::Null},
+                HEADER_GUARDIANS: {"from": chain_value(&cur.guardians), "to": chain_value(&chain)},
             }),
         )
         .await?;
         let left = cur.parent_id.clone();
         cur.parent_id = ChangeId::default();
-        cur.guardians = Vec::new();
+        cur.guardians = chain;
         let (c, seq) = self.reparent(cur, &target, seq).await?;
         // the event names the change it left
         let mut ev = c.clone();

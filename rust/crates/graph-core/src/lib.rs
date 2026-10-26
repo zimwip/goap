@@ -16,6 +16,7 @@ pub mod impact;
 pub mod items;
 pub mod jsontext;
 pub mod lnk;
+pub mod methodologies;
 pub mod model;
 pub mod okf;
 pub mod operations;

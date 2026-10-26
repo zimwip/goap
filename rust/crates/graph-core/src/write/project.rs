@@ -2,9 +2,12 @@
 //! `SetChangeMethodology`, ADR 0096): header edits journaled in a `change.updated` entry, with the gates the Go
 //! service plugs from the organisation (`graphsvc.ProjectMoveGate`, `MethodologyGate`) for a platform service.
 use graph_catalog::catalog::STRUCTURE_PROJECT;
+use std::collections::HashMap;
+
 use serde_json::{Map, Value, json};
 
 use super::{
+    attach::{chain_under, chain_value, own_ref},
     change::{STATUS_ABANDONED, STATUS_ACTIVE, STATUS_APPLIED, STATUS_DRAFT},
     tx::Tx,
 };
@@ -14,6 +17,7 @@ use crate::{
     change::{Change, ChangesFilter},
     impact::LogEntry,
     lnk::Url,
+    methodologies::Declared,
     model::ChangeId,
     store::WriteTx,
 };
@@ -22,10 +26,12 @@ use crate::{
 pub const HEADER_PROJECT_ID: &str = "projectId";
 /// The field of a header edit recording the methodology a change took (`graph.HeaderMethodology`).
 pub const HEADER_METHODOLOGY: &str = "methodology";
+/// The field of a header edit recording the version of its methodology a change follows (`graph.HeaderMethodologyVersion`).
+pub const HEADER_METHODOLOGY_VERSION: &str = "methodologyVersion";
 
 impl<S: WriteTx> Tx<'_, S> {
     /// Moves a root change, draft or active and having committed nothing, with its open sub-changes to another
-    /// project. With no registry no guardian chain is computed again. The change comes back with the position its
+    /// project, the guardian chain of each computed again for it (ADR 0106). The change comes back with the position its
     /// view was read at.
     /// `gate` judges the caller on each project a change of the family leaves or enters (Go's `ProjectMoveGate`).
     pub async fn move_change(
@@ -64,18 +70,39 @@ impl<S: WriteTx> Tx<'_, S> {
                 }
             }
         }
+        // the guardian chain of the root computed again for the new project (ADR 0106), its sub-changes' from it
+        let root = &family[0];
+        let root_chain = match root.methodology.is_empty() {
+            true => Vec::new(),
+            false => {
+                let declared = Declared::read(self.store).await?;
+                self.root_chain(&declared, &root.methodology_ref(), &project).await?
+            }
+        };
         self.lock_change(id).await?;
         let seq = super::work::fold_change(self.store, id).await?.seq;
-        let mut moved = Change::default();
+        let mut moved_to: HashMap<ChangeId, Change> = HashMap::new();
         for mut c in family {
-            let fields = json!({HEADER_PROJECT_ID: {"from": c.project_id.to_string(), "to": project.to_string()}});
+            let mut fields = json!({HEADER_PROJECT_ID: {"from": c.project_id.to_string(), "to": project.to_string()}});
+            let mut chain = c.guardians.clone();
+            if !c.methodology.is_empty() {
+                if &c.id == id {
+                    chain = root_chain.clone();
+                } else if let Some(p) = moved_to.get(&c.parent_id) {
+                    chain = chain_under(p, &c.methodology, own_ref(&c));
+                }
+            }
+            if chain != c.guardians {
+                fields[super::attach::HEADER_GUARDIANS] =
+                    json!({"from": chain_value(&c.guardians), "to": chain_value(&chain)});
+            }
             self.header_entry(&c.id, fields).await?;
             c.project_id = project.clone();
+            c.guardians = chain;
             self.put_change(&c).await?;
-            if &c.id == id {
-                moved = c;
-            }
+            moved_to.insert(c.id.clone(), c);
         }
+        let moved = moved_to.remove(id).unwrap_or_default();
         Ok((moved, seq))
     }
 
@@ -131,8 +158,10 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(family)
     }
 
-    /// Gives an open change that follows no methodology the one named. With no registry no version, goal, lifecycle
-    /// or guardian is resolved: the methodology only, applying to the project of the change.
+    /// Gives an open change that follows no methodology the one named, as a creation would have (Go's
+    /// `SetChangeMethodology`): the methodology applying to the project of the change, its latest published version,
+    /// its main goal when the change has none, its lifecycle starting in its initial state, the guardian chain of its
+    /// project or under its parent.
     pub async fn set_change_methodology(&mut self, id: &ChangeId, methodology: &str) -> Result<(Change, i64)> {
         if methodology.is_empty() {
             return Err(GraphError::invalid("a methodology is required"));
@@ -146,11 +175,32 @@ impl<S: WriteTx> Tx<'_, S> {
                 c.project_id
             )));
         }
+        let m = self
+            .resolve_methodology(methodology, "", &c.parent_id, &c.project_id)
+            .await?;
+        if m.version.is_empty() {
+            return Err(GraphError::invalid(format!("methodology {methodology} is unknown")));
+        }
         self.lock_change(id).await?;
         let seq = super::work::fold_change(self.store, id).await?.seq;
-        self.header_entry(id, json!({HEADER_METHODOLOGY: {"from": "", "to": methodology}}))
-            .await?;
+        let mut fields = json!({HEADER_METHODOLOGY: {"from": "", "to": methodology}});
+        if !m.version.is_empty() {
+            fields[HEADER_METHODOLOGY_VERSION] = json!({"from": c.methodology_version, "to": m.version});
+        }
+        if !m.guardians.is_empty() {
+            fields[super::attach::HEADER_GUARDIANS] =
+                json!({"from": chain_value(&c.guardians), "to": chain_value(&m.guardians)});
+        }
+        self.header_entry(id, fields).await?;
         c.methodology = methodology.to_string();
+        c.methodology_version = m.version;
+        if c.goal.is_empty() {
+            c.goal = m.goal;
+        }
+        c.guardians = m.guardians;
+        if c.lifecycle.is_empty() {
+            (c.lifecycle, c.state) = (m.lifecycle, m.initial);
+        }
         self.put_change(&c).await?;
         Ok((c, seq))
     }

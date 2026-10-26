@@ -69,7 +69,7 @@ lint: ## go vet + gofmt + tidy go.mod files + dsl.md sync check
 
 # make dev builds the Rust binaries with the cargo profile dev-local, rebuilt in a fraction of release's time
 dev dev-backend: LOCAL_CARGO_PROFILE = dev-local
-# make dev runs the Go graph unless LOCAL_GRAPH says otherwise: the Rust graph does not instantiate the lifecycles and
+# make dev runs the Go graph unless LOCAL_GRAPH says otherwise: the Rust graph does not run the lifecycle transitions and
 # guardians of the methodologies yet (ADR 0164)
 DEV_GRAPH = $(if $(filter environment command line,$(origin LOCAL_GRAPH)),$(LOCAL_GRAPH),go)
 

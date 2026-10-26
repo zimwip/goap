@@ -58,6 +58,12 @@ pub struct Change {
 pub const USER_PREFIX: &str = "USR:";
 
 impl Change {
+    /// The reference of the version of its methodology the change follows (`domain.Change.MethodologyRef`): a bare name
+    /// for the latest.
+    pub fn methodology_ref(&self) -> String {
+        crate::methodologies::reference(&self.methodology, &self.methodology_version)
+    }
+
     /// Whether a personal unit holds the change: only its subject reads it.
     pub fn is_personal(&self) -> bool {
         self.owner_org.key.starts_with(USER_PREFIX)
