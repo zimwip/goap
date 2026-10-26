@@ -32,6 +32,9 @@ type service struct {
 	env   map[string]string
 	// once runs it to its end (a bootstrap): never restarted, its failure stops the stack.
 	once bool
+	// after names the services it waits for before it starts (dependencies sets it from env), lazy those it is given
+	// the URL of but does not wait for: it calls them later, and they may call it at their start.
+	after, lazy []string
 }
 
 func (s service) url() string { return fmt.Sprintf("http://127.0.0.1:%d", s.port) }
@@ -53,8 +56,9 @@ type supervisor struct {
 type restartReq struct{ stopped, resume chan struct{} }
 
 // restart stops the running services named, runs prepare once they all stopped (new binaries put in place: Windows
-// refuses to overwrite a running program) and starts them again; the names of no running service are left alone.
-func (s *supervisor) restart(names []string, prepare func()) {
+// refuses to overwrite a running program) and starts them again; the names of no running service are left alone, and
+// once the context is done nothing is restarted.
+func (s *supervisor) restart(ctx context.Context, names []string, prepare func()) {
 	var reqs []restartReq
 	for _, name := range names {
 		s.mu.Lock()
@@ -64,8 +68,11 @@ func (s *supervisor) restart(names []string, prepare func()) {
 			continue
 		}
 		r := restartReq{stopped: make(chan struct{}), resume: make(chan struct{})}
-		ch <- r
-		reqs = append(reqs, r)
+		select {
+		case ch <- r:
+			reqs = append(reqs, r)
+		case <-ctx.Done(): // the service is stopping, or stopped already
+		}
 	}
 	for _, r := range reqs {
 		<-r.stopped
@@ -190,11 +197,22 @@ func (s *supervisor) run(ctx context.Context, w *lines, dir, path string, args, 
 	cmd.Env = env
 	cmd.Stdout, cmd.Stderr = w, w
 	ownGroup(cmd)
-	if err := cmd.Start(); err != nil {
+	// started and waited for on one thread: Linux signals a process whose parent thread ends (dieWithParent), and Go
+	// ends a thread only when a goroutine locked to it returns
+	started, done := make(chan error, 1), make(chan error, 1)
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		if err := cmd.Start(); err != nil {
+			started <- err
+			return
+		}
+		started <- nil
+		done <- cmd.Wait()
+	}()
+	if err := <-started; err != nil {
 		return err
 	}
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
 	var err error
 	select {
 	case err = <-done:

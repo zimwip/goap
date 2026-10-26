@@ -33,6 +33,9 @@ type watcher struct {
 	log      *slog.Logger
 	services []service
 	seen     map[string]stamp
+	// rust asks the cargo builder for a build: cargo takes minutes where go takes seconds, so it builds on its own,
+	// the Go services reloaded meanwhile; the changes made during a build make one more after it
+	rust chan struct{}
 }
 
 type stamp struct {
@@ -42,8 +45,13 @@ type stamp struct {
 
 // watch polls the sources every second until the context is done.
 func watch(ctx context.Context, cfg config, sup *supervisor, log *slog.Logger, services []service) {
-	w := &watcher{cfg: cfg, sup: sup, log: log, services: services}
+	w := &watcher{cfg: cfg, sup: sup, log: log, services: services, rust: make(chan struct{}, 1)}
 	w.seen = w.scan()
+	sup.wg.Add(1)
+	go func() {
+		defer sup.wg.Done()
+		w.cargo(ctx)
+	}()
 	log.Info("watching the sources: a change rebuilds and restarts the services it touches")
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
@@ -183,10 +191,13 @@ func (w *watcher) apply(ctx context.Context, changed []string) {
 		w.buildGo(ctx, goPkgs, allGo)
 	}
 	if rust {
-		w.buildRust(ctx)
+		select {
+		case w.rust <- struct{}{}:
+		default: // one asked already
+		}
 	}
 	if len(restart) > 0 {
-		w.sup.restart(slices.Sorted(maps.Keys(restart)), func() {})
+		w.sup.restart(ctx, slices.Sorted(maps.Keys(restart)), func() {})
 	}
 }
 
@@ -236,7 +247,7 @@ func (w *watcher) buildGo(ctx context.Context, pkgs []string, all bool) {
 		return
 	}
 	for _, b := range bins {
-		w.replace(b, filepath.Join(staging, exe(b)))
+		w.replace(ctx, b, filepath.Join(staging, exe(b)))
 	}
 }
 
@@ -264,10 +275,22 @@ func (w *watcher) goDeps(ctx context.Context, bins []string) (map[string][]strin
 	return deps, nil
 }
 
+// cargo builds the Rust binaries each time asked, until the context is done.
+func (w *watcher) cargo(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-w.rust:
+			w.buildRust(ctx)
+		}
+	}
+}
+
 // buildRust builds the cargo binaries the stack runs and restarts the services whose binary changed.
 func (w *watcher) buildRust(ctx context.Context) {
 	var bins []string
-	args := []string{"build", "--release", "--locked"}
+	args := []string{"build", "--profile", w.cfg.cargoProfile, "--locked"}
 	for _, s := range w.services {
 		if p := cargoBinaries[s.bin]; p != "" && !slices.Contains(bins, s.bin) {
 			bins = append(bins, s.bin)
@@ -283,13 +306,13 @@ func (w *watcher) buildRust(ctx context.Context) {
 		return
 	}
 	for _, b := range bins {
-		w.replace(b, filepath.Join(w.cfg.root, "rust", "target", "release", exe(b)))
+		w.replace(ctx, b, filepath.Join(w.cfg.root, "rust", "target", cargoDir(w.cfg.cargoProfile), exe(b)))
 	}
 }
 
 // replace restarts the services running a binary when the one built differs, putting it in place while they are
 // stopped (Windows refuses to overwrite a running program).
-func (w *watcher) replace(bin, built string) {
+func (w *watcher) replace(ctx context.Context, bin, built string) {
 	next, err := os.ReadFile(built)
 	if err != nil {
 		w.log.Warn("built binary", "bin", bin, "err", err)
@@ -306,7 +329,7 @@ func (w *watcher) replace(bin, built string) {
 			names = append(names, s.name)
 		}
 	}
-	w.sup.restart(names, func() {
+	w.sup.restart(ctx, names, func() {
 		tmp := target + ".new"
 		if err := os.WriteFile(tmp, next, 0o755); err == nil {
 			err = os.Rename(tmp, target)
@@ -332,6 +355,14 @@ func (w *watcher) command(ctx context.Context, name, dir, path string, args ...s
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	return nil
+}
+
+// cargoDir is the directory of target/ cargo puts a profile's binaries in.
+func cargoDir(profile string) string {
+	if profile == "dev" {
+		return "debug"
+	}
+	return profile
 }
 
 func exe(name string) string {

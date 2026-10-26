@@ -69,3 +69,14 @@ uuid = { version = "1", features = ["v4", "v5", "serde"] }
 
 [profile.release]
 debug = "line-tables-only"
+
+# make dev's builds (goap-local -watch): the workspace's crates unoptimized and incremental, rebuilt in seconds where a
+# release rebuild takes minutes; the dependencies (SQLite, QuickJS, tokio...) optimized, built once
+[profile.dev-local]
+inherits = "release"
+opt-level = 0
+incremental = true
+codegen-units = 256
+
+[profile.dev-local.package."*"]
+opt-level = 2

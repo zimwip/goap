@@ -1285,15 +1285,25 @@ The indexer follows the graph's events over NATS. The compose image is `pgvector
   `platform.OptionalSQL` in every service that keeps a store, the graph services included; `GOAP_DB_DSN` wins, neither:
   memory), an embedded NATS server (JetStream, `.goap/local/nats`) instead of the container, the secrets generated
   in `.goap/local/secrets`; the graph is Rust (`LOCAL_GRAPH=go` for the Go one), bootstrapped by its `bootstrap`
-  command before it serves; the processes are restarted when they stop, their output prefixed and kept in
-  `.goap/local/logs`; each runs in its own process group (Setpgid, a new process group on Windows) so that Ctrl-C
-  interrupts them and what they started, kills them after 10 s or at a second Ctrl-C. `-watch` (`make dev`,
+  command before it serves; before anything starts, every port of the stack (NATS and vite included) must be free,
+  else it stops naming each port taken and, on Linux, the process holding it (`ports.go`: a previous run's service
+  would answer the readiness checks in place of the new one); a service starts once the services whose URL its
+  environment holds answer `/readyz` (`deps.go`: `service.lazy` breaks the cycles, the graph's registry, the hub's
+  engine; a cycle left is refused), the others together; the processes are restarted when they stop, their output
+  prefixed and kept in `.goap/local/logs`; each runs in its own process group (Setpgid, a new process group on
+  Windows) so that Ctrl-C (or SIGHUP, a terminal closed) interrupts them and what they started, kills them after 10 s
+  or at a second Ctrl-C, a third leaving at once; on Linux they get SIGTERM when goap-local dies (`Pdeathsig`). A Go
+  service's shutdown lets its requests end for 2 s, then ends its streams (the event stream, server-sent events)
+  through their context (`platform.Server`'s `BaseContext`), rather than waiting for them until its deadline. `-watch` (`make dev`,
   `make dev-backend`) polls the sources every second and, once they settle, builds the Go binaries depending on a
-  changed package (`go list -deps`) and the cargo ones on a change of `rust/` or of the graph's migrations, replaces a
+  changed package (`go list -deps`) and the cargo ones on a change of `rust/` or of the graph's migrations (cargo on a
+  loop of its own, the Go services reloaded meanwhile; profile `-cargo-profile`, `dev-local` for `make dev`: the
+  workspace's crates at `opt-level` 0, incremental, the dependencies optimized: a change of `graph-core` rebuilt in
+  about 15 s where release takes minutes), replaces a
   binary only when its bytes changed and restarts its services (stopped, binary put in place, started again); a change
   of `domains/` restarts the graphs, of `methodologies/` the registry. `-web` runs vite (`npm run dev` in `web/`) under
-  the same supervisor. `make local-build` builds the binaries in `.goap/bin` (Go, then `goap-graph-rs` and
-  `goap-proxy` with cargo). `goap-local test` (`make local-test`) runs the stack on fresh data, then the end-to-end
+  the same supervisor, with `--strictPort`. `make local-build` builds the binaries in `.goap/bin` (Go, then
+  `goap-graph-rs` and `goap-proxy` with cargo, `LOCAL_CARGO_PROFILE`, release by default). `goap-local test` (`make local-test`) runs the stack on fresh data, then the end-to-end
   test of a running platform, `platform/e2e/stack` (`GOAP_STACK_URL`: registry, a commit on the content graph read
   back, the index following it over NATS, an export job, the engine), then stops; `goap-local bench`
   (`make local-bench`, `LOCAL_PROXY` go | rust | compare | shadow, `PERF_ARGS`) runs the graph alone behind goap-proxy

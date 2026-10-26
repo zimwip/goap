@@ -127,11 +127,16 @@ function DevWeb {
 $LocalServices = @('graph', 'registry', 'engine', 'modelgw', 'mcp', 'indexer', 'preferences', 'credentials', 'events',
     'conversations', 'jobs', 'gateway', 'connector-localfs', 'importer-git', 'goap-bench', 'goap-local')
 
-function LocalBuild {
+# the cargo profile of goap-graph-rs and goap-proxy ($env:LOCAL_CARGO_PROFILE, default release; Dev: dev-local, rebuilt
+# in a fraction of release's time)
+function CargoProfile([string] $default = 'release') { if ($env:LOCAL_CARGO_PROFILE) { $env:LOCAL_CARGO_PROFILE } else { $default } }
+
+function LocalBuild([string] $cargo = (CargoProfile)) {
     New-Item -ItemType Directory -Force .goap/bin | Out-Null
     InDir platform { Run go build -o ../.goap/bin/ @($LocalServices | ForEach-Object { "./cmd/$_" }) }
-    InDir rust { Run cargo build --release --locked -p graph-service -p goap-proxy }
-    Copy-Item "rust/target/release/goap-graph-rs$Exe", "rust/target/release/goap-proxy$Exe" .goap/bin/
+    InDir rust { Run cargo build --profile $cargo --locked -p graph-service -p goap-proxy }
+    $dir = if ($cargo -eq 'dev') { 'debug' } else { $cargo }
+    Copy-Item "rust/target/$dir/goap-graph-rs$Exe", "rust/target/$dir/goap-proxy$Exe" .goap/bin/
 }
 
 function LocalArgs { if ($env:LOCAL_ARGS) { $env:LOCAL_ARGS -split ' ' } else { @() } }
@@ -159,16 +164,18 @@ function LocalBench {
 # on this machine, no docker: the local stack (goap-local) watching the sources, a change rebuilding the binaries it
 # touches and restarting their services, with vite: http://localhost:5173. Ctrl-C stops every process.
 function Dev {
-    LocalBuild
+    $cargo = CargoProfile 'dev-local'
+    LocalBuild $cargo
     $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'rust' }
-    Run ".goap/bin/goap-local$Exe" -watch -web -graph $graph @(LocalArgs)
+    Run ".goap/bin/goap-local$Exe" -watch -web -graph $graph -cargo-profile $cargo @(LocalArgs)
 }
 
 # the same without the IDE: gateway http://localhost:8080
 function DevBackend {
-    LocalBuild
+    $cargo = CargoProfile 'dev-local'
+    LocalBuild $cargo
     $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'rust' }
-    Run ".goap/bin/goap-local$Exe" -watch -graph $graph @(LocalArgs)
+    Run ".goap/bin/goap-local$Exe" -watch -graph $graph -cargo-profile $cargo @(LocalArgs)
 }
 
 function DevReset { LocalReset }

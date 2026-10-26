@@ -10,7 +10,8 @@
 //
 // The binaries are read from -bin (make local builds them in .goap/bin), the data kept in -dir (.goap/local), each
 // process's output in <dir>/logs/<name>.log and on the standard output, prefixed by its name. Each process runs in a
-// group of its own: an interrupt stops them all, what they started included; a second one kills them at once.
+// group of its own: an interrupt stops them all, what they started included; a second one kills them at once. On
+// Linux they are also killed when goap-local dies without stopping them (killed itself).
 package main
 
 import (
@@ -47,6 +48,8 @@ type config struct {
 	reset                 bool
 	// watch rebuilds and restarts the services a change of the sources touches; web runs the IDE (vite) too.
 	watch, web bool
+	// cargoProfile is the cargo profile the watcher builds the Rust binaries with (the one -bin's were built with).
+	cargoProfile string
 }
 
 func main() {
@@ -67,14 +70,17 @@ func main() {
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
 	signals := make(chan os.Signal, 2)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	// a terminal closed (SIGHUP) stops the processes too: in groups of their own, they would outlive it
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
 		<-signals
 		log.Info("stopping every process (interrupt again to kill them at once)")
 		stop()
 		<-signals
-		log.Warn("killing every process")
+		log.Warn("killing every process (interrupt again to leave at once)")
 		close(hurry)
+		<-signals
+		os.Exit(1)
 	}()
 	switch mode {
 	case "bench":
@@ -85,7 +91,8 @@ func main() {
 		err = runPlatform(ctx, log, cfg, nil)
 	}
 	if err != nil && !errors.Is(err, context.Canceled) {
-		log.Error("goap-local", "err", err)
+		// as is, not in a log record: the error of the ports spans lines
+		fmt.Fprintln(os.Stderr, "goap-local:", err)
 		os.Exit(1)
 	}
 }
@@ -113,6 +120,7 @@ func parse(args []string, mode string) (config, []string, error) {
 	fs.IntVar(&cfg.natsMonitor, "nats-monitor", 8222, "monitoring port of the embedded NATS server (0: none)")
 	fs.BoolVar(&cfg.reset, "reset", mode != "", "drop the data of the previous run before starting")
 	fs.BoolVar(&cfg.watch, "watch", false, "rebuild and restart the services a change of the sources touches (make dev)")
+	fs.StringVar(&cfg.cargoProfile, "cargo-profile", platform.Env("GOAP_LOCAL_CARGO_PROFILE", "release"), "cargo profile of the Rust rebuilds of -watch (make dev: dev-local, quicker to rebuild)")
 	fs.BoolVar(&cfg.web, "web", false, "run the IDE too, vite on http://localhost:5173 (make dev)")
 	if err := fs.Parse(args); err != nil {
 		return cfg, nil, err

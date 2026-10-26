@@ -12,9 +12,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"sync"
-	"time"
 )
 
 // The ports of the stack on 127.0.0.1, those of the compose stack on the host.
@@ -33,6 +32,7 @@ const (
 	portJobs          = 8091
 	portContent       = 8092
 	portLocalFS       = 8093
+	portWeb           = 5173 // vite
 	// behind goap-proxy, which takes portGraph, the graph services take these
 	portGraphGo   = 8094
 	portGraphRust = 8095
@@ -160,18 +160,6 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 	if err != nil {
 		return err
 	}
-	ns, err := startNATS(cfg)
-	if err != nil {
-		return err
-	}
-	defer ns.Shutdown()
-	log.Info("nats", "url", cfg.natsURL())
-
-	ctx, cancel := context.WithCancel(ctx)
-	sup := &supervisor{cfg: cfg, log: log}
-	defer sup.wait()
-	defer cancel() // first: the processes stop, then they are waited for
-
 	graphs, graphURL := cfg.graphs()
 	common := func(port int, extra map[string]string) map[string]string {
 		env := map[string]string{
@@ -201,49 +189,32 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 			"GOAP_REGISTRY_URL":  url(portRegistry),
 		})
 	}
-	// the platform bootstrap, once per database (shadow: the Go service's)
-	booted := map[string]bool{}
+	// the graphs, then everything else: started in the order of their dependencies
+	var all []service
 	for _, g := range graphs {
-		if booted[g.db] {
-			continue
-		}
-		booted[g.db] = true
-		if err := sup.start(ctx, service{name: "bootstrap-" + g.name, bin: g.bin, args: []string{"bootstrap"}, env: platformGraph(g), once: true}); err != nil {
-			return err
-		}
-	}
-	var running []service // the services kept running, for -watch
-	for _, g := range graphs {
-		svc := service{name: "graph-" + g.name, bin: g.bin, port: g.port, ready: "/readyz", env: platformGraph(g)}
-		if err := sup.start(ctx, svc); err != nil {
-			return err
-		}
-		running = append(running, svc)
+		// the registry, the jobs and the content graph are called once serving; the registry calls the graph at start
+		all = append(all, service{name: "graph-" + g.name, bin: g.bin, port: g.port, env: platformGraph(g),
+			lazy: []string{"registry", "jobs", "graph-content"}})
 	}
 	if cfg.proxy != "" {
-		svc := cfg.proxyService(graphs)
-		if err := sup.start(ctx, svc); err != nil {
-			return err
-		}
-		running = append(running, svc)
+		all = append(all, cfg.proxyService(graphs))
 	}
-	services := []service{}
 	if sources != "" {
-		services = append(services, service{name: "graph-content", bin: graphs[0].bin, port: portContent, ready: "/readyz", env: common(portContent, map[string]string{
+		all = append(all, service{name: "graph-content", bin: graphs[0].bin, port: portContent, env: common(portContent, map[string]string{
 			"GOAP_GRAPH_SPACE":        "content",
 			"GOAP_PLATFORM_GRAPH_URL": graphURL,
 			"GOAP_REGISTRY_URL":       url(portRegistry),
 			"GOAP_JOBS_URL":           url(portJobs),
 			"GOAP_JOB_TOKEN":          sec.jobs,
 			"GOAP_SQLITE_PATH":        filepath.Join(cfg.dir, "content-"+graphs[0].name+".db"),
-		})})
+		}), lazy: []string{"registry", "jobs"}})
 		if cfg.graph != graphs[0].name {
 			log.Info("the content graph follows the proxied implementation", "graph", graphs[0].name)
 		}
 	}
 	db := func(name string) string { return filepath.Join(cfg.dir, name+".db") }
 	home, _ := os.UserHomeDir()
-	services = append(services,
+	all = append(all,
 		service{name: "jobs", bin: "jobs", port: portJobs, env: common(portJobs, map[string]string{
 			"GOAP_SQLITE_PATH": db("jobs"), "GOAP_JOB_TOKEN": sec.jobs})},
 		service{name: "registry", bin: "registry", port: portRegistry, env: common(portRegistry, map[string]string{
@@ -264,7 +235,8 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 		service{name: "mcp", bin: "mcp", port: portMCP, env: common(portMCP, map[string]string{
 			"GOAP_SQLITE_PATH": db("mcp"), "GOAP_GRAPH_URL": graphURL, "GOAP_ENGINE_URL": url(portEngine),
 			"GOAP_REGISTRY_URL": url(portRegistry), "GOAP_CONNECTOR_TOKEN": sec.connectors,
-			"GOAP_MODEL_PROXY_SECRET": sec.modelProxy, "GOAP_MODEL_PROXY_URL": url(portModelGW) + "/anthropic"})},
+			"GOAP_MODEL_PROXY_SECRET": sec.modelProxy, "GOAP_MODEL_PROXY_URL": url(portModelGW) + "/anthropic"}),
+			lazy: []string{"engine"}}, // the engine calls the hub at start, the hub calls the engine back when asked
 		service{name: "engine", bin: "engine", port: portEngine, env: common(portEngine, map[string]string{
 			"GOAP_SQLITE_PATH": db("engine"), "GOAP_GRAPH_URL": graphURL, "GOAP_REGISTRY_URL": url(portRegistry),
 			"GOAP_MODELGW_URL": url(portModelGW), "GOAP_MCP_URL": url(portMCP), "GOAP_RUNTIME_URL": url(portEngine)})},
@@ -293,34 +265,67 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 			"GOAP_JOBS_URL":          url(portJobs),
 		})},
 	)
+	web := filepath.Join(cfg.root, "web")
 	if cfg.web {
-		web := filepath.Join(cfg.root, "web")
-		if err := sup.start(ctx, service{name: "npm-install", path: "npm", dir: web, once: true,
-			args: []string{"install", "--no-audit", "--no-fund"}}); err != nil {
-			// an install that failed late (a package's own download) may still leave what vite needs
-			if _, serr := os.Stat(filepath.Join(web, "node_modules", ".bin", "vite")); serr != nil {
-				return err
-			}
-			log.Warn("npm install failed, the web runs on the modules in place", "err", err)
-		}
-		services = append(services, service{name: "web", path: "npm", dir: web, args: []string{"run", "dev"},
-			env: map[string]string{"GOAP_GATEWAY_URL": url(portGateway)}})
+		// --strictPort: on a port taken vite would take the next one, and the IDE on 5173 be a previous run's
+		all = append(all, service{name: "web", path: "npm", dir: web, port: portWeb, ready: "/",
+			args: []string{"run", "dev", "--", "--port", strconv.Itoa(portWeb), "--strictPort"},
+			env:  map[string]string{"GOAP_GATEWAY_URL": url(portGateway)}})
 	}
 	var started []service
-	for _, svc := range services {
+	for _, svc := range all {
 		if cfg.skip[svc.name] {
 			log.Info("skipped", "service", svc.name)
 			continue
 		}
-		if err := sup.start(ctx, svc); err != nil {
-			return err
+		if svc.port > 0 && svc.ready == "" {
+			svc.ready = "/readyz"
 		}
 		started = append(started, svc)
 	}
-	running = append(running, started...)
-	// every service answers its readiness once the ones it calls do: waited for together
-	if err := waitAll(ctx, started); err != nil {
-		if ready != nil {
+	if err := dependencies(started); err != nil {
+		return err
+	}
+	uses := append(ports(started), portUse{cfg.natsPort, "nats"}, portUse{cfg.natsMonitor, "nats monitoring"})
+	if err := checkPorts(uses); err != nil {
+		return err
+	}
+
+	ns, err := startNATS(cfg)
+	if err != nil {
+		return err
+	}
+	defer ns.Shutdown()
+	log.Info("nats", "url", cfg.natsURL())
+
+	ctx, cancel := context.WithCancel(ctx)
+	sup := &supervisor{cfg: cfg, log: log}
+	defer sup.wait()
+	defer cancel() // first: the processes stop, then they are waited for
+
+	if cfg.web {
+		if err := sup.start(ctx, service{name: "npm-install", path: "npm", dir: web, once: true,
+			args: []string{"install", "--no-audit", "--no-fund"}}); err != nil {
+			// an install that failed late (a package's own download) may still leave what vite needs
+			if _, serr := os.Stat(filepath.Join(web, "node_modules", ".bin", "vite")); serr != nil || ctx.Err() != nil {
+				return err
+			}
+			log.Warn("npm install failed, the web runs on the modules in place", "err", err)
+		}
+	}
+	// the platform bootstrap, once per database (shadow: the Go service's)
+	booted := map[string]bool{}
+	for _, g := range graphs {
+		if booted[g.db] {
+			continue
+		}
+		booted[g.db] = true
+		if err := sup.start(ctx, service{name: "bootstrap-" + g.name, bin: g.bin, args: []string{"bootstrap"}, env: platformGraph(g), once: true}); err != nil {
+			return err
+		}
+	}
+	if err := sup.startAll(ctx, started); err != nil {
+		if ready != nil || ctx.Err() != nil {
 			return err
 		}
 		log.Warn("not every service is ready", "err", err)
@@ -332,7 +337,11 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 		log.Info("platform ready", "gateway", url(portGateway), "web", web)
 	}
 	if cfg.watch {
-		go watch(ctx, cfg, sup, log, running)
+		sup.wg.Add(1)
+		go func() {
+			defer sup.wg.Done()
+			watch(ctx, cfg, sup, log, started)
+		}()
 	}
 	if ready != nil {
 		// the platform runs while ready does (goap-local test), then stops
@@ -341,29 +350,6 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 	<-ctx.Done()
 	log.Info("stopping")
 	return nil
-}
-
-// waitAll waits for the services listening on a port to answer /readyz, together.
-func waitAll(ctx context.Context, services []service) error {
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var errs []error
-	for _, svc := range services {
-		if svc.port == 0 {
-			continue
-		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := waitURL(ctx, svc.url()+"/readyz", 3*time.Minute, svc.name); err != nil {
-				mu.Lock()
-				errs = append(errs, err)
-				mu.Unlock()
-			}
-		}()
-	}
-	wg.Wait()
-	return errors.Join(errs...)
 }
 
 func envOr(key, def string) string {

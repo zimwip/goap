@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -65,20 +66,27 @@ func (s *Server) Mount(path string, h http.Handler) {
 	s.Echo.Any(path+"*", echo.WrapHandler(h))
 }
 
-// httpServer serves the Echo handler over HTTP/1.1 (browsers) and HTTP/2 cleartext (Connect clients, H2CClient).
-func (s *Server) httpServer() *http.Server {
+// httpServer serves the Echo handler over HTTP/1.1 (browsers) and HTTP/2 cleartext (Connect clients, H2CClient). The
+// requests' contexts derive from one the returned function cancels: a shutdown ends the streams through it.
+func (s *Server) httpServer() (*http.Server, context.CancelFunc) {
 	var protocols http.Protocols
 	protocols.SetHTTP1(true)
 	protocols.SetUnencryptedHTTP2(true)
-	return &http.Server{Addr: s.Addr, Handler: s.Echo, Protocols: &protocols, ReadHeaderTimeout: 10 * time.Second}
+	base, cancel := context.WithCancel(context.Background())
+	return &http.Server{Addr: s.Addr, Handler: s.Echo, Protocols: &protocols, ReadHeaderTimeout: 10 * time.Second,
+		BaseContext: func(net.Listener) context.Context { return base }}, cancel
 }
+
+// streamGrace is how long a shutdown lets the requests in flight end by themselves before the streams, which never do
+// (the event stream, server-sent events), are told to end through their context.
+const streamGrace = 2 * time.Second
 
 // Run serves until SIGINT/SIGTERM, then shuts down gracefully.
 func (s *Server) Run() error { return s.RunContext(context.Background()) }
 
 // RunContext serves until ctx ends or SIGINT/SIGTERM, then shuts down gracefully.
 func (s *Server) RunContext(ctx context.Context) error {
-	srv := s.httpServer()
+	srv, endStreams := s.httpServer()
 	errc := make(chan error, 1)
 	go func() {
 		s.log.Info("listening", "addr", s.Addr)
@@ -95,10 +103,25 @@ func (s *Server) RunContext(ctx context.Context) error {
 	case <-stop:
 	case <-ctx.Done():
 	}
+	s.log.Info("shutting down")
+	return shutdown(ctx, srv, endStreams)
+}
+
+// shutdown stops the server: no new connection, the requests in flight given streamGrace to end, then the streams
+// ended, everything done within 15 s.
+func shutdown(ctx context.Context, srv *http.Server, endStreams context.CancelFunc) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
-	s.log.Info("shutting down")
-	return srv.Shutdown(ctx)
+	defer endStreams()
+	done := make(chan error, 1)
+	go func() { done <- srv.Shutdown(ctx) }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(streamGrace):
+	}
+	endStreams()
+	return <-done
 }
 
 // Fatal logs and exits.

@@ -18,12 +18,22 @@ func runBench(ctx context.Context, log *slog.Logger, cfg config, args []string) 
 	if err := cfg.prepare(log); err != nil {
 		return err
 	}
+	graphs, graphURL := cfg.graphs()
+	uses := []portUse{}
+	for _, g := range graphs {
+		uses = append(uses, portUse{g.port, "graph-" + g.name})
+	}
+	if cfg.proxy != "" {
+		uses = append(uses, portUse{portGraph, "proxy"})
+	}
+	if err := checkPorts(uses); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	sup := &supervisor{cfg: cfg, log: log}
 	defer sup.wait()
 	defer cancel()
 
-	graphs, graphURL := cfg.graphs()
 	for i, g := range graphs {
 		env := map[string]string{
 			"GOAP_HTTP_ADDR":   addr(g.port),
