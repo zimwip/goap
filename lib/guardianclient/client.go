@@ -1,6 +1,6 @@
-// Package guardianclient asks the methodology registry what the methodologies of the changes of a graph say of them
+// Package guardianclient asks the guardian service what the methodologies of the changes of a graph say of them
 // (registry.v1.ChangeGuardianService, ADR 0168): the client a graph's composition plugs into its hooks. The graph knows
-// no methodology; the registry compiles them and answers on the blackboard the graph sends.
+// no methodology; the guardian compiles those the registry stores and answers on the blackboard the graph sends.
 package guardianclient
 
 import (
@@ -22,13 +22,13 @@ type Client struct {
 	rpc registryv1connect.ChangeGuardianServiceClient
 }
 
-// NewClient returns a client of the guardian service of the registry at baseURL.
+// NewClient returns a client of the guardian service at baseURL.
 func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *Client {
 	return &Client{rpc: registryv1connect.NewChangeGuardianServiceClient(hc, baseURL, opts...)}
 }
 
 // dataActivity is the key of Change.Data naming the Activity a change is scoped to (registrysvc.DataActivity): a change
-// scoped to none is judged by the graph alone, so the graph asks nothing of the registry for it, whose start waits on
+// scoped to none is judged by the graph alone, so the graph asks nothing of the guardian for it, whose start waits on
 // the graph's bootstrap.
 const dataActivity = "activityRef"
 
@@ -41,7 +41,7 @@ func board(bb domain.Blackboard) (*registryv1.Blackboard, error) {
 	return pbconv.BlackboardToPB(bb)
 }
 
-// MethodologyVersion is the version a new change of a methodology follows ("" when the registry does not know it).
+// MethodologyVersion is the version a new change of a methodology follows ("" when no methodology of that name is published).
 func (c *Client) MethodologyVersion(ctx context.Context, methodology string) (string, error) {
 	r, err := c.rpc.ResolveMethodologyVersion(ctx, connect.NewRequest(&registryv1.ResolveMethodologyVersionRequest{Methodology: methodology}))
 	if err != nil {
@@ -185,7 +185,7 @@ func (c *Client) OperationRoles(ctx context.Context, methodology, op string) (ro
 }
 
 // StepDependencies are the steps each step of a methodology relies on, to weigh the history of a change; nil when the
-// registry cannot say.
+// guardian cannot say.
 func (c *Client) StepDependencies(ctx context.Context, methodology string) map[string]map[string]bool {
 	r, err := c.rpc.GetStepDependencies(ctx, connect.NewRequest(&registryv1.GetStepDependenciesRequest{Methodology: methodology}))
 	if err != nil || len(r.Msg.Steps) == 0 {

@@ -1,6 +1,6 @@
-//! The guardian of the changes of this graph (ADR 0168): the methodology registry's `ChangeGuardianService` at
-//! `GOAP_REGISTRY_URL` (Go's `lib/guardianclient`). The graph knows no methodology; the registry compiles them and
-//! answers on the blackboard sent.
+//! The guardian of the changes of this graph (ADR 0168): the `ChangeGuardianService` of the guardian service at
+//! `GOAP_GUARDIAN_URL` (Go's `lib/guardianclient`). The graph knows no methodology; the guardian compiles those the
+//! registry stores and answers on the blackboard sent.
 use std::collections::BTreeMap;
 
 use goap_connect::{Code, ConnectError, Ctx, Request};
@@ -16,7 +16,7 @@ use graph_core::{
 
 use crate::{convert, graph::board_pb};
 
-/// A client of the guardian service of the registry.
+/// A client of the guardian service.
 pub struct Client {
     rpc: registrypb::ChangeGuardianServiceClient,
 }
@@ -29,7 +29,7 @@ impl Client {
     }
 }
 
-/// The graph error of a refusal of the registry (`rpcerr.FromConnect`): its kind from its code, its message as is.
+/// The graph error of a refusal of the guardian (`rpcerr.FromConnect`): its kind from its code, its message as is.
 fn graph_error(e: ConnectError) -> GraphError {
     let kind = match e.code() {
         Code::InvalidArgument => Kind::Invalid,
@@ -45,7 +45,7 @@ fn ctx() -> Ctx {
     Ctx::background()
 }
 
-/// The blackboard as the registry reads it: what `GetBlackboard` answers, with the facets the graph adds.
+/// The blackboard as the guardian reads it: what `GetBlackboard` answers, with the facets the graph adds.
 fn blackboard(b: &Board) -> Result<registrypb::Blackboard> {
     let bb = board_pb(b)?;
     let mut facets = std::collections::HashMap::new();
@@ -263,7 +263,7 @@ impl Guardian for Client {
     }
 
     async fn step_dependencies(&self, methodology: &str) -> Result<StepDeps> {
-        // a registry that cannot say leaves the history with no step relying on another (`StepDependencies`)
+        // a guardian that cannot say leaves the history with no step relying on another (`StepDependencies`)
         let Ok(r) = self
             .rpc
             .get_step_dependencies(

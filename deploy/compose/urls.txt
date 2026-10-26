@@ -17,6 +17,7 @@ Services, each on its own port (Connect RPC, /healthz):
   jobs                  http://localhost:8091
   graph-content         http://localhost:8092   (the content graph, called through graph)
   domains               http://localhost:8096   (the domain registry)
+  guardian              http://localhost:8097   (the guardian of the changes)
 
 Around them:
   Jaeger (traces)       http://localhost:16686

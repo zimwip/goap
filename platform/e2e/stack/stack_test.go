@@ -157,7 +157,7 @@ func TestStack(t *testing.T) {
 		})
 	})
 
-	t.Run("the methodology of a change is asked of the registry", func(t *testing.T) {
+	t.Run("the methodology of a change is asked of the guardian", func(t *testing.T) {
 		// the graph knows no methodology (ADR 0168): what a change follows and the gate of its moves are the
 		// registry's answers, on the blackboard the graph sends
 		created, err := graph.CreateChange(ctx, connect.NewRequest(&graphv1.CreateChangeRequest{

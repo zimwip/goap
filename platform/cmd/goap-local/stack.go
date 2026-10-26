@@ -39,6 +39,8 @@ const (
 	portGraphRust = 8095
 	// the domain registry, a service of its own (ADR 0167)
 	portDomains = 8096
+	// the guardian of the changes, which the graphs ask about the methodologies (ADR 0168)
+	portGuardian = 8097
 )
 
 func url(port int) string { return fmt.Sprintf("http://127.0.0.1:%d", port) }
@@ -205,7 +207,7 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 			"GOAP_GRAPH_SOURCES": sources,
 			"GOAP_JOBS_URL":      url(portJobs),
 			"GOAP_JOB_TOKEN":     sec.jobs,
-			"GOAP_REGISTRY_URL":  url(portRegistry),
+			"GOAP_GUARDIAN_URL":  url(portGuardian),
 		})
 	}
 	// the domain registry, the graphs, then everything else: started in the order of their dependencies
@@ -219,9 +221,9 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 	}
 	all = append(all, domains)
 	for _, g := range graphs {
-		// the registry, the jobs and the content graph are called once serving; the registry calls the graph at start
+		// the guardian, the jobs and the content graph are called once serving; the guardian calls the graph at start
 		all = append(all, service{name: "graph-" + g.name, bin: g.bin, port: g.port, env: platformGraph(g),
-			lazy: []string{"registry", "jobs", "graph-content"}})
+			lazy: []string{"guardian", "jobs", "graph-content"}})
 	}
 	if cfg.proxy != "" {
 		all = append(all, cfg.proxyService(graphs))
@@ -231,11 +233,11 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 			"GOAP_GRAPH_SPACE":        "content",
 			"GOAP_PLATFORM_GRAPH_URL": graphURL,
 			"GOAP_DOMAINS_URL":        domainsURL,
-			"GOAP_REGISTRY_URL":       url(portRegistry),
+			"GOAP_GUARDIAN_URL":       url(portGuardian),
 			"GOAP_JOBS_URL":           url(portJobs),
 			"GOAP_JOB_TOKEN":          sec.jobs,
 			"GOAP_SQLITE_PATH":        filepath.Join(cfg.dir, "content-"+graphs[0].name+".db"),
-		}), lazy: []string{"registry", "jobs"}})
+		}), lazy: []string{"guardian", "jobs"}})
 		if cfg.graph != graphs[0].name {
 			log.Info("the content graph follows the proxied implementation", "graph", graphs[0].name)
 		}
@@ -247,6 +249,8 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 			"GOAP_SQLITE_PATH": db("jobs"), "GOAP_JOB_TOKEN": sec.jobs})},
 		service{name: "registry", bin: "registry", port: portRegistry, env: common(portRegistry, map[string]string{
 			"GOAP_METHODOLOGIES_DIR": filepath.Join(cfg.root, "methodologies"), "GOAP_GRAPH_URL": graphURL, "GOAP_DOMAINS_URL": domainsURL})},
+		service{name: "guardian", bin: "guardian", port: portGuardian, env: common(portGuardian, map[string]string{
+			"GOAP_GRAPH_URL": graphURL, "GOAP_DOMAINS_URL": domainsURL})},
 		service{name: "modelgw", bin: "modelgw", port: portModelGW, env: common(portModelGW, map[string]string{
 			"GOAP_SQLITE_PATH": db("modelgw"), "GOAP_GRAPH_URL": graphURL, "GOAP_MODEL_PROXY_SECRET": sec.modelProxy})},
 		service{name: "preferences", bin: "preferences", port: portPreferences, env: common(portPreferences, map[string]string{

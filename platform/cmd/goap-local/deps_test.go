@@ -16,8 +16,8 @@ import (
 // refused.
 func TestDependencies(t *testing.T) {
 	services := []service{
-		{name: "graph", port: portGraph, env: map[string]string{"GOAP_REGISTRY_URL": url(portRegistry)}, lazy: []string{"registry"}},
-		{name: "registry", port: portRegistry, env: map[string]string{"GOAP_GRAPH_URL": url(portGraph)}},
+		{name: "graph", port: portGraph, env: map[string]string{"GOAP_GUARDIAN_URL": url(portGuardian)}, lazy: []string{"guardian"}},
+		{name: "guardian", port: portGuardian, env: map[string]string{"GOAP_GRAPH_URL": url(portGraph)}},
 		{name: "modelgw", port: portModelGW, env: map[string]string{"GOAP_GRAPH_URL": url(portGraph)}},
 		{name: "mcp", port: portMCP, env: map[string]string{"GOAP_ENGINE_URL": url(portEngine),
 			"GOAP_MODEL_PROXY_URL": url(portModelGW) + "/anthropic"}, lazy: []string{"engine"}},
@@ -27,7 +27,7 @@ func TestDependencies(t *testing.T) {
 	if err := dependencies(services); err != nil {
 		t.Fatal(err)
 	}
-	want := map[string][]string{"graph": nil, "registry": {"graph"}, "modelgw": {"graph"}, "mcp": {"modelgw"},
+	want := map[string][]string{"graph": nil, "guardian": {"graph"}, "modelgw": {"graph"}, "mcp": {"modelgw"},
 		"engine": {"mcp"}, "importer": {"graph"}}
 	for _, s := range services {
 		if !slices.Equal(s.after, want[s.name]) {

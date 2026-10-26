@@ -48,7 +48,7 @@ pub struct State {
     pub remote: Option<Arc<platform::Remote>>,
     /// Where the domains come from (ADR 0167): none, the store of this state holds them (the domain registry).
     pub domains: Option<DomainSource>,
-    /// What the methodologies of the changes are asked through (ADR 0168): the methodology registry's guardian
+    /// What the methodologies of the changes are asked through (ADR 0168): the guardian
     /// service; none, the changes follow their methodologies by name alone.
     pub guardian: Option<Arc<dyn graph_core::guardian::Guardian>>,
     /// The type catalogue of the domains in force, with what told the stored versions apart when it was built.

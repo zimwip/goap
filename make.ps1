@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
-$Services = 'graph', 'registry', 'engine', 'modelgw', 'preferences', 'conversations', 'credentials', 'indexer', 'events', 'jobs', 'gateway', 'mcp', 'connector-localfs', 'connector-workspace', 'connector-claude-coding-agent', 'importer-git', 'goap-local', 'goap-runner', 'goap-eval', 'goap-bench'
+$Services = 'graph', 'registry', 'guardian', 'engine', 'modelgw', 'preferences', 'conversations', 'credentials', 'indexer', 'events', 'jobs', 'gateway', 'mcp', 'connector-localfs', 'connector-workspace', 'connector-claude-coding-agent', 'importer-git', 'goap-local', 'goap-runner', 'goap-eval', 'goap-bench'
 # the modules of the go.work (ADR 0125): `./...` at the root matches none, every Go command names them
 $Modules = 'contracts', 'lib', 'graph', 'engine', 'mcp', 'gateway', 'platform'
 $Pkgs = $Modules | ForEach-Object { "./$_/..." }
@@ -124,7 +124,7 @@ function DevWeb {
 
 # the platform as the compose stack runs it, one process per binary, without docker (goap-local): an embedded NATS, the
 # graph ($env:LOCAL_GRAPH: rust, or go) and every service on SQLite files of .goap\local, the binaries in .goap\bin
-$LocalServices = @('domains', 'graph', 'registry', 'engine', 'modelgw', 'mcp', 'indexer', 'preferences', 'credentials', 'events',
+$LocalServices = @('domains', 'graph', 'registry', 'guardian', 'engine', 'modelgw', 'mcp', 'indexer', 'preferences', 'credentials', 'events',
     'conversations', 'jobs', 'gateway', 'connector-localfs', 'importer-git', 'goap-bench', 'goap-local')
 
 # the cargo profile of goap-graph-rs and goap-proxy ($env:LOCAL_CARGO_PROFILE, default release; Dev: dev-local, rebuilt

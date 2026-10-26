@@ -15,8 +15,8 @@ import (
 )
 
 // GuardianHandler serves what the graphs ask of the methodologies of their changes (ADR 0168): the hooks a graph
-// offers, answered by the methodologies this registry compiles. The graph sends the blackboard it judges; the answers
-// are the ones the Service gives in process.
+// offers, answered by the methodologies the Service compiles (platform/cmd/guardian, a service of its own: the registry
+// stores and validates). The graph sends the blackboard it judges; the answers are the ones the Service gives in process.
 type GuardianHandler struct {
 	Service *Service
 }

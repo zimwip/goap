@@ -1,4 +1,4 @@
-SERVICES := graph registry engine modelgw preferences conversations credentials indexer events jobs gateway mcp connector-localfs connector-workspace connector-claude-coding-agent importer-git goap-local goap-runner goap-eval goap-bench
+SERVICES := graph registry guardian engine modelgw preferences conversations credentials indexer events jobs gateway mcp connector-localfs connector-workspace connector-claude-coding-agent importer-git goap-local goap-runner goap-eval goap-bench
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 # the modules of the go.work (ADR 0125): `./...` at the root matches none, every Go command names them
 MODULES  := contracts lib graph engine mcp gateway platform
@@ -88,7 +88,7 @@ dev-reset: ## drop the data of the local stack (.goap/local; demo data and metho
 # the platform as the compose stack runs it, one process per binary, without docker (goap-local): an embedded NATS, the
 # graph (LOCAL_GRAPH: rust, or go) and every service on SQLite files of .goap/local, the binaries in .goap/bin
 LOCAL_BIN      := .goap/bin
-LOCAL_SERVICES := domains graph registry engine modelgw mcp indexer preferences credentials events conversations jobs gateway connector-localfs importer-git goap-bench goap-local
+LOCAL_SERVICES := domains graph registry guardian engine modelgw mcp indexer preferences credentials events conversations jobs gateway connector-localfs importer-git goap-bench goap-local
 LOCAL_GRAPH    ?= rust
 LOCAL_ARGS     ?=
 # the cargo profile of goap-graph-rs and goap-proxy (make dev: dev-local), and the directory of target/ it builds in

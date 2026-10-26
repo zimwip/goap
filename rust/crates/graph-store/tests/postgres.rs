@@ -24,11 +24,7 @@ async fn migrates_postgres_as_the_go_service() {
         .iter()
         .map(|r| r.get(0))
         .collect();
-    for n in [
-        "0001_schema.sql",
-        "0001_smart_tag.sql",
-        "0020_node_changes_index.sql",
-    ] {
+    for n in ["0001_schema.sql", "0001_smart_tag.sql", "0020_node_changes_index.sql"] {
         assert!(names.iter().any(|x| x == n), "{n} not recorded: {names:?}");
     }
     let Store::Postgres(pg) = &store else { unreachable!() };

@@ -230,8 +230,8 @@ func main() {
 	// the graph knows no methodology (ADR 0168): what it asks of the methodology of a change (its lifecycle, guards and
 	// gates, ADR 0058; the guardian of its commits and its chain of guardians, ADR 0106, 0146; the cascade of its
 	// sub-changes, ADR 0066; the standing of its steps, ADR 0109; the roles of its operations, ADR 0103) its hooks ask
-	// the methodology registry, which compiles the methodologies it declares and answers on the blackboard sent
-	guardian := guardianclient.NewClient(platform.H2CClient(), platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"),
+	// the guardian service, which compiles the methodologies the registry stores and answers on the blackboard sent
+	guardian := guardianclient.NewClient(platform.H2CClient(), platform.Env("GOAP_GUARDIAN_URL", "http://localhost:8097"),
 		telemetry.ClientOptions()...)
 	g.Lifecycles = guardian
 	g.SubChangeValidator = guardian.SubChangeValidator
