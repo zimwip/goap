@@ -73,7 +73,7 @@ func (g *Graph) declaredSource(ctx context.Context, name string) (lnk.Source, bo
 // Sources are the sources the platform@Source nodes in force on main declare (ADR 0154), by name: read again when the
 // head of the platform namespace moved. A node that declares no valid source is left out (naming it is an error).
 func (g *Graph) Sources(ctx context.Context) ([]lnk.Source, error) {
-	head, err := g.BranchHead(ctx, domain.NamespacePlatform, domain.MainBranch)
+	head, err := g.BranchHeadHeader(ctx, domain.NamespacePlatform, domain.MainBranch) // its id, never its state
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return nil, err
 	}

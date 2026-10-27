@@ -947,9 +947,20 @@ func (h *Handler) impactType(ctx context.Context, change, impact string) (string
 	return typ, nil
 }
 
+// adminOnlyChange tells whether the namespace of a change holds a type of the access nodes (Graph.AdminOnlyIn): a
+// node of a change is of its namespace, so the gate of the others reads no type. The head is the one the request read
+// already (PersonalScope); one it cannot read is gated as before.
+func (h *Handler) adminOnlyChange(ctx context.Context, change string) bool {
+	c, err := h.Graph.ChangeHead(ctx, domain.ChangeID(change))
+	return err != nil || h.Graph.AdminOnlyIn(c.Namespace)
+}
+
 // gateImpact applies to an operation on a change impact the gate of the access nodes (gateAccess): the impact names
 // the node by its id, or the call names the node.
 func (h *Handler) gateImpact(ctx context.Context, change, impact, node string) error {
+	if !h.adminOnlyChange(ctx, change) {
+		return nil
+	}
 	typ, err := h.impactType(ctx, change, impact)
 	if err != nil {
 		return err
@@ -965,6 +976,9 @@ func (h *Handler) gateImpact(ctx context.Context, change, impact, node string) e
 // gateLink applies the gate of the access nodes to an operation on a link of a draft of the change: the type of its
 // source.
 func (h *Handler) gateLink(ctx context.Context, change, link string) error {
+	if !h.adminOnlyChange(ctx, change) {
+		return nil
+	}
 	typ, err := h.Graph.LinkSourceType(ctx, domain.ChangeID(change), domain.LinkID(link))
 	if err != nil {
 		return rpcerr.ToConnect(err)

@@ -90,6 +90,9 @@ type guardTx struct {
 	// latestOn are the latest versions on a branch it read in a batch, by branch then node (0: none there), dropped for
 	// a node it writes or joins a version of (versioncache.go)
 	latestOn map[string]map[domain.NodeID]domain.Version
+	// wroteLinks are the links of versions it wrote, read back in a batch (prefetch), dropped when it writes links of
+	// the version again
+	wroteLinks map[domain.NodeRef][]domain.Link
 	// keys are the ids of the keys it read in a batch, by namespace and key ("": no node), dropped for a node it writes
 	keys map[string]domain.NodeID
 	// purged: the transaction deleted a change, and versions with it (the version cache is emptied once it is over)
@@ -472,6 +475,7 @@ func (t *guardTx) PutLinks(ctx context.Context, ls []domain.Link) error {
 		if !t.written[l.From] {
 			return fmt.Errorf("link %s: version %s is not written by this transaction, a version never changes (ADR 0079): %w", l.Type, l.From, ErrConflict)
 		}
+		delete(t.wroteLinks, l.From)
 	}
 	return t.Tx.PutLinks(ctx, ls)
 }
@@ -483,6 +487,7 @@ func (t *guardTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.
 	if !t.written[from] {
 		return fmt.Errorf("link %s: version %s is not written by this transaction, a version never changes (ADR 0079): %w", l.Type, from, ErrConflict)
 	}
+	delete(t.wroteLinks, from)
 	return t.Tx.DropLink(ctx, from, row, l)
 }
 
@@ -492,6 +497,7 @@ func (t *guardTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkS
 	if !t.written[from] {
 		return fmt.Errorf("the links of version %s: it is not written by this transaction, a version never changes (ADR 0079): %w", from, ErrConflict)
 	}
+	delete(t.wroteLinks, from)
 	for _, v := range []domain.Version{set.Of, set.Base} {
 		if v >= from.Version {
 			return fmt.Errorf("the links of version %s: v%d is not an earlier version of the node: %w", from, v, ErrInvalid)
@@ -557,7 +563,7 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 	if err := t.LockChange(ctx, id); err != nil {
 		return err
 	}
-	t.purged, t.nodes, t.latestOn, t.keys = true, nil, nil, nil
+	t.purged, t.nodes, t.latestOn, t.keys, t.wroteLinks = true, nil, nil, nil, nil
 	t.g.versions.reset()
 	if err := t.Tx.DeleteChange(ctx, id, namespace, branch); err != nil {
 		return err

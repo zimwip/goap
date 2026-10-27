@@ -19,6 +19,7 @@ import (
 	"github.com/zimwip/goap/contracts/lnk"
 	"github.com/zimwip/goap/lib/cache"
 	"github.com/zimwip/goap/lib/outbox"
+	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/lib/typecat"
 )
 
@@ -179,6 +180,12 @@ type Graph struct {
 	draftStates draftCache
 	// validations caches the validation of the impacts of a change on a flow, by the log position it was computed at.
 	validations *cache.Cache[validationKey, validationEntry]
+	// adminNS keeps, for the catalogue in force, whether a namespace holds an adminOnly type (AdminOnlyIn)
+	adminNS struct {
+		mu sync.Mutex
+		of TypeCatalog
+		in map[string]bool
+	}
 }
 
 // New returns a Graph backed by repo. Every transaction goes through the guard of the graph (guardRepo, ADR 0054),
@@ -263,7 +270,7 @@ func (g *Graph) BaselineHeader(ctx context.Context, id domain.BaselineID) (b dom
 
 // BranchHeadHeader returns the head of a branch without its state (Nodes nil).
 func (g *Graph) BranchHeadHeader(ctx context.Context, namespace, name string) (b domain.Baseline, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = branchHeadHeader(ctx, tx, namespace, name); return err })
+	err = g.repo.InTx(platform.ReadOnly(ctx), func(tx Tx) error { b, err = branchHeadHeader(ctx, tx, namespace, name); return err })
 	return
 }
 
@@ -506,7 +513,7 @@ func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, 
 
 // HasChange reports a change this graph holds (its header only; graphsvc.Router asks it to route a call, ADR 0154 §9).
 func (g *Graph) HasChange(ctx context.Context, id domain.ChangeID) (found bool, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.repo.InTx(platform.ReadOnly(ctx), func(tx Tx) error {
 		_, err := tx.ChangeHead(ctx, id)
 		found = err == nil
 		if errors.Is(err, ErrNotFound) {
@@ -519,7 +526,7 @@ func (g *Graph) HasChange(ctx context.Context, id domain.ChangeID) (found bool, 
 
 // Change returns a change with its items.
 func (g *Graph) Change(ctx context.Context, id domain.ChangeID) (c domain.Change, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.repo.InTx(platform.ReadOnly(ctx), func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
 		}
@@ -536,7 +543,7 @@ func (g *Graph) ChangeHead(ctx context.Context, id domain.ChangeID) (c domain.Ch
 		return c, nil
 	}
 	memo, _ := ctx.Value(headMemoKey{}).(*headMemo)
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.repo.InTx(platform.ReadOnly(ctx), func(tx Tx) error {
 		c, err = tx.ChangeHead(ctx, id)
 		return err
 	})

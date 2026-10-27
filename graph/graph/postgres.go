@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,10 +36,46 @@ type Postgres struct {
 	read *pgxpool.Pool
 	// readAll takes every context as read-only (the tests of the readers)
 	readAll bool
+	// roots are the roots of the trees of the changes last locked (LockChange)
+	roots *changeRoots
+}
+
+// changeRoots keeps the root of the tree of each change last locked: a guess its lock checks once held (an attach or
+// a detach moves it), so a lock reads the tree once instead of twice.
+type changeRoots struct {
+	mu    sync.Mutex
+	roots map[domain.ChangeID]string
+}
+
+// maxChangeRoots is the number of change roots kept.
+const maxChangeRoots = 4096
+
+func (c *changeRoots) get(id domain.ChangeID) (string, bool) {
+	if c == nil {
+		return "", false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	r, ok := c.roots[id]
+	return r, ok
+}
+
+func (c *changeRoots) keep(id domain.ChangeID, root string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.roots[id]; !ok && len(c.roots) >= maxChangeRoots {
+		clear(c.roots)
+	}
+	c.roots[id] = root
 }
 
 // NewPostgres returns a repository on pool (schema already migrated).
-func NewPostgres(pool *pgxpool.Pool) *Postgres { return &Postgres{pool: pool} }
+func NewPostgres(pool *pgxpool.Pool) *Postgres {
+	return &Postgres{pool: pool, roots: &changeRoots{roots: map[domain.ChangeID]string{}}}
+}
 
 // WithReader gives the repository a pool of read-only connections (platform.PostgresReader) for the transactions of
 // a read-only context.
@@ -58,7 +95,7 @@ func (p *Postgres) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	}
 	return pgx.BeginFunc(ctx, p.pool, func(tx pgx.Tx) error {
 		h := &heldQuerier{Tx: tx}
-		if err := fn(&pgTx{tx: h, held: h}); err != nil {
+		if err := fn(&pgTx{tx: h, held: h, roots: p.roots}); err != nil {
 			return err
 		}
 		return h.flush(ctx)
@@ -93,6 +130,7 @@ type pgTx struct {
 	held *heldQuerier
 	// readOnly is a read on a read-only connection (readTx): no transaction, so no lock to take
 	readOnly bool
+	roots    *changeRoots
 }
 
 // AppendOutbox implements Tx.
@@ -376,13 +414,19 @@ func (t *pgTx) LockChange(ctx context.Context, id domain.ChangeID) error {
 	if t.readOnly {
 		return errWrites // a lock announces a write: stop before reading what it checks
 	}
-	root, err := t.changeRoot(ctx, id)
+	// the root last locked is a guess the read once the lock is held checks
+	root, ok := t.roots.get(id)
+	var err error
+	if !ok {
+		root, err = t.changeRoot(ctx, id)
+	}
 	for err == nil {
 		if err = t.advisoryLock(ctx, "goap.change:"+root); err != nil {
 			break
 		}
 		var again string
 		if again, err = t.changeRoot(ctx, id); err == nil && again == root {
+			t.roots.keep(id, root)
 			return nil
 		}
 		root = again
@@ -439,7 +483,7 @@ func (t *pgTx) Branches(ctx context.Context, namespace string) ([]domain.Branch,
 
 func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.tx.Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from, ephemeral, fork_seq) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	_, err := t.unheld().Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from, ephemeral, fork_seq) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, head_baseline = EXCLUDED.head_baseline, description = EXCLUDED.description,
 			fork_baseline = EXCLUDED.fork_baseline, rebased_from = EXCLUDED.rebased_from, parent = EXCLUDED.parent, fork_seq = EXCLUDED.fork_seq`,
 		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral, b.ForkSeq)
@@ -637,7 +681,7 @@ func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Basel
 func (t *pgTx) BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
 	var b domain.Baseline
 	q, args := dialectPG.sqlBaselineHeader(id)
-	err := t.tx.QueryRow(ctx, q, args...).Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &b.CreatedAt,
+	err := t.unheld().QueryRow(ctx, q, args...).Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &b.CreatedAt,
 		&b.Branch, &b.Namespace, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq)
 	return b, mapErr(err, "baseline "+string(id))
 }
@@ -695,7 +739,7 @@ func (t *pgTx) commits(ctx context.Context, namespace, branch string, after, upT
 // written once that one is committed, and sees it.
 func (t *pgTx) NextCommit(ctx context.Context) (int64, error) {
 	var seq int64
-	err := t.tx.QueryRow(ctx, `SELECT nextval('commit_seq')`).Scan(&seq)
+	err := t.unheld().QueryRow(ctx, `SELECT nextval('commit_seq')`).Scan(&seq)
 	return seq, err
 }
 
@@ -1058,7 +1102,7 @@ func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 }
 
 func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
-	_, err := t.tx.Exec(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version)
+	_, err := t.unheld().Exec(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, intent = EXCLUDED.intent, goal = EXCLUDED.goal, status = EXCLUDED.status,
 		  result_baseline_id = EXCLUDED.result_baseline_id, data = EXCLUDED.data, baseline_id = EXCLUDED.baseline_id, branch = EXCLUDED.branch,
@@ -1233,6 +1277,10 @@ func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change dom
 }
 
 func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, committed int64) error {
+	if t.held != nil {
+		t.held.joins = append(t.held.joins, []any{string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)), committed})
+		return nil
+	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlJoinBranch(), string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)), committed)
 	return mapErr(err, "node "+ref.String())
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/lib/platform"
 )
 
 // ---- 3-way merge primitives ----------------------------------------------
@@ -223,7 +224,7 @@ func (g *Graph) SetBranchDescription(ctx context.Context, namespace, name, descr
 // empty state (empty id, no nodes). The branch of a change holds no baseline (ADR 0140): its state is answered with no
 // id, its fork as parent and the order of its last commit.
 func (g *Graph) BranchHead(ctx context.Context, namespace, name string) (b domain.Baseline, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.repo.InTx(platform.ReadOnly(ctx), func(tx Tx) error {
 		br, err := tx.Branch(ctx, domain.NamespaceOf(namespace), domain.BranchOf(name))
 		if err == nil && br.Ephemeral {
 			b, err = changeBranchHead(ctx, tx, br, true)

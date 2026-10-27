@@ -106,6 +106,13 @@ func (t *guardTx) known(gen uint64, ref domain.NodeRef) {
 // Node reads a version: an exact one the transaction did not write once per transaction (its origin may still be set,
 // SetNodeOrigin, so it is not kept beyond).
 func (t *guardTx) Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error) {
+	if ref.Version > 0 && t.written[ref] {
+		// a version it wrote, read back in a batch (prefetch): kept for the transaction only
+		if n, ok := t.nodes[ref]; ok {
+			return copyNode(n), nil
+		}
+		return t.Tx.Node(ctx, ref)
+	}
 	if !t.fixed(ref) {
 		return t.Tx.Node(ctx, ref)
 	}
@@ -139,6 +146,9 @@ func copyNode(n domain.Node) domain.Node {
 
 // OutLinks reads the links a version holds, kept for the versions that cannot change.
 func (t *guardTx) OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error) {
+	if ls, ok := t.wroteLinks[ref]; ok && ref.Version > 0 && t.written[ref] {
+		return cloneLinks(ls), nil
+	}
 	if !t.fixed(ref) {
 		return t.Tx.OutLinks(ctx, ref)
 	}
@@ -180,9 +190,21 @@ func (t *guardTx) LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, e
 // prefetch reads in one batch the versions refs, their link sets and their links, for the operation that reads them
 // one by one next (a commit, a merge, a review of N nodes reads N versions: three statements instead of 3N).
 func (t *guardTx) prefetch(ctx context.Context, refs []domain.NodeRef) error {
-	var nodes, links []domain.NodeRef
+	var nodes, links, written []domain.NodeRef
 	seen := map[domain.NodeRef]bool{}
 	for _, r := range refs {
+		if r.Version > 0 && t.written[r] && !seen[r] {
+			// a version it wrote, read back once its links are written: kept for the transaction only, never shared (it may
+			// roll back)
+			seen[r] = true
+			if _, ok := t.nodes[r]; !ok {
+				nodes = append(nodes, r)
+			}
+			if _, ok := t.wroteLinks[r]; !ok {
+				written = append(written, r)
+			}
+			continue
+		}
 		if !t.fixed(r) || seen[r] {
 			continue
 		}
@@ -203,7 +225,29 @@ func (t *guardTx) prefetch(ctx context.Context, refs []domain.NodeRef) error {
 			return err
 		}
 		for _, n := range ns {
+			if t.written[n.Ref()] {
+				if t.nodes == nil {
+					t.nodes = map[domain.NodeRef]domain.Node{}
+				}
+				t.nodes[n.Ref()] = n
+				continue
+			}
 			t.keepNode(gen, n)
+		}
+	}
+	if len(written) > 0 {
+		ls, err := t.Tx.LinksFrom(ctx, written)
+		if err != nil {
+			return err
+		}
+		if t.wroteLinks == nil {
+			t.wroteLinks = map[domain.NodeRef][]domain.Link{}
+		}
+		for _, r := range written {
+			t.wroteLinks[r] = nil
+		}
+		for _, l := range ls {
+			t.wroteLinks[l.From] = append(t.wroteLinks[l.From], l) // in the order of their ids, as OutLinks reads them
 		}
 	}
 	if len(links) == 0 {
@@ -236,7 +280,7 @@ func (t *guardTx) prefetch(ctx context.Context, refs []domain.NodeRef) error {
 
 // prefetchVersions reads in one batch the versions refs and their links, when the transaction keeps them.
 func prefetchVersions(ctx context.Context, tx Tx, refs []domain.NodeRef) error {
-	if t, ok := tx.(*guardTx); ok && len(refs) > 0 {
+	if t, ok := unwrapGuard(tx); ok && len(refs) > 0 {
 		return t.prefetch(ctx, refs)
 	}
 	return nil

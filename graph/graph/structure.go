@@ -78,6 +78,41 @@ func (g *Graph) AdminOnlyType(_ context.Context, typ string) (bool, error) {
 	return builtinTypes().AdminOnly(typ), nil
 }
 
+// AdminOnlyIn reports a namespace holding a node type written by platform administrators only (AdminOnlyType): a
+// gate on the type of a node of another namespace has nothing to decide, and need not read the type.
+func (g *Graph) AdminOnlyIn(namespace string) bool {
+	c := builtinTypes()
+	if g.Types != nil {
+		if cc := g.catalog(); cc != nil {
+			c = cc
+		}
+	}
+	ns := domain.NamespaceOf(namespace)
+	g.adminNS.mu.Lock()
+	defer g.adminNS.mu.Unlock()
+	if g.adminNS.of != c {
+		g.adminNS.of, g.adminNS.in = c, nil
+	}
+	if v, ok := g.adminNS.in[ns]; ok {
+		return v
+	}
+	lister, ok := c.(interface{ Types() []*typecat.Type })
+	in := !ok // a catalogue that lists no types: every namespace may hold one
+	if ok {
+		for _, t := range lister.Types() {
+			if t.Ref.Namespace == ns && c.AdminOnly(t.Ref.String()) {
+				in = true
+				break
+			}
+		}
+	}
+	if g.adminNS.in == nil {
+		g.adminNS.in = map[string]bool{}
+	}
+	g.adminNS.in[ns] = in
+	return in
+}
+
 // Visibility is the scope a version of a node of the type is stamped with in a state (ADR 0161 §4).
 func (g *Graph) Visibility(typ, state string) string { return g.visibilityOf(typ, state) }
 

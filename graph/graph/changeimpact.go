@@ -9,6 +9,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/operations"
+	"github.com/zimwip/goap/lib/platform"
 )
 
 // changeTx runs fn in a transaction holding the lock of the tree of change id (ADR 0127): the operations that write a
@@ -258,7 +259,7 @@ func (g *Graph) ListChangeImpacts(ctx context.Context, id domain.ChangeID) (out 
 // ImpactType returns the type of a change impact of a change, "" when the change holds no such impact: what a gate on
 // the type of the node an operation touches reads, without copying the impacts of the change.
 func (g *Graph) ImpactType(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID) (typ string, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.repo.InTx(platform.ReadOnly(ctx), func(tx Tx) error {
 		if _, ok := memoHead(ctx, id); !ok {
 			if _, err := tx.ChangeHead(ctx, id); err != nil {
 				return err
