@@ -134,7 +134,7 @@ impl Session {
         versions: std::sync::Arc<Versions>,
     ) -> Result<Session, StoreError> {
         c.batch_execute("BEGIN").await?;
-        crate::stats::note("BEGIN", 0);
+        crate::stats::note_text("BEGIN");
         Ok(Session {
             conn: Conn::PgTx(Some(c)),
             sql: Sql { pg: true },
@@ -187,9 +187,12 @@ impl Session {
         match &mut self.conn {
             Conn::PgTx(c) => {
                 let c = c.take().ok_or_else(|| StoreError::Other("transaction over".into()))?;
-                crate::stats::note("COMMIT", 0);
+                let at = crate::stats::texts().then(|| ("COMMIT".to_string(), std::time::Instant::now()));
                 match c.batch_execute("COMMIT").await {
-                    Ok(()) => Ok(()),
+                    Ok(()) => {
+                        crate::stats::note(at, 0);
+                        Ok(())
+                    }
                     Err(e) => {
                         drop(deadpool_postgres::Object::take(c));
                         Err(e.into())
@@ -206,10 +209,10 @@ impl Session {
 
     /// Runs a statement that writes and returns the number of rows it touched.
     pub async fn exec(&self, stmt: Stmt) -> Result<u64, StoreError> {
-        let text = crate::stats::texts().then(|| stmt.0.clone());
+        let text = crate::stats::texts().then(|| (stmt.0.clone(), std::time::Instant::now()));
         let n = self.exec_counted(stmt).await;
         if let Ok(n) = &n {
-            crate::stats::note(text.as_deref().unwrap_or(""), *n);
+            crate::stats::note(text, *n);
         }
         n
     }
@@ -244,10 +247,10 @@ impl Session {
 
     /// Runs a statement and returns its rows.
     pub async fn query(&self, stmt: Stmt) -> Result<Vec<Row>, StoreError> {
-        let text = crate::stats::texts().then(|| stmt.0.clone());
+        let text = crate::stats::texts().then(|| (stmt.0.clone(), std::time::Instant::now()));
         let rows = self.query_counted(stmt).await;
         if let Ok(r) = &rows {
-            crate::stats::note(text.as_deref().unwrap_or(""), r.len() as u64);
+            crate::stats::note(text, r.len() as u64);
         }
         rows
     }
@@ -817,6 +820,35 @@ impl ReadTx for Session {
             .await?
             .first()
             .map(|r| NodeId(r.text(0))))
+    }
+
+    async fn node_ids_by_keys(&self, namespace: &str, keys: &[String]) -> Result<HashMap<String, NodeId>, GraphError> {
+        if keys.is_empty() {
+            return Ok(HashMap::new());
+        }
+        Ok(self
+            .rows(self.sql.node_ids_by_keys(namespace, keys))
+            .await?
+            .iter()
+            .map(|r| (r.text(0), NodeId(r.text(1))))
+            .collect())
+    }
+
+    async fn last_versions(&self, ids: &[NodeId]) -> Result<HashMap<NodeId, Version>, GraphError> {
+        let ids: Vec<NodeId> = ids
+            .iter()
+            .filter(|i| !self.sql.pg || is_uuid(i.as_str()))
+            .cloned()
+            .collect();
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        Ok(self
+            .rows(self.sql.last_versions(&ids))
+            .await?
+            .iter()
+            .map(|r| (NodeId(r.text(0)), r.int32(1)))
+            .collect())
     }
 
     async fn nodes_at(&self, refs: &[NodeRef], typ: &str) -> Result<Vec<Node>, GraphError> {

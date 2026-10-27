@@ -221,6 +221,26 @@ impl Sql {
         )
     }
 
+    pub fn node_ids_by_keys(self, namespace: &str, keys: &[String]) -> Stmt {
+        let (cond, list) = self.in_list("key", 2, keys.to_vec(), false);
+        (
+            format!(
+                "SELECT key, {} FROM node WHERE namespace = {} AND {cond}",
+                self.id("id"),
+                self.ph(1)
+            ),
+            vec![namespace_of(namespace).into(), list],
+        )
+    }
+
+    pub fn last_versions(self, ids: &[NodeId]) -> Stmt {
+        let (cond, list) = self.in_list("id", 1, ids.iter().map(|i| i.0.clone()).collect(), true);
+        (
+            format!("SELECT {}, latest FROM node WHERE {cond}", self.id("id")),
+            vec![list],
+        )
+    }
+
     pub fn nodes_at(self, refs: &[NodeRef], typ: &str) -> Stmt {
         let (mut args, n) = self.refs_args(refs);
         args.push(typ.into());

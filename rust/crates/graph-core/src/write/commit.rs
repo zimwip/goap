@@ -122,7 +122,25 @@ impl<S: WriteTx> Tx<'_, S> {
     /// Writes the outgoing links of a version written in the transaction (Go's `putLinks`, ADR 0141): the set of one
     /// of `like` when it holds the same links, else a new set, a delta over an earlier one when that is smaller.
     pub(super) async fn put_version_links(&mut self, n: &Node, links: &[Link], like: &[NodeRef]) -> Result<()> {
+        let plan = self.plan_version_links(n, links, like).await?;
         let from = n.node_ref();
+        self.put_link_set(&from, plan.set).await?;
+        self.write_planned_links(&from, plan).await
+    }
+
+    /// The rows of a version's links once its link set is written: the links it adds, the drops of a delta.
+    async fn write_planned_links(&mut self, from: &NodeRef, plan: LinksPlan) -> Result<()> {
+        self.put_links(&plan.adds).await?;
+        for l in plan.drops {
+            let row = LinkId(self.env.new_id());
+            self.drop_link(from, &row, &l).await?;
+        }
+        Ok(())
+    }
+
+    /// How a version is to hold its outgoing links ([`Tx::put_version_links`]), read and decided before anything is
+    /// written.
+    async fn plan_version_links(&self, n: &Node, links: &[Link], like: &[NodeRef]) -> Result<LinksPlan> {
         let mut prev: Option<NodeRef> = None;
         for r in like {
             if r.id != n.id || r.version < 1 || r.version >= n.version {
@@ -135,22 +153,21 @@ impl<S: WriteTx> Tx<'_, S> {
             let (a, d) = diff_links(&held, links);
             if a.is_empty() && d.is_empty() {
                 let set = self.link_set_of(r).await?;
-                return self
-                    .put_link_set(
-                        &from,
-                        LinkSet {
-                            of: set.of,
-                            base: 0,
-                            depth: set.depth,
-                            seq: set.seq,
-                        },
-                    )
-                    .await;
+                return Ok(LinksPlan {
+                    set: LinkSet {
+                        of: set.of,
+                        base: 0,
+                        depth: set.depth,
+                        seq: set.seq,
+                    },
+                    ..LinksPlan::default()
+                });
             }
         }
         if prev.is_none() && n.version > 1 {
             prev = Some(NodeRef::new(n.id.clone(), n.version - 1));
         }
+        let from = n.node_ref();
         let stamp = |ls: Vec<Link>| -> Vec<Link> {
             ls.into_iter()
                 .map(|mut l| {
@@ -176,37 +193,35 @@ impl<S: WriteTx> Tx<'_, S> {
             }
         }
         let Some((base, adds, drops)) = delta else {
-            self.put_link_set(
-                &from,
-                LinkSet {
+            return Ok(LinksPlan {
+                set: LinkSet {
                     seq,
                     ..LinkSet::default()
                 },
-            )
-            .await?;
-            return self.put_links(&stamp(links.to_vec())).await;
+                adds: stamp(links.to_vec()),
+                drops: Vec::new(),
+            });
         };
-        self.put_link_set(
-            &from,
-            LinkSet {
+        Ok(LinksPlan {
+            set: LinkSet {
                 of: 0,
                 base: base.of,
                 depth: base.depth + 1,
                 seq,
             },
-        )
-        .await?;
-        self.put_links(&stamp(adds)).await?;
-        for mut l in drops {
-            l.change_id = n.change_id.clone();
-            let row = LinkId(self.env.new_id());
-            self.drop_link(&from, &row, &l).await?;
-        }
-        Ok(())
+            adds: stamp(adds),
+            drops: drops
+                .into_iter()
+                .map(|mut l| {
+                    l.change_id = n.change_id.clone();
+                    l
+                })
+                .collect(),
+        })
     }
 
-    /// Writes the version of a draft on the branch of the change (Go's `writeVersion`).
-    async fn write_version(&mut self, c: &Change, branch: &str, cn: &ChangeImpact, d: &Draft) -> Result<Node> {
+    /// The version of a draft on the branch of the change, to write (Go's `writeVersion`).
+    async fn plan_version(&mut self, c: &Change, branch: &str, cn: &ChangeImpact, d: &Draft) -> Result<Node> {
         let comment = cn.reviews.last().map_or(cn.rationale.clone(), |r| r.comment.clone());
         let mut n = Node {
             id: d.node.clone(),
@@ -231,7 +246,11 @@ impl<S: WriteTx> Tx<'_, S> {
             ..Node::default()
         };
         let Some(base) = &d.base else {
-            match self.store.node_id_by_key(&n.namespace, &n.key).await? {
+            let held = match &self.key_ids {
+                Some(k) => k.get(&n.key).cloned(),
+                None => self.store.node_id_by_key(&n.namespace, &n.key).await?,
+            };
+            match held {
                 Some(id) if id != n.id => {
                     return Err(GraphError::conflict(format!(
                         "{} ({}): the key is taken by a node another change created meanwhile: rename it or withdraw it",
@@ -253,19 +272,23 @@ impl<S: WriteTx> Tx<'_, S> {
                 None => n.version = 1,
             }
             n.reason = REASON_CREATE.into();
-            self.put_node(&n).await?;
             return Ok(n);
         };
-        let last = self
-            .store
-            .version_range(&d.node, 0, 1)
-            .await?
-            .pop()
-            .ok_or_else(|| GraphError::not_found(format!("node {}", d.node)))?;
-        n.version = last.version + 1;
+        let last = match self.last_versions.get(&d.node) {
+            Some(&v) => v,
+            None => {
+                self.store
+                    .version_range(&d.node, 0, 1)
+                    .await?
+                    .pop()
+                    .ok_or_else(|| GraphError::not_found(format!("node {}", d.node)))?
+                    .version
+            }
+        };
+        n.version = last + 1;
         n.parents = vec![base.version];
         n.reason = REASON_DERIVE.into();
-        if let Some(on) = self.store.latest_on(&d.node, branch).await? {
+        if let Some(on) = self.latest_on(&d.node, branch).await? {
             if on.version != base.version {
                 return Err(GraphError::conflict(format!(
                     "{} changed on the branch of change {} since it was checked out (v{}, checked out from v{})",
@@ -280,8 +303,88 @@ impl<S: WriteTx> Tx<'_, S> {
             n.parents.push(m.version);
             n.reason = REASON_REBASE.into();
         }
-        self.put_node(&n).await?;
         Ok(n)
+    }
+
+    /// Reads at once what the commit of the accepted drafts of a change reads node by node (Go's `guardTx.prefetch`):
+    /// the versions they start from with their links and link sets, the last version of each node and the one on the
+    /// branch, the nodes of the keys they create. A node id that is no uuid is left to the reads of each, in their
+    /// words.
+    async fn prefetch_commit(
+        &mut self,
+        c: &Change,
+        branch: &str,
+        fold: &crate::impact::Fold,
+        impacts: &[&ChangeImpact],
+    ) -> Result<()> {
+        let mut bases = Vec::new();
+        let mut pres = Vec::new();
+        let mut keys = Vec::new();
+        for cn in impacts.iter().filter(|cn| cn.review == REVIEW_ACCEPTED) {
+            let Some(d) = fold.draft(&cn.id, "") else { continue };
+            match &d.base {
+                Some(b) => bases.push(b.clone()),
+                None => keys.push(d.key.clone()),
+            }
+            if let Some(p) = &cn.pre {
+                pres.push(p.clone());
+            }
+        }
+        if bases.len() + keys.len() < 2
+            || !bases
+                .iter()
+                .chain(&pres)
+                .all(|r| super::work::looks_uuid(r.id.as_str()))
+        {
+            return Ok(());
+        }
+        let ids: Vec<NodeId> = bases.iter().map(|b| b.id.clone()).collect();
+        let mut reads = bases.clone();
+        reads.extend(pres);
+        reads.sort_by(|a, b| (a.id.as_str(), a.version).cmp(&(b.id.as_str(), b.version)));
+        reads.dedup();
+        self.store.nodes_at(&reads, "").await?;
+        self.store.links_from(&bases, None).await?;
+        self.store.link_sets_of(&bases).await?;
+        if !ids.is_empty() {
+            self.last_versions = self.store.last_versions(&ids).await?;
+            let mut on = self.store.latest_on_all(&ids, branch).await?;
+            self.latest = Some((
+                branch.to_string(),
+                ids.iter().map(|i| (i.clone(), on.remove(i))).collect(),
+            ));
+        }
+        if !keys.is_empty() {
+            self.key_ids = Some(self.store.node_ids_by_keys(namespace_of(&c.namespace), &keys).await?);
+        }
+        Ok(())
+    }
+
+    /// Reads at once the versions the main drafts of some impacts start from and the versions the impacts name, with
+    /// the links of the first (what a batch of verdicts reads impact by impact).
+    pub(super) async fn prefetch_bases(&mut self, id: &ChangeId, impacts: &[&str]) -> Result<()> {
+        let fold = &self.views[id].fold;
+        let mut bases = Vec::new();
+        let mut reads = Vec::new();
+        for i in impacts {
+            if let Some(b) = fold.draft(i, "").and_then(|d| d.base.clone()) {
+                bases.push(b.clone());
+                reads.push(b);
+            }
+            if let Some(p) = fold.impact(i).and_then(|cn| cn.pre.clone()) {
+                reads.push(p);
+            }
+        }
+        if reads.len() < 2 || !reads.iter().all(|r| super::work::looks_uuid(r.id.as_str())) {
+            return Ok(());
+        }
+        reads.sort_by(|a, b| (a.id.as_str(), a.version).cmp(&(b.id.as_str(), b.version)));
+        reads.dedup();
+        self.store.nodes_at(&reads, "").await?;
+        if !bases.is_empty() {
+            self.store.links_from(&bases, None).await?;
+        }
+        Ok(())
     }
 
     /// Commits a change on its own branch (Go's `CommitChange` for a root change of the main flow, no methodology to
@@ -339,6 +442,7 @@ impl<S: WriteTx> Tx<'_, S> {
             .filter(|cn| cn.flow.is_empty() && !cn.superseded)
             .collect();
 
+        self.prefetch_commit(&c, &branch, &fold, &impacts).await?;
         let mut todo: Vec<(ChangeImpact, Draft)> = Vec::new();
         for cn in &impacts {
             if cn.review != REVIEW_ACCEPTED {
@@ -383,18 +487,28 @@ impl<S: WriteTx> Tx<'_, S> {
         let mut written: HashMap<_, Version> = HashMap::new();
         let mut from: HashMap<_, Version> = HashMap::new();
         let mut nodes = Vec::with_capacity(todo.len());
-        for (cn, d) in &todo {
-            let n = self.write_version(&c, &branch, cn, d).await?;
-            written.insert(n.id.clone(), n.version);
-            if let Some(b) = &d.base {
-                from.insert(n.id.clone(), b.version);
-            } else if let Some(p) = &cn.pre {
-                from.insert(n.id.clone(), p.version);
+        let mut versions = async || {
+            for (cn, d) in &todo {
+                let n = self.plan_version(&c, &branch, cn, d).await?;
+                written.insert(n.id.clone(), n.version);
+                if let Some(b) = &d.base {
+                    from.insert(n.id.clone(), b.version);
+                } else if let Some(p) = &cn.pre {
+                    from.insert(n.id.clone(), p.version);
+                }
+                nodes.push(n);
             }
-            nodes.push(n);
-        }
+            Ok::<_, GraphError>(())
+        };
+        let wrote = versions().await;
+        // what was read for the versions is theirs only: a later write of the transaction reads afresh
+        self.latest = None;
+        self.last_versions.clear();
+        self.key_ids = None;
+        wrote?;
         // 2. their links, to the versions of the change
         let mut wrote = Vec::with_capacity(todo.len());
+        let mut plans = Vec::with_capacity(todo.len());
         for ((_, d), n) in todo.iter().zip(&nodes) {
             let mut links = Vec::with_capacity(d.links.len());
             for dl in &d.links {
@@ -433,8 +547,22 @@ impl<S: WriteTx> Tx<'_, S> {
                 });
             }
             let like: Vec<NodeRef> = n.parents.iter().map(|&p| NodeRef::new(n.id.clone(), p)).collect();
-            self.put_version_links(n, &links, &like).await?;
+            plans.push(self.plan_version_links(n, &links, &like).await?);
             wrote.push(links);
+        }
+        // written together: the versions with how they hold their links, then the rows of their links
+        let sets: Vec<(Node, LinkSet)> = nodes.iter().cloned().zip(plans.iter().map(|p| p.set)).collect();
+        self.put_versions(&sets).await?;
+        let mut drops = Vec::new();
+        let mut adds = Vec::new();
+        for (n, p) in nodes.iter().zip(plans) {
+            adds.extend(p.adds);
+            drops.extend(p.drops.into_iter().map(|l| (n.node_ref(), l)));
+        }
+        self.put_links(&adds).await?;
+        for (from, l) in drops {
+            let row = LinkId(self.env.new_id());
+            self.drop_link(&from, &row, &l).await?;
         }
         // 3. the reverts of the nodes withdrawn since their commit (ADR 0102)
         let reverted = self.revert_withdrawn(&c, &branch, &own, &withdrawn).await?;
@@ -796,4 +924,12 @@ mod tests {
         assert_eq!(adds.iter().map(|l| l.id.0.as_str()).collect::<Vec<_>>(), ["d"]);
         assert_eq!(drops.iter().map(|l| l.id.0.as_str()).collect::<Vec<_>>(), ["b"]);
     }
+}
+
+/// How a version is to hold its outgoing links: its link set, the link rows it writes, the links a delta drops.
+#[derive(Default)]
+struct LinksPlan {
+    set: LinkSet,
+    adds: Vec<Link>,
+    drops: Vec<Link>,
 }

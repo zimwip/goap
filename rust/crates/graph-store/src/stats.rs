@@ -9,7 +9,7 @@ use std::cell::RefCell;
 pub struct Counts {
     pub statements: u32,
     pub rows: u64,
-    /// The first words of each statement, in order (only when [`counted`] was asked for them).
+    /// The time and first words of each statement, in order (only when [`counted`] was asked for them).
     pub texts: Option<Vec<String>>,
 }
 
@@ -36,21 +36,34 @@ pub(crate) fn texts() -> bool {
     COUNTS.try_with(|c| c.borrow().texts.is_some()).unwrap_or(false)
 }
 
-/// Records a statement and the rows it returned or touched.
-pub(crate) fn note(text: &str, rows: u64) {
+/// Records a statement, with its text and when it started when the request asks for them, and the rows it returned
+/// or touched.
+pub(crate) fn note(text: Option<(String, std::time::Instant)>, rows: u64) {
+    let text = text.map(|(t, at)| format!("{:.2}ms {}", at.elapsed().as_secs_f64() * 1000.0, head(&t)));
+    record(text, rows);
+}
+
+/// Records a statement of no rows, named.
+pub(crate) fn note_text(text: &str) {
+    record(texts().then(|| text.to_string()), 0);
+}
+
+fn head(text: &str) -> String {
+    text.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(140)
+        .collect()
+}
+
+fn record(text: Option<String>, rows: u64) {
     let _ = COUNTS.try_with(|c| {
         let mut n = c.borrow_mut();
         n.statements += 1;
         n.rows += rows;
-        if let Some(t) = &mut n.texts {
-            t.push(
-                text.split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ")
-                    .chars()
-                    .take(140)
-                    .collect(),
-            );
+        if let (Some(t), Some(text)) = (&mut n.texts, text) {
+            t.push(text);
         }
     });
 }

@@ -181,6 +181,17 @@ pub trait ReadTx: Sync {
     /// The node of a key in a namespace.
     fn node_id_by_key(&self, namespace: &str, key: &str) -> impl Future<Output = Result<Option<NodeId>>> + Send;
 
+    /// The nodes of some keys in a namespace, in one statement (a key no node holds is left out).
+    fn node_ids_by_keys(
+        &self,
+        namespace: &str,
+        keys: &[String],
+    ) -> impl Future<Output = Result<HashMap<String, NodeId>>> + Send;
+
+    /// The number of the last version of each of some nodes, whatever its branch, in one statement (a node that does
+    /// not exist is left out).
+    fn last_versions(&self, ids: &[NodeId]) -> impl Future<Output = Result<HashMap<NodeId, Version>>> + Send;
+
     /// Versions of nodes, of one type when `typ` is not empty, by key.
     fn nodes_at(&self, refs: &[NodeRef], typ: &str) -> impl Future<Output = Result<Vec<Node>>> + Send;
 
@@ -285,6 +296,13 @@ pub trait WriteTx: ReadTx {
 
     fn delete_change_impact(&self, change: &ChangeId, id: &str) -> impl Future<Output = Result<()>> + Send;
 
+    /// Writes change impacts in order, each once ([`WriteTx::put_change_impact`] for each, in as few statements as
+    /// the store can).
+    fn put_change_impacts(
+        &self,
+        rows: &[(ChangeId, crate::impact::ChangeImpact)],
+    ) -> impl Future<Output = Result<()>> + Send;
+
     /// The keys and types of the first impacts of a change, at most `limit`.
     fn change_impact_keys(
         &self,
@@ -296,6 +314,10 @@ pub trait WriteTx: ReadTx {
 
     /// Writes a version (and the node, at its first), committed at an order.
     fn put_node(&self, n: &Node, committed: i64) -> impl Future<Output = Result<()>> + Send;
+
+    /// Writes versions committed at an order, each with how it holds its links ([`WriteTx::put_node`] then
+    /// [`WriteTx::put_link_set`] for each, in as few statements as the store can).
+    fn put_versions(&self, ns: &[(Node, LinkSet)], committed: i64) -> impl Future<Output = Result<()>> + Send;
 
     /// Writes link rows.
     fn put_links(&self, ls: &[Link]) -> impl Future<Output = Result<()>> + Send;

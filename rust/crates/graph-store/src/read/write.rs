@@ -36,6 +36,46 @@ const NODE_VERSION_COLUMNS: &[&str] = &[
     "editor",
     "visibility",
 ];
+/// The columns of a change impact, in the order of [`impact_args`].
+const IMPACT_COLUMNS: &[&str] = &[
+    "id",
+    "change_id",
+    "node_id",
+    "key",
+    "type",
+    "intent",
+    "rationale",
+    "pre_version",
+    "post_version",
+    "committed_version",
+    "review",
+    "reviews",
+    "via",
+    "recheck",
+    "produced_by",
+    "derived_from",
+    "items",
+    "execution",
+    "created_at",
+    "flow",
+    "superseded",
+];
+/// The change impacts written by one statement.
+const IMPACT_ROWS_PER_INSERT: usize = 500;
+/// The columns of a version saying how it holds its links (ADR 0141).
+const LINK_SET_COLUMNS: [&str; 4] = ["links", "links_base", "links_depth", "links_seq"];
+const NODE_COLUMNS: &[&str] = &[
+    "id",
+    "namespace",
+    "key",
+    "type",
+    "latest",
+    "project",
+    "creator",
+    "creator_unit",
+];
+/// The versions written by one statement: 22 values each, far below the parameters PostgreSQL takes.
+const VERSION_ROWS_PER_INSERT: usize = 500;
 const LINK_COLUMNS: &[&str] = &[
     "id",
     "type",
@@ -380,35 +420,7 @@ impl WriteTx for Session {
     }
 
     async fn put_change_impact(&self, change: &ChangeId, cn: &ChangeImpact) -> Result<(), GraphError> {
-        let ver = |r: &Option<NodeRef>| r.as_ref().map_or(Arg::Null, |r| Arg::Int(r.version.into()));
-        let node = cn
-            .pre
-            .as_ref()
-            .or(cn.post.as_ref())
-            .map_or(Arg::Null, |r| Arg::Text(r.id.to_string()));
-        let args = vec![
-            Arg::Text(cn.id.clone()),
-            Arg::Text(change.to_string()),
-            node,
-            cn.key.as_str().into(),
-            cn.typ.as_str().into(),
-            cn.intent.as_str().into(),
-            cn.rationale.as_str().into(),
-            ver(&cn.pre),
-            ver(&cn.post),
-            ver(&cn.committed),
-            cn.review.as_str().into(),
-            Arg::Text(json_list_always(&cn.reviews)),
-            Arg::or_null(&cn.via),
-            Arg::Bool(cn.recheck),
-            cn.produced_by.as_str().into(),
-            Arg::Text(json_list_always(&cn.derived_from)),
-            Arg::Text(json_list_always(&cn.items)),
-            cn.execution.as_str().into(),
-            Arg::Time(cn.created_at),
-            cn.flow.as_str().into(),
-            Arg::Bool(cn.superseded),
-        ];
+        let args = impact_args(change, cn);
         let q = if self.sql.pg {
             "INSERT INTO change_impact (id, change_id, node_id, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
@@ -423,6 +435,38 @@ impl WriteTx for Session {
 			reviews = excluded.reviews, via = excluded.via, recheck = excluded.recheck, produced_by = excluded.produced_by, derived_from = excluded.derived_from, items = excluded.items, execution = excluded.execution, flow = excluded.flow, superseded = excluded.superseded".to_string()
         };
         self.run((q, args), &format!("change impact {}", cn.key)).await?;
+        Ok(())
+    }
+
+    async fn put_change_impacts(&self, rows: &[(ChangeId, ChangeImpact)]) -> Result<(), GraphError> {
+        if !self.sql.pg || rows.len() < 2 {
+            for (change, cn) in rows {
+                self.put_change_impact(change, cn).await?;
+            }
+            return Ok(());
+        }
+        for chunk in rows.chunks(IMPACT_ROWS_PER_INSERT) {
+            let mut args = Vec::with_capacity(chunk.len() * IMPACT_COLUMNS.len());
+            for (change, cn) in chunk {
+                args.extend(impact_args(change, cn));
+            }
+            let set: Vec<String> = IMPACT_COLUMNS
+                .iter()
+                .filter(|c| !matches!(**c, "id" | "change_id" | "created_at"))
+                .map(|c| format!("{c} = EXCLUDED.{c}"))
+                .collect();
+            let q = format!(
+                "{} ON CONFLICT (id) DO UPDATE SET {}",
+                self.insert_rows("change_impact", IMPACT_COLUMNS, chunk.len()),
+                set.join(", ")
+            );
+            let what = if chunk.len() == 1 {
+                format!("change impact {}", chunk[0].1.key)
+            } else {
+                "change impacts".to_string()
+            };
+            self.run((q, args), &what).await?;
+        }
         Ok(())
     }
 
@@ -502,27 +546,84 @@ impl WriteTx for Session {
             }
         }
         let q = self.insert("node_version", NODE_VERSION_COLUMNS, "");
-        let args = vec![
-            Arg::Text(n.id.to_string()),
-            Arg::Int(n.version.into()),
-            Arg::Text(jsonb(&n.props)),
-            Arg::Bool(n.deleted),
-            Arg::or_null(n.change_id.as_str()),
-            Arg::Time(n.created_at.unwrap_or_else(jsontext::zero_time)),
-            Arg::Text(branch_of(&n.branch).to_string()),
-            Arg::Ints(n.parents.clone()),
-            n.reason.as_str().into(),
-            n.state.as_str().into(),
-            Arg::or_null(&n.change_impact),
-            n.comment.as_str().into(),
-            n.execution.as_str().into(),
-            Arg::Text(n.responsible.to_string()),
-            Arg::Text(json_list(&n.origins)),
-            Arg::Int(committed),
-            n.editor.as_str().into(),
-            n.visibility.as_str().into(),
-        ];
+        let args = version_args(n, committed);
         self.run((q, args), &format!("node {}", n.node_ref())).await?;
+        Ok(())
+    }
+
+    async fn put_versions(&self, ns: &[(Node, LinkSet)], committed: i64) -> Result<(), GraphError> {
+        if !self.sql.pg || ns.len() < 2 {
+            // SQLite runs in the process: a statement costs no round trip
+            for (n, set) in ns {
+                self.put_node(n, committed).await?;
+                self.put_link_set(&n.node_ref(), *set).await?;
+            }
+            return Ok(());
+        }
+        for (n, _) in ns {
+            self.tx.wrote(&n.node_ref());
+        }
+        let created: Vec<&Node> = ns.iter().map(|(n, _)| n).filter(|n| n.version == 1).collect();
+        for rows in created.chunks(VERSION_ROWS_PER_INSERT) {
+            let mut args = Vec::with_capacity(rows.len() * NODE_COLUMNS.len());
+            for n in rows {
+                args.extend([
+                    Arg::Text(n.id.to_string()),
+                    Arg::Text(namespace_of(&n.namespace).to_string()),
+                    n.key.as_str().into(),
+                    n.typ.as_str().into(),
+                    Arg::Int(1),
+                    Arg::Text(n.project.to_string()),
+                    n.creator.subject.as_str().into(),
+                    Arg::Text(n.creator.unit.to_string()),
+                ]);
+            }
+            let what = if rows.len() == 1 {
+                format!("node {}", rows[0].key)
+            } else {
+                "nodes".to_string()
+            };
+            self.run((self.insert_rows("node", NODE_COLUMNS, rows.len()), args), &what)
+                .await?;
+        }
+        let next: Vec<&Node> = ns.iter().map(|(n, _)| n).filter(|n| n.version > 1).collect();
+        if !next.is_empty() {
+            let q = "UPDATE node SET latest = u.v FROM unnest($1::uuid[], $2::int[]) AS u(id, v) \
+                     WHERE node.id = u.id AND node.latest = u.v - 1";
+            let args = vec![
+                Arg::Texts(next.iter().map(|n| n.id.to_string()).collect()),
+                Arg::Ints(next.iter().map(|n| n.version).collect()),
+            ];
+            if self.run((q.to_string(), args), "nodes").await? != next.len() as u64 {
+                // the first, in order, another writer moved meanwhile
+                let ids: Vec<NodeId> = next.iter().map(|n| n.id.clone()).collect();
+                let last = graph_core::store::ReadTx::last_versions(self, &ids).await?;
+                let n = next
+                    .iter()
+                    .find(|n| last.get(&n.id) != Some(&n.version))
+                    .unwrap_or(&next[0]);
+                return Err(GraphError::conflict(format!(
+                    "node {}: not the next version",
+                    n.node_ref()
+                )));
+            }
+        }
+        let mut columns = NODE_VERSION_COLUMNS.to_vec();
+        columns.extend(LINK_SET_COLUMNS);
+        for rows in ns.chunks(VERSION_ROWS_PER_INSERT) {
+            let mut args = Vec::with_capacity(rows.len() * columns.len());
+            for (n, set) in rows {
+                args.extend(version_args(n, committed));
+                args.extend(link_set_args(n.version, *set));
+            }
+            let what = if rows.len() == 1 {
+                format!("node {}", rows[0].0.node_ref())
+            } else {
+                "nodes".to_string()
+            };
+            self.run((self.insert_rows("node_version", &columns, rows.len()), args), &what)
+                .await?;
+        }
         Ok(())
     }
 
@@ -564,24 +665,8 @@ impl WriteTx for Session {
             s.ph(1),
             s.ph(2)
         );
-        let of = if set.of != 0 && set.of != from.version {
-            Arg::Int(set.of.into())
-        } else {
-            Arg::Null
-        };
-        let base = if set.base != 0 {
-            Arg::Int(set.base.into())
-        } else {
-            Arg::Null
-        };
-        let args = vec![
-            Arg::Text(from.id.to_string()),
-            Arg::Int(from.version.into()),
-            of,
-            base,
-            Arg::Int(set.depth.into()),
-            Arg::Int(set.seq),
-        ];
+        let mut args = vec![Arg::Text(from.id.to_string()), Arg::Int(from.version.into())];
+        args.extend(link_set_args(from.version, set));
         self.run((q, args), "link set").await?;
         Ok(())
     }
@@ -913,4 +998,77 @@ impl Session {
         }
         Ok(())
     }
+}
+
+/// The values of the columns of a version ([`NODE_VERSION_COLUMNS`]).
+fn version_args(n: &Node, committed: i64) -> Vec<Arg> {
+    vec![
+        Arg::Text(n.id.to_string()),
+        Arg::Int(n.version.into()),
+        Arg::Text(jsonb(&n.props)),
+        Arg::Bool(n.deleted),
+        Arg::or_null(n.change_id.as_str()),
+        Arg::Time(n.created_at.unwrap_or_else(jsontext::zero_time)),
+        Arg::Text(branch_of(&n.branch).to_string()),
+        Arg::Ints(n.parents.clone()),
+        n.reason.as_str().into(),
+        n.state.as_str().into(),
+        Arg::or_null(&n.change_impact),
+        n.comment.as_str().into(),
+        n.execution.as_str().into(),
+        Arg::Text(n.responsible.to_string()),
+        Arg::Text(json_list(&n.origins)),
+        Arg::Int(committed),
+        n.editor.as_str().into(),
+        n.visibility.as_str().into(),
+    ]
+}
+
+/// The values of the columns saying how a version holds its links ([`LINK_SET_COLUMNS`]): its own rows, the set of an
+/// earlier version, or a delta over one.
+fn link_set_args(version: graph_core::model::Version, set: LinkSet) -> [Arg; 4] {
+    let of = if set.of != 0 && set.of != version {
+        Arg::Int(set.of.into())
+    } else {
+        Arg::Null
+    };
+    let base = if set.base != 0 {
+        Arg::Int(set.base.into())
+    } else {
+        Arg::Null
+    };
+    [of, base, Arg::Int(set.depth.into()), Arg::Int(set.seq)]
+}
+
+/// The values of the columns of a change impact ([`IMPACT_COLUMNS`]).
+fn impact_args(change: &ChangeId, cn: &ChangeImpact) -> Vec<Arg> {
+    let ver = |r: &Option<NodeRef>| r.as_ref().map_or(Arg::Null, |r| Arg::Int(r.version.into()));
+    let node = cn
+        .pre
+        .as_ref()
+        .or(cn.post.as_ref())
+        .map_or(Arg::Null, |r| Arg::Text(r.id.to_string()));
+    vec![
+        Arg::Text(cn.id.clone()),
+        Arg::Text(change.to_string()),
+        node,
+        cn.key.as_str().into(),
+        cn.typ.as_str().into(),
+        cn.intent.as_str().into(),
+        cn.rationale.as_str().into(),
+        ver(&cn.pre),
+        ver(&cn.post),
+        ver(&cn.committed),
+        cn.review.as_str().into(),
+        Arg::Text(json_list_always(&cn.reviews)),
+        Arg::or_null(&cn.via),
+        Arg::Bool(cn.recheck),
+        cn.produced_by.as_str().into(),
+        Arg::Text(json_list_always(&cn.derived_from)),
+        Arg::Text(json_list_always(&cn.items)),
+        cn.execution.as_str().into(),
+        Arg::Time(cn.created_at),
+        cn.flow.as_str().into(),
+        Arg::Bool(cn.superseded),
+    ]
 }

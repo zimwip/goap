@@ -317,18 +317,21 @@ impl<S: WriteTx> Tx<'_, S> {
         for e in events.iter_mut() {
             e.seq = seq;
         }
+        let mut rows = Vec::new();
         for e in &events {
-            self.project(e).await?;
+            self.project(e, &mut rows).await?;
             let v = self.views.get_mut(&change).expect("the view of the change");
             v.fold.apply(e);
             v.history.apply_event(e);
             v.seq = seq;
         }
-        Ok(())
+        self.put_change_impacts(&mut rows).await
     }
 
-    /// Applies an event to the `change_impact` projection, the view being the fold before it (Go's `project`).
-    async fn project(&mut self, e: &ImpactEvent) -> Result<()> {
+    /// Applies an event to the `change_impact` projection, the view being the fold before it (Go's `project`): the
+    /// rows it writes join `rows`, written together once the events of the entry are applied (each row once per
+    /// statement: a row written again first writes those before it).
+    async fn project(&mut self, e: &ImpactEvent, rows: &mut Vec<(ChangeId, ChangeImpact)>) -> Result<()> {
         // an event touches its own change impact, an adoption every one of them
         let cur: Vec<ChangeImpact> = if e.op == ImpactOp::Adopted {
             self.views[&e.change].fold.impacts.clone()
@@ -349,13 +352,17 @@ impl<S: WriteTx> Tx<'_, S> {
         impact::apply_impact_event(&mut next, at, e);
         for c in &cur {
             if !next.iter().any(|n| n.id == c.id) {
+                self.put_change_impacts(rows).await?;
                 self.delete_change_impact(&e.change, &c.id).await?;
             }
         }
         let changed: Vec<ChangeImpact> = next.into_iter().filter(|n| !cur.iter().any(|c| c == n)).collect();
         for first in [true, false] {
             for cn in changed.iter().filter(|cn| cn.superseded == first) {
-                self.put_change_impact(&e.change, cn).await?;
+                if rows.iter().any(|(_, r)| r.id == cn.id) {
+                    self.put_change_impacts(rows).await?;
+                }
+                rows.push((e.change.clone(), cn.clone()));
             }
         }
         Ok(())
@@ -979,7 +986,7 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     /// The latest version of a node on a branch, from what a batch of checkouts read at once when it did.
-    async fn latest_on(&self, id: &NodeId, branch: &str) -> Result<Option<Node>> {
+    pub(super) async fn latest_on(&self, id: &NodeId, branch: &str) -> Result<Option<Node>> {
         if let Some((b, kept)) = &self.latest
             && b == branch
             && let Some(n) = kept.get(id)
@@ -2232,7 +2239,7 @@ async fn extend_fold<T: ReadTx>(store: &T, k: &mut KeptFold, id: &ChangeId, upto
 }
 
 /// Whether a text has the shape of a uuid (the ids the graph gives its nodes).
-fn looks_uuid(s: &str) -> bool {
+pub(super) fn looks_uuid(s: &str) -> bool {
     s.len() == 36
         && s.char_indices().all(|(i, c)| {
             if matches!(i, 8 | 13 | 18 | 23) {

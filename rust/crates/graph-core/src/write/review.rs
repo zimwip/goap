@@ -472,6 +472,8 @@ impl<S: WriteTx> Tx<'_, S> {
             return self.review_on_flow(id, &b, &flow, &key, &item).await;
         }
         let w = self.work_on(id, crate::flow::MAIN_FLOW).await?;
+        let impacts: Vec<&str> = b.verdicts.iter().map(|v| v.impact.as_str()).collect();
+        self.prefetch_bases(id, &impacts).await?;
         // the verdicts judge each other (the origins of an acceptance): what the batch settled is seen by the next
         let mut seen = w.seen.clone();
         let mut out: Vec<Option<ChangeImpact>> = vec![None; b.verdicts.len()];

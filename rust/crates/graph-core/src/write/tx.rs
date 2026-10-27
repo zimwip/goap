@@ -100,6 +100,10 @@ pub struct Tx<'s, S: WriteTx> {
     /// the latest versions of nodes on a branch, read for a batch of checkouts and kept for it only (a checkout
     /// writes no version)
     pub(super) latest: Option<(String, HashMap<NodeId, Option<Node>>)>,
+    /// what a commit reads of the nodes it writes, for all of them at once, kept while it writes their versions only:
+    /// the number of the last version of each, the node of each key it creates
+    pub(super) last_versions: HashMap<NodeId, crate::model::Version>,
+    pub(super) key_ids: Option<HashMap<String, NodeId>>,
 }
 
 /// What a transaction holds in memory when a rehearsal starts (the locks taken stay).
@@ -150,6 +154,8 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             unstorable: None,
             selected: HashMap::new(),
             latest: None,
+            last_versions: HashMap::new(),
+            key_ids: None,
         }
     }
 
@@ -315,6 +321,22 @@ impl<'s, S: WriteTx> Tx<'s, S> {
         Ok(())
     }
 
+    /// Writes change impacts in order and empties the list ([`Tx::put_change_impact`] for each).
+    pub async fn put_change_impacts(&mut self, rows: &mut Vec<(ChangeId, crate::impact::ChangeImpact)>) -> Result<()> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        for (change, _) in rows.iter() {
+            self.lock_change(change).await?;
+        }
+        self.store.put_change_impacts(rows).await?;
+        for (change, _) in std::mem::take(rows) {
+            self.touch(&change);
+            self.index(&change);
+        }
+        Ok(())
+    }
+
     pub async fn delete_change_impact(&mut self, change: &ChangeId, id: &str) -> Result<()> {
         self.lock_change(change).await?;
         self.store.delete_change_impact(change, id).await
@@ -340,6 +362,46 @@ impl<'s, S: WriteTx> Tx<'s, S> {
     /// Writes a version, stamped with its owner and its project (from the version it follows, else from its change)
     /// and with the order of its commit.
     pub async fn put_node(&mut self, n: &Node) -> Result<()> {
+        let n = self.stamp(n).await?;
+        let committed = self.commit_on(&n.branch).await?;
+        self.store.put_node(&n, committed).await?;
+        self.written.insert(n.node_ref());
+        self.nodes.push(n);
+        Ok(())
+    }
+
+    /// Writes versions of one branch, each with how it holds its links ([`Tx::put_node`], then [`Tx::put_link_set`]
+    /// for each), in as few statements as the store can.
+    pub async fn put_versions(&mut self, ns: &[(Node, LinkSet)]) -> Result<()> {
+        let mut stamped = Vec::with_capacity(ns.len());
+        for (n, set) in ns {
+            check_link_set(&n.node_ref(), set)?;
+            stamped.push((self.stamp(n).await?, *set));
+        }
+        let Some((first, _)) = stamped.first() else {
+            return Ok(());
+        };
+        if let Some((n, _)) = stamped
+            .iter()
+            .find(|(n, _)| branch_of(&n.branch) != branch_of(&first.branch))
+        {
+            return Err(GraphError::internal(format!(
+                "node {}: versions of one branch are written together",
+                n.node_ref()
+            )));
+        }
+        let committed = self.commit_on(&first.branch).await?;
+        self.store.put_versions(&stamped, committed).await?;
+        for (n, _) in stamped {
+            self.written.insert(n.node_ref());
+            self.nodes.push(n);
+        }
+        Ok(())
+    }
+
+    /// A version as it is written: its owner and its project (from the version it follows, else from its change),
+    /// its creator, editor and scope.
+    async fn stamp(&mut self, n: &Node) -> Result<Node> {
         let mut n = n.clone();
         let what = format!("node {} v{}", n.key, n.version);
         self.need_change(&n.change_id, &what)?;
@@ -407,11 +469,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             .insert(n.responsible.to_string(), (n.responsible.clone(), what.clone()));
         self.projects
             .insert(n.project.to_string(), (n.project.clone(), what.clone()));
-        let committed = self.commit_on(&n.branch).await?;
-        self.store.put_node(&n, committed).await?;
-        self.written.insert(n.node_ref());
-        self.nodes.push(n);
-        Ok(())
+        Ok(n)
     }
 
     pub async fn put_links(&mut self, ls: &[Link]) -> Result<()> {
@@ -444,18 +502,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
                 "the links of version {from}: it is not written by this transaction, a version never changes (ADR 0079)"
             )));
         }
-        for v in [set.of, set.base] {
-            if v >= from.version {
-                return Err(GraphError::invalid(format!(
-                    "the links of version {from}: v{v} is not an earlier version of the node"
-                )));
-            }
-        }
-        if set.of != 0 && set.base != 0 {
-            return Err(GraphError::invalid(format!(
-                "the links of version {from}: a version shares a set or writes a delta, not both"
-            )));
-        }
+        check_link_set(from, &set)?;
         self.store.put_link_set(from, set).await
     }
 
@@ -945,6 +992,23 @@ pub fn go_sprint(v: &serde_json::Value) -> String {
                 .join(" ")
         ),
     }
+}
+
+/// What a version may hold of its links: an earlier version's set, or a delta over one, not both.
+fn check_link_set(from: &NodeRef, set: &LinkSet) -> Result<()> {
+    for v in [set.of, set.base] {
+        if v >= from.version {
+            return Err(GraphError::invalid(format!(
+                "the links of version {from}: v{v} is not an earlier version of the node"
+            )));
+        }
+    }
+    if set.of != 0 && set.base != 0 {
+        return Err(GraphError::invalid(format!(
+            "the links of version {from}: a version shares a set or writes a delta, not both"
+        )));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
