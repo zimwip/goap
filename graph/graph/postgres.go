@@ -1136,16 +1136,25 @@ func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 
 func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 	delete(t.locked, c.ID)
-	_, err := t.unheld().Exec(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version)
+	// the header stored is the change's now, the transaction holding its lock (guardTx.PutChange): what it reads of it next
+	h, err := scanPGChangeHead(t.unheld().QueryRow(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, intent = EXCLUDED.intent, goal = EXCLUDED.goal, status = EXCLUDED.status,
 		  result_baseline_id = EXCLUDED.result_baseline_id, data = EXCLUDED.data, baseline_id = EXCLUDED.baseline_id, branch = EXCLUDED.branch,
 		  lifecycle = EXCLUDED.lifecycle, state = EXCLUDED.state, project_id = EXCLUDED.project_id,
 		  parent_id = EXCLUDED.parent_id, guardians = EXCLUDED.guardians, depends_on = EXCLUDED.depends_on,
-		  methodology = EXCLUDED.methodology, methodology_version = EXCLUDED.methodology_version`,
+		  methodology = EXCLUDED.methodology, methodology_version = EXCLUDED.methodology_version
+		RETURNING `+pgChangeHead,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)), jsonb(c.Data), c.CreatedAt,
-		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, guardiansJSON(c.Guardians), dependsOnJSON(c.DependsOn), c.MethodologyVersion)
-	return mapErr(err, "change")
+		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, guardiansJSON(c.Guardians), dependsOnJSON(c.DependsOn), c.MethodologyVersion).Scan)
+	if err != nil {
+		return mapErr(err, "change")
+	}
+	if t.locked == nil {
+		t.locked = map[domain.ChangeID]domain.Change{}
+	}
+	t.locked[c.ID] = h
+	return nil
 }
 
 func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {

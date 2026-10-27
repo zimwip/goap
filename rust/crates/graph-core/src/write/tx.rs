@@ -216,11 +216,16 @@ impl<'s, S: WriteTx> Tx<'s, S> {
         if id.is_empty() || !self.locked.insert(format!("change:{id}")) {
             return Ok(());
         }
-        self.store.lock_change(id).await?;
+        let head = self.store.lock_change(id).await?;
         // a header read before the lock is read again: another writer of the tree may have moved it since (Go's
-        // `changeTx` locks, then reads)
+        // `changeTx` locks, then reads); the one the lock read is the change's
         let written = &self.written_headers;
         self.headers.retain(|k, _| written.contains_key(k));
+        if let Some(c) = head
+            && !self.written_headers.contains_key(id)
+        {
+            self.headers.insert(id.clone(), c);
+        }
         Ok(())
     }
 

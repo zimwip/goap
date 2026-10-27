@@ -293,6 +293,25 @@ impl Session {
         Ok(rows.first().map_or_else(|| id.to_string(), |r| r.text(0)))
     }
 
+    /// Once the lock of its tree is held, the root of the tree of a change and its header in one statement: the
+    /// header is what the transaction reads of it next. A change not stored yet is its own root.
+    async fn locked_head(&self, id: &ChangeId) -> Result<(String, Option<Change>), GraphError> {
+        let q = format!(
+            "WITH RECURSIVE up (id, parent_id) AS (
+			SELECT id, parent_id FROM change WHERE id = $1
+			UNION ALL SELECT c.id, c.parent_id FROM change c JOIN up ON c.id = up.parent_id)
+		SELECT {}, (SELECT id::text FROM up WHERE parent_id IS NULL) FROM change WHERE id = $1",
+            self.sql.change_head_cols()
+        );
+        let rows = self
+            .select((q, vec![id.as_str().into()]), &format!("lock change {id}"))
+            .await?;
+        match rows.first() {
+            Some(r) => Ok((r.text(20), Some(super::change_of(r)?))),
+            None => Ok((id.to_string(), None)),
+        }
+    }
+
     async fn advisory_lock(&self, key: &str) -> Result<(), GraphError> {
         self.select(
             (
@@ -326,10 +345,10 @@ impl Session {
 }
 
 impl WriteTx for Session {
-    async fn lock_change(&self, id: &ChangeId) -> Result<(), GraphError> {
+    async fn lock_change(&self, id: &ChangeId) -> Result<Option<Change>, GraphError> {
         if !self.sql.pg {
             // SQLite has one writer: the transaction holds it
-            return Ok(());
+            return Ok(None);
         }
         // the root last locked is a guess the read once the lock is held checks (an attach or detach moves it)
         let mut root = match self.versions.root_of(id.as_str()) {
@@ -339,10 +358,10 @@ impl WriteTx for Session {
         self.tx.forget_branches();
         loop {
             self.advisory_lock(&format!("goap.change:{root}")).await?;
-            let again = self.change_root(id).await?;
+            let (again, head) = self.locked_head(id).await?;
             if again == root {
                 self.versions.keep_root(id.as_str(), &root);
-                return Ok(());
+                return Ok(head);
             }
             root = again;
         }

@@ -272,8 +272,9 @@ pub struct OutboxMessage {
 /// The writes of a store, in one transaction on its writer (Go's `Tx`): what a write reads it reads through the same
 /// transaction ([`ReadTx`]), and nothing is kept unless it commits.
 pub trait WriteTx: ReadTx {
-    /// Serializes the writers of the tree of a change (ADR 0127): PostgreSQL takes an advisory lock on its root.
-    fn lock_change(&self, id: &ChangeId) -> impl Future<Output = Result<()>> + Send;
+    /// Serializes the writers of the tree of a change (ADR 0127): PostgreSQL takes an advisory lock on its root, and
+    /// answers the header of the change it read with the root once the lock was held (none: not stored, or not read).
+    fn lock_change(&self, id: &ChangeId) -> impl Future<Output = Result<Option<Change>>> + Send;
 
     /// Serializes the writers of a branch.
     fn lock_branch(&self, namespace: &str, name: &str) -> impl Future<Output = Result<()>> + Send;

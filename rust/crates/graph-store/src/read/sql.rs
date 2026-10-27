@@ -925,8 +925,9 @@ impl Sql {
 
     /// The headers of the changes matching the parts of a filter a column answers, oldest first (indexes
     /// change_status, change_project, change_parent).
-    pub fn change_heads(self, f: &ChangesFilter) -> Stmt {
-        let cols = [
+    /// The select list of a change's head, in the order `change_of` reads it.
+    pub fn change_head_cols(self) -> String {
+        [
             self.id("id"),
             "title".into(),
             "intent".into(),
@@ -948,7 +949,11 @@ impl Sql {
             "depends_on".into(),
             "methodology_version".into(),
         ]
-        .join(", ");
+        .join(", ")
+    }
+
+    pub fn change_heads(self, f: &ChangesFilter) -> Stmt {
+        let cols = self.change_head_cols();
         let mut q = format!(
             "SELECT {cols} FROM change WHERE {}",
             if self.pg { "true" } else { "1 = 1" }

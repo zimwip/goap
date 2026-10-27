@@ -299,11 +299,13 @@ func lockedWrite(procedure string, ids []domain.ChangeID) bool {
 	return len(ids) == 1 && lockedWrites[procedure[strings.LastIndexByte(procedure, '/')+1:]]
 }
 
-// lockedWrites are the procedures editing the drafts of one change in one transaction of the graph, run whole in the
+// lockedWrites are the procedures writing one change in one transaction of the graph (the edits of its drafts, a review
+// batch, its purge), run whole in the
 // transaction holding the change's lock (Graph.InChangeLock).
 var lockedWrites = map[string]bool{
 	"ImpactNodeCreate": true, "ImpactNodeUpdate": true, "ImpactNodeCheckout": true, "ImpactNodeCheckoutBatch": true,
-	"ImpactLinkCreate": true, "ImpactLinkUpdate": true, "ImpactLinkDelete": true,
+	"ImpactLinkCreate": true, "ImpactLinkUpdate": true, "ImpactLinkDelete": true, "ImpactNodeReviewBatch": true,
+	"DeleteChange": true,
 }
 
 // changeIDsIn returns the changes a request names: its change_id (id for GetChange and UpdateChange) and the change of

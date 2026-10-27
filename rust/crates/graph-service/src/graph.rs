@@ -840,8 +840,12 @@ impl Graph {
 }
 
 /// Refuses a write naming a change the caller may not read, as if it did not exist (`PersonalScope`, `mayRead`): read
-/// in the transaction of the write, which reads it anyway.
+/// in the transaction of the write, which reads it anyway. A write naming one change takes its lock first (Go's
+/// `LockedWrites`): the header the lock reads serves this check and the write.
 async fn readable_changes(tx: &mut Tx<'_, Session>, ids: &[ChangeId], readable: &Readable) -> Result<(), GraphError> {
+    if let [id] = ids {
+        tx.lock_change(id).await?;
+    }
     for id in ids {
         match tx.change_head(id).await {
             Ok(c) if !readable.may_read(&c) => return Err(GraphError::not_found(format!("change {id}"))),
