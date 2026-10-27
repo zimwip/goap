@@ -18,7 +18,7 @@
   <rect width="64" height="64" rx="14" fill="url(#tile)"/>
   <!-- painted back to front: the tip coming out behind the target, the target, then the shaft in front -->
   <path d="M38 26 L46 18" stroke="#fff" stroke-width="3.6" stroke-linecap="round"/>
-  <path d="M57 7 L52.5 22.5 L48.5 18.5 L45.5 15.5 L41.5 11.5 Z" fill="#fff" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M57 7 L50 20.2 L47.6 16.4 L43.8 14 Z" fill="#fff" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>
   <!-- the target, turned three quarters away: its edge, then its face -->
   <g transform="translate(30 34) rotate(-12) scale(0.76 1)">
     <circle cx="4.5" r="21" fill="#0a2a63"/>
