@@ -1326,7 +1326,9 @@ The indexer follows the graph's events over NATS. The compose image is `pgvector
   the same supervisor, with `--strictPort`. `make local-build` builds the binaries in `.goap/bin` (Go, then
   `goap-graph-rs` and `goap-proxy` with cargo, `LOCAL_CARGO_PROFILE`, release by default). `goap-local test` (`make local-test`) runs the stack on fresh data, then the end-to-end
   test of a running platform, `platform/e2e/stack` (`GOAP_STACK_URL`: registry, a commit on the content graph read
-  back, the index following it over NATS, an export job, the engine), then stops; `goap-local bench`
+  back, the index following it over NATS, an export job, the engine), then stops; `goap-local e2e` (`make web-e2e`) runs
+  it on fresh data with the IDE and the demo data, then the Playwright tests of the IDE, `web/e2e` (`GOAP_E2E_URL`), then
+  stops; `goap-local bench`
   (`make local-bench`, `LOCAL_PROXY` go | rust | compare | shadow, `PERF_ARGS`) runs the graph alone behind goap-proxy
   loaded by goap-bench, then the proxy's report and, in mode compare, `goap-proxy diff-db` over the two SQLite files.
   Two graphs on one bus name their events apart (`Graph.Origin`, `graph-content` for a content graph: the bus
