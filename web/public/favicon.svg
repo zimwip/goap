@@ -10,15 +10,11 @@
       <stop offset="0" stop-color="#3d86ff"/>
       <stop offset="1" stop-color="#1450c0"/>
     </linearGradient>
-    <linearGradient id="trail" x1="0" y1="1" x2="1" y2="0">
-      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
-      <stop offset="1" stop-color="#fff" stop-opacity="0.9"/>
-    </linearGradient>
   </defs>
   <rect width="64" height="64" rx="14" fill="url(#tile)"/>
   <!-- painted back to front: the tip coming out behind the target, the target, then the shaft in front -->
-  <path d="M38 26 L46 18" stroke="#fff" stroke-width="3.6" stroke-linecap="round"/>
-  <path d="M57 7 L50 20.2 L47.6 16.4 L43.8 14 Z" fill="#fff" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M38 26 L48 16" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M56 8 L50.8 18.6 L49 15 L45.4 13.2 Z" fill="#fff" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>
   <!-- the target, turned three quarters away: its edge, then its face -->
   <g transform="translate(30 34) rotate(-12) scale(0.76 1)">
     <circle cx="4.5" r="21" fill="#0a2a63"/>
@@ -30,14 +26,8 @@
     <circle r="4.4" fill="#fff"/>
     <circle r="2" fill="#0a2a63" fill-opacity="0.55"/>
   </g>
-  <!-- speed lines behind the arrow -->
-  <g stroke="url(#trail)" stroke-linecap="round" fill="none">
-    <path d="M4 46 L15 35" stroke-width="2.2"/>
-    <path d="M17 60 L27 50" stroke-width="2.2"/>
-    <path d="M6 56 L13 49" stroke-width="2.6"/>
-  </g>
   <!-- the shaft in front, sunk into the bullseye, and its fletching -->
-  <path d="M14 50 L30 34" stroke="#0a1e3f" stroke-opacity="0.35" stroke-width="6" stroke-linecap="round"/>
-  <path d="M14 50 L30 34" stroke="#fff" stroke-width="3.6" stroke-linecap="round"/>
-  <path d="M10.5 47.5 L17.5 47.5 L17.5 54.5 M14.5 43.5 L21.5 43.5 L21.5 50.5" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M14 50 L30 34" stroke="#0a1e3f" stroke-opacity="0.35" stroke-width="4.4" stroke-linecap="round"/>
+  <path d="M14 50 L30 34" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M11.5 48.5 L16.5 48.5 L16.5 53.5 M15 45 L20 45 L20 50" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
