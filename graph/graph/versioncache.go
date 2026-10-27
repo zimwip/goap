@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 
@@ -239,4 +240,86 @@ func prefetchVersions(ctx context.Context, tx Tx, refs []domain.NodeRef) error {
 		return t.prefetch(ctx, refs)
 	}
 	return nil
+}
+
+// prefetchLatestOn reads at once the latest versions of some nodes on a branch, kept for LatestOn until the transaction
+// writes or joins a version of the node: the versions it found.
+func (t *guardTx) prefetchLatestOn(ctx context.Context, ids []domain.NodeID, branch string) ([]domain.NodeRef, error) {
+	at, err := t.Tx.LatestVersionsOn(ctx, ids, branch)
+	if err != nil {
+		return nil, err
+	}
+	b := domain.BranchOf(branch)
+	if t.latestOn == nil {
+		t.latestOn = map[string]map[domain.NodeID]domain.Version{}
+	}
+	m := t.latestOn[b]
+	if m == nil {
+		m = map[domain.NodeID]domain.Version{}
+		t.latestOn[b] = m
+	}
+	refs := make([]domain.NodeRef, 0, len(at))
+	for _, id := range ids {
+		v := at[id] // 0: none on the branch
+		m[id] = v
+		if v > 0 {
+			refs = append(refs, domain.NodeRef{ID: id, Version: v})
+		}
+	}
+	return refs, nil
+}
+
+// LatestOn reads the latest version of a node on a branch, from what prefetchLatestOn read when it holds the node.
+func (t *guardTx) LatestOn(ctx context.Context, id domain.NodeID, branch string) (domain.Node, error) {
+	b := domain.BranchOf(branch)
+	if v, ok := t.latestOn[b][id]; ok {
+		if v == 0 {
+			return domain.Node{}, fmt.Errorf("node %s on %s: %w", id, b, ErrNotFound)
+		}
+		return t.Node(ctx, domain.NodeRef{ID: id, Version: v})
+	}
+	return t.Tx.LatestOn(ctx, id, branch)
+}
+
+// forgetLatest drops what prefetchLatestOn read of a node: the transaction wrote or joined a version of it.
+func (t *guardTx) forgetLatest(id domain.NodeID) {
+	for _, m := range t.latestOn {
+		delete(m, id)
+	}
+}
+
+// prefetchKeys resolves some keys of a namespace at once, kept for NodeIDByKey until the transaction writes a node of
+// the key.
+func (t *guardTx) prefetchKeys(ctx context.Context, namespace string, keys []string) error {
+	ids, err := t.Tx.NodeIDsByKey(ctx, namespace, keys)
+	if err != nil {
+		return err
+	}
+	if t.keys == nil {
+		t.keys = make(map[string]domain.NodeID, len(keys))
+	}
+	for _, k := range keys {
+		t.keys[nsKey(namespace, k)] = ids[k] // "": no node holds it
+	}
+	return nil
+}
+
+// NodeIDByKey resolves a key, from what prefetchKeys read when it holds the key.
+func (t *guardTx) NodeIDByKey(ctx context.Context, namespace, key string) (domain.NodeID, error) {
+	if id, ok := t.keys[nsKey(namespace, key)]; ok {
+		if id == "" {
+			return "", fmt.Errorf("node key %s: %w", key, ErrNotFound)
+		}
+		return id, nil
+	}
+	return t.Tx.NodeIDByKey(ctx, namespace, key)
+}
+
+// prefetchNodeKeys is prefetchKeys through the guard of the graph (nothing otherwise); forget drops what it read.
+func prefetchNodeKeys(ctx context.Context, tx Tx, namespace string, keys []string) (forget func(), err error) {
+	gt, ok := unwrapGuard(tx)
+	if !ok || len(keys) < 2 {
+		return func() {}, nil
+	}
+	return func() { gt.keys = nil }, gt.prefetchKeys(ctx, namespace, keys)
 }

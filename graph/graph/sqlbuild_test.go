@@ -129,19 +129,19 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = pg.sqlCommittedVersions("", "main", 3, 9, nil)
 	check("pg CommittedVersions", pg, q, a, committed("node_id::text", "", "", "$4"), []any{"main", int64(3), int64(9), "default"})
 	q, a = pg.sqlCommittedVersions("", "main", 3, 9, ids)
-	check("pg CommittedVersions ids", pg, q, a, `SELECT q.id::text, x.version,
-			(SELECT w.deleted FROM node_version w WHERE w.node_id = q.id AND w.version = x.version),
-			(SELECT w.reason FROM node_version w WHERE w.node_id = q.id AND w.version = x.version)
-		FROM unnest($5::uuid[]) AS q(id) JOIN node n ON n.id = q.id AND n.namespace = $4
-		CROSS JOIN LATERAL (
-			SELECT u.version FROM (
-				(SELECT v.version, v.committed FROM node_version v
-				WHERE v.node_id = q.id AND v.branch = $1 AND v.committed > $2 AND v.committed <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
-				UNION ALL
-				(SELECT j.version, j.committed FROM node_branch j
-				WHERE j.node_id = q.id AND j.branch = $1 AND j.committed > $2 AND j.committed <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
-			) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
-		) x`, []any{"main", int64(3), int64(9), "default", []string{"n1", "n2"}})
+	check("pg CommittedVersions ids", pg, q, a, `WITH x AS MATERIALIZED (
+			SELECT q.id, (
+				SELECT u.version FROM (
+					(SELECT v.version, v.committed FROM node_version v
+					WHERE v.node_id = q.id AND v.branch = $1 AND v.committed + 0 > $2 AND v.committed + 0 <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
+					UNION ALL
+					(SELECT j.version, j.committed FROM node_branch j
+					WHERE j.node_id = q.id AND j.branch = $1 AND j.committed + 0 > $2 AND j.committed + 0 <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
+				) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
+			) AS version
+			FROM unnest($5::uuid[]) AS q(id) WHERE (SELECT n.namespace FROM node n WHERE n.id = q.id) = $4
+		)
+		SELECT x.id::text, x.version, w.deleted, w.reason FROM x JOIN node_version w ON w.node_id = x.id AND w.version = x.version`, []any{"main", int64(3), int64(9), "default", []string{"n1", "n2"}})
 	q, a = lite.sqlCommittedVersions("", "main", 3, 9, ids)
 	check("sqlite CommittedVersions ids", lite, q, a, strings.NewReplacer("$1", "?", "$2", "?", "$3", "?").Replace(committed("node_id",
 		" AND v.node_id IN (SELECT value FROM json_each(?))", " AND j.node_id IN (SELECT value FROM json_each(?))", "?")), []any{"main", int64(3), int64(9), "default", `["n1","n2"]`})

@@ -537,6 +537,11 @@ func (g *Graph) ImpactNodeCheckoutBatch(ctx context.Context, id domain.ChangeID,
 		return nil, invalidf("no node to check out")
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
+		if err := g.prefetchCheckouts(ctx, tx, id, in.Nodes); err != nil {
+			return err
+		}
+		// what it read of the branch holds for the checkouts of the batch, which write drafts, not versions
+		defer forgetLatestOn(tx)
 		out = make([]domain.ChangeImpact, 0, len(in.Nodes))
 		for _, n := range in.Nodes {
 			w, err := g.resolve(ctx, tx, id, checkoutTarget(n))
@@ -558,6 +563,49 @@ func (g *Graph) ImpactNodeCheckoutBatch(ctx context.Context, id domain.ChangeID,
 		return nil
 	})
 	return out, err
+}
+
+// prefetchCheckouts reads in one batch what the checkouts of a batch naming nodes by id read one node at a time: their
+// versions in the reference baseline, the latest on the change branch for the main flow, and those versions with their
+// links (ADR 0137 addendum). Nothing for a batch of one, or one naming impacts, keys or several flows.
+func (g *Graph) prefetchCheckouts(ctx context.Context, tx Tx, id domain.ChangeID, nodes []NodeCheckout) error {
+	gt, ok := unwrapGuard(tx)
+	if !ok || len(nodes) < 2 {
+		return nil
+	}
+	ids := make([]domain.NodeID, 0, len(nodes))
+	for _, n := range nodes {
+		if n.Impact != "" || n.Node == "" || n.Flow != nodes[0].Flow {
+			return nil
+		}
+		ids = append(ids, n.Node)
+	}
+	w, err := g.workOn(ctx, tx, id, nodes[0].Flow)
+	if err != nil {
+		return err
+	}
+	at, err := versionsAt(ctx, tx, w.c.BaselineID, ids)
+	if err != nil {
+		return err
+	}
+	refs := make([]domain.NodeRef, 0, len(at))
+	for nid, v := range at {
+		refs = append(refs, domain.NodeRef{ID: nid, Version: v})
+	}
+	if w.flow == "" {
+		latest, err := gt.prefetchLatestOn(ctx, ids, w.branch)
+		if err != nil {
+			return err
+		}
+		refs = append(refs, latest...)
+	}
+	return gt.prefetch(ctx, refs)
+}
+
+func forgetLatestOn(tx Tx) {
+	if gt, ok := unwrapGuard(tx); ok {
+		gt.latestOn = nil
+	}
 }
 
 // checkoutTx is the checkout of the impact w selects, inside a transaction (see ImpactNodeCheckout): the draft it gives.

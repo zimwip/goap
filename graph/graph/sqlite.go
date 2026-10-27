@@ -308,6 +308,27 @@ func (t *sqliteTx) NodeIDByKey(ctx context.Context, namespace, key string) (doma
 	return domain.NodeID(id), nil
 }
 
+func (t *sqliteTx) NodeIDsByKey(ctx context.Context, namespace string, keys []string) (map[string]domain.NodeID, error) {
+	out := make(map[string]domain.NodeID, len(keys))
+	if len(keys) == 0 {
+		return out, nil
+	}
+	q, args := dialectSQLite.sqlNodeIDsByKey(namespace, keys)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, sqliteErr(err, "node keys")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key, id string
+		if err := rows.Scan(&key, &id); err != nil {
+			return nil, err
+		}
+		out[key] = domain.NodeID(id)
+	}
+	return out, rows.Err()
+}
+
 func (t *sqliteTx) NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error) {
 	var id string
 	q, args := dialectSQLite.sqlNodeIDByKey(namespace, key)

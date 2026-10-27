@@ -47,6 +47,8 @@ type Tx interface {
 	NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error)
 	// NodeIDByKey resolves a key whatever the branch the node lives on.
 	NodeIDByKey(ctx context.Context, namespace, key string) (domain.NodeID, error)
+	// NodeIDsByKey resolves some keys at once, as NodeIDByKey: the keys no node holds are left out.
+	NodeIDsByKey(ctx context.Context, namespace string, keys []string) (map[string]domain.NodeID, error)
 	// NodesIn lists the nodes of a baseline, of one type when nodeType is not empty, by key: through the guard of the
 	// graph, which computes the state; a store lists the nodes of the entries it stores.
 	NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error)

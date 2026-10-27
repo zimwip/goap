@@ -188,6 +188,15 @@ func (d dialect) sqlNodeIDByKey(namespace, key string) (string, []any) {
 	return `SELECT ` + d.id("id") + ` FROM node WHERE namespace = ` + d.ph(1) + ` AND key = ` + d.ph(2), []any{domain.NamespaceOf(namespace), key}
 }
 
+// sqlNodeIDsByKey reads the keys and ids of the nodes holding some keys.
+func (d dialect) sqlNodeIDsByKey(namespace string, keys []string) (string, []any) {
+	if d.pg {
+		return `SELECT key, ` + d.id("id") + ` FROM node WHERE namespace = $1 AND key = ANY($2::text[])`, []any{domain.NamespaceOf(namespace), keys}
+	}
+	b, _ := json.Marshal(keys)
+	return `SELECT key, ` + d.id("id") + ` FROM node WHERE namespace = ? AND key IN (SELECT value FROM json_each(?))`, []any{domain.NamespaceOf(namespace), string(b)}
+}
+
 // sqlNodesAt reads node versions by reference, of one type when nodeType is not empty, ordered by key.
 func (d dialect) sqlNodesAt(refs []domain.NodeRef, nodeType string) (string, []any) {
 	if d.pg {
@@ -247,23 +256,26 @@ func (d dialect) sqlCommittedVersions(namespace, branch string, after, upTo int6
 
 // sqlFoldVersions is sqlCommittedVersions for some nodes on PostgreSQL: for each node its last commit on the branch in the
 // range, one lookup of the indexes node_version_fold / node_branch_fold whatever the length of its history (the planner
-// of a generic plan cannot estimate the range, a join over the list could walk every commit of the branch); what the
-// version found holds is read by its key once it is found (scalar subqueries: a join would let the planner read the
-// versions of the node first, one by one, a node estimated to have a single one).
+// of a generic plan cannot estimate the range, a join over the list could walk every commit of the branch); its
+// namespace and what the version found holds are read by their keys (scalar subqueries: a join lets the planner scan the
+// nodes of the namespace, or read every version of a node and filter them), each version computed once (the
+// materialized list); the bounds of the range are no index condition (committed + 0): a generic plan would walk the
+// commits of the branch in the range by node_version_committed, the node an afterthought, where node_version_fold
+// reads the commits of the node from its last, backwards.
 func (d dialect) sqlFoldVersions(args []any, ids []domain.NodeID) (string, []any) {
-	return `SELECT q.id::text, x.version,
-			(SELECT w.deleted FROM node_version w WHERE w.node_id = q.id AND w.version = x.version),
-			(SELECT w.reason FROM node_version w WHERE w.node_id = q.id AND w.version = x.version)
-		FROM unnest($5::uuid[]) AS q(id) JOIN node n ON n.id = q.id AND n.namespace = $4
-		CROSS JOIN LATERAL (
-			SELECT u.version FROM (
-				(SELECT v.version, v.committed FROM node_version v
-				WHERE v.node_id = q.id AND v.branch = $1 AND v.committed > $2 AND v.committed <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
-				UNION ALL
-				(SELECT j.version, j.committed FROM node_branch j
-				WHERE j.node_id = q.id AND j.branch = $1 AND j.committed > $2 AND j.committed <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
-			) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
-		) x`, append(args, nodeIDStrings(ids))
+	return `WITH x AS MATERIALIZED (
+			SELECT q.id, (
+				SELECT u.version FROM (
+					(SELECT v.version, v.committed FROM node_version v
+					WHERE v.node_id = q.id AND v.branch = $1 AND v.committed + 0 > $2 AND v.committed + 0 <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
+					UNION ALL
+					(SELECT j.version, j.committed FROM node_branch j
+					WHERE j.node_id = q.id AND j.branch = $1 AND j.committed + 0 > $2 AND j.committed + 0 <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
+				) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
+			) AS version
+			FROM unnest($5::uuid[]) AS q(id) WHERE (SELECT n.namespace FROM node n WHERE n.id = q.id) = $4
+		)
+		SELECT x.id::text, x.version, w.deleted, w.reason FROM x JOIN node_version w ON w.node_id = x.id AND w.version = x.version`, append(args, nodeIDStrings(ids))
 }
 
 func nodeIDStrings(ids []domain.NodeID) []string {

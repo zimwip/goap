@@ -87,6 +87,11 @@ type guardTx struct {
 	written map[domain.NodeRef]bool
 	// nodes are the versions it read that it did not write (versioncache.go)
 	nodes map[domain.NodeRef]domain.Node
+	// latestOn are the latest versions on a branch it read in a batch, by branch then node (0: none there), dropped for
+	// a node it writes or joins a version of (versioncache.go)
+	latestOn map[string]map[domain.NodeID]domain.Version
+	// keys are the ids of the keys it read in a batch, by namespace and key ("": no node), dropped for a node it writes
+	keys map[string]domain.NodeID
 	// purged: the transaction deleted a change, and versions with it (the version cache is emptied once it is over)
 	purged bool
 	// logged are the changes whose log the transaction appended to (the draft cache, ADR 0079, never publishes what a
@@ -371,6 +376,8 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	if err := t.needChange(n.ChangeID, what); err != nil {
 		return err
 	}
+	t.forgetLatest(n.ID)
+	delete(t.keys, nsKey(n.Namespace, n.Key))
 	var prev *domain.Node
 	if n.Version > 1 {
 		// the previous version alone, whatever the length of the history (ADR 0140): the project is the node's
@@ -512,6 +519,7 @@ func (t *guardTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch str
 	if err != nil {
 		return err
 	}
+	t.forgetLatest(ref.ID)
 	return t.Tx.JoinBranch(ctx, ref, branch, change, committed)
 }
 
@@ -549,7 +557,7 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 	if err := t.LockChange(ctx, id); err != nil {
 		return err
 	}
-	t.purged, t.nodes = true, nil
+	t.purged, t.nodes, t.latestOn, t.keys = true, nil, nil, nil
 	t.g.versions.reset()
 	if err := t.Tx.DeleteChange(ctx, id, namespace, branch); err != nil {
 		return err

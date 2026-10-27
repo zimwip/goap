@@ -74,10 +74,18 @@ func (a *applier) prepareChangeImpacts() error {
 	// 1. the versions: the next version of each node, whatever the branch it was written on; the latest version of
 	// each node, and the latest on the change's branch, read in two statements
 	var ids []domain.NodeID
+	var keys []string // of the creations, checked free in one statement
 	for _, l := range todo {
 		if l.d.Base != nil {
 			ids = append(ids, l.d.Node)
+		} else {
+			keys = append(keys, l.d.Key)
 		}
+	}
+	forget, err := prefetchNodeKeys(a.ctx, a.tx, a.change.Namespace, keys)
+	defer forget()
+	if err != nil {
+		return err
 	}
 	if a.latest, err = a.tx.LatestVersions(a.ctx, ids); err != nil {
 		return err

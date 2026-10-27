@@ -56,7 +56,13 @@ func (p *Postgres) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		}
 		slog.WarnContext(ctx, "graph: a read-only request writes; running its transaction on the writer")
 	}
-	return pgx.BeginFunc(ctx, p.pool, func(tx pgx.Tx) error { return fn(&pgTx{tx: tx}) })
+	return pgx.BeginFunc(ctx, p.pool, func(tx pgx.Tx) error {
+		h := &heldQuerier{Tx: tx}
+		if err := fn(&pgTx{tx: h, held: h}); err != nil {
+			return err
+		}
+		return h.flush(ctx)
+	})
 }
 
 // readTx runs fn on one read-only connection, outside any transaction; a write it tries ends it with errWrites, before
@@ -83,6 +89,8 @@ type pgQuerier interface {
 
 type pgTx struct {
 	tx pgQuerier
+	// held holds the change_impact rows of a write transaction (nil: a read)
+	held *heldQuerier
 	// readOnly is a read on a read-only connection (readTx): no transaction, so no lock to take
 	readOnly bool
 }
@@ -291,7 +299,7 @@ func (t *pgTx) Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error
 		return t.LatestOn(ctx, ref.ID, domain.MainBranch)
 	}
 	q, args := dialectPG.sqlNode(ref)
-	n, err := scanNode(t.tx.QueryRow(ctx, q, args...))
+	n, err := scanNode(t.onRefs([]domain.NodeRef{ref}).QueryRow(ctx, q, args...))
 	return n, mapErr(err, "node "+ref.String())
 }
 
@@ -328,7 +336,7 @@ func (t *pgTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, e
 
 func (t *pgTx) VersionRange(ctx context.Context, id domain.NodeID, before domain.Version, limit int) ([]domain.Node, error) {
 	q, args := dialectPG.sqlVersionRange(id, before, limit)
-	rows, err := t.tx.Query(ctx, q, args...)
+	rows, err := t.onNodes(id).Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -391,14 +399,14 @@ func (t *pgTx) LockBranch(ctx context.Context, namespace, name string) error {
 }
 
 func (t *pgTx) advisoryLock(ctx context.Context, key string) error {
-	_, err := t.tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, key)
+	_, err := t.unheld().Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, key)
 	return err
 }
 
 // changeRoot is the root change of the tree id belongs to, id itself when it is not stored yet.
 func (t *pgTx) changeRoot(ctx context.Context, id domain.ChangeID) (string, error) {
 	var root string
-	err := t.tx.QueryRow(ctx, `WITH RECURSIVE up (id, parent_id) AS (
+	err := t.unheld().QueryRow(ctx, `WITH RECURSIVE up (id, parent_id) AS (
 			SELECT id, parent_id FROM change WHERE id = $1
 			UNION ALL SELECT c.id, c.parent_id FROM change c JOIN up ON c.id = up.parent_id)
 		SELECT id::text FROM up WHERE parent_id IS NULL`, string(id)).Scan(&root)
@@ -411,14 +419,14 @@ func (t *pgTx) changeRoot(ctx context.Context, id domain.ChangeID) (string, erro
 func (t *pgTx) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {
 	var b domain.Branch
 	q, args := dialectPG.sqlBranch(namespace, name)
-	err := t.tx.QueryRow(ctx, q, args...).
+	err := t.unheld().QueryRow(ctx, q, args...).
 		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral, &b.ForkSeq)
 	return b, mapErr(err, "branch "+name)
 }
 
 func (t *pgTx) Branches(ctx context.Context, namespace string) ([]domain.Branch, error) {
 	q, args := dialectPG.sqlBranches(namespace)
-	rows, err := t.tx.Query(ctx, q, args...)
+	rows, err := t.unheld().Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -441,10 +449,39 @@ func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
 func (t *pgTx) NodeIDByKey(ctx context.Context, namespace, key string) (domain.NodeID, error) {
 	var id string
 	q, args := dialectPG.sqlNodeIDByKey(namespace, key)
-	if err := t.tx.QueryRow(ctx, q, args...).Scan(&id); err != nil {
+	on := t.tx
+	if t.held != nil && !t.held.holdsKey(namespace, key) {
+		on = t.held.Tx
+	}
+	if err := on.QueryRow(ctx, q, args...).Scan(&id); err != nil {
 		return "", mapErr(err, "node key "+key)
 	}
 	return domain.NodeID(id), nil
+}
+
+func (t *pgTx) NodeIDsByKey(ctx context.Context, namespace string, keys []string) (map[string]domain.NodeID, error) {
+	out := make(map[string]domain.NodeID, len(keys))
+	if len(keys) == 0 {
+		return out, nil
+	}
+	q, args := dialectPG.sqlNodeIDsByKey(namespace, keys)
+	on := pgQuerier(t.tx)
+	if t.held != nil && !slices.ContainsFunc(keys, func(k string) bool { return t.held.holdsKey(namespace, k) }) {
+		on = t.held.Tx
+	}
+	rows, err := on.Query(ctx, q, args...)
+	if err != nil {
+		return nil, mapErr(err, "node keys")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key, id string
+		if err := rows.Scan(&key, &id); err != nil {
+			return nil, err
+		}
+		out[key] = domain.NodeID(id)
+	}
+	return out, rows.Err()
 }
 
 func (t *pgTx) NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error) {
@@ -465,7 +502,7 @@ func (t *pgTx) NodesAt(ctx context.Context, refs []domain.NodeRef, nodeType stri
 		return nil, nil
 	}
 	q, args := dialectPG.sqlNodesAt(refs, nodeType)
-	rows, err := t.tx.Query(ctx, q, args...)
+	rows, err := t.onRefs(refs).Query(ctx, q, args...)
 	if err != nil {
 		return nil, mapErr(err, "nodes")
 	}
@@ -491,7 +528,11 @@ func (t *pgTx) Namespaces(ctx context.Context) ([]string, error) {
 }
 
 func (t *pgTx) queryLinks(ctx context.Context, q string, args ...any) ([]domain.Link, error) {
-	rows, err := t.tx.Query(ctx, q, args...)
+	return t.queryLinksOn(ctx, t.tx, q, args...)
+}
+
+func (t *pgTx) queryLinksOn(ctx context.Context, on pgQuerier, q string, args ...any) ([]domain.Link, error) {
+	rows, err := on.Query(ctx, q, args...)
 	if err != nil {
 		return nil, mapErr(err, "links")
 	}
@@ -537,7 +578,7 @@ func (t *pgTx) LatestVersionsOn(ctx context.Context, ids []domain.NodeID, branch
 		return out, nil
 	}
 	q, args := dialectPG.sqlLatestVersionsOn(ids, branch)
-	rows, err := t.tx.Query(ctx, q, args...)
+	rows, err := t.onNodes(ids...).Query(ctx, q, args...)
 	if err != nil {
 		return nil, mapErr(err, "nodes")
 	}
@@ -561,7 +602,7 @@ func (t *pgTx) LatestVersions(ctx context.Context, ids []domain.NodeID) (map[dom
 		return out, nil
 	}
 	q, args := dialectPG.sqlLatestVersions(ids)
-	rows, err := t.tx.Query(ctx, q, args...)
+	rows, err := t.onNodes(ids...).Query(ctx, q, args...)
 	if err != nil {
 		return nil, mapErr(err, "nodes")
 	}
@@ -798,7 +839,7 @@ func scanPGChangeHead(scan func(...any) error) (domain.Change, error) {
 
 // ChangeHead implements Tx.
 func (t *pgTx) ChangeHead(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
-	c, err := scanPGChangeHead(t.tx.QueryRow(ctx, `SELECT `+pgChangeHead+` FROM change WHERE id = $1`, string(id)).Scan)
+	c, err := scanPGChangeHead(t.unheld().QueryRow(ctx, `SELECT `+pgChangeHead+` FROM change WHERE id = $1`, string(id)).Scan)
 	if err != nil {
 		return c, mapErr(err, "change "+string(id))
 	}
@@ -808,7 +849,7 @@ func (t *pgTx) ChangeHead(ctx context.Context, id domain.ChangeID) (domain.Chang
 // ChangeHeads implements Tx.
 func (t *pgTx) ChangeHeads(ctx context.Context, f ChangesFilter) ([]domain.Change, error) {
 	q, args := dialectPG.sqlChangeHeads(pgChangeHead, f)
-	rows, err := t.tx.Query(ctx, q, args...)
+	rows, err := t.unheld().Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -866,6 +907,16 @@ func (t *pgTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain
 }
 
 func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
+	if t.held != nil {
+		if t.held.holdVersion(n, versionArgs(n)) {
+			return nil
+		}
+		if err := t.held.flush(ctx); err != nil {
+			return err
+		}
+		t.held.holdVersion(n, versionArgs(n))
+		return nil
+	}
 	if n.Version == 1 {
 		if _, err := t.tx.Exec(ctx, `INSERT INTO node (id, namespace, key, type, latest, project, creator, creator_unit) VALUES ($1, $2, $3, $4, 1, $5, $6, $7)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type, n.Project.String(), n.Creator.Subject, n.Creator.Unit.String()); err != nil {
 			return mapErr(err, "node "+n.Key)
@@ -879,13 +930,17 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 			return fmt.Errorf("node %s: not the next version: %w", n.Ref(), ErrConflict)
 		}
 	}
+	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node_version", nodeVersionColumns, ""), versionArgs(n)...)
+	return mapErr(err, "node "+n.Ref().String())
+}
+
+// versionArgs are the arguments of a node_version row, in the order of nodeVersionColumns.
+func versionArgs(n domain.Node) []any {
 	parents := make([]int32, len(n.Parents))
 	for i, pv := range n.Parents {
 		parents[i] = int32(pv)
 	}
-	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node_version", nodeVersionColumns, ""),
-		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Responsible.String(), originsJSON(n.Origins), n.Committed, n.Editor, n.Visibility)
-	return mapErr(err, "node "+n.Ref().String())
+	return []any{string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Responsible.String(), originsJSON(n.Origins), n.Committed, n.Editor, n.Visibility}
 }
 
 // exec1 runs a statement that must touch exactly one row (ErrNotFound otherwise).
@@ -917,6 +972,13 @@ func (t *pgTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, error) 
 }
 
 func (t *pgTx) PutLinks(ctx context.Context, ls []domain.Link) error {
+	if t.held != nil {
+		for _, l := range ls {
+			to, tv, url := linkTarget(l)
+			t.held.holdLink(l.From, []any{string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), to, tv, jsonb(l.Properties), nullUUID(string(l.ChangeID)), nil, url})
+		}
+		return nil
+	}
 	for rows := range slices.Chunk(ls, linkRowsPerInsert) {
 		args := make([]any, 0, len(rows)*len(linkColumns))
 		for _, l := range rows {
@@ -932,6 +994,10 @@ func (t *pgTx) PutLinks(ctx context.Context, ls []domain.Link) error {
 
 func (t *pgTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, l domain.Link) error {
 	to, tv, url := linkTarget(l)
+	if t.held != nil {
+		t.held.holdLink(from, []any{string(row), l.Type, string(from.ID), int(from.Version), to, tv, jsonb(l.Properties), nullUUID(string(l.ChangeID)), string(l.ID), url})
+		return nil
+	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("link", linkColumns, ""),
 		string(row), l.Type, string(from.ID), int(from.Version), to, tv, jsonb(l.Properties), nullUUID(string(l.ChangeID)), string(l.ID), url)
 	return mapErr(err, "link")
@@ -945,6 +1011,9 @@ func (t *pgTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet)
 	if set.Base != 0 {
 		base = int(set.Base)
 	}
+	if t.held != nil && t.held.holdLinkSet(from, [4]any{of, base, set.Depth, set.Seq}) {
+		return nil
+	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlPutLinkSet(), string(from.ID), int(from.Version), of, base, set.Depth, set.Seq)
 	return mapErr(err, "link set")
 }
@@ -952,7 +1021,7 @@ func (t *pgTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet)
 func (t *pgTx) LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, error) {
 	var s LinkSet
 	q, args := dialectPG.sqlLinkSetOf(ref)
-	err := t.tx.QueryRow(ctx, q, args...).Scan(&s.Of, &s.Base, &s.Depth, &s.Seq)
+	err := t.onRefs([]domain.NodeRef{ref}).QueryRow(ctx, q, args...).Scan(&s.Of, &s.Base, &s.Depth, &s.Seq)
 	return s, mapErr(err, "link set of "+ref.String())
 }
 
@@ -962,7 +1031,7 @@ func (t *pgTx) LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[domai
 		return out, nil
 	}
 	q, args := dialectPG.sqlLinkSetsOf(refs)
-	rows, err := t.tx.Query(ctx, q, args...)
+	rows, err := t.onRefs(refs).Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1006,7 +1075,11 @@ func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntr
 	if len(payload) == 0 {
 		payload = []byte("null") // an entry with no payload: the column holds JSON, never NULL
 	}
-	err := t.tx.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
+	q := t.tx
+	if t.held != nil {
+		q = t.held.Tx // an entry of a log reads no change_impact row: the rows held wait
+	}
+	err := q.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
 		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload).Scan(&e.Seq)
 	return e, mapErr(err, "log entry "+e.Type)
 }
@@ -1068,6 +1141,14 @@ func (t *pgTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {
 }
 
 func (t *pgTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
+	if t.held != nil {
+		args, err := impactArgs(change, cn)
+		if err != nil {
+			return err
+		}
+		t.held.hold(args)
+		return nil
+	}
 	r, err := toCNRow(cn)
 	if err != nil {
 		return err
@@ -1249,7 +1330,7 @@ func (t *pgTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, 
 
 func (t *pgTx) LinksFrom(ctx context.Context, refs []domain.NodeRef) ([]domain.Link, error) {
 	q, args := dialectPG.sqlLinksFrom(refs)
-	return t.queryLinks(ctx, q, args...)
+	return t.queryLinksOn(ctx, t.onRefs(refs), q, args...)
 }
 
 func (t *pgTx) LinksFromOfType(ctx context.Context, refs []domain.NodeRef, types []string) ([]domain.Link, error) {

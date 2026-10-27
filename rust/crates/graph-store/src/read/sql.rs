@@ -276,17 +276,19 @@ impl Sql {
             // per node one lookup of the indexes node_version_fold / node_branch_fold, whatever the length of its
             // history, then what the version found holds by its key: the scalar subqueries keep every lookup on an
             // index of the node (a join lets the planner scan the namespace or every version of a node), the
-            // materialized list computes each version once
+            // materialized list computes each version once; the bounds of the range are no index condition (committed + 0):
+            // a generic plan would walk the commits of the branch in the range, the node an afterthought, where the fold
+            // index reads the commits of the node from its last, backwards
             args.push(Arg::Texts(list(ids)));
             return (
                 "WITH x AS MATERIALIZED (
                     SELECT q.id, (
                         SELECT u.version FROM (
                             (SELECT v.version, v.committed FROM node_version v
-                            WHERE v.node_id = q.id AND v.branch = $1 AND v.committed > $2 AND v.committed <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
+                            WHERE v.node_id = q.id AND v.branch = $1 AND v.committed + 0 > $2 AND v.committed + 0 <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
                             UNION ALL
                             (SELECT j.version, j.committed FROM node_branch j
-                            WHERE j.node_id = q.id AND j.branch = $1 AND j.committed > $2 AND j.committed <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
+                            WHERE j.node_id = q.id AND j.branch = $1 AND j.committed + 0 > $2 AND j.committed + 0 <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
                         ) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
                     ) AS version
                     FROM unnest($5::uuid[]) AS q(id) WHERE (SELECT n.namespace FROM node n WHERE n.id = q.id) = $4

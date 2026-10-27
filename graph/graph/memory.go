@@ -319,6 +319,16 @@ func (t *memTx) NodeIDByKey(_ context.Context, namespace, key string) (domain.No
 	return id, nil
 }
 
+func (t *memTx) NodeIDsByKey(_ context.Context, namespace string, keys []string) (map[string]domain.NodeID, error) {
+	out := make(map[string]domain.NodeID, len(keys))
+	for _, k := range keys {
+		if id, ok := t.st.keys[nsKey(namespace, k)]; ok {
+			out[k] = id
+		}
+	}
+	return out, nil
+}
+
 func (t *memTx) NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error) {
 	id, ok := t.st.keys[nsKey(namespace, key)]
 	if !ok {
