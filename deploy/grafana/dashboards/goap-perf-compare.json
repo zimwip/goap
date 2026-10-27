@@ -737,6 +737,184 @@
    }
   },
   {
+   "type": "timeseries",
+   "title": "Write speed drift per doubling of the volume",
+   "id": 51,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "How the write speed changes when the volume doubles: the versions written per second over the last tenth of the versions written, against the same over the same tenth of half of them, minus 1 (goap-bench bench.write.drift). 0: the speed holds as the data grows; -25%: a quarter slower at twice the volume. A cost that grows with the logarithm of the volume (an index a level deeper) keeps it near 0; one that grows with the volume (a read of a whole table, a list that keeps growing) heads for -50%.",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 21
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "max by (goap_perf_impl) (goap_bench_write_drift{service_name=\"goap-bench\"})",
+     "legendFormat": "{{goap_perf_impl}}",
+     "refId": "A",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      }
+     },
+     "min": -1,
+     "max": 0.5
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^go"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3274D9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rust"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF780A"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "min"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Write speed at the volume reached",
+   "id": 52,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "description": "Versions written per second over the last tenth of the versions written (goap-bench bench.write.speed): the speed at the volume reached, not over the last minutes.",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 21
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "max by (goap_perf_impl) (goap_bench_write_speed{service_name=\"goap-bench\"})",
+     "legendFormat": "{{goap_perf_impl}}",
+     "refId": "A",
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      }
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^go"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3274D9"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^rust"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF780A"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "min"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
    "type": "row",
    "title": "Server side: latency seen by goap-proxy, CPU and memory of the containers",
    "id": 10,
@@ -745,7 +923,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 21
+    "y": 29
    }
   },
   {
@@ -820,7 +998,7 @@
     "h": 4,
     "w": 6,
     "x": 0,
-    "y": 22
+    "y": 30
    }
   },
   {
@@ -895,7 +1073,7 @@
     "h": 4,
     "w": 6,
     "x": 6,
-    "y": 22
+    "y": 30
    }
   },
   {
@@ -971,7 +1149,7 @@
     "h": 4,
     "w": 6,
     "x": 12,
-    "y": 22
+    "y": 30
    }
   },
   {
@@ -1046,7 +1224,7 @@
     "h": 4,
     "w": 6,
     "x": 18,
-    "y": 22
+    "y": 30
    }
   },
   {
@@ -1134,7 +1312,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 26
+    "y": 34
    }
   },
   {
@@ -1232,7 +1410,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 26
+    "y": 34
    }
   },
   {
@@ -1330,7 +1508,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 34
+    "y": 42
    }
   },
   {
@@ -1418,7 +1596,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 34
+    "y": 42
    }
   },
   {
@@ -1497,7 +1675,7 @@
     "h": 12,
     "w": 12,
     "x": 0,
-    "y": 42
+    "y": 50
    }
   },
   {
@@ -1565,7 +1743,7 @@
     "h": 12,
     "w": 12,
     "x": 12,
-    "y": 42
+    "y": 50
    }
   },
   {
@@ -1663,7 +1841,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 54
+    "y": 62
    }
   },
   {
@@ -1752,7 +1930,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 54
+    "y": 62
    }
   },
   {
@@ -1764,7 +1942,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 62
+    "y": 70
    }
   },
   {
@@ -1814,7 +1992,7 @@
     "h": 4,
     "w": 6,
     "x": 0,
-    "y": 63
+    "y": 71
    }
   },
   {
@@ -1864,7 +2042,7 @@
     "h": 4,
     "w": 6,
     "x": 6,
-    "y": 63
+    "y": 71
    }
   },
   {
@@ -1914,7 +2092,7 @@
     "h": 4,
     "w": 6,
     "x": 12,
-    "y": 63
+    "y": 71
    }
   },
   {
@@ -1964,7 +2142,7 @@
     "h": 4,
     "w": 6,
     "x": 18,
-    "y": 63
+    "y": 71
    }
   },
   {
@@ -2022,7 +2200,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 67
+    "y": 75
    }
   },
   {
@@ -2070,7 +2248,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 67
+    "y": 75
    }
   },
   {
@@ -2082,7 +2260,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 75
+    "y": 83
    }
   },
   {
@@ -2161,7 +2339,7 @@
     "h": 12,
     "w": 12,
     "x": 0,
-    "y": 76
+    "y": 84
    }
   },
   {
@@ -2229,7 +2407,7 @@
     "h": 12,
     "w": 12,
     "x": 12,
-    "y": 76
+    "y": 84
    }
   },
   {
@@ -2286,7 +2464,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 88
+    "y": 96
    }
   },
   {
@@ -2343,7 +2521,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 88
+    "y": 96
    }
   },
   {
@@ -2355,7 +2533,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 96
+    "y": 104
    }
   },
   {
@@ -2434,7 +2612,7 @@
     "h": 12,
     "w": 12,
     "x": 0,
-    "y": 97
+    "y": 105
    }
   },
   {
@@ -2502,7 +2680,7 @@
     "h": 12,
     "w": 12,
     "x": 12,
-    "y": 97
+    "y": 105
    }
   },
   {
@@ -2559,7 +2737,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 109
+    "y": 117
    }
   },
   {
@@ -2616,7 +2794,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 109
+    "y": 117
    }
   },
   {
@@ -2628,7 +2806,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 117
+    "y": 125
    }
   },
   {
@@ -2716,7 +2894,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 118
+    "y": 126
    }
   },
   {
@@ -2804,7 +2982,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 118
+    "y": 126
    }
   },
   {
@@ -2892,7 +3070,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 126
+    "y": 134
    }
   },
   {
@@ -2980,7 +3158,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 126
+    "y": 134
    }
   },
   {
@@ -2992,7 +3170,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 134
+    "y": 142
    }
   },
   {
@@ -3080,7 +3258,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 135
+    "y": 143
    }
   },
   {
@@ -3168,7 +3346,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 135
+    "y": 143
    }
   },
   {
@@ -3256,7 +3434,7 @@
     "h": 8,
     "w": 12,
     "x": 0,
-    "y": 143
+    "y": 151
    }
   },
   {
@@ -3345,7 +3523,7 @@
     "h": 8,
     "w": 12,
     "x": 12,
-    "y": 143
+    "y": 151
    }
   },
   {
@@ -3402,7 +3580,7 @@
     "h": 8,
     "w": 24,
     "x": 0,
-    "y": 151
+    "y": 159
    }
   }
  ]

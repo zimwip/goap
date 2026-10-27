@@ -223,6 +223,9 @@ impl Session {
         match &self.conn {
             Conn::Pg(c) | Conn::PgTx(Some(c)) => {
                 let st = c.prepare_cached(&text).await?;
+                if custom_plan(&text, &args) {
+                    return Ok(c.execute_typed(&text, &typed(&st, &args)).await?);
+                }
                 let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = args
                     .iter()
                     .map(|a| a as &(dyn tokio_postgres::types::ToSql + Sync))
@@ -267,6 +270,14 @@ impl Session {
         match &self.conn {
             Conn::Pg(c) | Conn::PgTx(Some(c)) => {
                 let st = c.prepare_cached(&text).await?;
+                if custom_plan(&text, &args) {
+                    return c
+                        .query_typed(&text, &typed(&st, &args))
+                        .await?
+                        .iter()
+                        .map(Row::from_pg)
+                        .collect();
+                }
                 let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = args
                     .iter()
                     .map(|a| a as &(dyn tokio_postgres::types::ToSql + Sync))
@@ -290,6 +301,27 @@ impl Session {
     async fn links(&self, stmt: Stmt) -> Result<Vec<Link>, GraphError> {
         self.rows(stmt).await?.iter().map(link_of).collect()
     }
+}
+
+/// Whether a statement runs with a plan of its own each time, as Go's `customPlan`: a prepared statement's generic
+/// plan does not know how many ids an array holds nor what a pattern matches, and the one PostgreSQL settles on after
+/// the first runs may read the tables whole for the next ones.
+fn custom_plan(text: &str, args: &[Arg]) -> bool {
+    !args.is_empty() && (text.contains("unnest(") || text.contains("ANY(") || text.contains(" LIKE "))
+}
+
+/// The arguments of a statement with the types of its cached preparation, for an unnamed statement planned with them.
+fn typed<'a>(
+    st: &tokio_postgres::Statement,
+    args: &'a [Arg],
+) -> Vec<(
+    &'a (dyn tokio_postgres::types::ToSql + Sync),
+    tokio_postgres::types::Type,
+)> {
+    args.iter()
+        .zip(st.params())
+        .map(|(a, t)| (a as &(dyn tokio_postgres::types::ToSql + Sync), t.clone()))
+        .collect()
 }
 
 fn sqlite_rows(c: &SqliteConn, text: &str, args: &[Arg]) -> Result<Vec<Row>, StoreError> {

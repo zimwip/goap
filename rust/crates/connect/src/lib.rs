@@ -37,8 +37,13 @@
 //! let got = client.get_preferences(&Ctx::background(), Request::new(pb::GetPreferencesRequest::default())).await?;
 //! ```
 //!
-//! Not reproduced from connect-go: the gRPC and gRPC-Web protocols, compression (a compressed request is refused
-//! with `unimplemented`), GET requests for side-effect-free methods, client and bidirectional streaming.
+//! Compression, on the server only, as the Go services configure connect-go: a gzip request is read, an answer of
+//! [`protocol::COMPRESS_MIN_BYTES`] or more is gzipped when the client accepts it (`Accept-Encoding` of a unary call,
+//! `Connect-Accept-Encoding` of a stream), another compression refused with `unimplemented`; the client sends and
+//! accepts none.
+//!
+//! Not reproduced from connect-go: the gRPC and gRPC-Web protocols, GET requests for side-effect-free methods, client
+//! and bidirectional streaming.
 
 mod client;
 mod error;

@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"math"
 	"slices"
 	"strconv"
 	"sync"
@@ -31,7 +32,9 @@ type Totals struct {
 // Metrics records every operation: OpenTelemetry instruments (scope github.com/zimwip/goap/bench; through the collector
 // of the stack they read goap_bench_* in Prometheus) and the samples of the current window for the CSV report.
 type Metrics struct {
-	Totals   Totals
+	Totals Totals
+	// Speed follows the write speed as the data grows (bench.write.speed, bench.write.drift)
+	Speed    Speed
 	duration metric.Float64Histogram
 	size     metric.Int64Histogram
 	// shaped is the duration of the calls whose cost follows the size of what they handle, by that size (LinkClass):
@@ -98,6 +101,25 @@ func NewMetrics() (*Metrics, error) {
 		{"bench.domain.versions", "Versions of the bench domain published", &m.Totals.DomainVersions},
 		{"bench.domain.types", "Node types of the latest bench domain published", &m.Totals.DomainTypes},
 		{"bench.errors", "Calls that failed", &m.Totals.Errors},
+	}
+	speeds := []struct {
+		name, desc string
+		v          func() (float64, bool)
+	}{
+		{"bench.write.speed", "Versions written per second over the last tenth of the versions written", m.Speed.Rate},
+		{"bench.write.drift", "Relative change of the write speed when the volume doubles: the speed over the last tenth of the versions written against the speed over the same tenth of half of them, minus 1 (0: steady; -0.25: a quarter slower at twice the data)", m.Speed.Drift},
+	}
+	for _, g := range speeds {
+		v := g.v
+		if _, err := meter.Float64ObservableGauge(g.name, metric.WithDescription(g.desc),
+			metric.WithFloat64Callback(func(_ context.Context, o metric.Float64Observer) error {
+				if x, ok := v(); ok {
+					o.Observe(x)
+				}
+				return nil
+			})); err != nil {
+			return nil, err
+		}
 	}
 	for _, g := range gauges {
 		v := g.v
@@ -180,6 +202,8 @@ type Row struct {
 	Rate                                     float64 // calls per second over the window
 	P50, P95, P99, Max                       time.Duration
 	MeanBytes                                int64
+	// WriteSpeed and WriteDrift are Speed.Rate and Speed.Drift at the end of the window (NaN: not measured yet)
+	WriteSpeed, WriteDrift float64
 }
 
 // Flush ends the window: one row per operation seen in it, sorted by name.
@@ -193,13 +217,21 @@ func (m *Metrics) Flush(elapsed, window time.Duration) []Row {
 		ops = append(ops, op)
 	}
 	slices.Sort(ops)
+	speed, drift := math.NaN(), math.NaN()
+	if x, ok := m.Speed.Rate(); ok {
+		speed = x
+	}
+	if x, ok := m.Speed.Drift(); ok {
+		drift = x
+	}
 	rows := make([]Row, 0, len(ops))
 	for _, op := range ops {
 		s := w[op]
 		slices.Sort(s.durations)
 		r := Row{Elapsed: elapsed, Versions: m.Totals.Versions.Load(), Nodes: m.Totals.Nodes.Load(), Links: m.Totals.Links.Load(),
 			Changes: m.Totals.Changes.Load(), Domains: m.Totals.DomainVersions.Load(), Op: op, Count: len(s.durations), Errors: s.errors,
-			P50: quantile(s.durations, 0.5), P95: quantile(s.durations, 0.95), P99: quantile(s.durations, 0.99), Max: quantile(s.durations, 1)}
+			P50: quantile(s.durations, 0.5), P95: quantile(s.durations, 0.95), P99: quantile(s.durations, 0.99), Max: quantile(s.durations, 1),
+			WriteSpeed: speed, WriteDrift: drift}
 		if window > 0 {
 			r.Rate = float64(len(s.durations)) / window.Seconds()
 		}
@@ -221,8 +253,28 @@ func quantile(sorted []float64, q float64) time.Duration {
 	return time.Duration(sorted[i] * float64(time.Second))
 }
 
+// SpeedSummary tells the write speed and its drift when measured: " write=120/s drift=-12%/x2".
+func SpeedSummary(speed, drift float64) string {
+	s := ""
+	if !math.IsNaN(speed) {
+		s += fmt.Sprintf(" write=%.0f/s", speed)
+	}
+	if !math.IsNaN(drift) {
+		s += fmt.Sprintf(" drift=%+.0f%%/x2", 100*drift)
+	}
+	return s
+}
+
+// float formats a measure of the report, empty when not measured (NaN).
+func float(x float64, prec int) string {
+	if math.IsNaN(x) {
+		return ""
+	}
+	return strconv.FormatFloat(x, 'f', prec, 64)
+}
+
 // CSVHeader is the first line of the report.
-var CSVHeader = []string{"elapsed_s", "versions", "nodes", "links", "changes", "domain_versions", "op", "count", "errors", "rate_per_s", "p50_ms", "p95_ms", "p99_ms", "max_ms", "mean_bytes"}
+var CSVHeader = []string{"elapsed_s", "versions", "nodes", "links", "changes", "domain_versions", "op", "count", "errors", "rate_per_s", "p50_ms", "p95_ms", "p99_ms", "max_ms", "mean_bytes", "write_per_s", "write_drift"}
 
 // CSVWriter writes the rows of the report.
 type CSVWriter struct{ w *csv.Writer }
@@ -244,7 +296,8 @@ func (c *CSVWriter) Write(rows []Row) error {
 	}
 	for _, r := range rows {
 		if err := c.w.Write([]string{strconv.FormatFloat(r.Elapsed.Seconds(), 'f', 1, 64), itoa(r.Versions), itoa(r.Nodes), itoa(r.Links), itoa(r.Changes), itoa(r.Domains),
-			r.Op, strconv.Itoa(r.Count), strconv.Itoa(r.Errors), strconv.FormatFloat(r.Rate, 'f', 2, 64), ms(r.P50), ms(r.P95), ms(r.P99), ms(r.Max), itoa(r.MeanBytes)}); err != nil {
+			r.Op, strconv.Itoa(r.Count), strconv.Itoa(r.Errors), strconv.FormatFloat(r.Rate, 'f', 2, 64), ms(r.P50), ms(r.P95), ms(r.P99), ms(r.Max), itoa(r.MeanBytes),
+			float(r.WriteSpeed, 1), float(r.WriteDrift, 3)}); err != nil {
 			return err
 		}
 	}
@@ -261,6 +314,7 @@ func Summary(rows []Row, window time.Duration) string {
 	}
 	r := rows[0]
 	s := fmt.Sprintf("t=%5.0fs versions=%d nodes=%d changes=%d domains=%d", r.Elapsed.Seconds(), r.Versions, r.Nodes, r.Changes, r.Domains)
+	s += SpeedSummary(r.WriteSpeed, r.WriteDrift)
 	for _, r := range rows {
 		if r.Count == 0 && r.Errors == 0 {
 			continue

@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -54,6 +55,8 @@ type draftState struct {
 	// events are the impact events folded, in the order of the log: what a flow other than the main one sees, and what
 	// stale runs left, are read over them (domain.ImpactsSeenBy, DraftSeenBy) with no read of the log. Never modified.
 	events []domain.ImpactEvent
+	// log holds events, shared with the folds copied from this one, so a copy does not copy them again (eventLog)
+	log *eventLog
 	// phases are the state each change impact started its draft on the main flow in (ADR 0058 §4, 0079), folded with the
 	// moves of the change: before its first move an impact is in the state that move leaves (phase.Before)
 	phases map[domain.ChangeImpactID]phase
@@ -71,7 +74,7 @@ type draftState struct {
 
 // copy is a state the caller may fold in place (the values it holds are never modified, only replaced).
 func (s *draftState) copy() *draftState {
-	n := &draftState{change: s.change, seq: s.seq, impacts: slices.Clone(s.impacts), at: maps.Clone(s.at), drafts: maps.Clone(s.drafts), nodes: maps.Clone(s.nodes), conflicts: maps.Clone(s.conflicts), items: slices.Clip(s.items), events: slices.Clip(s.events),
+	n := &draftState{change: s.change, seq: s.seq, impacts: slices.Clone(s.impacts), at: maps.Clone(s.at), drafts: maps.Clone(s.drafts), nodes: maps.Clone(s.nodes), conflicts: maps.Clone(s.conflicts), items: slices.Clip(s.items), events: s.events, log: s.log,
 		phases: maps.Clone(s.phases), moved: s.moved, first: s.first, state: s.state, moveSeq: maps.Clone(s.moveSeq), bytes: s.bytes}
 	if n.at == nil {
 		n.at = map[domain.ChangeImpactID]int{}
@@ -83,6 +86,34 @@ func (s *draftState) copy() *draftState {
 		n.nodes = map[domain.NodeID][]domain.ChangeImpactID{}
 	}
 	return n
+}
+
+// eventLog is the array of impact events the folds copied from one another share: the elements a fold holds are never
+// moved, a fold appends in place while it holds the whole log, else it starts a log of its own (another fold appended
+// to this one since they were copied), so a copy of a fold costs nothing and each event is copied once.
+type eventLog struct {
+	mu  sync.Mutex
+	evs []domain.ImpactEvent
+}
+
+// addEvent appends an event to the events of the fold.
+func (s *draftState) addEvent(e domain.ImpactEvent) {
+	l := s.log
+	if l != nil {
+		l.mu.Lock()
+		if len(l.evs) != len(s.events) {
+			l.mu.Unlock()
+			l = nil
+		}
+	}
+	if l == nil {
+		l = &eventLog{evs: slices.Clip(s.events)}
+		s.log = l
+		l.mu.Lock()
+	}
+	l.evs = append(l.evs, e)
+	s.events = l.evs
+	l.mu.Unlock()
 }
 
 // impact is the change impact of an id.
@@ -137,7 +168,7 @@ func (s *draftState) phaseOf(id domain.ChangeImpactID) (phase, bool) {
 
 // apply folds an event in place: domain.ApplyImpactEvent, then domain.ApplyDraftEvent and domain.ApplyConflictEvent.
 func (s *draftState) apply(e domain.ImpactEvent) {
-	s.events = append(s.events, e)
+	s.addEvent(e)
 	s.bytes += eventSize(e)
 	if e.StartsDraft() && e.Flow == "" {
 		if s.phases == nil {

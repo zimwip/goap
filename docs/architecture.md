@@ -1458,8 +1458,12 @@ within `-spread` (0.5 by default) of these four values, their means staying the 
 registry on its events, else after a while, ADR 0167: the bench creates a node of the newest type in a change it purges,
 until the graph accepts it, for three minutes at most, unmeasured). It records `bench.op.duration`
 (by `op`, `outcome` ok / conflict / error), `bench.response.size` and the gauges `bench.versions`, `nodes`, `links`,
-`changes`, `domain.versions`, `domain.types`, `errors` (Prometheus `goap_bench_*`), and a CSV per run (`.goap/perf/<run>.csv`:
-one row per operation and window, the totals at its end). Runs add to the same graph (`make perf-run`, keys prefixed by the
+`changes`, `domain.versions`, `domain.types`, `errors` (Prometheus `goap_bench_*`), the write speed as the data grows
+(`bench.write.speed`: the versions per second over the last tenth of the versions written; `bench.write.drift`: that speed
+against the same over the same tenth of half of them, minus 1, so 0 when the speed holds as the volume doubles and -50 %
+when a write costs in proportion to the volume; `platform/bench/speed.go`, panels of both dashboards, `write=` /
+`drift=` in its log lines), and a CSV per run (`.goap/perf/<run>.csv`: one row per operation and window, the totals at
+its end, `write_per_s` and `write_drift`). Runs add to the same graph (`make perf-run`, keys prefixed by the
 run) until `make perf-reset`. Once its run ends `goap-bench` holds (`-hold`: its series stay reported, so the dashboard keeps
 drawing them) until interrupted, or for `PERF_AUTOSTOP` (`make perf PERF_AUTOSTOP=30m`; `0`: it exits with the run).
 `make perf-capture` saves what Prometheus holds (a TSDB snapshot through its admin API, with the time range it covers) in

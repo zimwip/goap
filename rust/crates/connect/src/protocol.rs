@@ -57,14 +57,52 @@ pub fn check_protocol_version(h: &HeaderMap) -> Result<(), ConnectError> {
     }
 }
 
-/// Refuses a compressed body (only `identity` is supported).
-pub fn check_encoding(h: &HeaderMap, name: &str) -> Result<(), ConnectError> {
+/// The compression the server reads and writes besides `identity`, as connect-go registers it.
+pub const GZIP: &str = "gzip";
+/// `Accept-Encoding` of a unary call, `Connect-Accept-Encoding` of a stream: the compressions the peer reads.
+pub const HEADER_ACCEPT_ENCODING: &str = "accept-encoding";
+pub const HEADER_STREAM_ACCEPT_ENCODING: &str = "connect-accept-encoding";
+/// The size under which an answer goes uncompressed, the `compressMinBytes` the Go services give connect-go
+/// (`lib/telemetry`): resetting a gzip writer costs more than the bytes of a smaller answer save.
+pub const COMPRESS_MIN_BYTES: usize = 1024;
+
+/// Whether the body is gzip (`Content-Encoding` / `Connect-Content-Encoding`); another compression than identity and
+/// gzip is refused in connect-go's words.
+pub fn check_encoding(h: &HeaderMap, name: &str) -> Result<bool, ConnectError> {
     match h.get(name).and_then(|v| v.to_str().ok()).map(str::trim) {
-        None | Some("") | Some("identity") => Ok(()),
+        None | Some("") | Some("identity") => Ok(false),
+        Some(GZIP) => Ok(true),
         Some(other) => Err(ConnectError::unimplemented(format!(
-            "unknown compression {other:?}: supported encodings are identity"
+            "unknown compression {other:?}: supported encodings are {GZIP}"
         ))),
     }
+}
+
+/// Whether the peer reads gzip answers (connect-go's negotiation: the first name of the list it supports).
+pub fn accepts_gzip(h: &HeaderMap, name: &str) -> bool {
+    h.get_all(name)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split([',', ' ']))
+        .any(|n| n == GZIP)
+}
+
+/// The gzip of a payload, at the default level (Go's `gzip.NewWriter`).
+pub fn gzip(data: &[u8]) -> Bytes {
+    use std::io::Write;
+    let mut w = flate2::write::GzEncoder::new(Vec::with_capacity(data.len() / 4 + 32), flate2::Compression::default());
+    let _ = w.write_all(data);
+    Bytes::from(w.finish().unwrap_or_default())
+}
+
+/// The payload of a gzip body, refused in connect-go's words when it is not one.
+pub fn gunzip(data: &[u8]) -> Result<Bytes, ConnectError> {
+    use std::io::Read;
+    let mut out = Vec::with_capacity(data.len() * 4);
+    flate2::read::GzDecoder::new(data)
+        .read_to_end(&mut out)
+        .map_err(|e| ConnectError::invalid_argument(format!("decompress: {e}")))?;
+    Ok(Bytes::from(out))
 }
 
 /// One envelope: the flags, the 4-byte big-endian length, the payload.

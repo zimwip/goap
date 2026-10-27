@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/rand/v2"
 	"slices"
 	"strconv"
@@ -175,8 +176,16 @@ func (r *Runner) Run(ctx context.Context) error {
 	stop(nil)
 	bg.Wait()
 	r.flush() // the last window
-	r.logf("done in %s: %d versions, %d nodes, %d changes, %d domain versions, %d errors", time.Since(r.start).Round(time.Second),
-		r.Metrics.Totals.Versions.Load(), r.Metrics.Totals.Nodes.Load(), r.Metrics.Totals.Changes.Load(), r.Metrics.Totals.DomainVersions.Load(), r.Metrics.Totals.Errors.Load())
+	speed, drift := math.NaN(), math.NaN()
+	if x, ok := r.Metrics.Speed.Rate(); ok {
+		speed = x
+	}
+	if x, ok := r.Metrics.Speed.Drift(); ok {
+		drift = x
+	}
+	r.logf("done in %s: %d versions, %d nodes, %d changes, %d domain versions, %d errors%s", time.Since(r.start).Round(time.Second),
+		r.Metrics.Totals.Versions.Load(), r.Metrics.Totals.Nodes.Load(), r.Metrics.Totals.Changes.Load(), r.Metrics.Totals.DomainVersions.Load(), r.Metrics.Totals.Errors.Load(),
+		SpeedSummary(speed, drift))
 	var fatal *failing
 	if errors.As(failed, &fatal) {
 		return fatal
@@ -296,17 +305,27 @@ func (r *Runner) growDomain(ctx context.Context) {
 func (r *Runner) report(ctx context.Context) {
 	t := time.NewTicker(r.Config.ReportEvery)
 	defer t.Stop()
+	// the write speed is sampled every second, whatever the window of the report
+	sp := time.NewTicker(time.Second)
+	defer sp.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-sp.C:
+			r.sampleSpeed()
 		case <-t.C:
 			r.flush()
 		}
 	}
 }
 
+func (r *Runner) sampleSpeed() {
+	r.Metrics.Speed.Add(time.Since(r.start), r.Metrics.Totals.Versions.Load())
+}
+
 func (r *Runner) flush() {
+	r.sampleSpeed()
 	rows := r.Metrics.Flush(time.Since(r.start), r.Config.ReportEvery)
 	if len(rows) == 0 {
 		return

@@ -512,3 +512,67 @@ async fn the_context_ends_with_the_call() {
         .unwrap();
     assert_eq!(e, goap_ctx::CtxError::Canceled);
 }
+
+#[tokio::test]
+async fn gzip_as_connect_go_serves_it() {
+    let base = serve(Interceptors::none()).await;
+    let http = reqwest::Client::new();
+    let long = "x".repeat(2 * protocol::COMPRESS_MIN_BYTES);
+    // a gzip request is read; a large answer is gzipped when the client accepts it
+    let resp = http
+        .post(url(&base, "Echo"))
+        .header("content-type", "application/json")
+        .header("content-encoding", "gzip")
+        .header("accept-encoding", "gzip")
+        .body(protocol::gzip(format!(r#"{{"text":"{long}"}}"#).as_bytes()))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    assert_eq!(resp.headers()["content-encoding"], "gzip");
+    assert_eq!(resp.headers()["accept-encoding"], "gzip");
+    let body = resp.bytes().await.unwrap();
+    assert!(body.len() < long.len());
+    let v: serde_json::Value = serde_json::from_slice(&protocol::gunzip(&body).unwrap()).unwrap();
+    assert_eq!(v["text"], long.as_str());
+    // a small answer goes as is, and so does any answer to a client that accepts no gzip
+    for (text, accept) in [("a", "gzip"), (long.as_str(), "identity")] {
+        let resp = http
+            .post(url(&base, "Echo"))
+            .header("content-type", "application/json")
+            .header("accept-encoding", accept)
+            .body(format!(r#"{{"text":"{text}"}}"#))
+            .send()
+            .await
+            .unwrap();
+        assert!(!resp.headers().contains_key("content-encoding"));
+        let v: serde_json::Value = resp.json().await.unwrap();
+        assert_eq!(v["text"], text);
+    }
+    // another compression is refused in connect-go's words
+    let resp = http
+        .post(url(&base, "Echo"))
+        .header("content-type", "application/json")
+        .header("content-encoding", "br")
+        .body("{}")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 501);
+    let v: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(
+        v["message"],
+        r#"unknown compression "br": supported encodings are gzip"#
+    );
+    // a stream gzips its large messages when the client accepts it
+    let resp = http
+        .post(url(&base, "Count"))
+        .header("content-type", "application/connect+json")
+        .header("connect-accept-encoding", "gzip")
+        .body(protocol::envelope(0, br#"{"count":1}"#))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.headers()["connect-content-encoding"], "gzip");
+    assert_eq!(resp.headers()["connect-accept-encoding"], "gzip");
+}

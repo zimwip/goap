@@ -949,6 +949,7 @@ dependencies = [
  "axum",
  "base64 0.23.1",
  "bytes",
+ "flate2",
  "futures",
  "goap-ctx",
  "http",
