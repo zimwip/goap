@@ -27,7 +27,7 @@
     <circle r="2" fill="#0a2a63" fill-opacity="0.55"/>
   </g>
   <!-- the shaft in front, sunk into the bullseye, and its fletching -->
-  <path d="M12 52 L30 34" stroke="#0a1e3f" stroke-opacity="0.35" stroke-width="4.4" stroke-linecap="round"/>
-  <path d="M12 52 L30 34" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
-  <path d="M11.5 48 L16 48 L16 52.5 M15 44.5 L19.5 44.5 L19.5 49" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M13 51 L30 34" stroke="#0a1e3f" stroke-opacity="0.22" stroke-width="3.2"/>
+  <path d="M13 51 L30 34" stroke="#fff" stroke-width="2.4"/>
+  <path d="M20.5 43.5 L13 51 L13 56 L16.5 52.5 Z M20.5 43.5 L13 51 L8 51 L11.5 47.5 Z" fill="#fff"/>
 </svg>
