@@ -167,6 +167,11 @@ impl Session {
     pub async fn commit(mut self) -> Result<(), StoreError> {
         let res = self.commit_conn().await;
         if res.is_ok() {
+            if self.tx.wrote_branches() {
+                self.versions
+                    .branch_moves
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
             let (folds, logs) = self.tx.take_folds();
             for c in &logs {
                 self.versions.forget_fold(c);
@@ -500,24 +505,53 @@ impl ReadTx for Session {
         &self,
         head: &str,
         catalog: &std::sync::Arc<graph_catalog::Catalog>,
+        mark: Option<u64>,
     ) -> Option<std::sync::Arc<graph_core::access::Snapshot>> {
-        let kept = self.versions.organisation.lock().unwrap_or_else(|e| e.into_inner());
-        kept.as_ref()
-            .filter(|k| k.head == head && std::sync::Arc::ptr_eq(&k.catalog, catalog))
-            .map(|k| k.snapshot.clone())
+        let mut kept = self.versions.organisation.lock().unwrap_or_else(|e| e.into_inner());
+        let k = kept
+            .as_mut()
+            .filter(|k| k.head == head && std::sync::Arc::ptr_eq(&k.catalog, catalog))?;
+        if let Some(m) = mark {
+            k.checked = Some((m, std::time::Instant::now()));
+        }
+        Some(k.snapshot.clone())
     }
 
     fn keep_snapshot(
         &self,
         head: &str,
         catalog: &std::sync::Arc<graph_catalog::Catalog>,
+        mark: Option<u64>,
         snapshot: std::sync::Arc<graph_core::access::Snapshot>,
     ) {
         *self.versions.organisation.lock().unwrap_or_else(|e| e.into_inner()) = Some(versions::KeptSnapshot {
             head: head.to_string(),
             catalog: catalog.clone(),
             snapshot,
+            checked: mark.map(|m| (m, std::time::Instant::now())),
         });
+    }
+
+    fn fresh_snapshot(
+        &self,
+        catalog: &std::sync::Arc<graph_catalog::Catalog>,
+    ) -> Option<std::sync::Arc<graph_core::access::Snapshot>> {
+        let mark = self.snapshot_mark()?;
+        let kept = self.versions.organisation.lock().unwrap_or_else(|e| e.into_inner());
+        kept.as_ref()
+            .filter(|k| {
+                std::sync::Arc::ptr_eq(&k.catalog, catalog)
+                    && k.checked
+                        .is_some_and(|(m, at)| m == mark && at.elapsed() < versions::SNAPSHOT_FRESH)
+            })
+            .map(|k| k.snapshot.clone())
+    }
+
+    fn snapshot_mark(&self) -> Option<u64> {
+        if self.writes() && self.tx.wrote_branches() {
+            return None;
+        }
+        Some(self.versions.branch_moves.load(std::sync::atomic::Ordering::SeqCst))
     }
 
     async fn last_commit(&self, branch: &str) -> Result<i64, GraphError> {

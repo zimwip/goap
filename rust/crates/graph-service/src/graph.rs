@@ -760,55 +760,46 @@ impl Graph {
         F: for<'a, 'b, 'c> AsyncFnOnce(&'a mut Tx<'b, Session>, &'c Access) -> Result<T, GraphError>,
     {
         self.reached(&caller).await?;
-        let tx = self.state.reader().await.map_err(connect_error)?;
         let ids: Vec<ChangeId> = named
             .iter()
             .filter(|id| uuid::Uuid::parse_str(id).is_ok())
             .map(|id| ChangeId::from(*id))
             .collect();
-        let heads = if ids.is_empty() {
-            HashMap::new()
-        } else {
-            change::change_heads(&tx, &ids).await.map_err(connect_error)?
-        };
         if !caller.person() {
-            // a personal change is its subject's alone, a platform service's acting by itself too (`PersonalScope`)
-            if let Some(id) = ids
-                .iter()
-                .find(|id| heads.get(*id).is_some_and(|c| !c.visible_to(&caller.subject)))
-            {
-                return Err(connect_error(GraphError::not_found(format!("change {id}"))));
-            }
+            let tx = self.state.reader().await.map_err(connect_error)?;
             let acc = Access::of(&caller, &tx).await.map_err(connect_error)?;
             drop(tx);
+            // a personal change is its subject's alone, a platform service's acting by itself too (`PersonalScope`)
+            let readable = Readable {
+                subject: caller.subject.clone(),
+                person: None,
+            };
             return self
-                .transact(&caller, String::new(), async |tx| f(tx, &acc).await)
+                .transact(&caller, String::new(), async |tx| {
+                    readable_changes(tx, &ids, &readable).await?;
+                    f(tx, &acc).await
+                })
                 .await;
         }
-        let readable = Readable {
-            subject: caller.subject.clone(),
-            person: Some((
-                caller.reader(),
-                access::Snapshot::read(&tx).await.map_err(connect_error)?,
-            )),
-        };
-        for id in &ids {
-            let Some(c) = heads.get(id) else { continue };
-            if !readable.may_read(c) {
-                return Err(connect_error(GraphError::not_found(format!("change {id}"))));
-            }
-        }
-        drop(tx);
         let stamp = self.ensure_caller(&caller).await;
         let tx = self.state.reader().await.map_err(connect_error)?;
         let acc = Access::of(&caller, &tx).await.map_err(connect_error)?;
         drop(tx);
+        let readable = Readable {
+            subject: caller.subject.clone(),
+            person: Some((caller.reader(), acc.snap.clone())),
+        };
         let end_user = if caller.subject.starts_with("system:") {
             caller.on_behalf_of.clone()
         } else {
             caller.subject.clone()
         };
-        stamp.on(self.transact(&caller, end_user, async |tx| f(tx, &acc).await).await)
+        stamp.on(self
+            .transact(&caller, end_user, async |tx| {
+                readable_changes(tx, &ids, &readable).await?;
+                f(tx, &acc).await
+            })
+            .await)
     }
 
     /// Runs a write in one transaction of the store for a caller already let through.
@@ -846,6 +837,20 @@ impl Graph {
         }
         Ok(res)
     }
+}
+
+/// Refuses a write naming a change the caller may not read, as if it did not exist (`PersonalScope`, `mayRead`): read
+/// in the transaction of the write, which reads it anyway.
+async fn readable_changes(tx: &mut Tx<'_, Session>, ids: &[ChangeId], readable: &Readable) -> Result<(), GraphError> {
+    for id in ids {
+        match tx.change_head(id).await {
+            Ok(c) if !readable.may_read(&c) => return Err(GraphError::not_found(format!("change {id}"))),
+            Ok(_) => {}
+            Err(e) if e.is_not_found() => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
 }
 
 /// The criticality a change's data may name (`validCriticality`).

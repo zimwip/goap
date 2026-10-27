@@ -43,7 +43,14 @@ pub struct Versions {
     pub(crate) organisation: Mutex<Option<KeptSnapshot>>,
     /// The folds of the logs of the changes last read ([`graph_core::store::ReadTx::take_fold`]).
     folds: Mutex<Folds>,
+    /// The commits of the store that moved a branch.
+    pub(crate) branch_moves: std::sync::atomic::AtomicU64,
+    /// The root of the tree of each change last locked ([`Versions::root_of`]).
+    roots: Mutex<HashMap<String, String>>,
 }
+
+/// The number of change roots kept.
+const MAX_ROOTS: usize = 4096;
 
 /// The folds of change logs kept between transactions, the least recently read evicted first. A fold is the prefix of
 /// a log up to an order: the writers of a change append under the lock of its tree and in order, so what a later read
@@ -62,7 +69,12 @@ pub(crate) struct KeptSnapshot {
     pub head: String,
     pub catalog: std::sync::Arc<graph_catalog::Catalog>,
     pub snapshot: std::sync::Arc<graph_core::access::Snapshot>,
+    /// the moves of branches the store had committed when its head was last checked, and when
+    pub checked: Option<(u64, std::time::Instant)>,
 }
+
+/// How long the organisation checked at its head is taken as fresh while no commit of this store moved a branch.
+pub(crate) const SNAPSHOT_FRESH: std::time::Duration = std::time::Duration::from_secs(1);
 
 #[derive(Default)]
 struct Inner {
@@ -232,6 +244,23 @@ impl Versions {
         }
     }
 
+    /// The root of the tree of a change, as last locked: a guess its lock checks once held.
+    pub fn root_of(&self, change: &str) -> Option<String> {
+        self.roots
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(change)
+            .cloned()
+    }
+
+    pub fn keep_root(&self, change: &str, root: &str) {
+        let mut r = self.roots.lock().unwrap_or_else(|e| e.into_inner());
+        if r.len() >= MAX_ROOTS && !r.contains_key(change) {
+            r.clear();
+        }
+        r.insert(change.to_string(), root.to_string());
+    }
+
     /// Takes the fold of the log of a change out of what is kept.
     pub fn take_fold(&self, change: &str) -> Option<std::sync::Arc<graph_core::write::work::KeptFold>> {
         self.folds
@@ -266,6 +295,8 @@ pub struct Read {
     logs: Mutex<HashSet<String>>,
     /// The folds a write transaction keeps once it commits.
     folds: Mutex<Vec<(String, std::sync::Arc<graph_core::write::work::KeptFold>)>>,
+    /// Whether the transaction wrote a branch.
+    branches: std::sync::atomic::AtomicBool,
 }
 
 impl Read {
@@ -303,6 +334,16 @@ impl Read {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(change.to_string());
+    }
+
+    /// A branch the transaction writes.
+    pub fn wrote_branch(&self) {
+        self.branches.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Whether the transaction wrote a branch.
+    pub fn wrote_branches(&self) -> bool {
+        self.branches.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Whether the transaction wrote the log of a change.

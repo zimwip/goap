@@ -36,11 +36,13 @@ pub trait ReadTx: Sync {
     }
 
     /// The snapshot of the organisation the store keeps between its sessions, when it was read at that head of the
-    /// organisation's main branch with that type catalogue; none, it is read.
+    /// organisation's main branch with that type catalogue; none, it is read. `mark` is what
+    /// [`ReadTx::snapshot_mark`] answered before the head was read: the snapshot is then known fresh.
     fn kept_snapshot(
         &self,
         _head: &str,
         _catalog: &std::sync::Arc<graph_catalog::Catalog>,
+        _mark: Option<u64>,
     ) -> Option<std::sync::Arc<crate::access::Snapshot>> {
         None
     }
@@ -50,8 +52,25 @@ pub trait ReadTx: Sync {
         &self,
         _head: &str,
         _catalog: &std::sync::Arc<graph_catalog::Catalog>,
+        _mark: Option<u64>,
         _snapshot: std::sync::Arc<crate::access::Snapshot>,
     ) {
+    }
+
+    /// The snapshot of the organisation kept, when the store knows the head of the organisation has not moved since
+    /// it was checked (no commit of this store moved a branch since, and the check is recent: another writer of the
+    /// database is seen within that delay, as the Go services see the organisation through its events).
+    fn fresh_snapshot(
+        &self,
+        _catalog: &std::sync::Arc<graph_catalog::Catalog>,
+    ) -> Option<std::sync::Arc<crate::access::Snapshot>> {
+        None
+    }
+
+    /// Where the store stands in the moves of its branches, read before the head of the organisation is (none: what
+    /// is read then is not to be known fresh, a transaction that moved a branch).
+    fn snapshot_mark(&self) -> Option<u64> {
+        None
     }
 
     /// The order of the last commit on a branch (0: none).

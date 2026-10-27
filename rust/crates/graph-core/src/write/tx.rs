@@ -210,7 +210,12 @@ impl<'s, S: WriteTx> Tx<'s, S> {
         if id.is_empty() || !self.locked.insert(format!("change:{id}")) {
             return Ok(());
         }
-        self.store.lock_change(id).await
+        self.store.lock_change(id).await?;
+        // a header read before the lock is read again: another writer of the tree may have moved it since (Go's
+        // `changeTx` locks, then reads)
+        let written = &self.written_headers;
+        self.headers.retain(|k, _| written.contains_key(k));
+        Ok(())
     }
 
     /// Takes the lock of a branch once per transaction.

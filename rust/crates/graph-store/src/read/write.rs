@@ -240,11 +240,16 @@ impl WriteTx for Session {
             // SQLite has one writer: the transaction holds it
             return Ok(());
         }
-        let mut root = self.change_root(id).await?;
+        // the root last locked is a guess the read once the lock is held checks (an attach or detach moves it)
+        let mut root = match self.versions.root_of(id.as_str()) {
+            Some(r) => r,
+            None => self.change_root(id).await?,
+        };
         loop {
             self.advisory_lock(&format!("goap.change:{root}")).await?;
             let again = self.change_root(id).await?;
             if again == root {
+                self.versions.keep_root(id.as_str(), &root);
                 return Ok(());
             }
             root = again;
@@ -301,6 +306,7 @@ impl WriteTx for Session {
     }
 
     async fn put_branch(&self, b: &Branch) -> Result<(), GraphError> {
+        self.tx.wrote_branch();
         let ex = if self.sql.pg { "EXCLUDED" } else { "excluded" };
         let ps: Vec<String> = (1..=13).map(|n| self.sql.ph(n)).collect();
         let q = format!(

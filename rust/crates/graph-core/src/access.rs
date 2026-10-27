@@ -460,13 +460,17 @@ impl Snapshot {
         let Some(ns) = cat.structure(STRUCTURE_ORGANISATION).map(|s| s.namespace.clone()) else {
             return Ok(Snapshot::default());
         };
+        if let Some(s) = tx.fresh_snapshot(&cat) {
+            return Ok((*s).clone());
+        }
+        let mark = tx.snapshot_mark();
         // the head of main names what the snapshot holds: the one kept for it, if any, is the same
         let kept_at = match tx.branch(&ns, MAIN_BRANCH).await? {
             Some(b) if !b.ephemeral && !b.head.is_empty() => b.head.0.clone(),
             _ => String::new(),
         };
         if !kept_at.is_empty()
-            && let Some(s) = tx.kept_snapshot(&kept_at, &cat)
+            && let Some(s) = tx.kept_snapshot(&kept_at, &cat, mark)
         {
             return Ok((*s).clone());
         }
@@ -483,7 +487,7 @@ impl Snapshot {
         let links = tx.links_from(&held, None).await?;
         let s = Snapshot::build(&cat, &nodes, &links);
         if !kept_at.is_empty() {
-            tx.keep_snapshot(&kept_at, &cat, std::sync::Arc::new(s.clone()));
+            tx.keep_snapshot(&kept_at, &cat, mark, std::sync::Arc::new(s.clone()));
         }
         Ok(s)
     }
