@@ -64,7 +64,7 @@
 
 <div class="signin">
   <form class="card" onsubmit={submit} aria-busy={busy}>
-    <h1><span class="logo" aria-hidden="true">◆</span> GOAP</h1>
+    <h1><img class="logo" src="/favicon.svg" alt="" aria-hidden="true" /> GOAP</h1>
     {#if authState.notice}<p class="notice" role="status">{authState.notice}</p>{/if}
     <div class="tabs" role="tablist">
       <button type="button" role="tab" aria-selected={mode === 'login'} class:active={mode === 'login'} onclick={() => switchMode('login')}>Sign in</button>
@@ -188,7 +188,9 @@
     cursor: default;
   }
   .logo {
-    color: var(--accent, #4a7cff);
+    width: 1.4em;
+    height: 1.4em;
+    vertical-align: -0.3em;
   }
   .notice {
     margin: 0;

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>GOAP</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6aa5ff"/>
+      <stop offset="0.45" stop-color="#2f7bff"/>
+      <stop offset="1" stop-color="#0a1e3f"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3d86ff"/>
+      <stop offset="1" stop-color="#1450c0"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#tile)"/>
+  <!-- painted back to front: the tip coming out behind the target, the target, then the shaft in front -->
+  <path d="M38 26 L48 16" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M56 8 L50.8 18.6 L49 15 L45.4 13.2 Z" fill="#fff" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>
+  <!-- the target, turned three quarters away: its edge, then its face -->
+  <g transform="translate(30 34) rotate(-12) scale(0.76 1)">
+    <circle cx="4.5" r="21" fill="#0a2a63"/>
+    <circle r="21" fill="url(#face)"/>
+    <g fill="none" stroke="#fff">
+      <circle r="17.5" stroke-width="3.6" stroke-opacity="0.6"/>
+      <circle r="10.5" stroke-width="3.6" stroke-opacity="0.85"/>
+    </g>
+    <circle r="4.4" fill="#ff4d4f"/>
+    <circle r="2" fill="#0a2a63" fill-opacity="0.55"/>
+  </g>
+  <!-- the shaft in front, sunk into the bullseye, and its fletching -->
+  <path d="M13 51 L30 34" stroke="#0a1e3f" stroke-opacity="0.22" stroke-width="3.2"/>
+  <circle cx="30" cy="34" r="1.6" fill="#0a1e3f" fill-opacity="0.22"/>
+  <path d="M13 51 L30 34" stroke="#fff" stroke-width="2.4"/>
+  <circle cx="30" cy="34" r="1.2" fill="#fff"/>
+  <path d="M20.5 43.5 L13 51 L13 56 L16.5 52.5 Z M20.5 43.5 L13 51 L8 51 L11.5 47.5 Z" fill="#fff"/>
+</svg>

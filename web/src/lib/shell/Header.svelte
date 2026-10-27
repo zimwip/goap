@@ -245,7 +245,7 @@
 
 <header class="header">
   <div class="left">
-    <div class="brand"><span class="logo" aria-hidden="true">◆</span> GOAP</div>
+    <div class="brand"><img class="logo" src="/favicon.svg" alt="" aria-hidden="true" /> GOAP</div>
     <ModeSwitch />
     <HeaderContext />
   </div>
@@ -439,7 +439,9 @@
     white-space: nowrap;
   }
   .logo {
-    color: var(--accent);
+    width: 20px;
+    height: 20px;
+    display: block;
   }
   .left {
     display: flex;
