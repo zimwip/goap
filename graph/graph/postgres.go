@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -95,7 +96,7 @@ func (p *Postgres) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		slog.WarnContext(ctx, "graph: a read-only request writes; running its transaction on the writer")
 	}
 	return pgx.BeginFunc(ctx, p.pool, func(tx pgx.Tx) error {
-		h := &heldQuerier{Tx: tx}
+		h := &heldQuerier{Tx: plannedTx{tx}}
 		if err := fn(&pgTx{tx: h, held: h, roots: p.roots}); err != nil {
 			return err
 		}
@@ -111,11 +112,55 @@ func (p *Postgres) readTx(ctx context.Context, fn func(tx Tx) error) error {
 		return err
 	}
 	defer conn.Release()
-	err = fn(&pgTx{tx: conn, readOnly: true})
+	err = fn(&pgTx{tx: planned{conn}, readOnly: true})
 	if err != nil && platform.IsPostgresReadOnly(err) {
 		return errWrites
 	}
 	return err
+}
+
+// planned runs the statements whose plan depends on the values given (customPlan) with a plan of their own each time:
+// a prepared statement's generic plan does not know how many ids an array holds nor what a pattern matches, and the
+// one PostgreSQL settles on after the first runs reads the tables whole for the next ones.
+type planned struct{ pgQuerier }
+
+func (q planned) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	return q.pgQuerier.Exec(ctx, sql, customPlan(sql, args)...)
+}
+
+func (q planned) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	return q.pgQuerier.Query(ctx, sql, customPlan(sql, args)...)
+}
+
+func (q planned) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	return q.pgQuerier.QueryRow(ctx, sql, customPlan(sql, args)...)
+}
+
+// plannedTx is a transaction running its statements as planned does.
+type plannedTx struct{ pgx.Tx }
+
+func (t plannedTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	return t.Tx.Exec(ctx, sql, customPlan(sql, args)...)
+}
+
+func (t plannedTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	return t.Tx.Query(ctx, sql, customPlan(sql, args)...)
+}
+
+func (t plannedTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	return t.Tx.QueryRow(ctx, sql, customPlan(sql, args)...)
+}
+
+// customPlan asks pgx for a plan made with the values of a statement that reads an array of ids or matches a pattern
+// (an unnamed statement, planned at each run, its description cached); the others keep their prepared statement.
+func customPlan(sql string, args []any) []any {
+	if len(args) == 0 || !(strings.Contains(sql, "unnest(") || strings.Contains(sql, "ANY(") || strings.Contains(sql, " LIKE ")) {
+		return args
+	}
+	if _, ok := args[0].(pgx.QueryExecMode); ok {
+		return args
+	}
+	return append([]any{pgx.QueryExecModeCacheDescribe}, args...)
 }
 
 // pgQuerier is what a pgTx runs its statements on: a transaction, or a read-only connection (readTx).

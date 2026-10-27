@@ -150,14 +150,13 @@ func (g *Graph) unsettled(ctx context.Context, tx Tx, c domain.Change) ([]string
 func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution, closing bool) (c domain.Change, err error) {
 	// one transaction (ADR 0140): the guardians judge what is merged; a rebase that changed the branch is kept, the merge
 	// waits for the change to be looked at again
-	var rebased error
-	err = g.inChange(ctx, id, func(ctx context.Context) error {
-		c, rebased, err = g.mergeIn(ctx, id, resolutions, closing)
+	err = g.inChangeKeeping(ctx, id, func(ctx context.Context) error {
+		var rebased error
+		if c, rebased, err = g.mergeIn(ctx, id, resolutions, closing); err == nil && rebased != nil {
+			err = keep(rebased)
+		}
 		return err
 	})
-	if err == nil && rebased != nil {
-		err = rebased
-	}
 	return c, err
 }
 

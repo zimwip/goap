@@ -251,6 +251,36 @@ func testRebaseRootConflict(t *testing.T, repo Repo) {
 	}
 }
 
+// A commit run in a transaction holding the change's lock from its start (the service's LockedWrites) keeps the rebase
+// that left conflicts too: the transaction commits, then the commit is refused.
+func TestRebaseRootConflictInChangeLock(t *testing.T) {
+	forEachRepo(t, testRebaseRootConflictInChangeLock)
+}
+
+func testRebaseRootConflictInChangeLock(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	t1, _ := propChange(t, g, f.base.ID, "test1", f.req.Ref(), map[string]any{"x": 1})
+	t2, i2 := propChange(t, g, f.base.ID, "test2", f.req.Ref(), map[string]any{"x": 2})
+	must[domain.Baseline](t)(g.apply(ctx, t1.ID, ""))
+
+	err := g.InChangeLock(ctx, t2.ID, func(ctx context.Context) error {
+		_, err := g.CommitChange(ctx, t2.ID, "")
+		return err
+	})
+	if !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "props.x") {
+		t.Fatalf("the commit must stop on the conflict: %v", err)
+	}
+	cn := must[domain.ChangeImpact](t)(g.seenImpact(ctx, t2.ID, i2, ""))
+	if cn.Review != domain.ReviewProposed || cn.Reviews[len(cn.Reviews)-1].Comment != "rebased onto main" {
+		t.Fatalf("the rebase is kept, the impact back to proposed: %+v", cn)
+	}
+	if st := must[RebaseState](t)(g.RebaseState(ctx, t2.ID)); len(st.Conflicts) != 1 {
+		t.Fatalf("state = %+v", st)
+	}
+}
+
 // A node both changes create collides on its key: the commit of the second refuses it, settled by withdrawing the creation.
 func TestRebaseRootCreationCollision(t *testing.T) { forEachRepo(t, testRebaseRootCreationCollision) }
 

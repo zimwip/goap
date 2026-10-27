@@ -20,24 +20,10 @@ import (
 // (ImpactNodeResolve or an edit, then a review). The versions the commit writes then derive from the head's, and the
 // merge that follows is a fast-forward (fastForward follows the lineage of each node).
 
-// rebaseDrafts rebases the drafts a commit of the nodes named (none: every one) writes, in a transaction of its own: a
-// rebase that leaves conflicts is kept and refused as a conflict.
-func (g *Graph) rebaseDrafts(ctx context.Context, id domain.ChangeID, nodes []domain.NodeID) error {
-	var left []string
-	var target string
-	err := g.changeTx(ctx, id, func(tx Tx) error {
-		c, err := tx.Change(ctx, id)
-		if err != nil {
-			return err
-		}
-		target, left, err = g.rebaseDraftsTx(ctx, tx, c, nodes)
-		return err
-	})
-	if err == nil && len(left) > 0 {
-		err = fmt.Errorf("change %s: its drafts were rebased onto the head of %s, with conflicts on %s: settle them, review them and commit again: %w",
-			id, target, strings.Join(left, ", "), ErrConflict)
-	}
-	return err
+// rebaseConflict refuses a commit whose drafts the rebase onto the head of target left with conflicts on left.
+func rebaseConflict(id domain.ChangeID, target string, left []string) error {
+	return fmt.Errorf("change %s: its drafts were rebased onto the head of %s, with conflicts on %s: settle them, review them and commit again: %w",
+		id, target, strings.Join(left, ", "), ErrConflict)
 }
 
 // draftRebase is a draft the head moved under: its impact and draft, the version the head holds, the one both start
