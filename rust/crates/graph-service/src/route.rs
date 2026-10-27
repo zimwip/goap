@@ -61,6 +61,18 @@ pub struct Declared {
     state: Arc<State>,
     /// The graphs declared at a head of the platform namespace, read again when the head moves.
     at: Mutex<Option<(String, Arc<Vec<Source>>)>>,
+    /// The sources last checked at the head, with the moves of the platform namespace seen then.
+    checked: Mutex<Option<Checked>>,
+}
+
+/// How long the sources checked at the head are taken as current while no commit of this store moved the platform
+/// namespace.
+const FRESH: std::time::Duration = std::time::Duration::from_secs(1);
+
+struct Checked {
+    mark: u64,
+    at: std::time::Instant,
+    sources: Arc<Vec<Source>>,
 }
 
 impl Declared {
@@ -68,6 +80,7 @@ impl Declared {
         Declared {
             state,
             at: Mutex::new(None),
+            checked: Mutex::new(None),
         }
     }
 }
@@ -76,14 +89,33 @@ impl Declared {
 impl Graphs for Declared {
     async fn graphs(&self) -> Result<Arc<Vec<Source>>, String> {
         let tx = self.state.store.reader().await.map_err(|e| e.to_string())?;
+        // the head is not read again while no commit of this store moved a branch of the platform namespace, for a
+        // moment (the organisation's snapshot is held the same way)
+        let mark = tx.snapshot_mark(NAMESPACE_PLATFORM);
+        if let Some(Checked { mark: m, at, sources }) = self.checked.lock().unwrap().as_ref()
+            && mark == Some(*m)
+            && at.elapsed() < FRESH
+        {
+            return Ok(sources.clone());
+        }
         let head = match read::branch_head(&tx, NAMESPACE_PLATFORM, MAIN_BRANCH).await {
             Ok(h) => h,
             Err(e) if e.is_not_found() => return Ok(Arc::default()),
             Err(e) => return Err(e.message),
         };
+        let keep = |sources: &Arc<Vec<Source>>| {
+            if let Some(mark) = mark {
+                *self.checked.lock().unwrap() = Some(Checked {
+                    mark,
+                    at: std::time::Instant::now(),
+                    sources: sources.clone(),
+                });
+            }
+        };
         if let Some((at, gs)) = self.at.lock().unwrap().as_ref()
             && *at == head.id.0
         {
+            keep(gs);
             return Ok(gs.clone());
         }
         let (all, _) = sources::declared_at(&tx, &head).await.map_err(|e| e.message)?;
@@ -99,6 +131,7 @@ impl Graphs for Declared {
         }
         let out = Arc::new(out);
         *self.at.lock().unwrap() = Some((head.id.0.clone(), out.clone()));
+        keep(&out);
         Ok(out)
     }
 

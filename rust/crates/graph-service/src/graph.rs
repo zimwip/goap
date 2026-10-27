@@ -2676,6 +2676,15 @@ impl pb::GraphService for Graph {
             }
         }
         self.write_on(caller, &[], async |tx, _| {
+            // the schema keeps no foreign key: a log names a change that exists
+            for e in &m.entries {
+                let change = ChangeId(e.change_id.clone());
+                match tx.change_head(&change).await {
+                    Err(err) if err.is_not_found() => return Err(GraphError::invalid(format!("change {change}"))),
+                    Err(err) => return Err(err),
+                    Ok(_) => {}
+                }
+            }
             for e in &m.entries {
                 let change = ChangeId(e.change_id.clone());
                 let at =

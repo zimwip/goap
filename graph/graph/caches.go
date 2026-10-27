@@ -19,6 +19,8 @@ type Caches struct {
 	Headers cache.Bounds
 	// Validations: the validations of the impacts of a change on a flow (impactvalidation.go).
 	Validations cache.Bounds
+	// Structures: the units and projects the guard found (guard.go): a node is never deleted, nor its type changed.
+	Structures cache.Bounds
 }
 
 // DefaultCacheTTL is how long the graph keeps an entry no one reads.
@@ -30,6 +32,7 @@ var DefaultCaches = Caches{
 	Versions:    cache.Bounds{Bytes: 32 << 20, TTL: DefaultCacheTTL},
 	Headers:     cache.Bounds{Bytes: 4 << 20, TTL: DefaultCacheTTL},
 	Validations: cache.Bounds{Bytes: 16 << 20, TTL: DefaultCacheTTL},
+	Structures:  cache.Bounds{Bytes: 1 << 20, TTL: DefaultCacheTTL},
 }
 
 // boundsOf reads the bounds of one cache at each write: Graph.Caches may be set after New.
@@ -51,6 +54,9 @@ func (g *Graph) newCaches() {
 	g.versions = newVersionCache(g.boundsOf(func(c Caches) cache.Bounds { return c.Versions }))
 	g.headers = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Headers }), headerSize)
 	g.validations = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Validations }), validationSize)
+	g.foundRefs = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Structures }), func(k string, _ bool) int64 {
+		return cache.SlotBytes + int64(len(k))
+	})
 }
 
 func headerSize(_ domain.BaselineID, b domain.Baseline) int64 {

@@ -112,6 +112,16 @@ impl History {
         );
     }
 
+    /// Gives the phase of an impact the position its entry took, written after it was folded (`placeholder`: the
+    /// position it was folded at).
+    pub fn place(&mut self, impact: &str, placeholder: i64, seq: i64) {
+        if let Some(p) = self.phases.get_mut(impact)
+            && p.seq == placeholder
+        {
+            p.seq = seq;
+        }
+    }
+
     /// The state an impact started its draft in; none when the change never moved or the impact started no draft on
     /// the main flow (`draftState.phaseOf`).
     pub fn phase_of(&self, impact: &str) -> Option<Phase> {

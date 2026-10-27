@@ -1,15 +1,14 @@
 -- Graph schema (ADR 0054: the schema starts from zero, earlier migrations were folded into it). Every node version,
--- link and branch membership is written by a change (change_id, NOT NULL, foreign key); every node version is owned
--- by an organisational unit (owner) and every node was created in a project (project), both logical URLs of nodes
--- of the structures the type catalogue tags (lnk:<namespace>/<type>/<key>, no version): not foreign keys, for the structures may live in another graph, the
--- platform graph (ADR 0154 §9); the guard checks them. pkg/graph enforces the same rules in Go whatever the storage
--- (guardRepo): these constraints are a second line, not the only one. The foreign keys a bootstrap must satisfy in one
--- transaction (its change and its baseline reference each other) are deferred to the commit.
+-- link and branch membership is written by a change (change_id, NOT NULL); every node version is owned by an
+-- organisational unit (owner) and every node was created in a project (project), both logical URLs of nodes of the
+-- structures the type catalogue tags (lnk:<namespace>/<type>/<key>, no version), for the structures may live in another
+-- graph, the platform graph (ADR 0154 §9). No foreign key: the guard (guardRepo, in Go and in Rust) checks every
+-- reference at the end of the transaction, whatever the storage, so the database runs no trigger on each insert.
 
 CREATE TABLE baseline (
     id          uuid PRIMARY KEY,
     name        text        NOT NULL,
-    parent_id   uuid REFERENCES baseline(id),
+    parent_id   uuid,
     -- the change that produced the baseline (ADR 0056: a baseline is the state a change leaves; the state before
     -- the first change of a namespace is the empty one, it has no row)
     change_id   uuid        NOT NULL,
@@ -19,9 +18,9 @@ CREATE TABLE baseline (
     -- commit | merge | fast-forward | rebase | revert | snapshot: how the state follows from the change (ADR 0056); the
     -- state itself is the selection of the versions landed on the branch up to seq (ADR 0143), never stored
     kind        text        NOT NULL DEFAULT 'snapshot',
-    merged_from uuid REFERENCES baseline(id),
+    merged_from uuid,
     -- the baseline the change was forked from before its rebase onto the head of its target (ADR 0101); NULL: never rebased
-    rebased_from uuid REFERENCES baseline(id)
+    rebased_from uuid
 );
 CREATE INDEX baseline_namespace ON baseline (namespace, created_at);
 
@@ -29,15 +28,15 @@ CREATE TABLE branch (
     namespace     text        NOT NULL DEFAULT 'default',
     name          text        NOT NULL,
     parent        text        NOT NULL,
-    fork_baseline uuid REFERENCES baseline(id),
-    head_baseline uuid REFERENCES baseline(id),
+    fork_baseline uuid,
+    head_baseline uuid,
     origin        text        NOT NULL DEFAULT '',
     status        text        NOT NULL,
     created_at    timestamptz NOT NULL,
     description   text        NOT NULL DEFAULT '',
     intent        text        NOT NULL DEFAULT '',
     -- the first fork baseline of a change branch the change was rebased from (ADR 0101); NULL: never rebased
-    rebased_from  uuid REFERENCES baseline(id),
+    rebased_from  uuid,
     PRIMARY KEY (namespace, name)
 );
 
@@ -53,21 +52,19 @@ CREATE TABLE change (
     status             text        NOT NULL,
     -- the state the change starts from: the baseline of the change before it; NULL for the empty state (the first
     -- change of a namespace)
-    baseline_id        uuid REFERENCES baseline(id),
-    result_baseline_id uuid REFERENCES baseline(id),
+    baseline_id        uuid,
+    result_baseline_id uuid,
     data               jsonb       NOT NULL DEFAULT '{}',
     created_at         timestamptz NOT NULL,
     branch             text        NOT NULL DEFAULT 'main',
     namespace          text        NOT NULL DEFAULT 'default',
-    parent_id          uuid REFERENCES change(id),
+    parent_id          uuid,
     owner_org          text        NOT NULL CHECK (owner_org <> ''),
     project_id         text        NOT NULL CHECK (project_id <> ''),
     lifecycle          text        NOT NULL DEFAULT '',
     state              text        NOT NULL DEFAULT ''
 );
 CREATE INDEX change_parent ON change (parent_id);
--- a baseline is written by a change that references it in turn (its result), the check waits for the commit
-ALTER TABLE baseline ADD FOREIGN KEY (change_id) REFERENCES change(id) DEFERRABLE INITIALLY DEFERRED;
 
 CREATE TABLE node (
     id         uuid PRIMARY KEY,
@@ -81,11 +78,11 @@ CREATE TABLE node (
 );
 
 CREATE TABLE node_version (
-    node_id       uuid        NOT NULL REFERENCES node(id),
+    node_id       uuid        NOT NULL,
     version       integer     NOT NULL,
     props         jsonb       NOT NULL DEFAULT '{}',
     deleted       boolean     NOT NULL DEFAULT false,
-    change_id     uuid        NOT NULL REFERENCES change(id) DEFERRABLE INITIALLY DEFERRED,
+    change_id     uuid        NOT NULL,
     -- the organisational unit responsible for the version
     owner         text        NOT NULL CHECK (owner <> ''),
     created_at    timestamptz NOT NULL,
@@ -114,9 +111,7 @@ CREATE TABLE link (
     to_version   integer,
     to_url       text    NOT NULL DEFAULT '',
     props        jsonb   NOT NULL DEFAULT '{}',
-    change_id    uuid    NOT NULL REFERENCES change(id) DEFERRABLE INITIALLY DEFERRED,
-    FOREIGN KEY (from_id, from_version) REFERENCES node_version(node_id, version),
-    FOREIGN KEY (to_id, to_version) REFERENCES node_version(node_id, version),
+    change_id    uuid    NOT NULL,
     CHECK ((to_id IS NULL AND to_version IS NULL) = (to_url <> ''))
 );
 CREATE INDEX link_from ON link (from_id, from_version, type);
@@ -131,9 +126,8 @@ CREATE TABLE node_branch (
     node_id   uuid    NOT NULL,
     version   integer NOT NULL,
     branch    text    NOT NULL,
-    change_id uuid    NOT NULL REFERENCES change(id) DEFERRABLE INITIALLY DEFERRED,
-    PRIMARY KEY (node_id, branch, version),
-    FOREIGN KEY (node_id, version) REFERENCES node_version(node_id, version)
+    change_id uuid    NOT NULL,
+    PRIMARY KEY (node_id, branch, version)
 );
 CREATE INDEX node_branch_change ON node_branch (change_id);
 
@@ -141,7 +135,7 @@ CREATE INDEX node_branch_change ON node_branch (change_id);
 CREATE TABLE change_impact (
     id             uuid PRIMARY KEY,
     seq            bigserial,
-    change_id      uuid        NOT NULL REFERENCES change(id),
+    change_id      uuid        NOT NULL,
     node_id        uuid,
     key            text        NOT NULL,
     type           text        NOT NULL,
@@ -152,7 +146,7 @@ CREATE TABLE change_impact (
     landed_version integer,
     review         text        NOT NULL DEFAULT 'proposed',
     reviews        jsonb       NOT NULL DEFAULT '[]',
-    via            uuid REFERENCES change_impact(id),
+    via            uuid,
     recheck        boolean     NOT NULL DEFAULT false,
     produced_by    text        NOT NULL DEFAULT '',
     derived_from   jsonb       NOT NULL DEFAULT '[]',
@@ -170,7 +164,7 @@ CREATE UNIQUE INDEX change_impact_live ON change_impact (change_id, node_id, flo
 CREATE TABLE change_log (
     seq        bigserial   PRIMARY KEY,
     id         text        NOT NULL UNIQUE,
-    change_id  uuid        NOT NULL REFERENCES change(id),
+    change_id  uuid        NOT NULL,
     -- <stream>.<kind>: fact.artifact, journal.schedule, impact.transitioned...
     type       text        NOT NULL,
     flow       text        NOT NULL DEFAULT '',

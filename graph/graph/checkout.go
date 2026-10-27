@@ -543,24 +543,27 @@ func (g *Graph) ImpactNodeCheckoutBatch(ctx context.Context, id domain.ChangeID,
 		// what it read of the branch holds for the checkouts of the batch, which write drafts, not versions
 		defer forgetLatestOn(tx)
 		out = make([]domain.ChangeImpact, 0, len(in.Nodes))
-		for _, n := range in.Nodes {
-			w, err := g.resolve(ctx, tx, id, checkoutTarget(n))
-			if err != nil {
-				return err
-			}
-			d, err := g.checkoutTx(ctx, tx, w, n.Execution)
-			if err != nil {
-				return err
-			}
-			if in.Gate != nil {
-				if err := in.Gate(d.Type); err != nil {
+		// the entries of the checkouts are appended together, each as it would be alone
+		return g.withEntries(ctx, tx, id, func(ctx context.Context) error {
+			for _, n := range in.Nodes {
+				w, err := g.resolve(ctx, tx, id, checkoutTarget(n))
+				if err != nil {
 					return err
 				}
+				d, err := g.checkoutTx(ctx, tx, w, n.Execution)
+				if err != nil {
+					return err
+				}
+				if in.Gate != nil {
+					if err := in.Gate(d.Type); err != nil {
+						return err
+					}
+				}
+				ref := d.Ref()
+				out = append(out, w.seenAs(&ref))
 			}
-			ref := d.Ref()
-			out = append(out, w.seenAs(&ref))
-		}
-		return nil
+			return nil
+		})
 	})
 	return out, err
 }

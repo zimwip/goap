@@ -313,7 +313,14 @@ impl<S: WriteTx> Tx<'_, S> {
         } else {
             impact::entry(&events[0])
         };
-        let seq = self.append_log(&entry).await?;
+        // a batch holding back the entries of its change folds this one at a placeholder, placed once appended
+        let seq = match self.pending_log.as_mut().filter(|(c, _)| *c == change) {
+            Some((_, held)) => {
+                held.push((entry, events.iter().map(|e| e.impact.clone()).collect()));
+                -(held.len() as i64)
+            }
+            None => self.append_log(&entry).await?,
+        };
         for e in events.iter_mut() {
             e.seq = seq;
         }
@@ -323,7 +330,9 @@ impl<S: WriteTx> Tx<'_, S> {
             let v = self.views.get_mut(&change).expect("the view of the change");
             v.fold.apply(e);
             v.history.apply_event(e);
-            v.seq = seq;
+            if seq > 0 {
+                v.seq = seq;
+            }
         }
         self.put_change_impacts(&mut rows).await
     }
@@ -1352,9 +1361,20 @@ impl<S: WriteTx> Tx<'_, S> {
             return Err(GraphError::invalid("no node to check out"));
         }
         self.prefetch_checkouts(id, flow, &nodes).await?;
+        // one entry per checkout, as each would write it, appended together
+        self.pending_log = Some((id.clone(), Vec::new()));
         let out = self.checkout_each(id, flow, nodes).await;
         self.latest = None;
-        out
+        match out {
+            Ok(out) => {
+                self.flush_log().await?;
+                Ok(out)
+            }
+            Err(e) => {
+                self.pending_log = None;
+                Err(e)
+            }
+        }
     }
 
     async fn checkout_each(
@@ -2184,6 +2204,10 @@ pub struct KeptFold {
     pub items: Vec<crate::flow::Item>,
     /// the position of the last entry folded, whatever its stream
     pub last: i64,
+    /// the entries the last writer of the change appended after `last`, all of them (it held the lock of the change
+    /// from a read of the last position of its log equal to `last`): a writer finding the log where they end folds
+    /// them with no read
+    pub tail: Vec<crate::impact::LogEntry>,
 }
 
 /// The fold of the log of a change as it stood at a position (0: as it stands).
@@ -2195,17 +2219,30 @@ pub async fn fold_upto<T: ReadTx>(store: &T, id: &ChangeId, upto: i64) -> Result
     }
     let mut k = store.take_fold(id).unwrap_or_default();
     let last = k.last;
-    extend_fold(store, &mut k, id, 0).await?;
+    if store.log_top(id) == Some(k.last) {
+        // the lock of the change read the last position of its log: the fold holds it, nothing to read
+        if k.last == 0 {
+            k.view.flows = Flows::replay(&k.items);
+        }
+    } else {
+        extend_fold(store, &mut k, id, 0).await?;
+    }
     store.keep_fold(id, &k, k.last != last);
     Ok((k.view, k.items))
 }
 
 /// Folds the entries of the log after the last one a fold holds (up to a position, 0: all).
 async fn extend_fold<T: ReadTx>(store: &T, k: &mut KeptFold, id: &ChangeId, upto: i64) -> Result<()> {
+    let tail = std::mem::take(&mut k.tail);
+    let entries = match tail.last() {
+        // the log ends where the entries its last writer appended end: they are what follows the fold
+        Some(t) if upto == 0 && store.log_top(id) == Some(t.seq) => tail,
+        _ => store.log(id, k.last, &[]).await?,
+    };
     let out = &mut k.view;
     let mut events = Vec::new();
     let mut new_items = false;
-    for l in store.log(id, k.last, &[]).await? {
+    for l in entries {
         if upto > 0 && l.seq > upto {
             break;
         }

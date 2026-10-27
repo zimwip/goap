@@ -174,6 +174,10 @@ type Graph struct {
 	Caches Caches
 	// headers caches the headers of baselines (ADR 0137, 0140).
 	headers *cache.Cache[domain.BaselineID, domain.Baseline]
+	// platformMoves counts the commits of this graph that wrote a branch of the platform namespace (Graph.Sources)
+	platformMoves atomic.Uint64
+	// foundRefs are the references to units and projects the guard found in this graph (guardTx.inStructure)
+	foundRefs *cache.Cache[string, bool]
 	// versions caches the outgoing links of versions.
 	versions versionCache
 	// draftStates caches the views of the changes folded from their logs.
@@ -447,6 +451,11 @@ func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, 
 			ParentID: in.ParentID, OwnerOrg: owner, ProjectID: project,
 		}
 		c.Lifecycle, c.State, c.Goal, c.Guardians = lifecycle, initial, goal, guardians
+		// no one knows the id of the change before the transaction commits: its own lock needs no statement (a
+		// sub-change still takes its parent's tree)
+		if k, ok := tx.(interface{ newChange(domain.ChangeID) }); ok {
+			k.newChange(c.ID)
+		}
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
 			return err
 		}

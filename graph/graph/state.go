@@ -180,7 +180,7 @@ func (t *guardTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Ba
 	if id == "" {
 		return domain.Baseline{Nodes: map[domain.NodeID]domain.Version{}}, nil
 	}
-	b, err := t.Tx.BaselineHeader(ctx, id)
+	b, err := t.header(ctx, id)
 	if err != nil {
 		return b, err
 	}

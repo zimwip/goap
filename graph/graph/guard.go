@@ -50,8 +50,22 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		r.g.versions.reset() // what the transaction deleted may have been read meanwhile
 	}
 	if err == nil {
+		for ref := range gt.origins {
+			r.g.versions.forgetNode(ref)
+		}
+		if gt.movedPlatform {
+			r.g.platformMoves.Add(1)
+		}
+		for _, k := range gt.found {
+			r.g.foundRefs.Put(k, true)
+		}
 		// what the transaction folded of the logs it wrote is committed now: the next one folds only what follows
 		for _, st := range gt.drafts {
+			// a fold known whole at the lock, then holding every impact event and fact the transaction appended, is
+			// whole up to its last append (the writers of a log hold its lock)
+			if gt.whole[st.change] && st.seq >= gt.impactSeq[st.change] {
+				st.top.Store(gt.appended[st.change] + 1)
+			}
 			r.g.draftStates.put(st)
 		}
 		// the caller's watermark: where the writes left the log of each change (ADR 0153)
@@ -67,6 +81,8 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 type guardTx struct {
 	Tx
 	g *Graph
+	// movedPlatform: the transaction wrote a branch of the platform namespace (Graph.Sources reads its head again)
+	movedPlatform bool
 	// what the transaction wrote that names a change, a unit or a project, checked at its end
 	changeRefs map[domain.ChangeID]string
 	owners     map[lnk.URL]string
@@ -87,6 +103,8 @@ type guardTx struct {
 	written map[domain.NodeRef]bool
 	// nodes are the versions it read that it did not write (versioncache.go)
 	nodes map[domain.NodeRef]domain.Node
+	// origins are the versions whose origin the transaction set: read again by the next ones once it commits
+	origins map[domain.NodeRef]bool
 	// latestOn are the latest versions on a branch it read in a batch, by branch then node (0: none there), dropped for
 	// a node it writes or joins a version of (versioncache.go)
 	latestOn map[string]map[domain.NodeID]domain.Version
@@ -114,6 +132,61 @@ type guardTx struct {
 	heads map[domain.ChangeID]domain.Change
 	// locked are the changes and branches whose lock the transaction holds (ADR 0127)
 	locked map[string]bool
+	// tops are the last positions of the logs of the changes it locked, read with their header (lockReader)
+	tops map[domain.ChangeID]int64
+	// appended is, per change, the last position the transaction appended to its log
+	appended map[domain.ChangeID]int64
+	// found are the references to units and projects the transaction found, kept once it commits (inStructure)
+	found []string
+	// whole are the changes whose log the transaction read whole under their lock, before it appended to it
+	whole map[domain.ChangeID]bool
+	// branches are the branches the transaction read since it took its last lock, by namespace and name (a zero
+	// branch: none): a lock taken empties it (what a lock protects is read again once held), a write of a branch drops it
+	branches map[string]domain.Branch
+}
+
+func guardBranchKey(namespace, name string) string {
+	return domain.NamespaceOf(namespace) + "\x00" + name
+}
+
+// Branch reads a branch once per transaction and lock (ADR 0127): the writers of a branch hold the lock of its change
+// tree or of the branch, which the transaction takes before it reads what it changes.
+func (t *guardTx) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {
+	key := guardBranchKey(namespace, name)
+	if b, ok := t.branches[key]; ok {
+		if b.Name == "" {
+			return b, fmt.Errorf("branch %s: %w", name, ErrNotFound)
+		}
+		return b, nil
+	}
+	b, err := t.Tx.Branch(ctx, namespace, name)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		t.keepBranch(key, domain.Branch{}) // none: kept too, until a lock or a write
+	case err == nil:
+		t.keepBranch(key, b)
+	}
+	return b, err
+}
+
+func (t *guardTx) keepBranch(key string, b domain.Branch) {
+	if t.branches == nil {
+		t.branches = map[string]domain.Branch{}
+	}
+	t.branches[key] = b
+}
+
+func (t *guardTx) PutBranch(ctx context.Context, b domain.Branch) error {
+	delete(t.branches, guardBranchKey(b.Namespace, b.Name))
+	if domain.NamespaceOf(b.Namespace) == domain.NamespacePlatform {
+		t.movedPlatform = true
+	}
+	return t.Tx.PutBranch(ctx, b)
+}
+
+// BaselineHeader reads the header of a baseline, kept once written (a header never changes).
+func (t *guardTx) BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
+	return t.header(ctx, id)
 }
 
 // LockChange takes the lock of the tree of a change once per transaction (ADR 0127). Every write naming a change takes
@@ -127,7 +200,55 @@ func (t *guardTx) LockChange(ctx context.Context, id domain.ChangeID) error {
 		return err
 	}
 	t.lock("change:" + string(id))
+	if r, ok := t.Tx.(lockReader); ok {
+		if b, hasBranch, top, ok := r.lockReads(id); ok {
+			if hasBranch {
+				t.keepBranch(guardBranchKey(b.Namespace, b.Name), b)
+			}
+			if t.tops == nil {
+				t.tops = map[domain.ChangeID]int64{}
+			}
+			t.tops[id] = top
+		}
+	}
 	return nil
+}
+
+func (t *guardTx) wholeLog(id domain.ChangeID) {
+	if t.whole == nil {
+		t.whole = map[domain.ChangeID]bool{}
+	}
+	t.whole[id] = true
+}
+
+// newChange holds the lock of a change the transaction creates: its id is unknown outside it until it commits, so
+// no writer can contend for it. Its log is empty.
+func (t *guardTx) newChange(id domain.ChangeID) {
+	key := "change:" + string(id)
+	if t.locked == nil {
+		t.locked = map[string]bool{}
+	}
+	t.locked[key] = true
+	if t.tops == nil {
+		t.tops = map[domain.ChangeID]int64{}
+	}
+	t.tops[id] = 0
+}
+
+// lockReader is a repository transaction that reads, with the header of a change once its lock is held, the branch
+// the change names and the last position of its log (the PostgreSQL one: what saves a statement per read).
+type lockReader interface {
+	lockReads(id domain.ChangeID) (b domain.Branch, hasBranch bool, top int64, ok bool)
+}
+
+// topOf is the last position of the log of a change when the transaction took its lock, false when it does not know
+// it or appended to that log since (only its own appends follow it then, which its fold holds).
+func (t *guardTx) topOf(id domain.ChangeID) (int64, bool) {
+	if t.logged[id] {
+		return 0, false
+	}
+	top, ok := t.tops[id]
+	return top, ok
 }
 
 // LockBranch takes the lock of a branch once per transaction (ADR 0127).
@@ -148,6 +269,7 @@ func (t *guardTx) lock(key string) {
 		t.locked = map[string]bool{}
 	}
 	t.locked[key] = true
+	t.branches = nil // what the writers the lock held off changed is read again
 }
 
 func (t *guardTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
@@ -290,8 +412,36 @@ func copyChange(c domain.Change) domain.Change {
 }
 
 func (t *guardTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
-	if err := t.LockChange(ctx, e.Change); err != nil {
+	if err := t.beforeAppend(ctx, e); err != nil {
 		return e, err
+	}
+	out, err := t.Tx.AppendLog(ctx, e)
+	if err == nil {
+		t.afterAppend(out)
+	}
+	return out, err
+}
+
+// AppendLogs appends entries in their order, in one statement when the store can (logBatcher).
+func (t *guardTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]domain.LogEntry, error) {
+	for _, e := range entries {
+		if err := t.beforeAppend(ctx, e); err != nil {
+			return nil, err
+		}
+	}
+	out, err := appendLogs(ctx, t.Tx, entries)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range out {
+		t.afterAppend(e)
+	}
+	return out, nil
+}
+
+func (t *guardTx) beforeAppend(ctx context.Context, e domain.LogEntry) error {
+	if err := t.LockChange(ctx, e.Change); err != nil {
+		return err
 	}
 	if t.logged == nil {
 		t.logged = map[domain.ChangeID]bool{}
@@ -301,14 +451,20 @@ func (t *guardTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogE
 		delete(t.reads, e.Change) // a fact is an item of the change
 		delete(t.heads, e.Change)
 	}
-	out, err := t.Tx.AppendLog(ctx, e)
-	if err == nil && (strings.HasPrefix(e.Type, domain.LogImpact+".") || strings.HasPrefix(e.Type, domain.LogFact+".")) {
+	return nil
+}
+
+func (t *guardTx) afterAppend(e domain.LogEntry) {
+	if t.appended == nil {
+		t.appended = map[domain.ChangeID]int64{}
+	}
+	t.appended[e.Change] = max(t.appended[e.Change], e.Seq)
+	if strings.HasPrefix(e.Type, domain.LogImpact+".") || strings.HasPrefix(e.Type, domain.LogFact+".") {
 		if t.impactSeq == nil {
 			t.impactSeq = map[domain.ChangeID]int64{}
 		}
-		t.impactSeq[e.Change] = out.Seq
+		t.impactSeq[e.Change] = e.Seq
 	}
-	return out, err
 }
 
 var _ draftKeeper = (*guardTx)(nil)
@@ -514,6 +670,11 @@ func (t *guardTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change 
 		return err
 	}
 	delete(t.nodes, ref)
+	if t.origins == nil {
+		t.origins = map[domain.NodeRef]bool{}
+	}
+	t.origins[ref] = true
+	t.g.versions.forgetNode(ref)
 	return t.Tx.SetNodeOrigin(ctx, ref, change, cn, comment)
 }
 
@@ -572,6 +733,7 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 	delete(t.headers, id)
 	delete(t.reads, id)
 	delete(t.heads, id)
+	t.branches = nil
 	return nil
 }
 
@@ -634,6 +796,12 @@ func (t *guardTx) inStructure(ctx context.Context, kind string, u lnk.URL, what 
 		}
 		return nil
 	}
+	// a node found stays: none is deleted (ADR 0079) nor changes its type, and a purge removes only a change that
+	// committed nothing
+	found := kind + "\x00" + u.String()
+	if _, ok := t.g.foundRefs.Get(found); ok {
+		return nil
+	}
 	id, err := t.Tx.NodeIDByKey(ctx, st.Namespace, key)
 	if errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("%s %q is not a node of namespace %s: %w", what, key, st.Namespace, ErrInvalid)
@@ -651,5 +819,6 @@ func (t *guardTx) inStructure(ctx context.Context, kind string, u lnk.URL, what 
 	if n := vs[0]; !t.g.inStructure(n, st) || !t.g.isA(n.Type, st.Namespace+"@"+u.Type) {
 		return fmt.Errorf("%s %s is a %s of namespace %s, not a %s: %w", what, n.Key, n.Type, domain.NamespaceOf(n.Namespace), st.Type, ErrInvalid)
 	}
+	t.found = append(t.found, found)
 	return nil
 }

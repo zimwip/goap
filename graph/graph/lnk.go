@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/lnk"
@@ -26,7 +27,14 @@ type lnkState struct {
 	read    bool
 	sources []lnk.Source
 	broken  map[string]error // the declarations that declare no valid source, by name
+	// checked is when the head was last read, moves the platform moves of this graph seen then
+	checked time.Time
+	moves   uint64
 }
+
+// sourcesFresh is how long the sources read at the head are taken as current while no commit of this graph wrote a
+// branch of the platform namespace (another graph's commit is seen at most that late).
+const sourcesFresh = time.Second
 
 // Lnk is the registry of the sources of the graph: the graph resolver, the other resolvers of Graph.Resolvers, the
 // sources the platform@Source nodes on main declare.
@@ -73,6 +81,14 @@ func (g *Graph) declaredSource(ctx context.Context, name string) (lnk.Source, bo
 // Sources are the sources the platform@Source nodes in force on main declare (ADR 0154), by name: read again when the
 // head of the platform namespace moved. A node that declares no valid source is left out (naming it is an error).
 func (g *Graph) Sources(ctx context.Context) ([]lnk.Source, error) {
+	moves := g.platformMoves.Load()
+	g.lnk.mu.Lock()
+	if g.lnk.read && g.lnk.moves == moves && time.Now().Sub(g.lnk.checked) < sourcesFresh {
+		out := g.lnk.sources
+		g.lnk.mu.Unlock()
+		return out, nil
+	}
+	g.lnk.mu.Unlock()
 	head, err := g.BranchHeadHeader(ctx, domain.NamespacePlatform, domain.MainBranch) // its id, never its state
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return nil, err
@@ -80,6 +96,7 @@ func (g *Graph) Sources(ctx context.Context) ([]lnk.Source, error) {
 	g.lnk.mu.Lock()
 	defer g.lnk.mu.Unlock()
 	if g.lnk.read && g.lnk.head == head.ID {
+		g.lnk.checked, g.lnk.moves = time.Now(), moves
 		return g.lnk.sources, nil
 	}
 	nodes, err := g.ViewNodesOfType(ctx, View{Namespace: domain.NamespacePlatform, Branch: domain.MainBranch, Baseline: head.ID}, domain.TypeSource)
@@ -100,6 +117,7 @@ func (g *Graph) Sources(ctx context.Context) ([]lnk.Source, error) {
 	}
 	slices.SortFunc(out, func(a, b lnk.Source) int { return strings.Compare(a.Name, b.Name) })
 	g.lnk.head, g.lnk.read, g.lnk.sources, g.lnk.broken = head.ID, true, out, broken
+	g.lnk.checked, g.lnk.moves = time.Now(), moves
 	return out, nil
 }
 

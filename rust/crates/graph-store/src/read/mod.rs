@@ -168,16 +168,31 @@ impl Session {
         self.write_held().await?;
         let res = self.commit_conn().await;
         if res.is_ok() {
-            if self.tx.wrote_branches() {
-                self.versions
-                    .branch_moves
-                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let moved = self.tx.wrote_branches();
+            if !moved.is_empty() {
+                let mut m = self.versions.branch_moves.lock().unwrap_or_else(|e| e.into_inner());
+                for ns in moved {
+                    *m.entry(ns).or_default() += 1;
+                }
+            }
+            self.versions.keep_found(self.tx.take_found());
+            for r in self.tx.take_origins() {
+                self.versions.forget_node(&r);
             }
             let (folds, logs) = self.tx.take_folds();
             for c in &logs {
                 self.versions.forget_fold(c);
             }
             for (c, f) in folds {
+                // a fold of a log the transaction appended to carries what it appended, when that is all of it
+                let f = match logs.contains(&c).then(|| self.tx.tail_of(&c, f.last)).flatten() {
+                    Some(tail) if !tail.is_empty() => {
+                        let mut k = std::sync::Arc::try_unwrap(f).unwrap_or_else(|f| (*f).clone());
+                        k.tail = tail;
+                        std::sync::Arc::new(k)
+                    }
+                    _ => f,
+                };
                 self.versions.keep_fold(&c, f);
             }
         }
@@ -436,20 +451,25 @@ fn log_entry_of(r: &Row) -> graph_core::impact::LogEntry {
 
 /// A branch as the select list of `branch_cols` reads it.
 fn branch_of_row(r: &Row) -> Branch {
+    branch_at(r, 0)
+}
+
+/// A branch read from the columns of a row starting at an offset.
+pub(super) fn branch_at(r: &Row, o: usize) -> Branch {
     Branch {
-        namespace: r.text(0),
-        name: r.text(1),
-        parent: r.text(2),
-        fork_baseline: BaselineId(r.text(3)),
-        head: BaselineId(r.text(4)),
-        origin: r.text(5),
-        status: r.text(6),
-        created_at: r.time(7),
-        description: r.text(8),
-        intent: r.text(9),
-        rebased_from: BaselineId(r.text(10)),
-        ephemeral: r.bool(11),
-        fork_seq: r.int(12),
+        namespace: r.text(o),
+        name: r.text(o + 1),
+        parent: r.text(o + 2),
+        fork_baseline: BaselineId(r.text(o + 3)),
+        head: BaselineId(r.text(o + 4)),
+        origin: r.text(o + 5),
+        status: r.text(o + 6),
+        created_at: r.time(o + 7),
+        description: r.text(o + 8),
+        intent: r.text(o + 9),
+        rebased_from: BaselineId(r.text(o + 10)),
+        ephemeral: r.bool(o + 11),
+        fork_seq: r.int(o + 12),
     }
 }
 
@@ -534,6 +554,23 @@ impl ReadTx for Session {
             .map(|k| std::sync::Arc::try_unwrap(k).unwrap_or_else(|k| (*k).clone()))
     }
 
+    fn structure_found(&self, key: &str) -> bool {
+        self.versions.found(key)
+    }
+
+    fn found_structure(&self, key: &str) {
+        if self.writes() {
+            self.tx.found(key);
+        }
+    }
+
+    fn log_top(&self, change: &ChangeId) -> Option<i64> {
+        if !self.writes() {
+            return None;
+        }
+        self.tx.log_top(&change.0)
+    }
+
     fn keep_fold(&self, change: &ChangeId, fold: &graph_core::write::work::KeptFold, moved: bool) {
         if !self.writes() {
             if moved {
@@ -578,8 +615,9 @@ impl ReadTx for Session {
     fn fresh_snapshot(
         &self,
         catalog: &std::sync::Arc<graph_catalog::Catalog>,
+        namespace: &str,
     ) -> Option<std::sync::Arc<graph_core::access::Snapshot>> {
-        let mark = self.snapshot_mark()?;
+        let mark = self.snapshot_mark(namespace)?;
         let kept = self.versions.organisation.lock().unwrap_or_else(|e| e.into_inner());
         kept.as_ref()
             .filter(|k| {
@@ -590,11 +628,13 @@ impl ReadTx for Session {
             .map(|k| k.snapshot.clone())
     }
 
-    fn snapshot_mark(&self) -> Option<u64> {
-        if self.writes() && self.tx.wrote_branches() {
+    fn snapshot_mark(&self, namespace: &str) -> Option<u64> {
+        let namespace = graph_core::model::namespace_of(namespace);
+        if self.writes() && self.tx.wrote_branch_of(namespace) {
             return None;
         }
-        Some(self.versions.branch_moves.load(std::sync::atomic::Ordering::SeqCst))
+        let m = self.versions.branch_moves.lock().unwrap_or_else(|e| e.into_inner());
+        Some(m.get(namespace).copied().unwrap_or_default())
     }
 
     async fn last_commit(&self, branch: &str) -> Result<i64, GraphError> {
@@ -761,11 +801,21 @@ impl ReadTx for Session {
                 "baseline {id}: invalid input syntax for type uuid: \"{id}\""
             )));
         }
-        Ok(self
+        // a baseline is written once and never deleted: its header read is not read again
+        if let Some(b) = self.versions.header(id.as_str()) {
+            return Ok(Some(b));
+        }
+        let b = self
             .rows(self.sql.baseline_header(id.as_str()))
             .await?
             .first()
-            .map(header_of))
+            .map(header_of);
+        if let Some(b) = &b
+            && !self.tx.wrote_baseline_of(id.as_str())
+        {
+            self.versions.keep_header(b);
+        }
+        Ok(b)
     }
 
     async fn baseline_headers(&self, namespace: &str) -> Result<Vec<Baseline>, GraphError> {
@@ -825,14 +875,14 @@ impl ReadTx for Session {
             )));
         }
         let fixed = self.tx.fixed(r);
-        if fixed && let Some(n) = self.tx.node(r) {
+        if fixed && let Some(n) = self.tx.node(r).or_else(|| self.versions.node(r)) {
             return Ok(Some(n));
         }
         let era = self.versions.generation();
         let n = self.nodes(self.sql.node(r)).await?.into_iter().next();
         if fixed && let Some(n) = &n {
             self.tx.keep(n);
-            self.versions.known(era, r);
+            self.versions.keep_node(era, n);
         }
         Ok(n)
     }
@@ -906,16 +956,39 @@ impl ReadTx for Session {
         if refs.is_empty() {
             return Ok(Vec::new());
         }
+        // a version never changes once written (but its origin, set again at a merge): the ones kept between
+        // transactions are not read again
         let era = self.versions.generation();
-        let ns = self.nodes(self.sql.nodes_at(refs, typ)).await?;
+        let mut out = Vec::new();
+        let mut missing = Vec::new();
+        for r in refs {
+            match self.tx.fixed(r).then(|| self.versions.node(r)).flatten() {
+                Some(n) => {
+                    if typ.is_empty() || n.typ == typ {
+                        out.push(n);
+                    }
+                }
+                None => missing.push(r.clone()),
+            }
+        }
+        if missing.is_empty() {
+            out.sort_by(|a, b| (&a.key, a.version).cmp(&(&b.key, b.version)));
+            return Ok(out);
+        }
+        let ns = self.nodes(self.sql.nodes_at(&missing, typ)).await?;
         for n in &ns {
             let r = n.node_ref();
             if self.tx.fixed(&r) {
                 self.tx.keep(n);
-                self.versions.known(era, &r);
+                self.versions.keep_node(era, n);
             }
         }
-        Ok(ns)
+        if out.is_empty() {
+            return Ok(ns);
+        }
+        out.extend(ns);
+        out.sort_by(|a, b| (&a.key, a.version).cmp(&(&b.key, b.version)));
+        Ok(out)
     }
 
     async fn link(&self, id: &LinkId) -> Result<Option<Link>, GraphError> {

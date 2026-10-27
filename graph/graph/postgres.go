@@ -180,6 +180,22 @@ type pgTx struct {
 	// locked are the headers of the changes read with the root of their tree once its lock was held (LockChange): what
 	// the transaction then reads of them, until it writes them
 	locked map[domain.ChangeID]domain.Change
+	// lockedReads are what the same statement read of each such change: its branch and the last position of its log
+	lockedReads map[domain.ChangeID]lockedRead
+}
+
+// lockedRead is what the statement taking the header of a change once its lock is held reads with it (lockReader).
+type lockedRead struct {
+	branch    domain.Branch
+	hasBranch bool
+	// top is the last position of the log of the change, whatever the entry (0: no entry)
+	top int64
+}
+
+// lockReads implements lockReader.
+func (t *pgTx) lockReads(id domain.ChangeID) (domain.Branch, bool, int64, bool) {
+	r, ok := t.lockedReads[id]
+	return r.branch, r.hasBranch, r.top, ok
 }
 
 // AppendOutbox implements Tx.
@@ -483,19 +499,34 @@ func (t *pgTx) LockChange(ctx context.Context, id domain.ChangeID) error {
 	return mapErr(err, "lock change "+string(id))
 }
 
-// lockedHead reads, once the lock of its tree is held, the root of the tree of a change and its header in one
-// statement: the header is what the transaction reads of it next (ChangeHead). A change not stored yet is its own root.
+// lockedHead reads, once the lock of its tree is held, the root of the tree of a change, its header, the branch it
+// names and the last position of its log in one statement: what the transaction reads of it next (ChangeHead, Branch,
+// the fold of its log), which no other writer changes while the lock is held. A change not stored yet is its own root.
 func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, error) {
-	var root *string
+	var root, bNamespace, bName, bParent, bFork, bHead, bOrigin, bStatus, bDescription, bIntent, bRebased *string
+	var top, bForkSeq *int64
+	var bCreated *time.Time
+	var bEphemeral *bool
 	c, err := scanPGChangeHead(func(dest ...any) error {
 		return t.unheld().QueryRow(ctx, `WITH RECURSIVE up (id, parent_id) AS (
 				SELECT id, parent_id FROM change WHERE id = $1
 				UNION ALL SELECT c.id, c.parent_id FROM change c JOIN up ON c.id = up.parent_id)
-			SELECT (SELECT id::text FROM up WHERE parent_id IS NULL), `+pgChangeHead+` FROM change WHERE id = $1`, string(id)).
-			Scan(append([]any{&root}, dest...)...)
+			SELECT (SELECT id::text FROM up WHERE parent_id IS NULL), `+pgChangeHead+`,
+				(SELECT max(seq) FROM change_log WHERE change_id = $1),
+				ob.b_namespace, ob.b_name, ob.b_parent, ob.b_fork, ob.b_head, ob.b_origin, ob.b_status, ob.b_created,
+				ob.b_description, ob.b_intent, ob.b_rebased, ob.b_ephemeral, ob.b_fork_seq
+			FROM change LEFT JOIN LATERAL (SELECT b.namespace AS b_namespace, b.name AS b_name, b.parent AS b_parent,
+				coalesce(b.fork_baseline::text, '') AS b_fork, coalesce(b.head_baseline::text, '') AS b_head,
+				b.origin AS b_origin, b.status AS b_status, b.created_at AS b_created, b.description AS b_description,
+				b.intent AS b_intent, coalesce(b.rebased_from::text, '') AS b_rebased, b.ephemeral AS b_ephemeral,
+				b.fork_seq AS b_fork_seq
+				FROM branch b WHERE b.namespace = change.namespace AND b.name = change.branch) ob ON true
+			WHERE change.id = $1`, string(id)).
+			Scan(append(append([]any{&root}, dest...), &top, &bNamespace, &bName, &bParent, &bFork, &bHead, &bOrigin, &bStatus, &bCreated, &bDescription, &bIntent, &bRebased, &bEphemeral, &bForkSeq)...)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		delete(t.locked, id)
+		delete(t.lockedReads, id)
 		return string(id), nil
 	}
 	if err != nil {
@@ -503,8 +534,18 @@ func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, erro
 	}
 	if t.locked == nil {
 		t.locked = map[domain.ChangeID]domain.Change{}
+		t.lockedReads = map[domain.ChangeID]lockedRead{}
 	}
 	t.locked[id] = c
+	r := lockedRead{}
+	if top != nil {
+		r.top = *top
+	}
+	if bName != nil {
+		r.hasBranch = true
+		r.branch = domain.Branch{Namespace: *bNamespace, Name: *bName, Parent: *bParent, ForkBaseline: domain.BaselineID(*bFork), Head: domain.BaselineID(*bHead), Origin: *bOrigin, Status: *bStatus, CreatedAt: *bCreated, Description: *bDescription, Intent: domain.OptionIntent(*bIntent), RebasedFrom: domain.BaselineID(*bRebased), Ephemeral: *bEphemeral, ForkSeq: *bForkSeq}
+	}
+	t.lockedReads[id] = r
 	return str(root), nil
 }
 
@@ -1214,6 +1255,55 @@ func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntr
 	err := q.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
 		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload).Scan(&e.Seq)
 	return e, mapErr(err, "log entry "+e.Type)
+}
+
+// AppendLogs implements logBatcher: the entries in one statement, their positions in their order.
+func (t *pgTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]domain.LogEntry, error) {
+	if len(entries) == 1 {
+		e, err := t.AppendLog(ctx, entries[0])
+		return []domain.LogEntry{e}, err
+	}
+	n := len(entries)
+	ids, changes, types, flows, procs, execs, subjects, bys, causes, payloads := make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n)
+	ats := make([]time.Time, n)
+	for i, e := range entries {
+		ids[i], changes[i], types[i], flows[i], procs[i], execs[i], subjects[i], bys[i], causes[i], ats[i] = e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At
+		payloads[i] = string(e.Payload)
+		if len(e.Payload) == 0 {
+			payloads[i] = "null"
+		}
+	}
+	q := t.tx
+	if t.held != nil {
+		q = t.held.Tx
+	}
+	// the rows are inserted, and take their positions, in the order of the array
+	rows, err := q.Query(ctx, `INSERT INTO change_log (`+strings.Join(changeLogColumns, ", ")+`)
+		SELECT id, change_id::uuid, type, flow, process_id, execution, subject, by_whom, causation, at, payload::jsonb
+		FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::timestamptz[], $11::text[])
+			WITH ORDINALITY AS e (id, change_id, type, flow, process_id, execution, subject, by_whom, causation, at, payload, o)
+		ORDER BY o RETURNING id, seq`, ids, changes, types, flows, procs, execs, subjects, bys, causes, ats, payloads)
+	if err != nil {
+		return nil, mapErr(err, "log entries")
+	}
+	seqs := make(map[string]int64, n)
+	for rows.Next() {
+		var id string
+		var seq int64
+		if err := rows.Scan(&id, &seq); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		seqs[id] = seq
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapErr(err, "log entries")
+	}
+	out := slices.Clone(entries)
+	for i := range out {
+		out[i].Seq = seqs[out[i].ID]
+	}
+	return out, nil
 }
 
 func (t *pgTx) LogCounts(ctx context.Context, f domain.LogFilter) (map[string]int, error) {

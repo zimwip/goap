@@ -63,13 +63,14 @@ pub trait ReadTx: Sync {
     fn fresh_snapshot(
         &self,
         _catalog: &std::sync::Arc<graph_catalog::Catalog>,
+        _namespace: &str,
     ) -> Option<std::sync::Arc<crate::access::Snapshot>> {
         None
     }
 
     /// Where the store stands in the moves of its branches, read before the head of the organisation is (none: what
     /// is read then is not to be known fresh, a transaction that moved a branch).
-    fn snapshot_mark(&self) -> Option<u64> {
+    fn snapshot_mark(&self, _namespace: &str) -> Option<u64> {
         None
     }
 
@@ -170,6 +171,20 @@ pub trait ReadTx: Sync {
     /// not): a write transaction keeps it once it commits, and only when it had written nothing in that log before it
     /// read it.
     fn keep_fold(&self, _change: &ChangeId, _fold: &crate::write::work::KeptFold, _moved: bool) {}
+
+    /// Whether the guard found a unit or a project (a key of its kind and URL) in a transaction committed before.
+    fn structure_found(&self, _key: &str) -> bool {
+        false
+    }
+
+    /// A unit or a project the guard found, kept once the transaction commits.
+    fn found_structure(&self, _key: &str) {}
+
+    /// The last position of the log of a change, when a write transaction read it with the lock of the change and
+    /// wrote none of that log since (none: unknown): a fold holding it is whole.
+    fn log_top(&self, _change: &ChangeId) -> Option<i64> {
+        None
+    }
 
     /// The latest version of a node on a branch.
     fn latest_on(&self, id: &NodeId, branch: &str) -> impl Future<Output = Result<Option<Node>>> + Send;
@@ -276,6 +291,10 @@ pub trait WriteTx: ReadTx {
     /// answers the header of the change it read with the root once the lock was held (none: not stored, or not read).
     fn lock_change(&self, id: &ChangeId) -> impl Future<Output = Result<Option<Change>>> + Send;
 
+    /// A change the transaction opens, with an id no other writer knows yet: its tree is locked with no statement
+    /// (the parent's lock holds a sub-change's tree) and its log is empty.
+    fn new_change(&self, _id: &ChangeId, _parent: &ChangeId) {}
+
     /// Serializes the writers of a branch.
     fn lock_branch(&self, namespace: &str, name: &str) -> impl Future<Output = Result<()>> + Send;
 
@@ -287,6 +306,18 @@ pub trait WriteTx: ReadTx {
 
     /// Appends an entry to the log of its change and returns its order.
     fn append_log(&self, e: &crate::impact::LogEntry) -> impl Future<Output = Result<i64>> + Send;
+
+    /// Appends entries to the logs of their changes in order, in one statement where the store can, and returns
+    /// their orders.
+    fn append_logs(&self, es: &[crate::impact::LogEntry]) -> impl Future<Output = Result<Vec<i64>>> + Send {
+        async move {
+            let mut out = Vec::with_capacity(es.len());
+            for e in es {
+                out.push(self.append_log(e).await?);
+            }
+            Ok(out)
+        }
+    }
 
     /// Writes the projection of an impact (`change_impact`).
     fn put_change_impact(

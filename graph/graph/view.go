@@ -161,11 +161,10 @@ func (w *world) ref(ctx context.Context, tx Tx, id domain.NodeID, key string) (d
 			}
 		}
 		if id == "" {
-			n, err := tx.NodeByKey(ctx, w.namespace, key)
-			if err != nil {
+			var err error
+			if id, err = tx.NodeIDByKey(ctx, w.namespace, key); err != nil {
 				return domain.NodeRef{}, err
 			}
-			id = n.ID
 		}
 	}
 	at, err := w.at(ctx, tx, []domain.NodeID{id})

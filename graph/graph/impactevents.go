@@ -38,17 +38,37 @@ func (g *Graph) emit(ctx context.Context, tx Tx, events ...domain.ImpactEvent) e
 	for i := range events {
 		g.envelope(ctx, &events[i])
 	}
+	var s *impactStage
+	if len(events) > 0 {
+		if st, ok := ctx.Value(entriesKey{g}).(*impactStage); ok && st.change == events[0].Change {
+			s = st
+		}
+	}
 	for len(events) > 0 {
 		n := 1
 		for n < len(events) && domain.SameEntry(events[0], events[n]) {
 			n++
 		}
-		if err := g.emitEntry(ctx, tx, events[:n], nil); err != nil {
+		if err := g.emitEntry(ctx, tx, events[:n], s); err != nil {
 			return err
 		}
 		events = events[n:]
 	}
 	return nil
+}
+
+// entriesKey carries the stage an operation of many writes to one change logs its entries through (withEntries).
+type entriesKey struct{ g *Graph }
+
+// withEntries runs fn with the entries it logs to change id held, then appended in one statement (a batch of
+// checkouts: one entry per event, as each would be logged alone, ADR 0144 aside). Nothing else may write the log of
+// the change meanwhile.
+func (g *Graph) withEntries(ctx context.Context, tx Tx, id domain.ChangeID, fn func(ctx context.Context) error) error {
+	s := &impactStage{change: id, separate: true}
+	if err := fn(context.WithValue(ctx, entriesKey{g}, s)); err != nil {
+		return err
+	}
+	return g.flush(ctx, tx, s)
 }
 
 // envelope sets what an event leaves to its caller: its time and its author.
@@ -75,6 +95,15 @@ type impactStage struct {
 	events []domain.ImpactEvent
 	// st is the fold of the change holding the staged events: nothing else may write the log of the change meanwhile
 	st *draftState
+	// separate: each group of events emitted is an entry of its own, as emit logs it (withEntries), the groups the
+	// sizes of those entries, in order
+	separate bool
+	groups   []stagedGroup
+}
+
+type stagedGroup struct {
+	id string
+	n  int
 }
 
 // stage applies an event to the projection and to the fold of its change now, and logs it when the stage is flushed.
@@ -101,21 +130,57 @@ func (g *Graph) flush(ctx context.Context, tx Tx, s *impactStage) error {
 	if st == nil || st != s.st {
 		return fmt.Errorf("change %s: its log was written while events were staged", s.change)
 	}
-	entry, err := domain.ImpactBatchEntry(s.entry, s.events)
-	if err != nil {
-		return err
+	// seqs is the position of the entry of each staged event
+	seqs := make([]int64, len(s.events))
+	if s.separate {
+		entries := make([]domain.LogEntry, len(s.groups))
+		at := 0
+		for i, gr := range s.groups {
+			evs := s.events[at : at+gr.n]
+			var err error
+			if gr.n == 1 {
+				entries[i], err = domain.ImpactEntry(evs[0])
+			} else {
+				entries[i], err = domain.ImpactBatchEntry(gr.id, evs)
+			}
+			if err != nil {
+				return err
+			}
+			at += gr.n
+		}
+		entries, err := appendLogs(ctx, tx, entries)
+		if err != nil {
+			return err
+		}
+		at = 0
+		for i, gr := range s.groups {
+			for k := 0; k < gr.n; k++ {
+				seqs[at+k] = entries[i].Seq
+			}
+			at += gr.n
+		}
+		s.groups = nil
+	} else {
+		entry, err := domain.ImpactBatchEntry(s.entry, s.events)
+		if err != nil {
+			return err
+		}
+		if entry, err = tx.AppendLog(ctx, entry); err != nil {
+			return err
+		}
+		for i := range seqs {
+			seqs[i] = entry.Seq
+		}
 	}
-	if entry, err = tx.AppendLog(ctx, entry); err != nil {
-		return err
+	// the fold holds the events already: it is now up to the entries
+	st.seq = seqs[len(seqs)-1]
+	base := len(st.events) - len(s.events)
+	for i := range s.events {
+		st.events[base+i].Seq = int(seqs[i])
 	}
-	// the fold holds the events already: it is now up to the entry
-	st.seq = entry.Seq
-	for i := len(st.events) - len(s.events); i < len(st.events); i++ {
-		st.events[i].Seq = int(entry.Seq)
-	}
-	for _, e := range s.events {
+	for i, e := range s.events {
 		if p, ok := st.phases[e.Impact]; ok && e.StartsDraft() && e.Flow == "" {
-			p.Seq = entry.Seq
+			p.Seq = seqs[i]
 			st.phases[e.Impact] = p
 		}
 	}
@@ -129,13 +194,13 @@ func (g *Graph) flush(ctx context.Context, tx Tx, s *impactStage) error {
 func (g *Graph) emitEntry(ctx context.Context, tx Tx, events []domain.ImpactEvent, s *impactStage) error {
 	change := events[0].Change
 	id := g.newID()
-	if s != nil {
+	if s != nil && !s.separate {
 		id = s.entry
 	}
 	for i := range events {
 		e := &events[i]
 		switch {
-		case s != nil:
+		case s != nil && !s.separate:
 			e.ID = domain.PartID(id, len(s.events)+i)
 		case len(events) > 1:
 			e.ID = domain.PartID(id, i)
@@ -201,6 +266,9 @@ func (g *Graph) emitEntry(ctx context.Context, tx Tx, events []domain.ImpactEven
 	}
 	if s != nil {
 		s.events, s.st = append(s.events, events...), next
+		if s.separate {
+			s.groups = append(s.groups, stagedGroup{id: id, n: len(events)})
+		}
 	}
 	return nil
 }

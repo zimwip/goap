@@ -1198,10 +1198,11 @@ PostgreSQL; SQLite and the memory store run one transaction at a time), taken be
 (`changeOpen`, `Graph.changeTx`) and by the guard at every write naming a change; a branch head moves under
 `Tx.LockBranch` and only from the parent of the new baseline (`advanceBranch`). Reads take no lock.
 
-Every `change_id` above is `NOT NULL` with a foreign key (deferred where the bootstrap needs it); `owner`, `project`,
+Every `change_id` above is `NOT NULL`, with no foreign key: the schema declares none (no trigger runs on an insert),
+the guard checks every reference at the end of the transaction; `owner`, `project`,
 `owner_org` and `project_id` are non-empty logical URLs of nodes of the structures (`lnk:<namespace>/<type>/<key>`, no version: a reference to a node is a link; `Graph.StructureURL` the canonical form, `Graph.StructureRef` reads a URL or a bare key), no foreign key, since the structures may live in
-another graph (the platform graph, ADR 0154 §9; the guard checks them through `Graph.Directory`, the platform's organisation directory in a content graph), and `graph/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054): the constraints
-are a second line, a storage without any keeps the rules.
+another graph (the platform graph, ADR 0154 §9; the guard checks them through `Graph.Directory`, the platform's organisation directory in a content graph), and `graph/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054; the Rust graph its own):
+the `NOT NULL` and `CHECK` constraints are a second line, the references have only the guard.
 
 > Why PostgreSQL and not a graph database? The required traversals (neighborhood, impact propagation
 > at bounded depth) are expressed as recursive CTEs; version-to-version versioning and baselines are
@@ -1232,7 +1233,8 @@ declared sources (`ProjectUnit.sources`, inherited, nearest wins), so its conten
 The platform and the content are two graph services (ADR §9): the platform graph (`platform`, `organisation`, `methodology`)
 is the one its callers know and forwards the calls of the content namespaces or of a change held there to the content
 graph (`graphsvc.Router`): the routes are the declared sources, a `platform@Source` of kind `graph` with a location and the
-`namespaces` it holds being the driver of those namespaces (`Graph.Sources`, `lnk.Source.Holds`), and the namespace
+`namespaces` it holds being the driver of those namespaces (`Graph.Sources`, `lnk.Source.Holds`; the head of the
+platform namespace read again only once a commit of this graph moved one of its branches, else after a second), and the namespace
 listings are merged over every graph, each naming its source (the statistics group them). The content graph
 (`GOAP_GRAPH_SPACE=content`) reads its types and its organisation from the platform graph (`Graph.Directory`,
 `graphsnap.Heads`), holds no root and seeds nothing.

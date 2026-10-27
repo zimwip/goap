@@ -460,10 +460,10 @@ impl Snapshot {
         let Some(ns) = cat.structure(STRUCTURE_ORGANISATION).map(|s| s.namespace.clone()) else {
             return Ok(Snapshot::default());
         };
-        if let Some(s) = tx.fresh_snapshot(&cat) {
+        if let Some(s) = tx.fresh_snapshot(&cat, &ns) {
             return Ok((*s).clone());
         }
-        let mark = tx.snapshot_mark();
+        let mark = tx.snapshot_mark(&ns);
         // the head of main names what the snapshot holds: the one kept for it, if any, is the same
         let kept_at = match tx.branch(&ns, MAIN_BRANCH).await? {
             Some(b) if !b.ephemeral && !b.head.is_empty() => b.head.0.clone(),

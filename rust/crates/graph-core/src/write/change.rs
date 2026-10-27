@@ -288,6 +288,7 @@ impl<S: WriteTx> Tx<'_, S> {
             project_id: project,
             ..Change::default()
         };
+        self.new_change(&c.id, &c.parent_id);
         if !c.parent_id.is_empty() {
             // the cascade of the activities, in the transaction of the creation: it reads the methodology namespace
             let parent = self.change_head(&c.parent_id).await?;

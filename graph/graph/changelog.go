@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -209,6 +210,19 @@ func (g *Graph) AppendLog(ctx context.Context, entries []domain.LogEntry) error 
 		}
 	}
 	return g.repo.InTx(ctx, func(tx Tx) error {
+		// the schema keeps no foreign key: a log names a change that exists
+		known := map[domain.ChangeID]bool{}
+		for _, e := range entries {
+			if known[e.Change] {
+				continue
+			}
+			if _, err := tx.ChangeHead(ctx, e.Change); errors.Is(err, ErrNotFound) {
+				return fmt.Errorf("change %s: %w", e.Change, ErrInvalid)
+			} else if err != nil {
+				return err
+			}
+			known[e.Change] = true
+		}
 		for _, e := range entries {
 			if e.ID == "" {
 				e.ID = g.newID()
@@ -222,4 +236,25 @@ func (g *Graph) AppendLog(ctx context.Context, entries []domain.LogEntry) error 
 		}
 		return nil
 	})
+}
+
+// logBatcher is a repository transaction that appends several entries of a log in one statement.
+type logBatcher interface {
+	AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]domain.LogEntry, error)
+}
+
+// appendLogs appends entries in their order, in one statement when the transaction can, and returns them with their
+// Seq.
+func appendLogs(ctx context.Context, tx Tx, entries []domain.LogEntry) ([]domain.LogEntry, error) {
+	if b, ok := tx.(logBatcher); ok {
+		return b.AppendLogs(ctx, entries)
+	}
+	out := make([]domain.LogEntry, len(entries))
+	for i, e := range entries {
+		var err error
+		if out[i], err = tx.AppendLog(ctx, e); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }

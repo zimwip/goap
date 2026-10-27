@@ -62,6 +62,9 @@ impl Env {
 /// The most impacts the document of a change carries.
 const MAX_INDEXED_IMPACTS: usize = 200;
 
+/// An entry of a log held back by a batch, with the impacts of its events.
+pub(super) type HeldEntry = (LogEntry, Vec<String>);
+
 /// A write transaction of the graph over a transaction of the store.
 pub struct Tx<'s, S: WriteTx> {
     pub store: &'s S,
@@ -104,6 +107,9 @@ pub struct Tx<'s, S: WriteTx> {
     /// the number of the last version of each, the node of each key it creates
     pub(super) last_versions: HashMap<NodeId, crate::model::Version>,
     pub(super) key_ids: Option<HashMap<String, NodeId>>,
+    /// the entries of the log of a change a batch of operations folds as it goes and appends together at its end
+    /// (Go's `withEntries`): each with the impacts of its events
+    pub(super) pending_log: Option<(ChangeId, Vec<HeldEntry>)>,
 }
 
 /// What a transaction holds in memory when a rehearsal starts (the locks taken stay).
@@ -133,6 +139,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             store,
             env,
             locked: HashSet::new(),
+            pending_log: None,
             change_refs: BTreeMap::new(),
             owners: BTreeMap::new(),
             projects: BTreeMap::new(),
@@ -229,6 +236,13 @@ impl<'s, S: WriteTx> Tx<'s, S> {
         Ok(())
     }
 
+    /// A change this transaction opens under a new id: no other writer knows its tree, so it is locked as is (its
+    /// parent's tree is locked when it is written).
+    pub fn new_change(&mut self, id: &ChangeId, parent: &ChangeId) {
+        self.locked.insert(format!("change:{id}"));
+        self.store.new_change(id, parent);
+    }
+
     /// Takes the lock of a branch once per transaction.
     pub async fn lock_branch(&mut self, namespace: &str, name: &str) -> Result<()> {
         if !self.locked.insert(format!("branch:{}/{name}", namespace_of(namespace))) {
@@ -316,6 +330,33 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             }
         }
         Ok(seq)
+    }
+
+    /// Appends the entries a batch held back in one statement, then gives the view and the watermark the positions
+    /// they took (an entry is folded at the placeholder `-(its rank + 1)`).
+    pub(super) async fn flush_log(&mut self) -> Result<()> {
+        let Some((change, held)) = self.pending_log.take() else {
+            return Ok(());
+        };
+        if held.is_empty() {
+            return Ok(());
+        }
+        self.lock_change(&change).await?;
+        let entries: Vec<LogEntry> = held.iter().map(|(e, _)| e.clone()).collect();
+        let seqs = self.store.append_logs(&entries).await?;
+        self.touch(&change);
+        let last = seqs.iter().copied().max().unwrap_or_default();
+        self.seq.insert(change.clone(), last);
+        self.positions.insert(change.clone(), last);
+        if let Some(v) = self.views.get_mut(&change) {
+            v.seq = v.seq.max(last);
+            for (i, (_, impacts)) in held.iter().enumerate() {
+                for imp in impacts {
+                    v.history.place(imp, -(i as i64 + 1), seqs[i]);
+                }
+            }
+        }
+        Ok(())
     }
 
     pub async fn put_change_impact(&mut self, change: &ChangeId, cn: &crate::impact::ChangeImpact) -> Result<()> {
@@ -747,6 +788,11 @@ impl<'s, S: WriteTx> Tx<'s, S> {
             }
             return Ok(());
         }
+        // a node is never deleted once committed: a unit or a project found stays found
+        let found = format!("{kind}\0{u}");
+        if self.store.structure_found(&found) {
+            return Ok(());
+        }
         let Some(id) = self.store.node_id_by_key(&st.namespace, &u.key).await? else {
             return Err(GraphError::invalid(format!(
                 "{what} {:?} is not a node of namespace {}",
@@ -766,6 +812,7 @@ impl<'s, S: WriteTx> Tx<'s, S> {
                 st.typ
             )));
         }
+        self.store.found_structure(&found);
         Ok(())
     }
 

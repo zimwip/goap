@@ -7,6 +7,7 @@
 //! Only a version read by a transaction that did not write it is kept (what a transaction wrote may roll back, its
 //! number then taken again). A purge deletes versions (`delete_change`): it empties the cache, before and after its
 //! statements, and a read that started before an emptying is not kept (the generation).
+use chrono::Timelike;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     sync::Mutex,
@@ -26,6 +27,8 @@ const TTL: Duration = Duration::from_secs(5 * 60);
 /// What is known of a version: that it exists, how it holds its links, the links it holds.
 #[derive(Default, Clone)]
 struct Entry {
+    /// the version itself, read by a transaction that did not write it
+    node: Option<Node>,
     set: Option<LinkSet>,
     links: Option<Vec<Link>>,
     exists: bool,
@@ -43,10 +46,15 @@ pub struct Versions {
     pub(crate) organisation: Mutex<Option<KeptSnapshot>>,
     /// The folds of the logs of the changes last read ([`graph_core::store::ReadTx::take_fold`]).
     folds: Mutex<Folds>,
-    /// The commits of the store that moved a branch.
-    pub(crate) branch_moves: std::sync::atomic::AtomicU64,
+    /// Per namespace, the commits of the store that moved one of its branches.
+    pub(crate) branch_moves: Mutex<HashMap<String, u64>>,
     /// The root of the tree of each change last locked ([`Versions::root_of`]).
     roots: Mutex<HashMap<String, String>>,
+    /// The units and projects the guard found ([`graph_core::store::ReadTx::structure_found`]): a node is never
+    /// deleted once committed, so a structure found stays found.
+    found: Mutex<HashSet<String>>,
+    /// The headers of the baselines read: a baseline is written once and never deleted.
+    headers: Mutex<HashMap<String, graph_core::model::Baseline>>,
 }
 
 /// The number of change roots kept.
@@ -141,6 +149,16 @@ impl Inner {
 fn size(r: &NodeRef, e: &Entry) -> usize {
     const STRUCT: usize = 64;
     let mut n = STRUCT + r.id.as_str().len();
+    if let Some(v) = &e.node {
+        n += STRUCT * 2
+            + v.key.len()
+            + v.typ.len()
+            + v.namespace.len()
+            + v.comment.len()
+            + v.props
+                .as_ref()
+                .map_or(0, |p| serde_json::Value::Object(p.clone()).to_string().len());
+    }
     for l in e.links.iter().flatten() {
         let to = match &l.to {
             Target::Node(t) => t.id.as_str().len(),
@@ -178,6 +196,29 @@ impl Versions {
             return None;
         }
         e.links.clone()
+    }
+
+    /// The version, when kept.
+    pub fn node(&self, r: &NodeRef) -> Option<Node> {
+        self.lock().get(r)?.node.clone()
+    }
+
+    /// Keeps a version read at `era`.
+    pub fn keep_node(&self, era: u64, n: &Node) {
+        let r = n.node_ref();
+        self.at(era, &r, |e| {
+            e.exists = true;
+            e.node = Some(n.clone());
+        });
+    }
+
+    /// A version whose origin a transaction sets: read again, and the reads in flight are not kept.
+    pub fn forget_node(&self, r: &NodeRef) {
+        let mut c = self.lock();
+        c.era += 1;
+        if c.entries.contains_key(r) {
+            c.update(r, |e| e.node = None);
+        }
     }
 
     /// How a version holds its links, when known.
@@ -253,6 +294,34 @@ impl Versions {
             .cloned()
     }
 
+    /// The header of a baseline, when read before.
+    pub fn header(&self, id: &str) -> Option<graph_core::model::Baseline> {
+        self.headers.lock().unwrap_or_else(|e| e.into_inner()).get(id).cloned()
+    }
+
+    /// Keeps the header of a baseline committed.
+    pub fn keep_header(&self, b: &graph_core::model::Baseline) {
+        let mut h = self.headers.lock().unwrap_or_else(|e| e.into_inner());
+        if h.len() >= MAX_ROOTS * 4 {
+            h.clear();
+        }
+        h.insert(b.id.0.clone(), b.clone());
+    }
+
+    /// Whether the guard found a unit or a project.
+    pub fn found(&self, key: &str) -> bool {
+        self.found.lock().unwrap_or_else(|e| e.into_inner()).contains(key)
+    }
+
+    /// The units and projects a committed transaction found.
+    pub fn keep_found(&self, keys: Vec<String>) {
+        let mut f = self.found.lock().unwrap_or_else(|e| e.into_inner());
+        if f.len() + keys.len() > MAX_ROOTS {
+            f.clear();
+        }
+        f.extend(keys);
+    }
+
     pub fn keep_root(&self, change: &str, root: &str) {
         let mut r = self.roots.lock().unwrap_or_else(|e| e.into_inner());
         if r.len() >= MAX_ROOTS && !r.contains_key(change) {
@@ -295,14 +364,27 @@ pub struct Read {
     logs: Mutex<HashSet<String>>,
     /// The folds a write transaction keeps once it commits.
     folds: Mutex<Vec<(String, std::sync::Arc<graph_core::write::work::KeptFold>)>>,
-    /// Whether the transaction wrote a branch.
-    branches: std::sync::atomic::AtomicBool,
+    /// The namespaces of the branches the transaction wrote.
+    branches: Mutex<HashSet<String>>,
     /// The branches the transaction read since its last lock or write of one: a lock may let another writer's move
     /// in, a write keeps columns of the row it does not name.
     branch_rows: Mutex<HashMap<(String, String), Option<graph_core::model::Branch>>>,
     /// The rows of `change_impact` the transaction writes, sent in one statement before its next statement but an
     /// entry of a log (which reads none of them): a batched operation writes an impact per node.
     impacts: Mutex<HeldImpacts>,
+    /// The last position of the log of each change locked, read with its lock: no other writer appends to it while
+    /// the lock is held.
+    log_tops: Mutex<HashMap<String, i64>>,
+    /// The units and projects the guard found, kept once the transaction commits.
+    found: Mutex<Vec<String>>,
+    /// The entries the transaction appended to the log of each change, as the log holds them.
+    appended: Mutex<HashMap<String, Vec<graph_core::impact::LogEntry>>>,
+    /// The versions whose origin the transaction set, read again by the next transactions once it commits.
+    origins: Mutex<Vec<NodeRef>>,
+    /// The baselines the transaction wrote: not kept, they may roll back.
+    baselines: Mutex<HashSet<String>>,
+    /// Whether a savepoint was undone: what it appended is not known any more.
+    undone: std::sync::atomic::AtomicBool,
 }
 
 /// The rows of `change_impact` a transaction holds: each with the rank of its first write among the writes held, so
@@ -352,8 +434,11 @@ impl Read {
     }
 
     /// A branch the transaction writes.
-    pub fn wrote_branch(&self) {
-        self.branches.store(true, std::sync::atomic::Ordering::Relaxed);
+    pub fn wrote_branch(&self, namespace: &str) {
+        self.branches
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(namespace.to_string());
         self.forget_branches();
     }
 
@@ -398,9 +483,114 @@ impl Read {
         self.branch_rows.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
-    /// Whether the transaction wrote a branch.
-    pub fn wrote_branches(&self) -> bool {
-        self.branches.load(std::sync::atomic::Ordering::Relaxed)
+    /// An entry the transaction appended at a position, as the log holds it (its time to the microsecond, an empty
+    /// payload as null).
+    pub fn appended(&self, e: &graph_core::impact::LogEntry, seq: i64) {
+        let mut e = e.clone();
+        e.seq = seq;
+        e.at = e.at.with_nanosecond(e.at.nanosecond() / 1000 * 1000).unwrap_or(e.at);
+        if e.payload.is_empty() {
+            e.payload = "null".into();
+        }
+        self.appended
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(e.change.0.clone())
+            .or_default()
+            .push(e);
+    }
+
+    /// A version whose origin the transaction sets.
+    pub fn set_origin(&self, r: &NodeRef) {
+        self.origins.lock().unwrap_or_else(|e| e.into_inner()).push(r.clone());
+        self.forget(r);
+    }
+
+    /// The versions whose origin the transaction set.
+    pub fn take_origins(&self) -> Vec<NodeRef> {
+        std::mem::take(&mut *self.origins.lock().unwrap_or_else(|e| e.into_inner()))
+    }
+
+    /// A baseline the transaction writes.
+    pub fn wrote_baseline(&self, id: &str) {
+        self.baselines
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id.to_string());
+    }
+
+    /// Whether the transaction wrote a baseline.
+    pub fn wrote_baseline_of(&self, id: &str) -> bool {
+        self.baselines.lock().unwrap_or_else(|e| e.into_inner()).contains(id)
+    }
+
+    /// A savepoint undone.
+    pub fn undone(&self) {
+        self.undone.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The entries the transaction appended to the log of a change after the position its lock read, all of them:
+    /// none when the lock read none or a savepoint was undone.
+    pub fn tail_of(&self, change: &str, after: i64) -> Option<Vec<graph_core::impact::LogEntry>> {
+        if self.undone.load(std::sync::atomic::Ordering::Relaxed)
+            || self.log_tops.lock().unwrap_or_else(|e| e.into_inner()).get(change) != Some(&after)
+        {
+            return None;
+        }
+        let mut t = self.appended.lock().unwrap_or_else(|e| e.into_inner()).remove(change)?;
+        t.sort_by_key(|e| e.seq);
+        Some(t)
+    }
+
+    /// A unit or project the guard found.
+    pub fn found(&self, key: &str) {
+        self.found
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(key.to_string());
+    }
+
+    /// The units and projects the guard found, to keep at commit.
+    pub fn take_found(&self) -> Vec<String> {
+        std::mem::take(&mut *self.found.lock().unwrap_or_else(|e| e.into_inner()))
+    }
+
+    /// The last position of the log of a change read under its lock.
+    pub fn keep_log_top(&self, change: &str, top: i64) {
+        self.log_tops
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(change.to_string(), top);
+    }
+
+    /// The last position of the log of a change as its lock read it, while the transaction wrote none of it.
+    pub fn log_top(&self, change: &str) -> Option<i64> {
+        if self.wrote_log_of(change) {
+            return None;
+        }
+        self.log_tops
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(change)
+            .copied()
+    }
+
+    /// The namespaces of the branches the transaction wrote.
+    pub fn wrote_branches(&self) -> Vec<String> {
+        self.branches
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .cloned()
+            .collect()
+    }
+
+    /// Whether the transaction wrote a branch of a namespace.
+    pub fn wrote_branch_of(&self, namespace: &str) -> bool {
+        self.branches
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(namespace)
     }
 
     /// Whether the transaction wrote the log of a change.

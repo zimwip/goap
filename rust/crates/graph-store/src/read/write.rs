@@ -293,23 +293,56 @@ impl Session {
         Ok(rows.first().map_or_else(|| id.to_string(), |r| r.text(0)))
     }
 
-    /// Once the lock of its tree is held, the root of the tree of a change and its header in one statement: the
-    /// header is what the transaction reads of it next. A change not stored yet is its own root.
+    /// Once the lock of its tree is held, the root of the tree of a change, its header, the branch it names and the
+    /// last position of its log in one statement: what the transaction reads of it next (its header, its branch, the
+    /// fold of its log), which no other writer changes while the lock is held. A change not stored yet is its own root.
     async fn locked_head(&self, id: &ChangeId) -> Result<(String, Option<Change>), GraphError> {
+        let b = |c: &str| format!("b.{c}");
         let q = format!(
             "WITH RECURSIVE up (id, parent_id) AS (
 			SELECT id, parent_id FROM change WHERE id = $1
 			UNION ALL SELECT c.id, c.parent_id FROM change c JOIN up ON c.id = up.parent_id)
-		SELECT {}, (SELECT id::text FROM up WHERE parent_id IS NULL) FROM change WHERE id = $1",
-            self.sql.change_head_cols()
+		SELECT {}, (SELECT id::text FROM up WHERE parent_id IS NULL),
+			(SELECT max(seq) FROM change_log WHERE change_id = $1), ob.*
+		FROM change LEFT JOIN LATERAL (SELECT {} FROM branch b
+			WHERE b.namespace = change.namespace AND b.name = change.branch) ob ON true
+		WHERE change.id = $1",
+            self.sql.change_head_cols(),
+            [
+                b("namespace"),
+                b("name"),
+                b("parent"),
+                self.sql.id_or(&b("fork_baseline")),
+                self.sql.id_or(&b("head_baseline")),
+                b("origin"),
+                b("status"),
+                b("created_at"),
+                b("description"),
+                b("intent"),
+                self.sql.id_or(&b("rebased_from")),
+                b("ephemeral"),
+                b("fork_seq"),
+            ]
+            .iter()
+            .enumerate()
+            .map(|(i, c)| format!("{c} AS b_{i}"))
+            .collect::<Vec<_>>()
+            .join(", ")
         );
         let rows = self
             .select((q, vec![id.as_str().into()]), &format!("lock change {id}"))
             .await?;
-        match rows.first() {
-            Some(r) => Ok((r.text(20), Some(super::change_of(r)?))),
-            None => Ok((id.to_string(), None)),
+        let Some(r) = rows.first() else {
+            return Ok((id.to_string(), None));
+        };
+        let c = super::change_of(r)?;
+        self.tx.keep_log_top(id.as_str(), r.int(21));
+        if !c.branch.is_empty() && !c.namespace.is_empty() {
+            // the branch it names, none when it is not stored yet
+            let branch = (!r.is_null(22)).then(|| super::branch_at(r, 22));
+            self.tx.keep_branch_row(&c.namespace, &c.branch, &branch);
         }
+        Ok((r.text(20), Some(c)))
     }
 
     async fn advisory_lock(&self, key: &str) -> Result<(), GraphError> {
@@ -363,7 +396,24 @@ impl WriteTx for Session {
                 self.versions.keep_root(id.as_str(), &root);
                 return Ok(head);
             }
+            // what it read was not held by this lock
+            self.tx.forget_branches();
             root = again;
+        }
+    }
+
+    fn new_change(&self, id: &ChangeId, parent: &ChangeId) {
+        if !self.sql.pg {
+            return;
+        }
+        self.tx.keep_log_top(id.as_str(), 0);
+        let root = if parent.is_empty() {
+            Some(id.to_string())
+        } else {
+            self.versions.root_of(parent.as_str())
+        };
+        if let Some(r) = root {
+            self.versions.keep_root(id.as_str(), &r);
         }
     }
 
@@ -418,7 +468,7 @@ impl WriteTx for Session {
     }
 
     async fn put_branch(&self, b: &Branch) -> Result<(), GraphError> {
-        self.tx.wrote_branch();
+        self.tx.wrote_branch(namespace_of(&b.namespace));
         let ex = if self.sql.pg { "EXCLUDED" } else { "excluded" };
         let ps: Vec<String> = (1..=13).map(|n| self.sql.ph(n)).collect();
         let q = format!(
@@ -447,6 +497,7 @@ impl WriteTx for Session {
     }
 
     async fn put_baseline(&self, b: &Baseline) -> Result<(), GraphError> {
+        self.tx.wrote_baseline(b.id.as_str());
         let q = self.insert("baseline", BASELINE_COLUMNS, "");
         let kind = if b.kind.is_empty() { BASELINE_SNAPSHOT } else { &b.kind };
         let args = vec![
@@ -489,7 +540,64 @@ impl WriteTx for Session {
         ];
         let what = format!("log entry {}", e.typ);
         let rows = self.query_now((q, args)).await.map_err(|err| map_err(err, &what))?;
-        Ok(rows.first().map_or(0, |r| r.int(0)))
+        let seq = rows.first().map_or(0, |r| r.int(0));
+        self.tx.appended(e, seq);
+        Ok(seq)
+    }
+
+    async fn append_logs(&self, es: &[LogEntry]) -> Result<Vec<i64>, GraphError> {
+        if !self.sql.pg || es.len() < 2 {
+            let mut out = Vec::with_capacity(es.len());
+            for e in es {
+                out.push(self.append_log(e).await?);
+            }
+            return Ok(out);
+        }
+        let col = |f: &dyn Fn(&LogEntry) -> String| Arg::Texts(es.iter().map(f).collect());
+        for e in es {
+            self.tx.wrote_log(&e.change.0);
+        }
+        // the rows are inserted, and take their positions, in the order of the arrays
+        let q = format!(
+            "INSERT INTO change_log ({})
+		SELECT id, change_id::uuid, type, flow, process_id, execution, subject, by_whom, causation, at::timestamptz, payload::jsonb
+		FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[], $11::text[])
+			WITH ORDINALITY AS e (id, change_id, type, flow, process_id, execution, subject, by_whom, causation, at, payload, o)
+		ORDER BY o RETURNING id, seq",
+            CHANGE_LOG_COLUMNS.join(", ")
+        );
+        let args = vec![
+            col(&|e| e.id.clone()),
+            col(&|e| e.change.to_string()),
+            col(&|e| e.typ.clone()),
+            col(&|e| e.flow.clone()),
+            col(&|e| e.process.clone()),
+            col(&|e| e.execution.clone()),
+            col(&|e| e.subject.clone()),
+            col(&|e| e.by.clone()),
+            col(&|e| e.causation.clone()),
+            col(&|e| e.at.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string()),
+            col(&|e| {
+                if e.payload.is_empty() {
+                    "null".to_string() // the column holds JSON, never NULL
+                } else {
+                    e.payload.clone()
+                }
+            }),
+        ];
+        let rows = self
+            .query_now((q, args))
+            .await
+            .map_err(|err| map_err(err, "log entries"))?;
+        let seqs: HashMap<String, i64> = rows.iter().map(|r| (r.text(0), r.int(1))).collect();
+        let out: Vec<i64> = es
+            .iter()
+            .map(|e| seqs.get(&e.id).copied().unwrap_or_default())
+            .collect();
+        for (e, seq) in es.iter().zip(&out) {
+            self.tx.appended(e, *seq);
+        }
+        Ok(out)
     }
 
     async fn put_change_impact(&self, change: &ChangeId, cn: &ChangeImpact) -> Result<(), GraphError> {
@@ -813,7 +921,8 @@ impl WriteTx for Session {
         impact: &str,
         comment: &str,
     ) -> Result<(), GraphError> {
-        self.tx.forget(r);
+        self.tx.set_origin(r);
+        self.versions.forget_node(r);
         let s = self.sql;
         let q = format!(
             "UPDATE node_version SET change_id = {}, change_impact = {}, comment = {} WHERE node_id = {} AND version = {}",
@@ -863,8 +972,9 @@ impl WriteTx for Session {
     async fn rollback_to_savepoint(&self) -> Result<(), GraphError> {
         self.run(("ROLLBACK TO SAVEPOINT rehearsal".into(), vec![]), "savepoint")
             .await?;
-        // an origin set since is undone
+        // an origin set since is undone, and the entries appended since
         self.tx.clear();
+        self.tx.undone();
         Ok(())
     }
 

@@ -291,6 +291,23 @@ func (t *observedTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.L
 	return e, err
 }
 
+func (t *observedTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]domain.LogEntry, error) {
+	out, err := appendLogs(ctx, t.Tx, entries)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range out {
+		t.touch(e.Change)
+		if strings.HasPrefix(e.Type, domain.LogImpact+".") || strings.HasPrefix(e.Type, domain.LogFact+".") {
+			if t.seq == nil {
+				t.seq = map[domain.ChangeID]int64{}
+			}
+			t.seq[e.Change] = e.Seq
+		}
+	}
+	return out, nil
+}
+
 func (t *observedTx) PutNode(ctx context.Context, n domain.Node) error {
 	if err := t.Tx.PutNode(ctx, n); err != nil {
 		return err

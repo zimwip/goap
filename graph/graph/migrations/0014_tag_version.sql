@@ -8,8 +8,7 @@ CREATE TABLE tag (
     node_id    uuid NOT NULL,
     version    integer NOT NULL,
     by         text NOT NULL DEFAULT '',
-    created_at timestamptz NOT NULL,
-    FOREIGN KEY (node_id, version) REFERENCES node_version (node_id, version)
+    created_at timestamptz NOT NULL
 );
 CREATE INDEX tag_name ON tag (namespace, name);
 CREATE INDEX tag_node ON tag (node_id, version);

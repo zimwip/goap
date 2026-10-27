@@ -10,8 +10,9 @@ import (
 	"github.com/zimwip/goap/lib/cache"
 )
 
-// versionCache keeps what never changes once a version is written (ADR 0079, 0141): how it holds its links and the
-// links it holds. A commit or a merge of N nodes reads them for the versions it starts from: read once, in one batch,
+// versionCache keeps what never changes once a version is written (ADR 0079, 0141): the version, how it holds its links
+// and the links it holds (the origin of a version is set again at a merge, SetNodeOrigin: the version is then read
+// again, and the reads in flight are not kept). A commit or a merge of N nodes reads them for the versions it starts from: read once, in one batch,
 // they are not read again by the next operations on the same nodes. Only a version read by a transaction that did not
 // write it is kept (what a transaction wrote may roll back, its number then taken again). A purge deletes versions
 // (DeleteChange): it empties the cache, before and after its transaction, and a read that started before an emptying
@@ -24,6 +25,8 @@ type versionCache struct {
 
 // versionEntry is what is known of a version: that it exists, how it holds its links, the links it holds.
 type versionEntry struct {
+	node     domain.Node
+	hasNode  bool
 	set      LinkSet
 	hasSet   bool
 	links    []domain.Link
@@ -34,6 +37,9 @@ type versionEntry struct {
 func newVersionCache(bounds func() cache.Bounds) versionCache {
 	return versionCache{entries: cache.New(bounds, func(_ domain.NodeRef, e versionEntry) int64 {
 		n := int64(cache.StructBytes)
+		if e.hasNode {
+			n += cache.StructBytes + int64(len(e.node.ID)+len(e.node.Key)+len(e.node.Type)+len(e.node.Namespace)) + cache.Of(e.node.Properties)
+		}
 		for _, l := range e.links {
 			n += cache.StructBytes + int64(len(l.ID)+len(l.Type)+len(l.From.ID)+len(l.To.ID)) + cache.Of(l.Properties)
 		}
@@ -63,6 +69,26 @@ func (c *versionCache) update(gen uint64, ref domain.NodeRef, fn func(e *version
 		return
 	}
 	c.entries.Update(ref, func(e versionEntry, _ bool) (versionEntry, bool) { fn(&e); return e, true })
+}
+
+// node is the version, when kept (a copy).
+func (c *versionCache) node(ref domain.NodeRef) (domain.Node, bool) {
+	e, ok := c.entries.Get(ref)
+	if !ok || !e.hasNode {
+		return domain.Node{}, false
+	}
+	return copyNode(e.node), true
+}
+
+// forgetNode drops a version whose origin a transaction sets: read again, and the reads in flight are not kept.
+func (c *versionCache) forgetNode(ref domain.NodeRef) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.gen++
+	if e, ok := c.entries.Get(ref); ok && e.hasNode {
+		e.node, e.hasNode = domain.Node{}, false
+		c.entries.Put(ref, e)
+	}
 }
 
 // links are the links a version holds, when known (a copy).
@@ -103,8 +129,8 @@ func (t *guardTx) known(gen uint64, ref domain.NodeRef) {
 	t.g.versions.update(gen, ref, func(e *versionEntry) { e.exists = true })
 }
 
-// Node reads a version: an exact one the transaction did not write once per transaction (its origin may still be set,
-// SetNodeOrigin, so it is not kept beyond).
+// Node reads a version: an exact one the transaction did not write once, kept between transactions (but when its origin
+// is set, SetNodeOrigin).
 func (t *guardTx) Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error) {
 	if ref.Version > 0 && t.written[ref] {
 		// a version it wrote, read back in a batch (prefetch): kept for the transaction only
@@ -118,6 +144,9 @@ func (t *guardTx) Node(ctx context.Context, ref domain.NodeRef) (domain.Node, er
 	}
 	if n, ok := t.nodes[ref]; ok {
 		return copyNode(n), nil
+	}
+	if n, ok := t.g.versions.node(ref); ok {
+		return n, nil
 	}
 	gen := t.g.versions.generation()
 	n, err := t.Tx.Node(ctx, ref)
@@ -133,7 +162,12 @@ func (t *guardTx) keepNode(gen uint64, n domain.Node) {
 		t.nodes = map[domain.NodeRef]domain.Node{}
 	}
 	t.nodes[n.Ref()] = n
-	t.known(gen, n.Ref())
+	if t.origins[n.Ref()] {
+		t.known(gen, n.Ref())
+		return
+	}
+	kept := copyNode(n)
+	t.g.versions.update(gen, n.Ref(), func(e *versionEntry) { e.node, e.hasNode, e.exists = kept, true, true })
 }
 
 // copyNode is a node its reader may change.
@@ -210,7 +244,14 @@ func (t *guardTx) prefetch(ctx context.Context, refs []domain.NodeRef) error {
 		}
 		seen[r] = true
 		if _, ok := t.nodes[r]; !ok {
-			nodes = append(nodes, r)
+			if n, ok := t.g.versions.node(r); ok {
+				if t.nodes == nil {
+					t.nodes = map[domain.NodeRef]domain.Node{}
+				}
+				t.nodes[r] = n
+			} else {
+				nodes = append(nodes, r)
+			}
 		}
 		_, hasLinks := t.g.versions.links(r)
 		_, hasSet := t.g.versions.set(r)

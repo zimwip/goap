@@ -70,6 +70,10 @@ type draftState struct {
 	frozen bool
 	// bytes estimates the memory the view holds (eventSize, itemSize): what the cache counts against its bound
 	bytes int64
+	// top is, plus one, a last position of the whole log of the change at which the fold was known to hold every impact
+	// event and fact (0: none known): read under the lock of the change, so no writer of those has written since
+	// (ADR 0127). A transaction holding the lock that finds the log still there reads none of it (guardTx.topOf).
+	top atomic.Int64
 }
 
 // copy is a state the caller may fold in place (the values it holds are never modified, only replaced).
@@ -304,6 +308,24 @@ func currentDrafts(tx Tx, id domain.ChangeID) *draftState {
 	return nil
 }
 
+// lockedTop is the last position of the log of a change when the transaction took its lock, when it knows it and
+// has not appended to that log since.
+func lockedTop(tx Tx, id domain.ChangeID) (int64, bool) {
+	if k, ok := tx.(interface {
+		topOf(domain.ChangeID) (int64, bool)
+	}); ok {
+		return k.topOf(id)
+	}
+	return 0, false
+}
+
+// markWhole records that the transaction read the log of a change whole under its lock.
+func markWhole(tx Tx, id domain.ChangeID) {
+	if k, ok := tx.(interface{ wholeLog(domain.ChangeID) }); ok {
+		k.wholeLog(id)
+	}
+}
+
 func readLog(tx Tx, st *draftState) {
 	if k, ok := tx.(draftKeeper); ok {
 		k.readLog(st)
@@ -349,11 +371,22 @@ func (g *Graph) foldDrafts(ctx context.Context, tx Tx, id domain.ChangeID) (*dra
 	if st == nil {
 		st = &draftState{change: id}
 	}
+	top, whole := lockedTop(tx, id)
+	if whole {
+		markWhole(tx, id)
+	}
+	if whole && st.top.Load() == top+1 {
+		readLog(tx, st) // the log has not moved since the fold was whole
+		return st, nil
+	}
 	entries, err := tx.Log(ctx, domain.LogFilter{Change: id, Types: []string{domain.LogImpact + ".", domain.LogFact + "."}, AfterSeq: st.seq})
 	if err != nil {
 		return nil, err
 	}
 	if len(entries) == 0 {
+		if whole {
+			st.top.Store(top + 1)
+		}
 		readLog(tx, st)
 		return st, nil
 	}
@@ -367,6 +400,9 @@ func (g *Graph) foldDrafts(ctx context.Context, tx Tx, id domain.ChangeID) (*dra
 		return nil, err
 	}
 	next.seq = entries[len(entries)-1].Seq
+	if whole {
+		next.top.Store(max(top, next.seq) + 1)
+	}
 	g.draftStates.folded.Add(int64(n))
 	readLog(tx, next)
 	if wroteLog(tx, id) {
