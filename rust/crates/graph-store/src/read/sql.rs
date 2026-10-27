@@ -274,20 +274,24 @@ impl Sql {
         let list = |ids: &[NodeId]| ids.iter().map(|i| i.0.clone()).collect::<Vec<_>>();
         if let (Some(ids), true) = (ids, self.pg) {
             // per node one lookup of the indexes node_version_fold / node_branch_fold, whatever the length of its
-            // history; what the version found holds is read by its key once found
+            // history, then what the version found holds by its key: the scalar subqueries keep every lookup on an
+            // index of the node (a join lets the planner scan the namespace or every version of a node), the
+            // materialized list computes each version once
             args.push(Arg::Texts(list(ids)));
             return (
-                "SELECT q.id::text, x.version, w.deleted, w.reason
-                FROM unnest($5::uuid[]) AS q(id) JOIN node n ON n.id = q.id AND n.namespace = $4
-                CROSS JOIN LATERAL (
-                    SELECT u.version FROM (
-                        (SELECT v.version, v.committed FROM node_version v
-                        WHERE v.node_id = q.id AND v.branch = $1 AND v.committed > $2 AND v.committed <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
-                        UNION ALL
-                        (SELECT j.version, j.committed FROM node_branch j
-                        WHERE j.node_id = q.id AND j.branch = $1 AND j.committed > $2 AND j.committed <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
-                    ) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
-                ) x JOIN node_version w ON w.node_id = q.id AND w.version = x.version"
+                "WITH x AS MATERIALIZED (
+                    SELECT q.id, (
+                        SELECT u.version FROM (
+                            (SELECT v.version, v.committed FROM node_version v
+                            WHERE v.node_id = q.id AND v.branch = $1 AND v.committed > $2 AND v.committed <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
+                            UNION ALL
+                            (SELECT j.version, j.committed FROM node_branch j
+                            WHERE j.node_id = q.id AND j.branch = $1 AND j.committed > $2 AND j.committed <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
+                        ) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
+                    ) AS version
+                    FROM unnest($5::uuid[]) AS q(id) WHERE (SELECT n.namespace FROM node n WHERE n.id = q.id) = $4
+                )
+                SELECT x.id::text, x.version, w.deleted, w.reason FROM x JOIN node_version w ON w.node_id = x.id AND w.version = x.version"
                     .into(),
                 args,
             );

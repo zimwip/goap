@@ -165,6 +165,7 @@ impl Session {
 
     /// Commits a write transaction (a read session has nothing to commit).
     pub async fn commit(mut self) -> Result<(), StoreError> {
+        self.write_held().await?;
         let res = self.commit_conn().await;
         if res.is_ok() {
             if self.tx.wrote_branches() {
@@ -209,6 +210,7 @@ impl Session {
 
     /// Runs a statement that writes and returns the number of rows it touched.
     pub async fn exec(&self, stmt: Stmt) -> Result<u64, StoreError> {
+        self.write_held().await?;
         let text = crate::stats::texts().then(|| (stmt.0.clone(), std::time::Instant::now()));
         let n = self.exec_counted(stmt).await;
         if let Ok(n) = &n {
@@ -247,6 +249,12 @@ impl Session {
 
     /// Runs a statement and returns its rows.
     pub async fn query(&self, stmt: Stmt) -> Result<Vec<Row>, StoreError> {
+        self.write_held().await?;
+        self.query_now(stmt).await
+    }
+
+    /// Runs a statement and returns its rows, leaving the rows held for later (an entry of a log reads none).
+    pub(crate) async fn query_now(&self, stmt: Stmt) -> Result<Vec<Row>, StoreError> {
         let text = crate::stats::texts().then(|| (stmt.0.clone(), std::time::Instant::now()));
         let rows = self.query_counted(stmt).await;
         if let Ok(r) = &rows {
@@ -613,11 +621,22 @@ impl ReadTx for Session {
     }
 
     async fn branch(&self, namespace: &str, name: &str) -> Result<Option<Branch>, GraphError> {
-        Ok(self
+        // a write transaction reads a branch once until it takes a lock or writes one (a read session sees each
+        // statement afresh)
+        let namespace = graph_core::model::namespace_of(namespace);
+        let keep = self.writes();
+        if keep && let Some(b) = self.tx.branch_row(namespace, name) {
+            return Ok(b);
+        }
+        let b = self
             .rows(self.sql.branch(namespace, name))
             .await?
             .first()
-            .map(branch_of_row))
+            .map(branch_of_row);
+        if keep {
+            self.tx.keep_branch_row(namespace, name, &b);
+        }
+        Ok(b)
     }
 
     async fn branches(&self, namespace: &str) -> Result<Vec<Branch>, GraphError> {

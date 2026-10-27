@@ -297,6 +297,21 @@ pub struct Read {
     folds: Mutex<Vec<(String, std::sync::Arc<graph_core::write::work::KeptFold>)>>,
     /// Whether the transaction wrote a branch.
     branches: std::sync::atomic::AtomicBool,
+    /// The branches the transaction read since its last lock or write of one: a lock may let another writer's move
+    /// in, a write keeps columns of the row it does not name.
+    branch_rows: Mutex<HashMap<(String, String), Option<graph_core::model::Branch>>>,
+    /// The rows of `change_impact` the transaction writes, sent in one statement before its next statement but an
+    /// entry of a log (which reads none of them): a batched operation writes an impact per node.
+    impacts: Mutex<HeldImpacts>,
+}
+
+/// The rows of `change_impact` a transaction holds: each with the rank of its first write among the writes held, so
+/// that a row written twice takes the position its first write would have (each write takes one of the sequence,
+/// as its own statement would).
+#[derive(Default)]
+pub struct HeldImpacts {
+    pub rows: Vec<(graph_core::model::ChangeId, graph_core::impact::ChangeImpact, usize)>,
+    pub upserts: usize,
 }
 
 impl Read {
@@ -339,6 +354,48 @@ impl Read {
     /// A branch the transaction writes.
     pub fn wrote_branch(&self) {
         self.branches.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.forget_branches();
+    }
+
+    /// A branch the transaction read, when it reads it again.
+    pub fn branch_row(&self, namespace: &str, name: &str) -> Option<Option<graph_core::model::Branch>> {
+        self.branch_rows
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&(namespace.to_string(), name.to_string()))
+            .cloned()
+    }
+
+    pub fn keep_branch_row(&self, namespace: &str, name: &str, b: &Option<graph_core::model::Branch>) {
+        self.branch_rows
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert((namespace.to_string(), name.to_string()), b.clone());
+    }
+
+    /// Holds a row of `change_impact` until the next statement, the last write of a row replacing the one held.
+    pub fn hold_impact(&self, change: &graph_core::model::ChangeId, cn: &graph_core::impact::ChangeImpact) {
+        let mut held = self.impacts.lock().unwrap_or_else(|e| e.into_inner());
+        let at = held.upserts;
+        held.upserts += 1;
+        match held.rows.iter_mut().find(|r| r.1.id == cn.id) {
+            Some(r) => r.1 = cn.clone(),
+            None => held.rows.push((change.clone(), cn.clone(), at)),
+        }
+    }
+
+    /// The rows of `change_impact` held, to write now.
+    pub fn take_impacts(&self) -> HeldImpacts {
+        std::mem::take(&mut *self.impacts.lock().unwrap_or_else(|e| e.into_inner()))
+    }
+
+    pub fn holds_impacts(&self) -> bool {
+        !self.impacts.lock().unwrap_or_else(|e| e.into_inner()).rows.is_empty()
+    }
+
+    /// The branches read are read again: a lock taken, a branch written or deleted, a savepoint undone.
+    pub fn forget_branches(&self) {
+        self.branch_rows.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// Whether the transaction wrote a branch.
@@ -386,6 +443,7 @@ impl Read {
 
     pub fn clear(&self) {
         self.nodes.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        self.forget_branches();
     }
 }
 

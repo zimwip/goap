@@ -170,6 +170,57 @@ fn json_list<T: serde::Serialize>(xs: &[T]) -> String {
 }
 
 impl Session {
+    /// Writes the rows of `change_impact` the transaction holds, in statements of many rows.
+    pub(crate) async fn write_held(&self) -> Result<(), StoreError> {
+        if !self.tx.holds_impacts() {
+            return Ok(());
+        }
+        let held = self.tx.take_impacts();
+        // a row written more than once takes the position of its first write, the others' positions taken all the
+        // same (the sequence moves once per write, as when each write was its own statement)
+        let seqs = if held.upserts > held.rows.len() {
+            let q = format!(
+                "SELECT nextval(pg_get_serial_sequence('change_impact', 'seq')) FROM generate_series(1, {})",
+                held.upserts
+            );
+            let text = crate::stats::texts().then(|| (q.clone(), std::time::Instant::now()));
+            let rows = self.query_counted((q, vec![])).await?;
+            crate::stats::note(text, rows.len() as u64);
+            let mut seqs: Vec<i64> = rows.iter().map(|r| r.int(0)).collect();
+            seqs.sort_unstable();
+            Some(seqs)
+        } else {
+            None
+        };
+        let mut columns: Vec<&str> = IMPACT_COLUMNS.to_vec();
+        if seqs.is_some() {
+            columns.push("seq");
+        }
+        let set: Vec<String> = IMPACT_COLUMNS
+            .iter()
+            .filter(|c| !matches!(**c, "id" | "change_id" | "created_at"))
+            .map(|c| format!("{c} = EXCLUDED.{c}"))
+            .collect();
+        for chunk in held.rows.chunks(IMPACT_ROWS_PER_INSERT) {
+            let mut args = Vec::with_capacity(chunk.len() * columns.len());
+            for (change, cn, at) in chunk {
+                args.extend(impact_args(change, cn));
+                if let Some(seqs) = &seqs {
+                    args.push(Arg::Int(seqs[*at]));
+                }
+            }
+            let q = format!(
+                "{} ON CONFLICT (id) DO UPDATE SET {}",
+                self.insert_rows("change_impact", &columns, chunk.len()),
+                set.join(", ")
+            );
+            let text = crate::stats::texts().then(|| (q.clone(), std::time::Instant::now()));
+            let n = self.exec_counted((q, args)).await?;
+            crate::stats::note(text, n);
+        }
+        Ok(())
+    }
+
     fn insert(&self, table: &str, columns: &[&str], tail: &str) -> String {
         let ps: Vec<String> = (1..=columns.len()).map(|i| self.sql.ph(i)).collect();
         format!(
@@ -285,6 +336,7 @@ impl WriteTx for Session {
             Some(r) => r,
             None => self.change_root(id).await?,
         };
+        self.tx.forget_branches();
         loop {
             self.advisory_lock(&format!("goap.change:{root}")).await?;
             let again = self.change_root(id).await?;
@@ -300,6 +352,7 @@ impl WriteTx for Session {
         if !self.sql.pg {
             return Ok(());
         }
+        self.tx.forget_branches();
         self.advisory_lock(&format!("goap.branch:{}/{name}", namespace_of(namespace)))
             .await
     }
@@ -415,11 +468,16 @@ impl WriteTx for Session {
             Arg::Time(e.at),
             Arg::Text(payload),
         ];
-        let rows = self.select((q, args), &format!("log entry {}", e.typ)).await?;
+        let what = format!("log entry {}", e.typ);
+        let rows = self.query_now((q, args)).await.map_err(|err| map_err(err, &what))?;
         Ok(rows.first().map_or(0, |r| r.int(0)))
     }
 
     async fn put_change_impact(&self, change: &ChangeId, cn: &ChangeImpact) -> Result<(), GraphError> {
+        if self.sql.pg && self.writes() {
+            self.tx.hold_impact(change, cn);
+            return Ok(());
+        }
         let args = impact_args(change, cn);
         let q = if self.sql.pg {
             "INSERT INTO change_impact (id, change_id, node_id, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded)
@@ -439,33 +497,8 @@ impl WriteTx for Session {
     }
 
     async fn put_change_impacts(&self, rows: &[(ChangeId, ChangeImpact)]) -> Result<(), GraphError> {
-        if !self.sql.pg || rows.len() < 2 {
-            for (change, cn) in rows {
-                self.put_change_impact(change, cn).await?;
-            }
-            return Ok(());
-        }
-        for chunk in rows.chunks(IMPACT_ROWS_PER_INSERT) {
-            let mut args = Vec::with_capacity(chunk.len() * IMPACT_COLUMNS.len());
-            for (change, cn) in chunk {
-                args.extend(impact_args(change, cn));
-            }
-            let set: Vec<String> = IMPACT_COLUMNS
-                .iter()
-                .filter(|c| !matches!(**c, "id" | "change_id" | "created_at"))
-                .map(|c| format!("{c} = EXCLUDED.{c}"))
-                .collect();
-            let q = format!(
-                "{} ON CONFLICT (id) DO UPDATE SET {}",
-                self.insert_rows("change_impact", IMPACT_COLUMNS, chunk.len()),
-                set.join(", ")
-            );
-            let what = if chunk.len() == 1 {
-                format!("change impact {}", chunk[0].1.key)
-            } else {
-                "change impacts".to_string()
-            };
-            self.run((q, args), &what).await?;
+        for (change, cn) in rows {
+            self.put_change_impact(change, cn).await?;
         }
         Ok(())
     }
@@ -927,6 +960,7 @@ impl Session {
             .await?;
         }
         if !branch.is_empty() {
+            self.tx.forget_branches();
             self.run(
                 (
                     format!("DELETE FROM branch WHERE namespace = {p} AND name = {}", s.ph(2)),
