@@ -74,6 +74,11 @@ function Tidy { foreach ($m in $Modules) { InDir $m { Run go mod tidy } } }
 
 function WebTest { InDir web { Run npm test } }
 
+# the end-to-end tests of the IDE (Playwright, web\e2e): the browser they drive, then the tests ($env:E2E_ARGS: npx
+# playwright test's); the report in .goap\e2e\report
+function E2EArgs { if ($env:E2E_ARGS) { $env:E2E_ARGS -split ' ' } else { @() } }
+function WebE2EBrowser { InDir web { Run npm install --no-audit --no-fund; Run npx playwright install chromium } }
+
 # every test, the PostgreSQL ones included: GOAP_TEST_PG_DSN, else a throw-away pgvector container on PGTEST_PORT
 function TestPg {
     if ($env:GOAP_TEST_PG_DSN) { Run go test -count=1 @Pkgs; return }
@@ -151,6 +156,19 @@ function LocalTest {
     LocalBuild
     $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'rust' }
     Run ".goap/bin/goap-local$Exe" test -graph $graph @(LocalArgs)
+}
+
+function WebE2E {
+    LocalBuild (CargoProfile 'dev-local')
+    WebE2EBrowser
+    # the Go graph unless $env:LOCAL_GRAPH says otherwise, as dev
+    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'go' }
+    Run ".goap/bin/goap-local$Exe" e2e -graph $graph @(LocalArgs) -- @(E2EArgs)
+}
+
+function WebE2ERun {
+    WebE2EBrowser
+    InDir web { Run npx playwright test @(E2EArgs) }
 }
 
 function LocalBench {
@@ -388,6 +406,10 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   test-wasm         every go test with the scripts run by the wasm JavaScript engine (GOAP_JS_ENGINE=wasm)
   tidy              go mod tidy in every module
   web-test          unit tests of the web (needs npm install in web\)
+  web-e2e           no docker: the platform on fresh data with the IDE and the demo data (the Go graph unless
+                    $env:LOCAL_GRAPH is set), then the Playwright tests of web\e2e ($env:E2E_ARGS), then stop
+  web-e2e-run       the Playwright tests of web\e2e against an IDE already running (dev; $env:GOAP_E2E_URL,
+                    $env:GOAP_E2E_SUBJECT / GOAP_E2E_PASSWORD an administrator of it)
   test-pg           every test, the PostgreSQL ones included (GOAP_TEST_PG_DSN, else a throw-away
                     pgvector container on PGTEST_PORT, 55432)
   lint              go vet + gofmt + dsl.md sync check + go.mod files tidy
@@ -453,6 +475,8 @@ switch ($Target) {
     'test-wasm'        { TestWasm }
     'tidy'             { Tidy }
     'web-test'         { WebTest }
+    'web-e2e'          { WebE2E }
+    'web-e2e-run'      { WebE2ERun }
     'test-pg'          { TestPg }
     'lint'             { Lint }
     'eval'             { Eval }

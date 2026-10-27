@@ -155,6 +155,29 @@ Optional build variables:
 | `npm run build`   | production build into `dist/`                    |
 | `npm run check`   | type checking (`svelte-check`)                   |
 | `npm run preview` | serves the build locally                         |
+| `npm test`        | unit tests (vitest, `src/**/*.test.ts`)          |
+| `npm run e2e`     | end-to-end tests (Playwright, `e2e/*.e2e.ts`)    |
+
+## End-to-end tests
+
+The tests of `e2e/` drive the IDE in a browser (Playwright, Chromium) against a running platform: sign-in, the
+tasks of the project mode, the project selector, a change created by hand in the demo project, the methodologies of
+the admin mode. `auth.setup.e2e.ts` signs in once (creating the account when there is none) and keeps the session in
+`.goap/e2e/session.json` for the others; `session.ts` holds the shared steps (`signIn`, `selectProject`,
+`enterMode`, `openTool`). They run one at a time, on one platform.
+
+- `make web-e2e` (`.\make.ps1 web-e2e`): the local stack on fresh data with this IDE and the demo data
+  (`goap-local e2e`, the Go graph unless `LOCAL_GRAPH` is set), the tests, then it stops. The account the tests
+  create is the first one, so the administrator.
+- `make web-e2e-run`: the tests against an IDE already running (`make dev`): `GOAP_E2E_URL` (default
+  `http://localhost:5173`), `GOAP_E2E_SUBJECT` / `GOAP_E2E_PASSWORD` an administrator of that stack (default
+  `e2e-admin`, created if missing, but an administrator only on fresh data), and the demo data loaded
+  (*Settings → Demo data*).
+
+`E2E_ARGS` passes arguments to `npx playwright test` (`E2E_ARGS="e2e/change.e2e.ts --headed"`, `--ui`). A failure
+keeps its screenshot and trace in `.goap/e2e/results` (`npx playwright show-trace …`), the report in
+`.goap/e2e/report` (`npx playwright show-report ../.goap/e2e/report`). Prefer roles and labels to CSS classes in the
+locators, and wait on what the page shows (`expect(…).toBeVisible()`), never on a delay.
 
 ## Protocol
 

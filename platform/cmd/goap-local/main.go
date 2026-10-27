@@ -3,9 +3,12 @@
 // service on a SQLite file of its own, the processes restarted when they stop. `goap-local bench` runs the graph alone,
 // behind goap-proxy, and loads it with goap-bench: the performance test of the local machine. `goap-local test` runs
 // the platform on fresh data and the end-to-end test of platform/e2e/stack against its gateway (go test, from -root).
+// `goap-local e2e` runs the platform on fresh data with the IDE and the demo data, then the Playwright tests of web/e2e
+// in a browser against the IDE.
 //
 //	goap-local [flags]                 the platform, until interrupted (make local; -watch -web: make dev)
 //	goap-local test [flags] -- args    the platform, then go test ./e2e/stack/ with args, then stop
+//	goap-local e2e [flags] -- args     the platform and the IDE, then npx playwright test with args, then stop
 //	goap-local bench [flags] -- args   the graph(s) behind goap-proxy, goap-bench with args, the report, then stop
 //
 // The binaries are read from -bin (make local builds them in .goap/bin), the data kept in -dir (.goap/local), each
@@ -56,7 +59,7 @@ func main() {
 	log := platform.Logger("goap-local")
 	args := os.Args[1:]
 	mode := ""
-	if len(args) > 0 && (args[0] == "bench" || args[0] == "test") {
+	if len(args) > 0 && (args[0] == "bench" || args[0] == "test" || args[0] == "e2e") {
 		mode, args = args[0], args[1:]
 	}
 	cfg, rest, err := parse(args, mode)
@@ -87,6 +90,12 @@ func main() {
 		err = runBench(ctx, log, cfg, rest)
 	case "test":
 		err = runPlatform(ctx, log, cfg, func(ctx context.Context) error { return stackTest(ctx, cfg, rest) })
+	case "e2e":
+		// the tests find the demo project (platform/devseed/demo.json) unless the environment seeds otherwise
+		if os.Getenv("GOAP_GRAPH_SEED") == "" {
+			os.Setenv("GOAP_GRAPH_SEED", "demo")
+		}
+		err = runPlatform(ctx, log, cfg, func(ctx context.Context) error { return webTest(ctx, cfg, rest) })
 	default:
 		err = runPlatform(ctx, log, cfg, nil)
 	}
@@ -125,6 +134,10 @@ func parse(args []string, mode string) (config, []string, error) {
 	if err := fs.Parse(args); err != nil {
 		return cfg, nil, err
 	}
+	if mode == "e2e" {
+		// the tests drive the IDE
+		cfg.web = true
+	}
 	switch cfg.graph {
 	case "rust", "go":
 	default:
@@ -159,6 +172,19 @@ func stackTest(ctx context.Context, cfg config, args []string) error {
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("stack test: %w", err)
+	}
+	return nil
+}
+
+// webTest runs the end-to-end tests of the IDE (web/e2e, Playwright) against the vite server of the stack: the person
+// they register is the first of the fresh data, an administrator.
+func webTest(ctx context.Context, cfg config, args []string) error {
+	cmd := exec.CommandContext(ctx, "npx", append([]string{"playwright", "test"}, args...)...)
+	cmd.Dir = filepath.Join(cfg.root, "web")
+	cmd.Env = environ(map[string]string{"GOAP_E2E_URL": fmt.Sprintf("http://localhost:%d", portWeb)})
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("web e2e tests: %w", err)
 	}
 	return nil
 }

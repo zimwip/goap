@@ -5,14 +5,14 @@ MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: perf perf-images perf-up perf-run perf-rust perf-rust-up perf-rust-run perf-diff perf-compare perf-compare-up perf-compare-run rust-test rust-lint perf-capture perf-analysis perf-analysis-down perf-down perf-reset help all build test test-wasm tidy web-test test-pg lint eval generate cypher tools up urls down reset logs dev dev-backend dev-web dev-reset local local-build local-test local-bench local-reset web runner-image images claude-agent-runner
+.PHONY: perf perf-images perf-up perf-run perf-rust perf-rust-up perf-rust-run perf-diff perf-compare perf-compare-up perf-compare-run rust-test rust-lint perf-capture perf-analysis perf-analysis-down perf-down perf-reset help all build test test-wasm tidy web-test web-e2e web-e2e-browser web-e2e-run test-pg lint eval generate cypher tools up urls down reset logs dev dev-backend dev-web dev-reset local local-build local-test local-bench local-reset web runner-image images claude-agent-runner
 
 .DEFAULT_GOAL := help
 
 help: ## list the targets and what they do (the default target)
 	@echo "Usage: make <target>"
 	@echo
-	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/^([a-zA-Z_-]+):.*## (.*)/\1\t\2/' | awk -F'\t' '{ printf "  %-20s %s\n", $$1, $$2 }'
+	@grep -hE '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/^([a-zA-Z0-9_-]+):.*## (.*)/\1\t\2/' | awk -F'\t' '{ printf "  %-20s %s\n", $$1, $$2 }'
 
 all: generate build test ## generate, build, test
 
@@ -46,6 +46,19 @@ tidy: ## go mod tidy in every module
 web-test: ## unit tests of the web (needs npm install in web/)
 	cd web && npm test
 
+# the end-to-end tests of the IDE (Playwright, web/e2e): the browser they drive, then the tests (E2E_ARGS: npx playwright
+# test's, e.g. E2E_ARGS="e2e/change.e2e.ts --headed"); the report in .goap/e2e/report
+E2E_ARGS ?=
+web-e2e-browser:
+	cd web && npm install --no-audit --no-fund && npx playwright install chromium
+
+web-e2e: LOCAL_CARGO_PROFILE = dev-local
+web-e2e: local-build web-e2e-browser ## no docker: the platform on fresh data with the IDE and the demo data (the Go graph unless LOCAL_GRAPH is set), then the Playwright tests of web/e2e in a browser, then stop
+	$(LOCAL_BIN)/goap-local e2e -graph $(DEV_GRAPH) $(LOCAL_ARGS) -- $(E2E_ARGS)
+
+web-e2e-run: web-e2e-browser ## the Playwright tests of web/e2e against an IDE already running (make dev; GOAP_E2E_URL, default http://localhost:5173; GOAP_E2E_SUBJECT / GOAP_E2E_PASSWORD an administrator of it)
+	cd web && npx playwright test $(E2E_ARGS)
+
 PGTEST_IMAGE ?= pgvector/pgvector:pg17
 PGTEST_PORT  ?= 55432
 
@@ -69,7 +82,7 @@ lint: ## go vet + gofmt + tidy go.mod files + dsl.md sync check
 
 # make dev builds the Rust binaries with the cargo profile dev-local, rebuilt in a fraction of release's time
 dev dev-backend: LOCAL_CARGO_PROFILE = dev-local
-# make dev runs the Go graph unless LOCAL_GRAPH says otherwise: the Rust graph does not run the lifecycle transitions and
+# make dev (and make web-e2e) runs the Go graph unless LOCAL_GRAPH says otherwise: the Rust graph does not run the lifecycle transitions and
 # guardians of the methodologies yet (ADR 0164)
 DEV_GRAPH = $(if $(filter environment command line,$(origin LOCAL_GRAPH)),$(LOCAL_GRAPH),go)
 
