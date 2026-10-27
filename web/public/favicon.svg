@@ -17,11 +17,18 @@
     </mask>
   </defs>
   <rect width="64" height="64" rx="14" fill="url(#tile)"/>
-  <g mask="url(#pierce)" fill="none" stroke="#fff">
-    <circle cx="30" cy="34" r="19" stroke-width="4" stroke-opacity="0.5"/>
-    <circle cx="30" cy="34" r="11.5" stroke-width="4" stroke-opacity="0.78"/>
+  <!-- the target, turned three quarters away: an edge, then the face -->
+  <g mask="url(#pierce)">
+    <g transform="translate(30 34) rotate(-12) scale(0.76 1)">
+      <circle cx="4.5" cy="0" r="21" fill="#0a1e3f" fill-opacity="0.45"/>
+      <circle r="21" fill="#fff" fill-opacity="0.12"/>
+      <g fill="none" stroke="#fff">
+        <circle r="19" stroke-width="4" stroke-opacity="0.55"/>
+        <circle r="11.5" stroke-width="4" stroke-opacity="0.8"/>
+      </g>
+      <circle r="4.6" fill="#fff"/>
+    </g>
   </g>
-  <circle cx="30" cy="34" r="4.6" fill="#fff"/>
   <!-- speed lines behind the arrow -->
   <g stroke="url(#trail)" stroke-linecap="round" fill="none">
     <path d="M4 46 L15 35" stroke-width="2.2"/>
