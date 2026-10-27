@@ -777,6 +777,27 @@ func (r *Runner) probeOnce(ctx context.Context, rnd *rand.Rand) {
 	_, _ = timed(ctx, m, "ListChanges", func(ctx context.Context) (*connect.Response[graphv1.ListChangesResponse], error) {
 		return g.ListChanges(ctx, connect.NewRequest(&graphv1.ListChangesRequest{Namespace: Namespace, Status: []string{"active"}, HeaderOnly: true, Limit: 50}))
 	})
+	r.probeQueries(ctx, rnd, head)
+}
+
+// probeQueries measures the read queries (QueryView, ADR 0160) at the head: from a node by its key (its links out, a
+// hot node's links in, two hops), and a type read a page at a time with a filter on a property.
+func (r *Runner) probeQueries(ctx context.Context, rnd *rand.Rand, head string) {
+	g, m := r.Clients.Graph, r.Metrics
+	view := &graphv1.View{Namespace: Namespace, Branch: "main", BaselineId: head}
+	query := func(op, q string) {
+		_, _ = timed(ctx, m, op, func(ctx context.Context) (*connect.Response[graphv1.QueryViewResponse], error) {
+			return g.QueryView(ctx, connect.NewRequest(&graphv1.QueryViewRequest{View: view, Query: q}))
+		})
+	}
+	if n := r.sampleNode(rnd, false); n != nil {
+		query("cypher.out", fmt.Sprintf("MATCH (n {key: '%s'})-[:relates]->(m) RETURN m.key, m.title", n.key))
+		query("cypher.2hop", fmt.Sprintf("MATCH (n {key: '%s'})-[:relates]->()-[:relates]->(m) RETURN count(DISTINCT m) AS n", n.key))
+	}
+	if n := r.sampleNode(rnd, true); n != nil {
+		query("cypher.in", fmt.Sprintf("MATCH (n {key: '%s'})<-[:relates]-(m) RETURN m.key ORDER BY m.key LIMIT 100", n.key))
+	}
+	query("cypher.type", fmt.Sprintf("MATCH (n:%s) WHERE n.value > 500 RETURN n.key, n.value LIMIT 20", strings.TrimPrefix(TypeName(rnd.IntN(max(r.types, 1))), Namespace+"@")))
 }
 
 // text is a pseudo-random text of n bytes.

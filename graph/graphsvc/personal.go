@@ -247,7 +247,11 @@ func (h *Handler) PersonalScope() connect.Interceptor {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			who := h.Identity.Context(ctx, req.Header())
 			if msg, ok := req.Any().(proto.Message); ok {
-				for _, id := range changeIDsIn(req.Spec().Procedure, msg) {
+				ids := changeIDsIn(req.Spec().Procedure, msg)
+				if h.locksWrites.Load() && lockedWrite(req.Spec().Procedure, ids) {
+					return next(who, req) // checked by LockedWrites, in the transaction of the write
+				}
+				for _, id := range ids {
 					// the checks before the operation (the operation authorizer, the handler's) read the same head
 					who = graph.WithHeadMemo(who)
 					if c, err := h.Graph.ChangeHead(who, id); err == nil && !h.mayRead(who, c) {
@@ -258,6 +262,48 @@ func (h *Handler) PersonalScope() connect.Interceptor {
 			return next(who, req)
 		}
 	})
+}
+
+// LockedWrites is the interceptor running the edits of the drafts of one change (lockedWrites) whole in one transaction
+// of the graph holding the change's lock from the start (Graph.InChangeLock): the header of the change is read once,
+// for the check of PersonalScope (which leaves them to it), the handler's and the operation's. It goes after
+// EnsureCaller, whose write is a transaction of its own.
+func (h *Handler) LockedWrites() connect.Interceptor {
+	h.locksWrites.Store(true)
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			msg, ok := req.Any().(proto.Message)
+			if !ok {
+				return next(ctx, req)
+			}
+			ids := changeIDsIn(req.Spec().Procedure, msg)
+			if !lockedWrite(req.Spec().Procedure, ids) {
+				return next(ctx, req)
+			}
+			who := graph.WithHeadMemo(h.Identity.Context(ctx, req.Header()))
+			var res connect.AnyResponse
+			err := h.Graph.InChangeLock(who, ids[0], func(who context.Context) error {
+				if c, err := h.Graph.ChangeHead(who, ids[0]); err == nil && !h.mayRead(who, c) {
+					return denyPersonal(ids[0])
+				}
+				var err error
+				res, err = next(who, req)
+				return err
+			})
+			return res, err
+		}
+	})
+}
+
+func lockedWrite(procedure string, ids []domain.ChangeID) bool {
+	return len(ids) == 1 && lockedWrites[procedure[strings.LastIndexByte(procedure, '/')+1:]]
+}
+
+// lockedWrites are the procedures editing the drafts of one change in one transaction of the graph, run whole in the
+// transaction holding the change's lock (Graph.InChangeLock).
+var lockedWrites = map[string]bool{
+	"ImpactNodeCreate": true, "ImpactNodeUpdate": true, "ImpactNodeCheckout": true, "ImpactNodeCheckoutBatch": true,
+	"ImpactLinkCreate": true, "ImpactLinkUpdate": true, "ImpactLinkDelete": true,
 }
 
 // changeIDsIn returns the changes a request names: its change_id (id for GetChange and UpdateChange) and the change of

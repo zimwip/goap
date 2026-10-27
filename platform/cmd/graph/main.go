@@ -309,7 +309,7 @@ func main() {
 	if content {
 		graphHandler.Space = "content" // its exports and imports are jobs of kinds of its own
 	}
-	path, graphService := graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), graphHandler.Positions(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...)
+	path, graphService := graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), graphHandler.Positions(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller(), graphHandler.LockedWrites()))...)
 	// the exports and imports of the graph's namespaces, a worker of the job service
 	go (&jobkit.Worker{Queue: jobs, ID: jobkit.WorkerID("graph"), Kinds: graphHandler.JobRunners(), Log: log}).Run(ctx)
 	if content {

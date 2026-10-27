@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"connectrpc.com/connect"
 
@@ -39,6 +40,8 @@ type Publisher interface {
 // Handler implements graphv1connect.GraphServiceHandler.
 type Handler struct {
 	Graph *graph.Graph
+	// locksWrites is set once LockedWrites is installed: PersonalScope leaves it the edits of the drafts
+	locksWrites atomic.Bool
 	// Events receives what RepublishIndex sends (nil: the RPC is refused).
 	Events Publisher
 	// Authz gates the creation of a node in a change (resource "object": ImpactNodeCreate, the successors of a

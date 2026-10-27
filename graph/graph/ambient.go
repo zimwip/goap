@@ -41,3 +41,16 @@ func (g *Graph) inChange(ctx context.Context, id domain.ChangeID, fn func(ctx co
 		return fn(ctx)
 	})
 }
+
+// InChangeLock runs fn in one transaction holding the lock of the tree of change id from its start (ADR 0127): every
+// operation of the graph fn calls with the context it is given joins it, so that the header of the change, read once
+// the lock is held, serves the checks before the operation and the operation itself. Nothing is read of the change
+// before fn: one not stored is fn's to refuse.
+func (g *Graph) InChangeLock(ctx context.Context, id domain.ChangeID, fn func(ctx context.Context) error) error {
+	return g.inOne(ctx, func(ctx context.Context) error {
+		if err := g.repo.InTx(ctx, func(tx Tx) error { return tx.LockChange(ctx, id) }); err != nil {
+			return err
+		}
+		return fn(ctx)
+	})
+}

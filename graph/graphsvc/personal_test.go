@@ -30,7 +30,7 @@ func TestPersonalChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: authz.AllowAll{}, Graph: g}
-	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.PersonalScope()))
+	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.PersonalScope(), h.LockedWrites()))
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
@@ -84,6 +84,12 @@ func TestPersonalChange(t *testing.T) {
 	call("bob", del)
 	if _, err := cl.DeleteChange(ctx, del); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("bob DeleteChange: %v", err)
+	}
+	// an edit of its drafts too, checked in the transaction of the edit (LockedWrites)
+	edit := connect.NewRequest(&graphv1.ImpactNodeCreateRequest{ChangeId: id, Key: "LLA:x", Type: "platform@LlmAlias"})
+	call("bob", edit)
+	if _, err := cl.ImpactNodeCreate(ctx, edit); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("bob ImpactNodeCreate: %v", err)
 	}
 	list := connect.NewRequest(&graphv1.ListChangesRequest{})
 	call("bob", list)

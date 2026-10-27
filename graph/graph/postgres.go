@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -131,6 +132,9 @@ type pgTx struct {
 	// readOnly is a read on a read-only connection (readTx): no transaction, so no lock to take
 	readOnly bool
 	roots    *changeRoots
+	// locked are the headers of the changes read with the root of their tree once its lock was held (LockChange): what
+	// the transaction then reads of them, until it writes them
+	locked map[domain.ChangeID]domain.Change
 }
 
 // AppendOutbox implements Tx.
@@ -425,13 +429,38 @@ func (t *pgTx) LockChange(ctx context.Context, id domain.ChangeID) error {
 			break
 		}
 		var again string
-		if again, err = t.changeRoot(ctx, id); err == nil && again == root {
+		if again, err = t.lockedHead(ctx, id); err == nil && again == root {
 			t.roots.keep(id, root)
 			return nil
 		}
 		root = again
 	}
 	return mapErr(err, "lock change "+string(id))
+}
+
+// lockedHead reads, once the lock of its tree is held, the root of the tree of a change and its header in one
+// statement: the header is what the transaction reads of it next (ChangeHead). A change not stored yet is its own root.
+func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, error) {
+	var root *string
+	c, err := scanPGChangeHead(func(dest ...any) error {
+		return t.unheld().QueryRow(ctx, `WITH RECURSIVE up (id, parent_id) AS (
+				SELECT id, parent_id FROM change WHERE id = $1
+				UNION ALL SELECT c.id, c.parent_id FROM change c JOIN up ON c.id = up.parent_id)
+			SELECT (SELECT id::text FROM up WHERE parent_id IS NULL), `+pgChangeHead+` FROM change WHERE id = $1`, string(id)).
+			Scan(append([]any{&root}, dest...)...)
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		delete(t.locked, id)
+		return string(id), nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if t.locked == nil {
+		t.locked = map[domain.ChangeID]domain.Change{}
+	}
+	t.locked[id] = c
+	return str(root), nil
 }
 
 // LockBranch implements Tx: a transaction-level advisory lock on the branch.
@@ -883,6 +912,10 @@ func scanPGChangeHead(scan func(...any) error) (domain.Change, error) {
 
 // ChangeHead implements Tx.
 func (t *pgTx) ChangeHead(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
+	if c, ok := t.locked[id]; ok {
+		c.Data, c.Guardians, c.DependsOn = maps.Clone(c.Data), slices.Clone(c.Guardians), slices.Clone(c.DependsOn)
+		return c, nil
+	}
 	c, err := scanPGChangeHead(t.unheld().QueryRow(ctx, `SELECT `+pgChangeHead+` FROM change WHERE id = $1`, string(id)).Scan)
 	if err != nil {
 		return c, mapErr(err, "change "+string(id))
@@ -1102,6 +1135,7 @@ func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 }
 
 func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
+	delete(t.locked, c.ID)
 	_, err := t.unheld().Exec(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, intent = EXCLUDED.intent, goal = EXCLUDED.goal, status = EXCLUDED.status,
@@ -1321,6 +1355,7 @@ func (t *pgTx) Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, erro
 }
 
 func (t *pgTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error {
+	delete(t.locked, id)
 	var used int
 	d := dialectPG
 	for _, q := range d.deleteChangeUsed() {
