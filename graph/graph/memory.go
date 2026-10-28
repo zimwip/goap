@@ -816,7 +816,8 @@ func (t *memTx) PutChange(_ context.Context, c domain.Change) error {
 	if err := t.write(); err != nil {
 		return err
 	}
-	c.Items, c.Nodes = nil, nil // the facts are in the log
+	c.Items = nil // the facts are in the log
+	c.ShareImpacts(domain.Impacts{})
 	c.DependsOn = slices.Clone(c.DependsOn)
 	t.st.changes[c.ID] = c
 	return nil

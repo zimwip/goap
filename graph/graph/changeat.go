@@ -44,7 +44,7 @@ func (g *Graph) ChangeAt(ctx context.Context, id domain.ChangeID, seq int64) (c 
 		if st.moved {
 			c.State = st.state
 		}
-		c.Items, c.Nodes, c.Seq = slices.Clone(st.items), slices.Clone(st.impacts), st.seq
+		c.Items, c.Nodes, c.Seq = slices.Clone(st.items), st.impacts.list().Slice(), st.seq
 		return nil
 	})
 	return

@@ -80,7 +80,7 @@ func changeViewTx(ctx context.Context, g *Graph, tx Tx, c domain.Change, flow, l
 	if err != nil {
 		return base, err
 	}
-	for _, cn := range impacts {
+	for _, cn := range impacts.All() {
 		if cn.Post == nil || cn.Review == domain.ReviewRejected || (level == ViewAccepted && cn.Review != domain.ReviewAccepted) {
 			continue
 		}

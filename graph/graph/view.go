@@ -27,7 +27,7 @@ type world struct {
 	flow    string
 	branch  domain.Branch
 	own     bool
-	impacts []domain.ChangeImpact
+	impacts domain.Impacts
 	// over are the versions the change wrote over its fork (a draft is version 0), gone the nodes it deleted.
 	over   map[domain.NodeID]domain.Version
 	gone   map[domain.NodeID]bool
@@ -87,7 +87,7 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View, reach *Reach) (*wo
 	if err != nil {
 		return nil, err
 	}
-	for _, cn := range w.impacts {
+	for _, cn := range w.impacts.All() {
 		if cn.Post == nil || cn.Review == domain.ReviewRejected {
 			continue
 		}

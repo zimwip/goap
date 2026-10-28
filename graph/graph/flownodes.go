@@ -86,31 +86,32 @@ func nodeOf(cn domain.ChangeImpact) domain.NodeID {
 
 // nodes returns the change impacts the flow sees, with the post version and the review it resolves to: a fold of the
 // impact log (ADR 0029 §3).
-func (v *flowNodes) nodes(ctx context.Context) ([]domain.ChangeImpact, error) {
+func (v *flowNodes) nodes(ctx context.Context) (domain.Impacts, error) {
+	all := v.c.Impacts()
 	if v.flow == "" {
 		// the main flow sees the change impacts of the change as they are, but the superseded ones and those of other
-		// flows: when there are none, the change's own (a copy its reader owns) serve, clipped so that an append copies
-		if !slices.ContainsFunc(v.c.Nodes, func(cn domain.ChangeImpact) bool { return cn.Superseded || cn.Flow != "" }) {
-			return slices.Clip(v.c.Nodes), nil
+		// flows: when there are none, the change's own serve (a list is never edited)
+		if all.Find(func(cn domain.ChangeImpact) bool { return cn.Superseded || cn.Flow != "" }) < 0 {
+			return all, nil
 		}
-		return domain.ImpactsSeenBy(v.c.Nodes, nil, nil, v.stale), nil
+		return all.SeenBy(nil, nil, v.stale), nil
 	}
 	events, err := v.g.foldedEvents(ctx, v.tx, v.c.ID)
 	if err != nil {
-		return nil, err
+		return domain.Impacts{}, err
 	}
 	chain := make([]string, len(v.chain))
 	for i, f := range v.chain {
 		chain[i] = f.ID
 	}
-	return domain.ImpactsSeenBy(v.c.Nodes, events, chain, v.stale), nil
+	return all.SeenBy(events, chain, v.stale), nil
 }
 
 // find returns the change impact a flow sees under an id.
 func (v *flowNodes) find(ctx context.Context, id domain.ChangeImpactID) (domain.ChangeImpact, error) {
 	if v.flow == "" {
 		// the main flow sees its own live change impacts as they are (ImpactsSeenBy with no chain)
-		for _, cn := range v.c.Nodes {
+		for _, cn := range v.c.Impacts().All() {
 			if cn.ID == id && !cn.Superseded && cn.Flow == "" {
 				return cn, nil
 			}
@@ -121,10 +122,8 @@ func (v *flowNodes) find(ctx context.Context, id domain.ChangeImpactID) (domain.
 	if err != nil {
 		return domain.ChangeImpact{}, err
 	}
-	for _, cn := range list {
-		if cn.ID == id {
-			return cn, nil
-		}
+	if i := list.Index(id); i >= 0 {
+		return list.At(i), nil
 	}
 	return domain.ChangeImpact{}, fmt.Errorf("change impact %s is not on the flow %q of change %s: %w", id, v.flow, v.c.ID, ErrNotFound)
 }
@@ -149,7 +148,7 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 		return err
 	}
 	var installs []domain.ImpactEvent
-	for _, cn := range c.Nodes {
+	for _, cn := range c.Impacts().All() {
 		fd, md := draftOf(cn.ID, f.ID), draftOf(cn.ID, "")
 		switch {
 		case fd != nil:
@@ -248,7 +247,7 @@ func (g *Graph) discardNodes(ctx context.Context, tx Tx, c domain.Change, f doma
 			}
 		}
 	}
-	for _, cn := range c.Nodes {
+	for _, cn := range c.Impacts().All() {
 		if !gone[cn.Flow] || cn.Review == domain.ReviewRejected {
 			continue
 		}
@@ -264,7 +263,7 @@ func (g *Graph) discardNodes(ctx context.Context, tx Tx, c domain.Change, f doma
 // is not written until the change commits, so adopting a flow asks its acceptance).
 func acceptedOnFlow(c domain.Change, node domain.NodeID, flow string) bool {
 	accepted := false
-	for _, cn := range c.Nodes {
+	for _, cn := range c.Impacts().All() {
 		if nodeOf(cn) != node {
 			continue
 		}

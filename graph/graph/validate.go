@@ -36,7 +36,7 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 	v := c.View(flow)
 	// the reference baseline is read for the nodes the impacts start from only (ADR 0137)
 	var pres []domain.NodeID
-	for _, cn := range nodes {
+	for _, cn := range nodes.All() {
 		if cn.Pre != nil {
 			pres = append(pres, cn.Pre.ID)
 		}
@@ -89,7 +89,7 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 		}
 	}
 	// the change impacts: the id of a change impact stands where an item id does
-	for _, cn := range nodes {
+	for _, cn := range nodes.All() {
 		id := domain.ItemID(cn.ID)
 		if err := cn.Validate(); err != nil {
 			add(id, "", "structure", err.Error())

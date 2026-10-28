@@ -70,7 +70,7 @@ func (g *Graph) impactValidations(ctx context.Context, tx Tx, c domain.Change, f
 	}
 	out := map[domain.ChangeImpactID]*domain.ImpactValidation{}
 	complete := true
-	for _, cn := range seen {
+	for _, cn := range seen.All() {
 		d, ok := drafts[cn.ID]
 		if cn.Superseded || !cn.Drafted() || !ok {
 			continue

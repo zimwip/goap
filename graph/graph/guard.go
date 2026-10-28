@@ -381,7 +381,8 @@ func (t *guardTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change
 	c.Guardians = slices.Clone(c.Guardians)
 	c.DependsOn = slices.Clone(c.DependsOn)
 	c.Items = slices.Clone(st.items)
-	c.Nodes = slices.Clone(st.impacts) // values the fold replaces, never edits
+	c.ShareImpacts(domain.Impacts{})
+	c.Nodes = st.impacts.list().Slice() // values the fold replaces, never edits
 	c.Seq = st.seq
 	return c, nil
 }
@@ -416,7 +417,7 @@ func (t *guardTx) openChange(ctx context.Context, id domain.ChangeID) (domain.Ch
 	c.Guardians = slices.Clone(c.Guardians)
 	c.DependsOn = slices.Clone(c.DependsOn)
 	c.Items = slices.Clip(st.items)
-	c.Nodes = slices.Clip(st.impacts)
+	c.ShareImpacts(st.impacts.list())
 	c.Seq = st.seq
 	return c, nil
 }
@@ -762,7 +763,8 @@ func (t *guardTx) PutChange(ctx context.Context, c domain.Change) error {
 		t.changes = map[domain.ChangeID]domain.Change{}
 	}
 	h := c
-	h.Items, h.Nodes = nil, nil
+	h.Items = nil
+	h.ShareImpacts(domain.Impacts{})
 	t.changes[c.ID] = h
 	delete(t.headers, c.ID)
 	delete(t.reads, c.ID)

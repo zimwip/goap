@@ -102,7 +102,7 @@ func (g *Graph) flowImpactShapes(ctx context.Context, tx Tx, c domain.Change, fl
 		return k
 	}
 	var out []impactShape
-	for _, cn := range seen {
+	for _, cn := range seen.All() {
 		if cn.Review == domain.ReviewRejected || (level == ViewAccepted && cn.Review != domain.ReviewAccepted) {
 			continue
 		}

@@ -100,6 +100,8 @@ type Change struct {
 
 	flx  *flowIndex // replay of the flow events, valid for flxN items
 	flxN int
+	// shared are the impacts of the view the change was read from, when it shares them (ShareImpacts)
+	shared Impacts
 }
 
 // MethodologyRef is the reference of the methodology of the change at the version it follows (MethodologyRef).

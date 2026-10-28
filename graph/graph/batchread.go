@@ -105,9 +105,9 @@ func changeHeads(ctx context.Context, tx Tx, ids []domain.ChangeID) (map[domain.
 
 // storedPosts reads the stored versions the impacts of a change lead to (their posts, a draft left out) in one
 // statement, the rejected ones left out, and when accepted only those accepted.
-func storedPosts(ctx context.Context, tx Tx, impacts []domain.ChangeImpact, accepted bool) (map[domain.NodeRef]domain.Node, error) {
+func storedPosts(ctx context.Context, tx Tx, impacts domain.Impacts, accepted bool) (map[domain.NodeRef]domain.Node, error) {
 	var refs []domain.NodeRef
-	for _, cn := range impacts {
+	for _, cn := range impacts.All() {
 		if cn.Post == nil || cn.Post.IsDraft() || cn.Review == domain.ReviewRejected || (accepted && cn.Review != domain.ReviewAccepted) {
 			continue
 		}

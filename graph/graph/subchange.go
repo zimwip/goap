@@ -286,8 +286,8 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 		if err != nil {
 			return err
 		}
-		for _, cn := range parent.Nodes {
-			if !slices.ContainsFunc(seen, func(x domain.ChangeImpact) bool { return x.ID == cn.ID }) && len(cn.Items) == 0 {
+		for _, cn := range parent.Impacts().All() {
+			if seen.Index(cn.ID) < 0 && len(cn.Items) == 0 {
 				continue // a candidate of a flow, or replaced by one
 			}
 			if cn.Pre == nil || cn.Intent != domain.IntentModified || cn.Post != nil || cn.Superseded {

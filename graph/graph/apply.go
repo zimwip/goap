@@ -399,11 +399,11 @@ func (a *applier) takes(id domain.NodeID) bool {
 
 // takesImpact reports whether the commit writes the node of an impact: its node is named, or the impact it was merged or
 // split via is.
-func (a *applier) takesImpact(cn domain.ChangeImpact, impacts []domain.ChangeImpact) bool {
+func (a *applier) takesImpact(cn domain.ChangeImpact, impacts domain.Impacts) bool {
 	if a.only == nil || a.takes(nodeOf(cn)) {
 		return true
 	}
-	for _, p := range impacts {
+	for _, p := range impacts.All() {
 		if cn.Via != "" && p.ID == cn.Via {
 			return a.takesImpact(p, impacts)
 		}

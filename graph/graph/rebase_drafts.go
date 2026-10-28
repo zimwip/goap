@@ -62,7 +62,7 @@ func (g *Graph) rebaseDraftsTx(ctx context.Context, tx Tx, c domain.Change, node
 	drafted := map[domain.NodeID]bool{}
 	var todo []draftRebase
 	var ids []domain.NodeID
-	for _, cn := range impacts {
+	for _, cn := range impacts.All() {
 		d := draftOf(cn.ID, "")
 		if d == nil {
 			continue

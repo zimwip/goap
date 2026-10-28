@@ -378,11 +378,11 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 		return out, err
 	}
 	find := func(f func(domain.ChangeImpact) bool) domain.ChangeImpact {
-		i := slices.IndexFunc(w.seen, f)
+		i := w.seen.Find(f)
 		if i < 0 {
 			return domain.ChangeImpact{}
 		}
-		return w.seen[i]
+		return w.seen.At(i)
 	}
 	for _, c := range into {
 		out.Successors = append(out.Successors, find(func(i domain.ChangeImpact) bool { return i.Key == c.Key && i.Intent == domain.IntentCreated }))
@@ -399,7 +399,7 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 // currentOf is the stored version of a node the flow starts from (nil: none): its pre version when the change holds an
 // impact on it, else the version of the reference baseline. The draft the flow holds of it is read through draftReader.
 func (g *Graph) currentOf(ctx context.Context, tx Tx, w *work, nid domain.NodeID) (*domain.Node, error) {
-	for _, i := range w.seen {
+	for _, i := range w.seen.All() {
 		if nodeOf(i) != nid {
 			continue
 		}
@@ -447,23 +447,22 @@ func originsPatch(ctx context.Context, tx Tx, origins []domain.NodeRef) []any {
 // checkOrigins is the review gate of a successor (ADR 0077): a node created by the change with origins is accepted
 // and committed only when the change impact of every origin is accepted, the way what a node derives from is settled
 // before it. impacts are the ones the flow sees, d the draft of the successor.
-func (g *Graph) checkOrigins(impacts []domain.ChangeImpact, cn domain.ChangeImpact, d *domain.Draft) error {
+func (g *Graph) checkOrigins(impacts domain.Impacts, cn domain.ChangeImpact, d *domain.Draft) error {
 	if cn.Intent != domain.IntentCreated || d == nil || len(d.Origins) == 0 {
 		return nil
 	}
 	var pending []string
 	for _, o := range d.Origins {
-		i := slices.IndexFunc(impacts, func(x domain.ChangeImpact) bool { return nodeOf(x) == o.ID })
+		i := impacts.Find(func(x domain.ChangeImpact) bool { return nodeOf(x) == o.ID })
 		// an origin is changed by the impact of its parent (via): that one decides it (ADR 0077, 0102)
-		if i >= 0 && impacts[i].Via != "" {
-			via := impacts[i].Via
-			i = slices.IndexFunc(impacts, func(x domain.ChangeImpact) bool { return x.ID == via })
+		if i >= 0 && impacts.At(i).Via != "" {
+			i = impacts.Index(impacts.At(i).Via)
 		}
 		switch {
 		case i < 0:
 			pending = append(pending, string(o.ID)+" (not in the change)")
-		case impacts[i].Review != domain.ReviewAccepted:
-			pending = append(pending, fmt.Sprintf("%s (%s)", impacts[i].Key, impacts[i].Review))
+		case impacts.At(i).Review != domain.ReviewAccepted:
+			pending = append(pending, fmt.Sprintf("%s (%s)", impacts.At(i).Key, impacts.At(i).Review))
 		}
 	}
 	if len(pending) > 0 {
