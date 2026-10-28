@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -112,6 +113,35 @@ func settle(t *testing.T, g *Graph, id domain.ChangeID) {
 	}
 	if err := g.acceptAll(ctx, id); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestChangeBranchesOfAlikeIDs: the branch of a change is named by its whole id, so two changes whose ids begin alike
+// each own theirs (an 8 digit prefix named them once: the second took over the branch of the first).
+func TestChangeBranchesOfAlikeIDs(t *testing.T) { forEachRepo(t, testChangeBranchesOfAlikeIDs) }
+
+func testChangeBranchesOfAlikeIDs(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	n := 0
+	g.newID = func() string { n++; return fmt.Sprintf("aaaaaaaa-0000-4000-8000-%012d", n) }
+	a := setProp(t, g, f, f.base.ID, "A", map[string]any{"title": "A title"})
+	b, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "B", BaselineID: f.base.ID, OwnBranch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Branch == b.Branch {
+		t.Fatalf("both changes own branch %s", a.Branch)
+	}
+	for _, c := range []domain.Change{a, b} {
+		own := false
+		if err := g.repo.InTx(ctx, func(tx Tx) (err error) { _, own, err = ownBranch(ctx, tx, c); return }); err != nil || !own {
+			t.Fatalf("change %s owns its branch %s: %v, %v", c.ID, c.Branch, own, err)
+		}
+	}
+	if _, err := g.apply(ctx, a.ID, ""); err != nil {
+		t.Fatalf("apply: %v", err)
 	}
 }
 

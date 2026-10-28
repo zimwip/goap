@@ -625,55 +625,8 @@
         ]
       },
       "options": {
-        "mapping": "manual",
-        "series": [
-          {
-            "frame": {
-              "matcher": {
-                "id": "byIndex",
-                "options": 0
-              }
-            },
-            "x": {
-              "matcher": {
-                "id": "byName",
-                "options": "versions in the graph"
-              }
-            },
-            "y": {
-              "matcher": {
-                "id": "byName",
-                "options": "versions/s"
-              }
-            },
-            "name": {
-              "fixed": "versions/s"
-            }
-          },
-          {
-            "frame": {
-              "matcher": {
-                "id": "byIndex",
-                "options": 0
-              }
-            },
-            "x": {
-              "matcher": {
-                "id": "byName",
-                "options": "versions in the graph"
-              }
-            },
-            "y": {
-              "matcher": {
-                "id": "byName",
-                "options": "changes/s"
-              }
-            },
-            "name": {
-              "fixed": "changes/s"
-            }
-          }
-        ],
+        "mapping": "auto",
+        "series": [],
         "legend": {
           "showLegend": true,
           "displayMode": "list",

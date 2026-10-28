@@ -305,6 +305,15 @@ func (d dialect) sqlNamespaceNodeIDs(namespace string) (string, []any) {
 	return `SELECT ` + d.id("id") + ` FROM node WHERE namespace = ` + d.ph(1) + ` ORDER BY id`, []any{domain.NamespaceOf(namespace)}
 }
 
+// sqlNodeIDsOfType reads the ids of the nodes of a type after an id, by id, at most a limit (index node_type).
+func (d dialect) sqlNodeIDsOfType(namespace, typ string, after domain.NodeID, limit int) (string, []any) {
+	cond, args := ``, []any{domain.NamespaceOf(namespace), typ, limit}
+	if after != "" {
+		cond, args = ` AND id > `+d.ph(4), append(args, string(after))
+	}
+	return `SELECT ` + d.id("id") + ` FROM node WHERE namespace = ` + d.ph(1) + ` AND type = ` + d.ph(2) + cond + ` ORDER BY id LIMIT ` + d.ph(3), args
+}
+
 // sqlLastCommit reads the order of the last commit on a branch (index node_version_committed, node_branch_committed).
 func (d dialect) sqlLastCommit(branch string) (string, []any) {
 	return `SELECT coalesce(max(committed), 0) FROM (SELECT max(committed) AS committed FROM node_version WHERE branch = ` + d.ph(1) +
@@ -813,8 +822,12 @@ func (d dialect) deleteChangeRows() []string {
 	mine := `(SELECT node_id, version FROM node_version WHERE change_id = ` + p + `)`
 	return []string{
 		`DELETE FROM tag WHERE (node_id, version) IN ` + mine,
-		`DELETE FROM link WHERE change_id = ` + p + ` OR (from_id, from_version) IN ` + mine,
-		`DELETE FROM node_branch WHERE change_id = ` + p + ` OR (node_id, version) IN ` + mine,
+		// one statement per index: an OR with the IN would read the whole table (a hashed sub-plan filtering a
+		// sequential scan), the larger the graph the slower
+		`DELETE FROM link WHERE change_id = ` + p,
+		`DELETE FROM link WHERE (from_id, from_version) IN ` + mine,
+		`DELETE FROM node_branch WHERE change_id = ` + p,
+		`DELETE FROM node_branch WHERE (node_id, version) IN ` + mine,
 		`DELETE FROM node_version WHERE change_id = ` + p,
 		`DELETE FROM change_impact WHERE change_id = ` + p,
 		`DELETE FROM change_log WHERE change_id = ` + p,

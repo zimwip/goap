@@ -755,6 +755,18 @@ func (t *memTx) NamespaceNodeIDs(_ context.Context, namespace string) ([]domain.
 	return out, nil
 }
 
+func (t *memTx) NodeIDsOfType(_ context.Context, namespace, typ string, after domain.NodeID, limit int) ([]domain.NodeID, error) {
+	namespace = domain.NamespaceOf(namespace)
+	var out []domain.NodeID
+	for id, vs := range t.st.versions {
+		if len(vs) > 0 && domain.NamespaceOf(vs[0].Namespace) == namespace && vs[0].Type == typ && id > after {
+			out = append(out, id)
+		}
+	}
+	slices.Sort(out)
+	return out[:min(len(out), limit)], nil
+}
+
 func (t *memTx) BranchNodeIDs(_ context.Context, branch string) ([]domain.NodeID, error) {
 	branch = domain.BranchOf(branch)
 	seen := map[domain.NodeID]bool{}

@@ -161,6 +161,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg NamespaceNodeIDs", pg, q, a, `SELECT id::text FROM node WHERE namespace = $1 ORDER BY id`, []any{"alm"})
 	q, a = lite.sqlNamespaceNodeIDs("alm")
 	check("sqlite NamespaceNodeIDs", lite, q, a, `SELECT id FROM node WHERE namespace = ? ORDER BY id`, []any{"alm"})
+	q, a = pg.sqlNodeIDsOfType("alm", "alm@R", "", 10)
+	check("pg NodeIDsOfType", pg, q, a, `SELECT id::text FROM node WHERE namespace = $1 AND type = $2 ORDER BY id LIMIT $3`, []any{"alm", "alm@R", 10})
+	q, a = lite.sqlNodeIDsOfType("alm", "alm@R", "n1", 10)
+	check("sqlite NodeIDsOfType", lite, q, a, `SELECT id FROM node WHERE namespace = ?1 AND type = ?2 AND id > ?4 ORDER BY id LIMIT ?3`, []any{"alm", "alm@R", 10, "n1"})
 
 	// Pages of a state (ADR 0140): filtered, counted and paged by the store
 	pgRefs := []any{[]string{"n1", "n2"}, []int32{2, 1}}
@@ -426,16 +430,20 @@ func TestSQLBuildersGolden(t *testing.T) {
 	checkSQL(t, "sqlite change nodes", lite, lite.sqlChangeNodes(), `SELECT DISTINCT node_id FROM node_version WHERE change_id = ?`)
 	checkList("pg DeleteChange rows", pg, pg.deleteChangeRows(), []string{
 		`DELETE FROM tag WHERE (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
-		`DELETE FROM link WHERE change_id = $1 OR (from_id, from_version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
-		`DELETE FROM node_branch WHERE change_id = $1 OR (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
+		`DELETE FROM link WHERE change_id = $1`,
+		`DELETE FROM link WHERE (from_id, from_version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
+		`DELETE FROM node_branch WHERE change_id = $1`,
+		`DELETE FROM node_branch WHERE (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
 		`DELETE FROM node_version WHERE change_id = $1`,
 		`DELETE FROM change_impact WHERE change_id = $1`,
 		`DELETE FROM change_log WHERE change_id = $1`,
 	})
 	checkList("sqlite DeleteChange rows", lite, lite.deleteChangeRows(), []string{
 		`DELETE FROM tag WHERE (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = ?1)`,
-		`DELETE FROM link WHERE change_id = ?1 OR (from_id, from_version) IN (SELECT node_id, version FROM node_version WHERE change_id = ?1)`,
-		`DELETE FROM node_branch WHERE change_id = ?1 OR (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = ?1)`,
+		`DELETE FROM link WHERE change_id = ?1`,
+		`DELETE FROM link WHERE (from_id, from_version) IN (SELECT node_id, version FROM node_version WHERE change_id = ?1)`,
+		`DELETE FROM node_branch WHERE change_id = ?1`,
+		`DELETE FROM node_branch WHERE (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = ?1)`,
 		`DELETE FROM node_version WHERE change_id = ?1`,
 		`DELETE FROM change_impact WHERE change_id = ?1`,
 		`DELETE FROM change_log WHERE change_id = ?1`,

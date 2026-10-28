@@ -1220,6 +1220,11 @@ tag(id uuid, name, namespace, node_id, version, by, created_at)  -- names one no
 smart_tag(id, name, description, owner, by, created_at, updated_at), smart_tag_version(tag_id, node_id, version), smart_tag_share(tag_id, subject, access)  -- graph/smarttagsvc, own migrations (ADR 0143 §7)
 ```
 
+The ids the graph allocates (nodes, changes, links, impacts, entries, baselines) are UUIDs of version 7
+(`graph.newID`): their first bits are the time, so what is written together sits together in the indexes keyed by id,
+and a write keeps touching the same pages however large the graph grows. The branch a change owns is named by its
+whole id (`change-<id>`, `changeBranchName`): a prefix of it is not unique.
+
 **Two dialects, one model** ([ADR 0074](adr/0074-sql-dialect-builders-and-schema-guard.md)): the PostgreSQL repository
 (`graph/graph/postgres.go`, pgx) and the SQLite one (`sqlite.go`, `database/sql`) keep their executors, row scanning and
 value encodings (uuid / text, jsonb / text, arrays, timestamps), and share the statements: `graph/graph/sqlbuild.go`
