@@ -1,5 +1,5 @@
 name: platform
-version: 2.9.0
+version: 2.9.1
 description: >
   The platform configuration, in its own namespace ("platform"): the MCPs (the generic usage of a tool by an LLM), the
   adapter definitions (AdapterDef: code mapping an MCP onto a connector; an organisation implements an MCP with an Adapter
@@ -109,18 +109,18 @@ nodeTypes:
       - {name: name, label: Name, description: "Name of the role", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the role allows", type: string, widget: textarea, section: Identity, order: 2}
   # the sources of the logical URLs (ADR 0154, SRC:<name>): a URL lnk:<source>/<type>/<key> whose source is no
-  # namespace of this graph names one of them; the kind picks the resolver the services plug (graph, files...)
+  # namespace of this graph names one of them; the kind picks the resolver the services plug (graph, local-fs, web...)
   - name: Source
     visibility: public
-    description: "Where the things a logical URL names live: another graph, a directory of files..."
+    description: "Where the things a logical URL names live: another graph, a directory of files, a web site..."
     adminOnly: true
     lifecycle: config
     attributes:
       - {name: name, label: Name, description: "Name of the source, the <source> of lnk:<source>/<type>/<key>", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the source holds", type: string, widget: textarea, section: Identity, order: 2}
-      - {name: kind, label: Kind, description: "Kind of resolver reading it: graph, files, or one a service adds", type: string, section: Location, order: 3}
+      - {name: kind, label: Kind, description: "Kind of resolver reading it: graph, local-fs (formerly files), web, or one a service adds; never lnk, the scheme of the logical URLs", type: string, section: Location, order: 3}
       - {name: namespace, label: Namespace, description: "Namespace of the graph it reads (graph sources; empty: its name)", type: string, section: Location, order: 4}
-      - {name: location, label: Location, description: "Where it lives: the base URL of a graph service, the root directory of files", type: string, section: Location, order: 5}
+      - {name: location, label: Location, description: "Where it lives: the base URL of a graph service, the root directory of a local-fs source, the base address of a web site", type: string, section: Location, order: 5}
       - {name: namespaces, label: Namespaces, description: "The namespaces a graph service at the location holds: their calls and their URLs go to it (a list of names)", type: json, widget: textarea, section: Location, order: 6}
       - {name: branch, label: Branch, description: "Branch of the graph it reads (empty: main)", type: string, section: Location, order: 7}
       - {name: params, label: Parameters, description: "What else its resolver needs", type: json, widget: textarea, section: Location, order: 8}

@@ -133,8 +133,8 @@ const (
 	WidgetDirectory = "directory"
 	// WidgetCode edits source text with its language, highlighted (the usual widget of a code attribute).
 	WidgetCode = "code"
-	// WidgetURL is the address of something (file://, https://, lnk:...), shown as a link the user interface opens
-	// the way the source of its scheme says (ADR 0171: lnk.Open).
+	// WidgetURL is the address of something (https://, lnk:...), shown as a link the user interface opens the way the
+	// type of source of its scheme says (ADR 0171: GraphService.ResolveAddress, lnk.Open).
 	WidgetURL = "url"
 )
 

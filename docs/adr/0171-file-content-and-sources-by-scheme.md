@@ -1,6 +1,6 @@
 # ADR 0171 — The content of files, and the sources of the addresses by scheme
 
-**Status**: accepted, implemented for the git import (§1–§3); proposed for the sources by scheme (§4–§6) ·
+**Status**: accepted, implemented (§1–§6); a `git` type of source is left for later ·
 **Date**: 2026-10 · **Extends**: ADR 0147 (git repositories in the graph), ADR 0150 (declarations), ADR 0154
 (logical URLs)
 
@@ -63,12 +63,13 @@ fields), the attributes of a Python class, the fields of a JavaScript or TypeScr
 TypeScript interface (kind `field`); the variables of a C++ namespace and `export var`; the enumerators of C and C++,
 the constants of a Java enum and of an interface (kind `constant`). `variable` stays a declaration of the top level.
 
-### 4. The scheme names a type of source; `lnk` resolves a second level (proposed)
+### 4. The scheme names a type of source; `lnk` resolves a second level
 
 An address is resolved in two levels. Level 1: its scheme names the type (kind) of source serving it, and each type
 brings its resolver: `http` / `https` → `web`, `lnk` → `lnk`. A type serving schemes implements `lnk.SchemeResolver`
 (`Schemes()`, `ResolveDirect(ctx, src, *url.URL)`, `src` the type's default source) beside the `lnk.Resolver` of
-ADR 0154; the `Registry` keeps the table scheme → type (one type per scheme). Level 2: the built-in `lnk` type reads
+ADR 0154; the `Registry` keeps the table scheme → type (one type per scheme, `Registry.Register` refusing a second
+reader of a scheme, the scheme `lnk` and the kind `lnk`; `Registry.Schemes` lists them). Level 2: the built-in `lnk` type reads
 `<source>/<type>/<key>[?v=n]`, finds the named source (the project's mapping, ADR 0154 §8, then the declared source,
 else the namespace of that name) and calls the `Resolve` of that source's type. A source declares no scheme (its type
 does) and is never of type `lnk` (no loop).
@@ -81,21 +82,31 @@ through a source, `lnk:<source>/File/<path>`, whose root the platform declares a
 | --- | --- | --- | --- |
 | `lnk` | `lnk` | the second level | (it is the second level) |
 | `graph` | none | none | a node of a namespace of this graph or of a remote one |
-| `local-fs` | none | none | `<src>/File/<path>` read under the source's root only (today's `files`, kept as an alias) |
-| `web` | `http`, `https` | fetches nothing on the server: the address and the media type its path says | `<src>/Page/<path>` relative to the source's location |
+| `local-fs` | none | none | `<src>/File/<path>` read under the source's root only (`lnk.LocalFS`; the former kind `files` is read as `local-fs`, `lnk.CanonicalKind`) |
+| `web` | `http`, `https` | fetches nothing on the server: the address and the media type its path says (`lnk.Web`) | `<src>/Page/<path>` relative to the source's location |
 
-### 5. A target says how it opens (proposed)
+A `git` type (the blobs of a repository read at a commit, `lnk:<src>/Blob/<commit>/<path>`) is left for later: the
+importer's default stays the raw file of a known forge.
 
-`lnk.Target.Open` (`Mode`, `Href`, `Media`) and `Target.Content`: `node` (open its editor), `text` (the text read,
-under 1 MiB), `inline` (an image read, as a `data:` address, under 4 MiB), `external` (a web address, a new tab),
-`path` (show the path: outside the roots, too large, or a blob). `Graph.ResolveAddress(project, address)` and the RPC
-`GraphService.ResolveAddress` resolve a `lnk:` URL through the project's mapping (ADR 0154 §8) or any other address
-through its scheme.
+### 5. A target says how it opens
 
-### 6. The interface applies the mode (proposed)
+`lnk.Target.Open` (`Mode`, `Href`, `Media`, `Language`, `Truncated`) and `Target.Content`: `node` (open its editor),
+`text` (the text read and decoded by `contracts/content`, cut at `lnk.MaxOpenText`, 1 MiB), `inline` (an image read,
+as a `data:` address, at most `lnk.MaxOpenInline`, 4 MiB), `external` (a web address, a new tab), `path` (show the
+path: a directory, a blob). Resolving reads the target only; opening is a resolver's `lnk.Opener` (`LocalFS`), asked
+by `Registry.OpenIn` and `Registry.ResolveAddress` only, a node opened in its editor and a web location externally
+otherwise. `Graph.ResolveAddress(project, address)` and the RPC `GraphService.ResolveAddress` (the request's project,
+else the caller's active one; a node of this graph the caller may not read is not found) resolve a `lnk:` URL through
+the project's mapping (ADR 0154 §8) or any other address through its scheme: `INVALID_ARGUMENT` for a malformed
+address, `NOT_FOUND` for a missing target, `UNIMPLEMENTED` for a scheme no type reads (`file:` among them).
+
+### 6. The interface applies the mode
 
 An attribute with `widget: url` (`def.WidgetURL`) is shown as a link; a click resolves it and does what its mode
-says (`web/src/lib/address.ts`, `AddressLink.svelte`).
+says (`web/src/lib/address.ts`: `openingOf` keeps only an `http(s)` address for a tab and a `data:image/` address
+inline; `AddressLink.svelte` in the properties of the node tab: a node in its editor, a web address in a tab, a text
+in `CodeView`, an image, or the path to copy in a dialog). *Settings → Sources* offers the kinds `graph`, `local-fs`
+and `web`.
 
 ## Consequences
 

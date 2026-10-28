@@ -1,7 +1,7 @@
 // Graph types (proto3 JSON).
 
 import type { Int64, Struct } from './common';
-import type { ChangeStackJson, StackChangeJson, VersionStepJson, BaselineStepJson, GraphStatsJson, NamespaceSummaryJson, DistributionJson, NodeTypeStatsJson, LinkTypeStatsJson, ViewJson } from '../../../gen/goap/graph/v1/graph_pb';
+import type { ChangeStackJson, StackChangeJson, VersionStepJson, BaselineStepJson, GraphStatsJson, NamespaceSummaryJson, DistributionJson, NodeTypeStatsJson, LinkTypeStatsJson, ViewJson, AddressTargetJson, AddressOpenJson } from '../../../gen/goap/graph/v1/graph_pb';
 
 // --- graph ------------------------------------------------------------------
 
@@ -204,6 +204,10 @@ export interface ImpactEvent {
  * of its baselines (empty: its head; a baseline alone names its namespace), or a change on a flow (`changeId`, `flow`).
  * The graph refuses a read of the current graph naming none; only the reads of the history name versions. */
 export type GraphView = ViewJson;
+
+/** What an address points to and how a reader opens it (ADR 0171 §4-5: GraphService.ResolveAddress). */
+export type AddressTarget = AddressTargetJson;
+export type AddressOpen = AddressOpenJson;
 
 /** What a read query answered (ADR 0160, RPC QueryView): the columns, the rows (JSON values; a node, a link and a path
  * are objects naming them, `{$node: id}`, `{$link: id}`, `{$path: {nodes, links}}`), the nodes and links they name,

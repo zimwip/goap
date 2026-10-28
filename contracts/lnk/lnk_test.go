@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -105,7 +106,7 @@ func TestRegistryDeclaredSources(t *testing.T) {
 	ctx := context.Background()
 	r := NewRegistry()
 	// a declared graph source elsewhere, under another name than its namespace
-	if err := r.Declare(Source{Name: "docs", Kind: KindFiles}); !errors.Is(err, ErrInvalid) {
+	if err := r.Declare(Source{Name: "docs", Kind: KindLocalFS}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("files source without location: %v", err)
 	}
 	if err := r.Declare(Source{Name: "acme", Kind: KindGraph, Location: "https://acme.example/graph", Namespace: "alm"}); err != nil {
@@ -126,11 +127,11 @@ func TestRegistryDeclaredSources(t *testing.T) {
 	// Lookup finds the sources the graph declares
 	r.Lookup = func(_ context.Context, name string) (Source, bool, error) {
 		if name == "docs" {
-			return Source{Name: "docs", Kind: KindFiles, Location: "/srv/docs"}, true, nil
+			return Source{Name: "docs", Kind: KindLocalFS, Location: "/srv/docs"}, true, nil
 		}
 		return Source{}, false, nil
 	}
-	if src, err := r.Source(ctx, "docs"); err != nil || src.Kind != KindFiles {
+	if src, err := r.Source(ctx, "docs"); err != nil || src.Kind != KindLocalFS {
 		t.Fatalf("Source(docs) = %+v, %v", src, err)
 	}
 	if src, err := r.Source(ctx, "alm"); err != nil || src.Kind != KindGraph || src.Location != "" || src.NamespaceOf() != "alm" {
@@ -138,7 +139,7 @@ func TestRegistryDeclaredSources(t *testing.T) {
 	}
 }
 
-func TestFiles(t *testing.T) {
+func TestLocalFS(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "adr"), 0o755); err != nil {
@@ -151,8 +152,9 @@ func TestFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := newRegistry(nil)
-	r.Register(KindFiles, Files{})
-	if err := r.Declare(Source{Name: "docs", Kind: KindFiles, Location: dir}); err != nil {
+	r.Register(KindLocalFS, LocalFS{})
+	// files, the former name of the kind, is still read
+	if err := r.Declare(Source{Name: "docs", Kind: "files", Location: dir}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := r.ResolveString(ctx, "lnk:docs/File/adr/0153.md")
@@ -205,4 +207,89 @@ func TestResolveIn(t *testing.T) {
 	if _, err := r.ResolveIn(ctx, nil, New("alm", "Requirement", "REQ-1")); err != nil {
 		t.Fatalf("no mapping: %v", err)
 	}
+}
+
+func TestOpenLocalFS(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	png := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
+	for name, data := range map[string][]byte{
+		"a.go": []byte("package a\n"), "logo.png": png, "big.txt": []byte(strings.Repeat("x", MaxOpenText+10)),
+		"blob.bin": {0, 1, 2, 3},
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := newRegistry(nil)
+	r.Register(KindLocalFS, LocalFS{})
+	r.Register(KindWeb, Web{})
+	if err := r.Declare(Source{Name: "repo", Kind: KindLocalFS, Location: dir}); err != nil {
+		t.Fatal(err)
+	}
+	m := Mapping(func(name string) (string, bool) { return map[string]string{"src": "repo"}[name], name == "src" })
+	got, err := r.ResolveAddress(ctx, m, "lnk:src/File/a.go")
+	if err != nil || got.Open == nil || got.Open.Mode != OpenText || got.Open.Language != "go" || got.Content != "package a\n" || got.URL.Source != "src" {
+		t.Fatalf("text = %+v, %v", got, err)
+	}
+	got, err = r.ResolveAddress(ctx, m, "lnk:repo/File/big.txt")
+	if err != nil || got.Open.Mode != OpenText || !got.Open.Truncated || len(got.Content) != MaxOpenText {
+		t.Fatalf("big text = %+v, %v", got.Open, err)
+	}
+	got, err = r.ResolveAddress(ctx, m, "lnk:repo/File/logo.png")
+	if err != nil || got.Open.Mode != OpenInline || !strings.HasPrefix(got.Open.Href, "data:image/png;base64,") {
+		t.Fatalf("image = %+v, %v", got.Open, err)
+	}
+	got, err = r.ResolveAddress(ctx, m, "lnk:repo/File/blob.bin")
+	if err != nil || got.Open.Mode != OpenPath || got.Open.Href != filepath.Join(dir, "blob.bin") {
+		t.Fatalf("blob = %+v, %v", got.Open, err)
+	}
+	got, err = r.ResolveAddress(ctx, m, "lnk:repo/Directory/.")
+	if err != nil || got.Open.Mode != OpenPath {
+		t.Fatalf("directory = %+v, %v", got.Open, err)
+	}
+	// there is no file scheme: a local file is reached through a declared source
+	for _, a := range []string{"file:///etc/passwd", "ftp://example.com/x", "no-scheme"} {
+		if _, err := r.ResolveAddress(ctx, m, a); err == nil {
+			t.Fatalf("%s: resolved", a)
+		}
+	}
+}
+
+func TestWeb(t *testing.T) {
+	ctx := context.Background()
+	r := newRegistry(nil)
+	r.Register(KindWeb, Web{})
+	if k := r.Schemes()["https"]; k != KindWeb {
+		t.Fatalf("schemes = %v", r.Schemes())
+	}
+	got, err := r.ResolveAddress(ctx, nil, "HTTPS://raw.example.com/a/b%20c.png")
+	if err != nil || got.Open.Mode != OpenExternal || got.Open.Media != "image/png" || got.Title != "b c.png" {
+		t.Fatalf("direct = %+v / %+v, %v", got, got.Open, err)
+	}
+	if _, err := r.ResolveAddress(ctx, nil, "https://user:pw@example.com/"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("credentials: %v", err)
+	}
+	if err := r.Declare(Source{Name: "handbook", Kind: KindWeb, Location: "https://docs.example.com/hb"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = r.ResolveAddress(ctx, nil, "lnk:handbook/Page/guide/a%20b.html")
+	if err != nil || got.Open.Href != "https://docs.example.com/hb/guide/a%20b.html" || got.URL.String() != "lnk:handbook/Page/guide/a%20b.html" {
+		t.Fatalf("declared = %+v / %+v, %v", got, got.Open, err)
+	}
+	u, err := r.URLOf(ctx, "handbook", Target{Location: "https://docs.example.com/hb/guide/a%20b.html"})
+	if err != nil || u.Key != "guide/a b.html" {
+		t.Fatalf("URLOf = %s, %v", u, err)
+	}
+	if err := r.Declare(Source{Name: "self", Kind: KindLnk}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a source of kind lnk: %v", err)
+	}
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("a second resolver of https registered")
+			}
+		}()
+		r.Register("other", Web{})
+	}()
 }
