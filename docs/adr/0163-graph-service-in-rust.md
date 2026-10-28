@@ -1,6 +1,6 @@
 # ADR 0163 — The graph service in Rust, behind a comparing proxy
 
-**Status**: accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets), phase 2 implemented (the reads of the bench, the shadow mode), phase 3 implemented (the writes of the bench), phase 4 implemented (every method, the bootstrap, the content graph; the compose stack runs the Rust service) · **Date**: 2026-10
+**Status**: superseded by ADR 0170 (frozen on the branch `frozen/rust-graph`); was accepted; phase 1 implemented (the workspace, the store, the proxy, the perf targets), phase 2 implemented (the reads of the bench, the shadow mode), phase 3 implemented (the writes of the bench), phase 4 implemented (every method, the bootstrap, the content graph; the compose stack runs the Rust service) · **Date**: 2026-10
 
 ## Context
 

@@ -1,7 +1,7 @@
 // Command goap-local runs the platform on one machine without Docker, one process per binary as the compose stack
-// runs them: an embedded NATS server (JetStream), the graph (Rust by default, or Go) on a SQLite file, and every
-// service on a SQLite file of its own, the processes restarted when they stop. `goap-local bench` runs the graph alone,
-// behind goap-proxy, and loads it with goap-bench: the performance test of the local machine. `goap-local test` runs
+// runs them: an embedded NATS server (JetStream), the graph on a SQLite file, and every service on a SQLite file of
+// its own, the processes restarted when they stop. `goap-local bench` runs the graph alone and loads it with
+// goap-bench: the performance test of the local machine. `goap-local test` runs
 // the platform on fresh data and the end-to-end test of platform/e2e/stack against its gateway (go test, from -root).
 // `goap-local e2e` runs the platform on fresh data with the IDE and the demo data, then the Playwright tests of web/e2e
 // in a browser against the IDE.
@@ -9,7 +9,7 @@
 //	goap-local [flags]                 the platform, until interrupted (make local; -watch -web: make dev)
 //	goap-local test [flags] -- args    the platform, then go test ./e2e/stack/ with args, then stop
 //	goap-local e2e [flags] -- args     the platform and the IDE, then npx playwright test with args, then stop
-//	goap-local bench [flags] -- args   the graph(s) behind goap-proxy, goap-bench with args, the report, then stop
+//	goap-local bench [flags] -- args   the graph alone, goap-bench with args, then stop
 //
 // The binaries are read from -bin (make local builds them in .goap/bin), the data kept in -dir (.goap/local), each
 // process's output in <dir>/logs/<name>.log and on the standard output, prefixed by its name. Each process runs in a
@@ -38,12 +38,8 @@ var hurry = make(chan struct{})
 // config is what the command line and the environment set.
 type config struct {
 	bin, dir, root string
-	// graph is the implementation of the graph service: rust or go.
-	graph string
 	// content runs the content graph next to the platform graph (ADR 0154 §9).
 	content bool
-	// proxy puts goap-proxy in front of the graph in that mode (go, rust, compare, shadow), empty: none.
-	proxy string
 	// skip names the services not started.
 	skip map[string]bool
 	// natsPort is the client port of the embedded NATS server, natsMonitor its monitoring port (0: none).
@@ -51,8 +47,6 @@ type config struct {
 	reset                 bool
 	// watch rebuilds and restarts the services a change of the sources touches; web runs the IDE (vite) too.
 	watch, web bool
-	// cargoProfile is the cargo profile the watcher builds the Rust binaries with (the one -bin's were built with).
-	cargoProfile string
 }
 
 func main() {
@@ -107,7 +101,6 @@ func main() {
 }
 
 func parse(args []string, mode string) (config, []string, error) {
-	bench := mode == "bench"
 	name := "goap-local"
 	if mode != "" {
 		name += " " + mode
@@ -117,19 +110,12 @@ func parse(args []string, mode string) (config, []string, error) {
 	fs.StringVar(&cfg.bin, "bin", platform.Env("GOAP_LOCAL_BIN", filepath.Join(".goap", "bin")), "directory of the binaries (make local-build)")
 	fs.StringVar(&cfg.dir, "dir", platform.Env("GOAP_LOCAL_DIR", filepath.Join(".goap", "local")), "directory of the data, the secrets and the logs")
 	fs.StringVar(&cfg.root, "root", ".", "root of the repository: its domains/ and methodologies/")
-	fs.StringVar(&cfg.graph, "graph", platform.Env("GOAP_LOCAL_GRAPH", "rust"), "graph service: rust or go")
 	fs.BoolVar(&cfg.content, "content", true, "run the content graph next to the platform graph")
-	proxy := ""
-	if bench {
-		proxy = "rust"
-	}
-	fs.StringVar(&cfg.proxy, "proxy", platform.Env("GOAP_LOCAL_PROXY", proxy), "goap-proxy in front of the graph in this mode: go, rust, compare or shadow (empty: none)")
 	skip := fs.String("skip", "", "services not started, comma separated (e.g. importer-git,connector-localfs)")
 	fs.IntVar(&cfg.natsPort, "nats-port", 4222, "client port of the embedded NATS server")
 	fs.IntVar(&cfg.natsMonitor, "nats-monitor", 8222, "monitoring port of the embedded NATS server (0: none)")
 	fs.BoolVar(&cfg.reset, "reset", mode != "", "drop the data of the previous run before starting")
 	fs.BoolVar(&cfg.watch, "watch", false, "rebuild and restart the services a change of the sources touches (make dev)")
-	fs.StringVar(&cfg.cargoProfile, "cargo-profile", platform.Env("GOAP_LOCAL_CARGO_PROFILE", "release"), "cargo profile of the Rust rebuilds of -watch (make dev: dev-local, quicker to rebuild)")
 	fs.BoolVar(&cfg.web, "web", false, "run the IDE too, vite on http://localhost:5173 (make dev)")
 	if err := fs.Parse(args); err != nil {
 		return cfg, nil, err
@@ -137,16 +123,6 @@ func parse(args []string, mode string) (config, []string, error) {
 	if mode == "e2e" {
 		// the tests drive the IDE
 		cfg.web = true
-	}
-	switch cfg.graph {
-	case "rust", "go":
-	default:
-		return cfg, nil, fmt.Errorf("-graph must be rust or go, got %q", cfg.graph)
-	}
-	switch cfg.proxy {
-	case "", "go", "rust", "compare", "shadow":
-	default:
-		return cfg, nil, fmt.Errorf("-proxy must be go, rust, compare or shadow, got %q", cfg.proxy)
 	}
 	cfg.skip = map[string]bool{}
 	for _, s := range strings.Split(*skip, ",") {

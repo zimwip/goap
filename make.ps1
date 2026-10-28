@@ -128,42 +128,31 @@ function DevWeb {
 }
 
 # the platform as the compose stack runs it, one process per binary, without docker (goap-local): an embedded NATS, the
-# graph ($env:LOCAL_GRAPH: rust, or go) and every service on SQLite files of .goap\local, the binaries in .goap\bin
+# graph and every service on SQLite files of .goap\local, the binaries in .goap\bin
 $LocalServices = @('domains', 'graph', 'registry', 'guardian', 'engine', 'modelgw', 'mcp', 'indexer', 'preferences', 'credentials', 'events',
     'conversations', 'jobs', 'gateway', 'connector-localfs', 'importer-git', 'goap-bench', 'goap-local')
 
-# the cargo profile of goap-graph-rs and goap-proxy ($env:LOCAL_CARGO_PROFILE, default release; Dev: dev-local, rebuilt
-# in a fraction of release's time)
-function CargoProfile([string] $default = 'release') { if ($env:LOCAL_CARGO_PROFILE) { $env:LOCAL_CARGO_PROFILE } else { $default } }
-
-function LocalBuild([string] $cargo = (CargoProfile)) {
+function LocalBuild {
     New-Item -ItemType Directory -Force .goap/bin | Out-Null
     InDir platform { Run go build -o ../.goap/bin/ @($LocalServices | ForEach-Object { "./cmd/$_" }) }
-    InDir rust { Run cargo build --profile $cargo --locked -p graph-service -p goap-proxy }
-    $dir = if ($cargo -eq 'dev') { 'debug' } else { $cargo }
-    Copy-Item "rust/target/$dir/goap-graph-rs$Exe", "rust/target/$dir/goap-domains-rs$Exe", "rust/target/$dir/goap-proxy$Exe" .goap/bin/
 }
 
 function LocalArgs { if ($env:LOCAL_ARGS) { $env:LOCAL_ARGS -split ' ' } else { @() } }
 
 function Local {
     LocalBuild
-    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'rust' }
-    Run ".goap/bin/goap-local$Exe" -graph $graph @(LocalArgs)
+    Run ".goap/bin/goap-local$Exe" @(LocalArgs)
 }
 
 function LocalTest {
     LocalBuild
-    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'rust' }
-    Run ".goap/bin/goap-local$Exe" test -graph $graph @(LocalArgs)
+    Run ".goap/bin/goap-local$Exe" test @(LocalArgs)
 }
 
 function WebE2E {
-    LocalBuild (CargoProfile 'dev-local')
+    LocalBuild
     WebE2EBrowser
-    # the Go graph unless $env:LOCAL_GRAPH says otherwise, as dev
-    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'go' }
-    Run ".goap/bin/goap-local$Exe" e2e -graph $graph @(LocalArgs) -- @(E2EArgs)
+    Run ".goap/bin/goap-local$Exe" e2e @(LocalArgs) -- @(E2EArgs)
 }
 
 function WebE2ERun {
@@ -173,27 +162,21 @@ function WebE2ERun {
 
 function LocalBench {
     LocalBuild
-    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'rust' }
-    $proxy = if ($env:LOCAL_PROXY) { $env:LOCAL_PROXY } else { 'rust' }
     $bench = if ($env:PERF_ARGS) { $env:PERF_ARGS -split ' ' } else { @() }
-    Run ".goap/bin/goap-local$Exe" bench -graph $graph -proxy $proxy @(LocalArgs) -- @bench
+    Run ".goap/bin/goap-local$Exe" bench @(LocalArgs) -- @bench
 }
 
 # on this machine, no docker: the local stack (goap-local) watching the sources, a change rebuilding the binaries it
 # touches and restarting their services, with vite: http://localhost:5173. Ctrl-C stops every process.
 function Dev {
-    $cargo = CargoProfile 'dev-local'
-    LocalBuild $cargo
-    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'go' }
-    Run ".goap/bin/goap-local$Exe" -watch -web -graph $graph -cargo-profile $cargo @(LocalArgs)
+    LocalBuild
+    Run ".goap/bin/goap-local$Exe" -watch -web @(LocalArgs)
 }
 
 # the same without the IDE: gateway http://localhost:8080
 function DevBackend {
-    $cargo = CargoProfile 'dev-local'
-    LocalBuild $cargo
-    $graph = if ($env:LOCAL_GRAPH) { $env:LOCAL_GRAPH } else { 'go' }
-    Run ".goap/bin/goap-local$Exe" -watch -graph $graph -cargo-profile $cargo @(LocalArgs)
+    LocalBuild
+    Run ".goap/bin/goap-local$Exe" -watch @(LocalArgs)
 }
 
 function DevReset { LocalReset }
@@ -202,7 +185,7 @@ function LocalReset { Remove-Item -Recurse -Force .goap/local -ErrorAction Silen
 
 function RunnerImage { Run docker build --build-arg SERVICE=goap-runner -t goap/runner:dev . }
 
-function Images { RunnerImage; Run docker build --target services -t goap/goap:dev .; Run docker build --target rust -t goap/rust:dev . }
+function Images { RunnerImage; Run docker build --target services -t goap/goap:dev . }
 
 function ClaudeAgentRunner { Run go run ./platform/cmd/connector-claude-coding-agent install }
 
@@ -222,7 +205,7 @@ function Down { DockerSock; Run docker @Compose down }
 function Reset {
     DockerSock
     Run docker @Compose down --volumes --remove-orphans
-    & docker image rm goap/goap:dev goap/rust:dev goap/proxy:dev goap/runner:dev # absent images are not an error
+    & docker image rm goap/goap:dev goap/runner:dev # absent images are not an error
 }
 # Performance stack (deploy/compose/perf.yml): the graph service on PostgreSQL, goap-bench, Prometheus and Grafana
 $Perf = @('compose', '-f', 'deploy/compose/perf.yml')
@@ -230,125 +213,24 @@ function PerfArgs { if ($env:PERF_ARGS) { -split $env:PERF_ARGS } else { @('-ver
 # goap-bench stays up once its run ends, so its series stay in Grafana, until interrupted; $env:PERF_AUTOSTOP = '30m'
 # stops it after that long, '0' with the run
 function PerfHold { if ($env:PERF_AUTOSTOP) { "-hold=$env:PERF_AUTOSTOP" } else { '-hold=-1s' } }
-# goap-proxy in front of the graph service (ADR 0163): every call of the bench and the gateway goes through it;
-# $env:PERF_PROXY = '0' sends them to the graph service itself
-function PerfNoProxy { $env:PERF_PROXY -eq '0' }
-# the Rust graph service (deploy/compose/perf.rust.yml): perf-rust runs it behind the proxy in mode
-# $env:PERF_RUST_MODE (rust; go sends the calls to the Go service of the same stack); perf-diff compares it with the Go one call by call ($env:PERF_DIFF_ARGS, serial, seeded;
-# $env:PERF_DIFF_RUST = 'go' compares Go with Go), in mode $env:PERF_DIFF_MODE: shadow (default: the reads sent to both
-# on the Go service's schema) or compare (every call, each on its schema, then their tables)
-$PerfRust = @('compose', '-f', 'deploy/compose/perf.yml', '-f', 'deploy/compose/perf.rust.yml')
-$PerfDiffDsnGo = 'postgres://graph:graph@postgres:5432/goap?sslmode=disable'
-$PerfDiffDsnRs = 'postgres://graph_rs:graph_rs@postgres:5432/goap?sslmode=disable'
-# runs a block with environment variables set, then puts them back
-function WithEnv([hashtable]$vars, [scriptblock]$block) {
-    $saved = @{}
-    foreach ($k in $vars.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $vars[$k]) }
-    try { & $block } finally { foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) } }
-}
-function PerfGoEnv { if (PerfNoProxy) { @{ GOAP_PERF_GRAPH_URL = 'http://graph:8080' } } else { @{} } }
-function PerfRustEnv {
-    $mode = if ($env:PERF_RUST_MODE) { $env:PERF_RUST_MODE } else { 'rust' }
-    $vars = @{ GOAP_PERF_IMPL = $mode }
-    if (PerfNoProxy) { $vars.GOAP_PERF_GRAPH_URL = 'http://graph-rs:8080' }
-    $vars
-}
-function PerfDiffMode { if ($env:PERF_DIFF_MODE) { $env:PERF_DIFF_MODE } else { 'shadow' } }
-function PerfDiffEnv {
-    $mode = PerfDiffMode
-    $dsn = if ($mode -eq 'shadow') { $PerfDiffDsnGo } else { $PerfDiffDsnRs }
-    $vars = @{ GOAP_PERF_IMPL = $mode; GOAP_PERF_RS_DSN = $dsn }
-    if ($env:PERF_DIFF_RUST -eq 'go') { $vars.GOAP_PERF_RS_IMAGE = 'goap/goap:dev'; $vars.GOAP_PERF_RS_BIN = '/goap/graph' }
-    $vars
-}
-function PerfImages { Run docker build --target services -t goap/goap:dev .; Run docker build --target rust -t goap/rust:dev .; Run docker build --target proxy -t goap/proxy:dev . }
-function PerfUp { PerfImages; WithEnv (PerfGoEnv) { Run docker @Perf up -d } }
-function PerfRun { $a = PerfArgs; $h = PerfHold; WithEnv (PerfGoEnv) { Run docker @Perf run --rm bench $h @a } }
-function PerfRustUp { PerfImages; WithEnv (PerfRustEnv) { Run docker @PerfRust up -d } }
-function PerfRustRun { $a = PerfArgs; $h = PerfHold; WithEnv (PerfRustEnv) { Run docker @PerfRust run --rm bench $h @a } }
-function PerfRust {
-    PerfRustUp
-    PerfRustRun
-    Write-Host 'Grafana: http://localhost:3300/d/goap-perf - coverage: http://localhost:8383/proxy/coverage - reports: .goap\perf\*.csv'
-}
-function PerfDiff {
-    PerfImages
-    $a = if ($env:PERF_DIFF_ARGS) { -split $env:PERF_DIFF_ARGS } else { @('-versions', '5000') }
-    Run docker @PerfRust up -d --wait postgres
-    Run docker @PerfRust run --rm --no-deps --entrypoint psql postgres-init -v ON_ERROR_STOP=1 -h postgres -U goap -d goap `
-        -c 'DROP SCHEMA IF EXISTS graph CASCADE' -c 'DROP SCHEMA IF EXISTS graph_rs CASCADE'
-    WithEnv (PerfDiffEnv) {
-        Run docker @PerfRust up -d --force-recreate postgres-init graph graph-rs proxy otel-collector
-        Run docker @PerfRust run --rm bench -hold=0 -workers 1 -seed 1 @a
-        Write-Host (Invoke-RestMethod http://localhost:8383/proxy/report | ConvertTo-Json -Depth 6)
-        if ((PerfDiffMode) -ne 'shadow') {
-            Run docker @PerfRust run --rm --no-deps --entrypoint /goap/goap-proxy proxy diff-db --go $PerfDiffDsnGo --rust $PerfDiffDsnRs --ids /results/diff/ids.json
-        }
-    }
-}
-# perf-compare: the Go and the Rust graph services side by side (deploy/compose/perf.compare.yml), each on its schema
-# (graph, graph_rs) behind its own goap-proxy (proxy, proxy-rs: the time of each service as the server sees it), loaded
-# by its own goap-bench with $env:PERF_COMPARE_ARGS (default -seed 1 and PERF_ARGS, as perf), at the same time
-# or one after the other ($env:PERF_COMPARE_SERIAL = '1': Go, then Rust), each with its domain registry (domains,
-# domains_rs); the four schemas dropped first unless $env:PERF_COMPARE_KEEP = '1'; cAdvisor gives the CPU and memory of
-# each container, the podman exporter when the docker command is podman's ($env:PERF_CONTAINERS: cadvisor, podman or
-# none; $env:PERF_PODMAN_SOCK the socket of the podman service in its machine, the rootless one by default); drawn by the
-# Grafana dashboard "GOAP performance: Go vs Rust". $env:PERF_COMPARE_MODE: parallel (the above) or mirror (one
-# goap-bench through goap-proxy in mode compare: every call sent to both services, timed and compared; the stack of
-# perf-rust, one domain registry and one proxy)
-$PerfCmp = @('compose', '-f', 'deploy/compose/perf.yml', '-f', 'deploy/compose/perf.rust.yml', '-f', 'deploy/compose/perf.compare.yml')
+# cAdvisor gives the CPU and memory of each container, the podman exporter when the docker command is podman's
+# ($env:PERF_CONTAINERS: cadvisor, podman or none; $env:PERF_PODMAN_SOCK the socket of the podman service in its
+# machine, the rootless one by default)
 function PerfContainers {
     if ($env:PERF_CONTAINERS) { return $env:PERF_CONTAINERS }
     if ((docker --version 2>$null) -match 'podman') { 'podman' } else { 'cadvisor' }
 }
-function PerfMirror { $env:PERF_COMPARE_MODE -eq 'mirror' }
-function PerfCmpStack {
-    $metrics = switch (PerfContainers) { 'cadvisor' { @('cadvisor') } 'podman' { @('podman-exporter') } default { @() } }
-    $graphs = if (PerfMirror) { @('postgres-init', 'domains', 'graph', 'graph-rs', 'proxy') } else { @('postgres-init', 'domains', 'domains-rs', 'graph', 'graph-rs', 'proxy', 'proxy-rs') }
-    $graphs + $metrics + @('otel-collector', 'postgres-exporter', 'prometheus', 'grafana')
-}
-function PerfCmpUp { if (PerfMirror) { $PerfRust } else { $PerfCmp } }
-function PerfCmpEnv {
-    $vars = @{ GOAP_PERF_RS_DSN = $PerfDiffDsnRs; GOAP_PODMAN_SOCK = (PerfPodmanSock) }
-    if (PerfMirror) { $vars.GOAP_PERF_IMPL = 'compare' }
-    $vars
-}
 function PerfPodmanSock { if ($env:PERF_PODMAN_SOCK) { $env:PERF_PODMAN_SOCK } else { '/run/user/1000/podman/podman.sock' } }
-function PerfCompareArgs { if ($env:PERF_COMPARE_ARGS) { $env:PERF_COMPARE_ARGS } else { '-seed 1 ' + ((PerfArgs) -join ' ') } }
-function PerfCompareUp {
-    PerfImages
-    $stack = PerfCmpStack; $files = PerfCmpUp
-    WithEnv (PerfCmpEnv) {
-        if ($env:PERF_COMPARE_KEEP) {
-            Run docker @files up -d @stack
-        } else {
-            Run docker @PerfCmp up -d --wait postgres
-            Run docker @PerfCmp run --rm --no-deps --entrypoint psql postgres-init -v ON_ERROR_STOP=1 -h postgres -U goap -d goap `
-                -c 'DROP SCHEMA IF EXISTS graph CASCADE' -c 'DROP SCHEMA IF EXISTS graph_rs CASCADE' `
-                -c 'DROP SCHEMA IF EXISTS domains CASCADE' -c 'DROP SCHEMA IF EXISTS domains_rs CASCADE'
-            Run docker @files up -d --force-recreate --remove-orphans @stack
-        }
-    }
+function PerfProfile { $c = PerfContainers; if ($c -and $c -ne 'none') { @('--profile', $c) } else { @() } }
+# runs a block with GOAP_PODMAN_SOCK set, then puts it back
+function WithPodmanSock([scriptblock]$block) {
+    $saved = $env:GOAP_PODMAN_SOCK
+    $env:GOAP_PODMAN_SOCK = PerfPodmanSock
+    try { & $block } finally { $env:GOAP_PODMAN_SOCK = $saved }
 }
-function PerfCompareRun {
-    $a = PerfCompareArgs; $h = PerfHold
-    if (PerfMirror) {
-        $flags = -split $a
-        WithEnv (PerfCmpEnv) { Run docker @PerfRust run --rm -e OTEL_RESOURCE_ATTRIBUTES=goap.perf.impl=mirror bench $h @flags }
-    } elseif ($env:PERF_COMPARE_SERIAL) {
-        WithEnv @{ GOAP_PERF_RS_DSN = $PerfDiffDsnRs; GOAP_PERF_GO_ARGS = "-hold=0 $a" } { Run docker @PerfCmp up --no-deps --force-recreate bench }
-        WithEnv @{ GOAP_PERF_RS_DSN = $PerfDiffDsnRs; GOAP_PERF_RS_ARGS = "$h $a" } { Run docker @PerfCmp up --no-deps --force-recreate bench-rs }
-    } else {
-        WithEnv @{ GOAP_PERF_RS_DSN = $PerfDiffDsnRs; GOAP_PERF_GO_ARGS = "$h $a"; GOAP_PERF_RS_ARGS = "$h $a" } {
-            Run docker @PerfCmp up --no-deps --force-recreate bench bench-rs
-        }
-    }
-}
-function PerfCompare {
-    PerfCompareUp
-    PerfCompareRun
-    Write-Host 'Grafana: http://localhost:3300/d/goap-perf-compare - reports: .goap\perf\compare\{go,rust}\*.csv'
-}
+function PerfImages { Run docker build --target services -t goap/goap:dev . }
+function PerfUp { PerfImages; $p = PerfProfile; WithPodmanSock { Run docker @Perf @p up -d } }
+function PerfRun { $a = PerfArgs; $h = PerfHold; Run docker @Perf run --rm bench $h @a }
 # captures of the performance stack's Prometheus (perf-capture), replayed by perf-analysis
 $PerfCaptures = '.goap/perf/captures'
 $PerfAnalysis = @('compose', '-f', 'deploy/compose/perf-analysis.yml')
@@ -385,11 +267,8 @@ function Perf {
     PerfRun
     Write-Host 'Grafana: http://localhost:3300/d/goap-perf - Prometheus: http://localhost:9390 - web: http://localhost:5174 - reports: .goap\perf\*.csv'
 }
-function PerfDown { Run docker @PerfCmp --profile bench --profile cadvisor --profile podman down }
-function PerfReset { Run docker @PerfCmp --profile bench --profile cadvisor --profile podman down --volumes --remove-orphans }
-function RustTest { InDir rust { Run cargo test --locked } }
-function RustLint { InDir rust { Run cargo fmt --check; Run cargo clippy --locked --all-targets -- -D warnings } }
-
+function PerfDown { WithPodmanSock { Run docker @Perf --profile bench --profile cadvisor --profile podman down } }
+function PerfReset { WithPodmanSock { Run docker @Perf --profile bench --profile cadvisor --profile podman down --volumes --remove-orphans } }
 function Logs { DockerSock; Run docker @Compose logs -f engine graph registry modelgw gateway }
 
 function Help {
@@ -406,8 +285,8 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   test-wasm         every go test with the scripts run by the wasm JavaScript engine (GOAP_JS_ENGINE=wasm)
   tidy              go mod tidy in every module
   web-test          unit tests of the web (needs npm install in web\)
-  web-e2e           no docker: the platform on fresh data with the IDE and the demo data (the Go graph unless
-                    $env:LOCAL_GRAPH is set), then the Playwright tests of web\e2e ($env:E2E_ARGS), then stop
+  web-e2e           no docker: the platform on fresh data with the IDE and the demo data, then the
+                    Playwright tests of web\e2e ($env:E2E_ARGS), then stop
   web-e2e-run       the Playwright tests of web\e2e against an IDE already running (dev; $env:GOAP_E2E_URL,
                     $env:GOAP_E2E_SUBJECT / GOAP_E2E_PASSWORD an administrator of it)
   test-pg           every test, the PostgreSQL ones included (GOAP_TEST_PG_DSN, else a throw-away
@@ -416,48 +295,33 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   eval              offline evaluation cases of evals\ (or $env:EVAL) against a running gateway, as GOAP_TOKEN
   dev               no docker: the local stack (see local) watching the sources, a change rebuilding and
                     restarting what it touches, with vite: http://localhost:5173; Ctrl-C stops every process
-                    (the Go graph unless $env:LOCAL_GRAPH is set)
   dev-backend       the same without the IDE: gateway http://localhost:8080
   dev-web           IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
   dev-reset         drop the data of the local stack (.goap\local)
   local             no docker: the platform one process per binary (embedded NATS, SQLite in .goap\local,
-                    $env:LOCAL_GRAPH rust|go, $env:LOCAL_ARGS: goap-local -h): gateway http://localhost:8080,
+                    $env:LOCAL_ARGS: goap-local -h): gateway http://localhost:8080,
                     then .\make.ps1 dev-web
-  local-build       the binaries of the local stack in .goap\bin (Go services, goap-graph-rs, goap-domains-rs, goap-proxy)
+  local-build       the binaries of the local stack in .goap\bin 
   local-test        no docker: the platform on fresh data, the end-to-end test of platform\e2e\stack, then stop
-  local-bench       no docker: the graph alone on SQLite behind goap-proxy ($env:LOCAL_PROXY: rust, go,
-                    compare, shadow), loaded by goap-bench ($env:PERF_ARGS); .goap\local\bench, .goap\local\diff
+  local-bench       no docker: the graph alone on SQLite (GOAP_DB_DSN: on PostgreSQL), loaded by goap-bench
+                    ($env:PERF_ARGS); reports in .goap\local\bench
   local-reset       drop the data of the local stack (.goap\local)
   web               same as dev-web
   runner-image      image of the script sandboxes (goap-runner)
-  images            the images of the compose stack: goap/goap:dev (Go services), goap/rust:dev (graph services)
+  images            the images of the compose stack: goap/goap:dev (every service)
   claude-agent-runner  install the Claude Agent SDK of the claude-coding-agent connector
                     (GOAP_CLAUDE_AGENT_DIR, default .goap\claude-agent; needs npm)
   up | down | logs  docker compose stack (up prints its URLs and how to reach its database, DBeaver)
   reset             stop the stack and drop its containers, volumes (database, NATS, web modules) and images
   urls              the URLs of the compose stack: IDE, gateway, each service, tools, database
-  perf              performance test in docker: the graph service on PostgreSQL loaded by goap-bench through
-                    goap-proxy ($env:PERF_ARGS, goap-bench -h; $env:PERF_PROXY = '0' without the proxy), measured
+  perf              performance test in docker: the graph service on PostgreSQL loaded by goap-bench
+                    ($env:PERF_ARGS, goap-bench -h), measured
                     in Grafana http://localhost:3300; goap-bench holds once its run ends until interrupted, or for
                     $env:PERF_AUTOSTOP (e.g. 30m; 0: exits with the run)
-  perf-images       the images of the performance stack: goap/goap:dev, goap/rust:dev (Rust graph) and goap/proxy:dev (goap-proxy)
+  perf-images       the image of the performance stack: goap/goap:dev
   perf-up | perf-run | perf-down | perf-reset
-                    start the performance stack, one more run of goap-bench, stop it (keeping its data), drop its data
-  perf-rust | perf-rust-up | perf-rust-run
-                    the same with the Rust graph service behind goap-proxy in mode $env:PERF_RUST_MODE (rust; go:
-                    the Go service of the same stack)
-  perf-diff         the Go and the Rust graph services compared call by call ($env:PERF_DIFF_MODE: shadow, the
-                    reads on one schema; compare, every call each on its schema, then the databases)
-                    ($env:PERF_DIFF_ARGS, serial and seeded; $env:PERF_DIFF_RUST = 'go': Go with Go); .goap\perf\diff
-  perf-compare | perf-compare-up | perf-compare-run
-                    the Go and the Rust graph services measured side by side, each on its schema behind its own
-                    goap-proxy and loaded by its own goap-bench ($env:PERF_ARGS as perf; $env:PERF_COMPARE_ARGS,
-                    default -seed 1 and PERF_ARGS; $env:PERF_COMPARE_SERIAL = '1' one after the
-                    other; $env:PERF_COMPARE_KEEP = '1' keeps the schemas; $env:PERF_CONTAINERS cadvisor, podman
-                    or none; $env:PERF_COMPARE_MODE = 'mirror': the same calls sent to both by goap-proxy, their
-                    answers compared); http://localhost:3300/d/goap-perf-compare
-  rust-test | rust-lint
-                    cargo test, cargo fmt + clippy of the Rust workspace (rust\)
+                    start the performance stack ($env:PERF_CONTAINERS: cadvisor, podman or none), one more run of
+                    goap-bench, stop it (keeping its data), drop its data
   perf-capture      save what the performance stack's Prometheus holds in .goap\perf\captures\<$env:PERF_CAPTURE>
   perf-analysis | perf-analysis-down
                     replay a capture ($env:PERF_CAPTURE, default the latest) in a Grafana of its own,
@@ -502,15 +366,6 @@ switch ($Target) {
     'perf-up'          { PerfUp }
     'perf-run'         { PerfRun }
     'perf-images'      { PerfImages }
-    'perf-rust'        { PerfRust }
-    'perf-rust-up'     { PerfRustUp }
-    'perf-rust-run'    { PerfRustRun }
-    'perf-diff'        { PerfDiff }
-    'perf-compare'     { PerfCompare }
-    'perf-compare-up'  { PerfCompareUp }
-    'perf-compare-run' { PerfCompareRun }
-    'rust-test'        { RustTest }
-    'rust-lint'        { RustLint }
     'perf-down'        { PerfDown }
     'perf-reset'       { PerfReset }
     'perf-capture'     { PerfCapture }

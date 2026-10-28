@@ -21,21 +21,15 @@ var goModules = []string{"contracts", "lib", "graph", "engine", "mcp", "gateway"
 
 const modulePath = "github.com/zimwip/goap/"
 
-// The binaries built by cargo: the graph service and the proxy.
-var cargoBinaries = map[string]string{"goap-graph-rs": "graph-service", "goap-domains-rs": "graph-service", "goap-proxy": "goap-proxy"}
-
 // watcher rebuilds what a change of the sources touches and restarts the services running it (-watch, make dev):
-// the Go binaries depending on a package changed, the Rust ones on a change of rust/, the domain registry on a change
-// of domains/ or of the built-in domains (it publishes them at start, ADR 0167), the registry on one of methodologies/.
+// the Go binaries depending on a package changed, the domain registry on a change of domains/ or of the built-in
+// domains (it publishes them at start, ADR 0167), the registry on one of methodologies/.
 type watcher struct {
 	cfg      config
 	sup      *supervisor
 	log      *slog.Logger
 	services []service
 	seen     map[string]stamp
-	// rust asks the cargo builder for a build: cargo takes minutes where go takes seconds, so it builds on its own,
-	// the Go services reloaded meanwhile; the changes made during a build make one more after it
-	rust chan struct{}
 }
 
 type stamp struct {
@@ -45,13 +39,8 @@ type stamp struct {
 
 // watch polls the sources every second until the context is done.
 func watch(ctx context.Context, cfg config, sup *supervisor, log *slog.Logger, services []service) {
-	w := &watcher{cfg: cfg, sup: sup, log: log, services: services, rust: make(chan struct{}, 1)}
+	w := &watcher{cfg: cfg, sup: sup, log: log, services: services}
 	w.seen = w.scan()
-	sup.wg.Add(1)
-	go func() {
-		defer sup.wg.Done()
-		w.cargo(ctx)
-	}()
 	log.Info("watching the sources: a change rebuilds and restarts the services it touches")
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
@@ -97,7 +86,7 @@ func (w *watcher) scan() map[string]stamp {
 			}
 			if d.IsDir() {
 				switch d.Name() {
-				case "node_modules", "target", "testdata", ".git":
+				case "node_modules", "testdata", ".git":
 					return filepath.SkipDir
 				}
 				return nil
@@ -125,13 +114,6 @@ func (w *watcher) scan() map[string]stamp {
 			return false
 		})
 	}
-	walk("rust", func(rel string) bool {
-		switch filepath.Ext(rel) {
-		case ".rs", ".toml", ".lock", ".json", ".sql":
-			return true
-		}
-		return false
-	})
 	for _, dir := range []string{"domains", "methodologies", "lib/domains/builtin"} {
 		walk(dir, func(rel string) bool { return strings.HasSuffix(rel, ".yaml") && !strings.Contains(rel, "/examples/") })
 	}
@@ -159,13 +141,11 @@ func (w *watcher) apply(ctx context.Context, changed []string) {
 	slices.Sort(changed)
 	changed = slices.Compact(changed)
 	var goPkgs []string
-	allGo, rust := false, false
+	allGo := false
 	restart := map[string]bool{} // services restarted with their binary as is
 	for _, f := range changed {
 		top, rest, _ := strings.Cut(f, "/")
 		switch {
-		case top == "rust":
-			rust = true
 		case top == "domains" || strings.HasPrefix(f, "lib/domains/builtin/") && strings.HasSuffix(f, ".yaml"):
 			restart["domains"] = true
 		case top == "methodologies":
@@ -176,21 +156,11 @@ func (w *watcher) apply(ctx context.Context, changed []string) {
 				continue
 			}
 			goPkgs = append(goPkgs, modulePath+top+"/"+filepath.ToSlash(filepath.Dir(rest)))
-			// the Rust graph embeds the migrations of the graph, the domain registry and the smart tags
-			if strings.Contains(rest, "/migrations") && top == "graph" {
-				rust = true
-			}
 		}
 	}
 	w.log.Info("sources changed", "files", len(changed))
 	if len(goPkgs) > 0 || allGo {
 		w.buildGo(ctx, goPkgs, allGo)
-	}
-	if rust {
-		select {
-		case w.rust <- struct{}{}:
-		default: // one asked already
-		}
 	}
 	if len(restart) > 0 {
 		w.sup.restart(ctx, slices.Sorted(maps.Keys(restart)), func() {})
@@ -201,7 +171,7 @@ func (w *watcher) apply(ctx context.Context, changed []string) {
 func (w *watcher) goBinaries() []string {
 	var out []string
 	for _, s := range w.services {
-		if s.bin == "" || s.path != "" || cargoBinaries[s.bin] != "" || slices.Contains(out, s.bin) {
+		if s.bin == "" || s.path != "" || slices.Contains(out, s.bin) {
 			continue
 		}
 		out = append(out, s.bin)
@@ -271,41 +241,6 @@ func (w *watcher) goDeps(ctx context.Context, bins []string) (map[string][]strin
 	return deps, nil
 }
 
-// cargo builds the Rust binaries each time asked, until the context is done.
-func (w *watcher) cargo(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-w.rust:
-			w.buildRust(ctx)
-		}
-	}
-}
-
-// buildRust builds the cargo binaries the stack runs and restarts the services whose binary changed.
-func (w *watcher) buildRust(ctx context.Context) {
-	var bins []string
-	args := []string{"build", "--profile", w.cfg.cargoProfile, "--locked"}
-	for _, s := range w.services {
-		if p := cargoBinaries[s.bin]; p != "" && !slices.Contains(bins, s.bin) {
-			bins = append(bins, s.bin)
-			args = append(args, "-p", p)
-		}
-	}
-	if len(bins) == 0 {
-		return
-	}
-	w.log.Info("building", "binaries", bins)
-	if err := w.command(ctx, "cargo-build", filepath.Join(w.cfg.root, "rust"), "cargo", args...); err != nil {
-		w.log.Warn("the build failed: the services keep running as they were", "err", err)
-		return
-	}
-	for _, b := range bins {
-		w.replace(ctx, b, filepath.Join(w.cfg.root, "rust", "target", cargoDir(w.cfg.cargoProfile), exe(b)))
-	}
-}
-
 // replace restarts the services running a binary when the one built differs, putting it in place while they are
 // stopped (Windows refuses to overwrite a running program).
 func (w *watcher) replace(ctx context.Context, bin, built string) {
@@ -351,14 +286,6 @@ func (w *watcher) command(ctx context.Context, name, dir, path string, args ...s
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	return nil
-}
-
-// cargoDir is the directory of target/ cargo puts a profile's binaries in.
-func cargoDir(profile string) string {
-	if profile == "dev" {
-		return "debug"
-	}
-	return profile
 }
 
 func exe(name string) string {

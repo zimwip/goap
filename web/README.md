@@ -167,7 +167,7 @@ the admin mode. `auth.setup.e2e.ts` signs in once (creating the account when the
 `enterMode`, `openTool`). They run one at a time, on one platform.
 
 - `make web-e2e` (`.\make.ps1 web-e2e`): the local stack on fresh data with this IDE and the demo data
-  (`goap-local e2e`, the Go graph unless `LOCAL_GRAPH` is set), the tests, then it stops. The account the tests
+  (`goap-local e2e`), the tests, then it stops. The account the tests
   create is the first one, so the administrator.
 - `make web-e2e-run`: the tests against an IDE already running (`make dev`): `GOAP_E2E_URL` (default
   `http://localhost:5173`), `GOAP_E2E_SUBJECT` / `GOAP_E2E_PASSWORD` an administrator of that stack (default

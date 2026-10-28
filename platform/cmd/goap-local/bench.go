@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -10,23 +9,13 @@ import (
 	"strings"
 )
 
-// runBench runs the performance test of the local machine, the one of make perf: the graph service(s) alone on
-// SQLite, bootstrapping themselves, behind goap-proxy in its mode (none with -proxy ""), loaded by goap-bench with
-// args; then, in modes compare and shadow, the proxy's report and, in mode compare, the comparison of the two
-// databases.
+// runBench runs the performance test of the local machine, the one of make perf: the graph service alone on SQLite
+// (GOAP_DB_DSN: on PostgreSQL), bootstrapping itself, loaded by goap-bench with args.
 func runBench(ctx context.Context, log *slog.Logger, cfg config, args []string) error {
 	if err := cfg.prepare(log); err != nil {
 		return err
 	}
-	graphs, graphURL := cfg.graphs()
-	uses := []portUse{{portDomains, "domains"}}
-	for _, g := range graphs {
-		uses = append(uses, portUse{g.port, "graph-" + g.name})
-	}
-	if cfg.proxy != "" {
-		uses = append(uses, portUse{portGraph, "proxy"})
-	}
-	if err := checkPorts(uses); err != nil {
+	if err := checkPorts([]portUse{{portDomains, "domains"}, {portGraph, "graph"}}); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -34,57 +23,29 @@ func runBench(ctx context.Context, log *slog.Logger, cfg config, args []string) 
 	defer sup.wait()
 	defer cancel()
 
-	// the domain registry first: the graphs wait for its domains (ADR 0167)
-	if err := sup.start(ctx, cfg.domainsService(map[string]string{"GOAP_GRAPH_URL": graphURL})); err != nil {
+	// the domain registry first: the graph waits for its domains (ADR 0167)
+	if err := sup.start(ctx, cfg.domainsService(map[string]string{"GOAP_GRAPH_URL": url(portGraph)})); err != nil {
 		return err
 	}
-	for i, g := range graphs {
-		env := map[string]string{
-			"GOAP_HTTP_ADDR":   addr(g.port),
-			"GOAP_SQLITE_PATH": g.db,
-			"GOAP_DOMAINS_URL": url(portDomains),
-			"GOAP_LOG_FORMAT":  "text",
-			// no bootstrap command in this stack: the service bootstraps the platform itself (shadow: the Go one)
-			"GOAP_GRAPH_BOOTSTRAP": "1",
-		}
-		if cfg.proxy == "shadow" && i > 0 {
-			env["GOAP_GRAPH_BOOTSTRAP"] = "0"
-		}
-		if err := sup.start(ctx, service{name: "graph-" + g.name, bin: g.bin, port: g.port, ready: "/readyz", env: env}); err != nil {
-			return err
-		}
+	env := map[string]string{
+		"GOAP_HTTP_ADDR":   addr(portGraph),
+		"GOAP_SQLITE_PATH": filepath.Join(cfg.dir, "graph.db"),
+		"GOAP_DOMAINS_URL": url(portDomains),
+		"GOAP_LOG_FORMAT":  "text",
+		// no bootstrap command in this stack: the service bootstraps the platform itself
+		"GOAP_GRAPH_BOOTSTRAP": "1",
 	}
-	if cfg.proxy != "" {
-		if err := sup.start(ctx, cfg.proxyService(graphs)); err != nil {
-			return err
-		}
+	if err := sup.start(ctx, service{name: "graph", bin: "graph", port: portGraph, ready: "/readyz", env: env}); err != nil {
+		return err
 	}
 	results := filepath.Join(cfg.dir, "bench") + string(os.PathSeparator)
-	bench := []string{"-wait", "3m", "-hold=0", "-csv", results}
-	if cfg.proxy == "compare" || cfg.proxy == "shadow" {
-		// a comparison pairs the calls: one writer, the same keys at each run (later arguments win)
-		bench = append(bench, "-workers", "1", "-seed", "1")
-	}
-	bench = append(bench, args...)
+	bench := append([]string{"-wait", "3m", "-hold=0", "-csv", results}, args...)
 	if !slices.ContainsFunc(args, func(a string) bool { return strings.HasPrefix(strings.TrimLeft(a, "-"), "versions") }) {
 		bench = append(bench, "-versions", "20000")
 	}
-	if err := sup.start(ctx, service{name: "bench", bin: "goap-bench", args: bench, env: map[string]string{"GOAP_GRAPH_URL": graphURL, "GOAP_DOMAINS_URL": url(portDomains)}, once: true}); err != nil {
+	if err := sup.start(ctx, service{name: "bench", bin: "goap-bench", args: bench, env: map[string]string{"GOAP_GRAPH_URL": url(portGraph), "GOAP_DOMAINS_URL": url(portDomains)}, once: true}); err != nil {
 		return err
 	}
 	log.Info("bench done", "csv", results)
-	if cfg.proxy != "compare" && cfg.proxy != "shadow" {
-		return nil // the proxy compares nothing in the other modes: no report
-	}
-	report, err := get(ctx, url(portGraph)+"/proxy/report")
-	if err != nil {
-		return err
-	}
-	fmt.Printf("proxy report (%s mode):\n%s\n", cfg.proxy, report)
-	if cfg.proxy == "compare" {
-		return sup.start(ctx, service{name: "diff-db", bin: "goap-proxy", once: true, args: []string{"diff-db",
-			"--go", "sqlite://" + graphs[0].db, "--rust", "sqlite://" + graphs[1].db,
-			"--ids", filepath.Join(cfg.dir, "diff", "ids.json")}})
-	}
 	return nil
 }
