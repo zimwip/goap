@@ -1,5 +1,7 @@
 # ADR 0056 — Baselines are the states changes leave; names are tags
 
+> **Note (ADR 0175)**: a *baseline* is now a *commit* (table `commits`, `domain.Commit`), and every commit is a row, the commits of a change's branch included (superseding ADR 0140 §9). This ADR keeps its words as history.
+
 **Status**: accepted, implemented · **Date**: 2026-10 ·
 Builds on ADR 0032 (branches as pointers, baselines as deltas), ADR 0049 (mandatory change), ADR 0054 (the guard).
 Supersedes the empty initial baseline of ADR 0049 and the naming of baselines of ADR 0032. The two-step apply is
