@@ -44,10 +44,15 @@ func (f *fakeGraph) GetNode(_ context.Context, r *connect.Request[graphv1.GetNod
 }
 
 func (f *fakeGraph) GetGraphOverview(context.Context, *connect.Request[graphv1.GetGraphOverviewRequest]) (*connect.Response[graphv1.GetGraphOverviewResponse], error) {
-	ns := map[string][]string{"platform": {"organisation", "platform"}, "content": {"alm", "code"}}[f.name]
+	// each graph lists the namespaces it holds, and the domains in force it holds no node of with zero counts
+	held := map[string][]string{"platform": {"organisation", "platform"}, "content": {"alm", "code"}}[f.name]
+	empty := map[string][]string{"platform": {"alm", "code"}, "content": {"organisation", "platform"}}[f.name]
 	out := &graphv1.GetGraphOverviewResponse{}
-	for _, n := range ns {
+	for _, n := range held {
 		out.Namespaces = append(out.Namespaces, &graphv1.NamespaceSummary{Namespace: n, Nodes: 1})
+	}
+	for _, n := range empty {
+		out.Namespaces = append(out.Namespaces, &graphv1.NamespaceSummary{Namespace: n})
 	}
 	return connect.NewResponse(out), nil
 }
@@ -131,11 +136,15 @@ func TestRouter(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// each namespace counted by the graph holding it, never by the zero summary of the other
 		got := map[string]string{}
 		for _, n := range ov.Msg.Namespaces {
 			got[n.Namespace] = n.Source
+			if n.Nodes != 1 {
+				t.Fatalf("%s counted by %s: %d nodes", n.Namespace, n.Source, n.Nodes)
+			}
 		}
-		if len(got) != 4 || got["alm"] != "content" || got["code"] != "content" || got["organisation"] != "platform" {
+		if len(ov.Msg.Namespaces) != 4 || got["alm"] != "content" || got["code"] != "content" || got["organisation"] != "platform" {
 			t.Fatalf("overview = %v", got)
 		}
 		names, err := c.ListNamespaces(context.Background(), connect.NewRequest(&graphv1.ListNamespacesRequest{}))
