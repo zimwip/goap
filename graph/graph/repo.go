@@ -4,6 +4,7 @@ package graph
 
 import (
 	"context"
+	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/graphapi"
@@ -179,19 +180,14 @@ type Tx interface {
 
 	// OpenChangeIDs lists the changes that are neither applied nor abandoned.
 	OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
-	// PutChangeImpact inserts or updates a change impact of a change (ADR 0024). The table is the projection of the
-	// impact log (ADR 0029): only Graph.emit writes it.
-	PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error
-	// DeleteChangeImpact removes a change impact from the projection (an event removed it: ADR 0076).
-	DeleteChangeImpact(ctx context.Context, change domain.ChangeID, id domain.ChangeImpactID) error
-	// ChangeImpacts lists the change impacts of a change, in creation order.
-	ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error)
-	// ChangeImpactKeys lists the key and type of the first limit change impacts of a change, in creation order: what
-	// its index document carries (ADR 0095), read at every write of an impact without decoding the others.
-	ChangeImpactKeys(ctx context.Context, change domain.ChangeID, limit int) ([]domain.ChangeDocRef, error)
-	// NodeChangePage lists the last limit changes holding a change impact on a node whose cursor is below before (0:
-	// any), newest first; the cursor of a change is the order of its first impact on the node (ADR 0140: a page of a
-	// history, whatever its length).
+	// PutCommitImpacts writes the change impacts of versions a change wrote (ADR 0174): one row per version, written with
+	// it and never updated. Nothing else writes them: before its commit an impact lives in the log of its change.
+	PutCommitImpacts(ctx context.Context, rows []CommitImpact) error
+	// CommitImpacts lists the change impacts of the versions a change wrote, in the order of its log.
+	CommitImpacts(ctx context.Context, change domain.ChangeID) ([]CommitImpact, error)
+	// NodeChangePage lists the last limit changes whose log names a node in an impact entry whose cursor is below before
+	// (0: any), newest first; the cursor of a change is the position of its first such entry (ADR 0140: a page of a
+	// history, whatever its length; ADR 0174: committed or not, read from the log).
 	NodeChangePage(ctx context.Context, node domain.NodeID, before int64, limit int) ([]NodeChange, error)
 	// SetNodeOrigin records on a node version the change and change impact that produced it and its comment.
 	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error
@@ -214,6 +210,31 @@ type Tx interface {
 	// head is read to be moved. A storage whose transactions are serialized already does nothing.
 	LockChange(ctx context.Context, id domain.ChangeID) error
 	LockBranch(ctx context.Context, namespace, name string) error
+}
+
+// CommitImpact is the change impact a version was written for (ADR 0174): from the version the change started from
+// (Pre; 0 for a creation) to the version written (Node, Version), MergedWith the second parent of a rebase or a merge,
+// and LogSeq the entry of the change log that recorded the commit (0: none, the bootstrap). Impact is empty for a
+// version no impact holds (the revert of a withdrawn impact).
+type CommitImpact struct {
+	Node       domain.NodeID         `json:"node"`
+	Version    domain.Version        `json:"version"`
+	Change     domain.ChangeID       `json:"change"`
+	Impact     domain.ChangeImpactID `json:"impact,omitempty"`
+	Key        string                `json:"key"`
+	Type       string                `json:"type"`
+	Intent     domain.NodeIntent     `json:"intent"`
+	Rationale  string                `json:"rationale,omitempty"`
+	Pre        domain.Version        `json:"pre,omitempty"`
+	MergedWith domain.Version        `json:"mergedWith,omitempty"`
+	Reason     string                `json:"reason"`
+	Review     *domain.Review        `json:"review,omitempty"`
+	Effect     domain.ImpactEffect   `json:"effect,omitzero"`
+	LogSeq     int64                 `json:"logSeq,omitempty"`
+	ProducedBy string                `json:"producedBy,omitempty"`
+	Execution  string                `json:"execution,omitempty"`
+	Via        domain.ChangeImpactID `json:"via,omitempty"`
+	CreatedAt  time.Time             `json:"createdAt"`
 }
 
 // NodeChange is a change acting on a node and its cursor in the node's history (Tx.NodeChangePage).

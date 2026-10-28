@@ -268,19 +268,13 @@ func (t *observedTx) PutChange(ctx context.Context, c domain.Change) error {
 	return nil
 }
 
-func (t *observedTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
-	if err := t.Tx.PutChangeImpact(ctx, change, cn); err != nil {
-		return err
-	}
-	t.touch(change)
-	t.index(change)
-	return nil
-}
-
 func (t *observedTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
 	e, err := t.Tx.AppendLog(ctx, e)
 	if err == nil {
 		t.touch(e.Change)
+		if strings.HasPrefix(e.Type, domain.LogImpact+".") {
+			t.index(e.Change) // an impact is written: its change's document (ADR 0095, 0174)
+		}
 		if strings.HasPrefix(e.Type, domain.LogImpact+".") || strings.HasPrefix(e.Type, domain.LogFact+".") {
 			if t.seq == nil {
 				t.seq = map[domain.ChangeID]int64{}
@@ -298,6 +292,9 @@ func (t *observedTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) 
 	}
 	for _, e := range out {
 		t.touch(e.Change)
+		if strings.HasPrefix(e.Type, domain.LogImpact+".") {
+			t.index(e.Change) // an impact is written: its change's document (ADR 0095, 0174)
+		}
 		if strings.HasPrefix(e.Type, domain.LogImpact+".") || strings.HasPrefix(e.Type, domain.LogFact+".") {
 			if t.seq == nil {
 				t.seq = map[domain.ChangeID]int64{}
@@ -485,10 +482,14 @@ func (g *Graph) changeDocs(ctx context.Context, tx Tx, ot *observedTx) ([]publis
 		}
 		ev := domain.ChangeDocEvent{ID: c.ID, Title: c.Title, Intent: c.Intent, Goal: c.Goal, Methodology: c.Methodology, Namespace: c.Namespace,
 			Status: c.Status, State: c.State, ProjectID: c.ProjectID.Key, OwnerOrg: c.OwnerOrg.Key, ParentID: c.ParentID, Branch: c.Branch, CreatedAt: c.CreatedAt}
-		// the first impacts only: a write of an impact must not read every impact of a big change (an import)
-		var err error
-		if ev.Impacts, err = tx.ChangeImpactKeys(ctx, id, maxIndexedImpacts); err != nil {
+		// the first impacts only, from the view of the change (ADR 0174), which the write folded already
+		st, err := g.draftState(ctx, tx, id)
+		if err != nil {
 			return nil, err
+		}
+		for i := 0; i < st.impacts.n && len(ev.Impacts) < maxIndexedImpacts; i++ {
+			cn := st.impacts.at(i)
+			ev.Impacts = append(ev.Impacts, domain.ChangeDocRef{Key: cn.Key, Type: cn.Type})
 		}
 		out = append(out, published{fmt.Sprintf(domain.SubjectChangeIndexed, id), ev})
 	}

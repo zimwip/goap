@@ -638,13 +638,10 @@ func (t *sqliteTx) Baselines(ctx context.Context, namespace string) ([]domain.Ba
 	return out, nil
 }
 
+// Change reads the header of a change: its impacts and items are the fold of its log, which the guard of the graph
+// reads (ADR 0153, 0174).
 func (t *sqliteTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
-	c, err := t.changeHeader(ctx, id)
-	if err != nil {
-		return c, err
-	}
-	c.Nodes, err = t.ChangeImpacts(ctx, id)
-	return c, err
+	return t.changeHeader(ctx, id)
 }
 
 // changeHeader reads a change without its change impacts (the guard takes them from the fold of its log).
@@ -783,10 +780,6 @@ func (t *sqliteTx) exec1(ctx context.Context, what, q string, args ...any) error
 	return nil
 }
 
-func (t *sqliteTx) DeleteChangeImpact(ctx context.Context, change domain.ChangeID, id domain.ChangeImpactID) error {
-	return t.exec1(ctx, "change impact "+string(id), dialectSQLite.sqlDeleteChangeImpact(), string(change), string(id))
-}
-
 func (t *sqliteTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, error) {
 	q, args := dialectSQLite.sqlLinkByID(id)
 	ls, err := t.queryLinks(ctx, q, args...)
@@ -886,7 +879,7 @@ func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
 
 func (t *sqliteTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
 	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("change_log", changeLogColumns, ""),
-		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), string(e.Payload))
+		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), string(e.Payload), string(e.Node))
 	if err != nil {
 		return e, sqliteErr(err, "log entry "+e.Type)
 	}
@@ -950,73 +943,48 @@ func (t *sqliteTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
 	return out, rows.Err()
 }
 
-func (t *sqliteTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
-	r, err := toCNRow(cn)
-	if err != nil {
-		return err
-	}
-	_, err = t.tx.ExecContext(ctx, `INSERT INTO change_impact (id, seq, change_id, node_id, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded, effect)
-		VALUES (?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM change_impact), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (id) DO UPDATE SET node_id = excluded.node_id, key = excluded.key, type = excluded.type, intent = excluded.intent, rationale = excluded.rationale,
-			pre_version = excluded.pre_version, post_version = excluded.post_version, committed_version = excluded.committed_version, review = excluded.review,
-			reviews = excluded.reviews, via = excluded.via, recheck = excluded.recheck, produced_by = excluded.produced_by, derived_from = excluded.derived_from, items = excluded.items, execution = excluded.execution, flow = excluded.flow, superseded = excluded.superseded, effect = excluded.effect`,
-		r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Committed, r.Review, string(r.Reviews), nullUUID(r.Via), r.Recheck, r.ProducedBy, string(r.DerivedFrom), string(r.Items), r.Execution, tsText(cn.CreatedAt), r.Flow, r.Superseded, string(r.Effect))
-	return sqliteErr(err, "change impact "+cn.Key)
-}
-
-func (t *sqliteTx) ChangeImpactKeys(ctx context.Context, change domain.ChangeID, limit int) ([]domain.ChangeDocRef, error) {
-	q, args := dialectSQLite.sqlChangeImpactKeys(change, limit)
-	rows, err := t.tx.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []domain.ChangeDocRef
-	for rows.Next() {
-		var r domain.ChangeDocRef
-		if err := rows.Scan(&r.Key, &r.Type); err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
-}
-
-func (t *sqliteTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {
-	q, args := dialectSQLite.sqlChangeImpacts(change)
-	rows, err := t.tx.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []domain.ChangeImpact
-	for rows.Next() {
-		var r cnRow
-		var reviews, derived, items, created, effect string
-		var node sql.NullString
-		var pre, post, committed sql.NullInt64
-		if err := rows.Scan(&r.ID, &node, &r.Key, &r.Type, &r.Intent, &r.Rationale, &pre, &post, &committed, &r.Review, &reviews, &r.Via, &r.Recheck, &r.ProducedBy, &derived, &items, &r.Execution, &created, &r.Flow, &r.Superseded, &effect); err != nil {
-			return nil, err
-		}
-		if node.Valid {
-			r.NodeID = &node.String
-		}
-		for _, x := range []struct {
-			src sql.NullInt64
-			dst **int
-		}{{pre, &r.Pre}, {post, &r.Post}, {committed, &r.Committed}} {
-			if x.src.Valid {
-				v := int(x.src.Int64)
-				*x.dst = &v
+// PutCommitImpacts implements Tx.
+func (t *sqliteTx) PutCommitImpacts(ctx context.Context, rows []CommitImpact) error {
+	for chunk := range slices.Chunk(rows, sqliteCommitImpactRows) {
+		args := make([]any, 0, len(chunk)*len(commitImpactColumns))
+		for _, r := range chunk {
+			a, err := commitImpactArgs(r)
+			if err != nil {
+				return err
 			}
+			args = append(append(args, a...), tsText(r.CreatedAt))
 		}
-		r.Reviews, r.DerivedFrom, r.Items, r.Effect = []byte(reviews), []byte(derived), []byte(items), []byte(effect)
-		cn, err := r.node()
+		if _, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsertRows("change_impact", commitImpactColumns, len(chunk)), args...); err != nil {
+			return sqliteErr(err, "change impacts")
+		}
+	}
+	return nil
+}
+
+// sqliteCommitImpactRows is the number of change_impact rows one statement writes (18 arguments each, within the
+// 32766 a statement takes).
+const sqliteCommitImpactRows = 1000
+
+func (t *sqliteTx) CommitImpacts(ctx context.Context, change domain.ChangeID) ([]CommitImpact, error) {
+	q, args := dialectSQLite.sqlCommitImpacts(change)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, sqliteErr(err, "change impacts")
+	}
+	defer rows.Close()
+	var out []CommitImpact
+	for rows.Next() {
+		var r commitImpactRow
+		var at string
+		if err := rows.Scan(append(r.dest(), &at)...); err != nil {
+			return nil, err
+		}
+		ci, err := r.impactOf()
 		if err != nil {
 			return nil, err
 		}
-		cn.CreatedAt = tsParse(created)
-		out = append(out, cn)
+		ci.CreatedAt = tsParse(at)
+		out = append(out, ci)
 	}
 	return out, rows.Err()
 }

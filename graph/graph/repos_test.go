@@ -189,8 +189,9 @@ func postgresRepo(t *testing.T, dsn string, readers bool, f func(t *testing.T, r
 	}
 }
 
-// checkImpactLogs replays the impact log of every change and compares it with the change_impact projection (ADR 0029),
-// and the drafts the graph reads (ADR 0079) with a from-scratch fold: nothing may write a projection without an event.
+// checkImpactLogs replays the impact log of every change and compares it with the view the graph folds (ADR 0029,
+// 0153) and the drafts it reads (ADR 0079), and checks the change impacts the store keeps (ADR 0174): one row per
+// version a change wrote, pointing at the committed entry of its log that recorded it.
 func checkImpactLogs(t *testing.T, repo Repo) {
 	t.Helper()
 	if t.Failed() {
@@ -225,10 +226,11 @@ func checkImpactLogs(t *testing.T, repo Repo) {
 			return err
 		}
 		for _, c := range cs {
-			stored, err := tx.ChangeImpacts(context.Background(), c.ID)
+			view, err := cold.draftState(context.Background(), tx, c.ID)
 			if err != nil {
 				return err
 			}
+			stored := view.impacts.list().Slice()
 			events, err := impactEvents(context.Background(), tx, c.ID)
 			if err != nil {
 				return err
@@ -237,7 +239,10 @@ func checkImpactLogs(t *testing.T, repo Repo) {
 				t.Errorf("change %s: %v", c.ID, err)
 			}
 			if got, want := norm(domain.FoldImpacts(events)), norm(stored); got != want {
-				t.Errorf("change %s: the replay of its %d events differs from the projection\nreplay: %s\nstored: %s", c.ID, len(events), got, want)
+				t.Errorf("change %s: the replay of its %d events differs from the view\nreplay: %s\nview: %s", c.ID, len(events), got, want)
+			}
+			if err := checkCommitImpacts(context.Background(), tx, c.ID, events); err != nil {
+				t.Errorf("change %s: %v", c.ID, err)
 			}
 			storedDrafts, err := cold.drafts(context.Background(), tx, c.ID)
 			if err != nil {
@@ -266,6 +271,63 @@ func checkImpactLogs(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// checkCommitImpacts checks the change impacts kept for the versions a change wrote (ADR 0174): each names a version
+// of the change, and the position of an entry of its log; an impact's row is recorded by a committed event of that
+// entry for that version; an impact committed on its own branch by its change has its row.
+func checkCommitImpacts(ctx context.Context, tx Tx, id domain.ChangeID, events []domain.ImpactEvent) error {
+	rows, err := tx.CommitImpacts(ctx, id)
+	if err != nil {
+		return err
+	}
+	committed := map[domain.NodeRef]int{} // the committed events of the change, by version: the position of their entry
+	for _, e := range events {
+		if e.Op == domain.ImpactCommitted && e.Committed != nil {
+			if _, ok := committed[*e.Committed]; !ok {
+				committed[*e.Committed] = e.Seq
+			}
+		}
+	}
+	held := map[domain.NodeRef]bool{}
+	for _, r := range rows {
+		ref := domain.NodeRef{ID: r.Node, Version: r.Version}
+		if held[ref] {
+			return fmt.Errorf("version %s has two change impacts", ref)
+		}
+		held[ref] = true
+		n, err := tx.Node(ctx, ref)
+		if err != nil {
+			return fmt.Errorf("change impact of %s: %w", ref, err)
+		}
+		if n.Reason != r.Reason || n.Key != r.Key {
+			return fmt.Errorf("change impact of %s: reason %q key %q, the version has %q %q", ref, r.Reason, r.Key, n.Reason, n.Key)
+		}
+		if len(n.Parents) > 0 && r.Pre != n.Parents[0] {
+			return fmt.Errorf("change impact of %s starts from v%d, the version from v%d", ref, r.Pre, n.Parents[0])
+		}
+		if r.Impact == "" || r.LogSeq == 0 {
+			continue // a revert, the bootstrap
+		}
+		seq, ok := committed[ref]
+		if !ok || int64(seq) != r.LogSeq {
+			return fmt.Errorf("change impact of %s points at entry %d, its committed event is at %d (%v)", ref, r.LogSeq, seq, ok)
+		}
+	}
+	// a version committed by its change on its own branch, its impact holding it: it has its row
+	for _, e := range events {
+		if e.Op != domain.ImpactCommitted || e.Committed == nil || e.Effect == nil || held[*e.Committed] {
+			continue
+		}
+		n, err := tx.Node(ctx, *e.Committed)
+		if err != nil {
+			return err
+		}
+		if n.ChangeID == id && n.ChangeImpact == e.Impact && n.Reason != domain.ReasonMerge && e.Branch == domain.BranchOf(n.Branch) {
+			return fmt.Errorf("version %s committed by the change on its branch has no change impact", e.Committed)
+		}
+	}
+	return nil
 }
 
 // pinBaseline makes the head of main hold exactly the given versions on top of what it holds: the fixtures that
