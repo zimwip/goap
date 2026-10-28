@@ -942,6 +942,19 @@ func (t *pgTx) NamespaceNodeIDs(ctx context.Context, namespace string) ([]domain
 	})
 }
 
+func (t *pgTx) NodeIDsOfType(ctx context.Context, namespace, typ string, after domain.NodeID, limit int) ([]domain.NodeID, error) {
+	q, args := dialectPG.sqlNodeIDsOfType(namespace, typ, after, limit)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.NodeID, error) {
+		var id string
+		err := r.Scan(&id)
+		return domain.NodeID(id), err
+	})
+}
+
 func (t *pgTx) BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	q, args := dialectPG.sqlNamespaceBaselineHeaders(namespace)
 	return t.baselineHeaders(ctx, namespace, q, args)

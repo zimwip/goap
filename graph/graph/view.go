@@ -585,6 +585,49 @@ func (w *world) page(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error) 
 	return tx.NodePage(ctx, refsOf(b.Nodes), q)
 }
 
+// typeBatch is the number of nodes of a type ofType selects at a time.
+const typeBatch = 500
+
+// ofType reads the nodes of a type a branch view holds whose key, type or a string property contains text, by id, at
+// most limit (more: the view holds others): the node rows of the type a batch at a time (index node_type), each batch
+// selected at the baseline and read through the page of the store (its text and reach filters). Its cost follows the
+// nodes read, never the size of the state, which a page reads whole. A change view is read by its page (ok false).
+func (w *world) ofType(ctx context.Context, tx Tx, typ, text string, limit int) (nodes []domain.Node, more, ok bool, err error) {
+	if w.change != nil {
+		return nil, false, false, nil
+	}
+	if w.baseline == "" || limit <= 0 {
+		return nil, false, true, nil
+	}
+	var after domain.NodeID
+	for {
+		ids, err := tx.NodeIDsOfType(ctx, w.namespace, typ, after, typeBatch)
+		if err != nil || len(ids) == 0 {
+			return nodes, false, true, err
+		}
+		after = ids[len(ids)-1]
+		at, err := versionsAt(ctx, tx, w.baseline, ids)
+		if err != nil {
+			return nil, false, true, err
+		}
+		if len(at) > 0 {
+			page, err := tx.NodePage(ctx, refsOf(at), NodeQuery{Type: typ, Text: text, Reach: w.filter, Limit: limit - len(nodes) + 1})
+			if err != nil {
+				return nil, false, true, err
+			}
+			for _, n := range page.Nodes {
+				if len(nodes) == limit {
+					return nodes, true, true, nil
+				}
+				nodes = append(nodes, n)
+			}
+		}
+		if len(ids) < typeBatch {
+			return nodes, false, true, nil
+		}
+	}
+}
+
 // nodes is the page of a change view: the fork's nodes the change left alone, paged by the store, merged with the
 // nodes the change holds another version of (read node by node).
 func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error) {

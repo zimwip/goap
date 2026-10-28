@@ -200,10 +200,22 @@ type Graph struct {
 	}
 }
 
+// newID allocates the id of what the graph writes (a node, a change, a link, an entry...): a UUID of version 7, whose
+// first bits are the time, so the rows written together sit together in the indexes keyed by id. A random UUID (v4)
+// scatters each insert over the whole of each such index: once the indexes outgrow the database's cache, every write
+// reads and dirties pages at random, and the write speed falls as the graph grows.
+func newID() string {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return uuid.NewString() // the clock or the random source failed: a random id still identifies
+	}
+	return id.String()
+}
+
 // New returns a Graph backed by repo. Every transaction goes through the guard of the graph (guardRepo, ADR 0054),
 // whatever the storage.
 func New(repo Repo) *Graph {
-	g := &Graph{base: repo, now: func() time.Time { return time.Now().UTC() }, newID: func() string { return uuid.NewString() }}
+	g := &Graph{base: repo, now: func() time.Time { return time.Now().UTC() }, newID: newID}
 	g.repo = &ambientRepo{Repo: &guardRepo{Repo: repo, g: g}, g: g}
 	g.newCaches()
 	return g

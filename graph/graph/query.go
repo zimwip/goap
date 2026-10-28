@@ -730,22 +730,39 @@ func (r *queryRun) ofLabel(n cypher.NodePattern) ([]*qNode, error) {
 			return nil, err
 		}
 		room := r.opts.MaxAnchors - len(out)
-		page, err := r.w.page(r.ctx, r.tx, NodeQuery{Type: typ, Text: text, Limit: room + 1})
+		// a branch view reads the nodes of the type a batch at a time, never its state whole
+		nodes, more, ok, err := r.w.ofType(r.ctx, r.tx, typ, text, room)
 		if err != nil {
 			return nil, err
 		}
-		for _, node := range page.Nodes {
+		total := -1
+		if !ok {
+			page, err := r.w.page(r.ctx, r.tx, NodeQuery{Type: typ, Text: text, Limit: room + 1})
+			if err != nil {
+				return nil, err
+			}
+			nodes, total = page.Nodes, page.Total
+		}
+		for _, node := range nodes {
 			if node.Type != typ {
 				continue
 			}
 			if len(out) == r.opts.MaxAnchors {
-				r.truncated = true
-				r.note("only the first %d nodes of %s were read (of %d): narrow the anchor with a key or a WHERE on a property", r.opts.MaxAnchors, label, page.Total)
+				more = true
 				break
 			}
 			if q := r.keep(node); q != nil {
 				out = append(out, q)
 			}
+		}
+		if more {
+			r.truncated = true
+			of := ""
+			if total >= 0 {
+				of = fmt.Sprintf(" (of %d)", total)
+			}
+			r.note("only the first %d nodes of %s were read%s: narrow the anchor with a key or a WHERE on a property", r.opts.MaxAnchors, label, of)
+			break
 		}
 	}
 	return out, nil

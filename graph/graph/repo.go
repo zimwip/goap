@@ -110,6 +110,9 @@ type Tx interface {
 	BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error)
 	// NamespaceNodeIDs lists the nodes of a namespace (its node rows, ADR 0143 §4): what a whole state is selected over.
 	NamespaceNodeIDs(ctx context.Context, namespace string) ([]domain.NodeID, error)
+	// NodeIDsOfType lists the nodes of a type in a namespace (its node rows, index node_type), by id, from the first one
+	// after the id after (empty: from the start), at most limit: a type read a batch at a time.
+	NodeIDsOfType(ctx context.Context, namespace, typ string, after domain.NodeID, limit int) ([]domain.NodeID, error)
 	// BaselineHeaders returns the header of every baseline of a namespace, oldest first, without their nodes (ADR 0133).
 	BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error)
 	// BranchBaselineHeaders returns the header of every baseline of a branch of a namespace, oldest first.

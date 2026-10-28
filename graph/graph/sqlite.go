@@ -562,6 +562,16 @@ func (t *sqliteTx) NamespaceNodeIDs(ctx context.Context, namespace string) ([]do
 	return out, err
 }
 
+func (t *sqliteTx) NodeIDsOfType(ctx context.Context, namespace, typ string, after domain.NodeID, limit int) ([]domain.NodeID, error) {
+	q, args := dialectSQLite.sqlNodeIDsOfType(namespace, typ, after, limit)
+	ids, err := t.ids(ctx, q, args...)
+	out := make([]domain.NodeID, len(ids))
+	for i, id := range ids {
+		out[i] = domain.NodeID(id)
+	}
+	return out, err
+}
+
 func (t *sqliteTx) BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	q, args := dialectSQLite.sqlNamespaceBaselineHeaders(namespace)
 	return t.baselineHeaders(ctx, namespace, q, args)

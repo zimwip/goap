@@ -11,13 +11,11 @@ import (
 	"github.com/zimwip/goap/contracts/operations"
 )
 
-// changeBranchName names the branch owned by a change.
+// changeBranchName names the branch owned by a change: its whole id. A prefix of it is not unique: the 8 first hex
+// digits of random ids collide once a graph holds some tens of thousands of changes, and the second change took over
+// the branch of the first (the store keeps one branch per name), so neither committed nor merged again.
 func changeBranchName(id domain.ChangeID) string {
-	s := string(id)
-	if len(s) > 8 {
-		s = s[:8]
-	}
-	return "change-" + s
+	return "change-" + string(id)
 }
 
 // ownBranch returns the branch owned by the change, when it has one.
