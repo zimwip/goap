@@ -180,6 +180,7 @@ func (g *Graph) flush(ctx context.Context, tx Tx, s *impactStage) error {
 	}
 	for i, e := range s.events {
 		if p, ok := st.phases[e.Impact]; ok && e.StartsDraft() && e.Flow == "" {
+			st.own(sharedPhases)
 			p.Seq = seqs[i]
 			st.phases[e.Impact] = p
 		}

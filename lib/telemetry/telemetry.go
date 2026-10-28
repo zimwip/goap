@@ -122,9 +122,10 @@ func timing() connect.UnaryInterceptorFunc {
 const compressMinBytes = 1024
 
 // HandlerOptions instruments Connect handlers, and leaves the small answers uncompressed: resetting a gzip writer
-// costs more than the bytes of an answer under compressMinBytes save.
+// costs more than the bytes of an answer under compressMinBytes save. The gzip writers outlive a collection
+// (gzipCompression).
 func HandlerOptions() []connect.HandlerOption {
-	return []connect.HandlerOption{connect.WithInterceptors(interceptor(), timing()), connect.WithCompressMinBytes(compressMinBytes)}
+	return []connect.HandlerOption{connect.WithInterceptors(interceptor(), timing()), connect.WithCompressMinBytes(compressMinBytes), gzipCompression()}
 }
 
 // ClientOptions instruments Connect clients.

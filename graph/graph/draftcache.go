@@ -66,8 +66,12 @@ type draftState struct {
 	first, state string
 	// moveSeq is the position of each move in the log
 	moveSeq map[domain.ItemID]int64
-	// frozen: a reader of the transaction still reads it (draftReader), so its next fold is a copy
+	// frozen: a reader of the transaction still reads it (draftReader, the impacts of a change read), so its next fold
+	// is a copy
 	frozen bool
+	// shared are the containers (impacts, at, drafts...) the fold shares with the one it was copied from: cloned at
+	// their first write (own)
+	shared uint8
 	// bytes estimates the memory the view holds (eventSize, itemSize): what the cache counts against its bound
 	bytes int64
 	// top is, plus one, a last position of the whole log of the change at which the fold was known to hold every impact
@@ -76,20 +80,64 @@ type draftState struct {
 	top atomic.Int64
 }
 
-// copy is a state the caller may fold in place (the values it holds are never modified, only replaced).
+// copy is a state the caller may fold in place (the values it holds are never modified, only replaced). It shares the
+// containers of s until its first write to each (own): a transaction that touches one impact of a change of N clones
+// what that write touches, not the whole view.
 func (s *draftState) copy() *draftState {
-	n := &draftState{change: s.change, seq: s.seq, impacts: slices.Clone(s.impacts), at: maps.Clone(s.at), drafts: maps.Clone(s.drafts), nodes: maps.Clone(s.nodes), conflicts: maps.Clone(s.conflicts), items: slices.Clip(s.items), events: s.events, log: s.log,
-		phases: maps.Clone(s.phases), moved: s.moved, first: s.first, state: s.state, moveSeq: maps.Clone(s.moveSeq), bytes: s.bytes}
+	n := &draftState{change: s.change, seq: s.seq, impacts: slices.Clip(s.impacts), at: s.at, drafts: s.drafts, nodes: s.nodes, conflicts: s.conflicts, items: slices.Clip(s.items), events: s.events, log: s.log,
+		phases: s.phases, moved: s.moved, first: s.first, state: s.state, moveSeq: s.moveSeq, bytes: s.bytes, shared: sharedAll}
 	if n.at == nil {
-		n.at = map[domain.ChangeImpactID]int{}
+		n.at, n.shared = map[domain.ChangeImpactID]int{}, n.shared&^sharedAt
 	}
 	if n.drafts == nil {
-		n.drafts = map[domain.ChangeImpactID][]domain.Draft{}
+		n.drafts, n.shared = map[domain.ChangeImpactID][]domain.Draft{}, n.shared&^sharedDrafts
 	}
 	if n.nodes == nil {
-		n.nodes = map[domain.NodeID][]domain.ChangeImpactID{}
+		n.nodes, n.shared = map[domain.NodeID][]domain.ChangeImpactID{}, n.shared&^sharedNodes
 	}
 	return n
+}
+
+// The containers a copy shares with the state it was copied from (draftState.shared).
+const (
+	sharedImpacts uint8 = 1 << iota
+	sharedAt
+	sharedDrafts
+	sharedNodes
+	sharedConflicts
+	sharedPhases
+	sharedMoveSeq
+	sharedAll = sharedImpacts | sharedAt | sharedDrafts | sharedNodes | sharedConflicts | sharedPhases | sharedMoveSeq
+)
+
+// own makes the containers named by bits the fold's own before it writes to them: a shared one is cloned once.
+func (s *draftState) own(bits uint8) {
+	bits &= s.shared
+	if bits == 0 {
+		return
+	}
+	s.shared &^= bits
+	if bits&sharedImpacts != 0 {
+		s.impacts = slices.Clone(s.impacts)
+	}
+	if bits&sharedAt != 0 {
+		s.at = maps.Clone(s.at)
+	}
+	if bits&sharedDrafts != 0 {
+		s.drafts = maps.Clone(s.drafts)
+	}
+	if bits&sharedNodes != 0 {
+		s.nodes = maps.Clone(s.nodes)
+	}
+	if bits&sharedConflicts != 0 {
+		s.conflicts = maps.Clone(s.conflicts)
+	}
+	if bits&sharedPhases != 0 {
+		s.phases = maps.Clone(s.phases)
+	}
+	if bits&sharedMoveSeq != 0 {
+		s.moveSeq = maps.Clone(s.moveSeq)
+	}
 }
 
 // eventLog is the array of impact events the folds copied from one another share: the elements a fold holds are never
@@ -150,6 +198,7 @@ func (s *draftState) fact(it domain.ChangeItem, seq int64) {
 		s.moved, s.first = true, str("from")
 	}
 	s.state = str("to")
+	s.own(sharedMoveSeq)
 	if s.moveSeq == nil {
 		s.moveSeq = map[domain.ItemID]int64{}
 	}
@@ -175,6 +224,7 @@ func (s *draftState) apply(e domain.ImpactEvent) {
 	s.addEvent(e)
 	s.bytes += eventSize(e)
 	if e.StartsDraft() && e.Flow == "" {
+		s.own(sharedPhases)
 		if s.phases == nil {
 			s.phases = map[domain.ChangeImpactID]phase{}
 		}
@@ -185,14 +235,17 @@ func (s *draftState) apply(e domain.ImpactEvent) {
 		i = -1
 	}
 	n := len(s.impacts)
+	s.own(sharedImpacts)
 	s.impacts = domain.ApplyImpactEventAt(s.impacts, i, e)
 	switch {
 	case len(s.impacts) < n: // a change impact removed
+		s.own(sharedAt)
 		clear(s.at)
 		for j, cn := range s.impacts {
 			s.at[cn.ID] = j
 		}
 	case len(s.impacts) > n:
+		s.own(sharedAt)
 		s.at[e.Impact] = len(s.impacts) - 1
 	}
 	switch e.Op {
@@ -212,7 +265,9 @@ func (s *draftState) apply(e domain.ImpactEvent) {
 		case next != nil:
 			rows = append(rows, *next)
 		}
+		s.own(sharedDrafts)
 		if next != nil && !slices.Contains(s.nodes[next.Node], e.Impact) {
+			s.own(sharedNodes)
 			s.nodes[next.Node] = append(slices.Clone(s.nodes[next.Node]), e.Impact)
 		}
 		if len(rows) == 0 {
@@ -221,8 +276,12 @@ func (s *draftState) apply(e domain.ImpactEvent) {
 			s.drafts[e.Impact] = rows
 		}
 	case domain.ImpactWithdrawn, domain.ImpactCommitted:
-		delete(s.drafts, e.Impact)
+		if _, ok := s.drafts[e.Impact]; ok {
+			s.own(sharedDrafts)
+			delete(s.drafts, e.Impact)
+		}
 	case domain.ImpactAdopted:
+		s.own(sharedDrafts)
 		// the adopted flow's drafts were installed on the main flow by the events that follow (see the adoption)
 		for id, rows := range s.drafts {
 			if rows = slices.DeleteFunc(slices.Clone(rows), func(d domain.Draft) bool { return d.Flow == e.Flow }); len(rows) == 0 {
@@ -241,18 +300,22 @@ func (s *draftState) apply(e domain.ImpactEvent) {
 	if e.Op == domain.ImpactAdopted {
 		for id := range s.drafts {
 			if !live(id) {
+				s.own(sharedDrafts)
 				delete(s.drafts, id)
 			}
 		}
-	} else if !live(e.Impact) {
+	} else if _, ok := s.drafts[e.Impact]; ok && !live(e.Impact) {
+		s.own(sharedDrafts)
 		delete(s.drafts, e.Impact)
 	}
 	if c := domain.ApplyConflictEvent(s.conflicts[e.Impact], e); len(c) > 0 {
+		s.own(sharedConflicts)
 		if s.conflicts == nil {
 			s.conflicts = map[domain.ChangeImpactID][]string{}
 		}
 		s.conflicts[e.Impact] = c
-	} else {
+	} else if _, ok := s.conflicts[e.Impact]; ok {
+		s.own(sharedConflicts)
 		delete(s.conflicts, e.Impact)
 	}
 	s.seq = int64(e.Seq)
