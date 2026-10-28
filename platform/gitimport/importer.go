@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/zimwip/goap/contracts/codetext"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/graphapi"
 )
@@ -110,7 +111,18 @@ type Importer struct {
 	Symbols        Extractor
 	MaxSymbolBytes int64
 	Code           bool
-	Parallel       int
+	// Parallel is how many files a run reads, judges and parses at once, each worker through its own git process
+	// (default: the processors); the files of the next commit are read while the change of the current one is written.
+	Parallel int
+	// Text keeps the text of each file that reads as text (content.Sniff: by its bytes, whatever its name), decoded
+	// to UTF-8, as its content (a code text, ADR 0171), up to MaxTextBytes (default 256 KiB); a larger text and
+	// anything else is a blob the file names by its object id and, when ContentURL gives one, by the address of its
+	// content.
+	Text         bool
+	MaxTextBytes int64
+	// ContentURL, when set, gives the address of the content of a file at a commit (a web address of the forge, a
+	// file:// URL of a working tree...), recorded as its contentUrl: see ContentURLOf.
+	ContentURL func(commit, path, blob string) string
 	// Batch is the most operations on nodes the change of a commit takes by itself (default 1000): a commit doing more
 	// is written by sub-changes of its change, one per file (the files naming each other's declarations together,
 	// the packages first, the directories last), each merged into it in turn (an operation on a change costs in
@@ -134,8 +146,8 @@ type Importer struct {
 	branch  string            // the branch of the graph the commits are imported on
 	gitRef  string            // the git branch it follows ("" when unknown)
 	modules map[string]string // the module paths of the go.mod files, by blob
-	sizes   *Sizes
-	blobs   *Blobs
+	blobs   *Blobs            // reads the go.mod files
+	readers *readers          // read the files of the commits, one per worker
 	stats   Stats
 	start   time.Time
 }
@@ -201,16 +213,19 @@ func (im *Importer) run(ctx context.Context) (Stats, error) {
 	if err := im.load(ctx); err != nil {
 		return im.stats, err
 	}
-	sizes, err := NewSizes(ctx, im.Dir)
+	if im.MaxTextBytes <= 0 {
+		im.MaxTextBytes = DefaultMaxTextBytes
+	}
+	if im.Symbols != nil && im.MaxSymbolBytes <= 0 {
+		im.MaxSymbolBytes = 1 << 20
+	}
+	readers, err := newReaders(ctx, im.Dir, im.workers())
 	if err != nil {
 		return im.stats, err
 	}
-	im.sizes = sizes
-	defer sizes.Close()
+	im.readers = readers
+	defer readers.Close()
 	if im.Symbols != nil {
-		if im.MaxSymbolBytes <= 0 {
-			im.MaxSymbolBytes = 1 << 20
-		}
 		blobs, err := NewBlobs(ctx, im.Dir)
 		if err != nil {
 			return im.stats, err
@@ -271,7 +286,7 @@ func (im *Importer) history(ctx context.Context, from, rev string) error {
 	} else if max > 0 {
 		max -= im.stats.Commits
 	}
-	return Log(ctx, im.Dir, from, rev, max, func(c Commit) error { return im.commit(ctx, c) })
+	return im.pipeline(ctx, func(fn func(Commit) error) error { return Log(ctx, im.Dir, from, rev, max, fn) })
 }
 
 func (im *Importer) phase(what string) {
@@ -528,11 +543,22 @@ func Key(repo, p string, dir bool) string {
 // abandonWait bounds the abandon of the change of a commit that failed or was cancelled.
 const abandonWait = 30 * time.Second
 
+// commit imports one commit: reads its files, then writes its change.
 func (im *Importer) commit(ctx context.Context, c Commit) error {
+	p, err := im.prepare(ctx, c)
+	if err != nil {
+		return fmt.Errorf("commit %s: %w", short(c.Hash), err)
+	}
+	return im.commitPrepared(ctx, p)
+}
+
+// commitPrepared writes the change of a commit whose files were read.
+func (im *Importer) commitPrepared(ctx context.Context, p *prepared) error {
+	c := p.c
 	if im.OnBegin != nil {
 		im.OnBegin(im.stats, c)
 	}
-	ops, err := im.plan(ctx, c)
+	ops, err := im.plan(ctx, p)
 	if err != nil {
 		return fmt.Errorf("commit %s: %w", short(c.Hash), err)
 	}
@@ -777,7 +803,8 @@ func unitName(repo string, comp []string) string {
 
 // plan turns the raw diff of a commit into the operations on the nodes, deepest first: an entry's draft exists before
 // the directory linking to it.
-func (im *Importer) plan(ctx context.Context, c Commit) ([]*op, error) {
+func (im *Importer) plan(ctx context.Context, p *prepared) ([]*op, error) {
+	c := p.c
 	ops := map[string]*op{}
 	get := func(p string, dir bool) *op {
 		k := Key(im.Name, p, dir)
@@ -810,7 +837,7 @@ func (im *Importer) plan(ctx context.Context, c Commit) ([]*op, error) {
 			}
 		}
 		if has {
-			props, err := im.props(e, newDir)
+			props, err := im.props(c, e, newDir, p.files[e.Path])
 			if err != nil {
 				return nil, err
 			}
@@ -819,7 +846,7 @@ func (im *Importer) plan(ctx context.Context, c Commit) ([]*op, error) {
 		}
 	}
 	if im.Symbols != nil {
-		if err := im.planCode(ctx, ops); err != nil {
+		if err := im.planCode(ctx, ops, p); err != nil {
 			return nil, err
 		}
 	}
@@ -962,7 +989,12 @@ func sumOf(p map[string]any, keys ...string) string {
 	return b.String()
 }
 
-func (im *Importer) props(e Entry, dir bool) (map[string]any, error) {
+// DefaultMaxTextBytes is the largest text a file keeps by default (Importer.MaxTextBytes).
+const DefaultMaxTextBytes = 256 << 10
+
+// props are the attributes of a directory or of a file: for a file what its bytes are (fi, read by prepare), its text
+// when it reads as text and is kept (a code text in its language), else a blob, and the address of its content.
+func (im *Importer) props(c Commit, e Entry, dir bool, fi *fileInfo) (map[string]any, error) {
 	name := path.Base(e.Path)
 	if dir {
 		return map[string]any{"name": name, "path": e.Path, "tree": e.NewID}, nil
@@ -971,12 +1003,25 @@ func (im *Importer) props(e Entry, dir bool) (map[string]any, error) {
 	if ext := path.Ext(name); len(ext) > 1 && ext != name {
 		p["extension"] = strings.ToLower(ext[1:])
 	}
-	if e.NewMode != ModeGitlink {
-		n, err := im.sizes.Size(e.NewID)
-		if err != nil {
-			return nil, err
+	if e.NewMode == ModeGitlink {
+		return p, nil
+	}
+	if fi == nil {
+		return nil, fmt.Errorf("%s: not read", e.Path)
+	}
+	p["size"] = fi.size
+	p["media"] = fi.info.Media
+	p["binary"] = !fi.info.Text
+	if fi.info.Text {
+		p["encoding"] = fi.info.Encoding
+	}
+	if fi.hasText {
+		p["content"] = codetext.Format(codetext.Value{Language: fi.info.Language, Code: fi.text})
+	}
+	if im.ContentURL != nil {
+		if u := im.ContentURL(c.Hash, e.Path, e.NewID); u != "" {
+			p["contentUrl"] = u
 		}
-		p["size"] = n
 	}
 	return p, nil
 }

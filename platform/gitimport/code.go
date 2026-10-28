@@ -18,7 +18,7 @@ var relationTypes = kinds(LinkMemberOf, LinkCalls, LinkUses)
 // changes or removes and their links, the packages and the links of the files to them. Only what the commit changes
 // changes: a declaration of another file naming a symbol the commit removes or changes keeps its link to the version it
 // named, suspect from then on (ADR 0003), until its own text changes.
-func (im *Importer) planCode(ctx context.Context, ops map[string]*op) error {
+func (im *Importer) planCode(ctx context.Context, ops map[string]*op, p *prepared) error {
 	repoPath := func(key string) string { return strings.TrimPrefix(key, im.Name+":") }
 	// the go.mod files at the commit
 	mods := maps.Clone(im.ix.gomods)
@@ -51,10 +51,10 @@ func (im *Importer) planCode(ctx context.Context, ops map[string]*op) error {
 			}
 		},
 	}
-	// the files the commit changes, those to parse
+	// the files the commit changes, and those read as source files (prepare)
 	changed := map[string]*op{}
 	removedFiles := map[string]bool{}
-	var jobs []parseJob
+	files := map[string]*parsed{}
 	for _, o := range ops {
 		if o.typ != TypeFile {
 			continue
@@ -65,16 +65,12 @@ func (im *Importer) planCode(ctx context.Context, ops map[string]*op) error {
 			changed[o.key] = o
 		case o.props != nil:
 			changed[o.key] = o
-			if lang := im.sourceLanguage(o.props); lang != "" {
-				blob, _ := o.props["blob"].(string)
-				jobs = append(jobs, parseJob{key: o.key, path: repoPath(o.key), lang: lang, blob: blob})
+			if fi := p.files[repoPath(o.key)]; fi != nil && fi.parsed != nil {
+				fp := *fi.parsed
+				fp.key = o.key
+				files[o.key] = &fp
 			}
 		}
-	}
-	slices.SortFunc(jobs, func(a, b parseJob) int { return strings.Compare(a.key, b.key) })
-	files, err := im.parseAll(ctx, jobs)
-	if err != nil {
-		return err
 	}
 	// the symbols of the changed files
 	symOp := func(k, typ, file string) *op {

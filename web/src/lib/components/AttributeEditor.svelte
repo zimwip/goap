@@ -32,7 +32,7 @@
   } = $props();
 
   const TYPES = ['', 'string', 'number', 'boolean', 'date', 'enum', 'json', 'code'];
-  const WIDGETS = ['', 'text', 'textarea', 'dropdown', 'checkbox', 'date', 'directory', 'code'];
+  const WIDGETS = ['', 'text', 'textarea', 'dropdown', 'checkbox', 'date', 'directory', 'code', 'url'];
   const DIFF_LABELS: Record<string, string> = {
     value: 'value: old → new, whole',
     words: 'words: the words changed',
