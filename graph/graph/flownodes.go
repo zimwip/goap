@@ -91,7 +91,7 @@ func (v *flowNodes) nodes(ctx context.Context) (domain.Impacts, error) {
 	if v.flow == "" {
 		// the main flow sees the change impacts of the change as they are, but the superseded ones and those of other
 		// flows: when there are none, the change's own serve (a list is never edited)
-		if all.Find(func(cn domain.ChangeImpact) bool { return cn.Superseded || cn.Flow != "" }) < 0 {
+		if all.Plain() {
 			return all, nil
 		}
 		return all.SeenBy(nil, nil, v.stale), nil
@@ -111,8 +111,9 @@ func (v *flowNodes) nodes(ctx context.Context) (domain.Impacts, error) {
 func (v *flowNodes) find(ctx context.Context, id domain.ChangeImpactID) (domain.ChangeImpact, error) {
 	if v.flow == "" {
 		// the main flow sees its own live change impacts as they are (ImpactsSeenBy with no chain)
-		for _, cn := range v.c.Impacts().All() {
-			if cn.ID == id && !cn.Superseded && cn.Flow == "" {
+		all := v.c.Impacts()
+		if i := all.Index(id); i >= 0 {
+			if cn := all.At(i); !cn.Superseded && cn.Flow == "" {
 				return cn, nil
 			}
 		}

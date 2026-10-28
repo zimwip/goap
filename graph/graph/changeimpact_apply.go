@@ -36,6 +36,23 @@ func (a *applier) prepareChangeImpacts() error {
 	}
 	var todo []commit
 	impacts := a.mainImpacts()
+	// the drafts of the main flow by impact, read once (ownDraft walks them)
+	mainDrafts := make(map[domain.ChangeImpactID]*domain.Draft, len(rows))
+	for i := range rows {
+		if rows[i].Flow == "" {
+			if _, ok := mainDrafts[rows[i].Impact]; !ok {
+				mainDrafts[rows[i].Impact] = &rows[i]
+			}
+		}
+	}
+	ownDraft := func(id domain.ChangeImpactID) *domain.Draft {
+		d, ok := mainDrafts[id]
+		if !ok {
+			return nil
+		}
+		c := d.Clone()
+		return &c
+	}
 	// the versions the drafts start from, read in one batch: what the drafts are compared with, and the links the new
 	// versions share or write a delta over (ADR 0141)
 	var bases []domain.NodeRef
@@ -43,7 +60,7 @@ func (a *applier) prepareChangeImpacts() error {
 		if cn.Review != domain.ReviewAccepted {
 			continue
 		}
-		if d := ownDraft(rows, cn.ID, ""); d != nil && d.Base != nil {
+		if d := ownDraft(cn.ID); d != nil && d.Base != nil {
 			bases = append(bases, *d.Base)
 		}
 		if cn.Pre != nil {
@@ -57,7 +74,7 @@ func (a *applier) prepareChangeImpacts() error {
 		if cn.Review != domain.ReviewAccepted {
 			continue
 		}
-		d := ownDraft(rows, cn.ID, "")
+		d := ownDraft(cn.ID)
 		if ok, err := a.g.draftModifies(a.ctx, a.tx, d); err != nil {
 			return err
 		} else if !ok {

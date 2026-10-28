@@ -551,7 +551,7 @@ func (g *Graph) newDraftLink(ctx context.Context, tx Tx, w *work, from domain.Dr
 
 // normalizeTo points the version a node of the flow was checked out from at its draft.
 func (w *work) normalizeTo(to domain.NodeRef) domain.NodeRef {
-	for _, cn := range w.seen.All() {
+	for _, cn := range w.seen.OfNode(to.ID) {
 		if cn.Post != nil && cn.Post.IsDraft() && cn.Post.ID == to.ID && cn.Pre != nil && *cn.Pre == to {
 			return *cn.Post
 		}

@@ -441,7 +441,7 @@ func (t *guardTx) openChange(ctx context.Context, id domain.ChangeID) (domain.Ch
 	c.Guardians = slices.Clone(c.Guardians)
 	c.DependsOn = slices.Clone(c.DependsOn)
 	c.Items = slices.Clip(st.items)
-	c.ShareImpacts(st.impacts.list())
+	c.ShareImpacts(st.indexedList())
 	c.Seq = st.seq
 	return c, nil
 }

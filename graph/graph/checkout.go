@@ -214,7 +214,11 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 		return nil, invalidf("a node needs a key and a type")
 	}
 	var found *domain.ChangeImpact
-	if i := lastIndex(w.seen, func(cn domain.ChangeImpact) bool {
+	near := w.seen.OfKey(t.Key)
+	if t.Node != "" {
+		near = w.seen.OfNode(t.Node)
+	}
+	if i := lastIndex(near, func(cn domain.ChangeImpact) bool {
 		return (t.Node != "" && nodeOf(cn) == t.Node) || (t.Node == "" && cn.Key == t.Key && (t.Type == "" || cn.Type == t.Type))
 	}); i >= 0 {
 		cn := w.seen.At(i)

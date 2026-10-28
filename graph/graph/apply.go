@@ -403,10 +403,11 @@ func (a *applier) takesImpact(cn domain.ChangeImpact, impacts domain.Impacts) bo
 	if a.only == nil || a.takes(nodeOf(cn)) {
 		return true
 	}
-	for _, p := range impacts.All() {
-		if cn.Via != "" && p.ID == cn.Via {
-			return a.takesImpact(p, impacts)
-		}
+	if cn.Via == "" {
+		return false
+	}
+	if i := impacts.Index(cn.Via); i >= 0 {
+		return a.takesImpact(impacts.At(i), impacts)
 	}
 	return false
 }

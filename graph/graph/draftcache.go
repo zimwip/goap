@@ -45,6 +45,11 @@ type draftState struct {
 	impacts impactBlocks
 	// at is the position of each change impact in impacts
 	at cowMap[domain.ChangeImpactID, int]
+	// byNode and byKey are the positions of the change impacts naming each node (Pre or Post) and of each key, in order;
+	// odd counts the impacts superseded or of a flow: what the operations look for in the impacts (domain.ImpactLookup)
+	byNode cowMap[domain.NodeID, []int]
+	byKey  cowMap[string, []int]
+	odd    int
 	// drafts are the drafts of each change impact, one per flow
 	drafts cowMap[domain.ChangeImpactID, []domain.Draft]
 	// nodes are the change impacts that held a draft of each node (some may hold none any more)
@@ -85,7 +90,8 @@ type draftState struct {
 // containers of s, which copy what they write (impactBlocks, cowMap): a transaction that touches one impact of a change
 // of N copies what that write touches, not the whole view.
 func (s *draftState) copy() *draftState {
-	return &draftState{change: s.change, seq: s.seq, impacts: s.impacts.share(), at: s.at.share(), drafts: s.drafts.share(), nodes: s.nodes.share(),
+	return &draftState{change: s.change, seq: s.seq, impacts: s.impacts.share(), at: s.at.share(), byNode: s.byNode.share(), byKey: s.byKey.share(),
+		odd: s.odd, drafts: s.drafts.share(), nodes: s.nodes.share(),
 		conflicts: s.conflicts.share(), items: slices.Clip(s.items), events: s.events, log: s.log, phases: s.phases.share(), moved: s.moved,
 		first: s.first, state: s.state, moveSeq: s.moveSeq, bytes: s.bytes, sharedMoves: true}
 }
@@ -263,9 +269,12 @@ func (s *draftState) applyImpact(e domain.ImpactEvent) {
 		all := s.impacts.list().Slice()
 		s.resetImpacts(slices.Delete(all, i, i+1))
 	case ok:
+		s.unindex(i, s.impacts.at(i))
 		s.impacts.set(i, out[0])
+		s.index(i, out[0])
 	case len(out) > 0:
 		s.at.set(e.Impact, s.impacts.n)
+		s.index(s.impacts.n, out[0])
 		s.impacts.append(out[0])
 	}
 }
@@ -274,10 +283,113 @@ func (s *draftState) applyImpact(e domain.ImpactEvent) {
 func (s *draftState) resetImpacts(list []domain.ChangeImpact) {
 	s.impacts.reset(list)
 	s.at = cowMap[domain.ChangeImpactID, int]{}
+	s.byNode, s.byKey, s.odd = cowMap[domain.NodeID, []int]{}, cowMap[string, []int]{}, 0
 	for j, cn := range list {
 		s.at.set(cn.ID, j)
+		s.index(j, cn)
 	}
 }
+
+// impactNodes are the nodes an impact names: its Pre and its Post (the same node but for a merge or a split).
+func impactNodes(cn domain.ChangeImpact) (pre, post domain.NodeID) {
+	if cn.Pre != nil {
+		pre = cn.Pre.ID
+	}
+	if cn.Post != nil && cn.Post.ID != pre {
+		post = cn.Post.ID
+	}
+	return pre, post
+}
+
+func oddImpact(cn domain.ChangeImpact) bool { return cn.Superseded || cn.Flow != "" }
+
+// index adds the impact at position i to the lookups (positions in order: a new impact is the last, an impact replaced
+// keeps its place).
+func (s *draftState) index(i int, cn domain.ChangeImpact) {
+	pre, post := impactNodes(cn)
+	for _, n := range []domain.NodeID{pre, post} {
+		if n != "" {
+			at, _ := s.byNode.get(n)
+			s.byNode.set(n, insertPos(at, i))
+		}
+	}
+	if cn.Key != "" {
+		at, _ := s.byKey.get(cn.Key)
+		s.byKey.set(cn.Key, insertPos(at, i))
+	}
+	if oddImpact(cn) {
+		s.odd++
+	}
+}
+
+// unindex takes the impact at position i out of the lookups.
+func (s *draftState) unindex(i int, cn domain.ChangeImpact) {
+	pre, post := impactNodes(cn)
+	for _, n := range []domain.NodeID{pre, post} {
+		if n != "" {
+			at, _ := s.byNode.get(n)
+			if at = deletePos(at, i); len(at) == 0 {
+				s.byNode.del(n)
+			} else {
+				s.byNode.set(n, at)
+			}
+		}
+	}
+	if cn.Key != "" {
+		at, _ := s.byKey.get(cn.Key)
+		if at = deletePos(at, i); len(at) == 0 {
+			s.byKey.del(cn.Key)
+		} else {
+			s.byKey.set(cn.Key, at)
+		}
+	}
+	if oddImpact(cn) {
+		s.odd--
+	}
+}
+
+// insertPos is a sorted list of positions with i, a new slice (the old one may be shared with a copy of the view).
+func insertPos(at []int, i int) []int {
+	j, found := slices.BinarySearch(at, i)
+	if found {
+		return at
+	}
+	return slices.Insert(slices.Clone(at), j, i)
+}
+
+// deletePos is a sorted list of positions without i, a new slice.
+func deletePos(at []int, i int) []int {
+	j, found := slices.BinarySearch(at, i)
+	if !found {
+		return at
+	}
+	return slices.Delete(slices.Clone(at), j, j+1)
+}
+
+// indexedList is the impacts of the view with its lookups (domain.ImpactLookup): what an operation reads of a view
+// the transaction no longer writes (frozen, or published).
+func (s *draftState) indexedList() domain.Impacts {
+	return domain.IndexedImpacts(s.impacts.blocks, s.impacts.n, &viewLookup{at: s.at.share(), byNode: s.byNode.share(), byKey: s.byKey.share(), odd: s.odd})
+}
+
+// viewLookup is the domain.ImpactLookup of a view, over containers it shares with it.
+type viewLookup struct {
+	at     cowMap[domain.ChangeImpactID, int]
+	byNode cowMap[domain.NodeID, []int]
+	byKey  cowMap[string, []int]
+	odd    int
+}
+
+func (v *viewLookup) Position(id domain.ChangeImpactID) (int, bool) { return v.at.get(id) }
+func (v *viewLookup) OfNode(id domain.NodeID) []int {
+	at, _ := v.byNode.get(id)
+	return at
+}
+func (v *viewLookup) OfKey(key string) []int {
+	at, _ := v.byKey.get(key)
+	return at
+}
+func (v *viewLookup) Odd() int { return v.odd }
 
 // draftIDs are the impacts holding drafts.
 func (s *draftState) draftIDs() []domain.ChangeImpactID {
