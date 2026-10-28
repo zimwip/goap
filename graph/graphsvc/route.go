@@ -297,8 +297,11 @@ func (r *Router) forward(w http.ResponseWriter, req *http.Request, base string, 
 // mergedListings are the calls every graph answers, merged: the namespaces and their overview.
 var mergedListings = map[protoreflect.Name]bool{"GetGraphOverview": true, "ListNamespaces": true}
 
-// merge serves a listing every graph answers: this graph's answer, then each graph source's, a namespace listed once
-// (this graph first), each summary naming its source. A graph that does not answer is left out of the listing.
+// merge serves a listing every graph answers: this graph's answer, then each graph source's, a namespace listed once,
+// each summary naming its source. A namespace a graph source holds is that graph's: this graph lists the domains in
+// force with zero counts, the content's too, and its summary of them is replaced by the one of the graph holding them
+// (left out when that graph does not answer); any other namespace is this graph's first. A graph that does not answer
+// is left out of the listing.
 func (r *Router) merge(w http.ResponseWriter, req *http.Request, m protoreflect.MethodDescriptor) {
 	body, err := io.ReadAll(io.LimitReader(req.Body, RouterMaxBody))
 	if err != nil {
@@ -327,6 +330,7 @@ func (r *Router) merge(w http.ResponseWriter, req *http.Request, m protoreflect.
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
+	dropHeld(out, gs)
 	for _, g := range gs {
 		other := &recorder{header: http.Header{}, status: http.StatusOK}
 		r.forward(other, req, g.Location, body)
@@ -335,7 +339,7 @@ func (r *Router) merge(w http.ResponseWriter, req *http.Request, m protoreflect.
 		}
 		if msg, err := decodeAnswer(m, ct, other.body.Bytes()); err == nil {
 			stamp(msg, g.Name)
-			mergeListing(out, msg)
+			mergeListing(out, msg, g)
 		}
 	}
 	var b []byte
@@ -380,13 +384,27 @@ func stamp(msg proto.Message, source string) {
 	}
 }
 
-// mergeListing adds to a listing the namespaces of another it does not list yet.
-func mergeListing(into, from proto.Message) {
+// dropHeld takes out of this graph's overview the namespaces another graph holds: that graph answers for them.
+func dropHeld(msg proto.Message, gs []lnk.Source) {
+	if o, ok := msg.(*graphv1.GetGraphOverviewResponse); ok {
+		o.Namespaces = slices.DeleteFunc(o.Namespaces, func(n *graphv1.NamespaceSummary) bool {
+			return slices.ContainsFunc(gs, func(g lnk.Source) bool { return g.Holds(n.Namespace) })
+		})
+	}
+}
+
+// mergeListing adds to a listing the namespaces of the answer of graph g it does not list yet; the summary of a
+// namespace g holds replaces any other.
+func mergeListing(into, from proto.Message, g lnk.Source) {
 	switch o := into.(type) {
 	case *graphv1.GetGraphOverviewResponse:
 		for _, n := range from.(*graphv1.GetGraphOverviewResponse).Namespaces {
-			if !slices.ContainsFunc(o.Namespaces, func(x *graphv1.NamespaceSummary) bool { return x.Namespace == n.Namespace }) {
+			i := slices.IndexFunc(o.Namespaces, func(x *graphv1.NamespaceSummary) bool { return x.Namespace == n.Namespace })
+			switch {
+			case i < 0:
 				o.Namespaces = append(o.Namespaces, n)
+			case g.Holds(n.Namespace):
+				o.Namespaces[i] = n
 			}
 		}
 	case *graphv1.ListNamespacesResponse:
