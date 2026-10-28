@@ -37,7 +37,7 @@ func tree(t testing.TB, g *Graph, levels, fanout, decoys int) domain.Node {
 		edits = append(edits, e)
 	}
 	walk("R", 0)
-	if _, err := g.Commit(ctx, Commit{Title: "tree", By: "tester", ProjectID: "PROJ-ROOT", Edits: edits}); err != nil {
+	if _, err := g.CommitEdits(ctx, Edits{Title: "tree", By: "tester", ProjectID: "PROJ-ROOT", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 	root, err := g.NodeByKey(ctx, "", "R")
@@ -113,7 +113,7 @@ func TestLinksOfType(t *testing.T) {
 			}
 		}
 		pre := root.Ref()
-		if _, err := g.Commit(ctx, Commit{Title: "drop", By: "tester", ProjectID: "PROJ-ROOT", Edits: []NodeEdit{{Pre: &pre, RemoveLinks: []domain.LinkID{drop.ID}}}}); err != nil {
+		if _, err := g.CommitEdits(ctx, Edits{Title: "drop", By: "tester", ProjectID: "PROJ-ROOT", Edits: []NodeEdit{{Pre: &pre, RemoveLinks: []domain.LinkID{drop.ID}}}}); err != nil {
 			t.Fatal(err)
 		}
 		v2, err := g.NodeByKey(ctx, "", "R")

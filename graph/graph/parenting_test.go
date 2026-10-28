@@ -31,14 +31,14 @@ func testCommitRequiresAParent(t *testing.T, repo Repo) {
 	}
 
 	// no parent at all: refused
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "team", Baseline: base.ID, By: "t",
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "team", Commit: base.ID, By: "t",
 		Edits: []NodeEdit{{Key: "TEAM-A", Type: NodeTypeOrgUnit, Props: map[string]any{"name": "A"}}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("OrgUnit with no part_of = %v, want ErrInvalid", err)
 	}
 
 	// exactly one parent: accepted
 	orgRef := org.Ref()
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "team", Baseline: base.ID, By: "t",
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "team", Commit: base.ID, By: "t",
 		Edits: []NodeEdit{{Key: "TEAM-A", Type: NodeTypeOrgUnit, Props: map[string]any{"name": "A"},
 			Links: []LinkEdit{{Type: LinkPartOf, To: &orgRef}}}}}); err != nil {
 		t.Fatalf("OrgUnit with one part_of: %v", err)
@@ -49,7 +49,7 @@ func testCommitRequiresAParent(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "rename root", Baseline: head.ID, By: "t",
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "rename root", Commit: head.ID, By: "t",
 		Edits: []NodeEdit{{Pre: refPtr(org.Ref()), Props: map[string]any{"name": "Default org"}}}}); err != nil {
 		t.Fatalf("renaming the root: %v", err)
 	}
@@ -59,7 +59,7 @@ func testCommitRequiresAParent(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "user", Baseline: head.ID, By: "t",
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "user", Commit: head.ID, By: "t",
 		Edits: []NodeEdit{{Key: "USR:alice", Type: NodeTypeUser, Props: map[string]any{"subject": "alice"}}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("User with no member_of = %v, want ErrInvalid", err)
 	}
@@ -67,8 +67,8 @@ func testCommitRequiresAParent(t *testing.T, repo Repo) {
 
 // A modify edit that adds a second member_of without removing the first is rejected after the write, not
 // silently accepted — the safety net for a client that built its edit without knowing about the existing
-// link, e.g. from a baseline snapshot that predates it (checked when the version is accepted, checkRequiredLinks, ADR 0040: EnsureUser writes
-// member_of by import, which does not itself advance any baseline).
+// link, e.g. from a commit snapshot that predates it (checked when the version is accepted, checkRequiredLinks, ADR 0040: EnsureUser writes
+// member_of by import, which does not itself advance any commit).
 func TestCommitRejectsASecondMembership(t *testing.T) {
 	forEachRepo(t, testCommitRejectsASecondMembership)
 }
@@ -105,11 +105,11 @@ func testCommitRejectsASecondMembership(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 
-	// a client that never saw the existing member_of ORG-A (e.g. read it from an older baseline) adds
+	// a client that never saw the existing member_of ORG-A (e.g. read it from an older commit) adds
 	// member_of ORG-B without removing it: must be refused, not leave alice with two organisations.
 	userRef := user.Ref()
 	orgBRef := orgB.Ref()
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "move", Baseline: base.ID, By: "t",
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "move", Commit: base.ID, By: "t",
 		Edits: []NodeEdit{{Pre: &userRef, Links: []LinkEdit{{Type: LinkMemberOf, To: &orgBRef}}}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("adding a second member_of = %v, want ErrInvalid", err)
 	}
@@ -128,7 +128,7 @@ func testCommitRejectsASecondMembership(t *testing.T, repo Repo) {
 	if oldLink == "" {
 		t.Fatal("alice must already be member_of ORG-A")
 	}
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "move", Baseline: base.ID, By: "t",
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "move", Commit: base.ID, By: "t",
 		Edits: []NodeEdit{{Pre: &userRef, RemoveLinks: []domain.LinkID{oldLink}, Links: []LinkEdit{{Type: LinkMemberOf, To: &orgBRef}}}}}); err != nil {
 		t.Fatalf("move (remove old, add new): %v", err)
 	}

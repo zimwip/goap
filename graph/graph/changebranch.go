@@ -74,12 +74,12 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 		return c, err
 	}
 	c.Status = domain.ChangeApplied
-	c.ResultBaselineID = res.Baseline.ID
-	if err := g.commit(ctx, tx, c, own, res.Change.ID, res.Baseline.ID, nil); err != nil {
+	c.LandedCommit = res.Commit.ID
+	if err := g.commit(ctx, tx, c, own, res.Change.ID, res.Commit.ID, nil); err != nil {
 		return c, err
 	}
-	g.raiseMerged(ctx, tx, c, own.Parent, &res.Baseline, res.merged)
-	g.raiseApplied(ctx, tx, c, res.Baseline)
+	g.raiseMerged(ctx, tx, c, own.Parent, &res.Commit, res.merged)
+	g.raiseApplied(ctx, tx, c, res.Commit)
 	return c, tx.PutChange(ctx, c)
 }
 
@@ -257,8 +257,8 @@ func latestOnTx(ctx context.Context, tx Tx, namespace, branch string, id domain.
 
 // fastForward commits a change whose target has not moved, for the nodes its branch changed, since its branch was
 // forked: the versions of the branch join the target (ADR 0032), no merge version is made, and each change impact
-// commits as the version it wrote. The target is a lasting branch, which records the commit in a baseline, or the branch
-// of the parent change of a sub-change (ADR 0103), which holds no baseline (ADR 0140).
+// commits as the version it wrote. The target is a lasting branch, which records the commit in a commit, or the branch
+// of the parent change of a sub-change (ADR 0103), which holds no commit (ADR 0140).
 func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, closing bool) (bool, error) {
 	to, err := ontoOf(ctx, tx, own)
 	if err != nil {
@@ -331,7 +331,7 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		if !closing {
 			return false, fmt.Errorf("change %s: what it committed is merged already, nothing to merge: %w", c.ID, ErrNothingToCommit)
 		}
-		if c.ResultBaselineID != "" || to.parent.Ephemeral {
+		if c.LandedCommit != "" || to.parent.Ephemeral {
 			// merged before (ADR 0166): the close only closes
 			return true, g.closeMerged(ctx, tx, c, own, target)
 		}
@@ -355,11 +355,16 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	}
 	if to.parent.Ephemeral {
 		// the branch of the parent holds what the sub-change committed, its impacts committed there (recordInParent)
-		endCommit(tx, target)
 		if err := g.commit(ctx, tx, c, own, c.ID, "", only); err != nil {
 			return false, err
 		}
-		if err := g.raiseMergedRefs(ctx, tx, c, target, nil, moves); err != nil {
+		// the parent's branch records the merge as a commit of its own (ADR 0175)
+		pb := to.parent
+		res, err := g.commitOwn(ctx, tx, &pb, domain.Commit{Name: c.Title, ChangeID: c.ID, Kind: domain.CommitKindFastForward, MergedFrom: own.HeadOrFork()})
+		if err != nil {
+			return false, err
+		}
+		if err := g.raiseMergedRefs(ctx, tx, c, target, &res, moves); err != nil {
 			return false, err
 		}
 		if err := tx.PutChange(ctx, c); err != nil {
@@ -368,18 +373,18 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		if closing {
 			return true, nil
 		}
-		return true, g.forkAfterMerge(ctx, tx, c.ID, own, onto{parent: to.parent, head: to.parent.ForkBaseline})
+		return true, g.forkAfterMerge(ctx, tx, c.ID, own, onto{parent: pb, head: res.ID})
 	}
 	// a fast-forward, not a merge (the target did not move since the fork): name it after the change, not "merge …"
-	res := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: c.Title, Namespace: c.Namespace, Branch: target, ParentID: to.head, ChangeID: c.ID,
-		Kind: domain.BaselineFastForward, CreatedAt: g.now()}
-	if err := putBaselineOver(ctx, tx, res, to.head, delta); err != nil {
+	res := domain.Commit{ID: domain.CommitID(g.newID()), Name: c.Title, Namespace: c.Namespace, Branch: target, ParentID: to.head, ChangeID: c.ID,
+		Kind: domain.CommitKindFastForward, CreatedAt: g.now()}
+	if err := putCommitOver(ctx, tx, res, to.head, delta); err != nil {
 		return false, err
 	}
 	if err := g.advanceBranch(ctx, tx, c.Namespace, target, res); err != nil {
 		return false, err
 	}
-	c.ResultBaselineID = res.ID
+	c.LandedCommit = res.ID
 	if err := g.commit(ctx, tx, c, own, c.ID, res.ID, only); err != nil {
 		return false, err
 	}
@@ -398,41 +403,42 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 }
 
 // forkAfterMerge forks the branch of a change that stays open after its merge (ADR 0166) from what it merged into: the
-// fork and the change's reference baseline move there, journaled as a rebase is (HeaderBaselineID); the branch keeps
+// fork and the change's reference commit move there, journaled as a rebase is (HeaderForkCommit); the branch keeps
 // what it committed, now on the target too.
 func (g *Graph) forkAfterMerge(ctx context.Context, tx Tx, id domain.ChangeID, own domain.Branch, to onto) error {
 	c, err := tx.Change(ctx, id)
 	if err != nil {
 		return err
 	}
+	from := own.ForkCommit
 	if err := to.forkOnHead(ctx, tx, &own); err != nil {
 		return err
 	}
 	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
-		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderBaselineID: {From: string(c.BaselineID), To: string(own.ForkBaseline)}}})
+		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderForkCommit: {From: string(c.ForkCommit), To: string(own.ForkCommit)}}})
 	if err != nil {
 		return err
 	}
 	if _, err := tx.AppendLog(ctx, e); err != nil {
 		return err
 	}
-	if err := tx.PutBranch(ctx, own); err != nil {
+	if err := g.forkMoved(ctx, tx, c, &own, from); err != nil {
 		return err
 	}
-	c.BaselineID = own.ForkBaseline
+	c.ForkCommit = own.ForkCommit
 	return tx.PutChange(ctx, c)
 }
 
 // closeMerged closes a change whose work is all merged already (ADR 0166): its branch merged, the change applied at the
-// baseline its last merge left.
+// commit its last merge left.
 func (g *Graph) closeMerged(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, target string) error {
 	own.Status = domain.BranchMerged
 	if err := tx.PutBranch(ctx, own); err != nil {
 		return err
 	}
 	c.Status = domain.ChangeApplied
-	if c.ResultBaselineID != "" {
-		res, err := tx.BaselineHeader(ctx, c.ResultBaselineID)
+	if c.LandedCommit != "" {
+		res, err := tx.CommitHeader(ctx, c.LandedCommit)
 		if err != nil {
 			return err
 		}
@@ -471,7 +477,7 @@ func overTarget(ctx context.Context, tx Tx, ids []domain.NodeID, fork, into, fro
 }
 
 // ensureOwnBranch gives a change the branch of its own that the versions it writes live on
-// (ADR 0024), forked from its reference baseline like the one opened with the change. The
+// (ADR 0024), forked from its reference commit like the one opened with the change. The
 // items of a change are only applied when it is, so nothing is on the branch it acted on yet.
 func (g *Graph) ensureOwnBranch(ctx context.Context, tx Tx, c domain.Change) (domain.Change, domain.Branch, error) {
 	if c.ParentID != "" {
@@ -484,11 +490,11 @@ func (g *Graph) ensureOwnBranch(ctx context.Context, tx Tx, c domain.Change) (do
 	if parent.Status != domain.BranchOpen {
 		return c, parent, fmt.Errorf("branch %s is %s: %w", parent.Name, parent.Status, ErrConflict)
 	}
-	fork, err := headerOf(ctx, tx, c.BaselineID)
+	fork, err := headerOf(ctx, tx, c.ForkCommit)
 	if err != nil {
 		return c, parent, err
 	}
-	own := domain.Branch{Ephemeral: true, Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: parent.Name, ForkBaseline: fork.ID,
+	own := domain.Branch{Ephemeral: true, Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: parent.Name, ForkCommit: fork.ID,
 		Origin: domain.ChangeBranchOrigin(c.ID), Intent: domain.IntentDerive, Status: domain.BranchOpen, CreatedAt: g.now()}
 	if err := tx.PutBranch(ctx, own); err != nil {
 		return c, own, err

@@ -12,7 +12,7 @@ import (
 )
 
 // strictGraph is a graph judged by a catalogue with a closed type, a subtype of it, and a free-form type.
-func strictGraph(t *testing.T) (*Graph, domain.Baseline) {
+func strictGraph(t *testing.T) (*Graph, domain.Commit) {
 	t.Helper()
 	d, err := def.ParseDomain([]byte(`
 name: shop
@@ -81,7 +81,7 @@ func TestCheckAttributesIsStrict(t *testing.T) {
 func TestImpactNodeOperationsAreStrict(t *testing.T) {
 	ctx := context.Background()
 	g, b := strictGraph(t)
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: "shop", Title: "t", BaselineID: b.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: "shop", Title: "t", ForkCommit: b.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

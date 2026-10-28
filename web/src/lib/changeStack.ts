@@ -1,6 +1,6 @@
-// The change-stack of a node version or a baseline (ADR 0133), as the web reads it: one row per change, oldest first,
+// The change-stack of a node version or a commit (ADR 0133), as the web reads it: one row per change, oldest first,
 // a sub-change under its parent, with what it did in the lineage (the versions it wrote, rebased or made join a branch,
-// the baselines it left). Pure: the component loads the stack and renders the rows.
+// the commits it left). Pure: the component loads the stack and renders the rows.
 import { shortId, type ChangeStack, type StackChange } from './api';
 
 export interface StackRow {
@@ -36,9 +36,9 @@ export function stackRows(stack: ChangeStack | undefined): StackRow[] {
     else add(v.change, `wrote v${v.version}${v.reason ? ` (${v.reason})` : ''} on ${on}`);
     for (const j of v.joined ?? []) add(j.change, `made v${v.version} join ${j.branch || 'main'}`);
   }
-  for (const b of stack?.baselines ?? []) {
-    add(b.change, `${b.kind || 'baseline'} on ${b.branch || 'main'}`);
-    // a sub-change leaves no baseline of its own (ADR 0140): it came in merged into the change of the baseline
+  for (const b of stack?.commits ?? []) {
+    add(b.change, `${b.kind || 'commit'} on ${b.branch || 'main'}`);
+    // a sub-change leaves no commit of its own (ADR 0140): it came in merged into the change of the commit
     for (const m of b.merged ?? []) add(m, `merged into ${changeLabel(byId.get(b.change ?? ''), b.change ?? '')}`);
   }
   const depthOf = (id: string, seen = new Set<string>()): number => {

@@ -58,7 +58,7 @@ export interface NodeOption {
   inChange?: boolean;
 }
 
-/** What the node and link widgets choose from: the page decides (a human task: the reference baseline of the change
+/** What the node and link widgets choose from: the page decides (a human task: the reference commit of the change
  * and the nodes it writes). */
 export interface NodeSource {
   nodes: NodeOption[];

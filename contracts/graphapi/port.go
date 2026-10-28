@@ -70,12 +70,12 @@ type Port interface {
 	// QueryView runs a read query in a subset of openCypher in a view (ADR 0160): what measures a rule of a control
 	// (ADR 0162) reads.
 	QueryView(ctx context.Context, v View, query string, opts QueryOptions) (QueryResult, error)
-	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
+	CommitGraph(ctx context.Context, id domain.CommitID) ([]domain.Node, []domain.Link, error)
 	// ChangeGraph is the graph a call on a change reads: the active option's (or the option flow names), else the
-	// reference baseline of the change (ADR 0032 §6).
+	// reference commit of the change (ADR 0032 §6).
 	ChangeGraph(ctx context.Context, id domain.ChangeID, flow string) ([]domain.Node, []domain.Link, error)
 	// ChangeView is the graph of a change at a level (written, accepted, committed) on a flow (ADR 0032 §5).
-	ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (domain.Baseline, error)
+	ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (domain.Commit, error)
 	// Options of a change (ADR 0009 §3, ADR 0032 §6): open, activate, evaluate, list and compare them. Selecting and
 	// rejecting one is a decision, made through the graph service.
 	OpenOption(ctx context.Context, id domain.ChangeID, in OpenOptionRequest) (domain.Flow, error)
@@ -94,7 +94,7 @@ type Port interface {
 	TransitionChange(ctx context.Context, id domain.ChangeID, in TransitionRequest) (domain.Change, error)
 	// CommitChange is the first act of a change: its accepted modifications written on its own branch (ADR 0102); it
 	// answers the header of the commit, never its state.
-	CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
+	CommitChange(ctx context.Context, id domain.ChangeID, commitName string) (domain.Commit, error)
 	// Branch, PlanMerge and IntegrateChange are the second act: the merge of a committed change into the
 	// branch it was forked from, with the resolutions of the conflicts a person settled (ADR 0056).
 	Branch(ctx context.Context, namespace, name string) (domain.Branch, error)
@@ -105,7 +105,7 @@ type Port interface {
 	CloseChange(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	// RebaseState tells where a change stands against what it builds on: the conflicts a rebase left to settle (ADR 0101).
 	RebaseState(ctx context.Context, id domain.ChangeID) (RebaseState, error)
-	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
+	Commits(ctx context.Context, namespace string) ([]domain.Commit, error)
 	// TagVersion names one exact node version for the caller; Tags lists the tags matching a filter (ADR 0143 §6).
 	TagVersion(ctx context.Context, ref domain.NodeRef, name string) (domain.Tag, error)
 	Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, error)
@@ -113,7 +113,7 @@ type Port interface {
 	AppendLog(ctx context.Context, entries []domain.LogEntry) error
 	ChangeLog(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, map[string]int, error)
 	// BranchHead gives the head of a branch: the state the last change left, the empty state (empty id) before any.
-	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
+	BranchHead(ctx context.Context, namespace, name string) (domain.Commit, error)
 	// ListChanges lists the changes matching a filter (goap-change.list): which open change a request
 	// continues, else a new one is proposed.
 	ListChanges(ctx context.Context, f ChangesFilter) ([]domain.Change, error)

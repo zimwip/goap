@@ -26,7 +26,7 @@ func TestCancelInterruptsARunInFlight(t *testing.T) {
 	e, base := mcpEngine(t, hub, client)
 	e.Methodologies.(engine.StaticMethodologies)["docs"] = parseDocs(t, docsAsLLM)
 	alice := authz.With(context.Background(), authz.Principal{Subject: "alice", Org: "acme", Roles: []string{"admin"}})
-	p, err := e.Start(alice, engine.StartRequest{Methodology: "docs", Agent: "writer", Goal: "done", BaselineID: base, Intent: "document it", OwnerOrg: "acme", ProjectID: testProject})
+	p, err := e.Start(alice, engine.StartRequest{Methodology: "docs", Agent: "writer", Goal: "done", ForkCommit: base, Intent: "document it", OwnerOrg: "acme", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,7 +17,7 @@ func testNoVersionExistsDuringAChange(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "drafts", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "drafts", ForkCommit: f.base.ID, OwnBranch: true}))
 	made := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "TST-9", Type: "TestCase", Rationale: "new",
 		Links: []LinkWrite{{Type: "verifies", To: f.req.Ref()}}}))
 	pre := f.req.Ref()
@@ -80,7 +80,7 @@ func testCommitWritesOneVersionPerDraft(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "commit", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "commit", ForkCommit: f.base.ID, OwnBranch: true}))
 	pre := f.req.Ref()
 	mod := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "edit"}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, mod.ID, NodeUpdate{Properties: map[string]any{"title": "Use PSP v2"}}))
@@ -95,7 +95,7 @@ func testCommitWritesOneVersionPerDraft(t *testing.T, repo Repo) {
 	for _, cn := range []domain.ChangeImpact{mod, a, b} {
 		must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, cn.ID, "bob", "ok"))
 	}
-	res := g.withState(t, ctx, must[domain.Baseline](t)(g.apply(ctx, c.ID, "")))
+	res := g.withState(t, ctx, must[domain.Commit](t)(g.apply(ctx, c.ID, "")))
 
 	req2 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Nodes[f.req.ID]}))
 	if req2.Version != pre.Version+1 || !slices.Equal(req2.Parents, []domain.Version{pre.Version}) || req2.Responsible != f.req.Responsible || req2.ChangeID != c.ID || req2.ChangeImpact != mod.ID {
@@ -156,7 +156,7 @@ func testChildFlowForksTheParentDraft(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "flows", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "flows", ForkCommit: f.base.ID, OwnBranch: true}))
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "edit"}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: map[string]any{"title": "main one"}}))
 	child := must[domain.Flow](t)(g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "child", Hypothesis: "h", By: "u"}))

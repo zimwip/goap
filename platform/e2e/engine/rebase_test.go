@@ -41,7 +41,7 @@ goals:
     value: 1
 `
 
-// Two changes forked from the same baseline edit the same property: the run applying the second waits on the
+// Two changes forked from the same commit edit the same property: the run applying the second waits on the
 // conflicts of the rebase (ADR 0101), a person settles them, and the run goes on and commits the change.
 func TestRunWaitsOnTheConflictsOfTheRebase(t *testing.T) {
 	ctx := context.Background()
@@ -60,7 +60,7 @@ func TestRunWaitsOnTheConflictsOfTheRebase(t *testing.T) {
 		t.Fatal(err)
 	}
 	edited := func(title, value string) domain.Change {
-		c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: testProject, Namespace: "alm", Title: title, BaselineID: base, OwnBranch: true})
+		c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: testProject, Namespace: "alm", Title: title, ForkCommit: base, OwnBranch: true})
 		if err != nil {
 			t.Fatal(err)
 		}

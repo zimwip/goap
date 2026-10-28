@@ -10,9 +10,9 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-func TestBrowseBaseline(t *testing.T) { forEachRepo(t, testBrowseBaseline) }
+func TestBrowseCommit(t *testing.T) { forEachRepo(t, testBrowseCommit) }
 
-func testBrowseBaseline(t *testing.T, repo Repo) {
+func testBrowseCommit(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
 
@@ -51,7 +51,7 @@ func testBrowseBaseline(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 
-	page, err := g.BaselineNodes(ctx, b.ID, NodeQuery{Type: "Req", Offset: 10, Limit: 5})
+	page, err := g.CommitNodes(ctx, b.ID, NodeQuery{Type: "Req", Offset: 10, Limit: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func testBrowseBaseline(t *testing.T, repo Repo) {
 	if len(page.Types) != 2 || page.Types[0] != (TypeCount{Type: "Req", Count: 12}) || page.Types[1] != (TypeCount{Type: "Test", Count: 2}) {
 		t.Fatalf("types = %v", page.Types)
 	}
-	page, err = g.BaselineNodes(ctx, b.ID, NodeQuery{Text: "LOGIN"})
+	page, err = g.CommitNodes(ctx, b.ID, NodeQuery{Text: "LOGIN"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func testBrowseBaseline(t *testing.T, repo Repo) {
 	if len(nb.Suspect) != 1 || nb.Suspect[0] != verifies.ID {
 		t.Fatalf("suspect = %v", nb.Suspect)
 	}
-	// seen from the test, the suspect link leads to the baseline's version of req 0
+	// seen from the test, the suspect link leads to the commit's version of req 0
 	nb, err = g.NodeNeighbourhood(ctx, b.ID, test.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func testBrowseBaseline(t *testing.T, repo Repo) {
 	slices.SortStableFunc(whole, func(a, b domain.Node) int { return strings.Compare(a.Key, b.Key) })
 	for _, q := range []NodeQuery{{Limit: 500}, {Type: "Req", Offset: 3, Limit: 4}, {Text: "req 1", Limit: 50}, {Text: "%", Limit: 50}, {Text: "_", Limit: 50},
 		{Text: "x_y", Limit: 50}, {Text: "test", Limit: 1, Offset: 1}, {Text: "7", Limit: 50}, {Text: "nothing", Limit: 50}, {IncludeDeleted: true, Limit: 500}} {
-		got, err := g.BaselineNodes(ctx, b.ID, q)
+		got, err := g.CommitNodes(ctx, b.ID, q)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -129,7 +129,7 @@ func testBrowseBaseline(t *testing.T, repo Repo) {
 		}
 	}
 	for _, q := range []LinkQuery{{Limit: 500}, {Type: "depends", Limit: 50}, {Text: "VERIF", Limit: 50}, {Offset: 1, Limit: 1}, {Text: "%", Limit: 50}} {
-		got, err := g.BaselineLinks(ctx, b.ID, q)
+		got, err := g.CommitLinks(ctx, b.ID, q)
 		if err != nil {
 			t.Fatal(err)
 		}

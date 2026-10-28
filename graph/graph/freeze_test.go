@@ -34,7 +34,7 @@ func testGateFreezesAndSeats(t *testing.T, repo Repo) {
 		return nil
 	}
 	g := w.g
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "gated", Intent: "first", Methodology: "m", BaselineID: w.base.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "gated", Intent: "first", Methodology: "m", ForkCommit: w.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

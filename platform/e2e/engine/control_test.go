@@ -91,7 +91,7 @@ func TestAControlGovernsAndMeasuresAnActivity(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.Methodologies.(engine.StaticMethodologies)["controlled"] = c
-	ch, err := g.CreateChange(ctx, graph.NewChange{Title: "Pay", Intent: "build the payment", Methodology: "controlled", Namespace: "alm", ProjectID: testProject, BaselineID: head.ID})
+	ch, err := g.CreateChange(ctx, graph.NewChange{Title: "Pay", Intent: "build the payment", Methodology: "controlled", Namespace: "alm", ProjectID: testProject, ForkCommit: head.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestAControlCollectedWithNoRuleIsEstablished(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.Methodologies.(engine.StaticMethodologies)["controlled"] = c
-	ch, err := g.CreateChange(ctx, graph.NewChange{Title: "Pay", Intent: "build", Methodology: "controlled", Namespace: "alm", ProjectID: testProject, BaselineID: base})
+	ch, err := g.CreateChange(ctx, graph.NewChange{Title: "Pay", Intent: "build", Methodology: "controlled", Namespace: "alm", ProjectID: testProject, ForkCommit: base})
 	if err != nil {
 		t.Fatal(err)
 	}

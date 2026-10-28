@@ -13,7 +13,7 @@ import (
 
 // levelsGraph is judged by a domain plugging a validator at each level: an attribute (title), a node (a tag needs a
 // title), an attribute of a link (weight) and a link (both ends of the same colour).
-func levelsGraph(t *testing.T) (*Graph, domain.Baseline) {
+func levelsGraph(t *testing.T) (*Graph, domain.Commit) {
 	t.Helper()
 	d, err := def.ParseDomain([]byte(`
 name: lv
@@ -76,7 +76,7 @@ func newLevelsChange(t *testing.T, a, b, link map[string]any) *levelsChange {
 	t.Helper()
 	ctx := context.Background()
 	g, base := levelsGraph(t)
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: "lv", Title: "t", BaselineID: base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: "lv", Title: "t", ForkCommit: base.ID}))
 	lc := &levelsChange{g: g, c: c, ctx: ctx, t: t}
 	lc.b = must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Rationale: "r", Key: "B", Type: "lv@Item", Properties: b}))
 	lc.a = must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Rationale: "r", Key: "A", Type: "lv@Item", Properties: a,

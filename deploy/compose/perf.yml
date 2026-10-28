@@ -10,7 +10,7 @@
 # goap-bench holds once its run ends (make perf: until interrupted, PERF_AUTOSTOP=30m for that long, 0 to exit); make
 # perf-capture saves what Prometheus holds in .goap/perf/captures, make perf-analysis replays it (perf-analysis.yml).
 # The web on the data of the bench: http://localhost:5174 (the gateway on :8381 signs nobody in, a fixed administrator,
-# and reaches the graph only: the Baseline explorer, the nodes and the changes work, what needs another service fails).
+# and reaches the graph only: the History explorer, the nodes and the changes work, what needs another service fails).
 # pprof of the graph service: go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 # Its own project (goap-perf) and ports: it runs next to the dev stack (make up). make perf-reset drops its data.
 name: goap-perf
@@ -69,7 +69,7 @@ services:
       # no `graph bootstrap` in this stack: the service bootstraps the platform itself
       GOAP_GRAPH_BOOTSTRAP: "1"
       GOAP_PPROF_ADDR: ":6060"
-      # baselines storing their whole state (ADR 0056): 1 every baseline, the default otherwise
+      # commits storing their whole state (ADR 0056): 1 every commit, the default otherwise
     depends_on:
       postgres: {condition: service_healthy}
       domains: {condition: service_started}

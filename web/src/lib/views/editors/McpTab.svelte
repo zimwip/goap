@@ -75,7 +75,7 @@
       // a null value clears the property: both is the default scope
       const props: Struct = { name: out.name ?? '', description: out.description ?? '', scope: scope === 'both' ? null : scope, tools: (out.tools ?? []) as unknown as Struct[] };
       const item = existing ? updateNodeItem(existing, props) : createNodeItem(keyOf(out.name!), nodeTypes.mcp, props);
-      await applyOnMain(ns.platform, `MCP ${out.name}`, `${existing ? 'Update' : 'Create'} MCP ${out.name}`, h.baselineId, [item]);
+      await applyOnMain(ns.platform, `MCP ${out.name}`, `${existing ? 'Update' : 'Create'} MCP ${out.name}`, h.commitId, [item]);
       await refreshTools();
       notify(`MCP ${out.name} saved`, 'ok');
       if (isNew) {
@@ -95,7 +95,7 @@
       const h = await headGraph(ns.platform);
       const existing = findNode(h, ns.platform, nodeTypes.mcp, keyOf(name));
       if (!existing) throw new Error(`MCP ${name} is not on the graph`);
-      await applyOnMain(ns.platform, `Retire MCP ${name}`, `Retire MCP ${name}`, h.baselineId, [retireNodeItem(existing)]);
+      await applyOnMain(ns.platform, `Retire MCP ${name}`, `Retire MCP ${name}`, h.commitId, [retireNodeItem(existing)]);
       await refreshTools();
       closeTab(tab.id, { force: true });
     } catch (e) {

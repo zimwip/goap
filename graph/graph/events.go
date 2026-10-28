@@ -24,7 +24,7 @@ const OutboxOrigin = "graph"
 
 // Observe makes the graph emit its events (ADR 0136): the changes (change.created, change.applied...), the technical
 // change.updated and change documents of the index, a NodeEvent for every node version written (at commit, ADR 0079:
-// a node in a change is a draft, no version) and a BaselineEvent for every baseline created. They are written in the
+// a node in a change is a draft, no version) and a CommitEvent for every commit created. They are written in the
 // outbox of the graph in the transaction that writes their fact, whatever the write path, and delivered to sink once
 // it commits; the relay returned delivers again what could not be (Run it). It is called once, before serving.
 func (g *Graph) Observe(sink outbox.Sink) *outbox.Relay {
@@ -56,10 +56,10 @@ type observedRepo struct {
 type observedTx struct {
 	Tx
 	// nodes are the versions written by the transaction
-	nodes     []domain.NodeRef
-	baselines []domain.Baseline
-	// deltas are what the baselines written over their parent changed (putBaselineOver)
-	deltas map[domain.BaselineID]map[domain.NodeID]domain.Version
+	nodes   []domain.NodeRef
+	commits []domain.Commit
+	// deltas are what the commits written over their parent changed (putCommitOver)
+	deltas map[domain.CommitID]map[domain.NodeID]domain.Version
 	// changes written in the transaction, in order: the header when it was written, else just the id
 	changes []domain.ChangeID
 	headers map[domain.ChangeID]domain.Change
@@ -107,9 +107,9 @@ func (g *Graph) raiseItems(ctx context.Context, tx Tx, c domain.Change, items []
 
 // raiseApplied emits change.applied: the change committed in what it was forked from, leaving b (its header: the state
 // is not carried).
-func (g *Graph) raiseApplied(ctx context.Context, tx Tx, c domain.Change, b domain.Baseline) {
+func (g *Graph) raiseApplied(ctx context.Context, tx Tx, c domain.Change, b domain.Commit) {
 	b.Nodes = nil
-	g.raise(ctx, tx, events.ChangeApplied, c, func(ev *domain.ChangeEvent) { ev.Baseline = &b })
+	g.raise(ctx, tx, events.ChangeApplied, c, func(ev *domain.ChangeEvent) { ev.Commit = &b })
 	if ot, ok := tx.(*observedTx); ok {
 		evs, _ := ctx.Value(carriedKey{}).([]graphapi.CarriedEvent)
 		for _, e := range evs {
@@ -129,7 +129,7 @@ func withCarried(ctx context.Context, evs []graphapi.CarriedEvent) context.Conte
 }
 
 // carriedFamilies are the subjects the graph emits itself: a writer may not carry one (ADR 0136).
-var carriedFamilies = []string{"goap.change.", "goap.changed.", "goap.changeindex.", "goap.node.", "goap.baseline."}
+var carriedFamilies = []string{"goap.change.", "goap.changed.", "goap.changeindex.", "goap.node.", "goap.commit."}
 
 // checkCarried refuses a carried event outside goap.>, with a wildcard or an empty token, or of the graph's families,
 // and one whose payload is not JSON.
@@ -149,10 +149,10 @@ func checkCarried(evs []graphapi.CarriedEvent) error {
 
 // raiseCommitted emits change.committed (ADR 0159): c committed on the branch of b (its header: the state is not
 // carried), writing the versions nodes.
-func (g *Graph) raiseCommitted(ctx context.Context, tx Tx, c domain.Change, b domain.Baseline, nodes []domain.Node) {
+func (g *Graph) raiseCommitted(ctx context.Context, tx Tx, c domain.Change, b domain.Commit, nodes []domain.Node) {
 	b.Nodes = nil
 	g.raise(ctx, tx, events.ChangeCommitted, c, func(ev *domain.ChangeEvent) {
-		ev.Baseline, ev.Branch, ev.Nodes = &b, domain.BranchOf(b.Branch), eventNodes(nodes)
+		ev.Commit, ev.Branch, ev.Nodes = &b, domain.BranchOf(b.Branch), eventNodes(nodes)
 	})
 }
 
@@ -173,20 +173,20 @@ func (g *Graph) raiseRebased(ctx context.Context, tx Tx, id domain.ChangeID, bra
 }
 
 // raiseMerged emits change.merged (ADR 0159): c merged into branch into, leaving there the versions nodes (written or
-// joined by the merge), b the baseline it left when the branch keeps one (nil: the branch of a change).
-func (g *Graph) raiseMerged(ctx context.Context, tx Tx, c domain.Change, into string, b *domain.Baseline, nodes []domain.Node) {
+// joined by the merge), b the commit it left when the branch keeps one (nil: the branch of a change).
+func (g *Graph) raiseMerged(ctx context.Context, tx Tx, c domain.Change, into string, b *domain.Commit, nodes []domain.Node) {
 	if b != nil {
 		h := *b
 		h.Nodes = nil
 		b = &h
 	}
 	g.raise(ctx, tx, events.ChangeMerged, c, func(ev *domain.ChangeEvent) {
-		ev.Baseline, ev.Branch, ev.Nodes = b, domain.BranchOf(into), eventNodes(nodes)
+		ev.Commit, ev.Branch, ev.Nodes = b, domain.BranchOf(into), eventNodes(nodes)
 	})
 }
 
 // raiseMergedRefs is raiseMerged with the versions read by reference.
-func (g *Graph) raiseMergedRefs(ctx context.Context, tx Tx, c domain.Change, into string, b *domain.Baseline, refs []domain.NodeRef) error {
+func (g *Graph) raiseMergedRefs(ctx context.Context, tx Tx, c domain.Change, into string, b *domain.Commit, refs []domain.NodeRef) error {
 	if _, ok := tx.(*observedTx); !ok {
 		return nil
 	}
@@ -313,38 +313,38 @@ func (t *observedTx) PutNode(ctx context.Context, n domain.Node) error {
 	return nil
 }
 
-func (t *observedTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
-	if err := t.Tx.PutBaseline(ctx, b); err != nil {
+func (t *observedTx) PutCommit(ctx context.Context, b domain.Commit) error {
+	if err := t.Tx.PutCommit(ctx, b); err != nil {
 		return err
 	}
-	t.baselines = append(t.baselines, b)
+	t.commits = append(t.commits, b)
 	return nil
 }
 
-// putBaselineOver writes a baseline over another (putBaselineOver); its event is the delta when over is its parent.
-func (t *observedTx) putBaselineOver(ctx context.Context, b domain.Baseline, over domain.BaselineID, delta map[domain.NodeID]domain.Version) error {
-	if err := putBaselineOver(ctx, t.Tx, b, over, delta); err != nil {
+// putCommitOver writes a commit over another (putCommitOver); its event is the delta when over is its parent.
+func (t *observedTx) putCommitOver(ctx context.Context, b domain.Commit, over domain.CommitID, delta map[domain.NodeID]domain.Version) error {
+	if err := putCommitOver(ctx, t.Tx, b, over, delta); err != nil {
 		return err
 	}
 	if over != b.ParentID {
 		if domain.BranchOf(b.Branch) != domain.MainBranch {
-			b.Nodes = nil // its event carries no diff (BaselineEvent): no state is read for it
-			t.baselines = append(t.baselines, b)
+			b.Nodes = nil // its event carries no diff (CommitEvent): no state is read for it
+			t.commits = append(t.commits, b)
 			return nil
 		}
-		full, err := t.Tx.Baseline(ctx, b.ID)
+		full, err := t.Tx.Commit(ctx, b.ID)
 		if err != nil {
 			return err
 		}
-		t.baselines = append(t.baselines, full)
+		t.commits = append(t.commits, full)
 		return nil
 	}
 	if t.deltas == nil {
-		t.deltas = map[domain.BaselineID]map[domain.NodeID]domain.Version{}
+		t.deltas = map[domain.CommitID]map[domain.NodeID]domain.Version{}
 	}
 	t.deltas[b.ID] = delta
 	b.Nodes = nil
-	t.baselines = append(t.baselines, b)
+	t.commits = append(t.commits, b)
 	return nil
 }
 
@@ -399,8 +399,8 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 	out = append(out, docs...)
 	out = append(out, ot.raised...)
 	if len(ot.nodes) > 0 {
-		// typesAt ignores its baseline argument (the type catalogue is process-global, not
-		// namespace-scoped graph data): no baseline lookup is needed to build it.
+		// typesAt ignores its commit argument (the type catalogue is process-global, not
+		// namespace-scoped graph data): no commit lookup is needed to build it.
 		ix, err := g.typesAt(ctx, tx, "")
 		if err != nil {
 			return nil, err
@@ -417,11 +417,12 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 			out = append(out, published{fmt.Sprintf(domain.SubjectNodeWritten, subjectToken(ev.Namespace), subjectToken(n.Type), n.ID), ev})
 		}
 	}
-	for _, b := range ot.baselines {
-		ev := domain.BaselineEventOf(b)
+	for _, b := range ot.commits {
+		ev := domain.CommitEventOf(b)
 		ev.Set = map[domain.NodeID]domain.Version{}
 		if gt, ok := unwrapGuard(tx); ok && ev.Seq == 0 {
-			ev.Seq = gt.wroteHeads[b.ID].Seq // the order the guard gave it
+			// the order and the fork the guard gave it
+			ev.Seq, ev.Fork = gt.wroteHeads[b.ID].Seq, gt.wroteHeads[b.ID].Fork
 		}
 		if delta, ok := ot.deltas[b.ID]; ok {
 			ev.Whole = true
@@ -432,19 +433,19 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 					ev.Set[id] = v
 				}
 			}
-			out = append(out, published{fmt.Sprintf(domain.SubjectBaselineAdvanced, subjectToken(ev.Branch)), ev})
+			out = append(out, published{fmt.Sprintf(domain.SubjectCommitAdvanced, subjectToken(ev.Branch)), ev})
 			continue
 		}
 		if ev.Branch != domain.MainBranch {
-			// the index follows main only: the baseline of another branch (a rebase on a change's own branch) names
+			// the index follows main only: the commit of another branch (a rebase on a change's own branch) names
 			// itself, without reading two states to diff them
-			out = append(out, published{fmt.Sprintf(domain.SubjectBaselineAdvanced, subjectToken(ev.Branch)), ev})
+			out = append(out, published{fmt.Sprintf(domain.SubjectCommitAdvanced, subjectToken(ev.Branch)), ev})
 			continue
 		}
 		ev.Whole = true
 		var parent map[domain.NodeID]domain.Version
 		if b.ParentID != "" {
-			p, err := tx.Baseline(ctx, b.ParentID)
+			p, err := tx.Commit(ctx, b.ParentID)
 			if err != nil {
 				return nil, err
 			}
@@ -460,7 +461,7 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 				ev.Removed = append(ev.Removed, id)
 			}
 		}
-		out = append(out, published{fmt.Sprintf(domain.SubjectBaselineAdvanced, subjectToken(ev.Branch)), ev})
+		out = append(out, published{fmt.Sprintf(domain.SubjectCommitAdvanced, subjectToken(ev.Branch)), ev})
 	}
 	return out, nil
 }
@@ -549,7 +550,7 @@ func (ix *typeIndex) searchOf(typ string) []domain.SearchProperty {
 }
 
 // Republish publishes the node event of every node version (all branches, every namespace) and the
-// head of each namespace's main as a baseline event, to rebuild an index (ADR 0026). It returns the
+// head of each namespace's main as a commit event, to rebuild an index (ADR 0026). It returns the
 // number of documents published (node versions and changes).
 func (g *Graph) Republish(ctx context.Context, sink EventSink) (int, error) {
 	var namespaces []string
@@ -616,7 +617,7 @@ func (g *Graph) republishNamespace(ctx context.Context, namespace string, sink E
 		}
 		if head, err := branchHead(ctx, tx, namespace, domain.MainBranch); err == nil && head.ID != "" {
 			head.ParentID = ""
-			ot.baselines = append(ot.baselines, head)
+			ot.commits = append(ot.commits, head)
 		}
 		events, err = g.eventsOf(ctx, tx, ot)
 		return err

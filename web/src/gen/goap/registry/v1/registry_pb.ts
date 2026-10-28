@@ -2978,7 +2978,7 @@ export type Trigger = Message<"goap.registry.v1.Trigger"> & {
 
   /**
    * CEL filter over the event: event.type, event.change {id, title, status,
-   * methodology, goal, baseline}, event.process {id, agent, goal, status}
+   * methodology, goal, commit}, event.process {id, agent, goal, status}
    *
    * @generated from field: string filter = 5;
    */
@@ -3006,7 +3006,7 @@ export type Trigger = Message<"goap.registry.v1.Trigger"> & {
   intent: string;
 
   /**
-   * new_change: open a change on the latest baseline (default);
+   * new_change: open a change on the latest commit (default);
    * event_change: work on the change of the event
    *
    * @generated from field: string target = 9;
@@ -3066,7 +3066,7 @@ export type TriggerJson = {
 
   /**
    * CEL filter over the event: event.type, event.change {id, title, status,
-   * methodology, goal, baseline}, event.process {id, agent, goal, status}
+   * methodology, goal, commit}, event.process {id, agent, goal, status}
    *
    * @generated from field: string filter = 5;
    */
@@ -3094,7 +3094,7 @@ export type TriggerJson = {
   intent?: string;
 
   /**
-   * new_change: open a change on the latest baseline (default);
+   * new_change: open a change on the latest commit (default);
    * event_change: work on the change of the event
    *
    * @generated from field: string target = 9;

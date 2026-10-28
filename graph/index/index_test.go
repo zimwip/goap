@@ -74,7 +74,7 @@ func TestIndexSearch(t *testing.T) {
 			}
 		}
 		// main head: n1@1, n2@1, n3@1
-		if err := x.OnBaseline(ctx, domain.BaselineEvent{Branch: "main", Set: map[domain.NodeID]domain.Version{"n1": 1, "n2": 1, "n3": 1}}); err != nil {
+		if err := x.OnCommit(ctx, domain.CommitEvent{Branch: "main", Set: map[domain.NodeID]domain.Version{"n1": 1, "n2": 1, "n3": 1}}); err != nil {
 			t.Fatal(err)
 		}
 		yes := true
@@ -117,7 +117,7 @@ func TestIndexSearch(t *testing.T) {
 		}
 
 		// a new main head moves the flag from REQ-1@1 to REQ-1@2 and drops FN-1
-		if err := x.OnBaseline(ctx, domain.BaselineEvent{Branch: "main", Set: map[domain.NodeID]domain.Version{"n1": 2}, Removed: []domain.NodeID{"n3"}}); err != nil {
+		if err := x.OnCommit(ctx, domain.CommitEvent{Branch: "main", Set: map[domain.NodeID]domain.Version{"n1": 2}, Removed: []domain.NodeID{"n3"}}); err != nil {
 			t.Fatal(err)
 		}
 		r, _ = se.Search(ctx, Query{Filter: Filter{Main: &yes}})

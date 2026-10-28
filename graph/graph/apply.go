@@ -29,32 +29,32 @@ import (
 //     as its own (recordInParent). Only a root change's target moving in between falls back to the three-way merge,
 //     which leaves the change committed until it is resolved.
 //
-// The two acts are the only way in: a caller commits (CommitChange), then merges (IntegrateChange). Graph.Commit, the
+// The two acts are the only way in: a caller commits (CommitChange), then merges (IntegrateChange). Graph.CommitEdits, the
 // producer path, does both at once (apply).
 
 // ErrNothingToCommit refuses a commit that would write nothing: no accepted modification, nothing to revert (ADR 0102).
 var ErrNothingToCommit = graphapi.ErrNothingToCommit
 
-// apply commits what the change has pending, then closes it (CloseChange: merged, applied): Graph.Commit's landing. It returns the
-// header of the baseline the change left on the branch it was forked from (reading its state costs the size of the
+// apply commits what the change has pending, then closes it (CloseChange: merged, applied): Graph.CommitEdits's landing. It returns the
+// header of the commit the change left on the branch it was forked from (reading its state costs the size of the
 // namespace, ADR 0137), none when the merge waits for a resolution.
-func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
-	var result domain.Baseline
+func (g *Graph) apply(ctx context.Context, id domain.ChangeID, commitName string) (domain.Commit, error) {
+	var result domain.Commit
 	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
 		return result, err
 	}
-	if _, err := g.commitChange(ctx, id, baselineName, nil); err != nil && !errors.Is(err, ErrNothingToCommit) {
+	if _, err := g.commitChange(ctx, id, commitName, nil); err != nil && !errors.Is(err, ErrNothingToCommit) {
 		return result, err
 	}
 	c, err := g.CloseChange(ctx, id)
 	if err != nil {
 		return result, err
 	}
-	if c.ResultBaselineID == "" {
+	if c.LandedCommit == "" {
 		if c.Status != domain.ChangeApplied || c.ParentID == "" {
 			return result, nil
 		}
-		// a sub-change merged into the branch of its parent, which holds no baseline (ADR 0140): its state
+		// a sub-change merged into the branch of its parent: the head of that branch (ADR 0175)
 		err = g.repo.InTx(ctx, func(tx Tx) error {
 			own, _, err := ownBranch(ctx, tx, c)
 			if err != nil {
@@ -64,48 +64,48 @@ func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName stri
 			if err != nil {
 				return err
 			}
-			result, err = changeBranchHead(ctx, tx, p, false)
+			result, err = headerOf(ctx, tx, p.HeadOrFork())
 			return err
 		})
 		return result, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		result, err = tx.BaselineHeader(ctx, c.ResultBaselineID)
+		result, err = tx.CommitHeader(ctx, c.LandedCommit)
 		return err
 	})
 	return result, err
 }
 
 // CommitChange writes the accepted modifications of a change on its own branch and reverts there the nodes it no
-// longer changes; it returns the header of the commit baseline, without its state (ADR 0137): a caller that reads the
+// longer changes; it returns the header of the commit, without its state (ADR 0137): a caller that reads the
 // nodes asks for them (ChangeNodeView, BranchHead, the versions of the change). The change stays open (ADR 0102).
 //
 //goap:operation change.commit doer
-func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, commitName string) (domain.Commit, error) {
 	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
-		return domain.Baseline{}, err
+		return domain.Commit{}, err
 	}
-	return g.commitChange(ctx, id, baselineName, nil)
+	return g.commitChange(ctx, id, commitName, nil)
 }
 
 // CommitChangeNodes is a partial commit: CommitChange of the nodes named only, each an accepted modification of the
 // change or a node withdrawn since its commit (an impact merged or split via one named follows it); none named: every
 // one. A node named that the commit would not write is refused (ErrInvalid), so is a version linking to the draft of a
 // node left out.
-func (g *Graph) CommitChangeNodes(ctx context.Context, id domain.ChangeID, baselineName string, nodes []domain.NodeID) (domain.Baseline, error) {
+func (g *Graph) CommitChangeNodes(ctx context.Context, id domain.ChangeID, commitName string, nodes []domain.NodeID) (domain.Commit, error) {
 	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
-		return domain.Baseline{}, err
+		return domain.Commit{}, err
 	}
-	return g.commitChange(ctx, id, baselineName, nodes)
+	return g.commitChange(ctx, id, commitName, nodes)
 }
 
-// commitChange is CommitChange once allowed, of the nodes named (none: every one), its baseline returned without its
+// commitChange is CommitChange once allowed, of the nodes named (none: every one), its commit returned without its
 // state (ADR 0137).
-func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, baselineName string, nodes []domain.NodeID) (result domain.Baseline, err error) {
+func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, commitName string, nodes []domain.NodeID) (result domain.Commit, err error) {
 	// one transaction: the guardian judges the versions written and a refusal undoes them (ADR 0146); the drafts rebased
 	// onto the head with conflicts are kept, the commit refused, for the person or the agent to settle (ADR 0165)
 	err = g.inChangeKeeping(ctx, id, func(ctx context.Context) error {
-		if err := g.commitTx(ctx, id, baselineName, nodes, &result); err != nil {
+		if err := g.commitTx(ctx, id, commitName, nodes, &result); err != nil {
 			return err
 		}
 		return g.checkCommit(ctx, id)
@@ -114,7 +114,7 @@ func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, baselineNa
 }
 
 // commitTx writes the commit of a change, in the transaction of ctx.
-func (g *Graph) commitTx(ctx context.Context, id domain.ChangeID, baselineName string, nodes []domain.NodeID, result *domain.Baseline) error {
+func (g *Graph) commitTx(ctx context.Context, id domain.ChangeID, commitName string, nodes []domain.NodeID, result *domain.Commit) error {
 	return g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
@@ -138,7 +138,7 @@ func (g *Graph) commitTx(ctx context.Context, id domain.ChangeID, baselineName s
 				return err
 			}
 		}
-		if *result, _, err = g.commitOnBranch(ctx, tx, id, baselineName, false, nodes); err != nil {
+		if *result, _, err = g.commitOnBranch(ctx, tx, id, commitName, false, nodes); err != nil {
 			return err
 		}
 		if c, err = tx.Change(ctx, id); err != nil {
@@ -162,7 +162,7 @@ func (m pendingMove) key() string {
 	return fmt.Sprintf("%s@%d:%s>%s", m.node.ID, m.node.Version, m.t.From, m.t.To)
 }
 
-// newApplier prepares what applying a change starts from: its reference baseline, or the state of its own branch (its
+// newApplier prepares what applying a change starts from: its reference commit, or the state of its own branch (its
 // fork with what it committed, ADR 0140), returned too.
 func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*applier, domain.Branch, error) {
 	c, err := tx.Change(ctx, id)
@@ -172,7 +172,7 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 	if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeCommitted {
 		return nil, domain.Branch{}, fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
 	}
-	ix, err := g.typesAt(ctx, tx, c.BaselineID)
+	ix, err := g.typesAt(ctx, tx, c.ForkCommit)
 	if err != nil {
 		return nil, domain.Branch{}, err
 	}
@@ -186,19 +186,19 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 	if isOwn {
 		a.target = newBranchView(ctx, tx, own)
 	} else {
-		a.target = newStateView(ctx, tx, c.BaselineID)
+		a.target = newStateView(ctx, tx, c.ForkCommit)
 	}
 	return a, own, nil
 }
 
 // commitOnBranch writes the accepted modifications of a change on its own branch and reverts the nodes it no longer
 // changes. A rebase (mechanical) writes its merges and checks nothing of what they mean (ADR 0146): the lifecycle moves
-// and the validators judged the work of each side when it was committed. The branch of a change holds no baseline (ADR 0140): the header returned is the commit as an event tells it,
-// its order the commit of the versions written, stored nowhere. Nodes named make it a partial commit (none: every node).
-func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, mechanical bool, nodes []domain.NodeID) (domain.Baseline, []domain.Node, error) {
+// and the validators judged the work of each side when it was committed. The commit is a row of the branch of the
+// change, its new head (ADR 0175). Nodes named make it a partial commit (none: every node).
+func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, commitName string, mechanical bool, nodes []domain.NodeID) (domain.Commit, []domain.Node, error) {
 	a, own, err := g.newApplier(ctx, tx, id)
 	if err != nil {
-		return domain.Baseline{}, nil, err
+		return domain.Commit{}, nil, err
 	}
 	c := a.change
 	if len(nodes) > 0 {
@@ -209,55 +209,58 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 		a.taken = map[domain.NodeID]bool{}
 	}
 	if err := a.prepareChangeImpacts(); err != nil {
-		return domain.Baseline{}, nil, err
+		return domain.Commit{}, nil, err
 	}
 	reverted, err := a.revertWithdrawn(own)
 	if err != nil {
-		return domain.Baseline{}, nil, err
+		return domain.Commit{}, nil, err
 	}
 	if left := a.notTaken(); len(left) > 0 {
-		return domain.Baseline{}, nil, invalidf("change %s: nothing to commit for node(s) %s: neither an accepted modification of the change nor a node withdrawn since its commit", id, strings.Join(left, ", "))
+		return domain.Commit{}, nil, invalidf("change %s: nothing to commit for node(s) %s: neither an accepted modification of the change nor a node withdrawn since its commit", id, strings.Join(left, ", "))
 	}
 	if len(a.cposts) == 0 && len(reverted) == 0 {
-		return domain.Baseline{}, nil, fmt.Errorf("change %s: no accepted change impact modifies a node, and nothing it committed is withdrawn: %w", id, ErrNothingToCommit)
+		return domain.Commit{}, nil, fmt.Errorf("change %s: no accepted change impact modifies a node, and nothing it committed is withdrawn: %w", id, ErrNothingToCommit)
 	}
 	if !mechanical {
 		if _, err := a.walkChangeImpacts(); err != nil {
-			return domain.Baseline{}, nil, err
+			return domain.Commit{}, nil, err
 		}
 		if err := g.runNodeValidators(ctx, tx, a.target, a.cposts); err != nil {
-			return domain.Baseline{}, nil, err
+			return domain.Commit{}, nil, err
 		}
 	}
-	if baselineName == "" {
-		baselineName = c.Title
+	if commitName == "" {
+		commitName = c.Title
 	}
-	result := domain.Baseline{Name: baselineName, Namespace: c.Namespace, Branch: a.branch, ParentID: own.ForkBaseline, ChangeID: c.ID, Kind: domain.BaselineCommit,
-		Seq: endCommit(tx, a.branch), CreatedAt: g.now()}
+	result := domain.Commit{Name: commitName, ChangeID: c.ID, Kind: domain.CommitKindCommit}
 	switch {
 	case mechanical:
-		result.Kind = domain.BaselineRebase
+		result.Kind = domain.CommitKindRebase
 	case len(reverted) > 0:
-		result.Kind = domain.BaselineRevert
+		result.Kind = domain.CommitKindRevert
+	}
+	// the commit is a row of the branch of the change, its head now (ADR 0175)
+	if result, err = g.commitOwn(ctx, tx, &own, result); err != nil {
+		return domain.Commit{}, nil, err
 	}
 	// each version the change applied has committed on its own branch; it commits again on the branch it is integrated into
 	// (integrate, commit)
 	committed := make([]domain.ImpactEvent, 0, len(a.cposts))
 	for _, cp := range a.cposts {
 		ref, effect := cp.post.Ref(), cp.effect
-		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Effect: &effect, Branch: domain.BranchOf(a.branch)})
+		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Effect: &effect, Commit: result.ID, Branch: domain.BranchOf(a.branch)})
 	}
 	// one entry for the commit (ADR 0144)
 	if err := g.emit(ctx, tx, committed...); err != nil {
-		return domain.Baseline{}, nil, err
+		return domain.Commit{}, nil, err
 	}
 	// the versions written and the impacts that produced them, pointing at that entry (ADR 0174)
 	if err := g.putCommitImpacts(ctx, tx, c.ID, a.cposts, committed, reverted); err != nil {
-		return domain.Baseline{}, nil, err
+		return domain.Commit{}, nil, err
 	}
 	// the change stays open (ADR 0102): it is edited and committed again until it is merged
 	if c, err = tx.Change(ctx, id); err != nil {
-		return domain.Baseline{}, nil, err
+		return domain.Commit{}, nil, err
 	}
 	if c.Status == domain.ChangeDraft {
 		c.Status = domain.ChangeActive
@@ -265,7 +268,7 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 	// the counters of what it committed, kept on its header (the impacts withdrawn and reverted are no longer counted)
 	c.Stats = domain.StatsOf(c.Impacts()).Committed()
 	if err := tx.PutChange(ctx, c); err != nil {
-		return domain.Baseline{}, nil, err
+		return domain.Commit{}, nil, err
 	}
 	// a commit names the versions it wrote (ADR 0159); the commit of a rebase is told by the rebase (change.rebased)
 	wrote := make([]domain.Node, 0, len(a.cposts)+len(reverted))
@@ -333,10 +336,10 @@ func (a *applier) revertWithdrawn(own domain.Branch) ([]domain.Node, error) {
 	return wrote, nil
 }
 
-// advanceBranch moves the head of a branch to a baseline built on it (main is created on first use). The head moves only
-// from the baseline the new one follows (ADR 0127): read under the lock of the branch, a head another transaction moved
+// advanceBranch moves the head of a branch to a commit built on it (main is created on first use). The head moves only
+// from the commit the new one follows (ADR 0127): read under the lock of the branch, a head another transaction moved
 // meanwhile is a conflict, never a head silently replaced.
-func (g *Graph) advanceBranch(ctx context.Context, tx Tx, namespace, name string, head domain.Baseline) error {
+func (g *Graph) advanceBranch(ctx context.Context, tx Tx, namespace, name string, head domain.Commit) error {
 	namespace = domain.NamespaceOf(namespace)
 	if err := tx.LockBranch(ctx, namespace, name); err != nil {
 		return err
@@ -349,7 +352,7 @@ func (g *Graph) advanceBranch(ctx context.Context, tx Tx, namespace, name string
 		return err
 	}
 	if b.Head != head.ParentID {
-		return fmt.Errorf("branch %s moved to %s while baseline %s was built on %s: merge again: %w", name, b.Head, head.ID, head.ParentID, ErrConflict)
+		return fmt.Errorf("branch %s moved to %s while commit %s was built on %s: merge again: %w", name, b.Head, head.ID, head.ParentID, ErrConflict)
 	}
 	b.Head = head.ID
 	return tx.PutBranch(ctx, b)

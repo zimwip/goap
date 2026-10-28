@@ -51,7 +51,7 @@ func Activation(bb domain.Blackboard) map[string]any {
 	return map[string]any{
 		"change": map[string]any{
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
-			"criticality": string(criticality.Of(c.Data)), "lifecycle": c.Lifecycle, "state": c.State, "goal": c.Goal, "methodology": c.Methodology, "branch": domain.BranchOf(c.Branch), "baseline": string(c.BaselineID), "resultBaseline": string(c.ResultBaselineID), "data": orEmpty(c.Data),
+			"criticality": string(criticality.Of(c.Data)), "lifecycle": c.Lifecycle, "state": c.State, "goal": c.Goal, "methodology": c.Methodology, "branch": domain.BranchOf(c.Branch), "commit": string(c.ForkCommit), "resultCommit": string(c.LandedCommit), "data": orEmpty(c.Data),
 			"dependsOn": changeIDs(c.DependsOn),
 			// the transitions of the lifecycle that stand: taken, not gone back from since (ADR 0132 §1)
 			"passed": stringsOf(c.Passed()),

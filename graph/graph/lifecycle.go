@@ -31,8 +31,8 @@ type typeIndex struct {
 	cat TypeCatalog
 }
 
-// typesAt returns the types a change of the baseline is judged by: the catalogue in force.
-func (g *Graph) typesAt(context.Context, Tx, domain.BaselineID) (*typeIndex, error) {
+// typesAt returns the types a change of the commit is judged by: the catalogue in force.
+func (g *Graph) typesAt(context.Context, Tx, domain.CommitID) (*typeIndex, error) {
 	if g.Types == nil {
 		return &typeIndex{}, nil
 	}
@@ -71,8 +71,8 @@ func (ix *typeIndex) checkLink(typ, from, to string) error {
 
 // LifecycleControlled tells whether direct writes to nodes of a type are refused
 // (the type has a lifecycle): they must go through a change. The type catalogue is
-// process-global, not namespace-scoped graph data (typesAt ignores its baseline
-// argument), so this needs no baseline lookup at all.
+// process-global, not namespace-scoped graph data (typesAt ignores its commit
+// argument), so this needs no commit lookup at all.
 func (g *Graph) LifecycleControlled(_ context.Context, typ string) (bool, error) {
 	if g.Types == nil {
 		return false, nil

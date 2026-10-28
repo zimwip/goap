@@ -121,13 +121,13 @@ func TestSDLCBuildsFromTheSources(t *testing.T) {
 		}
 		return base.Complete(ctx, req)
 	})
-	e, g, baseline := sdlcSetup(t)
+	e, g, commit := sdlcSetup(t)
 	hub := &workspaceHub{conn: workspace.New(), root: filepath.Join(tmp, "workspaces")}
 	e.Executors[methodology.KindLLM] = engine.LLMExecutor{Client: model}
 	e.Scope = engine.AuthzScope{Authz: e.Scope.(engine.AuthzScope).Authz, Hub: hub}
 
 	ctx := devCtx
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", BaselineID: baseline,
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", ForkCommit: commit,
 		Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)

@@ -303,7 +303,7 @@ function fromEvent(
       const p = e.patch as
         | {
             state?: { from?: string; to?: string };
-            rebased?: { change?: string; branch?: string; baseline?: string };
+            rebased?: { change?: string; branch?: string; commit?: string };
             conflicts?: string[] | null;
           }
         | undefined;
@@ -386,7 +386,7 @@ function fromHeader(l: LogEntry): Entry {
     branch?: string;
   }>(l);
   const fields = payload.fields ?? {};
-  const rebase = fields.baselineId;
+  const rebase = fields.forkCommit;
   const show = (x: JsonValue | undefined) => {
     const t = typeof x === "string" ? x : JSON.stringify(x ?? "");
     return t.length > 60 ? `${t.slice(0, 57)}…` : t;

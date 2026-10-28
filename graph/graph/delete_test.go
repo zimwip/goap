@@ -16,7 +16,7 @@ func testDeleteAndRestore(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "drop REQ-1", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "drop REQ-1", ForkCommit: f.base.ID}))
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeDelete(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "obsolete"}))
 	if cn.Intent != domain.IntentModified || cn.Post == nil || !cn.Post.IsDraft() {
 		t.Fatalf("the deletion checks the node out: %+v", cn)
@@ -37,7 +37,7 @@ func testDeleteAndRestore(t *testing.T, repo Repo) {
 	}
 	must[domain.ChangeImpact](t)(g.ImpactNodeCancel(ctx, c.ID, created.ID, "", ""))
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, cn.ID, "bob", "gone"))
-	gone := g.withState(t, ctx, must[domain.Baseline](t)(g.apply(ctx, c.ID, "")))
+	gone := g.withState(t, ctx, must[domain.Commit](t)(g.apply(ctx, c.ID, "")))
 	if _, ok := gone.Nodes[f.req.ID]; ok {
 		t.Fatalf("a deleted node leaves the state: %v", gone.Nodes)
 	}
@@ -53,7 +53,7 @@ func testDeleteAndRestore(t *testing.T, repo Repo) {
 	}
 
 	// created again: the same node, restored
-	c2 := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "REQ-1 again", BaselineID: gone.ID}))
+	c2 := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "REQ-1 again", ForkCommit: gone.ID}))
 	back := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c2.ID, NodeCreate{Key: "REQ-1", Type: "Requirement", Rationale: "needed again",
 		Properties: map[string]any{"title": "Use PSP v3"}, Links: []LinkWrite{{Type: "satisfies", To: f.need.Ref()}}}))
 	if back.Intent != domain.IntentModified || back.Pre == nil || *back.Pre != tomb.Ref() || back.Post == nil || back.Post.ID != f.req.ID {
@@ -63,7 +63,7 @@ func testDeleteAndRestore(t *testing.T, repo Repo) {
 		t.Fatalf("a live key is still taken: %v", err)
 	}
 	must[domain.ChangeImpact](t)(g.accept(ctx, c2.ID, back.ID, "bob", "back"))
-	res := g.withState(t, ctx, must[domain.Baseline](t)(g.apply(ctx, c2.ID, "")))
+	res := g.withState(t, ctx, must[domain.Commit](t)(g.apply(ctx, c2.ID, "")))
 	n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Nodes[f.req.ID]}))
 	if n.Deleted || n.Version != tomb.Version+1 || n.Properties["title"] != "Use PSP v3" || len(n.Parents) != 1 || n.Parents[0] != tomb.Version {
 		t.Fatalf("restored as created, over its tombstone: %+v", n)
@@ -73,7 +73,7 @@ func testDeleteAndRestore(t *testing.T, repo Repo) {
 	}
 
 	// a checkout of the deleted node restores it as it was deleted
-	c3 := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "undo", BaselineID: gone.ID}))
+	c3 := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "undo", ForkCommit: gone.ID}))
 	undo := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c3.ID, NodeCheckout{Node: f.req.ID, Rationale: "undo"}))
 	if undo.Pre == nil || *undo.Pre != tomb.Ref() {
 		t.Fatalf("checked out from its tombstone: %+v", undo)

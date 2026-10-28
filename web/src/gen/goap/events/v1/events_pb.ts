@@ -74,7 +74,7 @@ export type Event = Message<"goap.events.v1.Event"> & {
   seq: bigint;
 
   /**
-   * process.started | process.step ... | change.created | change.applied ... | node.written | baseline.advanced |
+   * process.started | process.step ... | change.created | change.applied ... | node.written | commit.advanced |
    * methodology.published ... | domain.published ... | presence.snapshot | presence.joined | presence.moved |
    * presence.left | resync | heartbeat
    *
@@ -83,7 +83,7 @@ export type Event = Message<"goap.events.v1.Event"> & {
   type: string;
 
   /**
-   * what changed: process, change, node, baseline, methodology, domain, presence
+   * what changed: process, change, node, commit, methodology, domain, presence
    *
    * @generated from field: string kind = 4;
    */
@@ -182,7 +182,7 @@ export type EventJson = {
   seq?: string;
 
   /**
-   * process.started | process.step ... | change.created | change.applied ... | node.written | baseline.advanced |
+   * process.started | process.step ... | change.created | change.applied ... | node.written | commit.advanced |
    * methodology.published ... | domain.published ... | presence.snapshot | presence.joined | presence.moved |
    * presence.left | resync | heartbeat
    *
@@ -191,7 +191,7 @@ export type EventJson = {
   type?: string;
 
   /**
-   * what changed: process, change, node, baseline, methodology, domain, presence
+   * what changed: process, change, node, commit, methodology, domain, presence
    *
    * @generated from field: string kind = 4;
    */
@@ -465,7 +465,7 @@ export const LeaveResponseSchema: GenMessage<LeaveResponse, {jsonType: LeaveResp
 
 /**
  * EventService is the one stream the web follows (ADR 0053): every fact the platform publishes (processes, changes,
- * nodes, baselines, registry) as a thin, ordered event, plus who is looking at what (presence). Clients keep their
+ * nodes, commits, registry) as a thin, ordered event, plus who is looking at what (presence). Clients keep their
  * state from it, refetching what an event says changed, so a write made by anyone shows up for everyone.
  *
  * @generated from service goap.events.v1.EventService

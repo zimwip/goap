@@ -109,7 +109,7 @@ func (g *Graph) ownGuardian(ctx context.Context, c domain.Change, bb domain.Blac
 // (what the committable states read).
 func (g *Graph) commitBlackboard(ctx context.Context, tx Tx, c domain.Change, whole bool) (domain.Blackboard, []domain.NodeView, error) {
 	bb := domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}}
-	ix, err := g.typesAt(ctx, tx, c.BaselineID)
+	ix, err := g.typesAt(ctx, tx, c.ForkCommit)
 	if err != nil {
 		return bb, nil, err
 	}

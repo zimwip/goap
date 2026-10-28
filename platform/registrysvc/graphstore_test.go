@@ -105,7 +105,7 @@ func TestGraphStoreEditsElementsNotDocuments(t *testing.T) {
 		t.Fatal("the definition must be back as it was")
 	}
 	// the elements are tied to their version
-	nodes, links, _ := g.BaselineGraph(ctx, head.ID)
+	nodes, links, _ := g.CommitGraph(ctx, head.ID)
 	defines := 0
 	for _, l := range links {
 		if l.Type == linkDefines {
@@ -224,7 +224,7 @@ func TestGraphStoreMaterializesSteps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, links, err := g.BaselineGraph(ctx, head.ID)
+	_, links, err := g.CommitGraph(ctx, head.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +289,7 @@ func TestGraphStoreMaterializesMethodSteps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, links, err := g.BaselineGraph(ctx, head.ID)
+	_, links, err := g.CommitGraph(ctx, head.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

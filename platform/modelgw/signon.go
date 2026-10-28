@@ -50,10 +50,10 @@ func DetectProviders(lookup func(string) (string, bool)) []llmcfg.Provider {
 
 // SignOnGraph is what SignOn needs of the graph: *graph.Graph in process, *graphclient.Client over RPC.
 type SignOnGraph interface {
-	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
-	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
+	BranchHead(ctx context.Context, namespace, name string) (domain.Commit, error)
+	CommitGraph(ctx context.Context, id domain.CommitID) ([]domain.Node, []domain.Link, error)
 	Structures(ctx context.Context) (domain.Structures, error)
-	Commit(ctx context.Context, in graphapi.Commit) (graphapi.CommitResult, error)
+	CommitEdits(ctx context.Context, in graphapi.Edits) (graphapi.CommitResult, error)
 }
 
 // ErrNotBooted is returned by SignOn while the platform bootstrap has not seeded the model configuration yet (the
@@ -79,7 +79,7 @@ func SignOn(ctx context.Context, g SignOnGraph, detected []llmcfg.Provider) ([]s
 	} else if err != nil {
 		return nil, err
 	}
-	nodes, _, err := g.BaselineGraph(ctx, head.ID)
+	nodes, _, err := g.CommitGraph(ctx, head.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func SignOn(ctx context.Context, g SignOnGraph, detected []llmcfg.Provider) ([]s
 		return nil, err
 	}
 	title := "Providers signed on from the environment: " + strings.Join(names, ", ")
-	_, err = g.Commit(ctx, graphapi.Commit{Namespace: llmcfg.NamespacePlatform, Title: title, Intent: title, By: "modelgw.signon",
+	_, err = g.CommitEdits(ctx, graphapi.Edits{Namespace: llmcfg.NamespacePlatform, Title: title, Intent: title, By: "modelgw.signon",
 		Edits: edits, ProjectID: st.Project().Root})
 	if errors.Is(err, graphapi.ErrNothingToCommit) {
 		return nil, nil

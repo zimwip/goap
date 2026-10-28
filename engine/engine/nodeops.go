@@ -152,7 +152,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 		}
 		return "", fmt.Errorf("no change impact for %q: declare it with impactNode or impactNodeCreate", s)
 	}
-	target := func(s string) (domain.NodeRef, error) { // a link target: a node written by the change, else the reference baseline
+	target := func(s string) (domain.NodeRef, error) { // a link target: a node written by the change, else the reference commit
 		if strings.HasPrefix(s, "#") {
 			id, err := resolve(s)
 			if err != nil {
@@ -264,7 +264,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 					return declared, fail(err)
 				}
 				if !ok {
-					return declared, fail(fmt.Errorf("unknown node %q in the reference baseline", op.Key))
+					return declared, fail(fmt.Errorf("unknown node %q in the reference commit", op.Key))
 				}
 				cn.Pre = &ref
 			}

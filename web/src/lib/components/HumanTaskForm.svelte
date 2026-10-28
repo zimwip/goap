@@ -45,14 +45,14 @@
     task?.form ? 'form' : /select/i.test(action) ? 'select' : /review|revue|valid|approv/i.test(action) ? 'review' : 'nodes',
   );
 
-  /** the nodes of the baseline the change acts on (never the whole baseline) */
+  /** the nodes of the commit the change acts on (never the whole commit) */
   let nodes = $state<GraphNode[]>([]);
-  /** the nodes of the baseline matching what the person looks for, searched by the server as they type */
+  /** the nodes of the commit matching what the person looks for, searched by the server as they type */
   let found = $state<GraphNode[]>([]);
   /** the nodes added to the rows from the search */
   let added = $state<GraphNode[]>([]);
-  /** the baseline of the change: a declared form's pickers search it, never read it whole */
-  let baselineId = $state('');
+  /** the commit of the change: a declared form's pickers search it, never read it whole */
+  let commitId = $state('');
   /** the nodes picked in a declared form, kept so a choice stays shown once the search moved on */
   let picked = $state<NodeOption[]>([]);
   let changeImpacts = $state<ChangeImpact[]>([]);
@@ -79,7 +79,7 @@
   let raw = $state('');
   let showRaw = $state(false);
 
-  // Loads the change and its starting baseline when the task changes.
+  // Loads the change and its starting commit when the task changes.
   const changeId = $derived(process.changeId);
   const step = $derived(task?.step);
   let namespace = $state('');
@@ -89,10 +89,10 @@
     const change = (await graph.getChange(id, signal)).change;
     changeImpacts = change?.nodes ?? [];
     namespace = change?.namespace ?? '';
-    baselineId = change?.baselineId ?? '';
-    // of the baseline, only the nodes the change acts on; the rest is searched (a declared form's pickers, the selection,
+    commitId = change?.forkCommit ?? '';
+    // of the commit, only the nodes the change acts on; the rest is searched (a declared form's pickers, the selection,
     // the nodes to take on)
-    nodes = mode === 'form' ? [] : await changeNodes(id, baselineId, signal);
+    nodes = mode === 'form' ? [] : await changeNodes(id, commitId, signal);
     attached = (await graph.getChangeImpacts(id, signal)).nodes ?? [];
     posts = await loadPosts(changeImpacts, false, { changeId: id });
     decisions = hasDecision(task?.form?.fields) ? await loadDecisions(id, signal) : undefined;
@@ -114,8 +114,8 @@
     return () => ctrl.abort();
   });
 
-  // the search of the baseline: the selection and the nodes to take on, bound to the change's namespace (its WHAT: a
-  // change can only impact the nodes of its own domain, whatever else the baseline holds)
+  // the search of the commit: the selection and the nodes to take on, bound to the change's namespace (its WHAT: a
+  // change can only impact the nodes of its own domain, whatever else the commit holds)
   $effect(() => {
     const q = filter.trim();
     const id = changeId;
@@ -124,7 +124,7 @@
     const ctrl = new AbortController();
     const t = setTimeout(() => {
       graph
-        .listBaselineNodes({ view: { changeId: id }, query: q, limit: 200 }, ctrl.signal)
+        .listCommitNodes({ view: { changeId: id }, query: q, limit: 200 }, ctrl.signal)
         .then((r) => !ctrl.signal.aborted && (found = (r.nodes ?? []).filter((n) => !ns || n.namespace === ns)))
         .catch(() => undefined);
     }, 250);
@@ -243,7 +243,7 @@
     return [];
   });
 
-  // --- declared form (ADR 0115): the nodes its widgets may offer are the reference baseline and what the change writes
+  // --- declared form (ADR 0115): the nodes its widgets may offer are the reference commit and what the change writes
   let decisions = $state<DecisionOption[] | undefined>(undefined);
   const hasDecision = (fields: FieldDef[] | undefined): boolean => !!fields?.some((f) => f.widget === 'decision' || hasDecision(f.fields));
 
@@ -272,11 +272,11 @@
       byKey.set(cn.key, { ...(known ?? { key: cn.key, type: cn.type ?? '', namespace }), inChange: true });
     }
     const cat = typeCatalog.cat;
-    const b = baselineId;
+    const b = commitId;
     return {
       nodes: [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key)),
       search: async (query) =>
-        b && changeId ? ((await graph.listBaselineNodes({ view: { changeId }, query, limit: 200 })).nodes ?? []).filter((n) => n.key && !n.deleted).map((n) => inChange(optionOf(n))) : [],
+        b && changeId ? ((await graph.listCommitNodes({ view: { changeId }, query, limit: 200 })).nodes ?? []).filter((n) => n.key && !n.deleted).map((n) => inChange(optionOf(n))) : [],
       remember: (n) => {
         if (!picked.some((p) => p.key === n.key)) picked = [...picked, n];
       },

@@ -119,7 +119,7 @@ func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.
 		return nil, toConnect(err)
 	}
 	p, err := h.Engine.Start(ctx, engine.StartRequest{
-		Methodology: r.Msg.Methodology, ChangeID: domain.ChangeID(r.Msg.ChangeId), BaselineID: domain.BaselineID(r.Msg.BaselineId),
+		Methodology: r.Msg.Methodology, ChangeID: domain.ChangeID(r.Msg.ChangeId), ForkCommit: domain.CommitID(r.Msg.ForkCommit),
 		Title: r.Msg.Title, Intent: r.Msg.Intent, Goal: r.Msg.Goal, Agent: r.Msg.Agent, OwnerOrg: r.Msg.OwnerOrg, ProjectID: projectID, Vars: pbconv.Map(r.Msg.Vars),
 	})
 	if err != nil {
@@ -228,7 +228,7 @@ func (h *Handler) AttachChange(ctx context.Context, r *connect.Request[enginev1.
 	}
 	if err := h.Engine.AttachChange(ctx, r.Msg.ProcessId, engine.AttachRequest{
 		ChangeID: domain.ChangeID(r.Msg.ChangeId), Title: r.Msg.Title, Intent: r.Msg.Intent,
-		Namespace: r.Msg.Namespace, OwnerOrg: r.Msg.OwnerOrg, ProjectID: projectID, BaselineID: domain.BaselineID(r.Msg.BaselineId),
+		Namespace: r.Msg.Namespace, OwnerOrg: r.Msg.OwnerOrg, ProjectID: projectID, ForkCommit: domain.CommitID(r.Msg.ForkCommit),
 	}); err != nil {
 		return nil, toConnect(err)
 	}
@@ -894,7 +894,7 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 		CreatedAt: pbconv.Time(p.CreatedAt), UpdatedAt: pbconv.Time(p.UpdatedAt),
 		Initiator: &enginev1.Principal{Subject: p.Initiator.Subject, Org: p.Initiator.Org, Roles: p.Initiator.Roles, OnBehalfOf: p.Initiator.OnBehalfOf},
 		Agent:     p.Agent, Planner: p.Planner, ParentId: p.ParentID, Usage: usageToPB(p.Usage),
-		BaselineId: string(p.BaselineID), Title: p.Title, TraceId: p.TraceID, Trigger: p.Trigger, Cause: p.Cause, Flow: p.Flow, RelaunchOf: p.RelaunchOf, FromStep: int32(p.FromStep),
+		ForkCommit: string(p.ForkCommit), Title: p.Title, TraceId: p.TraceID, Trigger: p.Trigger, Cause: p.Cause, Flow: p.Flow, RelaunchOf: p.RelaunchOf, FromStep: int32(p.FromStep),
 		Instance: p.Instance, Closed: p.Closed, Runs: int32(p.Runs), MemoryTurns: int32(len(p.Memory)),
 	}
 	for _, t := range p.Intent.Turns {

@@ -6,7 +6,7 @@ import "goap/graph/v1/graph.proto";
 
 // IndexService is the document index (ADR 0026, 0095): lexical, semantic and hybrid search over the nodes and the
 // changes of the graph, filtered by type, project, owner, status and methodology, with facets and nearest-document
-// search. Fed by the node, baseline and change-document events of the graph service.
+// search. Fed by the node, commit and change-document events of the graph service.
 service IndexService {
   rpc Search(SearchRequest) returns (SearchResponse);
   // Empties the index and has the graph publish its nodes again (admin on `platform`).
@@ -156,7 +156,7 @@ message StatusResponse {
   bool semantic = 1;
   string store = 2;
   int64 nodes_indexed = 3;
-  int64 baselines_followed = 4;
+  int64 commits_followed = 4;
   int64 errors = 5;
   int64 changes_indexed = 6;
 }

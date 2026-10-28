@@ -18,7 +18,7 @@ func (h *Handler) GetGraphOverview(ctx context.Context, _ *connect.Request[graph
 	out := &graphv1.GetGraphOverviewResponse{}
 	for _, n := range ns {
 		out.Namespaces = append(out.Namespaces, &graphv1.NamespaceSummary{Namespace: n.Namespace, Nodes: int32(n.Nodes), Versions: int32(n.Versions),
-			LinkRows: int32(n.LinkRows), Changes: int32(n.Changes), Baselines: int32(n.Baselines), Branches: int32(n.Branches), Types: int32(n.Types),
+			LinkRows: int32(n.LinkRows), Changes: int32(n.Changes), Commits: int32(n.Commits), Branches: int32(n.Branches), Types: int32(n.Types),
 			LogEntries: int32(n.LogItems)})
 	}
 	return res(out, err)
@@ -30,12 +30,12 @@ func (h *Handler) GetGraphStats(ctx context.Context, r *connect.Request[graphv1.
 	if err != nil {
 		return res[graphv1.GetGraphStatsResponse](nil, err)
 	}
-	out := &graphv1.GraphStats{Namespace: s.Namespace, Branch: s.Branch, BaselineId: string(s.Baseline.ID),
+	out := &graphv1.GraphStats{Namespace: s.Namespace, Branch: s.Branch, CommitId: string(s.Commit.ID),
 		Branches: &graphv1.BranchStats{Total: int32(s.Branches.Total), Lasting: int32(s.Branches.Lasting), Ephemeral: int32(s.Branches.Ephemeral),
 			ByStatus: counts32(s.Branches.ByStatus), Names: s.Branches.Names},
 		State: stateStatsToPB(s.State)}
-	if s.Baseline.ID != "" {
-		out.BaselineAt = timestamppb.New(s.Baseline.CreatedAt)
+	if s.Commit.ID != "" {
+		out.CommitAt = timestamppb.New(s.Commit.CreatedAt)
 	}
 	for _, m := range graph.StoreMeasures {
 		out.Store = append(out.Store, &graphv1.StoreMeasure{Name: m, Counts: counts32(s.Store[m])})

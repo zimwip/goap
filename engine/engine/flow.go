@@ -89,7 +89,7 @@ func (e *Engine) relaunchLocked(ctx context.Context, id string, step int, reason
 		return nil, err
 	}
 	p := &Process{ID: uuid.NewString(), Methodology: old.Methodology, MethodologyVersion: old.MethodologyVersion, Agent: old.Agent, Planner: old.Planner,
-		Goal: old.Goal, ChangeID: old.ChangeID, BaselineID: old.BaselineID, Namespace: old.Namespace, Title: fmt.Sprintf("%s (relaunch from step %d)", baseTitle(old.Title), step+1),
+		Goal: old.Goal, ChangeID: old.ChangeID, ForkCommit: old.ForkCommit, Namespace: old.Namespace, Title: fmt.Sprintf("%s (relaunch from step %d)", baseTitle(old.Title), step+1),
 		Trigger: old.Trigger, Initiator: who, Vars: maps.Clone(old.Vars), Disabled: map[string]bool{}, Status: StatusRunning,
 		Flow: flow.ID, RelaunchOf: old.ID, FromStep: step, CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	p.Intent = old.Intent

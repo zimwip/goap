@@ -524,7 +524,7 @@ func (t *pgTx) LockChange(ctx context.Context, id domain.ChangeID) error {
 // the fold of its log), which no other writer changes while the lock is held. A change not stored yet is its own root.
 func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, error) {
 	var root, bNamespace, bName, bParent, bFork, bHead, bOrigin, bStatus, bDescription, bIntent, bRebased *string
-	var top, next, bForkSeq *int64
+	var top, next *int64
 	var bCreated *time.Time
 	var bEphemeral *bool
 	c, err := scanPGChangeHead(func(dest ...any) error {
@@ -534,15 +534,14 @@ func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, erro
 			SELECT (SELECT id::text FROM up WHERE parent_id IS NULL), `+pgChangeHead+`,
 				(SELECT max(seq) FROM change_log WHERE change_id = $1), nextval(pg_get_serial_sequence('change_log', 'seq')),
 				ob.b_namespace, ob.b_name, ob.b_parent, ob.b_fork, ob.b_head, ob.b_origin, ob.b_status, ob.b_created,
-				ob.b_description, ob.b_intent, ob.b_rebased, ob.b_ephemeral, ob.b_fork_seq
+				ob.b_description, ob.b_intent, ob.b_rebased, ob.b_ephemeral
 			FROM change LEFT JOIN LATERAL (SELECT b.namespace AS b_namespace, b.name AS b_name, b.parent AS b_parent,
-				coalesce(b.fork_baseline::text, '') AS b_fork, coalesce(b.head_baseline::text, '') AS b_head,
+				coalesce(b.fork_commit::text, '') AS b_fork, coalesce(b.head_commit::text, '') AS b_head,
 				b.origin AS b_origin, b.status AS b_status, b.created_at AS b_created, b.description AS b_description,
-				b.intent AS b_intent, coalesce(b.rebased_from::text, '') AS b_rebased, b.ephemeral AS b_ephemeral,
-				b.fork_seq AS b_fork_seq
+				b.intent AS b_intent, coalesce(b.rebased_from::text, '') AS b_rebased, b.ephemeral AS b_ephemeral
 				FROM branch b WHERE b.namespace = change.namespace AND b.name = change.branch) ob ON true
 			WHERE change.id = $1`, string(id)).
-			Scan(append(append([]any{&root}, dest...), &top, &next, &bNamespace, &bName, &bParent, &bFork, &bHead, &bOrigin, &bStatus, &bCreated, &bDescription, &bIntent, &bRebased, &bEphemeral, &bForkSeq)...)
+			Scan(append(append([]any{&root}, dest...), &top, &next, &bNamespace, &bName, &bParent, &bFork, &bHead, &bOrigin, &bStatus, &bCreated, &bDescription, &bIntent, &bRebased, &bEphemeral)...)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		delete(t.locked, id)
@@ -566,7 +565,7 @@ func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, erro
 	}
 	if bName != nil {
 		r.hasBranch = true
-		r.branch = domain.Branch{Namespace: *bNamespace, Name: *bName, Parent: *bParent, ForkBaseline: domain.BaselineID(*bFork), Head: domain.BaselineID(*bHead), Origin: *bOrigin, Status: *bStatus, CreatedAt: *bCreated, Description: *bDescription, Intent: domain.OptionIntent(*bIntent), RebasedFrom: domain.BaselineID(*bRebased), Ephemeral: *bEphemeral, ForkSeq: *bForkSeq}
+		r.branch = domain.Branch{Namespace: *bNamespace, Name: *bName, Parent: *bParent, ForkCommit: domain.CommitID(*bFork), Head: domain.CommitID(*bHead), Origin: *bOrigin, Status: *bStatus, CreatedAt: *bCreated, Description: *bDescription, Intent: domain.OptionIntent(*bIntent), RebasedFrom: domain.CommitID(*bRebased), Ephemeral: *bEphemeral}
 	}
 	t.lockedReads[id] = r
 	return str(root), nil
@@ -608,7 +607,7 @@ func (t *pgTx) Branch(ctx context.Context, namespace, name string) (domain.Branc
 	var b domain.Branch
 	q, args := dialectPG.sqlBranch(namespace, name)
 	err := t.unheld().QueryRow(ctx, q, args...).
-		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral, &b.ForkSeq)
+		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkCommit), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral)
 	return b, mapErr(err, "branch "+name)
 }
 
@@ -620,17 +619,17 @@ func (t *pgTx) Branches(ctx context.Context, namespace string) ([]domain.Branch,
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Branch, error) {
 		var b domain.Branch
-		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral, &b.ForkSeq)
+		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkCommit), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral)
 		return b, err
 	})
 }
 
 func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.unheld().Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from, ephemeral, fork_seq) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, head_baseline = EXCLUDED.head_baseline, description = EXCLUDED.description,
-			fork_baseline = EXCLUDED.fork_baseline, rebased_from = EXCLUDED.rebased_from, parent = EXCLUDED.parent, fork_seq = EXCLUDED.fork_seq`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral, b.ForkSeq)
+	_, err := t.unheld().Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_commit, head_commit, origin, status, created_at, description, intent, rebased_from, ephemeral) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, head_commit = EXCLUDED.head_commit, description = EXCLUDED.description,
+			fork_commit = EXCLUDED.fork_commit, rebased_from = EXCLUDED.rebased_from, parent = EXCLUDED.parent`,
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkCommit)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral)
 	return mapErr(err, "branch "+b.Name)
 }
 
@@ -681,8 +680,8 @@ func (t *pgTx) NodeByKey(ctx context.Context, namespace, key string) (domain.Nod
 	return t.LatestOn(ctx, domain.NodeID(id), domain.MainBranch)
 }
 
-func (t *pgTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error) {
-	return storedNodesIn(ctx, t, baseline, nodeType)
+func (t *pgTx) NodesIn(ctx context.Context, commit domain.CommitID, nodeType string) ([]domain.Node, error) {
+	return storedNodesIn(ctx, t, commit, nodeType)
 }
 
 func (t *pgTx) NodesAt(ctx context.Context, refs []domain.NodeRef, nodeType string) ([]domain.Node, error) {
@@ -813,8 +812,8 @@ func (t *pgTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, 
 	return t.queryLinks(ctx, q, args...)
 }
 
-func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
-	b, err := t.BaselineHeader(ctx, id)
+func (t *pgTx) Commit(ctx context.Context, id domain.CommitID) (domain.Commit, error) {
+	b, err := t.CommitHeader(ctx, id)
 	if err != nil {
 		return b, err
 	}
@@ -822,12 +821,12 @@ func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Basel
 	return b, err
 }
 
-func (t *pgTx) BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
-	var b domain.Baseline
-	q, args := dialectPG.sqlBaselineHeader(id)
+func (t *pgTx) CommitHeader(ctx context.Context, id domain.CommitID) (domain.Commit, error) {
+	var b domain.Commit
+	q, args := dialectPG.sqlCommitHeader(id)
 	err := t.unheld().QueryRow(ctx, q, args...).Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &b.CreatedAt,
-		&b.Branch, &b.Namespace, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq)
-	return b, mapErr(err, "baseline "+string(id))
+		&b.Branch, &b.Namespace, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq, (*string)(&b.Fork))
+	return b, mapErr(err, "commit "+string(id))
 }
 
 func (t *pgTx) CommittedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
@@ -908,7 +907,7 @@ func (t *pgTx) CommittedAtKey(ctx context.Context, namespace, branch string, upT
 }
 
 // NextCommit allocates the greatest order stored or allocated plus one: two transactions commit on one branch from
-// the same head may take the same, one of them fails to move the head (advanceBranch); a baseline built on another is
+// the same head may take the same, one of them fails to move the head (advanceBranch); a commit built on another is
 // written once that one is committed, and sees it.
 func (t *pgTx) NextCommit(ctx context.Context) (int64, error) {
 	var seq int64
@@ -955,26 +954,26 @@ func (t *pgTx) NodeIDsOfType(ctx context.Context, namespace, typ string, after d
 	})
 }
 
-func (t *pgTx) BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error) {
-	q, args := dialectPG.sqlNamespaceBaselineHeaders(namespace)
-	return t.baselineHeaders(ctx, namespace, q, args)
+func (t *pgTx) CommitHeaders(ctx context.Context, namespace string) ([]domain.Commit, error) {
+	q, args := dialectPG.sqlNamespaceCommitHeaders(namespace)
+	return t.commitHeaders(ctx, namespace, q, args)
 }
 
-func (t *pgTx) BranchBaselineHeaders(ctx context.Context, namespace, branch string) ([]domain.Baseline, error) {
-	q, args := dialectPG.sqlBranchBaselineHeaders(namespace, branch)
-	return t.baselineHeaders(ctx, namespace, q, args)
+func (t *pgTx) BranchCommitHeaders(ctx context.Context, namespace, branch string) ([]domain.Commit, error) {
+	q, args := dialectPG.sqlBranchCommitHeaders(namespace, branch)
+	return t.commitHeaders(ctx, namespace, q, args)
 }
 
-func (t *pgTx) baselineHeaders(ctx context.Context, namespace, q string, args []any) ([]domain.Baseline, error) {
+func (t *pgTx) commitHeaders(ctx context.Context, namespace, q string, args []any) ([]domain.Commit, error) {
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []domain.Baseline
+	var out []domain.Commit
 	for rows.Next() {
-		b := domain.Baseline{Namespace: domain.NamespaceOf(namespace)}
-		if err := rows.Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &b.CreatedAt, &b.Branch, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq); err != nil {
+		b := domain.Commit{Namespace: domain.NamespaceOf(namespace)}
+		if err := rows.Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &b.CreatedAt, &b.Branch, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq, (*string)(&b.Fork)); err != nil {
 			return nil, err
 		}
 		out = append(out, b)
@@ -1002,8 +1001,8 @@ func (t *pgTx) VersionJoins(ctx context.Context, id domain.NodeID) ([]domain.Ver
 	return out, rows.Err()
 }
 
-func (t *pgTx) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
-	q, args := dialectPG.sqlBaselineIDs(namespace)
+func (t *pgTx) Commits(ctx context.Context, namespace string) ([]domain.Commit, error) {
+	q, args := dialectPG.sqlCommitIDs(namespace)
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -1012,9 +1011,9 @@ func (t *pgTx) Baselines(ctx context.Context, namespace string) ([]domain.Baseli
 	if err != nil {
 		return nil, err
 	}
-	out := make([]domain.Baseline, 0, len(ids))
+	out := make([]domain.Commit, 0, len(ids))
 	for _, id := range ids {
-		b, err := t.Baseline(ctx, domain.BaselineID(id))
+		b, err := t.Commit(ctx, domain.CommitID(id))
 		if err != nil {
 			return nil, err
 		}
@@ -1046,16 +1045,16 @@ func (t *pgTx) changeHeader(ctx context.Context, id domain.ChangeID) (domain.Cha
 }
 
 // pgChangeHead is the select list of a change's head, in the order scanPGChangeHead reads it.
-const pgChangeHead = `id::text, title, intent, methodology, goal, status, COALESCE(baseline_id::text, ''), result_baseline_id::text, data, created_at, branch, namespace, COALESCE(parent_id::text, ''), owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats`
+const pgChangeHead = `id::text, title, intent, methodology, goal, status, COALESCE(fork_commit::text, ''), landed_commit::text, data, created_at, branch, namespace, COALESCE(parent_id::text, ''), owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats`
 
 func scanPGChangeHead(scan func(...any) error) (domain.Change, error) {
 	var c domain.Change
 	var result *string
 	var data, guardians, dependsOn, stats []byte
-	if err := scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &c.CreatedAt, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State, &guardians, &dependsOn, &c.MethodologyVersion, &stats); err != nil {
+	if err := scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.ForkCommit), &result, &data, &c.CreatedAt, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State, &guardians, &dependsOn, &c.MethodologyVersion, &stats); err != nil {
 		return c, err
 	}
-	c.ResultBaselineID, c.Data = domain.BaselineID(str(result)), props(data)
+	c.LandedCommit, c.Data = domain.CommitID(str(result)), props(data)
 	var err error
 	if c.Guardians, err = guardiansOf(guardians); err != nil {
 		return c, err
@@ -1280,25 +1279,25 @@ func (t *pgTx) LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[domai
 	return out, rows.Err()
 }
 
-// PutBaseline stores the header of a baseline (ADR 0143).
-func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
-	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("baseline", baselineColumns, ""),
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), kindOf(b), nullUUID(string(b.RebasedFrom)), b.Seq)
-	return mapErr(err, "baseline")
+// PutCommit stores the header of a commit (ADR 0143).
+func (t *pgTx) PutCommit(ctx context.Context, b domain.Commit) error {
+	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("commits", commitColumns, ""),
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), kindOf(b), nullUUID(string(b.RebasedFrom)), b.Seq, nullUUID(string(b.Fork)))
+	return mapErr(err, "commit")
 }
 
 func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 	delete(t.locked, c.ID)
 	// the header stored is the change's now, the transaction holding its lock (guardTx.PutChange): what it reads of it next
-	h, err := scanPGChangeHead(t.unheld().QueryRow(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats)
+	h, err := scanPGChangeHead(t.unheld().QueryRow(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, fork_commit, landed_commit, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, intent = EXCLUDED.intent, goal = EXCLUDED.goal, status = EXCLUDED.status,
-		  result_baseline_id = EXCLUDED.result_baseline_id, data = EXCLUDED.data, baseline_id = EXCLUDED.baseline_id, branch = EXCLUDED.branch,
+		  landed_commit = EXCLUDED.landed_commit, data = EXCLUDED.data, fork_commit = EXCLUDED.fork_commit, branch = EXCLUDED.branch,
 		  lifecycle = EXCLUDED.lifecycle, state = EXCLUDED.state, project_id = EXCLUDED.project_id,
 		  parent_id = EXCLUDED.parent_id, guardians = EXCLUDED.guardians, depends_on = EXCLUDED.depends_on,
 		  methodology = EXCLUDED.methodology, methodology_version = EXCLUDED.methodology_version, stats = EXCLUDED.stats
 		RETURNING `+pgChangeHead,
-		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)), jsonb(c.Data), c.CreatedAt,
+		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.ForkCommit)), nullUUID(string(c.LandedCommit)), jsonb(c.Data), c.CreatedAt,
 		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, guardiansJSON(c.Guardians), dependsOnJSON(c.DependsOn), c.MethodologyVersion, statsJSON(c.Stats)).Scan)
 	if err != nil {
 		return mapErr(err, "change")
@@ -1738,29 +1737,29 @@ func (t *pgTx) typeCounts(ctx context.Context, q string, args []any) (map[string
 	return out, rows.Err()
 }
 
-func (t *pgTx) BaselinePage(ctx context.Context, namespace, branch string, before int64, limit int) ([]domain.Baseline, error) {
-	q, args := dialectPG.sqlBaselinePage(namespace, branch, before, limit)
-	return t.baselineHeaders(ctx, namespace, q, args)
+func (t *pgTx) CommitPage(ctx context.Context, namespace, branch string, before int64, limit int) ([]domain.Commit, error) {
+	q, args := dialectPG.sqlCommitPage(namespace, branch, before, limit)
+	return t.commitHeaders(ctx, namespace, q, args)
 }
 
-func (t *pgTx) BaselineHeadersOf(ctx context.Context, namespace string, ids []domain.BaselineID) ([]domain.Baseline, error) {
+func (t *pgTx) CommitHeadersOf(ctx context.Context, namespace string, ids []domain.CommitID) ([]domain.Commit, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	q, args := dialectPG.sqlBaselineHeadersOf(namespace, ids)
-	return t.baselineHeaders(ctx, namespace, q, args)
+	q, args := dialectPG.sqlCommitHeadersOf(namespace, ids)
+	return t.commitHeaders(ctx, namespace, q, args)
 }
 
-func (t *pgTx) ChangeBaselineHeaders(ctx context.Context, namespace string, changes []domain.ChangeID) ([]domain.Baseline, error) {
+func (t *pgTx) ChangeCommitHeaders(ctx context.Context, namespace string, changes []domain.ChangeID) ([]domain.Commit, error) {
 	if len(changes) == 0 {
 		return nil, nil
 	}
-	q, args := dialectPG.sqlChangeBaselineHeaders(namespace, changes)
-	return t.baselineHeaders(ctx, namespace, q, args)
+	q, args := dialectPG.sqlChangeCommitHeaders(namespace, changes)
+	return t.commitHeaders(ctx, namespace, q, args)
 }
 
-func (t *pgTx) BaselineCounts(ctx context.Context, namespace string) (map[string]int, error) {
-	q, args := dialectPG.sqlBaselineCounts(namespace)
+func (t *pgTx) CommitCounts(ctx context.Context, namespace string) (map[string]int, error) {
+	q, args := dialectPG.sqlCommitCounts(namespace)
 	return t.typeCounts(ctx, q, args)
 }
 

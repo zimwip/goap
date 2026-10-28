@@ -34,7 +34,7 @@
   import { watchProcess } from '../../flux/events.svelte';
   import { processes, ingestProcess, childrenOf, refreshProcesses } from '../../stores/live.svelte';
   import { changes, refreshChanges, loadMethodology, published } from '../../stores/catalog.svelte';
-  import { viewBaseline } from '../../stores/baselineTool.svelte';
+  import { viewCommit } from '../../stores/commitTool.svelte';
   import { chainOf, inChain, restartedStepNumber } from '../../flowChain';
   import { namespaceOf } from '../../namespace';
 
@@ -217,11 +217,11 @@
     openTab({ kind: 'run', params: { id: pid } }, { pin });
   }
 
-  async function openBaseline(id: string | undefined) {
+  async function openCommit(id: string | undefined) {
     if (!id) return;
     if (!changes.loaded) await refreshChanges();
     const ns = changes.items.find((c) => c.id === process?.changeId)?.namespace ?? '';
-    void viewBaseline(id, ns);
+    void viewCommit(id, ns);
   }
 
   provideActions(
@@ -332,9 +332,9 @@
               >
             </dd>
           {/if}
-          {#if process.baselineId}
-            <dt>Baseline</dt>
-            <dd><button type="button" class="link mono" onclick={() => void openBaseline(process.baselineId)}>{shortId(process.baselineId)}</button></dd>
+          {#if process.forkCommit}
+            <dt>Commit</dt>
+            <dd><button type="button" class="link mono" onclick={() => void openCommit(process.forkCommit)}>{shortId(process.forkCommit)}</button></dd>
           {/if}
           {#if process.parentId}
             <dt>Parent</dt>

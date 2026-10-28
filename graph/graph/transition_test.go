@@ -129,7 +129,7 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 	w.g.DecisionPolicy = decision.Policy{}
 	g := w.g
 
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "lifecycle", Methodology: "m", BaselineID: w.base.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "lifecycle", Methodology: "m", ForkCommit: w.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +288,7 @@ func testGateVetosAndObjectives(t *testing.T, repo Repo) {
 			Objectives: []domain.Criterion{{Name: "docs", Expr: `world["docs"]`}}}}}}
 	w.g.Lifecycles = lcs
 	g := w.g
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "gate", Methodology: "m", BaselineID: w.base.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "gate", Methodology: "m", ForkCommit: w.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +363,7 @@ func testChangeDefaultGoal(t *testing.T, repo Repo) {
 	lcs := &lifecycles{goal: "deliver"}
 	new := func(in NewChange) domain.Change {
 		t.Helper()
-		in.ProjectID, in.BaselineID = "PROJ-ROOT", w.base.ID
+		in.ProjectID, in.ForkCommit = "PROJ-ROOT", w.base.ID
 		c, err := g.CreateChange(ctx, in)
 		if err != nil {
 			t.Fatal(err)

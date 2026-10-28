@@ -11,7 +11,7 @@
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import IntentDialogue from '../editors/IntentDialogue.svelte';
-  import { engine, graph, errorMessage, formatDate, shortId, type Baseline, type Process } from '../../api';
+  import { engine, graph, errorMessage, formatDate, shortId, type Commit, type Process } from '../../api';
   import { methodologies, refreshMethodologies, latestPublished } from '../../stores/catalog.svelte';
   import { processes, ingestProcess } from '../../stores/live.svelte';
   import { openTab } from '../../shell/tabs.svelte';
@@ -23,7 +23,7 @@
   let methodology = $state('');
   /** "methodology::agent" */
   let agentKey = $state('');
-  let baselineId = $state('');
+  let commitId = $state('');
   let goal = $state('');
   let title = $state('');
   /** key of the OrgUnit holding the change (empty: the default organisation) */
@@ -59,26 +59,26 @@
   );
   const goals = $derived(published.find((m) => m.name === methodology)?.goals ?? []);
 
-  // Baselines are namespace-scoped: those of the namespace the chosen methodology (or agent's) acts on. Without a
-  // methodology, the engine starts from the latest baseline of the identified one's namespace.
+  // Commits are namespace-scoped: those of the namespace the chosen methodology (or agent's) acts on. Without a
+  // methodology, the engine starts from the latest commit of the identified one's namespace.
   const chosen = $derived(methodology || (agentKey ? agentKey.split('::')[0] : ''));
   const namespace = $derived(chosen ? namespaceOf(published.find((m) => m.name === chosen)?.namespace) : '');
-  let baselines = $state<Baseline[]>([]);
+  let commits = $state<Commit[]>([]);
   $effect(() => {
     const ns = namespace;
-    baselines = [];
+    commits = [];
     if (!ns) return;
     const ctrl = new AbortController();
     graph
-      .listBaselines(ns, ctrl.signal)
-      .then((r) => (baselines = [...(r.baselines ?? [])].reverse()))
+      .listCommits(ns, ctrl.signal)
+      .then((r) => (commits = [...(r.commits ?? [])].reverse()))
       .catch(() => {});
     return () => ctrl.abort();
   });
 
   // Consistency of selections.
   $effect(() => {
-    if (baselineId && !baselines.some((b) => b.id === baselineId)) baselineId = '';
+    if (commitId && !commits.some((b) => b.id === commitId)) commitId = '';
   });
   $effect(() => {
     if (agentKey && !agents.some((a) => a.key === agentKey)) agentKey = '';
@@ -99,7 +99,7 @@
         intent: session.intent.trim(),
         ...(methodology || am ? { methodology: methodology || am } : {}),
         ...(a ? { agent: a } : {}),
-        ...(baselineId ? { baselineId } : {}),
+        ...(commitId ? { forkCommit: commitId } : {}),
         ...(title.trim() ? { title: title.trim() } : {}),
         ...(goal ? { goal } : {}),
         ...(ownerOrg ? { ownerOrg } : {}),
@@ -164,10 +164,10 @@
       </div>
     {/if}
     <div class="field">
-      <label for="t-base">Baseline</label>
-      <select id="t-base" bind:value={baselineId}>
+      <label for="t-base">Commit</label>
+      <select id="t-base" bind:value={commitId}>
         <option value="">{namespace ? `Most recent of ${namespace}` : "Most recent of the identified methodology's namespace"}</option>
-        {#each baselines as b (b.id)}<option value={b.id}>{b.name || shortId(b.id)} — {formatDate(b.createdAt)}</option>{/each}
+        {#each commits as b (b.id)}<option value={b.id}>{b.name || shortId(b.id)} — {formatDate(b.createdAt)}</option>{/each}
       </select>
     </div>
     <div class="field">

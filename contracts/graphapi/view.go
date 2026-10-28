@@ -8,15 +8,15 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// View is what a read of the current graph is scoped to (ADR 0157): a lasting branch at one of its baselines, or a
+// View is what a read of the current graph is scoped to (ADR 0157): a lasting branch at one of its commits, or a
 // change on a flow (its pending work over the branch it forked from). Only the reads of the history (a node's versions,
 // a diff, a change-stack) name versions instead.
 type View struct {
-	// Namespace and Branch name a lasting branch, both required: no branch is assumed; Baseline one of its baselines
+	// Namespace and Branch name a lasting branch, both required: no branch is assumed; Commit one of its commits
 	// (empty: its head when the read starts).
 	Namespace string
 	Branch    string
-	Baseline  domain.BaselineID
+	Commit    domain.CommitID
 	// Change and Flow name a change on a flow ("main" or an option id; empty: the change's active option). A change
 	// view takes no branch: it is the change's.
 	Change domain.ChangeID
@@ -24,7 +24,7 @@ type View struct {
 }
 
 // ErrNoView refuses a read of the current graph that names no view.
-var ErrNoView = fmt.Errorf("no view: name a branch (its namespace and its name) and optionally a baseline, or a change and its option: %w", ErrInvalid)
+var ErrNoView = fmt.Errorf("no view: name a branch (its namespace and its name) and optionally a commit, or a change and its option: %w", ErrInvalid)
 
 // IsChange tells a change view.
 func (v View) IsChange() bool { return v.Change != "" }
@@ -32,7 +32,7 @@ func (v View) IsChange() bool { return v.Change != "" }
 // Check refuses a view that names neither a change nor a branch (its namespace and its name), or both.
 func (v View) Check() error {
 	switch {
-	case v.Change != "" && (v.Namespace != "" || v.Branch != "" || v.Baseline != ""):
+	case v.Change != "" && (v.Namespace != "" || v.Branch != "" || v.Commit != ""):
 		return fmt.Errorf("a view names a change or a branch, not both: %w", ErrInvalid)
 	case v.Change == "" && (v.Namespace == "" || v.Branch == ""):
 		return ErrNoView
@@ -48,18 +48,18 @@ func (v View) String() string {
 		}
 		return fmt.Sprintf("change %s", v.Change)
 	}
-	if v.Baseline != "" {
-		return fmt.Sprintf("%s/%s at %s", v.Namespace, v.Branch, v.Baseline)
+	if v.Commit != "" {
+		return fmt.Sprintf("%s/%s at %s", v.Namespace, v.Branch, v.Commit)
 	}
 	return fmt.Sprintf("%s/%s", v.Namespace, v.Branch)
 }
 
-// ViewState is what a view holds of some nodes (Graph.ViewVersions): its namespace, the baseline it reads (a change
+// ViewState is what a view holds of some nodes (Graph.ViewVersions): its namespace, the commit it reads (a change
 // view: its fork), whether it is the head of main, and the version of each node asked that it holds (0: a change's
 // draft; absent: not in it).
 type ViewState struct {
 	Namespace string
-	Baseline  domain.BaselineID
+	Commit    domain.CommitID
 	// MainHead: a branch view of main at its head, the versions the index flags as heads of main.
 	MainHead bool
 	Versions map[domain.NodeID]domain.Version

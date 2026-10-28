@@ -46,7 +46,7 @@ func (d *memDrafts) SaveDraft(ctx context.Context, m methodology.Methodology) (d
 
 // storeDefinition writes the definition nodes of a methodology version as the registry does (ADR 0023): the version
 // node and one node per element, typed by the meta-domain methodology, the actions of an agent its uses links (ADR 0120).
-func storeDefinition(ctx context.Context, g *graph.Graph, base domain.BaselineID, m *methodology.Methodology) (graph.CommitResult, error) {
+func storeDefinition(ctx context.Context, g *graph.Graph, base domain.CommitID, m *methodology.Methodology) (graph.CommitResult, error) {
 	hkey := observe.ElementKey(m.Name, m.Version, "methodology", "")
 	head := graph.NodeEdit{Key: hkey, Type: "methodology@MethodologyVersion", Props: map[string]any{"name": m.Name, "version": m.Version, "status": "published"}}
 	edits := []graph.NodeEdit{}
@@ -66,7 +66,7 @@ func storeDefinition(ctx context.Context, g *graph.Graph, base domain.BaselineID
 		}
 		el("agent", "methodology@Agent", a.Name, map[string]any{}, uses...)
 	}
-	return g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: "methodology", Title: "Methodology " + m.Name, Baseline: base, By: "test", Edits: append(edits, head)})
+	return g.CommitEdits(ctx, graph.Edits{ProjectID: "PROJ-ROOT", Namespace: "methodology", Title: "Methodology " + m.Name, Commit: base, By: "test", Edits: append(edits, head)})
 }
 
 const testProject = "PROJ-TEST"
@@ -80,7 +80,7 @@ func scripted(t *testing.T) llm.Client {
 		switch {
 		case strings.Contains(p, "DIRECTLY impacted"):
 			if !strings.Contains(p, "REQ-1 (alm@Requirement)") {
-				t.Errorf("prompt misses baseline nodes:\n%s", p)
+				t.Errorf("prompt misses commit nodes:\n%s", p)
 			}
 			out = `Here: {"items":[{"type":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"PSP API change"}}]}`
 		case strings.Contains(p, "new version"):
@@ -97,7 +97,7 @@ func scripted(t *testing.T) llm.Client {
 	})
 }
 
-func setup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
+func setup(t *testing.T) (*engine.Engine, *graph.Graph, domain.CommitID) {
 	t.Helper()
 	ctx := context.Background()
 	m, err := methodology.LoadFile("../../../methodologies/examples/impact-analysis.yaml")
@@ -154,7 +154,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	e, g, base := setup(t)
 	// the observed run; the intent text deliberately echoes the
 	// "assess_impact" goal example in methodologies/examples/impact-analysis.yaml.
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	builtins := e.Executors[methodology.KindBuiltin].(engine.BuiltinExecutor)
 	selfimprove.Register(builtins, e, selfimprove.Config{Drafts: drafts, Thresholds: observe.Thresholds{LLMCalls: 1, MinSystematized: 1}})
 
-	op, err := e.Start(ctx, engine.StartRequest{Methodology: obs.Definition().Name, Agent: "observer", Goal: "improve_methodology", BaselineID: res.Baseline.ID,
+	op, err := e.Start(ctx, engine.StartRequest{Methodology: obs.Definition().Name, Agent: "observer", Goal: "improve_methodology", ForkCommit: res.Commit.ID,
 		Intent: "observe", Vars: map[string]any{"event": map[string]any{"process": map[string]any{"id": p.ID}}}, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)

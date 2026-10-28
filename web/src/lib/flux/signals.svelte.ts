@@ -52,12 +52,12 @@ export function touch(key: string): void {
 export const keyOf = {
   change: (id: string) => `change:${id}`,
   node: (id: string) => `node:${id}`,
-  /** a branch of the graph moved (a baseline was created on it) */
+  /** a branch of the graph moved (a commit was created on it) */
   branch: (name: string) => `branch:${name}`,
   /** a node of the namespace was written (organisation, platform, alm…) */
   namespace: (ns: string) => `ns:${ns}`,
-  /** any baseline anywhere */
-  baselines: 'baselines',
+  /** any commit anywhere */
+  commits: 'commits',
   /** any change, any status: the list changed */
   changes: 'changes',
   methodology: (name: string) => `methodology:${name}`,

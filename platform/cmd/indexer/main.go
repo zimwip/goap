@@ -1,4 +1,4 @@
-// Command indexer is the document index service (ADR 0026, 0095): it follows the node, baseline and change events of the graph
+// Command indexer is the document index service (ADR 0026, 0095): it follows the node, commit and change events of the graph
 // on NATS, embeds through the model gateway and answers hybrid searches.
 package main
 
@@ -44,7 +44,7 @@ func main() {
 	hc := platform.H2CClient()
 	graphURL := platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")
 	directory := &access.Directory{Graph: graphclient.NewClient(hc, graphURL, telemetry.ClientOptions()...)}
-	// the policies, the organisation and the projects the platform graph delivers, read again when its baseline
+	// the policies, the organisation and the projects the platform graph delivers, read again when its commit
 	// events say the organisation moved (ADR 0154 §9)
 	if events != nil {
 		if err := directory.FollowEvents(events); err != nil {

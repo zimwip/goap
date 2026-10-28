@@ -29,7 +29,7 @@ describe('hoodIndex', () => {
 
   it('holds the nodes read and the links between them, once each', () => {
     const ix = hoodIndex('B1', [req, need]);
-    expect(ix.baselineId).toBe('B1');
+    expect(ix.commitId).toBe('B1');
     expect([...ix.nodes.keys()].sort()).toEqual(['need', 'req', 'req2', 'tst']);
     expect(ix.out.get('req')?.map((l) => l.id)).toEqual(['l1']);
     expect(ix.in.get('need')?.map((l) => l.id).sort()).toEqual(['l1', 'l4']);

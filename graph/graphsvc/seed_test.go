@@ -57,7 +57,7 @@ func TestSeedBuiltins(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "edit", Intent: "edit", Baseline: head.ID, By: "test", Edits: []graph.NodeEdit{e}}); err != nil {
+		if _, err := g.CommitEdits(ctx, graph.Edits{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "edit", Intent: "edit", Commit: head.ID, By: "test", Edits: []graph.NodeEdit{e}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -80,7 +80,7 @@ func TestSeedBuiltins(t *testing.T) {
 		t.Fatalf("resync = %v, %v", seeded, err)
 	}
 	head, _ := g.BranchHead(ctx, domain.NamespacePlatform, domain.MainBranch)
-	nodes, _, err := g.BaselineGraph(ctx, head.ID)
+	nodes, _, err := g.CommitGraph(ctx, head.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestSeedBuiltins(t *testing.T) {
 		}
 	}
 	orgHead, _ := g.BranchHead(ctx, access.NamespaceOrganisation, domain.MainBranch)
-	orgNodes, _, _ := g.BaselineGraph(ctx, orgHead.ID)
+	orgNodes, _, _ := g.CommitGraph(ctx, orgHead.ID)
 	for _, n := range orgNodes {
 		if n.Key == adapter.Key(access.DefaultOrg, mcpbuiltin.Admin) && n.Properties["disabled"] != true {
 			t.Fatalf("the disabled instance was seeded again: %+v", n.Properties)

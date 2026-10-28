@@ -99,7 +99,7 @@ var (
 )
 
 // sdlcSetup runs methodologies/sdlc.yaml on the demo ALM repository, with the types of the repository's domains.
-func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
+func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.CommitID) {
 	t.Helper()
 	ctx := devCtx
 	authorizer, err := authz.NewCasbin(nil)
@@ -148,7 +148,7 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 	if _, err := graphtest.Project(ctx, g, testProject, "Test"); err != nil {
 		t.Fatal(err)
 	}
-	// the latest baseline, not bs[0] (ADR 0049: SeedDemo imports the organisation and the alm data as a change each,
+	// the latest commit, not bs[0] (ADR 0049: SeedDemo imports the organisation and the alm data as a change each,
 	// so the head is the one the last of them left).
 	head, err := g.BranchHead(ctx, "alm", domain.MainBranch)
 	if err != nil {
@@ -287,7 +287,7 @@ func checkImpactAnalysis(t *testing.T, g *graph.Graph, id domain.ChangeID, quali
 func TestSDLCDelivery(t *testing.T) {
 	ctx, rm, approver := devCtx, rmCtx, approverCtx
 	e, g, base := sdlcSetup(t)
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", BaselineID: base,
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", ForkCommit: base,
 		Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
@@ -406,7 +406,7 @@ func TestSDLCDelivery(t *testing.T) {
 		t.Fatalf("deployment waves: %v", deploys)
 	}
 	c, _ = g.Change(ctx, p.ChangeID)
-	nodes, links, err := g.BaselineGraph(ctx, c.ResultBaselineID)
+	nodes, links, err := g.CommitGraph(ctx, c.LandedCommit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,7 +446,7 @@ func TestSDLCProcess(t *testing.T) {
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "dev", Org: "acme",
 		Roles: []string{"contributor", "business_analyst@ORG-DEFAULT", "tech_lead"}})
 	e, g, base := sdlcSetup(t)
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Goal: "software_delivery", BaselineID: base,
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Goal: "software_delivery", ForkCommit: base,
 		Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)

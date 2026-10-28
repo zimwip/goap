@@ -79,13 +79,13 @@ export function spread(d: Distribution | undefined): string {
 
 /** The totals of the overview, every namespace added up. */
 export function overviewTotals(ns: NamespaceSummary[]): Required<Omit<NamespaceSummary, 'namespace' | 'types' | 'source'>> {
-  const t = { nodes: 0, versions: 0, linkRows: 0, changes: 0, baselines: 0, branches: 0, logEntries: 0 };
+  const t = { nodes: 0, versions: 0, linkRows: 0, changes: 0, commits: 0, branches: 0, logEntries: 0 };
   for (const n of ns) {
     t.nodes += num(n.nodes);
     t.versions += num(n.versions);
     t.linkRows += num(n.linkRows);
     t.changes += num(n.changes);
-    t.baselines += num(n.baselines);
+    t.commits += num(n.commits);
     t.branches += num(n.branches);
     t.logEntries += num(n.logEntries);
   }

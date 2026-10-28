@@ -2,7 +2,7 @@
 import type { ChangeItem, GraphNode } from './api';
 
 export interface ItemContext {
-  /** Nodes from the starting baseline, indexed by id. */
+  /** Nodes from the starting commit, indexed by id. */
   nodes: Map<string, GraphNode>;
   /** Items of the change, indexed by id. */
   items: Map<string, ChangeItem>;

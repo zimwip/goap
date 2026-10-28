@@ -108,7 +108,7 @@ export interface IndexStatus {
   semantic?: boolean;
   store?: string;
   nodesIndexed?: string;
-  baselinesFollowed?: string;
+  commitsFollowed?: string;
   changesIndexed?: string;
   errors?: string;
 }

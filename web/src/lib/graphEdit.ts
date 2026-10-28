@@ -7,7 +7,7 @@ import { stream } from './flux/events.svelte';
 import { keyOf, stamp } from './flux/signals.svelte';
 
 export interface HeadGraph {
-  baselineId: string;
+  commitId: string;
   /** the nodes in force, and the links between them */
   nodes: GraphNode[];
   links: Link[];
@@ -22,13 +22,13 @@ export const ACTIVE = 'active';
 /** the heads read, per namespace, with what they were read at */
 const heads = new Map<string, { at: string; head: Promise<HeadGraph> }>();
 
-/** What a head read stands for: the namespace and every baseline as the events left them, and this client's writes. */
+/** What a head read stands for: the namespace and every commit as the events left them, and this client's writes. */
 const readAt = (namespace: string): string =>
-  untrack(() => `${stamp(keyOf.namespace(namespace))}/${stamp(keyOf.baselines)}/${ownWrites()}`);
+  untrack(() => `${stamp(keyOf.namespace(namespace))}/${stamp(keyOf.commits)}/${ownWrites()}`);
 
 /**
  * The graph at the head of a namespace's main (the base of every change applied on it). The views that show the
- * organisation or the platform all read it: one read serves them until an event says the namespace or a baseline moved,
+ * organisation or the platform all read it: one read serves them until an event says the namespace or a commit moved,
  * or this client wrote to the graph (ADR 0053); while the event stream is down nothing vouches for it, so it is read
  * each time. Each caller gets its own copy.
  */
@@ -54,13 +54,13 @@ export function forgetHeads(): void {
 async function readHead(namespace: string): Promise<HeadGraph> {
   const b = await graph.getBranch(namespace, MAIN_BRANCH);
   const id = b.head?.id ?? b.branch?.head;
-  if (!id) throw new Error(`${namespace} main has no baseline yet`);
-  const g = await graph.getBaselineGraph(id);
+  if (!id) throw new Error(`${namespace} main has no commit yet`);
+  const g = await graph.getCommitGraph(id);
   const all = g.nodes ?? [];
   const retired = all.filter((n) => n.state === RETIRED);
   const gone = new Set(retired.map((n) => n.id));
   return {
-    baselineId: id,
+    commitId: id,
     nodes: all.filter((n) => !gone.has(n.id)),
     // the suspect links too: a link names the version its target had, and editing the target leaves it in place (a
     // sub-project keeps its parent, an Assignment its project, once they are edited)
@@ -76,8 +76,8 @@ export const findNode = (h: HeadGraph, namespace: string, type: string, key: str
   [...h.nodes, ...h.retired].find((n) => n.namespace === namespace && n.type === type && n.key === key);
 
 /** Commits node edits on main as one change of `namespace`; returns the id of the applied change. */
-export async function applyOnMain(namespace: string, title: string, intent: string, baselineId: string, edits: NodeEdit[]): Promise<string> {
-  const { changeId } = await graph.commitEdits({ namespace, title, intent, baselineId, edits });
+export async function applyOnMain(namespace: string, title: string, intent: string, commitId: string, edits: NodeEdit[]): Promise<string> {
+  const { changeId } = await graph.commitEdits({ namespace, title, intent, commitId, edits });
   if (!changeId) throw new Error('change not created');
   return changeId;
 }
@@ -114,7 +114,7 @@ export const currentLink = (h: HeadGraph, n: GraphNode, type: string): Link | un
  * Moves `n` to a new parent/organisation: replaces its single outgoing link of `type` (part_of,
  * project_part_of or member_of) with one to `to` in the same edit, so the node is never left with zero or
  * two (ADR 0040's "move" action). `current` is the link found by currentLink, if any — `headGraph` is a
- * baseline snapshot, which can predate a link written outside of any change (EnsureUser's own member_of),
+ * commit snapshot, which can predate a link written outside of any change (EnsureUser's own member_of),
  * so `current` can come back empty even though the node already has one; the commit is refused in that case
  * (the server re-checks the live link count after writing, not just this edit's own declared links) rather
  * than silently leaving two — surface that error and have the caller reload before retrying.

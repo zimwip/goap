@@ -57,7 +57,7 @@ func (s *Snapshot) ReachSet(p authz.Principal) ReachSet {
 // reachKey keys the reach sets the directory keeps: a principal at a head of the organisation.
 type reachKey struct {
 	subject, org string
-	baseline     string
+	commit       string
 }
 
 // ReachBounds are the bounds of the reach sets a directory keeps (ADR 0156): a set per person reading at a head of the
@@ -65,7 +65,7 @@ type reachKey struct {
 var ReachBounds = cache.Bounds{Bytes: 8 << 20, TTL: 10 * time.Minute}
 
 // ReachSet is the reach of a principal at the current head of the organisation (Snapshot.ReachSet), kept per subject
-// and head (ADR 0161 §5): a baseline event the directory follows moves the head, and the next read compiles it again.
+// and head (ADR 0161 §5): a commit event the directory follows moves the head, and the next read compiles it again.
 func (d *Directory) ReachSet(ctx context.Context, p authz.Principal) (ReachSet, error) {
 	s, err := d.Snapshot(ctx)
 	if err != nil {
@@ -74,7 +74,7 @@ func (d *Directory) ReachSet(ctx context.Context, p authz.Principal) (ReachSet, 
 	d.mu.Lock()
 	if d.reach == nil {
 		d.reach = cache.New(cache.Fixed(ReachBounds), func(k reachKey, r ReachSet) int64 {
-			n := int64(cache.StructBytes + len(k.subject) + len(k.org) + len(k.baseline) + len(r.Subject))
+			n := int64(cache.StructBytes + len(k.subject) + len(k.org) + len(k.commit) + len(r.Subject))
 			for _, l := range [][]string{r.Projects, r.Trees, r.Units} {
 				for _, x := range l {
 					n += cache.WordBytes + int64(len(x))
@@ -85,7 +85,7 @@ func (d *Directory) ReachSet(ctx context.Context, p authz.Principal) (ReachSet, 
 	}
 	c := d.reach
 	d.mu.Unlock()
-	k := reachKey{subject: p.Subject, org: p.Org, baseline: string(s.Baseline)}
+	k := reachKey{subject: p.Subject, org: p.Org, commit: string(s.Commit)}
 	if r, ok := c.Get(k); ok {
 		return r, nil
 	}

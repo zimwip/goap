@@ -52,12 +52,12 @@
     disabled?: boolean;
     busy?: string;
     onmove: (row: LifecycleRow, t: LifecycleTransition) => void;
-    /** takes on a node of the baseline; with impacts, rationale says why the change impacts it */
+    /** takes on a node of the commit; with impacts, rationale says why the change impacts it */
     onadd: (id: string, rationale?: string) => void;
     /** node types a new node can have */
     types: string[];
     lifecycleOf: (type: string) => Lifecycle | undefined;
-    /** keys already taken (baseline and pending nodes) */
+    /** keys already taken (commit and pending nodes) */
     keys: string[];
     /** creates a node: identity and type, with what the form of its type gave (ADR 0115 §7); the rest comes from Edit */
     oncreate: (key: string, type: string, state: string, init?: { props: Record<string, unknown>; links: LinkWrite[] }) => Promise<boolean> | boolean;

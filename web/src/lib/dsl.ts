@@ -22,7 +22,7 @@ export const DSL_FUNCTIONS: DslFunction[] = [
   { name: 'items', args: ['kind'], returns: 'Item[]', doc: 'Items of the change of this kind ("" = all).', group: 'read' },
   { name: 'options', args: [], returns: 'Option[]', doc: 'Options of the change: hypotheses explored on a flow of their own.', group: 'read' },
   { name: 'decisionPoints', args: [], returns: 'DecisionPoint[]', doc: 'Decision points of the change: questions it must settle.', group: 'read' },
-  { name: 'node', args: ['key'], returns: 'Node', doc: 'Node from the reference baseline.', group: 'read' },
+  { name: 'node', args: ['key'], returns: 'Node', doc: 'Node from the reference commit.', group: 'read' },
   { name: 'nodes', args: ['type'], returns: 'Node[]', doc: 'Nodes of this type ("" = all).', group: 'read' },
   {
     name: 'links',
@@ -34,7 +34,7 @@ export const DSL_FUNCTIONS: DslFunction[] = [
   { name: 'addArtifact', args: ['type', 'data'], returns: '', doc: 'Free-form data (report…).', group: 'write' },
   { name: 'addItem', args: ['itemType', 'data'], returns: '', doc: 'An item of a type the domains declare (hypothesis, risk, assessment…).', group: 'write' },
   { name: 'changeImpacts', args: [], returns: 'ChangeImpact[]', doc: 'Nodes the change reads, modifies or creates.', group: 'read' },
-  { name: 'impactNode', args: ['key', 'rationale'], returns: '"#nN"', doc: 'The change acts on a baseline node, and why (no version written yet).', group: 'write' },
+  { name: 'impactNode', args: ['key', 'rationale'], returns: '"#nN"', doc: 'The change acts on a commit node, and why (no version written yet).', group: 'write' },
   { name: 'impactNodeCreate', args: ['type', 'key', 'rationale'], returns: '"#nN"', doc: 'The change creates a node, and why.', group: 'write' },
   { name: 'impactNodePlan', args: ['type', 'key', 'rationale'], returns: '"#nN"', doc: 'The change will create a node, not written yet (a planned creation, no draft): a later writeNode of its key creates it.', group: 'write' },
   { name: 'impactNodeMerge', args: ['sources', 'type', 'key', 'rationale'], returns: '"#nN"', doc: 'Merge nodes (keys) into a new one, from the side of their parents: they lose the links to the sources and gain one to the new node; the sources stay as they are.', group: 'write' },
@@ -91,7 +91,7 @@ export interface DslShape {
 
 export const DSL_SHAPES: Record<string, DslShape> = {
   Item: { name: 'Item', summary: 'An artifact or decision recorded on the change.', fields: ['id', 'kind', 'type', 'status', 'data', 'producedBy'] },
-  Node: { name: 'Node', summary: 'A graph node: from the reference baseline in an action, as it will be after the change in an algorithm.', fields: ['id', 'version', 'key', 'type', 'state', 'props'] },
+  Node: { name: 'Node', summary: 'A graph node: from the reference commit in an action, as it will be after the change in an algorithm.', fields: ['id', 'version', 'key', 'type', 'state', 'props'] },
   Link: { name: 'Link', summary: 'A link between two nodes; from / to are {id, version, key, type}.', fields: ['id', 'type', 'from', 'to'] },
   ChangeImpact: {
     name: 'ChangeImpact',

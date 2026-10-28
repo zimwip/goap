@@ -12,10 +12,10 @@ import (
 
 func TestChangeBranch(t *testing.T) { forEachRepo(t, testChangeBranch) }
 
-func setProp(t *testing.T, g *Graph, f fixture, base domain.BaselineID, title string, props map[string]any) domain.Change {
+func setProp(t *testing.T, g *Graph, f fixture, base domain.CommitID, title string, props map[string]any) domain.Change {
 	t.Helper()
 	ctx := context.Background()
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: title, BaselineID: base, OwnBranch: true})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: title, ForkCommit: base, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,11 +55,11 @@ func testChangeBranch(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	if ba.Branch != "main" {
-		t.Fatalf("result baseline branch = %q", ba.Branch)
+		t.Fatalf("result commit branch = %q", ba.Branch)
 	}
 	ac, _ := g.Change(ctx, a.ID)
-	if ac.Status != domain.ChangeApplied || ac.ResultBaselineID != ba.ID {
-		t.Fatalf("A = %s %s", ac.Status, ac.ResultBaselineID)
+	if ac.Status != domain.ChangeApplied || ac.LandedCommit != ba.ID {
+		t.Fatalf("A = %s %s", ac.Status, ac.LandedCommit)
 	}
 	if br, _ := g.Branch(ctx, "", a.Branch); br.Status != domain.BranchMerged {
 		t.Fatalf("A branch = %s", br.Status)
@@ -76,8 +76,8 @@ func testChangeBranch(t *testing.T, repo Repo) {
 		t.Fatalf("apply with a conflict: %v", err)
 	}
 	bc, _ := g.Change(ctx, b.ID)
-	if bc.Status != domain.ChangeActive || bc.BaselineID != ba.ID {
-		t.Fatalf("B = %s on %s, want active, rebased onto %s", bc.Status, bc.BaselineID, ba.ID)
+	if bc.Status != domain.ChangeActive || bc.ForkCommit != ba.ID {
+		t.Fatalf("B = %s on %s, want active, rebased onto %s", bc.Status, bc.ForkCommit, ba.ID)
 	}
 	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "A title" {
 		t.Fatalf("pending change leaked on main: %v", n.Properties)
@@ -89,8 +89,8 @@ func testChangeBranch(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bb.Kind != domain.BaselineFastForward || bb.ParentID != ba.ID {
-		t.Fatalf("B's baseline = %s on %s, want a fast-forward of %s", bb.Kind, bb.ParentID, ba.ID)
+	if bb.Kind != domain.CommitKindFastForward || bb.ParentID != ba.ID {
+		t.Fatalf("B's commit = %s on %s, want a fast-forward of %s", bb.Kind, bb.ParentID, ba.ID)
 	}
 	// its draft was rebased onto A at its commit (ADR 0165): its version derives from A's alone
 	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "B title" || !slices.Equal(n.Parents, []domain.Version{aVersion}) {
@@ -127,7 +127,7 @@ func testChangeBranchesOfAlikeIDs(t *testing.T, repo Repo) {
 	n := 0
 	g.newID = func() string { n++; return fmt.Sprintf("aaaaaaaa-0000-4000-8000-%012d", n) }
 	a := setProp(t, g, f, f.base.ID, "A", map[string]any{"title": "A title"})
-	b, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "B", BaselineID: f.base.ID, OwnBranch: true})
+	b, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "B", ForkCommit: f.base.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}

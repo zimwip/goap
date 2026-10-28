@@ -17,7 +17,7 @@ func testCheckoutEditAccept(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", ForkCommit: f.base.ID}))
 	if _, err := g.ImpactNodeUpdate(ctx, c.ID, "nope", NodeUpdate{Properties: map[string]any{"x": 1}}); err == nil {
 		t.Fatal("an update names an impact of the change")
 	}
@@ -81,7 +81,7 @@ func testCheckoutEditAccept(t *testing.T, repo Repo) {
 	if n := g.versionCount(ctx, f.req.ID); n != int(f.req.Version) {
 		t.Fatalf("no version for the whole edit: %d versions", n)
 	}
-	res := g.withState(t, ctx, must[domain.Baseline](t)(g.apply(ctx, c.ID, "")))
+	res := g.withState(t, ctx, must[domain.Commit](t)(g.apply(ctx, c.ID, "")))
 	committed := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Nodes[f.req.ID]}))
 	if committed.Properties["title"] != "Use PSP v3" || committed.Version != f.req.Version+1 || committed.Comment != "fine again" || len(committed.Parents) != 1 || committed.Parents[0] != f.req.Version {
 		t.Fatalf("commit writes the version from the draft: %+v", committed)
@@ -112,7 +112,7 @@ func testImpactNodeCancel(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "try", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "try", ForkCommit: f.base.ID}))
 	mod := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "try"}))
 	created := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-9", Type: "Requirement", Rationale: "new",
 		Links: []LinkWrite{{Type: "satisfies", To: f.need.Ref()}}}))
@@ -155,7 +155,7 @@ func testAdoptFlowNeedsAccept(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "options", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "options", ForkCommit: f.base.ID, OwnBranch: true}))
 	opt := must[domain.Flow](t)(g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "A", Hypothesis: "a", By: "u"}))
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "A", Flow: opt.ID}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: map[string]any{"title": "A"}, Flow: opt.ID}))
@@ -178,7 +178,7 @@ func testDraftLinksFollowNewVersions(t *testing.T, repo Repo) {
 	g := w.g
 	c := w.change(t, "follow")
 	req2 := w.declare(t, c, w.req2)
-	// a new Note links the baseline version of REQ-2; REQ-2 is then moved (its draft): the link targets it by id
+	// a new Note links the commit version of REQ-2; REQ-2 is then moved (its draft): the link targets it by id
 	note := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "NOTE-1", Type: "Note", Rationale: "cover",
 		Links: []LinkWrite{{Type: "refines", To: w.req2.Ref()}}}))
 	must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, req2, edit{Properties: map[string]any{"title": "two"}}))
@@ -190,7 +190,7 @@ func testDraftLinksFollowNewVersions(t *testing.T, repo Repo) {
 	}
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, note.ID, "u", "ok"))
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, req2, "u", "ok"))
-	res := g.withState(t, ctx, must[domain.Baseline](t)(g.apply(ctx, c.ID, "")))
+	res := g.withState(t, ctx, must[domain.Commit](t)(g.apply(ctx, c.ID, "")))
 	committed := must[[]domain.Link](t)(g.OutLinksOf(ctx, domain.NodeRef{ID: note.Post.ID, Version: res.Nodes[note.Post.ID]}))
 	if len(committed) != 1 || committed[0].To != (domain.NodeRef{ID: w.req2.ID, Version: res.Nodes[w.req2.ID]}) || res.Nodes[w.req2.ID] != w.req2.Version+1 {
 		t.Fatalf("commit resolves the link to the version it writes for REQ-2 (%v): %+v", res.Nodes[w.req2.ID], committed)
@@ -204,7 +204,7 @@ func testCreateIsCheckedOut(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "New", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "New", ForkCommit: f.base.ID}))
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-NEW", Type: "alm@Requirement", Rationale: "new", Properties: map[string]any{"title": "x"}}))
 	if cn.Post == nil || !cn.Post.IsDraft() || !must[domain.Node](t)(g.ChangeNode(ctx, c.ID, "", *cn.Post)).IsDraft() {
 		t.Fatalf("a created node starts as a draft: %+v", cn)
@@ -234,7 +234,7 @@ func testCheckouts(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "batch", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "batch", ForkCommit: f.base.ID}))
 	refused := errors.New("refused")
 	gated := func(typ string) error {
 		if typ == f.test.Type {

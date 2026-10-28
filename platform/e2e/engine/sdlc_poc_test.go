@@ -103,7 +103,7 @@ func TestSDLCDerisksByAProofOfConcept(t *testing.T) {
 
 	ctx := devCtx
 	ch, err := g.CreateChange(ctx, graph.NewChange{Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees",
-		Methodology: "sdlc", Namespace: "alm", BaselineID: head, ProjectID: testProject})
+		Methodology: "sdlc", Namespace: "alm", ForkCommit: head, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

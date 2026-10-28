@@ -48,7 +48,7 @@ func TestScopedActionRunsOncePerSubject(t *testing.T) {
 		t.Fatalf("lifted action %+v", a)
 	}
 	e.Methodologies.(engine.StaticMethodologies)["scoped"] = c
-	ch, err := g.CreateChange(ctx, graph.NewChange{Title: "Q", Intent: "qualify", Methodology: "scoped", Namespace: "alm", ProjectID: testProject, BaselineID: base})
+	ch, err := g.CreateChange(ctx, graph.NewChange{Title: "Q", Intent: "qualify", Methodology: "scoped", Namespace: "alm", ProjectID: testProject, ForkCommit: base})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestStepNarrowsTheSubjectsOfAScopedAction(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
 	e.Methodologies.(engine.StaticMethodologies)["narrowed"] = c
-	ch, err := g.CreateChange(ctx, graph.NewChange{Title: "Q", Intent: "qualify", Methodology: "narrowed", Namespace: "alm", ProjectID: testProject, BaselineID: base})
+	ch, err := g.CreateChange(ctx, graph.NewChange{Title: "Q", Intent: "qualify", Methodology: "narrowed", Namespace: "alm", ProjectID: testProject, ForkCommit: base})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func TestScopedActionRunsSubjectsInParallel(t *testing.T) {
 				out := `{"items":[{"type":"artifact","target":"qualified","data":{"impact":"` + key + `"}}]}`
 				return llm.Response{Text: out, Provider: "test", Model: req.Model}, nil
 			})}
-			ch, err := g.CreateChange(ctx, graph.NewChange{Title: "Q", Intent: "qualify", Methodology: "parallel", Namespace: "alm", ProjectID: testProject, BaselineID: base})
+			ch, err := g.CreateChange(ctx, graph.NewChange{Title: "Q", Intent: "qualify", Methodology: "parallel", Namespace: "alm", ProjectID: testProject, ForkCommit: base})
 			if err != nil {
 				t.Fatal(err)
 			}

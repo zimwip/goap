@@ -28,7 +28,7 @@ func TestRender(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := graph.Snapshot{Format: graph.SnapshotFormat, Namespace: "alm", Branch: "main", Baseline: "B1", ExportedAt: time.Date(2026, 10, 13, 0, 0, 0, 0, time.UTC),
+	s := graph.Snapshot{Format: graph.SnapshotFormat, Namespace: "alm", Branch: "main", Commit: "B1", ExportedAt: time.Date(2026, 10, 13, 0, 0, 0, 0, time.UTC),
 		Nodes: []graph.SnapshotNode{
 			{Key: "NEED:1", Type: "alm@Need", State: "draft", Owner: "ORG-DEFAULT", Properties: map[string]any{"title": "Pay online", "description": "The customer\npays by card."},
 				Links: []graph.SnapshotLink{{Type: "alm@refines", To: "REQ-1", Properties: map[string]any{"why": "x"}}}},
@@ -68,7 +68,7 @@ func TestRender(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]any{
-		"key": "NEED:1", "type": "alm@Need", "title": "Pay online", "state": "draft", "owner": "ORG-DEFAULT", "namespace": "alm", "baseline": "B1",
+		"key": "NEED:1", "type": "alm@Need", "title": "Pay online", "state": "draft", "owner": "ORG-DEFAULT", "namespace": "alm", "commit": "B1",
 		"aliases": []any{"NEED:1"}, "tags": []any{"alm/Need", "state/draft"},
 		"refines":        []any{"[[Requirement/REQ-1|Card payment]]"},
 		"linkProperties": []any{map[string]any{"type": "alm@refines", "to": "REQ-1", "properties": map[string]any{"why": "x"}}},

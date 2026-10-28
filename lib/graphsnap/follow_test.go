@@ -11,10 +11,10 @@ import (
 // TestHeads: a head is asked once, then again only once a branch moved.
 func TestHeads(t *testing.T) {
 	ctx := context.Background()
-	asked, head := 0, domain.BaselineID("b1")
-	ask := func(context.Context, string, string) (domain.Baseline, error) {
+	asked, head := 0, domain.CommitID("b1")
+	ask := func(context.Context, string, string) (domain.Commit, error) {
 		asked++
-		return domain.Baseline{ID: head}, nil
+		return domain.Commit{ID: head}, nil
 	}
 	var h graphsnap.Heads
 	for range 3 {

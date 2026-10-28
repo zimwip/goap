@@ -2,7 +2,7 @@ import { rpc } from "./transport";
 import { notePosition } from "../flux/positions";
 import type { Empty, Struct } from "./types/common";
 import type {
-  BaselineDiff,
+  CommitDiff,
   BoardIssue,
   DecisionPoint,
   Flow,
@@ -15,12 +15,12 @@ import type {
   Restructured,
 } from "./types/engine";
 import type {
-  Baseline,
-  BaselineLinksQuery,
+  Commit,
+  CommitLinksQuery,
   GraphExport,
   GraphImport,
   GraphImportResult,
-  BaselineNodesQuery,
+  CommitNodesQuery,
   Branch,
   Change,
   ChangeDependencies,
@@ -93,10 +93,10 @@ export function reviewUpdateRequest(
 }
 
 export const graph = {
-  /** namespace is required: baselines are scoped to one namespace each. With `branch`, a page of its history (ADR
-   * 0140): the baselines committed before `before` (none: the newest), at most `limit`, with what draws them in `related`
+  /** namespace is required: commits are scoped to one namespace each. With `branch`, a page of its history (ADR
+   * 0140): the commits committed before `before` (none: the newest), at most `limit`, with what draws them in `related`
    * and the `before` of the older page in `next` ("0" or absent: none); with `ids`, those headers only. */
-  listBaselines: (
+  listCommits: (
     namespace: string,
     signal?: AbortSignal,
     opts: {
@@ -114,18 +114,18 @@ export const graph = {
         limit?: number;
         ids?: string[];
       },
-      { baselines?: Baseline[]; related?: Baseline[]; next?: string }
-    >(GRAPH, "ListBaselines", { namespace, ...opts }, signal),
-  getBaselineGraph: (id: string, signal?: AbortSignal) =>
+      { commits?: Commit[]; related?: Commit[]; next?: string }
+    >(GRAPH, "ListCommits", { namespace, ...opts }, signal),
+  getCommitGraph: (id: string, signal?: AbortSignal) =>
     rpc<
       { id: string },
       {
-        baseline?: Baseline;
+        commit?: Commit;
         nodes?: GraphNode[];
         links?: Link[];
         suspectLinks?: Link[];
       }
-    >(GRAPH, "GetBaselineGraph", { id }, signal),
+    >(GRAPH, "GetCommitGraph", { id }, signal),
   /** The world a change sees, whatever its flow (`world`, Graph.ChangeWorld): the nodes of its fork it left alone, the
    * versions it committed and its drafts (version 0), with the links whose target node is in it. */
   getChangeWorld: (changeId: string, flow = "", signal?: AbortSignal) =>
@@ -133,29 +133,29 @@ export const graph = {
       { changeId: string; flow: string; world: boolean },
       { nodes?: GraphNode[]; links?: Link[] }
     >(GRAPH, "GetChangeGraph", { changeId, flow, world: true }, signal),
-  /** A page of the nodes of a view (by type, text-filtered; ADR 0157), with the node count of every type; `baseline` is
+  /** A page of the nodes of a view (by type, text-filtered; ADR 0157), with the node count of every type; `commit` is
    * the one read (a change view: its fork). */
-  listBaselineNodes: (req: BaselineNodesQuery, signal?: AbortSignal) =>
+  listCommitNodes: (req: CommitNodesQuery, signal?: AbortSignal) =>
     rpc<
-      BaselineNodesQuery,
+      CommitNodesQuery,
       {
-        baseline?: Baseline;
+        commit?: Commit;
         nodes?: GraphNode[];
         total?: number;
         types?: TypeCount[];
       }
-    >(GRAPH, "ListBaselineNodes", req, signal),
-  /** A page of the links of a baseline (by type, text-filtered), with the link count of every type. */
-  listBaselineLinks: (req: BaselineLinksQuery, signal?: AbortSignal) =>
+    >(GRAPH, "ListCommitNodes", req, signal),
+  /** A page of the links of a commit (by type, text-filtered), with the link count of every type. */
+  listCommitLinks: (req: CommitLinksQuery, signal?: AbortSignal) =>
     rpc<
-      BaselineLinksQuery,
+      CommitLinksQuery,
       {
-        baseline?: Baseline;
+        commit?: Commit;
         links?: Link[];
         total?: number;
         types?: TypeCount[];
       }
-    >(GRAPH, "ListBaselineLinks", req, signal),
+    >(GRAPH, "ListCommitLinks", req, signal),
   /** A node as a view holds it, with its direct neighbours (both directions; ADR 0157). */
   getNodeNeighbourhood: (
     view: GraphView,
@@ -206,22 +206,22 @@ export const graph = {
       { entries?: LogEntry[]; counts?: Record<string, number> }
     >(GRAPH, "ListChangeLog", req, signal),
   /** The whole log of a change as W3C PROV-O provenance, a JSON-LD document (ADR 0057). */
-  /** The state of a namespace at a baseline (default: the head of main) as a JSON snapshot, without history (ADR 0104),
+  /** The state of a namespace at a commit (default: the head of main) as a JSON snapshot, without history (ADR 0104),
    *  in one answer; the web exports through `startGraphExport` (a job, ADR 0149). */
-  exportGraph: (namespace: string, branch?: string, baselineId?: string) =>
+  exportGraph: (namespace: string, branch?: string, commitId?: string) =>
     rpc<
-      { namespace: string; branch?: string; baselineId?: string },
+      { namespace: string; branch?: string; commitId?: string },
       GraphExport
-    >(GRAPH, "ExportGraph", { namespace, branch, baselineId }),
+    >(GRAPH, "ExportGraph", { namespace, branch, commitId }),
   /** Imports a JSON snapshot into main as one new change, left open for review (ADR 0104). */
   importGraph: (req: GraphImport) =>
     rpc<GraphImport, GraphImportResult>(GRAPH, "ImportGraph", req),
-  /** Exports the state of a namespace (head of a branch, default main, or a baseline) as a job (ADR 0149): a JSON
+  /** Exports the state of a namespace (head of a branch, default main, or a commit) as a job (ADR 0149): a JSON
    *  snapshot or an OKF zip, the file the job writes once done. */
   startGraphExport: (req: {
     namespace: string;
     branch?: string;
-    baselineId?: string;
+    commitId?: string;
     format: "json" | "okf";
   }) => rpc<object, { job: Job }>(GRAPH, "StartGraphExport", req),
   /** Imports a JSON snapshot as a job (ADR 0149): its output names the change it created and what it did. */
@@ -240,7 +240,7 @@ export const graph = {
   listItemTypes: (signal?: AbortSignal) =>
     rpc<Empty, { types?: ItemTypeInfo[] }>(GRAPH, "ListItemTypes", {}, signal),
   /** The namespaces holding at least one node. */
-  /** What every namespace holds: nodes, versions, link rows, changes, baselines, branches. */
+  /** What every namespace holds: nodes, versions, link rows, changes, commits, branches. */
   graphOverview: (signal?: AbortSignal) =>
     rpc<Empty, { namespaces?: NamespaceSummary[] }>(
       GRAPH,
@@ -291,9 +291,9 @@ export const graph = {
   getBranch: (namespace: string, name: string, signal?: AbortSignal) =>
     rpc<
       { namespace: string; name: string; headerOnly: boolean },
-      { branch?: Branch; head?: Baseline }
+      { branch?: Branch; head?: Commit }
     >(GRAPH, "GetBranch", { namespace, name, headerOnly: true }, signal),
-  /** The branches (of these statuses, when given), with the header of each head and the number of baselines of each
+  /** The branches (of these statuses, when given), with the header of each head and the number of commits of each
    * branch (ADR 0140). */
   listBranches: (
     namespace: string,
@@ -304,14 +304,14 @@ export const graph = {
       { namespace: string; status?: string[] },
       {
         branches?: Branch[];
-        heads?: Baseline[];
+        heads?: Commit[];
         counts?: Record<string, number>;
       }
     >(GRAPH, "ListBranches", { namespace, ...opts }, signal),
   createBranch: (req: {
     namespace: string;
     name: string;
-    fromBaseline: string;
+    fromCommit: string;
     origin?: string;
     description?: string;
   }) => rpc<typeof req, { branch?: Branch }>(GRAPH, "CreateBranch", req),
@@ -340,7 +340,7 @@ export const graph = {
     title?: string;
     resolutions?: Record<string, Resolution>;
   }) =>
-    rpc<typeof req, { change?: Change; baseline?: Baseline; plan?: MergePlan }>(
+    rpc<typeof req, { change?: Change; commit?: Commit; plan?: MergePlan }>(
       GRAPH,
       "MergeBranch",
       req,
@@ -358,22 +358,22 @@ export const graph = {
   ) => rpc<typeof filter, { tags?: Tag[] }>(GRAPH, "ListTags", filter),
   deleteTag: (id: string) =>
     rpc<{ id: string }, Record<string, never>>(GRAPH, "DeleteTag", { id }),
-  /** What going from a baseline to another changes, node by node. */
-  diffBaselines: (from: string, to: string, signal?: AbortSignal) =>
+  /** What going from a commit to another changes, node by node. */
+  diffCommits: (from: string, to: string, signal?: AbortSignal) =>
     rpc<
       { from: string; to: string },
       {
-        nodes?: BaselineDiff[];
+        nodes?: CommitDiff[];
         changesAdded?: StackChange[];
         changesRemoved?: StackChange[];
       }
-    >(GRAPH, "DiffBaselines", { from, to }, signal),
-  /** The change-stack of a node version (version 0: its latest on main) or of a baseline (ADR 0133). */
+    >(GRAPH, "DiffCommits", { from, to }, signal),
+  /** The change-stack of a node version (version 0: its latest on main) or of a commit (ADR 0133). */
   getChangeStack: (
     q: {
       nodeId?: string;
       version?: number;
-      baselineId?: string;
+      commitId?: string;
       limit?: number;
     },
     signal?: AbortSignal,
@@ -382,7 +382,7 @@ export const graph = {
       {
         nodeId?: string;
         version?: number;
-        baselineId?: string;
+        commitId?: string;
         limit?: number;
       },
       { stack?: ChangeStack }
@@ -426,7 +426,7 @@ export const graph = {
   createChange: (req: {
     title: string;
     intent?: string;
-    baselineId?: string;
+    forkCommit?: string;
     methodology?: string;
     namespace?: string;
     /** branch the change is merged into (default main) */
@@ -657,7 +657,7 @@ export const graph = {
   ) =>
     rpc<
       { changeId: string; flow: string; level: string },
-      { baseline?: Baseline }
+      { commit?: Commit }
     >(GRAPH, "GetChangeView", { changeId, flow, level }, signal),
   /** What merging a branch into another would do. */
   planMerge: (
@@ -1066,7 +1066,7 @@ export const graph = {
     namespace: string;
     title: string;
     intent: string;
-    baselineId: string;
+    commitId: string;
     methodology?: string;
     edits: NodeEdit[];
   }) => rpc<typeof req, { changeId?: string }>(GRAPH, "CommitEdits", req),
@@ -1134,13 +1134,13 @@ export const graph = {
       { changeId },
     ),
   /** Step one of apply (ADR 0056): the versions are written on the change's own branch; mergeChange integrates them. */
-  commitChange: (changeId: string, baselineName: string, nodes?: string[]) =>
+  commitChange: (changeId: string, commitName: string, nodes?: string[]) =>
     rpc<
-      { changeId: string; baselineName: string; nodes?: string[] },
-      { baseline?: Baseline }
+      { changeId: string; commitName: string; nodes?: string[] },
+      { commit?: Commit }
     >(GRAPH, "CommitChange", {
       changeId,
-      baselineName,
+      commitName,
       ...(nodes?.length ? { nodes } : {}),
     }),
 };

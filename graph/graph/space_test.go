@@ -52,7 +52,7 @@ func TestContentGraph(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			return g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "t", BaselineID: head.ID, OwnBranch: true, OwnerOrg: owner, ProjectID: project})
+			return g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "t", ForkCommit: head.ID, OwnBranch: true, OwnerOrg: owner, ProjectID: project})
 		}
 		if _, err := open("ORG-SALES", "PROJ-NOWHERE"); !errors.Is(err, graph.ErrInvalid) {
 			t.Fatalf("a project the platform does not know: %v", err)

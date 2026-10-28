@@ -29,17 +29,17 @@ func testResolveCreate(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "create", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "create", ForkCommit: f.base.ID}))
 
-	// a key the reference baseline holds: the creation is requalified as the modification of that node (ADR 0172), three
+	// a key the reference commit holds: the creation is requalified as the modification of that node (ADR 0172), three
 	// entries of the log
 	if _, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-1", Type: "TestCase"}); !errors.Is(err, ErrConflict) {
-		t.Fatalf("create on a baseline key of another type: %v", err)
+		t.Fatalf("create on a commit key of another type: %v", err)
 	}
 	re := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "Use PSP v9"},
 		Links: []LinkWrite{{Type: "satisfies", To: f.need.Ref()}}}))
 	if re.Intent != domain.IntentModified || re.Pre == nil || *re.Pre != f.req.Ref() || re.Post == nil || re.Post.ID != f.req.ID {
-		t.Fatalf("create on a baseline key: %+v", re)
+		t.Fatalf("create on a commit key: %+v", re)
 	}
 	var reOps []domain.ImpactOp
 	for _, e := range must[[]domain.ImpactEvent](t)(g.ChangeEvents(ctx, c.ID)) {
@@ -111,9 +111,9 @@ func testResolveExistingNode(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "modify", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "modify", ForkCommit: f.base.ID}))
 
-	// unknown nodes are in neither the baseline nor the change
+	// unknown nodes are in neither the commit nor the change
 	if _, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: "nope"}); !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), "neither") {
 		t.Fatalf("checkout of an unknown node: %v", err)
 	}
@@ -130,10 +130,10 @@ func testResolveExistingNode(t *testing.T, repo Repo) {
 		t.Fatalf("a refused operation declares nothing: %+v", got)
 	}
 
-	// checkout by key declares the impact from the baseline
+	// checkout by key declares the impact from the commit
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Key: "REQ-1", Rationale: "why"}))
 	if cn.Intent != domain.IntentModified || cn.Pre == nil || *cn.Pre != f.req.Ref() || cn.Rationale != "why" {
-		t.Fatalf("auto-proposed from the baseline: %+v", cn)
+		t.Fatalf("auto-proposed from the commit: %+v", cn)
 	}
 	// an update by node reuses it
 	up := must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, "", NodeUpdate{Node: f.req.ID, Properties: map[string]any{"title": "T"}}))
@@ -152,11 +152,11 @@ func testResolveExistingNode(t *testing.T, repo Repo) {
 	}
 }
 
-func TestResolveTransitionFromBaseline(t *testing.T) {
-	forEachRepo(t, testResolveTransitionFromBaseline)
+func TestResolveTransitionFromCommit(t *testing.T) {
+	forEachRepo(t, testResolveTransitionFromCommit)
 }
 
-func testResolveTransitionFromBaseline(t *testing.T, repo Repo) {
+func testResolveTransitionFromCommit(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorldG(t, repo, "")
 	c := w.change(t, "move")
@@ -165,7 +165,7 @@ func testResolveTransitionFromBaseline(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	if cn.Intent != domain.IntentModified || cn.Pre == nil || *cn.Pre != w.req1.Ref() || cn.Post == nil {
-		t.Fatalf("auto-proposed from the baseline: %+v", cn)
+		t.Fatalf("auto-proposed from the commit: %+v", cn)
 	}
 	// the impact is reused by the next transition
 	cn2, err := w.g.ImpactNodeTransition(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Node: w.req1.ID}, To: "approved"})

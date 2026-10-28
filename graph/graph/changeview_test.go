@@ -19,7 +19,7 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", ForkCommit: f.base.ID, OwnBranch: true}))
 	req, need := f.req.Ref(), f.need.Ref()
 	added := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &req, Rationale: "new PSP"},
@@ -32,8 +32,8 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, reqW.ID, "u", "ok"))
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, added[2].ID, "u", "ok"))
 
-	view := func(level string) domain.Baseline {
-		return must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, "", level))
+	view := func(level string) domain.Commit {
+		return must[domain.Commit](t)(g.ChangeView(ctx, c.ID, "", level))
 	}
 	// written: everything proposed or accepted
 	w := view(ViewWritten)
@@ -64,7 +64,7 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 	if err := g.WithdrawImpact(ctx, c.ID, needW.ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	res := must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
+	res := must[domain.Commit](t)(g.apply(ctx, c.ID, ""))
 	l := view(ViewCommitted)
 	if l.ID != res.ID || l.Nodes[f.req.ID] != f.req.Version+1 || !l.Contains(need) {
 		t.Fatalf("committed view: %+v", l)
@@ -84,8 +84,8 @@ func testChangeViewOfAFlow(t *testing.T, repo Repo) {
 	pre := w.f.req.Ref()
 	added := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}}))
 	must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[0].ID, edit{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}))
-	flowView := must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, w.flow, ViewWritten))
-	mainView := must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, "", ViewWritten))
+	flowView := must[domain.Commit](t)(g.ChangeView(ctx, c.ID, w.flow, ViewWritten))
+	mainView := must[domain.Commit](t)(g.ChangeView(ctx, c.ID, "", ViewWritten))
 	fv := must[domain.Node](t)(g.ChangeNode(ctx, c.ID, w.flow, domain.NodeRef{ID: pre.ID, Version: flowView.Nodes[pre.ID]}))
 	if fv.Properties["title"] != "B" || !mainView.Contains(*w.req.Post) {
 		t.Fatalf("flow view %v, main view %v", flowView.Nodes, mainView.Nodes)
@@ -104,7 +104,7 @@ func testChangeViewOfAFlow(t *testing.T, repo Repo) {
 	}
 	checkViewPages(t, g, View{Change: c.ID, Flow: w.flow}, flowNodes)
 	// accepted: nothing of the flow is reviewed yet
-	if a := must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, w.flow, ViewAccepted)); !a.Contains(pre) {
+	if a := must[domain.Commit](t)(g.ChangeView(ctx, c.ID, w.flow, ViewAccepted)); !a.Contains(pre) {
 		t.Fatalf("flow accepted view: %v", a.Nodes)
 	}
 }
@@ -117,7 +117,7 @@ func testChangeWorld(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", ForkCommit: f.base.ID, OwnBranch: true}))
 	mod := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "PSP v2"}))
 	must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, mod.ID, edit{Properties: map[string]any{"title": "Use PSP v2"}}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-9", Type: "Requirement", Rationale: "new",
@@ -157,13 +157,13 @@ func testChangeWorld(t *testing.T, repo Repo) {
 	}
 	check(read(g.ChangeWorld), "Use PSP v2")
 	checkChangeHoods(t, g, c.ID)
-	// the graph a call on the change reads stays its reference baseline
+	// the graph a call on the change reads stays its reference commit
 	if ref := read(g.ChangeGraph); ref.nodes["REQ-1"].Properties["title"] != "Use PSP v1" || ref.nodes["REQ-9"].ID != "" {
 		t.Fatalf("change graph: %+v", ref.nodes)
 	}
 	// committed: the version it wrote on its branch, the created node still a draft
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, mod.ID, "u", "ok"))
-	must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
+	must[domain.Commit](t)(g.CommitChange(ctx, c.ID, ""))
 	w := read(g.ChangeWorld)
 	check(w, "Use PSP v2")
 	if w.nodes["REQ-1"].Version != f.req.Version+1 || w.nodes["REQ-9"].Version != 0 {

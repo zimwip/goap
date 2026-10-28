@@ -1,5 +1,5 @@
 // Catalogs shared by the explorers, the tester and search: methodologies
-// (all versions), baselines, changes.
+// (all versions), commits, changes.
 import { SvelteMap } from 'svelte/reactivity';
 import { isMeta } from './session.svelte';
 import {
@@ -7,7 +7,7 @@ import {
   graph,
   errorMessage,
   compareVersions,
-  type Baseline,
+  type Commit,
   type Change,
   type Methodology,
   type MethodologySummary,
@@ -25,7 +25,7 @@ function catalog<T>(): Catalog<T> {
 }
 
 export const methodologies: Catalog<MethodologySummary> = $state(catalog());
-export const baselines: Catalog<Baseline> = $state(catalog());
+export const commits: Catalog<Commit> = $state(catalog());
 export const changes: Catalog<Change> = $state(catalog());
 
 async function fill<T>(c: Catalog<T>, fn: () => Promise<T[]>): Promise<void> {
@@ -45,24 +45,24 @@ export function refreshMethodologies(): Promise<void> {
   return fill(methodologies, async () => (await registry.listMethodologies(true)).methodologies ?? []);
 }
 
-let baselinesFor = '';
+let commitsFor = '';
 
-/** The namespace the `baselines` catalog currently holds. */
-export function baselinesNamespace(): string {
-  return baselinesFor;
+/** The namespace the `commits` catalog currently holds. */
+export function commitsNamespace(): string {
+  return commitsFor;
 }
 
-/** Baselines are namespace-scoped: this replaces the store's contents with that namespace's baselines. */
-export function refreshBaselines(namespace: string): Promise<void> {
-  baselinesFor = namespace;
-  return fill(baselines, async () => (await graph.listBaselines(namespace)).baselines ?? []);
+/** Commits are namespace-scoped: this replaces the store's contents with that namespace's commits. */
+export function refreshCommits(namespace: string): Promise<void> {
+  commitsFor = namespace;
+  return fill(commits, async () => (await graph.listCommits(namespace)).commits ?? []);
 }
 
-/** The baselines of every namespace holding nodes (newest first in each), the meta-domain methodology aside. */
-export async function baselinesByNamespace(signal?: AbortSignal): Promise<{ namespace: string; baselines: Baseline[] }[]> {
+/** The commits of every namespace holding nodes (newest first in each), the meta-domain methodology aside. */
+export async function commitsByNamespace(signal?: AbortSignal): Promise<{ namespace: string; commits: Commit[] }[]> {
   const nss = ((await graph.listNamespaces(signal)).namespaces ?? []).filter((n) => !isMeta(n));
   return Promise.all(
-    nss.map(async (namespace) => ({ namespace, baselines: [...((await graph.listBaselines(namespace, signal)).baselines ?? [])].reverse() })),
+    nss.map(async (namespace) => ({ namespace, commits: [...((await graph.listCommits(namespace, signal)).commits ?? [])].reverse() })),
   );
 }
 

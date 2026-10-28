@@ -147,7 +147,7 @@ export interface MergeConflict {
 
 /** The conflicts the rebase of a change left, which stopped its apply (ADR 0101): the impacts and the names of what conflicts. */
 export interface RebaseTask {
-  /** the branch the change was rebased onto (a sub-change: its parent change), and the head baseline or parent id */
+  /** the branch the change was rebased onto (a sub-change: its parent change), and the head commit or parent id */
   branch?: string;
   onto?: string;
   impacts?: { impact?: string; key?: string; conflicts?: string[] }[];
@@ -428,7 +428,7 @@ export interface Process {
   /** calling process (sub-agent) */
   parentId?: string;
   usage?: Usage;
-  baselineId?: string;
+  forkCommit?: string;
   title?: string;
   /** OpenTelemetry trace (root "process" span) */
   traceId?: string;
@@ -594,8 +594,8 @@ export interface Resolution {
   skip?: boolean;
 }
 
-/** A node whose version differs between two baselines. */
-export interface BaselineDiff {
+/** A node whose version differs between two commits. */
+export interface CommitDiff {
   node?: string;
   key?: string;
   type?: string;
@@ -698,7 +698,7 @@ export interface AttachChangeRequest {
   intent?: string;
   namespace?: string;
   ownerOrg?: string;
-  baselineId?: string;
+  forkCommit?: string;
   /** key of the ProjectUnit the new change belongs to (empty: the caller's active project) */
   projectId?: string;
 }
@@ -818,7 +818,7 @@ export interface StartProcessRequest {
   methodology?: string;
   /** restricts identification to this agent */
   agent?: string;
-  baselineId?: string;
+  forkCommit?: string;
   changeId?: string;
   title?: string;
   intent: string;

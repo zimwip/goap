@@ -14,12 +14,12 @@ import (
 type GraphPort = graphapi.Port
 
 // viewOf is the view a process reads the graph in (ADR 0157): its change on its flow (the active option when it runs on
-// the main flow), else the main branch of its namespace at the baseline it started from.
+// the main flow), else the main branch of its namespace at the commit it started from.
 func viewOf(p *Process) graphapi.View {
 	if p.ChangeID != "" {
 		return graphapi.View{Change: p.ChangeID, Flow: p.Flow}
 	}
-	return graphapi.View{Namespace: p.Namespace, Branch: domain.MainBranch, Baseline: p.BaselineID}
+	return graphapi.View{Namespace: p.Namespace, Branch: domain.MainBranch, Commit: p.ForkCommit}
 }
 
 // MethodologyPort resolves methodologies (the registry): the latest

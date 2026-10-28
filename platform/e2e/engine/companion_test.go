@@ -290,7 +290,7 @@ func TestRunWaitsForTheChangesItDependsOn(t *testing.T) {
 		t.Fatal(err)
 	}
 	dep, err := g.CreateChange(ctx, graph.NewChange{Title: "first", Methodology: "dependent", Namespace: "alm", ProjectID: testProject,
-		BaselineID: head.ID, OwnBranch: true})
+		ForkCommit: head.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}

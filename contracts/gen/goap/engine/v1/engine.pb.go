@@ -1061,7 +1061,7 @@ func (x *HumanTask) GetDeclined() []string {
 // The conflicts a rebase left on a change before it commits (ADR 0101).
 type RebaseTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// the branch the change was rebased onto (a sub-change: its parent change), and the head baseline or parent id
+	// the branch the change was rebased onto (a sub-change: its parent change), and the head commit or parent id
 	Branch        string            `protobuf:"bytes,1,opt,name=branch,proto3" json:"branch,omitempty"`
 	Onto          string            `protobuf:"bytes,2,opt,name=onto,proto3" json:"onto,omitempty"`
 	Impacts       []*RebaseConflict `protobuf:"bytes,3,rep,name=impacts,proto3" json:"impacts,omitempty"`
@@ -2261,7 +2261,7 @@ type Process struct {
 	ParentId string `protobuf:"bytes,21,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
 	// totals over the steps
 	Usage      *Usage `protobuf:"bytes,22,opt,name=usage,proto3" json:"usage,omitempty"`
-	BaselineId string `protobuf:"bytes,23,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	ForkCommit string `protobuf:"bytes,23,opt,name=fork_commit,json=forkCommit,proto3" json:"fork_commit,omitempty"`
 	Title      string `protobuf:"bytes,24,opt,name=title,proto3" json:"title,omitempty"`
 	// OpenTelemetry trace of the process (root span "process")
 	TraceId string `protobuf:"bytes,25,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
@@ -2469,9 +2469,9 @@ func (x *Process) GetUsage() *Usage {
 	return nil
 }
 
-func (x *Process) GetBaselineId() string {
+func (x *Process) GetForkCommit() string {
 	if x != nil {
-		return x.BaselineId
+		return x.ForkCommit
 	}
 	return ""
 }
@@ -2558,10 +2558,10 @@ type StartProcessRequest struct {
 	// empty: the intent loop identifies the methodology and agent among every
 	// published methodology
 	Methodology string `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
-	// continue an existing change, or open one on baseline_id (empty: the latest baseline of the namespace of the
+	// continue an existing change, or open one on fork_commit (empty: the latest commit of the namespace of the
 	// identified methodology)
 	ChangeId   string `protobuf:"bytes,2,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
-	BaselineId string `protobuf:"bytes,3,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	ForkCommit string `protobuf:"bytes,3,opt,name=fork_commit,json=forkCommit,proto3" json:"fork_commit,omitempty"`
 	Title      string `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
 	Intent     string `protobuf:"bytes,5,opt,name=intent,proto3" json:"intent,omitempty"`
 	// skip the intent loop
@@ -2623,9 +2623,9 @@ func (x *StartProcessRequest) GetChangeId() string {
 	return ""
 }
 
-func (x *StartProcessRequest) GetBaselineId() string {
+func (x *StartProcessRequest) GetForkCommit() string {
 	if x != nil {
-		return x.BaselineId
+		return x.ForkCommit
 	}
 	return ""
 }
@@ -3816,7 +3816,7 @@ type AttachChangeRequest struct {
 	Intent     string `protobuf:"bytes,4,opt,name=intent,proto3" json:"intent,omitempty"`
 	Namespace  string `protobuf:"bytes,5,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	OwnerOrg   string `protobuf:"bytes,6,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
-	BaselineId string `protobuf:"bytes,7,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	ForkCommit string `protobuf:"bytes,7,opt,name=fork_commit,json=forkCommit,proto3" json:"fork_commit,omitempty"`
 	// key of the ProjectUnit the new change belongs to (empty: the caller's active project, from its
 	// token, else the root project, ADR 0039)
 	ProjectId     string `protobuf:"bytes,8,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
@@ -3896,9 +3896,9 @@ func (x *AttachChangeRequest) GetOwnerOrg() string {
 	return ""
 }
 
-func (x *AttachChangeRequest) GetBaselineId() string {
+func (x *AttachChangeRequest) GetForkCommit() string {
 	if x != nil {
-		return x.BaselineId
+		return x.ForkCommit
 	}
 	return ""
 }
@@ -7300,8 +7300,8 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\aplanner\x18\x14 \x01(\tR\aplanner\x12\x1b\n" +
 	"\tparent_id\x18\x15 \x01(\tR\bparentId\x12+\n" +
 	"\x05usage\x18\x16 \x01(\v2\x15.goap.engine.v1.UsageR\x05usage\x12\x1f\n" +
-	"\vbaseline_id\x18\x17 \x01(\tR\n" +
-	"baselineId\x12\x14\n" +
+	"\vfork_commit\x18\x17 \x01(\tR\n" +
+	"forkCommit\x12\x14\n" +
 	"\x05title\x18\x18 \x01(\tR\x05title\x12\x19\n" +
 	"\btrace_id\x18\x19 \x01(\tR\atraceId\x12\x18\n" +
 	"\atrigger\x18\x1a \x01(\tR\atrigger\x12\x12\n" +
@@ -7324,8 +7324,8 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x13StartProcessRequest\x12 \n" +
 	"\vmethodology\x18\x01 \x01(\tR\vmethodology\x12\x1b\n" +
 	"\tchange_id\x18\x02 \x01(\tR\bchangeId\x12\x1f\n" +
-	"\vbaseline_id\x18\x03 \x01(\tR\n" +
-	"baselineId\x12\x14\n" +
+	"\vfork_commit\x18\x03 \x01(\tR\n" +
+	"forkCommit\x12\x14\n" +
 	"\x05title\x18\x04 \x01(\tR\x05title\x12\x16\n" +
 	"\x06intent\x18\x05 \x01(\tR\x06intent\x12\x12\n" +
 	"\x04goal\x18\x06 \x01(\tR\x04goal\x12+\n" +
@@ -7423,8 +7423,8 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x06intent\x18\x04 \x01(\tR\x06intent\x12\x1c\n" +
 	"\tnamespace\x18\x05 \x01(\tR\tnamespace\x12\x1b\n" +
 	"\towner_org\x18\x06 \x01(\tR\bownerOrg\x12\x1f\n" +
-	"\vbaseline_id\x18\a \x01(\tR\n" +
-	"baselineId\x12\x1d\n" +
+	"\vfork_commit\x18\a \x01(\tR\n" +
+	"forkCommit\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\b \x01(\tR\tprojectId\"I\n" +
 	"\x14AttachChangeResponse\x121\n" +

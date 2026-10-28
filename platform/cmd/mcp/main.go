@@ -80,7 +80,7 @@ func main() {
 	// connectors whose lease ran out
 	events := platform.OptionalEvents(ctx, log)
 	defer events.Close()
-	// the policies, the organisation and the projects the platform graph delivers, read again when its baseline
+	// the policies, the organisation and the projects the platform graph delivers, read again when its commit
 	// events say the organisation moved (ADR 0154 §9)
 	if events != nil {
 		if err := directory.FollowEvents(events); err != nil {

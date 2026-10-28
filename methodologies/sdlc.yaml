@@ -220,7 +220,7 @@ conditions:
       artifacts.exists(p, p.target == "release_plan" && (size(p.data.releases) == 0
         || size(artifacts.filter(w, w.target == "deployment_wave")) >= size(p.data.pipeline)))
   - name: applied
-    description: The change is applied to the ALM repository (new baseline)
+    description: The change is applied to the ALM repository (new commit)
     expr: change.status == "applied"
   # --- proofs of concept and prototypes (ADR 0131): an action of kind poc of the register, opened by a person as a
   # sub-change of the poc methodology, concluded there, taken back here; one opened for the framing explores the need,
@@ -335,7 +335,7 @@ actions:
       {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}, {{ .Intent }}{{ if .Planned }}, planned{{ end }}) {{ .Rationale }}
       {{ end }}
       Needs and requirements of the ALM repository (key, type, properties):
-      {{ range .Baseline.Nodes }}{{ if or (isa .Type "alm@Need") (isa .Type "alm@Requirement") }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
+      {{ range .Commit.Nodes }}{{ if or (isa .Type "alm@Need") (isa .Type "alm@Requirement") }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
       {{ end }}{{ end }}
       Name only the elements of this layer the change itself concerns DIRECTLY; the propagation along the ALM links
       follows, and qualifies what it finds. For each one, declare a change impact:
@@ -375,7 +375,7 @@ actions:
       {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}, {{ .Intent }}{{ if .Planned }}, planned{{ end }}) {{ .Rationale }}
       {{ end }}
       Functions of the ALM repository (key, type, properties):
-      {{ range .Baseline.Nodes }}{{ if isa .Type "alm@Function" }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
+      {{ range .Commit.Nodes }}{{ if isa .Type "alm@Function" }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
       {{ end }}{{ end }}
       Name only the elements of this layer the change itself concerns (a new behaviour of an existing function, beyond what the impacted requirements carry); the propagation along the ALM links
       follows, and qualifies what it finds. For each one, declare a change impact:
@@ -415,7 +415,7 @@ actions:
       {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}, {{ .Intent }}{{ if .Planned }}, planned{{ end }}) {{ .Rationale }}
       {{ end }}
       Applications, solutions, interfaces, flows and data of the ALM repository (key, type, properties):
-      {{ range .Baseline.Nodes }}{{ if or (isa .Type "alm@Application") (isa .Type "alm@Solution") (isa .Type "alm@Interface") (isa .Type "alm@Flow") (isa .Type "alm@Data") }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
+      {{ range .Commit.Nodes }}{{ if or (isa .Type "alm@Application") (isa .Type "alm@Solution") (isa .Type "alm@Interface") (isa .Type "alm@Flow") (isa .Type "alm@Data") }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
       {{ end }}{{ end }}
       Name only the elements of this layer the change itself concerns (a contract, a flow or a data structure to change); the propagation along the ALM links
       follows, and qualifies what it finds. For each one, declare a change impact:
@@ -455,7 +455,7 @@ actions:
       {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}, {{ .Intent }}{{ if .Planned }}, planned{{ end }}) {{ .Rationale }}
       {{ end }}
       Components and build artifacts of the ALM repository (key, type, properties):
-      {{ range .Baseline.Nodes }}{{ if or (isa .Type "alm@Component") (isa .Type "alm@BuildArtifact") }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
+      {{ range .Commit.Nodes }}{{ if or (isa .Type "alm@Component") (isa .Type "alm@BuildArtifact") }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
       {{ end }}{{ end }}
       Name only the elements of this layer the change itself concerns (a technical change no function or application carries); the propagation along the ALM links
       follows, and qualifies what it finds. For each one, declare a change impact:
@@ -1170,7 +1170,7 @@ actions:
   - name: apply_change
     kind: builtin
     builtin: graph.apply
-    description: Apply the change to the ALM repository (new baseline, including releases and deployments)
+    description: Apply the change to the ALM repository (new commit, including releases and deployments)
     # the change commits delivered (ADR 0132): the gate of the delivery took it there
     pre: {reviewed: true, requirements_approved: true, rolled_out: true, "gate:software_delivery/delivery_gate": true}
     effects: {applied: true}

@@ -8,12 +8,12 @@ import (
 	"github.com/zimwip/goap/contracts/lnk"
 )
 
-// The change-stack (ADR 0133): a node version and a baseline are the application of the changes that led to them. The
+// The change-stack (ADR 0133): a node version and a commit are the application of the changes that led to them. The
 // graph already records, for every version, the change that wrote it (Node.ChangeID) and the changes whose merge made
-// it join other branches (node_branch), and for every baseline the change that left it, its parent and the head it
+// it join other branches (node_branch), and for every commit the change that left it, its parent and the head it
 // merged; the stack is what these records compose into, read back as a lineage. A version's lineage is the DAG of its
-// ancestors (Parents: two for a merge or a rebase); a baseline's is the DAG of the baselines it follows from (parent,
-// merged head) and, for a baseline that took a change in (fast-forward or merge), the baselines of that change's own
+// ancestors (Parents: two for a merge or a rebase); a commit's is the DAG of the commits it follows from (parent,
+// merged head) and, for a commit that took a change in (fast-forward or merge), the commits of that change's own
 // branch: its commits, its rebases, the sub-changes merged into it.
 
 // VersionJoin is a version joining a branch it was not written on, by the merge of a change (ADR 0032).
@@ -36,17 +36,17 @@ type VersionStep struct {
 	CreatedAt time.Time     `json:"createdAt"`
 }
 
-// BaselineStep is a baseline of the lineage of a baseline.
-type BaselineStep struct {
-	ID          BaselineID `json:"id"`
-	Name        string     `json:"name,omitempty"`
-	Branch      string     `json:"branch"`
-	Kind        string     `json:"kind,omitempty"`
-	Change      ChangeID   `json:"change"`
-	Parent      BaselineID `json:"parent,omitempty"`
-	MergedFrom  BaselineID `json:"mergedFrom,omitempty"`
-	RebasedFrom BaselineID `json:"rebasedFrom,omitempty"`
-	CreatedAt   time.Time  `json:"createdAt"`
+// CommitStep is a commit of the lineage of a commit.
+type CommitStep struct {
+	ID          CommitID  `json:"id"`
+	Name        string    `json:"name,omitempty"`
+	Branch      string    `json:"branch"`
+	Kind        string    `json:"kind,omitempty"`
+	Change      ChangeID  `json:"change"`
+	Parent      CommitID  `json:"parent,omitempty"`
+	MergedFrom  CommitID  `json:"mergedFrom,omitempty"`
+	RebasedFrom CommitID  `json:"rebasedFrom,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
 	// Merged are the sub-changes merged into Change (ADR 0103), oldest first: the work it brings is theirs too.
 	Merged []ChangeID `json:"merged,omitempty"`
 }
@@ -62,14 +62,14 @@ type StackChange struct {
 	OwnerOrg lnk.URL `json:"ownerOrg,omitzero"`
 }
 
-// ChangeStack is the stack of changes producing a node version or a baseline: the changes, oldest first, and the
-// lineage they are read from (Versions for a node version, Baselines for a baseline), oldest first. Truncated: the
+// ChangeStack is the stack of changes producing a node version or a commit: the changes, oldest first, and the
+// lineage they are read from (Versions for a node version, Commits for a commit), oldest first. Truncated: the
 // lineage was cut at the limit asked, its oldest part left out.
 type ChangeStack struct {
-	Changes   []StackChange  `json:"changes"`
-	Versions  []VersionStep  `json:"versions,omitempty"`
-	Baselines []BaselineStep `json:"baselines,omitempty"`
-	Truncated bool           `json:"truncated,omitempty"`
+	Changes   []StackChange `json:"changes"`
+	Versions  []VersionStep `json:"versions,omitempty"`
+	Commits   []CommitStep  `json:"commits,omitempty"`
+	Truncated bool          `json:"truncated,omitempty"`
 }
 
 // DefaultStackLimit is how many steps of a lineage a stack holds when none is asked.
@@ -114,20 +114,20 @@ func VersionLineage(versions []Node, joins []VersionJoin, v Version, limit int) 
 	return out, truncated
 }
 
-// BaselineLineage returns the lineage of baseline from, oldest first, read from the headers of the baselines of its
-// namespace (their nodes are not needed): the baselines it follows from (parent, merged head), each naming the
+// CommitLineage returns the lineage of commit from, oldest first, read from the headers of the commits of its
+// namespace (their nodes are not needed): the commits it follows from (parent, merged head), each naming the
 // sub-changes merged into its change (merged names them, recursively; nil: none), whose work it brings (the branch of a
-// change holds no baseline, ADR 0140). At most limit (the most recent kept; 0: DefaultStackLimit).
-func BaselineLineage(headers []Baseline, from BaselineID, merged func(ChangeID) []ChangeID, limit int) (out []BaselineStep, truncated bool) {
+// change holds no commit, ADR 0140). At most limit (the most recent kept; 0: DefaultStackLimit).
+func CommitLineage(headers []Commit, from CommitID, merged func(ChangeID) []ChangeID, limit int) (out []CommitStep, truncated bool) {
 	if limit <= 0 {
 		limit = DefaultStackLimit
 	}
-	byID := make(map[BaselineID]Baseline, len(headers))
+	byID := make(map[CommitID]Commit, len(headers))
 	for _, b := range headers {
 		byID[b.ID] = b
 	}
-	seen := map[BaselineID]bool{}
-	todo := []BaselineID{from}
+	seen := map[CommitID]bool{}
+	todo := []CommitID{from}
 	for len(todo) > 0 {
 		id := todo[0]
 		todo = todo[1:]
@@ -136,9 +136,9 @@ func BaselineLineage(headers []Baseline, from BaselineID, merged func(ChangeID) 
 			continue
 		}
 		seen[id] = true
-		step := BaselineStep{ID: b.ID, Name: b.Name, Branch: BranchOf(b.Branch), Kind: b.Kind, Change: b.ChangeID, Parent: b.ParentID,
+		step := CommitStep{ID: b.ID, Name: b.Name, Branch: BranchOf(b.Branch), Kind: b.Kind, Change: b.ChangeID, Parent: b.ParentID,
 			MergedFrom: b.MergedFrom, RebasedFrom: b.RebasedFrom, CreatedAt: b.CreatedAt}
-		if merged != nil && b.ChangeID != "" && (b.Kind == BaselineFastForward || b.Kind == BaselineMerge) {
+		if merged != nil && b.ChangeID != "" && (b.Kind == CommitKindFastForward || b.Kind == CommitKindMerge) {
 			step.Merged = merged(b.ChangeID)
 		}
 		out = append(out, step)
@@ -153,7 +153,7 @@ func BaselineLineage(headers []Baseline, from BaselineID, merged func(ChangeID) 
 
 // StackChangeIDs returns the changes of a lineage, in the order they first appear (oldest first): for a version,
 // the change that wrote it, then the changes whose merge made it join a branch.
-func StackChangeIDs(versions []VersionStep, baselines []BaselineStep) []ChangeID {
+func StackChangeIDs(versions []VersionStep, commits []CommitStep) []ChangeID {
 	var out []ChangeID
 	seen := map[ChangeID]bool{}
 	add := func(c ChangeID) {
@@ -168,7 +168,7 @@ func StackChangeIDs(versions []VersionStep, baselines []BaselineStep) []ChangeID
 			add(j.Change)
 		}
 	}
-	for _, b := range baselines {
+	for _, b := range commits {
 		for _, m := range b.Merged {
 			add(m)
 		}

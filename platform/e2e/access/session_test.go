@@ -34,7 +34,7 @@ func TestSessionOfAdminMemberAndReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	ref := team.Ref()
-	if _, err := g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "reader", Baseline: head.ID, By: "test", BaselineName: "reader", Edits: []graph.NodeEdit{
+	if _, err := g.CommitEdits(ctx, graph.Edits{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "reader", Commit: head.ID, By: "test", CommitName: "reader", Edits: []graph.NodeEdit{
 		{Key: access.PlatformAssignmentKey("team-a"), Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleReader}}.Props(), Rationale: "t",
 			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &ref}}},
 	}}); err != nil {

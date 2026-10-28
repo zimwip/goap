@@ -98,7 +98,7 @@ func (ev TriggerEvent) activation() map[string]any {
 			data = map[string]any{}
 		}
 		out["change"] = map[string]any{"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
-			"methodology": c.Methodology, "goal": c.Goal, "baseline": string(c.BaselineID), "items": int64(len(c.Items)), "data": data,
+			"methodology": c.Methodology, "goal": c.Goal, "commit": string(c.ForkCommit), "items": int64(len(c.Items)), "data": data,
 			"state": c.State, "parent": string(c.ParentID), "project": c.ProjectID.Key}
 	}
 	if p := ev.Process; p != nil {
@@ -517,11 +517,11 @@ func (t *TriggerManager) start(ctx context.Context, key string, s TriggerState, 
 		if err != nil {
 			return nil, err
 		}
-		b, err := t.Engine.latestBaseline(ctx, domain.NamespaceOf(m.Namespace()))
+		b, err := t.Engine.latestCommit(ctx, domain.NamespaceOf(m.Namespace()))
 		if err != nil {
 			return nil, err
 		}
-		req.BaselineID = b
+		req.ForkCommit = b
 		// the new change acts in the project of the event (ADR 0159): what reacts to a change is about that project
 		req.ProjectID = ev.projectKey()
 	}
@@ -539,8 +539,8 @@ func (t *TriggerManager) start(ctx context.Context, key string, s TriggerState, 
 	return p, nil
 }
 
-func (e *Engine) latestBaseline(ctx context.Context, namespace string) (domain.BaselineID, error) {
-	bs, err := e.Graph.Baselines(ctx, namespace)
+func (e *Engine) latestCommit(ctx context.Context, namespace string) (domain.CommitID, error) {
+	bs, err := e.Graph.Commits(ctx, namespace)
 	if err != nil {
 		return "", err
 	}

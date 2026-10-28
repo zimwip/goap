@@ -14,21 +14,21 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// This file is the export and import of the graph of a namespace as a snapshot (ADR 0104): the state a baseline
+// This file is the export and import of the graph of a namespace as a snapshot (ADR 0104): the state a commit
 // holds, without its history (no version, no branch, no change), and its import as one change made of node creations
 // and modifications, left for review like any other change.
 
 // SnapshotFormat names the format of a graph snapshot (JSON).
 const SnapshotFormat = "goap.graph.snapshot/v1"
 
-// Snapshot is the state of the graph of a namespace at a baseline, without history: its nodes named by key, their
+// Snapshot is the state of the graph of a namespace at a commit, without history: its nodes named by key, their
 // outgoing links to the other nodes of the snapshot.
 type Snapshot struct {
 	Format    string `json:"format"`
 	Namespace string `json:"namespace"`
-	// Branch and Baseline say where the state was read; informative, an import ignores them.
+	// Branch and Commit say where the state was read; informative, an import ignores them.
 	Branch     string         `json:"branch,omitempty"`
-	Baseline   string         `json:"baseline,omitempty"`
+	Commit     string         `json:"commit,omitempty"`
 	ExportedAt time.Time      `json:"exportedAt"`
 	Nodes      []SnapshotNode `json:"nodes"`
 }
@@ -64,33 +64,33 @@ type SnapshotLink struct {
 	Properties map[string]any `json:"props,omitempty"`
 }
 
-// ExportSnapshot reads the state of a namespace at a baseline (empty: the head of the branch, main by default) as a
+// ExportSnapshot reads the state of a namespace at a commit (empty: the head of the branch, main by default) as a
 // snapshot. The links kept are the ones between nodes of the namespace: a link to another namespace is left out.
-func (g *Graph) ExportSnapshot(ctx context.Context, namespace, branch string, baseline domain.BaselineID) (Snapshot, error) {
+func (g *Graph) ExportSnapshot(ctx context.Context, namespace, branch string, commit domain.CommitID) (Snapshot, error) {
 	namespace = domain.NamespaceOf(namespace)
 	branch = domain.BranchOf(branch)
 	s := Snapshot{Format: SnapshotFormat, Namespace: namespace, Branch: branch, ExportedAt: g.now().UTC(), Nodes: []SnapshotNode{}}
-	if baseline == "" {
+	if commit == "" {
 		head, err := g.BranchHead(ctx, namespace, branch)
 		if err != nil {
 			return s, err
 		}
-		baseline = head.ID
+		commit = head.ID
 	} else {
-		b, err := g.Baseline(ctx, baseline)
+		b, err := g.Commit(ctx, commit)
 		if err != nil {
 			return s, err
 		}
 		if b.Namespace != namespace {
-			return s, invalidf("baseline %s is a baseline of %s, not %s", baseline, b.Namespace, namespace)
+			return s, invalidf("commit %s is a commit of %s, not %s", commit, b.Namespace, namespace)
 		}
 		s.Branch = domain.BranchOf(b.Branch)
 	}
-	s.Baseline = string(baseline)
-	if baseline == "" {
+	s.Commit = string(commit)
+	if commit == "" {
 		return s, nil // nothing committed yet: the empty state
 	}
-	nodes, links, err := g.BaselineGraph(ctx, baseline)
+	nodes, links, err := g.CommitGraph(ctx, commit)
 	if err != nil {
 		return s, err
 	}
@@ -275,7 +275,7 @@ func (g *Graph) ImportSnapshot(ctx context.Context, in SnapshotImport) (res Snap
 	var nodes []domain.Node
 	var links []domain.Link
 	if head.ID != "" {
-		if nodes, links, err = g.BaselineGraph(ctx, head.ID); err != nil {
+		if nodes, links, err = g.CommitGraph(ctx, head.ID); err != nil {
 			return res, err
 		}
 	}

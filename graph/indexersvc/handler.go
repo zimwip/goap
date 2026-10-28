@@ -122,8 +122,8 @@ func (h *Handler) Reindex(ctx context.Context, r *connect.Request[indexv1.Reinde
 }
 
 func (h *Handler) Status(context.Context, *connect.Request[indexv1.StatusRequest]) (*connect.Response[indexv1.StatusResponse], error) {
-	semantic, store, nodes, baselines, changes, errs := h.Service.Status()
-	return connect.NewResponse(&indexv1.StatusResponse{Semantic: semantic, Store: store, NodesIndexed: nodes, BaselinesFollowed: baselines, ChangesIndexed: changes, Errors: errs}), nil
+	semantic, store, nodes, commits, changes, errs := h.Service.Status()
+	return connect.NewResponse(&indexv1.StatusResponse{Semantic: semantic, Store: store, NodesIndexed: nodes, CommitsFollowed: commits, ChangesIndexed: changes, Errors: errs}), nil
 }
 
 // inViews scopes a search of nodes to the views it names (ADR 0157), one per namespace: the namespaces are theirs, and

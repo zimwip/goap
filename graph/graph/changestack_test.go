@@ -9,7 +9,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// The change-stack of a version and of a baseline (ADR 0133): two sub-changes of one parent change the same node, the
+// The change-stack of a version and of a commit (ADR 0133): two sub-changes of one parent change the same node, the
 // second is rebased onto the first (a version of reason rebase, its second parent the first's), the parent commits both.
 // The stack of the node's version on main and the one of main's head both name the four changes, sub-changes first,
 // and each sub-change under its parent.
@@ -19,8 +19,8 @@ func testChangeStack(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newOrgWorld(t, repo)
 	g := w.g
-	before := must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch))
-	parent := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "parent", BaselineID: w.base.ID, OwnBranch: true}))
+	before := must[domain.Commit](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch))
+	parent := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "parent", ForkCommit: w.base.ID, OwnBranch: true}))
 	a := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "sub A", ParentID: parent.ID}))
 	b := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "sub B", ParentID: parent.ID}))
 	pre := w.cmp3.Ref()
@@ -34,9 +34,9 @@ func testChangeStack(t *testing.T, repo Repo) {
 	}
 	write(a, map[string]any{"title": "from A"})
 	write(b, map[string]any{"title": "three", "version": "2.0"})
-	must[domain.Baseline](t)(g.apply(ctx, a.ID, ""))
-	must[domain.Baseline](t)(g.apply(ctx, b.ID, "")) // rebased onto A: different properties, no conflict
-	head := must[domain.Baseline](t)(g.apply(ctx, parent.ID, ""))
+	must[domain.Commit](t)(g.apply(ctx, a.ID, ""))
+	must[domain.Commit](t)(g.apply(ctx, b.ID, "")) // rebased onto A: different properties, no conflict
+	head := must[domain.Commit](t)(g.apply(ctx, parent.ID, ""))
 
 	n := must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3"))
 	// B's draft was rebased onto A's version at its commit (ADR 0165): its version derives from A's
@@ -78,21 +78,21 @@ func testChangeStack(t *testing.T, repo Repo) {
 		t.Fatalf("a lineage cut at 2: %+v", cut)
 	}
 
-	bs := must[domain.ChangeStack](t)(g.ChangeStack(ctx, ChangeStackQuery{Baseline: head.ID}))
+	bs := must[domain.ChangeStack](t)(g.ChangeStack(ctx, ChangeStackQuery{Commit: head.ID}))
 	got = ids(bs.Changes)
 	for _, c := range []domain.ChangeID{a.ID, b.ID, parent.ID} {
 		if !slices.Contains(got, c) {
 			t.Fatalf("main's head is made of %v, missing %s", got, c)
 		}
 	}
-	if bs.Baselines[len(bs.Baselines)-1].ID != head.ID {
-		t.Fatalf("the lineage ends with the baseline asked: %+v", bs.Baselines)
+	if bs.Commits[len(bs.Commits)-1].ID != head.ID {
+		t.Fatalf("the lineage ends with the commit asked: %+v", bs.Commits)
 	}
-	// the branch of a change holds no baseline (ADR 0140): the parent's commit names the sub-changes merged into it
-	if !slices.ContainsFunc(bs.Baselines, func(s domain.BaselineStep) bool {
+	// the branch of a change holds no commit (ADR 0140): the parent's commit names the sub-changes merged into it
+	if !slices.ContainsFunc(bs.Commits, func(s domain.CommitStep) bool {
 		return s.Change == parent.ID && slices.Equal(s.Merged, []domain.ChangeID{a.ID, b.ID})
 	}) {
-		t.Fatalf("A and B are merged into the parent's commit: %+v", bs.Baselines)
+		t.Fatalf("A and B are merged into the parent's commit: %+v", bs.Commits)
 	}
 
 	added, removed := mustStacks(t)(g.DiffStacks(ctx, before.ID, head.ID))

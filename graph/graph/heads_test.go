@@ -8,7 +8,7 @@ import (
 )
 
 // A graph keeps the head of a branch its views read in memory: its own commits move it at once, the commits of
-// another graph sharing its store reach it by their baseline events, which carry the header and the versions moved,
+// another graph sharing its store reach it by their commit events, which carry the header and the versions moved,
 // so nothing is read again (heads.go); an event out of order leaves the head unknown, read at the next view.
 func TestHeadsFollowCommitsAndEvents(t *testing.T) {
 	forEachRepo(t, func(t *testing.T, repo Repo) {
@@ -51,16 +51,16 @@ func TestHeadsFollowCommitsAndEvents(t *testing.T) {
 		if v := version(reader); v != n.Version {
 			t.Fatalf("reader reads v%d before the events, want the head it keeps, v%d", v, n.Version)
 		}
-		var events []domain.BaselineEvent
+		var events []domain.CommitEvent
 		sink.mu.Lock()
 		for _, v := range sink.vals {
-			if ev, ok := v.(domain.BaselineEvent); ok && ev.Namespace == domain.DefaultNamespace && ev.Branch == domain.MainBranch {
+			if ev, ok := v.(domain.CommitEvent); ok && ev.Namespace == domain.DefaultNamespace && ev.Branch == domain.MainBranch {
 				events = append(events, ev)
 			}
 		}
 		sink.mu.Unlock()
 		if len(events) == 0 {
-			t.Fatal("no baseline event of main")
+			t.Fatal("no commit event of main")
 		}
 		for _, ev := range events {
 			if ev.Seq == 0 || !ev.Whole {
@@ -81,7 +81,7 @@ func TestHeadsFollowCommitsAndEvents(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		reader.HeadEvent(domain.BaselineEvent{ID: "unknown", Namespace: domain.DefaultNamespace, Branch: domain.MainBranch, Parent: "elsewhere", Seq: head.Seq + 1, Whole: true})
+		reader.HeadEvent(domain.CommitEvent{ID: "unknown", Namespace: domain.DefaultNamespace, Branch: domain.MainBranch, Parent: "elsewhere", Seq: head.Seq + 1, Whole: true})
 		if v := version(reader); v != n3.Version {
 			t.Fatalf("reader reads v%d after a gap, want the head read again, v%d", v, n3.Version)
 		}

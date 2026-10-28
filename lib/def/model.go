@@ -142,7 +142,7 @@ const (
 var AttributeWidgets = []string{WidgetText, WidgetTextarea, WidgetDropdown, WidgetCheckbox, WidgetDate, WidgetDirectory, WidgetCode, WidgetURL}
 
 // Attribute diffs: how the user interface shows what changed between two values of an attribute (a version and the
-// next, a draft and its base, two baselines).
+// next, a draft and its base, two commits).
 const (
 	// DiffValue shows the two values whole, the old one struck out (the usual diff of a number, a date, an enum...).
 	DiffValue = "value"

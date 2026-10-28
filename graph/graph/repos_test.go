@@ -33,7 +33,7 @@ func testChange(t *testing.T, g *Graph, namespace string) domain.ChangeID {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: namespace, BaselineID: head.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: namespace, ForkCommit: head.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func seedNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) {
 	if err != nil {
 		return n, err
 	}
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: n.Namespace, Title: "seed " + n.Key, BaselineID: head.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: n.Namespace, Title: "seed " + n.Key, ForkCommit: head.ID})
 	if err != nil {
 		return n, err
 	}
@@ -330,18 +330,18 @@ func checkCommitImpacts(ctx context.Context, tx Tx, id domain.ChangeID, events [
 	return nil
 }
 
-// pinBaseline makes the head of main hold exactly the given versions on top of what it holds: the fixtures that
+// pinCommit makes the head of main hold exactly the given versions on top of what it holds: the fixtures that
 // arrange a world with seedNode (versions written outside the merge of a change) need them part of the state a
 // change starts from. It is written through an applied change like any other state (ADR 0056); production code has
 // no such operation, a state is only ever what a change left.
-func pinBaseline(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRef) domain.Baseline {
+func pinCommit(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRef) domain.Commit {
 	t.Helper()
 	ctx := context.Background()
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	namespace = domain.NamespaceOf(namespace)
-	var out domain.Baseline
+	var out domain.Commit
 	err := g.repo.InTx(ctx, func(tx Tx) error {
 		head, err := branchHead(ctx, tx, namespace, domain.MainBranch)
 		if err != nil {
@@ -377,18 +377,18 @@ func pinBaseline(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRe
 		}
 		org, proj := g.Structure(domain.StructureOrganisation), g.Structure(domain.StructureProject)
 		c := domain.Change{ID: domain.ChangeID(g.newID()), Title: "Pin", Namespace: namespace, Status: domain.ChangeApplied, Intent: "Pin node versions for a fixture",
-			BaselineID: head.ID, Branch: domain.MainBranch, OwnerOrg: g.StructureURL(domain.StructureOrganisation, org.Root), ProjectID: g.StructureURL(domain.StructureProject, proj.Root), CreatedAt: g.now()}
+			ForkCommit: head.ID, Branch: domain.MainBranch, OwnerOrg: g.StructureURL(domain.StructureOrganisation, org.Root), ProjectID: g.StructureURL(domain.StructureProject, proj.Root), CreatedAt: g.now()}
 		if err := tx.PutChange(ctx, c); err != nil {
 			return err
 		}
-		out = domain.Baseline{ID: domain.BaselineID(g.newID()), Name: "Pin", Namespace: namespace, Branch: domain.MainBranch, ParentID: head.ID, ChangeID: c.ID, Nodes: nodes, CreatedAt: g.now()}
-		if err := tx.PutBaseline(ctx, out); err != nil {
+		out = domain.Commit{ID: domain.CommitID(g.newID()), Name: "Pin", Namespace: namespace, Branch: domain.MainBranch, ParentID: head.ID, ChangeID: c.ID, Nodes: nodes, CreatedAt: g.now()}
+		if err := tx.PutCommit(ctx, out); err != nil {
 			return err
 		}
 		if err := g.advanceBranch(ctx, tx, namespace, domain.MainBranch, out); err != nil {
 			return err
 		}
-		c.ResultBaselineID = out.ID
+		c.LandedCommit = out.ID
 		return tx.PutChange(ctx, c)
 	})
 	if err != nil {

@@ -60,8 +60,8 @@ func (d docs) link(t *testing.T, typ string, from, to domain.Node) {
 
 func (d docs) change(t *testing.T) domain.Change {
 	t.Helper()
-	head := must[domain.Baseline](t)(d.g.BranchHead(d.ctx, "docs", domain.MainBranch))
-	return must[domain.Change](t)(d.g.CreateChange(d.ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: "docs", Title: "restructure", Intent: "restructure", BaselineID: head.ID, OwnBranch: true}))
+	head := must[domain.Commit](t)(d.g.BranchHead(d.ctx, "docs", domain.MainBranch))
+	return must[domain.Change](t)(d.g.CreateChange(d.ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: "docs", Title: "restructure", Intent: "restructure", ForkCommit: head.ID, OwnBranch: true}))
 }
 
 // outKeys are the keys the latest version of a node on main links to, as "type:key".
@@ -171,7 +171,7 @@ func testMergeFromTheParent(t *testing.T, repo Repo) {
 	if err := g.acceptImpact(ctx, c.ID, res.Successors[0].ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	base := must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
+	base := must[domain.Commit](t)(g.apply(ctx, c.ID, ""))
 
 	// the lineage, on the first version of the successor written at commit
 	committedC := must[domain.Node](t)(g.NodeByKey(ctx, "docs", "C"))
@@ -194,15 +194,15 @@ func testMergeFromTheParent(t *testing.T, repo Repo) {
 		t.Errorf("X derives nothing: %v", got)
 	}
 
-	// one baseline holds it all, and nothing disappeared
-	nodes, _ := must2(t)(g.BaselineGraph(ctx, base.ID))
+	// one commit holds it all, and nothing disappeared
+	nodes, _ := must2(t)(g.CommitGraph(ctx, base.ID))
 	keys := map[string]bool{}
 	for _, n := range nodes {
 		keys[n.Key] = true
 	}
 	for _, k := range []string{"A", "B", "C", "F", "X"} {
 		if !keys[k] {
-			t.Errorf("the baseline lost %s", k)
+			t.Errorf("the commit lost %s", k)
 		}
 	}
 	if got := d.outKeys(t, "F"); !slices.Equal(got, []string{"docs@contains:C", "docs@contains:X"}) {
@@ -302,7 +302,7 @@ func testSplit(t *testing.T, repo Repo) {
 	for _, s := range res.Successors {
 		must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, s.ID, "tester", "ok"))
 	}
-	must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
+	must[domain.Commit](t)(g.apply(ctx, c.ID, ""))
 	if got := must[[]domain.Node](t)(g.DerivedNodes(ctx, a.Ref())); len(got) != 2 {
 		t.Errorf("A derives into C and D: %v", got)
 	}
@@ -382,7 +382,7 @@ func testRestructureRefusals(t *testing.T, repo Repo) {
 	}
 }
 
-// What a change creates cannot be merged: it has no parent in the baseline.
+// What a change creates cannot be merged: it has no parent in the commit.
 func TestRestructureRefusesCreatedSources(t *testing.T) {
 	forEachRepo(t, func(t *testing.T, repo Repo) {
 		d := newDocs(t, repo)
@@ -418,7 +418,7 @@ func testOriginsGateAtCommit(t *testing.T, repo Repo) {
 		t.Fatalf("commit with an origin awaiting its review: %v", err)
 	}
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, res.Parents[0].ID, domain.ReviewAccepted, "tester", "ok again"))
-	must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
+	must[domain.Commit](t)(g.apply(ctx, c.ID, ""))
 }
 
 // The export names what a successor derives from (ADR 0077).

@@ -51,8 +51,8 @@ func testAttachChange(t *testing.T, repo Repo) {
 	gate := &chainGate{}
 	g.Lifecycles = gate
 
-	release := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "R1", Methodology: "release", BaselineID: w.base.ID, OwnBranch: true}))
-	cand := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "fix", Methodology: "sdlc", BaselineID: w.base.ID, OwnBranch: true}))
+	release := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "R1", Methodology: "release", ForkCommit: w.base.ID, OwnBranch: true}))
+	cand := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "fix", Methodology: "sdlc", ForkCommit: w.base.ID, OwnBranch: true}))
 	names := func(c domain.Change) []string {
 		var out []string
 		for _, r := range c.Guardians {
@@ -86,7 +86,7 @@ func testAttachChange(t *testing.T, repo Repo) {
 	}
 
 	// a change of a methodology the parent does not integrate is not attached
-	other := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "other", Methodology: "release", BaselineID: w.base.ID, OwnBranch: true}))
+	other := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "other", Methodology: "release", ForkCommit: w.base.ID, OwnBranch: true}))
 	if _, err := g.AttachChange(ctx, other.ID, release.ID); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("attach outside integrates: %v", err)
 	}

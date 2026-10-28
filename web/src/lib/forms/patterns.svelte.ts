@@ -47,9 +47,9 @@ export async function loadPatterns(): Promise<void> {
       .sort((a, b) => a.label.localeCompare(b.label));
     formPatterns.error = '';
   } catch (e) {
-    // no baseline yet: no shared pattern
+    // no commit yet: no shared pattern
     formPatterns.shared = [];
-    formPatterns.error = /no baseline/.test(errorMessage(e)) ? '' : errorMessage(e);
+    formPatterns.error = /no commit/.test(errorMessage(e)) ? '' : errorMessage(e);
   } finally {
     formPatterns.loaded = true;
   }
@@ -65,7 +65,7 @@ export async function savePattern(p: { name: string; label: string; description:
   const props = { name, label: p.label.trim() || name, description: p.description.trim(), form: p.form as never };
   const n = findNode(h, ns.platform, patternType(), key);
   const edit = n ? updateNodeItem(n, props) : createNodeItem(key, patternType(), props);
-  await applyOnMain(ns.platform, `Form pattern ${name}`, `Share the form pattern ${name} with the form designer`, h.baselineId, [edit]);
+  await applyOnMain(ns.platform, `Form pattern ${name}`, `Share the form pattern ${name} with the form designer`, h.commitId, [edit]);
   await loadPatterns();
 }
 
@@ -74,6 +74,6 @@ export async function retirePattern(name: string): Promise<void> {
   const h = await headGraph(ns.platform);
   const n = findNode(h, ns.platform, patternType(), patternKey(name));
   if (!n) throw new Error(`No shared pattern ${name}.`);
-  await applyOnMain(ns.platform, `Retire form pattern ${name}`, `The form pattern ${name} is no longer offered`, h.baselineId, [retireNodeItem(n)]);
+  await applyOnMain(ns.platform, `Retire form pattern ${name}`, `The form pattern ${name} is no longer offered`, h.commitId, [retireNodeItem(n)]);
   await loadPatterns();
 }

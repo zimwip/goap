@@ -12,7 +12,7 @@
   let follow = $state(true);
   let scroller = $state<HTMLDivElement>();
 
-  const KINDS = ['process', 'change', 'node', 'baseline', 'job', 'model', 'methodology', 'domain', 'connector', 'conversation', 'preferences'];
+  const KINDS = ['process', 'change', 'node', 'commit', 'job', 'model', 'methodology', 'domain', 'connector', 'conversation', 'preferences'];
 
   const q = $derived(filter.trim().toLowerCase());
   const rows = $derived(

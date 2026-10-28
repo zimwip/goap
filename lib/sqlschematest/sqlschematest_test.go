@@ -80,3 +80,17 @@ func TestRenameColumn(t *testing.T) {
 		t.Fatalf("index columns = %q", ix.Cols)
 	}
 }
+
+// A renamed index keeps its table and columns under its new name.
+func TestRenameIndex(t *testing.T) {
+	s := load(t, map[string]string{
+		"d/0001.sql": `CREATE TABLE t (id text PRIMARY KEY, seq integer); CREATE INDEX t_seq ON t (seq);`,
+		"d/0002.sql": `ALTER TABLE t RENAME TO u; ALTER INDEX t_seq RENAME TO u_seq;`,
+	}, "d")
+	if _, ok := s.Indexes["t_seq"]; ok {
+		t.Fatalf("the old name stays: %v", s.Indexes)
+	}
+	if ix := s.Indexes["u_seq"]; ix == nil || ix.Table != "u" || ix.Cols != "seq" {
+		t.Fatalf("index = %+v", ix)
+	}
+}

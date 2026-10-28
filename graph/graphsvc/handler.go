@@ -253,40 +253,40 @@ func (h *Handler) DeleteTag(ctx context.Context, r *connect.Request[graphv1.Dele
 	return res(&graphv1.DeleteTagResponse{}, h.Graph.DeleteTag(ctx, domain.TagID(r.Msg.Id)))
 }
 
-func (h *Handler) ListBaselines(ctx context.Context, r *connect.Request[graphv1.ListBaselinesRequest]) (*connect.Response[graphv1.ListBaselinesResponse], error) {
-	out := &graphv1.ListBaselinesResponse{}
-	var bs []domain.Baseline
+func (h *Handler) ListCommits(ctx context.Context, r *connect.Request[graphv1.ListCommitsRequest]) (*connect.Response[graphv1.ListCommitsResponse], error) {
+	out := &graphv1.ListCommitsResponse{}
+	var bs []domain.Commit
 	var err error
 	switch {
 	case r.Msg.Branch != "":
-		var hist graph.BaselineHistory
-		hist, err = h.Graph.BaselineHistory(ctx, r.Msg.Namespace, r.Msg.Branch, r.Msg.Before, int(r.Msg.Limit))
-		bs, out.Next = hist.Baselines, hist.Next
+		var hist graph.CommitHistory
+		hist, err = h.Graph.CommitHistory(ctx, r.Msg.Namespace, r.Msg.Branch, r.Msg.Before, int(r.Msg.Limit))
+		bs, out.Next = hist.Commits, hist.Next
 		for _, b := range hist.Related {
-			out.Related = append(out.Related, pbconv.BaselineToPB(b))
+			out.Related = append(out.Related, pbconv.CommitToPB(b))
 		}
 	case len(r.Msg.Ids) > 0:
-		ids := make([]domain.BaselineID, len(r.Msg.Ids))
+		ids := make([]domain.CommitID, len(r.Msg.Ids))
 		for i, id := range r.Msg.Ids {
-			ids[i] = domain.BaselineID(id)
+			ids[i] = domain.CommitID(id)
 		}
-		bs, err = h.Graph.BaselineHeadersOf(ctx, r.Msg.Namespace, ids)
+		bs, err = h.Graph.CommitHeadersOf(ctx, r.Msg.Namespace, ids)
 	default:
-		bs, err = h.Graph.BaselineHeaders(ctx, r.Msg.Namespace) // their headers: the states are read one at a time
+		bs, err = h.Graph.CommitHeaders(ctx, r.Msg.Namespace) // their headers: the states are read one at a time
 	}
 	for _, b := range bs {
-		out.Baselines = append(out.Baselines, pbconv.BaselineToPB(b))
+		out.Commits = append(out.Commits, pbconv.CommitToPB(b))
 	}
 	return res(out, err)
 }
 
-func (h *Handler) GetBaselineGraph(ctx context.Context, r *connect.Request[graphv1.GetBaselineGraphRequest]) (*connect.Response[graphv1.GetBaselineGraphResponse], error) {
-	id := domain.BaselineID(r.Msg.Id)
-	b, err := h.Graph.Baseline(ctx, id)
+func (h *Handler) GetCommitGraph(ctx context.Context, r *connect.Request[graphv1.GetCommitGraphRequest]) (*connect.Response[graphv1.GetCommitGraphResponse], error) {
+	id := domain.CommitID(r.Msg.Id)
+	b, err := h.Graph.Commit(ctx, id)
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	nodes, links, err := h.Graph.BaselineGraph(ctx, id)
+	nodes, links, err := h.Graph.CommitGraph(ctx, id)
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
@@ -298,13 +298,13 @@ func (h *Handler) GetBaselineGraph(ctx context.Context, r *connect.Request[graph
 	nodes, links = reach.Keep(slices.Clone(all), links) // what the caller reads only (ADR 0161 §5)
 	suspects, err := h.Graph.SuspectLinks(ctx, id)
 	_, suspects = reach.Keep(all, suspects)
-	return res(&graphv1.GetBaselineGraphResponse{Baseline: pbconv.BaselineToPB(b), Nodes: pbconv.NodesToPB(nodes),
+	return res(&graphv1.GetCommitGraphResponse{Commit: pbconv.CommitToPB(b), Nodes: pbconv.NodesToPB(nodes),
 		Links: pbconv.LinksToPB(links), SuspectLinks: pbconv.LinksToPB(suspects)}, err)
 }
 
-// GetBaselineDelta serves graph.Graph.BaselineDelta: what a snapshot of the head reads when the head moved (ADR 0143 §4).
-func (h *Handler) GetBaselineDelta(ctx context.Context, r *connect.Request[graphv1.GetBaselineDeltaRequest]) (*connect.Response[graphv1.GetBaselineDeltaResponse], error) {
-	d, err := h.Graph.BaselineDelta(ctx, domain.BaselineID(r.Msg.From), domain.BaselineID(r.Msg.To))
+// GetCommitDelta serves graph.Graph.CommitDelta: what a snapshot of the head reads when the head moved (ADR 0143 §4).
+func (h *Handler) GetCommitDelta(ctx context.Context, r *connect.Request[graphv1.GetCommitDeltaRequest]) (*connect.Response[graphv1.GetCommitDeltaResponse], error) {
+	d, err := h.Graph.CommitDelta(ctx, domain.CommitID(r.Msg.From), domain.CommitID(r.Msg.To))
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
@@ -317,7 +317,7 @@ func (h *Handler) GetBaselineDelta(ctx context.Context, r *connect.Request[graph
 	for i, id := range d.Removed {
 		removed[i] = string(id)
 	}
-	return res(&graphv1.GetBaselineDeltaResponse{From: pbconv.BaselineToPB(d.From), To: pbconv.BaselineToPB(d.To), Nodes: pbconv.NodesToPB(d.Nodes),
+	return res(&graphv1.GetCommitDeltaResponse{From: pbconv.CommitToPB(d.From), To: pbconv.CommitToPB(d.To), Nodes: pbconv.NodesToPB(d.Nodes),
 		Links: pbconv.LinksToPB(d.Links), Removed: removed}, nil)
 }
 
@@ -409,9 +409,9 @@ func (h *Handler) ExportChangeProvenance(ctx context.Context, r *connect.Request
 		Filename: "change-" + string(c.ID) + ".prov.jsonld", MediaType: prov.MediaType}), nil
 }
 
-// ExportGraph serves the state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
+// ExportGraph serves the state of a namespace at a commit as a JSON snapshot, without history (ADR 0104).
 func (h *Handler) ExportGraph(ctx context.Context, r *connect.Request[graphv1.ExportGraphRequest]) (*connect.Response[graphv1.ExportGraphResponse], error) {
-	s, err := h.Graph.ExportSnapshot(ctx, r.Msg.Namespace, r.Msg.Branch, domain.BaselineID(r.Msg.BaselineId))
+	s, err := h.Graph.ExportSnapshot(ctx, r.Msg.Namespace, r.Msg.Branch, domain.CommitID(r.Msg.CommitId))
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
@@ -464,17 +464,17 @@ func (h *Handler) ListChangeEvents(ctx context.Context, r *connect.Request[graph
 	return connect.NewResponse(out), nil
 }
 
-func (h *Handler) ListBaselineNodes(ctx context.Context, r *connect.Request[graphv1.ListBaselineNodesRequest]) (*connect.Response[graphv1.ListBaselineNodesResponse], error) {
+func (h *Handler) ListCommitNodes(ctx context.Context, r *connect.Request[graphv1.ListCommitNodesRequest]) (*connect.Response[graphv1.ListCommitNodesResponse], error) {
 	page, err := h.Graph.ViewNodes(ctx, pbconv.GraphViewFromPB(r.Msg.View), graph.NodeQuery{Type: r.Msg.Type, Text: r.Msg.Query,
 		IncludeDeleted: r.Msg.IncludeDeleted, Change: domain.ChangeID(r.Msg.ChangeId), Offset: int(r.Msg.Offset), Limit: int(r.Msg.Limit)})
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	b, err := h.Graph.BaselineHeader(ctx, page.Baseline) // the header: the page is what is sent
+	b, err := h.Graph.CommitHeader(ctx, page.Commit) // the header: the page is what is sent
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	out := &graphv1.ListBaselineNodesResponse{Baseline: pbconv.BaselineToPB(b), Nodes: pbconv.NodesToPB(page.Nodes), Total: int32(page.Total)}
+	out := &graphv1.ListCommitNodesResponse{Commit: pbconv.CommitToPB(b), Nodes: pbconv.NodesToPB(page.Nodes), Total: int32(page.Total)}
 	for _, t := range page.Types {
 		out.Types = append(out.Types, &graphv1.TypeCount{Type: t.Type, Count: int32(t.Count)})
 	}
@@ -489,18 +489,18 @@ func (h *Handler) ListViewNodes(ctx context.Context, r *connect.Request[graphv1.
 	return connect.NewResponse(&graphv1.ListViewNodesResponse{Nodes: pbconv.NodesToPB(nodes)}), nil
 }
 
-func (h *Handler) ListBaselineLinks(ctx context.Context, r *connect.Request[graphv1.ListBaselineLinksRequest]) (*connect.Response[graphv1.ListBaselineLinksResponse], error) {
-	id := domain.BaselineID(r.Msg.BaselineId)
-	b, err := h.Graph.BaselineHeader(ctx, id) // the header: the page is what is sent
+func (h *Handler) ListCommitLinks(ctx context.Context, r *connect.Request[graphv1.ListCommitLinksRequest]) (*connect.Response[graphv1.ListCommitLinksResponse], error) {
+	id := domain.CommitID(r.Msg.CommitId)
+	b, err := h.Graph.CommitHeader(ctx, id) // the header: the page is what is sent
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	page, err := h.Graph.BaselineLinks(ctx, id, graph.LinkQuery{Type: r.Msg.Type, Text: r.Msg.Query,
+	page, err := h.Graph.CommitLinks(ctx, id, graph.LinkQuery{Type: r.Msg.Type, Text: r.Msg.Query,
 		Offset: int(r.Msg.Offset), Limit: int(r.Msg.Limit)})
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	out := &graphv1.ListBaselineLinksResponse{Baseline: pbconv.BaselineToPB(b), Links: pbconv.LinksToPB(page.Links), Total: int32(page.Total)}
+	out := &graphv1.ListCommitLinksResponse{Commit: pbconv.CommitToPB(b), Links: pbconv.LinksToPB(page.Links), Total: int32(page.Total)}
 	for _, t := range page.Types {
 		out.Types = append(out.Types, &graphv1.TypeCount{Type: t.Type, Count: int32(t.Count)})
 	}
@@ -552,7 +552,7 @@ func (h *Handler) QueryView(ctx context.Context, r *connect.Request[graphv1.Quer
 		return nil, rpcerr.ToConnect(err)
 	}
 	out := &graphv1.QueryViewResponse{Columns: res.Columns, Nodes: pbconv.NodesToPB(res.Nodes), Links: pbconv.LinksToPB(res.Links),
-		Truncated: res.Truncated, Notes: res.Notes, Reads: int32(res.Reads), BaselineId: string(res.Baseline)}
+		Truncated: res.Truncated, Notes: res.Notes, Reads: int32(res.Reads), CommitId: string(res.Commit)}
 	for _, row := range res.Rows {
 		lv, err := structpb.NewList(row)
 		if err != nil {
@@ -573,7 +573,7 @@ func (h *Handler) ResolveView(ctx context.Context, r *connect.Request[graphv1.Re
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	out := &graphv1.ResolveViewResponse{Namespace: st.Namespace, BaselineId: string(st.Baseline), MainHead: st.MainHead, Versions: map[string]int32{}}
+	out := &graphv1.ResolveViewResponse{Namespace: st.Namespace, CommitId: string(st.Commit), MainHead: st.MainHead, Versions: map[string]int32{}}
 	for id, v := range st.Versions {
 		out.Versions[string(id)] = int32(v)
 	}
@@ -639,7 +639,7 @@ func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.C
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ParentID: domain.ChangeID(r.Msg.ParentId), OwnerOrg: owner, OwnBranch: r.Msg.OwnBranch, Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology, MethodologyVersion: r.Msg.MethodologyVersion,
-		BaselineID: domain.BaselineID(r.Msg.BaselineId), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data), ProjectID: projectID})
+		ForkCommit: domain.CommitID(r.Msg.ForkCommit), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data), ProjectID: projectID})
 	return res(&graphv1.CreateChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }
 
@@ -936,10 +936,10 @@ func (h *Handler) CommitEdits(ctx context.Context, r *connect.Request[graphv1.Co
 	for _, e := range r.Msg.Events {
 		carried = append(carried, graph.CarriedEvent{Subject: e.Subject, Payload: e.Payload})
 	}
-	out, err := h.Graph.Commit(ctx, graph.Commit{Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
-		Data: pbconv.Map(r.Msg.Data), Baseline: domain.BaselineID(r.Msg.BaselineId), By: by, BaselineName: r.Msg.BaselineName, Edits: edits,
+	out, err := h.Graph.CommitEdits(ctx, graph.Edits{Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
+		Data: pbconv.Map(r.Msg.Data), Commit: domain.CommitID(r.Msg.CommitId), By: by, CommitName: r.Msg.CommitName, Edits: edits,
 		OwnerOrg: owner, ProjectID: projectID, Events: carried})
-	return res(&graphv1.CommitEditsResponse{ChangeId: string(out.Change), Baseline: pbconv.BaselineToPB(out.Baseline)}, err)
+	return res(&graphv1.CommitEditsResponse{ChangeId: string(out.Change), Commit: pbconv.CommitToPB(out.Commit)}, err)
 }
 
 // ---- Node edits (ADR 0076) ---------------------------------------------------------------------------------
@@ -1398,8 +1398,8 @@ func (h *Handler) CommitChange(ctx context.Context, r *connect.Request[graphv1.C
 	for i, n := range r.Msg.Nodes {
 		nodes[i] = domain.NodeID(n)
 	}
-	b, err := h.Graph.CommitChangeNodes(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName, nodes)
-	return res(&graphv1.CommitChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
+	b, err := h.Graph.CommitChangeNodes(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.CommitName, nodes)
+	return res(&graphv1.CommitChangeResponse{Commit: pbconv.CommitToPB(b)}, err)
 }
 
 func (h *Handler) TransitionChange(ctx context.Context, r *connect.Request[graphv1.TransitionChangeRequest]) (*connect.Response[graphv1.TransitionChangeResponse], error) {
@@ -1427,7 +1427,7 @@ func (h *Handler) GetChangeTransitions(ctx context.Context, r *connect.Request[g
 }
 
 func (h *Handler) CreateBranch(ctx context.Context, r *connect.Request[graphv1.CreateBranchRequest]) (*connect.Response[graphv1.CreateBranchResponse], error) {
-	b, err := h.Graph.CreateBranch(ctx, graph.NewBranch{Name: r.Msg.Name, Namespace: r.Msg.Namespace, From: domain.BaselineID(r.Msg.FromBaseline), Origin: r.Msg.Origin, Description: r.Msg.Description})
+	b, err := h.Graph.CreateBranch(ctx, graph.NewBranch{Name: r.Msg.Name, Namespace: r.Msg.Namespace, From: domain.CommitID(r.Msg.FromCommit), Origin: r.Msg.Origin, Description: r.Msg.Description})
 	return res(&graphv1.CreateBranchResponse{Branch: pbconv.BranchToPB(b)}, err)
 }
 
@@ -1438,7 +1438,7 @@ func (h *Handler) ListBranches(ctx context.Context, r *connect.Request[graphv1.L
 		out.Branches = append(out.Branches, pbconv.BranchToPB(b))
 	}
 	for _, b := range heads {
-		out.Heads = append(out.Heads, pbconv.BaselineToPB(b))
+		out.Heads = append(out.Heads, pbconv.CommitToPB(b))
 	}
 	for k, n := range counts {
 		out.Counts[k] = int32(n)
@@ -1453,10 +1453,10 @@ func (h *Handler) GetBranch(ctx context.Context, r *connect.Request[graphv1.GetB
 	}
 	if r.Msg.HeaderOnly {
 		head, err := h.Graph.BranchHeadHeader(ctx, r.Msg.Namespace, b.Name)
-		return res(&graphv1.GetBranchResponse{Branch: pbconv.BranchToPB(b), Head: pbconv.BaselineToPB(head)}, err)
+		return res(&graphv1.GetBranchResponse{Branch: pbconv.BranchToPB(b), Head: pbconv.CommitToPB(head)}, err)
 	}
 	head, err := h.Graph.BranchHead(ctx, r.Msg.Namespace, b.Name)
-	return res(&graphv1.GetBranchResponse{Branch: pbconv.BranchToPB(b), Head: pbconv.BaselineToPB(head)}, err)
+	return res(&graphv1.GetBranchResponse{Branch: pbconv.BranchToPB(b), Head: pbconv.CommitToPB(head)}, err)
 }
 
 func (h *Handler) SetBranchStatus(ctx context.Context, r *connect.Request[graphv1.SetBranchStatusRequest]) (*connect.Response[graphv1.SetBranchStatusResponse], error) {
@@ -1483,21 +1483,21 @@ func (h *Handler) MergeBranch(ctx context.Context, r *connect.Request[graphv1.Me
 		req.Resolutions[domain.NodeID(id)] = graph.Resolution{Props: pbconv.Map(res.GetProps()), Skip: res.GetSkip()}
 	}
 	out, err := h.Graph.MergeBranch(ctx, req)
-	return res(&graphv1.MergeBranchResponse{Change: pbconv.ChangeToPB(out.Change), Baseline: pbconv.BaselineToPB(out.Baseline), Plan: pbconv.MergePlanToPB(out.Plan)}, err)
+	return res(&graphv1.MergeBranchResponse{Change: pbconv.ChangeToPB(out.Change), Commit: pbconv.CommitToPB(out.Commit), Plan: pbconv.MergePlanToPB(out.Plan)}, err)
 }
 
-func (h *Handler) DiffBaselines(ctx context.Context, r *connect.Request[graphv1.DiffBaselinesRequest]) (*connect.Response[graphv1.DiffBaselinesResponse], error) {
-	ds, err := h.Graph.DiffBaselines(ctx, domain.BaselineID(r.Msg.From), domain.BaselineID(r.Msg.To))
+func (h *Handler) DiffCommits(ctx context.Context, r *connect.Request[graphv1.DiffCommitsRequest]) (*connect.Response[graphv1.DiffCommitsResponse], error) {
+	ds, err := h.Graph.DiffCommits(ctx, domain.CommitID(r.Msg.From), domain.CommitID(r.Msg.To))
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
 	reach, err := h.Graph.Reach(ctx)
-	out := &graphv1.DiffBaselinesResponse{}
+	out := &graphv1.DiffCommitsResponse{}
 	for _, d := range ds {
 		if (d.From != nil && !reach.Sees(*d.From)) || (d.To != nil && !reach.Sees(*d.To)) {
 			continue // a node the caller does not read (ADR 0161 §5)
 		}
-		pb := &graphv1.BaselineDiff{Node: string(d.Node), Key: d.Key, Type: d.Type, Kind: d.Kind}
+		pb := &graphv1.CommitDiff{Node: string(d.Node), Key: d.Key, Type: d.Type, Kind: d.Kind}
 		if d.From != nil {
 			pb.From = pbconv.NodeToPB(*d.From)
 		}
@@ -1510,16 +1510,16 @@ func (h *Handler) DiffBaselines(ctx context.Context, r *connect.Request[graphv1.
 		return res(out, err)
 	}
 	ctx = h.Identity.Context(ctx, r.Header())
-	added, removed, err := h.Graph.DiffStacks(ctx, domain.BaselineID(r.Msg.From), domain.BaselineID(r.Msg.To))
+	added, removed, err := h.Graph.DiffStacks(ctx, domain.CommitID(r.Msg.From), domain.CommitID(r.Msg.To))
 	out.ChangesAdded, out.ChangesRemoved = pbconv.StackChangesToPB(readableStack(ctx, added)), pbconv.StackChangesToPB(readableStack(ctx, removed))
 	return res(out, err)
 }
 
-// GetChangeStack serves the change-stack of a node version or a baseline (ADR 0133).
+// GetChangeStack serves the change-stack of a node version or a commit (ADR 0133).
 func (h *Handler) GetChangeStack(ctx context.Context, r *connect.Request[graphv1.GetChangeStackRequest]) (*connect.Response[graphv1.GetChangeStackResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	s, err := h.Graph.ChangeStack(ctx, graph.ChangeStackQuery{Node: domain.NodeRef{ID: domain.NodeID(r.Msg.NodeId), Version: domain.Version(r.Msg.Version)},
-		Baseline: domain.BaselineID(r.Msg.BaselineId), Limit: int(r.Msg.Limit)})
+		Commit: domain.CommitID(r.Msg.CommitId), Limit: int(r.Msg.Limit)})
 	s.Changes = readableStack(ctx, s.Changes)
 	return res(&graphv1.GetChangeStackResponse{Stack: pbconv.ChangeStackToPB(s)}, err)
 }
@@ -1650,7 +1650,7 @@ func (h *Handler) ListExecutions(ctx context.Context, r *connect.Request[graphv1
 	return connect.NewResponse(out), nil
 }
 
-// RepublishIndex publishes again the node and baseline events so that an index can be rebuilt (ADR 0026).
+// RepublishIndex publishes again the node and commit events so that an index can be rebuilt (ADR 0026).
 func (h *Handler) RepublishIndex(ctx context.Context, r *connect.Request[graphv1.RepublishIndexRequest]) (*connect.Response[graphv1.RepublishIndexResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: authz.From(ctx), Action: "admin", Resource: authz.Resource{Type: "platform"}}); err != nil {
@@ -1738,7 +1738,7 @@ func (h *Handler) DiffFlows(ctx context.Context, r *connect.Request[graphv1.Diff
 
 func (h *Handler) GetChangeView(ctx context.Context, r *connect.Request[graphv1.GetChangeViewRequest]) (*connect.Response[graphv1.GetChangeViewResponse], error) {
 	b, err := h.Graph.ChangeView(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, r.Msg.Level)
-	return res(&graphv1.GetChangeViewResponse{Baseline: pbconv.BaselineToPB(b)}, err)
+	return res(&graphv1.GetChangeViewResponse{Commit: pbconv.CommitToPB(b)}, err)
 }
 
 func (h *Handler) GetChangeGraph(ctx context.Context, r *connect.Request[graphv1.GetChangeGraphRequest]) (*connect.Response[graphv1.GetChangeGraphResponse], error) {

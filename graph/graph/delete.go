@@ -65,15 +65,15 @@ func (g *Graph) ImpactNodeDelete(ctx context.Context, id domain.ChangeID, in Nod
 	return
 }
 
-// tombstone is the version that deleted a node in the reference baseline of change c (ADR 0172): the node's last
-// commit on the baseline's branch up to its order, else, past the fork of the branch, on the branch it was forked from,
+// tombstone is the version that deleted a node in the reference commit of change c (ADR 0172): the node's last
+// commit on the commit's branch up to its order, else, past the fork of the commit, on the branch it was forked from,
 // when that commit deletes the node; nil otherwise. One indexed read of that node per branch of the chain, never the
 // history of the namespace.
 func (g *Graph) tombstone(ctx context.Context, tx Tx, c domain.Change, nid domain.NodeID) (*domain.Node, error) {
-	if c.BaselineID == "" {
+	if c.ForkCommit == "" {
 		return nil, nil
 	}
-	b, err := headerOf(ctx, tx, c.BaselineID)
+	b, err := headerOf(ctx, tx, c.ForkCommit)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (g *Graph) tombstone(ctx context.Context, tx Tx, c domain.Change, nid domai
 		if err != nil {
 			return nil, err
 		}
-		if cv, ok := got[nid]; ok {
+		if cv, ok := got[nid]; ok && !cv.Revert {
 			if !cv.Deleted {
 				return nil, nil
 			}
@@ -92,11 +92,10 @@ func (g *Graph) tombstone(ctx context.Context, tx Tx, c domain.Change, nid domai
 			}
 			return &n, nil
 		}
-		fork, err := branchFork(ctx, tx, b.Namespace, b.Branch)
-		if err != nil || fork == "" {
-			return nil, err
+		if b.Fork == "" {
+			return nil, nil
 		}
-		if b, err = headerOf(ctx, tx, fork); err != nil {
+		if b, err = headerOf(ctx, tx, b.Fork); err != nil {
 			return nil, err
 		}
 	}

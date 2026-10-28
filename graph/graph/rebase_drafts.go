@@ -80,7 +80,7 @@ func (g *Graph) rebaseDraftsTx(ctx context.Context, tx Tx, c domain.Change, node
 	// the head of the branch the change merges into, read for those nodes only (ADR 0137)
 	var target string
 	var head map[domain.NodeID]domain.Version
-	// a change that committed nothing yet starts from the head now: its fork (its reference baseline) moves there
+	// a change that committed nothing yet starts from the head now: its fork (its reference commit) moves there
 	follow := !hasCommits(c)
 	if isOwn {
 		to, err := ontoOf(ctx, tx, own)
@@ -110,8 +110,8 @@ func (g *Graph) rebaseDraftsTx(ctx context.Context, tx Tx, c domain.Change, node
 		if head, err = versionsAt(ctx, tx, h.ID, ids); err != nil {
 			return "", nil, err
 		}
-		if follow && h.ID != c.BaselineID {
-			if err := g.moveBaseline(ctx, tx, c.ID, h.ID); err != nil {
+		if follow && h.ID != c.ForkCommit {
+			if err := g.moveCommit(ctx, tx, c.ID, h.ID); err != nil {
 				return "", nil, err
 			}
 		}
@@ -144,7 +144,7 @@ func (g *Graph) rebaseDraftsTx(ctx context.Context, tx Tx, c domain.Change, node
 	if len(moved) == 0 {
 		return target, nil, nil
 	}
-	ix, err := g.typesAt(ctx, tx, c.BaselineID)
+	ix, err := g.typesAt(ctx, tx, c.ForkCommit)
 	if err != nil {
 		return "", nil, err
 	}
@@ -288,21 +288,21 @@ func rebasedMoves(lc *domain.Lifecycle, events []domain.ImpactEvent, impact doma
 	return nil, false
 }
 
-// moveBaseline moves the reference baseline of a change with no branch of its own yet (the one its branch will be forked
-// from), journaled as a rebase is (HeaderBaselineID).
-func (g *Graph) moveBaseline(ctx context.Context, tx Tx, id domain.ChangeID, to domain.BaselineID) error {
+// moveCommit moves the reference commit of a change with no branch of its own yet (the one its branch will be forked
+// from), journaled as a rebase is (HeaderForkCommit).
+func (g *Graph) moveCommit(ctx context.Context, tx Tx, id domain.ChangeID, to domain.CommitID) error {
 	c, err := tx.Change(ctx, id)
 	if err != nil {
 		return err
 	}
 	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
-		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderBaselineID: {From: string(c.BaselineID), To: string(to)}}})
+		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderForkCommit: {From: string(c.ForkCommit), To: string(to)}}})
 	if err != nil {
 		return err
 	}
 	if _, err := tx.AppendLog(ctx, e); err != nil {
 		return err
 	}
-	c.BaselineID = to
+	c.ForkCommit = to
 	return tx.PutChange(ctx, c)
 }

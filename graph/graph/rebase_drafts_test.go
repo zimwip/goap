@@ -30,10 +30,10 @@ func testRebaseDraftsAtCommit(t *testing.T, repo Repo) {
 		return must[domain.Node](t)(seedNode(ctx, g, newNode{Key: key, Type: "Item", Properties: map[string]any{"title": key}, State: "a"}))
 	}
 	one, two, three := seed("IT-1"), seed("IT-2"), seed("IT-3")
-	base := pinBaseline(t, g, "", one.Ref(), two.Ref(), three.Ref())
+	base := pinCommit(t, g, "", one.Ref(), two.Ref(), three.Ref())
 	work := func(title string, n domain.Node, props map[string]any, moves ...string) (domain.Change, domain.ChangeImpactID) {
 		t.Helper()
-		c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: title, BaselineID: base.ID}))
+		c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: title, ForkCommit: base.ID}))
 		ref := n.Ref()
 		id := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: title}}))[0].ID
 		if props != nil {
@@ -60,7 +60,7 @@ func testRebaseDraftsAtCommit(t *testing.T, repo Repo) {
 	a3, _ := work("A3", three, nil, "c")
 	b3, i3 := work("B3", three, nil, "d")
 	for _, c := range []domain.Change{a1, a2, a3} {
-		must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
+		must[domain.Commit](t)(g.apply(ctx, c.ID, ""))
 	}
 	heads := map[domain.NodeID]domain.Version{}
 	for _, n := range []domain.Node{one, two, three} {
@@ -68,8 +68,8 @@ func testRebaseDraftsAtCommit(t *testing.T, repo Repo) {
 	}
 
 	for _, c := range []domain.Change{b1, b2} {
-		res := must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
-		if res.Kind != domain.BaselineFastForward {
+		res := must[domain.Commit](t)(g.apply(ctx, c.ID, ""))
+		if res.Kind != domain.CommitKindFastForward {
 			t.Fatalf("%s merges as a fast-forward: %+v", c.Title, res)
 		}
 	}

@@ -44,7 +44,7 @@
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
-  import { baselineHoods, branchView, changeHoods, forkView, hoodIndex, hoodOf, indexOf, type GraphIndex, type Hood } from '../../graphIndex';
+  import { commitHoods, branchView, changeHoods, forkView, hoodIndex, hoodOf, indexOf, type GraphIndex, type Hood } from '../../graphIndex';
   import { MAIN_BRANCH, namespaceOf } from '../../namespace';
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { assistField, registerAssist } from '../../assist/registry.svelte';
@@ -80,7 +80,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   let busy = $state('');
   let editing = $state(false);
   let reload = $state(0);
-  /** the Graph pane: the node at its center and the link it shows, in the head baseline (as in the Baseline tab) */
+  /** the Graph pane: the node at its center and the link it shows, in the head commit (as in the Commit tab) */
   let graphNode = $state('');
   let graphLink = $state<Link | undefined>();
   /** the nodes the Graph pane shows around its center: its filter, its query's answer (NodeQuery) */
@@ -110,7 +110,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   /** the world of the change as read so far: the neighbourhoods read in it (its fork as it left it, its commits, its
    * drafts; GetNodeNeighbourhood in the change), the node's then the ones of the nodes unfolded */
   let worldHoods = $state<Hood[]>([]);
-  const worldIndex = $derived(work ? hoodIndex(work.change.baselineId ?? '', worldHoods) : undefined);
+  const worldIndex = $derived(work ? hoodIndex(work.change.forkCommit ?? '', worldHoods) : undefined);
   /** the neighbourhoods to read again when the world moves: the ones read so far, the node's first */
   const readAgain = (hoods: Hood[]) => [...new Set([id, ...hoods.flatMap((h) => (h.node?.id ? [h.node.id] : []))])].slice(0, 20);
 
@@ -161,7 +161,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
       nodeNamespace = namespace;
       const hid = (await graph.getBranch(namespace, MAIN_BRANCH, signal)).head?.id ?? '';
       const again = headAt?.id === hid && headAt.node === id ? readAgain(headAt.hoods) : [id];
-      headAt = { id: hid, node: id, hoods: hid ? await Promise.all(again.map((n) => hoodOf(baselineHoods(branchView(namespace, hid)), n, signal))) : [] };
+      headAt = { id: hid, node: id, hoods: hid ? await Promise.all(again.map((n) => hoodOf(commitHoods(branchView(namespace, hid)), n, signal))) : [] };
       if (!changes.loaded) void refreshChanges();
     } catch (e) {
       if (!signal?.aborted) error = errorMessage(e);
@@ -172,7 +172,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
 
   /** the fork of a change (the empty state for the first change of a namespace, ADR 0056) */
   const loadFork = async (c: Change): Promise<GraphIndex> =>
-    c.baselineId ? hoodIndex(c.baselineId, [await hoodOf(baselineHoods(await forkView(c)), id)]) : indexOf('', [], []);
+    c.forkCommit ? hoodIndex(c.forkCommit, [await hoodOf(commitHoods(await forkView(c)), id)]) : indexOf('', [], []);
   /** the neighbourhoods of the world of the change: the node's, and the ones read so far when it is the same change */
   let worldOf = '';
   async function loadWorld(flow = '') {
@@ -266,7 +266,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
         if (w === workId && f === workFlow) worldHoods = [...worldHoods, h];
       } else if (headAt?.id) {
         const at = headAt.id;
-        const h = await hoodOf(baselineHoods(branchView(nodeNamespace, at)), nid);
+        const h = await hoodOf(commitHoods(branchView(nodeNamespace, at)), nid);
         if (headAt?.id === at) headAt = { ...headAt, hoods: [...headAt.hoods, h] };
       }
     } catch (e) {
@@ -279,8 +279,8 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   let foundByKey = new Map<string, GraphNode>();
   /** the nodes matching a text in the view (ADR 0157): the world of the working change on its option, else the head */
   async function searchNodes(query: string): Promise<GraphNode[]> {
-    const view = work ? { changeId: work.change.id, flow: workFlow } : head?.baselineId ? branchView(nodeNamespace, head.baselineId) : undefined;
-    const found = view ? ((await graph.listBaselineNodes({ view, query, limit: 200 })).nodes ?? []) : [];
+    const view = work ? { changeId: work.change.id, flow: workFlow } : head?.commitId ? branchView(nodeNamespace, head.commitId) : undefined;
+    const found = view ? ((await graph.listCommitNodes({ view, query, limit: 200 })).nodes ?? []) : [];
     const out = found.filter((n) => !n.deleted);
     foundByKey = new Map(out.flatMap((n) => (n.key ? [[n.key, n] as const] : [])));
     return out;
@@ -296,7 +296,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
 
   /** the node in the working change, or in the current graph when there is none */
   const row = $derived.by<LifecycleRow | undefined>(() => {
-    // a node the change creates is not in its baseline: its row is the one whose written version is this node
+    // a node the change creates is not in its commit: its row is the one whose written version is this node
     if (work)
       return lifecycleRows(typeCatalog.cat, work.base.list, work.attached, work.change.nodes ?? [], work.posts, [id], !!workFlow).find(
         (r) => r.node.id === id || (!!r.created && r.impact?.post?.id === id),
@@ -335,10 +335,10 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   // --- the change followed ------------------------------------------------------------
   async function ensureChange(): Promise<string> {
     if (workId) return workId;
-    const baselineId = head?.baselineId;
-    if (!baselineId) throw new Error('There is no baseline to start a change from.');
+    const commitId = head?.commitId;
+    if (!commitId) throw new Error('There is no commit to start a change from.');
     // the change acts on the namespace of the node (ADR 0015 §2)
-    const c = (await graph.createChange({ title: `Edit ${stored?.key ?? shortId(id)}`, baselineId, namespace: stored?.namespace })).change;
+    const c = (await graph.createChange({ title: `Edit ${stored?.key ?? shortId(id)}`, forkCommit: commitId, namespace: stored?.namespace })).change;
     if (!c?.id) throw new Error('The change could not be created.');
     // a change created to edit a node is the change the person works in from now on: the one the editor follows
     if (!(await workIn(c)) || workId !== c.id) throw new Error(`Change “${c.title}” was created, but could not be selected: select it to edit the node.`);
@@ -740,15 +740,15 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
                 <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
               {/if}
               <NodeQuery view={{ changeId: work.change.id ?? '', flow: workFlow }} from={graphNode} fromKey={graphKey} fromType={graphHood.center?.type ?? typeName} namespace={stored.namespace ?? ''} bind:keep={graphKeep} onpick={pickInGraph} />
-              <NodeNeighbourhood baselineId={work.change.baselineId ?? ''} inChange={{ changeId: work.change.id ?? '', flow: workFlow }} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} bind:hood={graphHood} keep={graphKeep} details={false} compact fill {reload} />
+              <NodeNeighbourhood commitId={work.change.forkCommit ?? ''} inChange={{ changeId: work.change.id ?? '', flow: workFlow }} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} bind:hood={graphHood} keep={graphKeep} details={false} compact fill {reload} />
             </section>
-          {:else if !work && head?.baselineId && head.nodes.has(id)}
+          {:else if !work && head?.commitId && head.nodes.has(id)}
             <section class="card neighbourhood">
               {#if graphNode !== id || graphLink}
                 <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
               {/if}
-              <NodeQuery view={branchView(stored.namespace ?? '', head.baselineId)} from={graphNode} fromKey={graphKey} fromType={graphHood.center?.type ?? typeName} namespace={stored.namespace ?? ''} bind:keep={graphKeep} onpick={pickInGraph} />
-              <NodeNeighbourhood baselineId={head.baselineId} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} bind:hood={graphHood} keep={graphKeep} details={false} compact fill {reload} />
+              <NodeQuery view={branchView(stored.namespace ?? '', head.commitId)} from={graphNode} fromKey={graphKey} fromType={graphHood.center?.type ?? typeName} namespace={stored.namespace ?? ''} bind:keep={graphKeep} onpick={pickInGraph} />
+              <NodeNeighbourhood commitId={head.commitId} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} bind:hood={graphHood} keep={graphKeep} details={false} compact fill {reload} />
             </section>
           {:else}
             <p class="empty">{work ? 'This node is not in the world of the selected change.' : 'This node is not in the current graph (deleted, or only created by a change: select that change to see it).'}</p>

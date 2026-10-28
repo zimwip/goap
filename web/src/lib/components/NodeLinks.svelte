@@ -26,7 +26,7 @@
     total?: number;
     /** reads the next page of the links */
     onmore?: () => void;
-    /** the graph the targets are picked from (the working change's baseline, else the current graph) */
+    /** the graph the targets are picked from (the working change's commit, else the current graph) */
     index?: GraphIndex;
     readonly?: boolean;
     /** why the links cannot be changed now (shown when readonly) */

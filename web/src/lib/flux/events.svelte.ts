@@ -79,7 +79,7 @@ export function onPlatformEvent(fn: Listener): () => void {
   return () => listeners.delete(fn);
 }
 
-/** Calls `fn` for the events of one kind (`node`, `change`, `baseline`, `process`, `methodology`, `domain`, `job`,
+/** Calls `fn` for the events of one kind (`node`, `change`, `commit`, `process`, `methodology`, `domain`, `job`,
  * `model`, `connector`, `conversation`, `preferences`). */
 export function onKind(kind: string | string[], fn: Listener): () => void {
   const kinds = Array.isArray(kind) ? kind : [kind];

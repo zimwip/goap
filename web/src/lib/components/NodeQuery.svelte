@@ -18,7 +18,7 @@
     keep = $bindable(),
     onpick,
   }: {
-    /** the view the pane reads: the change on its flow, or a baseline of a branch */
+    /** the view the pane reads: the change on its flow, or a commit of a branch */
     view: GraphView;
     /** the node at the center, the query's `n` */
     from: string;

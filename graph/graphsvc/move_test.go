@@ -24,7 +24,7 @@ import (
 type moveEnv struct {
 	g    *graph.Graph
 	a    *access.Authorizer
-	base domain.Baseline
+	base domain.Commit
 }
 
 // moveWorld seeds the projects X, Y (both applying m1), Z (m2) and W (m1), a team whose developers work on X, Y and Z
@@ -60,7 +60,7 @@ func moveWorld(t *testing.T) moveEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Commit(ctx, graph.Commit{ProjectID: access.DefaultProject, Namespace: access.NamespaceOrganisation, Title: "projects", Baseline: head.ID, By: "test", BaselineName: "projects", Edits: edits}); err != nil {
+	if _, err := g.CommitEdits(ctx, graph.Edits{ProjectID: access.DefaultProject, Namespace: access.NamespaceOrganisation, Title: "projects", Commit: head.ID, By: "test", CommitName: "projects", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 	return moveEnv{g: g, a: a}

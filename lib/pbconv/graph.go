@@ -79,13 +79,13 @@ func GraphViewFromPB(v *graphv1.View) graphapi.View {
 	if v == nil {
 		return graphapi.View{}
 	}
-	return graphapi.View{Namespace: v.Namespace, Branch: v.Branch, Baseline: domain.BaselineID(v.BaselineId),
+	return graphapi.View{Namespace: v.Namespace, Branch: v.Branch, Commit: domain.CommitID(v.CommitId),
 		Change: domain.ChangeID(v.ChangeId), Flow: v.Flow}
 }
 
 // GraphViewToPB writes the view of a read (ADR 0157).
 func GraphViewToPB(v graphapi.View) *graphv1.View {
-	return &graphv1.View{Namespace: v.Namespace, Branch: v.Branch, BaselineId: string(v.Baseline), ChangeId: string(v.Change), Flow: v.Flow}
+	return &graphv1.View{Namespace: v.Namespace, Branch: v.Branch, CommitId: string(v.Commit), ChangeId: string(v.Change), Flow: v.Flow}
 }
 
 func RefPtrFromPB(r *graphv1.NodeRef) *domain.NodeRef {
@@ -220,13 +220,13 @@ func ViewFromPB(v *graphv1.NodeView) domain.NodeView {
 	return domain.NodeView{Node: NodeFromPB(v.Node), Latest: domain.Version(v.Latest), Out: LinksFromPB(v.Out), In: LinksFromPB(v.In), NotCommittable: v.NotCommittable}
 }
 
-func BaselineToPB(b domain.Baseline) *graphv1.Baseline {
+func CommitToPB(b domain.Commit) *graphv1.Commit {
 	nodes := make(map[string]int32, len(b.Nodes))
 	for id, v := range b.Nodes {
 		nodes[string(id)] = int32(v)
 	}
-	return &graphv1.Baseline{Id: string(b.ID), Name: b.Name, ParentId: string(b.ParentID), ChangeId: string(b.ChangeID), Nodes: nodes, CreatedAt: Time(b.CreatedAt),
-		Branch: domain.BranchOf(b.Branch), Namespace: domain.NamespaceOf(b.Namespace), MergedFrom: string(b.MergedFrom), Kind: b.Kind, RebasedFrom: string(b.RebasedFrom)}
+	return &graphv1.Commit{Id: string(b.ID), Name: b.Name, ParentId: string(b.ParentID), ChangeId: string(b.ChangeID), Nodes: nodes, CreatedAt: Time(b.CreatedAt),
+		Branch: domain.BranchOf(b.Branch), Namespace: domain.NamespaceOf(b.Namespace), MergedFrom: string(b.MergedFrom), Kind: b.Kind, RebasedFrom: string(b.RebasedFrom), Fork: string(b.Fork)}
 }
 
 // ChangeStackToPB converts a change-stack (ADR 0133).
@@ -239,8 +239,8 @@ func ChangeStackToPB(s domain.ChangeStack) *graphv1.ChangeStack {
 		}
 		out.Versions = append(out.Versions, pv)
 	}
-	for _, b := range s.Baselines {
-		out.Baselines = append(out.Baselines, &graphv1.BaselineStep{Id: string(b.ID), Name: b.Name, Branch: b.Branch, Kind: b.Kind, Change: string(b.Change),
+	for _, b := range s.Commits {
+		out.Commits = append(out.Commits, &graphv1.CommitStep{Id: string(b.ID), Name: b.Name, Branch: b.Branch, Kind: b.Kind, Change: string(b.Change),
 			Parent: string(b.Parent), MergedFrom: string(b.MergedFrom), RebasedFrom: string(b.RebasedFrom), CreatedAt: Time(b.CreatedAt), Merged: changeIDs(b.Merged)})
 	}
 	return out
@@ -263,13 +263,13 @@ func TagFromPB(t *graphv1.Tag) domain.Tag {
 	return domain.Tag{ID: domain.TagID(t.Id), Name: t.Name, Namespace: t.Namespace, Node: domain.NodeID(t.NodeId), Version: domain.Version(t.Version), By: t.By, CreatedAt: FromTime(t.CreatedAt)}
 }
 
-func BaselineFromPB(b *graphv1.Baseline) domain.Baseline {
+func CommitFromPB(b *graphv1.Commit) domain.Commit {
 	nodes := make(map[domain.NodeID]domain.Version, len(b.Nodes))
 	for id, v := range b.Nodes {
 		nodes[domain.NodeID(id)] = domain.Version(v)
 	}
-	return domain.Baseline{ID: domain.BaselineID(b.Id), Name: b.Name, ParentID: domain.BaselineID(b.ParentId), ChangeID: domain.ChangeID(b.ChangeId), Nodes: nodes, CreatedAt: FromTime(b.CreatedAt),
-		Branch: b.Branch, Namespace: b.Namespace, MergedFrom: domain.BaselineID(b.MergedFrom), Kind: b.Kind, RebasedFrom: domain.BaselineID(b.RebasedFrom)}
+	return domain.Commit{ID: domain.CommitID(b.Id), Name: b.Name, ParentID: domain.CommitID(b.ParentId), ChangeID: domain.ChangeID(b.ChangeId), Nodes: nodes, CreatedAt: FromTime(b.CreatedAt),
+		Branch: b.Branch, Namespace: b.Namespace, MergedFrom: domain.CommitID(b.MergedFrom), Kind: b.Kind, RebasedFrom: domain.CommitID(b.RebasedFrom), Fork: domain.CommitID(b.Fork)}
 }
 
 func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
@@ -338,7 +338,7 @@ func ItemsFromPB(its []*graphv1.ChangeItem) []domain.ChangeItem {
 
 func ChangeToPB(c domain.Change) *graphv1.Change {
 	return &graphv1.Change{Id: string(c.ID), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentId: string(c.ParentID), OwnerOrg: c.OwnerOrg.String(), Status: string(c.Status),
-		BaselineId: string(c.BaselineID), ResultBaselineId: string(c.ResultBaselineID), Data: Struct(c.Data), Items: ItemsToPB(c.Items), CreatedAt: Time(c.CreatedAt),
+		ForkCommit: string(c.ForkCommit), LandedCommit: string(c.LandedCommit), Data: Struct(c.Data), Items: ItemsToPB(c.Items), CreatedAt: Time(c.CreatedAt),
 		Branch: domain.BranchOf(c.Branch), Nodes: ChangeImpactsToPB(c.Nodes), ProjectId: c.ProjectID.String(), Lifecycle: c.Lifecycle, State: c.State, Guardians: GuardiansToPB(c.Guardians),
 		DependsOn: changeIDsToPB(c.DependsOn), MethodologyVersion: c.MethodologyVersion, Seq: c.Seq, Stats: ChangeStatsToPB(changeStats(c))}
 }
@@ -388,13 +388,13 @@ func ChangeFromPB(c *graphv1.Change) domain.Change {
 		return domain.Change{}
 	}
 	return domain.Change{ID: domain.ChangeID(c.Id), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentID: domain.ChangeID(c.ParentId), OwnerOrg: lnk.Of(c.OwnerOrg), Status: domain.ChangeStatus(c.Status),
-		BaselineID: domain.BaselineID(c.BaselineId), ResultBaselineID: domain.BaselineID(c.ResultBaselineId), Data: Map(c.Data), Items: ItemsFromPB(c.Items), CreatedAt: FromTime(c.CreatedAt),
+		ForkCommit: domain.CommitID(c.ForkCommit), LandedCommit: domain.CommitID(c.LandedCommit), Data: Map(c.Data), Items: ItemsFromPB(c.Items), CreatedAt: FromTime(c.CreatedAt),
 		Branch: c.Branch, Nodes: ChangeImpactsFromPB(c.Nodes), ProjectID: lnk.Of(c.ProjectId), Lifecycle: c.Lifecycle, State: c.State, Guardians: GuardiansFromPB(c.Guardians),
 		DependsOn: ChangeIDsFromPB(c.DependsOn), MethodologyVersion: c.MethodologyVersion, Seq: c.Seq, Stats: ChangeStatsFromPB(c.Stats).Committed()}
 }
 
 func BranchToPB(b domain.Branch) *graphv1.Branch {
-	return &graphv1.Branch{Name: b.Name, Parent: b.Parent, ForkBaseline: string(b.ForkBaseline), Head: string(b.Head),
+	return &graphv1.Branch{Name: b.Name, Parent: b.Parent, ForkCommit: string(b.ForkCommit), Head: string(b.Head),
 		Origin: b.Origin, Status: b.Status, CreatedAt: Time(b.CreatedAt), Namespace: b.Namespace, Description: b.Description, RebasedFrom: string(b.RebasedFrom)}
 }
 

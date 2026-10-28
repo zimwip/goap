@@ -13,7 +13,7 @@ import (
 type lcWorld struct {
 	g                *Graph
 	req1, req2, spec domain.Node
-	base             domain.Baseline
+	base             domain.Commit
 	reqLC, specLC    domain.Lifecycle
 }
 
@@ -56,13 +56,13 @@ func newLifecycleWorldG(t *testing.T, repo Repo, approveGuard string) lcWorld {
 	}
 	w.spec = spec
 	// the spec is version 1 with its links
-	w.base = pinBaseline(t, w.g, "", w.req1.Ref(), w.req2.Ref(), w.spec.Ref())
+	w.base = pinCommit(t, w.g, "", w.req1.Ref(), w.req2.Ref(), w.spec.Ref())
 	return w
 }
 
 func (w lcWorld) change(t *testing.T, title string) domain.Change {
 	t.Helper()
-	c, err := w.g.CreateChange(context.Background(), NewChange{ProjectID: "PROJ-ROOT", Title: title, BaselineID: w.base.ID})
+	c, err := w.g.CreateChange(context.Background(), NewChange{ProjectID: "PROJ-ROOT", Title: title, ForkCommit: w.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestActivityGoalsGateReplacesCommittableFloor(t *testing.T) {
 func testActivityGoalsGateReplacesCommittableFloor(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
-	c, err := w.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "edit REQ-2", BaselineID: w.base.ID, Data: map[string]any{"scope": "deliver/draft-requirement"}})
+	c, err := w.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "edit REQ-2", ForkCommit: w.base.ID, Data: map[string]any{"scope": "deliver/draft-requirement"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,7 +413,7 @@ func testLifecycleAuthorizerReadsTheGraph(t *testing.T, repo Repo) {
 	w := newLifecycleWorld(t, repo)
 	var asked []string
 	w.g.Authorizer = func(ctx context.Context, n domain.Node, tr domain.Transition) error {
-		if _, err := w.g.Baselines(ctx, n.Namespace); err != nil {
+		if _, err := w.g.Commits(ctx, n.Namespace); err != nil {
 			return err
 		}
 		asked = append(asked, tr.Name)

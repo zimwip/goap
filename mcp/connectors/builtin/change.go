@@ -41,7 +41,7 @@ var changeOps = []op{
 	{"detach", "Detach a sub-change from the change integrating it, a root change again: {change}", schema(map[string]string{"change": "string"})},
 	{"depend", "Add or remove changes this change depends on: {change, add: [ids], remove: [ids]}", schema(map[string]string{"change": "string", "add": "array", "remove": "array"})},
 	{"upgrade", "Move an open change to another version of its methodology (default: the latest): {change}", schema(map[string]string{"change": "string", "version": "string"})},
-	{"tag", "Name one exact version of a node (default: the version a branch holds, the head of main unless named): {tag}", schema(map[string]string{"namespace": "string", "key": "string", "version": "integer", "name": "string", "branch": "string", "baseline": "string"}, "namespace", "key", "name")},
+	{"tag", "Name one exact version of a node (default: the version a branch holds, the head of main unless named): {tag}", schema(map[string]string{"namespace": "string", "key": "string", "version": "integer", "name": "string", "branch": "string", "commit": "string"}, "namespace", "key", "name")},
 	{"dependencies", "Read the dependencies of a change, its dependents and the merge order of its sub-changes: {change}", schema(map[string]string{"change": "string"})},
 	{"read", "Read a change: {change, nodes, items}", schema(map[string]string{"change": "string"})},
 	{"list", "List changes, the latest first: {changes, truncated}", schema(map[string]string{"namespace": "string", "unit": "string", "status": "string", "limit": "integer"})},
@@ -264,7 +264,7 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		if _, ok, err := w.base(key); err != nil {
 			return nil, err
 		} else if ok {
-			return nil, fmt.Errorf("%s exists in the baseline of the change: edit it", key)
+			return nil, fmt.Errorf("%s exists in the commit of the change: edit it", key)
 		}
 		out, err := c.p.Graph.ImpactNodeCreate(ctx, id, graphapi.NodeCreate{Key: key, Type: typ, Properties: a.object("properties"), Rationale: a.str("rationale"), ProducedBy: producer(ctx)})
 		if err != nil {
@@ -565,7 +565,7 @@ func (c Change) create(ctx context.Context, who authz.Principal, a args) (map[st
 		project = st.Project().Root
 	}
 	ch, err := c.p.Graph.CreateChange(ctx, graphapi.NewChange{Title: title, Intent: intent, Methodology: a.str("methodology"), Namespace: ns,
-		BaselineID: head.ID, OwnerOrg: a.unit(ctx, who), ProjectID: project, Data: data})
+		ForkCommit: head.ID, OwnerOrg: a.unit(ctx, who), ProjectID: project, Data: data})
 	if err != nil {
 		return nil, err
 	}
@@ -701,7 +701,7 @@ func producer(ctx context.Context) string {
 
 func changeSummary(c domain.Change) map[string]any {
 	return map[string]any{"id": c.ID, "title": c.Title, "intent": c.Intent, "methodology": c.Methodology, "methodologyVersion": c.MethodologyVersion, "namespace": c.Namespace,
-		"unit": c.OwnerOrg, "status": c.Status, "baselineId": c.BaselineID, "branch": c.Branch, "parentId": c.ParentID, "project": c.ProjectID,
+		"unit": c.OwnerOrg, "status": c.Status, "commitId": c.ForkCommit, "branch": c.Branch, "parentId": c.ParentID, "project": c.ProjectID,
 		"guardians": c.Guardians, "dependsOn": c.DependsOn}
 }
 
@@ -744,7 +744,7 @@ func (w *working) impacts() []map[string]any {
 	return out
 }
 
-// base returns a node as the change was forked from it (ADR 0157): read by key, never the whole baseline.
+// base returns a node as the change was forked from it (ADR 0157): read by key, never the whole commit.
 func (w *working) base(key string) (domain.Node, bool, error) {
 	return graphapi.ForkNode(w.ctx, w.c.p.Graph, w.bb, "", key)
 }
@@ -765,7 +765,7 @@ func (w *working) declare(imp domain.ChangeImpact) (domain.ChangeImpact, error) 
 	return out[0], nil
 }
 
-// touch returns the change impact of a node, declaring the modification of a node of the baseline
+// touch returns the change impact of a node, declaring the modification of a node of the commit
 // the first time the change touches it.
 func (w *working) touch(key, rationale string) (domain.ChangeImpact, error) {
 	if key == "" {
@@ -779,7 +779,7 @@ func (w *working) touch(key, rationale string) (domain.ChangeImpact, error) {
 		return domain.ChangeImpact{}, err
 	}
 	if !ok {
-		return domain.ChangeImpact{}, fmt.Errorf("no node %s in the change nor in its baseline", key)
+		return domain.ChangeImpact{}, fmt.Errorf("no node %s in the change nor in its commit", key)
 	}
 	if err := w.c.gate(w.ctx, w.who, n.Type); err != nil {
 		return domain.ChangeImpact{}, err
@@ -826,7 +826,7 @@ func normalize(v any) any {
 	return m["v"]
 }
 
-// ref returns the version a link points to: the one the change writes, else the one of the baseline.
+// ref returns the version a link points to: the one the change writes, else the one of the commit.
 func (w *working) ref(key string) (domain.NodeRef, error) {
 	if imp, ok := w.impact(key); ok && imp.Post != nil {
 		return *imp.Post, nil
@@ -836,7 +836,7 @@ func (w *working) ref(key string) (domain.NodeRef, error) {
 	} else if ok {
 		return n.Ref(), nil
 	}
-	return domain.NodeRef{}, fmt.Errorf("no node %s to link to in the change nor in its baseline", key)
+	return domain.NodeRef{}, fmt.Errorf("no node %s to link to in the change nor in its commit", key)
 }
 
 // checkout returns the change impact with a draft of its own on the flow the call works on, the node checked out when
@@ -1048,8 +1048,8 @@ func (c Change) tag(ctx context.Context, a args) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	// a tag names a committed version: read in a branch (default main) at a baseline (default its head), never a draft
-	r, err := Graph(c).reader(ctx, args{"namespace": a.str("namespace"), "branch": cmp.Or(a.str("branch"), domain.MainBranch), "baseline": a.str("baseline")})
+	// a tag names a committed version: read in a branch (default main) at a commit (default its head), never a draft
+	r, err := Graph(c).reader(ctx, args{"namespace": a.str("namespace"), "branch": cmp.Or(a.str("branch"), domain.MainBranch), "commit": a.str("commit")})
 	if err != nil {
 		return nil, err
 	}

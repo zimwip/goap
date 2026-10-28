@@ -102,7 +102,7 @@ func twoReplicas(t *testing.T, client llm.Client) (a, b *engine.Engine, start fu
 	b = &engine.Engine{Graph: a.Graph, Methodologies: a.Methodologies, Executors: a.Executors, Store: a.Store, Scope: a.Scope,
 		Locks: replica{s: locks, holder: "b"}, LockTTL: a.LockTTL}
 	start = func() *engine.Process {
-		p, err := a.Start(alice(), engine.StartRequest{Methodology: "docs", Agent: "writer", Goal: "done", BaselineID: base, Intent: "document it", OwnerOrg: "acme", ProjectID: testProject})
+		p, err := a.Start(alice(), engine.StartRequest{Methodology: "docs", Agent: "writer", Goal: "done", ForkCommit: base, Intent: "document it", OwnerOrg: "acme", ProjectID: testProject})
 		if err != nil {
 			t.Fatal(err)
 		}

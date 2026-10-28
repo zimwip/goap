@@ -43,7 +43,7 @@ lets non-specialists phrase a request in plain language.
     their parent;
   - **Triggers**: status of published agents' triggers (`ListTriggers`),
     "Fire" button (`FireTrigger`) that opens the created run;
-  - **Repository**: baselines → nodes by type;
+  - **Repository**: commits → nodes by type;
   - **Changes**; **Access** (ABAC policies).
 - **Tabbed editing area**: each object opens in a tab. A single click
   opens a **preview** (italicized title) replaced by the next

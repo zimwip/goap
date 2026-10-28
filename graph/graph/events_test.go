@@ -26,8 +26,8 @@ func (r *recSink) Deliver(ctx context.Context, m outbox.Message) error {
 		var ev domain.NodeEvent
 		_ = json.Unmarshal(m.Data, &ev)
 		v = ev
-	case strings.HasPrefix(m.Subject, "goap.baseline."):
-		var ev domain.BaselineEvent
+	case strings.HasPrefix(m.Subject, "goap.commit."):
+		var ev domain.CommitEvent
 		_ = json.Unmarshal(m.Data, &ev)
 		v = ev
 	case strings.HasPrefix(m.Subject, "goap.change.") || strings.HasPrefix(m.Subject, "goap.changed."):
@@ -47,7 +47,7 @@ func (r *recSink) Publish(_ context.Context, subject string, v any) error {
 	return nil
 }
 
-func TestObserveNodeAndBaselineEvents(t *testing.T) {
+func TestObserveNodeAndCommitEvents(t *testing.T) {
 	forEachRepo(t, func(t *testing.T, repo Repo) {
 		ctx := context.Background()
 		g := New(repo)
@@ -70,8 +70,8 @@ func TestObserveNodeAndBaselineEvents(t *testing.T) {
 		sink := &recSink{}
 		g.Observe(sink)
 		// a creation now commits as a change of its own (ADR 0049): besides the node's own NodeEvent, its
-		// Apply (and the merge of its own branch into main) advance one or more baselines, each a
-		// BaselineEvent — so the node's event is looked up among them, not assumed to be the only one.
+		// Apply (and the merge of its own branch into main) advance one or more commits, each a
+		// CommitEvent — so the node's event is looked up among them, not assumed to be the only one.
 		n := mk("ITEM-1", "SubItem", map[string]any{"title": "hello", "prio": "high", "notes": "long text", "other": 1})
 		var ev domain.NodeEvent
 		found := false
@@ -98,15 +98,15 @@ func TestObserveNodeAndBaselineEvents(t *testing.T) {
 		if ev.Facets["title"] != "hello" || ev.Facets["prio"] != "high" || len(ev.Facets) != 2 {
 			t.Fatalf("facets = %v", ev.Facets)
 		}
-		// the creation advanced the head of main: a BaselineEvent among the events
+		// the creation advanced the head of main: a CommitEvent among the events
 		advanced := 0
 		for i, v := range sink.vals {
-			if _, ok := v.(domain.BaselineEvent); ok && sink.subj[i] == "goap.baseline.main.advanced" {
+			if _, ok := v.(domain.CommitEvent); ok && sink.subj[i] == "goap.commit.main.advanced" {
 				advanced++
 			}
 		}
 		if advanced == 0 {
-			t.Fatalf("no baseline event: %v", sink.subj)
+			t.Fatalf("no commit event: %v", sink.subj)
 		}
 	})
 }
@@ -121,7 +121,7 @@ func TestChangeEventCarriesThePosition(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "positions", BaselineID: base.ID})
+		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "positions", ForkCommit: base.ID})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -25,15 +25,15 @@ func setEdit(ref domain.NodeRef, props map[string]any) NodeEdit {
 	return NodeEdit{Pre: &ref, Props: props}
 }
 
-// commitOn makes a change of edits that commits on a branch ("" = main) and returns its resulting baseline.
-func commitOn(t *testing.T, g *Graph, branch string, from domain.BaselineID, edits ...NodeEdit) domain.Baseline {
+// commitOn makes a change of edits that commits on a branch ("" = main) and returns its resulting commit.
+func commitOn(t *testing.T, g *Graph, branch string, from domain.CommitID, edits ...NodeEdit) domain.Commit {
 	t.Helper()
-	res, err := g.Commit(context.Background(), Commit{ProjectID: "PROJ-ROOT", Title: "c-" + branch, Baseline: from, Branch: branch, By: "test", Edits: edits})
+	res, err := g.CommitEdits(context.Background(), Edits{ProjectID: "PROJ-ROOT", Title: "c-" + branch, Commit: from, Branch: branch, By: "test", Edits: edits})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// a commit returns the header of its baseline (ADR 0137): its state is read apart
-	return must[domain.Baseline](t)(g.Baseline(context.Background(), res.Baseline.ID))
+	// a commit returns the header of its commit (ADR 0137): its state is read apart
+	return must[domain.Commit](t)(g.Commit(context.Background(), res.Commit.ID))
 }
 
 func TestBranchMerge(t *testing.T) { forEachRepo(t, testBranchMerge) }
@@ -44,7 +44,7 @@ func testBranchMerge(t *testing.T, repo Repo) {
 	g := f.g
 	req1 := f.req.Ref()
 
-	if _, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", BaselineID: f.base.ID, Branch: "opt-a"}); !errors.Is(err, ErrNotFound) {
+	if _, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", ForkCommit: f.base.ID, Branch: "opt-a"}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("change on unknown branch: %v", err)
 	}
 	must[domain.Branch](t)(g.CreateBranch(ctx, NewBranch{Name: "opt-a", From: f.base.ID, Origin: "option:a"}))
@@ -57,7 +57,7 @@ func testBranchMerge(t *testing.T, repo Repo) {
 		setEdit(req1, map[string]any{"title": "Use PSP v2", "psp": "stripe"}),
 		NodeEdit{Key: "DES-1", Type: "Design", Links: []LinkEdit{{Type: "refines", To: &req1}}})
 	if bA.Branch != "opt-a" || bA.Nodes[f.req.ID] != 2 {
-		t.Fatalf("opt-a baseline: %+v", bA)
+		t.Fatalf("opt-a commit: %+v", bA)
 	}
 	versions := func() []domain.Node { return must[[]domain.Node](t)(g.Versions(ctx, f.req.ID)) }
 	// written on the branch of the change, joined opt-a when the change committed there (ADR 0032)
@@ -68,7 +68,7 @@ func testBranchMerge(t *testing.T, repo Repo) {
 	if n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID})); n.Version != 1 {
 		t.Fatalf("main latest must stay v1, got v%d", n.Version)
 	}
-	if h := must[domain.Baseline](t)(g.BranchHead(ctx, "", "opt-a")); h.ID != bA.ID {
+	if h := must[domain.Commit](t)(g.BranchHead(ctx, "", "opt-a")); h.ID != bA.ID {
 		t.Fatalf("opt-a head %s, want %s", h.ID, bA.ID)
 	}
 
@@ -79,7 +79,7 @@ func testBranchMerge(t *testing.T, repo Repo) {
 		t.Fatalf("main version: %+v", v3)
 	}
 	// a change that started before and changes the same property conflicts
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "stale", Baseline: f.base.ID, By: "test", Edits: []NodeEdit{setEdit(req1, map[string]any{"prio": "low"})}}); !errors.Is(err, ErrConflict) {
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "stale", Commit: f.base.ID, By: "test", Edits: []NodeEdit{setEdit(req1, map[string]any{"prio": "low"})}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("stale commit: %v", err)
 	}
 
@@ -108,18 +108,18 @@ func testBranchMerge(t *testing.T, repo Repo) {
 	}
 
 	res := must[MergeResult](t)(g.MergeBranch(ctx, MergeRequest{ProjectID: "PROJ-ROOT", From: "opt-a", Into: domain.MainBranch}))
-	b := res.Baseline
+	b := res.Commit
 	v4 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID}))
 	if b.Branch != domain.MainBranch || b.Nodes[f.req.ID] != v4.Version {
-		t.Fatalf("merged baseline: %+v", b)
+		t.Fatalf("merged commit: %+v", b)
 	}
 	if b.ParentID != bM.ID || b.MergedFrom != bA.ID {
-		t.Fatalf("merged baseline parents: parent %s (want %s), mergedFrom %s (want %s)", b.ParentID, bM.ID, b.MergedFrom, bA.ID)
+		t.Fatalf("merged commit parents: parent %s (want %s), mergedFrom %s (want %s)", b.ParentID, bM.ID, b.MergedFrom, bA.ID)
 	}
 	if v4.Version < 4 || v4.Reason != domain.ReasonMerge || !slices.Equal(v4.Parents, []domain.Version{3, 2}) || v4.Properties["prio"] != "high" || v4.Properties["psp"] != "stripe" {
 		t.Fatalf("merge version: %+v", v4)
 	}
-	nodes, links := must2(t)(g.BaselineGraph(ctx, b.ID))
+	nodes, links := must2(t)(g.CommitGraph(ctx, b.ID))
 	if len(nodes) != 4 {
 		t.Fatalf("merged nodes: %+v", nodes)
 	}
@@ -143,7 +143,7 @@ func testBranchMerge(t *testing.T, repo Repo) {
 	if br := must[domain.Branch](t)(g.Branch(ctx, "", "opt-a")); br.Status != domain.BranchMerged {
 		t.Fatalf("branch status %s", br.Status)
 	}
-	if h := must[domain.Baseline](t)(g.BranchHead(ctx, "", "")); h.ID != b.ID {
+	if h := must[domain.Commit](t)(g.BranchHead(ctx, "", "")); h.ID != b.ID {
 		t.Fatalf("main head %s, want %s", h.ID, b.ID)
 	}
 	if _, err := g.PlanMerge(ctx, "", "opt-a", ""); !errors.Is(err, ErrConflict) {
@@ -181,7 +181,7 @@ func testBranchMergeConflict(t *testing.T, repo Repo) {
 	}
 	res := must[MergeResult](t)(g.MergeBranch(ctx, MergeRequest{ProjectID: "PROJ-ROOT", From: "opt-b", Resolutions: map[domain.NodeID]Resolution{
 		f.req.ID: {Props: map[string]any{"title": "Use PSP B+M"}}}}))
-	n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Baseline.Nodes[f.req.ID]}))
+	n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Commit.Nodes[f.req.ID]}))
 	if n.Properties["title"] != "Use PSP B+M" || n.Reason != domain.ReasonMerge {
 		t.Fatalf("resolved: %+v", n)
 	}
@@ -249,18 +249,18 @@ func testBranchNamesAreScopedToTheirNamespace(t *testing.T, repo Repo) {
 	if _, err := importNode(ctx, g, newNode{Namespace: "organisation", Key: "N-1", Type: "OrgUnit"}); err != nil {
 		t.Fatal(err)
 	}
-	defBase := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
-	orgBase := must[domain.Baseline](t)(g.BranchHead(ctx, "organisation", domain.MainBranch))
+	defBase := must[domain.Commit](t)(g.BranchHead(ctx, "", domain.MainBranch))
+	orgBase := must[domain.Commit](t)(g.BranchHead(ctx, "organisation", domain.MainBranch))
 	// two namespaces can each have their own branch of the same name
 	defBranch := must[domain.Branch](t)(g.CreateBranch(ctx, NewBranch{Name: "feature-x", From: defBase.ID}))
 	orgBranch := must[domain.Branch](t)(g.CreateBranch(ctx, NewBranch{Namespace: "organisation", Name: "feature-x", From: orgBase.ID}))
 	if defBranch.Namespace != domain.DefaultNamespace || orgBranch.Namespace != "organisation" {
 		t.Fatalf("branch namespaces: %+v %+v", defBranch, orgBranch)
 	}
-	if got, err := g.Branch(ctx, "", "feature-x"); err != nil || got.ForkBaseline != defBase.ID {
+	if got, err := g.Branch(ctx, "", "feature-x"); err != nil || got.ForkCommit != defBase.ID {
 		t.Fatalf("default feature-x: %+v %v", got, err)
 	}
-	if got, err := g.Branch(ctx, "organisation", "feature-x"); err != nil || got.ForkBaseline != orgBase.ID {
+	if got, err := g.Branch(ctx, "organisation", "feature-x"); err != nil || got.ForkCommit != orgBase.ID {
 		t.Fatalf("organisation feature-x: %+v %v", got, err)
 	}
 }
@@ -279,7 +279,7 @@ func testHeadIsScopedToOneNamespace(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snap := must[domain.Baseline](t)(g.BranchHead(ctx, "organisation", domain.MainBranch))
+	snap := must[domain.Commit](t)(g.BranchHead(ctx, "organisation", domain.MainBranch))
 	if snap.Namespace != "organisation" {
 		t.Fatalf("head namespace = %q", snap.Namespace)
 	}
@@ -292,7 +292,7 @@ func testHeadIsScopedToOneNamespace(t *testing.T, repo Repo) {
 }
 
 // A namespace no change committed in has the empty state for head (empty id); its first change starts from it and leaves
-// the first baseline, which has no parent but a change (ADR 0056).
+// the first commit, which has no parent but a change (ADR 0056).
 func TestFirstChangeStartsFromTheEmptyState(t *testing.T) {
 	forEachRepo(t, testFirstChangeStartsFromTheEmptyState)
 }
@@ -300,31 +300,31 @@ func TestFirstChangeStartsFromTheEmptyState(t *testing.T) {
 func testFirstChangeStartsFromTheEmptyState(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
-	head := must[domain.Baseline](t)(g.BranchHead(ctx, "nothing-here-yet", domain.MainBranch))
+	head := must[domain.Commit](t)(g.BranchHead(ctx, "nothing-here-yet", domain.MainBranch))
 	if head.ID != "" || len(head.Nodes) != 0 {
 		t.Fatalf("the head of a namespace without history is the empty state: %+v", head)
 	}
-	if bs := must[[]domain.Baseline](t)(g.Baselines(ctx, "nothing-here-yet")); len(bs) != 0 {
+	if bs := must[[]domain.Commit](t)(g.Commits(ctx, "nothing-here-yet")); len(bs) != 0 {
 		t.Fatalf("nothing stores the empty state: %+v", bs)
 	}
-	res, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: "nothing-here-yet", Title: "First", Edits: []NodeEdit{{Key: "N-1", Type: "Thing"}}})
+	res, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: "nothing-here-yet", Title: "First", Edits: []NodeEdit{{Key: "N-1", Type: "Thing"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	c := must[domain.Change](t)(g.Change(ctx, res.Change))
-	if c.BaselineID != "" || c.ResultBaselineID != res.Baseline.ID {
+	if c.ForkCommit != "" || c.LandedCommit != res.Commit.ID {
 		t.Fatalf("the first change starts from the empty state: %+v", c)
 	}
-	if b := must[domain.Baseline](t)(g.Baseline(ctx, res.Baseline.ID)); b.ParentID != "" || b.ChangeID != c.ID || len(b.Nodes) != 1 {
-		t.Fatalf("the first baseline has no parent and its change: %+v", b)
+	if b := must[domain.Commit](t)(g.Commit(ctx, res.Commit.ID)); b.ParentID != "" || b.ChangeID != c.ID || len(b.Nodes) != 1 {
+		t.Fatalf("the first commit has no parent and its change: %+v", b)
 	}
-	if after := must[domain.Baseline](t)(g.BranchHead(ctx, "nothing-here-yet", domain.MainBranch)); after.ID != res.Baseline.ID {
-		t.Fatalf("head = %s, want %s", after.ID, res.Baseline.ID)
+	if after := must[domain.Commit](t)(g.BranchHead(ctx, "nothing-here-yet", domain.MainBranch)); after.ID != res.Commit.ID {
+		t.Fatalf("head = %s, want %s", after.ID, res.Commit.ID)
 	}
-	// every baseline of the organisation, the bootstrap's included, is the result of a change
-	for _, b := range must[[]domain.Baseline](t)(g.Baselines(ctx, NamespaceOrganisation)) {
+	// every commit of the organisation, the bootstrap's included, is the result of a change
+	for _, b := range must[[]domain.Commit](t)(g.Commits(ctx, NamespaceOrganisation)) {
 		if b.ChangeID == "" {
-			t.Fatalf("baseline %s (%s) has no change", b.ID, b.Name)
+			t.Fatalf("commit %s (%s) has no change", b.ID, b.Name)
 		}
 	}
 }
@@ -341,7 +341,7 @@ func testKeyOnTwoLines(t *testing.T, repo Repo) {
 	must[domain.Branch](t)(g.CreateBranch(ctx, NewBranch{Name: "line-a", From: f.base.ID}))
 	bA := commitOn(t, g, "line-a", f.base.ID, NodeEdit{Key: "REQ-9", Type: "Requirement", Props: map[string]any{"title": "on a"}})
 	var onA domain.Node
-	nodes, _ := must2(t)(g.BaselineGraph(ctx, bA.ID))
+	nodes, _ := must2(t)(g.CommitGraph(ctx, bA.ID))
 	for _, n := range nodes {
 		if n.Key == "REQ-9" {
 			onA = n
@@ -353,7 +353,7 @@ func testKeyOnTwoLines(t *testing.T, repo Repo) {
 		t.Fatalf("main takes the node over with a creation of its own: %+v, line-a %v, main %v", vs, bA.Nodes, bM.Nodes)
 	}
 	// a change forked from main before that creation, creating the key again, races the one that landed on main
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "late", Baseline: f.base.ID, By: "test",
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "late", Commit: f.base.ID, By: "test",
 		Edits: []NodeEdit{{Key: "REQ-9", Type: "Requirement", Props: map[string]any{"title": "late"}}}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("the key is main's: %v", err)
 	}
@@ -369,7 +369,7 @@ func testKeyOnTwoLines(t *testing.T, repo Repo) {
 	}
 	res := must[MergeResult](t)(g.MergeBranch(ctx, MergeRequest{ProjectID: "PROJ-ROOT", From: "line-a", Into: domain.MainBranch,
 		Resolutions: map[domain.NodeID]Resolution{onA.ID: {Props: map[string]any{"title": "both"}}}}))
-	n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: onA.ID, Version: res.Baseline.Nodes[onA.ID]}))
+	n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: onA.ID, Version: res.Commit.Nodes[onA.ID]}))
 	if n.Properties["title"] != "both" || !slices.Equal(n.Parents, []domain.Version{2, 1}) {
 		t.Fatalf("merged: %+v", n)
 	}

@@ -33,7 +33,7 @@ func importNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) 
 	if err != nil {
 		return domain.Node{}, err
 	}
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "Import " + in.Key, Intent: "Import " + in.Key, BaselineID: head.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "Import " + in.Key, Intent: "Import " + in.Key, ForkCommit: head.ID, OwnBranch: true})
 	if err != nil {
 		return domain.Node{}, err
 	}
@@ -74,7 +74,7 @@ func importLink(ctx context.Context, g *Graph, typ string, from, to domain.NodeR
 	if err != nil {
 		return domain.Link{}, err
 	}
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "Link " + src.Key, Intent: "Link " + src.Key, BaselineID: head.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "Link " + src.Key, Intent: "Link " + src.Key, ForkCommit: head.ID, OwnBranch: true})
 	if err != nil {
 		return domain.Link{}, err
 	}
@@ -107,7 +107,7 @@ func importProps(ctx context.Context, g *Graph, ref domain.NodeRef, props map[st
 	if err != nil {
 		return src, err
 	}
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "Edit " + src.Key, Intent: "Edit " + src.Key, BaselineID: head.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "Edit " + src.Key, Intent: "Edit " + src.Key, ForkCommit: head.ID, OwnBranch: true})
 	if err != nil {
 		return src, err
 	}
@@ -251,7 +251,7 @@ func (g *Graph) acceptOn(ctx context.Context, id domain.ChangeID, flow, executio
 	return g.seenImpact(ctx, id, impact, flow)
 }
 
-// proposeOrCreate declares impacts in a test: a node of the baseline is proposed (ProposeImpact), a new node is created
+// proposeOrCreate declares impacts in a test: a node of the commit is proposed (ProposeImpact), a new node is created
 // (ImpactNodeCreate: it has no proposal, ADR 0077), in order. A created impact comes back with its working version.
 func (g *Graph) proposeOrCreate(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error) {
 	out := make([]domain.ChangeImpact, 0, len(nodes))

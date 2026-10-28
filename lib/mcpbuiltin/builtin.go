@@ -64,7 +64,7 @@ func list(desc string) map[string]any {
 // argument descriptions shared by several tools
 var (
 	argNamespace = str("namespace of the graph (alm, organisation, platform, ...)")
-	argBaseline  = str("baseline of the branch to read (default: its head)")
+	argCommit    = str("commit of the branch to read (default: its head)")
 	argBranch    = str("lasting branch to read (default: main); a change of the namespace is read instead when one is named or the calling process works on one")
 	argOfChange  = str("change to read (default: the change the calling process works on, when it acts on the namespace): its drafts over the branch it forked from")
 	argFlow      = str("option of the change to read (default: its active option; main: the main flow)")
@@ -76,23 +76,23 @@ var (
 // Defs returns the definitions of the built-in MCPs.
 func Defs() []mcp.Def {
 	return []mcp.Def{
-		{Name: Graph, Description: "Read the versioned graph in a view: a branch at a baseline (default: the head of main), or the change the calling process works on (built in, read-only).", Tools: []mcp.Tool{
+		{Name: Graph, Description: "Read the versioned graph in a view: a branch at a commit (default: the head of main), or the change the calling process works on (built in, read-only).", Tools: []mcp.Tool{
 			{Name: "read", ReadOnly: true, Description: "Read a node by key: type, version, properties and links.",
-				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "baseline": argBaseline, "branch": argBranch, "change": argOfChange, "flow": argFlow}, "namespace", "key")},
+				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "commit": argCommit, "branch": argBranch, "change": argOfChange, "flow": argFlow}, "namespace", "key")},
 			{Name: "glob", ReadOnly: true, Description: "List the nodes whose key matches a glob pattern (REQ-*), optionally of one type.",
 				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "pattern": str("glob on the key (default *)"),
-					"type": str("node type, <namespace>@<Type>"), "baseline": argBaseline, "branch": argBranch, "change": argOfChange, "flow": argFlow, "limit": argLimit}, "namespace")},
+					"type": str("node type, <namespace>@<Type>"), "commit": argCommit, "branch": argBranch, "change": argOfChange, "flow": argFlow, "limit": argLimit}, "namespace")},
 			{Name: "grep", ReadOnly: true, Description: "Search the nodes whose properties match a regular expression.",
 				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "pattern": str("regular expression (RE2)"),
 					"type": str("node type, <namespace>@<Type>"), "property": str("search this property only"),
-					"ignoreCase": boolean("case-insensitive match"), "baseline": argBaseline, "branch": argBranch, "change": argOfChange, "flow": argFlow, "limit": argLimit}, "namespace", "pattern")},
+					"ignoreCase": boolean("case-insensitive match"), "commit": argCommit, "branch": argBranch, "change": argOfChange, "flow": argFlow, "limit": argLimit}, "namespace", "pattern")},
 			{Name: "links", ReadOnly: true, Description: "List the links of a node, with the key and type of the other end.",
 				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"),
-					"direction": str("in, out or both (default)"), "type": str("link type, <namespace>@<link>"), "baseline": argBaseline, "branch": argBranch, "change": argOfChange, "flow": argFlow}, "namespace", "key")},
-			{Name: "baselines", ReadOnly: true, Description: "List the baselines of a namespace, the head of main first.",
+					"direction": str("in, out or both (default)"), "type": str("link type, <namespace>@<link>"), "commit": argCommit, "branch": argBranch, "change": argOfChange, "flow": argFlow}, "namespace", "key")},
+			{Name: "commits", ReadOnly: true, Description: "List the commits of a namespace, the head of main first.",
 				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "limit": argLimit}, "namespace")},
 			{Name: "tags", ReadOnly: true, Description: "List the tags naming versions of a node (key), or the versions a tag name labels in a namespace (name). A tag names one exact version; follow its links to read what it stands for.",
-				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "name": str("name of the tag"), "baseline": argBaseline, "branch": argBranch, "change": argOfChange, "flow": argFlow}, "namespace")},
+				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "name": str("name of the tag"), "commit": argCommit, "branch": argBranch, "change": argOfChange, "flow": argFlow}, "namespace")},
 		}},
 		{Name: Change, Description: "Work on a change, the blackboard every modification of the graph goes through (built in).", Tools: []mcp.Tool{
 			{Name: "create", Description: "Open a change on the head of main of a namespace: its intent (why), unit (who) and methodology (how); with parent, a sub-change forked from the parent's branch, in its namespace and project.",
@@ -116,7 +116,7 @@ func Defs() []mcp.Def {
 				InputSchema: schemaObj(map[string]any{"change": argChange, "version": str("version of the methodology (default: the latest published one)")})},
 			{Name: "tag", Description: "Name one exact version of a node (a release, a configuration): by default the version a branch holds (the head of main unless named). Not unique: a name may label several versions.",
 				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "version": map[string]any{"type": "integer", "description": "version to name (default: the one the branch holds)"},
-					"name": str("name of the tag"), "branch": str("lasting branch to read the node in (default: main)"), "baseline": argBaseline}, "namespace", "key", "name")},
+					"name": str("name of the tag"), "branch": str("lasting branch to read the node in (default: main)"), "commit": argCommit}, "namespace", "key", "name")},
 			{Name: "dependencies", ReadOnly: true, Description: "Read the dependencies of a change (satisfied or what each waits for), the open changes depending on it, and the order its open sub-changes merge in.",
 				InputSchema: schemaObj(map[string]any{"change": argChange})},
 			{Name: "read", ReadOnly: true, Description: "Read a change: status, items, the nodes it acts on and their review.",
@@ -134,7 +134,7 @@ func Defs() []mcp.Def {
 			{Name: "edit", Description: "Modify the properties of a node in the change, on its draft (the node is checked out by the first edit; no version exists until the change commits; a null value clears one), or move it to a lifecycle state (a transition of the draft, the node checked out first when it has none); an edit never reviews; expect guards against a concurrent edit.",
 				InputSchema: schemaObj(map[string]any{"change": argChange, "key": str("key of the node"), "properties": object("properties to set"),
 					"expect": object("current values the edit expects"), "state": str("lifecycle state to move to (without properties)"), "rationale": argRationale}, "key", "rationale")},
-			{Name: "link", Description: "Add a link from a node of the change to a node of the change or of its baseline.",
+			{Name: "link", Description: "Add a link from a node of the change to a node of the change or of its commit.",
 				InputSchema: schemaObj(map[string]any{"change": argChange, "from": str("key of the source node"), "type": str("link type, <namespace>@<link>"),
 					"to": str("key of the target node"), "rationale": argRationale}, "from", "type", "to")},
 			{Name: "unlink", Description: "Remove a link from a node of the change: removing a child is a modification of its parent (a node is never deleted).",
@@ -230,7 +230,7 @@ func Defs() []mcp.Def {
 				InputSchema: schemaObj(map[string]any{"process": str("process id (default: the calling process)"), "change": str("reuse this existing change"),
 					"title": str("title of a new change"), "intent": str("intent of a new change"),
 					"namespace": str("namespace of a new change (default: the one of the process's methodology)"),
-					"unit":      str("unit holding a new change (default: the default organisation)"), "baseline": str("baseline of a new change (default: the latest of the namespace)")})},
+					"unit":      str("unit holding a new change (default: the default organisation)"), "commit": str("commit of a new change (default: the latest of the namespace)")})},
 			{Name: "list", ReadOnly: true, Description: "List processes, the latest first.",
 				InputSchema: schemaObj(map[string]any{"mine": boolean("only the processes started by the caller"),
 					"status": str("clarifying, running, waiting, completed, stuck, failed"), "limit": argLimit})},

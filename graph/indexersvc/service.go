@@ -1,4 +1,4 @@
-// Package indexersvc is the node index service (ADR 0026): it follows the node and baseline events of
+// Package indexersvc is the node index service (ADR 0026): it follows the node and commit events of
 // the graph, embeds the documents through the model gateway and answers searches.
 package indexersvc
 
@@ -22,7 +22,7 @@ import (
 )
 
 // Subjects the indexer consumes.
-var Subjects = []string{"goap.node.>", "goap.baseline.>", "goap.changeindex.>"}
+var Subjects = []string{"goap.node.>", "goap.commit.>", "goap.changeindex.>"}
 
 // Access is what the service asks of the organisation to authorize and scope a search (ADR 0095): implemented by
 // access.Directory. The index itself knows no organisation.
@@ -66,11 +66,11 @@ type Service struct {
 	// is refused (only the history is searched).
 	Views Views
 
-	embed    *Embedder
-	nodes    atomic.Int64
-	baseline atomic.Int64
-	changes  atomic.Int64
-	errs     atomic.Int64
+	embed   *Embedder
+	nodes   atomic.Int64
+	commit  atomic.Int64
+	changes atomic.Int64
+	errs    atomic.Int64
 }
 
 // New builds the service. embedder may be nil (text-only index); authz may be nil (no filtering).
@@ -186,12 +186,12 @@ func (s *Service) Handle(ctx context.Context, subject string, data []byte) error
 			return nil // a malformed event is not worth a redelivery
 		}
 		return s.count(&s.nodes, s.Indexer.OnNode(ctx, ev))
-	case strings.HasPrefix(subject, "goap.baseline."):
-		var ev domain.BaselineEvent
+	case strings.HasPrefix(subject, "goap.commit."):
+		var ev domain.CommitEvent
 		if err := json.Unmarshal(data, &ev); err != nil {
 			return nil
 		}
-		return s.count(&s.baseline, s.Indexer.OnBaseline(ctx, ev))
+		return s.count(&s.commit, s.Indexer.OnCommit(ctx, ev))
 	case strings.HasPrefix(subject, "goap.changeindex."):
 		var ev domain.ChangeDocEvent
 		if err := json.Unmarshal(data, &ev); err != nil {
@@ -226,8 +226,8 @@ func (s *Service) Reindex(ctx context.Context) (int, error) {
 }
 
 // Status reports what the service does.
-func (s *Service) Status() (semantic bool, store string, nodes, baselines, changes, errs int64) {
-	return s.embed != nil && s.embed.Available(), s.StoreName, s.nodes.Load(), s.baseline.Load(), s.changes.Load(), s.errs.Load()
+func (s *Service) Status() (semantic bool, store string, nodes, commits, changes, errs int64) {
+	return s.embed != nil && s.embed.Available(), s.StoreName, s.nodes.Load(), s.commit.Load(), s.changes.Load(), s.errs.Load()
 }
 
 // Sink is a graph.EventSink for the all-in-one mode: events are handled in order by one goroutine,
@@ -271,7 +271,7 @@ func (k *Sink) Publish(ctx context.Context, subject string, v any) error {
 }
 
 func indexed(subject string) bool {
-	return strings.HasPrefix(subject, "goap.node.") || strings.HasPrefix(subject, "goap.baseline.") || strings.HasPrefix(subject, "goap.changeindex.")
+	return strings.HasPrefix(subject, "goap.node.") || strings.HasPrefix(subject, "goap.commit.") || strings.HasPrefix(subject, "goap.changeindex.")
 }
 
 func (k *Sink) handle(ctx context.Context, subject string, data []byte) error {

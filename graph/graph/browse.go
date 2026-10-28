@@ -10,10 +10,10 @@ import (
 	"github.com/zimwip/goap/contracts/graphapi"
 )
 
-// Browsing a baseline without shipping it whole: the IDE lists the node types of a baseline, pages through the
+// Browsing a commit without shipping it whole: the IDE lists the node types of a commit, pages through the
 // nodes of one type with a text filter, and shows the neighbourhood of a selected node.
 
-// MaxBrowseLimit caps the page size of BaselineNodes.
+// MaxBrowseLimit caps the page size of CommitNodes.
 const MaxBrowseLimit = graphapi.MaxBrowseLimit
 
 // The shapes of a browse belong to the graph's contract (ADR 0157: the port reads a view a page at a time).
@@ -24,9 +24,9 @@ type (
 	Neighbourhood = graphapi.Neighbourhood
 )
 
-// BaselineNodes returns a page of the nodes of a baseline, ordered by key: the store filters, counts and reads the page
+// CommitNodes returns a page of the nodes of a commit, ordered by key: the store filters, counts and reads the page
 // over the versions of the state (ADR 0140); with q.Change, the nodes of that change only.
-func (g *Graph) BaselineNodes(ctx context.Context, id domain.BaselineID, q NodeQuery) (page NodePage, err error) {
+func (g *Graph) CommitNodes(ctx context.Context, id domain.CommitID, q NodeQuery) (page NodePage, err error) {
 	if q.Limit <= 0 || q.Limit > MaxBrowseLimit {
 		q.Limit = MaxBrowseLimit
 	}
@@ -36,7 +36,7 @@ func (g *Graph) BaselineNodes(ctx context.Context, id domain.BaselineID, q NodeQ
 		return page, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		h, err := tx.BaselineHeader(ctx, id)
+		h, err := tx.CommitHeader(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -46,7 +46,7 @@ func (g *Graph) BaselineNodes(ctx context.Context, id domain.BaselineID, q NodeQ
 			page = pageNodes(nodes, q)
 			return err
 		}
-		b, err := tx.Baseline(ctx, id)
+		b, err := tx.Commit(ctx, id)
 		if err != nil || len(b.Nodes) == 0 {
 			return err
 		}
@@ -89,9 +89,9 @@ func typeCounts(counts map[string]int, typ string) (types []TypeCount, total int
 	return types, total
 }
 
-// changeNodesIn reads, at baseline id, the nodes the impacts of a change act on, ordered by key (ADR 0137): never the
-// whole state of the baseline.
-func changeNodesIn(ctx context.Context, tx Tx, id domain.BaselineID, change domain.ChangeID) ([]domain.Node, error) {
+// changeNodesIn reads, at commit id, the nodes the impacts of a change act on, ordered by key (ADR 0137): never the
+// whole state of the commit.
+func changeNodesIn(ctx context.Context, tx Tx, id domain.CommitID, change domain.ChangeID) ([]domain.Node, error) {
 	c, err := tx.Change(ctx, change)
 	if err != nil {
 		return nil, err
@@ -122,7 +122,7 @@ func changeNodesIn(ctx context.Context, tx Tx, id domain.BaselineID, change doma
 	return nodes, nil
 }
 
-// LinkQuery selects a page of the links of a baseline.
+// LinkQuery selects a page of the links of a commit.
 type LinkQuery struct {
 	// Type keeps the links of this type (empty: every type).
 	Type string
@@ -133,7 +133,7 @@ type LinkQuery struct {
 	Offset, Limit int
 }
 
-// LinkPage is a page of the links of a baseline.
+// LinkPage is a page of the links of a commit.
 type LinkPage struct {
 	Links []domain.Link
 	// Total is the number of links matching the query (all pages).
@@ -142,9 +142,9 @@ type LinkPage struct {
 	Types []TypeCount
 }
 
-// BaselineLinks returns a page of the links of a baseline (both ends held by it), ordered by type then id: the store
+// CommitLinks returns a page of the links of a commit (both ends held by it), ordered by type then id: the store
 // filters, counts and reads the page over the versions of the state (ADR 0140).
-func (g *Graph) BaselineLinks(ctx context.Context, id domain.BaselineID, q LinkQuery) (page LinkPage, err error) {
+func (g *Graph) CommitLinks(ctx context.Context, id domain.CommitID, q LinkQuery) (page LinkPage, err error) {
 	if q.Limit <= 0 || q.Limit > MaxBrowseLimit {
 		q.Limit = MaxBrowseLimit
 	}
@@ -154,7 +154,7 @@ func (g *Graph) BaselineLinks(ctx context.Context, id domain.BaselineID, q LinkQ
 		return page, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		b, err := tx.Baseline(ctx, id)
+		b, err := tx.Commit(ctx, id)
 		if err != nil || len(b.Nodes) == 0 {
 			return err
 		}
@@ -219,14 +219,14 @@ func nodeMatches(n domain.Node, text string) bool {
 	return false
 }
 
-// NodeNeighbourhood returns a node of a baseline with its direct neighbours; it reads the versions of the node and of
-// its neighbours in the baseline, never its whole state (ADR 0137).
-func (g *Graph) NodeNeighbourhood(ctx context.Context, id domain.BaselineID, nodeID domain.NodeID) (Neighbourhood, error) {
-	b, err := g.BaselineHeader(ctx, id)
+// NodeNeighbourhood returns a node of a commit with its direct neighbours; it reads the versions of the node and of
+// its neighbours in the commit, never its whole state (ADR 0137).
+func (g *Graph) NodeNeighbourhood(ctx context.Context, id domain.CommitID, nodeID domain.NodeID) (Neighbourhood, error) {
+	b, err := g.CommitHeader(ctx, id)
 	if err != nil {
 		return Neighbourhood{}, err
 	}
-	return g.ViewNeighbourhood(ctx, View{Namespace: b.Namespace, Branch: b.Branch, Baseline: id}, nodeID)
+	return g.ViewNeighbourhood(ctx, View{Namespace: b.Namespace, Branch: b.Branch, Commit: id}, nodeID)
 }
 
 // ChangeNodeNeighbourhood returns a node and its direct neighbours as a change sees them (its world, ChangeWorld): the

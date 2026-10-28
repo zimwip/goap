@@ -86,7 +86,7 @@ func TestAuthAndRouting(t *testing.T) {
 	defer srv.Close()
 
 	call := func(token string) int {
-		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/goap.graph.v1.GraphService/ListBaselines", strings.NewReader("{}"))
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/goap.graph.v1.GraphService/ListCommits", strings.NewReader("{}"))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set(HeaderSubject, "spoofed")
 		if token != "" {
@@ -228,7 +228,7 @@ func TestLocalAuth(t *testing.T) {
 		return resp.StatusCode, tok.Token
 	}
 	call := func(token string) int {
-		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/goap.graph.v1.GraphService/ListBaselines", strings.NewReader("{}"))
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/goap.graph.v1.GraphService/ListCommits", strings.NewReader("{}"))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := http.DefaultClient.Do(req)
@@ -416,7 +416,7 @@ func TestLogoutRevokesTheSession(t *testing.T) {
 		return out.Token
 	}
 	call := func(token string) (int, string) {
-		return post("/goap.graph.v1.GraphService/ListBaselines", token, "{}")
+		return post("/goap.graph.v1.GraphService/ListCommits", token, "{}")
 	}
 
 	tok := login()

@@ -23,7 +23,7 @@ ctx.setProp("state_after", ctx.transition().to);`
 
 type algoWorld struct {
 	g        *Graph
-	base     domain.Baseline
+	base     domain.Commit
 	req, doc domain.Node
 }
 
@@ -55,13 +55,13 @@ func newAlgoWorld(t *testing.T, repo Repo) algoWorld {
 	w.g.Types = func() TypeCatalog { return types }
 	w.req = mk("R1", "Req", map[string]any{"code": "REQ-1"}, "draft")
 	w.doc = mk("D1", "Doc", map[string]any{}, "draft", LinkWrite{Type: domain.LinkContains, To: w.req.Ref()})
-	w.base = pinBaseline(t, w.g, "", w.req.Ref(), w.doc.Ref())
+	w.base = pinCommit(t, w.g, "", w.req.Ref(), w.doc.Ref())
 	return w
 }
 
 func (w algoWorld) change(t *testing.T) domain.Change {
 	t.Helper()
-	c, err := w.g.CreateChange(context.Background(), NewChange{ProjectID: "PROJ-ROOT", Title: "chg", BaselineID: w.base.ID})
+	c, err := w.g.CreateChange(context.Background(), NewChange{ProjectID: "PROJ-ROOT", Title: "chg", ForkCommit: w.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,5 +1,7 @@
 # ADR 0140 — A baseline is computed from the versions that landed in it; guardians judge in the transaction they guard
 
+> **Note (ADR 0175)**: a *baseline* is now a *commit* (table `commits`, `domain.Commit`), and every commit is a row, the commits of a change's branch included (superseding ADR 0140 §9). This ADR keeps its words as history.
+
 **Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0032 (versions and branches), 0056 (a baseline is
 the state a change leaves), 0137 (a commit reads the nodes it touches) · Supersedes the delta chains of ADR 0032 §5
 

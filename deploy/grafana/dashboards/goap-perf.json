@@ -1075,7 +1075,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, op) (rate(goap_bench_op_duration_seconds_bucket{service_name=\"goap-bench\", outcome=\"ok\", op=~\"GetBranch|GetNode|hot.GetNode|resolve.GetNode|GetNodeNeighbourhood|ListNodeVersions|ListNodeChanges|ListBaselineNodes|search.ListBaselineNodes|DiffBaselines|ListChanges\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, op) (rate(goap_bench_op_duration_seconds_bucket{service_name=\"goap-bench\", outcome=\"ok\", op=~\"GetBranch|GetNode|hot.GetNode|resolve.GetNode|GetNodeNeighbourhood|ListNodeVersions|ListNodeChanges|ListCommitNodes|search.ListCommitNodes|DiffCommits|ListChanges\"}[$__rate_interval])))",
           "legendFormat": "{{op}}",
           "refId": "A",
           "range": true
@@ -1119,7 +1119,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Bytes of the answer of each call: an answer that grows with the graph (a whole baseline) shows here",
+      "description": "Bytes of the answer of each call: an answer that grows with the graph (a whole commit) shows here",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -1810,7 +1810,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (relname) (pg_stat_user_tables_n_live_tup{datname=\"goap\", relname=~\"node_version|change_log|change_impact|link|node_branch|baseline|change|branch\"}) / scalar(max(goap_bench_versions))",
+          "expr": "sum by (relname) (pg_stat_user_tables_n_live_tup{datname=\"goap\", relname=~\"node_version|change_log|change_impact|link|node_branch|commit|change|branch\"}) / scalar(max(goap_bench_versions))",
           "legendFormat": "{{relname}}",
           "refId": "A",
           "range": true
@@ -1848,7 +1848,7 @@
     },
     {
       "type": "row",
-      "title": "Baseline states ($service)",
+      "title": "Commit states ($service)",
       "id": 30,
       "collapsed": false,
       "gridPos": {
@@ -1866,7 +1866,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Reads of the state of a baseline (ADR 0143), by source: commits (the selection of the versions committed on the branch and the branches it was forked from; the states are not cached, ADR 0156). whole: the whole state, nodes: some nodes (commit, merge).",
+      "description": "Reads of the state of a commit (ADR 0143), by source: commits (the selection of the versions committed on the branch and the branches it was forked from; the states are not cached, ADR 0156). whole: the whole state, nodes: some nodes (commit, merge).",
       "gridPos": {
         "h": 8,
         "w": 8,

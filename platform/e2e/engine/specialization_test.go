@@ -73,7 +73,7 @@ func TestSpecializationChosenAtExecution(t *testing.T) {
 		Executors: map[string]engine.Executor{methodology.KindBuiltin: engine.BuiltinExecutor{"build.java": builtin("java"), "build.any": builtin("any"), "build.go": builtin("go")}},
 		Intent:    intent.Resolver{Ranker: intent.Lexical{}}, Store: engine.NewMemoryStore()}
 	for lang, want := range map[string]string{"java": "build_java", "c": "build_any", "go": "golang/build_go"} {
-		p, err := e.Start(ctx, engine.StartRequest{Methodology: "demo", Goal: "build_it", BaselineID: b.ID, Intent: "build", Vars: map[string]any{"lang": lang}, ProjectID: testProject})
+		p, err := e.Start(ctx, engine.StartRequest{Methodology: "demo", Goal: "build_it", ForkCommit: b.ID, Intent: "build", Vars: map[string]any{"lang": lang}, ProjectID: testProject})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -110,7 +110,7 @@ goals: [{name: g, pre: {done: true}}]
 	b, _ := g.BranchHead(ctx, "", domain.MainBranch)
 	e := &engine.Engine{Graph: g, Methodologies: engine.StaticMethodologies{"abs": compile(t, src)}, Executors: map[string]engine.Executor{},
 		Intent: intent.Resolver{Ranker: intent.Lexical{}}, Store: engine.NewMemoryStore(), MaxFailures: 1}
-	p, _ := e.Start(ctx, engine.StartRequest{Methodology: "abs", Goal: "g", BaselineID: b.ID, Intent: "x", ProjectID: testProject})
+	p, _ := e.Start(ctx, engine.StartRequest{Methodology: "abs", Goal: "g", ForkCommit: b.ID, Intent: "x", ProjectID: testProject})
 	p, _ = e.Run(ctx, p.ID)
 	if p.Status != engine.StatusStuck || p.Steps[0].Error == "" {
 		t.Fatalf("abstract action must fail then disable: %+v", p)

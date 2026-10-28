@@ -60,7 +60,7 @@ func testQueryView(t *testing.T, repo Repo) {
 		t.Fatalf("aggregate: %+v", res.Rows)
 	}
 	// a change view sees its drafts: a test created and linked in the change only
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "more tests", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "more tests", ForkCommit: f.base.ID}))
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "TST-2", Type: "TestCase", Rationale: "cover"}))
 	must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, cn.ID, edit{AddLinks: []LinkWrite{{Type: "verifies", To: f.req.Ref()}}}))
 	q := "MATCH (r {key: 'REQ-1'})<-[:verifies]-(t) RETURN t.key ORDER BY t.key"

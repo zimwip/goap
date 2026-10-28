@@ -44,7 +44,7 @@ func TestTriggersFollowTheEngineOutbox(t *testing.T) {
 	}
 	var designers []*engine.Process
 	for range 2 {
-		d, err := e.Start(ctx, engine.StartRequest{Methodology: "test-design", Agent: "test-designer", BaselineID: base, Intent: "concevoir", ProjectID: testProject})
+		d, err := e.Start(ctx, engine.StartRequest{Methodology: "test-design", Agent: "test-designer", ForkCommit: base, Intent: "concevoir", ProjectID: testProject})
 		if err != nil {
 			t.Fatal(err)
 		}

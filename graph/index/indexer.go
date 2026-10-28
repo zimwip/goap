@@ -103,8 +103,8 @@ func (x *Indexer) put(ctx context.Context, d Doc) error {
 	return x.Store.Upsert(ctx, d)
 }
 
-// OnBaseline follows the head of main: only its diffs matter to the main facet.
-func (x *Indexer) OnBaseline(ctx context.Context, ev domain.BaselineEvent) error {
+// OnCommit follows the head of main: only its diffs matter to the main facet.
+func (x *Indexer) OnCommit(ctx context.Context, ev domain.CommitEvent) error {
 	if domain.BranchOf(ev.Branch) != domain.MainBranch {
 		return nil
 	}

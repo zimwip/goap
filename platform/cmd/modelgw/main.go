@@ -64,7 +64,7 @@ func main() {
 	// its events (a call recorded in the ledger, a quota exceeded) go through its outbox to the bus (ADR 0136)
 	events := platform.OptionalEvents(ctx, log)
 	defer events.Close()
-	// the policies, the organisation and the projects the platform graph delivers, read again when its baseline
+	// the policies, the organisation and the projects the platform graph delivers, read again when its commit
 	// events say the organisation moved (ADR 0154 §9)
 	if events != nil {
 		if err := directory.FollowEvents(events); err != nil {

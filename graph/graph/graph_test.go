@@ -11,7 +11,7 @@ import (
 type fixture struct {
 	g               *Graph
 	need, req, test domain.Node
-	base            domain.Baseline
+	base            domain.Commit
 }
 
 // need <-satisfies- req <-verifies- test
@@ -48,7 +48,7 @@ func testApplyUpdateCreatesSuspectLinks(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	g := f.g
 
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", BaselineID: f.base.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", ForkCommit: f.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func testApplyUpdateCreatesSuspectLinks(t *testing.T, repo Repo) {
 	}
 	b2 = g.withState(t, ctx, b2)
 	if b2.Nodes[f.req.ID] != 2 {
-		t.Fatalf("REQ-1 should be at v2 in the target baseline, got %v", b2.Nodes[f.req.ID])
+		t.Fatalf("REQ-1 should be at v2 in the target commit, got %v", b2.Nodes[f.req.ID])
 	}
 	if b2.Nodes[f.need.ID] != 1 || b2.Nodes[f.test.ID] != 1 {
 		t.Fatalf("untouched nodes must keep their version: %+v", b2.Nodes)
@@ -96,7 +96,7 @@ func testApplyUpdateCreatesSuspectLinks(t *testing.T, repo Repo) {
 		t.Fatalf("props not updated: %v", req2.Properties)
 	}
 
-	nodes, links, err := g.BaselineGraph(ctx, b2.ID)
+	nodes, links, err := g.CommitGraph(ctx, b2.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,14 +114,14 @@ func testApplyUpdateCreatesSuspectLinks(t *testing.T, repo Repo) {
 	if len(suspects) != 1 || suspects[0].From != f.test.Ref() {
 		t.Fatalf("TST-1 verifies REQ-1@v1 must be suspect, got %+v", suspects)
 	}
-	// The reference baseline is untouched.
-	_, links1, _ := g.BaselineGraph(ctx, f.base.ID)
+	// The reference commit is untouched.
+	_, links1, _ := g.CommitGraph(ctx, f.base.ID)
 	if len(links1) != 2 {
-		t.Fatalf("reference baseline changed: %+v", links1)
+		t.Fatalf("reference commit changed: %+v", links1)
 	}
 	sus1, _ := g.SuspectLinks(ctx, f.base.ID)
 	if len(sus1) != 0 {
-		t.Fatalf("reference baseline has suspects: %+v", sus1)
+		t.Fatalf("reference commit has suspects: %+v", sus1)
 	}
 }
 
@@ -132,7 +132,7 @@ func testApplyRemoveLinkBumpsSource(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	g := f.g
 	v, _ := g.View(ctx, f.test.Ref())
-	c, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "drop test", BaselineID: f.base.ID})
+	c, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "drop test", ForkCommit: f.base.ID})
 	pre := f.test.Ref()
 	ns, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "the test no longer verifies"}})
 	if err != nil {
@@ -152,7 +152,7 @@ func testApplyRemoveLinkBumpsSource(t *testing.T, repo Repo) {
 	if b2.Nodes[f.test.ID] != 2 {
 		t.Fatalf("TST-1 should be bumped")
 	}
-	_, links, _ := g.BaselineGraph(ctx, b2.ID)
+	_, links, _ := g.CommitGraph(ctx, b2.ID)
 	if len(links) != 1 || links[0].Type != "satisfies" {
 		t.Fatalf("unexpected links %+v", links)
 	}
@@ -167,7 +167,7 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 	reqRef := f.req.Ref()
 	// each change writes the same property with its own value, and accepts (or rejects) it
 	change := func(title string, value int, accept bool) domain.Change {
-		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: title, BaselineID: f.base.ID})
+		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: title, ForkCommit: f.base.ID})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -210,10 +210,10 @@ func TestAddItemsValidation(t *testing.T) { forEachRepo(t, testAddItemsValidatio
 func testAddItemsValidation(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
-	c, _ := f.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "c", BaselineID: f.base.ID})
+	c, _ := f.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "c", ForkCommit: f.base.ID})
 	bad := domain.NodeRef{ID: f.req.ID, Version: 9}
 	if _, err := f.g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &bad, Rationale: "x"}}); !errors.Is(err, ErrConflict) {
-		t.Fatalf("expected a conflict (the version is not in the baseline), got %v", err)
+		t.Fatalf("expected a conflict (the version is not in the commit), got %v", err)
 	}
 	if _, err := f.g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: "impact"}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("the impact kind is gone, got %v", err)

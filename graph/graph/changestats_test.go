@@ -16,7 +16,7 @@ func testChangeStats(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "stats", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "stats", ForkCommit: f.base.ID, OwnBranch: true}))
 	req := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "v2"}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, req.ID, NodeUpdate{Properties: map[string]any{"title": "Use PSP v2"}}))
 	design := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "D-1", Type: "Design", Rationale: "new", Properties: map[string]any{"title": "PSP"}}))
@@ -28,7 +28,7 @@ func testChangeStats(t *testing.T, repo Repo) {
 	if s := domain.StatsOf(must[domain.Change](t)(g.Change(ctx, c.ID)).Impacts()); s.Nodes() != 0 || s.Accepted != 2 || s.Proposed != 1 {
 		t.Fatalf("nothing committed, three impacts pending: %+v", s)
 	}
-	must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
+	must[domain.Commit](t)(g.CommitChange(ctx, c.ID, ""))
 
 	got := must[domain.Change](t)(g.Change(ctx, c.ID))
 	for _, cn := range got.Impacts().All() {
@@ -55,7 +55,7 @@ func testChangeStats(t *testing.T, repo Repo) {
 	req2 := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "v3"}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, req2.ID, NodeUpdate{Properties: map[string]any{"title": "Use PSP v3", "note": "x"}}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, req2.ID, domain.ReviewAccepted, "bob", "ok"))
-	must[domain.Baseline](t)(g.CommitChangeNodes(ctx, c.ID, "", []domain.NodeID{f.req.ID}))
+	must[domain.Commit](t)(g.CommitChangeNodes(ctx, c.ID, "", []domain.NodeID{f.req.ID}))
 	got = must[domain.Change](t)(g.Change(ctx, c.ID))
 	if want := (domain.ChangeStats{Created: 1, Modified: 1, Properties: 3, LinksAdded: 1}); got.Stats != want {
 		t.Fatalf("net per node: %+v", got.Stats)
@@ -65,7 +65,7 @@ func testChangeStats(t *testing.T, repo Repo) {
 	sub := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "sub", ParentID: c.ID}))
 	d2 := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, sub.ID, NodeCreate{Key: "D-2", Type: "Design", Rationale: "new"}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, sub.ID, d2.ID, domain.ReviewAccepted, "bob", "ok"))
-	must[domain.Baseline](t)(g.CommitChange(ctx, sub.ID, ""))
+	must[domain.Commit](t)(g.CommitChange(ctx, sub.ID, ""))
 	if s := must[domain.Change](t)(g.Change(ctx, sub.ID)).Stats; s != (domain.ChangeStats{Created: 1}) {
 		t.Fatalf("the sub-change's own counters: %+v", s)
 	}
@@ -89,27 +89,27 @@ func testChangeStatsDeleteAndRestore(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "drop REQ-1", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "drop REQ-1", ForkCommit: f.base.ID}))
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeDelete(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "obsolete"}))
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, cn.ID, "bob", "gone"))
-	gone := must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
+	gone := must[domain.Commit](t)(g.apply(ctx, c.ID, ""))
 	if s := must[domain.Change](t)(g.Change(ctx, c.ID)).Stats; s != (domain.ChangeStats{Deleted: 1, LinksRemoved: 1}) {
 		t.Fatalf("a deletion drops the node and its links: %+v", s)
 	}
 
-	c3 := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "undo", BaselineID: gone.ID}))
+	c3 := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "undo", ForkCommit: gone.ID}))
 	undo := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c3.ID, NodeCheckout{Node: f.req.ID, Rationale: "undo"}))
 	must[domain.ChangeImpact](t)(g.accept(ctx, c3.ID, undo.ID, "bob", "undo"))
-	must[domain.Baseline](t)(g.CommitChange(ctx, c3.ID, ""))
+	must[domain.Commit](t)(g.CommitChange(ctx, c3.ID, ""))
 	if s := must[domain.Change](t)(g.Change(ctx, c3.ID)).Stats; s != (domain.ChangeStats{Restored: 1, Properties: 1}) {
 		t.Fatalf("a checkout of a deleted node restores it: %+v", s)
 	}
 
-	c2 := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "REQ-1 again", BaselineID: gone.ID}))
+	c2 := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "REQ-1 again", ForkCommit: gone.ID}))
 	back := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c2.ID, NodeCreate{Key: "REQ-1", Type: "Requirement", Rationale: "needed again",
 		Properties: map[string]any{"title": "Use PSP v3"}, Links: []LinkWrite{{Type: "satisfies", To: f.need.Ref()}}}))
 	must[domain.ChangeImpact](t)(g.accept(ctx, c2.ID, back.ID, "bob", "back"))
-	must[domain.Baseline](t)(g.apply(ctx, c2.ID, ""))
+	must[domain.Commit](t)(g.apply(ctx, c2.ID, ""))
 	if s := must[domain.Change](t)(g.Change(ctx, c2.ID)).Stats; s != (domain.ChangeStats{Restored: 1, Requalified: 1, Properties: 1, LinksAdded: 1}) {
 		t.Fatalf("the creation of a deleted key is a restoration, requalified: %+v", s)
 	}

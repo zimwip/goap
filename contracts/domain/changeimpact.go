@@ -54,7 +54,7 @@ type ChangeImpact struct {
 	Type      string         `json:"type"`
 	Intent    NodeIntent     `json:"intent"`
 	Rationale string         `json:"rationale"`
-	// Pre is the released version of the reference baseline (nil when Intent is created).
+	// Pre is the released version of the reference commit (nil when Intent is created).
 	Pre *NodeRef `json:"pre,omitempty"`
 	// Post is the draft of the node while the change works (a draft reference: the node, Version 0, ADR 0079), the
 	// version written once the change is committed; nil while the change impact is only planned.

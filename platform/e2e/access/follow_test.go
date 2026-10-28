@@ -17,7 +17,7 @@ import (
 	"github.com/zimwip/goap/lib/typecat"
 )
 
-// TestPoliciesFollowThePlatformEvents (ADR 0154 §9): a following directory keeps the policies it read until a baseline
+// TestPoliciesFollowThePlatformEvents (ADR 0154 §9): a following directory keeps the policies it read until a commit
 // event of the organisation says they moved; the graph's own events, delivered by its outbox, refresh it at the commit.
 func TestPoliciesFollowThePlatformEvents(t *testing.T) {
 	ctx := context.Background()
@@ -50,7 +50,7 @@ func TestPoliciesFollowThePlatformEvents(t *testing.T) {
 		t.Fatal("no event yet: the policies read are kept")
 	}
 	moved := func(ns string) []byte {
-		data, _ := json.Marshal(domain.BaselineEvent{ID: "b", Namespace: ns, Branch: domain.MainBranch})
+		data, _ := json.Marshal(domain.CommitEvent{ID: "b", Namespace: ns, Branch: domain.MainBranch})
 		return data
 	}
 	dir.Moved(moved("alm"))
@@ -63,7 +63,7 @@ func TestPoliciesFollowThePlatformEvents(t *testing.T) {
 	}
 
 	// delivered by the graph's outbox, as an in-process composition does: the next commit refreshes it
-	subject := fmt.Sprintf(domain.SubjectBaselineAdvanced, domain.MainBranch)
+	subject := fmt.Sprintf(domain.SubjectCommitAdvanced, domain.MainBranch)
 	g.Observe(outbox.SinkFunc(func(_ context.Context, m outbox.Message) error {
 		if m.Subject == subject {
 			dir.Moved(m.Data)

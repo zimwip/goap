@@ -217,7 +217,7 @@
       const links = platform ? [{ type: linkTypes.assignsOrg, to: refOf(orgNode) }] : [{ type: linkTypes.assignsOrg, to: refOf(orgNode) }, { type: linkTypes.assignsProject, to: refOf(projectNode!) }];
       const edit = existing ? updateNodeItem(existing, props) : createNodeItem(key, nodeTypes.assignment, { ...(roles.length ? { roles } : {}), ...(!platform && fOwner ? { owner: true } : {}), ...(!platform && fAdmin ? { admin: true } : {}), ...(description ? { description } : {}) }, links);
       const target = platform ? 'the platform' : project;
-      await applyOnMain(ns.organisation, `Assignment ${org} / ${target}`, `${existing ? 'Update' : 'Create'} the assignment of ${org} on ${target}`, head.baselineId, [edit]);
+      await applyOnMain(ns.organisation, `Assignment ${org} / ${target}`, `${existing ? 'Update' : 'Create'} the assignment of ${org} on ${target}`, head.commitId, [edit]);
       notify(`Assignment saved: ${org} on ${target}.`, 'ok');
       adding = false;
       onChanged();
@@ -231,7 +231,7 @@
   async function remove(r: Row) {
     if (!(await confirmDialog({ message: `Remove the assignment of ${r.org} on ${r.project}?`, danger: true }))) return;
     try {
-      await applyOnMain(ns.organisation, `Retire assignment`, `Retire the assignment of ${r.org} on ${r.project}`, head.baselineId, [retireNodeItem(r.node)]);
+      await applyOnMain(ns.organisation, `Retire assignment`, `Retire the assignment of ${r.org} on ${r.project}`, head.commitId, [retireNodeItem(r.node)]);
       notify('Assignment removed.', 'ok');
       onChanged();
     } catch (e) {

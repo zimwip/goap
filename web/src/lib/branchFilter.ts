@@ -1,7 +1,7 @@
-import type { Baseline, Branch } from './api';
+import type { Commit, Branch } from './api';
 import { MAIN_BRANCH } from './namespace';
 
-/** A branch a flow owns (flow-*): drafts only, no baseline a person can browse. A change's branch (change-*) is
+/** A branch a flow owns (flow-*): drafts only, no commit a person can browse. A change's branch (change-*) is
  * shown: it is where the versions of a change are committed before they are merged. */
 export const isFlowBranch = (b: Branch): boolean => !!b.name && b.name.startsWith('flow-');
 
@@ -12,13 +12,13 @@ export const isChangeBranch = (b: Branch): boolean => !!b.name && b.name.startsW
 export const changeOfBranch = (b: Branch): string => (b.origin?.startsWith('change:') ? b.origin.slice('change:'.length) : '');
 
 /**
- * The logical time of every baseline: 1 + the latest of its parents (the baseline it follows, and the head merged into
+ * The logical time of every commit: 1 + the latest of its parents (the commit it follows, and the head merged into
  * it), 0 for the empty state. A change starts from the result of another one, so this is the order of the history,
- * whatever the clocks say (a Lamport clock over the baseline graph).
+ * whatever the clocks say (a Lamport clock over the commit graph).
  */
-export function logicalTimes(baselines: Iterable<Baseline>): Map<string, number> {
-  const byId = new Map<string, Baseline>();
-  for (const b of baselines) if (b.id) byId.set(b.id, b);
+export function logicalTimes(commits: Iterable<Commit>): Map<string, number> {
+  const byId = new Map<string, Commit>();
+  for (const b of commits) if (b.id) byId.set(b.id, b);
   const time = new Map<string, number>();
   for (const root of byId.keys()) {
     const stack = [root];
@@ -42,15 +42,15 @@ export function logicalTimes(baselines: Iterable<Baseline>): Map<string, number>
   return time;
 }
 
-/** When a branch was opened in the history: the logical time of the baseline it forked from (0: the empty state). */
-const openedAt = (b: Branch, times: Map<string, number>): number => (b.forkBaseline ? (times.get(b.forkBaseline) ?? 0) : 0);
+/** When a branch was opened in the history: the logical time of the commit it forked from (0: the empty state). */
+const openedAt = (b: Branch, times: Map<string, number>): number => (b.forkCommit ? (times.get(b.forkCommit) ?? 0) : 0);
 
 /**
  * The branches the explorer lists: open ones always, merged and abandoned on request; main first, then the latest in
  * the history first (the logical time of its fork point, then its creation date).
  */
-export function shownBranches(branches: Branch[], showClosed: boolean, baselines: Iterable<Baseline> = []): Branch[] {
-  const times = logicalTimes(baselines);
+export function shownBranches(branches: Branch[], showClosed: boolean, commits: Iterable<Commit> = []): Branch[] {
+  const times = logicalTimes(commits);
   return branches
     .filter((b) => !isFlowBranch(b) && (showClosed || b.status === 'open'))
     .sort((a, b) =>

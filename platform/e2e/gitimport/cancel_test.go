@@ -77,9 +77,9 @@ func (c *cancelling) ImpactNodeReviewBatch(ctx context.Context, id domain.Change
 	return c.Port.ImpactNodeReviewBatch(c.at(ctx), id, b)
 }
 
-func (c *cancelling) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+func (c *cancelling) CommitChange(ctx context.Context, id domain.ChangeID, commitName string) (domain.Commit, error) {
 	defer c.done()
-	return c.Port.CommitChange(c.at(ctx), id, baselineName)
+	return c.Port.CommitChange(c.at(ctx), id, commitName)
 }
 
 func (c *cancelling) CloseChange(ctx context.Context, id domain.ChangeID) (domain.Change, error) {

@@ -1,23 +1,23 @@
 <script lang="ts">
-  // Comparing two baselines of a namespace: what going from one to the other changes, node by node (added, removed,
-  // another version with the properties that differ). The default is the baseline against its parent: what its
-  // change committed; the first baseline of a namespace has none, it is compared with the empty state (ADR 0056: the
-  // baseline id "", which nothing stores), so every node it holds shows as added.
-  import { graph, errorMessage, shortId, type Baseline, type BaselineDiff, type JsonValue, type StackChange } from '../api';
+  // Comparing two commits of a namespace: what going from one to the other changes, node by node (added, removed,
+  // another version with the properties that differ). The default is the commit against its parent: what its
+  // change committed; the first commit of a namespace has none, it is compared with the empty state (ADR 0056: the
+  // commit id "", which nothing stores), so every node it holds shows as added.
+  import { graph, errorMessage, shortId, type Commit, type CommitDiff, type JsonValue, type StackChange } from '../api';
   import { changeLabel } from '../changeStack';
   import { openTab } from '../shell/tabs.svelte';
   import ChangeStackView from './ChangeStackView.svelte';
   import ValueDiff from './ValueDiff.svelte';
   import { openNode } from '../nodeEditors';
 
-  /** candidates: the baselines offered as "from" (the history the caller read), newest last */
-  let { baseline, candidates = [] }: { baseline: Baseline; candidates?: Baseline[] } = $props();
+  /** candidates: the commits offered as "from" (the history the caller read), newest last */
+  let { commit, candidates = [] }: { commit: Commit; candidates?: Commit[] } = $props();
 
-  const others = $derived(candidates.filter((x) => x.id !== baseline.id).reverse());
+  const others = $derived(candidates.filter((x) => x.id !== commit.id).reverse());
   /** the empty state, a choice of "from" (its id is "", which the select keeps for nothing chosen) */
   const EMPTY = '∅';
   let from = $state('');
-  let diff = $state<BaselineDiff[] | undefined>();
+  let diff = $state<CommitDiff[] | undefined>();
   /** the changes that explain the difference (ADR 0133) */
   let added = $state<StackChange[]>([]);
   let removed = $state<StackChange[]>([]);
@@ -25,19 +25,19 @@
   let error = $state('');
 
   $effect(() => {
-    from = baseline.parentId || EMPTY;
+    from = commit.parentId || EMPTY;
   });
 
   $effect(() => {
     const f = from;
-    const to = baseline.id ?? '';
+    const to = commit.id ?? '';
     diff = undefined;
     added = [];
     removed = [];
     if (!f || !to) return;
     const ctrl = new AbortController();
     graph
-      .diffBaselines(f === EMPTY ? '' : f, to, ctrl.signal)
+      .diffCommits(f === EMPTY ? '' : f, to, ctrl.signal)
       .then((r) => ((diff = r.nodes ?? []), (added = r.changesAdded ?? []), (removed = r.changesRemoved ?? []), (error = '')))
       .catch((e) => {
         if (!ctrl.signal.aborted) error = errorMessage(e);
@@ -45,12 +45,12 @@
     return () => ctrl.abort();
   });
 
-  function changedProps(d: BaselineDiff): string[] {
+  function changedProps(d: CommitDiff): string[] {
     const a = (d.from?.props ?? {}) as Record<string, JsonValue>;
     const b = (d.to?.props ?? {}) as Record<string, JsonValue>;
     return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => JSON.stringify(a[k] ?? null) !== JSON.stringify(b[k] ?? null)).sort();
   }
-  const label = (b: Baseline) => `${b.name || shortId(b.id)} (${b.branch || 'main'})`;
+  const label = (b: Commit) => `${b.name || shortId(b.id)} (${b.branch || 'main'})`;
 </script>
 
 <section class="card compare">
@@ -58,11 +58,11 @@
     <h3>Compare</h3>
     <label for="cmp-from">from</label>
     <select id="cmp-from" bind:value={from}>
-      <option value="">— baseline —</option>
-      <option value={EMPTY}>empty state{baseline.parentId ? '' : ' · parent'}</option>
-      {#each others as b (b.id)}<option value={b.id}>{label(b)}{b.id === baseline.parentId ? ' · parent' : ''}</option>{/each}
+      <option value="">— commit —</option>
+      <option value={EMPTY}>empty state{commit.parentId ? '' : ' · parent'}</option>
+      {#each others as b (b.id)}<option value={b.id}>{label(b)}{b.id === commit.parentId ? ' · parent' : ''}</option>{/each}
     </select>
-    <span>to this baseline</span>
+    <span>to this commit</span>
     {#if diff}<span class="hint">{diff.length} node(s) differ</span>{/if}
   </div>
   {#if error}<div class="alert">{error}</div>{/if}
@@ -74,8 +74,8 @@
     </p>
   {/if}
   <details ontoggle={(e) => (stackOpen = (e.currentTarget as HTMLDetailsElement).open)}>
-    <summary>Change-stack of this baseline</summary>
-    {#if stackOpen && baseline.id}<ChangeStackView baselineId={baseline.id} />{/if}
+    <summary>Change-stack of this commit</summary>
+    {#if stackOpen && commit.id}<ChangeStackView commitId={commit.id} />{/if}
   </details>
   {#if diff?.length}
     <div class="scroll">
@@ -101,7 +101,7 @@
       </table>
     </div>
   {:else if diff}
-    <p class="empty">The two baselines hold the same versions.</p>
+    <p class="empty">The two commits hold the same versions.</p>
   {/if}
 </section>
 

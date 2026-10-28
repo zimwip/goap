@@ -46,7 +46,7 @@ func testNamespaces(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: base.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", ForkCommit: base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func testNamespaces(t *testing.T, repo Repo) {
 	}
 	orgRef, sdlcRef := org.Ref(), sdlc.Ref()
 	// a node of another namespace can never be in the change's own (now namespace-scoped)
-	// reference baseline, so modifying it is refused even before the namespace itself is checked
+	// reference commit, so modifying it is refused even before the namespace itself is checked
 	_, err = g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &orgRef, Rationale: "x"}})
 	if !errors.Is(err, ErrConflict) {
 		t.Fatalf("update across namespaces: %v", err)

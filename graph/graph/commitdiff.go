@@ -8,16 +8,16 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// Kinds of a baseline difference.
+// Kinds of a commit difference.
 const (
 	DiffAdded   = "added"
 	DiffRemoved = "removed"
 	DiffChanged = "changed"
 )
 
-// BaselineDiff is a node whose version differs between two baselines: added (only in the second), removed (only in
-// the first) or changed (another version). From / To are the node as each baseline holds it (nil where absent).
-type BaselineDiff struct {
+// CommitDiff is a node whose version differs between two commits: added (only in the second), removed (only in
+// the first) or changed (another version). From / To are the node as each commit holds it (nil where absent).
+type CommitDiff struct {
 	Node domain.NodeID
 	Key  string
 	Type string
@@ -26,17 +26,17 @@ type BaselineDiff struct {
 	To   *domain.Node
 }
 
-// DiffBaselines compares two baselines of a namespace node by node: what going from the first to the second
+// DiffCommits compares two commits of a namespace node by node: what going from the first to the second
 // changes. Nodes are ordered by key.
-func (g *Graph) DiffBaselines(ctx context.Context, from, to domain.BaselineID) (out []BaselineDiff, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) (err error) { out, err = diffBaselines(ctx, tx, from, to); return })
+func (g *Graph) DiffCommits(ctx context.Context, from, to domain.CommitID) (out []CommitDiff, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) (err error) { out, err = diffCommits(ctx, tx, from, to); return })
 	return
 }
 
-// diffBaselines is DiffBaselines in a transaction, one way whatever the two baselines (ADR 0140): the changes only one
+// diffCommits is DiffCommits in a transaction, one way whatever the two commits (ADR 0140): the changes only one
 // of them takes in (lineageGap) name the nodes the states may differ on, the nodes of the versions they wrote and of
-// their own branches; the versions of those nodes alone are read in each baseline, then compared.
-func diffBaselines(ctx context.Context, tx Tx, from, to domain.BaselineID) ([]BaselineDiff, error) {
+// their own branches; the versions of those nodes alone are read in each commit, then compared.
+func diffCommits(ctx context.Context, tx Tx, from, to domain.CommitID) ([]CommitDiff, error) {
 	gap, err := lineageGap(ctx, tx, from, to)
 	if err != nil {
 		return nil, err
@@ -89,7 +89,7 @@ func diffBaselines(ctx context.Context, tx Tx, from, to domain.BaselineID) ([]Ba
 }
 
 // diffStates compares two states over the same nodes, reading the versions on both sides in one query.
-func diffStates(ctx context.Context, tx Tx, a, b map[domain.NodeID]domain.Version) (out []BaselineDiff, err error) {
+func diffStates(ctx context.Context, tx Tx, a, b map[domain.NodeID]domain.Version) (out []CommitDiff, err error) {
 	var refs []domain.NodeRef
 	for id, va := range a {
 		if vb, ok := b[id]; !ok || va != vb {
@@ -123,7 +123,7 @@ func diffStates(ctx context.Context, tx Tx, a, b map[domain.NodeID]domain.Versio
 		if ok && va == vb {
 			continue
 		}
-		d := BaselineDiff{Node: id, Kind: DiffRemoved}
+		d := CommitDiff{Node: id, Kind: DiffRemoved}
 		if d.From, err = node(id, va); err != nil {
 			return nil, err
 		}
@@ -139,7 +139,7 @@ func diffStates(ctx context.Context, tx Tx, a, b map[domain.NodeID]domain.Versio
 		if _, ok := a[id]; ok {
 			continue
 		}
-		d := BaselineDiff{Node: id, Kind: DiffAdded}
+		d := CommitDiff{Node: id, Kind: DiffAdded}
 		if d.To, err = node(id, vb); err != nil {
 			return nil, err
 		}

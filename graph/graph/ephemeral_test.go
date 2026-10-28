@@ -9,14 +9,14 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-func TestEphemeralBranchHoldsNoBaseline(t *testing.T) { forEachRepo(t, testEphemeralBranch) }
+func TestEphemeralBranchCommits(t *testing.T) { forEachRepo(t, testEphemeralBranch) }
 
-// testEphemeralBranch: the branch of a change is ephemeral, it holds no baseline however many commits it has, and its
-// state (its fork and its commits) still reads right (ADR 0140).
+// testEphemeralBranch: the branch of a change is ephemeral, each of its commits is a commit of it, one after the other
+// over its fork, and its state (its fork and its commits) reads right (ADR 0140, 0175).
 func testEphemeralBranch(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "seed", By: "t", Edits: []NodeEdit{{Key: "N-0", Type: "Need"}}}); err != nil {
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "seed", By: "t", Edits: []NodeEdit{{Key: "N-0", Type: "Need"}}}); err != nil {
 		t.Fatal(err)
 	}
 	c, err := g.CreateChange(ctx, NewChange{Title: "c", OwnBranch: true, ProjectID: "PROJ-ROOT"})
@@ -43,12 +43,27 @@ func testEphemeralBranch(t *testing.T, repo Repo) {
 		if !own.Ephemeral {
 			t.Fatalf("the branch of change %s is not ephemeral", c.ID)
 		}
-		hs, err := tx.BranchBaselineHeaders(ctx, c.Namespace, own.Name)
+		hs, err := tx.BranchCommitHeaders(ctx, c.Namespace, own.Name)
 		if err != nil {
 			return err
 		}
-		if len(hs) != 0 {
-			t.Fatalf("the branch of the change holds %d baselines, want none", len(hs))
+		if len(hs) != 5 {
+			t.Fatalf("the branch of the change holds %d commits, want one per commit (ADR 0175)", len(hs))
+		}
+		for i, h := range hs {
+			want := own.ForkCommit
+			if i > 0 {
+				want = hs[i-1].ID
+			}
+			if h.ParentID != want {
+				t.Fatalf("commit %d follows %s, not %s", i, h.ParentID, want)
+			}
+			if h.Fork != own.ForkCommit {
+				t.Fatalf("commit %d stands on %s, the branch on %s", i, h.Fork, own.ForkCommit)
+			}
+		}
+		if own.Head != hs[4].ID {
+			t.Fatalf("the head of the branch is %s, its last commit %s", own.Head, hs[4].ID)
 		}
 		return nil
 	}); err != nil {
@@ -63,18 +78,18 @@ func testEphemeralBranch(t *testing.T, repo Repo) {
 	}
 }
 
-func TestBaselineNodesOfAChange(t *testing.T) { forEachRepo(t, testBaselineNodesOfAChange) }
+func TestCommitNodesOfAChange(t *testing.T) { forEachRepo(t, testCommitNodesOfAChange) }
 
-// testBaselineNodesOfAChange: the nodes of a baseline scoped by a change are the nodes its impacts act on, whatever
-// else the baseline holds (ADR 0140).
-func testBaselineNodesOfAChange(t *testing.T, repo Repo) {
+// testCommitNodesOfAChange: the nodes of a commit scoped by a change are the nodes its impacts act on, whatever
+// else the commit holds (ADR 0140).
+func testCommitNodesOfAChange(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
 	var edits []NodeEdit
 	for i := range 5 {
 		edits = append(edits, NodeEdit{Key: fmt.Sprintf("N-%d", i), Type: "Need"})
 	}
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "seed", By: "t", Edits: edits}); err != nil {
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "seed", By: "t", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 	c, err := g.CreateChange(ctx, NewChange{Title: "c", OwnBranch: true, ProjectID: "PROJ-ROOT"})
@@ -111,7 +126,7 @@ func testBaselineNodesOfAChange(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := g.BaselineNodes(ctx, b.ID, NodeQuery{Change: c.ID})
+	page, err := g.CommitNodes(ctx, b.ID, NodeQuery{Change: c.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +146,7 @@ func TestNodeHistoryPages(t *testing.T) { forEachRepo(t, testNodeHistoryPages) }
 func testNodeHistoryPages(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
-	_, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "c0", By: "t", Edits: []NodeEdit{{Key: "N-0", Type: "Need", Props: map[string]any{"n": 0}}}})
+	_, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "c0", By: "t", Edits: []NodeEdit{{Key: "N-0", Type: "Need", Props: map[string]any{"n": 0}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +161,7 @@ func testNodeHistoryPages(t *testing.T, repo Repo) {
 			t.Fatal(err)
 		}
 		ref := n.Ref()
-		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: fmt.Sprintf("c%d", i), By: "t", Edits: []NodeEdit{{Pre: &ref, Props: map[string]any{"n": i}}}}); err != nil {
+		if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: fmt.Sprintf("c%d", i), By: "t", Edits: []NodeEdit{{Pre: &ref, Props: map[string]any{"n": i}}}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -190,16 +205,16 @@ func testNodeHistoryPages(t *testing.T, repo Repo) {
 	}
 }
 
-func TestDiffBaselinesByCommits(t *testing.T) { forEachRepo(t, testDiffBaselinesByCommits) }
+func TestDiffCommitsByCommits(t *testing.T) { forEachRepo(t, testDiffCommitsByCommits) }
 
-// testDiffBaselinesByCommits: the difference of two baselines of a branch read from what committed between them is the
+// testDiffCommitsByCommits: the difference of two commits of a branch read from what committed between them is the
 // one of their whole states, whatever pair is asked (ADR 0140).
-func testDiffBaselinesByCommits(t *testing.T, repo Repo) {
+func testDiffCommitsByCommits(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
-	var heads []domain.BaselineID
+	var heads []domain.CommitID
 	commit := func(edits ...NodeEdit) {
-		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: fmt.Sprintf("c%d", len(heads)), By: "t", Edits: edits}); err != nil {
+		if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: fmt.Sprintf("c%d", len(heads)), By: "t", Edits: edits}); err != nil {
 			t.Fatal(err)
 		}
 		head, err := g.BranchHeadHeader(ctx, "", domain.MainBranch)
@@ -221,13 +236,13 @@ func testDiffBaselinesByCommits(t *testing.T, repo Repo) {
 	commit(edit("A", 1))
 	commit(edit("B", 1), NodeEdit{Key: "D", Type: "Need"})
 	commit(edit("A", 2), edit("C", 1))
-	whole := func(from, to domain.BaselineID) string {
-		var a, b domain.Baseline
+	whole := func(from, to domain.CommitID) string {
+		var a, b domain.Commit
 		if err := g.repo.InTx(ctx, func(tx Tx) (err error) {
-			if a, err = tx.Baseline(ctx, from); err != nil {
+			if a, err = tx.Commit(ctx, from); err != nil {
 				return err
 			}
-			b, err = tx.Baseline(ctx, to)
+			b, err = tx.Commit(ctx, to)
 			return err
 		}); err != nil {
 			t.Fatal(err)
@@ -248,7 +263,7 @@ func testDiffBaselinesByCommits(t *testing.T, repo Repo) {
 	}
 	for i := range heads {
 		for j := range heads {
-			ds, err := g.DiffBaselines(ctx, heads[i], heads[j])
+			ds, err := g.DiffCommits(ctx, heads[i], heads[j])
 			if err != nil {
 				t.Fatal(err)
 			}

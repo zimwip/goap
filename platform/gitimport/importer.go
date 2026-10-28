@@ -62,16 +62,16 @@ type Port interface {
 	ImpactLinkDelete(ctx context.Context, id domain.ChangeID, link domain.LinkID, flow, execution string) error
 	ImpactNodeDelete(ctx context.Context, id domain.ChangeID, in graphapi.NodeCheckout) (domain.ChangeImpact, error)
 	ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b domain.ReviewBatch) ([]domain.ChangeImpact, error)
-	CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
+	CommitChange(ctx context.Context, id domain.ChangeID, commitName string) (domain.Commit, error)
 	CloseChange(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
-	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
+	BranchHead(ctx context.Context, namespace, name string) (domain.Commit, error)
 	Branch(ctx context.Context, namespace, name string) (domain.Branch, error)
 	CreateBranch(ctx context.Context, in graphapi.NewBranch) (domain.Branch, error)
 	VersionPage(ctx context.Context, id domain.NodeID, before domain.Version, limit int) ([]domain.Node, domain.Version, error)
-	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
-	BaselineDelta(ctx context.Context, from, to domain.BaselineID) (graphapi.BaselineDelta, error)
-	SuspectLinks(ctx context.Context, id domain.BaselineID) ([]domain.Link, error)
+	CommitGraph(ctx context.Context, id domain.CommitID) ([]domain.Node, []domain.Link, error)
+	CommitDelta(ctx context.Context, from, to domain.CommitID) (graphapi.CommitDelta, error)
+	SuspectLinks(ctx context.Context, id domain.CommitID) ([]domain.Link, error)
 }
 
 // Importer imports one repository.
@@ -140,7 +140,7 @@ type Importer struct {
 	OnPart func(i, n int, name string)
 
 	ix      index
-	head    domain.BaselineID
+	head    domain.CommitID
 	branch  string            // the branch of the graph the commits are imported on
 	gitRef  string            // the git branch it follows ("" when unknown)
 	modules map[string]string // the module paths of the go.mod files, by blob
@@ -396,10 +396,10 @@ func (im *Importer) load(ctx context.Context) error {
 	return im.whole(ctx, head.ID)
 }
 
-// whole reads the state of a baseline whole, the links to a node that changed since included (they are the nodes'
+// whole reads the state of a commit whole, the links to a node that changed since included (they are the nodes'
 // all the same: a checkout carries them).
-func (im *Importer) whole(ctx context.Context, id domain.BaselineID) error {
-	nodes, links, err := im.Graph.BaselineGraph(ctx, id)
+func (im *Importer) whole(ctx context.Context, id domain.CommitID) error {
+	nodes, links, err := im.Graph.CommitGraph(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -413,9 +413,9 @@ func (im *Importer) whole(ctx context.Context, id domain.BaselineID) error {
 
 // follow brings the index to the head a landing left: the delta from the previous head, the whole state when the
 // delta is too large to be read.
-func (im *Importer) follow(ctx context.Context, to domain.BaselineID) error {
+func (im *Importer) follow(ctx context.Context, to domain.CommitID) error {
 	if im.head != "" {
-		d, err := im.Graph.BaselineDelta(ctx, im.head, to)
+		d, err := im.Graph.CommitDelta(ctx, im.head, to)
 		if err == nil {
 			im.ix.apply(im.Name, d.Nodes, d.Links, d.Removed)
 			im.head = to
@@ -595,13 +595,13 @@ func (im *Importer) commitPrepared(ctx context.Context, p *prepared) error {
 
 // change writes the change of a commit, by itself or through its sub-changes, and applies it; a change that fails is
 // abandoned, with its sub-change at work.
-func (im *Importer) change(ctx context.Context, c Commit, ops []*op) (domain.Baseline, error) {
+func (im *Importer) change(ctx context.Context, c Commit, ops []*op) (domain.Commit, error) {
 	ch, err := im.Graph.CreateChange(ctx, graphapi.NewChange{Namespace: Namespace, Title: title(c), Intent: capText(c.Message, maxIntent),
 		Data: changeData(im.Name, im.gitRef, c), Branch: im.branch, OwnBranch: true, ProjectID: im.ProjectID, OwnerOrg: im.OwnerOrg})
 	if err != nil {
-		return domain.Baseline{}, err
+		return domain.Commit{}, err
 	}
-	var b domain.Baseline
+	var b domain.Commit
 	var sub domain.ChangeID
 	batch := im.Batch
 	if batch <= 0 {
@@ -1042,7 +1042,7 @@ func (im *Importer) props(c Commit, e Entry, dir bool, fi *fileInfo) (map[string
 // first (a creation with the links whose targets have their draft already), then the other links.
 // A node written renews the links it holds to an older version of their target than the head, or than the version an
 // earlier sub-change of the commit wrote (done).
-func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops []*op, done map[string]domain.NodeRef) (domain.Baseline, error) {
+func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops []*op, done map[string]domain.NodeRef) (domain.Commit, error) {
 	byKey := map[string]*op{}
 	for _, o := range ops {
 		byKey[o.key] = o
@@ -1065,7 +1065,7 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 	for _, o := range ops {
 		// a cancel stops the change between two writes, whether the graph refuses the next or not
 		if err := ctx.Err(); err != nil {
-			return domain.Baseline{}, err
+			return domain.Commit{}, err
 		}
 		switch {
 		case o.cur == nil || o.cur.removed:
@@ -1080,10 +1080,10 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 			}
 			cn, err := im.Graph.ImpactNodeCreate(ctx, id, graphapi.NodeCreate{Key: o.key, Type: o.typ, Properties: o.props, Links: links, Rationale: why, ProducedBy: im.By})
 			if err != nil {
-				return domain.Baseline{}, fmt.Errorf("%s: %w", o.key, err)
+				return domain.Commit{}, fmt.Errorf("%s: %w", o.key, err)
 			}
 			if cn.Post == nil {
-				return domain.Baseline{}, fmt.Errorf("%s: created without a draft", o.key)
+				return domain.Commit{}, fmt.Errorf("%s: created without a draft", o.key)
 			}
 			o.impact, o.ref = cn.ID, *cn.Post
 			im.stats.Created++
@@ -1093,7 +1093,7 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 			// deleted (ADR 0172): the tombstone holds no link, none to drop
 			cn, err := im.Graph.ImpactNodeDelete(ctx, id, graphapi.NodeCheckout{Node: o.cur.id, Rationale: why, ProducedBy: im.By})
 			if err != nil {
-				return domain.Baseline{}, fmt.Errorf("%s: %w", o.key, err)
+				return domain.Commit{}, fmt.Errorf("%s: %w", o.key, err)
 			}
 			o.impact, o.ref = cn.ID, domain.DraftRef(o.cur.id)
 			im.stats.Removed++
@@ -1102,12 +1102,12 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 		default:
 			cn, err := im.Graph.ImpactNodeCheckout(ctx, id, graphapi.NodeCheckout{Node: o.cur.id, Rationale: why, ProducedBy: im.By})
 			if err != nil {
-				return domain.Baseline{}, fmt.Errorf("%s: %w", o.key, err)
+				return domain.Commit{}, fmt.Errorf("%s: %w", o.key, err)
 			}
 			o.impact = cn.ID
 			if o.props != nil {
 				if _, err := im.Graph.ImpactNodeUpdate(ctx, id, o.impact, graphapi.NodeUpdate{Properties: o.props}); err != nil {
-					return domain.Baseline{}, fmt.Errorf("%s: %w", o.key, err)
+					return domain.Commit{}, fmt.Errorf("%s: %w", o.key, err)
 				}
 			}
 			im.stats.Modified++
@@ -1119,21 +1119,21 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 		drop, later[o] = im.renew(o, byKey, done, drop, later[o])
 		for _, l := range drop {
 			if err := im.Graph.ImpactLinkDelete(ctx, id, l, "", ""); err != nil {
-				return domain.Baseline{}, fmt.Errorf("%s: %w", o.key, err)
+				return domain.Commit{}, fmt.Errorf("%s: %w", o.key, err)
 			}
 		}
 	}
 	for _, o := range ops {
 		for _, w := range later[o] {
 			if err := ctx.Err(); err != nil {
-				return domain.Baseline{}, err
+				return domain.Commit{}, err
 			}
 			to, ok := target(w.key)
 			if !ok {
-				return domain.Baseline{}, fmt.Errorf("%s: no node %s to link to", o.key, w.key)
+				return domain.Commit{}, fmt.Errorf("%s: no node %s to link to", o.key, w.key)
 			}
 			if _, err := im.Graph.ImpactLinkCreate(ctx, id, o.impact, graphapi.LinkWrite{Type: w.typ, To: to}, "", ""); err != nil {
-				return domain.Baseline{}, fmt.Errorf("%s: %w", o.key, err)
+				return domain.Commit{}, fmt.Errorf("%s: %w", o.key, err)
 			}
 		}
 	}
@@ -1142,34 +1142,34 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 		accept.Verdicts = append(accept.Verdicts, domain.ImpactVerdict{Impact: o.impact, Status: domain.ReviewAccepted, Comment: why})
 	}
 	if err := ctx.Err(); err != nil {
-		return domain.Baseline{}, err
+		return domain.Commit{}, err
 	}
 	if _, err := im.Graph.ImpactNodeReviewBatch(ctx, id, accept); err != nil {
-		return domain.Baseline{}, err
+		return domain.Commit{}, err
 	}
 	if err := ctx.Err(); err != nil {
-		return domain.Baseline{}, err
+		return domain.Commit{}, err
 	}
 	return im.land(ctx, id)
 }
 
 // land commits a change and closes it, merged into the branch it was forked from (main, or the branch of the change of its
-// commit for a sub-change): the baseline it leaves on main, by its header (empty for a sub-change).
-func (im *Importer) land(ctx context.Context, id domain.ChangeID) (domain.Baseline, error) {
+// commit for a sub-change): the commit it leaves on main, by its header (empty for a sub-change).
+func (im *Importer) land(ctx context.Context, id domain.ChangeID) (domain.Commit, error) {
 	if _, err := im.Graph.CommitChange(ctx, id, ""); err != nil && !errors.Is(err, graphapi.ErrNothingToCommit) {
-		return domain.Baseline{}, err
+		return domain.Commit{}, err
 	}
 	if err := ctx.Err(); err != nil {
-		return domain.Baseline{}, err
+		return domain.Commit{}, err
 	}
 	c, err := im.Graph.CloseChange(ctx, id)
 	if err != nil {
-		return domain.Baseline{}, err
+		return domain.Commit{}, err
 	}
-	if c.ParentID == "" && (c.Status != domain.ChangeApplied || c.ResultBaselineID == "") {
-		return domain.Baseline{}, fmt.Errorf("change %s left %s: the head moved while it was imported: %w", id, c.Status, graphapi.ErrConflict)
+	if c.ParentID == "" && (c.Status != domain.ChangeApplied || c.LandedCommit == "") {
+		return domain.Commit{}, fmt.Errorf("change %s left %s: the head moved while it was imported: %w", id, c.Status, graphapi.ErrConflict)
 	}
-	return domain.Baseline{ID: c.ResultBaselineID}, nil
+	return domain.Commit{ID: c.LandedCommit}, nil
 }
 
 // renew adds to the links a node written drops and adds those it holds to an older version of their target than the

@@ -38,30 +38,30 @@ const (
 	// GraphServiceListNodeLinksProcedure is the fully-qualified name of the GraphService's
 	// ListNodeLinks RPC.
 	GraphServiceListNodeLinksProcedure = "/goap.graph.v1.GraphService/ListNodeLinks"
-	// GraphServiceListBaselinesProcedure is the fully-qualified name of the GraphService's
-	// ListBaselines RPC.
-	GraphServiceListBaselinesProcedure = "/goap.graph.v1.GraphService/ListBaselines"
+	// GraphServiceListCommitsProcedure is the fully-qualified name of the GraphService's ListCommits
+	// RPC.
+	GraphServiceListCommitsProcedure = "/goap.graph.v1.GraphService/ListCommits"
 	// GraphServiceTagVersionProcedure is the fully-qualified name of the GraphService's TagVersion RPC.
 	GraphServiceTagVersionProcedure = "/goap.graph.v1.GraphService/TagVersion"
 	// GraphServiceListTagsProcedure is the fully-qualified name of the GraphService's ListTags RPC.
 	GraphServiceListTagsProcedure = "/goap.graph.v1.GraphService/ListTags"
 	// GraphServiceDeleteTagProcedure is the fully-qualified name of the GraphService's DeleteTag RPC.
 	GraphServiceDeleteTagProcedure = "/goap.graph.v1.GraphService/DeleteTag"
-	// GraphServiceGetBaselineGraphProcedure is the fully-qualified name of the GraphService's
-	// GetBaselineGraph RPC.
-	GraphServiceGetBaselineGraphProcedure = "/goap.graph.v1.GraphService/GetBaselineGraph"
-	// GraphServiceGetBaselineDeltaProcedure is the fully-qualified name of the GraphService's
-	// GetBaselineDelta RPC.
-	GraphServiceGetBaselineDeltaProcedure = "/goap.graph.v1.GraphService/GetBaselineDelta"
-	// GraphServiceListBaselineNodesProcedure is the fully-qualified name of the GraphService's
-	// ListBaselineNodes RPC.
-	GraphServiceListBaselineNodesProcedure = "/goap.graph.v1.GraphService/ListBaselineNodes"
+	// GraphServiceGetCommitGraphProcedure is the fully-qualified name of the GraphService's
+	// GetCommitGraph RPC.
+	GraphServiceGetCommitGraphProcedure = "/goap.graph.v1.GraphService/GetCommitGraph"
+	// GraphServiceGetCommitDeltaProcedure is the fully-qualified name of the GraphService's
+	// GetCommitDelta RPC.
+	GraphServiceGetCommitDeltaProcedure = "/goap.graph.v1.GraphService/GetCommitDelta"
+	// GraphServiceListCommitNodesProcedure is the fully-qualified name of the GraphService's
+	// ListCommitNodes RPC.
+	GraphServiceListCommitNodesProcedure = "/goap.graph.v1.GraphService/ListCommitNodes"
 	// GraphServiceListViewNodesProcedure is the fully-qualified name of the GraphService's
 	// ListViewNodes RPC.
 	GraphServiceListViewNodesProcedure = "/goap.graph.v1.GraphService/ListViewNodes"
-	// GraphServiceListBaselineLinksProcedure is the fully-qualified name of the GraphService's
-	// ListBaselineLinks RPC.
-	GraphServiceListBaselineLinksProcedure = "/goap.graph.v1.GraphService/ListBaselineLinks"
+	// GraphServiceListCommitLinksProcedure is the fully-qualified name of the GraphService's
+	// ListCommitLinks RPC.
+	GraphServiceListCommitLinksProcedure = "/goap.graph.v1.GraphService/ListCommitLinks"
 	// GraphServiceGetNodeNeighbourhoodProcedure is the fully-qualified name of the GraphService's
 	// GetNodeNeighbourhood RPC.
 	GraphServiceGetNodeNeighbourhoodProcedure = "/goap.graph.v1.GraphService/GetNodeNeighbourhood"
@@ -283,9 +283,9 @@ const (
 	// GraphServiceMergeBranchProcedure is the fully-qualified name of the GraphService's MergeBranch
 	// RPC.
 	GraphServiceMergeBranchProcedure = "/goap.graph.v1.GraphService/MergeBranch"
-	// GraphServiceDiffBaselinesProcedure is the fully-qualified name of the GraphService's
-	// DiffBaselines RPC.
-	GraphServiceDiffBaselinesProcedure = "/goap.graph.v1.GraphService/DiffBaselines"
+	// GraphServiceDiffCommitsProcedure is the fully-qualified name of the GraphService's DiffCommits
+	// RPC.
+	GraphServiceDiffCommitsProcedure = "/goap.graph.v1.GraphService/DiffCommits"
 	// GraphServiceGetChangeStackProcedure is the fully-qualified name of the GraphService's
 	// GetChangeStack RPC.
 	GraphServiceGetChangeStackProcedure = "/goap.graph.v1.GraphService/GetChangeStack"
@@ -374,21 +374,21 @@ type GraphServiceClient interface {
 	// Domain axis
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)
 	ListNodeLinks(context.Context, *connect.Request[v1.ListNodeLinksRequest]) (*connect.Response[v1.ListNodeLinksResponse], error)
-	ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error)
+	ListCommits(context.Context, *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error)
 	// Tags (ADR 0143 §6) name one exact node version; not unique, a name may label several versions.
 	TagVersion(context.Context, *connect.Request[v1.TagVersionRequest]) (*connect.Response[v1.TagVersionResponse], error)
 	ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error)
 	DeleteTag(context.Context, *connect.Request[v1.DeleteTagRequest]) (*connect.Response[v1.DeleteTagResponse], error)
-	GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error)
-	// GetBaselineDelta reads what moved from a baseline to a later one of its branch (ADR 0143 §4): the nodes committed in
+	GetCommitGraph(context.Context, *connect.Request[v1.GetCommitGraphRequest]) (*connect.Response[v1.GetCommitGraphResponse], error)
+	// GetCommitDelta reads what moved from a commit to a later one of its branch (ADR 0143 §4): the nodes committed in
 	// between at their version in the later one, the links leaving them, the nodes it no longer holds. INVALID_ARGUMENT
-	// when the baselines do not follow each other or too much moved: read the later baseline whole.
-	GetBaselineDelta(context.Context, *connect.Request[v1.GetBaselineDeltaRequest]) (*connect.Response[v1.GetBaselineDeltaResponse], error)
-	// Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
-	ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error)
+	// when the commits do not follow each other or too much moved: read the later commit whole.
+	GetCommitDelta(context.Context, *connect.Request[v1.GetCommitDeltaRequest]) (*connect.Response[v1.GetCommitDeltaResponse], error)
+	// Browsing a large commit: a page of its nodes (by type, filtered) and the neighbourhood of one node.
+	ListCommitNodes(context.Context, *connect.Request[v1.ListCommitNodesRequest]) (*connect.Response[v1.ListCommitNodesResponse], error)
 	// every node of a type a view holds (ADR 0157): the explicit read of a whole type a script or a template asks for
 	ListViewNodes(context.Context, *connect.Request[v1.ListViewNodesRequest]) (*connect.Response[v1.ListViewNodesResponse], error)
-	ListBaselineLinks(context.Context, *connect.Request[v1.ListBaselineLinksRequest]) (*connect.Response[v1.ListBaselineLinksResponse], error)
+	ListCommitLinks(context.Context, *connect.Request[v1.ListCommitLinksRequest]) (*connect.Response[v1.ListCommitLinksResponse], error)
 	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
 	// A read query in the subset of openCypher (ADR 0160) over a view: anchored MATCH patterns grown a hop at a time,
 	// WHERE, RETURN; never a namespace whole (capped reads, anchors and rows). INVALID_ARGUMENT for a query the subset
@@ -422,7 +422,7 @@ type GraphServiceClient interface {
 	ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error)
 	// The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
 	ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error)
-	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
+	// The state of a namespace at a commit as a JSON snapshot, without history (ADR 0104).
 	ExportGraph(context.Context, *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error)
 	// StartGraphExport exports the state of a namespace as a job (ADR 0149, kind graph.export): a JSON snapshot
 	// (ADR 0104) or an OKF zip archive, one Markdown file per node (ADR 0111), downloaded from the job when it ends.
@@ -551,9 +551,9 @@ type GraphServiceClient interface {
 	DerivedNodes(context.Context, *connect.Request[v1.DerivedNodesRequest]) (*connect.Response[v1.DerivedNodesResponse], error)
 	PlanMerge(context.Context, *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error)
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
-	// What going from a baseline to another changes, node by node (same namespace), and the changes that explain it.
-	DiffBaselines(context.Context, *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error)
-	// The change-stack of a node version or a baseline (ADR 0133): the changes it is the application of, oldest first,
+	// What going from a commit to another changes, node by node (same namespace), and the changes that explain it.
+	DiffCommits(context.Context, *connect.Request[v1.DiffCommitsRequest]) (*connect.Response[v1.DiffCommitsResponse], error)
+	// The change-stack of a node version or a commit (ADR 0133): the changes it is the application of, oldest first,
 	// and the lineage they are read from.
 	GetChangeStack(context.Context, *connect.Request[v1.GetChangeStackRequest]) (*connect.Response[v1.GetChangeStackResponse], error)
 	// Merges what a change committed into what it was forked from (ADR 0102, 0166): a root change into the branch it
@@ -590,7 +590,7 @@ type GraphServiceClient interface {
 	// changes of a modified one; the identical ones are counted, not listed.
 	DiffFlows(context.Context, *connect.Request[v1.DiffFlowsRequest]) (*connect.Response[v1.DiffFlowsResponse], error)
 	// The graph a change sees at a level (written, accepted, committed) on a flow (ADR 0032 §5), and the graph a call on
-	// the change reads (the active option's, else the reference baseline).
+	// the change reads (the active option's, else the reference commit).
 	GetChangeView(context.Context, *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error)
 	// Decision points of a change (ADR 0009 §4): opened, ruled (decided or undecidable with questions), their questions
 	// answered, an agent ruling below the threshold ratified by a person; a decided point selects its option.
@@ -632,10 +632,10 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("ListNodeLinks")),
 			connect.WithClientOptions(opts...),
 		),
-		listBaselines: connect.NewClient[v1.ListBaselinesRequest, v1.ListBaselinesResponse](
+		listCommits: connect.NewClient[v1.ListCommitsRequest, v1.ListCommitsResponse](
 			httpClient,
-			baseURL+GraphServiceListBaselinesProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("ListBaselines")),
+			baseURL+GraphServiceListCommitsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListCommits")),
 			connect.WithClientOptions(opts...),
 		),
 		tagVersion: connect.NewClient[v1.TagVersionRequest, v1.TagVersionResponse](
@@ -656,22 +656,22 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("DeleteTag")),
 			connect.WithClientOptions(opts...),
 		),
-		getBaselineGraph: connect.NewClient[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse](
+		getCommitGraph: connect.NewClient[v1.GetCommitGraphRequest, v1.GetCommitGraphResponse](
 			httpClient,
-			baseURL+GraphServiceGetBaselineGraphProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("GetBaselineGraph")),
+			baseURL+GraphServiceGetCommitGraphProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetCommitGraph")),
 			connect.WithClientOptions(opts...),
 		),
-		getBaselineDelta: connect.NewClient[v1.GetBaselineDeltaRequest, v1.GetBaselineDeltaResponse](
+		getCommitDelta: connect.NewClient[v1.GetCommitDeltaRequest, v1.GetCommitDeltaResponse](
 			httpClient,
-			baseURL+GraphServiceGetBaselineDeltaProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("GetBaselineDelta")),
+			baseURL+GraphServiceGetCommitDeltaProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetCommitDelta")),
 			connect.WithClientOptions(opts...),
 		),
-		listBaselineNodes: connect.NewClient[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse](
+		listCommitNodes: connect.NewClient[v1.ListCommitNodesRequest, v1.ListCommitNodesResponse](
 			httpClient,
-			baseURL+GraphServiceListBaselineNodesProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("ListBaselineNodes")),
+			baseURL+GraphServiceListCommitNodesProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListCommitNodes")),
 			connect.WithClientOptions(opts...),
 		),
 		listViewNodes: connect.NewClient[v1.ListViewNodesRequest, v1.ListViewNodesResponse](
@@ -680,10 +680,10 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("ListViewNodes")),
 			connect.WithClientOptions(opts...),
 		),
-		listBaselineLinks: connect.NewClient[v1.ListBaselineLinksRequest, v1.ListBaselineLinksResponse](
+		listCommitLinks: connect.NewClient[v1.ListCommitLinksRequest, v1.ListCommitLinksResponse](
 			httpClient,
-			baseURL+GraphServiceListBaselineLinksProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("ListBaselineLinks")),
+			baseURL+GraphServiceListCommitLinksProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListCommitLinks")),
 			connect.WithClientOptions(opts...),
 		),
 		getNodeNeighbourhood: connect.NewClient[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse](
@@ -1142,10 +1142,10 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("MergeBranch")),
 			connect.WithClientOptions(opts...),
 		),
-		diffBaselines: connect.NewClient[v1.DiffBaselinesRequest, v1.DiffBaselinesResponse](
+		diffCommits: connect.NewClient[v1.DiffCommitsRequest, v1.DiffCommitsResponse](
 			httpClient,
-			baseURL+GraphServiceDiffBaselinesProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("DiffBaselines")),
+			baseURL+GraphServiceDiffCommitsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("DiffCommits")),
 			connect.WithClientOptions(opts...),
 		),
 		getChangeStack: connect.NewClient[v1.GetChangeStackRequest, v1.GetChangeStackResponse](
@@ -1329,15 +1329,15 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 type graphServiceClient struct {
 	getNode                *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
 	listNodeLinks          *connect.Client[v1.ListNodeLinksRequest, v1.ListNodeLinksResponse]
-	listBaselines          *connect.Client[v1.ListBaselinesRequest, v1.ListBaselinesResponse]
+	listCommits            *connect.Client[v1.ListCommitsRequest, v1.ListCommitsResponse]
 	tagVersion             *connect.Client[v1.TagVersionRequest, v1.TagVersionResponse]
 	listTags               *connect.Client[v1.ListTagsRequest, v1.ListTagsResponse]
 	deleteTag              *connect.Client[v1.DeleteTagRequest, v1.DeleteTagResponse]
-	getBaselineGraph       *connect.Client[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse]
-	getBaselineDelta       *connect.Client[v1.GetBaselineDeltaRequest, v1.GetBaselineDeltaResponse]
-	listBaselineNodes      *connect.Client[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse]
+	getCommitGraph         *connect.Client[v1.GetCommitGraphRequest, v1.GetCommitGraphResponse]
+	getCommitDelta         *connect.Client[v1.GetCommitDeltaRequest, v1.GetCommitDeltaResponse]
+	listCommitNodes        *connect.Client[v1.ListCommitNodesRequest, v1.ListCommitNodesResponse]
 	listViewNodes          *connect.Client[v1.ListViewNodesRequest, v1.ListViewNodesResponse]
-	listBaselineLinks      *connect.Client[v1.ListBaselineLinksRequest, v1.ListBaselineLinksResponse]
+	listCommitLinks        *connect.Client[v1.ListCommitLinksRequest, v1.ListCommitLinksResponse]
 	getNodeNeighbourhood   *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
 	queryView              *connect.Client[v1.QueryViewRequest, v1.QueryViewResponse]
 	resolveView            *connect.Client[v1.ResolveViewRequest, v1.ResolveViewResponse]
@@ -1414,7 +1414,7 @@ type graphServiceClient struct {
 	derivedNodes           *connect.Client[v1.DerivedNodesRequest, v1.DerivedNodesResponse]
 	planMerge              *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
 	mergeBranch            *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
-	diffBaselines          *connect.Client[v1.DiffBaselinesRequest, v1.DiffBaselinesResponse]
+	diffCommits            *connect.Client[v1.DiffCommitsRequest, v1.DiffCommitsResponse]
 	getChangeStack         *connect.Client[v1.GetChangeStackRequest, v1.GetChangeStackResponse]
 	mergeChange            *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
 	closeChange            *connect.Client[v1.CloseChangeRequest, v1.CloseChangeResponse]
@@ -1456,9 +1456,9 @@ func (c *graphServiceClient) ListNodeLinks(ctx context.Context, req *connect.Req
 	return c.listNodeLinks.CallUnary(ctx, req)
 }
 
-// ListBaselines calls goap.graph.v1.GraphService.ListBaselines.
-func (c *graphServiceClient) ListBaselines(ctx context.Context, req *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error) {
-	return c.listBaselines.CallUnary(ctx, req)
+// ListCommits calls goap.graph.v1.GraphService.ListCommits.
+func (c *graphServiceClient) ListCommits(ctx context.Context, req *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error) {
+	return c.listCommits.CallUnary(ctx, req)
 }
 
 // TagVersion calls goap.graph.v1.GraphService.TagVersion.
@@ -1476,19 +1476,19 @@ func (c *graphServiceClient) DeleteTag(ctx context.Context, req *connect.Request
 	return c.deleteTag.CallUnary(ctx, req)
 }
 
-// GetBaselineGraph calls goap.graph.v1.GraphService.GetBaselineGraph.
-func (c *graphServiceClient) GetBaselineGraph(ctx context.Context, req *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error) {
-	return c.getBaselineGraph.CallUnary(ctx, req)
+// GetCommitGraph calls goap.graph.v1.GraphService.GetCommitGraph.
+func (c *graphServiceClient) GetCommitGraph(ctx context.Context, req *connect.Request[v1.GetCommitGraphRequest]) (*connect.Response[v1.GetCommitGraphResponse], error) {
+	return c.getCommitGraph.CallUnary(ctx, req)
 }
 
-// GetBaselineDelta calls goap.graph.v1.GraphService.GetBaselineDelta.
-func (c *graphServiceClient) GetBaselineDelta(ctx context.Context, req *connect.Request[v1.GetBaselineDeltaRequest]) (*connect.Response[v1.GetBaselineDeltaResponse], error) {
-	return c.getBaselineDelta.CallUnary(ctx, req)
+// GetCommitDelta calls goap.graph.v1.GraphService.GetCommitDelta.
+func (c *graphServiceClient) GetCommitDelta(ctx context.Context, req *connect.Request[v1.GetCommitDeltaRequest]) (*connect.Response[v1.GetCommitDeltaResponse], error) {
+	return c.getCommitDelta.CallUnary(ctx, req)
 }
 
-// ListBaselineNodes calls goap.graph.v1.GraphService.ListBaselineNodes.
-func (c *graphServiceClient) ListBaselineNodes(ctx context.Context, req *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error) {
-	return c.listBaselineNodes.CallUnary(ctx, req)
+// ListCommitNodes calls goap.graph.v1.GraphService.ListCommitNodes.
+func (c *graphServiceClient) ListCommitNodes(ctx context.Context, req *connect.Request[v1.ListCommitNodesRequest]) (*connect.Response[v1.ListCommitNodesResponse], error) {
+	return c.listCommitNodes.CallUnary(ctx, req)
 }
 
 // ListViewNodes calls goap.graph.v1.GraphService.ListViewNodes.
@@ -1496,9 +1496,9 @@ func (c *graphServiceClient) ListViewNodes(ctx context.Context, req *connect.Req
 	return c.listViewNodes.CallUnary(ctx, req)
 }
 
-// ListBaselineLinks calls goap.graph.v1.GraphService.ListBaselineLinks.
-func (c *graphServiceClient) ListBaselineLinks(ctx context.Context, req *connect.Request[v1.ListBaselineLinksRequest]) (*connect.Response[v1.ListBaselineLinksResponse], error) {
-	return c.listBaselineLinks.CallUnary(ctx, req)
+// ListCommitLinks calls goap.graph.v1.GraphService.ListCommitLinks.
+func (c *graphServiceClient) ListCommitLinks(ctx context.Context, req *connect.Request[v1.ListCommitLinksRequest]) (*connect.Response[v1.ListCommitLinksResponse], error) {
+	return c.listCommitLinks.CallUnary(ctx, req)
 }
 
 // GetNodeNeighbourhood calls goap.graph.v1.GraphService.GetNodeNeighbourhood.
@@ -1881,9 +1881,9 @@ func (c *graphServiceClient) MergeBranch(ctx context.Context, req *connect.Reque
 	return c.mergeBranch.CallUnary(ctx, req)
 }
 
-// DiffBaselines calls goap.graph.v1.GraphService.DiffBaselines.
-func (c *graphServiceClient) DiffBaselines(ctx context.Context, req *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error) {
-	return c.diffBaselines.CallUnary(ctx, req)
+// DiffCommits calls goap.graph.v1.GraphService.DiffCommits.
+func (c *graphServiceClient) DiffCommits(ctx context.Context, req *connect.Request[v1.DiffCommitsRequest]) (*connect.Response[v1.DiffCommitsResponse], error) {
+	return c.diffCommits.CallUnary(ctx, req)
 }
 
 // GetChangeStack calls goap.graph.v1.GraphService.GetChangeStack.
@@ -2036,21 +2036,21 @@ type GraphServiceHandler interface {
 	// Domain axis
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)
 	ListNodeLinks(context.Context, *connect.Request[v1.ListNodeLinksRequest]) (*connect.Response[v1.ListNodeLinksResponse], error)
-	ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error)
+	ListCommits(context.Context, *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error)
 	// Tags (ADR 0143 §6) name one exact node version; not unique, a name may label several versions.
 	TagVersion(context.Context, *connect.Request[v1.TagVersionRequest]) (*connect.Response[v1.TagVersionResponse], error)
 	ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error)
 	DeleteTag(context.Context, *connect.Request[v1.DeleteTagRequest]) (*connect.Response[v1.DeleteTagResponse], error)
-	GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error)
-	// GetBaselineDelta reads what moved from a baseline to a later one of its branch (ADR 0143 §4): the nodes committed in
+	GetCommitGraph(context.Context, *connect.Request[v1.GetCommitGraphRequest]) (*connect.Response[v1.GetCommitGraphResponse], error)
+	// GetCommitDelta reads what moved from a commit to a later one of its branch (ADR 0143 §4): the nodes committed in
 	// between at their version in the later one, the links leaving them, the nodes it no longer holds. INVALID_ARGUMENT
-	// when the baselines do not follow each other or too much moved: read the later baseline whole.
-	GetBaselineDelta(context.Context, *connect.Request[v1.GetBaselineDeltaRequest]) (*connect.Response[v1.GetBaselineDeltaResponse], error)
-	// Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
-	ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error)
+	// when the commits do not follow each other or too much moved: read the later commit whole.
+	GetCommitDelta(context.Context, *connect.Request[v1.GetCommitDeltaRequest]) (*connect.Response[v1.GetCommitDeltaResponse], error)
+	// Browsing a large commit: a page of its nodes (by type, filtered) and the neighbourhood of one node.
+	ListCommitNodes(context.Context, *connect.Request[v1.ListCommitNodesRequest]) (*connect.Response[v1.ListCommitNodesResponse], error)
 	// every node of a type a view holds (ADR 0157): the explicit read of a whole type a script or a template asks for
 	ListViewNodes(context.Context, *connect.Request[v1.ListViewNodesRequest]) (*connect.Response[v1.ListViewNodesResponse], error)
-	ListBaselineLinks(context.Context, *connect.Request[v1.ListBaselineLinksRequest]) (*connect.Response[v1.ListBaselineLinksResponse], error)
+	ListCommitLinks(context.Context, *connect.Request[v1.ListCommitLinksRequest]) (*connect.Response[v1.ListCommitLinksResponse], error)
 	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
 	// A read query in the subset of openCypher (ADR 0160) over a view: anchored MATCH patterns grown a hop at a time,
 	// WHERE, RETURN; never a namespace whole (capped reads, anchors and rows). INVALID_ARGUMENT for a query the subset
@@ -2084,7 +2084,7 @@ type GraphServiceHandler interface {
 	ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error)
 	// The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
 	ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error)
-	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
+	// The state of a namespace at a commit as a JSON snapshot, without history (ADR 0104).
 	ExportGraph(context.Context, *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error)
 	// StartGraphExport exports the state of a namespace as a job (ADR 0149, kind graph.export): a JSON snapshot
 	// (ADR 0104) or an OKF zip archive, one Markdown file per node (ADR 0111), downloaded from the job when it ends.
@@ -2213,9 +2213,9 @@ type GraphServiceHandler interface {
 	DerivedNodes(context.Context, *connect.Request[v1.DerivedNodesRequest]) (*connect.Response[v1.DerivedNodesResponse], error)
 	PlanMerge(context.Context, *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error)
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
-	// What going from a baseline to another changes, node by node (same namespace), and the changes that explain it.
-	DiffBaselines(context.Context, *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error)
-	// The change-stack of a node version or a baseline (ADR 0133): the changes it is the application of, oldest first,
+	// What going from a commit to another changes, node by node (same namespace), and the changes that explain it.
+	DiffCommits(context.Context, *connect.Request[v1.DiffCommitsRequest]) (*connect.Response[v1.DiffCommitsResponse], error)
+	// The change-stack of a node version or a commit (ADR 0133): the changes it is the application of, oldest first,
 	// and the lineage they are read from.
 	GetChangeStack(context.Context, *connect.Request[v1.GetChangeStackRequest]) (*connect.Response[v1.GetChangeStackResponse], error)
 	// Merges what a change committed into what it was forked from (ADR 0102, 0166): a root change into the branch it
@@ -2252,7 +2252,7 @@ type GraphServiceHandler interface {
 	// changes of a modified one; the identical ones are counted, not listed.
 	DiffFlows(context.Context, *connect.Request[v1.DiffFlowsRequest]) (*connect.Response[v1.DiffFlowsResponse], error)
 	// The graph a change sees at a level (written, accepted, committed) on a flow (ADR 0032 §5), and the graph a call on
-	// the change reads (the active option's, else the reference baseline).
+	// the change reads (the active option's, else the reference commit).
 	GetChangeView(context.Context, *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error)
 	// Decision points of a change (ADR 0009 §4): opened, ruled (decided or undecidable with questions), their questions
 	// answered, an agent ruling below the threshold ratified by a person; a decided point selects its option.
@@ -2290,10 +2290,10 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("ListNodeLinks")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceListBaselinesHandler := connect.NewUnaryHandler(
-		GraphServiceListBaselinesProcedure,
-		svc.ListBaselines,
-		connect.WithSchema(graphServiceMethods.ByName("ListBaselines")),
+	graphServiceListCommitsHandler := connect.NewUnaryHandler(
+		GraphServiceListCommitsProcedure,
+		svc.ListCommits,
+		connect.WithSchema(graphServiceMethods.ByName("ListCommits")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceTagVersionHandler := connect.NewUnaryHandler(
@@ -2314,22 +2314,22 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("DeleteTag")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceGetBaselineGraphHandler := connect.NewUnaryHandler(
-		GraphServiceGetBaselineGraphProcedure,
-		svc.GetBaselineGraph,
-		connect.WithSchema(graphServiceMethods.ByName("GetBaselineGraph")),
+	graphServiceGetCommitGraphHandler := connect.NewUnaryHandler(
+		GraphServiceGetCommitGraphProcedure,
+		svc.GetCommitGraph,
+		connect.WithSchema(graphServiceMethods.ByName("GetCommitGraph")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceGetBaselineDeltaHandler := connect.NewUnaryHandler(
-		GraphServiceGetBaselineDeltaProcedure,
-		svc.GetBaselineDelta,
-		connect.WithSchema(graphServiceMethods.ByName("GetBaselineDelta")),
+	graphServiceGetCommitDeltaHandler := connect.NewUnaryHandler(
+		GraphServiceGetCommitDeltaProcedure,
+		svc.GetCommitDelta,
+		connect.WithSchema(graphServiceMethods.ByName("GetCommitDelta")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceListBaselineNodesHandler := connect.NewUnaryHandler(
-		GraphServiceListBaselineNodesProcedure,
-		svc.ListBaselineNodes,
-		connect.WithSchema(graphServiceMethods.ByName("ListBaselineNodes")),
+	graphServiceListCommitNodesHandler := connect.NewUnaryHandler(
+		GraphServiceListCommitNodesProcedure,
+		svc.ListCommitNodes,
+		connect.WithSchema(graphServiceMethods.ByName("ListCommitNodes")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceListViewNodesHandler := connect.NewUnaryHandler(
@@ -2338,10 +2338,10 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("ListViewNodes")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceListBaselineLinksHandler := connect.NewUnaryHandler(
-		GraphServiceListBaselineLinksProcedure,
-		svc.ListBaselineLinks,
-		connect.WithSchema(graphServiceMethods.ByName("ListBaselineLinks")),
+	graphServiceListCommitLinksHandler := connect.NewUnaryHandler(
+		GraphServiceListCommitLinksProcedure,
+		svc.ListCommitLinks,
+		connect.WithSchema(graphServiceMethods.ByName("ListCommitLinks")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceGetNodeNeighbourhoodHandler := connect.NewUnaryHandler(
@@ -2800,10 +2800,10 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("MergeBranch")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceDiffBaselinesHandler := connect.NewUnaryHandler(
-		GraphServiceDiffBaselinesProcedure,
-		svc.DiffBaselines,
-		connect.WithSchema(graphServiceMethods.ByName("DiffBaselines")),
+	graphServiceDiffCommitsHandler := connect.NewUnaryHandler(
+		GraphServiceDiffCommitsProcedure,
+		svc.DiffCommits,
+		connect.WithSchema(graphServiceMethods.ByName("DiffCommits")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceGetChangeStackHandler := connect.NewUnaryHandler(
@@ -2986,24 +2986,24 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetNodeHandler.ServeHTTP(w, r)
 		case GraphServiceListNodeLinksProcedure:
 			graphServiceListNodeLinksHandler.ServeHTTP(w, r)
-		case GraphServiceListBaselinesProcedure:
-			graphServiceListBaselinesHandler.ServeHTTP(w, r)
+		case GraphServiceListCommitsProcedure:
+			graphServiceListCommitsHandler.ServeHTTP(w, r)
 		case GraphServiceTagVersionProcedure:
 			graphServiceTagVersionHandler.ServeHTTP(w, r)
 		case GraphServiceListTagsProcedure:
 			graphServiceListTagsHandler.ServeHTTP(w, r)
 		case GraphServiceDeleteTagProcedure:
 			graphServiceDeleteTagHandler.ServeHTTP(w, r)
-		case GraphServiceGetBaselineGraphProcedure:
-			graphServiceGetBaselineGraphHandler.ServeHTTP(w, r)
-		case GraphServiceGetBaselineDeltaProcedure:
-			graphServiceGetBaselineDeltaHandler.ServeHTTP(w, r)
-		case GraphServiceListBaselineNodesProcedure:
-			graphServiceListBaselineNodesHandler.ServeHTTP(w, r)
+		case GraphServiceGetCommitGraphProcedure:
+			graphServiceGetCommitGraphHandler.ServeHTTP(w, r)
+		case GraphServiceGetCommitDeltaProcedure:
+			graphServiceGetCommitDeltaHandler.ServeHTTP(w, r)
+		case GraphServiceListCommitNodesProcedure:
+			graphServiceListCommitNodesHandler.ServeHTTP(w, r)
 		case GraphServiceListViewNodesProcedure:
 			graphServiceListViewNodesHandler.ServeHTTP(w, r)
-		case GraphServiceListBaselineLinksProcedure:
-			graphServiceListBaselineLinksHandler.ServeHTTP(w, r)
+		case GraphServiceListCommitLinksProcedure:
+			graphServiceListCommitLinksHandler.ServeHTTP(w, r)
 		case GraphServiceGetNodeNeighbourhoodProcedure:
 			graphServiceGetNodeNeighbourhoodHandler.ServeHTTP(w, r)
 		case GraphServiceQueryViewProcedure:
@@ -3156,8 +3156,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServicePlanMergeHandler.ServeHTTP(w, r)
 		case GraphServiceMergeBranchProcedure:
 			graphServiceMergeBranchHandler.ServeHTTP(w, r)
-		case GraphServiceDiffBaselinesProcedure:
-			graphServiceDiffBaselinesHandler.ServeHTTP(w, r)
+		case GraphServiceDiffCommitsProcedure:
+			graphServiceDiffCommitsHandler.ServeHTTP(w, r)
 		case GraphServiceGetChangeStackProcedure:
 			graphServiceGetChangeStackHandler.ServeHTTP(w, r)
 		case GraphServiceMergeChangeProcedure:
@@ -3233,8 +3233,8 @@ func (UnimplementedGraphServiceHandler) ListNodeLinks(context.Context, *connect.
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListNodeLinks is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListBaselines is not implemented"))
+func (UnimplementedGraphServiceHandler) ListCommits(context.Context, *connect.Request[v1.ListCommitsRequest]) (*connect.Response[v1.ListCommitsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListCommits is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) TagVersion(context.Context, *connect.Request[v1.TagVersionRequest]) (*connect.Response[v1.TagVersionResponse], error) {
@@ -3249,24 +3249,24 @@ func (UnimplementedGraphServiceHandler) DeleteTag(context.Context, *connect.Requ
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.DeleteTag is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetBaselineGraph is not implemented"))
+func (UnimplementedGraphServiceHandler) GetCommitGraph(context.Context, *connect.Request[v1.GetCommitGraphRequest]) (*connect.Response[v1.GetCommitGraphResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetCommitGraph is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) GetBaselineDelta(context.Context, *connect.Request[v1.GetBaselineDeltaRequest]) (*connect.Response[v1.GetBaselineDeltaResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetBaselineDelta is not implemented"))
+func (UnimplementedGraphServiceHandler) GetCommitDelta(context.Context, *connect.Request[v1.GetCommitDeltaRequest]) (*connect.Response[v1.GetCommitDeltaResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetCommitDelta is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListBaselineNodes is not implemented"))
+func (UnimplementedGraphServiceHandler) ListCommitNodes(context.Context, *connect.Request[v1.ListCommitNodesRequest]) (*connect.Response[v1.ListCommitNodesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListCommitNodes is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ListViewNodes(context.Context, *connect.Request[v1.ListViewNodesRequest]) (*connect.Response[v1.ListViewNodesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListViewNodes is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) ListBaselineLinks(context.Context, *connect.Request[v1.ListBaselineLinksRequest]) (*connect.Response[v1.ListBaselineLinksResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListBaselineLinks is not implemented"))
+func (UnimplementedGraphServiceHandler) ListCommitLinks(context.Context, *connect.Request[v1.ListCommitLinksRequest]) (*connect.Response[v1.ListCommitLinksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListCommitLinks is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error) {
@@ -3573,8 +3573,8 @@ func (UnimplementedGraphServiceHandler) MergeBranch(context.Context, *connect.Re
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.MergeBranch is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) DiffBaselines(context.Context, *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.DiffBaselines is not implemented"))
+func (UnimplementedGraphServiceHandler) DiffCommits(context.Context, *connect.Request[v1.DiffCommitsRequest]) (*connect.Response[v1.DiffCommitsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.DiffCommits is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) GetChangeStack(context.Context, *connect.Request[v1.GetChangeStackRequest]) (*connect.Response[v1.GetChangeStackResponse], error) {

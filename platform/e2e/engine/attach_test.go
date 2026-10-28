@@ -17,7 +17,7 @@ import (
 func TestEagerBindJournalsAttach(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, ProjectID: testProject, Intent: "The PSP changes its API, what does this break?"})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: base, ProjectID: testProject, Intent: "The PSP changes its API, what does this break?"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestDeferredBindStartsUnbound(t *testing.T) {
 	statics := e.Methodologies.(engine.StaticMethodologies)
 	statics["deferred-bind"] = loadMethodology(t, "deferred-bind.yaml")
 
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "deferred-bind", Agent: "intake", Goal: "bound", BaselineID: base, ProjectID: testProject})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "deferred-bind", Agent: "intake", Goal: "bound", ForkCommit: base, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,11 +117,11 @@ func TestAttachChangeReusesExistingChange(t *testing.T) {
 	statics := e.Methodologies.(engine.StaticMethodologies)
 	statics["deferred-bind"] = loadMethodology(t, "deferred-bind.yaml")
 
-	existing, err := e.Graph.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "existing", Intent: "pre-existing change to reuse", Namespace: "alm", BaselineID: base})
+	existing, err := e.Graph.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "existing", Intent: "pre-existing change to reuse", Namespace: "alm", ForkCommit: base})
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "deferred-bind", Agent: "intake", Goal: "bound", BaselineID: base, ProjectID: testProject})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "deferred-bind", Agent: "intake", Goal: "bound", ForkCommit: base, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestStartProjectOfTheChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: base, Intent: "The PSP changes its API, what does this break?"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestStartProjectOfTheChange(t *testing.T) {
 		t.Fatalf("no project: change in %q, run in %q, %v", c.ProjectID, p.Project, err)
 	}
 
-	own, err := g.CreateChange(ctx, graph.NewChange{Title: "t", Namespace: c.Namespace, BaselineID: base, ProjectID: testProject})
+	own, err := g.CreateChange(ctx, graph.NewChange{Title: "t", Namespace: c.Namespace, ForkCommit: base, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

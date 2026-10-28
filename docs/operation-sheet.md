@@ -231,10 +231,10 @@ them marks dependent work **stale** and sends it to revalidation. A change is co
 
 | Notion | GOAP | Status |
 |---|---|---|
-| Versions exist | methodology versions (`MV:`), node versions, baselines as states of changes (ADR 0056) | ✅ |
+| Versions exist | methodology versions (`MV:`), node versions, commits as states of changes (ADR 0056) | ✅ |
 | Pin at start: record methodology, policy, adapter/model version on the process | none | ⬜ |
 | Stale on version change | only flow-level stale after a relaunch (ADR 0025) | 🟡 |
-| Proposed design | pin = baseline id + versions recorded on the process; stale = comparison at the gate; **no new versioning** | ⬜ next ADR |
+| Proposed design | pin = commit id + versions recorded on the process; stale = comparison at the gate; **no new versioning** | ⬜ next ADR |
 
 ## 10. Traceability
 

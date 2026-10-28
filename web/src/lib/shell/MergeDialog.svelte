@@ -8,7 +8,7 @@
 
   async function merge(resolutions: Record<string, Resolution>): Promise<boolean> {
     const r = await graph.mergeBranch({ namespace: mergeDialog.namespace, from: mergeDialog.from, into: mergeDialog.into, resolutions });
-    notify(`${mergeDialog.from} merged into ${mergeDialog.into}: baseline ${r.baseline?.name || shortId(r.baseline?.id)}.`, 'ok');
+    notify(`${mergeDialog.from} merged into ${mergeDialog.into}: commit ${r.commit?.name || shortId(r.commit?.id)}.`, 'ok');
     closeMergeDialog();
     return true;
   }

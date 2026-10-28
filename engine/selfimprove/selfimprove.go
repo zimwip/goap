@@ -296,12 +296,12 @@ func definitionLinks(ctx context.Context, e *engine.Engine) (map[string][]stored
 	if err != nil || head.ID == "" {
 		return nil, err
 	}
-	nodes, links, err := e.Graph.BaselineGraph(ctx, head.ID)
+	nodes, links, err := e.Graph.CommitGraph(ctx, head.ID)
 	if err != nil {
 		return nil, err
 	}
 	if sr, ok := e.Graph.(interface {
-		SuspectLinks(context.Context, domain.BaselineID) ([]domain.Link, error)
+		SuspectLinks(context.Context, domain.CommitID) ([]domain.Link, error)
 	}); ok {
 		sus, err := sr.SuspectLinks(ctx, head.ID)
 		if err != nil {

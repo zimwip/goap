@@ -1,8 +1,8 @@
 // Package domain defines the two-axis knowledge graph used by GOAP.
 //
 // The domain axis holds versioned content nodes linked version-to-version and
-// grouped into baselines. The change axis holds Changes: the description of
-// a modification starting from a reference baseline (impacts) and proposing the
+// grouped into commits. The change axis holds Changes: the description of
+// a modification starting from a reference commit (impacts) and proposing the
 // target graph (proposals). A Change is the blackboard of an agent process.
 package domain
 
@@ -148,8 +148,8 @@ type Node struct {
 	// node).
 	Origins   []NodeRef `json:"origins,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
-	// Committed is the order (Baseline.Seq) of the baseline the version committed in on its branch (ADR 0140): the graph sets
-	// it when it writes the version, and the state of a baseline follows from it.
+	// Committed is the order (Commit.Seq) of the commit the version committed in on its branch (ADR 0140): the graph sets
+	// it when it writes the version, and the state of a commit follows from it.
 	Committed int64 `json:"-"`
 }
 
@@ -193,51 +193,56 @@ func (l Link) Points() string {
 	return l.To.String()
 }
 
-// BaselineID identifies a baseline.
-type BaselineID string
+// CommitID identifies a commit.
+type CommitID string
 
-// Baseline is a consistent snapshot of the domain graph: which version of each
-// node is part of it. Links belong to a baseline when both endpoints do.
-type Baseline struct {
-	ID        BaselineID `json:"id"`
-	Name      string     `json:"name"`
-	Namespace string     `json:"namespace,omitempty"`
-	Branch    string     `json:"branch,omitempty"`
-	ParentID  BaselineID `json:"parentId,omitempty"`
-	// MergedFrom is the head baseline of the branch merged in, when this baseline is the result of a merge
-	// (ADR 0032): a baseline has at most one such second parent, ParentID being the first (the target branch's
+// Commit is a state of a branch (ADR 0175): every commit, on main, on a named branch or on the branch of a change, is
+// one. Its state is a selection (ADR 0143): which version of each node is part of it. Links belong to a commit when
+// both endpoints do.
+type Commit struct {
+	ID        CommitID `json:"id"`
+	Name      string   `json:"name"`
+	Namespace string   `json:"namespace,omitempty"`
+	Branch    string   `json:"branch,omitempty"`
+	ParentID  CommitID `json:"parentId,omitempty"`
+	// MergedFrom is the head commit of the branch merged in, when this commit is the result of a merge
+	// (ADR 0032): a commit has at most one such second parent, ParentID being the first (the target branch's
 	// previous head).
-	MergedFrom BaselineID `json:"mergedFrom,omitempty"`
-	// RebasedFrom is the baseline the change was forked from before it was rebased onto the head of its target (ADR 0101),
-	// on the commit baseline of a rebased change: the first fork, when it was rebased several times.
-	RebasedFrom BaselineID `json:"rebasedFrom,omitempty"`
-	ChangeID    ChangeID   `json:"changeId,omitempty"`
-	// Kind says how the state of the baseline follows from the change that produced it (ADR 0056): BaselineCommit,
-	// BaselineMerge, BaselineFastForward or BaselineSnapshot.
+	MergedFrom CommitID `json:"mergedFrom,omitempty"`
+	// RebasedFrom is the commit the change was forked from before it was rebased onto the head of its target (ADR 0101),
+	// on the commit of a rebased change: the first fork, when it was rebased several times.
+	RebasedFrom CommitID `json:"rebasedFrom,omitempty"`
+	ChangeID    ChangeID `json:"changeId,omitempty"`
+	// Fork is the commit the branch stood on when this commit was written (ADR 0175): what the selection of its state
+	// reads past its branch; empty on main. The branch of a change moves its fork when it is rebased, the commits it
+	// wrote before keep theirs.
+	Fork CommitID `json:"fork,omitempty"`
+	// Kind says how the state of the commit follows from the change that produced it (ADR 0056): CommitKindCommit,
+	// CommitKindMerge, CommitKindFastForward, CommitKindRebase, CommitKindRevert or CommitKindSnapshot.
 	Kind string `json:"kind,omitempty"`
-	// Seq orders the baselines (ADR 0140): a baseline has a greater one than every baseline before it on its branch, and
+	// Seq orders the commits (ADR 0140): a commit has a greater one than every commit before it on its branch, and
 	// its state is the selection of the versions committed on its branch up to it (ADR 0143); the graph hides it.
 	Seq       int64              `json:"-"`
 	Nodes     map[NodeID]Version `json:"nodes"`
 	CreatedAt time.Time          `json:"createdAt"`
 }
 
-// Kinds of baseline.
+// Kinds of commit.
 const (
-	// BaselineCommit is the state a change leaves on its own branch when it is committed.
-	BaselineCommit = "commit"
-	// BaselineMerge is the state of a branch after a 3-way merge into it.
-	BaselineMerge = "merge"
-	// BaselineFastForward is the state of a branch after a change was fast-forwarded into it.
-	BaselineFastForward = "fast-forward"
-	// BaselineRebase is the state of the branch of a committed change moved onto the head of its target (ADR 0102): that
+	// CommitKindCommit is the state a change leaves on its own branch when it is committed.
+	CommitKindCommit = "commit"
+	// CommitKindMerge is the state of a branch after a 3-way merge into it.
+	CommitKindMerge = "merge"
+	// CommitKindFastForward is the state of a branch after a change was fast-forwarded into it.
+	CommitKindFastForward = "fast-forward"
+	// CommitKindRebase is the state of the branch of a committed change moved onto the head of its target (ADR 0102): that
 	// head with what the change committed.
-	BaselineRebase = "rebase"
-	// BaselineRevert is a commit that also puts back, on the branch of a change, the nodes it no longer changes (an impact
+	CommitKindRebase = "rebase"
+	// CommitKindRevert is a commit that also puts back, on the branch of a change, the nodes it no longer changes (an impact
 	// withdrawn after its commit, ADR 0102).
-	BaselineRevert = "revert"
-	// BaselineSnapshot is the state the bootstrap leaves (ADR 0143: an ordinary commit).
-	BaselineSnapshot = "snapshot"
+	CommitKindRevert = "revert"
+	// CommitKindSnapshot is the state the bootstrap leaves (ADR 0143: an ordinary commit).
+	CommitKindSnapshot = "snapshot"
 )
 
 // TagID identifies a tag.
@@ -268,8 +273,8 @@ type TagFilter struct {
 	Node      NodeID
 }
 
-// Contains reports whether the exact node version is part of the baseline.
-func (b Baseline) Contains(r NodeRef) bool {
+// Contains reports whether the exact node version is part of the commit.
+func (b Commit) Contains(r NodeRef) bool {
 	v, ok := b.Nodes[r.ID]
 	return ok && v == r.Version
 }
@@ -282,16 +287,16 @@ const (
 )
 
 // Branch is a line of versions parallel to main (an option of a change, a
-// maintenance line…). Its head is its most recent baseline.
+// maintenance line…). Its head is its most recent commit.
 type Branch struct {
-	Name         string     `json:"name"`
-	Namespace    string     `json:"namespace,omitempty"`
-	Parent       string     `json:"parent"`
-	ForkBaseline BaselineID `json:"forkBaseline"`
-	Head         BaselineID `json:"head,omitempty"` // latest baseline of the branch
-	// RebasedFrom is the first fork baseline of a change branch moved by a rebase (ADR 0101), set once.
-	RebasedFrom BaselineID `json:"rebasedFrom,omitempty"`
-	Origin      string     `json:"origin,omitempty"` // change / option that opened it
+	Name       string   `json:"name"`
+	Namespace  string   `json:"namespace,omitempty"`
+	Parent     string   `json:"parent"`
+	ForkCommit CommitID `json:"forkCommit"`
+	Head       CommitID `json:"head,omitempty"` // latest commit of the branch
+	// RebasedFrom is the first fork commit of a change branch moved by a rebase (ADR 0101), set once.
+	RebasedFrom CommitID `json:"rebasedFrom,omitempty"`
+	Origin      string   `json:"origin,omitempty"` // change / option that opened it
 	// Intent says why the branch exists relative to its parent (derive/revise/refine, same vocabulary as an
 	// Option's, architecture plan "exploration branches"): derive, a new independent line of work (a sub-change
 	// of a sub-activity, the common case); revise, a correction of what the parent already has; refine, a
@@ -300,14 +305,17 @@ type Branch struct {
 	Status      string       `json:"status"`
 	CreatedAt   time.Time    `json:"createdAt"`
 	Description string       `json:"description,omitempty"`
-	// Ephemeral marks the branch of a change (ADR 0140): it lives until the change commits, its state is its fork with
-	// what it committed, never a checkpoint; only the lasting branches (main, the named ones) store states.
+	// Ephemeral marks the branch of a change (ADR 0140): it lives as long as its change. It holds commits like any
+	// branch (ADR 0175), its Head empty until the change commits: its state is then its fork.
 	Ephemeral bool `json:"ephemeral,omitempty"`
-	// ForkSeq is, for a branch forked from the branch of a change (a sub-change, ADR 0103), the order of commit up to
-	// which the versions committed on that branch, and on the branches it is forked from, are in its fork (ADR 0140): a
-	// change branch holds no baseline, so its fork is ForkBaseline, the lasting baseline under the chain, with those
-	// commits. 0 for a branch forked from a lasting one.
-	ForkSeq int64 `json:"forkSeq,omitempty"`
+}
+
+// HeadOrFork is the commit holding the state of a branch: its head, else, before anything committed on it, its fork.
+func (b Branch) HeadOrFork() CommitID {
+	if b.Head != "" {
+		return b.Head
+	}
+	return b.ForkCommit
 }
 
 // AttributeCheck is what the graph needs of an attribute of a node type to judge the value of a property: its

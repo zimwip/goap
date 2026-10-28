@@ -15,7 +15,7 @@ import (
 // jsonb / text, arrays, timestamps); what they share is the statement, written once here with the few words that
 // differ between the dialects named on the dialect value: the placeholder, the text cast of a uuid column, the test
 // for a nullable column, the true literal and the order tie-break (SQLite orders by rowid, PostgreSQL by a column).
-// A query whose text is not common (LatestNodes, the upserts, the bulk inserts of baseline entries) stays in its
+// A query whose text is not common (LatestNodes, the upserts, the bulk inserts of commit entries) stays in its
 // repository. sqlbuild_test.go holds the text the repositories ran before, per query and dialect.
 
 // dialect names the differences between the SQL dialects of the repositories.
@@ -240,8 +240,8 @@ func (d dialect) nodeIDList(col string, n int, ids []domain.NodeID) (string, any
 	return col + ` IN (SELECT value FROM json_each(` + d.ph(n) + `))`, string(b)
 }
 
-// sqlCommittedVersions reads the versions that committed on a branch of a namespace in the baselines after the order after,
-// up to upTo (Baseline.Seq, ADR 0140): written on the branch or joined to it, the last commit of each node, for some
+// sqlCommittedVersions reads the versions that committed on a branch of a namespace in the commits after the order after,
+// up to upTo (Commit.Seq, ADR 0140): written on the branch or joined to it, the last commit of each node, for some
 // nodes (nil: every node), with whether that version deletes the node and why it was written (a revert, on the branch
 // of a change).
 func (d dialect) sqlCommittedVersions(namespace, branch string, after, upTo int64, ids []domain.NodeID) (string, []any) {
@@ -326,10 +326,10 @@ func (d dialect) sqlBranchNodeIDs(branch string) (string, []any) {
 		` UNION SELECT ` + d.id("node_id") + ` FROM node_branch WHERE branch = ` + d.ph(1), []any{domain.BranchOf(branch)}
 }
 
-// sqlBaselineHeader reads the header of a baseline.
-func (d dialect) sqlBaselineHeader(id domain.BaselineID) (string, []any) {
+// sqlCommitHeader reads the header of a commit.
+func (d dialect) sqlCommitHeader(id domain.CommitID) (string, []any) {
 	return `SELECT ` + d.id("id") + `, name, ` + d.idOr("coalesce", "parent_id") + `, ` + d.idOr("coalesce", "merged_from") + `, ` + d.idOr("coalesce", "change_id") +
-		`, created_at, branch, namespace, kind, ` + d.idOr("coalesce", "rebased_from") + `, seq FROM baseline WHERE id = ` + d.ph(1), []any{string(id)}
+		`, created_at, branch, namespace, kind, ` + d.idOr("coalesce", "rebased_from") + `, seq, ` + d.idOr("coalesce", "fork_commit") + ` FROM commits WHERE id = ` + d.ph(1), []any{string(id)}
 }
 
 // refsRows is the rows (id, version) of the refs of refsArgs at placeholder n.
@@ -484,11 +484,11 @@ func (d dialect) linkCols() string {
 	return d.cols(append(append([]sqlCol{su("id"), sc("type"), su("from_id"), sc("from_version")}, linkTo("")...), sc("props"), su("change_id"), sc("to_url"))...)
 }
 
-const branchColsText = `namespace, name, parent, %s, %s, origin, status, created_at, description, intent, %s, ephemeral, fork_seq`
+const branchColsText = `namespace, name, parent, %s, %s, origin, status, created_at, description, intent, %s, ephemeral`
 
 // branchCols is the select list of a branch.
 func (d dialect) branchCols() string {
-	return fmt.Sprintf(branchColsText, d.idOr("coalesce", "fork_baseline"), d.idOr("coalesce", "head_baseline"), d.idOr("coalesce", "rebased_from"))
+	return fmt.Sprintf(branchColsText, d.idOr("coalesce", "fork_commit"), d.idOr("coalesce", "head_commit"), d.idOr("coalesce", "rebased_from"))
 }
 
 // sqlBranch reads a branch.
@@ -501,47 +501,47 @@ func (d dialect) sqlBranches(namespace string) (string, []any) {
 	return `SELECT ` + d.branchCols() + ` FROM branch WHERE namespace = ` + d.ph(1) + d.orderBy("created_at", ""), []any{domain.NamespaceOf(namespace)}
 }
 
-// sqlNamespaceBaselineHeaders reads the header of every baseline of a namespace, oldest first (ADR 0133).
-func (d dialect) sqlNamespaceBaselineHeaders(namespace string) (string, []any) {
-	return `SELECT ` + d.headerListCols() + ` FROM baseline WHERE namespace = ` + d.ph(1) + d.orderBy("created_at", ", id"), []any{domain.NamespaceOf(namespace)}
+// sqlNamespaceCommitHeaders reads the header of every commit of a namespace, oldest first (ADR 0133).
+func (d dialect) sqlNamespaceCommitHeaders(namespace string) (string, []any) {
+	return `SELECT ` + d.headerListCols() + ` FROM commits WHERE namespace = ` + d.ph(1) + d.orderBy("created_at", ", id"), []any{domain.NamespaceOf(namespace)}
 }
 
-// headerListCols is the select list of a baseline header in a listing.
+// headerListCols is the select list of a commit header in a listing.
 func (d dialect) headerListCols() string {
 	return d.id("id") + `, name, ` + d.idOr("coalesce", "parent_id") + `, ` + d.idOr("coalesce", "merged_from") + `, ` + d.idOr("coalesce", "change_id") +
-		`, created_at, branch, kind, ` + d.idOr("coalesce", "rebased_from") + `, seq`
+		`, created_at, branch, kind, ` + d.idOr("coalesce", "rebased_from") + `, seq, ` + d.idOr("coalesce", "fork_commit")
 }
 
-// sqlBaselinePage reads the headers of the baselines of a branch committed before the order before (0: the newest), newest
+// sqlCommitPage reads the headers of the commits of a branch committed before the order before (0: the newest), newest
 // first, at most limit.
-func (d dialect) sqlBaselinePage(namespace, branch string, before int64, limit int) (string, []any) {
-	return `SELECT ` + d.headerListCols() + ` FROM baseline WHERE namespace = ` + d.ph(1) + ` AND branch = ` + d.ph(2) + ` AND (` + d.ph(3) + ` = 0 OR seq < ` + d.ph(3) +
+func (d dialect) sqlCommitPage(namespace, branch string, before int64, limit int) (string, []any) {
+	return `SELECT ` + d.headerListCols() + ` FROM commits WHERE namespace = ` + d.ph(1) + ` AND branch = ` + d.ph(2) + ` AND (` + d.ph(3) + ` = 0 OR seq < ` + d.ph(3) +
 		`) ORDER BY seq DESC LIMIT ` + d.ph(4), []any{domain.NamespaceOf(namespace), domain.BranchOf(branch), before, limit}
 }
 
-// sqlBaselineHeadersOf reads the headers of baselines of a namespace by id, oldest first.
-func (d dialect) sqlBaselineHeadersOf(namespace string, ids []domain.BaselineID) (string, []any) {
+// sqlCommitHeadersOf reads the headers of commits of a namespace by id, oldest first.
+func (d dialect) sqlCommitHeadersOf(namespace string, ids []domain.CommitID) (string, []any) {
 	list := make([]string, len(ids))
 	for i, id := range ids {
 		list[i] = string(id)
 	}
 	in, arg := d.uuidList("id", 2, list)
-	return `SELECT ` + d.headerListCols() + ` FROM baseline WHERE namespace = ` + d.ph(1) + ` AND ` + in + ` ORDER BY seq`, []any{domain.NamespaceOf(namespace), arg}
+	return `SELECT ` + d.headerListCols() + ` FROM commits WHERE namespace = ` + d.ph(1) + ` AND ` + in + ` ORDER BY seq`, []any{domain.NamespaceOf(namespace), arg}
 }
 
-// sqlChangeBaselineHeaders reads the headers of the baselines the changes left in a namespace, oldest first.
-func (d dialect) sqlChangeBaselineHeaders(namespace string, changes []domain.ChangeID) (string, []any) {
+// sqlChangeCommitHeaders reads the headers of the commits the changes left in a namespace, oldest first.
+func (d dialect) sqlChangeCommitHeaders(namespace string, changes []domain.ChangeID) (string, []any) {
 	list := make([]string, len(changes))
 	for i, id := range changes {
 		list[i] = string(id)
 	}
 	in, arg := d.uuidList("change_id", 2, list)
-	return `SELECT ` + d.headerListCols() + ` FROM baseline WHERE namespace = ` + d.ph(1) + ` AND ` + in + ` ORDER BY seq`, []any{domain.NamespaceOf(namespace), arg}
+	return `SELECT ` + d.headerListCols() + ` FROM commits WHERE namespace = ` + d.ph(1) + ` AND ` + in + ` ORDER BY seq`, []any{domain.NamespaceOf(namespace), arg}
 }
 
-// sqlBaselineCounts counts the baselines of each branch of a namespace.
-func (d dialect) sqlBaselineCounts(namespace string) (string, []any) {
-	return `SELECT branch, count(*) FROM baseline WHERE namespace = ` + d.ph(1) + ` GROUP BY branch`, []any{domain.NamespaceOf(namespace)}
+// sqlCommitCounts counts the commits of each branch of a namespace.
+func (d dialect) sqlCommitCounts(namespace string) (string, []any) {
+	return `SELECT branch, count(*) FROM commits WHERE namespace = ` + d.ph(1) + ` GROUP BY branch`, []any{domain.NamespaceOf(namespace)}
 }
 
 // sqlStoreCounts gives the statement of each measure of the store (StoreMeasures) for a namespace: rows of a key and a
@@ -560,7 +560,7 @@ func (d dialect) sqlStoreCounts(namespace string) map[string]string {
 		StatLinkSetsByMode: `SELECT CASE WHEN v.links IS NOT NULL THEN '` + LinkSetShared + `' WHEN v.links_base IS NOT NULL THEN '` + LinkSetDelta +
 			`' ELSE '` + LinkSetOwn + `' END AS mode, count(*)` + versions + ` GROUP BY mode`,
 		StatJoins:           `SELECT '', count(*) FROM node_branch j JOIN node n ON n.id = j.node_id WHERE n.namespace = ` + ns,
-		StatBaselinesByKind: `SELECT kind, count(*) FROM baseline WHERE namespace = ` + ns + ` GROUP BY kind`,
+		StatCommitsByKind:   `SELECT kind, count(*) FROM commits WHERE namespace = ` + ns + ` GROUP BY kind`,
 		StatChangesByStatus: `SELECT status, count(*) FROM change WHERE namespace = ` + ns + ` GROUP BY status`,
 		StatChangeCounters: `SELECT s.key, sum(CAST(s.value AS integer)) FROM change c, ` + d.jsonEach("c.stats") + ` s WHERE c.namespace = ` + ns +
 			` AND c.parent_id IS NULL GROUP BY s.key`,
@@ -586,15 +586,15 @@ func (d dialect) uuidList(col string, n int, list []string) (string, any) {
 	return col + ` IN (SELECT value FROM json_each(` + d.ph(n) + `))`, string(b)
 }
 
-// sqlBranchBaselineHeaders reads the header of every baseline of a branch of a namespace, oldest first.
-func (d dialect) sqlBranchBaselineHeaders(namespace, branch string) (string, []any) {
-	return `SELECT ` + d.headerListCols() + ` FROM baseline WHERE namespace = ` + d.ph(1) + ` AND branch = ` + d.ph(2) + ` ORDER BY seq`,
+// sqlBranchCommitHeaders reads the header of every commit of a branch of a namespace, oldest first.
+func (d dialect) sqlBranchCommitHeaders(namespace, branch string) (string, []any) {
+	return `SELECT ` + d.headerListCols() + ` FROM commits WHERE namespace = ` + d.ph(1) + ` AND branch = ` + d.ph(2) + ` ORDER BY seq`,
 		[]any{domain.NamespaceOf(namespace), domain.BranchOf(branch)}
 }
 
-// sqlBaselineIDs reads the ids of the baselines of a namespace, oldest first.
-func (d dialect) sqlBaselineIDs(namespace string) (string, []any) {
-	return `SELECT ` + d.id("id") + ` FROM baseline WHERE namespace = ` + d.ph(1) + d.orderBy("created_at", ""), []any{domain.NamespaceOf(namespace)}
+// sqlCommitIDs reads the ids of the commits of a namespace, oldest first.
+func (d dialect) sqlCommitIDs(namespace string) (string, []any) {
+	return `SELECT ` + d.id("id") + ` FROM commits WHERE namespace = ` + d.ph(1) + d.orderBy("created_at", ""), []any{domain.NamespaceOf(namespace)}
 }
 
 // sqlChangeIDs reads the ids of every change, oldest first.
@@ -780,7 +780,7 @@ func (d dialect) sqlSetNodeOrigin() string {
 	return `UPDATE node_version SET change_id = ` + d.ph(3) + `, change_impact = ` + d.ph(4) + `, comment = ` + d.ph(5) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
 }
 
-// sqlJoinBranch makes a version join a branch: arguments node, version, branch, change, the order of the baseline it
+// sqlJoinBranch makes a version join a branch: arguments node, version, branch, change, the order of the commit it
 // commits in.
 func (d dialect) sqlJoinBranch() string {
 	return `INSERT INTO node_branch (node_id, version, branch, change_id, committed) SELECT node_id, version, ` + d.ph(3) + `, ` + d.ph(4) + `, ` + d.ph(5) + ` FROM node_version
@@ -792,7 +792,7 @@ func (d dialect) sqlJoinBranch() string {
 func (d dialect) deleteChangeUsed() []string {
 	p := d.ph(1)
 	return []string{
-		`SELECT count(*) FROM baseline WHERE change_id = ` + p,
+		`SELECT count(*) FROM commits WHERE change_id = ` + p,
 		`SELECT count(*) FROM link l JOIN node_version v ON l.to_id = v.node_id AND l.to_version = v.version WHERE v.change_id = ` + p + ` AND ` + d.differs("l.change_id", p),
 		`SELECT count(*) FROM node_version o JOIN node_version v ON o.node_id = v.node_id AND o.version > v.version WHERE v.change_id = ` + p + ` AND ` + d.differs("o.change_id", p),
 	}
@@ -843,7 +843,7 @@ func (d dialect) sqlDeleteChange() string { return `DELETE FROM change WHERE id 
 var (
 	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner", "origins", "committed", "editor", "visibility"}
 	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id", "removes", "to_url"}
-	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "kind", "rebased_from", "seq"}
+	commitColumns      = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "kind", "rebased_from", "seq", "fork_commit"}
 	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "causation", "at", "payload", "node"}
 )
 

@@ -20,7 +20,7 @@ func testDecisionLoop(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	g := f.g
 	g.DecisionPolicy = decision.Policy{}
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP", ForkCommit: f.base.ID, OwnBranch: true}))
 	pre := f.req.Ref()
 	write := func(option, title string) domain.NodeRef {
 		t.Helper()
@@ -79,7 +79,7 @@ func testDecisionLoop(t *testing.T, repo Repo) {
 	if opts[0].OptionStatus() != domain.OptionSelected || opts[1].OptionStatus() != domain.OptionRejected {
 		t.Fatalf("options after the decision: %+v", opts)
 	}
-	res := g.withState(t, ctx, must[domain.Baseline](t)(g.apply(ctx, c.ID, "")))
+	res := g.withState(t, ctx, must[domain.Commit](t)(g.apply(ctx, c.ID, "")))
 	if res.Nodes[va.ID] != 2 || must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: va.ID})).Properties["title"] != "Use Stripe" {
 		t.Fatalf("the chosen option commits: %v", res.Nodes)
 	}
@@ -95,7 +95,7 @@ func testDecisionEscalation(t *testing.T, repo Repo) {
 	g.DecisionPolicy = decision.Policy{}
 	now := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	g.now = func() time.Time { return now }
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", ForkCommit: f.base.ID}))
 	d := must[domain.DecisionPoint](t)(g.OpenDecision(ctx, c.ID, OpenDecisionRequest{Question: "Go?", Options: []string{}, Policy: map[string]any{decision.KeyMaxRounds: 1, decision.KeyMaxDuration: "1h"}}))
 	d = must[domain.DecisionPoint](t)(g.RuleDecision(ctx, c.ID, RuleRequest{Point: d.ID, Outcome: domain.OutcomeUndecidable, Justification: "unknown", Questions: []string{"cost?"}}))
 	must[domain.DecisionPoint](t)(g.AnswerQuestion(ctx, c.ID, d.Questions[0].ID, "cheap", "", "u"))
@@ -126,7 +126,7 @@ func testDecisionWithoutPolicy(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", ForkCommit: f.base.ID}))
 	if _, err := g.OpenDecision(ctx, c.ID, OpenDecisionRequest{Question: "Go?", Options: []string{}, Policy: map[string]any{"threshold": 0.9}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("policy values without a policy: %v", err)
 	}
@@ -157,7 +157,7 @@ func testSelectOptionSettlesItsDecision(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", ForkCommit: f.base.ID, OwnBranch: true}))
 	a := must[domain.Flow](t)(g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "a"}))
 	must[domain.Flow](t)(g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "b"}))
 	must[domain.DecisionPoint](t)(g.OpenDecision(ctx, c.ID, OpenDecisionRequest{Question: "a or b?"}))

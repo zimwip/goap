@@ -12,7 +12,7 @@ type QueryOptions struct {
 	// Visible tells whether the caller reads a node (nil: every node): a node it may not read is not in the graph the
 	// query sees (no pattern, EXISTS or OPTIONAL MATCH meets it). It is asked outside the read's transaction (an access
 	// check reads the graph, and nothing in a graph transaction may wait on such a read): the query runs once, the
-	// nodes it met are asked, and it runs again in the same baseline when one of them is hidden.
+	// nodes it met are asked, and it runs again in the same commit when one of them is hidden.
 	Visible func(domain.Node) bool
 }
 
@@ -30,6 +30,6 @@ type QueryResult struct {
 	Notes     []string
 	// Reads is the number of reads the query made.
 	Reads int
-	// Baseline is the baseline the view read (a change view: its fork).
-	Baseline domain.BaselineID
+	// Commit is the commit the view read (a change view: its fork).
+	Commit domain.CommitID
 }

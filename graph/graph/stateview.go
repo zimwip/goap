@@ -8,24 +8,24 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// stateView is the state a baseline leaves as an operation builds on it (ADR 0137): the versions it reads are read
-// node by node from the baseline (versionsAt: the chain its state is stored over, ADR 0140), what it changes is kept apart (the delta the next baseline is written with), and the whole state is read only
+// stateView is the state a commit leaves as an operation builds on it (ADR 0137): the versions it reads are read
+// node by node from the commit (versionsAt: the chain its state is stored over, ADR 0140), what it changes is kept apart (the delta the next commit is written with), and the whole state is read only
 // for a question about every node (all).
 type stateView struct {
 	ctx context.Context
 	tx  Tx
-	// versions reads some nodes of the state (nil: every node): a baseline (versionsAt) or the branch of a change
+	// versions reads some nodes of the state (nil: every node): a commit (versionsAt) or the branch of a change
 	// (branchVersions)
 	versions func(ids []domain.NodeID) (map[domain.NodeID]domain.Version, error)
-	read     map[domain.NodeID]domain.Version // versions read from the baseline
-	absent   map[domain.NodeID]bool           // nodes read that the baseline does not hold
+	read     map[domain.NodeID]domain.Version // versions read from the commit
+	absent   map[domain.NodeID]bool           // nodes read that the commit does not hold
 	changed  map[domain.NodeID]domain.Version // what the operation changed: a version, 0 for a node it removed
 }
 
-func newStateView(ctx context.Context, tx Tx, at domain.BaselineID) *stateView {
+func newStateView(ctx context.Context, tx Tx, at domain.CommitID) *stateView {
 	return newView(ctx, tx, func(ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
 		if ids == nil {
-			b, err := tx.Baseline(ctx, at)
+			b, err := tx.Commit(ctx, at)
 			return b.Nodes, err
 		}
 		return versionsAt(ctx, tx, at, ids)
@@ -108,16 +108,16 @@ func (s *stateView) all() (map[domain.NodeID]domain.Version, error) {
 	return out, nil
 }
 
-// versionsAt reads the versions of some nodes in a baseline (guardTx.BaselineVersions; a transaction without the guard
+// versionsAt reads the versions of some nodes in a commit (guardTx.CommitVersions; a transaction without the guard
 // reads the whole state).
-func versionsAt(ctx context.Context, tx Tx, at domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+func versionsAt(ctx context.Context, tx Tx, at domain.CommitID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
 	if at == "" || len(ids) == 0 {
 		return map[domain.NodeID]domain.Version{}, nil
 	}
 	if gt, ok := unwrapGuard(tx); ok {
-		return gt.BaselineVersions(ctx, at, ids)
+		return gt.CommitVersions(ctx, at, ids)
 	}
-	b, err := tx.Baseline(ctx, at)
+	b, err := tx.Commit(ctx, at)
 	if err != nil {
 		return nil, err
 	}
@@ -130,26 +130,23 @@ func versionsAt(ctx context.Context, tx Tx, at domain.BaselineID, ids []domain.N
 	return out, nil
 }
 
-// branchHeadHeader returns the head baseline of a branch without its state (ADR 0137); the empty state (no change
+// branchHeadHeader returns the head commit of a branch without its state (ADR 0137); the empty state (no change
 // committed yet) has the empty id.
-func branchHeadHeader(ctx context.Context, tx Tx, namespace, name string) (domain.Baseline, error) {
+func branchHeadHeader(ctx context.Context, tx Tx, namespace, name string) (domain.Commit, error) {
 	ns, n := domain.NamespaceOf(namespace), domain.BranchOf(name)
 	b, err := tx.Branch(ctx, ns, n)
-	if err == nil && b.Ephemeral {
-		return domain.Baseline{}, errEphemeral(b)
-	}
-	if err == nil && b.Head != "" {
-		return tx.BaselineHeader(ctx, b.Head)
+	if err == nil && b.HeadOrFork() != "" {
+		return tx.CommitHeader(ctx, b.HeadOrFork())
 	}
 	head, err := branchHead(ctx, tx, namespace, name)
 	head.Nodes = nil
 	return head, err
 }
 
-// headerOf reads a baseline without its state; the empty id is the empty state.
-func headerOf(ctx context.Context, tx Tx, id domain.BaselineID) (domain.Baseline, error) {
+// headerOf reads a commit without its state; the empty id is the empty state.
+func headerOf(ctx context.Context, tx Tx, id domain.CommitID) (domain.Commit, error) {
 	if id == "" {
-		return domain.Baseline{}, nil
+		return domain.Commit{}, nil
 	}
-	return tx.BaselineHeader(ctx, id)
+	return tx.CommitHeader(ctx, id)
 }

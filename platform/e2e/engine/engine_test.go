@@ -27,7 +27,7 @@ func scripted(t *testing.T) llm.Client {
 		switch {
 		case strings.Contains(p, "DIRECTLY impacted"):
 			if !strings.Contains(p, "REQ-1 (alm@Requirement)") {
-				t.Errorf("prompt misses baseline nodes:\n%s", p)
+				t.Errorf("prompt misses commit nodes:\n%s", p)
 			}
 			out = `Here: {"items":[{"type":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"PSP API change"}}]}`
 		case strings.Contains(p, "new version"):
@@ -83,7 +83,7 @@ func (m mainGoals) CheckGuardians(context.Context, domain.Blackboard, string, []
 	return "", nil
 }
 
-func setup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
+func setup(t *testing.T) (*engine.Engine, *graph.Graph, domain.CommitID) {
 	t.Helper()
 	ctx := context.Background()
 	m, err := methodology.LoadFile("../../../methodologies/examples/impact-analysis.yaml")
@@ -155,7 +155,7 @@ func TestAssessImpact(t *testing.T) {
 	e, g, base := setup(t)
 	// the intent text deliberately echoes the "assess_impact" goal example
 	// ("what does this break") in methodologies/examples/impact-analysis.yaml.
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, ProjectID: testProject, Intent: "The PSP changes its API, what does this break?"})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: base, ProjectID: testProject, Intent: "The PSP changes its API, what does this break?"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestAssessImpact(t *testing.T) {
 func TestPrepareChangeWithClarificationAndReview(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, ProjectID: testProject, Intent: "The payment provider is changing"})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: base, ProjectID: testProject, Intent: "The payment provider is changing"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestPrepareChangeWithClarificationAndReview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes, links, _ := g.BaselineGraph(ctx, b2.ID)
+	nodes, links, _ := g.CommitGraph(ctx, b2.ID)
 	if len(nodes) != 5 {
 		t.Fatalf("expected 5 nodes in target graph, got %d", len(nodes))
 	}
@@ -261,7 +261,7 @@ func TestStuckWhenNoPlan(t *testing.T) {
 	e.Executors[methodology.KindLLM] = engine.LLMExecutor{Client: llm.ClientFunc(func(context.Context, llm.Request) (llm.Response, error) {
 		return llm.Response{Text: `{"items":[]}`}, nil
 	})}
-	p, _ := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, ProjectID: testProject, Goal: "assess_impact"})
+	p, _ := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: base, ProjectID: testProject, Goal: "assess_impact"})
 	p, _ = e.Run(ctx, p.ID)
 	if p.Status != engine.StatusWaiting || p.Pending.Action != "select_impacts" {
 		t.Fatalf("expected fallback to human selection, got %s %+v", p.Status, p.Pending)
@@ -292,7 +292,7 @@ func deliverUntilReviewed(t *testing.T, who authz.Principal) (*engine.Engine, *g
 	t.Helper()
 	e, g, base := setup(t)
 	ctx := authz.With(context.Background(), who)
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, ProjectID: testProject, Goal: "deliver_change"})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: base, ProjectID: testProject, Goal: "deliver_change"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +339,7 @@ func TestApplyNeedsApproval(t *testing.T) {
 		t.Fatalf("unexpected apply step %+v", last)
 	}
 	c, _ := g.Change(ctx, p.ChangeID)
-	if c.Status != domain.ChangeApplied || c.ResultBaselineID == "" {
+	if c.Status != domain.ChangeApplied || c.LandedCommit == "" {
 		t.Fatalf("change not applied: %+v", c)
 	}
 }
@@ -391,7 +391,7 @@ func TestRunFollowsTheVersionOfItsChange(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
 	cur := e.Methodologies.(engine.StaticMethodologies)["impact-analysis"]
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "pinned", Methodology: "impact-analysis", Namespace: "alm", BaselineID: base, ProjectID: testProject})
+	c, err := g.CreateChange(ctx, graph.NewChange{Title: "pinned", Methodology: "impact-analysis", Namespace: "alm", ForkCommit: base, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,7 +411,7 @@ func TestRunFollowsTheVersionOfItsChange(t *testing.T) {
 	if p.MethodologyVersion != cur.Definition().Version {
 		t.Fatalf("the run follows the change: %q", p.MethodologyVersion)
 	}
-	fresh, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", Goal: "assess_impact", BaselineID: base, ProjectID: testProject})
+	fresh, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", Goal: "assess_impact", ForkCommit: base, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

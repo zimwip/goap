@@ -22,7 +22,7 @@ func symbols(t *testing.T, g *graph.Graph, file string) map[string]domain.Versio
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes, links, err := g.BaselineGraph(ctx, head.ID)
+	nodes, links, err := g.CommitGraph(ctx, head.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func codeGraph(t *testing.T, g *graph.Graph) (map[string]domain.Node, map[string
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes, links, err := g.BaselineGraph(ctx, head.ID)
+	nodes, links, err := g.CommitGraph(ctx, head.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

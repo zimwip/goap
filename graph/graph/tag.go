@@ -51,17 +51,17 @@ func (g *Graph) DeleteTag(ctx context.Context, id domain.TagID) error {
 	return g.repo.InTx(ctx, func(tx Tx) error { return tx.DeleteTag(ctx, id) })
 }
 
-// StateAfter returns the state of the namespace after change id committed: the baseline that change produced.
-func (g *Graph) StateAfter(ctx context.Context, id domain.ChangeID) (b domain.Baseline, err error) {
+// StateAfter returns the state of the namespace after change id committed: the commit that change produced.
+func (g *Graph) StateAfter(ctx context.Context, id domain.ChangeID) (b domain.Commit, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err
 		}
-		if c.Status != domain.ChangeApplied || c.ResultBaselineID == "" {
+		if c.Status != domain.ChangeApplied || c.LandedCommit == "" {
 			return fmt.Errorf("change %s is %s: it has left no state: %w", id, c.Status, ErrNotFound)
 		}
-		b, err = tx.Baseline(ctx, c.ResultBaselineID)
+		b, err = tx.Commit(ctx, c.LandedCommit)
 		return err
 	})
 	return b, err

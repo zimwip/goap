@@ -8,7 +8,7 @@ import (
 )
 
 // txQuery implements ValidatorQuery against the resulting node set of a change being applied (target: the map
-// Apply is about to persist as the new baseline's Nodes, ADR 0024), not a branch read: an impacted node's new
+// Apply is about to persist as the new commit's Nodes, ADR 0024), not a branch read: an impacted node's new
 // version only joins its branch once Apply advances it, after validators run.
 type txQuery struct {
 	g      *Graph

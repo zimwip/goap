@@ -98,7 +98,7 @@
               <input id="{ap}-def" type="text" bind:value={a.default} disabled={readonly} />
             </div>
             <div class="field">
-              <label for="{ap}-diff" title="How a change of the value is shown: in the history of a node, the diff of an impact, the comparison of baselines">Diff</label>
+              <label for="{ap}-diff" title="How a change of the value is shown: in the history of a node, the diff of an impact, the comparison of commits">Diff</label>
               <select id="{ap}-diff" bind:value={a.diff} class:bad={bad(`${ap}.diff`)} data-path="{ap}.diff" disabled={readonly}>
                 <option value="">usual of the type ({defaultDiff({ type: a.type, widget: a.widget })})</option>
                 {#each DIFF_MODES as d (d)}<option value={d}>{DIFF_LABELS[d]}</option>{/each}

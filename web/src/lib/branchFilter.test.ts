@@ -28,7 +28,7 @@ describe('shownBranches', () => {
 
 describe('logical time', () => {
   // b1 <- b2 <- b3 on main; a branch forked at b1 was created last by the clock, one forked at b3 first
-  const baselines = [
+  const commits = [
     { id: 'b1' },
     { id: 'b2', parentId: 'b1' },
     { id: 'b3', parentId: 'b2' },
@@ -36,19 +36,19 @@ describe('logical time', () => {
     { id: 'b4', parentId: 'b3', mergedFrom: 'c1' },
   ];
 
-  it('counts the longest history behind a baseline', () => {
-    const t = logicalTimes(baselines);
+  it('counts the longest history behind a commit', () => {
+    const t = logicalTimes(commits);
     expect([...['b1', 'b2', 'b3', 'c1', 'b4']].map((id) => t.get(id))).toEqual([1, 2, 3, 2, 4]);
   });
 
   it('orders branches by where they forked in the history, not by their clock', () => {
     const branches = [
       { name: 'main', status: 'open' },
-      { name: 'old-fork', status: 'open', forkBaseline: 'b1', createdAt: '2026-09-01T00:00:00Z' },
-      { name: 'late-fork', status: 'open', forkBaseline: 'b3', createdAt: '2026-01-01T00:00:00Z' },
+      { name: 'old-fork', status: 'open', forkCommit: 'b1', createdAt: '2026-09-01T00:00:00Z' },
+      { name: 'late-fork', status: 'open', forkCommit: 'b3', createdAt: '2026-01-01T00:00:00Z' },
       { name: 'from-empty', status: 'open', createdAt: '2026-12-01T00:00:00Z' },
     ];
-    expect(shownBranches(branches, false, baselines).map((x) => x.name)).toEqual(['main', 'late-fork', 'old-fork', 'from-empty']);
+    expect(shownBranches(branches, false, commits).map((x) => x.name)).toEqual(['main', 'late-fork', 'old-fork', 'from-empty']);
   });
 
   it('survives a cycle in corrupt data', () => {

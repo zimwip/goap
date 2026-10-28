@@ -160,7 +160,7 @@ func closeInstance(p *Process, m *methodology.Compiled) {
 }
 
 // handOver starts a new instance for the events left in the inbox of an instance that closed: the next cycle. The
-// instance of a change keeps its change; one of another scope starts from the latest baseline, like the trigger
+// instance of a change keeps its change; one of another scope starts from the latest commit, like the trigger
 // that started it.
 func (e *Engine) handOver(ctx context.Context, p *Process) error {
 	if len(p.Inbox) == 0 {
@@ -181,7 +181,7 @@ func (e *Engine) handOver(ctx context.Context, p *Process) error {
 		ProjectID: p.Project, Vars: vars, Intent: fmt.Sprintf("next cycle of %s after %s", p.Agent, p.ID)}
 	if ag.Persistent.ScopePath() == methodology.ScopeChange {
 		req.ChangeID = p.ChangeID
-	} else if req.BaselineID, err = e.latestBaseline(ctx, domain.NamespaceOf(m.Namespace())); err != nil {
+	} else if req.ForkCommit, err = e.latestCommit(ctx, domain.NamespaceOf(m.Namespace())); err != nil {
 		return err
 	}
 	unlock := e.lock(p.ID)

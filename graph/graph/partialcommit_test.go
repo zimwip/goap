@@ -17,7 +17,7 @@ func testPartialCommit(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "partial", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "partial", ForkCommit: f.base.ID, OwnBranch: true}))
 	req := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "v2"}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, req.ID, NodeUpdate{Properties: map[string]any{"title": "one"}}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, req.ID, domain.ReviewAccepted, "bob", "ok"))
@@ -35,7 +35,7 @@ func testPartialCommit(t *testing.T, repo Repo) {
 	if _, err := g.CommitChangeNodes(ctx, c.ID, "", []domain.NodeID{f.req.ID, "no-such-node"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a node with nothing to commit is refused: %v", err)
 	}
-	b := g.withState(t, ctx, must[domain.Baseline](t)(g.CommitChangeNodes(ctx, c.ID, "", []domain.NodeID{nodeOf(created)})))
+	b := g.withState(t, ctx, must[domain.Commit](t)(g.CommitChangeNodes(ctx, c.ID, "", []domain.NodeID{nodeOf(created)})))
 	if b.Nodes[f.req.ID] != f.req.Version || b.Nodes[nodeOf(created)] == 0 {
 		t.Fatalf("only the node named is committed: %+v", b.Nodes)
 	}
@@ -48,20 +48,20 @@ func testPartialCommit(t *testing.T, repo Repo) {
 		t.Fatalf("one node to merge, the close held: %+v", st)
 	}
 	merged := must[domain.Change](t)(g.IntegrateChange(ctx, c.ID, nil))
-	onMain := g.withState(t, ctx, must[domain.Baseline](t)(g.Baseline(ctx, merged.ResultBaselineID)))
+	onMain := g.withState(t, ctx, must[domain.Commit](t)(g.Commit(ctx, merged.LandedCommit)))
 	if merged.Status != domain.ChangeActive || onMain.Branch != domain.MainBranch || onMain.Nodes[nodeOf(created)] == 0 || onMain.Nodes[f.req.ID] != f.req.Version {
 		t.Fatalf("the committed node merges, the change open: %+v %+v", merged, onMain.Nodes)
 	}
 	if _, err := g.CloseChange(ctx, c.ID); !errors.Is(err, ErrConflict) {
 		t.Fatalf("an uncommitted modification holds the close: %v", err)
 	}
-	b = g.withState(t, ctx, must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, "")))
+	b = g.withState(t, ctx, must[domain.Commit](t)(g.CommitChange(ctx, c.ID, "")))
 	if b.Nodes[f.req.ID] == f.req.Version {
 		t.Fatalf("the second commit writes the rest: %+v", b.Nodes)
 	}
 
 	// a version linking to the draft of a node left out is refused
-	c2 := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "linked", BaselineID: f.base.ID, OwnBranch: true}))
+	c2 := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "linked", ForkCommit: f.base.ID, OwnBranch: true}))
 	d2 := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c2.ID, NodeCreate{Key: "D-2", Type: "Design", Rationale: "new"}))
 	r2 := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c2.ID, NodeCheckout{Node: f.req.ID, Rationale: "link"}))
 	must[domain.Link](t)(g.ImpactLinkCreate(ctx, c2.ID, r2.ID, LinkWrite{Type: "refines", To: *d2.Post}, "", ""))

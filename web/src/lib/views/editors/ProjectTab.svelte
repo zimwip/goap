@@ -117,7 +117,7 @@
     if (on && !(await confirmDialog({ message: `Stop the project ${key}? It takes no new change until an owner restarts it.`, danger: true }))) return;
     error = '';
     try {
-      await applyOnMain(ns.organisation, `${on ? 'Stop' : 'Restart'} project ${key}`, `${on ? 'Stop' : 'Restart'} the project ${key}`, head.baselineId, [updateNodeItem(project, { stopped: on || null })]);
+      await applyOnMain(ns.organisation, `${on ? 'Stop' : 'Restart'} project ${key}`, `${on ? 'Stop' : 'Restart'} the project ${key}`, head.commitId, [updateNodeItem(project, { stopped: on || null })]);
       notify(`Project ${key} ${on ? 'stopped' : 'restarted'}.`, 'ok');
     } catch (e) {
       error = errorMessage(e);
@@ -130,7 +130,7 @@
     error = '';
     try {
       const methodologies = fMethodologies;
-      await applyOnMain(ns.organisation, `Project ${key}`, `Update project ${key}`, head.baselineId, [
+      await applyOnMain(ns.organisation, `Project ${key}`, `Update project ${key}`, head.commitId, [
         updateNodeItem(project, { description: fDescription.trim() || null, status: fStatus.trim() || null, methodologies: methodologies.length ? methodologies : null }),
       ]);
       notify(`Project ${key} updated.`, 'ok');

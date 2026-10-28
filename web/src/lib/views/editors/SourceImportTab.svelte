@@ -9,7 +9,7 @@
   import Icon from '../../shell/Icon.svelte';
   import DirectoryChooser from '../../components/DirectoryChooser.svelte';
   import { provideActions, notify } from '../../shell/workbench.svelte';
-  import { refreshBranches } from '../../stores/baselineTool.svelte';
+  import { refreshBranches } from '../../stores/commitTool.svelte';
   import { onJobEnded, openJob, takeJob } from '../../stores/jobs.svelte';
   import { initialValues, isImportJob, paramFields, runParams, type ParamField } from '../../importSources';
 

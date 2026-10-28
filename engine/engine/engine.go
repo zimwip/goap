@@ -136,9 +136,9 @@ func (e *Engine) queue(ctx context.Context, p *Process, reason string, cause map
 // StartRequest starts a process.
 type StartRequest struct {
 	Methodology string
-	// ChangeID continues an existing change; otherwise a change is opened on BaselineID.
+	// ChangeID continues an existing change; otherwise a change is opened on CommitID.
 	ChangeID   domain.ChangeID
-	BaselineID domain.BaselineID
+	ForkCommit domain.CommitID
 	// Namespace of the new change (default: domain.DefaultNamespace).
 	Namespace string
 	// OwnBranch gives the new change a branch of its own (merged into main when applied).
@@ -215,7 +215,7 @@ func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) 
 
 // start creates a process (the instance of key when it is not empty) and resolves its intent.
 func (e *Engine) start(ctx context.Context, req StartRequest, instance string) (*Process, error) {
-	p := &Process{Instance: instance, ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID, Namespace: req.Namespace, OwnBranch: req.OwnBranch, Org: req.OwnerOrg,
+	p := &Process{Instance: instance, ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, ForkCommit: req.ForkCommit, Namespace: req.Namespace, OwnBranch: req.OwnBranch, Org: req.OwnerOrg,
 		Project: req.ProjectID, Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Cause: req.Cause, Flow: req.Flow, Initiator: authz.From(ctx), Vars: maps.Clone(req.Vars), Step: req.Step, Disabled: map[string]bool{},
 		CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	if p.Initiator.System() && p.Initiator.OnBehalfOf == "" {
@@ -237,8 +237,8 @@ func (e *Engine) start(ctx context.Context, req StartRequest, instance string) (
 		if err != nil {
 			return nil, err
 		}
-		if req.BaselineID == "" {
-			p.BaselineID = bb.Change.BaselineID
+		if req.ForkCommit == "" {
+			p.ForkCommit = bb.Change.ForkCommit
 		}
 		// a run works where its change does (ADR 0091): the roles it checks are held on the project of the change,
 		// which a move may have changed since the caller's token was issued
@@ -465,7 +465,7 @@ func agentBindsOwnChange(m *methodology.Compiled, ag methodology.Agent) bool {
 type AttachRequest struct {
 	ChangeID                                      domain.ChangeID // reuse an existing change if set
 	Title, Intent, Namespace, OwnerOrg, ProjectID string
-	BaselineID                                    domain.BaselineID
+	ForkCommit                                    domain.CommitID
 }
 
 // AttachChange binds a standalone (not-yet-bound) process to a change: the
@@ -518,7 +518,7 @@ func (e *Engine) bindChange(ctx context.Context, p *Process, m *methodology.Comp
 // resolveChange creates a new change for p, defaulting from req where given
 // and from p/its methodology otherwise (identical defaults to what selectTarget
 // always did eagerly: title from the first user turn or "<methodology> / <goal>",
-// namespace from the methodology, baseline the latest of that namespace).
+// namespace from the methodology, commit the latest of that namespace).
 func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.Compiled, req AttachRequest) (domain.ChangeID, error) {
 	title := firstNonEmpty(req.Title, p.Title)
 	if title == "" {
@@ -557,22 +557,22 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 		data = nil
 	}
 	ns := firstNonEmpty(req.Namespace, p.Namespace, m.Namespace())
-	baseline := req.BaselineID
-	if baseline == "" {
-		baseline = p.BaselineID
+	commit := req.ForkCommit
+	if commit == "" {
+		commit = p.ForkCommit
 	}
-	// Without a baseline, the change starts from the latest one of the namespace it acts on: a request may
+	// Without a commit, the change starts from the latest one of the namespace it acts on: a request may
 	// only know its methodology (hence its namespace) once its intent is identified.
-	if baseline == "" {
-		b, err := e.latestBaseline(ctx, domain.NamespaceOf(ns))
+	if commit == "" {
+		b, err := e.latestCommit(ctx, domain.NamespaceOf(ns))
 		if err != nil {
 			return "", fmt.Errorf("methodology %s: %w", m.Name(), err)
 		}
-		baseline = b
+		commit = b
 	}
-	p.BaselineID = baseline
+	p.ForkCommit = commit
 	c, err := e.Graph.CreateChange(ctx, graphapi.NewChange{Title: title, Intent: intent, Methodology: m.Name(), OwnerOrg: ownerOrg, ProjectID: projectID,
-		Namespace: ns, OwnBranch: p.OwnBranch, BaselineID: baseline, Data: data})
+		Namespace: ns, OwnBranch: p.OwnBranch, ForkCommit: commit, Data: data})
 	if err != nil {
 		return "", err
 	}
@@ -1078,7 +1078,7 @@ func (e *Engine) runChildStep(ctx context.Context, h *Host, key, methodologyName
 			}
 			vars["item"] = step.Item
 		}
-		c, err := e.Start(ctx, StartRequest{Methodology: methodologyName, ChangeID: parent.ChangeID, BaselineID: parent.BaselineID,
+		c, err := e.Start(ctx, StartRequest{Methodology: methodologyName, ChangeID: parent.ChangeID, ForkCommit: parent.ForkCommit,
 			Agent: agentName, Goal: goal, Intent: intentText, ParentID: parent.ID, Call: key, Vars: vars, Step: step})
 		if err != nil {
 			return dsl.AgentResult{}, err

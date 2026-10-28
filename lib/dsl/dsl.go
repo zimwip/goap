@@ -286,7 +286,7 @@ func (c *Ctx) ChangeImpacts() []ChangeImpact {
 	return c.job.Nodes
 }
 
-// ---- domain (read, reference baseline) --------------------------------------
+// ---- domain (read, reference commit) --------------------------------------
 
 func (c *Ctx) Node(key string) (Node, error) { return c.host.Node(c.gctx, key) }
 func (c *Ctx) Nodes(nodeType string) ([]Node, error) {
@@ -308,7 +308,7 @@ func (c *Ctx) emit(item map[string]any) string {
 }
 
 // ImpactNode declares that the change acts on an existing node of the reference
-// baseline, and why: a change impact with no version written yet. It returns a
+// commit, and why: a change impact with no version written yet. It returns a
 // reference ("#nN") for WriteNode and ImpactNodeReview of the same script.
 func (c *Ctx) ImpactNode(key, rationale string) string {
 	c.nseq++

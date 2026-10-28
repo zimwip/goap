@@ -36,7 +36,7 @@ func TestPositionsThroughTheService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: base.ID})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "t", ForkCommit: base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -57,7 +57,7 @@ nodeTypes:
 		t.Fatal(err)
 	}
 	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "docs", Title: "Reset the password", Intent: "Users reset it by mail", Methodology: "sdlc",
-		BaselineID: head.ID, OwnBranch: true, ProjectID: root})
+		ForkCommit: head.ID, OwnBranch: true, ProjectID: root})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ nodeTypes:
 	}
 
 	// a change that committed nothing is purged with its document
-	other, err := g.CreateChange(ctx, graph.NewChange{Namespace: "docs", Title: "Scratch", Intent: "scratch", BaselineID: head.ID, ProjectID: root})
+	other, err := g.CreateChange(ctx, graph.NewChange{Namespace: "docs", Title: "Scratch", Intent: "scratch", ForkCommit: head.ID, ProjectID: root})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,12 +324,12 @@ type views map[string]map[domain.NodeID]domain.Version
 
 func (vs views) ViewVersions(_ context.Context, v graphapi.View, ids []domain.NodeID) (graphapi.ViewState, error) {
 	if v.IsChange() {
-		return graphapi.ViewState{Namespace: "docs", Baseline: "B1", Versions: vs[string(v.Change)]}, nil
+		return graphapi.ViewState{Namespace: "docs", Commit: "B1", Versions: vs[string(v.Change)]}, nil
 	}
 	if err := v.Check(); err != nil {
 		return graphapi.ViewState{}, err
 	}
-	return graphapi.ViewState{Namespace: v.Namespace, Baseline: "B2", MainHead: v.Branch == domain.MainBranch && v.Baseline == ""}, nil
+	return graphapi.ViewState{Namespace: v.Namespace, Commit: "B2", MainHead: v.Branch == domain.MainBranch && v.Commit == ""}, nil
 }
 
 func (vs views) ViewDrafts(_ context.Context, v graphapi.View, text string, _ int) ([]domain.Node, error) {

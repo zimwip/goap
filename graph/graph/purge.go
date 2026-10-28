@@ -10,7 +10,7 @@ import (
 
 // PurgeChange removes a change that committed nothing, with its whole log (ADR 0037). It is the exception to the
 // insert-only log of ADR 0030: what is removed was never part of the graph. A change is refused (ErrConflict) unless it
-// is draft, active or abandoned, has produced no baseline (no commit), has no sub-change, and its own branch, when it has
+// is draft, active or abandoned, has produced no commit (no commit), has no sub-change, and its own branch, when it has
 // one, has not moved since it was forked. A change whose log records an execution (an entry of a stream the graph does
 // not write itself: the journal of a run, the exchanges with a model) is refused too: that record is the trace of what an
 // AI did on whose behalf (EU AI Act Art. 12, 19), kept with the change, which can still be abandoned.
@@ -23,8 +23,8 @@ func (g *Graph) PurgeChange(ctx context.Context, id domain.ChangeID) (domain.Cha
 		if c.Status != domain.ChangeDraft && c.Status != domain.ChangeActive && c.Status != domain.ChangeAbandoned {
 			return fmt.Errorf("change %s is %s, it committed in the graph: %w", id, c.Status, ErrConflict)
 		}
-		if c.ResultBaselineID != "" {
-			return fmt.Errorf("change %s produced baseline %s: %w", id, c.ResultBaselineID, ErrConflict)
+		if c.LandedCommit != "" {
+			return fmt.Errorf("change %s produced commit %s: %w", id, c.LandedCommit, ErrConflict)
 		}
 		if subs, err := subChanges(ctx, tx, id); err != nil {
 			return err
@@ -42,7 +42,7 @@ func (g *Graph) PurgeChange(ctx context.Context, id domain.ChangeID) (domain.Cha
 			return err
 		}
 		if isOwn {
-			// the branch of a change holds no baseline (ADR 0140): what it committed, or a sub-change merged into it, is a
+			// the branch of a change holds no commit (ADR 0140): what it committed, or a sub-change merged into it, is a
 			// commit on it
 			if last, err := tx.LastCommit(ctx, own.Name); err != nil {
 				return err

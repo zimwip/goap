@@ -130,11 +130,11 @@ func (im *Importer) skip(l gitLine, why string) {
 // versionPage is how many versions of the repository node fork reads at a time.
 const versionPage = 500
 
-// fork is the baseline a git branch starts from: the state the import of the last commit of its first-parent line
+// fork is the commit a git branch starts from: the state the import of the last commit of its first-parent line
 // already imported left (the repository node, written by every commit, names the commit of each of its versions); the
 // empty state for a branch sharing no commit with what was imported, when the import starts at the root commit; why
 // says why the branch is left out otherwise.
-func (im *Importer) fork(ctx context.Context, l gitLine) (domain.BaselineID, string, error) {
+func (im *Importer) fork(ctx context.Context, l gitLine) (domain.CommitID, string, error) {
 	repo := im.ix.byKey[im.Name]
 	if repo != nil {
 		line, err := FirstParents(ctx, im.Dir, l.tip)
@@ -167,9 +167,9 @@ func (im *Importer) fork(ctx context.Context, l gitLine) (domain.BaselineID, str
 	return "", "", nil
 }
 
-// landed is the baseline the change of a commit left on the branch it was imported on: the change of a version, or the
+// landed is the commit the change of a commit left on the branch it was imported on: the change of a version, or the
 // change of the commit whose sub-change wrote it; "" when it never landed (abandoned).
-func (im *Importer) landed(ctx context.Context, id domain.ChangeID) (domain.BaselineID, error) {
+func (im *Importer) landed(ctx context.Context, id domain.ChangeID) (domain.CommitID, error) {
 	for id != "" {
 		c, err := im.Graph.Change(ctx, id)
 		if err != nil {
@@ -179,7 +179,7 @@ func (im *Importer) landed(ctx context.Context, id domain.ChangeID) (domain.Base
 			if c.Status != domain.ChangeApplied {
 				return "", nil
 			}
-			return c.ResultBaselineID, nil
+			return c.LandedCommit, nil
 		}
 		id = c.ParentID
 	}

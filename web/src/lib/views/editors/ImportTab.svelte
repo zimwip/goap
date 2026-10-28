@@ -10,7 +10,7 @@
   import { openTab } from '../../shell/tabs.svelte';
   import { refreshMethodologies } from '../../stores/catalog.svelte';
   import { refreshDomains } from '../../stores/domains.svelte';
-  import { refreshBranches } from '../../stores/baselineTool.svelte';
+  import { refreshBranches } from '../../stores/commitTool.svelte';
   import { methodologySpec } from './methodologyTabs';
   import { domainSpec } from './domainTabs';
   import { importKind, IMPORT_KINDS } from './importKinds';

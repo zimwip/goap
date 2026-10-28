@@ -16,7 +16,7 @@ func TestChangesPage(t *testing.T) { forEachRepo(t, testChangesPage) }
 func testChangesPage(t *testing.T, g *graph.Graph, first domain.Change) {
 	ctx := context.Background()
 	for i := range 7 {
-		if _, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: fmt.Sprintf("p%d", i), BaselineID: first.BaselineID}); err != nil {
+		if _, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: fmt.Sprintf("p%d", i), ForkCommit: first.ForkCommit}); err != nil {
 			t.Fatal(err)
 		}
 	}

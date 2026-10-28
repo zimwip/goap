@@ -4,8 +4,8 @@ import { errorMessage, graph, type Job } from './api';
 import { notify } from './shell/workbench.svelte';
 import { downloadJobResult, followJob } from './stores/jobs.svelte';
 
-/** Starts the export of a namespace (the head of a branch, default main, or a baseline) and saves its file when done. */
-export async function exportGraph(req: { namespace: string; branch?: string; baselineId?: string; format: 'json' | 'okf' }): Promise<Job> {
+/** Starts the export of a namespace (the head of a branch, default main, or a commit) and saves its file when done. */
+export async function exportGraph(req: { namespace: string; branch?: string; commitId?: string; format: 'json' | 'okf' }): Promise<Job> {
   const { job } = await graph.startGraphExport(req);
   notify(`Export of ${req.namespace} started: it shows under Jobs in the status bar.`, 'info');
   followJob(job, (j) => {

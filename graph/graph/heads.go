@@ -13,18 +13,18 @@ import (
 // commits of other processes sharing its store: a commit of this graph moves the head at once (Graph.headMoved).
 const headAge = time.Second
 
-// followedHeadAge is the same when the graph follows the baseline events of the other processes (FollowHeads): an event
+// followedHeadAge is the same when the graph follows the commit events of the other processes (FollowHeads): an event
 // moves the head at once, a lost one is caught up then.
 const followedHeadAge = 30 * time.Second
 
 // maxHeads bounds the lasting branches whose head is kept.
 const maxHeads = 1024
 
-// keptBranch is the head of a lasting branch as the graph holds it in memory, moved by its own commits and the baseline
+// keptBranch is the head of a lasting branch as the graph holds it in memory, moved by its own commits and the commit
 // events of the other processes rather than read again (the way a change view follows its log, ADR 0153).
 type keptBranch struct {
 	// head is the header of the head ("" id: unknown, read at the next view), at when it was last known to be it
-	head domain.Baseline
+	head domain.Commit
 	at   time.Time
 	// gen counts the moves told: a head read from the store is kept only when no move came while it was read
 	gen uint64
@@ -37,7 +37,7 @@ type keptBranch struct {
 type keptHeads struct {
 	mu       sync.Mutex
 	branches map[string]*keptBranch
-	// follows: the baseline events of the other processes reach the graph (FollowHeads)
+	// follows: the commit events of the other processes reach the graph (FollowHeads)
 	follows bool
 }
 
@@ -82,7 +82,7 @@ const unknownVersion domain.Version = -2
 // headMove is what a commit did to the head of a branch: its new header and the versions it moved there (0: a node it
 // no longer holds); whole when moves holds every node whose version changed since the parent.
 type headMove struct {
-	head  domain.Baseline
+	head  domain.Commit
 	moves map[domain.NodeID]domain.Version
 	whole bool
 }
@@ -102,7 +102,7 @@ func (g *Graph) headMoved(key string, m headMove) {
 	}
 	b.gen++
 	if b.head.ID == "" || b.head.ID != m.head.ParentID {
-		b.head, b.epoch = domain.Baseline{}, b.epoch+1
+		b.head, b.epoch = domain.Commit{}, b.epoch+1
 		return
 	}
 	b.head, b.at = m.head, time.Now()
@@ -119,7 +119,7 @@ func (g *Graph) headMoved(key string, m headMove) {
 	}
 }
 
-// FollowHeads makes the graph keep the heads of its lasting branches until the baseline events of the other processes
+// FollowHeads makes the graph keep the heads of its lasting branches until the commit events of the other processes
 // sharing its store move them (HeadEvent), followedHeadAge at most: the composition of a graph with a bus.
 func (g *Graph) FollowHeads() {
 	g.heads.mu.Lock()
@@ -127,10 +127,10 @@ func (g *Graph) FollowHeads() {
 	g.heads.mu.Unlock()
 }
 
-// HeadEvent takes a baseline event (a domain.BaselineEvent, subject domain.SubjectBaselineAdvanced) and moves the head
+// HeadEvent takes a commit event (a domain.CommitEvent, subject domain.SubjectCommitAdvanced) and moves the head
 // kept of its branch: the event carries the header and, when whole, the versions the commit moved. An event of a
 // commit of this graph comes back once its head moved: it is left alone.
-func (g *Graph) HeadEvent(ev domain.BaselineEvent) {
+func (g *Graph) HeadEvent(ev domain.CommitEvent) {
 	if ev.ID == "" || ev.Seq == 0 {
 		return // an event of an older graph: the head is read again after followedHeadAge
 	}
@@ -146,7 +146,7 @@ func (g *Graph) HeadEvent(ev domain.BaselineEvent) {
 
 // headHeader is branchHeadHeader for a view of a lasting branch at its head: the head kept, read again once it is older
 // than its age or unknown; read in the transaction when it wrote a branch itself.
-func (g *Graph) headHeader(ctx context.Context, tx Tx, namespace, name string) (domain.Baseline, error) {
+func (g *Graph) headHeader(ctx context.Context, tx Tx, namespace, name string) (domain.Commit, error) {
 	gt, ok := unwrapGuard(tx)
 	if !ok || len(gt.moved) > 0 {
 		return branchHeadHeader(ctx, tx, namespace, name)
@@ -177,8 +177,8 @@ func (g *Graph) headHeader(ctx context.Context, tx Tx, namespace, name string) (
 }
 
 // keptSelection is the node of a key and its version at the head of its branch when the graph keeps them (selectKey):
-// the baseline must be the head held.
-func (g *Graph) keptSelection(b domain.Baseline, key string) (domain.NodeID, domain.Version, bool) {
+// the commit must be the head held.
+func (g *Graph) keptSelection(b domain.Commit, key string) (domain.NodeID, domain.Version, bool) {
 	id, ok := g.keyIDs.Get(nsKey(b.Namespace, key))
 	if !ok {
 		return "", 0, false
@@ -197,9 +197,9 @@ func (g *Graph) keptSelection(b domain.Baseline, key string) (domain.NodeID, dom
 	return id, s.version, true
 }
 
-// keepSelection keeps the node of a key and its version at a baseline read from the store, when the baseline is the
-// head held (a selection at a baseline never changes: what is kept for the head is moved with it).
-func (g *Graph) keepSelection(b domain.Baseline, key string, id domain.NodeID, v domain.Version) {
+// keepSelection keeps the node of a key and its version at a commit read from the store, when the commit is the
+// head held (a selection at a commit never changes: what is kept for the head is moved with it).
+func (g *Graph) keepSelection(b domain.Commit, key string, id domain.NodeID, v domain.Version) {
 	g.keyIDs.Put(nsKey(b.Namespace, key), id)
 	bk := guardBranchKey(b.Namespace, b.Branch)
 	g.heads.mu.Lock()

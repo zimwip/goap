@@ -22,12 +22,12 @@ func testTags(t *testing.T, repo Repo) {
 			ref := n.Ref()
 			edit = NodeEdit{Pre: &ref, Props: edit.Props}
 		}
-		res, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: title, Baseline: must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)).ID,
+		res, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: title, Commit: must[domain.Commit](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)).ID,
 			By: "test", Edits: []NodeEdit{edit}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return committed{res.Change, res.Baseline}, must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, key))
+		return committed{res.Change, res.Commit}, must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, key))
 	}
 	// a tag names one exact version (ADR 0143 §6)
 	_, v1 := commit("First", "T-1", "draft")
@@ -79,21 +79,21 @@ func testTags(t *testing.T, repo Repo) {
 	}
 }
 
-// committed is what a commit of the test leaves: its change and the baseline it produced.
+// committed is what a commit of the test leaves: its change and the commit it produced.
 type committed struct {
-	change   domain.ChangeID
-	baseline domain.Baseline
+	change domain.ChangeID
+	commit domain.Commit
 }
 
 // A state is the selection of the versions committed (ADR 0143): the graph and a store read the same, whatever the cache.
-func TestBaselinesAreSelections(t *testing.T) { forEachRepo(t, testBaselinesAreSelections) }
+func TestCommitsAreSelections(t *testing.T) { forEachRepo(t, testCommitsAreSelections) }
 
-func testBaselinesAreSelections(t *testing.T, repo Repo) {
+func testCommitsAreSelections(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	head := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
-	var written []domain.Baseline
+	head := must[domain.Commit](t)(g.BranchHead(ctx, "", domain.MainBranch))
+	var written []domain.Commit
 	for i := range 7 {
 		edits := []NodeEdit{{Key: fmt.Sprintf("DES-%d", i), Type: "Design"}}
 		if i == 4 {
@@ -105,12 +105,12 @@ func testBaselinesAreSelections(t *testing.T, repo Repo) {
 	// a store selects the state without the graph
 	if err := repo.InTx(ctx, func(tx Tx) error {
 		for i, b := range written {
-			r, err := tx.Baseline(ctx, b.ID)
+			r, err := tx.Commit(ctx, b.ID)
 			if err != nil {
 				return err
 			}
 			if !maps.Equal(r.Nodes, b.Nodes) {
-				t.Errorf("baseline %d read by the store: %v, want %v", i, r.Nodes, b.Nodes)
+				t.Errorf("commit %d read by the store: %v, want %v", i, r.Nodes, b.Nodes)
 			}
 		}
 		return nil
@@ -120,20 +120,20 @@ func testBaselinesAreSelections(t *testing.T, repo Repo) {
 	// read: every one holds what was written, through a graph with no cache
 	fresh := New(repo)
 	for i, want := range written {
-		got := must[domain.Baseline](t)(fresh.Baseline(ctx, want.ID))
+		got := must[domain.Commit](t)(fresh.Commit(ctx, want.ID))
 		if !maps.Equal(got.Nodes, want.Nodes) {
-			t.Fatalf("baseline %d: read %v, wrote %v", i, got.Nodes, want.Nodes)
+			t.Fatalf("commit %d: read %v, wrote %v", i, got.Nodes, want.Nodes)
 		}
-		if st := must[domain.Baseline](t)(fresh.StateAfter(ctx, want.ChangeID)); !maps.Equal(st.Nodes, want.Nodes) {
-			t.Fatalf("state after the change of baseline %d: %v, want %v", i, st.Nodes, want.Nodes)
+		if st := must[domain.Commit](t)(fresh.StateAfter(ctx, want.ChangeID)); !maps.Equal(st.Nodes, want.Nodes) {
+			t.Fatalf("state after the change of commit %d: %v, want %v", i, st.Nodes, want.Nodes)
 		}
-		if nodes, _ := must2(t)(fresh.BaselineGraph(ctx, want.ID)); len(nodes) != len(want.Nodes) {
-			t.Fatalf("baseline %d: graph of %d nodes, want %d", i, len(nodes), len(want.Nodes))
+		if nodes, _ := must2(t)(fresh.CommitGraph(ctx, want.ID)); len(nodes) != len(want.Nodes) {
+			t.Fatalf("commit %d: graph of %d nodes, want %d", i, len(nodes), len(want.Nodes))
 		}
 	}
-	// browsing a baseline by type
-	page := must[NodePage](t)(New(repo).BaselineNodes(ctx, written[3].ID, NodeQuery{Type: "Design"}))
+	// browsing a commit by type
+	page := must[NodePage](t)(New(repo).CommitNodes(ctx, written[3].ID, NodeQuery{Type: "Design"}))
 	if page.Total != 4 {
-		t.Fatalf("baseline 3: %d Design nodes listed, want 4", page.Total)
+		t.Fatalf("commit 3: %d Design nodes listed, want 4", page.Total)
 	}
 }

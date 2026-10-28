@@ -18,7 +18,7 @@ func testSnapshotExportImport(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	g := f.g
 	s := must[Snapshot](t)(g.ExportSnapshot(ctx, "", "", ""))
-	if s.Format != SnapshotFormat || s.Namespace != domain.DefaultNamespace || s.Baseline != string(f.base.ID) || len(s.Nodes) != 3 {
+	if s.Format != SnapshotFormat || s.Namespace != domain.DefaultNamespace || s.Commit != string(f.base.ID) || len(s.Nodes) != 3 {
 		t.Fatalf("export of the head of main: %+v", s)
 	}
 	if keys := []string{s.Nodes[0].Key, s.Nodes[1].Key, s.Nodes[2].Key}; !slices.Equal(keys, []string{"NEED-1", "REQ-1", "TST-1"}) {
