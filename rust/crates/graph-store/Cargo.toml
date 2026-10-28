@@ -9,6 +9,7 @@ description = "The storage of the Rust graph service: PostgreSQL or SQLite, the 
 
 [dependencies]
 graph-core = { workspace = true }
+futures = { workspace = true }
 graph-catalog = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }

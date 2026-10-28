@@ -166,6 +166,50 @@ func selectState(ctx context.Context, tx Tx, b domain.Baseline, ids []domain.Nod
 	return out, nil
 }
 
+// keySelector is a store reading the node of a key and its last commit on a branch up to an order in one statement
+// (the PostgreSQL one): the node "" when no node has the key, decided false when it committed nothing in the range.
+type keySelector interface {
+	CommittedAtKey(ctx context.Context, namespace, branch string, upTo int64, key string) (id domain.NodeID, v CommittedVersion, decided bool, err error)
+}
+
+// selectKey reads the node of a key and its version at a baseline in one statement, when the store reads them so and
+// the baseline's branch is forked from none (main: its commits decide every node): decided then, version 0 for a node
+// the baseline does not hold, the node "" for a key no node has.
+func selectKey(ctx context.Context, tx Tx, at domain.BaselineID, key string) (domain.NodeID, domain.Version, bool, error) {
+	gt, ok := unwrapGuard(tx)
+	if !ok || at == "" || gt.newBaselines[at] {
+		return "", 0, false, nil
+	}
+	ks, ok := gt.Tx.(keySelector)
+	if !ok {
+		return "", 0, false, nil
+	}
+	b, err := gt.header(ctx, at)
+	if err != nil {
+		return "", 0, false, err
+	}
+	if fork, err := gt.forkOf(ctx, b.Namespace, b.Branch); err != nil || fork != "" {
+		return "", 0, false, err
+	}
+	id, cv, decided, err := ks.CommittedAtKey(ctx, b.Namespace, b.Branch, b.Seq, key)
+	if err != nil || id == "" {
+		return "", 0, err == nil, err
+	}
+	v := cv.Version
+	if !decided || cv.Deleted {
+		v = 0
+	}
+	// what BaselineVersions answers of it next
+	if gt.baselineReads == nil {
+		gt.baselineReads = map[domain.BaselineID]map[domain.NodeID]domain.Version{}
+	}
+	if gt.baselineReads[at] == nil {
+		gt.baselineReads[at] = map[domain.NodeID]domain.Version{}
+	}
+	gt.baselineReads[at][id] = v
+	return id, v, true, nil
+}
+
 // selectBatch is the number of nodes one statement selects the version of.
 const selectBatch = 2000
 

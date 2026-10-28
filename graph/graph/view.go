@@ -51,7 +51,7 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View, reach *Reach) (*wo
 		w.reach = reach.in(w.namespace)
 		w.filter = g.filterOf(w.reach)
 		if w.baseline == "" {
-			head, err := branchHeadHeader(ctx, tx, w.namespace, v.Branch)
+			head, err := g.headHeader(ctx, tx, w.namespace, v.Branch)
 			if err != nil {
 				return nil, err
 			}
@@ -160,6 +160,19 @@ func (w *world) ref(ctx context.Context, tx Tx, id domain.NodeID, key string) (d
 				}
 			}
 		}
+		if id == "" && w.change == nil {
+			// the node of the key and its version in the state, in one statement when the store reads them so
+			found, v, decided, err := selectKey(ctx, tx, w.baseline, key)
+			if err != nil {
+				return domain.NodeRef{}, err
+			}
+			if decided && found == "" {
+				return domain.NodeRef{}, fmt.Errorf("node key %s: %w", key, ErrNotFound)
+			}
+			if decided {
+				return w.found(ctx, tx, found, key, v, v > 0)
+			}
+		}
 		if id == "" {
 			var err error
 			if id, err = tx.NodeIDByKey(ctx, w.namespace, key); err != nil {
@@ -172,8 +185,13 @@ func (w *world) ref(ctx context.Context, tx Tx, id domain.NodeID, key string) (d
 		return domain.NodeRef{}, err
 	}
 	v, ok := at[id]
+	return w.found(ctx, tx, id, key, v, ok)
+}
+
+// found is the reference of a node of the world at version v when ok, the caller's reach seeing it; not found else.
+func (w *world) found(ctx context.Context, tx Tx, id domain.NodeID, key string, v domain.Version, ok bool) (domain.NodeRef, error) {
 	if ok && w.reach != nil {
-		n, err := w.node(ctx, tx, domain.NodeRef{ID: id, Version: v})
+		n, err := w.stored(ctx, tx, domain.NodeRef{ID: id, Version: v})
 		if err != nil {
 			return domain.NodeRef{}, err
 		}
@@ -187,6 +205,32 @@ func (w *world) ref(ctx context.Context, tx Tx, id domain.NodeID, key string) (d
 		return domain.NodeRef{}, fmt.Errorf("node %s in %s: %w", what, w.view, ErrNotFound)
 	}
 	return domain.NodeRef{ID: id, Version: v}, nil
+}
+
+// stored reads a version a view of a branch holds through the latest version of its node on main, which a view
+// shows with it (viewIn) and which is that version when the view is main at its head: one statement for both. A
+// change view reads it as w.node does.
+func (w *world) stored(ctx context.Context, tx Tx, ref domain.NodeRef) (domain.Node, error) {
+	if w.change != nil || ref.IsDraft() {
+		return w.node(ctx, tx, ref)
+	}
+	if _, ok := w.reader.latest[ref.ID]; !ok {
+		l, err := tx.Node(ctx, domain.NodeRef{ID: ref.ID})
+		if err != nil && !isNotFound(err) {
+			return domain.Node{}, err
+		}
+		if w.reader.latest == nil {
+			w.reader.latest = map[domain.NodeID]domain.Version{}
+		}
+		w.reader.latest[ref.ID] = l.Version
+		if err == nil && l.Version == ref.Version {
+			if gt, ok := unwrapGuard(tx); ok && gt.fixed(ref) {
+				gt.keepNode(gt.g.versions.generation(), l)
+			}
+			return l, nil
+		}
+	}
+	return w.node(ctx, tx, ref)
 }
 
 // ViewNode reads a node as a view holds it, by id or, when id is empty, by key: with its links, the latest version of
@@ -206,6 +250,10 @@ func (g *Graph) ViewNode(ctx context.Context, v View, id domain.NodeID, key stri
 			return err
 		}
 		if err := w.preloadIn(ctx, tx, ref); err != nil {
+			return err
+		}
+		// the version and the latest of its node read together
+		if _, err := w.stored(ctx, tx, ref); err != nil {
 			return err
 		}
 		if nv, err = viewIn(ctx, tx, w.reader, ref); err != nil {

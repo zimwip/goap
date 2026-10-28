@@ -17,7 +17,7 @@ use crate::{
     },
     page::page_nodes,
     reach::Reach,
-    store::{REVERTED, ReadTx},
+    store::{KeyAt, REVERTED, ReadTx},
     view::View,
     write::{change::change_branch_origin, work::fold_change},
 };
@@ -103,6 +103,22 @@ pub async fn branch_head<T: ReadTx>(tx: &T, namespace: &str, name: &str) -> Resu
         .rev()
         .find(|h| branch_of(&h.branch) == name)
         .unwrap_or_else(|| empty_head(ns, name)))
+}
+
+/// The head of a lasting branch a view reads at its head (Go's `headHeader`): the one the store keeps, fresh and read
+/// since its last commit of the branch, else read.
+async fn view_head<T: ReadTx>(tx: &T, namespace: &str, name: &str) -> Result<Baseline> {
+    let mark = tx.head_mark(namespace, name);
+    if let Some(m) = &mark
+        && let Some(h) = tx.kept_head(namespace, name, m)
+    {
+        return Ok(h);
+    }
+    let head = branch_head(tx, namespace, name).await?;
+    if let Some(m) = mark {
+        tx.keep_head(namespace, name, m, &head);
+    }
+    Ok(head)
 }
 
 /// The head of a branch as Go's `Graph.BranchHead` answers it: the branch of a change answers its fork with the order
@@ -393,7 +409,7 @@ impl<'a, T: ReadTx> World<'a, T> {
         }
         let namespace = namespace_of(&view.namespace).to_string();
         let baseline = if view.baseline.is_empty() {
-            branch_head(tx, &namespace, &view.branch).await?
+            view_head(tx, &namespace, &view.branch).await?
         } else {
             let h = header_of(tx, &view.baseline).await?;
             if h.namespace != namespace || h.branch != view.branch {
@@ -585,6 +601,16 @@ impl<'a, T: ReadTx> World<'a, T> {
             (Some(cw), true) => cw.drafts().into_iter().rfind(|d| d.key == key).map(|d| d.node.clone()),
             _ => None,
         };
+        if drafted.is_none()
+            && id.is_empty()
+            && let Some(at) = self.key_at(key).await?
+        {
+            // the node of the key and its version in the view, in one statement
+            return match at {
+                None => Err(GraphError::not_found(format!("node key {key}"))),
+                Some((id, v)) => self.found(id, key, (v > 0).then_some(v)).await,
+            };
+        }
         let id = if let Some(id) = drafted {
             id
         } else if id.is_empty() {
@@ -601,7 +627,32 @@ impl<'a, T: ReadTx> World<'a, T> {
         } else {
             id.clone()
         };
-        let mut at = self.at(std::slice::from_ref(&id)).await?.get(&id).copied();
+        let at = self.at(std::slice::from_ref(&id)).await?.get(&id).copied();
+        self.found(id, key, at).await
+    }
+
+    /// The node of a key and its version in a view of a branch forked from none (main: its commits decide every node)
+    /// when the store reads them in one statement (Go's `selectKey`): none when it does not; the node none for a key no
+    /// node has, version 0 when the view does not hold it.
+    async fn key_at(&self, key: &str) -> Result<Option<Option<(NodeId, Version)>>> {
+        if self.change.is_some() || self.baseline.id.is_empty() {
+            return Ok(None);
+        }
+        let b = &self.baseline;
+        if !branch_fork(self.tx, &b.namespace, &b.branch).await?.is_empty() {
+            return Ok(None);
+        }
+        Ok(match self.tx.node_at_key(&b.namespace, &b.branch, b.seq, key).await? {
+            KeyAt::Unread => None,
+            KeyAt::NoNode => Some(None),
+            KeyAt::Node(id, v) => Some(Some((id, v.unwrap_or(0)))),
+        })
+    }
+
+    /// The reference of a node of the view at a version (none: not in the view), the caller's reach seeing it; not
+    /// found else.
+    async fn found(&self, id: NodeId, key: &str, at: Option<Version>) -> Result<NodeRef> {
+        let mut at = at;
         if let Some(v) = at
             && v != 0
             && self.reach.is_some()

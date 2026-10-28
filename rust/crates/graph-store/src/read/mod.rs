@@ -51,6 +51,17 @@ pub struct Session {
     /// The versions kept between the transactions of the store, and what this one read ([`versions`]).
     versions: std::sync::Arc<Versions>,
     tx: versions::Read,
+    /// The statements of a write transaction nothing waits on, sent with its next statement or its COMMIT in one
+    /// round trip (a pipeline): its BEGIN, a lock, an insert whose answer is known. The statements of a pipeline run
+    /// one after the other, each with a snapshot of its own (READ COMMITTED), so a read sent after a lock reads what
+    /// the lock holds.
+    queued: std::sync::Mutex<Vec<Queued>>,
+}
+
+/// A statement queued: a statement of no argument, or one with what an error of it is about.
+enum Queued {
+    Simple(&'static str),
+    Stmt(Stmt, String),
 }
 
 enum Conn {
@@ -137,6 +148,7 @@ impl Session {
             guardian: None,
             versions,
             tx: Default::default(),
+            queued: Default::default(),
         }
     }
 
@@ -149,6 +161,7 @@ impl Session {
             guardian: None,
             versions,
             tx: Default::default(),
+            queued: Default::default(),
         }
     }
 
@@ -157,8 +170,7 @@ impl Session {
         c: deadpool_postgres::Object,
         versions: std::sync::Arc<Versions>,
     ) -> Result<Session, StoreError> {
-        c.batch_execute("BEGIN").await?;
-        crate::stats::note_text("BEGIN");
+        // sent with the first statement
         Ok(Session {
             conn: Conn::PgTx(Some(c)),
             sql: Sql { pg: true },
@@ -167,6 +179,7 @@ impl Session {
             guardian: None,
             versions,
             tx: Default::default(),
+            queued: std::sync::Mutex::new(vec![Queued::Simple("BEGIN")]),
         })
     }
 
@@ -179,6 +192,7 @@ impl Session {
             guardian: None,
             versions,
             tx: Default::default(),
+            queued: Default::default(),
         }
     }
 
@@ -192,6 +206,7 @@ impl Session {
         self.write_held().await?;
         let res = self.commit_conn().await;
         if res.is_ok() {
+            self.versions.moved_heads(self.tx.wrote_named_branches());
             let moved = self.tx.wrote_branches();
             if !moved.is_empty() {
                 let mut m = self.versions.branch_moves.lock().unwrap_or_else(|e| e.into_inner());
@@ -226,16 +241,30 @@ impl Session {
     async fn commit_conn(&mut self) -> Result<(), StoreError> {
         match &mut self.conn {
             Conn::PgTx(c) => {
+                let queued = std::mem::take(&mut *self.queued.lock().unwrap_or_else(|e| e.into_inner()));
                 let c = c.take().ok_or_else(|| StoreError::Other("transaction over".into()))?;
+                if matches!(queued.as_slice(), [Queued::Simple("BEGIN")]) {
+                    // nothing was sent: nothing to commit
+                    return Ok(());
+                }
+                // the statements queued and the COMMIT in one round trip
                 let at = crate::stats::texts().then(|| ("COMMIT".to_string(), std::time::Instant::now()));
-                match c.batch_execute("COMMIT").await {
+                let res = match prepared(&c, &queued).await {
+                    Ok(st) => {
+                        crate::stats::trip();
+                        let (before, commit) = futures::join!(sent(&c, &queued, &st), c.batch_execute("COMMIT"));
+                        before.and(commit.map_err(StoreError::from))
+                    }
+                    Err(e) => Err(e),
+                };
+                match res {
                     Ok(()) => {
                         crate::stats::note(at, 0);
                         Ok(())
                     }
                     Err(e) => {
                         drop(deadpool_postgres::Object::take(c));
-                        Err(e.into())
+                        Err(e)
                     }
                 }
             }
@@ -259,9 +288,49 @@ impl Session {
         n
     }
 
-    async fn exec_counted(&self, (text, args): Stmt) -> Result<u64, StoreError> {
+    /// Whether the session is a PostgreSQL transaction, whose statements nothing waits on are queued.
+    pub(crate) fn pipes(&self) -> bool {
+        matches!(self.conn, Conn::PgTx(Some(_)))
+    }
+
+    /// Queues a statement nothing waits on, sent with the next statement of the transaction or its COMMIT.
+    pub(crate) fn queue(&self, stmt: Stmt, what: &str) {
+        self.queued
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(Queued::Stmt(stmt, what.to_string()));
+    }
+
+    /// Runs a statement of a PostgreSQL transaction after the statements queued, all sent in one round trip: the
+    /// first error of the queued ones, else the statement's answer.
+    async fn piped<T, F>(&self, c: &deadpool_postgres::Object, main: F) -> Result<T, StoreError>
+    where
+        F: std::future::Future<Output = Result<T, StoreError>>,
+    {
+        let queued = std::mem::take(&mut *self.queued.lock().unwrap_or_else(|e| e.into_inner()));
+        crate::stats::trip();
+        if queued.is_empty() {
+            return main.await;
+        }
+        let st = prepared(c, &queued).await?;
+        let (before, out) = futures::join!(sent(c, &queued, &st), main);
+        before?;
+        out
+    }
+
+    async fn exec_counted(&self, stmt: Stmt) -> Result<u64, StoreError> {
+        if let Conn::PgTx(Some(c)) = &self.conn {
+            // prepared before anything is sent, so that the statements leave in their order
+            let st = c.prepare_cached(&stmt.0).await?;
+            return self.piped(c, pg_exec(c, st, stmt)).await;
+        }
+        self.exec_alone(stmt).await
+    }
+
+    async fn exec_alone(&self, (text, args): Stmt) -> Result<u64, StoreError> {
         match &self.conn {
             Conn::Pg(c) | Conn::PgTx(Some(c)) => {
+                crate::stats::trip();
                 let st = c.prepare_cached(&text).await?;
                 if custom_plan(&text, &args) {
                     return Ok(c.execute_typed(&text, &typed(&st, &args)).await?);
@@ -306,9 +375,18 @@ impl Session {
         rows
     }
 
-    async fn query_counted(&self, (text, args): Stmt) -> Result<Vec<Row>, StoreError> {
+    async fn query_counted(&self, stmt: Stmt) -> Result<Vec<Row>, StoreError> {
+        if let Conn::PgTx(Some(c)) = &self.conn {
+            let st = c.prepare_cached(&stmt.0).await?;
+            return self.piped(c, pg_query(c, st, stmt)).await;
+        }
+        self.query_alone(stmt).await
+    }
+
+    async fn query_alone(&self, (text, args): Stmt) -> Result<Vec<Row>, StoreError> {
         match &self.conn {
             Conn::Pg(c) | Conn::PgTx(Some(c)) => {
+                crate::stats::trip();
                 let st = c.prepare_cached(&text).await?;
                 if custom_plan(&text, &args) {
                     return c
@@ -341,6 +419,89 @@ impl Session {
     async fn links(&self, stmt: Stmt) -> Result<Vec<Link>, GraphError> {
         self.rows(stmt).await?.iter().map(link_of).collect()
     }
+}
+
+/// The statements queued, prepared (none for a statement of no argument).
+async fn prepared(
+    c: &deadpool_postgres::Object,
+    queued: &[Queued],
+) -> Result<Vec<Option<tokio_postgres::Statement>>, StoreError> {
+    let mut out = Vec::with_capacity(queued.len());
+    for q in queued {
+        out.push(match q {
+            Queued::Simple(_) => None,
+            Queued::Stmt((text, _), _) => Some(c.prepare_cached(text).await?),
+        });
+    }
+    Ok(out)
+}
+
+/// Sends the statements queued, in order, and reads their answers: the first error, about its statement.
+async fn sent(
+    c: &deadpool_postgres::Object,
+    queued: &[Queued],
+    st: &[Option<tokio_postgres::Statement>],
+) -> Result<(), StoreError> {
+    let runs = queued.iter().zip(st).map(|(q, st)| async move {
+        match (q, st) {
+            (Queued::Stmt(stmt, what), Some(st)) => {
+                let text = crate::stats::texts().then(|| (stmt.0.clone(), std::time::Instant::now()));
+                let n = pg_exec(c, st.clone(), stmt.clone())
+                    .await
+                    .map_err(|e| StoreError::Queued {
+                        what: what.clone(),
+                        source: Box::new(e),
+                    })?;
+                crate::stats::note(text, n);
+                Ok(())
+            }
+            (Queued::Simple(text), _) => {
+                c.batch_execute(text).await?;
+                crate::stats::note_text(text);
+                Ok(())
+            }
+            (Queued::Stmt(..), None) => Err(StoreError::Other("statement not prepared".into())),
+        }
+    });
+    // polled in order: each sends its statement at its first poll, before the next one does
+    futures::future::join_all(runs).await.into_iter().collect()
+}
+
+/// Runs a prepared statement that writes.
+async fn pg_exec(
+    c: &deadpool_postgres::Object,
+    st: tokio_postgres::Statement,
+    (text, args): Stmt,
+) -> Result<u64, StoreError> {
+    if custom_plan(&text, &args) {
+        return Ok(c.execute_typed(&text, &typed(&st, &args)).await?);
+    }
+    let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = args
+        .iter()
+        .map(|a| a as &(dyn tokio_postgres::types::ToSql + Sync))
+        .collect();
+    Ok(c.execute(&st, &params).await?)
+}
+
+/// Runs a prepared statement and returns its rows.
+async fn pg_query(
+    c: &deadpool_postgres::Object,
+    st: tokio_postgres::Statement,
+    (text, args): Stmt,
+) -> Result<Vec<Row>, StoreError> {
+    if custom_plan(&text, &args) {
+        return c
+            .query_typed(&text, &typed(&st, &args))
+            .await?
+            .iter()
+            .map(Row::from_pg)
+            .collect();
+    }
+    let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = args
+        .iter()
+        .map(|a| a as &(dyn tokio_postgres::types::ToSql + Sync))
+        .collect();
+    c.query(&st, &params).await?.iter().map(Row::from_pg).collect()
 }
 
 /// Whether a statement runs with a plan of its own each time, as Go's `customPlan`: a prepared statement's generic
@@ -651,6 +812,98 @@ impl ReadTx for Session {
                         .is_some_and(|(m, at)| m == mark && at.elapsed() < self.versions.snapshot_fresh())
             })
             .map(|k| k.snapshot.clone())
+    }
+
+    fn head_mark(&self, namespace: &str, name: &str) -> Option<graph_core::store::HeadMark> {
+        if self.writes() && !self.tx.wrote_branches().is_empty() {
+            return None;
+        }
+        let (ns, name) = (
+            graph_core::model::namespace_of(namespace),
+            graph_core::model::branch_of(name),
+        );
+        Some(graph_core::store::HeadMark {
+            mark: self.versions.head_mark(ns, name),
+            at: std::time::Instant::now(),
+        })
+    }
+
+    fn kept_head(
+        &self,
+        namespace: &str,
+        name: &str,
+        mark: &graph_core::store::HeadMark,
+    ) -> Option<graph_core::model::Baseline> {
+        let (ns, name) = (
+            graph_core::model::namespace_of(namespace),
+            graph_core::model::branch_of(name),
+        );
+        self.versions.kept_head(ns, name, mark.mark, mark.at)
+    }
+
+    fn keep_head(
+        &self,
+        namespace: &str,
+        name: &str,
+        mark: graph_core::store::HeadMark,
+        head: &graph_core::model::Baseline,
+    ) {
+        let (ns, name) = (
+            graph_core::model::namespace_of(namespace),
+            graph_core::model::branch_of(name),
+        );
+        self.versions.keep_head(ns, name, mark.mark, mark.at, head);
+    }
+
+    async fn node_at_key(
+        &self,
+        namespace: &str,
+        branch: &str,
+        up_to: i64,
+        key: &str,
+    ) -> Result<graph_core::store::KeyAt, GraphError> {
+        use graph_core::store::KeyAt;
+        if !self.sql.pg {
+            return Ok(KeyAt::Unread);
+        }
+        // Go's CommittedAtKey: sqlFoldVersions for the node of the key, found by its key in the same statement
+        let q = "WITH x AS MATERIALIZED (
+			SELECT n.id, (
+				SELECT u.version FROM (
+					(SELECT v.version, v.committed FROM node_version v
+					WHERE v.node_id = n.id AND v.branch = $1 AND v.committed + 0 > 0 AND v.committed + 0 <= $2 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
+					UNION ALL
+					(SELECT j.version, j.committed FROM node_branch j
+					WHERE j.node_id = n.id AND j.branch = $1 AND j.committed + 0 > 0 AND j.committed + 0 <= $2 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
+				) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
+			) AS version
+			FROM node n WHERE n.namespace = $3 AND n.key = $4
+		)
+		SELECT x.id::text, x.version, w.deleted, w.reason FROM x LEFT JOIN node_version w ON w.node_id = x.id AND w.version = x.version";
+        let rows = self
+            .rows((
+                q.into(),
+                vec![
+                    graph_core::model::branch_of(branch).into(),
+                    Arg::Int(up_to),
+                    graph_core::model::namespace_of(namespace).into(),
+                    key.into(),
+                ],
+            ))
+            .await?;
+        let Some(r) = rows.first() else {
+            return Ok(KeyAt::NoNode);
+        };
+        let id = NodeId(r.text(0));
+        if r.is_null(1) {
+            return Ok(KeyAt::Node(id, None));
+        }
+        let v = match (r.bool(2), r.text(3) == REASON_REVERT) {
+            (_, true) => REVERTED,
+            (true, false) => 0,
+            (false, false) => r.int32(1),
+        };
+        Ok(KeyAt::Node(id, Some(v)))
     }
 
     fn snapshot_mark(&self, namespace: &str) -> Option<u64> {

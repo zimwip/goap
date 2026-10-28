@@ -18,6 +18,9 @@ pub enum StoreError {
     },
     #[error("{0}")]
     Other(String),
+    /// A statement sent ahead of another (a pipeline) failed: what it was about.
+    #[error("{what}: {source}")]
+    Queued { what: String, source: Box<StoreError> },
 }
 
 impl StoreError {

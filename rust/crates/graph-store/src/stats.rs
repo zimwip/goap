@@ -8,6 +8,8 @@ use std::cell::RefCell;
 #[derive(Debug, Default, Clone)]
 pub struct Counts {
     pub statements: u32,
+    /// The round trips to the database: statements sent together (a pipeline) are one.
+    pub trips: u32,
     pub rows: u64,
     /// The time and first words of each statement, in order (only when [`counted`] was asked for them).
     pub texts: Option<Vec<String>>,
@@ -41,6 +43,11 @@ pub(crate) fn texts() -> bool {
 pub(crate) fn note(text: Option<(String, std::time::Instant)>, rows: u64) {
     let text = text.map(|(t, at)| format!("{:.2}ms {}", at.elapsed().as_secs_f64() * 1000.0, head(&t)));
     record(text, rows);
+}
+
+/// Records a round trip.
+pub(crate) fn trip() {
+    let _ = COUNTS.try_with(|c| c.borrow_mut().trips += 1);
 }
 
 /// Records a statement of no rows, named.

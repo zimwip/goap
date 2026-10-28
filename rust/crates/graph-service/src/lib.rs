@@ -307,6 +307,7 @@ impl goap_connect::Interceptor for Counted {
             target: "goap::rpc",
             procedure,
             statements = n.statements,
+            trips = n.trips,
             rows = n.rows,
             ms = start.elapsed().as_secs_f64() * 1000.0,
             ok = out.is_ok(),

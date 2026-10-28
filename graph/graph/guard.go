@@ -53,6 +53,9 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		for ref := range gt.origins {
 			r.g.versions.forgetNode(ref)
 		}
+		for k := range gt.movedBranches {
+			r.g.headMarks.move(k)
+		}
 		for ns := range gt.moved {
 			if ns == domain.NamespacePlatform {
 				r.g.platformMoves.Add(1)
@@ -89,6 +92,9 @@ type guardTx struct {
 	// moved are the namespaces a branch of which the transaction wrote (Graph.Sources and OnBranchMoved, once it
 	// commits)
 	moved map[string]bool
+	// movedBranches are the branches the transaction wrote (guardBranchKey): the heads kept of them are read again
+	// once it commits (headHeader)
+	movedBranches map[string]bool
 	// what the transaction wrote that names a change, a unit or a project, checked at its end
 	changeRefs map[domain.ChangeID]string
 	owners     map[lnk.URL]string
@@ -188,6 +194,10 @@ func (t *guardTx) PutBranch(ctx context.Context, b domain.Branch) error {
 		t.moved = map[string]bool{}
 	}
 	t.moved[domain.NamespaceOf(b.Namespace)] = true
+	if t.movedBranches == nil {
+		t.movedBranches = map[string]bool{}
+	}
+	t.movedBranches[guardBranchKey(b.Namespace, b.Name)] = true
 	return t.Tx.PutBranch(ctx, b)
 }
 

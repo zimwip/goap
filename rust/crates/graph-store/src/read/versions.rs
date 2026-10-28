@@ -37,6 +37,9 @@ struct Entry {
     tick: u64,
 }
 
+/// A head kept: the mark of its branch, when it was read, the header.
+type KeptHead = (u64, std::time::Instant, graph_core::model::Baseline);
+
 /// The versions kept between the transactions of a store, the least recently read evicted first.
 #[derive(Default)]
 pub struct Versions {
@@ -55,6 +58,11 @@ pub struct Versions {
     found: Mutex<HashSet<String>>,
     /// The headers of the baselines read: a baseline is written once and never deleted.
     headers: Mutex<HashMap<String, graph_core::model::Baseline>>,
+    /// The heads of the lasting branches the views read, by namespace and branch: the mark of the branch and when it
+    /// was read, kept [`HEAD_FRESH`] ([`graph_core::store::ReadTx::kept_head`]).
+    heads: Mutex<HashMap<(String, String), KeptHead>>,
+    /// Per namespace and branch, the commits of the store that moved it.
+    head_marks: Mutex<HashMap<(String, String), u64>>,
     /// Whether a bus tells the moves of the other processes ([`Versions::follow_events`]).
     follows: std::sync::atomic::AtomicBool,
 }
@@ -86,6 +94,13 @@ pub(crate) struct KeptSnapshot {
 /// How long the organisation checked at its head is taken as fresh while no commit of this store moved a branch, with
 /// no bus (Go's `access.CommitAge`): a commit of another process is seen at most that late.
 pub(crate) const SNAPSHOT_FRESH: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// How long a view takes the head of a lasting branch as it was read (Go's `headAge`): a commit of this store moves it
+/// at once, one of another process within it.
+pub(crate) const HEAD_FRESH: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// The number of branch heads kept.
+const MAX_HEADS: usize = 1024;
 
 /// The same with a bus telling the moves of the other processes (Go's `access.FollowAge`): a lost event is caught up
 /// then.
@@ -182,6 +197,52 @@ fn size(r: &NodeRef, e: &Entry) -> usize {
 
 impl Versions {
     /// A branch of a namespace moved in another process: its marks move ([`Store::moved`](crate::Store::moved)).
+    /// Where the store stands in the commits of a branch.
+    pub fn head_mark(&self, namespace: &str, name: &str) -> u64 {
+        let m = self.head_marks.lock().unwrap_or_else(|e| e.into_inner());
+        m.get(&(namespace.to_string(), name.to_string()))
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// A head of a branch kept, read at the mark given and fresh at the time given.
+    pub fn kept_head(
+        &self,
+        namespace: &str,
+        name: &str,
+        mark: u64,
+        at: std::time::Instant,
+    ) -> Option<graph_core::model::Baseline> {
+        let h = self.heads.lock().unwrap_or_else(|e| e.into_inner());
+        h.get(&(namespace.to_string(), name.to_string()))
+            .filter(|(m, read, _)| *m == mark && at.saturating_duration_since(*read) < HEAD_FRESH)
+            .map(|(_, _, b)| b.clone())
+    }
+
+    /// Keeps a head of a branch read at a mark, at a time.
+    pub fn keep_head(
+        &self,
+        namespace: &str,
+        name: &str,
+        mark: u64,
+        at: std::time::Instant,
+        head: &graph_core::model::Baseline,
+    ) {
+        let mut h = self.heads.lock().unwrap_or_else(|e| e.into_inner());
+        if h.len() >= MAX_HEADS {
+            h.clear();
+        }
+        h.insert((namespace.to_string(), name.to_string()), (mark, at, head.clone()));
+    }
+
+    /// The commits of the store that moved branches.
+    pub fn moved_heads(&self, branches: Vec<(String, String)>) {
+        let mut m = self.head_marks.lock().unwrap_or_else(|e| e.into_inner());
+        for b in branches {
+            *m.entry(b).or_default() += 1;
+        }
+    }
+
     pub fn moved(&self, namespace: &str) {
         let namespace = graph_core::model::namespace_of(namespace);
         let mut m = self.branch_moves.lock().unwrap_or_else(|e| e.into_inner());
@@ -405,6 +466,8 @@ pub struct Read {
     folds: Mutex<Vec<(String, std::sync::Arc<graph_core::write::work::KeptFold>)>>,
     /// The namespaces of the branches the transaction wrote.
     branches: Mutex<HashSet<String>>,
+    /// The branches the transaction wrote, by namespace and name.
+    named_branches: Mutex<HashSet<(String, String)>>,
     /// The branches the transaction read since its last lock or write of one: a lock may let another writer's move
     /// in, a write keeps columns of the row it does not name.
     branch_rows: Mutex<HashMap<(String, String), Option<graph_core::model::Branch>>>,
@@ -414,6 +477,9 @@ pub struct Read {
     /// The last position of the log of each change locked, read with its lock: no other writer appends to it while
     /// the lock is held.
     log_tops: Mutex<HashMap<String, i64>>,
+    /// A position of the log taken with the lock of a change for its next entry, whose insert then answers nothing
+    /// to wait for (Go's `lockedRead.next`): taken once, by the first entry the transaction appends after it.
+    log_next: Mutex<HashMap<String, i64>>,
     /// The units and projects the guard found, kept once the transaction commits.
     found: Mutex<Vec<String>>,
     /// The entries the transaction appended to the log of each change, as the log holds them.
@@ -524,12 +590,26 @@ impl Read {
     }
 
     /// A branch the transaction writes.
-    pub fn wrote_branch(&self, namespace: &str) {
+    pub fn wrote_branch(&self, namespace: &str, name: &str) {
         self.branches
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(namespace.to_string());
+        self.named_branches
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert((namespace.to_string(), name.to_string()));
         self.forget_branches();
+    }
+
+    /// The branches the transaction wrote, by namespace and name.
+    pub fn wrote_named_branches(&self) -> Vec<(String, String)> {
+        self.named_branches
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .cloned()
+            .collect()
     }
 
     /// A branch the transaction read, when it reads it again.
@@ -652,6 +732,28 @@ impl Read {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(change.to_string(), top);
+    }
+
+    /// The position taken for the next entry of a change once its lock is held.
+    pub fn keep_log_next(&self, change: &str, seq: i64) {
+        self.log_next
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(change.to_string(), seq);
+    }
+
+    /// The position taken for the next entry of a change, none when it is taken or none was: any entry appended takes
+    /// the positions taken before it out, so the entries keep the order they were appended in.
+    pub fn take_log_next(&self, change: &str) -> Option<i64> {
+        let mut m = self.log_next.lock().unwrap_or_else(|e| e.into_inner());
+        let seq = m.get(change).copied();
+        m.clear();
+        seq.filter(|s| *s > 0)
+    }
+
+    /// Drops the positions taken: the entries appended take later ones.
+    pub fn drop_log_next(&self) {
+        self.log_next.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// The last position of the log of a change as its lock read it, while the transaction wrote none of it.

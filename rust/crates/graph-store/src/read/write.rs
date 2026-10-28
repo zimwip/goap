@@ -124,6 +124,9 @@ const BASELINE_SNAPSHOT: &str = "snapshot";
 /// An error of a write, as Go's `mapErr` / `sqliteErr` sort them: a duplicate is a conflict, a broken reference
 /// invalid, a deadlock a conflict the caller retries.
 fn map_err(e: StoreError, what: &str) -> GraphError {
+    if let StoreError::Queued { what, source } = e {
+        return map_err(*source, &what);
+    }
     match &e {
         StoreError::Postgres(pe) => {
             if let Some(db) = pe.as_db_error() {
@@ -214,6 +217,11 @@ impl Session {
                 self.insert_rows("change_impact", &columns, chunk.len()),
                 set.join(", ")
             );
+            if self.pipes() {
+                // sent with the statement that asked for them
+                self.queue((q, args), "change impacts");
+                continue;
+            }
             let text = crate::stats::texts().then(|| (q.clone(), std::time::Instant::now()));
             let n = self.exec_counted((q, args)).await?;
             crate::stats::note(text, n);
@@ -303,7 +311,8 @@ impl Session {
 			SELECT id, parent_id FROM change WHERE id = $1
 			UNION ALL SELECT c.id, c.parent_id FROM change c JOIN up ON c.id = up.parent_id)
 		SELECT {}, (SELECT id::text FROM up WHERE parent_id IS NULL),
-			(SELECT max(seq) FROM change_log WHERE change_id = $1), ob.*
+			(SELECT max(seq) FROM change_log WHERE change_id = $1), ob.*,
+			nextval(pg_get_serial_sequence('change_log', 'seq'))
 		FROM change LEFT JOIN LATERAL (SELECT {} FROM branch b
 			WHERE b.namespace = change.namespace AND b.name = change.branch) ob ON true
 		WHERE change.id = $1",
@@ -337,6 +346,7 @@ impl Session {
         };
         let c = super::change_of(r)?;
         self.tx.keep_log_top(id.as_str(), r.int(21));
+        self.tx.keep_log_next(id.as_str(), r.int(35));
         if !c.branch.is_empty() && !c.namespace.is_empty() {
             // the branch it names, none when it is not stored yet
             let branch = (!r.is_null(22)).then(|| super::branch_at(r, 22));
@@ -345,15 +355,15 @@ impl Session {
         Ok((r.text(20), Some(c)))
     }
 
+    /// The lock is sent with the read that follows it, in one round trip: that read starts once it is held.
     async fn advisory_lock(&self, key: &str) -> Result<(), GraphError> {
-        self.select(
+        self.queue(
             (
                 "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))::text".into(),
                 vec![key.into()],
             ),
             key,
-        )
-        .await?;
+        );
         Ok(())
     }
 
@@ -468,7 +478,8 @@ impl WriteTx for Session {
     }
 
     async fn put_branch(&self, b: &Branch) -> Result<(), GraphError> {
-        self.tx.wrote_branch(namespace_of(&b.namespace));
+        self.tx
+            .wrote_branch(namespace_of(&b.namespace), graph_core::model::branch_of(&b.name));
         let ex = if self.sql.pg { "EXCLUDED" } else { "excluded" };
         let ps: Vec<String> = (1..=13).map(|n| self.sql.ph(n)).collect();
         let q = format!(
@@ -539,6 +550,15 @@ impl WriteTx for Session {
             Arg::Text(payload),
         ];
         let what = format!("log entry {}", e.typ);
+        if let Some(seq) = self.tx.take_log_next(e.change.as_str()) {
+            // its position is known: the insert goes with the next statement, or the commit
+            let q = self.insert("change_log", &[&["seq"], CHANGE_LOG_COLUMNS].concat(), "");
+            let mut a = vec![Arg::Int(seq)];
+            a.extend(args);
+            self.queue((q, a), &what);
+            self.tx.appended(e, seq);
+            return Ok(seq);
+        }
         let rows = self.query_now((q, args)).await.map_err(|err| map_err(err, &what))?;
         let seq = rows.first().map_or(0, |r| r.int(0));
         self.tx.appended(e, seq);
@@ -554,6 +574,7 @@ impl WriteTx for Session {
             return Ok(out);
         }
         let col = |f: &dyn Fn(&LogEntry) -> String| Arg::Texts(es.iter().map(f).collect());
+        self.tx.drop_log_next(); // the positions they take come after any taken before
         for e in es {
             self.tx.wrote_log(&e.change.0);
         }

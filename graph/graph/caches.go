@@ -21,6 +21,8 @@ type Caches struct {
 	Validations cache.Bounds
 	// Structures: the units and projects the guard found (guard.go): a node is never deleted, nor its type changed.
 	Structures cache.Bounds
+	// Heads: the heads of the lasting branches the views read (headHeader), each kept headAge at most.
+	Heads cache.Bounds
 }
 
 // DefaultCacheTTL is how long the graph keeps an entry no one reads.
@@ -33,6 +35,7 @@ var DefaultCaches = Caches{
 	Headers:     cache.Bounds{Bytes: 4 << 20, TTL: DefaultCacheTTL},
 	Validations: cache.Bounds{Bytes: 16 << 20, TTL: DefaultCacheTTL},
 	Structures:  cache.Bounds{Bytes: 1 << 20, TTL: DefaultCacheTTL},
+	Heads:       cache.Bounds{Bytes: 1 << 20, TTL: DefaultCacheTTL},
 }
 
 // boundsOf reads the bounds of one cache at each write: Graph.Caches may be set after New.
@@ -53,6 +56,9 @@ func (g *Graph) newCaches() {
 	g.draftStates = newDraftCache(g.boundsOf(func(c Caches) cache.Bounds { return c.Drafts }))
 	g.versions = newVersionCache(g.boundsOf(func(c Caches) cache.Bounds { return c.Versions }))
 	g.headers = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Headers }), headerSize)
+	g.heads = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Heads }), func(k string, h keptHead) int64 {
+		return cache.StructBytes + int64(len(k)) + headerSize("", h.head)
+	})
 	g.validations = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Validations }), validationSize)
 	g.foundRefs = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Structures }), func(k string, _ bool) int64 {
 		return cache.SlotBytes + int64(len(k))

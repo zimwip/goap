@@ -13,6 +13,25 @@ use crate::{
 /// What [`ReadTx::committed_versions`] answers for a node whose last commit reverts it to the fork of its branch.
 pub const REVERTED: Version = -1;
 
+/// Where a store stood in the commits of a branch, and when, before a head of it was read ([`ReadTx::head_mark`]).
+#[derive(Debug, Clone, Copy)]
+pub struct HeadMark {
+    pub mark: u64,
+    pub at: std::time::Instant,
+}
+
+/// The node of a key and its version on a branch ([`ReadTx::node_at_key`]).
+#[derive(Debug, Clone, PartialEq)]
+pub enum KeyAt {
+    /// The store does not read them in one statement.
+    Unread,
+    /// No node has the key.
+    NoNode,
+    /// The node, with its last commit in the range: 0 when it deletes the node, [`REVERTED`] when it reverts it, none
+    /// when it has none.
+    Node(NodeId, Option<Version>),
+}
+
 /// The reads of a store, in one session (a read-only connection: PostgreSQL with no transaction around the
 /// statements, SQLite a reader of the WAL).
 pub trait ReadTx: Sync {
@@ -72,6 +91,32 @@ pub trait ReadTx: Sync {
     /// is read then is not to be known fresh, a transaction that moved a branch).
     fn snapshot_mark(&self, _namespace: &str) -> Option<u64> {
         None
+    }
+
+    /// Where the store stands in the commits of a lasting branch, read before a view reads its head (Go's
+    /// `headHeader`): none, the head is read (a store keeping none, a transaction that wrote a branch).
+    fn head_mark(&self, _namespace: &str, _name: &str) -> Option<HeadMark> {
+        None
+    }
+
+    /// The head of a lasting branch the store keeps for the views, read at that mark and still fresh.
+    fn kept_head(&self, _namespace: &str, _name: &str, _mark: &HeadMark) -> Option<Baseline> {
+        None
+    }
+
+    /// Keeps the head of a lasting branch read at a mark.
+    fn keep_head(&self, _namespace: &str, _name: &str, _mark: HeadMark, _head: &Baseline) {}
+
+    /// The node of a key and its last commit on a branch up to an order, in one statement (Go's `keySelector`):
+    /// [`KeyAt::Unread`] when the store does not read them so.
+    fn node_at_key(
+        &self,
+        _namespace: &str,
+        _branch: &str,
+        _up_to: i64,
+        _key: &str,
+    ) -> impl Future<Output = Result<KeyAt>> + Send {
+        async { Ok(KeyAt::Unread) }
     }
 
     /// The order of the last commit on a branch (0: none).

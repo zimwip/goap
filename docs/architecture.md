@@ -609,6 +609,25 @@ impacts (`storedPosts`: `openWorld`, `changeViewTx`), the headers of the changes
 `ChangesPage` given to the transaction (`guardTx.knowHeads`). `TestReadsAreBatched` counts the single-row reads of
 these paths over a hub; a new read path meeting several nodes or changes goes through these helpers.
 
+**Pipelined writes**: on PostgreSQL a write transaction sends the statements nothing waits on with the next one
+(`graph/graph/pgpipe.go`, `pipeTx`; Rust `Session::queue`, `Queued`, polled in order on one connection): its
+`BEGIN` and an advisory lock go with the read that follows (READ COMMITTED: each statement of a pipeline takes its own
+snapshot when it starts, so the read sees what the lock holds), the held inserts (impacts, nodes, versions, links,
+joins: `heldQuerier.write`) and the first log entry wait for the next statement, the `COMMIT` takes what is left. The
+first entry's position is reserved by the locked head (`nextval` of `change_log.seq`, `takeNext` / `take_log_next`);
+any other append drops the reservation, so entries keep their order. A statement queued that fails is the error of
+the statement sent with it (`StoreError::Queued` in Rust). A statement carrying its own execution mode (`customPlan`)
+sends what is queued alone first. The rpc log line of the Rust graph counts the round trips (`trips=`).
+
+**Kept heads**: a view of a lasting branch with no baseline reads the branch's head header once a second at most
+(`Graph.headHeader`, `graph/graph/heads.go`, `headAge`; Rust `view_head`, `ReadTx::kept_head`, `HEAD_FRESH`), kept
+with the mark of the branch, which a commit of this graph moving it bumps (`guardTx.movedBranches`, Rust
+`moved_heads`): a head read after this graph's own commit is fresh, another process's commit is seen within the
+second; a transaction that moved a branch reads it again. On a branch with no fork, a node read by key in a view
+finds the node and its selected version in one statement (`keySelector.CommittedAtKey`, `selectKey`; Rust
+`ReadTx::node_at_key`, `KeyAt`), and `GetNode` reads the latest version of main first and keeps it when the view
+selects it (`world.stored`).
+
 **Roles** ([ADR 0035](adr/0035-methods-roles-operations-documents.md) §2, [ADR 0043](adr/0043-project-scoped-roles-admin-flag.md)):
 a methodology declares its roles (`methodology@Role` nodes, ADR 0039); its processes and methods assign them RACI
 style (`roles: {responsible, accountable, consulted, informed}` on a process, a method or a step; a process and a method

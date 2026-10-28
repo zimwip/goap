@@ -26,7 +26,9 @@ const impactRowsPerInsert = 500
 // an impact per node, one statement each otherwise. The last write of a row replaces the one held; each row takes the
 // position of its first write, the sequence moving once per write, as when each write was its own statement.
 type heldQuerier struct {
-	pgx.Tx
+	Tx pgQuerier
+	// pipe is the transaction the rows are written in: their inserts wait for the next statement (nil: sent at once)
+	pipe    *pipeTx
 	rows    []heldImpact
 	upserts int
 	// versions are the node versions held, in the order written, each with its link set once set
@@ -142,8 +144,8 @@ func (h *heldQuerier) flush(ctx context.Context) error {
 			}
 		}
 		q := dialectPG.sqlInsertRows("change_impact", columns, len(chunk)) + ` ON CONFLICT (id) DO UPDATE SET ` + strings.Join(set, ", ")
-		if _, err := h.Tx.Exec(ctx, q, args...); err != nil {
-			return mapErr(err, "change impacts")
+		if err := h.write(ctx, q, args, "change impacts"); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -181,8 +183,8 @@ func (h *heldQuerier) flushVersions(ctx context.Context) error {
 		if len(chunk) == 1 {
 			what = "node " + chunk[0].n.Key
 		}
-		if _, err := h.Tx.Exec(ctx, dialectPG.sqlInsertRows("node", nodeColumns, len(chunk)), args...); err != nil {
-			return mapErr(err, what)
+		if err := h.write(ctx, dialectPG.sqlInsertRows("node", nodeColumns, len(chunk)), args, what); err != nil {
+			return err
 		}
 	}
 	if len(movedIDs) > 0 {
@@ -214,11 +216,22 @@ func (h *heldQuerier) flushVersions(ctx context.Context) error {
 		if len(chunk) == 1 {
 			what = "node " + chunk[0].n.Ref().String()
 		}
-		if _, err := h.Tx.Exec(ctx, dialectPG.sqlInsertRows("node_version", columns, len(chunk)), args...); err != nil {
-			return mapErr(err, what)
+		if err := h.write(ctx, dialectPG.sqlInsertRows("node_version", columns, len(chunk)), args, what); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// write writes rows held: an insert answering nothing but its error, which waits for the next statement of the
+// transaction, or its commit, when it has one.
+func (h *heldQuerier) write(ctx context.Context, sql string, args []any, what string) error {
+	if h.pipe != nil {
+		h.pipe.queue(sql, args, what)
+		return nil
+	}
+	_, err := h.Tx.Exec(ctx, sql, args...)
+	return mapErr(err, what)
 }
 
 func (h *heldQuerier) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
@@ -266,8 +279,8 @@ func (h *heldQuerier) flushLinks(ctx context.Context) error {
 		for _, l := range rows {
 			args = append(args, l.args...)
 		}
-		if _, err := h.Tx.Exec(ctx, dialectPG.sqlInsertRows("link", linkColumns, len(rows)), args...); err != nil {
-			return mapErr(err, "link")
+		if err := h.write(ctx, dialectPG.sqlInsertRows("link", linkColumns, len(rows)), args, "link"); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -290,8 +303,8 @@ func (h *heldQuerier) flushJoins(ctx context.Context) error {
 			SELECT v.node_id, v.version, j.branch, j.change_id, j.committed FROM (VALUES ` + strings.Join(vals, ", ") + `) AS j(node_id, version, branch, change_id, committed)
 			JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version AND v.branch <> j.branch
 			ON CONFLICT DO NOTHING`
-		if _, err := h.Tx.Exec(ctx, q, args...); err != nil {
-			return mapErr(err, "node branch")
+		if err := h.write(ctx, q, args, "node branch"); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -95,13 +95,26 @@ func (p *Postgres) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		}
 		slog.WarnContext(ctx, "graph: a read-only request writes; running its transaction on the writer")
 	}
-	return pgx.BeginFunc(ctx, p.pool, func(tx pgx.Tx) error {
-		h := &heldQuerier{Tx: plannedTx{tx}}
-		if err := fn(&pgTx{tx: h, held: h, roots: p.roots}); err != nil {
-			return err
+	conn, err := p.pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	pipe := &pipeTx{conn: conn.Conn()}
+	pipe.begin()
+	defer func() {
+		if pipe.begun {
+			_ = pipe.rollback(ctx) // a panic, or an error before the commit
 		}
-		return h.flush(ctx)
-	})
+	}()
+	h := &heldQuerier{Tx: planned{pipe}, pipe: pipe}
+	if err := fn(&pgTx{tx: h, held: h, roots: p.roots, pipe: pipe}); err != nil {
+		return err
+	}
+	if err := h.flush(ctx); err != nil {
+		return err
+	}
+	return pipe.commit(ctx)
 }
 
 // readTx runs fn on one read-only connection, outside any transaction; a write it tries ends it with errWrites, before
@@ -136,21 +149,6 @@ func (q planned) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 	return q.pgQuerier.QueryRow(ctx, sql, customPlan(sql, args)...)
 }
 
-// plannedTx is a transaction running its statements as planned does.
-type plannedTx struct{ pgx.Tx }
-
-func (t plannedTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
-	return t.Tx.Exec(ctx, sql, customPlan(sql, args)...)
-}
-
-func (t plannedTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
-	return t.Tx.Query(ctx, sql, customPlan(sql, args)...)
-}
-
-func (t plannedTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	return t.Tx.QueryRow(ctx, sql, customPlan(sql, args)...)
-}
-
 // customPlan asks pgx for a plan made with the values of a statement that reads an array of ids or matches a pattern
 // (an unnamed statement, planned at each run, its description cached); the others keep their prepared statement.
 func customPlan(sql string, args []any) []any {
@@ -176,7 +174,9 @@ type pgTx struct {
 	held *heldQuerier
 	// readOnly is a read on a read-only connection (readTx): no transaction, so no lock to take
 	readOnly bool
-	roots    *changeRoots
+	// pipe is the transaction of a write: what queues the statements nothing waits on (nil: a read)
+	pipe  *pipeTx
+	roots *changeRoots
 	// locked are the headers of the changes read with the root of their tree once its lock was held (LockChange): what
 	// the transaction then reads of them, until it writes them
 	locked map[domain.ChangeID]domain.Change
@@ -190,6 +190,9 @@ type lockedRead struct {
 	hasBranch bool
 	// top is the last position of the log of the change, whatever the entry (0: no entry)
 	top int64
+	// next is a position of the log taken with them for the next entry of the change, so that its insert answers
+	// nothing to wait for (0: none, or taken)
+	next int64
 }
 
 // lockReads implements lockReader.
@@ -504,7 +507,7 @@ func (t *pgTx) LockChange(ctx context.Context, id domain.ChangeID) error {
 // the fold of its log), which no other writer changes while the lock is held. A change not stored yet is its own root.
 func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, error) {
 	var root, bNamespace, bName, bParent, bFork, bHead, bOrigin, bStatus, bDescription, bIntent, bRebased *string
-	var top, bForkSeq *int64
+	var top, next, bForkSeq *int64
 	var bCreated *time.Time
 	var bEphemeral *bool
 	c, err := scanPGChangeHead(func(dest ...any) error {
@@ -512,7 +515,7 @@ func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, erro
 				SELECT id, parent_id FROM change WHERE id = $1
 				UNION ALL SELECT c.id, c.parent_id FROM change c JOIN up ON c.id = up.parent_id)
 			SELECT (SELECT id::text FROM up WHERE parent_id IS NULL), `+pgChangeHead+`,
-				(SELECT max(seq) FROM change_log WHERE change_id = $1),
+				(SELECT max(seq) FROM change_log WHERE change_id = $1), nextval(pg_get_serial_sequence('change_log', 'seq')),
 				ob.b_namespace, ob.b_name, ob.b_parent, ob.b_fork, ob.b_head, ob.b_origin, ob.b_status, ob.b_created,
 				ob.b_description, ob.b_intent, ob.b_rebased, ob.b_ephemeral, ob.b_fork_seq
 			FROM change LEFT JOIN LATERAL (SELECT b.namespace AS b_namespace, b.name AS b_name, b.parent AS b_parent,
@@ -522,7 +525,7 @@ func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, erro
 				b.fork_seq AS b_fork_seq
 				FROM branch b WHERE b.namespace = change.namespace AND b.name = change.branch) ob ON true
 			WHERE change.id = $1`, string(id)).
-			Scan(append(append([]any{&root}, dest...), &top, &bNamespace, &bName, &bParent, &bFork, &bHead, &bOrigin, &bStatus, &bCreated, &bDescription, &bIntent, &bRebased, &bEphemeral, &bForkSeq)...)
+			Scan(append(append([]any{&root}, dest...), &top, &next, &bNamespace, &bName, &bParent, &bFork, &bHead, &bOrigin, &bStatus, &bCreated, &bDescription, &bIntent, &bRebased, &bEphemeral, &bForkSeq)...)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		delete(t.locked, id)
@@ -541,6 +544,9 @@ func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, erro
 	if top != nil {
 		r.top = *top
 	}
+	if next != nil {
+		r.next = *next
+	}
 	if bName != nil {
 		r.hasBranch = true
 		r.branch = domain.Branch{Namespace: *bNamespace, Name: *bName, Parent: *bParent, ForkBaseline: domain.BaselineID(*bFork), Head: domain.BaselineID(*bHead), Origin: *bOrigin, Status: *bStatus, CreatedAt: *bCreated, Description: *bDescription, Intent: domain.OptionIntent(*bIntent), RebasedFrom: domain.BaselineID(*bRebased), Ephemeral: *bEphemeral, ForkSeq: *bForkSeq}
@@ -558,7 +564,13 @@ func (t *pgTx) LockBranch(ctx context.Context, namespace, name string) error {
 }
 
 func (t *pgTx) advisoryLock(ctx context.Context, key string) error {
-	_, err := t.unheld().Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, key)
+	const lock = `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`
+	if t.pipe != nil {
+		// sent with the read that follows it: it reads what the lock holds
+		t.pipe.queue(lock, []any{key}, "lock "+key)
+		return nil
+	}
+	_, err := t.unheld().Exec(ctx, lock, key)
 	return err
 }
 
@@ -847,6 +859,35 @@ func (t *pgTx) commits(ctx context.Context, namespace, branch string, after, upT
 		out[domain.NodeID(nid)] = l
 	}
 	return out, rows.Err()
+}
+
+// CommittedAtKey implements keySelector: sqlFoldVersions for the node of a key, found by its key in the same statement.
+func (t *pgTx) CommittedAtKey(ctx context.Context, namespace, branch string, upTo int64, key string) (domain.NodeID, CommittedVersion, bool, error) {
+	var nid string
+	var v *int
+	var deleted *bool
+	var reason *string
+	err := t.tx.QueryRow(ctx, `WITH x AS MATERIALIZED (
+			SELECT n.id, (
+				SELECT u.version FROM (
+					(SELECT v.version, v.committed FROM node_version v
+					WHERE v.node_id = n.id AND v.branch = $1 AND v.committed + 0 > 0 AND v.committed + 0 <= $2 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
+					UNION ALL
+					(SELECT j.version, j.committed FROM node_branch j
+					WHERE j.node_id = n.id AND j.branch = $1 AND j.committed + 0 > 0 AND j.committed + 0 <= $2 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
+				) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
+			) AS version
+			FROM node n WHERE n.namespace = $3 AND n.key = $4
+		)
+		SELECT x.id::text, x.version, w.deleted, w.reason FROM x LEFT JOIN node_version w ON w.node_id = x.id AND w.version = x.version`,
+		domain.BranchOf(branch), upTo, domain.NamespaceOf(namespace), key).Scan(&nid, &v, &deleted, &reason)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", CommittedVersion{}, false, nil
+	}
+	if err != nil || v == nil {
+		return domain.NodeID(nid), CommittedVersion{}, false, mapErr(err, "node key "+key)
+	}
+	return domain.NodeID(nid), CommittedVersion{Version: domain.Version(*v), Deleted: *deleted, Revert: str(reason) == domain.ReasonRevert}, true, nil
 }
 
 // NextCommit allocates the greatest order stored or allocated plus one: two transactions commit on one branch from
@@ -1248,6 +1289,13 @@ func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntr
 	if len(payload) == 0 {
 		payload = []byte("null") // an entry with no payload: the column holds JSON, never NULL
 	}
+	if seq := t.takeNext(e.Change); seq != 0 {
+		// its position is known: the insert waits for the next statement, or the commit
+		e.Seq = seq
+		t.pipe.queue(dialectPG.sqlInsert("change_log", append([]string{"seq"}, changeLogColumns...), ""),
+			[]any{seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload}, "log entry "+e.Type)
+		return e, nil
+	}
 	q := t.tx
 	if t.held != nil {
 		q = t.held.Tx // an entry of a log reads no change_impact row: the rows held wait
@@ -1257,12 +1305,39 @@ func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntr
 	return e, mapErr(err, "log entry "+e.Type)
 }
 
+// takeNext is the position taken for the next entry of a change once its lock was held (lockedHead), 0 when there
+// is none: a position is taken once, and only by the first entry the transaction appends after it, so the entries
+// keep the order they were appended in.
+func (t *pgTx) takeNext(id domain.ChangeID) int64 {
+	if t.pipe == nil {
+		return 0
+	}
+	r, ok := t.lockedReads[id]
+	seq := r.next
+	t.dropNext()
+	if !ok || seq == 0 {
+		return 0
+	}
+	return seq
+}
+
+// dropNext drops the positions taken: an entry appended takes a later one.
+func (t *pgTx) dropNext() {
+	for id, r := range t.lockedReads {
+		if r.next != 0 {
+			r.next = 0
+			t.lockedReads[id] = r
+		}
+	}
+}
+
 // AppendLogs implements logBatcher: the entries in one statement, their positions in their order.
 func (t *pgTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]domain.LogEntry, error) {
 	if len(entries) == 1 {
 		e, err := t.AppendLog(ctx, entries[0])
 		return []domain.LogEntry{e}, err
 	}
+	t.dropNext() // the positions it takes come after any taken before
 	n := len(entries)
 	ids, changes, types, flows, procs, execs, subjects, bys, causes, payloads := make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n)
 	ats := make([]time.Time, n)
