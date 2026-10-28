@@ -5,7 +5,7 @@
 //!
 //! The domains are the domain registry's (ADR 0167, `goap-domains-rs`, `GOAP_DOMAINS_URL`, default
 //! `http://localhost:8096`): read at the start (the service waits for the built-in ones), then again on the registry's
-//! events (`goap.registry.domain.published|deleted`) and after `platform::DOMAINS_TTL`. `goap-graph-rs bootstrap` runs the platform bootstrap once against the database, then exits (its events stay in the outbox: the
+//! events (`goap.registry.domain.published|deleted`, `service.ready.domains`), kept as read meanwhile. `goap-graph-rs bootstrap` runs the platform bootstrap once against the database, then exits (its events stay in the outbox: the
 //! service delivers them); the service bootstraps itself only with `GOAP_GRAPH_BOOTSTRAP=1` or a database in memory.
 //! The bootstrap seeds the models of `GOAP_MODELS_CONFIG` (else the default, Anthropic when its key is in Vault or
 //! `ANTHROPIC_API_KEY`), declares the sources of `GOAP_GRAPH_SOURCES`, and with `GOAP_GRAPH_SEED=dev` the development data, `=demo`
@@ -16,7 +16,7 @@
 //! `GOAP_GRAPH_SPACE=content` makes it a content graph (ADR 0154 §9): it holds the domains' content and reads the
 //! organisation and the projects from the platform graph at `GOAP_PLATFORM_GRAPH_URL`, serves the
 //! graph service alone, and has nothing to bootstrap.
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use graph_service::{
@@ -37,8 +37,13 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 /// statement (20 to 30 % of a commit, four times the context switches) for no throughput.
 const WORKERS: usize = 2;
 
+/// The stack of a worker: the futures of a commit, unoptimized (the `dev-local` profile of `make dev`), overflow tokio's
+/// 2 MiB, which aborts the process.
+const STACK: usize = 16 << 20;
+
 fn main() -> anyhow::Result<()> {
     let mut rt = tokio::runtime::Builder::new_multi_thread();
+    rt.thread_stack_size(STACK);
     if std::env::var_os("TOKIO_WORKER_THREADS").is_none() {
         rt.worker_threads(WORKERS);
     }
@@ -82,14 +87,17 @@ async fn serve() -> anyhow::Result<()> {
                 .with_context(|| format!("NATS at {nats}"))?,
         )
     };
-    // a graph types nothing without the built-in domains: the registry, started first, seeds them and announces it
-    // serves, which brings the next try at once
+    // a graph types nothing without the built-in domains: read from the registry at once; when it is not there, read
+    // again as soon as it announces it serves or publishes a domain (ADR 0169), for as long as it takes
     let mut ready = match &bus {
-        Some(c) => Some(c.subscribe(READY_DOMAINS).await.context("subscribe")?),
+        Some(c) => Some(futures::stream::select(
+            c.subscribe(READY_DOMAINS).await.context("subscribe")?,
+            c.subscribe(DOMAIN_PUBLISHED).await.context("subscribe")?,
+        )),
         None => None,
     };
     registry
-        .wait_for_builtins(60, ready.as_mut())
+        .wait_for_builtins(ready.as_mut())
         .await
         .context("domain registry")?;
     drop(ready);
@@ -132,17 +140,34 @@ async fn serve() -> anyhow::Result<()> {
         let sink = Sink::connect(&nats).await.with_context(|| format!("NATS at {nats}"))?;
         vec![state.relay(sink)]
     };
-    // the domains are the registry's: read again when it publishes or deletes one (and after `DOMAINS_TTL` anyway)
+    // the domains are the registry's: kept as read, read again when it publishes or deletes one, or announces it
+    // serves again (a registry restarted); with no bus, every minute
     if let Some(client) = &bus {
-        for subject in ["goap.registry.domain.published", "goap.registry.domain.deleted"] {
-            let mut sub = client.subscribe(subject).await.context("subscribe")?;
-            let registry = registry.clone();
-            tokio::spawn(async move {
-                while futures::StreamExt::next(&mut sub).await.is_some() {
-                    registry.invalidate().await;
+        let mut moved = futures::stream::select_all([
+            client.subscribe(DOMAIN_PUBLISHED).await.context("subscribe")?,
+            client.subscribe(DOMAIN_DELETED).await.context("subscribe")?,
+            client.subscribe(READY_DOMAINS).await.context("subscribe")?,
+        ]);
+        let registry = registry.clone();
+        tokio::spawn(async move {
+            while futures::StreamExt::next(&mut moved).await.is_some() {
+                if let Err(e) = registry.reload().await {
+                    tracing::error!(err = %e.message, "type catalogue");
                 }
-            });
-        }
+            }
+        });
+    } else {
+        let registry = registry.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(60));
+            tick.tick().await;
+            loop {
+                tick.tick().await;
+                if let Err(e) = registry.reload().await {
+                    tracing::error!(err = %e.message, "type catalogue");
+                }
+            }
+        });
     }
     if content {
         state.remote = Some(Arc::new(graph_service::platform::Remote::new(&platform_url)));
@@ -208,6 +233,9 @@ async fn follow_moves(bus: &Option<async_nats::Client>, state: &Arc<State>) -> a
 
 /// The registry announces it serves (Go's `platform.ReadyDomains`, ADR 0169).
 const READY_DOMAINS: &str = "service.ready.domains";
+/// The registry published or deleted a domain version (ADR 0167).
+const DOMAIN_PUBLISHED: &str = "goap.registry.domain.published";
+const DOMAIN_DELETED: &str = "goap.registry.domain.deleted";
 /// This graph announces it serves (Go's `platform.ReadyGraph` / `ReadyGraphContent`).
 const READY_GRAPH: &str = "service.ready.graph.platform";
 const READY_GRAPH_CONTENT: &str = "service.ready.graph.content";

@@ -24,7 +24,9 @@ answer `/readyz`; compose and a cluster start them in any order.
    shipped domains), `service.ready.graph.platform` (the platform graph, `graph` and `goap-graph-rs`; again once an
    in-process bootstrap is done) and `service.ready.graph.content` (a content graph). Payload `{"service": name}`.
 3. **Who waits on what.** The Go graph's `loadTypes` (`service.ready.domains`, `goap.registry.domain.published`; the
-   domain client invalidated before each try), the Rust graph's `Registry::wait_for_builtins` (`service.ready.domains`),
+   domain client invalidated before each try, each try bounded to 10 s), the Rust graph's `Registry::wait_for_builtins`
+   (`service.ready.domains`, `goap.registry.domain.published`; the same doubling delay, no limit of tries, each read
+   bounded by `REGISTRY_TIMEOUT`),
    the engine's type catalogue (`service.ready.domains`), the methodology registry's seed and `Recheck` and the
    guardian's `Recheck` (`service.ready.domains`, `service.ready.graph.platform`).
 
