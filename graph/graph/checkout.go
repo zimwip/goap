@@ -35,7 +35,7 @@ type work struct {
 	branch string
 	ns     string
 	ix     *typeIndex
-	seen   []domain.ChangeImpact
+	seen   domain.Impacts
 	cn     domain.ChangeImpact // the stored change impact
 	vcn    domain.ChangeImpact // as the flow sees it
 	// planned is set when a creation names the key of a planned creation (resolve): its draft fulfils that impact
@@ -138,18 +138,16 @@ func (w *work) checkTypeFreeze(typ string) error {
 
 // selectImpact selects the change impact the operation works on, as the flow sees it.
 func (w *work) selectImpact(id domain.ChangeImpactID) error {
-	i, err := findChangeImpact(w.c, id)
+	cn, err := findChangeImpact(w.c, id)
 	if err != nil {
 		return err
 	}
-	w.cn = w.c.Nodes[i]
-	found := false
-	for _, cn := range w.seen {
-		if cn.ID == id {
-			w.vcn, found = cn, true
-		}
+	w.cn = cn
+	i := w.seen.Index(id)
+	if i >= 0 {
+		w.vcn = w.seen.At(i)
 	}
-	if !found {
+	if i < 0 {
 		return fmt.Errorf("change impact %s is not on the flow %q of change %s: %w", id, w.flow, w.c.ID, ErrNotFound)
 	}
 	return nil
@@ -209,10 +207,11 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 		return nil, invalidf("a node needs a key and a type")
 	}
 	var found *domain.ChangeImpact
-	for i, cn := range w.seen {
-		if (t.Node != "" && nodeOf(cn) == t.Node) || (t.Node == "" && cn.Key == t.Key && (t.Type == "" || cn.Type == t.Type)) {
-			found = &w.seen[i]
-		}
+	if i := lastIndex(w.seen, func(cn domain.ChangeImpact) bool {
+		return (t.Node != "" && nodeOf(cn) == t.Node) || (t.Node == "" && cn.Key == t.Key && (t.Type == "" || cn.Type == t.Type))
+	}); i >= 0 {
+		cn := w.seen.At(i)
+		found = &cn
 	}
 	if found != nil {
 		if t.create && plannedCreation(*found) && (t.Type == "" || found.Type == t.Type) {
@@ -279,7 +278,7 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 	if t.create {
 		// not recorded yet: the created event of the first version adds it (createTx)
 		w.cn, w.vcn = out[0], out[0]
-		w.seen = append(w.seen, out[0])
+		w.seen = w.seen.Append(out[0])
 		return w, nil
 	}
 	return w, g.impact(ctx, tx, w, out[0].ID)
@@ -909,7 +908,7 @@ func (g *Graph) checkAcceptedIn(ctx context.Context, tx Tx, s *reviewScope, cn d
 	if err != nil || d == nil {
 		return err
 	}
-	if err := g.checkOrigins(s.seen, cn, d); err != nil {
+	if err := g.checkOrigins(domain.ImpactsOf(s.seen), cn, d); err != nil {
 		return err
 	}
 	return g.checkDraft(ctx, s.ix, s.c, *d, draftResolver(ctx, tx, s.r))
@@ -918,7 +917,7 @@ func (g *Graph) checkAcceptedIn(ctx context.Context, tx Tx, s *reviewScope, cn d
 // checkDraftOf is the check of an accepted review on one draft, writing nothing: the origins gate over the change
 // impacts the flow sees, then what a version must satisfy. It serves the review (checkAccepted) and the validation the
 // views carry (ImpactValidation).
-func (g *Graph) checkDraftOf(ctx context.Context, tx Tx, c domain.Change, flow string, ix *typeIndex, seen []domain.ChangeImpact, cn domain.ChangeImpact, d *domain.Draft) error {
+func (g *Graph) checkDraftOf(ctx context.Context, tx Tx, c domain.Change, flow string, ix *typeIndex, seen domain.Impacts, cn domain.ChangeImpact, d *domain.Draft) error {
 	if err := g.checkOrigins(seen, cn, d); err != nil {
 		return err
 	}
@@ -1229,7 +1228,7 @@ func (g *Graph) withdrawTx(ctx context.Context, tx Tx, id domain.ChangeID, impac
 		if w.cn.Flow != w.flow {
 			return fmt.Errorf("change impact %s was declared on another flow: %w", impact, ErrConflict)
 		}
-		for _, o := range w.c.Nodes {
+		for _, o := range w.c.Impacts().All() {
 			if o.Via == impact {
 				withdraw(o.ID)
 			}

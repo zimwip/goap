@@ -38,17 +38,19 @@ import (
 // and the drafts, indexed. Immutable once published; the transaction that keeps one (ownDrafts) folds its next events in
 // place, so that an operation on a change of N impacts costs what its event touches, not N.
 type draftState struct {
-	change  domain.ChangeID
-	seq     int64
-	impacts []domain.ChangeImpact
+	change domain.ChangeID
+	seq    int64
+	// impacts are kept in blocks, the containers keyed by impact or node in shards, which the copies of the view share
+	// until they write (impactBlocks, cowMap): a write to a change of N impacts copies what it touches, not N
+	impacts impactBlocks
 	// at is the position of each change impact in impacts
-	at map[domain.ChangeImpactID]int
+	at cowMap[domain.ChangeImpactID, int]
 	// drafts are the drafts of each change impact, one per flow
-	drafts map[domain.ChangeImpactID][]domain.Draft
+	drafts cowMap[domain.ChangeImpactID, []domain.Draft]
 	// nodes are the change impacts that held a draft of each node (some may hold none any more)
-	nodes map[domain.NodeID][]domain.ChangeImpactID
+	nodes cowMap[domain.NodeID, []domain.ChangeImpactID]
 	// conflicts are the pending conflicts of the change impacts that have some (domain.PendingConflicts)
-	conflicts map[domain.ChangeImpactID][]string
+	conflicts cowMap[domain.ChangeImpactID, []string]
 	// items are the items of the change, the facts of its log in their order (itemsOf): folded with the impact events,
 	// so that reading a change does not decode its facts again
 	items []domain.ChangeItem
@@ -59,7 +61,7 @@ type draftState struct {
 	log *eventLog
 	// phases are the state each change impact started its draft on the main flow in (ADR 0058 §4, 0079), folded with the
 	// moves of the change: before its first move an impact is in the state that move leaves (phase.Before)
-	phases map[domain.ChangeImpactID]phase
+	phases cowMap[domain.ChangeImpactID, phase]
 	// moved: the change took a move (a transition fact of the main flow); first is the state its first move left, state
 	// the one its last move entered
 	moved        bool
@@ -69,9 +71,8 @@ type draftState struct {
 	// frozen: a reader of the transaction still reads it (draftReader, the impacts of a change read), so its next fold
 	// is a copy
 	frozen bool
-	// shared are the containers (impacts, at, drafts...) the fold shares with the one it was copied from: cloned at
-	// their first write (own)
-	shared uint8
+	// sharedMoves: moveSeq is shared with the fold it was copied from, cloned at its first write
+	sharedMoves bool
 	// bytes estimates the memory the view holds (eventSize, itemSize): what the cache counts against its bound
 	bytes int64
 	// top is, plus one, a last position of the whole log of the change at which the fold was known to hold every impact
@@ -81,63 +82,12 @@ type draftState struct {
 }
 
 // copy is a state the caller may fold in place (the values it holds are never modified, only replaced). It shares the
-// containers of s until its first write to each (own): a transaction that touches one impact of a change of N clones
-// what that write touches, not the whole view.
+// containers of s, which copy what they write (impactBlocks, cowMap): a transaction that touches one impact of a change
+// of N copies what that write touches, not the whole view.
 func (s *draftState) copy() *draftState {
-	n := &draftState{change: s.change, seq: s.seq, impacts: slices.Clip(s.impacts), at: s.at, drafts: s.drafts, nodes: s.nodes, conflicts: s.conflicts, items: slices.Clip(s.items), events: s.events, log: s.log,
-		phases: s.phases, moved: s.moved, first: s.first, state: s.state, moveSeq: s.moveSeq, bytes: s.bytes, shared: sharedAll}
-	if n.at == nil {
-		n.at, n.shared = map[domain.ChangeImpactID]int{}, n.shared&^sharedAt
-	}
-	if n.drafts == nil {
-		n.drafts, n.shared = map[domain.ChangeImpactID][]domain.Draft{}, n.shared&^sharedDrafts
-	}
-	if n.nodes == nil {
-		n.nodes, n.shared = map[domain.NodeID][]domain.ChangeImpactID{}, n.shared&^sharedNodes
-	}
-	return n
-}
-
-// The containers a copy shares with the state it was copied from (draftState.shared).
-const (
-	sharedImpacts uint8 = 1 << iota
-	sharedAt
-	sharedDrafts
-	sharedNodes
-	sharedConflicts
-	sharedPhases
-	sharedMoveSeq
-	sharedAll = sharedImpacts | sharedAt | sharedDrafts | sharedNodes | sharedConflicts | sharedPhases | sharedMoveSeq
-)
-
-// own makes the containers named by bits the fold's own before it writes to them: a shared one is cloned once.
-func (s *draftState) own(bits uint8) {
-	bits &= s.shared
-	if bits == 0 {
-		return
-	}
-	s.shared &^= bits
-	if bits&sharedImpacts != 0 {
-		s.impacts = slices.Clone(s.impacts)
-	}
-	if bits&sharedAt != 0 {
-		s.at = maps.Clone(s.at)
-	}
-	if bits&sharedDrafts != 0 {
-		s.drafts = maps.Clone(s.drafts)
-	}
-	if bits&sharedNodes != 0 {
-		s.nodes = maps.Clone(s.nodes)
-	}
-	if bits&sharedConflicts != 0 {
-		s.conflicts = maps.Clone(s.conflicts)
-	}
-	if bits&sharedPhases != 0 {
-		s.phases = maps.Clone(s.phases)
-	}
-	if bits&sharedMoveSeq != 0 {
-		s.moveSeq = maps.Clone(s.moveSeq)
-	}
+	return &draftState{change: s.change, seq: s.seq, impacts: s.impacts.share(), at: s.at.share(), drafts: s.drafts.share(), nodes: s.nodes.share(),
+		conflicts: s.conflicts.share(), items: slices.Clip(s.items), events: s.events, log: s.log, phases: s.phases.share(), moved: s.moved,
+		first: s.first, state: s.state, moveSeq: s.moveSeq, bytes: s.bytes, sharedMoves: true}
 }
 
 // eventLog is the array of impact events the folds copied from one another share: the elements a fold holds are never
@@ -170,15 +120,16 @@ func (s *draftState) addEvent(e domain.ImpactEvent) {
 
 // impact is the change impact of an id.
 func (s *draftState) impact(id domain.ChangeImpactID) (domain.ChangeImpact, bool) {
-	if i, ok := s.at[id]; ok {
-		return s.impacts[i], true
+	if i, ok := s.at.get(id); ok {
+		return s.impacts.at(i), true
 	}
 	return domain.ChangeImpact{}, false
 }
 
 // draft is the draft a change impact has on a flow (the value is shared: Clone it to edit it).
 func (s *draftState) draft(id domain.ChangeImpactID, flow string) (domain.Draft, bool) {
-	for _, d := range s.drafts[id] {
+	rows, _ := s.drafts.get(id)
+	for _, d := range rows {
 		if d.Flow == flow {
 			return d, true
 		}
@@ -198,9 +149,11 @@ func (s *draftState) fact(it domain.ChangeItem, seq int64) {
 		s.moved, s.first = true, str("from")
 	}
 	s.state = str("to")
-	s.own(sharedMoveSeq)
-	if s.moveSeq == nil {
-		s.moveSeq = map[domain.ItemID]int64{}
+	if s.sharedMoves || s.moveSeq == nil {
+		s.moveSeq, s.sharedMoves = maps.Clone(s.moveSeq), false
+		if s.moveSeq == nil {
+			s.moveSeq = map[domain.ItemID]int64{}
+		}
 	}
 	s.moveSeq[it.ID] = seq
 	s.seq = seq
@@ -209,7 +162,7 @@ func (s *draftState) fact(it domain.ChangeItem, seq int64) {
 // phaseOf is the state a change impact started its draft in; false when the change never moved or the impact started
 // no draft on the main flow.
 func (s *draftState) phaseOf(id domain.ChangeImpactID) (phase, bool) {
-	p, ok := s.phases[id]
+	p, ok := s.phases.get(id)
 	if !ok || !s.moved {
 		return phase{}, false
 	}
@@ -224,33 +177,13 @@ func (s *draftState) apply(e domain.ImpactEvent) {
 	s.addEvent(e)
 	s.bytes += eventSize(e)
 	if e.StartsDraft() && e.Flow == "" {
-		s.own(sharedPhases)
-		if s.phases == nil {
-			s.phases = map[domain.ChangeImpactID]phase{}
-		}
-		s.phases[e.Impact] = phase{State: s.state, Seq: int64(e.Seq), Before: !s.moved}
+		s.phases.set(e.Impact, phase{State: s.state, Seq: int64(e.Seq), Before: !s.moved})
 	}
-	i, ok := s.at[e.Impact]
-	if !ok {
-		i = -1
-	}
-	n := len(s.impacts)
-	s.own(sharedImpacts)
-	s.impacts = domain.ApplyImpactEventAt(s.impacts, i, e)
-	switch {
-	case len(s.impacts) < n: // a change impact removed
-		s.own(sharedAt)
-		clear(s.at)
-		for j, cn := range s.impacts {
-			s.at[cn.ID] = j
-		}
-	case len(s.impacts) > n:
-		s.own(sharedAt)
-		s.at[e.Impact] = len(s.impacts) - 1
-	}
+	s.applyImpact(e)
 	switch e.Op {
 	case domain.ImpactCreated, domain.ImpactCheckedOut, domain.ImpactTransitioned, domain.ImpactUpdated, domain.ImpactCancelled:
-		rows := slices.Clone(s.drafts[e.Impact])
+		rows, _ := s.drafts.get(e.Impact)
+		rows = slices.Clone(rows)
 		j := slices.IndexFunc(rows, func(d domain.Draft) bool { return d.Flow == e.Flow })
 		var cur *domain.Draft
 		if j >= 0 {
@@ -265,29 +198,26 @@ func (s *draftState) apply(e domain.ImpactEvent) {
 		case next != nil:
 			rows = append(rows, *next)
 		}
-		s.own(sharedDrafts)
-		if next != nil && !slices.Contains(s.nodes[next.Node], e.Impact) {
-			s.own(sharedNodes)
-			s.nodes[next.Node] = append(slices.Clone(s.nodes[next.Node]), e.Impact)
+		if next != nil {
+			if held, _ := s.nodes.get(next.Node); !slices.Contains(held, e.Impact) {
+				s.nodes.set(next.Node, append(slices.Clip(held), e.Impact))
+			}
 		}
 		if len(rows) == 0 {
-			delete(s.drafts, e.Impact)
+			s.drafts.del(e.Impact)
 		} else {
-			s.drafts[e.Impact] = rows
+			s.drafts.set(e.Impact, rows)
 		}
 	case domain.ImpactWithdrawn, domain.ImpactCommitted:
-		if _, ok := s.drafts[e.Impact]; ok {
-			s.own(sharedDrafts)
-			delete(s.drafts, e.Impact)
-		}
+		s.drafts.del(e.Impact)
 	case domain.ImpactAdopted:
-		s.own(sharedDrafts)
 		// the adopted flow's drafts were installed on the main flow by the events that follow (see the adoption)
-		for id, rows := range s.drafts {
+		for _, id := range s.draftIDs() {
+			rows, _ := s.drafts.get(id)
 			if rows = slices.DeleteFunc(slices.Clone(rows), func(d domain.Draft) bool { return d.Flow == e.Flow }); len(rows) == 0 {
-				delete(s.drafts, id)
+				s.drafts.del(id)
 			} else {
-				s.drafts[id] = rows
+				s.drafts.set(id, rows)
 			}
 		}
 	}
@@ -298,27 +228,64 @@ func (s *draftState) apply(e domain.ImpactEvent) {
 		return ok && !cn.Superseded
 	}
 	if e.Op == domain.ImpactAdopted {
-		for id := range s.drafts {
+		for _, id := range s.draftIDs() {
 			if !live(id) {
-				s.own(sharedDrafts)
-				delete(s.drafts, id)
+				s.drafts.del(id)
 			}
 		}
-	} else if _, ok := s.drafts[e.Impact]; ok && !live(e.Impact) {
-		s.own(sharedDrafts)
-		delete(s.drafts, e.Impact)
+	} else if s.drafts.has(e.Impact) && !live(e.Impact) {
+		s.drafts.del(e.Impact)
 	}
-	if c := domain.ApplyConflictEvent(s.conflicts[e.Impact], e); len(c) > 0 {
-		s.own(sharedConflicts)
-		if s.conflicts == nil {
-			s.conflicts = map[domain.ChangeImpactID][]string{}
-		}
-		s.conflicts[e.Impact] = c
-	} else if _, ok := s.conflicts[e.Impact]; ok {
-		s.own(sharedConflicts)
-		delete(s.conflicts, e.Impact)
+	cur, _ := s.conflicts.get(e.Impact)
+	if c := domain.ApplyConflictEvent(cur, e); len(c) > 0 {
+		s.conflicts.set(e.Impact, c)
+	} else {
+		s.conflicts.del(e.Impact)
 	}
 	s.seq = int64(e.Seq)
+}
+
+// applyImpact folds an event into the change impacts (domain.ApplyImpactEventAt): an event touches its own impact, an
+// adoption, or the removal of an impact, the list.
+func (s *draftState) applyImpact(e domain.ImpactEvent) {
+	i, ok := s.at.get(e.Impact)
+	if e.Op == domain.ImpactAdopted {
+		s.resetImpacts(domain.ApplyImpactEventAt(s.impacts.list().Slice(), -1, e))
+		return
+	}
+	one, at := []domain.ChangeImpact(nil), -1
+	if ok {
+		one, at = []domain.ChangeImpact{s.impacts.at(i)}, 0
+	}
+	out := domain.ApplyImpactEventAt(one, at, e)
+	switch {
+	case ok && len(out) == 0: // a change impact removed
+		all := s.impacts.list().Slice()
+		s.resetImpacts(slices.Delete(all, i, i+1))
+	case ok:
+		s.impacts.set(i, out[0])
+	case len(out) > 0:
+		s.at.set(e.Impact, s.impacts.n)
+		s.impacts.append(out[0])
+	}
+}
+
+// resetImpacts makes the change impacts those of a list, indexed again.
+func (s *draftState) resetImpacts(list []domain.ChangeImpact) {
+	s.impacts.reset(list)
+	s.at = cowMap[domain.ChangeImpactID, int]{}
+	for j, cn := range list {
+		s.at.set(cn.ID, j)
+	}
+}
+
+// draftIDs are the impacts holding drafts.
+func (s *draftState) draftIDs() []domain.ChangeImpactID {
+	out := make([]domain.ChangeImpactID, 0, s.drafts.len())
+	for id := range s.drafts.all() {
+		out = append(out, id)
+	}
+	return out
 }
 
 // draftCache keeps the views of the changes between calls in the one cache of the platform (lib/cache): bounded in
@@ -564,11 +531,13 @@ func (g *Graph) nodeDrafts(ctx context.Context, tx Tx, id domain.ChangeID, node 
 	if err != nil {
 		return nil, err
 	}
-	impacts := slices.Clone(st.nodes[node])
+	held, _ := st.nodes.get(node)
+	impacts := slices.Clone(held)
 	slices.Sort(impacts)
 	var out []domain.Draft
 	for _, imp := range slices.Compact(impacts) {
-		rows := slices.Clone(st.drafts[imp])
+		rows, _ := st.drafts.get(imp)
+		rows = slices.Clone(rows)
 		slices.SortStableFunc(rows, func(a, b domain.Draft) int { return strings.Compare(a.Flow, b.Flow) })
 		for _, d := range rows {
 			out = append(out, d.Clone())
@@ -583,7 +552,7 @@ func (g *Graph) drafts(ctx context.Context, tx Tx, id domain.ChangeID) ([]domain
 		return nil, err
 	}
 	var out []domain.Draft
-	for _, rows := range st.drafts {
+	for _, rows := range st.drafts.all() {
 		for _, d := range rows {
 			out = append(out, d.Clone())
 		}

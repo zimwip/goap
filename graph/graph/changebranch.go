@@ -186,7 +186,7 @@ func (g *Graph) SharedNodes(ctx context.Context, id domain.ChangeID) (out []Shar
 			return err
 		}
 		seen := map[domain.NodeID]bool{}
-		for _, cn := range c.Nodes {
+		for _, cn := range c.Impacts().All() {
 			if cn.Pre == nil || seen[cn.Pre.ID] {
 				continue
 			}

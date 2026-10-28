@@ -187,7 +187,7 @@ func (g *Graph) ImpactNodeResolve(ctx context.Context, id domain.ChangeID, impac
 		if err != nil {
 			return err
 		}
-		if len(st.conflicts[impact]) == 0 {
+		if pending, _ := st.conflicts.get(impact); len(pending) == 0 {
 			return fmt.Errorf("change impact %s (%s) has no conflict to settle: %w", impact, w.cn.Key, ErrConflict)
 		}
 		ref := d.Ref()
@@ -206,7 +206,7 @@ func (g *Graph) checkSettled(ctx context.Context, tx Tx, c domain.Change, impact
 	if err != nil {
 		return err
 	}
-	if pending := st.conflicts[impact]; len(pending) > 0 {
+	if pending, _ := st.conflicts.get(impact); len(pending) > 0 {
 		return fmt.Errorf("change impact %s has conflicts with the branch it was forked from to settle first (edit the fields, or keep them with ImpactNodeResolve): %s: %w",
 			impact, strings.Join(pending, ", "), ErrConflict)
 	}
@@ -226,8 +226,9 @@ func (g *Graph) RebaseState(ctx context.Context, id domain.ChangeID) (st RebaseS
 		if err != nil {
 			return err
 		}
-		for _, cn := range c.Nodes {
-			if pending := slices.Clone(view.conflicts[cn.ID]); len(pending) > 0 {
+		for _, cn := range c.Impacts().All() {
+			if pending, _ := view.conflicts.get(cn.ID); len(pending) > 0 {
+				pending = slices.Clone(pending)
 				st.Conflicts = append(st.Conflicts, ImpactConflicts{Impact: cn.ID, Key: cn.Key, Conflicts: pending})
 			}
 		}

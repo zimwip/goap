@@ -46,13 +46,13 @@ func changeOpen(ctx context.Context, tx Tx, id domain.ChangeID) (domain.Change, 
 	return c, nil
 }
 
-func findChangeImpact(c domain.Change, id domain.ChangeImpactID) (int, error) {
-	for i, cn := range c.Nodes {
+func findChangeImpact(c domain.Change, id domain.ChangeImpactID) (domain.ChangeImpact, error) {
+	for _, cn := range c.Impacts().All() {
 		if cn.ID == id {
-			return i, nil
+			return cn, nil
 		}
 	}
-	return -1, fmt.Errorf("change impact %s of change %s: %w", id, c.ID, ErrNotFound)
+	return domain.ChangeImpact{}, fmt.Errorf("change impact %s of change %s: %w", id, c.ID, ErrNotFound)
 }
 
 // ProposeImpact adds change impacts to a change (ADR 0024): each names an existing node (intent modified) and a
@@ -117,8 +117,8 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 		var known map[domain.ChangeImpactID]bool
 		isKnown := func(id domain.ChangeImpactID) bool {
 			if known == nil {
-				known = make(map[domain.ChangeImpactID]bool, len(c.Nodes)+len(nodes))
-				for _, cn := range c.Nodes {
+				known = make(map[domain.ChangeImpactID]bool, c.Impacts().Len()+len(nodes))
+				for _, cn := range c.Impacts().All() {
 					known[cn.ID] = true
 				}
 				for _, cn := range nodes {
@@ -130,20 +130,14 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 			return known[id]
 		}
 		// a node appears once per flow: what the flow sees (the stale change impacts of a relaunched step do not count)
-		presByFlow := map[string]map[domain.NodeID]bool{}
-		presOf := func(flow string) map[domain.NodeID]bool {
-			if set, ok := presByFlow[flow]; ok {
-				return set
+		presByFlow := map[string]*presence{}
+		presOf := func(flow string) *presence {
+			p, ok := presByFlow[flow]
+			if !ok {
+				p = &presence{impacts: c.Impacts(), fv: g.newFlowNodes(tx, c, flow)}
+				presByFlow[flow] = p
 			}
-			set := map[domain.NodeID]bool{}
-			fv := g.newFlowNodes(tx, c, flow)
-			for _, cn := range c.Nodes {
-				if cn.Pre != nil && fv.visible(cn) {
-					set[cn.Pre.ID] = true
-				}
-			}
-			presByFlow[flow] = set
-			return set
+			return p
 		}
 		batch := slices.Clone(nodes)
 		for i := range batch {
@@ -183,10 +177,10 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 					return fmt.Errorf("change impact %s: pre %s is not in baseline %s (the node moved on): %w", cn.ID, cn.Pre, b.ID, ErrConflict)
 				}
 				pres := presOf(cn.Flow)
-				if pres[cn.Pre.ID] {
+				if pres.has(cn.Pre.ID) {
 					return fmt.Errorf("change impact %s: node %s is already in the change: %w", cn.ID, cn.Pre.ID, ErrConflict)
 				}
-				pres[cn.Pre.ID] = true
+				pres.add(cn.Pre.ID)
 				n, err := tx.Node(ctx, *cn.Pre)
 				if err != nil {
 					return err
@@ -230,6 +224,42 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 	return out, err
 }
 
+// presence tells the nodes a flow of a change holds an impact on (by their pre version): the impacts are looked through
+// for the first nodes asked, indexed once more are asked (a declaration names one node, a proposal may name many).
+type presence struct {
+	impacts domain.Impacts
+	fv      *flowNodes
+	added   map[domain.NodeID]bool
+	all     map[domain.NodeID]bool
+	asks    int
+}
+
+func (p *presence) has(id domain.NodeID) bool {
+	if p.added[id] {
+		return true
+	}
+	if p.all == nil && p.asks < 4 {
+		p.asks++
+		return p.impacts.Find(func(cn domain.ChangeImpact) bool { return cn.Pre != nil && cn.Pre.ID == id && p.fv.visible(cn) }) >= 0
+	}
+	if p.all == nil {
+		p.all = map[domain.NodeID]bool{}
+		for _, cn := range p.impacts.All() {
+			if cn.Pre != nil && p.fv.visible(cn) {
+				p.all[cn.Pre.ID] = true
+			}
+		}
+	}
+	return p.all[id]
+}
+
+func (p *presence) add(id domain.NodeID) {
+	if p.added == nil {
+		p.added = map[domain.NodeID]bool{}
+	}
+	p.added[id] = true
+}
+
 // checkPlannedKey refuses a planned creation whose key a node already holds, or the change already acts on in the
 // flow (createTx makes the same checks when the node is created).
 func (g *Graph) checkPlannedKey(ctx context.Context, tx Tx, c domain.Change, b domain.Baseline, cn domain.ChangeImpact) error {
@@ -241,7 +271,7 @@ func (g *Graph) checkPlannedKey(ctx context.Context, tx Tx, c domain.Change, b d
 		return err
 	}
 	fv := g.newFlowNodes(tx, c, cn.Flow)
-	for _, other := range c.Nodes {
+	for _, other := range c.Impacts().All() {
 		if other.Key == cn.Key && other.ID != cn.ID && fv.visible(other) {
 			return fmt.Errorf("cannot plan %s (%s): the change already holds it as change impact %s: %w", cn.Key, cn.Type, other.ID, ErrConflict)
 		}
@@ -256,7 +286,7 @@ func (g *Graph) ListChangeImpacts(ctx context.Context, id domain.ChangeID) (out 
 		if err != nil {
 			return err
 		}
-		out = c.Nodes
+		out = c.Impacts().Slice()
 		return nil
 	})
 	return
@@ -275,8 +305,8 @@ func (g *Graph) ImpactType(ctx context.Context, id domain.ChangeID, impact domai
 		if err != nil {
 			return err
 		}
-		if i, ok := st.at[impact]; ok {
-			typ = st.impacts[i].Type
+		if cn, ok := st.impact(impact); ok {
+			typ = cn.Type
 		}
 		return nil
 	})
@@ -359,8 +389,8 @@ func (g *Graph) newReviewScope(ctx context.Context, tx Tx, id domain.ChangeID) (
 		return nil, err
 	}
 	// verdict records the verdicts in them: copies of the change's (shared with its view, changeOpen)
-	w.c.Nodes, w.seen = slices.Clone(w.c.Nodes), slices.Clone(w.seen)
-	s := &reviewScope{c: w.c, seen: w.seen, ix: w.ix, at: make(map[domain.ChangeImpactID]int, len(w.c.Nodes)), seenAt: make(map[domain.ChangeImpactID]int, len(w.seen))}
+	w.c.Nodes = w.c.Impacts().Slice()
+	s := &reviewScope{c: w.c, seen: w.seen.Slice(), ix: w.ix, at: make(map[domain.ChangeImpactID]int, len(w.c.Nodes)), seenAt: make(map[domain.ChangeImpactID]int, w.seen.Len())}
 	for i, cn := range s.c.Nodes {
 		s.at[cn.ID] = i
 	}
@@ -368,7 +398,7 @@ func (g *Graph) newReviewScope(ctx context.Context, tx Tx, id domain.ChangeID) (
 		s.seenAt[cn.ID] = i
 	}
 	// the drafts do not change by a review: one reader serves every verdict
-	if s.r, err = g.newDraftReader(ctx, tx, s.c, "", s.seen); err != nil {
+	if s.r, err = g.newDraftReader(ctx, tx, s.c, "", domain.ImpactsOf(s.seen)); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -416,11 +446,9 @@ func (g *Graph) reviewTx(ctx context.Context, tx Tx, stage *impactStage, scope *
 				return cn, fmt.Errorf("flow %s is not open: %w", flow, ErrConflict)
 			}
 		}
-		i, err := findChangeImpact(c, node)
-		if err != nil {
+		if cn, err = findChangeImpact(c, node); err != nil {
 			return cn, err
 		}
-		cn = c.Nodes[i]
 		if seen, err = g.newFlowNodes(tx, c, flow).find(ctx, node); err != nil {
 			return cn, err
 		}
@@ -551,8 +579,8 @@ func (g *Graph) reviewBatch(ctx context.Context, id domain.ChangeID, b domain.Re
 		name := func(i int) string {
 			v := b.Verdicts[i]
 			if c, err := tx.Change(ctx, id); err == nil {
-				if k, err := findChangeImpact(c, v.Impact); err == nil {
-					return label(i, c.Nodes[k].Key)
+				if cn, err := findChangeImpact(c, v.Impact); err == nil {
+					return label(i, cn.Key)
 				}
 			}
 			return label(i, string(v.Impact))
@@ -663,11 +691,10 @@ func (g *Graph) ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts [
 			return err
 		}
 		for _, imp := range impacts {
-			i, err := findChangeImpact(c, imp)
+			cn, err := findChangeImpact(c, imp)
 			if err != nil {
 				return err
 			}
-			cn := c.Nodes[i]
 			if cn.Review != domain.ReviewAccepted && cn.Review != domain.ReviewRejected {
 				continue
 			}

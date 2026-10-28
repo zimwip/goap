@@ -341,7 +341,7 @@ func (g *Graph) localTarget(ctx context.Context, tx Tx, w *work, src lnk.Source,
 		return domain.NodeRef{}, fmt.Errorf("%s: no %s %s in namespace %s: %w", u, u.Type, u.Key, ns, ErrInvalid)
 	}
 	if u.Version == 0 && domain.NamespaceOf(w.ns) == domain.NamespaceOf(ns) {
-		for _, cn := range w.seen {
+		for _, cn := range w.seen.All() {
 			if cn.Key == u.Key && cn.Post != nil && cn.Post.IsDraft() {
 				if !r.isA(ns, cn.Type, u.Type) {
 					return notFound()

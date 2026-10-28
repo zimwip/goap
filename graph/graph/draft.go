@@ -68,7 +68,7 @@ func (g *Graph) seenDrafts(ctx context.Context, tx Tx, c domain.Change, flow str
 		return nil, err
 	}
 	isStale := func(e string) bool { return e != "" && stale[e] }
-	for _, cn := range c.Nodes {
+	for _, cn := range c.Impacts().All() {
 		if d := domain.DraftSeenBy(events, cn.ID, ids, isStale); d != nil {
 			out[cn.ID] = *d
 		}
@@ -164,7 +164,7 @@ func (r *draftReader) prefetch(ctx context.Context, tx Tx, refs []domain.NodeRef
 
 // newDraftReader reads the drafts a flow sees, for the change impacts it sees (visible: stale or foreign impacts leave
 // their drafts out).
-func (g *Graph) newDraftReader(ctx context.Context, tx Tx, c domain.Change, flow string, visible []domain.ChangeImpact) (*draftReader, error) {
+func (g *Graph) newDraftReader(ctx context.Context, tx Tx, c domain.Change, flow string, visible domain.Impacts) (*draftReader, error) {
 	r := &draftReader{c: c, byNode: map[domain.NodeID]domain.Draft{}}
 	chain := flowChain(c, flow)
 	if len(staleOf(chain)) > 0 {
@@ -172,7 +172,7 @@ func (g *Graph) newDraftReader(ctx context.Context, tx Tx, c domain.Change, flow
 		if err != nil {
 			return nil, err
 		}
-		for _, cn := range visible {
+		for _, cn := range visible.All() {
 			if d, ok := seen[cn.ID]; ok {
 				r.byNode[d.Node] = d
 			}
@@ -195,14 +195,15 @@ func (g *Graph) newDraftReader(ctx context.Context, tx Tx, c domain.Change, flow
 		}
 		return domain.Draft{}, false
 	}
-	pos := make(map[domain.ChangeImpactID]int, len(visible))
-	for i, cn := range visible {
+	pos := make(map[domain.ChangeImpactID]int, visible.Len())
+	for i, cn := range visible.All() {
 		pos[cn.ID] = i
 	}
 	// as the whole reader would hold it: the draft of the last visible impact of the node
 	r.lazy = func(node domain.NodeID) (domain.Draft, bool) {
 		best, out := -1, domain.Draft{}
-		for _, id := range st.nodes[node] {
+		held, _ := st.nodes.get(node)
+		for _, id := range held {
 			if i, ok := pos[id]; ok && i > best {
 				if d, ok := pick(id); ok && d.Node == node {
 					best, out = i, d
@@ -216,7 +217,7 @@ func (g *Graph) newDraftReader(ctx context.Context, tx Tx, c domain.Change, flow
 	}
 	r.all = func() map[domain.NodeID]domain.Draft {
 		m := map[domain.NodeID]domain.Draft{}
-		for _, cn := range visible {
+		for _, cn := range visible.All() {
 			if d, ok := pick(cn.ID); ok {
 				m[d.Node] = d.Clone()
 			}
@@ -384,7 +385,7 @@ func (g *Graph) LinkSourceType(ctx context.Context, id domain.ChangeID, link dom
 		if err != nil {
 			return err
 		}
-		for _, rows := range st.drafts {
+		for _, rows := range st.drafts.all() {
 			for _, d := range rows {
 				if _, ok := d.Link(link); ok {
 					typ = d.Type
@@ -428,7 +429,7 @@ func (g *Graph) ChangeNodeViewByKey(ctx context.Context, id domain.ChangeID, flo
 		}
 		if ref.ID == "" && domain.NamespaceOf(c.Namespace) == domain.NamespaceOf(namespace) {
 			// a node the change committed, or a sub-change merged into it (ADR 0103): the version it committed
-			for _, cn := range seen {
+			for _, cn := range seen.All() {
 				if cn.Key == key && cn.Committed != nil {
 					ref = *cn.Committed
 				} else if cn.Key == key && cn.Post != nil && !cn.Post.IsDraft() {
@@ -503,7 +504,7 @@ func isNotFound(err error) bool { return errors.Is(err, ErrNotFound) }
 // draftLinkTargetType is the type of the node a link of a draft targets: a draft of the flow, or a stored version.
 func (g *Graph) draftLinkTargetType(ctx context.Context, tx Tx, w *work, to domain.NodeRef) (string, error) {
 	if to.IsDraft() {
-		for _, cn := range w.seen {
+		for _, cn := range w.seen.All() {
 			if cn.Post != nil && cn.Post.IsDraft() && cn.Post.ID == to.ID {
 				return cn.Type, nil
 			}
@@ -550,7 +551,7 @@ func (g *Graph) newDraftLink(ctx context.Context, tx Tx, w *work, from domain.Dr
 
 // normalizeTo points the version a node of the flow was checked out from at its draft.
 func (w *work) normalizeTo(to domain.NodeRef) domain.NodeRef {
-	for _, cn := range w.seen {
+	for _, cn := range w.seen.All() {
 		if cn.Post != nil && cn.Post.IsDraft() && cn.Post.ID == to.ID && cn.Pre != nil && *cn.Pre == to {
 			return *cn.Post
 		}

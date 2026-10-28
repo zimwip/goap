@@ -285,7 +285,7 @@ func (g *Graph) reopenPhase(ctx context.Context, tx Tx, c domain.Change, to stri
 		}
 	}
 	since := st.moveSeq[entered]
-	for _, cn := range c.Nodes {
+	for _, cn := range c.Impacts().All() {
 		p, ok := st.phaseOf(cn.ID)
 		if !ok || p.State == to || p.Seq < since || cn.Review != domain.ReviewAccepted {
 			continue

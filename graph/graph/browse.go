@@ -97,7 +97,7 @@ func changeNodesIn(ctx context.Context, tx Tx, id domain.BaselineID, change doma
 		return nil, err
 	}
 	var ids []domain.NodeID
-	for _, cn := range c.Nodes {
+	for _, cn := range c.Impacts().All() {
 		if n := nodeOf(cn); n != "" {
 			ids = append(ids, n)
 		}

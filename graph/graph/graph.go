@@ -915,7 +915,7 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 		}
 		full := c // the drafts are read with the flows of the change, the view of a flow has none
 		c = c.View(flow)
-		c.Nodes = slices.Clone(nodes)
+		c.Nodes = nodes.Slice()
 		g.attachValidation(ctx, tx, full, flow, c.Nodes, nil)
 		bb = domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{},
 			Facets: facets, At: now}
@@ -980,7 +980,7 @@ func (g *Graph) ChangeImpacts(ctx context.Context, id domain.ChangeID) (refs []d
 		if err != nil {
 			return err
 		}
-		for _, cn := range c.Nodes {
+		for _, cn := range c.Impacts().All() {
 			if cn.Pre != nil {
 				refs = append(refs, *cn.Pre)
 			}
@@ -1003,7 +1003,7 @@ func (g *Graph) openChangeHolders(ctx context.Context, tx Tx) (map[domain.NodeID
 		if err != nil {
 			return nil, err
 		}
-		for _, cn := range c.Nodes {
+		for _, cn := range c.Impacts().All() {
 			for _, ref := range []*domain.NodeRef{cn.Pre, cn.Post} {
 				if ref != nil && !slices.Contains(out[ref.ID], id) {
 					out[ref.ID] = append(out[ref.ID], id)

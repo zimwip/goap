@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"iter"
 	"slices"
 	"time"
 )
@@ -295,6 +296,15 @@ func adoptImpact(cn ChangeImpact, flow string, staleExecutions []string) ChangeI
 // else on the main flow; the review is the last one on the chain or the main flow that is neither
 // superseded nor stale.
 func ImpactsSeenBy(impacts []ChangeImpact, events []ImpactEvent, chain []string, stale map[string]bool) []ChangeImpact {
+	return seenBy(slices.All(impacts), events, chain, stale)
+}
+
+// SeenBy is ImpactsSeenBy over a list.
+func (l Impacts) SeenBy(events []ImpactEvent, chain []string, stale map[string]bool) Impacts {
+	return ImpactsOf(seenBy(l.All(), events, chain, stale))
+}
+
+func seenBy(impacts iter.Seq2[int, ChangeImpact], events []ImpactEvent, chain []string, stale map[string]bool) []ChangeImpact {
 	isStale := func(e string) bool { return e != "" && stale[e] }
 	inChain := func(f string) bool { return slices.Contains(chain, f) }
 	var out []ChangeImpact

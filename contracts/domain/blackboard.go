@@ -100,7 +100,7 @@ func (c *Change) ReferencedNodes() []NodeRef {
 		seen[*r] = true
 		out = append(out, *r)
 	}
-	for _, cn := range c.Nodes {
+	for _, cn := range c.Impacts().All() {
 		add(cn.Pre)
 		add(cn.Post)
 		add(cn.Committed)

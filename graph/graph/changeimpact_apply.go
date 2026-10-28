@@ -39,7 +39,7 @@ func (a *applier) prepareChangeImpacts() error {
 	// the versions the drafts start from, read in one batch: what the drafts are compared with, and the links the new
 	// versions share or write a delta over (ADR 0141)
 	var bases []domain.NodeRef
-	for _, cn := range impacts {
+	for _, cn := range impacts.All() {
 		if cn.Review != domain.ReviewAccepted {
 			continue
 		}
@@ -53,7 +53,7 @@ func (a *applier) prepareChangeImpacts() error {
 	if err := prefetchVersions(a.ctx, a.tx, bases); err != nil {
 		return err
 	}
-	for _, cn := range impacts {
+	for _, cn := range impacts.All() {
 		if cn.Review != domain.ReviewAccepted {
 			continue
 		}
@@ -210,7 +210,7 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 }
 
 // mainImpacts are the impacts of the main flow that count at commit.
-func (a *applier) mainImpacts() []domain.ChangeImpact { return mainImpactsOf(a.change) }
+func (a *applier) mainImpacts() domain.Impacts { return mainImpactsOf(a.change) }
 
 // walkChangeImpacts validates the properties of each produced version and walks its transitions: it returns the nodes
 // left in a state that cannot commit (ADR 0078).
@@ -306,7 +306,7 @@ func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.B
 	}
 	// the latest version of each node on the target, read in two statements
 	var ids []domain.NodeID
-	for _, cn := range c.Nodes {
+	for _, cn := range c.Impacts().All() {
 		if commits(cn) {
 			ids = append(ids, cn.Post.ID)
 		}
@@ -328,7 +328,7 @@ func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.B
 		byID[n.ID] = n
 	}
 	var committed []domain.ImpactEvent
-	for _, cn := range c.Nodes {
+	for _, cn := range c.Impacts().All() {
 		if !commits(cn) {
 			continue
 		}

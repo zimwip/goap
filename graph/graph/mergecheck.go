@@ -3,7 +3,6 @@ package graph
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
 )
@@ -38,22 +37,23 @@ func (g *Graph) checkMerge(ctx context.Context, tx Tx, c domain.Change, closing 
 
 // mainImpactsOf are the impacts of the main flow of a change: the ones its commit and its merge look at (read them,
 // never edit them: they may be the change's own).
-func mainImpactsOf(c domain.Change) []domain.ChangeImpact {
+func mainImpactsOf(c domain.Change) domain.Impacts {
 	main := func(cn domain.ChangeImpact) bool { return cn.Flow == "" && !cn.Superseded }
+	all := c.Impacts()
 	n := 0
-	for _, cn := range c.Nodes {
+	for _, cn := range all.All() {
 		if main(cn) {
 			n++
 		}
 	}
-	if n == len(c.Nodes) {
-		return slices.Clip(c.Nodes) // every impact is the main flow's: no copy (the readers never edit them)
+	if n == all.Len() {
+		return all // every impact is the main flow's: no copy
 	}
 	out := make([]domain.ChangeImpact, 0, n)
-	for _, cn := range c.Nodes {
+	for _, cn := range all.All() {
 		if main(cn) {
 			out = append(out, cn)
 		}
 	}
-	return out
+	return domain.ImpactsOf(out)
 }

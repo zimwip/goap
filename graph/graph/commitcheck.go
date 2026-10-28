@@ -122,8 +122,8 @@ func (g *Graph) commitBlackboard(ctx context.Context, tx Tx, c domain.Change, wh
 	if own, ok, err := ownBranch(ctx, tx, c); err != nil {
 		return bb, nil, err
 	} else if ok {
-		ids := make([]domain.NodeID, 0, len(impacts))
-		for _, cn := range impacts {
+		ids := make([]domain.NodeID, 0, impacts.Len())
+		for _, cn := range impacts.All() {
 			if id := nodeOf(cn); id != "" { // a planned creation has no node yet (ADR 0121)
 				ids = append(ids, id)
 			}
@@ -134,7 +134,7 @@ func (g *Graph) commitBlackboard(ctx context.Context, tx Tx, c domain.Change, wh
 	}
 	// the versions the blackboard shows, read in one batch
 	var refs []domain.NodeRef
-	for _, cn := range impacts {
+	for _, cn := range impacts.All() {
 		if cn.Pre != nil {
 			refs = append(refs, *cn.Pre)
 		}
@@ -163,7 +163,7 @@ func (g *Graph) commitBlackboard(ctx context.Context, tx Tx, c domain.Change, wh
 		return v, err
 	}
 	var committed []domain.NodeView
-	for _, cn := range impacts {
+	for _, cn := range impacts.All() {
 		if cn.Pre != nil {
 			v, err := view(*cn.Pre)
 			if err != nil {

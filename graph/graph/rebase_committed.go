@@ -24,7 +24,7 @@ func hasCommits(c domain.Change) bool {
 	if c.Status != domain.ChangeDraft && c.Status != domain.ChangeActive {
 		return false
 	}
-	for _, cn := range mainImpactsOf(c) {
+	for _, cn := range mainImpactsOf(c).All() {
 		if cn.Committed != nil {
 			return true
 		}
@@ -39,7 +39,7 @@ func (g *Graph) uncommitted(ctx context.Context, tx Tx, c domain.Change) ([]stri
 		return nil, err
 	}
 	var out []string
-	for _, cn := range mainImpactsOf(c) {
+	for _, cn := range mainImpactsOf(c).All() {
 		if ok, err := g.draftModifies(ctx, tx, draftOf(cn.ID, "")); err != nil {
 			return nil, err
 		} else if ok {
@@ -57,7 +57,7 @@ func (g *Graph) withdrawnSince(ctx context.Context, tx Tx, c domain.Change) ([]d
 		return nil, nil, err
 	}
 	held := map[domain.NodeID]bool{}
-	for _, cn := range mainImpactsOf(c) {
+	for _, cn := range mainImpactsOf(c).All() {
 		held[nodeOf(cn)] = true
 	}
 	// only a node the branch holds a version of can differ from the fork (ADR 0137)
@@ -114,7 +114,7 @@ func (g *Graph) unsettled(ctx context.Context, tx Tx, c domain.Change) ([]string
 	if err != nil {
 		return nil, err
 	}
-	for _, cn := range mainImpactsOf(c) {
+	for _, cn := range mainImpactsOf(c).All() {
 		if cn.Via != "" {
 			continue
 		}
@@ -253,11 +253,11 @@ func (g *Graph) checkParentDrafts(ctx context.Context, tx Tx, c domain.Change) e
 		return err
 	}
 	mine := map[domain.NodeID]bool{}
-	for _, cn := range mainImpactsOf(c) {
+	for _, cn := range mainImpactsOf(c).All() {
 		mine[nodeOf(cn)] = true
 	}
 	var held []string
-	for _, cn := range mainImpactsOf(parent) {
+	for _, cn := range mainImpactsOf(parent).All() {
 		if !mine[nodeOf(cn)] {
 			continue
 		}
@@ -292,11 +292,11 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 	var entries []domain.ReviewEntry
 	held := map[domain.NodeID]domain.ChangeImpactID{} // the parent's impact of each node, the last one
 	parentImpact := map[domain.ChangeImpactID]domain.ChangeImpact{}
-	for _, p := range mainImpactsOf(parent) {
+	for _, p := range mainImpactsOf(parent).All() {
 		held[nodeOf(p)] = p.ID
 		parentImpact[p.ID] = p
 	}
-	for _, cn := range mainImpactsOf(c) {
+	for _, cn := range mainImpactsOf(c).All() {
 		if cn.Committed == nil {
 			continue
 		}
@@ -389,7 +389,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 		return res, fmt.Errorf("change %s holds uncommitted modifications (%s): commit or cancel them before it is rebased: %w", c.ID, strings.Join(keys, ", "), ErrConflict)
 	}
 	impactOf := map[domain.NodeID]domain.ChangeImpact{}
-	for _, cn := range mainImpactsOf(c) {
+	for _, cn := range mainImpactsOf(c).All() {
 		impactOf[nodeOf(cn)] = cn
 	}
 	// the nodes read are the ones the branch holds a version of (only those can differ from the fork) and the ones the
@@ -398,7 +398,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 	if err != nil {
 		return res, err
 	}
-	for _, cn := range mainImpactsOf(c) {
+	for _, cn := range mainImpactsOf(c).All() {
 		if cn.Pre != nil {
 			ids = append(ids, cn.Pre.ID)
 		}
@@ -507,7 +507,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 	}
 	// the impacts that committed nothing start from the target's version of their node too (to check again, ADR 0101)
 	var repre []domain.ImpactEvent
-	for _, cn := range mainImpactsOf(c) {
+	for _, cn := range mainImpactsOf(c).All() {
 		if cn.Committed != nil || cn.Pre == nil {
 			continue
 		}
@@ -585,7 +585,7 @@ func (g *Graph) committedBehind(ctx context.Context, tx Tx, c domain.Change, own
 	}
 	st.Branch, st.Onto = domain.BranchOf(own.Parent), to.head
 	var ids []domain.NodeID
-	for _, cn := range mainImpactsOf(c) {
+	for _, cn := range mainImpactsOf(c).All() {
 		ids = append(ids, nodeOf(cn))
 	}
 	forkNodes, err := forkVersions(ctx, tx, own, ids)
@@ -600,7 +600,7 @@ func (g *Graph) committedBehind(ctx context.Context, tx Tx, c domain.Change, own
 	if err != nil {
 		return err
 	}
-	for _, cn := range mainImpactsOf(c) {
+	for _, cn := range mainImpactsOf(c).All() {
 		id := nodeOf(cn)
 		hv, ok := mineNodes[id]
 		if !ok || forkNodes[id] == hv {
@@ -660,7 +660,7 @@ func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitS
 		if err != nil {
 			return err
 		}
-		for _, cn := range mainImpactsOf(c) {
+		for _, cn := range mainImpactsOf(c).All() {
 			if cn.Review != domain.ReviewAccepted {
 				continue
 			}

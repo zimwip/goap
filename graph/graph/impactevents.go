@@ -179,10 +179,9 @@ func (g *Graph) flush(ctx context.Context, tx Tx, s *impactStage) error {
 		st.events[base+i].Seq = int(seqs[i])
 	}
 	for i, e := range s.events {
-		if p, ok := st.phases[e.Impact]; ok && e.StartsDraft() && e.Flow == "" {
-			st.own(sharedPhases)
+		if p, ok := st.phases.get(e.Impact); ok && e.StartsDraft() && e.Flow == "" {
 			p.Seq = seqs[i]
-			st.phases[e.Impact] = p
+			st.phases.set(e.Impact, p)
 		}
 	}
 	readLog(tx, st)
@@ -277,9 +276,10 @@ func (g *Graph) emitEntry(ctx context.Context, tx Tx, events []domain.ImpactEven
 // project applies an event to the change_impact projection, st being the fold before it.
 func (g *Graph) project(ctx context.Context, tx Tx, st *draftState, e domain.ImpactEvent) error {
 	// an event touches its own change impact, an adoption every one of them
-	cur := st.impacts
-	if e.Op != domain.ImpactAdopted {
-		cur = nil
+	var cur []domain.ChangeImpact
+	if e.Op == domain.ImpactAdopted {
+		cur = st.impacts.list().Slice()
+	} else {
 		if cn, ok := st.impact(e.Impact); ok {
 			cur = []domain.ChangeImpact{cn}
 		}
