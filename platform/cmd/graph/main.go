@@ -43,7 +43,7 @@ import (
 	"github.com/zimwip/goap/platform/modelgw"
 )
 
-// registryTimeout bounds a read of the domain registry, at start and on its events (Rust's REGISTRY_TIMEOUT): a
+// registryTimeout bounds a read of the domain registry, at start and on its events: a
 // registry that does not answer is one that is not there, the catalogue kept stays in force.
 const registryTimeout = 10 * time.Second
 

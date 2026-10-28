@@ -25,7 +25,7 @@ const alm = "alm"
 // of its methodology there.
 const DemoProject = "PROJ-DEMO"
 
-// demoJSON is the demo itself, shared with the Rust graph service (ADR 0163), which loads the same data.
+// demoJSON is the demo itself.
 //
 //go:embed demo.json
 var demoJSON []byte

@@ -610,33 +610,30 @@ impacts (`storedPosts`: `openWorld`, `changeViewTx`), the headers of the changes
 these paths over a hub; a new read path meeting several nodes or changes goes through these helpers.
 
 **Pipelined writes**: on PostgreSQL a write transaction sends the statements nothing waits on with the next one
-(`graph/graph/pgpipe.go`, `pipeTx`; Rust `Session::queue`, `Queued`, polled in order on one connection): its
+(`graph/graph/pgpipe.go`, `pipeTx`): its
 `BEGIN` and an advisory lock go with the read that follows (READ COMMITTED: each statement of a pipeline takes its own
 snapshot when it starts, so the read sees what the lock holds), the held inserts (impacts, nodes, versions, links,
 joins: `heldQuerier.write`) and the first log entry wait for the next statement, the `COMMIT` takes what is left. The
-first entry's position is reserved by the locked head (`nextval` of `change_log.seq`, `takeNext` / `take_log_next`);
+first entry's position is reserved by the locked head (`nextval` of `change_log.seq`, `takeNext`);
 any other append drops the reservation, so entries keep their order. A statement queued that fails is the error of
-the statement sent with it (`StoreError::Queued` in Rust). A statement carrying its own execution mode (`customPlan`)
-sends what is queued alone first. The rpc log line of the Rust graph counts the round trips (`trips=`).
+the statement sent with it. A statement carrying its own execution mode (`customPlan`)
+sends what is queued alone first.
 
 **Kept heads**: the graph holds in memory the head of each lasting branch its views read, the way a change view
-follows its log (`graph/graph/heads.go`, `keptBranch`; Rust `Versions::head_moved`, `KeptBranch`). It is not read
+follows its log (`graph/graph/heads.go`, `keptBranch`). It is not read
 again but moved: by a commit of this graph once it commits (the guard notes the head each branch moves to, the
 baselines it wrote with their order, the version each node takes on each branch (a version joined whose deletion it
 does not know drops what is kept of its node) and the nodes of the keys it created, `guardTx.movedBranches` /
-`wroteHeads` / `headMoves` / `newKeys`; Rust `Read::head_moves`, `take_keys`), and by the baseline events of the other processes sharing the
-store (`Graph.FollowHeads` / `HeadEvent`, subscribed to `goap.baseline.*.advanced` by `platform/cmd/graph`; Rust
-`follow_moves`, `Store::head_event`), which carry the whole header (`BaselineEvent.Seq`, `Name`, `ChangeID`,
+`wroteHeads` / `headMoves` / `newKeys`), and by the baseline events of the other processes sharing the
+store (`Graph.FollowHeads` / `HeadEvent`, subscribed to `goap.baseline.*.advanced` by `platform/cmd/graph`), which carry the whole header (`BaselineEvent.Seq`, `Name`, `ChangeID`,
 `Kind`...) and, when `Whole`, every node whose version changed. A move whose parent is the head held moves it and the
 versions of the nodes kept with it; one told twice or older than the head held is left alone (an echo of this graph's
 own commit); one not following it leaves the head unknown, read at the next view; a transaction that moved a branch
-reads it in the transaction. A head is taken as known for `followedHeadAge` (30 s, `HEAD_FOLLOWED`) when the events are
-followed, a lost event caught up then, else `headAge` (1 s, `HEAD_FRESH`). The version of a node at the head is kept
-by branch and node with the epoch it was known in (`Graph.selections` / `keyIDs` bounded by `Caches.Heads`; Rust
-`Heads.selections`, `MAX_SELECTIONS`): a selection at a baseline never changes, a move with every node told carries
+reads it in the transaction. A head is taken as known for `followedHeadAge` (30 s) when the events are
+followed, a lost event caught up then, else `headAge` (1 s). The version of a node at the head is kept
+by branch and node with the epoch it was known in (`Graph.selections` / `keyIDs` bounded by `Caches.Heads`): a selection at a baseline never changes, a move with every node told carries
 it to the next head, any other starts an epoch. On a branch with no fork, a node read by key in a view finds the node
-and its version there (`keptSelection`), else in one statement (`keySelector.CommittedAtKey`, `selectKey`; Rust
-`ReadTx::node_at_key`, `KeyAt`), then kept; `GetNode` reads the latest version of main first and keeps it when the
+and its version there (`keptSelection`), else in one statement (`keySelector.CommittedAtKey`, `selectKey`), then kept; `GetNode` reads the latest version of main first and keeps it when the
 view selects it (`world.stored`). The access directory is apart: it follows the organisation of the platform graph,
 which may be another graph, by its own subscription (`access.Directory.FollowEvents`).
 
@@ -1093,14 +1090,14 @@ every import, the tests' included (`TestComponents`), and each `go.mod` (`TestMo
 `platform/cmd/*` is the platform's composition.
 
 Two registries: the **domain registry** (`graph/domainsvc`, `registry.v1.DomainService`) is a service of its own
-([ADR 0167](adr/0167-domain-registry-a-service-of-its-own.md): `platform/cmd/domains`, Rust `goap-domains-rs`, port
+([ADR 0167](adr/0167-domain-registry-a-service-of-its-own.md): `platform/cmd/domains`, port
 8096, a database of its own): it seeds the built-in domains protected at each start (`SeedBuiltinDomains`, from
 `GOAP_BUILTIN_DOMAINS_DIR`, else `GOAP_DOMAINS_DIR/builtin`, else `lib/domains/builtin`), then the shipped domains; a
 protected domain (`domain_protection`) is refused every write over RPC and written by its command line only (`publish`,
 `protect`, `unprotect`, `list`, on a context marked `domainsvc.Local`); it reads the organisation's rules from the
 platform graph; it names no methodology. Every graph is its client (`GOAP_DOMAINS_URL`): it waits at its start for the
 built-in domains, then reads the domains in force again on the registry's events (`typecat.NewLive` over
-`lib/domainclient`; Rust `platform::Registry`), and its catalogue is exactly those domains (`typecat.Of`). The
+`lib/domainclient`), and its catalogue is exactly those domains (`typecat.Of`). The
 **methodology registry** (`platform/registrysvc`, `platform/cmd/registry`) goes with the engine: it reads the domains through a
 port (`registrysvc.Domains`: the service in process, `lib/domainclient` over RPC) and the graph through
 `graphapi`. Publishing or archiving a domain is never refused for a methodology: the domain registry emits
@@ -1241,7 +1238,7 @@ PostgreSQL; SQLite and the memory store run one transaction at a time), taken be
 Every `change_id` above is `NOT NULL`, with no foreign key: the schema declares none (no trigger runs on an insert),
 the guard checks every reference at the end of the transaction; `owner`, `project`,
 `owner_org` and `project_id` are non-empty logical URLs of nodes of the structures (`lnk:<namespace>/<type>/<key>`, no version: a reference to a node is a link; `Graph.StructureURL` the canonical form, `Graph.StructureRef` reads a URL or a bare key), no foreign key, since the structures may live in
-another graph (the platform graph, ADR 0154 §9; the guard checks them through `Graph.Directory`, the platform's organisation directory in a content graph), and `graph/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054; the Rust graph its own):
+another graph (the platform graph, ADR 0154 §9; the guard checks them through `Graph.Directory`, the platform's organisation directory in a content graph), and `graph/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054):
 the `NOT NULL` and `CHECK` constraints are a second line, the references have only the guard.
 
 > Why PostgreSQL and not a graph database? The required traversals (neighborhood, impact propagation
@@ -1286,9 +1283,7 @@ its snapshot (`Directory.Follow`) until a baseline event of the organisation's n
 carries its namespace) reaches `Directory.Moved`; a change of a policy is a commit on the platform graph, its outbox
 sends the event, every graph refreshes. With no bus, the platform graph follows its own commits instead
 (`Directory.FollowCommits`): its snapshot holds for `access.CommitAge` (30 seconds) and a commit of the organisation's
-namespace moves it at once (`Graph.OnBranchMoved`, `Directory.MovedNamespace`). The Rust graph does the same both ways:
-its kept snapshot holds thirty seconds both ways, moved by its own commits and, with a bus,
-by the baseline events of the other processes (`follow_moves`, `Store::moved`).
+namespace moves it at once (`Graph.OnBranchMoved`, `Directory.MovedNamespace`).
 
 ### 3.4b Node index and search ([ADR 0026](adr/0026-node-index-and-search.md))
 
@@ -1346,12 +1341,10 @@ The indexer follows the graph's events over NATS. The compose image is `pgvector
 - **The compose stack without Docker** (`make dev`, `make local`, `.\make.ps1 dev`; `platform/cmd/goap-local`,
   [ADR 0164](adr/0164-local-stack-replaces-goap-dev.md): it replaces `goap-dev`): one process per
   binary of `platform/cmd` as the compose stack runs them, on its host ports (gateway 8080, graph 8081 ... jobs 8091,
-  content graph 8092, domain registry 8096, started first: `goap-domains-rs` with the Rust graph, else the Go
-  `domains`), each service on a SQLite file of its own in `.goap/local` (`GOAP_SQLITE_PATH`, read by
+  content graph 8092, domain registry 8096, started first), each service on a SQLite file of its own in `.goap/local` (`GOAP_SQLITE_PATH`, read by
   `platform.OptionalSQL` in every service that keeps a store, the graph services included; `GOAP_DB_DSN` wins, neither:
   memory), an embedded NATS server (JetStream, `.goap/local/nats`) instead of the container, the secrets generated
-  in `.goap/local/secrets`; the graph is Rust (`LOCAL_GRAPH=go` for the Go one; `make dev` runs the Go one unless `LOCAL_GRAPH` is set, the Rust graph
-  running no lifecycle transition or guardian of the methodologies yet), bootstrapped by its `bootstrap`
+  in `.goap/local/secrets`; the graph is bootstrapped by its `bootstrap`
   command before it serves; before anything starts, every port of the stack (NATS and vite included) must be free,
   else it stops naming each port taken and, on Linux, the process holding it (`ports.go`: a previous run's service
   would answer the readiness checks in place of the new one); a service starts once the services whose URL its
@@ -1363,44 +1356,22 @@ The indexer follows the graph's events over NATS. The compose image is `pgvector
   service's shutdown lets its requests end for 2 s, then ends its streams (the event stream, server-sent events)
   through their context (`platform.Server`'s `BaseContext`), rather than waiting for them until its deadline. `-watch` (`make dev`,
   `make dev-backend`) polls the sources every second and, once they settle, builds the Go binaries depending on a
-  changed package (`go list -deps`) and the cargo ones on a change of `rust/` or of the graph's migrations (cargo on a
-  loop of its own, the Go services reloaded meanwhile; profile `-cargo-profile`, `dev-local` for `make dev`: the
-  workspace's crates at `opt-level` 0, incremental, the dependencies optimized: a change of `graph-core` rebuilt in
-  about 15 s where release takes minutes), replaces a
+  changed package (`go list -deps`), replaces a
   binary only when its bytes changed and restarts its services (stopped, binary put in place, started again); a change
   of `domains/` restarts the graphs, of `methodologies/` the registry. `-web` runs vite (`npm run dev` in `web/`) under
-  the same supervisor, with `--strictPort`. `make local-build` builds the binaries in `.goap/bin` (Go, then
-  `goap-graph-rs` and `goap-proxy` with cargo, `LOCAL_CARGO_PROFILE`, release by default). `goap-local test` (`make local-test`) runs the stack on fresh data, then the end-to-end
+  the same supervisor, with `--strictPort`. `make local-build` builds the binaries in `.goap/bin`. `goap-local test` (`make local-test`) runs the stack on fresh data, then the end-to-end
   test of a running platform, `platform/e2e/stack` (`GOAP_STACK_URL`: registry, a commit on the content graph read
   back, the index following it over NATS, an export job, the engine), then stops; `goap-local e2e` (`make web-e2e`) runs
   it on fresh data with the IDE and the demo data, then the Playwright tests of the IDE, `web/e2e` (`GOAP_E2E_URL`), then
   stops; `goap-local bench`
-  (`make local-bench`, `LOCAL_PROXY` go | rust | compare | shadow, `PERF_ARGS`) runs the graph alone behind goap-proxy
-  loaded by goap-bench, then the proxy's report and, in mode compare, `goap-proxy diff-db` over the two SQLite files.
+  (`make local-bench`, `PERF_ARGS`) runs the graph alone on SQLite (`GOAP_DB_DSN`: on PostgreSQL) loaded by
+  goap-bench.
   Two graphs on one bus name their events apart (`Graph.Origin`, `graph-content` for a content graph: the bus
   deduplicates by event id) and their job kinds (`Handler.Space`: `graph.export.content`), so that each worker runs
   what its own store holds.
-- **The graph service in Rust** ([ADR 0163](adr/0163-graph-service-in-rust.md), its four phases done: the compose stack runs it): the Cargo workspace `rust/`
-  (outside the `go.work`, generated from the same `proto/`, its JSON timestamps written as Go's `protojson` writes them,
-  `goap_proto::wkt::Timestamp`) holds `goap-graph-rs`, the graph's four services on the
-  same schema (PostgreSQL or SQLite, the migrations of the Go services embedded), every method served (where it cannot
-  know Go's words, a CEL guard cel-go may refuse, a script goja may, it decides in its own); the reads of the bench are written (`graph-core`: views, selection, neighbourhood, pages, change
-  headers, baseline differences, over the store trait `ReadTx`; `graph-store` `read/`: the SQL of both dialects) and so
-  are its writes (`graph-core` `write/`: changes, impacts, the review batch, commit, fast-forward merge, `CommitEdits`,
-  `ImportDomain` (`graph-catalog` `imported`: the YAML parsed by `serde_norway`, laid into the shape of `def.Domain` by `decode`; the issues of `Domain.Validate` by `validate`, `form` and the `cel` crate; the doubles of every answer written as protojson writes them, `goap-connect`), over `WriteTx`, in one transaction with the outbox) for a platform service acting by itself in the simple world of
-  ADR 0163 (no lifecycle guard; the rebase, the sub-changes, the three-way merge of branches and that of a change whose target moved meanwhile served), `GetDomain`, `ListTypes`, the YAML and JSON export of a domain (built-in ones included), the draft, publication, new version and deletion of a domain (a person's asked of the organisation's rules) (and `ValidateDomain`), the reads of the catalogue, `ListNamespaces`, `ListTags`, `ListBaselines` (a branch's history too), `ListBranches`, `GetBranch` (a change's branch too), `GetChangeImpacts`, `ListSubChanges`, `ListViewNodes`, `ResolveView`, `GetCommitState`, `ListChangeLog`, `ListChangeEvents`, `GetBaselineGraph`, `GetBaselineDelta`, `ListBaselineLinks`, `GetChangeStack`, `DerivedNodes`, `GetSharedNodes`, `GetChangeDependencies`, `GetGraphStats`, `GetGraphOverview` (with `ListNamespaces`, merged with the answers of the other graphs declared), the tags and branches (a person's too: a tag in the caller's reach, `tag:create` / `tag:delete`), the commit and rebase states and statistics of a person, a person's flows, options, decisions (the seat of a board), journal entries, dependencies, attach, detach, move, methodology, transition, upgrade, proposed impacts, rebase and branch merge, a platform service's change dependencies and journal entries (`AppendLog` (an unknown change refused in Go's words), `ListExecutions`, `AddItems` of artifacts, decisions, signals and the item types no code reads, `UpdateChange` but a criticality, `ImpactNodeCancel`, `WithdrawImpact(s)`, `ImpactLinkUpdate`, `ImpactNodeTransition` with its children states, CEL guard, guard and action algorithms (`graph-script`: QuickJS and CEL); the property, node and link validators of a domain at the acceptance and the commit; `RunAlgorithm`; the reads of a change: `ListDecisionPoints`, `GetBlackboard`, `GetChangeView`, `GetChangeGraph`; the commit of nodes following a lifecycle, the committable states as its guardian; `ProposeImpact` (reviews refused, superseded kept, as Go) and the planned creations of ADR 0121; the revert of the nodes withdrawn after their commit; the decision points; the flows and options, the work on an option or a flow branch, its adoption and the reads of a change on a flow; the review objects of ADR 0080 / 0105 and `ImpactNodeReview`; what a change follows of its methodology and what its methodology says of its moves and commits, asked of the guardian service (ADR 0168); the merge and split of nodes of ADR 0077 with the origins gate of their successors; `MoveChange` and `SetChangeMethodology` over the projects of the organisation read at the head of main; the sub-changes of ADR 0103, created under a parent, committed and merged into it; the rebase of ADR 0101 / 0102, its conflicts, `ImpactNodeResolve` and `GetRebaseState`; `AttachChange` and `DetachChange` of ADR 0106; the three-way merge of branches, `PlanMerge` and `MergeBranch`; the changes of the platform's namespaces, a person's too, with the validators of the organisation (the rights of a person on the projects included) and of the platform at the commit; the owner of a node at its creation and moved; the state edits of `CommitEdits`) and `GetChange` with the check of its drafts, at a position of its log too, a person's first call creating its user as Go's `EnsureCaller` does, a person's reads of changes (the personal ones its subject's, the others those who work on their project, as Go's `PersonalScope` decides, the prompts of `ListChangeLog` judged by the ABAC rules of the organisation, run in Rust as Go's Casbin and govaluate run them, a rule `authz.Validate` refuses left out, checked against Go's own answers by `casbin_cases.gen.json`), the reach of a person's reads of the graph (the nodes of the projects it works on, those of the open namespaces whole, ADR 0161 §5), a person's writes on a change (the gates of Go's handler asked of the access snapshot: the creations, the access nodes, the reviews of others; the roles the methodology of the change allows each operation, asked of the guardian, ADR 0103, 0168; the permission each lifecycle transition declares, also in a person's `CommitEdits`, whose every operation asks the roles of the change's methodology; a platform service's commit carrying its own events, raised after `change.applied`; the check of a code text, ADR 0152; the links written to a logical URL, a node of this graph or the URL kept, ADR 0154; a creation taking over a key living only on other lasting branches, ADR 0151; the merge of a change depending on others, ADR 0108; a change following a lifecycle no guardian resolves, refused at its transition and merge; a checkout of a node of a project the change's does not hold refused for every caller, ADR 0161 §3), the personal changes of a person (ADR 0037: `@me`, their writes, views and purge; the settings dialog's RPCs, ADR 0122, for any caller in the platform's namespaces too), the views of a change read whole (neighbourhoods, pages, the nodes of a type), the criticality of a change and its risk register (risks, actions, hypotheses, assessments, comments, derogations and verifications, judged by the criticality policy of the organisation), the work around a change (`ReopenChangeImpacts`, `ValidateBoard`, `DiffFlows`, `CompareOptions`, `SplitChange`), the snapshots of ADR 0104 (`ExportGraph`; `ImportGraph`, each of Go's operations a savepoint, a failed step purging the change in the same call; the snapshot decoded with `encoding/json`'s errors, `graph_core::godecode`), the PROV-O export of a change (`ExportChangeProvenance`, ADR 0057), the read queries of ADR 0160 (`QueryView`: the openCypher subset parsed by `crates/cypher`, what the subset leaves out refused in Go's words, what the grammar refuses in the parser's own words at the furthest token read; the match of `graph_core::query` reads, caps and orders as Go's), the router of the two graph spaces (`route.rs`, Go's `graphsvc.Router`: a call naming a namespace or a change of another declared graph forwarded to it, one naming neither tried there when not found here, the namespace listings merged), the relays of its outboxes to NATS (`relay.rs`; a drain finding the relay at work only tells it to look again), the jobs of its exports and imports and their worker (`graph/jobs.rs`, the OKF export written as yaml.v3 writes, `graph_core::okf` / `goyaml`), the import registry (`graph/imports.rs`, Go's `graph/importsvc`), the reads at a position of a change log (`X-Goap-At-Least`, a position not reached refused as Go does), `ListChanges` filtered by the key of a unit or a project, `ListChanges` read whole, `RepublishIndex` (`Tx::republish`), `LoadDemoData` (`graph/demo.rs`, the demo data of `platform/devseed/demo.json` shared with Go), and the smart tags whole. `goap-proxy`, the Connect proxy in front of the
-  The platform bootstrap is served too (`goap-graph-rs bootstrap`, `GOAP_GRAPH_BOOTSTRAP=1`, the shipped domains published at
-  each start; the nodes the code states read from `boot.gen.json`, written by `platform/devseed` `TestRustBootIsCurrent`). A content graph as well (`GOAP_GRAPH_SPACE=content`: the domains,
-  the organisation read from the platform graph, `graph_core::platform`). The methodologies of the changes are asked of the
-  guardian service (`platform/cmd/guardian`, `graph_core::guardian::Guardian`, `graph_service::guardian::Client`,
-  `GOAP_GUARDIAN_URL`, ADR 0168), as the Go graph asks them.
-  graph services: mode `go`, `rust`, `compare` (Go answers, Rust gets the same call on its own database, ids paired, every call judged
-  in `calls.jsonl`; `goap-proxy diff-db` compares the two databases) or `shadow` (Go answers, the reads go to Rust too,
-  one database). The performance stack goes through it: `make perf` (go), `make perf-rust` (`perf.rust.yml`, rust),
-  `make perf-diff` (`PERF_DIFF_MODE` shadow or compare; `PERF_DIFF_RUST=go` compares Go with Go); `make perf-compare`
-  leaves it out (see *Performance stack*). It is a binary
-  of its own, which no crate of the service depends on, in an image of its own: `goap/proxy:dev` (`--target proxy`),
-  the service's being `goap/rust:dev` (`--target rust`).
+- **The graph service in Rust** was frozen ([ADR 0170](adr/0170-rust-graph-frozen.md)): the Cargo workspace of
+  ADR 0163 (`goap-graph-rs`, `goap-domains-rs`, `goap-proxy`) and its comparison stacks live on the branch
+  `frozen/rust-graph`, no longer kept in step with the Go services; `main` runs the Go graph only.
 - A single multi-target image (`Dockerfile`, `ARG SERVICE`), static binary on `distroless`; its `services` target holds every binary (`/goap/<service>`), the one image `goap/goap:dev` the compose stack runs with an entrypoint per service (`make images`, done by `make up`), so it compiles once.
 - Kubernetes 🟡: one Helm chart per service (or kustomize); engine as a scalable `Deployment` (HPA on
   the work-queue stream depth), NATS via the official chart, Vault Agent Injector.
@@ -1516,29 +1487,11 @@ drawing them) until interrupted, or for `PERF_AUTOSTOP` (`make perf PERF_AUTOSTO
 `.goap/perf/captures/<PERF_CAPTURE>`, and `make perf-analysis` replays one (the latest by default) in a stack of its own
 (`deploy/compose/perf-analysis.yml`, project `goap-perf-analysis`: Prometheus on the capture, scraping nothing, and Grafana on
 http://localhost:3301, its link set to the capture's range; `make perf-analysis-down`), so a run stays readable once its
-stack is down or reset. `make perf-compare` (`.\make.ps1 perf-compare`, `deploy/compose/perf.compare.yml` over `perf.yml`
-and `perf.rust.yml`) measures the Go and the Rust graph services side by side: each on its schema of the same PostgreSQL
-(`graph`, `graph_rs`) with its own domain registry (`domains`, `domains-rs` on `domains_rs`: each bench publishes its
-versions of the bench domain; the four schemas dropped first unless `PERF_COMPARE_KEEP=1`), each loaded by its own `goap-bench` (`bench`,
-`bench-rs`) with the flags `PERF_COMPARE_ARGS` (default `-seed 1` then `PERF_ARGS`, the flags of `make perf`: the same
-workload for both), each through its own `goap-proxy` (`proxy` in mode go, `proxy-rs` in mode rust, :8385), at the same
-time (they share the machine) or one after the other (`PERF_COMPARE_SERIAL=1`: Go, then Rust); the benches tag their
-series with the resource attribute `goap.perf.impl` (`go` / `rust`, Prometheus label `goap_perf_impl`), each proxy times
-the service behind it (`goap_proxy_upstream_duration_seconds`, a histogram per service, method and `side`), and cAdvisor
-(`cadvisor`, profile `cadvisor` of `perf.yml`, started by `make perf-compare`) gives the CPU, memory, network and threads
-of each container, or under podman (the `docker` command being podman's; rootless included) the podman exporter
-(`podman-exporter`, profile `podman`, over the socket of the podman service, `PERF_PODMAN_SOCK`; `PERF_CONTAINERS`
-`cadvisor` | `podman` | `none`, guessed from `docker --version`), the dashboard reading either; drawn by the dashboard *GOAP performance: Go vs Rust* (`deploy/grafana/dashboards/goap-perf-compare.json`, http://localhost:3300/d/goap-perf-compare:
-throughput, the server's latency, CPU and memory per service, p95 per call over the range and its ratio Rust / Go as
-the client and as the server see them, each service's calls over time, the size and scans of each schema); reports in
-`.goap/perf/compare/go` and `rust`. The Rust service exports no metrics of its own yet: the comparison is what the
-client, the proxies, cAdvisor and PostgreSQL see. Each bench runs as fast as its service answers, so in this mode
-(`PERF_COMPARE_MODE=parallel`, the default) the volumes written differ: the throughput is the result.
-`PERF_COMPARE_MODE=mirror` sends the same calls to both instead: the stack of `make perf-diff` in mode compare (one
-domain registry, `proxy` in mode compare, the Rust service on `graph_rs`) loaded by one `goap-bench` (`goap.perf.impl`
-`mirror`, `PERF_COMPARE_ARGS`), each call answered by the Go service then sent to the Rust one, one call at a time, both
-timed by the proxy (`side`) and their answers compared (`goap_proxy_compare_total` by `verdict`, the *Mirror* row of the
-dashboard; `calls.jsonl` and http://localhost:8383/proxy/report). The web looks at the data of the bench (http://localhost:5174): a `gateway` (:8381, `GOAP_AUTH_MODE=none`, the
+stack is down or reset. cAdvisor (profile
+`cadvisor` of `perf.yml`) gives the CPU, memory, network and threads of each container, or under podman (the `docker`
+command being podman's; rootless included) the podman exporter (`podman-exporter`, profile `podman`, over the socket of
+the podman service, `PERF_PODMAN_SOCK`); `make perf-up` starts the one of `PERF_CONTAINERS` (`cadvisor` | `podman` |
+`none`, guessed from `docker --version`). The web looks at the data of the bench (http://localhost:5174): a `gateway` (:8381, `GOAP_AUTH_MODE=none`, the
 fixed development administrator) routing to the graph alone, and the `web` dev server; what needs another service answers
 an error.
 
@@ -2243,7 +2196,6 @@ lib/importerkit/               kit of an importer service: a worker of the job s
 lib/jobkit/                    kit of the long runs: the job queue (in process or over RPC), the worker, the job of a runner (ADR 0149)
 graph/index/                   document index (nodes and changes): hybrid search, facets, similar_to, stores (memory, SQLite FTS5, PostgreSQL pgvector)
 proto/                       connect-rpc contracts (buf)
-rust/                        Cargo workspace (ADR 0163): goap-proto, goap-connect, graph-core, graph-store, graph-service (goap-graph-rs, goap-domains-rs), proxy (goap-proxy)
 contracts/gen/                         generated code (committed)
 methodologies/               example methodologies (active part)
 domains/                     domains: seeded by the domain registry at its start (alm, code), after the built-in ones of lib/domains/builtin, protected (one per namespace)

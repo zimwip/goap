@@ -1,4 +1,0 @@
-# The tests of the graph service drive whole requests on the test thread: unoptimized, their futures outgrow the
-# 2 MiB of a test thread (a stack overflow in tests/serve.rs), so the threads cargo's binaries spawn get 8 MiB.
-[env]
-RUST_MIN_STACK = "8388608"

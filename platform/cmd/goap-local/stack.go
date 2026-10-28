@@ -34,9 +34,6 @@ const (
 	portContent       = 8092
 	portLocalFS       = 8093
 	portWeb           = 5173 // vite
-	// behind goap-proxy, which takes portGraph, the graph services take these
-	portGraphGo   = 8094
-	portGraphRust = 8095
 	// the domain registry, a service of its own (ADR 0167)
 	portDomains = 8096
 	// the guardian of the changes, which the graphs ask about the methodologies (ADR 0168)
@@ -47,66 +44,15 @@ func url(port int) string { return fmt.Sprintf("http://127.0.0.1:%d", port) }
 
 func addr(port int) string { return fmt.Sprintf("127.0.0.1:%d", port) }
 
-// graphImpl is one implementation of the graph service.
-type graphImpl struct {
-	name string // go or rust
-	bin  string
-	port int
-	// db is its SQLite file
-	db string
-}
-
-// domainsService is the domain registry the graphs read (ADR 0167): the implementation of -graph (Go's behind a proxy,
-// which compares the graphs only), on its own SQLite file, seeding the built-in domains and those of domains/.
+// domainsService is the domain registry the graphs read (ADR 0167), on its own SQLite file, seeding the built-in
+// domains and those of domains/.
 func (c config) domainsService(env map[string]string) service {
-	bin := "domains"
-	if c.proxy == "" && c.graph == "rust" {
-		bin = "goap-domains-rs"
-	}
 	env["GOAP_HTTP_ADDR"] = addr(portDomains)
 	env["GOAP_SQLITE_PATH"] = filepath.Join(c.dir, "domains.db")
 	env["GOAP_DOMAINS_DIR"] = filepath.Join(c.root, "domains")
 	env["GOAP_BUILTIN_DOMAINS_DIR"] = filepath.Join(c.root, "lib", "domains", "builtin")
 	env["GOAP_LOG_FORMAT"] = "text"
-	return service{name: "domains", bin: bin, port: portDomains, ready: "/readyz", env: env}
-}
-
-// graphs are the graph services of the stack and the URL its clients call: the one of -graph on portGraph, or
-// those the proxy mode asks for behind goap-proxy on portGraph.
-func (c config) graphs() ([]graphImpl, string) {
-	impl := func(name string, port int) graphImpl {
-		bin := map[string]string{"go": "graph", "rust": "goap-graph-rs"}[name]
-		return graphImpl{name: name, bin: bin, port: port, db: filepath.Join(c.dir, "graph-"+name+".db")}
-	}
-	switch c.proxy {
-	case "":
-		return []graphImpl{impl(c.graph, portGraph)}, url(portGraph)
-	case "go":
-		return []graphImpl{impl("go", portGraphGo)}, url(portGraph)
-	case "rust":
-		return []graphImpl{impl("rust", portGraphRust)}, url(portGraph)
-	case "shadow":
-		// one database: the Rust service reads what the Go one wrote
-		g, r := impl("go", portGraphGo), impl("rust", portGraphRust)
-		r.db = g.db
-		return []graphImpl{g, r}, url(portGraph)
-	default: // compare: each on its database
-		return []graphImpl{impl("go", portGraphGo), impl("rust", portGraphRust)}, url(portGraph)
-	}
-}
-
-// proxyService is goap-proxy in front of the graph services.
-func (c config) proxyService(graphs []graphImpl) service {
-	env := map[string]string{
-		"GOAP_HTTP_ADDR":        addr(portGraph),
-		"GOAP_PROXY_MODE":       c.proxy,
-		"GOAP_PROXY_REPORT_DIR": filepath.Join(c.dir, "diff"),
-		"GOAP_LOG_FORMAT":       "text",
-	}
-	for _, g := range graphs {
-		env["GOAP_PROXY_"+strings.ToUpper(g.name)] = url(g.port)
-	}
-	return service{name: "proxy", bin: "goap-proxy", port: portGraph, ready: "/proxy/healthz", env: env}
+	return service{name: "domains", bin: "domains", port: portDomains, ready: "/readyz", env: env}
 }
 
 // secrets are the shared secrets of the services, generated once in the data directory (an environment value wins).
@@ -155,7 +101,7 @@ func (c config) secrets() (secrets, error) {
 // prepare makes the data directory, dropping the previous one with -reset.
 func (c config) prepare(log *slog.Logger) error {
 	if c.reset {
-		for _, name := range []string{"nats", "diff", "localfs"} {
+		for _, name := range []string{"nats", "localfs"} {
 			if err := os.RemoveAll(filepath.Join(c.dir, name)); err != nil {
 				return err
 			}
@@ -180,7 +126,7 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 	if err != nil {
 		return err
 	}
-	graphs, graphURL := cfg.graphs()
+	graphURL := url(portGraph)
 	domainsURL := url(portDomains)
 	common := func(port int, extra map[string]string) map[string]string {
 		env := map[string]string{
@@ -199,9 +145,9 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 	if cfg.content && !cfg.skip["graph-content"] {
 		sources = "content=alm,code@" + url(portContent)
 	}
-	platformGraph := func(g graphImpl) map[string]string {
-		return common(g.port, map[string]string{
-			"GOAP_SQLITE_PATH":   g.db,
+	platformGraph := func() map[string]string {
+		return common(portGraph, map[string]string{
+			"GOAP_SQLITE_PATH":   filepath.Join(cfg.dir, "graph.db"),
 			"GOAP_DOMAINS_URL":   domainsURL,
 			"GOAP_GRAPH_SEED":    envOr("GOAP_GRAPH_SEED", "dev"),
 			"GOAP_GRAPH_SOURCES": sources,
@@ -215,32 +161,21 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 	// the domain registry reads the organisation's rules from the graph only when a person writes a domain, the graphs
 	// read its domains at their start (ADR 0167)
 	domains := cfg.domainsService(common(0, map[string]string{"GOAP_GRAPH_URL": graphURL}))
-	domains.lazy = []string{"proxy"}
-	for _, g := range graphs {
-		domains.lazy = append(domains.lazy, "graph-"+g.name)
-	}
+	domains.lazy = []string{"graph"}
 	all = append(all, domains)
-	for _, g := range graphs {
-		// the guardian, the jobs and the content graph are called once serving; the guardian calls the graph at start
-		all = append(all, service{name: "graph-" + g.name, bin: g.bin, port: g.port, env: platformGraph(g),
-			lazy: []string{"guardian", "jobs", "graph-content"}})
-	}
-	if cfg.proxy != "" {
-		all = append(all, cfg.proxyService(graphs))
-	}
+	// the guardian, the jobs and the content graph are called once serving; the guardian calls the graph at start
+	all = append(all, service{name: "graph", bin: "graph", port: portGraph, env: platformGraph(),
+		lazy: []string{"guardian", "jobs", "graph-content"}})
 	if sources != "" {
-		all = append(all, service{name: "graph-content", bin: graphs[0].bin, port: portContent, env: common(portContent, map[string]string{
+		all = append(all, service{name: "graph-content", bin: "graph", port: portContent, env: common(portContent, map[string]string{
 			"GOAP_GRAPH_SPACE":        "content",
 			"GOAP_PLATFORM_GRAPH_URL": graphURL,
 			"GOAP_DOMAINS_URL":        domainsURL,
 			"GOAP_GUARDIAN_URL":       url(portGuardian),
 			"GOAP_JOBS_URL":           url(portJobs),
 			"GOAP_JOB_TOKEN":          sec.jobs,
-			"GOAP_SQLITE_PATH":        filepath.Join(cfg.dir, "content-"+graphs[0].name+".db"),
+			"GOAP_SQLITE_PATH":        filepath.Join(cfg.dir, "content.db"),
 		}), lazy: []string{"guardian", "jobs"}})
-		if cfg.graph != graphs[0].name {
-			log.Info("the content graph follows the proxied implementation", "graph", graphs[0].name)
-		}
 	}
 	db := func(name string) string { return filepath.Join(cfg.dir, name+".db") }
 	home, _ := os.UserHomeDir()
@@ -358,16 +293,9 @@ func runPlatform(ctx context.Context, log *slog.Logger, cfg config, ready func(c
 			return err
 		}
 	}
-	// the platform bootstrap, once per database (shadow: the Go service's)
-	booted := map[string]bool{}
-	for _, g := range graphs {
-		if booted[g.db] {
-			continue
-		}
-		booted[g.db] = true
-		if err := sup.start(ctx, service{name: "bootstrap-" + g.name, bin: g.bin, args: []string{"bootstrap"}, env: platformGraph(g), once: true}); err != nil {
-			return err
-		}
+	// the platform bootstrap
+	if err := sup.start(ctx, service{name: "bootstrap", bin: "graph", args: []string{"bootstrap"}, env: platformGraph(), once: true}); err != nil {
+		return err
 	}
 	if err := sup.startAll(ctx, rest); err != nil {
 		if ready != nil || ctx.Err() != nil {
