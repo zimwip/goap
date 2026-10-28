@@ -94,16 +94,19 @@ func interceptor() connect.Interceptor {
 // SlowRPC is the duration from which a unary call is logged at warn level instead of debug.
 const SlowRPC = time.Second
 
-// timing logs the duration of every unary call: debug (GOAP_LOG_LEVEL=debug) for all of them, warn above SlowRPC.
-// Streaming calls are not timed (their duration is the connection's).
-func timing() connect.UnaryInterceptorFunc {
+// slowRPC is SlowRPC, lowered by the tests.
+var slowRPC = SlowRPC
+
+// timing logs the duration of every unary call: debug (GOAP_LOG_LEVEL=debug) for all of them, warn above SlowRPC but
+// for the procedures that wait by design (longPolls). Streaming calls are not timed (their duration is the connection's).
+func timing(longPolls map[string]bool) connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			start := time.Now()
 			resp, err := next(ctx, req)
 			d := time.Since(start)
 			level := slog.LevelDebug
-			if d >= SlowRPC {
+			if d >= slowRPC && !longPolls[req.Spec().Procedure] {
 				level = slog.LevelWarn
 			}
 			if l := slog.Default(); l.Enabled(ctx, level) {
@@ -121,11 +124,28 @@ func timing() connect.UnaryInterceptorFunc {
 // compressMinBytes is the size under which a Connect answer goes uncompressed.
 const compressMinBytes = 1024
 
+// HandlerOption tunes the instrumentation of HandlerOptions.
+type HandlerOption func(longPolls map[string]bool)
+
+// LongPoll names procedures whose calls wait by design (a long poll answering when there is work or at its deadline):
+// their duration is not slow, so they are logged at debug level only.
+func LongPoll(procedures ...string) HandlerOption {
+	return func(longPolls map[string]bool) {
+		for _, p := range procedures {
+			longPolls[p] = true
+		}
+	}
+}
+
 // HandlerOptions instruments Connect handlers, and leaves the small answers uncompressed: resetting a gzip writer
 // costs more than the bytes of an answer under compressMinBytes save. The gzip writers outlive a collection
 // (gzipCompression).
-func HandlerOptions() []connect.HandlerOption {
-	return []connect.HandlerOption{connect.WithInterceptors(interceptor(), timing()), connect.WithCompressMinBytes(compressMinBytes), gzipCompression()}
+func HandlerOptions(opts ...HandlerOption) []connect.HandlerOption {
+	longPolls := map[string]bool{}
+	for _, o := range opts {
+		o(longPolls)
+	}
+	return []connect.HandlerOption{connect.WithInterceptors(interceptor(), timing(longPolls)), connect.WithCompressMinBytes(compressMinBytes), gzipCompression()}
 }
 
 // ClientOptions instruments Connect clients.

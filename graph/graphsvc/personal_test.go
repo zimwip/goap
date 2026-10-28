@@ -184,6 +184,31 @@ func TestUserCreatedAutomatically(t *testing.T) {
 	}
 }
 
+// A content graph holds no organisation: its EnsureCaller declares no user (the platform graph does), so a call never
+// waits behind a creation that cannot succeed there.
+func TestContentGraphDeclaresNoUser(t *testing.T) {
+	ctx := context.Background()
+	g := typedGraph(t)
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: authz.AllowAll{}, Graph: g, Space: "content"}
+	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.PersonalScope(), h.EnsureCaller()))
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	cl := graphv1connect.NewGraphServiceClient(srv.Client(), srv.URL)
+	list := connect.NewRequest(&graphv1.ListChangesRequest{})
+	identity.SetHeaders(authz.Principal{Subject: "bob"}, list.Header())
+	if _, err := cl.ListChanges(ctx, list); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.NodeByKey(ctx, access.NamespaceOrganisation, "USR:bob"); !errors.Is(err, graph.ErrNotFound) {
+		t.Fatalf("a content graph declared a user: %v", err)
+	}
+}
+
 // EnsureUser must not create a broken User (no member_of, no shot at the first-admin bootstrap) when the
 // default organisation does not exist yet — the bootstrap can still be running at startup (ADR 0040). Failing
 // leaves nothing behind, so a later, correctly-timed call for the same subject still succeeds.

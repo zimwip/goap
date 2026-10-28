@@ -38,7 +38,7 @@ func main() {
 	outbox.Start(ctx, svc.Emit(outbox.NATS(events)), log)
 	go svc.Run(ctx)
 	h := &jobsvc.Handler{Service: svc, Token: token}
-	srv.Mount(jobsv1connect.NewJobServiceHandler(h, telemetry.HandlerOptions()...))
+	srv.Mount(jobsv1connect.NewJobServiceHandler(h, telemetry.HandlerOptions(telemetry.LongPoll(jobsv1connect.JobServiceClaimJobProcedure))...))
 	h.Mount(srv.Echo)
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
