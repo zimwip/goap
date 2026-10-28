@@ -108,6 +108,10 @@ service GraphService {
   rpc ImpactLinkDelete(ImpactLinkDeleteRequest) returns (ImpactLinkDeleteResponse);
   rpc ImpactNodeTransition(ImpactNodeTransitionRequest) returns (ImpactNodeTransitionResponse);
   rpc ImpactNodeCancel(ImpactNodeCancelRequest) returns (ImpactNodeCancelResponse);
+  // ImpactNodeDelete deletes a node in a change (ADR 0172): its draft (the node checked out first) is marked deleted and
+  // loses its outgoing links; the commit writes a tombstone and the node leaves the state. A later change creating a node
+  // of its key, or checking it out, restores it.
+  rpc ImpactNodeDelete(ImpactNodeDeleteRequest) returns (ImpactNodeDeleteResponse);
   // Merge nodes into a new one, split one into new ones, seen from the parent side (ADR 0077): the parents lose the
   // links to the sources and gain the links to the successors, the sources stay untouched with the impact of their
   // parent as via.
@@ -1980,6 +1984,21 @@ message ImpactNodeCancelRequest {
 
 message ImpactNodeCancelResponse {
   // the change impact as the cancellation leaves it (empty when a creation was cancelled: the impact is gone)
+  ChangeImpact node = 1;
+}
+
+message ImpactNodeDeleteRequest {
+  string change_id = 1;
+  string change_impact_id = 2;
+  string node_id = 3;
+  // the key of the node, when neither the impact nor the node id is given
+  string key = 4;
+  string rationale = 5;
+  string flow = 6;
+  string execution = 7;
+}
+
+message ImpactNodeDeleteResponse {
   ChangeImpact node = 1;
 }
 

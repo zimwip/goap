@@ -629,6 +629,11 @@ func (b *builder) impact(c domain.Change, e domain.LogEntry, ev domain.ImpactEve
 			add(bl, "prov:wasGeneratedBy", ref(changeIRI(c.ID)))
 			add(bl, "prov:hadMember", ref(versionIRI(*ev.Committed)))
 		}
+	case domain.ImpactRequalified:
+		if ev.Pre != nil {
+			// a creation that named an existing node: the modification of that node (ADR 0172)
+			add(n, "goap:requalifiedOn", ref(b.version(*ev.Pre, typ, key)))
+		}
 	case domain.ImpactRebased:
 		if ev.Pre != nil {
 			add(n, "goap:rebasedOn", ref(b.version(*ev.Pre, typ, key)))

@@ -1196,6 +1196,17 @@ func (h *Handler) ImpactNodeCancel(ctx context.Context, r *connect.Request[graph
 	return res(&graphv1.ImpactNodeCancelResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 
+func (h *Handler) ImpactNodeDelete(ctx context.Context, r *connect.Request[graphv1.ImpactNodeDeleteRequest]) (*connect.Response[graphv1.ImpactNodeDeleteResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, m.NodeId); err != nil {
+		return nil, err
+	}
+	cn, err := h.Graph.ImpactNodeDelete(ctx, domain.ChangeID(m.ChangeId), graph.NodeCheckout{Impact: domain.ChangeImpactID(m.ChangeImpactId), Node: domain.NodeID(m.NodeId),
+		Key: m.Key, Rationale: m.Rationale, Flow: m.Flow, Execution: m.Execution, ProducedBy: authz.From(ctx).Subject})
+	return res(&graphv1.ImpactNodeDeleteResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
+}
+
 func (h *Handler) WithdrawImpact(ctx context.Context, r *connect.Request[graphv1.WithdrawImpactRequest]) (*connect.Response[graphv1.WithdrawImpactResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg

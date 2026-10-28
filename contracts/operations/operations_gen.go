@@ -16,6 +16,7 @@ const (
 	ImpactCancel      = "impact.cancel"      // Graph.ImpactNodeCancel, doer
 	ImpactCheckout    = "impact.checkout"    // Graph.ImpactNodeCheckout, doer
 	ImpactCreate      = "impact.create"      // Graph.ImpactNodeCreate, doer
+	ImpactDelete      = "impact.delete"      // Graph.ImpactNodeDelete, doer
 	ImpactLinkCreate  = "impact.link.create" // Graph.ImpactLinkCreate, doer
 	ImpactLinkDelete  = "impact.link.delete" // Graph.ImpactLinkDelete, doer
 	ImpactLinkUpdate  = "impact.link.update" // Graph.ImpactLinkUpdate, doer
@@ -42,6 +43,7 @@ var catalog = []Operation{
 	{Code: ImpactCancel, Kind: Doer, Method: "Graph.ImpactNodeCancel", Doc: "ImpactNodeCancel drops the draft of a change impact on the flow: the impact goes back to what the flow saw before (the draft of a parent flow), or to none."},
 	{Code: ImpactCheckout, Kind: Doer, Method: "Graph.ImpactNodeCheckout", Doc: "ImpactNodeCheckout puts a node in edit mode in a change: it gives the node a draft on the flow, a copy of what the flow sees of it (properties, state, owner and outgoing links), whatever its state (ADR 0078)."},
 	{Code: ImpactCreate, Kind: Doer, Method: "Graph.ImpactNodeCreate", Doc: "ImpactNodeCreate creates a node in a change: one `created` event adds the change impact (intent created) and the draft of the node (ADR 0076, 0077, 0079)."},
+	{Code: ImpactDelete, Kind: Doer, Method: "Graph.ImpactNodeDelete", Doc: "ImpactNodeDelete deletes a node in a change: its draft (the node checked out first when it has none) is marked deleted and loses its outgoing links, an updated event with the patch {\"deleted\": true, \"removeLinks\": [...]}."},
 	{Code: ImpactLinkCreate, Kind: Doer, Method: "Graph.ImpactLinkCreate", Doc: "ImpactLinkCreate adds an outgoing link to the draft of a change impact."},
 	{Code: ImpactLinkDelete, Kind: Doer, Method: "Graph.ImpactLinkDelete", Doc: "ImpactLinkDelete removes an outgoing link of a draft: removing a child is a modification of its parent (ADR 0024 §4)."},
 	{Code: ImpactLinkUpdate, Kind: Doer, Method: "Graph.ImpactLinkUpdate", Doc: "ImpactLinkUpdate replaces the properties of an outgoing link of a draft."},

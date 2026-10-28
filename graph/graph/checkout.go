@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/operations"
@@ -42,6 +43,9 @@ type work struct {
 	planned bool
 	// reuse is the node a creation takes over: the node of its key, which only abandoned changes wrote (takeKey)
 	reuse domain.NodeID
+	// adopt is set when a creation names a node that exists (ADR 0172): the node the reference baseline holds, the one it
+	// deleted (restored), or one the change holds without a draft; the creation then edits it, an impact found after the fact
+	adopt bool
 	// transition is set for a move of the lifecycle of the node (ImpactNodeTransition): a freeze of its type may let
 	// it through (domain.Freezes.Transitions, ADR 0132 §4)
 	transition bool
@@ -181,6 +185,9 @@ func checkoutTarget(in NodeCheckout) target {
 //   - an impact id is taken as it is;
 //   - a node (id, or key) the flow already sees in the change reuses its impact, never doubling it;
 //   - else a node of the reference baseline gets an impact of intent modified, its pre the baseline version;
+//   - else a node deleted on the line the change lands on (ADR 0172) gets an impact of intent modified, its pre the
+//     tombstone: a creation of its key restores it with what the creation gives, any other operation checks it out
+//     restored as it was when deleted;
 //   - else, for a creation, the key is new: the impact is checked but not recorded, the created event of its first
 //     version carries it (ADR 0077); for any other operation the node is in neither the baseline nor the change:
 //     ErrNotFound.
@@ -219,7 +226,12 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 			return w, g.impact(ctx, tx, w, found.ID)
 		}
 		if t.create {
-			return nil, fmt.Errorf("cannot create %s (%s): the change already holds it as change impact %s (%s): %w", t.Key, t.Type, found.ID, found.Intent, ErrConflict)
+			if own, err := g.ownDraftOf(ctx, tx, id, found.ID, w.flow); err != nil {
+				return nil, err
+			} else if own != nil || found.Intent == domain.IntentCreated || (t.Type != "" && found.Type != "" && found.Type != t.Type) {
+				return nil, fmt.Errorf("cannot create %s (%s): the change already holds it as change impact %s (%s): %w", t.Key, t.Type, found.ID, found.Intent, ErrConflict)
+			}
+			w.adopt = true // an impact the change declared without a draft: the creation edits its node
 		}
 		return w, g.impact(ctx, tx, w, found.ID)
 	}
@@ -241,11 +253,35 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 		}
 		v, inBase = at[nid]
 	}
+	// a node no state holds any more may have been deleted in the reference baseline: named again, it is restored (ADR 0172)
+	var tomb *domain.Node
+	if nid != "" && !inBase {
+		if tomb, err = g.tombstone(ctx, tx, w.c, nid); err != nil {
+			return nil, err
+		}
+	}
 	var decl domain.ChangeImpact
 	var reuse domain.NodeID
+	adopt := false
 	switch {
 	case t.create && inBase:
-		return nil, fmt.Errorf("cannot create %s (%s): the reference baseline of change %s already holds it: %w", t.Key, t.Type, id, ErrConflict)
+		// the creation of a node that exists: an impact found after the fact, a modification of that node (ADR 0172)
+		n, err := tx.Node(ctx, domain.NodeRef{ID: nid, Version: v})
+		if err != nil {
+			return nil, err
+		}
+		if n.Type != t.Type {
+			return nil, fmt.Errorf("cannot create %s (%s): the reference baseline of change %s holds it as a node of type %s: %w", t.Key, t.Type, id, n.Type, ErrConflict)
+		}
+		decl = domain.ChangeImpact{Intent: domain.IntentModified, Pre: &domain.NodeRef{ID: nid, Version: v}, DerivedFrom: t.DerivedFrom}
+		adopt = true
+	case tomb != nil && t.create && tomb.Type != t.Type:
+		return nil, fmt.Errorf("cannot create %s (%s): the key is taken by a deleted node of type %s: %w", t.Key, t.Type, tomb.Type, ErrConflict)
+	case tomb != nil:
+		// the creation of a deleted node's key, or any other operation on the node, restores it from its tombstone
+		pre := tomb.Ref()
+		decl = domain.ChangeImpact{Intent: domain.IntentModified, Pre: &pre, DerivedFrom: t.DerivedFrom}
+		adopt = t.create
 	case t.create && nid != "":
 		if err := g.takeKey(ctx, tx, w.c, nid, t.Key, t.Type); err != nil {
 			return nil, err
@@ -264,18 +300,22 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 		return nil, fmt.Errorf("node %s is in neither the reference baseline nor the change %s: %w", name, id, ErrNotFound)
 	}
 	decl.Rationale, decl.Flow, decl.Execution, decl.ProducedBy = t.Rationale, t.Flow, t.Execution, t.ProducedBy
-	out, err := g.declareTx(ctx, tx, id, []domain.ChangeImpact{decl}, !t.create)
+	if adopt && strings.TrimSpace(decl.Rationale) == "" {
+		decl.Rationale = "created again: the node exists, its creation is its modification"
+	}
+	created := t.create && !adopt
+	out, err := g.declareTx(ctx, tx, id, []domain.ChangeImpact{decl}, !created)
 	if err != nil {
 		return nil, err
 	}
 	// a creation is not recorded yet: the change is as it was read, unless the declaration activated a draft change
-	if !t.create || w.c.Status == domain.ChangeDraft {
+	if !created || w.c.Status == domain.ChangeDraft {
 		if err := g.reread(ctx, tx, w); err != nil {
 			return nil, err
 		}
 	}
-	w.transition, w.reuse = t.transition, reuse
-	if t.create {
+	w.transition, w.reuse, w.adopt = t.transition, reuse, adopt
+	if created {
 		// not recorded yet: the created event of the first version adds it (createTx)
 		w.cn, w.vcn = out[0], out[0]
 		w.seen = w.seen.Append(out[0])
@@ -390,6 +430,9 @@ func (g *Graph) working(ctx context.Context, tx Tx, w *work) (domain.Draft, erro
 		}
 		return domain.Draft{}, fmt.Errorf("%s is not checked out: check it out first: %w", draftOf(w.cn), ErrConflict)
 	}
+	if d.Deleted {
+		return domain.Draft{}, fmt.Errorf("%s is deleted by the change: cancel its draft to take the deletion back: %w", draftOf(w.cn), ErrConflict)
+	}
 	return d.Clone(), nil
 }
 
@@ -438,6 +481,12 @@ func (g *Graph) createTx(ctx context.Context, tx Tx, id domain.ChangeID, in Node
 	if err != nil {
 		return domain.ChangeImpact{}, err
 	}
+	if w.adopt {
+		if len(origins) > 0 {
+			return domain.ChangeImpact{}, fmt.Errorf("cannot create %s (%s) from other nodes: the node exists: %w", in.Key, in.Type, ErrConflict)
+		}
+		return g.adoptTx(ctx, tx, w, in)
+	}
 	d, err := g.newDraft(ctx, tx, w, in, origins)
 	if err != nil {
 		return domain.ChangeImpact{}, err
@@ -459,6 +508,93 @@ func (g *Graph) createTx(ctx context.Context, tx Tx, id domain.ChangeID, in Node
 		return domain.ChangeImpact{}, err
 	}
 	return w.seenAs(&ref), nil
+}
+
+// adoptTx is a creation naming a node that exists (ADR 0172): an impact found after the fact. The node is checked out
+// (restored when the reference baseline deleted it), then the creation edits its draft: its properties set over the
+// node's, its owner, and the links it names that the node does not hold already.
+func (g *Graph) adoptTx(ctx context.Context, tx Tx, w *work, in NodeCreate) (domain.ChangeImpact, error) {
+	// three entries of the audit: the requalification, the checkout, the edit
+	if w.cn.Pre == nil {
+		return domain.ChangeImpact{}, fmt.Errorf("cannot create %s (%s): change impact %s holds no version of it: %w", in.Key, in.Type, w.cn.ID, ErrConflict)
+	}
+	pre := *w.cn.Pre
+	restored := false
+	if n, err := tx.Node(ctx, pre); err != nil {
+		return domain.ChangeImpact{}, err
+	} else {
+		restored = n.Deleted
+	}
+	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: w.c.ID, Impact: w.cn.ID, Op: domain.ImpactRequalified, Flow: w.flow, Execution: in.Execution, Pre: &pre,
+		Patch: map[string]any{"from": string(domain.IntentCreated), "to": string(domain.IntentModified), "key": in.Key, "type": in.Type, "restored": restored}}); err != nil {
+		return domain.ChangeImpact{}, err
+	}
+	if err := g.ensureDraft(ctx, tx, w, in.Execution); err != nil {
+		return domain.ChangeImpact{}, err
+	}
+	d, err := g.working(ctx, tx, w)
+	if err != nil {
+		return domain.ChangeImpact{}, err
+	}
+	patch := map[string]any{}
+	if len(in.Properties) > 0 {
+		props := cloneMap(d.Properties)
+		if props == nil {
+			props = map[string]any{}
+		}
+		maps.Copy(props, in.Properties)
+		if err := w.checkDraftAttributes(d, props); err != nil {
+			return domain.ChangeImpact{}, err
+		}
+		patch["props"] = in.Properties
+	}
+	if in.Responsible != "" {
+		unit, _, err := g.resolveStructure(ctx, tx, domain.StructureOrganisation, in.Responsible)
+		if err != nil {
+			return domain.ChangeImpact{}, err
+		}
+		patch["owner"] = unit.String()
+	}
+	var adds []any
+	for _, l := range in.Links {
+		dl, err := g.newDraftLink(ctx, tx, w, d, l)
+		if err != nil {
+			return domain.ChangeImpact{}, err
+		}
+		if slices.ContainsFunc(d.Links, func(o domain.DraftLink) bool {
+			return o.Type == dl.Type && o.To.ID == dl.To.ID && o.Target.Logical() == dl.Target.Logical()
+		}) {
+			continue
+		}
+		d.Links = append(d.Links, dl)
+		adds = append(adds, linkPatch(dl))
+	}
+	if len(adds) > 0 {
+		patch["addLinks"] = adds
+	}
+	ref := d.Ref()
+	if len(patch) > 0 {
+		if err := g.emitUpdated(ctx, tx, w, ref, in.Execution, patch); err != nil {
+			return domain.ChangeImpact{}, err
+		}
+	}
+	return w.seenAs(&ref), nil
+}
+
+// ensureDraft checks the node of the impact w selects out when the flow holds no draft of it, so that an operation
+// editing the draft finds one (a transition, an update, a deletion, a creation of a node that exists).
+func (g *Graph) ensureDraft(ctx context.Context, tx Tx, w *work, execution string) error {
+	own, err := g.ownDraftOf(ctx, tx, w.c.ID, w.cn.ID, w.flow)
+	if err != nil || own != nil {
+		return err
+	}
+	if _, err := g.checkoutTx(ctx, tx, w, execution); err != nil {
+		return err
+	}
+	if err := g.reread(ctx, tx, w); err != nil {
+		return err
+	}
+	return g.impact(ctx, tx, w, w.cn.ID)
 }
 
 // newDraft is the draft of a new node: its id, key, type, initial state, owner, properties and links, checked.

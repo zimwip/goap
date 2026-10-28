@@ -182,7 +182,7 @@ export interface ImpactEvent {
   /** empty for a change-level event (adopted) */
   impactId?: string;
   /** proposed: the impact of an existing node; created: a new node, its impact and draft in one event; checkedOut: the draft of an existing node (ADR 0079) */
-  op?: 'proposed' | 'created' | 'checkedOut' | 'transitioned' | 'updated' | 'reviewed' | 'discarded' | 'cancelled' | 'withdrawn' | 'adopted' | 'committed' | 'rebased' | string;
+  op?: 'proposed' | 'created' | 'checkedOut' | 'transitioned' | 'updated' | 'reviewed' | 'discarded' | 'cancelled' | 'withdrawn' | 'adopted' | 'committed' | 'rebased' | 'requalified' | string;
   /** the caller: flow branch ('' = main flow), journal record of the action run, principal or component */
   flow?: string;
   execution?: string;

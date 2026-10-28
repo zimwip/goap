@@ -68,6 +68,8 @@ func MergeDrafts(base, ours, theirs Draft) (Draft, []string) {
 	if out.State, conflict = merge3(base.State, ours.State, theirs.State); conflict {
 		conflicts = append(conflicts, ConflictState)
 	}
+	// a deletion on either side holds (two booleans changed on both sides from the base agree)
+	out.Deleted, _ = merge3(base.Deleted, ours.Deleted, theirs.Deleted)
 	links, lc := mergeLinks(base.Links, ours.Links, theirs.Links)
 	out.Links = links
 	conflicts = append(conflicts, lc...)
@@ -284,12 +286,15 @@ func stringsOf(v any) []string {
 }
 
 // DraftChanged reports whether a draft modifies the version it was checked out from (base, the stored version seen as a
-// draft): a property set, changed or unset, the owner, the state, or an outgoing link added, removed or with other
+// draft): a deletion or a restoration, a property set, changed or unset, the owner, the state, or an outgoing link added, removed or with other
 // properties (identified by its type and target node; its target version is not a modification: a link to a node the
 // change also drafts points at that draft). A draft with no base (a creation) is always a modification.
 func DraftChanged(base *Draft, d Draft) bool {
 	if base == nil || d.Base == nil {
 		return true
+	}
+	if d.Deleted != base.Deleted {
+		return true // it deletes the node, or restores a deleted one (ADR 0172)
 	}
 	if d.MergedWith != nil && *d.MergedWith != *d.Base {
 		return true // it brings another version in: a merge, whatever its values (ADR 0102)

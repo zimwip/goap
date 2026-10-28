@@ -47,8 +47,6 @@ const (
 	LinkInPackage = "code@in_package"
 	LinkImports   = "code@imports"
 	LinkDependsOn = "code@depends_on"
-	StatePresent  = "present"
-	StateRemoved  = "removed"
 )
 
 // Port is what the importer asks of the graph: open a change, give it its node operations, review and apply it, read
@@ -61,7 +59,7 @@ type Port interface {
 	ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in graphapi.NodeUpdate) (domain.ChangeImpact, error)
 	ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l graphapi.LinkWrite, flow, execution string) (domain.Link, error)
 	ImpactLinkDelete(ctx context.Context, id domain.ChangeID, link domain.LinkID, flow, execution string) error
-	ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in graphapi.NodeTransition) (domain.ChangeImpact, error)
+	ImpactNodeDelete(ctx context.Context, id domain.ChangeID, in graphapi.NodeCheckout) (domain.ChangeImpact, error)
 	ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b domain.ReviewBatch) ([]domain.ChangeImpact, error)
 	CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
 	CloseChange(ctx context.Context, id domain.ChangeID) (domain.Change, error)
@@ -323,7 +321,7 @@ type entry struct {
 	id      domain.NodeID
 	typ     string
 	ver     domain.Version
-	removed bool
+	removed bool // deleted by a commit (ADR 0172): created again, the graph restores it
 	// links are its outgoing links: the entries a directory holds, the symbols a file defines, its package...
 	links map[domain.LinkID]link
 	out   map[linkKey]domain.LinkID // the same by type and target
@@ -394,7 +392,7 @@ func (im *Importer) whole(ctx context.Context, id domain.BaselineID) error {
 	if err != nil {
 		return err
 	}
-	im.ix.apply(im.Name, nodes, append(links, suspect...))
+	im.ix.apply(im.Name, nodes, append(links, suspect...), nil)
 	return nil
 }
 
@@ -404,7 +402,7 @@ func (im *Importer) follow(ctx context.Context, to domain.BaselineID) error {
 	if im.head != "" {
 		d, err := im.Graph.BaselineDelta(ctx, im.head, to)
 		if err == nil {
-			im.ix.apply(im.Name, d.Nodes, d.Links)
+			im.ix.apply(im.Name, d.Nodes, d.Links, d.Removed)
 			im.head = to
 			return nil
 		} else if !errors.Is(err, graphapi.ErrInvalid) {
@@ -424,8 +422,28 @@ func mine(repo, key string) bool {
 	return key == repo || strings.HasPrefix(key, repo+":") || strings.HasPrefix(key, repo+"@")
 }
 
-// apply sets the nodes of the repository named, with their outgoing links (all of them: a node read is read whole).
-func (ix *index) apply(repo string, nodes []domain.Node, links []domain.Link) {
+// apply sets the nodes of the repository named, with their outgoing links (all of them: a node read is read whole), and
+// marks removed the nodes a commit deleted (ADR 0172: a tombstone holds no link; created again, the graph restores it).
+func (ix *index) apply(repo string, nodes []domain.Node, links []domain.Link, deleted []domain.NodeID) {
+	for _, id := range deleted {
+		k, ok := ix.keyOf[id]
+		if !ok {
+			continue
+		}
+		e := ix.byKey[k]
+		for lid, l := range e.links {
+			delete(ix.into[l.to], lid)
+		}
+		e.links, e.out, e.removed = nil, nil, true
+		if e.sym != nil {
+			delete(ix.fileSyms[e.sym.file], k)
+		}
+		if e.typ == TypeFile && e.blob != "" {
+			if p := strings.TrimPrefix(k, repo+":"); path.Base(p) == "go.mod" {
+				delete(ix.gomods, dirOf(p))
+			}
+		}
+	}
 	for _, n := range nodes {
 		if !mine(repo, n.Key) {
 			continue
@@ -441,7 +459,7 @@ func (ix *index) apply(repo string, nodes []domain.Node, links []domain.Link) {
 		if e.sym != nil {
 			delete(ix.fileSyms[e.sym.file], n.Key)
 		}
-		*e = entry{id: n.ID, typ: n.Type, ver: n.Version, removed: n.State == StateRemoved}
+		*e = entry{id: n.ID, typ: n.Type, ver: n.Version}
 		ix.keyOf[n.ID] = n.Key
 		str := func(k string) string { s, _ := n.Properties[k].(string); return s }
 		switch {
@@ -457,22 +475,16 @@ func (ix *index) apply(repo string, nodes []domain.Node, links []domain.Link) {
 				file = n.Key[:i]
 			}
 			e.sym = &symInfo{key: n.Key, kind: kind, name: str("name"), container: str("container"), file: file}
-			if !e.removed {
-				if ix.fileSyms[file] == nil {
-					ix.fileSyms[file] = map[string]bool{}
-				}
-				ix.fileSyms[file][n.Key] = true
+			if ix.fileSyms[file] == nil {
+				ix.fileSyms[file] = map[string]bool{}
 			}
+			ix.fileSyms[file][n.Key] = true
 		case n.Type == TypePackage:
 			e.sum, e.name = pkgFingerprint(n.Properties), str("name")
 		case n.Type == TypeFile:
 			e.blob, e.sum = str("blob"), entrySum(n.Type, n.Properties)
 			if p := str("path"); path.Base(p) == "go.mod" {
-				if e.removed {
-					delete(ix.gomods, dirOf(p))
-				} else {
-					ix.gomods[dirOf(p)] = e.blob
-				}
+				ix.gomods[dirOf(p)] = e.blob
 			}
 		}
 	}
@@ -1011,7 +1023,8 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 			return domain.Baseline{}, err
 		}
 		switch {
-		case o.cur == nil:
+		case o.cur == nil || o.cur.removed:
+			// a new entry, or one a commit deleted: the graph restores a deleted node created again (ADR 0172)
 			var links []graphapi.LinkWrite
 			for _, w := range o.add {
 				if to, ok := target(w.key); ok {
@@ -1032,13 +1045,15 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 			im.tally(o)
 			continue
 		case o.remove:
-			cn, err := im.Graph.ImpactNodeTransition(ctx, id, graphapi.NodeTransition{NodeCheckout: graphapi.NodeCheckout{Node: o.cur.id, Rationale: why, ProducedBy: im.By}, To: StateRemoved})
+			// deleted (ADR 0172): the tombstone holds no link, none to drop
+			cn, err := im.Graph.ImpactNodeDelete(ctx, id, graphapi.NodeCheckout{Node: o.cur.id, Rationale: why, ProducedBy: im.By})
 			if err != nil {
 				return domain.Baseline{}, fmt.Errorf("%s: %w", o.key, err)
 			}
-			o.impact = cn.ID
+			o.impact, o.ref = cn.ID, domain.DraftRef(o.cur.id)
 			im.stats.Removed++
 			im.tally(o)
+			continue
 		default:
 			cn, err := im.Graph.ImpactNodeCheckout(ctx, id, graphapi.NodeCheckout{Node: o.cur.id, Rationale: why, ProducedBy: im.By})
 			if err != nil {
@@ -1050,20 +1065,13 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 					return domain.Baseline{}, fmt.Errorf("%s: %w", o.key, err)
 				}
 			}
-			if o.cur.removed {
-				if _, err := im.Graph.ImpactNodeTransition(ctx, id, graphapi.NodeTransition{NodeCheckout: graphapi.NodeCheckout{Impact: o.impact, ProducedBy: im.By}, To: StatePresent}); err != nil {
-					return domain.Baseline{}, fmt.Errorf("%s: %w", o.key, err)
-				}
-			}
 			im.stats.Modified++
 			im.tally(o)
 		}
 		o.ref = domain.DraftRef(o.cur.id)
 		drop := slices.Clone(o.drop)
 		later[o] = slices.Clone(o.add)
-		if !o.remove {
-			drop, later[o] = im.renew(o, byKey, done, drop, later[o])
-		}
+		drop, later[o] = im.renew(o, byKey, done, drop, later[o])
 		for _, l := range drop {
 			if err := im.Graph.ImpactLinkDelete(ctx, id, l, "", ""); err != nil {
 				return domain.Baseline{}, fmt.Errorf("%s: %w", o.key, err)

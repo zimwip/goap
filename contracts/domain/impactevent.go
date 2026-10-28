@@ -52,6 +52,11 @@ const (
 	ImpactCommitted ImpactOp = "committed"
 	// ImpactRebased moves the pre version of a planned change impact to a newer head, to re-check (Pre).
 	ImpactRebased ImpactOp = "rebased"
+	// ImpactRequalified records that a creation named a node that exists (ADR 0172): the impact it declared is the
+	// modification of that node (Pre: the version it starts from, the tombstone of a deleted node), an impact found after
+	// the fact. Patch {"from": "created", "to": "modified", "key", "type", "restored"}; the checkout and the edit the
+	// creation makes follow as their own events. It changes nothing of the impact.
+	ImpactRequalified ImpactOp = "requalified"
 )
 
 // WritesPost reports whether the operation sets the post of a change impact: the draft of its node (or, in the merge
@@ -146,7 +151,7 @@ func (e ImpactEvent) Validate() error {
 		return need(e.Impact == "" && e.Flow != "", "a flow and no change impact")
 	case ImpactCommitted:
 		return need(e.Impact != "" && e.Committed != nil, "a change impact and a committed version")
-	case ImpactRebased:
+	case ImpactRebased, ImpactRequalified:
 		return need(e.Impact != "" && e.Pre != nil, "a change impact and a pre version")
 	case ImpactUpdated:
 		return need(e.Impact != "" && e.Post != nil && len(e.Patch) > 0, "a change impact, its draft and a patch")
