@@ -70,6 +70,9 @@ const (
 	// GraphServiceResolveViewProcedure is the fully-qualified name of the GraphService's ResolveView
 	// RPC.
 	GraphServiceResolveViewProcedure = "/goap.graph.v1.GraphService/ResolveView"
+	// GraphServiceResolveAddressProcedure is the fully-qualified name of the GraphService's
+	// ResolveAddress RPC.
+	GraphServiceResolveAddressProcedure = "/goap.graph.v1.GraphService/ResolveAddress"
 	// GraphServiceListNamespacesProcedure is the fully-qualified name of the GraphService's
 	// ListNamespaces RPC.
 	GraphServiceListNamespacesProcedure = "/goap.graph.v1.GraphService/ListNamespaces"
@@ -394,6 +397,12 @@ type GraphServiceClient interface {
 	// What a view holds of some nodes (ADR 0157): their versions in it, read by node; the index keeps the hits of a
 	// search the views asked hold.
 	ResolveView(context.Context, *connect.Request[v1.ResolveViewRequest]) (*connect.Response[v1.ResolveViewResponse], error)
+	// Reads and opens an address for a project (ADR 0171 §4-5): its scheme names the type of source reading it. A logical
+	// URL (lnk) is read through the source its project maps the URL's source to: a node to open in its editor, the text
+	// or the image of a file of a local source; an http or https address is opened by the reader's browser. There is no
+	// file scheme. INVALID_ARGUMENT for a malformed address, NOT_FOUND for a target its source does not have,
+	// UNIMPLEMENTED for a scheme or a kind of source no resolver reads.
+	ResolveAddress(context.Context, *connect.Request[v1.ResolveAddressRequest]) (*connect.Response[v1.ResolveAddressResponse], error)
 	// The namespaces holding at least one node.
 	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
 	// The statistics of the graph: what every namespace holds (the overview of the graph statistics view).
@@ -693,6 +702,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceResolveViewProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ResolveView")),
+			connect.WithClientOptions(opts...),
+		),
+		resolveAddress: connect.NewClient[v1.ResolveAddressRequest, v1.ResolveAddressResponse](
+			httpClient,
+			baseURL+GraphServiceResolveAddressProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ResolveAddress")),
 			connect.WithClientOptions(opts...),
 		),
 		listNamespaces: connect.NewClient[v1.ListNamespacesRequest, v1.ListNamespacesResponse](
@@ -1326,6 +1341,7 @@ type graphServiceClient struct {
 	getNodeNeighbourhood   *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
 	queryView              *connect.Client[v1.QueryViewRequest, v1.QueryViewResponse]
 	resolveView            *connect.Client[v1.ResolveViewRequest, v1.ResolveViewResponse]
+	resolveAddress         *connect.Client[v1.ResolveAddressRequest, v1.ResolveAddressResponse]
 	listNamespaces         *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
 	getGraphOverview       *connect.Client[v1.GetGraphOverviewRequest, v1.GetGraphOverviewResponse]
 	getGraphStats          *connect.Client[v1.GetGraphStatsRequest, v1.GetGraphStatsResponse]
@@ -1498,6 +1514,11 @@ func (c *graphServiceClient) QueryView(ctx context.Context, req *connect.Request
 // ResolveView calls goap.graph.v1.GraphService.ResolveView.
 func (c *graphServiceClient) ResolveView(ctx context.Context, req *connect.Request[v1.ResolveViewRequest]) (*connect.Response[v1.ResolveViewResponse], error) {
 	return c.resolveView.CallUnary(ctx, req)
+}
+
+// ResolveAddress calls goap.graph.v1.GraphService.ResolveAddress.
+func (c *graphServiceClient) ResolveAddress(ctx context.Context, req *connect.Request[v1.ResolveAddressRequest]) (*connect.Response[v1.ResolveAddressResponse], error) {
+	return c.resolveAddress.CallUnary(ctx, req)
 }
 
 // ListNamespaces calls goap.graph.v1.GraphService.ListNamespaces.
@@ -2038,6 +2059,12 @@ type GraphServiceHandler interface {
 	// What a view holds of some nodes (ADR 0157): their versions in it, read by node; the index keeps the hits of a
 	// search the views asked hold.
 	ResolveView(context.Context, *connect.Request[v1.ResolveViewRequest]) (*connect.Response[v1.ResolveViewResponse], error)
+	// Reads and opens an address for a project (ADR 0171 §4-5): its scheme names the type of source reading it. A logical
+	// URL (lnk) is read through the source its project maps the URL's source to: a node to open in its editor, the text
+	// or the image of a file of a local source; an http or https address is opened by the reader's browser. There is no
+	// file scheme. INVALID_ARGUMENT for a malformed address, NOT_FOUND for a target its source does not have,
+	// UNIMPLEMENTED for a scheme or a kind of source no resolver reads.
+	ResolveAddress(context.Context, *connect.Request[v1.ResolveAddressRequest]) (*connect.Response[v1.ResolveAddressResponse], error)
 	// The namespaces holding at least one node.
 	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
 	// The statistics of the graph: what every namespace holds (the overview of the graph statistics view).
@@ -2333,6 +2360,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceResolveViewProcedure,
 		svc.ResolveView,
 		connect.WithSchema(graphServiceMethods.ByName("ResolveView")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceResolveAddressHandler := connect.NewUnaryHandler(
+		GraphServiceResolveAddressProcedure,
+		svc.ResolveAddress,
+		connect.WithSchema(graphServiceMethods.ByName("ResolveAddress")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceListNamespacesHandler := connect.NewUnaryHandler(
@@ -2977,6 +3010,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceQueryViewHandler.ServeHTTP(w, r)
 		case GraphServiceResolveViewProcedure:
 			graphServiceResolveViewHandler.ServeHTTP(w, r)
+		case GraphServiceResolveAddressProcedure:
+			graphServiceResolveAddressHandler.ServeHTTP(w, r)
 		case GraphServiceListNamespacesProcedure:
 			graphServiceListNamespacesHandler.ServeHTTP(w, r)
 		case GraphServiceGetGraphOverviewProcedure:
@@ -3244,6 +3279,10 @@ func (UnimplementedGraphServiceHandler) QueryView(context.Context, *connect.Requ
 
 func (UnimplementedGraphServiceHandler) ResolveView(context.Context, *connect.Request[v1.ResolveViewRequest]) (*connect.Response[v1.ResolveViewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ResolveView is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ResolveAddress(context.Context, *connect.Request[v1.ResolveAddressRequest]) (*connect.Response[v1.ResolveAddressResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ResolveAddress is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error) {

@@ -133,10 +133,13 @@ const (
 	WidgetDirectory = "directory"
 	// WidgetCode edits source text with its language, highlighted (the usual widget of a code attribute).
 	WidgetCode = "code"
+	// WidgetURL is the address of something (https://, lnk:...), shown as a link the user interface opens the way the
+	// type of source of its scheme says (ADR 0171: GraphService.ResolveAddress, lnk.Open).
+	WidgetURL = "url"
 )
 
 // AttributeWidgets lists the widgets.
-var AttributeWidgets = []string{WidgetText, WidgetTextarea, WidgetDropdown, WidgetCheckbox, WidgetDate, WidgetDirectory, WidgetCode}
+var AttributeWidgets = []string{WidgetText, WidgetTextarea, WidgetDropdown, WidgetCheckbox, WidgetDate, WidgetDirectory, WidgetCode, WidgetURL}
 
 // Attribute diffs: how the user interface shows what changed between two values of an attribute (a version and the
 // next, a draft and its base, two baselines).

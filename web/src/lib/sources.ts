@@ -12,7 +12,9 @@ export const SOURCE_PREFIX = 'SRC:';
 /** The source of the platform graph (graphsvc.PlatformSource): the namespaces no other graph holds. */
 export const PLATFORM_SOURCE = 'platform';
 /** The drivers the platform plugs (graphsvc.Resolvers); a service may add others, so the kind stays free text. */
-export const SOURCE_KINDS = ['graph', 'files'];
+export const SOURCE_KINDS = ['graph', 'local-fs', 'web'];
+/** The former names of kinds, still read (lnk.CanonicalKind): files became local-fs (ADR 0171). */
+export const kindOf = (k: string): string => (k.trim() === 'files' ? 'local-fs' : k.trim());
 /** The name of a source (lnk.Source.Validate). */
 export const SOURCE_NAME_RE = /^[a-z][a-z0-9_.-]*$/;
 
@@ -55,7 +57,9 @@ export function sourceOf(key: string, props: Record<string, unknown> | undefined
 export function sourceProblem(s: Source): string {
   if (!SOURCE_NAME_RE.test(s.name)) return 'The name starts with a lowercase letter and holds lowercase letters, digits, ".", "_" or "-".';
   if (!s.kind.trim()) return 'A source names the kind of driver reading it.';
-  if (s.kind.trim() === 'files' && !s.location.trim()) return 'A source of files names its root directory.';
+  if (kindOf(s.kind) === 'local-fs' && !s.location.trim()) return 'A local-fs source names its root directory.';
+  if (kindOf(s.kind) === 'web' && !/^https?:\/\/\S+$/i.test(s.location.trim())) return 'A web source names its base address (https://…).';
+  if (kindOf(s.kind) === 'lnk') return 'lnk is the scheme of the logical URLs, not a kind of source.';
   if (namesOf(s.namespaces).length && (s.kind.trim() !== 'graph' || !s.location.trim())) return 'Only a graph at a location holds namespaces.';
   if (namesOf(s.namespaces).some((n) => !SOURCE_NAME_RE.test(n))) return 'A namespace is a lowercase name.';
   if (s.params.trim()) {
@@ -106,7 +110,8 @@ export function overlaySources(applied: GraphNode[], ns: string): Source[] {
 export function sourceRole(s: Source): string {
   if (s.kind === 'graph' && !s.location) return s.name === PLATFORM_SOURCE ? 'this graph (the platform)' : `this graph, namespace ${s.namespace || s.name}`;
   if (s.kind === 'graph') return namesOf(s.namespaces).length ? `graph holding ${namesOf(s.namespaces).join(', ')}` : `graph, namespace ${s.namespace || s.name}`;
-  if (s.kind === 'files') return 'directory of files';
+  if (kindOf(s.kind) === 'local-fs') return 'directory of files on the service';
+  if (kindOf(s.kind) === 'web') return 'web site';
   return s.kind;
 }
 

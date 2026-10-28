@@ -77,7 +77,7 @@ type Graph struct {
 	// Authorizer, when set, is asked before every lifecycle transition.
 	Authorizer TransitionAuthorizer
 	// Resolvers are the resolvers of the kinds of source (ADR 0154: lnk.KindGraph for the graphs with a location,
-	// lnk.KindFiles...), read once, at the first use of Lnk. Unset: the graph resolves its own namespaces only.
+	// lnk.KindLocalFS, lnk.KindWeb...), read once, at the first use of Lnk. Unset: the graph resolves its own namespaces only.
 	Resolvers map[string]lnk.Resolver
 	// ProjectSources is the source mapping in force on a project, by its key (ADR 0154 §8: the name a URL gives a
 	// source to the declared source holding it there, inherited from the parent projects), plugged by the compositions

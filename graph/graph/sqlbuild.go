@@ -35,6 +35,19 @@ func (d dialect) ph(n int) string {
 	return "?" + strconv.Itoa(n)
 }
 
+// lookupBranch is the branch bound to the placeholder p as the per-node lookups compare it (latestOn, sqlFoldVersions,
+// CommittedAtKey): on PostgreSQL a scalar subquery, whose value the planner does not see. With the value seen, a
+// custom plan estimates a branch the statistics do not hold yet (the branch of a change, before an ANALYZE) at one
+// row and walks node_version_committed / node_branch_committed (branch, committed) for each node, filtering its id:
+// every commit of the branch per node, quadratic on a change of many nodes (20 s for 10 000). Unseen, the branch is
+// estimated as any branch and the index leading with (branch, node_id) wins.
+func (d dialect) lookupBranch(p string) string {
+	if d.pg {
+		return `(SELECT ` + p + `::text)`
+	}
+	return p
+}
+
 // id is a uuid column read as text (PostgreSQL stores uuids, SQLite stores text).
 func (d dialect) id(col string) string {
 	if d.pg {
@@ -135,7 +148,7 @@ func (d dialect) sqlLatestOn(id domain.NodeID, branch string) (string, []any) {
 // joins of the branch.
 func (d dialect) latestOn(node, branch string) string {
 	last := func(table string) string {
-		return `coalesce((SELECT version FROM ` + table + ` WHERE node_id = ` + node + ` AND branch = ` + branch + ` ORDER BY version DESC LIMIT 1), 0)`
+		return `coalesce((SELECT version FROM ` + table + ` WHERE node_id = ` + node + ` AND branch = ` + d.lookupBranch(branch) + ` ORDER BY version DESC LIMIT 1), 0)`
 	}
 	greatest := "max"
 	if d.pg {
@@ -261,16 +274,17 @@ func (d dialect) sqlCommittedVersions(namespace, branch string, after, upTo int6
 // nodes of the namespace, or read every version of a node and filter them), each version computed once (the
 // materialized list); the bounds of the range are no index condition (committed + 0): a generic plan would walk the
 // commits of the branch in the range by node_version_committed, the node an afterthought, where node_version_fold
-// reads the commits of the node from its last, backwards.
+// reads the commits of the node from its last, backwards; the branch is no value the planner sees (lookupBranch), the
+// custom plan of a branch the statistics do not hold yet would make the same walk.
 func (d dialect) sqlFoldVersions(args []any, ids []domain.NodeID) (string, []any) {
 	return `WITH x AS MATERIALIZED (
 			SELECT q.id, (
 				SELECT u.version FROM (
 					(SELECT v.version, v.committed FROM node_version v
-					WHERE v.node_id = q.id AND v.branch = $1 AND v.committed + 0 > $2 AND v.committed + 0 <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
+					WHERE v.node_id = q.id AND v.branch = ` + d.lookupBranch("$1") + ` AND v.committed + 0 > $2 AND v.committed + 0 <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
 					UNION ALL
 					(SELECT j.version, j.committed FROM node_branch j
-					WHERE j.node_id = q.id AND j.branch = $1 AND j.committed + 0 > $2 AND j.committed + 0 <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
+					WHERE j.node_id = q.id AND j.branch = ` + d.lookupBranch("$1") + ` AND j.committed + 0 > $2 AND j.committed + 0 <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
 				) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
 			) AS version
 			FROM unnest($5::uuid[]) AS q(id) WHERE (SELECT n.namespace FROM node n WHERE n.id = q.id) = $4

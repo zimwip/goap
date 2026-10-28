@@ -54,7 +54,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	symbols := fs.Bool("symbols", false, "read the source files with Tree-sitter: a node per declaration (function, method, class, struct, variable...) defined in its file, the calls and uses between them, the packages and their imports")
 	fs.Int64Var(&im.MaxSymbolBytes, "symbols-max", 1<<20, "leave the source files larger than this many bytes out of -symbols")
 	fs.BoolVar(&im.Code, "code", true, "with -symbols, keep the source text of each declaration on its node")
-	fs.IntVar(&im.Parallel, "parallel", 0, "with -symbols, how many files are parsed at once (default: the processors, at most 8)")
+	fs.IntVar(&im.Parallel, "parallel", 0, "how many files are read, judged and parsed at once, each through its own git process (default: the processors)")
+	fs.BoolVar(&im.Text, "text", true, "keep the text of the files that read as text (by their bytes), decoded to UTF-8; the others are blobs")
+	fs.Int64Var(&im.MaxTextBytes, "text-max", gitimport.DefaultMaxTextBytes, "the largest text kept, in bytes: a larger file is a blob")
+	contentURL := fs.String("content-url", "", "address of the content of a file: {commit}, {path}, {blob}, {name} replaced (a web address or a lnk: URL of a declared source; default: the raw files of a known forge, else none)")
 	fs.IntVar(&im.Batch, "batch", 0, "the most operations the change of a commit takes by itself; a larger commit is written by a sub-change per file (default 1000)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -91,6 +94,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	im.Graph = graphclient.NewClient(hc, *graphURL)
 	im.Progress = stdout
 	im.Branches = gitimport.ParseBranches(*branches)
+	src := im.Source
+	if src == "" {
+		src = im.Dir
+	}
+	im.ContentURL = gitimport.ContentURLOf(*contentURL, src, im.Name)
 	st, err := im.Run(ctx)
 	for _, s := range st.Skipped {
 		fmt.Fprintln(stderr, "goap-gitimport: git branch "+s)

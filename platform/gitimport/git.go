@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zimwip/goap/contracts/content"
 )
 
 // Commit is a commit of the first-parent history read from git, with what it changed against its first parent (the
@@ -53,6 +55,7 @@ type Entry struct {
 const (
 	ModeTree    = "040000"
 	ModeGitlink = "160000"
+	ModeSymlink = "120000"
 	modeNone    = "000000"
 )
 
@@ -340,56 +343,6 @@ func gitErr(what string, err error) error {
 	return fmt.Errorf("%s: %w", what, err)
 }
 
-// Sizes asks git the size of objects through one git cat-file --batch-check process, one request at a time.
-type Sizes struct {
-	mu  sync.Mutex
-	cmd *exec.Cmd
-	in  io.WriteCloser
-	out *bufio.Reader
-}
-
-// NewSizes starts the process; Close ends it.
-func NewSizes(ctx context.Context, dir string) (*Sizes, error) {
-	cmd := exec.CommandContext(ctx, "git", "-C", dir, "cat-file", "--batch-check=%(objectsize)")
-	in, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, err
-	}
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	return &Sizes{cmd: cmd, in: in, out: bufio.NewReader(out)}, nil
-}
-
-// Size is the size of an object in bytes.
-func (s *Sizes) Size(id string) (int64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, err := io.WriteString(s.in, id+"\n"); err != nil {
-		return 0, err
-	}
-	line, err := s.out.ReadString('\n')
-	if err != nil {
-		return 0, err
-	}
-	line = strings.TrimSpace(line)
-	n, err := strconv.ParseInt(line, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("git cat-file %s: %s", id, line)
-	}
-	return n, nil
-}
-
-// Close ends the process.
-func (s *Sizes) Close() error {
-	_ = s.in.Close()
-	return s.cmd.Wait()
-}
-
 // Blobs reads the content of objects through one git cat-file --batch process, one request at a time.
 type Blobs struct {
 	mu  sync.Mutex
@@ -440,6 +393,40 @@ func (b *Blobs) Read(id string) ([]byte, error) {
 		return nil, err
 	}
 	return buf[:n], nil
+}
+
+// ReadUpTo gives the size of an object and its content when it is no larger than limit, else its first SniffBytes
+// (content.SniffBytes), the rest read and dropped: whole says which.
+func (b *Blobs) ReadUpTo(id string, limit int64) (data []byte, size int64, whole bool, err error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if _, err := io.WriteString(b.in, id+"\n"); err != nil {
+		return nil, 0, false, err
+	}
+	head, err := b.out.ReadString('\n')
+	if err != nil {
+		return nil, 0, false, err
+	}
+	f := strings.Fields(head)
+	if len(f) != 3 {
+		return nil, 0, false, fmt.Errorf("git cat-file %s: %s", id, strings.TrimSpace(head))
+	}
+	if size, err = strconv.ParseInt(f[2], 10, 64); err != nil {
+		return nil, 0, false, fmt.Errorf("git cat-file %s: %s", id, strings.TrimSpace(head))
+	}
+	n := size
+	if whole = size <= limit; !whole {
+		n = min(size, content.SniffBytes)
+	}
+	data = make([]byte, n)
+	if _, err := io.ReadFull(b.out, data); err != nil {
+		return nil, 0, false, err
+	}
+	// the rest of a larger object, and the line end
+	if _, err := io.CopyN(io.Discard, b.out, size-n+1); err != nil {
+		return nil, 0, false, err
+	}
+	return data, size, whole, nil
 }
 
 // Close ends the process.

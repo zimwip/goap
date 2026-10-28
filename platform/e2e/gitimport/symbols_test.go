@@ -81,7 +81,7 @@ func TestImportReadsTheSymbols(t *testing.T) {
 	run()
 	const file = "demo:src/main.c"
 	got := symbols(t, g, file)
-	if keys(got) != "function:add function:main struct:point" {
+	if keys(got) != "field:point.x function:add function:main struct:point" {
 		t.Fatalf("symbols: %s", keys(got))
 	}
 	// main changes, add is removed, sub is new: point and the include keep their version
@@ -92,7 +92,7 @@ func TestImportReadsTheSymbols(t *testing.T) {
 		t.Fatalf("%+v", st)
 	}
 	got = symbols(t, g, file)
-	if keys(got) != "function:main function:sub struct:point" || got["struct:point"] != 1 || got["function:main"] != 2 {
+	if keys(got) != "field:point.x function:main function:sub struct:point" || got["struct:point"] != 1 || got["function:main"] != 2 {
 		t.Fatalf("symbols: %v", got)
 	}
 	add, err := g.NodeByKey(ctx, gitimport.Namespace, file+"#function:add")
@@ -397,7 +397,7 @@ func TestImportVersionsWhatChanged(t *testing.T) {
 		}
 		return st
 	}
-	src := "class Shape:\n    sides = 3\n\n    def area(self):\n        return 1\n\n    def name(self):\n        return 'shape'\n"
+	src := "class Shape:\n    \"\"\"A shape of 3 sides.\"\"\"\n    sides = 3\n\n    def area(self):\n        return 1\n\n    def name(self):\n        return 'shape'\n"
 	const (
 		shape = "demo:shape.py#class:Shape"
 		area  = "demo:shape.py#method:Shape.area"
@@ -437,7 +437,7 @@ func TestImportVersionsWhatChanged(t *testing.T) {
 		t.Errorf("a method removed: %v", v)
 	}
 	// the class's own text
-	src = strings.Replace(src, "sides = 3", "sides = 4", 1)
+	src = strings.Replace(src, "of 3 sides", "of 4 sides", 1)
 	r.write("shape.py", src)
 	r.commit("Sides")
 	run()

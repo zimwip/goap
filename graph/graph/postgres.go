@@ -888,10 +888,10 @@ func (t *pgTx) CommittedAtKey(ctx context.Context, namespace, branch string, upT
 			SELECT n.id, (
 				SELECT u.version FROM (
 					(SELECT v.version, v.committed FROM node_version v
-					WHERE v.node_id = n.id AND v.branch = $1 AND v.committed + 0 > 0 AND v.committed + 0 <= $2 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
+					WHERE v.node_id = n.id AND v.branch = (SELECT $1::text) AND v.committed + 0 > 0 AND v.committed + 0 <= $2 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
 					UNION ALL
 					(SELECT j.version, j.committed FROM node_branch j
-					WHERE j.node_id = n.id AND j.branch = $1 AND j.committed + 0 > 0 AND j.committed + 0 <= $2 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
+					WHERE j.node_id = n.id AND j.branch = (SELECT $1::text) AND j.committed + 0 > 0 AND j.committed + 0 <= $2 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
 				) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
 			) AS version
 			FROM node n WHERE n.namespace = $3 AND n.key = $4
@@ -1559,7 +1559,7 @@ func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change dom
 
 func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, committed int64) error {
 	if t.held != nil {
-		t.held.joins = append(t.held.joins, []any{string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)), committed})
+		t.held.holdJoin([]any{string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)), committed})
 		return nil
 	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlJoinBranch(), string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)), committed)
