@@ -14,6 +14,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/zimwip/goap/contracts/algo"
 	"github.com/zimwip/goap/contracts/domain"
@@ -736,6 +737,9 @@ type Source func(ctx context.Context) ([]*def.Domain, error)
 type Live struct {
 	src Source
 	cur atomic.Pointer[Catalog]
+	// mu serializes Refresh, tried is when it last read the source
+	mu    sync.Mutex
+	tried time.Time
 }
 
 // empty is the catalogue of no domain.
@@ -763,4 +767,26 @@ func (l *Live) Reload(ctx context.Context) error {
 	}
 	l.cur.Store(c)
 	return nil
+}
+
+// Refresh reads the source again for a caller that met a type the catalogue does not hold: a domain published since
+// the last reload, whose event was lost or never sent (no bus). It reads at most once per every, the callers meeting
+// the same miss meanwhile waiting for that read, and reports whether the domains in force changed, so the caller tries
+// again only then.
+func (l *Live) Refresh(ctx context.Context, every time.Duration) bool {
+	before := l.Get()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if now := l.Get(); now != before {
+		// reloaded while this caller waited
+		return !maps.Equal(now.domains, before.domains)
+	}
+	if time.Since(l.tried) < every {
+		return false
+	}
+	l.tried = time.Now()
+	if err := l.Reload(ctx); err != nil {
+		return false
+	}
+	return !maps.Equal(l.Get().domains, before.domains)
 }
