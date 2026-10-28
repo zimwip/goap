@@ -42,7 +42,8 @@ import (
 	"github.com/zimwip/goap/platform/modelgw"
 )
 
-// registryTimeout bounds a read of the domain registry at start.
+// registryTimeout bounds a read of the domain registry, at start and on its events (Rust's REGISTRY_TIMEOUT): a
+// registry that does not answer is one that is not there, the catalogue kept stays in force.
 const registryTimeout = 10 * time.Second
 
 // loadTypes loads the type catalogue until it holds the domains the seeds write to, then runs the seeds: tried at
@@ -175,7 +176,9 @@ func main() {
 	reload := func() {
 		// the client keeps what it read for its TTL: the event says it moved
 		client.Invalidate()
-		if err := types.Reload(context.Background()); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), registryTimeout)
+		defer cancel()
+		if err := types.Reload(ctx); err != nil {
 			log.Error("type catalogue", "err", err)
 		}
 	}
