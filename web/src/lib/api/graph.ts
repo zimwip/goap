@@ -359,7 +359,9 @@ export const graph = {
   derivedNodes: (ref: NodeRef, signal?: AbortSignal) => rpc<{ ref: NodeRef }, { nodes?: GraphNode[] }>(GRAPH, 'DerivedNodes', { ref }, signal),
   /** Checks out a node (by its impact, or by the node: the impact is declared) for editing: the draft of the flow; refused (conflict 'already checked out') while the flow already holds its own (update it). A draft held by a parent flow is not the flow's own. */
   impactNodeCheckout: (changeId: string, target: { changeImpactId?: string; nodeId?: string }, rationale = '', flow = '') =>
-    rpc<{ changeId: string; changeImpactId?: string; nodeId?: string; rationale: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeCheckout', { changeId, ...target, rationale, flow }),
+    rpc<{ changeId: string; nodes: { changeImpactId?: string; nodeId?: string; rationale: string }[]; flow: string }, { nodes?: ChangeImpact[] }>(
+      GRAPH, 'ImpactNodeCheckout', { changeId, nodes: [{ ...target, rationale }], flow },
+    ).then((r) => ({ node: r.nodes?.[0] })),
   /** Merges properties into (and transfers the responsible unit of) a draft, in place; an accepted review goes back to proposed. */
   impactNodeUpdate: (changeId: string, changeImpactId: string, u: { props?: Struct; responsible?: string }, flow = '') =>
     rpc<{ changeId: string; changeImpactId: string; props?: Struct; responsible?: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeUpdate', { changeId, changeImpactId, ...u, flow }),

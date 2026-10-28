@@ -1387,7 +1387,7 @@ impl<S: WriteTx> Tx<'_, S> {
     }
 
     /// Checks nodes out in a change, each as one checkout, the change locked and read once (Go's
-    /// `ImpactNodeCheckoutBatch`; one node: `ImpactNodeCheckout`).
+    /// `ImpactNodeCheckout`, one node or several).
     pub async fn impact_node_checkout(
         &mut self,
         id: &ChangeId,

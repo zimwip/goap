@@ -3460,41 +3460,6 @@ impl pb::GraphService for Graph {
         let by = caller.subject.clone();
         self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
             let id = served_change(tx, &m.change_id).await?;
-            if m.change_impact_id.is_empty() {
-                acc.gate_node(tx, &m.node_id).await?;
-            }
-            acc.allow(tx, &m.change_id, operations::IMPACT_CHECKOUT).await?;
-            let mut out = tx
-                .impact_node_checkout(
-                    &id,
-                    &m.flow,
-                    vec![NodeCheckout {
-                        impact: m.change_impact_id.clone(),
-                        node: m.node_id.as_str().into(),
-                        key: String::new(),
-                        rationale: m.rationale.clone(),
-                        execution: m.execution.clone(),
-                        produced_by: by,
-                    }],
-                )
-                .await?;
-            Ok(pb::ImpactNodeCheckoutResponse {
-                node: out.pop().map(|cn| convert::change_impact(&cn)),
-            })
-        })
-        .await
-    }
-
-    async fn impact_node_checkout_batch(
-        &self,
-        _ctx: &Ctx,
-        req: Request<pb::ImpactNodeCheckoutBatchRequest>,
-    ) -> Answer<pb::ImpactNodeCheckoutBatchResponse> {
-        let caller = Caller::of(&req)?;
-        let m = req.into_inner();
-        let by = caller.subject.clone();
-        self.write_on(caller, &[m.change_id.as_str()], async |tx, acc| {
-            let id = served_change(tx, &m.change_id).await?;
             acc.allow(tx, &m.change_id, operations::IMPACT_CHECKOUT).await?;
             let named: Vec<&str> = m
                 .nodes
@@ -3516,7 +3481,7 @@ impl pb::GraphService for Graph {
                 })
                 .collect();
             let out = tx.impact_node_checkout(&id, &m.flow, nodes).await?;
-            Ok(pb::ImpactNodeCheckoutBatchResponse {
+            Ok(pb::ImpactNodeCheckoutResponse {
                 nodes: out.iter().map(convert::change_impact).collect(),
             })
         })

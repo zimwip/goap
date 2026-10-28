@@ -237,9 +237,9 @@ func TestChangeImpactRPCs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	co := connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id})
+	co := connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: string(c.ID), Nodes: []*graphv1.NodeCheckoutSpec{{ChangeImpactId: cn.Id}}})
 	as("contributor", co)
-	if out, err := h.ImpactNodeCheckout(ctx, co); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 0 {
+	if out, err := h.ImpactNodeCheckout(ctx, co); err != nil || len(out.Msg.Nodes) != 1 || out.Msg.Nodes[0].Post == nil || out.Msg.Nodes[0].Post.Version != 0 {
 		t.Fatalf("checkout: %v %v", out, err)
 	}
 	props, _ := structpb.NewStruct(map[string]any{"title": "two"})

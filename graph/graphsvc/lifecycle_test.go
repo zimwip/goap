@@ -143,7 +143,7 @@ nodeTypes:
 		t.Fatalf("a contributor may reopen: %v", err)
 	}
 	// the transition checked the node out: a second checkout is refused, the caller updates the draft
-	co := connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: string(c.ID), ChangeImpactId: cnID})
+	co := connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: string(c.ID), Nodes: []*graphv1.NodeCheckoutSpec{{ChangeImpactId: cnID}}})
 	withRoles(co.Header(), "contributor")
 	if _, err := h.ImpactNodeCheckout(ctx, co); connect.CodeOf(err) != connect.CodeFailedPrecondition && connect.CodeOf(err) != connect.CodeAborted && err == nil {
 		t.Fatalf("a node checked out by a transition is not checked out again: %v", err)

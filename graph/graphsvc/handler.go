@@ -1111,30 +1111,19 @@ func (h *Handler) DerivedNodes(ctx context.Context, r *connect.Request[graphv1.D
 	return res(&graphv1.DerivedNodesResponse{Nodes: pbconv.NodesToPB(ns)}, err)
 }
 
+// ImpactNodeCheckout checks out one node or several at once: the gate of the access nodes is asked for the type of
+// each inside the transaction of the checkout, which reads it anyway.
 func (h *Handler) ImpactNodeCheckout(ctx context.Context, r *connect.Request[graphv1.ImpactNodeCheckoutRequest]) (*connect.Response[graphv1.ImpactNodeCheckoutResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
-	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, m.NodeId); err != nil {
-		return nil, err
-	}
-	cn, err := h.Graph.ImpactNodeCheckout(ctx, domain.ChangeID(m.ChangeId), graph.NodeCheckout{Impact: domain.ChangeImpactID(m.ChangeImpactId), Node: domain.NodeID(m.NodeId),
-		Rationale: m.Rationale, Flow: m.Flow, Execution: m.Execution, ProducedBy: authz.From(ctx).Subject})
-	return res(&graphv1.ImpactNodeCheckoutResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
-}
-
-// ImpactNodeCheckoutBatch checks out several nodes at once: the gate of the access nodes is asked for the type of each
-// inside the transaction of the checkout, which reads it anyway.
-func (h *Handler) ImpactNodeCheckoutBatch(ctx context.Context, r *connect.Request[graphv1.ImpactNodeCheckoutBatchRequest]) (*connect.Response[graphv1.ImpactNodeCheckoutBatchResponse], error) {
-	ctx = h.Identity.Context(ctx, r.Header())
-	m := r.Msg
 	by := authz.From(ctx).Subject
-	in := graph.CheckoutBatch{Gate: h.gateFunc(ctx)}
+	in := graph.Checkouts{Gate: h.gateFunc(ctx)}
 	for _, n := range m.Nodes {
 		in.Nodes = append(in.Nodes, graph.NodeCheckout{Impact: domain.ChangeImpactID(n.ChangeImpactId), Node: domain.NodeID(n.NodeId), Key: n.Key,
 			Rationale: n.Rationale, Flow: m.Flow, Execution: m.Execution, ProducedBy: by})
 	}
-	out, err := h.Graph.ImpactNodeCheckoutBatch(ctx, domain.ChangeID(m.ChangeId), in)
-	resp := &graphv1.ImpactNodeCheckoutBatchResponse{}
+	out, err := h.Graph.ImpactNodeCheckouts(ctx, domain.ChangeID(m.ChangeId), in)
+	resp := &graphv1.ImpactNodeCheckoutResponse{}
 	for _, cn := range out {
 		resp.Nodes = append(resp.Nodes, pbconv.ChangeImpactToPB(cn))
 	}

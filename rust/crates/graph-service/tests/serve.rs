@@ -337,9 +337,9 @@ async fn a_commit_rebases_its_drafts_onto_the_head() {
         let change = open(title).await;
         let impact = ok(
             "ImpactNodeCheckout",
-            serde_json::json!({"changeId": change, "nodeId": node, "rationale": title}),
+            serde_json::json!({"changeId": change, "nodes": [{"nodeId": node, "rationale": title}]}),
         )
-        .await["node"]["id"]
+        .await["nodes"][0]["id"]
             .as_str()
             .unwrap()
             .to_string();

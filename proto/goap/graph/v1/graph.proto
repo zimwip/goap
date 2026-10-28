@@ -100,9 +100,8 @@ service GraphService {
   // state of its draft, the node checked out first when it has none); ImpactNodeCancel drops the draft (a creation cancelled
   // removes its impact). The versions are written when the change commits.
   rpc ImpactNodeCreate(ImpactNodeCreateRequest) returns (ImpactNodeCreateResponse);
+  // ImpactNodeCheckout checks out one node or several at once, all or none, in one transaction.
   rpc ImpactNodeCheckout(ImpactNodeCheckoutRequest) returns (ImpactNodeCheckoutResponse);
-  // ImpactNodeCheckoutBatch checks out several nodes at once, all or none, in one transaction.
-  rpc ImpactNodeCheckoutBatch(ImpactNodeCheckoutBatchRequest) returns (ImpactNodeCheckoutBatchResponse);
   rpc ImpactNodeUpdate(ImpactNodeUpdateRequest) returns (ImpactNodeUpdateResponse);
   rpc ImpactLinkCreate(ImpactLinkCreateRequest) returns (ImpactLinkCreateResponse);
   rpc ImpactLinkUpdate(ImpactLinkUpdateRequest) returns (ImpactLinkUpdateResponse);
@@ -1846,21 +1845,7 @@ message ImpactNodeCreateResponse {
   ChangeImpact node = 1;
 }
 
-message ImpactNodeCheckoutRequest {
-  string change_id = 1;
-  string change_impact_id = 2;
-  string node_id = 3;
-  // why, when the call declares the impact
-  string rationale = 4;
-  string flow = 5;
-  string execution = 6;
-}
-
-message ImpactNodeCheckoutResponse {
-  ChangeImpact node = 1;
-}
-
-// A node of ImpactNodeCheckoutBatch: a change impact, a node, or a node by its key.
+// A node of ImpactNodeCheckout: a change impact, a node, or a node by its key.
 message NodeCheckoutSpec {
   string change_impact_id = 1;
   string node_id = 2;
@@ -1869,14 +1854,14 @@ message NodeCheckoutSpec {
   string rationale = 4;
 }
 
-message ImpactNodeCheckoutBatchRequest {
+message ImpactNodeCheckoutRequest {
   string change_id = 1;
   string flow = 2;
   string execution = 3;
   repeated NodeCheckoutSpec nodes = 4;
 }
 
-message ImpactNodeCheckoutBatchResponse {
+message ImpactNodeCheckoutResponse {
   // the change impacts, in the order of the nodes
   repeated ChangeImpact nodes = 1;
 }

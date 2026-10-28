@@ -519,17 +519,17 @@ func (g *Graph) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in N
 	return
 }
 
-// CheckoutBatch is the checkout of several nodes of a change at once (ImpactNodeCheckoutBatch).
-type CheckoutBatch struct {
+// Checkouts is the checkout of several nodes of a change at once (ImpactNodeCheckouts).
+type Checkouts struct {
 	Nodes []NodeCheckout
 	// Gate, when set, is asked for the type of each node checked out, before its draft stands: an error refuses the
 	// whole batch (the gate of the access nodes, MergeInput.Gate).
 	Gate func(typ string) error
 }
 
-// ImpactNodeCheckoutBatch checks out several nodes of a change in one transaction, all or none: each one as
+// ImpactNodeCheckouts checks out several nodes of a change in one transaction, all or none: each one as
 // ImpactNodeCheckout does, the change locked and read once. The change impacts come back in the order of the nodes.
-func (g *Graph) ImpactNodeCheckoutBatch(ctx context.Context, id domain.ChangeID, in CheckoutBatch) (out []domain.ChangeImpact, err error) {
+func (g *Graph) ImpactNodeCheckouts(ctx context.Context, id domain.ChangeID, in Checkouts) (out []domain.ChangeImpact, err error) {
 	if err := g.allow(ctx, id, operations.ImpactCheckout); err != nil {
 		return nil, err
 	}

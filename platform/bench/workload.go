@@ -27,7 +27,7 @@ const (
 	// drafts, accepts and merges them).
 	ModeCommit = "commit"
 	// ModeLifecycle drives each change call by call, as the web and the engine do: CreateChange, ImpactNodeCreate or
-	// ImpactNodeCheckoutBatch, ImpactNodeUpdate per node, one ImpactNodeReviewBatch by a second principal, CommitChange, MergeChange.
+	// ImpactNodeCheckout of the modified nodes at once, ImpactNodeUpdate per node, one ImpactNodeReviewBatch by a second principal, CommitChange, MergeChange.
 	ModeLifecycle = "lifecycle"
 )
 
@@ -54,8 +54,8 @@ type Config struct {
 	HotRatio  float64
 	TextBytes int    // size of the description of a created node
 	Mode      string // ModeCommit or ModeLifecycle
-	// NodeCheckout checks the modified nodes of a lifecycle change out one call each, rather than in one batch
-	// (ImpactNodeCheckoutBatch)
+	// NodeCheckout checks the modified nodes of a lifecycle change out one call each, rather than all in one
+	// (ImpactNodeCheckout naming them all)
 	NodeCheckout bool
 	// The run stops at the first of: TargetVersions versions written, Duration elapsed, MaxChanges changes (0: no bound).
 	TargetVersions int64
@@ -621,8 +621,8 @@ func (r *Runner) lifecycle(ctx context.Context, w *worker, edits []edit) error {
 			}
 		}
 		if len(specs) > 0 {
-			res, err := shaped(ctx, m, "ImpactNodeCheckoutBatch", out, func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeCheckoutBatchResponse], error) {
-				return g.ImpactNodeCheckoutBatch(ctx, connect.NewRequest(&graphv1.ImpactNodeCheckoutBatchRequest{ChangeId: id, Nodes: specs}))
+			res, err := shaped(ctx, m, "ImpactNodeCheckout", out, func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeCheckoutResponse], error) {
+				return g.ImpactNodeCheckout(ctx, connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: id, Nodes: specs}))
 			})
 			if err != nil {
 				return abandon(err)
@@ -654,12 +654,13 @@ func (r *Runner) lifecycle(ctx context.Context, w *worker, edits []edit) error {
 		imp, ok := checked[e.n.id]
 		if !ok {
 			res, err := shaped(ctx, m, "ImpactNodeCheckout", len(e.n.out), func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeCheckoutResponse], error) {
-				return g.ImpactNodeCheckout(ctx, connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: id, NodeId: e.n.id, Rationale: "bench: modified"}))
+				return g.ImpactNodeCheckout(ctx, connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: id,
+					Nodes: []*graphv1.NodeCheckoutSpec{{NodeId: e.n.id, Rationale: "bench: modified"}}}))
 			})
 			if err != nil {
 				return abandon(err)
 			}
-			imp = res.Msg.Node.GetId()
+			imp = res.Msg.Nodes[0].GetId()
 		}
 		if _, err := shaped(ctx, m, "ImpactNodeUpdate", len(e.n.out), func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeUpdateResponse], error) {
 			return g.ImpactNodeUpdate(ctx, connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: id, ChangeImpactId: imp, Props: structOf(e.props)}))

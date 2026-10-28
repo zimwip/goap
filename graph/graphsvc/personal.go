@@ -304,7 +304,7 @@ func lockedWrite(procedure string, ids []domain.ChangeID) bool {
 // then refused), run whole in the
 // transaction holding the change's lock (Graph.InChangeLock).
 var lockedWrites = map[string]bool{
-	"ImpactNodeCreate": true, "ImpactNodeUpdate": true, "ImpactNodeCheckout": true, "ImpactNodeCheckoutBatch": true,
+	"ImpactNodeCreate": true, "ImpactNodeUpdate": true, "ImpactNodeCheckout": true,
 	"ImpactLinkCreate": true, "ImpactLinkUpdate": true, "ImpactLinkDelete": true, "ImpactNodeReviewBatch": true,
 	"DeleteChange": true, "CommitChange": true, "MergeChange": true, "CloseChange": true,
 }

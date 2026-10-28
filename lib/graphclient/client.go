@@ -6,6 +6,7 @@ package graphclient
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"connectrpc.com/connect"
@@ -250,24 +251,26 @@ func (c *Client) DerivedNodes(ctx context.Context, ref domain.NodeRef) ([]domain
 
 // ImpactNodeCheckout implements engine.GraphPort.
 func (c *Client) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in graphapi.NodeCheckout) (domain.ChangeImpact, error) {
-	r, err := c.rpc.ImpactNodeCheckout(ctx, connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: string(id), ChangeImpactId: string(in.Impact), NodeId: string(in.Node),
-		Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution}))
+	out, err := c.ImpactNodeCheckouts(ctx, id, []graphapi.NodeCheckout{in})
 	if err != nil {
-		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
+		return domain.ChangeImpact{}, err
 	}
-	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
+	if len(out) != 1 {
+		return domain.ChangeImpact{}, fmt.Errorf("graphclient: checkout answered %d nodes for one", len(out))
+	}
+	return out[0], nil
 }
 
-// ImpactNodeCheckoutBatch checks out several nodes at once, all or none, on the flow and execution of the first.
-func (c *Client) ImpactNodeCheckoutBatch(ctx context.Context, id domain.ChangeID, nodes []graphapi.NodeCheckout) ([]domain.ChangeImpact, error) {
-	req := &graphv1.ImpactNodeCheckoutBatchRequest{ChangeId: string(id)}
+// ImpactNodeCheckouts checks out several nodes at once, all or none, on the flow and execution of the first.
+func (c *Client) ImpactNodeCheckouts(ctx context.Context, id domain.ChangeID, nodes []graphapi.NodeCheckout) ([]domain.ChangeImpact, error) {
+	req := &graphv1.ImpactNodeCheckoutRequest{ChangeId: string(id)}
 	if len(nodes) > 0 {
 		req.Flow, req.Execution = nodes[0].Flow, nodes[0].Execution
 	}
 	for _, n := range nodes {
 		req.Nodes = append(req.Nodes, &graphv1.NodeCheckoutSpec{ChangeImpactId: string(n.Impact), NodeId: string(n.Node), Key: n.Key, Rationale: n.Rationale})
 	}
-	r, err := c.rpc.ImpactNodeCheckoutBatch(ctx, connect.NewRequest(req))
+	r, err := c.rpc.ImpactNodeCheckout(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
