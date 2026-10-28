@@ -244,8 +244,8 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 	// (integrate, commit)
 	committed := make([]domain.ImpactEvent, 0, len(a.cposts))
 	for _, cp := range a.cposts {
-		ref := cp.post.Ref()
-		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Branch: domain.BranchOf(a.branch)})
+		ref, effect := cp.post.Ref(), cp.effect
+		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Effect: &effect, Branch: domain.BranchOf(a.branch)})
 	}
 	// one entry for the commit (ADR 0144)
 	if err := g.emit(ctx, tx, committed...); err != nil {
@@ -258,6 +258,8 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 	if c.Status == domain.ChangeDraft {
 		c.Status = domain.ChangeActive
 	}
+	// the counters of what it committed, kept on its header (the impacts withdrawn and reverted are no longer counted)
+	c.Stats = domain.StatsOf(c.Impacts()).Committed()
 	if err := tx.PutChange(ctx, c); err != nil {
 		return domain.Baseline{}, nil, err
 	}

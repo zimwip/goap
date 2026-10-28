@@ -37,8 +37,8 @@ const (
 	goldSQLiteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution, v.owner, n.project, v.origins, n.creator, n.creator_unit, v.editor, v.visibility`
 	goldPGOnBranch     = `(v.branch = $2 OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = $2))`
 	goldSQLiteOnBranch = `(v.branch = ? OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = ?))`
-	goldPGImpactCols   = `id::text, node_id::text, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, COALESCE(via::text, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded`
-	goldSQLiteImpact   = `id, node_id, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, COALESCE(via, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded`
+	goldPGImpactCols   = `id::text, node_id::text, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, COALESCE(via::text, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded, effect`
+	goldSQLiteImpact   = `id, node_id, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, COALESCE(via, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded, effect`
 )
 
 func TestSQLBuildersGolden(t *testing.T) {
@@ -484,10 +484,11 @@ func TestSQLStoreCounts(t *testing.T) {
 		t.Fatalf("%d / %d statements for %d measures", len(pg), len(lite), len(StoreMeasures))
 	}
 	for _, m := range StoreMeasures {
-		if pg[m] == "" || qmarkNn.ReplaceAllString(lite[m], "$$1") != pg[m] {
+		if pg[m] == "" || strings.ReplaceAll(qmarkNn.ReplaceAllString(lite[m], "$$1"), "json_each(", "jsonb_each_text(") != pg[m] {
 			t.Errorf("%s:\n pg     %s\n sqlite %s", m, pg[m], lite[m])
 		}
 	}
 	checkSQL(t, "pg linkSetsByMode", dialectPG, pg[StatLinkSetsByMode], `SELECT CASE WHEN v.links IS NOT NULL THEN 'shared' WHEN v.links_base IS NOT NULL THEN 'delta' ELSE 'own' END AS mode, count(*) FROM node_version v JOIN node n ON n.id = v.node_id WHERE n.namespace = $1 GROUP BY mode`)
+	checkSQL(t, "pg changeCounters", dialectPG, pg[StatChangeCounters], `SELECT s.key, sum(CAST(s.value AS integer)) FROM change c, jsonb_each_text(c.stats) s WHERE c.namespace = $1 AND c.parent_id IS NULL GROUP BY s.key`)
 	checkSQL(t, "sqlite logByType", dialectSQLite, lite[StatLogByType], `SELECT l.type, count(*) FROM change_log l JOIN change c ON c.id = l.change_id WHERE c.namespace = ? GROUP BY l.type`)
 }

@@ -17,6 +17,8 @@ type cpost struct {
 	post domain.Node
 	// links are the outgoing links the commit wrote for post
 	links []domain.Link
+	// effect is what post does to its node over pre (domain.EffectOf), recorded on its committed event
+	effect domain.ImpactEffect
 }
 
 // prepareChangeImpacts writes, from the drafts of the change impacts, the versions the commit produces (ADR 0079): a node
@@ -154,15 +156,26 @@ func (a *applier) prepareChangeImpacts() error {
 		wrote[i] = links
 	}
 	// 3. what the change leaves
+	requalified, err := a.requalified()
+	if err != nil {
+		return err
+	}
 	for i, l := range todo {
 		cp := cpost{cn: l.cn, post: nodes[i], links: wrote[i]}
+		var preLinks []domain.Link
 		if l.cn.Pre != nil {
 			pre, err := a.tx.Node(a.ctx, *l.cn.Pre)
 			if err != nil {
 				return err
 			}
 			cp.pre = &pre
+			// read with the bases above (prefetchVersions): no statement
+			if preLinks, err = a.tx.OutLinks(a.ctx, pre.Ref()); err != nil {
+				return err
+			}
 		}
+		cp.effect = domain.EffectOf(cp.pre, preLinks, cp.post, cp.links)
+		cp.effect.Requalified = requalified[l.cn.ID]
 		a.cposts = append(a.cposts, cp)
 		if nodes[i].Deleted {
 			a.target.remove(nodes[i].ID) // a tombstone: the node leaves the state (ADR 0172)
@@ -170,6 +183,37 @@ func (a *applier) prepareChangeImpacts() error {
 			a.target.set(nodes[i].ID, nodes[i].Version)
 		}
 	}
+	return nil
+}
+
+// requalified are the impacts of the change whose creation was requalified as the modification of an existing node
+// (ADR 0172), read from the events of its view.
+func (a *applier) requalified() (map[domain.ChangeImpactID]bool, error) {
+	if err := a.loadEvents(); err != nil {
+		return nil, err
+	}
+	var out map[domain.ChangeImpactID]bool
+	for _, e := range *a.events {
+		if e.Op == domain.ImpactRequalified {
+			if out == nil {
+				out = map[domain.ChangeImpactID]bool{}
+			}
+			out[e.Impact] = true
+		}
+	}
+	return out, nil
+}
+
+// loadEvents reads the impact events of the change once, from its view.
+func (a *applier) loadEvents() error {
+	if a.events != nil {
+		return nil
+	}
+	evs, err := a.g.foldedEvents(a.ctx, a.tx, a.change.ID)
+	if err != nil {
+		return err
+	}
+	a.events = &evs
 	return nil
 }
 
@@ -263,12 +307,8 @@ func (a *applier) walkChangeImpacts() (stuck []string, err error) {
 // flow must leave the state the draft was in and be a move of the lifecycle, and the chain must end in the state of the
 // version. Each move was authorized, guarded and acted when it was taken (ImpactNodeTransition).
 func (a *applier) walkTransitions(cp cpost, lc *domain.Lifecycle) error {
-	if a.events == nil {
-		evs, err := a.g.foldedEvents(a.ctx, a.tx, a.change.ID)
-		if err != nil {
-			return err
-		}
-		a.events = &evs
+	if err := a.loadEvents(); err != nil {
+		return err
 	}
 	norm := func(s string) string {
 		if s == "" {

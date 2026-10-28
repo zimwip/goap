@@ -428,6 +428,40 @@ message Change {
   string methodology_version = 24;
   // the position of the log of the change its impacts and items were read at: the view the reader holds (ADR 0153)
   int64 seq = 25;
+  // the counters of the change: what its commits did to the graph, net per node, and the impacts not committed yet; read
+  // from its impacts when the answer holds them, else the counters of what it committed its header keeps
+  ChangeStats stats = 26;
+}
+
+// The counters of a change (domain.ChangeStats): the nodes its commits wrote, by what each version does to its node, the
+// properties and links they changed, the lifecycle moves; and the impacts not committed yet, by review.
+message ChangeStats {
+  int32 created = 1;
+  int32 modified = 2;
+  int32 deleted = 3;
+  int32 restored = 4;
+  // among the modified and restored nodes, the creations taken as the modification of an existing node (ADR 0172)
+  int32 requalified = 5;
+  int32 properties = 6;
+  int32 states = 7;
+  int32 links_added = 8;
+  int32 links_removed = 9;
+  int32 links_changed = 10;
+  int32 proposed = 11;
+  int32 accepted = 12;
+  int32 rejected = 13;
+}
+
+// What the version a change committed does to its node over the version it started from (domain.ImpactEffect).
+message ImpactEffect {
+  // created | modified | deleted | restored
+  string kind = 1;
+  bool requalified = 2;
+  int32 properties = 3;
+  bool state = 4;
+  int32 links_added = 5;
+  int32 links_removed = 6;
+  int32 links_changed = 7;
 }
 
 // A methodology of the guardian chain of a change, at the version in force when the chain was computed (ADR 0106).
@@ -482,6 +516,8 @@ message ChangeImpact {
   // a read model, never stored: what the accepted-review gate would say of the draft as it stands (empty: not checked
   // or no draft); filled by GetChange and GetBlackboard
   ImpactValidation validation = 20;
+  // what the last commit of the change did to the node (empty until it commits)
+  ImpactEffect effect = 21;
 }
 
 // The outcome of checking a draft as an accepted review would: valid, or the first failure (readable message).

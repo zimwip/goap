@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -1293,6 +1294,17 @@ func (t *memTx) StoreCounts(_ context.Context, namespace string) (map[string]map
 	for _, c := range t.st.changes {
 		if domain.NamespaceOf(c.Namespace) == namespace {
 			out[StatChangesByStatus][string(c.Status)]++
+		}
+	}
+	for _, c := range t.st.changes {
+		if domain.NamespaceOf(c.Namespace) != namespace || c.ParentID != "" {
+			continue
+		}
+		var counters map[string]int
+		b, _ := json.Marshal(c.Stats.Committed())
+		_ = json.Unmarshal(b, &counters)
+		for k, n := range counters {
+			out[StatChangeCounters][k] += n
 		}
 	}
 	for _, tg := range t.st.tags {

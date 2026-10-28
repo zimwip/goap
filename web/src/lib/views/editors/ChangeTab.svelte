@@ -42,6 +42,7 @@
   import CommitDialog from '../../components/CommitDialog.svelte';
   import AttachChange from '../../components/AttachChange.svelte';
   import ChangeDependencies from '../../components/ChangeDependencies.svelte';
+  import ChangeCounters from '../../components/ChangeCounters.svelte';
   import { attachable, detach, detachable, guardianChain } from '../../changeAttach';
   import { movable } from '../../changeProject';
   import type { Tab } from '../../shell/types';
@@ -1397,6 +1398,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             </dd>
           {/if}
         </dl>
+        <ChangeCounters stats={ch.stats} />
         <ChangeState changeId={selected} onopen={(id) => openTab({ kind: 'run', params: { id } })} />
         {#if showSteps}
           <PossibleSteps

@@ -285,6 +285,11 @@
         {@render bars(ranked(measure(stats, 'changesByStatus')), 'changes')}
       </section>
       <section class="card">
+        <h4>What the changes committed</h4>
+        {@render bars(ranked(measure(stats, 'changeCounters')), 'counted')}
+        <p class="hint">Summed over the root changes, net per node: a sub-change is counted in its parent once merged.</p>
+      </section>
+      <section class="card">
         <h4>Baselines by kind</h4>
         {@render bars(ranked(measure(stats, 'baselinesByKind')), 'baselines')}
       </section>

@@ -328,6 +328,23 @@ func dependsOnOf(b []byte) ([]domain.ChangeID, error) {
 	return ds, nil
 }
 
+// statsJSON encodes the counters a change committed (domain.ChangeStats.Committed): a JSON object, "{}" when none.
+func statsJSON(s domain.ChangeStats) []byte {
+	b, _ := json.Marshal(s.Committed())
+	return b
+}
+
+func statsOf(b []byte) (domain.ChangeStats, error) {
+	var s domain.ChangeStats
+	if len(b) == 0 {
+		return s, nil
+	}
+	if err := json.Unmarshal(b, &s); err != nil {
+		return s, fmt.Errorf("counters of a change: %w", err)
+	}
+	return s, nil
+}
+
 func guardiansOf(b []byte) ([]domain.GuardianRef, error) {
 	var gs []domain.GuardianRef
 	if len(b) == 0 {
@@ -1019,13 +1036,13 @@ func (t *pgTx) changeHeader(ctx context.Context, id domain.ChangeID) (domain.Cha
 }
 
 // pgChangeHead is the select list of a change's head, in the order scanPGChangeHead reads it.
-const pgChangeHead = `id::text, title, intent, methodology, goal, status, COALESCE(baseline_id::text, ''), result_baseline_id::text, data, created_at, branch, namespace, COALESCE(parent_id::text, ''), owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version`
+const pgChangeHead = `id::text, title, intent, methodology, goal, status, COALESCE(baseline_id::text, ''), result_baseline_id::text, data, created_at, branch, namespace, COALESCE(parent_id::text, ''), owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats`
 
 func scanPGChangeHead(scan func(...any) error) (domain.Change, error) {
 	var c domain.Change
 	var result *string
-	var data, guardians, dependsOn []byte
-	if err := scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &c.CreatedAt, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State, &guardians, &dependsOn, &c.MethodologyVersion); err != nil {
+	var data, guardians, dependsOn, stats []byte
+	if err := scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &c.CreatedAt, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State, &guardians, &dependsOn, &c.MethodologyVersion, &stats); err != nil {
 		return c, err
 	}
 	c.ResultBaselineID, c.Data = domain.BaselineID(str(result)), props(data)
@@ -1033,7 +1050,10 @@ func scanPGChangeHead(scan func(...any) error) (domain.Change, error) {
 	if c.Guardians, err = guardiansOf(guardians); err != nil {
 		return c, err
 	}
-	c.DependsOn, err = dependsOnOf(dependsOn)
+	if c.DependsOn, err = dependsOnOf(dependsOn); err != nil {
+		return c, err
+	}
+	c.Stats, err = statsOf(stats)
 	return c, err
 }
 
@@ -1264,16 +1284,16 @@ func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 	delete(t.locked, c.ID)
 	// the header stored is the change's now, the transaction holding its lock (guardTx.PutChange): what it reads of it next
-	h, err := scanPGChangeHead(t.unheld().QueryRow(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+	h, err := scanPGChangeHead(t.unheld().QueryRow(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, intent = EXCLUDED.intent, goal = EXCLUDED.goal, status = EXCLUDED.status,
 		  result_baseline_id = EXCLUDED.result_baseline_id, data = EXCLUDED.data, baseline_id = EXCLUDED.baseline_id, branch = EXCLUDED.branch,
 		  lifecycle = EXCLUDED.lifecycle, state = EXCLUDED.state, project_id = EXCLUDED.project_id,
 		  parent_id = EXCLUDED.parent_id, guardians = EXCLUDED.guardians, depends_on = EXCLUDED.depends_on,
-		  methodology = EXCLUDED.methodology, methodology_version = EXCLUDED.methodology_version
+		  methodology = EXCLUDED.methodology, methodology_version = EXCLUDED.methodology_version, stats = EXCLUDED.stats
 		RETURNING `+pgChangeHead,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)), jsonb(c.Data), c.CreatedAt,
-		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, guardiansJSON(c.Guardians), dependsOnJSON(c.DependsOn), c.MethodologyVersion).Scan)
+		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, guardiansJSON(c.Guardians), dependsOnJSON(c.DependsOn), c.MethodologyVersion, statsJSON(c.Stats)).Scan)
 	if err != nil {
 		return mapErr(err, "change")
 	}
@@ -1458,11 +1478,11 @@ func (t *pgTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn d
 	if err != nil {
 		return err
 	}
-	_, err = t.tx.Exec(ctx, `INSERT INTO change_impact (id, change_id, node_id, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+	_, err = t.tx.Exec(ctx, `INSERT INTO change_impact (id, change_id, node_id, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded, effect)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 		ON CONFLICT (id) DO UPDATE SET node_id = $3, key = $4, type = $5, intent = $6, rationale = $7, pre_version = $8, post_version = $9, committed_version = $10,
-			review = $11, reviews = $12, via = $13, recheck = $14, produced_by = $15, derived_from = $16, items = $17, execution = $18, flow = $20, superseded = $21`,
-		r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Committed, r.Review, r.Reviews, nullUUID(r.Via), r.Recheck, r.ProducedBy, r.DerivedFrom, r.Items, r.Execution, cn.CreatedAt, r.Flow, r.Superseded)
+			review = $11, reviews = $12, via = $13, recheck = $14, produced_by = $15, derived_from = $16, items = $17, execution = $18, flow = $20, superseded = $21, effect = $22`,
+		r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Committed, r.Review, r.Reviews, nullUUID(r.Via), r.Recheck, r.ProducedBy, r.DerivedFrom, r.Items, r.Execution, cn.CreatedAt, r.Flow, r.Superseded, r.Effect)
 	return mapErr(err, "change impact "+cn.Key)
 }
 
@@ -1495,7 +1515,7 @@ func (t *pgTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]dom
 	for rows.Next() {
 		var r cnRow
 		var created time.Time
-		if err := rows.Scan(&r.ID, &r.NodeID, &r.Key, &r.Type, &r.Intent, &r.Rationale, &r.Pre, &r.Post, &r.Committed, &r.Review, &r.Reviews, &r.Via, &r.Recheck, &r.ProducedBy, &r.DerivedFrom, &r.Items, &r.Execution, &created, &r.Flow, &r.Superseded); err != nil {
+		if err := rows.Scan(&r.ID, &r.NodeID, &r.Key, &r.Type, &r.Intent, &r.Rationale, &r.Pre, &r.Post, &r.Committed, &r.Review, &r.Reviews, &r.Via, &r.Recheck, &r.ProducedBy, &r.DerivedFrom, &r.Items, &r.Execution, &created, &r.Flow, &r.Superseded, &r.Effect); err != nil {
 			return nil, err
 		}
 		cn, err := r.node()
