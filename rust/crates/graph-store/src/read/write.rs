@@ -478,8 +478,11 @@ impl WriteTx for Session {
     }
 
     async fn put_branch(&self, b: &Branch) -> Result<(), GraphError> {
-        self.tx
-            .wrote_branch(namespace_of(&b.namespace), graph_core::model::branch_of(&b.name));
+        self.tx.wrote_branch(
+            namespace_of(&b.namespace),
+            graph_core::model::branch_of(&b.name),
+            b.head.as_str(),
+        );
         let ex = if self.sql.pg { "EXCLUDED" } else { "excluded" };
         let ps: Vec<String> = (1..=13).map(|n| self.sql.ph(n)).collect();
         let q = format!(
@@ -509,6 +512,7 @@ impl WriteTx for Session {
 
     async fn put_baseline(&self, b: &Baseline) -> Result<(), GraphError> {
         self.tx.wrote_baseline(b.id.as_str());
+        self.tx.wrote_header(b);
         let q = self.insert("baseline", BASELINE_COLUMNS, "");
         let kind = if b.kind.is_empty() { BASELINE_SNAPSHOT } else { &b.kind };
         let args = vec![
@@ -684,7 +688,7 @@ impl WriteTx for Session {
     }
 
     async fn put_node(&self, n: &Node, committed: i64) -> Result<(), GraphError> {
-        self.tx.wrote(&n.node_ref());
+        self.wrote_version(n, committed);
         let s = self.sql;
         if n.version == 1 {
             let q = format!(
@@ -742,7 +746,7 @@ impl WriteTx for Session {
             return Ok(());
         }
         for (n, _) in ns {
-            self.tx.wrote(&n.node_ref());
+            self.wrote_version(n, committed);
         }
         let created: Vec<&Node> = ns.iter().map(|(n, _)| n).filter(|n| n.version == 1).collect();
         for rows in created.chunks(VERSION_ROWS_PER_INSERT) {
@@ -914,6 +918,7 @@ impl WriteTx for Session {
             Arg::Int(committed),
         ];
         self.run((q, args), &format!("node {r}")).await?;
+        self.joined(std::slice::from_ref(r), branch);
         Ok(())
     }
 
@@ -932,6 +937,7 @@ impl WriteTx for Session {
             &format!("{} nodes joining {branch}", refs.len()),
         )
         .await?;
+        self.joined(refs, branch);
         Ok(())
     }
 
@@ -1034,7 +1040,45 @@ impl WriteTx for Session {
     }
 }
 
+/// The version a commit gives a node on its branch as a selection reads it: 0 when it deletes the node,
+/// [`graph_core::store::REVERTED`] when it reverts it.
+fn selected(n: &Node) -> i32 {
+    if n.reason == graph_core::model::REASON_REVERT {
+        graph_core::store::REVERTED
+    } else if n.deleted {
+        0
+    } else {
+        n.version
+    }
+}
+
 impl Session {
+    /// A version the transaction writes: what it gives the head of its branch once it commits, the node of its key when
+    /// it creates it.
+    fn wrote_version(&self, n: &Node, committed: i64) {
+        self.tx.wrote(&n.node_ref());
+        self.tx.wrote_selected(n.node_ref(), selected(n));
+        if committed > 0 {
+            self.tx.moved_to(&n.branch, &n.id, Some(selected(n)));
+        }
+        if n.version == 1 {
+            self.tx.created(namespace_of(&n.namespace), &n.key, &n.id);
+        }
+    }
+
+    /// Versions joining a branch: what they give the head is known for the versions the transaction or the cache
+    /// holds.
+    fn joined(&self, refs: &[NodeRef], branch: &str) {
+        for r in refs {
+            let v = self
+                .tx
+                .selected_of(r)
+                .or_else(|| self.versions.written_selected(r))
+                .or_else(|| self.tx.node(r).or_else(|| self.versions.node(r)).as_ref().map(selected));
+            self.tx.moved_to(branch, &r.id, v);
+        }
+    }
+
     async fn purge_change(&self, id: &ChangeId, namespace: &str, branch: &str) -> Result<(), GraphError> {
         let s = self.sql;
         let p = s.ph(1);

@@ -326,6 +326,23 @@ pub struct BaselineEvent<'a> {
     pub removed: Vec<NodeId>,
     #[serde(with = "jsontext::time")]
     pub time: DateTime<Utc>,
+    /// `set` and `removed` are every node whose version changed since `parent`: a graph following the heads of its
+    /// branches moves what it keeps of them so.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub whole: bool,
+    /// The rest of the header: a graph keeping the head of the branch takes it as is.
+    #[serde(skip_serializing_if = "str::is_empty")]
+    pub name: &'a str,
+    #[serde(skip_serializing_if = "ChangeId::is_empty")]
+    pub change_id: &'a ChangeId,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    pub kind: &'a str,
+    #[serde(skip_serializing_if = "BaselineId::is_empty")]
+    pub merged_from: &'a BaselineId,
+    #[serde(skip_serializing_if = "BaselineId::is_empty")]
+    pub rebased_from: &'a BaselineId,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub seq: i64,
 }
 
 /// The branch of a baseline event.

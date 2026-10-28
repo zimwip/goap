@@ -177,10 +177,11 @@ type Graph struct {
 	Caches Caches
 	// headers caches the headers of baselines (ADR 0137, 0140).
 	headers *cache.Cache[domain.BaselineID, domain.Baseline]
-	// heads are the heads of the lasting branches read by the views, kept headAge (headHeader); headMarks count the
-	// commits of this graph that moved each branch
-	heads     *cache.Cache[string, keptHead]
-	headMarks headMarks
+	// heads are the heads of the lasting branches read by the views (heads.go), moved by the commits of this graph and
+	// the baseline events of the others; selections the versions of nodes at them, keyIDs the nodes of keys
+	heads      keptHeads
+	selections *cache.Cache[string, keptSel]
+	keyIDs     *cache.Cache[string, domain.NodeID]
 	// platformMoves counts the commits of this graph that wrote a branch of the platform namespace (Graph.Sources)
 	platformMoves atomic.Uint64
 	// foundRefs are the references to units and projects the guard found in this graph (guardTx.inStructure)

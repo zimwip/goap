@@ -191,13 +191,19 @@ func selectKey(ctx context.Context, tx Tx, at domain.BaselineID, key string) (do
 	if fork, err := gt.forkOf(ctx, b.Namespace, b.Branch); err != nil || fork != "" {
 		return "", 0, false, err
 	}
-	id, cv, decided, err := ks.CommittedAtKey(ctx, b.Namespace, b.Branch, b.Seq, key)
-	if err != nil || id == "" {
-		return "", 0, err == nil, err
-	}
-	v := cv.Version
-	if !decided || cv.Deleted {
-		v = 0
+	// the head kept in memory holds it (heads.go), else the store answers
+	id, v, kept := gt.g.keptSelection(b, key)
+	if !kept {
+		var cv CommittedVersion
+		var decided bool
+		if id, cv, decided, err = ks.CommittedAtKey(ctx, b.Namespace, b.Branch, b.Seq, key); err != nil || id == "" {
+			return "", 0, err == nil, err
+		}
+		v = cv.Version
+		if !decided || cv.Deleted {
+			v = 0
+		}
+		gt.g.keepSelection(b, key, id, v)
 	}
 	// what BaselineVersions answers of it next
 	if gt.baselineReads == nil {
@@ -359,7 +365,14 @@ func (t *guardTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 		return err
 	}
 	b.Nodes = nil
-	return t.Tx.PutBaseline(ctx, b)
+	if err := t.Tx.PutBaseline(ctx, b); err != nil {
+		return err
+	}
+	if t.wroteHeads == nil {
+		t.wroteHeads = map[domain.BaselineID]domain.Baseline{}
+	}
+	t.wroteHeads[b.ID] = b
+	return nil
 }
 
 func (t *guardTx) markNew(id domain.BaselineID) {

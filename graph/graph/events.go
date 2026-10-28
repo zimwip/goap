@@ -421,8 +421,13 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 		}
 	}
 	for _, b := range ot.baselines {
-		ev := domain.BaselineEvent{ID: b.ID, Namespace: domain.NamespaceOf(b.Namespace), Branch: domain.BranchOf(b.Branch), Parent: b.ParentID, Set: map[domain.NodeID]domain.Version{}, Time: b.CreatedAt}
+		ev := domain.BaselineEventOf(b)
+		ev.Set = map[domain.NodeID]domain.Version{}
+		if gt, ok := unwrapGuard(tx); ok && ev.Seq == 0 {
+			ev.Seq = gt.wroteHeads[b.ID].Seq // the order the guard gave it
+		}
 		if delta, ok := ot.deltas[b.ID]; ok {
+			ev.Whole = true
 			for _, id := range slices.Sorted(maps.Keys(delta)) {
 				if v := delta[id]; v == 0 {
 					ev.Removed = append(ev.Removed, id)
@@ -439,6 +444,7 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 			out = append(out, published{fmt.Sprintf(domain.SubjectBaselineAdvanced, subjectToken(ev.Branch)), ev})
 			continue
 		}
+		ev.Whole = true
 		var parent map[domain.NodeID]domain.Version
 		if b.ParentID != "" {
 			p, err := tx.Baseline(ctx, b.ParentID)

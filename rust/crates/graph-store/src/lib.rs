@@ -100,6 +100,27 @@ impl Store {
         self.versions().moved(namespace);
     }
 
+    /// A baseline event of a commit of another process (Go's `Graph.HeadEvent`): the head the store keeps of its branch
+    /// moves to the header it carries, the nodes it moved with it when `whole`. An event of a commit of this store
+    /// comes back once its head moved: left alone.
+    pub fn head_event(
+        &self,
+        head: &graph_core::model::Baseline,
+        moves: &std::collections::HashMap<graph_core::model::NodeId, i32>,
+        whole: bool,
+    ) {
+        if head.id.is_empty() || head.seq == 0 {
+            return; // an event of an older graph: the head is read again once it is no longer fresh
+        }
+        self.versions().head_moved(
+            graph_core::model::namespace_of(&head.namespace),
+            graph_core::model::branch_of(&head.branch),
+            head,
+            moves,
+            whole,
+        );
+    }
+
     /// Every namespace moved: an event the store could not read.
     pub fn moved_all(&self) {
         self.versions().moved_all();

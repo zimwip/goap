@@ -971,6 +971,13 @@ impl<'s, S: WriteTx> Tx<'s, S> {
                 set: BTreeMap::new(),
                 removed: Vec::new(),
                 time: b.created_at.unwrap_or_else(jsontext::zero_time),
+                whole: delta.is_some(),
+                name: &b.name,
+                change_id: &b.change_id,
+                kind: &b.kind,
+                merged_from: &b.merged_from,
+                rebased_from: &b.rebased_from,
+                seq: b.seq,
             };
             if let Some(delta) = &delta {
                 for (id, v) in delta {

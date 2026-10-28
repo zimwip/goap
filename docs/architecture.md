@@ -619,14 +619,26 @@ any other append drops the reservation, so entries keep their order. A statement
 the statement sent with it (`StoreError::Queued` in Rust). A statement carrying its own execution mode (`customPlan`)
 sends what is queued alone first. The rpc log line of the Rust graph counts the round trips (`trips=`).
 
-**Kept heads**: a view of a lasting branch with no baseline reads the branch's head header once a second at most
-(`Graph.headHeader`, `graph/graph/heads.go`, `headAge`; Rust `view_head`, `ReadTx::kept_head`, `HEAD_FRESH`), kept
-with the mark of the branch, which a commit of this graph moving it bumps (`guardTx.movedBranches`, Rust
-`moved_heads`): a head read after this graph's own commit is fresh, another process's commit is seen within the
-second; a transaction that moved a branch reads it again. On a branch with no fork, a node read by key in a view
-finds the node and its selected version in one statement (`keySelector.CommittedAtKey`, `selectKey`; Rust
-`ReadTx::node_at_key`, `KeyAt`), and `GetNode` reads the latest version of main first and keeps it when the view
-selects it (`world.stored`).
+**Kept heads**: the graph holds in memory the head of each lasting branch its views read, the way a change view
+follows its log (`graph/graph/heads.go`, `keptBranch`; Rust `Versions::head_moved`, `KeptBranch`). It is not read
+again but moved: by a commit of this graph once it commits (the guard notes the head each branch moves to, the
+baselines it wrote with their order, the version each node takes on each branch (a version joined whose deletion it
+does not know drops what is kept of its node) and the nodes of the keys it created, `guardTx.movedBranches` /
+`wroteHeads` / `headMoves` / `newKeys`; Rust `Read::head_moves`, `take_keys`), and by the baseline events of the other processes sharing the
+store (`Graph.FollowHeads` / `HeadEvent`, subscribed to `goap.baseline.*.advanced` by `platform/cmd/graph`; Rust
+`follow_moves`, `Store::head_event`), which carry the whole header (`BaselineEvent.Seq`, `Name`, `ChangeID`,
+`Kind`...) and, when `Whole`, every node whose version changed. A move whose parent is the head held moves it and the
+versions of the nodes kept with it; one told twice or older than the head held is left alone (an echo of this graph's
+own commit); one not following it leaves the head unknown, read at the next view; a transaction that moved a branch
+reads it in the transaction. A head is taken as known for `followedHeadAge` (30 s, `HEAD_FOLLOWED`) when the events are
+followed, a lost event caught up then, else `headAge` (1 s, `HEAD_FRESH`). The version of a node at the head is kept
+by branch and node with the epoch it was known in (`Graph.selections` / `keyIDs` bounded by `Caches.Heads`; Rust
+`Heads.selections`, `MAX_SELECTIONS`): a selection at a baseline never changes, a move with every node told carries
+it to the next head, any other starts an epoch. On a branch with no fork, a node read by key in a view finds the node
+and its version there (`keptSelection`), else in one statement (`keySelector.CommittedAtKey`, `selectKey`; Rust
+`ReadTx::node_at_key`, `KeyAt`), then kept; `GetNode` reads the latest version of main first and keeps it when the
+view selects it (`world.stored`). The access directory is apart: it follows the organisation of the platform graph,
+which may be another graph, by its own subscription (`access.Directory.FollowEvents`).
 
 **Reads a write skips**: a write locks its change before it reads anything (`changeTx`, the checkouts too), the root of
 a change it creates being kept at `PutChange` (`roots`), so the lock reads no root; a fact appended by the

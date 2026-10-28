@@ -37,8 +37,57 @@ struct Entry {
     tick: u64,
 }
 
-/// A head kept: the mark of its branch, when it was read, the header.
-type KeptHead = (u64, std::time::Instant, graph_core::model::Baseline);
+/// The head of a lasting branch kept in memory (Go's `keptBranch`): its header (none: unknown, read at the next view)
+/// and when it was last known to be it, the moves told (a head read from the store is kept only when none came while
+/// it was read), the epoch of the selection kept (a move whose nodes are not all told starts another).
+struct KeptBranch {
+    head: Option<graph_core::model::Baseline>,
+    at: Instant,
+    moves: u64,
+    epoch: u64,
+}
+
+/// The heads kept, the versions of nodes at them by branch and node with the epoch they were known in, the nodes of
+/// keys by namespace.
+#[derive(Default)]
+struct Heads {
+    branches: HashMap<(String, String), KeptBranch>,
+    /// What the versions the store committed give a selection (0: deleted, REVERTED): a version joining a branch
+    /// later moves its head so.
+    written: HashMap<NodeRef, i32>,
+    selections: HashMap<((String, String), graph_core::model::NodeId), (u64, i32)>,
+    keys: HashMap<(String, String), graph_core::model::NodeId>,
+}
+
+impl Heads {
+    fn branch(&mut self, namespace: &str, name: &str) -> &mut KeptBranch {
+        if self.branches.len() >= MAX_HEADS {
+            self.branches.clear();
+        }
+        self.branches
+            .entry((namespace.to_string(), name.to_string()))
+            .or_insert_with(|| KeptBranch {
+                head: None,
+                at: Instant::now(),
+                moves: 0,
+                epoch: 1,
+            })
+    }
+
+    fn keep_sel(&mut self, branch: &(String, String), id: &graph_core::model::NodeId, epoch: u64, v: i32) {
+        if self.selections.len() >= MAX_SELECTIONS {
+            self.selections.clear();
+        }
+        self.selections.insert((branch.clone(), id.clone()), (epoch, v));
+    }
+}
+
+/// A move of a node whose version the commit does not know (a version joined it did not read, Go's
+/// `unknownVersion`): what is kept of the node goes.
+pub(crate) const UNKNOWN_VERSION: i32 = -2;
+
+/// The number of node versions at the heads, and of keys, kept.
+const MAX_SELECTIONS: usize = 100_000;
 
 /// The versions kept between the transactions of a store, the least recently read evicted first.
 #[derive(Default)]
@@ -58,11 +107,9 @@ pub struct Versions {
     found: Mutex<HashSet<String>>,
     /// The headers of the baselines read: a baseline is written once and never deleted.
     headers: Mutex<HashMap<String, graph_core::model::Baseline>>,
-    /// The heads of the lasting branches the views read, by namespace and branch: the mark of the branch and when it
-    /// was read, kept [`HEAD_FRESH`] ([`graph_core::store::ReadTx::kept_head`]).
-    heads: Mutex<HashMap<(String, String), KeptHead>>,
-    /// Per namespace and branch, the commits of the store that moved it.
-    head_marks: Mutex<HashMap<(String, String), u64>>,
+    /// The heads of the lasting branches the views read, moved by the commits of the store and the baseline events
+    /// of the other processes, with the versions of nodes at them ([`Versions::head_moved`]).
+    heads: Mutex<Heads>,
     /// Whether a bus tells the moves of the other processes ([`Versions::follow_events`]).
     follows: std::sync::atomic::AtomicBool,
 }
@@ -95,9 +142,13 @@ pub(crate) struct KeptSnapshot {
 /// no bus (Go's `access.CommitAge`): a commit of another process is seen at most that late.
 pub(crate) const SNAPSHOT_FRESH: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// How long a view takes the head of a lasting branch as it was read (Go's `headAge`): a commit of this store moves it
-/// at once, one of another process within it.
+/// How long a view takes the head of a lasting branch as it was read with no bus (Go's `headAge`): a commit of this
+/// store moves it at once, one of another process within it.
 pub(crate) const HEAD_FRESH: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// The same with a bus telling the commits of the other processes (Go's `followedHeadAge`): a lost event is caught up
+/// then.
+pub(crate) const HEAD_FOLLOWED: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// The number of branch heads kept.
 const MAX_HEADS: usize = 1024;
@@ -196,50 +247,187 @@ fn size(r: &NodeRef, e: &Entry) -> usize {
 }
 
 impl Versions {
-    /// A branch of a namespace moved in another process: its marks move ([`Store::moved`](crate::Store::moved)).
-    /// Where the store stands in the commits of a branch.
+    /// Where the store stands in the moves of a branch told (Go's `keptBranch.gen`): a head read from the store is
+    /// kept only when no move came while it was read.
     pub fn head_mark(&self, namespace: &str, name: &str) -> u64 {
-        let m = self.head_marks.lock().unwrap_or_else(|e| e.into_inner());
-        m.get(&(namespace.to_string(), name.to_string()))
-            .copied()
-            .unwrap_or_default()
+        let mut h = self.heads.lock().unwrap_or_else(|e| e.into_inner());
+        h.branch(namespace, name).moves
     }
 
-    /// A head of a branch kept, read at the mark given and fresh at the time given.
-    pub fn kept_head(
-        &self,
-        namespace: &str,
-        name: &str,
-        mark: u64,
-        at: std::time::Instant,
-    ) -> Option<graph_core::model::Baseline> {
+    /// The head of a branch kept, known and fresh at the time given (Go's `headHeader`).
+    pub fn kept_head(&self, namespace: &str, name: &str, at: Instant) -> Option<graph_core::model::Baseline> {
+        let age = self.head_age();
         let h = self.heads.lock().unwrap_or_else(|e| e.into_inner());
-        h.get(&(namespace.to_string(), name.to_string()))
-            .filter(|(m, read, _)| *m == mark && at.saturating_duration_since(*read) < HEAD_FRESH)
-            .map(|(_, _, b)| b.clone())
+        h.branches
+            .get(&(namespace.to_string(), name.to_string()))
+            .and_then(|b| b.head.as_ref().map(|head| (b, head)))
+            .filter(|(b, _)| at.saturating_duration_since(b.at) < age)
+            .map(|(_, head)| head.clone())
     }
 
-    /// Keeps a head of a branch read at a mark, at a time.
-    pub fn keep_head(
+    /// Keeps a head of a branch read at a mark, at a time, when no move came since.
+    pub fn keep_head(&self, namespace: &str, name: &str, mark: u64, at: Instant, head: &graph_core::model::Baseline) {
+        if head.id.is_empty() {
+            return;
+        }
+        let mut h = self.heads.lock().unwrap_or_else(|e| e.into_inner());
+        let b = h.branch(namespace, name);
+        if b.moves != mark {
+            return;
+        }
+        if b.head.as_ref().is_none_or(|k| k.id != head.id) {
+            b.epoch += 1;
+        }
+        b.head = Some(head.clone());
+        b.at = at;
+    }
+
+    /// How long a head is taken as it was read: a commit of this store moves it at once, an event one of another
+    /// process; with no bus, another process's commit is seen within [`HEAD_FRESH`].
+    fn head_age(&self) -> Duration {
+        if self.follows.load(std::sync::atomic::Ordering::Relaxed) {
+            HEAD_FOLLOWED
+        } else {
+            HEAD_FRESH
+        }
+    }
+
+    /// Moves the kept head of a branch by a commit, of this store or told by an event (Go's `Graph.headMoved`): from
+    /// the head held to the commit's, the nodes it moved kept with their version (0: no longer held) when `whole`
+    /// says they are all there; a commit not following the head held leaves it unknown, one older than it is one
+    /// already applied.
+    pub fn head_moved(
         &self,
         namespace: &str,
         name: &str,
-        mark: u64,
-        at: std::time::Instant,
         head: &graph_core::model::Baseline,
+        moves: &HashMap<graph_core::model::NodeId, i32>,
+        whole: bool,
     ) {
         let mut h = self.heads.lock().unwrap_or_else(|e| e.into_inner());
-        if h.len() >= MAX_HEADS {
-            h.clear();
+        let key = (namespace.to_string(), name.to_string());
+        let Some(b) = h.branches.get_mut(&key) else {
+            return; // no view reads it: the next one reads its head
+        };
+        if let Some(k) = &b.head
+            && (k.id == head.id || head.seq <= k.seq)
+        {
+            return;
         }
-        h.insert((namespace.to_string(), name.to_string()), (mark, at, head.clone()));
+        b.moves += 1;
+        if b.head.as_ref().is_none_or(|k| k.id != head.parent_id) {
+            b.head = None;
+            b.epoch += 1;
+            return;
+        }
+        b.head = Some(head.clone());
+        b.at = Instant::now();
+        if !whole {
+            b.epoch += 1;
+            return;
+        }
+        let epoch = b.epoch;
+        for (id, v) in moves {
+            if *v == UNKNOWN_VERSION {
+                h.selections.remove(&(key.clone(), id.clone()));
+            } else {
+                h.keep_sel(&key, id, epoch, *v);
+            }
+        }
     }
 
-    /// The commits of the store that moved branches.
-    pub fn moved_heads(&self, branches: Vec<(String, String)>) {
-        let mut m = self.head_marks.lock().unwrap_or_else(|e| e.into_inner());
-        for b in branches {
-            *m.entry(b).or_default() += 1;
+    /// The node of a key and its version at the head of a branch, when the head held has that order and the store
+    /// keeps them (Go's `keptSelection`).
+    pub fn kept_selection(
+        &self,
+        namespace: &str,
+        name: &str,
+        up_to: i64,
+        key: &str,
+    ) -> Option<(graph_core::model::NodeId, i32)> {
+        let h = self.heads.lock().unwrap_or_else(|e| e.into_inner());
+        let id = h.keys.get(&(namespace.to_string(), key.to_string()))?.clone();
+        let bk = (namespace.to_string(), name.to_string());
+        let b = h.branches.get(&bk)?;
+        if b.head.as_ref()?.seq != up_to {
+            return None;
+        }
+        let (epoch, v) = h.selections.get(&(bk, id.clone()))?;
+        (*epoch == b.epoch).then_some((id, *v))
+    }
+
+    /// Keeps the node of a key and its version at a commit order of a branch read from the store, when it is the
+    /// order of the head held: a selection at a baseline never changes, what is kept of the head is moved with it.
+    pub fn keep_selection(
+        &self,
+        namespace: &str,
+        name: &str,
+        up_to: i64,
+        key: &str,
+        id: &graph_core::model::NodeId,
+        v: i32,
+    ) {
+        let mut h = self.heads.lock().unwrap_or_else(|e| e.into_inner());
+        if h.keys.len() >= MAX_SELECTIONS {
+            h.keys.clear();
+        }
+        h.keys.insert((namespace.to_string(), key.to_string()), id.clone());
+        let bk = (namespace.to_string(), name.to_string());
+        let Some(epoch) = h
+            .branches
+            .get(&bk)
+            .filter(|b| b.head.as_ref().is_some_and(|k| k.seq == up_to))
+            .map(|b| b.epoch)
+        else {
+            return;
+        };
+        h.keep_sel(&bk, id, epoch, v);
+    }
+
+    /// Makes the kept head of a branch unknown: read again at the next view (a transaction undid a savepoint, what it
+    /// moved is not known).
+    pub fn forget_head(&self, namespace: &str, name: &str) {
+        let mut h = self.heads.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(b) = h.branches.get_mut(&(namespace.to_string(), name.to_string())) {
+            b.moves += 1;
+            b.head = None;
+            b.epoch += 1;
+        }
+    }
+
+    /// What a version the store committed gives a selection, when known.
+    pub fn written_selected(&self, r: &NodeRef) -> Option<i32> {
+        self.heads
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .written
+            .get(r)
+            .copied()
+    }
+
+    /// The nodes of keys a commit of the store created, and what the versions it wrote give a selection.
+    pub fn keep_keys(&self, keys: Vec<((String, String), graph_core::model::NodeId)>, written: Vec<(NodeRef, i32)>) {
+        let mut h = self.heads.lock().unwrap_or_else(|e| e.into_inner());
+        if h.written.len() + written.len() >= MAX_SELECTIONS {
+            h.written.clear();
+        }
+        h.written.extend(written);
+        if keys.is_empty() {
+            return;
+        }
+        if h.keys.len() + keys.len() >= MAX_SELECTIONS {
+            h.keys.clear();
+        }
+        h.keys.extend(keys);
+    }
+
+    /// Drops what the store keeps of the heads' nodes (a purge deleted nodes).
+    fn forget_selections(&self) {
+        let mut h = self.heads.lock().unwrap_or_else(|e| e.into_inner());
+        h.keys.clear();
+        h.written.clear();
+        for b in h.branches.values_mut() {
+            b.epoch += 1;
         }
     }
 
@@ -281,6 +469,7 @@ impl Versions {
 
     /// Empties the cache: the reads in flight are not kept.
     pub fn reset(&self) {
+        self.forget_selections();
         let mut c = self.lock();
         c.era += 1;
         c.entries.clear();
@@ -466,8 +655,6 @@ pub struct Read {
     folds: Mutex<Vec<(String, std::sync::Arc<graph_core::write::work::KeptFold>)>>,
     /// The namespaces of the branches the transaction wrote.
     branches: Mutex<HashSet<String>>,
-    /// The branches the transaction wrote, by namespace and name.
-    named_branches: Mutex<HashSet<(String, String)>>,
     /// The branches the transaction read since its last lock or write of one: a lock may let another writer's move
     /// in, a write keeps columns of the row it does not name.
     branch_rows: Mutex<HashMap<(String, String), Option<graph_core::model::Branch>>>,
@@ -488,6 +675,15 @@ pub struct Read {
     origins: Mutex<Vec<NodeRef>>,
     /// The baselines the transaction wrote: not kept, they may roll back.
     baselines: Mutex<HashSet<String>>,
+    /// The heads of the branches it wrote, the baselines it wrote with their order, the versions it moved on each
+    /// branch by name (0: deleted, [`graph_core::store::REVERTED`]: reverted) and the branches one joined there is not
+    /// known of: the heads kept move once it commits (Go's `guardTx.movedBranches`, `wroteHeads`, `headMoves`).
+    branch_heads: Mutex<HashMap<(String, String), String>>,
+    wrote_heads: Mutex<HashMap<String, graph_core::model::Baseline>>,
+    moves: Mutex<HashMap<String, HashMap<graph_core::model::NodeId, i32>>>,
+    /// The nodes the transaction created, by namespace and key, and what the versions it wrote give a selection.
+    new_keys: Mutex<Vec<((String, String), graph_core::model::NodeId)>>,
+    written_sel: Mutex<HashMap<NodeRef, i32>>,
     /// Whether a savepoint was undone: what it appended is not known any more.
     undone: std::sync::atomic::AtomicBool,
     /// What the transaction read of the commits of a branch in a range of orders, by node (none: the range holds no
@@ -589,27 +785,105 @@ impl Read {
             .insert(change.to_string());
     }
 
-    /// A branch the transaction writes.
-    pub fn wrote_branch(&self, namespace: &str, name: &str) {
+    /// A baseline the transaction wrote, with its order.
+    pub fn wrote_header(&self, b: &graph_core::model::Baseline) {
+        self.wrote_heads
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(b.id.to_string(), b.clone());
+    }
+
+    /// The version a node has on a branch once the transaction commits (none: not known).
+    pub fn moved_to(&self, branch: &str, id: &graph_core::model::NodeId, v: Option<i32>) {
+        let name = graph_core::model::branch_of(branch).to_string();
+        self.moves
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(name)
+            .or_default()
+            .insert(id.clone(), v.unwrap_or(UNKNOWN_VERSION));
+    }
+
+    /// A node the transaction created.
+    pub fn created(&self, namespace: &str, key: &str, id: &graph_core::model::NodeId) {
+        self.new_keys
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(((namespace.to_string(), key.to_string()), id.clone()));
+    }
+
+    /// A version the transaction wrote and what it gives a selection.
+    pub fn wrote_selected(&self, r: NodeRef, v: i32) {
+        self.written_sel.lock().unwrap_or_else(|e| e.into_inner()).insert(r, v);
+    }
+
+    /// What a version the transaction wrote gives a selection.
+    pub fn selected_of(&self, r: &NodeRef) -> Option<i32> {
+        self.written_sel
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(r)
+            .copied()
+    }
+
+    /// The nodes the transaction created, and what the versions it wrote give a selection.
+    #[allow(clippy::type_complexity)]
+    pub fn take_keys(&self) -> (Vec<((String, String), graph_core::model::NodeId)>, Vec<(NodeRef, i32)>) {
+        (
+            std::mem::take(&mut *self.new_keys.lock().unwrap_or_else(|e| e.into_inner())),
+            std::mem::take(&mut *self.written_sel.lock().unwrap_or_else(|e| e.into_inner()))
+                .into_iter()
+                .collect(),
+        )
+    }
+
+    /// The moves of the heads of the branches the transaction wrote: namespace, branch, the new head, the versions
+    /// moved, whether they are all.
+    #[allow(clippy::type_complexity)]
+    pub fn head_moves(
+        &self,
+    ) -> Vec<(
+        String,
+        String,
+        graph_core::model::Baseline,
+        HashMap<graph_core::model::NodeId, i32>,
+        bool,
+    )> {
+        let heads = self.branch_heads.lock().unwrap_or_else(|e| e.into_inner());
+        let wrote = self.wrote_heads.lock().unwrap_or_else(|e| e.into_inner());
+        let moves = self.moves.lock().unwrap_or_else(|e| e.into_inner());
+        let undone = self.undone.load(std::sync::atomic::Ordering::Relaxed);
+        let mut out = Vec::new();
+        for ((ns, name), head) in heads.iter() {
+            let Some(b) = wrote.get(head).filter(|_| !undone) else {
+                // a savepoint undone: the head it names may be gone; else the branch kept its head
+                if undone {
+                    out.push((ns.clone(), name.clone(), Default::default(), HashMap::new(), false));
+                }
+                continue;
+            };
+            out.push((
+                ns.clone(),
+                name.clone(),
+                b.clone(),
+                moves.get(name).cloned().unwrap_or_default(),
+                true,
+            ));
+        }
+        out
+    }
+
+    /// A branch the transaction writes, and the head it moves it to.
+    pub fn wrote_branch(&self, namespace: &str, name: &str, head: &str) {
         self.branches
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(namespace.to_string());
-        self.named_branches
+        self.branch_heads
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .insert((namespace.to_string(), name.to_string()));
+            .insert((namespace.to_string(), name.to_string()), head.to_string());
         self.forget_branches();
-    }
-
-    /// The branches the transaction wrote, by namespace and name.
-    pub fn wrote_named_branches(&self) -> Vec<(String, String)> {
-        self.named_branches
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .iter()
-            .cloned()
-            .collect()
     }
 
     /// A branch the transaction read, when it reads it again.
@@ -692,6 +966,11 @@ impl Read {
     /// Whether the transaction wrote a baseline.
     pub fn wrote_baseline_of(&self, id: &str) -> bool {
         self.baselines.lock().unwrap_or_else(|e| e.into_inner()).contains(id)
+    }
+
+    /// Whether a savepoint was undone.
+    pub fn was_undone(&self) -> bool {
+        self.undone.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// A savepoint undone.
@@ -886,5 +1165,54 @@ mod tests {
         assert!(!t.fixed(&r(0)));
         t.wrote(&r(1));
         assert!(!t.fixed(&r(1)));
+    }
+
+    /// A head kept moves with the commits told: a commit following it moves it with the versions it moved, the others
+    /// kept; one told twice or older changes nothing; one not following it leaves it unknown (Go's `headMoved`).
+    #[test]
+    fn heads_move_with_commits() {
+        use graph_core::model::{Baseline, NodeId};
+        let v = Versions::default();
+        let b = |id: &str, parent: &str, seq: i64| Baseline {
+            id: id.into(),
+            parent_id: parent.into(),
+            seq,
+            namespace: "alm".into(),
+            branch: "main".into(),
+            ..Default::default()
+        };
+        let mark = v.head_mark("alm", "main");
+        let now = Instant::now();
+        v.keep_head("alm", "main", mark, now, &b("h1", "", 1));
+        assert_eq!(v.kept_head("alm", "main", now).map(|h| h.id), Some("h1".into()));
+        let (a, c): (NodeId, NodeId) = ("a".into(), "c".into());
+        v.keep_selection("alm", "main", 1, "A", &a, 1);
+        v.keep_selection("alm", "main", 1, "C", &c, 3);
+        assert_eq!(v.kept_selection("alm", "main", 1, "A"), Some((a.clone(), 1)));
+        // a read at a mark a move passed is not kept
+        let stale = v.head_mark("alm", "main");
+        v.head_moved("alm", "main", &b("h2", "h1", 2), &HashMap::from([(a.clone(), 2)]), true);
+        v.keep_head("alm", "main", stale, now, &b("h1", "", 1));
+        assert_eq!(
+            v.kept_head("alm", "main", Instant::now()).map(|h| h.id),
+            Some("h2".into())
+        );
+        assert_eq!(v.kept_selection("alm", "main", 2, "A"), Some((a.clone(), 2)));
+        assert_eq!(v.kept_selection("alm", "main", 2, "C"), Some((c.clone(), 3)));
+        assert_eq!(v.kept_selection("alm", "main", 1, "A"), None);
+        // told again, or older: nothing
+        v.head_moved("alm", "main", &b("h2", "h1", 2), &HashMap::from([(a.clone(), 9)]), true);
+        v.head_moved("alm", "main", &b("h0", "", 1), &HashMap::new(), true);
+        assert_eq!(v.kept_selection("alm", "main", 2, "A"), Some((a.clone(), 2)));
+        // not every node told: the head moves, what was kept of the nodes goes
+        v.head_moved("alm", "main", &b("h3", "h2", 3), &HashMap::new(), false);
+        assert_eq!(
+            v.kept_head("alm", "main", Instant::now()).map(|h| h.id),
+            Some("h3".into())
+        );
+        assert_eq!(v.kept_selection("alm", "main", 3, "C"), None);
+        // a gap: unknown
+        v.head_moved("alm", "main", &b("h5", "h4", 5), &HashMap::new(), true);
+        assert_eq!(v.kept_head("alm", "main", Instant::now()), None);
     }
 }

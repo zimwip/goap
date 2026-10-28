@@ -3,6 +3,7 @@ package main
 
 import (
 	"connectrpc.com/connect"
+	"encoding/json"
 
 	"context"
 	"fmt"
@@ -211,6 +212,17 @@ func main() {
 	}
 	directory := &access.Directory{Graph: source}
 	if events != nil {
+		// the heads of the branches this graph serves are kept in memory, moved by its commits and by the baseline
+		// events of the other processes sharing its store (each carries its header and the versions it moved)
+		g.FollowHeads()
+		if err := events.Subscribe(fmt.Sprintf(domain.SubjectBaselineAdvanced, "*"), func(data []byte) {
+			var ev domain.BaselineEvent
+			if json.Unmarshal(data, &ev) == nil {
+				g.HeadEvent(ev)
+			}
+		}); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
 		// read once, then again when the organisation moves; a lost event is caught up after access.FollowAge
 		if err := directory.FollowEvents(events); err != nil {
 			platform.Fatal(log, "subscribe", err)

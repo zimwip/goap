@@ -61,6 +61,28 @@ type BaselineEvent struct {
 	Set       map[NodeID]Version `json:"set,omitempty"`
 	Removed   []NodeID           `json:"removed,omitempty"`
 	Time      time.Time          `json:"time"`
+	// Whole says Set and Removed are every node whose version changed since Parent (the baseline of another branch
+	// than main may name itself only); a graph following the heads of its branches moves what it keeps of them so.
+	Whole bool `json:"whole,omitempty"`
+	// The rest of the header of the baseline: a graph keeping the head of the branch takes it as is (Header).
+	Name        string     `json:"name,omitempty"`
+	ChangeID    ChangeID   `json:"changeId,omitempty"`
+	Kind        string     `json:"kind,omitempty"`
+	MergedFrom  BaselineID `json:"mergedFrom,omitempty"`
+	RebasedFrom BaselineID `json:"rebasedFrom,omitempty"`
+	Seq         int64      `json:"seq,omitempty"`
+}
+
+// BaselineEventOf is the event of a baseline header, with no node yet.
+func BaselineEventOf(b Baseline) BaselineEvent {
+	return BaselineEvent{ID: b.ID, Namespace: NamespaceOf(b.Namespace), Branch: BranchOf(b.Branch), Parent: b.ParentID, Time: b.CreatedAt,
+		Name: b.Name, ChangeID: b.ChangeID, Kind: b.Kind, MergedFrom: b.MergedFrom, RebasedFrom: b.RebasedFrom, Seq: b.Seq}
+}
+
+// Header is the header of the baseline the event tells.
+func (e BaselineEvent) Header() Baseline {
+	return Baseline{ID: e.ID, Name: e.Name, Namespace: e.Namespace, Branch: e.Branch, ParentID: e.Parent, MergedFrom: e.MergedFrom,
+		RebasedFrom: e.RebasedFrom, ChangeID: e.ChangeID, Kind: e.Kind, Seq: e.Seq, CreatedAt: e.Time}
 }
 
 // ChangeDocEvent is what the index needs to know of a change (ADR 0095): the header fields it searches and filters on

@@ -202,30 +202,88 @@ async fn serve() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Follows the moves of the other processes (Go's `Directory.FollowEvents`): a commit on main of a namespace, the
-/// organisation's among them, makes what the store keeps of its head checked again at its next read.
+/// Follows the moves of the other processes (Go's `Directory.FollowEvents` and `Graph.HeadEvent`): a commit on main of
+/// a namespace, the organisation's among them, makes what the store keeps of its snapshot checked again at its next
+/// read; a commit on a lasting branch moves the head the store keeps of it to the header its event carries, with the
+/// versions it moved.
 async fn follow_moves(bus: &Option<async_nats::Client>, state: &Arc<State>) -> anyhow::Result<()> {
     let Some(client) = bus else {
         return Ok(());
     };
     let mut sub = client
-        .subscribe("goap.baseline.main.advanced")
+        .subscribe("goap.baseline.*.advanced")
         .await
         .context("subscribe")?;
     state.store.follow_events();
     let state = state.clone();
     tokio::spawn(async move {
         #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
         struct Moved {
             #[serde(default)]
+            id: String,
+            #[serde(default)]
             namespace: String,
+            #[serde(default)]
+            branch: String,
+            #[serde(default)]
+            parent: String,
+            #[serde(default)]
+            set: std::collections::HashMap<String, i32>,
+            #[serde(default)]
+            removed: Vec<String>,
+            #[serde(default)]
+            time: Option<chrono::DateTime<chrono::Utc>>,
+            #[serde(default)]
+            whole: bool,
+            #[serde(default)]
+            name: String,
+            #[serde(default)]
+            change_id: String,
+            #[serde(default)]
+            kind: String,
+            #[serde(default)]
+            merged_from: String,
+            #[serde(default)]
+            rebased_from: String,
+            #[serde(default)]
+            seq: i64,
         }
         while let Some(msg) = futures::StreamExt::next(&mut sub).await {
-            match serde_json::from_slice::<Moved>(&msg.payload) {
-                Ok(m) if !m.namespace.is_empty() => state.store.moved(&m.namespace),
-                // unreadable, or naming no namespace: every head is checked again rather than miss a change
-                _ => state.store.moved_all(),
+            let main = msg.subject.as_str() == "goap.baseline.main.advanced";
+            let Ok(m) = serde_json::from_slice::<Moved>(&msg.payload) else {
+                if main {
+                    // unreadable: every head is checked again rather than miss a change
+                    state.store.moved_all();
+                }
+                continue;
+            };
+            if main {
+                if m.namespace.is_empty() {
+                    state.store.moved_all();
+                } else {
+                    state.store.moved(&m.namespace);
+                }
             }
+            let mut moves: std::collections::HashMap<graph_core::model::NodeId, i32> =
+                m.set.into_iter().map(|(id, v)| (id.into(), v)).collect();
+            for id in m.removed {
+                moves.insert(id.into(), 0);
+            }
+            let head = graph_core::model::Baseline {
+                id: m.id.into(),
+                name: m.name,
+                parent_id: m.parent.into(),
+                merged_from: m.merged_from.into(),
+                change_id: m.change_id.into(),
+                created_at: m.time,
+                branch: m.branch,
+                namespace: m.namespace,
+                kind: m.kind,
+                rebased_from: m.rebased_from.into(),
+                seq: m.seq,
+            };
+            state.store.head_event(&head, &moves, m.whole);
         }
     });
     Ok(())

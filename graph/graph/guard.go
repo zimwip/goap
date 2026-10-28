@@ -48,13 +48,21 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	})
 	if gt != nil && gt.purged {
 		r.g.versions.reset() // what the transaction deleted may have been read meanwhile
+		r.g.forgetSelections()
 	}
 	if err == nil {
 		for ref := range gt.origins {
 			r.g.versions.forgetNode(ref)
 		}
-		for k := range gt.movedBranches {
-			r.g.headMarks.move(k)
+		// the heads kept of the branches it moved move with it, the nodes of the keys it created known (heads.go)
+		for k, id := range gt.newKeys {
+			r.g.keyIDs.Put(k, id)
+		}
+		for k, head := range gt.movedBranches {
+			if h, ok := gt.wroteHeads[head]; ok {
+				name := domain.BranchOf(h.Branch)
+				r.g.headMoved(k, headMove{head: h, moves: gt.headMoves[name], whole: true})
+			}
 		}
 		for ns := range gt.moved {
 			if ns == domain.NamespacePlatform {
@@ -103,9 +111,14 @@ type guardTx struct {
 	// moved are the namespaces a branch of which the transaction wrote (Graph.Sources and OnBranchMoved, once it
 	// commits)
 	moved map[string]bool
-	// movedBranches are the branches the transaction wrote (guardBranchKey): the heads kept of them are read again
-	// once it commits (headHeader)
-	movedBranches map[string]bool
+	// movedBranches are the branches the transaction wrote (guardBranchKey) and their heads: the heads kept of them
+	// move once it commits (headMoved), with the baselines it wrote (wroteHeads, their order set) and the versions it
+	// moved on each branch by name (headMoves, 0: a version deleted, unknownVersion: one joined it did not read), the
+	// nodes it created by namespace and key (newKeys)
+	movedBranches map[string]domain.BaselineID
+	wroteHeads    map[domain.BaselineID]domain.Baseline
+	headMoves     map[string]map[domain.NodeID]domain.Version
+	newKeys       map[string]domain.NodeID
 	// what the transaction wrote that names a change, a unit or a project, checked at its end
 	changeRefs map[domain.ChangeID]string
 	owners     map[lnk.URL]string
@@ -206,9 +219,9 @@ func (t *guardTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	}
 	t.moved[domain.NamespaceOf(b.Namespace)] = true
 	if t.movedBranches == nil {
-		t.movedBranches = map[string]bool{}
+		t.movedBranches = map[string]domain.BaselineID{}
 	}
-	t.movedBranches[guardBranchKey(b.Namespace, b.Name)] = true
+	t.movedBranches[guardBranchKey(b.Namespace, b.Name)] = b.Head
 	return t.Tx.PutBranch(ctx, b)
 }
 
@@ -704,6 +717,19 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	if err := t.Tx.PutNode(ctx, n); err != nil {
 		return err
 	}
+	if n.Version == 1 {
+		if t.newKeys == nil {
+			t.newKeys = map[string]domain.NodeID{}
+		}
+		t.newKeys[nsKey(n.Namespace, n.Key)] = n.ID
+	}
+	if n.Committed > 0 {
+		v := n.Version
+		if n.Deleted {
+			v = 0
+		}
+		t.headMove(n.Branch, n.ID, v)
+	}
 	if t.written == nil {
 		t.written = map[domain.NodeRef]bool{}
 	}
@@ -775,7 +801,34 @@ func (t *guardTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch str
 		return err
 	}
 	t.forgetLatest(ref.ID)
-	return t.Tx.JoinBranch(ctx, ref, branch, change, committed)
+	if err := t.Tx.JoinBranch(ctx, ref, branch, change, committed); err != nil {
+		return err
+	}
+	n, ok := t.nodes[ref]
+	if !ok {
+		n, ok = t.g.versions.node(ref)
+	}
+	switch {
+	case !ok:
+		t.headMove(branch, ref.ID, unknownVersion)
+	case n.Deleted:
+		t.headMove(branch, ref.ID, 0)
+	default:
+		t.headMove(branch, ref.ID, ref.Version)
+	}
+	return nil
+}
+
+// headMove notes the version a node has on a branch once the transaction commits (0: deleted there).
+func (t *guardTx) headMove(branch string, id domain.NodeID, v domain.Version) {
+	name := domain.BranchOf(branch)
+	if t.headMoves == nil {
+		t.headMoves = map[string]map[domain.NodeID]domain.Version{}
+	}
+	if t.headMoves[name] == nil {
+		t.headMoves[name] = map[domain.NodeID]domain.Version{}
+	}
+	t.headMoves[name][id] = v
 }
 
 func (t *guardTx) PutChange(ctx context.Context, c domain.Change) error {

@@ -206,7 +206,18 @@ impl Session {
         self.write_held().await?;
         let res = self.commit_conn().await;
         if res.is_ok() {
-            self.versions.moved_heads(self.tx.wrote_named_branches());
+            // the heads kept of the branches it moved move with it, the nodes of the keys it created known
+            if !self.tx.was_undone() {
+                let (keys, written) = self.tx.take_keys();
+                self.versions.keep_keys(keys, written);
+            }
+            for (ns, name, head, moves, whole) in self.tx.head_moves() {
+                if head.id.is_empty() {
+                    self.versions.forget_head(&ns, &name);
+                } else {
+                    self.versions.head_moved(&ns, &name, &head, &moves, whole);
+                }
+            }
             let moved = self.tx.wrote_branches();
             if !moved.is_empty() {
                 let mut m = self.versions.branch_moves.lock().unwrap_or_else(|e| e.into_inner());
@@ -838,7 +849,7 @@ impl ReadTx for Session {
             graph_core::model::namespace_of(namespace),
             graph_core::model::branch_of(name),
         );
-        self.versions.kept_head(ns, name, mark.mark, mark.at)
+        self.versions.kept_head(ns, name, mark.at)
     }
 
     fn keep_head(
@@ -865,6 +876,14 @@ impl ReadTx for Session {
         use graph_core::store::KeyAt;
         if !self.sql.pg {
             return Ok(KeyAt::Unread);
+        }
+        let (ns, name) = (
+            graph_core::model::namespace_of(namespace),
+            graph_core::model::branch_of(branch),
+        );
+        // the head kept in memory holds it (Go's keptSelection), else the store answers
+        if let Some((id, v)) = self.versions.kept_selection(ns, name, up_to, key) {
+            return Ok(KeyAt::Node(id, Some(v)));
         }
         // Go's CommittedAtKey: sqlFoldVersions for the node of the key, found by its key in the same statement
         let q = "WITH x AS MATERIALIZED (
@@ -896,6 +915,7 @@ impl ReadTx for Session {
         };
         let id = NodeId(r.text(0));
         if r.is_null(1) {
+            self.versions.keep_selection(ns, name, up_to, key, &id, 0);
             return Ok(KeyAt::Node(id, None));
         }
         let v = match (r.bool(2), r.text(3) == REASON_REVERT) {
@@ -903,6 +923,7 @@ impl ReadTx for Session {
             (true, false) => 0,
             (false, false) => r.int32(1),
         };
+        self.versions.keep_selection(ns, name, up_to, key, &id, v);
         Ok(KeyAt::Node(id, Some(v)))
     }
 
