@@ -386,6 +386,41 @@ func (t *guardTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change
 	return c, nil
 }
 
+// openChange reads a change as Change does, its impacts shared with the view of the change rather than copied: what an
+// operation of the graph reads before it writes (changeOpen), never handed to a caller of the graph, which may edit
+// them. The view's values are replaced, never edited, and the transaction's own view, frozen, is copied before its
+// next write, which clones them (draftState.own). A store that reads its changes whole gives its copy.
+func (t *guardTx) openChange(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
+	if _, ok := t.Tx.(changeHeaderReader); !ok {
+		return t.Change(ctx, id)
+	}
+	c, ok := t.heads[id]
+	if !ok {
+		var err error
+		if c, err = t.Tx.ChangeHead(ctx, id); err != nil {
+			return c, err
+		}
+		if t.heads == nil {
+			t.heads = map[domain.ChangeID]domain.Change{}
+		}
+		t.heads[id] = c
+	}
+	st, err := t.g.draftState(ctx, t, id)
+	if err != nil {
+		return c, err
+	}
+	if ownDrafts(t, id) == st {
+		st.frozen = true
+	}
+	c.Data = maps.Clone(c.Data)
+	c.Guardians = slices.Clone(c.Guardians)
+	c.DependsOn = slices.Clone(c.DependsOn)
+	c.Items = slices.Clip(st.items)
+	c.Nodes = slices.Clip(st.impacts)
+	c.Seq = st.seq
+	return c, nil
+}
+
 // knowHeads gives the transaction the headers of changes read in one statement (a page of a listing), so that reading
 // those changes reads their logs only. A store that reads its changes whole (no changeHeader) ignores them.
 func (t *guardTx) knowHeads(cs []domain.Change) {

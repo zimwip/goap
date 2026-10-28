@@ -29,7 +29,13 @@ func changeOpen(ctx context.Context, tx Tx, id domain.ChangeID) (domain.Change, 
 	if err := tx.LockChange(ctx, id); err != nil {
 		return domain.Change{}, err
 	}
-	c, err := tx.Change(ctx, id)
+	read := tx.Change
+	if o, ok := tx.(interface {
+		openChange(context.Context, domain.ChangeID) (domain.Change, error)
+	}); ok {
+		read = o.openChange // its impacts and items shared with the view of the change: read, never edited
+	}
+	c, err := read(ctx, id)
 	if err != nil {
 		return c, err
 	}
@@ -352,6 +358,8 @@ func (g *Graph) newReviewScope(ctx context.Context, tx Tx, id domain.ChangeID) (
 	if err != nil {
 		return nil, err
 	}
+	// verdict records the verdicts in them: copies of the change's (shared with its view, changeOpen)
+	w.c.Nodes, w.seen = slices.Clone(w.c.Nodes), slices.Clone(w.seen)
 	s := &reviewScope{c: w.c, seen: w.seen, ix: w.ix, at: make(map[domain.ChangeImpactID]int, len(w.c.Nodes)), seenAt: make(map[domain.ChangeImpactID]int, len(w.seen))}
 	for i, cn := range s.c.Nodes {
 		s.at[cn.ID] = i

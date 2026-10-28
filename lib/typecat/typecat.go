@@ -120,6 +120,8 @@ type Catalog struct {
 	structures map[string]domain.Structure
 	// items are the types of change item the domains declare (ADR 0128), by name.
 	items map[string]*ItemType
+	// sets are the structures with their types (Structures), resolved at their first read: the catalogue never changes
+	sets atomic.Pointer[domain.Structures]
 }
 
 // ItemType is the resolved model of a type of change item a domain declares (ADR 0128).
@@ -292,8 +294,12 @@ func (c *Catalog) structureKinds() []string {
 }
 
 // Structures returns every structure the domains declare with the types belonging to each (the tagged type and its
-// subtypes), by kind, the types sorted.
+// subtypes), by kind, the types sorted. Resolved once (the catalogue never changes); the lists of types are shared:
+// read them, never edit them.
 func (c *Catalog) Structures() domain.Structures {
+	if sets := c.sets.Load(); sets != nil {
+		return slices.Clone(*sets)
+	}
 	var out domain.Structures
 	for _, kind := range c.structureKinds() {
 		set := domain.StructureSet{Structure: c.structures[kind]}
@@ -305,7 +311,8 @@ func (c *Catalog) Structures() domain.Structures {
 		slices.Sort(set.Types)
 		out = append(out, set)
 	}
-	return out
+	c.sets.Store(&out)
+	return slices.Clone(out)
 }
 
 func mustRef(s string) domain.TypeRef {
