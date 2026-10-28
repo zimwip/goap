@@ -42,11 +42,17 @@ import (
 	"github.com/zimwip/goap/platform/modelgw"
 )
 
+// registryTimeout bounds a read of the domain registry at start.
+const registryTimeout = 10 * time.Second
+
 // loadTypes loads the type catalogue until it holds the domains the seeds write to, then runs the seeds: tried at
 // once, then again when the domain registry announces it serves or publishes a domain (ADR 0169), else after a delay.
 func loadTypes(ctx context.Context, log *slog.Logger, events *platform.Events, types *typecat.Live, invalidate func(), need []string, seed func()) {
 	err := events.Await(ctx, []string{platform.ReadyDomains, "goap.registry.domain.published"}, func(ctx context.Context) error {
 		invalidate() // what the client kept says nothing of the registry now
+		// a registry that does not answer is one that is not there: the announcement brings the next try
+		ctx, cancel := context.WithTimeout(ctx, registryTimeout)
+		defer cancel()
 		if err := types.Reload(ctx); err != nil {
 			return err
 		}
@@ -162,8 +168,8 @@ func main() {
 	}
 	outbox.Start(ctx, g.Observe(outbox.NATS(events)), log)
 	// the graph judges nodes by the types of the published domains (ADR 0012), read from the domain registry, a service
-	// of its own (ADR 0167): at start (loadTypes), then again on its events (a version published or archived); with no
-	// bus, every minute
+	// of its own (ADR 0167): at start (loadTypes), then again on its events (a version published or archived, the
+	// registry announcing it serves again); with no bus, every minute. The requests read the catalogue kept meanwhile
 	client := domainclient.NewClient(platform.H2CClient(), platform.Env("GOAP_DOMAINS_URL", "http://localhost:8096"), telemetry.ClientOptions()...)
 	types := typecat.NewLive(client.Domains)
 	reload := func() {
@@ -178,6 +184,9 @@ func main() {
 			if err := events.Subscribe(subject, func([]byte) { reload() }); err != nil {
 				platform.Fatal(log, "subscribe", err)
 			}
+		}
+		if err := events.Subscribe(platform.ReadyDomains, func([]byte) { reload() }); err != nil {
+			platform.Fatal(log, "subscribe", err)
 		}
 	} else {
 		go func() {

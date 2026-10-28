@@ -44,7 +44,9 @@ wants to ship a new version of `organisation`, or freeze a domain of its own, ha
 4. **A graph is a client of the registry** (`GOAP_DOMAINS_URL`, default `http://localhost:8096`): it waits at its start
    until the registry holds the built-in domains (`loadTypes`, Rust `Registry::wait_for_builtins`), builds its catalogue
    from the domains in force (`typecat.NewLive` over `domainclient`, Rust `platform::Registry`), then reads them again
-   on the registry's events (`goap.registry.domain.published|deleted`), else after a TTL. A typed graph asks only its
+   on the registry's events (`goap.registry.domain.published|deleted`, and `service.ready.domains` for a registry
+   started again; with no bus, every minute). The requests read the catalogue kept meanwhile, never the registry: a
+   registry gone or slow leaves the graph serving with the domains it read. A typed graph asks only its
    catalogue for structures, required links and `adminOnly` (`graphapi.ValidatorQuery.Structures`): no fallback to the
    compiled-in domains; the untyped graph of the tests keeps `typecat.Builtin()`. The Rust sessions carry the catalogue
    (`Session::with_catalog`, `ReadTx::catalog`, `access::catalog_of`). The content graph reads its domains from the

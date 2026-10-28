@@ -1,13 +1,10 @@
 //! What a graph reads from the other services (ADR 0154 §9, ADR 0167): the domain registry ([`Registry`], a service of
 //! its own at `GOAP_DOMAINS_URL`) gives the domains of every graph; in a content graph (`GOAP_GRAPH_SPACE=content` of
 //! `platform/cmd/graph`) the platform graph ([`Remote`]) gives the organisation and the projects its changes and
-//! versions are placed in, the roles of the methodologies of its changes. The domains are read again after
-//! [`DOMAINS_TTL`] or when a domain event says one moved; the namespaces of the platform at each request, read again
-//! only when their head moved.
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+//! versions are placed in, the roles of the methodologies of its changes. The domains are kept as read, and read again
+//! when a domain event says one moved; the namespaces of the platform at each request, read again only when their head
+//! moved.
+use std::{sync::Arc, time::Duration};
 
 use goap_connect::{ConnectError, Ctx, Request};
 use goap_proto::graph::v1::{self as pb, GraphService as _};
@@ -27,8 +24,12 @@ use graph_core::{
 };
 use tokio::sync::Mutex;
 
-/// How long the domains read are kept when no event says they moved (`domainclient.DefaultTTL`).
-pub const DOMAINS_TTL: Duration = Duration::from_secs(30);
+/// How long a read of the domain registry may take: a registry that does not answer is one that is not there.
+pub const REGISTRY_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The longest delay between two tries of [`Registry::wait_for_builtins`] (Go's `platform.AwaitMaxDelay`): the
+/// fallback of an announcement lost.
+pub const AWAIT_MAX_DELAY: Duration = Duration::from_secs(30);
 
 /// The subject a graph calls the other services as (`graphclient.ClientPrincipal`).
 const CLIENT_SUBJECT: &str = "system:client";
@@ -41,16 +42,19 @@ pub(crate) fn client(url: &str) -> goap_connect::Client {
         .build()
 }
 
-/// The domain registry at `GOAP_DOMAINS_URL` (ADR 0167): the domains in force, the built-in ones included.
+/// The domain registry at `GOAP_DOMAINS_URL` (ADR 0167): the domains in force, the built-in ones included. What it
+/// read is kept until [`Registry::reload`] (a domain event, ADR 0169): a request never waits for the registry once the
+/// domains were read, nor fails when the registry is gone.
 pub struct Registry {
     domains: registrypb::DomainServiceClient,
-    /// what was read last: when, the versions in force, their catalogue and their definitions
+    /// what was read last: the versions in force, their catalogue and their definitions
     catalog: Mutex<Option<Read>>,
+    /// one read of the registry at a time, so an older answer never replaces a newer one
+    reading: Mutex<()>,
 }
 
 /// What a registry answered.
 struct Read {
-    at: Instant,
     versions: String,
     catalog: Arc<Catalog>,
     domains: Arc<Vec<Domain>>,
@@ -61,73 +65,102 @@ impl Registry {
         Registry {
             domains: registrypb::DomainServiceClient::new(client(url)),
             catalog: Mutex::new(None),
+            reading: Mutex::new(()),
         }
-    }
-
-    /// Forgets the domains read: the next request reads the registry again (a domain event).
-    pub async fn invalidate(&self) {
-        *self.catalog.lock().await = None;
     }
 
     /// Waits until the registry holds the built-in domains (Go's `loadTypes` at start): a graph with no domains types
-    /// nothing. Tried at once, then again when a message reaches `wake` (the registry announcing it serves,
-    /// `service.ready.domains`, ADR 0169), else after a second; `attempts` times.
-    pub async fn wait_for_builtins(
-        &self,
-        attempts: usize,
-        mut wake: Option<&mut async_nats::Subscriber>,
-    ) -> Result<Arc<Catalog>, GraphError> {
-        let mut last = GraphError::internal("domain registry: no built-in domain");
-        for _ in 0..attempts.max(1) {
-            match self
-                .catalog(Arc::new(Catalog::of(&[]).map_err(GraphError::internal)?))
-                .await
-            {
-                Ok(c) if BUILTIN_NAMES.iter().all(|n| c.domains().contains_key(*n)) => return Ok(c),
-                Ok(_) => {
-                    self.invalidate().await;
-                    last = GraphError::internal(format!(
+    /// nothing. Tried at once, then again as soon as a message reaches `wake` (the registry announcing it serves,
+    /// `service.ready.domains`, or publishing a domain, ADR 0169), else after a delay doubling from a second up to
+    /// [`AWAIT_MAX_DELAY`]; for as long as it takes.
+    pub async fn wait_for_builtins<S>(&self, mut wake: Option<&mut S>) -> Result<Arc<Catalog>, GraphError>
+    where
+        S: futures::Stream + Unpin,
+    {
+        let mut delay = Duration::from_secs(1);
+        loop {
+            let err = match self.reload().await {
+                Ok(()) => match self.read().await {
+                    Some(r) if BUILTIN_NAMES.iter().all(|n| r.0.domains().contains_key(*n)) => return Ok(r.0),
+                    _ => GraphError::internal(format!(
                         "domain registry: the built-in domains ({}) are not published",
                         BUILTIN_NAMES.join(", ")
-                    ));
-                }
-                Err(e) => last = e,
-            }
-            tracing::info!(err = %last.message, "waiting for the domain registry");
-            let delay = tokio::time::sleep(Duration::from_secs(1));
+                    )),
+                },
+                Err(e) => e,
+            };
+            tracing::info!(err = %err.message, retry = ?delay, "waiting for the domain registry");
+            let sleep = tokio::time::sleep(delay);
+            delay = (delay * 2).min(AWAIT_MAX_DELAY);
             match wake.as_deref_mut() {
                 Some(sub) => {
                     tokio::select! {
-                        _ = delay => {}
-                        _ = futures::StreamExt::next(sub) => self.invalidate().await,
+                        _ = sleep => {}
+                        // the registry is there now: a failure again is retried soon
+                        _ = futures::StreamExt::next(sub) => delay = Duration::from_millis(500),
                     }
                 }
-                None => delay.await,
+                None => sleep.await,
             }
         }
-        Err(last)
     }
 
     /// The type catalogue of the domains in force in the registry (`typecat.Live` over a `domainclient`): built again
     /// when the versions in force changed; domains that make no catalogue leave the previous one (else `current`).
     pub async fn catalog(&self, current: Arc<Catalog>) -> Result<Arc<Catalog>, GraphError> {
-        Ok(self.read().await?.map(|r| r.0).unwrap_or(current))
+        Ok(self.kept().await?.map(|r| r.0).unwrap_or(current))
     }
 
     /// The definitions of the domains in force (`domainclient.Client.Domains`).
     pub async fn domains(&self) -> Result<Arc<Vec<Domain>>, GraphError> {
-        Ok(self.read().await?.map(|r| r.1).unwrap_or_default())
+        Ok(self.kept().await?.map(|r| r.1).unwrap_or_default())
     }
 
-    /// The catalogue and the domains in force, read again after [`DOMAINS_TTL`] or an invalidation; none while no
-    /// read made a catalogue.
-    async fn read(&self) -> Result<Option<(Arc<Catalog>, Arc<Vec<Domain>>)>, GraphError> {
-        let mut cur = self.catalog.lock().await;
-        if let Some(r) = cur.as_ref()
-            && r.at.elapsed() < DOMAINS_TTL
-        {
-            return Ok(Some((r.catalog.clone(), r.domains.clone())));
+    /// What was read, else the registry read now (a graph that has read nothing yet).
+    async fn kept(&self) -> Result<Option<(Arc<Catalog>, Arc<Vec<Domain>>)>, GraphError> {
+        if let Some(r) = self.read().await {
+            return Ok(Some(r));
         }
+        self.reload().await?;
+        Ok(self.read().await)
+    }
+
+    async fn read(&self) -> Option<(Arc<Catalog>, Arc<Vec<Domain>>)> {
+        self.catalog
+            .lock()
+            .await
+            .as_ref()
+            .map(|r| (r.catalog.clone(), r.domains.clone()))
+    }
+
+    /// Reads the registry again (a domain event, Go's `reload`): the domains in force replace what was kept when they
+    /// make a catalogue; a registry that does not answer, or domains that make no catalogue, leave it as it was. The
+    /// requests keep being served from what was kept meanwhile.
+    pub async fn reload(&self) -> Result<(), GraphError> {
+        let _one = self.reading.lock().await;
+        let known = self
+            .catalog
+            .lock()
+            .await
+            .as_ref()
+            .map(|r| (r.versions.clone(), r.catalog.clone(), r.domains.clone()));
+        let read = tokio::time::timeout(REGISTRY_TIMEOUT, self.fetch(known))
+            .await
+            .map_err(|_| {
+                GraphError::internal(format!(
+                    "domain registry: no answer within {}s",
+                    REGISTRY_TIMEOUT.as_secs()
+                ))
+            })??;
+        if let Some(r) = read {
+            *self.catalog.lock().await = Some(r);
+        }
+        Ok(())
+    }
+
+    /// The domains in force in the registry: `known` again when its versions did not change (nothing exported), none
+    /// when they make no catalogue.
+    async fn fetch(&self, known: Option<(String, Arc<Catalog>, Arc<Vec<Domain>>)>) -> Result<Option<Read>, GraphError> {
         let ctx = Ctx::background();
         let list = self
             .domains
@@ -164,11 +197,14 @@ impl Registry {
             .map(|(n, v)| format!("{n}@{v}"))
             .collect::<Vec<_>>()
             .join(",");
-        if let Some(r) = cur.as_mut()
-            && r.versions == versions
+        if let Some((v, catalog, domains)) = known
+            && v == versions
         {
-            r.at = Instant::now();
-            return Ok(Some((r.catalog.clone(), r.domains.clone())));
+            return Ok(Some(Read {
+                versions,
+                catalog,
+                domains,
+            }));
         }
         let mut ds = Vec::new();
         for (name, version) in &force {
@@ -193,22 +229,16 @@ impl Registry {
             ds.push(d);
         }
         match Catalog::of(&ds) {
-            Ok(c) => {
-                *cur = Some(Read {
-                    at: Instant::now(),
-                    versions,
-                    catalog: Arc::new(c),
-                    domains: Arc::new(ds),
-                });
-            }
+            Ok(c) => Ok(Some(Read {
+                versions,
+                catalog: Arc::new(c),
+                domains: Arc::new(ds),
+            })),
             Err(e) => {
                 tracing::error!(err = %e, "type catalogue");
-                if let Some(r) = cur.as_mut() {
-                    r.at = Instant::now();
-                }
+                Ok(None)
             }
         }
-        Ok(cur.as_ref().map(|r| (r.catalog.clone(), r.domains.clone())))
     }
 }
 
