@@ -226,7 +226,7 @@ func CommitToPB(b domain.Commit) *graphv1.Commit {
 		nodes[string(id)] = int32(v)
 	}
 	return &graphv1.Commit{Id: string(b.ID), Name: b.Name, ParentId: string(b.ParentID), ChangeId: string(b.ChangeID), Nodes: nodes, CreatedAt: Time(b.CreatedAt),
-		Branch: domain.BranchOf(b.Branch), Namespace: domain.NamespaceOf(b.Namespace), MergedFrom: string(b.MergedFrom), Kind: b.Kind, RebasedFrom: string(b.RebasedFrom)}
+		Branch: domain.BranchOf(b.Branch), Namespace: domain.NamespaceOf(b.Namespace), MergedFrom: string(b.MergedFrom), Kind: b.Kind, RebasedFrom: string(b.RebasedFrom), Fork: string(b.Fork)}
 }
 
 // ChangeStackToPB converts a change-stack (ADR 0133).
@@ -269,7 +269,7 @@ func CommitFromPB(b *graphv1.Commit) domain.Commit {
 		nodes[domain.NodeID(id)] = domain.Version(v)
 	}
 	return domain.Commit{ID: domain.CommitID(b.Id), Name: b.Name, ParentID: domain.CommitID(b.ParentId), ChangeID: domain.ChangeID(b.ChangeId), Nodes: nodes, CreatedAt: FromTime(b.CreatedAt),
-		Branch: b.Branch, Namespace: b.Namespace, MergedFrom: domain.CommitID(b.MergedFrom), Kind: b.Kind, RebasedFrom: domain.CommitID(b.RebasedFrom)}
+		Branch: b.Branch, Namespace: b.Namespace, MergedFrom: domain.CommitID(b.MergedFrom), Kind: b.Kind, RebasedFrom: domain.CommitID(b.RebasedFrom), Fork: domain.CommitID(b.Fork)}
 }
 
 func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {

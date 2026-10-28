@@ -1,9 +1,9 @@
 // The history of a branch as lanes (CommitBranchGraph): its own commits in its lane, and, for each change that
-// committed on it, the change's own branch as a lane of its own, from the commit the change started on to the commit
-// the merge joined. Two changes started from the same commit and applied one after the other read as two lanes
-// forking from the same dot, the second joining by a merge. The branches forked from the branch shown and still open
-// have a lane too (ADR 0102): the branch of a change holds no commit (ADR 0140), so it is its open head, drawn as a
-// transparent dot on the lane leaving the commit it forked from; a lasting branch shows its own commits.
+// committed on it, the change's own branch as a lane of its own with its commits (ADR 0175), from the commit the
+// change started on to the commit the merge joined. Two changes started from the same commit and applied one after the
+// other read as two lanes forking from the same dot, the second joining by a merge. The branches forked from the branch
+// shown and still open have a lane too (ADR 0102): their commits, else, a branch that committed nothing yet, its open
+// head, drawn as a transparent dot on the lane leaving the commit it forked from.
 import { shortId, type Commit, type Branch } from './api';
 import type { LaneEdge, LaneEntry } from './components/HistoryGraph.svelte';
 import { MAIN_BRANCH } from './namespace';
@@ -79,8 +79,11 @@ export function historyEntries(
   const own = commits.filter((b) => branchOf(b) === branch);
   const committed = new Set(own.map((b) => b.changeId).filter((c): c is string => !!c));
   const byChange = commitsOf(commits, branch);
-  // the lanes of the changes that committed here (a change branch seen from itself has none: its commit is its own)
-  const side = [...byChange.entries()].filter(([change]) => committed.has(change)).map(([, b]) => b);
+  // the lanes of the changes that committed here, every commit of their branch (a change branch seen from itself has
+  // none: its commits are its own)
+  const heads = new Set([...byChange.entries()].filter(([change]) => committed.has(change)).map(([, b]) => b.id));
+  const lanes = new Set(commits.filter((b) => heads.has(b.id)).map(branchOf));
+  const side = commits.filter((b) => branchOf(b) !== branch && lanes.has(branchOf(b)));
   const present = new Set([...own, ...side].map((b) => b.id));
 
   const edges = (b: Commit, joined: Commit | undefined): LaneEdge[] => {

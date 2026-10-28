@@ -280,10 +280,12 @@ export interface Commit {
   branch?: string;
   /** the namespace this commit snapshots (a commit holds one namespace's nodes) */
   namespace?: string;
-  /** commit | merge | fast-forward | snapshot (ADR 0056) */
+  /** commit | merge | fast-forward | rebase | revert | snapshot (ADR 0056, 0175) */
   kind?: string;
   /** the commit the change was forked from before its rebase onto the head of its target (ADR 0101) */
   rebasedFrom?: string;
+  /** the commit its branch stood on when it was written: none on main (ADR 0175) */
+  fork?: string;
 }
 
 /** A name given to one exact node version (ADR 0143 §6); not unique. */

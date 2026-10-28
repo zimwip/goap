@@ -36,6 +36,19 @@ describe('historyEntries', () => {
     expect(own.map((r) => r.lane)).toEqual(['change-bbbb2222', 'main']);
   });
 
+  it('lays every commit of a change branch on its lane (ADR 0175)', () => {
+    const more = [
+      ...commits.slice(0, 1),
+      { id: 'c0', branch: 'change-aaaa1111', kind: 'commit', parentId: 'B', changeId: 'aaaa1111-x', createdAt: '2026-01-01T12:00:00Z' },
+      { ...commits[1], kind: 'commit', parentId: 'c0' },
+      ...commits.slice(2),
+    ];
+    const rows = historyEntries(more, 'main');
+    expect(rows.filter((r) => r.lane === 'change-aaaa1111').map((r) => r.id)).toEqual(['c1', 'c0']);
+    expect(rows.find((r) => r.id === 'c1')?.parents.map((p) => p.id)).toEqual(['c0']);
+    expect(rows.find((r) => r.id === 'm1')?.parents.map((p) => p.id)).toEqual(['B', 'c1']);
+  });
+
   it('keeps a change that did not commit out of the history of the branch', () => {
     expect(historyEntries(commits.filter((b) => b.id !== 'm2'), 'main').map((r) => r.id)).not.toContain('c2');
   });

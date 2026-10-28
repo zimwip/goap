@@ -71,18 +71,19 @@ type CommitEvent struct {
 	MergedFrom  CommitID `json:"mergedFrom,omitempty"`
 	RebasedFrom CommitID `json:"rebasedFrom,omitempty"`
 	Seq         int64    `json:"seq,omitempty"`
+	Fork        CommitID `json:"fork,omitempty"`
 }
 
 // CommitEventOf is the event of a commit header, with no node yet.
 func CommitEventOf(b Commit) CommitEvent {
 	return CommitEvent{ID: b.ID, Namespace: NamespaceOf(b.Namespace), Branch: BranchOf(b.Branch), Parent: b.ParentID, Time: b.CreatedAt,
-		Name: b.Name, ChangeID: b.ChangeID, Kind: b.Kind, MergedFrom: b.MergedFrom, RebasedFrom: b.RebasedFrom, Seq: b.Seq}
+		Name: b.Name, ChangeID: b.ChangeID, Kind: b.Kind, MergedFrom: b.MergedFrom, RebasedFrom: b.RebasedFrom, Seq: b.Seq, Fork: b.Fork}
 }
 
 // Header is the header of the commit the event tells.
 func (e CommitEvent) Header() Commit {
 	return Commit{ID: e.ID, Name: e.Name, Namespace: e.Namespace, Branch: e.Branch, ParentID: e.Parent, MergedFrom: e.MergedFrom,
-		RebasedFrom: e.RebasedFrom, ChangeID: e.ChangeID, Kind: e.Kind, Seq: e.Seq, CreatedAt: e.Time}
+		RebasedFrom: e.RebasedFrom, ChangeID: e.ChangeID, Kind: e.Kind, Seq: e.Seq, Fork: e.Fork, CreatedAt: e.Time}
 }
 
 // ChangeDocEvent is what the index needs to know of a change (ADR 0095): the header fields it searches and filters on

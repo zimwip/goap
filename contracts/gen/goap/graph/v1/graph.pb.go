@@ -709,7 +709,9 @@ type Commit struct {
 	// commit | merge | fast-forward | rebase | revert | snapshot (ADR 0056)
 	Kind string `protobuf:"bytes,10,opt,name=kind,proto3" json:"kind,omitempty"`
 	// the commit the change was forked from before its rebase onto the head of its target (ADR 0101)
-	RebasedFrom   string `protobuf:"bytes,11,opt,name=rebased_from,json=rebasedFrom,proto3" json:"rebased_from,omitempty"`
+	RebasedFrom string `protobuf:"bytes,11,opt,name=rebased_from,json=rebasedFrom,proto3" json:"rebased_from,omitempty"`
+	// the commit its branch stood on when it was written: none on main (ADR 0175)
+	Fork          string `protobuf:"bytes,12,opt,name=fork,proto3" json:"fork,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -817,6 +819,13 @@ func (x *Commit) GetKind() string {
 func (x *Commit) GetRebasedFrom() string {
 	if x != nil {
 		return x.RebasedFrom
+	}
+	return ""
+}
+
+func (x *Commit) GetFork() string {
+	if x != nil {
+		return x.Fork
 	}
 	return ""
 }
@@ -8603,7 +8612,7 @@ func (x *CommitChangeRequest) GetNodes() []string {
 
 type CommitChangeResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// the commit commit, on the change's own branch
+	// the commit, on the change's own branch
 	Commit        *Commit `protobuf:"bytes,1,opt,name=commit,proto3" json:"commit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -21088,7 +21097,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\tout_total\x18\x06 \x01(\x05R\boutTotal\x12\x19\n" +
 	"\bin_total\x18\a \x01(\x05R\ainTotal\x125\n" +
 	"\tout_types\x18\b \x03(\v2\x18.goap.graph.v1.TypeCountR\boutTypes\x123\n" +
-	"\bin_types\x18\t \x03(\v2\x18.goap.graph.v1.TypeCountR\ainTypes\"\xa1\x03\n" +
+	"\bin_types\x18\t \x03(\v2\x18.goap.graph.v1.TypeCountR\ainTypes\"\xb5\x03\n" +
 	"\x06Commit\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1b\n" +
@@ -21103,7 +21112,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"mergedFrom\x12\x12\n" +
 	"\x04kind\x18\n" +
 	" \x01(\tR\x04kind\x12!\n" +
-	"\frebased_from\x18\v \x01(\tR\vrebasedFrom\x1a8\n" +
+	"\frebased_from\x18\v \x01(\tR\vrebasedFrom\x12\x12\n" +
+	"\x04fork\x18\f \x01(\tR\x04fork\x1a8\n" +
 	"\n" +
 	"NodesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +

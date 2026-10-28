@@ -421,7 +421,8 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 		ev := domain.CommitEventOf(b)
 		ev.Set = map[domain.NodeID]domain.Version{}
 		if gt, ok := unwrapGuard(tx); ok && ev.Seq == 0 {
-			ev.Seq = gt.wroteHeads[b.ID].Seq // the order the guard gave it
+			// the order and the fork the guard gave it
+			ev.Seq, ev.Fork = gt.wroteHeads[b.ID].Seq, gt.wroteHeads[b.ID].Fork
 		}
 		if delta, ok := ot.deltas[b.ID]; ok {
 			ev.Whole = true

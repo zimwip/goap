@@ -363,6 +363,8 @@ message Commit {
   string kind = 10;
   // the commit the change was forked from before its rebase onto the head of its target (ADR 0101)
   string rebased_from = 11;
+  // the commit its branch stood on when it was written: none on main (ADR 0175)
+  string fork = 12;
 }
 
 message Decision {
