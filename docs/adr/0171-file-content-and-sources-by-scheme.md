@@ -62,17 +62,23 @@ fields), the attributes of a Python class, the fields of a JavaScript or TypeScr
 TypeScript interface (kind `field`); the variables of a C++ namespace and `export var`; the enumerators of C and C++,
 the constants of a Java enum and of an interface (kind `constant`). `variable` stays a declaration of the top level.
 
-### 4. A source serves schemes (proposed)
+### 4. The scheme names a type of source; `lnk` resolves a second level (proposed)
 
-A source declares the schemes of the addresses it serves (`lnk.Source.Schemes`, attribute `schemes` of
-`platform@Source`). An address that is not `lnk:` goes to the source declaring its scheme, else to the built-in one:
+An address is resolved in two levels. Level 1: its scheme names the type (kind) of source serving it, and each type
+brings its resolver: `file` → `local-fs`, `http` / `https` → `web`, `lnk` → `lnk`. A type serving schemes implements
+`lnk.SchemeResolver` (`Schemes()`, `ResolveDirect(ctx, src, *url.URL)`, `src` the type's default source) beside the
+`lnk.Resolver` of ADR 0154; the `Registry` keeps the table scheme → type (one type per scheme). Level 2: the built-in
+`lnk` type reads `<source>/<type>/<key>[?v=n]`, finds the named source (the project's mapping, ADR 0154 §8, then the
+declared source, else the namespace of that name) and calls the `Resolve` of that source's type. One resolver thus
+serves a direct address (`file:///srv/docs/a.md`) and a logical one (`lnk:docs/File/a.md`, `docs` a `local-fs`
+source rooted at `/srv/docs`). A source declares no scheme (its type does) and is never of type `lnk` (no loop).
 
-| Source | Kind | Schemes | Its resolver |
+| Type | Schemes | Direct address | Under `lnk:` |
 | --- | --- | --- | --- |
-| `local-fs` | `local-fs` | `file` | reads a file only under the roots allowed (`GOAP_LOCAL_FS_ROOTS`, `params.roots`); elsewhere gives the path, unread |
-| `web` | `web` | `http`, `https` | fetches nothing on the server: gives the address and the media type its path says |
-
-A resolver serving schemes implements `lnk.AddressResolver` (`ResolveAddress(ctx, src, *url.URL)`).
+| `lnk` | `lnk` | the second level | (it is the second level) |
+| `graph` | none | none | a node of a namespace of this graph or of a remote one |
+| `local-fs` | `file` | read only under the default roots (`GOAP_LOCAL_FS_ROOTS`); elsewhere the path, unread | `<src>/File/<path>` under the source's root (today's `files`, kept as an alias) |
+| `web` | `http`, `https` | fetches nothing on the server: the address and the media type its path says | `<src>/Page/<path>` relative to the source's location |
 
 ### 5. A target says how it opens (proposed)
 
