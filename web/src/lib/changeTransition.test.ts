@@ -1,116 +1,275 @@
-import { describe, expect, it, vi } from 'vitest';
-import { availableTransitions, confirmMessage, consumedDecisions, gateSummary, movable, parseRefusal, pickableDecisions, resolveCall, runTransition, type TransitionDeps } from './changeTransition';
-import type { ChangeItem, Lifecycle } from './api';
+import { describe, expect, it, vi } from "vitest";
+import {
+  availableTransitions,
+  confirmMessage,
+  consumedDecisions,
+  gateSummary,
+  judgedOf,
+  judgementText,
+  movable,
+  parseRefusal,
+  pickableDecisions,
+  resolveCall,
+  runTransition,
+  type TransitionDeps,
+} from "./changeTransition";
+import type { ChangeItem, Lifecycle } from "./api";
 
 const lc: Lifecycle = {
-  name: 'change',
-  initial: 'draft',
+  name: "change",
+  initial: "draft",
   transitions: [
-    { name: 'submit', from: 'draft', to: 'review' },
-    { name: 'approve', from: 'review', to: 'approved', guard: 'change.decision != ""', vetos: [{ name: 'no_open_risk' }], objectives: [{ name: 'coverage' }] },
-    { name: 'back', from: 'review', to: 'draft' },
+    { name: "submit", from: "draft", to: "review" },
+    {
+      name: "approve",
+      from: "review",
+      to: "approved",
+      guard: 'change.decision != ""',
+      vetos: [{ name: "no_open_risk" }],
+      objectives: [{ name: "coverage" }],
+    },
+    { name: "back", from: "review", to: "draft" },
   ],
 };
-const approve = availableTransitions(lc, 'review')[0];
+const approve = availableTransitions(lc, "review")[0];
 const points = [
-  { id: 'D1', status: 'decided', question: 'Which option?', option: 'A' },
-  { id: 'D2', status: 'open' },
-  { id: 'D3', status: 'decided' },
+  { id: "D1", status: "decided", question: "Which option?", option: "A" },
+  { id: "D2", status: "open" },
+  { id: "D3", status: "decided" },
 ];
 
-describe('transitions of a change lifecycle', () => {
-  it('lists those leaving the state, flags the decision and summarises the gate', () => {
-    expect(availableTransitions(lc, 'draft').map((t) => t.name)).toEqual(['submit']);
-    expect(availableTransitions(lc, 'review').map((t) => t.name)).toEqual(['approve', 'back']);
+describe("transitions of a change lifecycle", () => {
+  it("lists those leaving the state, flags the decision and summarises the gate", () => {
+    expect(availableTransitions(lc, "draft").map((t) => t.name)).toEqual([
+      "submit",
+    ]);
+    expect(availableTransitions(lc, "review").map((t) => t.name)).toEqual([
+      "approve",
+      "back",
+    ]);
     expect(approve.needsDecision).toBe(true);
-    expect(approve.gate).toBe('guard: change.decision != ""; vetos: no_open_risk; objectives: coverage');
-    expect(gateSummary({ name: 'x' })).toBe('');
-    expect(availableTransitions(undefined, 'draft')).toEqual([]);
+    expect(approve.gate).toBe(
+      'guard: change.decision != ""; vetos: no_open_risk; objectives: coverage',
+    );
+    expect(gateSummary({ name: "x" })).toBe("");
+    expect(availableTransitions(undefined, "draft")).toEqual([]);
   });
 
-  it('moves only a change with a lifecycle that is not closed', () => {
-    expect(movable({ lifecycle: 'change', status: 'active' })).toBe(true);
-    expect(movable({ lifecycle: 'change', status: 'draft' })).toBe(true);
-    for (const status of ['applied', 'abandoned', 'committed']) expect(movable({ lifecycle: 'change', status })).toBe(false);
-    expect(movable({ status: 'active' })).toBe(false);
+  it("moves only a change with a lifecycle that is not closed", () => {
+    expect(movable({ lifecycle: "change", status: "active" })).toBe(true);
+    expect(movable({ lifecycle: "change", status: "draft" })).toBe(true);
+    for (const status of ["applied", "abandoned", "committed"])
+      expect(movable({ lifecycle: "change", status })).toBe(false);
+    expect(movable({ status: "active" })).toBe(false);
   });
 
-  it('offers the decided points no transition used yet', () => {
-    const items: ChangeItem[] = [{ id: 'T1', type: 'transition', data: { transition: 'x', decision: 'D3' } }, { id: 'T2', type: 'fact', data: { decision: 'D1' } }];
-    expect([...consumedDecisions(items)]).toEqual(['D3']);
-    expect(pickableDecisions(points, items).map((p) => p.id)).toEqual(['D1']);
+  it("offers the decided points no transition used yet", () => {
+    const items: ChangeItem[] = [
+      {
+        id: "T1",
+        type: "transition",
+        data: { transition: "x", decision: "D3" },
+      },
+      { id: "T2", type: "fact", data: { decision: "D1" } },
+    ];
+    expect([...consumedDecisions(items)]).toEqual(["D3"]);
+    expect(pickableDecisions(points, items).map((p) => p.id)).toEqual(["D1"]);
   });
 
-  it('reads the refusal of the server', () => {
-    const v = parseRefusal('failed_precondition: change C cannot take approve: vetoed by a, b: conflict');
-    expect(v.vetoed).toEqual(['a', 'b']);
-    const o = parseRefusal('change C cannot take approve: objectives not met and not covered by a derogation: coverage, perf: conflict');
-    expect(o.unmet).toEqual(['coverage', 'perf']);
-    expect(parseRefusal('change C cannot take approve: gate not satisfied (change.decision != ""): conflict').guard).toBe('change.decision != ""');
-    expect(parseRefusal('boom')).toEqual({ message: 'boom', vetoed: [], unmet: [], guard: '' });
+  it("reads the refusal of the server", () => {
+    const v = parseRefusal(
+      "failed_precondition: change C cannot take approve: vetoed by a, b: conflict",
+    );
+    expect(v.vetoed).toEqual(["a", "b"]);
+    const o = parseRefusal(
+      "change C cannot take approve: objectives not met and not covered by a derogation: coverage, perf: conflict",
+    );
+    expect(o.unmet).toEqual(["coverage", "perf"]);
+    expect(
+      parseRefusal(
+        'change C cannot take approve: gate not satisfied (change.decision != ""): conflict',
+      ).guard,
+    ).toBe('change.decision != ""');
+    expect(parseRefusal("boom")).toEqual({
+      message: "boom",
+      vetoed: [],
+      unmet: [],
+      guard: "",
+    });
   });
 
-  it('states from, to, the decision and the freeze in the confirmation', () => {
+  it("states from, to, the decision and the freeze in the confirmation", () => {
     const m = confirmMessage(approve, points[0], approve.gate);
-    expect(m).toContain('from “review” to “approved”');
-    expect(m).toContain('Which option? → A');
-    expect(m).toContain('freezes the impacts');
+    expect(m).toContain("from “review” to “approved”");
+    expect(m).toContain("Which option? → A");
+    expect(m).toContain("freezes the impacts");
   });
 
-  it('resolves an assistant call against the offers and the pickable points', () => {
-    const offers = availableTransitions(lc, 'review');
-    const ok = resolveCall(offers, [points[0]], { transition: 'approve', decision: 'D1' });
-    expect(ok).toMatchObject({ offer: { name: 'approve' }, decision: { id: 'D1' } });
-    expect(resolveCall(offers, [], { transition: 'nope' })).toMatch(/does not leave the current state; offered: approve, back/);
-    expect(resolveCall(offers, [points[0]], { transition: 'approve' })).toMatch(/needs a decided decision point/);
-    expect(resolveCall(offers, [points[0]], { transition: 'back', decision: 'D9' })).toMatch(/not decided or was already used/);
-    expect(resolveCall(offers, [], { transition: 'back' })).toMatchObject({ offer: { name: 'back' } });
+  it("resolves an assistant call against the offers and the pickable points", () => {
+    const offers = availableTransitions(lc, "review");
+    const ok = resolveCall(offers, [points[0]], {
+      transition: "approve",
+      decision: "D1",
+    });
+    expect(ok).toMatchObject({
+      offer: { name: "approve" },
+      decision: { id: "D1" },
+    });
+    expect(resolveCall(offers, [], { transition: "nope" })).toMatch(
+      /does not leave the current state; offered: approve, back/,
+    );
+    expect(resolveCall(offers, [points[0]], { transition: "approve" })).toMatch(
+      /needs a decided decision point/,
+    );
+    expect(
+      resolveCall(offers, [points[0]], { transition: "back", decision: "D9" }),
+    ).toMatch(/not decided or was already used/);
+    expect(resolveCall(offers, [], { transition: "back" })).toMatchObject({
+      offer: { name: "back" },
+    });
   });
 });
 
-describe('runTransition', () => {
+describe("runTransition", () => {
   const deps = (over: Partial<TransitionDeps> = {}) => ({
     confirm: vi.fn(async () => true),
-    call: vi.fn(async () => ({ change: { state: 'approved' } })),
+    call: vi.fn(async () => ({ change: { state: "approved" } })),
     refresh: vi.fn(async () => {}),
     notify: vi.fn(),
     ...over,
   });
-  const change = { id: 'C1', lifecycle: 'change', status: 'active', state: 'review' };
+  const change = {
+    id: "C1",
+    lifecycle: "change",
+    status: "active",
+    state: "review",
+  };
 
-  it('confirms, calls, refreshes and reports the new state', async () => {
+  it("confirms, calls, refreshes and reports the new state", async () => {
     const d = deps();
-    const r = await runTransition(d, { change, offer: approve, decision: { id: 'D1' } });
-    expect(r).toEqual({ ok: true, state: 'approved' });
+    const r = await runTransition(d, {
+      change,
+      offer: approve,
+      decision: { id: "D1" },
+    });
+    expect(r).toEqual({ ok: true, state: "approved" });
     expect(d.confirm).toHaveBeenCalledOnce();
-    expect(d.call).toHaveBeenCalledWith('C1', 'approve', 'D1');
+    expect(d.call).toHaveBeenCalledWith("C1", "approve", "D1");
     expect(d.refresh).toHaveBeenCalledOnce();
-    expect(d.notify).toHaveBeenCalledWith('Change moved to “approved”.', 'ok');
+    expect(d.notify).toHaveBeenCalledWith("Change moved to “approved”.", "ok");
   });
 
-  it('skips the dialog for the assistant card', async () => {
+  it("skips the dialog for the assistant card", async () => {
     const d = deps();
-    expect((await runTransition(d, { change, offer: approve, decision: { id: 'D1' }, skipConfirm: true })).ok).toBe(true);
+    expect(
+      (
+        await runTransition(d, {
+          change,
+          offer: approve,
+          decision: { id: "D1" },
+          skipConfirm: true,
+        })
+      ).ok,
+    ).toBe(true);
     expect(d.confirm).not.toHaveBeenCalled();
   });
 
-  it('does nothing when the person cancels', async () => {
+  it("does nothing when the person cancels", async () => {
     const d = deps({ confirm: vi.fn(async () => false) });
-    expect(await runTransition(d, { change, offer: approve, decision: { id: 'D1' } })).toMatchObject({ ok: false, cancelled: true });
+    expect(
+      await runTransition(d, {
+        change,
+        offer: approve,
+        decision: { id: "D1" },
+      }),
+    ).toMatchObject({ ok: false, cancelled: true });
     expect(d.call).not.toHaveBeenCalled();
   });
 
-  it('refuses before calling when a decision is missing or the change is closed', async () => {
+  it("refuses before calling when a decision is missing or the change is closed", async () => {
     const d = deps();
-    expect(await runTransition(d, { change, offer: approve })).toMatchObject({ ok: false });
-    expect(await runTransition(d, { change: { ...change, status: 'applied' }, offer: approve, decision: { id: 'D1' } })).toMatchObject({ ok: false });
+    expect(await runTransition(d, { change, offer: approve })).toMatchObject({
+      ok: false,
+    });
+    expect(
+      await runTransition(d, {
+        change: { ...change, status: "applied" },
+        offer: approve,
+        decision: { id: "D1" },
+      }),
+    ).toMatchObject({ ok: false });
     expect(d.call).not.toHaveBeenCalled();
   });
 
-  it('shows the refusal of the server and does not refresh', async () => {
-    const d = deps({ call: vi.fn(async () => { throw new Error('cannot take approve: vetoed by no_open_risk: conflict'); }) });
-    const r = await runTransition(d, { change, offer: approve, decision: { id: 'D1' }, skipConfirm: true });
-    expect(r).toMatchObject({ ok: false, refusal: { vetoed: ['no_open_risk'] } });
+  it("shows the refusal of the server and does not refresh", async () => {
+    const d = deps({
+      call: vi.fn(async () => {
+        throw new Error(
+          "cannot take approve: vetoed by no_open_risk: conflict",
+        );
+      }),
+    });
+    const r = await runTransition(d, {
+      change,
+      offer: approve,
+      decision: { id: "D1" },
+      skipConfirm: true,
+    });
+    expect(r).toMatchObject({
+      ok: false,
+      refusal: { vetoed: ["no_open_risk"] },
+    });
     expect(d.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("the server judgement of the transitions", () => {
+  const judged = judgedOf({
+    state: "review",
+    transitions: [
+      {
+        name: "approve",
+        from: "review",
+        to: "approved",
+        blocks: [
+          {
+            kind: "permission",
+            reason: "needs the permission change:transition on project P",
+          },
+          { kind: "veto", reason: "vetoed by no_open_risk" },
+        ],
+      },
+      {
+        name: "back",
+        from: "review",
+        to: "draft",
+        allowed: true,
+        reserve: ["coverage"],
+      },
+    ],
+  });
+
+  it("is attached to the offers it judges", () => {
+    const [approve, back] = availableTransitions(lc, "review", judged);
+    expect(approve.judgement).toMatchObject({ allowed: false, decisions: [] });
+    expect(approve.judgement?.blocks.map((b) => b.kind)).toEqual([
+      "permission",
+      "veto",
+    ]);
+    expect(back.judgement).toMatchObject({
+      allowed: true,
+      reserve: ["coverage"],
+    });
+    expect(availableTransitions(lc, "review")[0].judgement).toBeUndefined();
+  });
+
+  it("reads as one line per block", () => {
+    const [approve, back] = availableTransitions(lc, "review", judged);
+    expect(judgementText(approve.judgement!)).toBe(
+      "Access: needs the permission change:transition on project P\nVeto: vetoed by no_open_risk",
+    );
+    expect(judgementText(back.judgement!)).toBe(
+      "allowed, with reserve of coverage",
+    );
   });
 });

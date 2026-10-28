@@ -4,8 +4,19 @@
   // rail: their sources merge into a trunk that carries the name once (`lifecycleBundles.ts`).
   import type { LifecycleForm } from '../methodologyForm';
   import { bundleLevels, bundleTransitions, labelX, type Bundle } from '../lifecycleBundles';
+  import { judgedKey, judgementText, type Judged, type TransitionJudgement } from '../changeTransition';
 
-  let { lc, current = '' }: { lc: LifecycleForm; /** the state something is in: drawn emphasised */ current?: string } = $props();
+  let {
+    lc,
+    current = '',
+    judged,
+  }: {
+    lc: LifecycleForm;
+    /** the state something is in: drawn emphasised */
+    current?: string;
+    /** what the server judges of the transitions out of current: each drawn allowed or blocked, the others dimmed */
+    judged?: Judged;
+  } = $props();
 
   const BOX_W = 110;
   const BOX_H = 36;
@@ -92,6 +103,14 @@
     };
   });
 
+  /** the transition of a bundle leaving the current state, with its judgement, when the server judged it */
+  function judgementOf(e: Edge): { n: number; j: TransitionJudgement } | undefined {
+    if (!judged || !current) return undefined;
+    const n = e.from.findIndex((f) => states[f].name === current);
+    const j = n < 0 ? undefined : judged.get(judgedKey(e.name, current, states[e.to].name));
+    return j ? { n, j } : undefined;
+  }
+
   /**
    * The paths of a bundle: the trunk leaves the farthest source, runs at its level and drops into the
    * target (d1 up to the chip, d2 from the chip on, arrowhead); each nearer source rises and curves into the trunk
@@ -111,7 +130,12 @@
     const d1 = `M ${x1},${connY} V ${midY - v * R} Q ${x1},${midY} ${x1 + s * R},${midY} H ${midX - s * gap}`;
     const d2 = `M ${midX + s * gap},${midY} H ${e.x2 - s * R} Q ${e.x2},${midY} ${e.x2},${midY - v * R} V ${connY}`;
     const branches = e.xs.slice(0, -1).map((x) => `M ${x},${connY} V ${midY - v * R} Q ${x},${midY} ${x + s * R},${midY}`);
-    return { fwd, d1, d2, branches, midX, midY, hw };
+    // the whole way from one source to the target, drawn over the bundle for the transition leaving the current state
+    const from = (n: number) => {
+      const x = e.xs[n];
+      return `M ${x},${connY} V ${midY - v * R} Q ${x},${midY} ${x + s * R},${midY} H ${e.x2 - s * R} Q ${e.x2},${midY} ${e.x2},${midY - v * R} V ${connY}`;
+    };
+    return { fwd, d1, d2, branches, from, midX, midY, hw };
   }
 </script>
 
@@ -124,21 +148,32 @@
         <marker id="lcp-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
           <path d="M0,0.5 L0,6.5 L6,3.5 z" fill="context-stroke" opacity="0.8" />
         </marker>
+        <marker id="lcp-arr-ok" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0.5 L0,6.5 L6,3.5 z" class="arr-ok" />
+        </marker>
+        <marker id="lcp-arr-no" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0.5 L0,6.5 L6,3.5 z" class="arr-no" />
+        </marker>
       </defs>
 
       {#each layout.edges as e (e.key)}
         {@const r = rail(e, layout.rowY)}
         {@const c = tone(states[e.to])}
-        <g class="edge" style="--c: {c}">
-          <title>{e.name}: {e.from.map((f) => states[f].name).join(', ')} → {states[e.to].name}</title>
+        {@const jd = judgementOf(e)}
+        <g class="edge" class:dim={!!judged && !!current && !jd} style="--c: {c}">
+          <title>{e.name}: {e.from.map((f) => states[f].name).join(', ')} → {states[e.to].name}{jd ? `\n${judgementText(jd.j)}` : ''}</title>
           {#each r.branches as d, n (n)}
-            <path {d} fill="none" stroke={c} stroke-width="1.5" stroke-dasharray={r.fwd ? 'none' : '4,3'} opacity="0.75" />
+            <path {d} class:faded={!!jd} fill="none" stroke={c} stroke-width="1.5" stroke-dasharray={r.fwd ? 'none' : '4,3'} opacity="0.75" />
           {/each}
-          <path d={r.d1} fill="none" stroke={c} stroke-width="1.5" stroke-dasharray={r.fwd ? 'none' : '4,3'} opacity="0.75" />
-          <path d={r.d2} fill="none" stroke={c} stroke-width="1.5" stroke-dasharray={r.fwd ? 'none' : '4,3'} opacity="0.75" marker-end="url(#lcp-arr)" />
+          <path d={r.d1} class:faded={!!jd} fill="none" stroke={c} stroke-width="1.5" stroke-dasharray={r.fwd ? 'none' : '4,3'} opacity="0.75" />
+          <path d={r.d2} class:faded={!!jd} fill="none" stroke={c} stroke-width="1.5" stroke-dasharray={r.fwd ? 'none' : '4,3'} opacity="0.75" marker-end="url(#lcp-arr)" />
+          {#if jd}
+            <path class="way" class:ok={jd.j.allowed} d={r.from(jd.n)} fill="none" marker-end={jd.j.allowed ? 'url(#lcp-arr-ok)' : 'url(#lcp-arr-no)'} />
+          {/if}
           {#if e.name}
-            <rect class="pill" x={r.midX - r.hw} y={r.midY - BTN_H / 2} width={r.hw * 2} height={BTN_H} rx="8" />
-            <text class="pilltext" x={r.midX} y={r.midY + 3.5} text-anchor="middle">{e.name}</text>
+            {@const w = r.hw + (jd ? 7 : 0)}
+            <rect class="pill" class:ok={jd?.j.allowed} class:no={jd && !jd.j.allowed} x={r.midX - w} y={r.midY - BTN_H / 2} width={w * 2} height={BTN_H} rx="8" />
+            <text class="pilltext" class:ok={jd?.j.allowed} class:no={jd && !jd.j.allowed} x={r.midX} y={r.midY + 3.5} text-anchor="middle">{jd ? (jd.j.allowed ? '✓ ' : '✕ ') : ''}{e.name}</text>
           {/if}
         </g>
       {/each}
@@ -190,6 +225,40 @@
     font-weight: 700;
     fill: var(--c);
     user-select: none;
+  }
+  .edge.dim,
+  .faded {
+    opacity: 0.3;
+  }
+  /* the transition leaving the current state: allowed for the caller, or blocked */
+  .way {
+    stroke: var(--danger);
+    stroke-width: 2.4;
+    stroke-dasharray: 5 3;
+  }
+  .way.ok {
+    stroke: var(--accent);
+    stroke-dasharray: none;
+  }
+  .arr-ok {
+    fill: var(--accent);
+  }
+  .arr-no {
+    fill: var(--danger);
+  }
+  .pill.ok {
+    fill: var(--accent);
+    stroke: var(--accent);
+  }
+  .pilltext.ok {
+    fill: var(--accent-fg);
+  }
+  .pill.no {
+    fill: color-mix(in srgb, var(--danger) 12%, var(--surface));
+    stroke: var(--danger);
+  }
+  .pilltext.no {
+    fill: var(--danger);
   }
   .empty {
     color: var(--muted);

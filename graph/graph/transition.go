@@ -2,10 +2,12 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
+	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/events"
 )
@@ -198,9 +200,26 @@ func slicesContainsMove(moves []domain.StateMove, to string) bool {
 // (the ones that already gated a transition left out) and its world state, then its vetos and objectives (ADR 0075 §3).
 // The result says which objectives the transition goes with reserve of.
 func (g *Graph) checkGate(ctx context.Context, bb domain.Blackboard, t domain.Transition, decision string, consumed map[string]bool) (domain.GateResult, error) {
+	res, block, err := g.gateBlock(ctx, bb, t, decision, consumed)
+	if err != nil || block == nil {
+		return res, err
+	}
+	switch block.Kind {
+	case BlockGuard:
+		return res, fmt.Errorf("change %s cannot take %s: gate not satisfied (%s): %w", bb.Change.ID, t.Name, t.Guard, ErrConflict)
+	case BlockVeto:
+		return res, fmt.Errorf("change %s cannot take %s: vetoed by %s: %w", bb.Change.ID, t.Name, strings.Join(res.Vetoed, ", "), ErrConflict)
+	default:
+		return res, fmt.Errorf("change %s cannot take %s: objectives not met and not covered by a derogation: %s: %w", bb.Change.ID, t.Name, strings.Join(res.Uncovered(), ", "), ErrConflict)
+	}
+}
+
+// gateBlock is checkGate's judgement: what blocks the transition (nil: nothing), an error only when the guard or the
+// criteria cannot be evaluated.
+func (g *Graph) gateBlock(ctx context.Context, bb domain.Blackboard, t domain.Transition, decision string, consumed map[string]bool) (domain.GateResult, *TransitionBlock, error) {
 	var res domain.GateResult
 	if t.Guard == "" && len(t.Vetos) == 0 && len(t.Objectives) == 0 {
-		return res, nil
+		return res, nil, nil
 	}
 	var kept []domain.DecisionPoint
 	for _, d := range domain.DecisionPointsOf(bb) {
@@ -212,26 +231,161 @@ func (g *Graph) checkGate(ctx context.Context, bb domain.Blackboard, t domain.Tr
 	if t.Guard != "" {
 		ok, err := g.Lifecycles.Guard(ctx, bb, t.Guard, t.Name, decision)
 		if err != nil {
-			return res, invalidf("guard of %s on change %s: %v", t.Name, bb.Change.ID, err)
+			return res, nil, invalidf("guard of %s on change %s: %v", t.Name, bb.Change.ID, err)
 		}
 		if !ok {
-			return res, fmt.Errorf("change %s cannot take %s: gate not satisfied (%s): %w", bb.Change.ID, t.Name, t.Guard, ErrConflict)
+			return res, &TransitionBlock{Kind: BlockGuard, Reason: "guard not satisfied: " + t.Guard}, nil
 		}
 	}
 	if len(t.Vetos) == 0 && len(t.Objectives) == 0 {
-		return res, nil
+		return res, nil, nil
 	}
 	res, err := g.Lifecycles.Gate(ctx, bb, t, decision)
 	if err != nil {
-		return res, invalidf("criteria of %s on change %s: %v", t.Name, bb.Change.ID, err)
+		return res, nil, invalidf("criteria of %s on change %s: %v", t.Name, bb.Change.ID, err)
 	}
 	if len(res.Vetoed) > 0 {
-		return res, fmt.Errorf("change %s cannot take %s: vetoed by %s: %w", bb.Change.ID, t.Name, strings.Join(res.Vetoed, ", "), ErrConflict)
+		return res, &TransitionBlock{Kind: BlockVeto, Reason: "vetoed by " + strings.Join(res.Vetoed, ", ")}, nil
 	}
 	if u := res.Uncovered(); len(u) > 0 {
-		return res, fmt.Errorf("change %s cannot take %s: objectives not met and not covered by a derogation: %s: %w", bb.Change.ID, t.Name, strings.Join(u, ", "), ErrConflict)
+		return res, &TransitionBlock{Kind: BlockObjective, Reason: "objectives not met and not covered by a derogation: " + strings.Join(u, ", ")}, nil
 	}
-	return res, nil
+	return res, nil, nil
+}
+
+// What blocks a transition (TransitionBlock.Kind).
+const (
+	BlockStatus     = "status"
+	BlockPermission = "permission"
+	BlockDecision   = "decision"
+	BlockGuard      = "guard"
+	BlockVeto       = "veto"
+	BlockObjective  = "objective"
+	BlockGuardian   = "guardian"
+)
+
+// TransitionBlock is one check refusing a transition and why.
+type TransitionBlock struct {
+	Kind   string
+	Reason string
+}
+
+// TransitionCheck is a transition out of the state of a change as the caller would take it now.
+type TransitionCheck struct {
+	Name, From, To string
+	// Allowed: nothing blocks it
+	Allowed bool
+	Blocks  []TransitionBlock
+	// Decisions are the decided decision points its guard passes with, when it reads change.decision.
+	Decisions []string
+	// Reserve are the objectives it would go with reserve of, each covered by a derogation.
+	Reserve []string
+}
+
+// readsDecision reports a guard reading the decision point that gates the transition.
+func readsDecision(guard string) bool {
+	return strings.Contains(guard, "change.decision")
+}
+
+// ChangeTransitions judges each transition out of the state of a change for the caller, as TransitionChange would
+// judge it, and takes none: the status of the change, the caller's permission (ChangeAuthorizer), the guard and the
+// criteria (with each decided decision point not consumed yet when the guard reads one), the outer guardians. Every
+// check runs, so a refusal lists all that block. A change with no lifecycle has none.
+func (g *Graph) ChangeTransitions(ctx context.Context, id domain.ChangeID) (state string, out []TransitionCheck, err error) {
+	bb, err := g.Blackboard(ctx, id)
+	if err != nil {
+		return "", nil, err
+	}
+	c := bb.Change
+	if c.Lifecycle == "" {
+		return c.State, nil, nil
+	}
+	lc, err := g.changeLifecycle(ctx, c)
+	if err != nil {
+		return c.State, nil, err
+	}
+	consumed := map[string]bool{}
+	for _, m := range c.StateMoves() {
+		if m.Decision != "" {
+			consumed[m.Decision] = true
+		}
+	}
+	var decided []string
+	for _, d := range domain.DecisionPointsOf(bb) {
+		if d.Status == domain.PointDecided && !consumed[d.ID] {
+			decided = append(decided, d.ID)
+		}
+	}
+	for _, t := range lc.Transitions {
+		if t.From != c.State {
+			continue
+		}
+		tc := TransitionCheck{Name: t.Name, From: t.From, To: t.To}
+		switch c.Status {
+		case domain.ChangeApplied, domain.ChangeAbandoned, domain.ChangeCommitted:
+			tc.Blocks = append(tc.Blocks, TransitionBlock{Kind: BlockStatus, Reason: "the change is " + string(c.Status)})
+		}
+		if g.ChangeAuthorizer != nil {
+			if err := g.ChangeAuthorizer(ctx, c, t); err != nil {
+				if !errors.Is(err, authz.ErrForbidden) {
+					return c.State, nil, err
+				}
+				tc.Blocks = append(tc.Blocks, TransitionBlock{Kind: BlockPermission, Reason: permissionReason(t, c)})
+			}
+		}
+		if g.Lifecycles != nil {
+			candidates := []string{""}
+			if readsDecision(t.Guard) {
+				candidates = decided
+			}
+			var first *TransitionBlock
+			passed := false
+			for _, d := range candidates {
+				res, block, err := g.gateBlock(ctx, bb, t, d, consumed)
+				if err != nil {
+					return c.State, nil, err
+				}
+				if block != nil {
+					if first == nil {
+						first = block
+					}
+					continue
+				}
+				if !passed {
+					tc.Reserve = res.Unmet
+				}
+				passed = true
+				if d != "" {
+					tc.Decisions = append(tc.Decisions, d)
+				}
+			}
+			switch {
+			case len(candidates) == 0:
+				tc.Blocks = append(tc.Blocks, TransitionBlock{Kind: BlockDecision, Reason: "its guard reads a decided decision point, and none is decided"})
+			case !passed:
+				tc.Blocks = append(tc.Blocks, *first)
+			}
+			refusal, err := g.guardianRefusal(ctx, bb, t.Name)
+			if err != nil {
+				return c.State, nil, err
+			}
+			if refusal != "" {
+				tc.Blocks = append(tc.Blocks, TransitionBlock{Kind: BlockGuardian, Reason: "its guardian " + refusal})
+			}
+		}
+		tc.Allowed = len(tc.Blocks) == 0
+		out = append(out, tc)
+	}
+	return c.State, out, nil
+}
+
+// permissionReason says which permission a transition asks of the caller, and where.
+func permissionReason(t domain.Transition, c domain.Change) string {
+	perm := t.Permission
+	if perm == "" {
+		perm = "change:transition"
+	}
+	return fmt.Sprintf("needs the permission %s on project %s", perm, c.ProjectID.Key)
 }
 
 // phase is the state a change impact started its draft in, and where in the log (draftState.phaseOf).
@@ -302,32 +456,38 @@ func (g *Graph) reopenPhase(ctx context.Context, tx Tx, c domain.Change, to stri
 // checkGuardians asks the outer guardians of the chain of a change (ADR 0106) about a transition, or about its commit
 // when transition is "" (ADR 0146). A change whose chain is its own methodology only is not asked.
 func (g *Graph) checkGuardians(ctx context.Context, bb domain.Blackboard, transition string) error {
+	refusal, err := g.guardianRefusal(ctx, bb, transition)
+	if err != nil || refusal == "" {
+		return err
+	}
+	what := "commit"
+	if transition != "" {
+		what = "take " + transition
+	}
+	return fmt.Errorf("change %s cannot %s: its guardian %s: %w", bb.Change.ID, what, refusal, ErrConflict)
+}
+
+// guardianRefusal is checkGuardians' judgement: the refusal of the outer guardians, "" when they agree.
+func (g *Graph) guardianRefusal(ctx context.Context, bb domain.Blackboard, transition string) (string, error) {
 	c := bb.Change
 	if g.Lifecycles == nil || len(c.OuterGuardians()) == 0 {
-		return nil
+		return "", nil
 	}
 	var ancestors []domain.Change
 	for p, seen := c.ParentID, map[domain.ChangeID]bool{}; p != "" && !seen[p]; {
 		seen[p] = true
 		pc, err := g.Change(ctx, p)
 		if err != nil {
-			return err
+			return "", err
 		}
 		ancestors = append(ancestors, pc)
 		p = pc.ParentID
 	}
 	refusal, err := g.Lifecycles.CheckGuardians(ctx, bb, transition, ancestors)
 	if err != nil {
-		return invalidf("guardians of change %s: %v", c.ID, err)
+		return "", invalidf("guardians of change %s: %v", c.ID, err)
 	}
-	if refusal == "" {
-		return nil
-	}
-	what := "commit"
-	if transition != "" {
-		what = "take " + transition
-	}
-	return fmt.Errorf("change %s cannot %s: its guardian %s: %w", c.ID, what, refusal, ErrConflict)
+	return refusal, nil
 }
 
 // guardianChain is the guardian chain of a new change (ADR 0106): a sub-change takes its parent's chain and adds its

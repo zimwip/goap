@@ -152,6 +152,9 @@ service GraphService {
   // Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
   // the expected world state) must hold, and it is journaled.
   rpc TransitionChange(TransitionChangeRequest) returns (TransitionChangeResponse);
+  // The transitions out of the current state of a change, each judged for the caller as TransitionChange would judge
+  // it, without taking it: allowed, or what blocks it (status, permission, guard, criteria, guardians) and why.
+  rpc GetChangeTransitions(GetChangeTransitionsRequest) returns (GetChangeTransitionsResponse);
   // Remove a change that committed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
   rpc DeleteChange(DeleteChangeRequest) returns (DeleteChangeResponse);
 
@@ -1327,6 +1330,40 @@ message TransitionChangeRequest {
 
 message TransitionChangeResponse {
   Change change = 1;
+}
+
+message GetChangeTransitionsRequest {
+  string change_id = 1;
+}
+
+message GetChangeTransitionsResponse {
+  // the state of the change the transitions leave
+  string state = 1;
+  // the transitions out of it, in the order of the lifecycle
+  repeated TransitionCheck transitions = 2;
+}
+
+// A transition out of the state of a change as the caller would take it now.
+message TransitionCheck {
+  string name = 1;
+  string from = 2;
+  string to = 3;
+  // nothing blocks it: TransitionChange would take it (with one of decisions when its guard reads change.decision)
+  bool allowed = 4;
+  // what blocks it, every check that refuses
+  repeated TransitionBlock blocks = 5;
+  // the decided decision points its guard passes with, when it reads change.decision
+  repeated string decisions = 6;
+  // the objectives it would go with reserve of, each covered by a derogation (ADR 0075 §3)
+  repeated string reserve = 7;
+}
+
+message TransitionBlock {
+  // status (the change is applied, committed or abandoned), permission (the caller's rights), decision (the guard
+  // reads a decided decision point and none is), guard, veto, objective, guardian (an outer guardian, ADR 0106)
+  string kind = 1;
+  // why, in words
+  string reason = 2;
 }
 
 message DeleteChangeRequest {

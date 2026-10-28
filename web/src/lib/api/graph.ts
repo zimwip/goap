@@ -1,13 +1,66 @@
-import { rpc } from './transport';
-import { notePosition } from '../flux/positions';
-import type { Empty, Struct } from './types/common';
-import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
-import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeStack, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, GraphStats, GraphView, NamespaceSummary, NodeView, QueryResult, ItemTypeInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, PendingSettings, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SettingEdit, SharedNode, StackChange, Tag, TypeCount } from './types/graph';
+import { rpc } from "./transport";
+import { notePosition } from "../flux/positions";
+import type { Empty, Struct } from "./types/common";
+import type {
+  BaselineDiff,
+  BoardIssue,
+  DecisionPoint,
+  Flow,
+  FlowDiff,
+  LinkWrite,
+  MergePlan,
+  NodeCreateSpec,
+  NodeName,
+  Resolution,
+  Restructured,
+} from "./types/engine";
+import type {
+  Baseline,
+  BaselineLinksQuery,
+  GraphExport,
+  GraphImport,
+  GraphImportResult,
+  BaselineNodesQuery,
+  Branch,
+  Change,
+  ChangeDependencies,
+  ChangeStack,
+  ChangeImpact,
+  CommitState,
+  ChangeItem,
+  ChangeLogQuery,
+  ExecutionRecord,
+  GraphNode,
+  GraphStats,
+  GraphView,
+  NamespaceSummary,
+  NodeView,
+  QueryResult,
+  ItemTypeInfo,
+  ImpactEvent,
+  Link,
+  LogEntry,
+  NodeEdit,
+  NodeRef,
+  PendingSettings,
+  RebasedImpact,
+  RebaseState,
+  ReviewEdit,
+  ReviewRecord,
+  SettingEdit,
+  SharedNode,
+  StackChange,
+  Tag,
+  TypeCount,
+} from "./types/graph";
 
-import type { LoadDemoDataResponseJson } from '../../gen/goap/graph/v1/graph_pb';
-import type { Job } from './jobs';
+import type {
+  GetChangeTransitionsResponseJson,
+  LoadDemoDataResponseJson,
+} from "../../gen/goap/graph/v1/graph_pb";
+import type { Job } from "./jobs";
 
-const GRAPH = 'goap.graph.v1.GraphService';
+const GRAPH = "goap.graph.v1.GraphService";
 
 /** The largest page of links the graph service answers. */
 const MAX_LINK_PAGE = 500;
@@ -16,20 +69,24 @@ export const GRAPH_SERVICE = GRAPH;
 
 /** The wire form of the edit of an open review: a field is written only when the edit names it (proto3 has no
  * unset: set_comment / set_outcome say which ones). */
-export function reviewUpdateRequest(changeId: string, key: string, e: ReviewEdit) {
+export function reviewUpdateRequest(
+  changeId: string,
+  key: string,
+  e: ReviewEdit,
+) {
   return {
     changeId,
     key,
     setComment: e.comment !== undefined,
-    comment: e.comment ?? '',
+    comment: e.comment ?? "",
     add: e.add ?? [],
     remove: e.remove ?? [],
     entries: (e.entries ?? []).map((x) => ({
       changeImpactId: x.changeImpactId,
       setComment: x.comment !== undefined,
-      comment: x.comment ?? '',
+      comment: x.comment ?? "",
       setOutcome: x.outcome !== undefined,
-      outcome: x.outcome ?? '',
+      outcome: x.outcome ?? "",
     })),
   };
 }
@@ -38,153 +95,324 @@ export const graph = {
   /** namespace is required: baselines are scoped to one namespace each. With `branch`, a page of its history (ADR
    * 0140): the baselines committed before `before` (none: the newest), at most `limit`, with what draws them in `related`
    * and the `before` of the older page in `next` ("0" or absent: none); with `ids`, those headers only. */
-  listBaselines: (namespace: string, signal?: AbortSignal, opts: { branch?: string; before?: string; limit?: number; ids?: string[] } = {}) =>
-    rpc<{ namespace: string; branch?: string; before?: string; limit?: number; ids?: string[] }, { baselines?: Baseline[]; related?: Baseline[]; next?: string }>(
-      GRAPH,
-      'ListBaselines',
-      { namespace, ...opts },
-      signal,
-    ),
+  listBaselines: (
+    namespace: string,
+    signal?: AbortSignal,
+    opts: {
+      branch?: string;
+      before?: string;
+      limit?: number;
+      ids?: string[];
+    } = {},
+  ) =>
+    rpc<
+      {
+        namespace: string;
+        branch?: string;
+        before?: string;
+        limit?: number;
+        ids?: string[];
+      },
+      { baselines?: Baseline[]; related?: Baseline[]; next?: string }
+    >(GRAPH, "ListBaselines", { namespace, ...opts }, signal),
   getBaselineGraph: (id: string, signal?: AbortSignal) =>
-    rpc<{ id: string }, { baseline?: Baseline; nodes?: GraphNode[]; links?: Link[]; suspectLinks?: Link[] }>(
-      GRAPH,
-      'GetBaselineGraph',
-      { id },
-      signal,
-    ),
+    rpc<
+      { id: string },
+      {
+        baseline?: Baseline;
+        nodes?: GraphNode[];
+        links?: Link[];
+        suspectLinks?: Link[];
+      }
+    >(GRAPH, "GetBaselineGraph", { id }, signal),
   /** The world a change sees, whatever its flow (`world`, Graph.ChangeWorld): the nodes of its fork it left alone, the
    * versions it committed and its drafts (version 0), with the links whose target node is in it. */
-  getChangeWorld: (changeId: string, flow = '', signal?: AbortSignal) =>
-    rpc<{ changeId: string; flow: string; world: boolean }, { nodes?: GraphNode[]; links?: Link[] }>(GRAPH, 'GetChangeGraph', { changeId, flow, world: true }, signal),
+  getChangeWorld: (changeId: string, flow = "", signal?: AbortSignal) =>
+    rpc<
+      { changeId: string; flow: string; world: boolean },
+      { nodes?: GraphNode[]; links?: Link[] }
+    >(GRAPH, "GetChangeGraph", { changeId, flow, world: true }, signal),
   /** A page of the nodes of a view (by type, text-filtered; ADR 0157), with the node count of every type; `baseline` is
    * the one read (a change view: its fork). */
   listBaselineNodes: (req: BaselineNodesQuery, signal?: AbortSignal) =>
-    rpc<BaselineNodesQuery, { baseline?: Baseline; nodes?: GraphNode[]; total?: number; types?: TypeCount[] }>(
-      GRAPH,
-      'ListBaselineNodes',
-      req,
-      signal,
-    ),
+    rpc<
+      BaselineNodesQuery,
+      {
+        baseline?: Baseline;
+        nodes?: GraphNode[];
+        total?: number;
+        types?: TypeCount[];
+      }
+    >(GRAPH, "ListBaselineNodes", req, signal),
   /** A page of the links of a baseline (by type, text-filtered), with the link count of every type. */
   listBaselineLinks: (req: BaselineLinksQuery, signal?: AbortSignal) =>
-    rpc<BaselineLinksQuery, { baseline?: Baseline; links?: Link[]; total?: number; types?: TypeCount[] }>(
-      GRAPH,
-      'ListBaselineLinks',
-      req,
-      signal,
-    ),
+    rpc<
+      BaselineLinksQuery,
+      {
+        baseline?: Baseline;
+        links?: Link[];
+        total?: number;
+        types?: TypeCount[];
+      }
+    >(GRAPH, "ListBaselineLinks", req, signal),
   /** A node as a view holds it, with its direct neighbours (both directions; ADR 0157). */
-  getNodeNeighbourhood: (view: GraphView, nodeId: string, signal?: AbortSignal) =>
-    rpc<{ view: GraphView; nodeId: string }, { node?: GraphNode; nodes?: GraphNode[]; links?: Link[]; suspectLinkIds?: string[] }>(
-      GRAPH,
-      'GetNodeNeighbourhood',
-      { view, nodeId },
-      signal,
-    ),
+  getNodeNeighbourhood: (
+    view: GraphView,
+    nodeId: string,
+    signal?: AbortSignal,
+  ) =>
+    rpc<
+      { view: GraphView; nodeId: string },
+      {
+        node?: GraphNode;
+        nodes?: GraphNode[];
+        links?: Link[];
+        suspectLinkIds?: string[];
+      }
+    >(GRAPH, "GetNodeNeighbourhood", { view, nodeId }, signal),
   /** A read query in the subset of openCypher over a view (ADR 0160): anchored MATCH patterns, WHERE, RETURN. */
-  queryView: (view: GraphView, query: string, bind?: Record<string, string>, signal?: AbortSignal) =>
-    rpc<{ view: GraphView; query: string; bind?: Record<string, string> }, QueryResult>(GRAPH, 'QueryView', { view, query, bind }, signal),
+  queryView: (
+    view: GraphView,
+    query: string,
+    bind?: Record<string, string>,
+    signal?: AbortSignal,
+  ) =>
+    rpc<
+      { view: GraphView; query: string; bind?: Record<string, string> },
+      QueryResult
+    >(GRAPH, "QueryView", { view, query, bind }, signal),
   /** The impact log of a change (ADR 0029): every operation on its change impacts, with its caller. */
   listChangeEvents: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { events?: ImpactEvent[] }>(GRAPH, 'ListChangeEvents', { changeId }, signal),
+    rpc<{ changeId: string }, { events?: ImpactEvent[] }>(
+      GRAPH,
+      "ListChangeEvents",
+      { changeId },
+      signal,
+    ),
   /** The log of a change (ADR 0030), filtered on its columns; counts: entries per type without the types filter. */
   listChangeLog: (req: ChangeLogQuery, signal?: AbortSignal) =>
-    rpc<ChangeLogQuery, { entries?: LogEntry[]; counts?: Record<string, number> }>(GRAPH, 'ListChangeLog', req, signal),
+    rpc<
+      ChangeLogQuery,
+      { entries?: LogEntry[]; counts?: Record<string, number> }
+    >(GRAPH, "ListChangeLog", req, signal),
   /** The whole log of a change as W3C PROV-O provenance, a JSON-LD document (ADR 0057). */
   /** The state of a namespace at a baseline (default: the head of main) as a JSON snapshot, without history (ADR 0104),
    *  in one answer; the web exports through `startGraphExport` (a job, ADR 0149). */
   exportGraph: (namespace: string, branch?: string, baselineId?: string) =>
-    rpc<{ namespace: string; branch?: string; baselineId?: string }, GraphExport>(GRAPH, 'ExportGraph', { namespace, branch, baselineId }),
+    rpc<
+      { namespace: string; branch?: string; baselineId?: string },
+      GraphExport
+    >(GRAPH, "ExportGraph", { namespace, branch, baselineId }),
   /** Imports a JSON snapshot into main as one new change, left open for review (ADR 0104). */
-  importGraph: (req: GraphImport) => rpc<GraphImport, GraphImportResult>(GRAPH, 'ImportGraph', req),
+  importGraph: (req: GraphImport) =>
+    rpc<GraphImport, GraphImportResult>(GRAPH, "ImportGraph", req),
   /** Exports the state of a namespace (head of a branch, default main, or a baseline) as a job (ADR 0149): a JSON
    *  snapshot or an OKF zip, the file the job writes once done. */
-  startGraphExport: (req: { namespace: string; branch?: string; baselineId?: string; format: 'json' | 'okf' }) =>
-    rpc<object, { job: Job }>(GRAPH, 'StartGraphExport', req),
+  startGraphExport: (req: {
+    namespace: string;
+    branch?: string;
+    baselineId?: string;
+    format: "json" | "okf";
+  }) => rpc<object, { job: Job }>(GRAPH, "StartGraphExport", req),
   /** Imports a JSON snapshot as a job (ADR 0149): its output names the change it created and what it did. */
-  startGraphImport: (req: GraphImport) => rpc<GraphImport, { job: Job }>(GRAPH, 'StartGraphImport', req),
+  startGraphImport: (req: GraphImport) =>
+    rpc<GraphImport, { job: Job }>(GRAPH, "StartGraphImport", req),
   /** Loads the demo data (administrators only): the demo organisation, the demo project bound to it and its ALM
    *  data, whatever is missing of them; `loaded` false when the graph held them already. */
-  loadDemoData: () => rpc<Empty, LoadDemoDataResponseJson>(GRAPH, 'LoadDemoData', {}),
+  loadDemoData: () =>
+    rpc<Empty, LoadDemoDataResponseJson>(GRAPH, "LoadDemoData", {}),
   exportChangeProvenance: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { document?: string; filename?: string; mediaType?: string }>(
-      GRAPH,
-      'ExportChangeProvenance',
-      { changeId },
-      signal,
-    ),
+    rpc<
+      { changeId: string },
+      { document?: string; filename?: string; mediaType?: string }
+    >(GRAPH, "ExportChangeProvenance", { changeId }, signal),
   /** The item types a change may hold, described (ADR 0119). */
-  listItemTypes: (signal?: AbortSignal) => rpc<Empty, { types?: ItemTypeInfo[] }>(GRAPH, 'ListItemTypes', {}, signal),
+  listItemTypes: (signal?: AbortSignal) =>
+    rpc<Empty, { types?: ItemTypeInfo[] }>(GRAPH, "ListItemTypes", {}, signal),
   /** The namespaces holding at least one node. */
   /** What every namespace holds: nodes, versions, link rows, changes, baselines, branches. */
-  graphOverview: (signal?: AbortSignal) => rpc<Empty, { namespaces?: NamespaceSummary[] }>(GRAPH, 'GetGraphOverview', {}, signal),
+  graphOverview: (signal?: AbortSignal) =>
+    rpc<Empty, { namespaces?: NamespaceSummary[] }>(
+      GRAPH,
+      "GetGraphOverview",
+      {},
+      signal,
+    ),
   /** The statistics of a namespace at the head of a lasting branch (default main). */
   graphStats: (namespace: string, branch?: string, signal?: AbortSignal) =>
-    rpc<{ namespace: string; branch?: string }, { stats?: GraphStats }>(GRAPH, 'GetGraphStats', { namespace, branch }, signal),
-  listNamespaces: (signal?: AbortSignal) => rpc<Empty, { namespaces?: string[] }>(GRAPH, 'ListNamespaces', {}, signal),
+    rpc<{ namespace: string; branch?: string }, { stats?: GraphStats }>(
+      GRAPH,
+      "GetGraphStats",
+      { namespace, branch },
+      signal,
+    ),
+  listNamespaces: (signal?: AbortSignal) =>
+    rpc<Empty, { namespaces?: string[] }>(GRAPH, "ListNamespaces", {}, signal),
   /** The changes; `headerOnly`: their heads only, without impacts nor items (what a list shows, ADR 0140). */
   /** The changes, every one; with a limit, a page of them newest first, after the cursor (nextCursor of the page
    * before), with the number of changes the request matches. */
   listChanges: (
     signal?: AbortSignal,
-    opts: { headerOnly?: boolean; status?: string[]; project?: string; query?: string; limit?: number; cursor?: string } = {},
-  ) => rpc<typeof opts, { changes?: Change[]; nextCursor?: string; total?: number }>(GRAPH, 'ListChanges', opts, signal),
+    opts: {
+      headerOnly?: boolean;
+      status?: string[];
+      project?: string;
+      query?: string;
+      limit?: number;
+      cursor?: string;
+    } = {},
+  ) =>
+    rpc<
+      typeof opts,
+      { changes?: Change[]; nextCursor?: string; total?: number }
+    >(GRAPH, "ListChanges", opts, signal),
   /** A change, read at least as far as its log is known here (ADR 0153); its position is noted for the next reads. */
   getChange: (id: string, signal?: AbortSignal) =>
-    rpc<{ id: string }, { change?: Change }>(GRAPH, 'GetChange', { id }, signal).then((r) => {
+    rpc<{ id: string }, { change?: Change }>(
+      GRAPH,
+      "GetChange",
+      { id },
+      signal,
+    ).then((r) => {
       if (r.change) notePosition(id, r.change.seq);
       return r;
     }),
   /** A branch and the header of its head (its nodes are not sent, ADR 0140). */
   getBranch: (namespace: string, name: string, signal?: AbortSignal) =>
-    rpc<{ namespace: string; name: string; headerOnly: boolean }, { branch?: Branch; head?: Baseline }>(
-      GRAPH,
-      'GetBranch',
-      { namespace, name, headerOnly: true },
-      signal,
-    ),
+    rpc<
+      { namespace: string; name: string; headerOnly: boolean },
+      { branch?: Branch; head?: Baseline }
+    >(GRAPH, "GetBranch", { namespace, name, headerOnly: true }, signal),
   /** The branches (of these statuses, when given), with the header of each head and the number of baselines of each
    * branch (ADR 0140). */
-  listBranches: (namespace: string, signal?: AbortSignal, opts: { status?: string[] } = {}) =>
-    rpc<{ namespace: string; status?: string[] }, { branches?: Branch[]; heads?: Baseline[]; counts?: Record<string, number> }>(
-      GRAPH,
-      'ListBranches',
-      { namespace, ...opts },
-      signal,
-    ),
-  createBranch: (req: { namespace: string; name: string; fromBaseline: string; origin?: string; description?: string }) =>
-    rpc<typeof req, { branch?: Branch }>(GRAPH, 'CreateBranch', req),
+  listBranches: (
+    namespace: string,
+    signal?: AbortSignal,
+    opts: { status?: string[] } = {},
+  ) =>
+    rpc<
+      { namespace: string; status?: string[] },
+      {
+        branches?: Branch[];
+        heads?: Baseline[];
+        counts?: Record<string, number>;
+      }
+    >(GRAPH, "ListBranches", { namespace, ...opts }, signal),
+  createBranch: (req: {
+    namespace: string;
+    name: string;
+    fromBaseline: string;
+    origin?: string;
+    description?: string;
+  }) => rpc<typeof req, { branch?: Branch }>(GRAPH, "CreateBranch", req),
   /** open | merged | abandoned (an abandoned branch takes no change any more). */
   setBranchStatus: (namespace: string, name: string, status: string) =>
-    rpc<{ namespace: string; name: string; status: string }, Empty>(GRAPH, 'SetBranchStatus', { namespace, name, status }),
-  setBranchDescription: (namespace: string, name: string, description: string) =>
-    rpc<{ namespace: string; name: string; description: string }, Empty>(GRAPH, 'SetBranchDescription', { namespace, name, description }),
+    rpc<{ namespace: string; name: string; status: string }, Empty>(
+      GRAPH,
+      "SetBranchStatus",
+      { namespace, name, status },
+    ),
+  setBranchDescription: (
+    namespace: string,
+    name: string,
+    description: string,
+  ) =>
+    rpc<{ namespace: string; name: string; description: string }, Empty>(
+      GRAPH,
+      "SetBranchDescription",
+      { namespace, name, description },
+    ),
   /** Merges a branch into another; a node changed on both sides needs a resolution (by node id). */
-  mergeBranch: (req: { namespace: string; from: string; into: string; title?: string; resolutions?: Record<string, Resolution> }) =>
-    rpc<typeof req, { change?: Change; baseline?: Baseline; plan?: MergePlan }>(GRAPH, 'MergeBranch', req),
+  mergeBranch: (req: {
+    namespace: string;
+    from: string;
+    into: string;
+    title?: string;
+    resolutions?: Record<string, Resolution>;
+  }) =>
+    rpc<typeof req, { change?: Change; baseline?: Baseline; plan?: MergePlan }>(
+      GRAPH,
+      "MergeBranch",
+      req,
+    ),
   /** Names the state an applied change leaves (ADR 0056); tags are not unique. */
   tagVersion: (nodeId: string, version: number, name: string) =>
-    rpc<{ nodeId: string; version: number; name: string }, { tag?: Tag }>(GRAPH, 'TagVersion', { nodeId, version, name }),
+    rpc<{ nodeId: string; version: number; name: string }, { tag?: Tag }>(
+      GRAPH,
+      "TagVersion",
+      { nodeId, version, name },
+    ),
   /** The tags matching the filter (all empty: every tag). */
-  listTags: (filter: { namespace?: string; name?: string; nodeId?: string } = {}) =>
-    rpc<typeof filter, { tags?: Tag[] }>(GRAPH, 'ListTags', filter),
-  deleteTag: (id: string) => rpc<{ id: string }, Record<string, never>>(GRAPH, 'DeleteTag', { id }),
+  listTags: (
+    filter: { namespace?: string; name?: string; nodeId?: string } = {},
+  ) => rpc<typeof filter, { tags?: Tag[] }>(GRAPH, "ListTags", filter),
+  deleteTag: (id: string) =>
+    rpc<{ id: string }, Record<string, never>>(GRAPH, "DeleteTag", { id }),
   /** What going from a baseline to another changes, node by node. */
   diffBaselines: (from: string, to: string, signal?: AbortSignal) =>
-    rpc<{ from: string; to: string }, { nodes?: BaselineDiff[]; changesAdded?: StackChange[]; changesRemoved?: StackChange[] }>(GRAPH, 'DiffBaselines', { from, to }, signal),
+    rpc<
+      { from: string; to: string },
+      {
+        nodes?: BaselineDiff[];
+        changesAdded?: StackChange[];
+        changesRemoved?: StackChange[];
+      }
+    >(GRAPH, "DiffBaselines", { from, to }, signal),
   /** The change-stack of a node version (version 0: its latest on main) or of a baseline (ADR 0133). */
-  getChangeStack: (q: { nodeId?: string; version?: number; baselineId?: string; limit?: number }, signal?: AbortSignal) =>
-    rpc<{ nodeId?: string; version?: number; baselineId?: string; limit?: number }, { stack?: ChangeStack }>(GRAPH, 'GetChangeStack', q, signal),
+  getChangeStack: (
+    q: {
+      nodeId?: string;
+      version?: number;
+      baselineId?: string;
+      limit?: number;
+    },
+    signal?: AbortSignal,
+  ) =>
+    rpc<
+      {
+        nodeId?: string;
+        version?: number;
+        baselineId?: string;
+        limit?: number;
+      },
+      { stack?: ChangeStack }
+    >(GRAPH, "GetChangeStack", q, signal),
   /** A page of the changes that acted on a node (headers only, oldest first; ADR 0140): the latest `limit` (default
    * 50) before the cursor `before`; `next` is the cursor of the older page (absent: none). */
-  listNodeChanges: (nodeId: string, signal?: AbortSignal, page: { before?: string; limit?: number } = {}) =>
-    rpc<{ nodeId: string; before?: string; limit?: number }, { changes?: Change[]; next?: string }>(GRAPH, 'ListNodeChanges', { nodeId, ...page }, signal),
+  listNodeChanges: (
+    nodeId: string,
+    signal?: AbortSignal,
+    page: { before?: string; limit?: number } = {},
+  ) =>
+    rpc<
+      { nodeId: string; before?: string; limit?: number },
+      { changes?: Change[]; next?: string }
+    >(GRAPH, "ListNodeChanges", { nodeId, ...page }, signal),
   /**
    * Edits a change: title, intent, goal; status 'abandoned' abandons it (its sub-changes and its branch too); data is merged
    * into its free-form data (the criticality, ADR 0075 §3: raising it is free, lowering it asks a permission).
    */
-  updateChange: (id: string, patch: { title?: string; intent?: string; goal?: string; status?: string; data?: Struct }) =>
-    rpc<{ id: string; title?: string; intent?: string; goal?: string; status?: string; data?: Struct }, { change?: Change }>(GRAPH, 'UpdateChange', { id, ...patch }),
+  updateChange: (
+    id: string,
+    patch: {
+      title?: string;
+      intent?: string;
+      goal?: string;
+      status?: string;
+      data?: Struct;
+    },
+  ) =>
+    rpc<
+      {
+        id: string;
+        title?: string;
+        intent?: string;
+        goal?: string;
+        status?: string;
+        data?: Struct;
+      },
+      { change?: Change }
+    >(GRAPH, "UpdateChange", { id, ...patch }),
   createChange: (req: {
     title: string;
     intent?: string;
@@ -199,125 +427,303 @@ export const graph = {
     ownerOrg?: string;
     /** key of the project the change acts in: required unless a parent change gives it (ADR 0091) */
     projectId?: string;
-  }) => rpc<typeof req, { change?: Change }>(GRAPH, 'CreateChange', req),
+  }) => rpc<typeof req, { change?: Change }>(GRAPH, "CreateChange", req),
   /**
    * Moves a root change, draft or active, with its open sub-changes, to another project whose methodologies include the
    * change's (ADR 0091); the nodes it already acts on keep their project.
    */
   moveChange: (changeId: string, projectId: string) =>
-    rpc<{ changeId: string; projectId: string }, { change?: Change }>(GRAPH, 'MoveChange', { changeId, projectId }),
+    rpc<{ changeId: string; projectId: string }, { change?: Change }>(
+      GRAPH,
+      "MoveChange",
+      { changeId, projectId },
+    ),
   /** Attaches a root change to a change whose methodology integrates its own, as its sub-change (ADR 0106). */
   attachChange: (changeId: string, parentId: string) =>
-    rpc<{ changeId: string; parentId: string }, { change?: Change }>(GRAPH, 'AttachChange', { changeId, parentId }),
+    rpc<{ changeId: string; parentId: string }, { change?: Change }>(
+      GRAPH,
+      "AttachChange",
+      { changeId, parentId },
+    ),
   /** Detaches a sub-change from the change integrating it: a root change again (ADR 0106). */
-  detachChange: (changeId: string) => rpc<{ changeId: string }, { change?: Change }>(GRAPH, 'DetachChange', { changeId }),
+  detachChange: (changeId: string) =>
+    rpc<{ changeId: string }, { change?: Change }>(GRAPH, "DetachChange", {
+      changeId,
+    }),
   /** Replaces the changes a change depends on: no cycle, no ancestor, no sub-change (ADR 0108). */
   setChangeDependencies: (changeId: string, dependsOn: string[]) =>
-    rpc<{ changeId: string; dependsOn: string[] }, { change?: Change }>(GRAPH, 'SetChangeDependencies', { changeId, dependsOn }),
+    rpc<{ changeId: string; dependsOn: string[] }, { change?: Change }>(
+      GRAPH,
+      "SetChangeDependencies",
+      { changeId, dependsOn },
+    ),
   /** Moves an open change to another version of its methodology, the latest when version is empty (ADR 0113). */
-  upgradeChange: (changeId: string, version = '') =>
-    rpc<{ changeId: string; version: string }, { change?: Change }>(GRAPH, 'UpgradeChange', { changeId, version }),
+  upgradeChange: (changeId: string, version = "") =>
+    rpc<{ changeId: string; version: string }, { change?: Change }>(
+      GRAPH,
+      "UpgradeChange",
+      { changeId, version },
+    ),
   /** Gives an open change that follows no methodology one of the methodologies of its project (its latest version). */
   setChangeMethodology: (changeId: string, methodology: string) =>
-    rpc<{ changeId: string; methodology: string }, { change?: Change }>(GRAPH, 'SetChangeMethodology', { changeId, methodology }),
+    rpc<{ changeId: string; methodology: string }, { change?: Change }>(
+      GRAPH,
+      "SetChangeMethodology",
+      { changeId, methodology },
+    ),
   /** The dependencies of a change, the open changes depending on it and the merge order of its sub-changes (ADR 0108). */
   getChangeDependencies: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, ChangeDependencies>(GRAPH, 'GetChangeDependencies', { changeId }, signal),
+    rpc<{ changeId: string }, ChangeDependencies>(
+      GRAPH,
+      "GetChangeDependencies",
+      { changeId },
+      signal,
+    ),
   /** Splits a change into one sub-change per organisational unit owning impacted nodes. */
   splitChange: (changeId: string) =>
-    rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'SplitChange', { changeId }),
+    rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, "SplitChange", {
+      changeId,
+    }),
   listSubChanges: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'ListSubChanges', { changeId }, signal),
+    rpc<{ changeId: string }, { changes?: Change[] }>(
+      GRAPH,
+      "ListSubChanges",
+      { changeId },
+      signal,
+    ),
   /** Merges what a change committed into the branch it was forked from, rebased first (ADR 0102), the change left open
    * (ADR 0166); or integrates a committed change that waits for a resolution (resolutions are by node id). */
-  mergeChange: (changeId: string, resolutions: Record<string, Resolution> = {}) =>
+  mergeChange: (
+    changeId: string,
+    resolutions: Record<string, Resolution> = {},
+  ) =>
     rpc<
       { changeId: string; resolutions: Record<string, Resolution> },
       { change?: Change }
-    >(GRAPH, 'MergeChange', { changeId, resolutions }),
+    >(GRAPH, "MergeChange", { changeId, resolutions }),
   /** Closes a change (ADR 0166): settled, what is left merged, then applied. */
-  closeChange: (changeId: string) => rpc<{ changeId: string }, { change?: Change }>(GRAPH, 'CloseChange', { changeId }),
+  closeChange: (changeId: string) =>
+    rpc<{ changeId: string }, { change?: Change }>(GRAPH, "CloseChange", {
+      changeId,
+    }),
   /** Flow branches of a change (relaunched steps). */
-  validateBoard: (changeId: string, flow = '', signal?: AbortSignal) =>
-    rpc<{ changeId: string; flow: string }, { issues?: BoardIssue[] }>(GRAPH, 'ValidateBoard', { changeId, flow }, signal),
+  validateBoard: (changeId: string, flow = "", signal?: AbortSignal) =>
+    rpc<{ changeId: string; flow: string }, { issues?: BoardIssue[] }>(
+      GRAPH,
+      "ValidateBoard",
+      { changeId, flow },
+      signal,
+    ),
   listFlows: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { flows?: Flow[] }>(GRAPH, 'ListFlows', { changeId }, signal),
+    rpc<{ changeId: string }, { flows?: Flow[] }>(
+      GRAPH,
+      "ListFlows",
+      { changeId },
+      signal,
+    ),
   /** Adopts an open flow branch straight on the graph (prefer engine.decideFlow when the run is known). */
   adoptFlow: (changeId: string, flow: string) =>
-    rpc<{ changeId: string; flow: string }, { flow?: Flow }>(GRAPH, 'AdoptFlow', { changeId, flow }),
+    rpc<{ changeId: string; flow: string }, { flow?: Flow }>(
+      GRAPH,
+      "AdoptFlow",
+      { changeId, flow },
+    ),
   /** Discards an open flow branch straight on the graph (its candidates are rejected, its graph branch abandoned). */
   discardFlow: (changeId: string, flow: string) =>
-    rpc<{ changeId: string; flow: string }, { flow?: Flow }>(GRAPH, 'DiscardFlow', { changeId, flow }),
+    rpc<{ changeId: string; flow: string }, { flow?: Flow }>(
+      GRAPH,
+      "DiscardFlow",
+      { changeId, flow },
+    ),
   /** Options of a change (ADR 0009 §3, ADR 0032 §6): hypotheses explored on flows of their own; the active one is
    * where every call that names no flow goes. */
   listOptions: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { options?: Flow[]; active?: string }>(GRAPH, 'ListOptions', { changeId }, signal),
-  openOption: (changeId: string, name: string, hypothesis: string, activate: boolean) =>
-    rpc<{ changeId: string; name: string; hypothesis: string; activate: boolean }, { option?: Flow }>(GRAPH, 'OpenOption', { changeId, name, hypothesis, activate }),
+    rpc<{ changeId: string }, { options?: Flow[]; active?: string }>(
+      GRAPH,
+      "ListOptions",
+      { changeId },
+      signal,
+    ),
+  openOption: (
+    changeId: string,
+    name: string,
+    hypothesis: string,
+    activate: boolean,
+  ) =>
+    rpc<
+      { changeId: string; name: string; hypothesis: string; activate: boolean },
+      { option?: Flow }
+    >(GRAPH, "OpenOption", { changeId, name, hypothesis, activate }),
   /** Works on an option; '' or 'main': back to the main flow. */
   activateOption: (changeId: string, option: string) =>
-    rpc<{ changeId: string; option: string }, { active?: string }>(GRAPH, 'ActivateOption', { changeId, option }),
+    rpc<{ changeId: string; option: string }, { active?: string }>(
+      GRAPH,
+      "ActivateOption",
+      { changeId, option },
+    ),
   evaluateOption: (changeId: string, option: string, comment: string) =>
-    rpc<{ changeId: string; option: string; comment: string }, { option?: Flow }>(GRAPH, 'EvaluateOption', { changeId, option, comment }),
+    rpc<
+      { changeId: string; option: string; comment: string },
+      { option?: Flow }
+    >(GRAPH, "EvaluateOption", { changeId, option, comment }),
   /** Selects an option: its versions join the change branch, the other open options are rejected. */
   selectOption: (changeId: string, option: string) =>
-    rpc<{ changeId: string; option: string }, { option?: Flow }>(GRAPH, 'SelectOption', { changeId, option }),
+    rpc<{ changeId: string; option: string }, { option?: Flow }>(
+      GRAPH,
+      "SelectOption",
+      { changeId, option },
+    ),
   rejectOption: (changeId: string, option: string) =>
-    rpc<{ changeId: string; option: string }, { option?: Flow }>(GRAPH, 'RejectOption', { changeId, option }),
+    rpc<{ changeId: string; option: string }, { option?: Flow }>(
+      GRAPH,
+      "RejectOption",
+      { changeId, option },
+    ),
   /** The impacts two flows of a change see, compared (ADR 0083): 'main' or an option id on each side; level written or
    * accepted. Added, removed and modified impacts are listed, the identical ones counted. */
-  diffFlows: (changeId: string, left: string, right: string, level: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string; left: string; right: string; level: string }, FlowDiff>(GRAPH, 'DiffFlows', { changeId, left, right, level }, signal),
+  diffFlows: (
+    changeId: string,
+    left: string,
+    right: string,
+    level: string,
+    signal?: AbortSignal,
+  ) =>
+    rpc<
+      { changeId: string; left: string; right: string; level: string },
+      FlowDiff
+    >(GRAPH, "DiffFlows", { changeId, left, right, level }, signal),
   /** Decision points of a change (ADR 0009 §4). */
   listDecisionPoints: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { points?: DecisionPoint[] }>(GRAPH, 'ListDecisionPoints', { changeId }, signal),
-  openDecision: (req: { changeId: string; question: string; allOptions: boolean; options?: string[]; criteria?: string[]; policy?: { decider?: string; threshold?: number; maxRounds?: number; maxDuration?: string } }) =>
-    rpc<typeof req, { point?: DecisionPoint }>(GRAPH, 'OpenDecision', req),
+    rpc<{ changeId: string }, { points?: DecisionPoint[] }>(
+      GRAPH,
+      "ListDecisionPoints",
+      { changeId },
+      signal,
+    ),
+  openDecision: (req: {
+    changeId: string;
+    question: string;
+    allOptions: boolean;
+    options?: string[];
+    criteria?: string[];
+    policy?: {
+      decider?: string;
+      threshold?: number;
+      maxRounds?: number;
+      maxDuration?: string;
+    };
+  }) => rpc<typeof req, { point?: DecisionPoint }>(GRAPH, "OpenDecision", req),
   /** A ruling from the IDE is a person's: it needs no ratification. */
-  ruleDecision: (req: { changeId: string; point: string; outcome: string; option?: string; confidence?: number; justification: string; questions?: string[] }) =>
-    rpc<typeof req, { point?: DecisionPoint }>(GRAPH, 'RuleDecision', req),
+  ruleDecision: (req: {
+    changeId: string;
+    point: string;
+    outcome: string;
+    option?: string;
+    confidence?: number;
+    justification: string;
+    questions?: string[];
+  }) => rpc<typeof req, { point?: DecisionPoint }>(GRAPH, "RuleDecision", req),
   answerQuestion: (changeId: string, question: string, answer: string) =>
-    rpc<{ changeId: string; question: string; answer: string }, { point?: DecisionPoint }>(GRAPH, 'AnswerQuestion', { changeId, question, answer }),
-  ratifyDecision: (changeId: string, point: string, accept: boolean, comment: string) =>
-    rpc<{ changeId: string; point: string; accept: boolean; comment: string }, { point?: DecisionPoint }>(GRAPH, 'RatifyDecision', { changeId, point, accept, comment }),
+    rpc<
+      { changeId: string; question: string; answer: string },
+      { point?: DecisionPoint }
+    >(GRAPH, "AnswerQuestion", { changeId, question, answer }),
+  ratifyDecision: (
+    changeId: string,
+    point: string,
+    accept: boolean,
+    comment: string,
+  ) =>
+    rpc<
+      { changeId: string; point: string; accept: boolean; comment: string },
+      { point?: DecisionPoint }
+    >(GRAPH, "RatifyDecision", { changeId, point, accept, comment }),
   /** The graph of a change at a level (written, accepted, committed) on a flow (ADR 0032 §5). */
-  getChangeView: (changeId: string, flow: string, level: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string; flow: string; level: string }, { baseline?: Baseline }>(GRAPH, 'GetChangeView', { changeId, flow, level }, signal),
+  getChangeView: (
+    changeId: string,
+    flow: string,
+    level: string,
+    signal?: AbortSignal,
+  ) =>
+    rpc<
+      { changeId: string; flow: string; level: string },
+      { baseline?: Baseline }
+    >(GRAPH, "GetChangeView", { changeId, flow, level }, signal),
   /** What merging a branch into another would do. */
-  planMerge: (namespace: string, from: string, into: string, signal?: AbortSignal) =>
-    rpc<{ namespace: string; from: string; into: string }, { plan?: MergePlan }>(GRAPH, 'PlanMerge', { namespace, from, into }, signal),
+  planMerge: (
+    namespace: string,
+    from: string,
+    into: string,
+    signal?: AbortSignal,
+  ) =>
+    rpc<
+      { namespace: string; from: string; into: string },
+      { plan?: MergePlan }
+    >(GRAPH, "PlanMerge", { namespace, from, into }, signal),
   getSharedNodes: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { nodes?: SharedNode[] }>(GRAPH, 'GetSharedNodes', { changeId }, signal),
+    rpc<{ changeId: string }, { nodes?: SharedNode[] }>(
+      GRAPH,
+      "GetSharedNodes",
+      { changeId },
+      signal,
+    ),
   /** A node version with its outgoing and incoming links (the history: no view), or at version 0 the node as a view
    * holds it (ADR 0157; required then): in a change view a draft reference `{id, version: 0}` reads the draft the change
    * holds (draft: true, version 0, its links with their ids), a node without a draft the version its world holds. */
-  getNode: (ref: NodeRef, signal?: AbortSignal, view?: GraphView, linkLimit?: number) =>
-    rpc<{ ref: NodeRef; view?: GraphView; linkLimit?: number }, { view?: NodeView }>(
+  getNode: (
+    ref: NodeRef,
+    signal?: AbortSignal,
+    view?: GraphView,
+    linkLimit?: number,
+  ) =>
+    rpc<
+      { ref: NodeRef; view?: GraphView; linkLimit?: number },
+      { view?: NodeView }
+    >(
       GRAPH,
-      'GetNode',
+      "GetNode",
       { ref, ...(view ? { view } : {}), ...(linkLimit ? { linkLimit } : {}) },
       signal,
     ),
   /** A page of the links of a node read as getNode reads it (by type then id): outgoing, or entering with `incoming`. */
-  listNodeLinks: (ref: NodeRef, q: { incoming?: boolean; type?: string; offset?: number; limit?: number }, signal?: AbortSignal, view?: GraphView) =>
-    rpc<{ ref: NodeRef; view?: GraphView; incoming?: boolean; type?: string; offset?: number; limit?: number }, { links?: Link[]; total?: number }>(
-      GRAPH,
-      'ListNodeLinks',
-      { ref, ...(view ? { view } : {}), ...q },
-      signal,
-    ),
+  listNodeLinks: (
+    ref: NodeRef,
+    q: { incoming?: boolean; type?: string; offset?: number; limit?: number },
+    signal?: AbortSignal,
+    view?: GraphView,
+  ) =>
+    rpc<
+      {
+        ref: NodeRef;
+        view?: GraphView;
+        incoming?: boolean;
+        type?: string;
+        offset?: number;
+        limit?: number;
+      },
+      { links?: Link[]; total?: number }
+    >(GRAPH, "ListNodeLinks", { ref, ...(view ? { view } : {}), ...q }, signal),
   /** getNode with every link of both directions: the pages getNode does not answer read with listNodeLinks (what a
    * diff of two versions or a link to remove by id needs; a view of the node reads a page). */
-  getNodeWithLinks: async (ref: NodeRef, signal?: AbortSignal, view?: GraphView): Promise<{ view?: NodeView }> => {
+  getNodeWithLinks: async (
+    ref: NodeRef,
+    signal?: AbortSignal,
+    view?: GraphView,
+  ): Promise<{ view?: NodeView }> => {
     const r = await graph.getNode(ref, signal, view, MAX_LINK_PAGE);
     const v = r.view;
     if (!v?.node?.id) return r;
     const at = { id: v.node.id, version: ref.version };
     for (const incoming of [false, true]) {
-      const links = (incoming ? (v.in ??= []) : (v.out ??= []));
+      const links = incoming ? (v.in ??= []) : (v.out ??= []);
       const total = (incoming ? v.inTotal : v.outTotal) ?? 0;
       while (links.length < total) {
-        const p = await graph.listNodeLinks(at, { incoming, offset: links.length, limit: MAX_LINK_PAGE }, signal, view);
+        const p = await graph.listNodeLinks(
+          at,
+          { incoming, offset: links.length, limit: MAX_LINK_PAGE },
+          signal,
+          view,
+        );
         if (!p.links?.length) break;
         links.push(...p.links);
       }
@@ -328,46 +734,145 @@ export const graph = {
   getNodeByKey: (key: string, view: GraphView, signal?: AbortSignal) =>
     rpc<{ key: string; view: GraphView }, { view?: NodeView }>(
       GRAPH,
-      'GetNode',
+      "GetNode",
       { key, view },
       signal,
     ),
   /** A page of the versions of a node, all branches, by version (ADR 0140): the latest `limit` (default 50) below the
    * version `before`; `next` is the `before` of the older page (absent: none). */
-  listNodeVersions: (id: string, signal?: AbortSignal, page: { before?: number; limit?: number } = {}) =>
-    rpc<{ id: string; before?: number; limit?: number }, { versions?: GraphNode[]; next?: number }>(GRAPH, 'ListNodeVersions', { id, ...page }, signal),
+  listNodeVersions: (
+    id: string,
+    signal?: AbortSignal,
+    page: { before?: number; limit?: number } = {},
+  ) =>
+    rpc<
+      { id: string; before?: number; limit?: number },
+      { versions?: GraphNode[]; next?: number }
+    >(GRAPH, "ListNodeVersions", { id, ...page }, signal),
   /** The versions the change starts from (the pre version of its change impacts). */
   getChangeImpacts: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { nodes?: NodeRef[] }>(GRAPH, 'GetChangeImpacts', { changeId }, signal),
+    rpc<{ changeId: string }, { nodes?: NodeRef[] }>(
+      GRAPH,
+      "GetChangeImpacts",
+      { changeId },
+      signal,
+    ),
   /** Declare the nodes a change acts on (an impact: pre, intent, rationale). */
   proposeImpact: (changeId: string, nodes: ChangeImpact[]) =>
-    rpc<{ changeId: string; nodes: ChangeImpact[] }, { nodes?: ChangeImpact[] }>(GRAPH, 'ProposeImpact', { changeId, nodes }),
+    rpc<
+      { changeId: string; nodes: ChangeImpact[] },
+      { nodes?: ChangeImpact[] }
+    >(GRAPH, "ProposeImpact", { changeId, nodes }),
   // The node operations of a change (ADR 0076): a node is created or checked out in a change (a draft: the node has
   // no version until the change commits, ADR 0079), edited in place (properties, owner, outgoing links), moved along its
   // lifecycle (a transition on a node with no draft checks it out first). An edit never reviews: the review is explicit. flow: the flow or
   // option written on ('main' names the main flow, '' is the active option).
   /** Creates a node in a change: the impact (intent created) and its draft. */
-  impactNodeCreate: (changeId: string, n: { key: string; type: string; props?: Struct; responsible?: string; rationale: string; links?: LinkWrite[] }, flow = '') =>
-    rpc<typeof n & { changeId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeCreate', { changeId, ...n, flow }),
+  impactNodeCreate: (
+    changeId: string,
+    n: {
+      key: string;
+      type: string;
+      props?: Struct;
+      responsible?: string;
+      rationale: string;
+      links?: LinkWrite[];
+    },
+    flow = "",
+  ) =>
+    rpc<typeof n & { changeId: string; flow: string }, { node?: ChangeImpact }>(
+      GRAPH,
+      "ImpactNodeCreate",
+      { changeId, ...n, flow },
+    ),
   /** Merges nodes into a new one, from the side of their parents (ADR 0077): the parents lose the links to the sources and gain one to the new node; the sources stay as they are, their impacts carry the impact of their parent as via. */
-  impactNodeMerge: (changeId: string, m: { sources: NodeName[]; into: NodeCreateSpec; rationale?: string }, flow = '') =>
-    rpc<typeof m & { changeId: string; flow: string }, Restructured>(GRAPH, 'ImpactNodeMerge', { changeId, ...m, flow }),
+  impactNodeMerge: (
+    changeId: string,
+    m: { sources: NodeName[]; into: NodeCreateSpec; rationale?: string },
+    flow = "",
+  ) =>
+    rpc<typeof m & { changeId: string; flow: string }, Restructured>(
+      GRAPH,
+      "ImpactNodeMerge",
+      { changeId, ...m, flow },
+    ),
   /** Splits a node into new ones, from the side of its parents; the other links to it are returned as suspect. */
-  impactNodeSplit: (changeId: string, s: { source: NodeName; into: NodeCreateSpec[]; rationale?: string }, flow = '') =>
-    rpc<typeof s & { changeId: string; flow: string }, Restructured>(GRAPH, 'ImpactNodeSplit', { changeId, ...s, flow }),
+  impactNodeSplit: (
+    changeId: string,
+    s: { source: NodeName; into: NodeCreateSpec[]; rationale?: string },
+    flow = "",
+  ) =>
+    rpc<typeof s & { changeId: string; flow: string }, Restructured>(
+      GRAPH,
+      "ImpactNodeSplit",
+      { changeId, ...s, flow },
+    ),
   /** The first versions of the nodes that derive from a node (ADR 0077); version 0 (or none): any version. */
-  derivedNodes: (ref: NodeRef, signal?: AbortSignal) => rpc<{ ref: NodeRef }, { nodes?: GraphNode[] }>(GRAPH, 'DerivedNodes', { ref }, signal),
+  derivedNodes: (ref: NodeRef, signal?: AbortSignal) =>
+    rpc<{ ref: NodeRef }, { nodes?: GraphNode[] }>(
+      GRAPH,
+      "DerivedNodes",
+      { ref },
+      signal,
+    ),
   /** Checks out a node (by its impact, or by the node: the impact is declared) for editing: the draft of the flow; refused (conflict 'already checked out') while the flow already holds its own (update it). A draft held by a parent flow is not the flow's own. */
-  impactNodeCheckout: (changeId: string, target: { changeImpactId?: string; nodeId?: string }, rationale = '', flow = '') =>
-    rpc<{ changeId: string; nodes: { changeImpactId?: string; nodeId?: string; rationale: string }[]; flow: string }, { nodes?: ChangeImpact[] }>(
-      GRAPH, 'ImpactNodeCheckout', { changeId, nodes: [{ ...target, rationale }], flow },
-    ).then((r) => ({ node: r.nodes?.[0] })),
+  impactNodeCheckout: (
+    changeId: string,
+    target: { changeImpactId?: string; nodeId?: string },
+    rationale = "",
+    flow = "",
+  ) =>
+    rpc<
+      {
+        changeId: string;
+        nodes: {
+          changeImpactId?: string;
+          nodeId?: string;
+          rationale: string;
+        }[];
+        flow: string;
+      },
+      { nodes?: ChangeImpact[] }
+    >(GRAPH, "ImpactNodeCheckout", {
+      changeId,
+      nodes: [{ ...target, rationale }],
+      flow,
+    }).then((r) => ({ node: r.nodes?.[0] })),
   /** Merges properties into (and transfers the responsible unit of) a draft, in place; an accepted review goes back to proposed. */
-  impactNodeUpdate: (changeId: string, changeImpactId: string, u: { props?: Struct; responsible?: string }, flow = '') =>
-    rpc<{ changeId: string; changeImpactId: string; props?: Struct; responsible?: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeUpdate', { changeId, changeImpactId, ...u, flow }),
+  impactNodeUpdate: (
+    changeId: string,
+    changeImpactId: string,
+    u: { props?: Struct; responsible?: string },
+    flow = "",
+  ) =>
+    rpc<
+      {
+        changeId: string;
+        changeImpactId: string;
+        props?: Struct;
+        responsible?: string;
+        flow: string;
+      },
+      { node?: ChangeImpact }
+    >(GRAPH, "ImpactNodeUpdate", { changeId, changeImpactId, ...u, flow }),
   /** Adds an outgoing link to a draft, in place. `to` is an exact version, or a draft reference {id, version: 0} of a node the change holds a draft of. */
-  impactLinkCreate: (changeId: string, changeImpactId: string, l: LinkWrite, flow = '') =>
-    rpc<{ changeId: string; changeImpactId: string; type: string; to: NodeRef; props?: Struct; flow: string }, { link?: Link }>(GRAPH, 'ImpactLinkCreate', {
+  impactLinkCreate: (
+    changeId: string,
+    changeImpactId: string,
+    l: LinkWrite,
+    flow = "",
+  ) =>
+    rpc<
+      {
+        changeId: string;
+        changeImpactId: string;
+        type: string;
+        to: NodeRef;
+        props?: Struct;
+        flow: string;
+      },
+      { link?: Link }
+    >(GRAPH, "ImpactLinkCreate", {
       changeId,
       changeImpactId,
       type: l.type,
@@ -375,14 +880,42 @@ export const graph = {
       props: l.props,
       flow,
     }),
-  impactLinkUpdate: (changeId: string, linkId: string, props: Struct, flow = '') =>
-    rpc<{ changeId: string; linkId: string; props: Struct; flow: string }, { link?: Link }>(GRAPH, 'ImpactLinkUpdate', { changeId, linkId, props, flow }),
+  impactLinkUpdate: (
+    changeId: string,
+    linkId: string,
+    props: Struct,
+    flow = "",
+  ) =>
+    rpc<
+      { changeId: string; linkId: string; props: Struct; flow: string },
+      { link?: Link }
+    >(GRAPH, "ImpactLinkUpdate", { changeId, linkId, props, flow }),
   /** Removes an outgoing link of a draft (id: a link of the draft view, or of the stored version it was checked out from) (removing a child is a modification of its parent). */
-  impactLinkDelete: (changeId: string, linkId: string, flow = '') =>
-    rpc<{ changeId: string; linkId: string; flow: string }, Empty>(GRAPH, 'ImpactLinkDelete', { changeId, linkId, flow }),
+  impactLinkDelete: (changeId: string, linkId: string, flow = "") =>
+    rpc<{ changeId: string; linkId: string; flow: string }, Empty>(
+      GRAPH,
+      "ImpactLinkDelete",
+      { changeId, linkId, flow },
+    ),
   /** Moves a node along its lifecycle (by its impact, or by the node: the impact is declared): always on the draft (a node with none is checked out first); never changes the review. */
-  impactNodeTransition: (changeId: string, target: { changeImpactId?: string; nodeId?: string }, state: string, rationale = '', flow = '') =>
-    rpc<{ changeId: string; changeImpactId?: string; nodeId?: string; state: string; rationale: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeTransition', {
+  impactNodeTransition: (
+    changeId: string,
+    target: { changeImpactId?: string; nodeId?: string },
+    state: string,
+    rationale = "",
+    flow = "",
+  ) =>
+    rpc<
+      {
+        changeId: string;
+        changeImpactId?: string;
+        nodeId?: string;
+        state: string;
+        rationale: string;
+        flow: string;
+      },
+      { node?: ChangeImpact }
+    >(GRAPH, "ImpactNodeTransition", {
       changeId,
       ...target,
       state,
@@ -390,83 +923,212 @@ export const graph = {
       flow,
     }),
   /** Drops the draft of an impact (a creation never accepted leaves no node). */
-  impactNodeCancel: (changeId: string, changeImpactId: string, flow = '') =>
-    rpc<{ changeId: string; changeImpactId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeCancel', { changeId, changeImpactId, flow }),
+  impactNodeCancel: (changeId: string, changeImpactId: string, flow = "") =>
+    rpc<
+      { changeId: string; changeImpactId: string; flow: string },
+      { node?: ChangeImpact }
+    >(GRAPH, "ImpactNodeCancel", { changeId, changeImpactId, flow }),
   /** Takes an impact out of the change, at any time (ADR 0102): its draft is dropped, a version it committed is reverted
    * by the next commit. */
-  withdrawImpact: (changeId: string, changeImpactId: string, flow = '') =>
-    rpc<{ changeId: string; changeImpactId: string; flow: string }, Empty>(GRAPH, 'WithdrawImpact', { changeId, changeImpactId, flow }),
+  withdrawImpact: (changeId: string, changeImpactId: string, flow = "") =>
+    rpc<{ changeId: string; changeImpactId: string; flow: string }, Empty>(
+      GRAPH,
+      "WithdrawImpact",
+      { changeId, changeImpactId, flow },
+    ),
   /** Takes several impacts out of the change at once, in one transaction: all of them or none. */
-  withdrawImpacts: (changeId: string, changeImpactIds: string[], flow = '') =>
-    rpc<{ changeId: string; changeImpactIds: string[]; flow: string }, Empty>(GRAPH, 'WithdrawImpacts', { changeId, changeImpactIds, flow }),
+  withdrawImpacts: (changeId: string, changeImpactIds: string[], flow = "") =>
+    rpc<{ changeId: string; changeImpactIds: string[]; flow: string }, Empty>(
+      GRAPH,
+      "WithdrawImpacts",
+      { changeId, changeImpactIds, flow },
+    ),
   /** Rebases a change onto the head of the branch it was forked from (ADR 0101; a sub-change: its parent's branch, ADR 0103): the nodes changed on both sides are merged three-way, the fields changed on both sides are conflicts. */
   rebaseChange: (changeId: string) =>
-    rpc<{ changeId: string }, { parentId?: string; impacts?: RebasedImpact[]; branch?: string; from?: string; onto?: string }>(GRAPH, 'RebaseChange', { changeId }),
+    rpc<
+      { changeId: string },
+      {
+        parentId?: string;
+        impacts?: RebasedImpact[];
+        branch?: string;
+        from?: string;
+        onto?: string;
+      }
+    >(GRAPH, "RebaseChange", { changeId }),
   /** Keeps the change's values for the conflicts a rebase left on an impact (an edit of a field settles its own). */
   impactNodeResolve: (changeId: string, changeImpactId: string) =>
-    rpc<{ changeId: string; changeImpactId: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeResolve', { changeId, changeImpactId }),
+    rpc<{ changeId: string; changeImpactId: string }, { node?: ChangeImpact }>(
+      GRAPH,
+      "ImpactNodeResolve",
+      { changeId, changeImpactId },
+    ),
   /** Where a sub-change stands against its parent: the impacts behind it, the conflicts to settle. */
   /** What the change can commit and merge (ADR 0102). */
-  getCommitState: (changeId: string, signal?: AbortSignal) => rpc<{ changeId: string }, CommitState>(GRAPH, 'GetCommitState', { changeId }, signal),
+  getCommitState: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, CommitState>(
+      GRAPH,
+      "GetCommitState",
+      { changeId },
+      signal,
+    ),
   getRebaseState: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, RebaseState>(GRAPH, 'GetRebaseState', { changeId }, signal),
+    rpc<{ changeId: string }, RebaseState>(
+      GRAPH,
+      "GetRebaseState",
+      { changeId },
+      signal,
+    ),
   /** Sends accepted or rejected impacts back to proposed (a rejected one is reworked); the comment is mandatory. */
-  reopenChangeImpacts: (changeId: string, changeImpactIds: string[], comment: string) =>
-    rpc<{ changeId: string; changeImpactIds: string[]; comment: string }, { reopened?: string[] }>(GRAPH, 'ReopenChangeImpacts', { changeId, changeImpactIds, comment }),
+  reopenChangeImpacts: (
+    changeId: string,
+    changeImpactIds: string[],
+    comment: string,
+  ) =>
+    rpc<
+      { changeId: string; changeImpactIds: string[]; comment: string },
+      { reopened?: string[] }
+    >(GRAPH, "ReopenChangeImpacts", { changeId, changeImpactIds, comment }),
   /** Accept or reject a change impact; the comment is mandatory. */
   /** flow: the flow or option the review is made on ('main' names the main flow; '' is the active option). */
-  impactNodeReview: (changeId: string, changeImpactId: string, accept: boolean, comment: string, flow = '') =>
-    rpc<{ changeId: string; changeImpactId: string; accept: boolean; comment: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeReview', { changeId, changeImpactId, accept, comment, flow }),
+  impactNodeReview: (
+    changeId: string,
+    changeImpactId: string,
+    accept: boolean,
+    comment: string,
+    flow = "",
+  ) =>
+    rpc<
+      {
+        changeId: string;
+        changeImpactId: string;
+        accept: boolean;
+        comment: string;
+        flow: string;
+      },
+      { node?: ChangeImpact }
+    >(GRAPH, "ImpactNodeReview", {
+      changeId,
+      changeImpactId,
+      accept,
+      comment,
+      flow,
+    }),
   /** The review object (ADR 0080): open one (flow: 'main' names the main flow; '' is the active option). */
-  reviewOpen: (changeId: string, comment = '', flow = '') =>
-    rpc<{ changeId: string; flow: string; comment: string }, { review?: ReviewRecord }>(GRAPH, 'ReviewOpen', { changeId, flow, comment }),
+  reviewOpen: (changeId: string, comment = "", flow = "") =>
+    rpc<
+      { changeId: string; flow: string; comment: string },
+      { review?: ReviewRecord }
+    >(GRAPH, "ReviewOpen", { changeId, flow, comment }),
   /** Change an open review: its author or an administrator only. Every field is optional. */
   reviewUpdate: (changeId: string, key: string, edit: ReviewEdit) =>
-    rpc<ReturnType<typeof reviewUpdateRequest>, { review?: ReviewRecord }>(GRAPH, 'ReviewUpdate', reviewUpdateRequest(changeId, key, edit)),
+    rpc<ReturnType<typeof reviewUpdateRequest>, { review?: ReviewRecord }>(
+      GRAPH,
+      "ReviewUpdate",
+      reviewUpdateRequest(changeId, key, edit),
+    ),
   /** Submit an open review: every entry reviewed in one transaction, all or none. */
-  reviewSubmit: (changeId: string, key: string) => rpc<{ changeId: string; key: string }, { review?: ReviewRecord }>(GRAPH, 'ReviewSubmit', { changeId, key }),
+  reviewSubmit: (changeId: string, key: string) =>
+    rpc<{ changeId: string; key: string }, { review?: ReviewRecord }>(
+      GRAPH,
+      "ReviewSubmit",
+      { changeId, key },
+    ),
   /** Discard a review that was never submitted. */
-  reviewDiscard: (changeId: string, key: string) => rpc<{ changeId: string; key: string }, { review?: ReviewRecord }>(GRAPH, 'ReviewDiscard', { changeId, key }),
+  reviewDiscard: (changeId: string, key: string) =>
+    rpc<{ changeId: string; key: string }, { review?: ReviewRecord }>(
+      GRAPH,
+      "ReviewDiscard",
+      { changeId, key },
+    ),
   /** The change as a flow or an option sees it: its change impacts (with the post versions of that flow) and items. */
   getBlackboard: (changeId: string, flow: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string; flow: string }, { change?: Change; options?: Flow[]; activeOption?: string; decisionPoints?: DecisionPoint[] }>(GRAPH, 'GetBlackboard', { changeId, flow }, signal),
+    rpc<
+      { changeId: string; flow: string },
+      {
+        change?: Change;
+        options?: Flow[];
+        activeOption?: string;
+        decisionPoints?: DecisionPoint[];
+      }
+    >(GRAPH, "GetBlackboard", { changeId, flow }, signal),
   /** Create a change, write the edits on its branch, accept and check them in and apply it (one call). */
-  commitEdits: (req: { namespace: string; title: string; intent: string; baselineId: string; methodology?: string; edits: NodeEdit[] }) =>
-    rpc<typeof req, { changeId?: string }>(GRAPH, 'CommitEdits', req),
+  commitEdits: (req: {
+    namespace: string;
+    title: string;
+    intent: string;
+    baselineId: string;
+    methodology?: string;
+    edits: NodeEdit[];
+  }) => rpc<typeof req, { changeId?: string }>(GRAPH, "CommitEdits", req),
   addItems: (changeId: string, items: ChangeItem[]) =>
-    rpc<{ changeId: string; items: ChangeItem[] }, { items?: ChangeItem[] }>(GRAPH, 'AddItems', { changeId, items }),
-  /** Execution journal of a change, optionally restricted to given processes. */
-  listExecutions: (changeId: string, processIds: string[] = [], signal?: AbortSignal) =>
-    rpc<{ changeId: string; processIds?: string[] }, { records?: ExecutionRecord[] }>(
+    rpc<{ changeId: string; items: ChangeItem[] }, { items?: ChangeItem[] }>(
       GRAPH,
-      'ListExecutions',
+      "AddItems",
+      { changeId, items },
+    ),
+  /** Execution journal of a change, optionally restricted to given processes. */
+  listExecutions: (
+    changeId: string,
+    processIds: string[] = [],
+    signal?: AbortSignal,
+  ) =>
+    rpc<
+      { changeId: string; processIds?: string[] },
+      { records?: ExecutionRecord[] }
+    >(
+      GRAPH,
+      "ListExecutions",
       processIds.length ? { changeId, processIds } : { changeId },
       signal,
     ),
   /** Removes a change that committed nothing, with its log (ADR 0037); refused once anything of it is applied or used. */
-  deleteChange: (changeId: string) => rpc<{ changeId: string }, { change?: Change }>(GRAPH, 'DeleteChange', { changeId }),
+  deleteChange: (changeId: string) =>
+    rpc<{ changeId: string }, { change?: Change }>(GRAPH, "DeleteChange", {
+      changeId,
+    }),
   /** The settings dialog's edits not saved yet (ADR 0037, 0122): the personal changes of the caller, one per namespace. */
-  getPendingSettings: () => rpc<Empty, PendingSettings>(GRAPH, 'GetPendingSettings', {}),
+  getPendingSettings: () =>
+    rpc<Empty, PendingSettings>(GRAPH, "GetPendingSettings", {}),
   /** Stages edits of the settings dialog in order, on the server; answers the whole pending state. */
-  stageSettings: (edits: SettingEdit[]) => rpc<{ edits: SettingEdit[] }, PendingSettings>(GRAPH, 'StageSettings', { edits }),
+  stageSettings: (edits: SettingEdit[]) =>
+    rpc<{ edits: SettingEdit[] }, PendingSettings>(GRAPH, "StageSettings", {
+      edits,
+    }),
   /** Accepts and applies the staged edits that modify something; the others are given up. */
-  saveSettings: () => rpc<Empty, PendingSettings>(GRAPH, 'SaveSettings', {}),
+  saveSettings: () => rpc<Empty, PendingSettings>(GRAPH, "SaveSettings", {}),
   /** Removes the personal changes holding the staged edits. */
-  discardSettings: () => rpc<Empty, PendingSettings>(GRAPH, 'DiscardSettings', {}),
+  discardSettings: () =>
+    rpc<Empty, PendingSettings>(GRAPH, "DiscardSettings", {}),
   /**
    * Moves the change along a transition of its lifecycle (ADR 0058). `decision` is the decision point that gates it
    * (seen by the guard as change.decision, consumed by the move). A refusal comes as an error whose message names the
    * vetos or the objectives not met (`parseRefusal` of `changeTransition.ts`).
    */
-  transitionChange: (changeId: string, transition: string, decision = '') =>
-    rpc<{ changeId: string; transition: string; decision?: string }, { change?: Change }>(GRAPH, 'TransitionChange', {
+  transitionChange: (changeId: string, transition: string, decision = "") =>
+    rpc<
+      { changeId: string; transition: string; decision?: string },
+      { change?: Change }
+    >(GRAPH, "TransitionChange", {
       changeId,
       transition,
       ...(decision ? { decision } : {}),
     }),
+  /**
+   * The transitions out of the state of the change, each judged for the caller as TransitionChange would judge it,
+   * without taking it: allowed, or what blocks it (status, access, guard, criteria, guardians) and why.
+   */
+  getChangeTransitions: (changeId: string) =>
+    rpc<{ changeId: string }, GetChangeTransitionsResponseJson>(
+      GRAPH,
+      "GetChangeTransitions",
+      { changeId },
+    ),
   /** Step one of apply (ADR 0056): the versions are written on the change's own branch; mergeChange integrates them. */
   commitChange: (changeId: string, baselineName: string, nodes?: string[]) =>
-    rpc<{ changeId: string; baselineName: string; nodes?: string[] }, { baseline?: Baseline }>(GRAPH, 'CommitChange', {
+    rpc<
+      { changeId: string; baselineName: string; nodes?: string[] },
+      { baseline?: Baseline }
+    >(GRAPH, "CommitChange", {
       changeId,
       baselineName,
       ...(nodes?.length ? { nodes } : {}),
