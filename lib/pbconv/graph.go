@@ -340,7 +340,47 @@ func ChangeToPB(c domain.Change) *graphv1.Change {
 	return &graphv1.Change{Id: string(c.ID), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentId: string(c.ParentID), OwnerOrg: c.OwnerOrg.String(), Status: string(c.Status),
 		BaselineId: string(c.BaselineID), ResultBaselineId: string(c.ResultBaselineID), Data: Struct(c.Data), Items: ItemsToPB(c.Items), CreatedAt: Time(c.CreatedAt),
 		Branch: domain.BranchOf(c.Branch), Nodes: ChangeImpactsToPB(c.Nodes), ProjectId: c.ProjectID.String(), Lifecycle: c.Lifecycle, State: c.State, Guardians: GuardiansToPB(c.Guardians),
-		DependsOn: changeIDsToPB(c.DependsOn), MethodologyVersion: c.MethodologyVersion, Seq: c.Seq}
+		DependsOn: changeIDsToPB(c.DependsOn), MethodologyVersion: c.MethodologyVersion, Seq: c.Seq, Stats: ChangeStatsToPB(changeStats(c))}
+}
+
+// changeStats are the counters a change is answered with: the fold of its impacts when it holds them (the impacts not
+// committed counted too), else the counters of what it committed its header keeps.
+func changeStats(c domain.Change) domain.ChangeStats {
+	if c.Impacts().Len() == 0 {
+		return c.Stats
+	}
+	return domain.StatsOf(c.Impacts())
+}
+
+func ChangeStatsToPB(s domain.ChangeStats) *graphv1.ChangeStats {
+	return &graphv1.ChangeStats{Created: int32(s.Created), Modified: int32(s.Modified), Deleted: int32(s.Deleted), Restored: int32(s.Restored),
+		Requalified: int32(s.Requalified), Properties: int32(s.Properties), States: int32(s.States), LinksAdded: int32(s.LinksAdded),
+		LinksRemoved: int32(s.LinksRemoved), LinksChanged: int32(s.LinksChanged), Proposed: int32(s.Proposed), Accepted: int32(s.Accepted), Rejected: int32(s.Rejected)}
+}
+
+func ChangeStatsFromPB(s *graphv1.ChangeStats) domain.ChangeStats {
+	if s == nil {
+		return domain.ChangeStats{}
+	}
+	return domain.ChangeStats{Created: int(s.Created), Modified: int(s.Modified), Deleted: int(s.Deleted), Restored: int(s.Restored),
+		Requalified: int(s.Requalified), Properties: int(s.Properties), States: int(s.States), LinksAdded: int(s.LinksAdded),
+		LinksRemoved: int(s.LinksRemoved), LinksChanged: int(s.LinksChanged), Proposed: int(s.Proposed), Accepted: int(s.Accepted), Rejected: int(s.Rejected)}
+}
+
+func impactEffectToPB(e domain.ImpactEffect) *graphv1.ImpactEffect {
+	if e.IsZero() {
+		return nil
+	}
+	return &graphv1.ImpactEffect{Kind: e.Kind, Requalified: e.Requalified, Properties: int32(e.Properties), State: e.State,
+		LinksAdded: int32(e.LinksAdded), LinksRemoved: int32(e.LinksRemoved), LinksChanged: int32(e.LinksChanged)}
+}
+
+func impactEffectFromPB(e *graphv1.ImpactEffect) domain.ImpactEffect {
+	if e == nil {
+		return domain.ImpactEffect{}
+	}
+	return domain.ImpactEffect{Kind: e.Kind, Requalified: e.Requalified, Properties: int(e.Properties), State: e.State,
+		LinksAdded: int(e.LinksAdded), LinksRemoved: int(e.LinksRemoved), LinksChanged: int(e.LinksChanged)}
 }
 
 func ChangeFromPB(c *graphv1.Change) domain.Change {
@@ -350,7 +390,7 @@ func ChangeFromPB(c *graphv1.Change) domain.Change {
 	return domain.Change{ID: domain.ChangeID(c.Id), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentID: domain.ChangeID(c.ParentId), OwnerOrg: lnk.Of(c.OwnerOrg), Status: domain.ChangeStatus(c.Status),
 		BaselineID: domain.BaselineID(c.BaselineId), ResultBaselineID: domain.BaselineID(c.ResultBaselineId), Data: Map(c.Data), Items: ItemsFromPB(c.Items), CreatedAt: FromTime(c.CreatedAt),
 		Branch: c.Branch, Nodes: ChangeImpactsFromPB(c.Nodes), ProjectID: lnk.Of(c.ProjectId), Lifecycle: c.Lifecycle, State: c.State, Guardians: GuardiansFromPB(c.Guardians),
-		DependsOn: ChangeIDsFromPB(c.DependsOn), MethodologyVersion: c.MethodologyVersion, Seq: c.Seq}
+		DependsOn: ChangeIDsFromPB(c.DependsOn), MethodologyVersion: c.MethodologyVersion, Seq: c.Seq, Stats: ChangeStatsFromPB(c.Stats).Committed()}
 }
 
 func BranchToPB(b domain.Branch) *graphv1.Branch {
@@ -362,7 +402,7 @@ func ChangeImpactToPB(cn domain.ChangeImpact) *graphv1.ChangeImpact {
 	out := &graphv1.ChangeImpact{Id: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Rationale: cn.Rationale,
 		Pre: RefPtrToPB(cn.Pre), Post: RefPtrToPB(cn.Post), Committed: RefPtrToPB(cn.Committed), Review: string(cn.Review),
 		Via: string(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, CreatedAt: Time(cn.CreatedAt),
-		Flow: cn.Flow, Superseded: cn.Superseded}
+		Flow: cn.Flow, Superseded: cn.Superseded, Effect: impactEffectToPB(cn.Effect)}
 	if v := cn.Validation; v != nil {
 		out.Validation = &graphv1.ImpactValidation{Valid: v.Valid, Message: v.Message, Modified: v.Modified}
 	}
@@ -385,7 +425,7 @@ func ChangeImpactFromPB(cn *graphv1.ChangeImpact) domain.ChangeImpact {
 	out := domain.ChangeImpact{ID: domain.ChangeImpactID(cn.Id), Key: cn.Key, Type: cn.Type, Intent: domain.NodeIntent(cn.Intent), Rationale: cn.Rationale,
 		Pre: RefPtrFromPB(cn.Pre), Post: RefPtrFromPB(cn.Post), Committed: RefPtrFromPB(cn.Committed), Review: domain.NodeReview(cn.Review),
 		Via: domain.ChangeImpactID(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, CreatedAt: FromTime(cn.CreatedAt),
-		Flow: cn.Flow, Superseded: cn.Superseded}
+		Flow: cn.Flow, Superseded: cn.Superseded, Effect: impactEffectFromPB(cn.Effect)}
 	if v := cn.Validation; v != nil {
 		out.Validation = &domain.ImpactValidation{Valid: v.Valid, Message: v.Message, Modified: v.Modified}
 	}

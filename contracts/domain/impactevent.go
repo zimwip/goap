@@ -102,6 +102,10 @@ type ImpactEvent struct {
 	FromBase  *BaseCopy `json:"fromBase,omitempty"`
 	Pre       *NodeRef  `json:"pre,omitempty"` // rebased; checkedOut, transitioned: a rebase moved the pre (ADR 0101, 0144)
 	Committed *NodeRef  `json:"committed,omitempty"`
+	// Effect is, on committed, what the version does to its node (EffectOf): set where the version is committed for the
+	// change, on its own branch or on its parent's; an integration into another branch records none and keeps the one
+	// folded.
+	Effect *ImpactEffect `json:"effect,omitempty"`
 	// Baseline is, on committed, the baseline of the branch the version committed in (ADR 0032).
 	Baseline BaselineID `json:"baseline,omitempty"`
 	// Branch is, on committed, the branch the version committed on: the change's own branch at commit, the branch it is
@@ -227,6 +231,9 @@ func ApplyImpactEventAt(out []ChangeImpact, at int, e ImpactEvent) []ChangeImpac
 	case ImpactCommitted:
 		l := *e.Committed
 		cn.Committed = &l
+		if e.Effect != nil {
+			cn.Effect = *e.Effect
+		}
 		if cn.Post == nil || cn.Post.IsDraft() {
 			p := l // the draft is written as this version (ADR 0079)
 			cn.Post = &p

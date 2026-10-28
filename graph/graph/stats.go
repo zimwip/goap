@@ -31,11 +31,14 @@ const (
 	StatChangesByStatus  = "changesByStatus"  // changes, by status
 	StatTags             = "tags"             // tags naming a node version
 	StatLogByType        = "logByType"        // entries of the logs of the changes, by type
+	// what the root changes committed, by counter (domain.ChangeStats as its header keeps it: created, modified,
+	// deleted, linksAdded...): a sub-change's work is counted in its parent once merged
+	StatChangeCounters = "changeCounters"
 )
 
 // StoreMeasures lists the measures StoreCounts answers, in the order they are shown.
 var StoreMeasures = []string{StatNodesByType, StatVersionsByType, StatVersionsByReason, StatVersionsPerNode, StatLinkRowsByType,
-	StatLinkDrops, StatLinkSetsByMode, StatJoins, StatBaselinesByKind, StatChangesByStatus, StatTags, StatLogByType}
+	StatLinkDrops, StatLinkSetsByMode, StatJoins, StatBaselinesByKind, StatChangesByStatus, StatChangeCounters, StatTags, StatLogByType}
 
 // Link set modes (StatLinkSetsByMode).
 const (

@@ -16,9 +16,9 @@ import (
 // impactColumns are the columns of a change_impact row, in the order of PutChangeImpact's arguments.
 var impactColumns = []string{"id", "change_id", "node_id", "key", "type", "intent", "rationale", "pre_version", "post_version",
 	"committed_version", "review", "reviews", "via", "recheck", "produced_by", "derived_from", "items", "execution", "created_at",
-	"flow", "superseded"}
+	"flow", "superseded", "effect"}
 
-// impactRowsPerInsert is the number of change_impact rows one statement writes (22 arguments each).
+// impactRowsPerInsert is the number of change_impact rows one statement writes (23 arguments each).
 const impactRowsPerInsert = 500
 
 // heldQuerier holds the rows of change_impact a write transaction writes and sends them in one statement before its
@@ -151,7 +151,7 @@ func (h *heldQuerier) flush(ctx context.Context) error {
 	return nil
 }
 
-// versionRowsPerInsert is the number of node versions one statement writes (22 arguments each).
+// versionRowsPerInsert is the number of node versions one statement writes (23 arguments each).
 const versionRowsPerInsert = 500
 
 // flushVersions writes the versions held: the nodes created, the nodes moved to their next version (each checked:
@@ -267,7 +267,7 @@ func impactArgs(change domain.ChangeID, cn domain.ChangeImpact) ([]any, error) {
 		return nil, err
 	}
 	return []any{r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Committed, r.Review, r.Reviews,
-		nullUUID(r.Via), r.Recheck, r.ProducedBy, r.DerivedFrom, r.Items, r.Execution, cn.CreatedAt, r.Flow, r.Superseded}, nil
+		nullUUID(r.Via), r.Recheck, r.ProducedBy, r.DerivedFrom, r.Items, r.Execution, cn.CreatedAt, r.Flow, r.Superseded, r.Effect}, nil
 }
 
 // flushLinks writes the link rows held, several per statement.

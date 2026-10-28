@@ -12,6 +12,7 @@ type cnRow struct {
 	NodeID                      *string
 	Pre, Post, Committed        *int
 	Reviews, DerivedFrom, Items []byte
+	Effect                      []byte
 	Key, Type, Intent, Review   string
 	Rationale, Via              string
 	Recheck                     bool
@@ -45,7 +46,10 @@ func toCNRow(cn domain.ChangeImpact) (cnRow, error) {
 	if r.DerivedFrom, err = json.Marshal(nonNil(cn.DerivedFrom)); err != nil {
 		return r, err
 	}
-	r.Items, err = json.Marshal(nonNil(cn.Items))
+	if r.Items, err = json.Marshal(nonNil(cn.Items)); err != nil {
+		return r, err
+	}
+	r.Effect, err = json.Marshal(cn.Effect)
 	return r, err
 }
 
@@ -84,6 +88,11 @@ func (r cnRow) node() (domain.ChangeImpact, error) {
 	}
 	if len(cn.Items) == 0 {
 		cn.Items = nil
+	}
+	if len(r.Effect) > 0 {
+		if err := json.Unmarshal(r.Effect, &cn.Effect); err != nil {
+			return cn, err
+		}
 	}
 	return cn, nil
 }

@@ -63,6 +63,9 @@ type ChangeImpact struct {
 	Committed *NodeRef   `json:"committed,omitempty"`
 	Review    NodeReview `json:"review"`
 	Reviews   []Review   `json:"reviews,omitempty"`
+	// Effect is what the last commit of the change did to the node (EffectOf, recorded on the committed event of its own
+	// branch, or of the parent's for the work of a merged sub-change); zero until it commits.
+	Effect ImpactEffect `json:"effect,omitzero"`
 	// Via is the change impact of the parent that realizes the removal of this node.
 	Via ChangeImpactID `json:"via,omitempty"`
 	// Recheck marks a rationale written against a version that is no longer the head.

@@ -87,6 +87,9 @@ type Change struct {
 	// Branch the change is applied to (default main).
 	Branch           string     `json:"branch,omitempty"`
 	ResultBaselineID BaselineID `json:"resultBaselineId,omitempty"`
+	// Stats are the counters of what the change committed (ChangeStats.Committed of StatsOf), kept on its header at each
+	// commit and each merge of a sub-change into it: what a statistic of the changes reads with no fold of their logs.
+	Stats ChangeStats `json:"stats,omitzero"`
 	// Data is the free-form data of the change: the marks the services give it (the graph reads none, see
 	// DataAdministrative, "trigger").
 	Data map[string]any `json:"data,omitempty"`

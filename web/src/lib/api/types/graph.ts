@@ -1,7 +1,7 @@
 // Graph types (proto3 JSON).
 
 import type { Int64, Struct } from './common';
-import type { ChangeStackJson, StackChangeJson, VersionStepJson, BaselineStepJson, GraphStatsJson, NamespaceSummaryJson, DistributionJson, NodeTypeStatsJson, LinkTypeStatsJson, ViewJson } from '../../../gen/goap/graph/v1/graph_pb';
+import type { ChangeStatsJson, ImpactEffectJson, ChangeStackJson, StackChangeJson, VersionStepJson, BaselineStepJson, GraphStatsJson, NamespaceSummaryJson, DistributionJson, NodeTypeStatsJson, LinkTypeStatsJson, ViewJson } from '../../../gen/goap/graph/v1/graph_pb';
 
 // --- graph ------------------------------------------------------------------
 
@@ -417,7 +417,14 @@ export interface Change {
   /** the nodes the change reads, modifies or creates: stored, and derived from its items */
   nodes?: ChangeImpact[];
   createdAt?: string;
+  /** its counters: what its commits did to the graph, net per node, and the impacts not committed yet */
+  stats?: ChangeStats;
 }
+
+/** The counters of a change (nodes created, modified, deleted, restored; properties, links, lifecycle moves; pending impacts). */
+export type ChangeStats = ChangeStatsJson;
+/** What the last commit of a change did to the node of an impact. */
+export type ImpactEffect = ImpactEffectJson;
 
 export interface NodeReview {
   status?: 'accepted' | 'rejected' | string;
@@ -517,6 +524,8 @@ export interface ChangeImpact {
   execution?: string;
   /** impact / proposal items it is derived from (empty when written directly) */
   items?: string[];
+  /** what the last commit of the change did to the node; absent until it commits */
+  effect?: ImpactEffect;
 }
 
 /** process.started | tick | action | approval | process.ended */

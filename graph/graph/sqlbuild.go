@@ -539,9 +539,19 @@ func (d dialect) sqlStoreCounts(namespace string) map[string]string {
 		StatJoins:           `SELECT '', count(*) FROM node_branch j JOIN node n ON n.id = j.node_id WHERE n.namespace = ` + ns,
 		StatBaselinesByKind: `SELECT kind, count(*) FROM baseline WHERE namespace = ` + ns + ` GROUP BY kind`,
 		StatChangesByStatus: `SELECT status, count(*) FROM change WHERE namespace = ` + ns + ` GROUP BY status`,
-		StatTags:            `SELECT name, count(*) FROM tag WHERE namespace = ` + ns + ` GROUP BY name`,
-		StatLogByType:       `SELECT l.type, count(*) FROM change_log l JOIN change c ON c.id = l.change_id WHERE c.namespace = ` + ns + ` GROUP BY l.type`,
+		StatChangeCounters: `SELECT s.key, sum(CAST(s.value AS integer)) FROM change c, ` + d.jsonEach("c.stats") + ` s WHERE c.namespace = ` + ns +
+			` AND c.parent_id IS NULL GROUP BY s.key`,
+		StatTags:      `SELECT name, count(*) FROM tag WHERE namespace = ` + ns + ` GROUP BY name`,
+		StatLogByType: `SELECT l.type, count(*) FROM change_log l JOIN change c ON c.id = l.change_id WHERE c.namespace = ` + ns + ` GROUP BY l.type`,
 	}
+}
+
+// jsonEach is the table of the keys and values (columns key, value: text) of a JSON object column.
+func (d dialect) jsonEach(col string) string {
+	if d.pg {
+		return `jsonb_each_text(` + col + `)`
+	}
+	return `json_each(` + col + `)`
 }
 
 // uuidList tests col against a list of uuids given as the n-th argument: an array for PostgreSQL, a JSON list for SQLite.
@@ -647,7 +657,7 @@ func (d dialect) sqlNodeChangePage(node domain.NodeID, before int64, limit int) 
 func (d dialect) changeImpactCols() string {
 	return d.cols(su("id"), su("node_id"), sc("key"), sc("type"), sc("intent"), sc("rationale"), sc("pre_version"), sc("post_version"), sc("committed_version"),
 		sc("review"), sc("reviews"), sqlCol{name: d.idOr("COALESCE", "via")}, sc("recheck"), sc("produced_by"), sc("derived_from"), sc("items"), sc("execution"),
-		sc("created_at"), sc("flow"), sc("superseded"))
+		sc("created_at"), sc("flow"), sc("superseded"), sc("effect"))
 }
 
 // sqlChangeImpacts reads the impacts of a change in the order they were written.

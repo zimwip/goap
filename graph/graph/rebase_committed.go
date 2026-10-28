@@ -287,6 +287,7 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 		id     domain.ChangeImpactID
 		ref    domain.NodeRef
 		review domain.Review
+		effect domain.ImpactEffect
 	}
 	var todo []committedIn
 	var entries []domain.ReviewEntry
@@ -305,6 +306,15 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 		id := held[ref.ID]
 		if p, ok := parentImpact[id]; ok && p.Committed != nil && *p.Committed == ref {
 			continue // merged before (ADR 0166): the parent holds it already
+		}
+		// what the version does to the node for the parent: the sub-change's effect when the parent starts from the same
+		// version, else read again over the parent's pre
+		effect := cn.Effect
+		if p, ok := parentImpact[id]; ok && !sameRef(p.Pre, cn.Pre) {
+			var err error
+			if effect, err = effectOver(ctx, tx, p.Pre, ref); err != nil {
+				return err
+			}
 		}
 		if id == "" {
 			id = domain.ChangeImpactID(g.newID())
@@ -326,7 +336,7 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 		}
 		r := domain.Review{Status: domain.ReviewAccepted, By: last.By, At: g.now(),
 			Comment: strings.TrimSpace(fmt.Sprintf("merged from sub-change %s (%s): %s", c.Title, c.ID, last.Comment))}
-		todo = append(todo, committedIn{events: events, id: id, ref: ref, review: r})
+		todo = append(todo, committedIn{events: events, id: id, ref: ref, review: r, effect: effect})
 		entries = append(entries, domain.ReviewEntry{Impact: string(id), Comment: r.Comment, Outcome: domain.ReviewOutcomeAccept})
 	}
 	if len(todo) > 0 {
@@ -339,15 +349,23 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 		for _, t := range todo {
 			r := t.review
 			r.ReviewID = key
-			ref := t.ref
+			ref, effect := t.ref, t.effect
 			phases[0] = append(phases[0], t.events...)
 			phases[1] = append(phases[1], domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactReviewed, By: r.By, Review: &r, Causation: cause})
-			phases[2] = append(phases[2], domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactCommitted, Committed: &ref, Branch: domain.BranchOf(parent.Branch)})
+			phases[2] = append(phases[2], domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactCommitted, Committed: &ref, Effect: &effect, Branch: domain.BranchOf(parent.Branch)})
 		}
 		for _, events := range phases {
 			if err := g.emit(ctx, tx, events...); err != nil {
 				return err
 			}
+		}
+		// the counters of the parent count the work it now holds
+		if parent, err = tx.Change(ctx, parent.ID); err != nil {
+			return err
+		}
+		parent.Stats = domain.StatsOf(parent.Impacts()).Committed()
+		if err := tx.PutChange(ctx, parent); err != nil {
+			return err
 		}
 	}
 	// the parent's branch now holds the sub-change's commits, committed impacts of the parent: it has committed work to
@@ -739,4 +757,32 @@ func (g *Graph) unmerged(ctx context.Context, tx Tx, c domain.Change) (int, erro
 		}
 	}
 	return n, nil
+}
+
+// effectOver is what the version post does to its node over the version pre (nil: a creation), read from the store.
+func effectOver(ctx context.Context, tx Tx, pre *domain.NodeRef, post domain.NodeRef) (domain.ImpactEffect, error) {
+	n, err := tx.Node(ctx, post)
+	if err != nil {
+		return domain.ImpactEffect{}, err
+	}
+	links, err := tx.OutLinks(ctx, post)
+	if err != nil {
+		return domain.ImpactEffect{}, err
+	}
+	if pre == nil {
+		return domain.EffectOf(nil, nil, n, links), nil
+	}
+	p, err := tx.Node(ctx, *pre)
+	if err != nil {
+		return domain.ImpactEffect{}, err
+	}
+	preLinks, err := tx.OutLinks(ctx, *pre)
+	if err != nil {
+		return domain.ImpactEffect{}, err
+	}
+	return domain.EffectOf(&p, preLinks, n, links), nil
+}
+
+func sameRef(a, b *domain.NodeRef) bool {
+	return (a == nil && b == nil) || (a != nil && b != nil && *a == *b)
 }

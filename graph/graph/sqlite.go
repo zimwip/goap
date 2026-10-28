@@ -654,13 +654,13 @@ func (t *sqliteTx) changeHeader(ctx context.Context, id domain.ChangeID) (domain
 }
 
 // sqliteChangeHead is the select list of a change's head, in the order scanSQLiteChangeHead reads it.
-const sqliteChangeHead = `id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, COALESCE(parent_id, ''), owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version`
+const sqliteChangeHead = `id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, COALESCE(parent_id, ''), owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats`
 
 func scanSQLiteChangeHead(scan func(...any) error) (domain.Change, error) {
 	var c domain.Change
 	var start, result sql.NullString
-	var data, created, guardians, dependsOn string
-	if err := scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), &start, &result, &data, &created, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State, &guardians, &dependsOn, &c.MethodologyVersion); err != nil {
+	var data, created, guardians, dependsOn, stats string
+	if err := scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), &start, &result, &data, &created, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State, &guardians, &dependsOn, &c.MethodologyVersion, &stats); err != nil {
 		return c, err
 	}
 	c.BaselineID, c.ResultBaselineID, c.Data, c.CreatedAt = domain.BaselineID(start.String), domain.BaselineID(result.String), props([]byte(data)), tsParse(created)
@@ -668,7 +668,10 @@ func scanSQLiteChangeHead(scan func(...any) error) (domain.Change, error) {
 	if c.Guardians, err = guardiansOf([]byte(guardians)); err != nil {
 		return c, err
 	}
-	c.DependsOn, err = dependsOnOf([]byte(dependsOn))
+	if c.DependsOn, err = dependsOnOf([]byte(dependsOn)); err != nil {
+		return c, err
+	}
+	c.Stats, err = statsOf([]byte(stats))
 	return c, err
 }
 
@@ -859,15 +862,15 @@ func (t *sqliteTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 }
 
 func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET title = excluded.title, intent = excluded.intent, goal = excluded.goal, status = excluded.status,
 		  result_baseline_id = excluded.result_baseline_id, data = excluded.data, baseline_id = excluded.baseline_id, branch = excluded.branch,
 		  lifecycle = excluded.lifecycle, state = excluded.state, project_id = excluded.project_id,
 		  parent_id = excluded.parent_id, guardians = excluded.guardians, depends_on = excluded.depends_on,
-		  methodology = excluded.methodology, methodology_version = excluded.methodology_version`,
+		  methodology = excluded.methodology, methodology_version = excluded.methodology_version, stats = excluded.stats`,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)),
-		string(jsonb(c.Data)), tsText(c.CreatedAt), domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, string(guardiansJSON(c.Guardians)), string(dependsOnJSON(c.DependsOn)), c.MethodologyVersion)
+		string(jsonb(c.Data)), tsText(c.CreatedAt), domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, string(guardiansJSON(c.Guardians)), string(dependsOnJSON(c.DependsOn)), c.MethodologyVersion, string(statsJSON(c.Stats)))
 	return sqliteErr(err, "change")
 }
 
@@ -942,12 +945,12 @@ func (t *sqliteTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, 
 	if err != nil {
 		return err
 	}
-	_, err = t.tx.ExecContext(ctx, `INSERT INTO change_impact (id, seq, change_id, node_id, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded)
-		VALUES (?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM change_impact), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err = t.tx.ExecContext(ctx, `INSERT INTO change_impact (id, seq, change_id, node_id, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded, effect)
+		VALUES (?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM change_impact), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET node_id = excluded.node_id, key = excluded.key, type = excluded.type, intent = excluded.intent, rationale = excluded.rationale,
 			pre_version = excluded.pre_version, post_version = excluded.post_version, committed_version = excluded.committed_version, review = excluded.review,
-			reviews = excluded.reviews, via = excluded.via, recheck = excluded.recheck, produced_by = excluded.produced_by, derived_from = excluded.derived_from, items = excluded.items, execution = excluded.execution, flow = excluded.flow, superseded = excluded.superseded`,
-		r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Committed, r.Review, string(r.Reviews), nullUUID(r.Via), r.Recheck, r.ProducedBy, string(r.DerivedFrom), string(r.Items), r.Execution, tsText(cn.CreatedAt), r.Flow, r.Superseded)
+			reviews = excluded.reviews, via = excluded.via, recheck = excluded.recheck, produced_by = excluded.produced_by, derived_from = excluded.derived_from, items = excluded.items, execution = excluded.execution, flow = excluded.flow, superseded = excluded.superseded, effect = excluded.effect`,
+		r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Committed, r.Review, string(r.Reviews), nullUUID(r.Via), r.Recheck, r.ProducedBy, string(r.DerivedFrom), string(r.Items), r.Execution, tsText(cn.CreatedAt), r.Flow, r.Superseded, string(r.Effect))
 	return sqliteErr(err, "change impact "+cn.Key)
 }
 
@@ -979,10 +982,10 @@ func (t *sqliteTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([
 	var out []domain.ChangeImpact
 	for rows.Next() {
 		var r cnRow
-		var reviews, derived, items, created string
+		var reviews, derived, items, created, effect string
 		var node sql.NullString
 		var pre, post, committed sql.NullInt64
-		if err := rows.Scan(&r.ID, &node, &r.Key, &r.Type, &r.Intent, &r.Rationale, &pre, &post, &committed, &r.Review, &reviews, &r.Via, &r.Recheck, &r.ProducedBy, &derived, &items, &r.Execution, &created, &r.Flow, &r.Superseded); err != nil {
+		if err := rows.Scan(&r.ID, &node, &r.Key, &r.Type, &r.Intent, &r.Rationale, &pre, &post, &committed, &r.Review, &reviews, &r.Via, &r.Recheck, &r.ProducedBy, &derived, &items, &r.Execution, &created, &r.Flow, &r.Superseded, &effect); err != nil {
 			return nil, err
 		}
 		if node.Valid {
@@ -997,7 +1000,7 @@ func (t *sqliteTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([
 				*x.dst = &v
 			}
 		}
-		r.Reviews, r.DerivedFrom, r.Items = []byte(reviews), []byte(derived), []byte(items)
+		r.Reviews, r.DerivedFrom, r.Items, r.Effect = []byte(reviews), []byte(derived), []byte(items), []byte(effect)
 		cn, err := r.node()
 		if err != nil {
 			return nil, err
