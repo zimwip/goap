@@ -119,7 +119,7 @@ type Importer struct {
 	Text         bool
 	MaxTextBytes int64
 	// ContentURL, when set, gives the address of the content of a file at a commit (a web address of the forge, a
-	// file:// URL of a working tree...), recorded as its contentUrl: see ContentURLOf.
+	// lnk: URL of a declared source...), recorded as its contentUrl: see ContentURLOf.
 	ContentURL func(commit, path, blob string) string
 	// Batch is the most operations on nodes the change of a commit takes by itself (default 1000): a commit doing more
 	// is written by sub-changes of its change, one per file (the files naming each other's declarations together,

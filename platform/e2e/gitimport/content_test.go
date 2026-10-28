@@ -22,7 +22,7 @@ func TestImportKeepsTheText(t *testing.T) {
 	r.write("big.txt", strings.Repeat("a line of text\n", 100))
 	r.commit("Initial")
 	im := &gitimport.Importer{Graph: g, Dir: r.dir, Name: "demo", ProjectID: project, Text: true, MaxTextBytes: 1000,
-		ContentURL: gitimport.ContentURLOf("https://forge.example/{name}/raw/{commit}/{path}", r.dir, r.dir, "demo")}
+		ContentURL: gitimport.ContentURLOf("https://forge.example/{name}/raw/{commit}/{path}", r.dir, "demo")}
 	if _, err := im.Run(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestContentURLOf(t *testing.T) {
 		{"https://gitlab.com/group/sub/proj", "https://gitlab.com/group/sub/proj/-/raw/abc/a%20b/c.go"},
 		{"https://git.internal/x/y.git", ""},
 	} {
-		f := gitimport.ContentURLOf("", c.source, "", "x")
+		f := gitimport.ContentURLOf("", c.source, "x")
 		got := ""
 		if f != nil {
 			got = f("abc", "a b/c.go", "blob")
@@ -81,7 +81,10 @@ func TestContentURLOf(t *testing.T) {
 		}
 	}
 	r := newRepo(t)
-	if f := gitimport.ContentURLOf("", r.dir, r.dir, "x"); f == nil || f("abc", "a/b.go", "") != "file://"+r.dir+"/a/b.go" {
-		t.Error("a working tree: no file:// URL")
+	if f := gitimport.ContentURLOf("", r.dir, "x"); f != nil {
+		t.Error("a local directory: an address, want none (no file:// address)")
+	}
+	if f := gitimport.ContentURLOf("lnk:repos/File/{name}/{path}", r.dir, "x"); f == nil || f("abc", "a/b c.go", "") != "lnk:repos/File/x/a/b%20c.go" {
+		t.Error("a lnk: template: not applied")
 	}
 }

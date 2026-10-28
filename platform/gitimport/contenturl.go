@@ -2,20 +2,19 @@ package gitimport
 
 import (
 	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
 
 // ContentURLOf gives the address of the content of a file at a commit (ADR 0171), the contentUrl of its node, for a
-// repository imported from source (a URL or a local directory read in place as dir):
-//   - a template, when given, with {commit}, {path} (each element escaped), {blob} and {name} replaced;
+// repository imported from source (a URL or a local directory):
+//   - a template, when given, with {commit}, {path} (each element escaped), {blob} and {name} replaced: a web address,
+//     or a logical URL (lnk:<source>/File/{path}) of a source the platform declares, a local-fs one for a directory;
 //   - a repository of a known forge (github.com, gitlab.com, bitbucket.org, codeberg.org): the raw file at the commit;
-//   - a working tree read in place: the file:// URL of the file in it (what is checked out there now);
 //
-// nil when none applies (a bare clone of another host): the file is named by its blob only.
-func ContentURLOf(template, source, dir, name string) func(commit, path, blob string) string {
+// nil when none applies (a local directory, a clone of another host): the file is named by its blob only. A local
+// file is never named by a file:// address: only a declared source knows where its root is.
+func ContentURLOf(template, source, name string) func(commit, path, blob string) string {
 	if template != "" {
 		return func(commit, p, blob string) string {
 			return strings.NewReplacer("{commit}", commit, "{path}", escapePath(p), "{blob}", blob, "{name}", name).Replace(template)
@@ -23,12 +22,6 @@ func ContentURLOf(template, source, dir, name string) func(commit, path, blob st
 	}
 	if raw := forgeRaw(source); raw != "" {
 		return func(commit, p, _ string) string { return raw + "/" + commit + "/" + escapePath(p) }
-	}
-	if dir != "" && !strings.Contains(source, "://") && !remoteRE.MatchString(source) {
-		if fi, err := os.Stat(filepath.Join(dir, ".git")); err == nil && fi.IsDir() {
-			base := (&url.URL{Scheme: "file", Path: filepath.ToSlash(dir)}).String()
-			return func(_, p, _ string) string { return base + "/" + escapePath(p) }
-		}
 	}
 	return nil
 }

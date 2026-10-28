@@ -28,7 +28,7 @@ importers:
       - {name: code, label: Source text, type: boolean, default: true, description: "With the symbols, keep the source text of each declaration on its node (the code attribute, cut at 64 KiB)", order: 9}
       - {name: text, label: File text, type: boolean, default: true, description: "Keep the text of each file that reads as text, judged by its bytes whatever its name (UTF-8, UTF-16/32 with a byte order mark, Windows-1252), decoded to UTF-8 as its content; the other files are blobs named by their object id and the address of their content (ADR 0171)", order: 10}
       - {name: maxText, label: Largest text, type: number, default: 256, description: "The largest text kept, in KiB: a larger file is a blob", order: 11}
-      - {name: contentUrl, label: Content address, description: "Address of the content of a file, the contentUrl of its node: {commit}, {path}, {blob} and {name} replaced (default: the raw files of a repository of github.com, gitlab.com, bitbucket.org or codeberg.org; the file:// URL of the working tree of a local directory)", order: 12}
+      - {name: contentUrl, label: Content address, description: "Address of the content of a file, the contentUrl of its node: {commit}, {path}, {blob} and {name} replaced (a web address, or lnk:<source>/File/{path} for a source the platform declares; default: the raw files of a repository of github.com, gitlab.com, bitbucket.org or codeberg.org, else none)", order: 12}
 enums:
   - name: symbol-kind
     description: What a declaration of a source file is
@@ -79,7 +79,7 @@ nodeTypes:
       - {name: binary, label: Binary, description: "The content does not read as text: a blob, opened through its content address", type: boolean, section: Content, order: 31}
       - {name: encoding, label: Encoding, description: "Encoding of a text in git (utf-8, utf-16le, windows-1252…), its content being decoded to UTF-8", type: string, section: Content, order: 32}
       - {name: content, label: Content, description: "The text of a file that reads as text, decoded to UTF-8 (none for a blob or a text larger than the import keeps)", type: code, section: Content, order: 33}
-      - {name: contentUrl, label: Content address, description: "Where the content of this version is opened (a file:// URL, the raw file of a forge…): resolved by the source of its scheme (ADR 0171)", type: string, widget: url, section: Content, order: 34}
+      - {name: contentUrl, label: Content address, description: "Where the content of this version is opened (the raw file of a forge, a lnk: URL of a declared source…): resolved through its scheme (ADR 0171)", type: string, widget: url, section: Content, order: 34}
     search: [{property: extension, facet: true}, {property: media, facet: true}]
   # the root directory of a repository, the node that says where its import stands
   - name: Repository

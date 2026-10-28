@@ -41,9 +41,10 @@ its language, ADR 0152) and `contentUrl` (widget `url`). The importer (`Importer
 anything else is a blob named by its object id. A symbolic link keeps no text. `contentUrl` is where the content of
 the version is opened (`Importer.ContentURL`, `ContentURLOf`):
 
-- a template (param `contentUrl`, flag `-content-url`) with `{commit}`, `{path}`, `{blob}`, `{name}`;
+- a template (param `contentUrl`, flag `-content-url`) with `{commit}`, `{path}`, `{blob}`, `{name}`: a web address,
+  or a logical URL of a source the platform declares (`lnk:repos/File/{name}/{path}`, a `local-fs` source);
 - else, for a repository of github.com, gitlab.com, bitbucket.org or codeberg.org, the raw file at the commit;
-- else, for a working tree read in place, the `file://` URL of the file in it (what is checked out there now).
+- else none: a file of a local directory is never named by a `file://` address (see §4).
 
 A file whose blob did not change is not written again, so a repository imported before keeps its files without
 content until they change, or until it is imported again.
@@ -65,19 +66,22 @@ the constants of a Java enum and of an interface (kind `constant`). `variable` s
 ### 4. The scheme names a type of source; `lnk` resolves a second level (proposed)
 
 An address is resolved in two levels. Level 1: its scheme names the type (kind) of source serving it, and each type
-brings its resolver: `file` → `local-fs`, `http` / `https` → `web`, `lnk` → `lnk`. A type serving schemes implements
-`lnk.SchemeResolver` (`Schemes()`, `ResolveDirect(ctx, src, *url.URL)`, `src` the type's default source) beside the
-`lnk.Resolver` of ADR 0154; the `Registry` keeps the table scheme → type (one type per scheme). Level 2: the built-in
-`lnk` type reads `<source>/<type>/<key>[?v=n]`, finds the named source (the project's mapping, ADR 0154 §8, then the
-declared source, else the namespace of that name) and calls the `Resolve` of that source's type. One resolver thus
-serves a direct address (`file:///srv/docs/a.md`) and a logical one (`lnk:docs/File/a.md`, `docs` a `local-fs`
-source rooted at `/srv/docs`). A source declares no scheme (its type does) and is never of type `lnk` (no loop).
+brings its resolver: `http` / `https` → `web`, `lnk` → `lnk`. A type serving schemes implements `lnk.SchemeResolver`
+(`Schemes()`, `ResolveDirect(ctx, src, *url.URL)`, `src` the type's default source) beside the `lnk.Resolver` of
+ADR 0154; the `Registry` keeps the table scheme → type (one type per scheme). Level 2: the built-in `lnk` type reads
+`<source>/<type>/<key>[?v=n]`, finds the named source (the project's mapping, ADR 0154 §8, then the declared source,
+else the namespace of that name) and calls the `Resolve` of that source's type. A source declares no scheme (its type
+does) and is never of type `lnk` (no loop).
+
+There is no `file` scheme: where a local file lies depends on the machine and the project, so a file is reached only
+through a source, `lnk:<source>/File/<path>`, whose root the platform declares and a project may map to another
+(a share, another root): the address stays the same wherever it is read.
 
 | Type | Schemes | Direct address | Under `lnk:` |
 | --- | --- | --- | --- |
 | `lnk` | `lnk` | the second level | (it is the second level) |
 | `graph` | none | none | a node of a namespace of this graph or of a remote one |
-| `local-fs` | `file` | read only under the default roots (`GOAP_LOCAL_FS_ROOTS`); elsewhere the path, unread | `<src>/File/<path>` under the source's root (today's `files`, kept as an alias) |
+| `local-fs` | none | none | `<src>/File/<path>` read under the source's root only (today's `files`, kept as an alias) |
 | `web` | `http`, `https` | fetches nothing on the server: the address and the media type its path says | `<src>/Page/<path>` relative to the source's location |
 
 ### 5. A target says how it opens (proposed)
@@ -98,5 +102,5 @@ says (`web/src/lib/address.ts`, `AddressLink.svelte`).
 - The text of a repository is readable, searchable and diffable in the graph; the database grows with each version
   of a text file (capped per file; `text: false` turns it off).
 - The server never reads a disk nor the web it was not allowed to: no root, no read; the web source fetches nothing.
-- A project may later map a scheme to another source (a `file://` read on a network share), like the source names of
-  ADR 0154 §8.
+- A project maps a source name to another source (ADR 0154 §8): the same `lnk:` address of a file reads a
+  `local-fs` source on another root or a network share, for that project.

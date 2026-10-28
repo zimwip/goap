@@ -96,11 +96,7 @@ func (p *Plugin) Run(ctx context.Context, job *importerkit.Job) error {
 		OnCommit: func(st Stats) { record(job, st) },
 		OnPart:   func(i, n int, name string) { job.Progress(fmt.Sprintf("  part %d/%d: %s", i, n, capLine(name, 100))) }}
 	im.Text, im.MaxTextBytes = job.Bool("text"), int64(job.Int("maxText"))<<10
-	localDir := ""
-	if url == "" {
-		localDir = dir
-	}
-	im.ContentURL = ContentURLOf(job.String("contentUrl"), repo, localDir, name)
+	im.ContentURL = ContentURLOf(job.String("contentUrl"), repo, name)
 	if job.Bool("symbols") {
 		if p.Symbols == nil {
 			return errors.New("symbols: this importer service reads no symbols")
