@@ -1398,6 +1398,20 @@ func (h *Handler) TransitionChange(ctx context.Context, r *connect.Request[graph
 	return connect.NewResponse(&graphv1.TransitionChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 
+func (h *Handler) GetChangeTransitions(ctx context.Context, r *connect.Request[graphv1.GetChangeTransitionsRequest]) (*connect.Response[graphv1.GetChangeTransitionsResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header()) // judged for the caller
+	state, ts, err := h.Graph.ChangeTransitions(ctx, domain.ChangeID(r.Msg.ChangeId))
+	out := &graphv1.GetChangeTransitionsResponse{State: state}
+	for _, t := range ts {
+		pt := &graphv1.TransitionCheck{Name: t.Name, From: t.From, To: t.To, Allowed: t.Allowed, Decisions: t.Decisions, Reserve: t.Reserve}
+		for _, b := range t.Blocks {
+			pt.Blocks = append(pt.Blocks, &graphv1.TransitionBlock{Kind: b.Kind, Reason: b.Reason})
+		}
+		out.Transitions = append(out.Transitions, pt)
+	}
+	return res(out, err)
+}
+
 func (h *Handler) CreateBranch(ctx context.Context, r *connect.Request[graphv1.CreateBranchRequest]) (*connect.Response[graphv1.CreateBranchResponse], error) {
 	b, err := h.Graph.CreateBranch(ctx, graph.NewBranch{Name: r.Msg.Name, Namespace: r.Msg.Namespace, From: domain.BaselineID(r.Msg.FromBaseline), Origin: r.Msg.Origin, Description: r.Msg.Description})
 	return res(&graphv1.CreateBranchResponse{Branch: pbconv.BranchToPB(b)}, err)

@@ -1,9 +1,22 @@
 <script lang="ts">
   // Read-only diagram of a lifecycle: the states in a row, forward transitions as square rails above,
-  // backward ones (dashed) below, each carrying its name as a pill.
+  // backward ones (dashed) below, each carrying its name as a pill. Transitions sharing a name and a target are one
+  // rail: their sources merge into a trunk that carries the name once (`lifecycleBundles.ts`).
   import type { LifecycleForm } from '../methodologyForm';
+  import { bundleLevels, bundleTransitions, labelX, type Bundle } from '../lifecycleBundles';
+  import { judgedKey, judgementText, type Judged, type TransitionJudgement } from '../changeTransition';
 
-  let { lc, current = '' }: { lc: LifecycleForm; /** the state something is in: drawn emphasised */ current?: string } = $props();
+  let {
+    lc,
+    current = '',
+    judged,
+  }: {
+    lc: LifecycleForm;
+    /** the state something is in: drawn emphasised */
+    current?: string;
+    /** what the server judges of the transitions out of current: each drawn allowed or blocked, the others dimmed */
+    judged?: Judged;
+  } = $props();
 
   const BOX_W = 110;
   const BOX_H = 36;
@@ -28,35 +41,29 @@
     return 'var(--info)';
   }
 
-  interface Edge {
-    i: number;
-    name: string;
-    from: number;
-    to: number;
-    span: number;
-    x1: number;
+  /** a bundle placed: the x where each source leaves its box (same order as `from`) and where the trunk enters the target */
+  interface Edge extends Bundle {
+    xs: number[];
     x2: number;
+    /** level of its rail, 1 nearest the boxes */
+    level: number;
   }
 
   const layout = $derived.by(() => {
-    const edges: Edge[] = [];
-    lc.transitions.forEach((t, i) => {
-      const from = index.get(t.from.trim());
-      const to = index.get(t.to.trim());
-      if (from === undefined || to === undefined || from === to) return;
-      edges.push({ i, name: t.name.trim(), from, to, span: to - from, x1: cx(from), x2: cx(to) });
-    });
+    const bundles = bundleTransitions(lc.transitions, index);
+    const levels = bundleLevels(bundles);
+    const edges: Edge[] = bundles.map((b) => ({ ...b, xs: b.from.map(cx), x2: cx(b.to), level: levels.get(b.key) ?? 1 }));
 
     // several rails on one state edge: spread their attachment points so none overlap or cross
-    const conns = new Map<string, { e: Edge; role: 'from' | 'to'; other: number }[]>();
-    const add = (state: number, edge: string, e: Edge, role: 'from' | 'to', other: number) => {
-      const k = `${state}:${edge}`;
-      conns.set(k, [...(conns.get(k) ?? []), { e, role, other }]);
+    type Conn = { e: Edge; role: 'from' | 'to'; n: number; other: number };
+    const conns = new Map<string, Conn[]>();
+    const add = (state: number, c: Conn) => {
+      const k = `${state}:${c.e.dir > 0 ? 'top' : 'bot'}`;
+      conns.set(k, [...(conns.get(k) ?? []), c]);
     };
     for (const e of edges) {
-      const edge = e.span > 0 ? 'top' : 'bot';
-      add(e.from, edge, e, 'from', e.to);
-      add(e.to, edge, e, 'to', e.from);
+      e.from.forEach((f, n) => add(f, { e, role: 'from', n, other: e.to }));
+      add(e.to, { e, role: 'to', n: 0, other: e.from[e.from.length - 1] });
     }
     for (const [k, items] of conns) {
       if (items.length < 2) continue;
@@ -78,13 +85,13 @@
       const start = cx(s) - SPREAD / 2;
       const step = SPREAD / (ordered.length - 1);
       ordered.forEach((c, n) => {
-        if (c.role === 'from') c.e.x1 = start + n * step;
+        if (c.role === 'from') c.e.xs[c.n] = start + n * step;
         else c.e.x2 = start + n * step;
       });
     }
 
-    const maxFwd = Math.max(0, ...edges.filter((e) => e.span > 0).map((e) => e.span));
-    const maxBwd = Math.max(0, ...edges.filter((e) => e.span < 0).map((e) => -e.span));
+    const maxFwd = Math.max(0, ...edges.filter((e) => e.dir > 0).map((e) => e.level));
+    const maxBwd = Math.max(0, ...edges.filter((e) => e.dir < 0).map((e) => e.level));
     const top = maxFwd ? BASE_CURVE + (maxFwd - 1) * CURVE_STEP + BTN_H + 16 : 20;
     const bot = maxBwd ? BASE_CURVE + (maxBwd - 1) * CURVE_STEP + BTN_H + 28 : 30;
     const rowY = PAD + top + BOX_H / 2;
@@ -96,19 +103,39 @@
     };
   });
 
+  /** the transition of a bundle leaving the current state, with its judgement, when the server judged it */
+  function judgementOf(e: Edge): { n: number; j: TransitionJudgement } | undefined {
+    if (!judged || !current) return undefined;
+    const n = e.from.findIndex((f) => states[f].name === current);
+    const j = n < 0 ? undefined : judged.get(judgedKey(e.name, current, states[e.to].name));
+    return j ? { n, j } : undefined;
+  }
+
+  /**
+   * The paths of a bundle: the trunk leaves the farthest source, runs at its level and drops into the
+   * target (d1 up to the chip, d2 from the chip on, arrowhead); each nearer source rises and curves into the trunk
+   * towards the target (branches, no arrowhead).
+   */
   function rail(e: Edge, rowY: number) {
-    const fwd = e.span > 0;
-    const offset = BASE_CURVE + (Math.abs(e.span) - 1) * CURVE_STEP;
+    const fwd = e.dir > 0;
+    const offset = BASE_CURVE + (e.level - 1) * CURVE_STEP;
     const connY = fwd ? rowY - BOX_H / 2 : rowY + BOX_H / 2;
     const midY = fwd ? connY - offset : connY + offset;
-    const midX = (e.x1 + e.x2) / 2;
+    const x1 = e.xs[e.xs.length - 1];
+    const midX = labelX(e.xs, e.x2);
     const hw = e.name ? Math.max(44, e.name.length * 6 + 18) / 2 : 0;
     const gap = hw ? hw + CHIP_GAP : 0;
     const s = fwd ? 1 : -1;
-    // d1 leaves the source up to the chip, d2 goes on from the chip into the target (arrowhead)
-    const d1 = `M ${e.x1},${connY} V ${midY + s * R} Q ${e.x1},${midY} ${e.x1 + s * R},${midY} H ${midX - s * gap}`;
-    const d2 = `M ${midX + s * gap},${midY} H ${e.x2 - s * R} Q ${e.x2},${midY} ${e.x2},${midY + s * R} V ${connY}`;
-    return { fwd, d1, d2, midX, midY, hw };
+    const v = fwd ? -1 : 1;
+    const d1 = `M ${x1},${connY} V ${midY - v * R} Q ${x1},${midY} ${x1 + s * R},${midY} H ${midX - s * gap}`;
+    const d2 = `M ${midX + s * gap},${midY} H ${e.x2 - s * R} Q ${e.x2},${midY} ${e.x2},${midY - v * R} V ${connY}`;
+    const branches = e.xs.slice(0, -1).map((x) => `M ${x},${connY} V ${midY - v * R} Q ${x},${midY} ${x + s * R},${midY}`);
+    // the whole way from one source to the target, drawn over the bundle for the transition leaving the current state
+    const from = (n: number) => {
+      const x = e.xs[n];
+      return `M ${x},${connY} V ${midY - v * R} Q ${x},${midY} ${x + s * R},${midY} H ${e.x2 - s * R} Q ${e.x2},${midY} ${e.x2},${midY - v * R} V ${connY}`;
+    };
+    return { fwd, d1, d2, branches, from, midX, midY, hw };
   }
 </script>
 
@@ -121,17 +148,32 @@
         <marker id="lcp-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
           <path d="M0,0.5 L0,6.5 L6,3.5 z" fill="context-stroke" opacity="0.8" />
         </marker>
+        <marker id="lcp-arr-ok" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0.5 L0,6.5 L6,3.5 z" class="arr-ok" />
+        </marker>
+        <marker id="lcp-arr-no" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+          <path d="M0,0.5 L0,6.5 L6,3.5 z" class="arr-no" />
+        </marker>
       </defs>
 
-      {#each layout.edges as e (e.i)}
+      {#each layout.edges as e (e.key)}
         {@const r = rail(e, layout.rowY)}
         {@const c = tone(states[e.to])}
-        <g class="edge" style="--c: {c}">
-          <path d={r.d1} fill="none" stroke={c} stroke-width="1.5" stroke-dasharray={r.fwd ? 'none' : '4,3'} opacity="0.75" />
-          <path d={r.d2} fill="none" stroke={c} stroke-width="1.5" stroke-dasharray={r.fwd ? 'none' : '4,3'} opacity="0.75" marker-end="url(#lcp-arr)" />
+        {@const jd = judgementOf(e)}
+        <g class="edge" class:dim={!!judged && !!current && !jd} style="--c: {c}">
+          <title>{e.name}: {e.from.map((f) => states[f].name).join(', ')} → {states[e.to].name}{jd ? `\n${judgementText(jd.j)}` : ''}</title>
+          {#each r.branches as d, n (n)}
+            <path {d} class:faded={!!jd} fill="none" stroke={c} stroke-width="1.5" stroke-dasharray={r.fwd ? 'none' : '4,3'} opacity="0.75" />
+          {/each}
+          <path d={r.d1} class:faded={!!jd} fill="none" stroke={c} stroke-width="1.5" stroke-dasharray={r.fwd ? 'none' : '4,3'} opacity="0.75" />
+          <path d={r.d2} class:faded={!!jd} fill="none" stroke={c} stroke-width="1.5" stroke-dasharray={r.fwd ? 'none' : '4,3'} opacity="0.75" marker-end="url(#lcp-arr)" />
+          {#if jd}
+            <path class="way" class:ok={jd.j.allowed} d={r.from(jd.n)} fill="none" marker-end={jd.j.allowed ? 'url(#lcp-arr-ok)' : 'url(#lcp-arr-no)'} />
+          {/if}
           {#if e.name}
-            <rect class="pill" x={r.midX - r.hw} y={r.midY - BTN_H / 2} width={r.hw * 2} height={BTN_H} rx="8" />
-            <text class="pilltext" x={r.midX} y={r.midY + 3.5} text-anchor="middle">{e.name}</text>
+            {@const w = r.hw + (jd ? 7 : 0)}
+            <rect class="pill" class:ok={jd?.j.allowed} class:no={jd && !jd.j.allowed} x={r.midX - w} y={r.midY - BTN_H / 2} width={w * 2} height={BTN_H} rx="8" />
+            <text class="pilltext" class:ok={jd?.j.allowed} class:no={jd && !jd.j.allowed} x={r.midX} y={r.midY + 3.5} text-anchor="middle">{jd ? (jd.j.allowed ? '✓ ' : '✕ ') : ''}{e.name}</text>
           {/if}
         </g>
       {/each}
@@ -183,6 +225,40 @@
     font-weight: 700;
     fill: var(--c);
     user-select: none;
+  }
+  .edge.dim,
+  .faded {
+    opacity: 0.3;
+  }
+  /* the transition leaving the current state: allowed for the caller, or blocked */
+  .way {
+    stroke: var(--danger);
+    stroke-width: 2.4;
+    stroke-dasharray: 5 3;
+  }
+  .way.ok {
+    stroke: var(--accent);
+    stroke-dasharray: none;
+  }
+  .arr-ok {
+    fill: var(--accent);
+  }
+  .arr-no {
+    fill: var(--danger);
+  }
+  .pill.ok {
+    fill: var(--accent);
+    stroke: var(--accent);
+  }
+  .pilltext.ok {
+    fill: var(--accent-fg);
+  }
+  .pill.no {
+    fill: color-mix(in srgb, var(--danger) 12%, var(--surface));
+    stroke: var(--danger);
+  }
+  .pilltext.no {
+    fill: var(--danger);
   }
   .empty {
     color: var(--muted);

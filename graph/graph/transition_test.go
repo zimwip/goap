@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/decision"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/lib/guard"
@@ -170,7 +171,35 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 		}
 		return p.ID
 	}
+	// the transitions out of the state, judged without being taken
+	judged := func() TransitionCheck {
+		t.Helper()
+		state, ts, err := g.ChangeTransitions(ctx, c.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if state != "analysing" || len(ts) != 1 || ts[0].Name != "implement" {
+			t.Fatalf("the transitions out of analysing: %q %+v", state, ts)
+		}
+		return ts[0]
+	}
+	if j := judged(); j.Allowed || len(j.Blocks) != 1 || j.Blocks[0].Kind != BlockDecision {
+		t.Fatalf("a guard reading a decision with none decided: %+v", j)
+	}
 	first := decide("go")
+	if j := judged(); j.Allowed || len(j.Blocks) != 1 || j.Blocks[0].Kind != BlockGuard || !strings.Contains(j.Blocks[0].Reason, "analysed") {
+		t.Fatalf("a guard the world does not satisfy: %+v", j)
+	}
+	g.ChangeAuthorizer = func(context.Context, domain.Change, domain.Transition) error { return authz.ErrForbidden }
+	if j := judged(); j.Allowed || len(j.Blocks) != 2 || j.Blocks[0].Kind != BlockPermission || !strings.Contains(j.Blocks[0].Reason, "change:transition on project PROJ-ROOT") {
+		t.Fatalf("every check that refuses is listed, the permission first: %+v", j)
+	}
+	g.ChangeAuthorizer = nil
+	lcs.world["analysed"] = true
+	if j := judged(); !j.Allowed || len(j.Decisions) != 1 || j.Decisions[0] != first {
+		t.Fatalf("allowed with the decision it passes with: %+v", j)
+	}
+	lcs.world["analysed"] = false
 	if err := move("implement", ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a gate needs its decision: %v", err)
 	}
@@ -270,7 +299,21 @@ func testGateVetosAndObjectives(t *testing.T, repo Repo) {
 	if err := ship(); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "no_blocker") {
 		t.Fatalf("a veto not met blocks: %v", err)
 	}
+	judged := func() TransitionCheck {
+		t.Helper()
+		_, ts, err := g.ChangeTransitions(ctx, c.ID)
+		if err != nil || len(ts) != 1 {
+			t.Fatal(ts, err)
+		}
+		return ts[0]
+	}
+	if j := judged(); j.Allowed || j.Blocks[0].Kind != BlockVeto || j.Blocks[0].Reason != "vetoed by no_blocker" {
+		t.Fatalf("judged vetoed: %+v", j)
+	}
 	lcs.world["blocked"] = false
+	if j := judged(); j.Allowed || j.Blocks[0].Kind != BlockObjective || !strings.Contains(j.Blocks[0].Reason, "docs") {
+		t.Fatalf("judged short of an objective: %+v", j)
+	}
 	if err := ship(); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "docs") {
 		t.Fatalf("an objective not met blocks: %v", err)
 	}
@@ -293,6 +336,9 @@ func testGateVetosAndObjectives(t *testing.T, repo Repo) {
 		t.Fatalf("a derogation does not waive a veto: %v", err)
 	}
 	lcs.world["blocked"] = false
+	if j := judged(); !j.Allowed || fmt.Sprint(j.Reserve) != "[docs]" {
+		t.Fatalf("judged allowed with reserve: %+v", j)
+	}
 	if err := ship(); err != nil {
 		t.Fatalf("covered objective: %v", err)
 	}

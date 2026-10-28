@@ -36,7 +36,7 @@
   import { changeSummary, impactEntities, stepEntities, transitionEntities, type ImpactFacts } from '../../assist/changeScreen';
   import { recordAction } from '../../assist/recorder';
   import { loadMoveOffer, moveChangeTo } from '../../changeMove';
-  import { availableTransitions, decisionLabel, findLifecycle, movable as lifecycleMovable, pickableDecisions, resolveCall, runTransition, type Refusal, type TransitionOffer } from '../../changeTransition';
+  import { availableTransitions, decisionLabel, findLifecycle, judgedOf, movable as lifecycleMovable, pickableDecisions, resolveCall, runTransition, type Judged, type Refusal, type TransitionOffer } from '../../changeTransition';
   import ChangeTransitions from '../../components/ChangeTransitions.svelte';
   import MoveChange from '../../components/MoveChange.svelte';
   import CommitDialog from '../../components/CommitDialog.svelte';
@@ -522,7 +522,28 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       });
     return () => ctl.abort();
   });
-  const offers = $derived(lifecycleMovable(change) ? availableTransitions(lcDef, change?.state) : []);
+  // what the server judges of the transitions out of the state for the caller, read again when the change moves
+  let judged = $state<Judged>();
+  $effect(() => {
+    const id = change?.id ?? '';
+    const state = change?.state ?? '';
+    if (!id || !change?.lifecycle) {
+      judged = undefined;
+      return;
+    }
+    void stamp(keyOf.change(id));
+    let gone = false;
+    graph
+      .getChangeTransitions(id)
+      .then((r) => {
+        if (!gone && r.state === state) judged = judgedOf(r);
+      })
+      .catch(() => {
+        if (!gone) judged = undefined; // the definition alone is drawn
+      });
+    return () => (gone = true);
+  });
+  const offers = $derived(lifecycleMovable(change) ? availableTransitions(lcDef, change?.state, judged) : []);
   const pickable = $derived(pickableDecisions(decisionPoints, change?.items));
 
   /** Takes a transition of the lifecycle: the button (with its confirmation) and the assistant (its card confirmed). */
@@ -1233,7 +1254,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     {#snippet head()}
       <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} {writable} onchange={() => load(selected)} oncompare={() => (compareOpen = true)} />
       {#if ch.lifecycle}
-        <ChangeLifecycleView lifecycle={ch.lifecycle} current={ch.state ?? ''} definition={lcDef} domain={lcDomain} loading={lcLoading} failure={lcFailure}>
+        <ChangeLifecycleView lifecycle={ch.lifecycle} current={ch.state ?? ''} definition={lcDef} domain={lcDomain} loading={lcLoading} failure={lcFailure} {judged}>
           {#if lcDef && lifecycleMovable(ch)}
             <ChangeTransitions current={ch.state ?? ''} {offers} {pickable} busy={transitioning} refusal={transitionRefusal} onmove={(o, d) => void takeTransition(o, d)} />
           {/if}
