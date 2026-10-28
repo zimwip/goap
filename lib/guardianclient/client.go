@@ -127,6 +127,9 @@ func (c *Client) Commit(ctx context.Context, ch domain.Change, bb domain.Blackbo
 	return r.Msg.Decided, r.Msg.Ok, nil
 }
 
+// JudgesCommit implements graph.CommitJudge: only a change scoped to an Activity is judged at its commit.
+func (c *Client) JudgesCommit(ch domain.Change) bool { return activityOf(ch) != "" }
+
 // Guardians is the guardian chain of a new root change of a methodology in a project.
 func (c *Client) Guardians(ctx context.Context, methodology, project string) ([]domain.GuardianRef, error) {
 	r, err := c.rpc.GetGuardians(ctx, connect.NewRequest(&registryv1.GetGuardiansRequest{Methodology: methodology, Project: project}))

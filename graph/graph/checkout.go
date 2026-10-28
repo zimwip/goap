@@ -536,7 +536,7 @@ func (g *Graph) ImpactNodeCheckouts(ctx context.Context, id domain.ChangeID, in 
 	if len(in.Nodes) == 0 {
 		return nil, invalidf("no node to check out")
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		if err := g.prefetchCheckouts(ctx, tx, id, in.Nodes); err != nil {
 			return err
 		}

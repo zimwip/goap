@@ -628,6 +628,15 @@ finds the node and its selected version in one statement (`keySelector.Committed
 `ReadTx::node_at_key`, `KeyAt`), and `GetNode` reads the latest version of main first and keeps it when the view
 selects it (`world.stored`).
 
+**Reads a write skips**: a write locks its change before it reads anything (`changeTx`, the checkouts too), the root of
+a change it creates being kept at `PutChange` (`roots`), so the lock reads no root; a fact appended by the
+transaction is folded into the view of its change (`guardTx.foldFact`), so the log is not read again after it, and
+the fold of a change whose log holds nothing past it reads no log; the versions a transaction wrote and read back are
+kept by the graph once it commits (the version cache), so the next write naming them (a link's target type) reads
+none. A commit asks the light check when no guardian of the change judges it (`Graph.judgesCommit`: no outer
+guardian, and the lifecycles, `CommitJudge`, say so; `guardianclient` judges only a change scoped to an Activity):
+the drafts' versions and their committable states, with no links entering, no history, no dependencies.
+
 **Roles** ([ADR 0035](adr/0035-methods-roles-operations-documents.md) §2, [ADR 0043](adr/0043-project-scoped-roles-admin-flag.md)):
 a methodology declares its roles (`methodology@Role` nodes, ADR 0039); its processes and methods assign them RACI
 style (`roles: {responsible, accountable, consulted, informed}` on a process, a method or a step; a process and a method
@@ -1264,9 +1273,9 @@ included, the same way (`Directory.FollowEvents`): each graph's `access.Director
 its snapshot (`Directory.Follow`) until a baseline event of the organisation's namespace (`domain.BaselineEvent`
 carries its namespace) reaches `Directory.Moved`; a change of a policy is a commit on the platform graph, its outbox
 sends the event, every graph refreshes. With no bus, the platform graph follows its own commits instead
-(`Directory.FollowCommits`): its snapshot holds for `access.CommitAge` (one second) and a commit of the organisation's
+(`Directory.FollowCommits`): its snapshot holds for `access.CommitAge` (30 seconds) and a commit of the organisation's
 namespace moves it at once (`Graph.OnBranchMoved`, `Directory.MovedNamespace`). The Rust graph does the same both ways:
-its kept snapshot holds one second and is moved by its own commits, and with a bus it holds thirty seconds and is moved
+its kept snapshot holds thirty seconds both ways, moved by its own commits and, with a bus,
 by the baseline events of the other processes (`follow_moves`, `Store::moved`).
 
 ### 3.4b Node index and search ([ADR 0026](adr/0026-node-index-and-search.md))

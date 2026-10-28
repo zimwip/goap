@@ -67,6 +67,17 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		for _, k := range gt.found {
 			r.g.foundRefs.Put(k, true)
 		}
+		// the versions it wrote and read back are what is stored now that it committed: kept for the next readers (a
+		// link to one checks its type), but one whose origin it set
+		if len(gt.written) > 0 && !gt.purged {
+			gen := r.g.versions.generation()
+			for ref, n := range gt.nodes {
+				if gt.written[ref] && !gt.origins[ref] {
+					kept := copyNode(n)
+					r.g.versions.update(gen, ref, func(e *versionEntry) { e.node, e.hasNode, e.exists = kept, true, true })
+				}
+			}
+		}
 		// what the transaction folded of the logs it wrote is committed now: the next one folds only what follows
 		for _, st := range gt.drafts {
 			// a fold known whole at the lock, then holding every impact event and fact the transaction appended, is
@@ -511,12 +522,36 @@ func (t *guardTx) afterAppend(e domain.LogEntry) {
 		t.appended = map[domain.ChangeID]int64{}
 	}
 	t.appended[e.Change] = max(t.appended[e.Change], e.Seq)
+	if strings.HasPrefix(e.Type, domain.LogFact+".") {
+		t.foldFact(e)
+	}
 	if strings.HasPrefix(e.Type, domain.LogImpact+".") || strings.HasPrefix(e.Type, domain.LogFact+".") {
 		if t.impactSeq == nil {
 			t.impactSeq = map[domain.ChangeID]int64{}
 		}
 		t.impactSeq[e.Change] = e.Seq
 	}
+}
+
+// foldFact folds an item just appended into the fold of its change the transaction holds whole (current), so the
+// operation's next read of the view reads no log; an impact event is folded by Graph.emit.
+func (t *guardTx) foldFact(e domain.LogEntry) {
+	st := t.current(e.Change)
+	if st == nil || e.Seq <= st.seq {
+		return
+	}
+	items, err := itemsOf([]domain.LogEntry{e})
+	if err != nil || len(items) != 1 {
+		return // the next read of the view folds it from the log
+	}
+	next := st
+	if t.drafts[e.Change] != st || st.frozen {
+		next = st.copy()
+	}
+	next.fact(items[0], e.Seq)
+	next.seq = e.Seq
+	t.keepDrafts(next)
+	t.readLog(next)
 }
 
 var _ draftKeeper = (*guardTx)(nil)

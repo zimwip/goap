@@ -1281,6 +1281,14 @@ func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 		t.locked = map[domain.ChangeID]domain.Change{}
 	}
 	t.locked[c.ID] = h
+	// the root of its tree, the guess the next lock of it checks: no read of it before that lock
+	if _, ok := t.roots.get(c.ID); !ok {
+		if c.ParentID == "" {
+			t.roots.keep(c.ID, string(c.ID))
+		} else if root, ok := t.roots.get(c.ParentID); ok {
+			t.roots.keep(c.ID, root)
+		}
+	}
 	return nil
 }
 

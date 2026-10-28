@@ -10,7 +10,7 @@ import (
 
 // headAge is how long a view takes the head of a lasting branch as it was read: a commit of this graph that moves
 // the branch is seen at once (headMarks), one of another process sharing the store within headAge, as the access
-// snapshot follows the organisation (access.CommitAge).
+// snapshot follows the organisation (access.CommitAge) but for a shorter while.
 const headAge = time.Second
 
 // keptHead is the head of a branch as a view read it: the mark of the branch then, and when it was read.

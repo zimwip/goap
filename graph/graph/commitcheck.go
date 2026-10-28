@@ -20,8 +20,15 @@ func (g *Graph) checkCommit(ctx context.Context, id domain.ChangeID) error {
 	var bb domain.Blackboard
 	var committed []domain.NodeView
 	var logs map[string][]domain.LogEntry
+	whole := true
 	err := g.repo.InTx(ctx, func(tx Tx) (err error) {
 		if c, err = tx.Change(ctx, id); err != nil {
+			return err
+		}
+		// with no guardian to ask, the committable states only: the nodes committed, not their links, history or
+		// dependencies
+		if whole = g.judgesCommit(c); !whole {
+			bb, committed, err = g.commitBlackboard(ctx, tx, c, false)
 			return err
 		}
 		if logs, err = g.logEntries(ctx, tx, id); err != nil {
@@ -31,12 +38,15 @@ func (g *Graph) checkCommit(ctx context.Context, id domain.ChangeID) error {
 		if err != nil {
 			return err
 		}
-		bb, committed, err = g.commitBlackboard(ctx, tx, c)
+		bb, committed, err = g.commitBlackboard(ctx, tx, c, true)
 		bb = bb.WithFacet(domain.FacetDependencies, deps)
 		return err
 	})
 	if err != nil {
 		return err
+	}
+	if !whole {
+		return g.ownGuardian(ctx, c, bb, committed)
 	}
 	// the facets folded from the log (the history of the change, ADR 0109)
 	if bb, err = g.withLogFacets(ctx, bb, logs); err != nil {
@@ -47,6 +57,26 @@ func (g *Graph) checkCommit(ctx context.Context, id domain.ChangeID) error {
 	}
 	// then the outer guardians of its chain (ADR 0106), innermost first
 	return g.checkGuardians(ctx, bb, "")
+}
+
+// CommitJudge is a ChangeLifecycles that tells from the change alone whether its Commit may decide (a change scoped to
+// an Activity): one that does not leaves the commit to the committable states, and the commit builds no blackboard
+// for it.
+type CommitJudge interface {
+	JudgesCommit(c domain.Change) bool
+}
+
+// judgesCommit is whether a guardian may judge a commit of the change: its own methodology's, or an outer one of its
+// chain.
+func (g *Graph) judgesCommit(c domain.Change) bool {
+	if g.Lifecycles == nil {
+		return false
+	}
+	if len(c.OuterGuardians()) > 0 {
+		return true
+	}
+	j, ok := g.Lifecycles.(CommitJudge)
+	return !ok || j.JudgesCommit(c)
 }
 
 // ownGuardian is the say of the change's own methodology on its commits: its Activity goal, else the committable states.
@@ -75,8 +105,9 @@ func (g *Graph) ownGuardian(ctx context.Context, c domain.Change, bb domain.Blac
 }
 
 // commitBlackboard is what the guardian judges: the change with, for each impact, its pre version and what it commits (the
-// version on the change's branch), those committed nodes returned apart.
-func (g *Graph) commitBlackboard(ctx context.Context, tx Tx, c domain.Change) (domain.Blackboard, []domain.NodeView, error) {
+// version on the change's branch), those committed nodes returned apart; not whole, the versions without their links
+// (what the committable states read).
+func (g *Graph) commitBlackboard(ctx context.Context, tx Tx, c domain.Change, whole bool) (domain.Blackboard, []domain.NodeView, error) {
 	bb := domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}}
 	ix, err := g.typesAt(ctx, tx, c.BaselineID)
 	if err != nil {
@@ -111,11 +142,21 @@ func (g *Graph) commitBlackboard(ctx context.Context, tx Tx, c domain.Change) (d
 			refs = append(refs, domain.NodeRef{ID: nodeOf(cn), Version: at})
 		}
 	}
-	if err := r.prefetch(ctx, tx, refs); err != nil {
+	if !whole {
+		if err := prefetchVersions(ctx, tx, refs); err != nil {
+			return bb, nil, err
+		}
+	} else if err := r.prefetch(ctx, tx, refs); err != nil {
 		return bb, nil, err
 	}
 	view := func(ref domain.NodeRef) (domain.NodeView, error) {
-		v, err := viewIn(ctx, tx, r, ref)
+		var v domain.NodeView
+		var err error
+		if whole {
+			v, err = viewIn(ctx, tx, r, ref)
+		} else {
+			v.Node, err = r.node(ctx, tx, ref)
+		}
 		if lc := ix.lifecycleOf(v.Type); err == nil && lc != nil && v.State != "" {
 			v.NotCommittable = !lc.Committable(v.State)
 		}

@@ -617,7 +617,7 @@ func (d *Directory) FollowEvents(bus Subscriber) error {
 
 // CommitAge is how long a directory following the commits of its own graph (no bus) keeps a snapshot: a commit of
 // another process is seen at most that late.
-const CommitAge = time.Second
+const CommitAge = 30 * time.Second
 
 // FollowCommits makes the directory keep its snapshot until the graph it reads in process says a branch of the
 // organisation's namespace moved (MovedNamespace, plugged on graph.Graph.OnBranchMoved), CommitAge at most: the

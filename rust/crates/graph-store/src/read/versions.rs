@@ -93,7 +93,7 @@ pub(crate) struct KeptSnapshot {
 
 /// How long the organisation checked at its head is taken as fresh while no commit of this store moved a branch, with
 /// no bus (Go's `access.CommitAge`): a commit of another process is seen at most that late.
-pub(crate) const SNAPSHOT_FRESH: std::time::Duration = std::time::Duration::from_secs(1);
+pub(crate) const SNAPSHOT_FRESH: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// How long a view takes the head of a lasting branch as it was read (Go's `headAge`): a commit of this store moves it
 /// at once, one of another process within it.

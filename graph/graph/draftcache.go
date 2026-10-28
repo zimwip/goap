@@ -438,8 +438,10 @@ func (g *Graph) foldDrafts(ctx context.Context, tx Tx, id domain.ChangeID) (*dra
 	if whole {
 		markWhole(tx, id)
 	}
-	if whole && st.top.Load() == top+1 {
-		readLog(tx, st) // the log has not moved since the fold was whole
+	if whole && (st.top.Load() == top+1 || top <= st.seq) {
+		// the log has not moved since the fold was whole, or holds nothing past it (a change with no entry yet)
+		st.top.Store(top + 1)
+		readLog(tx, st)
 		return st, nil
 	}
 	entries, err := tx.Log(ctx, domain.LogFilter{Change: id, Types: []string{domain.LogImpact + ".", domain.LogFact + "."}, AfterSeq: st.seq})
