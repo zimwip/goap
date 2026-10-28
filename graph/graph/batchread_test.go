@@ -18,9 +18,6 @@ type countingRepo struct {
 
 func (r *countingRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	return r.Repo.InTx(ctx, func(tx Tx) error {
-		if h, ok := tx.(changeHeaderReader); ok {
-			return fn(&countingHeaderTx{countingTx{Tx: tx, r: r}, h})
-		}
 		return fn(&countingTx{Tx: tx, r: r})
 	})
 }
@@ -38,15 +35,6 @@ func (t *countingTx) Node(ctx context.Context, ref domain.NodeRef) (domain.Node,
 func (t *countingTx) ChangeHead(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
 	t.r.heads.Add(1)
 	return t.Tx.ChangeHead(ctx, id)
-}
-
-type countingHeaderTx struct {
-	countingTx
-	h changeHeaderReader
-}
-
-func (t *countingHeaderTx) changeHeader(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
-	return t.h.changeHeader(ctx, id)
 }
 
 // The reads of the current graph read what they meet in batches: the neighbours of a hub, a query's hop through it,

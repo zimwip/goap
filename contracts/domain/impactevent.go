@@ -72,6 +72,27 @@ func (e ImpactEvent) StartsDraft() bool {
 	return e.Draft != nil && e.Op.WritesPost()
 }
 
+// NodeID is the node an event is about, when it names one: its post, its committed version, its pre, the impact or the
+// draft it installs ("" for a planned creation, or an event naming none).
+func (e ImpactEvent) NodeID() NodeID {
+	for _, r := range []*NodeRef{e.Post, e.Committed, e.Pre} {
+		if r != nil && r.ID != "" {
+			return r.ID
+		}
+	}
+	if e.State != nil {
+		for _, r := range []*NodeRef{e.State.Post, e.State.Pre} {
+			if r != nil && r.ID != "" {
+				return r.ID
+			}
+		}
+	}
+	if e.Draft != nil {
+		return e.Draft.Node
+	}
+	return ""
+}
+
 // ImpactEvent is one operation on the change impacts of a change.
 type ImpactEvent struct {
 	ID     string         `json:"id"`

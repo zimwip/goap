@@ -3,16 +3,15 @@ package graph
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// The change impacts are event-sourced (ADR 0029): every operation appends an event to the change's log, and the
-// change_impact table is the projection of that log, updated in the same transaction. Nothing else writes it. The
-// drafts of the nodes the change works on (ADR 0079) are no projection: they are folded from the same log when read
-// (draftcache.go).
+// The change impacts are event-sourced (ADR 0029): every operation appends an event to the change's log, folded into
+// the view of the change (draftcache.go), which is all there is of an impact until its commit: the store keeps a
+// change impact only once it wrote a version (ADR 0174, commitimpacts.go). The drafts of the nodes the change works
+// on (ADR 0079) are folded from the same log.
 
 func (g *Graph) caller(ctx context.Context) string {
 	if g.Caller == nil {
@@ -31,7 +30,7 @@ func (g *Graph) author(ctx context.Context) string {
 	return g.caller(ctx)
 }
 
-// emit appends events to the impact logs and applies each one to the projection. The events of one batched operation
+// emit appends events to the impact logs and folds each one into the view of its change. The events of one batched operation
 // that follow each other with one envelope (domain.SameEntry: the verdicts of a review, the versions of a commit) are
 // one log entry (ADR 0144).
 func (g *Graph) emit(ctx context.Context, tx Tx, events ...domain.ImpactEvent) error {
@@ -106,7 +105,7 @@ type stagedGroup struct {
 	n  int
 }
 
-// stage applies an event to the projection and to the fold of its change now, and logs it when the stage is flushed.
+// stage applies an event to the fold of its change now, and logs it when the stage is flushed.
 func (g *Graph) stage(ctx context.Context, tx Tx, s *impactStage, e domain.ImpactEvent) error {
 	g.envelope(ctx, &e)
 	if s.entry == "" {
@@ -189,8 +188,8 @@ func (g *Graph) flush(ctx context.Context, tx Tx, s *impactStage) error {
 	return nil
 }
 
-// emitEntry appends one log entry carrying the events (SameEntry) and applies them to the projection and to the fold of
-// the change; staged (s set), it applies them and leaves the entry to flush.
+// emitEntry appends one log entry carrying the events (SameEntry) and applies them to the fold of the change; staged
+// (s set), it applies them and leaves the entry to flush.
 func (g *Graph) emitEntry(ctx context.Context, tx Tx, events []domain.ImpactEvent, s *impactStage) error {
 	change := events[0].Change
 	id := g.newID()
@@ -212,8 +211,8 @@ func (g *Graph) emitEntry(ctx context.Context, tx Tx, events []domain.ImpactEven
 			return fmt.Errorf("change %s: %v: %w", e.Change, err, ErrInvalid)
 		}
 	}
-	// the projection before the events is the fold of the log (they are the same, ADR 0029), kept by the transaction:
-	// a batch of writes to one change reads none of its impacts again
+	// the fold of the log before the events, kept by the transaction: a batch of writes to one change reads none of its
+	// impacts again
 	st, err := g.draftState(ctx, tx, change)
 	if err != nil {
 		return err
@@ -252,15 +251,10 @@ func (g *Graph) emitEntry(ctx context.Context, tx Tx, events []domain.ImpactEven
 			next = st.copy()
 		}
 	}
-	for _, e := range events {
-		if err := g.project(ctx, tx, next, e); err != nil {
-			return err
-		}
-		if fold {
+	if fold {
+		for _, e := range events {
 			next.apply(e)
 		}
-	}
-	if fold {
 		keepDrafts(tx, next)
 		readLog(tx, next)
 	}
@@ -268,51 +262,6 @@ func (g *Graph) emitEntry(ctx context.Context, tx Tx, events []domain.ImpactEven
 		s.events, s.st = append(s.events, events...), next
 		if s.separate {
 			s.groups = append(s.groups, stagedGroup{id: id, n: len(events)})
-		}
-	}
-	return nil
-}
-
-// project applies an event to the change_impact projection, st being the fold before it.
-func (g *Graph) project(ctx context.Context, tx Tx, st *draftState, e domain.ImpactEvent) error {
-	// an event touches its own change impact, an adoption every one of them
-	var cur []domain.ChangeImpact
-	if e.Op == domain.ImpactAdopted {
-		cur = st.impacts.list().Slice()
-	} else {
-		if cn, ok := st.impact(e.Impact); ok {
-			cur = []domain.ChangeImpact{cn}
-		}
-	}
-	next := domain.ApplyImpactEvent(cur, e)
-	kept := make(map[domain.ChangeImpactID]bool, len(next))
-	for _, n := range next {
-		kept[n.ID] = true
-	}
-	// a change impact the event removes (a creation cancelled before it is accepted, an impact removed, ADR 0076)
-	before := make(map[domain.ChangeImpactID]domain.ChangeImpact, len(cur))
-	for _, cn := range cur {
-		before[cn.ID] = cn
-		if !kept[cn.ID] {
-			if err := tx.DeleteChangeImpact(ctx, e.Change, cn.ID); err != nil {
-				return err
-			}
-		}
-	}
-	// the superseded ones first: a node has one live change impact per flow (index change_impact_live)
-	var changed []domain.ChangeImpact
-	for _, cn := range next {
-		if was, ok := before[cn.ID]; !ok || !reflect.DeepEqual(was, cn) {
-			changed = append(changed, cn)
-		}
-	}
-	for _, first := range []bool{true, false} {
-		for _, cn := range changed {
-			if cn.Superseded == first {
-				if err := tx.PutChangeImpact(ctx, e.Change, cn); err != nil {
-					return err
-				}
-			}
 		}
 	}
 	return nil

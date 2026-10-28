@@ -328,20 +328,17 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg OpenChangeIDs", pg, pg.sqlOpenChangeIDs(), nil, `SELECT id::text FROM change WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at`, nil)
 	check("sqlite OpenChangeIDs", lite, lite.sqlOpenChangeIDs(), nil, `SELECT id FROM change WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at, rowid`, nil)
 
-	// Change impacts
-	q, a = pg.sqlChangeImpacts("c1")
-	check("pg ChangeImpacts", pg, q, a, `SELECT `+goldPGImpactCols+` FROM change_impact WHERE change_id = $1 ORDER BY seq`, []any{"c1"})
-	q, a = lite.sqlChangeImpacts("c1")
-	check("sqlite ChangeImpacts", lite, q, a, `SELECT `+goldSQLiteImpact+`
-			FROM change_impact WHERE change_id = ? ORDER BY seq`, []any{"c1"})
-	q, a = pg.sqlChangeImpactKeys("c1", 200)
-	check("pg ChangeImpactKeys", pg, q, a, `SELECT key, type FROM change_impact WHERE change_id = $1 ORDER BY seq LIMIT $2`, []any{"c1", 200})
-	q, a = lite.sqlChangeImpactKeys("c1", 200)
-	check("sqlite ChangeImpactKeys", lite, q, a, `SELECT key, type FROM change_impact WHERE change_id = ? ORDER BY seq LIMIT ?`, []any{"c1", 200})
+	// Change impacts (ADR 0174)
+	q, a = pg.sqlCommitImpacts("c1")
+	check("pg CommitImpacts", pg, q, a, `SELECT node_id::text, version, change_id::text, impact_id::text, key, type, intent, rationale, pre_version, merged_with, reason, review::text, effect, log_seq, produced_by, execution, via::text, created_at
+			FROM change_impact WHERE change_id = $1 ORDER BY log_seq, node_id, version`, []any{"c1"})
+	q, a = lite.sqlCommitImpacts("c1")
+	check("sqlite CommitImpacts", lite, q, a, `SELECT node_id, version, change_id, impact_id, key, type, intent, rationale, pre_version, merged_with, reason, review, effect, log_seq, produced_by, execution, via, created_at
+			FROM change_impact WHERE change_id = ? ORDER BY log_seq, node_id, version`, []any{"c1"})
 	q, a = pg.sqlNodeChangePage("n1", 0, 3)
-	check("pg NodeChangePage", pg, q, a, `SELECT change_id::text, min(seq) FROM change_impact WHERE node_id = $1 GROUP BY change_id ORDER BY 2 DESC LIMIT $2`, []any{"n1", 3})
+	check("pg NodeChangePage", pg, q, a, `SELECT change_id::text, min(seq) FROM change_log WHERE node = $1 GROUP BY change_id ORDER BY 2 DESC LIMIT $2`, []any{"n1", 3})
 	q, a = lite.sqlNodeChangePage("n1", 9, 3)
-	check("sqlite NodeChangePage", lite, q, a, `SELECT change_id, min(seq) FROM change_impact WHERE node_id = ? GROUP BY change_id HAVING min(seq) < ? ORDER BY 2 DESC LIMIT ?`, []any{"n1", int64(9), 3})
+	check("sqlite NodeChangePage", lite, q, a, `SELECT change_id, min(seq) FROM change_log WHERE node = ? GROUP BY change_id HAVING min(seq) < ? ORDER BY 2 DESC LIMIT ?`, []any{"n1", int64(9), 3})
 
 	// Log, LogCounts: the filter exercises every condition (the where builder is shared and unchanged)
 	f := domain.LogFilter{Change: "c1", Types: []string{"fact.", "journal.schedule"}, Flows: []string{"main"}, Processes: []string{"p1", "p2"}, Execution: "e1", AfterSeq: 7, Limit: 5}
@@ -378,8 +375,6 @@ func TestSQLBuildersGolden(t *testing.T) {
 	checkSQL(t, "pg DeleteTag", pg, q, `DELETE FROM tag WHERE id = $1`)
 	q, _ = lite.sqlDeleteTag("t1")
 	checkSQL(t, "sqlite DeleteTag", lite, q, `DELETE FROM tag WHERE id = ?`)
-	checkSQL(t, "pg DeleteChangeImpact", pg, pg.sqlDeleteChangeImpact(), `DELETE FROM change_impact WHERE change_id = $1 AND id = $2`)
-	checkSQL(t, "sqlite DeleteChangeImpact", lite, lite.sqlDeleteChangeImpact(), `DELETE FROM change_impact WHERE change_id = ? AND id = ?`)
 	checkSQL(t, "pg SetNodeOrigin", pg, pg.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = $3, change_impact = $4, comment = $5 WHERE node_id = $1 AND version = $2`)
 	checkSQL(t, "sqlite SetNodeOrigin", lite, lite.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = ?, change_impact = ?, comment = ? WHERE node_id = ? AND version = ?`)
 	checkSQL(t, "pg JoinBranch", pg, pg.sqlJoinBranch(), `INSERT INTO node_branch (node_id, version, branch, change_id, committed) SELECT node_id, version, $3, $4, $5 FROM node_version
@@ -401,10 +396,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	baselineCols := []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "depth", "gap", "kind"}
 	checkSQL(t, "pg insert baseline", pg, pg.sqlInsert("baseline", baselineCols, ""), `INSERT INTO baseline (id, name, parent_id, merged_from, change_id, created_at, branch, namespace, depth, gap, kind) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`)
 	checkSQL(t, "sqlite insert baseline", lite, lite.sqlInsert("baseline", baselineCols, ""), `INSERT INTO baseline (id, name, parent_id, merged_from, change_id, created_at, branch, namespace, depth, gap, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	checkSQL(t, "pg insert change_log", pg, pg.sqlInsert("change_log", changeLogColumns, " RETURNING seq"), `INSERT INTO change_log (id, change_id, type, flow, process_id, execution, subject, by_whom, causation, at, payload)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING seq`)
-	checkSQL(t, "sqlite insert change_log", lite, lite.sqlInsert("change_log", changeLogColumns, ""), `INSERT INTO change_log (id, change_id, type, flow, process_id, execution, subject, by_whom, causation, at, payload)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	checkSQL(t, "pg insert change_log", pg, pg.sqlInsert("change_log", changeLogColumns, " RETURNING seq"), `INSERT INTO change_log (id, change_id, type, flow, process_id, execution, subject, by_whom, causation, at, payload, node)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING seq`)
+	checkSQL(t, "sqlite insert change_log", lite, lite.sqlInsert("change_log", changeLogColumns, ""), `INSERT INTO change_log (id, change_id, type, flow, process_id, execution, subject, by_whom, causation, at, payload, node)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	// DeleteChange
 	checkList := func(name string, d dialect, got, want []string) {

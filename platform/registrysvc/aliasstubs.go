@@ -113,7 +113,7 @@ func missingAliases(ctx context.Context, g StoreGraph, aliases []string) ([]stri
 // hasPendingStub reports whether an open (not applied/abandoned) platform-namespace change
 // already holds the LlmAlias node of alias, whatever the state of its review - avoids creating a
 // duplicate stub when a methodology referencing it is republished before an administrator acts.
-// (Change.Nodes is the impact projection, filled by Graph.Changes.)
+// (Change.Nodes are the impacts of its view, filled by Graph.Changes.)
 func hasPendingStub(ctx context.Context, g StoreGraph, alias string) (bool, error) {
 	changes, err := g.Changes(ctx)
 	if err != nil {

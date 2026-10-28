@@ -6,93 +6,80 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// cnRow is the flat storage form of a change impact shared by the SQL backends.
-type cnRow struct {
-	ID                          string
-	NodeID                      *string
-	Pre, Post, Committed        *int
-	Reviews, DerivedFrom, Items []byte
-	Effect                      []byte
-	Key, Type, Intent, Review   string
-	Rationale, Via              string
-	Recheck                     bool
-	ProducedBy, Execution, Flow string
-	Superseded                  bool
-}
+// commitImpactColumns are the columns of a change_impact row (ADR 0174), in the order of commitImpactArgs.
+var commitImpactColumns = []string{"node_id", "version", "change_id", "impact_id", "key", "type", "intent", "rationale", "pre_version",
+	"merged_with", "reason", "review", "effect", "log_seq", "produced_by", "execution", "via", "created_at"}
 
-func toCNRow(cn domain.ChangeImpact) (cnRow, error) {
-	r := cnRow{ID: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Review: string(cn.Review),
-		Rationale: cn.Rationale, Via: string(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, Flow: cn.Flow, Superseded: cn.Superseded}
-	ver := func(ref *domain.NodeRef) *int {
-		if ref == nil {
+// commitImpactArgs are the arguments of a change_impact row but its time, which each repository encodes (the last
+// column): the versions a row does not name are NULL, its review and effect JSON.
+func commitImpactArgs(r CommitImpact) ([]any, error) {
+	var review []byte
+	if r.Review != nil {
+		var err error
+		if review, err = json.Marshal(r.Review); err != nil {
+			return nil, err
+		}
+	}
+	effect, err := json.Marshal(r.Effect)
+	if err != nil {
+		return nil, err
+	}
+	ver := func(v domain.Version) *int {
+		if v == 0 {
 			return nil
 		}
-		v := int(ref.Version)
-		return &v
+		n := int(v)
+		return &n
 	}
-	r.Pre, r.Post, r.Committed = ver(cn.Pre), ver(cn.Post), ver(cn.Committed)
-	switch {
-	case cn.Pre != nil:
-		s := string(cn.Pre.ID)
-		r.NodeID = &s
-	case cn.Post != nil:
-		s := string(cn.Post.ID)
-		r.NodeID = &s
+	var rev any
+	if review != nil {
+		rev = string(review)
 	}
-	var err error
-	if r.Reviews, err = json.Marshal(nonNil(cn.Reviews)); err != nil {
-		return r, err
-	}
-	if r.DerivedFrom, err = json.Marshal(nonNil(cn.DerivedFrom)); err != nil {
-		return r, err
-	}
-	if r.Items, err = json.Marshal(nonNil(cn.Items)); err != nil {
-		return r, err
-	}
-	r.Effect, err = json.Marshal(cn.Effect)
-	return r, err
+	return []any{string(r.Node), int(r.Version), string(r.Change), nullUUID(string(r.Impact)), r.Key, r.Type, string(r.Intent), r.Rationale,
+		ver(r.Pre), ver(r.MergedWith), r.Reason, rev, string(effect), r.LogSeq, r.ProducedBy, r.Execution, nullUUID(string(r.Via))}, nil
 }
 
-func nonNil[T any](s []T) []T {
-	if s == nil {
-		return []T{}
-	}
-	return s
+// commitImpactRow is the scan target of a change_impact row (sqlCommitImpacts), its time left to each repository.
+type commitImpactRow struct {
+	node, change, key, typ, intent, rationale, reason, producedBy, execution string
+	impact, via, review                                                      *string
+	version                                                                  int
+	pre, mergedWith                                                          *int
+	effect                                                                   []byte
+	logSeq                                                                   int64
 }
 
-func (r cnRow) node() (domain.ChangeImpact, error) {
-	cn := domain.ChangeImpact{ID: domain.ChangeImpactID(r.ID), Key: r.Key, Type: r.Type, Intent: domain.NodeIntent(r.Intent),
-		Review: domain.NodeReview(r.Review), Rationale: r.Rationale, Via: domain.ChangeImpactID(r.Via), Recheck: r.Recheck,
-		ProducedBy: r.ProducedBy, Execution: r.Execution, Flow: r.Flow, Superseded: r.Superseded}
-	ref := func(v *int) *domain.NodeRef {
-		if v == nil || r.NodeID == nil {
-			return nil
-		}
-		return &domain.NodeRef{ID: domain.NodeID(*r.NodeID), Version: domain.Version(*v)}
+// dest are the scan destinations of a row, in the order of sqlCommitImpacts but its time.
+func (r *commitImpactRow) dest() []any {
+	return []any{&r.node, &r.version, &r.change, &r.impact, &r.key, &r.typ, &r.intent, &r.rationale, &r.pre, &r.mergedWith, &r.reason,
+		&r.review, &r.effect, &r.logSeq, &r.producedBy, &r.execution, &r.via}
+}
+
+func (r *commitImpactRow) impactOf() (CommitImpact, error) {
+	ci := CommitImpact{Node: domain.NodeID(r.node), Version: domain.Version(r.version), Change: domain.ChangeID(r.change), Key: r.key, Type: r.typ,
+		Intent: domain.NodeIntent(r.intent), Rationale: r.rationale, Reason: r.reason, LogSeq: r.logSeq, ProducedBy: r.producedBy, Execution: r.execution}
+	if r.impact != nil {
+		ci.Impact = domain.ChangeImpactID(*r.impact)
 	}
-	cn.Pre, cn.Post, cn.Committed = ref(r.Pre), ref(r.Post), ref(r.Committed)
-	if err := json.Unmarshal(r.Reviews, &cn.Reviews); err != nil {
-		return cn, err
+	if r.via != nil {
+		ci.Via = domain.ChangeImpactID(*r.via)
 	}
-	if len(cn.Reviews) == 0 {
-		cn.Reviews = nil
+	if r.pre != nil {
+		ci.Pre = domain.Version(*r.pre)
 	}
-	if err := json.Unmarshal(r.DerivedFrom, &cn.DerivedFrom); err != nil {
-		return cn, err
+	if r.mergedWith != nil {
+		ci.MergedWith = domain.Version(*r.mergedWith)
 	}
-	if len(cn.DerivedFrom) == 0 {
-		cn.DerivedFrom = nil
-	}
-	if err := json.Unmarshal(r.Items, &cn.Items); err != nil {
-		return cn, err
-	}
-	if len(cn.Items) == 0 {
-		cn.Items = nil
-	}
-	if len(r.Effect) > 0 {
-		if err := json.Unmarshal(r.Effect, &cn.Effect); err != nil {
-			return cn, err
+	if r.review != nil && *r.review != "" {
+		ci.Review = &domain.Review{}
+		if err := json.Unmarshal([]byte(*r.review), ci.Review); err != nil {
+			return ci, err
 		}
 	}
-	return cn, nil
+	if len(r.effect) > 0 {
+		if err := json.Unmarshal(r.effect, &ci.Effect); err != nil {
+			return ci, err
+		}
+	}
+	return ci, nil
 }

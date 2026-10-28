@@ -161,9 +161,6 @@ type guardTx struct {
 	// fresh is, per change whose lock the transaction holds, the fold it last read the log for: only its own appends can
 	// follow it (ADR 0127)
 	fresh map[domain.ChangeID]*draftState
-	// reads are the changes read whole by the transaction, kept up to date by its own writes (a batch of N writes to
-	// one change reads its N impacts once)
-	reads map[domain.ChangeID]domain.Change
 	// heads are the headers of the changes read by the transaction, their impacts taken from the fold of their log
 	heads map[domain.ChangeID]domain.Change
 	// locked are the changes and branches whose lock the transaction holds (ADR 0127)
@@ -313,79 +310,20 @@ func (t *guardTx) lock(key string) {
 	t.branches = nil // what the writers the lock held off changed is read again
 }
 
-func (t *guardTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
-	if err := t.LockChange(ctx, change); err != nil {
-		return err
+// PutCommitImpacts writes the change impacts of versions a change wrote (ADR 0174): each names an existing change.
+func (t *guardTx) PutCommitImpacts(ctx context.Context, rows []CommitImpact) error {
+	for _, r := range rows {
+		if err := t.needChange(r.Change, "change impact of "+r.Key); err != nil {
+			return err
+		}
 	}
-	if err := t.Tx.PutChangeImpact(ctx, change, cn); err != nil {
-		return err
-	}
-	c, ok := t.reads[change]
-	if !ok {
-		return nil
-	}
-	at := slices.IndexFunc(c.Nodes, func(n domain.ChangeImpact) bool { return n.ID == cn.ID })
-	if at < 0 {
-		delete(t.reads, change) // a new one: read again, as the store orders and stamps it
-		return nil
-	}
-	// what the store gives back (its encoding), its creation time kept as an update keeps it
-	r, err := toCNRow(cn)
-	if err != nil {
-		return err
-	}
-	stored, err := r.node()
-	if err != nil {
-		return err
-	}
-	stored.CreatedAt = c.Nodes[at].CreatedAt
-	c.Nodes[at] = stored
-	return nil
+	return t.Tx.PutCommitImpacts(ctx, rows)
 }
 
-func (t *guardTx) DeleteChangeImpact(ctx context.Context, change domain.ChangeID, id domain.ChangeImpactID) error {
-	if err := t.LockChange(ctx, change); err != nil {
-		return err
-	}
-	if err := t.Tx.DeleteChangeImpact(ctx, change, id); err != nil {
-		return err
-	}
-	if c, ok := t.reads[change]; ok {
-		c.Nodes = slices.DeleteFunc(c.Nodes, func(n domain.ChangeImpact) bool { return n.ID == id })
-		t.reads[change] = c
-	}
-	return nil
-}
-
-// changeHeaderReader is a store that reads a change without its impacts.
-type changeHeaderReader interface {
-	changeHeader(ctx context.Context, id domain.ChangeID) (domain.Change, error)
-}
-
-// Change reads a change: its header once per transaction, its change impacts from the fold of its log (the projection
-// they are the same as, ADR 0029), so that an operation on a change of N impacts decodes none of them. A store that
-// cannot read the header alone is read once per transaction, later reads being copies kept up to date by its writes.
+// Change reads a change: its header once per transaction, its change impacts and items from the fold of its log (ADR
+// 0153; the store keeps no impact before its commit, ADR 0174), so that an operation on a change of N impacts decodes
+// none of them.
 func (t *guardTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
-	_, ok := t.Tx.(changeHeaderReader)
-	if !ok {
-		if c, ok := t.reads[id]; ok {
-			return copyChange(c), nil
-		}
-		c, err := t.Tx.Change(ctx, id)
-		if err != nil {
-			return c, err
-		}
-		if t.reads == nil {
-			t.reads = map[domain.ChangeID]domain.Change{}
-		}
-		t.reads[id] = copyChange(c)
-		st, err := t.g.draftState(ctx, t, id)
-		if err != nil {
-			return c, err
-		}
-		c.Seq = st.seq
-		return c, nil
-	}
 	c, ok := t.heads[id]
 	if !ok {
 		var err error
@@ -411,14 +349,42 @@ func (t *guardTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change
 	return c, nil
 }
 
+// Changes reads every change as Change does: its impacts and items from the fold of its log (ADR 0174).
+func (t *guardTx) Changes(ctx context.Context) ([]domain.Change, error) {
+	cs, err := t.Tx.Changes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return t.viewed(ctx, cs)
+}
+
+// SubChanges reads the sub-changes of a change as Change does.
+func (t *guardTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain.Change, error) {
+	cs, err := t.Tx.SubChanges(ctx, parent)
+	if err != nil {
+		return nil, err
+	}
+	return t.viewed(ctx, cs)
+}
+
+// viewed reads changes a store read again as Change does, their headers known.
+func (t *guardTx) viewed(ctx context.Context, cs []domain.Change) ([]domain.Change, error) {
+	t.knowHeads(cs)
+	out := make([]domain.Change, len(cs))
+	for i, c := range cs {
+		var err error
+		if out[i], err = t.Change(ctx, c.ID); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 // openChange reads a change as Change does, its impacts shared with the view of the change rather than copied: what an
 // operation of the graph reads before it writes (changeOpen), never handed to a caller of the graph, which may edit
 // them. The view's values are replaced, never edited, and the transaction's own view, frozen, is copied before its
-// next write, which clones them (draftState.own). A store that reads its changes whole gives its copy.
+// next write, which clones them (draftState.own).
 func (t *guardTx) openChange(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
-	if _, ok := t.Tx.(changeHeaderReader); !ok {
-		return t.Change(ctx, id)
-	}
 	c, ok := t.heads[id]
 	if !ok {
 		var err error
@@ -447,11 +413,8 @@ func (t *guardTx) openChange(ctx context.Context, id domain.ChangeID) (domain.Ch
 }
 
 // knowHeads gives the transaction the headers of changes read in one statement (a page of a listing), so that reading
-// those changes reads their logs only. A store that reads its changes whole (no changeHeader) ignores them.
+// those changes reads their logs only.
 func (t *guardTx) knowHeads(cs []domain.Change) {
-	if _, ok := t.Tx.(changeHeaderReader); !ok {
-		return
-	}
 	if t.heads == nil {
 		t.heads = map[domain.ChangeID]domain.Change{}
 	}
@@ -460,32 +423,6 @@ func (t *guardTx) knowHeads(cs []domain.Change) {
 			t.heads[c.ID] = c
 		}
 	}
-}
-
-// copyChange is a copy of a change its reader may edit.
-func copyChange(c domain.Change) domain.Change {
-	c.Data = maps.Clone(c.Data)
-	c.Guardians = slices.Clone(c.Guardians)
-	c.DependsOn = slices.Clone(c.DependsOn)
-	c.Items = slices.Clone(c.Items)
-	c.Nodes = slices.Clone(c.Nodes)
-	for i, cn := range c.Nodes {
-		cn.Reviews = slices.Clone(cn.Reviews)
-		cn.DerivedFrom = slices.Clone(cn.DerivedFrom)
-		cn.Items = slices.Clone(cn.Items)
-		for _, r := range []**domain.NodeRef{&cn.Pre, &cn.Post, &cn.Committed} {
-			if *r != nil {
-				v := **r
-				*r = &v
-			}
-		}
-		if cn.Validation != nil {
-			v := *cn.Validation
-			cn.Validation = &v
-		}
-		c.Nodes[i] = cn
-	}
-	return c
 }
 
 func (t *guardTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
@@ -525,8 +462,7 @@ func (t *guardTx) beforeAppend(ctx context.Context, e domain.LogEntry) error {
 	}
 	t.logged[e.Change] = true
 	if !strings.HasPrefix(e.Type, domain.LogImpact+".") {
-		delete(t.reads, e.Change) // a fact is an item of the change
-		delete(t.heads, e.Change)
+		delete(t.heads, e.Change) // a fact is an item of the change
 	}
 	return nil
 }
@@ -855,7 +791,6 @@ func (t *guardTx) PutChange(ctx context.Context, c domain.Change) error {
 	h.ShareImpacts(domain.Impacts{})
 	t.changes[c.ID] = h
 	delete(t.headers, c.ID)
-	delete(t.reads, c.ID)
 	delete(t.heads, c.ID)
 	return nil
 }
@@ -873,7 +808,6 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 	}
 	delete(t.changes, id)
 	delete(t.headers, id)
-	delete(t.reads, id)
 	delete(t.heads, id)
 	t.branches = nil
 	return nil
