@@ -26,7 +26,8 @@ history, about 90 000 files today), so the import must stream the history and mu
    file versions every directory up to the root, and each directory's draft keeps its links, which the landing points
    at the versions it writes (ADR 0003, ADR 0079): the links of a directory always name the versions of its entries at
    the head, never a suspect version, and reading the tree from the repository node is reading the commit.
-4. **A node is never deleted** (ADR 0077): a removed entry leaves its directory and moves to `removed` (a removed
+4. *(Superseded by ADR 0172: a removed entry is deleted, a tombstone, and an entry added again is a creation the
+   graph requalifies and restores; the `presence` lifecycle is gone.)* **A node is never deleted** (ADR 0077): a removed entry leaves its directory and moves to `removed` (a removed
    directory drops its links too); added again at the same path, it is the same node, `restore`d.
 5. **Streaming, resumable.** One `git log --first-parent --reverse --raw -t -z` process for the whole history, read as
    it writes, one `git cat-file --batch-check` for the sizes; the importer keeps only the repository at the head (key →

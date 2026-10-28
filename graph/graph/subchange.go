@@ -137,6 +137,9 @@ func (g *Graph) checkVersion(ctx context.Context, ix *typeIndex, n domain.Node, 
 
 // checkDraft checks a draft as the version written from it will be.
 func (g *Graph) checkDraft(ctx context.Context, ix *typeIndex, c domain.Change, d domain.Draft, resolve nodeResolver) error {
+	if d.Deleted {
+		return nil // a tombstone holds no rule of a version (ADR 0172)
+	}
 	return g.checkVersion(ctx, ix, draftNode(c, d), d.OutLinks(), resolve)
 }
 

@@ -172,18 +172,22 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 				return fmt.Errorf("change impact %s: unknown via %s: %w", cn.ID, cn.Via, ErrInvalid)
 			}
 			if cn.Pre != nil {
+				var n domain.Node
 				if !b.Contains(*cn.Pre) {
-					return fmt.Errorf("change impact %s: pre %s is not in baseline %s (the node moved on): %w", cn.ID, cn.Pre, b.ID, ErrConflict)
+					// a restoration starts from the tombstone that deleted the node, which no state holds (ADR 0172)
+					if n, err = tx.Node(ctx, *cn.Pre); err != nil && !errors.Is(err, ErrNotFound) {
+						return err
+					} else if err != nil || !n.Deleted {
+						return fmt.Errorf("change impact %s: pre %s is not in baseline %s (the node moved on): %w", cn.ID, cn.Pre, b.ID, ErrConflict)
+					}
+				} else if n, err = tx.Node(ctx, *cn.Pre); err != nil {
+					return err
 				}
 				pres := presOf(cn.Flow)
 				if pres.has(cn.Pre.ID) {
 					return fmt.Errorf("change impact %s: node %s is already in the change: %w", cn.ID, cn.Pre.ID, ErrConflict)
 				}
 				pres.add(cn.Pre.ID)
-				n, err := tx.Node(ctx, *cn.Pre)
-				if err != nil {
-					return err
-				}
 				if (cn.Key != "" && cn.Key != n.Key) || (cn.Type != "" && cn.Type != n.Type) {
 					return fmt.Errorf("change impact %s: key / type do not match node %s: %w", cn.ID, n.Ref(), ErrInvalid)
 				}

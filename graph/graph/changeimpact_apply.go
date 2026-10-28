@@ -164,7 +164,11 @@ func (a *applier) prepareChangeImpacts() error {
 			cp.pre = &pre
 		}
 		a.cposts = append(a.cposts, cp)
-		a.target.set(nodes[i].ID, nodes[i].Version)
+		if nodes[i].Deleted {
+			a.target.remove(nodes[i].ID) // a tombstone: the node leaves the state (ADR 0172)
+		} else {
+			a.target.set(nodes[i].ID, nodes[i].Version)
+		}
 	}
 	return nil
 }
@@ -180,7 +184,7 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 	}
 	n := domain.Node{ID: d.Node, Branch: a.branch, Namespace: domain.NamespaceOf(a.change.Namespace), Key: d.Key, Type: d.Type, Properties: cloneMap(d.Properties),
 		State: d.State, ChangeID: a.change.ID, Responsible: d.Owner, ChangeImpact: cn.ID, Comment: comment, Execution: d.Execution, Origins: slices.Clone(d.Origins), CreatedAt: a.g.now(),
-		Creator: domain.Creator{Subject: d.Creator}, Editor: d.Editor}
+		Creator: domain.Creator{Subject: d.Creator}, Editor: d.Editor, Deleted: d.Deleted}
 	if d.Base == nil {
 		// a key is one node's: another change may have created it meanwhile
 		id, err := a.tx.NodeIDByKey(a.ctx, n.Namespace, n.Key)
