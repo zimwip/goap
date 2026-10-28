@@ -36,7 +36,7 @@ func symbols(t *testing.T, g *graph.Graph, file string) map[string]domain.Versio
 			continue
 		}
 		s := byID[l.To.ID]
-		if s.Version != l.To.Version || s.State != gitimport.StatePresent {
+		if s.Version != l.To.Version || s.Deleted {
 			t.Fatalf("%s defines %s v%d (%s), the head has v%d", file, s.Key, l.To.Version, s.State, s.Version)
 		}
 		name := s.Properties["name"].(string)
@@ -96,7 +96,7 @@ func TestImportReadsTheSymbols(t *testing.T) {
 		t.Fatalf("symbols: %v", got)
 	}
 	add, err := g.NodeByKey(ctx, gitimport.Namespace, file+"#function:add")
-	if err != nil || add.State != gitimport.StateRemoved {
+	if err != nil || !add.Deleted {
 		t.Fatalf("add: %+v %v", add, err)
 	}
 	// add is back: the same node, present again; the file removed takes its symbols with it
@@ -114,7 +114,7 @@ func TestImportReadsTheSymbols(t *testing.T) {
 		t.Fatalf("symbols: %v", got)
 	}
 	for _, k := range []string{"#function:add", "#function:sub", "#struct:point"} {
-		if n, err := g.NodeByKey(ctx, gitimport.Namespace, file+k); err != nil || n.State != gitimport.StateRemoved {
+		if n, err := g.NodeByKey(ctx, gitimport.Namespace, file+k); err != nil || !n.Deleted {
 			t.Fatalf("%s: %+v %v", k, n, err)
 		}
 	}
@@ -283,10 +283,10 @@ func (p *Point) check() {
 	r.commit("Rename NewPoint")
 	st := run()
 	nodes, links = codeGraph(t, g)
-	if nodes[newPoint].State != gitimport.StateRemoved || nodes[pt+"#function:Make"].State != gitimport.StatePresent {
-		t.Fatalf("NewPoint %s, Make %s", nodes[newPoint].State, nodes[pt+"#function:Make"].State)
+	if _, held := nodes[newPoint]; held || nodes[pt+"#function:Make"].Deleted {
+		t.Fatalf("NewPoint %+v, Make %+v", nodes[newPoint], nodes[pt+"#function:Make"])
 	}
-	if !links[main+" calls "+newPoint] || !suspect(t, g, main, newPoint) {
+	if !suspect(t, g, main, newPoint) {
 		t.Error("main's call to NewPoint is not suspect")
 	}
 	for _, k := range []string{pt + "#struct:Point", pt + "#method:Point.Scale", pt + "#constant:Max", shapes} {
@@ -433,7 +433,7 @@ func TestImportVersionsWhatChanged(t *testing.T) {
 	r.write("shape.py", src)
 	r.commit("No name")
 	run()
-	if v := versions(); v[shape] != 1 || v[area] != 2 || v[name] != 2 {
+	if v := versions(); v[shape] != 1 || v[area] != 2 || v[name] != 0 { // deleted (ADR 0172): not in the head
 		t.Errorf("a method removed: %v", v)
 	}
 	// the class's own text

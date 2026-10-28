@@ -157,8 +157,8 @@ func graphTreeOn(t *testing.T, g *graph.Graph, name, branch string) (map[string]
 	var walk func(n domain.Node)
 	walk = func(n domain.Node) {
 		p, _ := n.Properties["path"].(string)
-		if n.State == gitimport.StateRemoved {
-			t.Fatalf("%s is held but removed", n.Key)
+		if n.Deleted {
+			t.Fatalf("%s is held but deleted", n.Key)
 		}
 		switch n.Type {
 		case gitimport.TypeFile:
@@ -255,13 +255,13 @@ func TestImportFollowsTheHistory(t *testing.T) {
 	if applied != 7 {
 		t.Fatalf("%d applied changes, want one per commit", applied)
 	}
-	// the removed entries stay, in their removed state; a path back is the same node
+	// the removed entries are deleted, their tombstone the last version (ADR 0172); a path back is the same node, restored
 	lib, err := g.NodeByKey(ctx, gitimport.Namespace, "demo:src/lib/util.h")
-	if err != nil || lib.State != gitimport.StatePresent || lib.Version != 3 {
+	if err != nil || lib.Deleted || lib.Version != 3 {
 		t.Fatalf("util.h: %+v %v", lib, err)
 	}
 	readme, err := g.NodeByKey(ctx, gitimport.Namespace, "demo:README")
-	if err != nil || readme.State != gitimport.StateRemoved {
+	if err != nil || !readme.Deleted {
 		t.Fatalf("README: %+v %v", readme, err)
 	}
 	if f, _ := g.NodeByKey(ctx, gitimport.Namespace, "demo:src/main.c"); f.Properties["extension"] != "c" || f.Properties["size"] == nil {

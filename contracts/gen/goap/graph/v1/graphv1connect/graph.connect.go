@@ -178,6 +178,9 @@ const (
 	// GraphServiceImpactNodeCancelProcedure is the fully-qualified name of the GraphService's
 	// ImpactNodeCancel RPC.
 	GraphServiceImpactNodeCancelProcedure = "/goap.graph.v1.GraphService/ImpactNodeCancel"
+	// GraphServiceImpactNodeDeleteProcedure is the fully-qualified name of the GraphService's
+	// ImpactNodeDelete RPC.
+	GraphServiceImpactNodeDeleteProcedure = "/goap.graph.v1.GraphService/ImpactNodeDelete"
 	// GraphServiceImpactNodeMergeProcedure is the fully-qualified name of the GraphService's
 	// ImpactNodeMerge RPC.
 	GraphServiceImpactNodeMergeProcedure = "/goap.graph.v1.GraphService/ImpactNodeMerge"
@@ -462,6 +465,10 @@ type GraphServiceClient interface {
 	ImpactLinkDelete(context.Context, *connect.Request[v1.ImpactLinkDeleteRequest]) (*connect.Response[v1.ImpactLinkDeleteResponse], error)
 	ImpactNodeTransition(context.Context, *connect.Request[v1.ImpactNodeTransitionRequest]) (*connect.Response[v1.ImpactNodeTransitionResponse], error)
 	ImpactNodeCancel(context.Context, *connect.Request[v1.ImpactNodeCancelRequest]) (*connect.Response[v1.ImpactNodeCancelResponse], error)
+	// ImpactNodeDelete deletes a node in a change (ADR 0172): its draft (the node checked out first) is marked deleted and
+	// loses its outgoing links; the commit writes a tombstone and the node leaves the state. A later change creating a node
+	// of its key, or checking it out, restores it.
+	ImpactNodeDelete(context.Context, *connect.Request[v1.ImpactNodeDeleteRequest]) (*connect.Response[v1.ImpactNodeDeleteResponse], error)
 	// Merge nodes into a new one, split one into new ones, seen from the parent side (ADR 0077): the parents lose the
 	// links to the sources and gain the links to the successors, the sources stay untouched with the impact of their
 	// parent as via.
@@ -910,6 +917,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("ImpactNodeCancel")),
 			connect.WithClientOptions(opts...),
 		),
+		impactNodeDelete: connect.NewClient[v1.ImpactNodeDeleteRequest, v1.ImpactNodeDeleteResponse](
+			httpClient,
+			baseURL+GraphServiceImpactNodeDeleteProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ImpactNodeDelete")),
+			connect.WithClientOptions(opts...),
+		),
 		impactNodeMerge: connect.NewClient[v1.ImpactNodeMergeRequest, v1.ImpactNodeRestructureResponse](
 			httpClient,
 			baseURL+GraphServiceImpactNodeMergeProcedure,
@@ -1350,6 +1363,7 @@ type graphServiceClient struct {
 	impactLinkDelete       *connect.Client[v1.ImpactLinkDeleteRequest, v1.ImpactLinkDeleteResponse]
 	impactNodeTransition   *connect.Client[v1.ImpactNodeTransitionRequest, v1.ImpactNodeTransitionResponse]
 	impactNodeCancel       *connect.Client[v1.ImpactNodeCancelRequest, v1.ImpactNodeCancelResponse]
+	impactNodeDelete       *connect.Client[v1.ImpactNodeDeleteRequest, v1.ImpactNodeDeleteResponse]
 	impactNodeMerge        *connect.Client[v1.ImpactNodeMergeRequest, v1.ImpactNodeRestructureResponse]
 	impactNodeSplit        *connect.Client[v1.ImpactNodeSplitRequest, v1.ImpactNodeRestructureResponse]
 	withdrawImpact         *connect.Client[v1.WithdrawImpactRequest, v1.WithdrawImpactResponse]
@@ -1669,6 +1683,11 @@ func (c *graphServiceClient) ImpactNodeTransition(ctx context.Context, req *conn
 // ImpactNodeCancel calls goap.graph.v1.GraphService.ImpactNodeCancel.
 func (c *graphServiceClient) ImpactNodeCancel(ctx context.Context, req *connect.Request[v1.ImpactNodeCancelRequest]) (*connect.Response[v1.ImpactNodeCancelResponse], error) {
 	return c.impactNodeCancel.CallUnary(ctx, req)
+}
+
+// ImpactNodeDelete calls goap.graph.v1.GraphService.ImpactNodeDelete.
+func (c *graphServiceClient) ImpactNodeDelete(ctx context.Context, req *connect.Request[v1.ImpactNodeDeleteRequest]) (*connect.Response[v1.ImpactNodeDeleteResponse], error) {
+	return c.impactNodeDelete.CallUnary(ctx, req)
 }
 
 // ImpactNodeMerge calls goap.graph.v1.GraphService.ImpactNodeMerge.
@@ -2090,6 +2109,10 @@ type GraphServiceHandler interface {
 	ImpactLinkDelete(context.Context, *connect.Request[v1.ImpactLinkDeleteRequest]) (*connect.Response[v1.ImpactLinkDeleteResponse], error)
 	ImpactNodeTransition(context.Context, *connect.Request[v1.ImpactNodeTransitionRequest]) (*connect.Response[v1.ImpactNodeTransitionResponse], error)
 	ImpactNodeCancel(context.Context, *connect.Request[v1.ImpactNodeCancelRequest]) (*connect.Response[v1.ImpactNodeCancelResponse], error)
+	// ImpactNodeDelete deletes a node in a change (ADR 0172): its draft (the node checked out first) is marked deleted and
+	// loses its outgoing links; the commit writes a tombstone and the node leaves the state. A later change creating a node
+	// of its key, or checking it out, restores it.
+	ImpactNodeDelete(context.Context, *connect.Request[v1.ImpactNodeDeleteRequest]) (*connect.Response[v1.ImpactNodeDeleteResponse], error)
 	// Merge nodes into a new one, split one into new ones, seen from the parent side (ADR 0077): the parents lose the
 	// links to the sources and gain the links to the successors, the sources stay untouched with the impact of their
 	// parent as via.
@@ -2532,6 +2555,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceImpactNodeCancelProcedure,
 		svc.ImpactNodeCancel,
 		connect.WithSchema(graphServiceMethods.ByName("ImpactNodeCancel")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceImpactNodeDeleteHandler := connect.NewUnaryHandler(
+		GraphServiceImpactNodeDeleteProcedure,
+		svc.ImpactNodeDelete,
+		connect.WithSchema(graphServiceMethods.ByName("ImpactNodeDelete")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceImpactNodeMergeHandler := connect.NewUnaryHandler(
@@ -3022,6 +3051,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceImpactNodeTransitionHandler.ServeHTTP(w, r)
 		case GraphServiceImpactNodeCancelProcedure:
 			graphServiceImpactNodeCancelHandler.ServeHTTP(w, r)
+		case GraphServiceImpactNodeDeleteProcedure:
+			graphServiceImpactNodeDeleteHandler.ServeHTTP(w, r)
 		case GraphServiceImpactNodeMergeProcedure:
 			graphServiceImpactNodeMergeHandler.ServeHTTP(w, r)
 		case GraphServiceImpactNodeSplitProcedure:
@@ -3361,6 +3392,10 @@ func (UnimplementedGraphServiceHandler) ImpactNodeTransition(context.Context, *c
 
 func (UnimplementedGraphServiceHandler) ImpactNodeCancel(context.Context, *connect.Request[v1.ImpactNodeCancelRequest]) (*connect.Response[v1.ImpactNodeCancelResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ImpactNodeCancel is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ImpactNodeDelete(context.Context, *connect.Request[v1.ImpactNodeDeleteRequest]) (*connect.Response[v1.ImpactNodeDeleteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ImpactNodeDelete is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ImpactNodeMerge(context.Context, *connect.Request[v1.ImpactNodeMergeRequest]) (*connect.Response[v1.ImpactNodeRestructureResponse], error) {

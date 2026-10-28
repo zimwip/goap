@@ -326,7 +326,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "",
+      "description": "Versions, nodes, changes and links written by goap-bench, domain types on the right axis",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -362,6 +362,16 @@
           "expr": "max(goap_bench_changes{service_name=\"goap-bench\"})",
           "legendFormat": "changes",
           "refId": "C",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(goap_bench_links{service_name=\"goap-bench\"})",
+          "legendFormat": "links",
+          "refId": "E",
           "range": true
         },
         {

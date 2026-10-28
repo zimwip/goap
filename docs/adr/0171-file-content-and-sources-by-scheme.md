@@ -35,7 +35,7 @@ name, through fixed tables (the same on every machine, never the system's MIME f
 
 ### 2. A text file keeps its text, a blob the address of its content
 
-`code` 1.6.0 adds to `code@File`: `media`, `binary`, `encoding`, `content` (type `code`: the text decoded to UTF-8 in
+`code` 1.8.0 adds to `code@File`: `media`, `binary`, `encoding`, `content` (type `code`: the text decoded to UTF-8 in
 its language, ADR 0152) and `contentUrl` (widget `url`). The importer (`Importer.Text`, `MaxTextBytes`, default
 256 KiB; params `text`, `maxText`) keeps the text of a file that reads as text and is no larger; a larger text and
 anything else is a blob named by its object id. A symbolic link keeps no text. `contentUrl` is where the content of

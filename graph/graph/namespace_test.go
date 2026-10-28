@@ -26,13 +26,19 @@ func testNamespaces(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatalf("same key in another namespace: %v", err)
 	}
-	if _, err := importNode(ctx, g, newNode{Key: "X-1", Type: "Thing"}); !errors.Is(err, ErrConflict) {
-		t.Fatalf("duplicate key in one namespace: %v", err)
+	// a creation of a key a namespace holds is the modification of that node (ADR 0172)
+	again, err := importNode(ctx, g, newNode{Key: "X-1", Type: "Thing", Properties: map[string]any{"title": "again"}})
+	if err != nil || again.ID != sdlc.ID {
+		t.Fatalf("a key is one node in one namespace: %v, %v", again.ID, err)
+	}
+	sdlc = again
+	if _, err := importNode(ctx, g, newNode{Key: "X-1", Type: "OtherThing"}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a key of another type: %v", err)
 	}
 	if n, err := g.NodeByKey(ctx, "organisation", "X-1"); err != nil || n.ID != org.ID {
 		t.Fatalf("NodeByKey(organisation) = %v, %v", n.ID, err)
 	}
-	if n, err := g.NodeByKey(ctx, "", "X-1"); err != nil || n.ID != sdlc.ID {
+	if n, err := g.NodeByKey(ctx, "", "X-1"); err != nil || n.ID != sdlc.ID || n.Properties["title"] != "again" {
 		t.Fatalf("NodeByKey(default) = %v, %v", n.ID, err)
 	}
 

@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -30,11 +31,32 @@ func testResolveCreate(t *testing.T, repo Repo) {
 	g := f.g
 	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "create", BaselineID: f.base.ID}))
 
-	// a key the reference baseline holds
-	_, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-1", Type: "Requirement"})
-	if !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "baseline") {
-		t.Fatalf("create on a baseline key: %v", err)
+	// a key the reference baseline holds: the creation is requalified as the modification of that node (ADR 0172), three
+	// entries of the log
+	if _, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-1", Type: "TestCase"}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("create on a baseline key of another type: %v", err)
 	}
+	re := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "Use PSP v9"},
+		Links: []LinkWrite{{Type: "satisfies", To: f.need.Ref()}}}))
+	if re.Intent != domain.IntentModified || re.Pre == nil || *re.Pre != f.req.Ref() || re.Post == nil || re.Post.ID != f.req.ID {
+		t.Fatalf("create on a baseline key: %+v", re)
+	}
+	var reOps []domain.ImpactOp
+	for _, e := range must[[]domain.ImpactEvent](t)(g.ChangeEvents(ctx, c.ID)) {
+		if e.Impact == re.ID {
+			reOps = append(reOps, e.Op)
+		}
+	}
+	if want := []domain.ImpactOp{domain.ImpactProposed, domain.ImpactRequalified, domain.ImpactCheckedOut, domain.ImpactUpdated}; !slices.Equal(reOps, want) {
+		t.Fatalf("requalified, checked out, edited: %v", reOps)
+	}
+	if d := must[*domain.Draft](t)(g.draftOf(ctx, c.ID, "", re.ID)); d == nil || d.Properties["title"] != "Use PSP v9" || len(d.Links) != 1 {
+		t.Fatalf("the creation's properties set, a link it holds already not doubled: %+v", d)
+	}
+	if _, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-1", Type: "Requirement"}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a node the change holds a draft of is not created: %v", err)
+	}
+	var err error
 	// twice
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-9", Type: "Requirement", Rationale: "new"}))
 	if cn.Intent != domain.IntentCreated || cn.Post == nil {

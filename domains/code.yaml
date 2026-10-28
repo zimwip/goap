@@ -1,5 +1,5 @@
 name: code
-version: 1.6.0
+version: 1.8.0
 description: >
   Source code held in git repositories (ADR 0147): a repository, its directories and its files as of the last commit
   imported. The git importer (platform/gitimport: the importer `git` below, served by importer-git, ADR 0148; the
@@ -7,6 +7,8 @@ description: >
   node, a directory holds its entries by `contains` links, and a version of a directory is a git tree (its links follow
   the versions of its entries, as a tree names the objects it holds). With the symbols read (Tree-sitter), a source file
   defines its declarations (functions, types, imports, variables...) by `defines` links, read back as "defined in".
+  An entry or a declaration a commit removes is deleted (ADR 0172: a tombstone, the node leaves the state); added
+  again under the same key, the creation is requalified and restores the same node.
 importers:
   - name: git
     label: Git repository
@@ -55,7 +57,6 @@ nodeTypes:
     attributes:
       - {name: name, label: Name, description: Last element of the path, type: string, section: Identity, order: 1, asName: true}
       - {name: path, label: Path, description: "Path from the root of the repository, with / separators (empty for the root)", type: string, section: Identity, order: 2}
-    lifecycle: presence
     search: [{property: name, text: true}, {property: path, text: true}]
   - name: Directory
     icon: folder
@@ -103,7 +104,6 @@ nodeTypes:
       - {name: signature, label: Signature, description: First line of its text, type: string, section: Source, order: 5}
       - {name: digest, label: Digest, description: Digest of its text, type: string, section: Source, order: 6}
       - {name: code, label: Code, description: "Source text of the declaration with its language (a code text: front matter, then the fenced block; cut at 64 KiB; the digest is of the whole text)", type: code, section: Source, order: 7}
-    lifecycle: presence
     search: [{property: name, text: true}, {property: signature, text: true}, {property: kind, facet: true}, {property: language, facet: true}]
   # the declarations by what they are; a namespace, a module or a macro stays a Symbol
   - name: Function
@@ -169,20 +169,7 @@ nodeTypes:
       - {name: name, label: Name, description: Name of the package (the Go package clause, the last element of its path), type: string, section: Identity, order: 1, asName: true}
       - {name: path, label: Path, description: "Import path of the package (a Go import path, a Python module, a Java package, an npm package, a directory)", type: string, section: Identity, order: 2}
       - {name: language, label: Language, description: "Language family of the package (go, python, java, js, c, rust)", type: string, section: Identity, order: 3}
-    lifecycle: presence
     search: [{property: name, text: true}, {property: path, text: true}, {property: language, facet: true}]
-lifecycles:
-  # a node is never deleted: an entry the commit removes leaves its directory and is moved to removed; added again at
-  # the same path, it is the same node, present again
-  - name: presence
-    description: Whether an entry is in the source tree at the last commit imported
-    initial: present
-    states:
-      - {name: present, description: In the tree}
-      - {name: removed, description: Removed from the tree by a commit}
-    transitions:
-      - {name: remove, description: A commit removes the entry, from: present, to: removed}
-      - {name: restore, description: A commit adds the entry again, from: removed, to: present}
 linkTypes:
   - name: contains
     description: "A directory holds an entry (a git tree names it)"

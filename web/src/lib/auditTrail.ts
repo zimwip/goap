@@ -344,6 +344,10 @@ function fromEvent(
     case "rebased":
       summary = `pre moved to ${v(e.pre)}, to re-check`;
       break;
+    case "requalified":
+      // a creation that named an existing node: the modification of that node (ADR 0172)
+      summary = `creation requalified as the modification of ${v(e.pre)}${e.patch?.["restored"] ? ", a deleted node restored" : ""}`;
+      break;
   }
   return {
     key: `e:${e.id}`,

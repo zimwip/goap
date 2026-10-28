@@ -326,6 +326,16 @@ func (c *Client) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, i
 	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
 }
 
+// ImpactNodeDelete implements engine.GraphPort.
+func (c *Client) ImpactNodeDelete(ctx context.Context, id domain.ChangeID, in graphapi.NodeCheckout) (domain.ChangeImpact, error) {
+	r, err := c.rpc.ImpactNodeDelete(ctx, connect.NewRequest(&graphv1.ImpactNodeDeleteRequest{ChangeId: string(id), ChangeImpactId: string(in.Impact), NodeId: string(in.Node),
+		Key: in.Key, Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution}))
+	if err != nil {
+		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
+}
+
 // ImpactNodeCancel implements engine.GraphPort.
 func (c *Client) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) (domain.ChangeImpact, error) {
 	r, err := c.rpc.ImpactNodeCancel(ctx, connect.NewRequest(&graphv1.ImpactNodeCancelRequest{ChangeId: string(id), ChangeImpactId: string(impact), Flow: flow, Execution: execution}))
