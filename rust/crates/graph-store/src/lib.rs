@@ -87,6 +87,30 @@ impl Store {
         }
     }
 
+    fn versions(&self) -> &read::Versions {
+        match self {
+            Store::Postgres(p) => &p.versions,
+            Store::Sqlite(s) => &s.versions,
+        }
+    }
+
+    /// A branch of a namespace moved in another process (a baseline event on the bus, Go's `Directory.Moved`): what
+    /// the store keeps of that namespace's heads (the organisation's snapshot) is checked again at its next read.
+    pub fn moved(&self, namespace: &str) {
+        self.versions().moved(namespace);
+    }
+
+    /// Every namespace moved: an event the store could not read.
+    pub fn moved_all(&self) {
+        self.versions().moved_all();
+    }
+
+    /// The bus tells the store the moves of the other processes ([`Store::moved`], Go's `Directory.FollowEvents`):
+    /// the organisation checked at its head is then kept for `access.FollowAge`, a lost event caught up then.
+    pub fn follow_events(&self) {
+        self.versions().follow_events();
+    }
+
     /// A read-only session for the reads of a request.
     pub async fn reader(&self) -> Result<read::Session, StoreError> {
         Ok(match self {

@@ -54,11 +54,14 @@ struct ReadItem {
 
 /// The decision points of a change, replayed at a moment from its log.
 pub async fn points_of<T: ReadTx>(tx: &T, id: &ChangeId, now: DateTime<Utc>) -> Result<Vec<DecisionPoint>> {
+    points_in(&super::work::fold_change(tx, id).await?, now)
+}
+
+/// The decision points of a change, replayed at a moment from the facts of its view.
+pub fn points_in(view: &super::work::ChangeView, now: DateTime<Utc>) -> Result<Vec<DecisionPoint>> {
+    let typ = format!("{LOG_FACT}.{TYPE_DECISION_POINT}");
     let mut items = Vec::new();
-    for l in tx.log(id, 0, &[&format!("{LOG_FACT}.{TYPE_DECISION_POINT}")]).await? {
-        if l.typ != format!("{LOG_FACT}.{TYPE_DECISION_POINT}") {
-            continue;
-        }
+    for l in view.facts.iter().filter(|f| f.typ == typ) {
         let it: ReadItem = serde_json::from_str(&l.payload).map_err(GraphError::internal)?;
         if let Some(event) = it.decision_event {
             items.push(PointItem {
@@ -172,8 +175,12 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(d)
     }
 
-    async fn points(&self, id: &ChangeId) -> Result<Vec<DecisionPoint>> {
-        points_of(self.store, id, self.env.now()).await
+    /// The decision points of a change now: from its view when the transaction holds one, else from its log.
+    pub(super) async fn points(&self, id: &ChangeId) -> Result<Vec<DecisionPoint>> {
+        match self.views.get(id) {
+            Some(v) => points_in(v, self.env.now()),
+            None => points_of(self.store, id, self.env.now()).await,
+        }
     }
 
     async fn point(&self, id: &ChangeId, point: &str) -> Result<DecisionPoint> {

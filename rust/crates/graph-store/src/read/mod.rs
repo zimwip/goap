@@ -86,6 +86,30 @@ impl From<StoreError> for GraphError {
 }
 
 impl Session {
+    async fn committed_rows(
+        &self,
+        namespace: &str,
+        branch: &str,
+        after: i64,
+        up_to: i64,
+        valid: Option<&[NodeId]>,
+    ) -> Result<HashMap<NodeId, Version>, GraphError> {
+        let rows = self
+            .rows(self.sql.committed_versions(namespace, branch, after, up_to, valid))
+            .await?;
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let v = match (r.bool(2), r.text(3) == REASON_REVERT) {
+                    (_, true) => REVERTED,
+                    (true, false) => 0,
+                    (false, false) => r.int32(1),
+                };
+                (NodeId(r.text(0)), v)
+            })
+            .collect())
+    }
+
     /// The session knowing the type catalogue in force.
     pub fn with_catalog(mut self, c: std::sync::Arc<graph_catalog::Catalog>) -> Session {
         self.catalog = Some(c);
@@ -226,6 +250,7 @@ impl Session {
     /// Runs a statement that writes and returns the number of rows it touched.
     pub async fn exec(&self, stmt: Stmt) -> Result<u64, StoreError> {
         self.write_held().await?;
+        self.tx.written_any();
         let text = crate::stats::texts().then(|| (stmt.0.clone(), std::time::Instant::now()));
         let n = self.exec_counted(stmt).await;
         if let Ok(n) = &n {
@@ -623,7 +648,7 @@ impl ReadTx for Session {
             .filter(|k| {
                 std::sync::Arc::ptr_eq(&k.catalog, catalog)
                     && k.checked
-                        .is_some_and(|(m, at)| m == mark && at.elapsed() < versions::SNAPSHOT_FRESH)
+                        .is_some_and(|(m, at)| m == mark && at.elapsed() < self.versions.snapshot_fresh())
             })
             .map(|k| k.snapshot.clone())
     }
@@ -839,23 +864,20 @@ impl ReadTx for Session {
         if valid.as_ref().is_some_and(Vec::is_empty) {
             return Ok(HashMap::new());
         }
-        let rows = self
-            .rows(
-                self.sql
-                    .committed_versions(namespace, branch, after, up_to, valid.as_deref()),
-            )
-            .await?;
-        Ok(rows
-            .iter()
-            .map(|r| {
-                let v = match (r.bool(2), r.text(3) == REASON_REVERT) {
-                    (_, true) => REVERTED,
-                    (true, false) => 0,
-                    (false, false) => r.int32(1),
-                };
-                (NodeId(r.text(0)), v)
-            })
-            .collect())
+        if let Some(valid) = &valid {
+            // what the transaction read of the range is not read again until it writes
+            let key = (namespace.to_string(), branch.to_string(), after, up_to);
+            let (mut out, missing) = self.tx.selected(&key, valid);
+            if !missing.is_empty() {
+                let got = self
+                    .committed_rows(namespace, branch, after, up_to, Some(&missing))
+                    .await?;
+                self.tx.keep_selected(key, &missing, &got);
+                out.extend(got);
+            }
+            return Ok(out);
+        }
+        self.committed_rows(namespace, branch, after, up_to, None).await
     }
 
     async fn namespace_node_ids(&self, namespace: &str) -> Result<Vec<NodeId>, GraphError> {

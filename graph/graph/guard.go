@@ -53,8 +53,13 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		for ref := range gt.origins {
 			r.g.versions.forgetNode(ref)
 		}
-		if gt.movedPlatform {
-			r.g.platformMoves.Add(1)
+		for ns := range gt.moved {
+			if ns == domain.NamespacePlatform {
+				r.g.platformMoves.Add(1)
+			}
+			if r.g.OnBranchMoved != nil {
+				r.g.OnBranchMoved(ns)
+			}
 		}
 		for _, k := range gt.found {
 			r.g.foundRefs.Put(k, true)
@@ -81,8 +86,9 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 type guardTx struct {
 	Tx
 	g *Graph
-	// movedPlatform: the transaction wrote a branch of the platform namespace (Graph.Sources reads its head again)
-	movedPlatform bool
+	// moved are the namespaces a branch of which the transaction wrote (Graph.Sources and OnBranchMoved, once it
+	// commits)
+	moved map[string]bool
 	// what the transaction wrote that names a change, a unit or a project, checked at its end
 	changeRefs map[domain.ChangeID]string
 	owners     map[lnk.URL]string
@@ -178,9 +184,10 @@ func (t *guardTx) keepBranch(key string, b domain.Branch) {
 
 func (t *guardTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	delete(t.branches, guardBranchKey(b.Namespace, b.Name))
-	if domain.NamespaceOf(b.Namespace) == domain.NamespacePlatform {
-		t.movedPlatform = true
+	if t.moved == nil {
+		t.moved = map[string]bool{}
 	}
+	t.moved[domain.NamespaceOf(b.Namespace)] = true
 	return t.Tx.PutBranch(ctx, b)
 }
 

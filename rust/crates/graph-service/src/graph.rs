@@ -4545,45 +4545,14 @@ fn review_pb(r: &ReviewObject) -> pb::ReviewResponse {
     }
 }
 
-/// Whether a project or one above it is stopped (`access.Snapshot.ProjectStopped`, ADR 0138): the projects at the
-/// head of main, followed up through their parent links. A project the structure does not hold is not stopped.
 /// The name of this graph's source in the listings (`graphsvc.PlatformSource`).
 const PLATFORM_SOURCE: &str = "platform";
 
+/// Whether a project or one above it is stopped (`access.Snapshot.ProjectStopped`, ADR 0138): the snapshot of the
+/// organisation, the one the store keeps while the head of main has not moved. A project it does not hold is not
+/// stopped.
 async fn project_stopped(tx: &Tx<'_, Session>, project: &str) -> Result<bool, GraphError> {
-    let Some(st) = tx.catalog().structure(STRUCTURE_PROJECT).cloned() else {
-        return Ok(false);
-    };
-    let world = World::open(tx.store, &graph_core::view::View::branch(&st.namespace, MAIN_BRANCH)).await?;
-    let mut seen = std::collections::HashSet::new();
-    let mut key = project.to_string();
-    while !key.is_empty() && seen.insert(key.clone()) {
-        let v = match world.node_view(&NodeId::default(), &key).await {
-            Ok(v) => v,
-            Err(e) if e.is_not_found() => return Ok(false),
-            Err(e) => return Err(e),
-        };
-        if v.node
-            .props
-            .as_ref()
-            .and_then(|p| p.get("stopped"))
-            .and_then(serde_json::Value::as_bool)
-            == Some(true)
-        {
-            return Ok(true);
-        }
-        key = String::new();
-        for l in &v.out {
-            if l.typ == st.parent || l.typ.rsplit('@').next() == Some(st.parent.rsplit('@').next().unwrap_or_default())
-            {
-                if let Some(to) = l.to_node() {
-                    key = tx.store.node(to).await?.map(|n| n.key).unwrap_or_default();
-                }
-                break;
-            }
-        }
-    }
-    Ok(false)
+    Ok(access::Snapshot::read(tx.store).await?.project_stopped(project))
 }
 
 /// A baseline header as a listing gives it: no state, the namespace asked.

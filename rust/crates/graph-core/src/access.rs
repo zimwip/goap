@@ -271,6 +271,8 @@ pub struct Snapshot {
     units: Hierarchy,
     projects: Hierarchy,
     project_keys: std::collections::HashSet<String>,
+    /// The projects flagged `stopped` (`Snapshot.stopped`).
+    stopped: std::collections::HashSet<String>,
     assignments: Vec<Assignment>,
     org_root: String,
     /// The rules stored as `Policy` nodes, one `authz.Validate` refuses left out (`PolicyFromProps`).
@@ -354,6 +356,9 @@ impl Snapshot {
         for n in &nodes {
             if cat.is_a(&n.typ, &proj.typ) {
                 s.project_keys.insert(n.key.clone());
+                if flag(&n.props, "stopped") {
+                    s.stopped.insert(n.key.clone());
+                }
             }
             match n.typ.as_str() {
                 TYPE_USER => {
@@ -739,6 +744,11 @@ impl Snapshot {
         self.assignments
             .iter()
             .any(|a| a.owner && !a.project.is_empty() && chain.contains(&a.project))
+    }
+
+    /// Whether a project takes no new change: it, or a project above it, is stopped (`ProjectStopped`, ADR 0138).
+    pub fn project_stopped(&self, project: &str) -> bool {
+        self.projects.chain(project).iter().any(|p| self.stopped.contains(p))
     }
 
     /// The chain of a project, itself first, the root last (`ProjectChain`).

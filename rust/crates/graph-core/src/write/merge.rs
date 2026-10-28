@@ -20,9 +20,7 @@ use super::{
 use crate::{
     GraphError, Result,
     change::{Change, ChangesFilter},
-    impact::{
-        ChangeImpact, ImpactEvent, ImpactOp, LOG_FACT, REVIEW_ACCEPTED, REVIEW_PROPOSED, REVIEW_REJECTED, Review,
-    },
+    impact::{ChangeImpact, ImpactEvent, ImpactOp, REVIEW_ACCEPTED, REVIEW_PROPOSED, REVIEW_REJECTED, Review},
     model::{BRANCH_MERGED, Baseline, BaselineId, Branch, ChangeId, MAIN_BRANCH, NodeId, NodeRef, Version, branch_of},
     read,
     store::WriteTx,
@@ -185,15 +183,10 @@ impl<S: WriteTx> Tx<'_, S> {
     /// What holds the merge of a change (Go's `unsettled`).
     async fn unsettled(&self, c: &Change, impacts: &[ChangeImpact], own: Option<&Branch>) -> Result<Vec<String>> {
         let mut out = Vec::new();
-        if let Some(f) = super::flow::flows_of(self.store, &c.id)
-            .await?
-            .list
-            .iter()
-            .find(|f| f.is_open())
-        {
+        if let Some(f) = self.flows(&c.id).await?.list.iter().find(|f| f.is_open()) {
             out.push(format!("open flow {} (adopt or discard it)", f.id));
         }
-        let points = super::decision::points_of(self.store, &c.id, self.env.now()).await?;
+        let points = self.points(&c.id).await?;
         if let Some(d) = points.iter().find(|d| d.pending()) {
             out.push(format!("pending decision point {:?}", d.question));
         }
@@ -865,11 +858,8 @@ impl<S: WriteTx> Tx<'_, S> {
     /// A change as a merge answers it.
     async fn change_read(&mut self, c: Change) -> Result<ChangeRead> {
         let id = c.id.clone();
-        let mut items = Vec::new();
-        for l in self.store.log(&id, 0, &[&format!("{LOG_FACT}.")]).await? {
-            items.push(serde_json::from_str(&l.payload).map_err(GraphError::internal)?);
-        }
         let v = &self.views[&id];
+        let items = v.items()?;
         Ok(ChangeRead {
             change: c,
             impacts: v.fold.impacts.clone(),

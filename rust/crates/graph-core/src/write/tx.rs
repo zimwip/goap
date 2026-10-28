@@ -322,11 +322,13 @@ impl<'s, S: WriteTx> Tx<'s, S> {
         }
         if e.typ.starts_with(&format!("{LOG_FACT}.")) && self.views.contains_key(&e.change) {
             // the flows of a change are a replay of its items: the view follows them
-            let fx = super::flow::flows_of(self.store, &e.change).await?;
-            let it: serde_json::Value = serde_json::from_str(&e.payload).map_err(GraphError::internal)?;
             if let Some(v) = self.views.get_mut(&e.change) {
-                v.flows = fx;
-                v.history.apply_item(&it, seq);
+                v.add_fact(super::work::Fact {
+                    seq,
+                    id: e.id.clone(),
+                    typ: e.typ.clone(),
+                    payload: e.payload.clone(),
+                })?;
             }
         }
         Ok(seq)

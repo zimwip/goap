@@ -16,7 +16,7 @@ use super::{
 use crate::{
     GraphError, Result,
     change::{Change, ChangesFilter, reference},
-    impact::{LOG_FACT, LogEntry},
+    impact::LogEntry,
     jsontext,
     model::{ChangeId, MAIN_BRANCH, branch_of, namespace_of},
     store::WriteTx,
@@ -58,10 +58,7 @@ impl<S: WriteTx> Tx<'_, S> {
         let mut c = self.change_head(id).await?;
         // the view as read: no transition, so no freeze in force
         let view = fold_change(self.store, id).await?;
-        let mut items = Vec::new();
-        for l in self.store.log(id, 0, &[&format!("{LOG_FACT}.")]).await? {
-            items.push(serde_json::from_str(&l.payload).map_err(GraphError::internal)?);
-        }
+        let items = view.items()?;
         let mut edit = Map::new();
         let mut edited = Map::new();
         for (name, to, field) in [

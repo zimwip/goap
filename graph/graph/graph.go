@@ -94,7 +94,10 @@ type Graph struct {
 	// owners and projects a transaction writes, the scope of a change and the walks up a structure ask it. Unset: they
 	// are nodes of this graph, read in the transaction.
 	Directory StructureDirectory
-	lnk       lnkState
+	// OnBranchMoved, when set, is told once a transaction that wrote a branch of a namespace committed (a reader of
+	// this graph keeping a head, the organisation's directory, reads it again; ADR 0145).
+	OnBranchMoved func(namespace string)
+	lnk           lnkState
 	// Types returns the type catalogue in force (ADR 0012 §2, pkg/typecat): the graph judges the nodes by it and
 	// refuses the ones whose type or link type it does not resolve. Unset: an untyped graph (tests, tools).
 	Types func() TypeCatalog

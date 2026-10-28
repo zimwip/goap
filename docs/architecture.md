@@ -1244,7 +1244,11 @@ The platform graph delivers the policies, the organisation and the projects to e
 included, the same way (`Directory.FollowEvents`): each graph's `access.Directory` reads them from the platform graph (in process, else its client) and keeps
 its snapshot (`Directory.Follow`) until a baseline event of the organisation's namespace (`domain.BaselineEvent`
 carries its namespace) reaches `Directory.Moved`; a change of a policy is a commit on the platform graph, its outbox
-sends the event, every graph refreshes.
+sends the event, every graph refreshes. With no bus, the platform graph follows its own commits instead
+(`Directory.FollowCommits`): its snapshot holds for `access.CommitAge` (one second) and a commit of the organisation's
+namespace moves it at once (`Graph.OnBranchMoved`, `Directory.MovedNamespace`). The Rust graph does the same both ways:
+its kept snapshot holds one second and is moved by its own commits, and with a bus it holds thirty seconds and is moved
+by the baseline events of the other processes (`follow_moves`, `Store::moved`).
 
 ### 3.4b Node index and search ([ADR 0026](adr/0026-node-index-and-search.md))
 

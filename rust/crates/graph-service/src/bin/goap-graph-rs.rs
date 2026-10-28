@@ -147,6 +147,7 @@ async fn serve() -> anyhow::Result<()> {
     if content {
         state.remote = Some(Arc::new(graph_service::platform::Remote::new(&platform_url)));
         let state = Arc::new(state);
+        follow_moves(&bus, &state).await?;
         tokio::spawn(Arc::new(Graph { state: state.clone() }).run_worker());
         for r in relays {
             tokio::spawn(r.run(state.clone()));
@@ -158,6 +159,7 @@ async fn serve() -> anyhow::Result<()> {
         return Ok(());
     }
     let state = Arc::new(state);
+    follow_moves(&bus, &state).await?;
     if memory || env("GOAP_GRAPH_BOOTSTRAP") == "1" {
         match boot(&state, sources).await {
             Ok(r) => tracing::info!(?r, "platform bootstrapped"),
@@ -172,6 +174,35 @@ async fn serve() -> anyhow::Result<()> {
     axum::serve(listener, app(state))
         .with_graceful_shutdown(shutdown())
         .await?;
+    Ok(())
+}
+
+/// Follows the moves of the other processes (Go's `Directory.FollowEvents`): a commit on main of a namespace, the
+/// organisation's among them, makes what the store keeps of its head checked again at its next read.
+async fn follow_moves(bus: &Option<async_nats::Client>, state: &Arc<State>) -> anyhow::Result<()> {
+    let Some(client) = bus else {
+        return Ok(());
+    };
+    let mut sub = client
+        .subscribe("goap.baseline.main.advanced")
+        .await
+        .context("subscribe")?;
+    state.store.follow_events();
+    let state = state.clone();
+    tokio::spawn(async move {
+        #[derive(serde::Deserialize)]
+        struct Moved {
+            #[serde(default)]
+            namespace: String,
+        }
+        while let Some(msg) = futures::StreamExt::next(&mut sub).await {
+            match serde_json::from_slice::<Moved>(&msg.payload) {
+                Ok(m) if !m.namespace.is_empty() => state.store.moved(&m.namespace),
+                // unreadable, or naming no namespace: every head is checked again rather than miss a change
+                _ => state.store.moved_all(),
+            }
+        }
+    });
     Ok(())
 }
 

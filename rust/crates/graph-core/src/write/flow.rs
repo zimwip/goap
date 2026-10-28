@@ -108,8 +108,12 @@ impl<S: WriteTx> Tx<'_, S> {
         Ok(c)
     }
 
+    /// The flows of a change: those of its view when the transaction holds one, else replayed from its log.
     pub(crate) async fn flows(&self, id: &ChangeId) -> Result<Flows> {
-        flows_of(self.store, id).await
+        match self.views.get(id) {
+            Some(v) => Ok(v.flows.clone()),
+            None => flows_of(self.store, id).await,
+        }
     }
 
     async fn flow_of(&self, id: &ChangeId, flow: &str) -> Result<Flow> {
@@ -289,8 +293,7 @@ impl<S: WriteTx> Tx<'_, S> {
         self.flow_change(id).await?;
         self.select_option_tx(id, option, by).await?;
         // a selection by hand settles the decision points that were choosing among the options (ADR 0009 §4)
-        let now = self.env.now();
-        for d in super::decision::points_of(self.store, id, now).await? {
+        for d in self.points(id).await? {
             if d.pending() && d.options.iter().any(|o| o == option) {
                 self.put_decision_event(
                     id,

@@ -199,11 +199,17 @@ func main() {
 	}
 	directory := &access.Directory{Graph: source}
 	if events != nil {
-		// read once, then again when the organisation moves; a lost event is caught up after access.FollowAge. No bus:
-		// the head is asked at each read
+		// read once, then again when the organisation moves; a lost event is caught up after access.FollowAge
 		if err := directory.FollowEvents(events); err != nil {
 			platform.Fatal(log, "subscribe", err)
 		}
+	} else {
+		// no bus: read again once a commit of this graph moved the organisation, else after access.CommitAge
+		directory.FollowCommits()
+	}
+	if !content {
+		// this graph holds the organisation: its own commits are seen at once, before their event comes back
+		g.OnBranchMoved = directory.MovedNamespace
 	}
 	if content {
 		g.Directory = directory

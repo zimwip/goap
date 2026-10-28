@@ -568,7 +568,8 @@ type Directory struct {
 	// Follow, when set, keeps the snapshot until the platform says the organisation moved (ADR 0154 §9: the platform
 	// graph delivers the policies, the organisation and the projects to every graph, itself included, the same way):
 	// Moved, given the baseline events of the platform graph, forgets the head; Follow.MaxAge catches a lost event.
-	// Nil: the head is asked at each read.
+	// Nil: the head is asked at each read. FollowCommits instead keeps it for CommitAge, until MovedNamespace says this
+	// process moved the organisation.
 	Follow *graphsnap.Heads
 
 	mu        sync.Mutex
@@ -612,6 +613,31 @@ const FollowAge = 30 * time.Second
 func (d *Directory) FollowEvents(bus Subscriber) error {
 	d.Follow = &graphsnap.Heads{MaxAge: FollowAge}
 	return bus.Subscribe(fmt.Sprintf(domain.SubjectBaselineAdvanced, domain.MainBranch), d.Moved)
+}
+
+// CommitAge is how long a directory following the commits of its own graph (no bus) keeps a snapshot: a commit of
+// another process is seen at most that late.
+const CommitAge = time.Second
+
+// FollowCommits makes the directory keep its snapshot until the graph it reads in process says a branch of the
+// organisation's namespace moved (MovedNamespace, plugged on graph.Graph.OnBranchMoved), CommitAge at most: the
+// composition of a graph with no bus.
+func (d *Directory) FollowCommits() {
+	d.Follow = &graphsnap.Heads{MaxAge: CommitAge}
+}
+
+// MovedNamespace takes a commit of the graph in process that moved a branch of a namespace: one of the organisation's
+// makes a following directory read the snapshot again at its next use.
+func (d *Directory) MovedNamespace(namespace string) {
+	if d.Follow == nil {
+		return
+	}
+	d.mu.Lock()
+	ns := d.namespace
+	d.mu.Unlock()
+	if ns == "" || namespace == ns {
+		d.Follow.Moved()
+	}
 }
 
 // Moved takes a baseline event of the platform graph (a domain.BaselineEvent, subject domain.SubjectBaselineAdvanced):

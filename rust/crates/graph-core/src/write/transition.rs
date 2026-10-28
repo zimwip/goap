@@ -13,7 +13,6 @@ use graph_catalog::def::{Lifecycle, Transition};
 
 use super::{
     change::{STATUS_ACTIVE, STATUS_DRAFT},
-    decision,
     events::CHANGE_TRANSITIONED,
     items::ItemWrite,
     tx::Tx,
@@ -290,7 +289,7 @@ impl<S: WriteTx> Tx<'_, S> {
                     "decision point {decision} already gated a transition"
                 )));
             }
-            let points = decision::points_of(self.store, id, self.env.now()).await?;
+            let points = self.points(id).await?;
             if !points.iter().any(|d| d.id == decision) {
                 return Err(GraphError::not_found(format!(
                     "decision point {decision} of change {id}"

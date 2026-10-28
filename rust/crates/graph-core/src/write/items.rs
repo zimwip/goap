@@ -393,13 +393,15 @@ impl<S: WriteTx> Tx<'_, S> {
             it.id = self.env.new_id();
         }
         // the items a decision may target: those of the change, then those of the batch written before it
-        let mut known: std::collections::HashSet<String> = self
-            .store
-            .log(id, 0, &[&format!("{LOG_FACT}.")])
-            .await?
-            .into_iter()
-            .map(|l| l.id)
-            .collect();
+        let mut known: std::collections::HashSet<String> = match self.views.get(id) {
+            Some(v) => v.facts.iter().map(|f| f.id.clone()).collect(),
+            None => super::work::fold_change(self.store, id)
+                .await?
+                .facts
+                .iter()
+                .map(|f| f.id.clone())
+                .collect(),
+        };
         let mut out = Vec::with_capacity(its.len());
         for it in &its {
             if let Some(d) = &it.decision

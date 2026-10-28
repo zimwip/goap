@@ -55,6 +55,43 @@ pub struct ChangeView {
     pub flows: Flows,
     /// the moves of its state and the phase of each of its impacts (ADR 0058)
     pub history: super::transition::History,
+    /// the facts of its log, in order (Go's `draftState.items`, ADR 0153): what its items, flows and decision points
+    /// are read from, with no read of the log
+    pub facts: std::sync::Arc<Vec<Fact>>,
+}
+
+/// A fact of the log of a change: its position, its type and its payload, the item.
+#[derive(Debug, Clone)]
+pub struct Fact {
+    pub seq: i64,
+    /// the id of its entry, the item's
+    pub id: String,
+    pub typ: String,
+    pub payload: String,
+}
+
+impl ChangeView {
+    /// The items of the change, in the order of its log.
+    pub fn items<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        self.facts
+            .iter()
+            .map(|f| serde_json::from_str(&f.payload).map_err(GraphError::internal))
+            .collect()
+    }
+
+    /// Notes a fact appended to the log of the change: its flows are a replay of its items.
+    pub fn add_fact(&mut self, fact: Fact) -> Result<()> {
+        let it: Value = serde_json::from_str(&fact.payload).map_err(GraphError::internal)?;
+        self.history.apply_item(&it, fact.seq);
+        std::sync::Arc::make_mut(&mut self.facts).push(fact);
+        let items = self
+            .facts
+            .iter()
+            .map(|f| crate::flow::Item::of(&f.payload).map_err(GraphError::internal))
+            .collect::<Result<Vec<_>>>()?;
+        self.flows = Flows::replay(&items);
+        Ok(())
+    }
 }
 
 impl ChangeView {
@@ -2261,6 +2298,12 @@ async fn extend_fold<T: ReadTx>(store: &T, k: &mut KeptFold, id: &ChangeId, upto
             out.history.apply_item(&it, l.seq);
             k.items
                 .push(crate::flow::Item::of(&l.payload).map_err(GraphError::internal)?);
+            std::sync::Arc::make_mut(&mut out.facts).push(Fact {
+                seq: l.seq,
+                id: l.id.clone(),
+                typ: l.typ.clone(),
+                payload: l.payload.clone(),
+            });
             new_items = true;
         }
     }

@@ -10,7 +10,6 @@ use serde_json::{Map, Value};
 use crate::{
     GraphError, Result,
     flow::{FLOW_ADOPTED, FLOW_DISCARDED, FLOW_OPEN, Flows, Item, TYPE_FLOW},
-    impact::LOG_FACT,
     model::{ChangeId, MAIN_BRANCH, NodeRef},
     read,
     store::ReadTx,
@@ -169,7 +168,7 @@ pub async fn validate_board<T: ReadTx>(tx: &T, cat: &Catalog, id: &ChangeId, flo
     let view = fold_change(tx, id).await?;
     let mut all = Vec::new();
     let mut replayed = Vec::new();
-    for l in tx.log(id, 0, &[&format!("{LOG_FACT}.")]).await? {
+    for l in view.facts.iter() {
         all.push(serde_json::from_str::<BoardItem>(&l.payload).map_err(GraphError::internal)?);
         replayed.push(Item::of(&l.payload).map_err(GraphError::internal)?);
     }

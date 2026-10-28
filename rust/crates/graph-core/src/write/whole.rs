@@ -13,12 +13,7 @@ use super::{
     work::{ChangeView, fold_change, fold_upto},
 };
 use crate::{
-    GraphError, Kind, Result,
-    change::Change,
-    flow::FLOW_OPEN,
-    impact::{ChangeImpact, LOG_FACT},
-    model::ChangeId,
-    store::ReadTx,
+    GraphError, Kind, Result, change::Change, flow::FLOW_OPEN, impact::ChangeImpact, model::ChangeId, store::ReadTx,
 };
 
 /// What the gate of an acceptance says of a draft (`domain.ImpactValidation`).
@@ -67,10 +62,7 @@ pub async fn whole_change_on<T: ReadTx>(
         .await?
         .ok_or_else(|| GraphError::not_found(format!("change {id}")))?;
     let view = fold_change(tx, id).await?;
-    let mut items = Vec::new();
-    for l in tx.log(id, 0, &[&format!("{LOG_FACT}.")]).await? {
-        items.push(serde_json::from_str(&l.payload).map_err(GraphError::internal)?);
-    }
+    let items = view.items()?;
     let validates = !matches!(change.status.as_str(), "applied" | "abandoned" | "committed");
     let list = match flow {
         Some(f) => view.seen(f),
@@ -101,10 +93,7 @@ pub async fn whole_change_on<T: ReadTx>(
 pub async fn folded<T: ReadTx>(tx: &T, change: Change) -> Result<WholeChange> {
     let id = change.id.clone();
     let view = fold_change(tx, &id).await?;
-    let mut items = Vec::new();
-    for l in tx.log(&id, 0, &[&format!("{LOG_FACT}.")]).await? {
-        items.push(serde_json::from_str(&l.payload).map_err(GraphError::internal)?);
-    }
+    let items = view.items()?;
     Ok(WholeChange {
         change,
         impacts: view.fold.impacts.iter().map(|cn| (cn.clone(), None)).collect(),
@@ -178,13 +167,7 @@ pub async fn change_at<T: ReadTx>(tx: &T, id: &ChangeId, seq: i64) -> Result<Who
     let now = fold_change(tx, id).await?;
     let upto = if seq >= now.seq { 0 } else { seq };
     let (view, _) = fold_upto(tx, id, upto).await?;
-    let mut items = Vec::new();
-    for l in tx.log(id, 0, &[&format!("{LOG_FACT}.")]).await? {
-        if upto > 0 && l.seq > upto {
-            break;
-        }
-        items.push(serde_json::from_str(&l.payload).map_err(GraphError::internal)?);
-    }
+    let items = view.items()?;
     Ok(WholeChange {
         change,
         impacts: view.fold.impacts.into_iter().map(|cn| (cn, None)).collect(),

@@ -55,6 +55,8 @@ pub struct Versions {
     found: Mutex<HashSet<String>>,
     /// The headers of the baselines read: a baseline is written once and never deleted.
     headers: Mutex<HashMap<String, graph_core::model::Baseline>>,
+    /// Whether a bus tells the moves of the other processes ([`Versions::follow_events`]).
+    follows: std::sync::atomic::AtomicBool,
 }
 
 /// The number of change roots kept.
@@ -81,8 +83,13 @@ pub(crate) struct KeptSnapshot {
     pub checked: Option<(u64, std::time::Instant)>,
 }
 
-/// How long the organisation checked at its head is taken as fresh while no commit of this store moved a branch.
+/// How long the organisation checked at its head is taken as fresh while no commit of this store moved a branch, with
+/// no bus (Go's `access.CommitAge`): a commit of another process is seen at most that late.
 pub(crate) const SNAPSHOT_FRESH: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// The same with a bus telling the moves of the other processes (Go's `access.FollowAge`): a lost event is caught up
+/// then.
+pub(crate) const SNAPSHOT_FOLLOWED: std::time::Duration = std::time::Duration::from_secs(30);
 
 #[derive(Default)]
 struct Inner {
@@ -174,6 +181,38 @@ fn size(r: &NodeRef, e: &Entry) -> usize {
 }
 
 impl Versions {
+    /// A branch of a namespace moved in another process: its marks move ([`Store::moved`](crate::Store::moved)).
+    pub fn moved(&self, namespace: &str) {
+        let namespace = graph_core::model::namespace_of(namespace);
+        let mut m = self.branch_moves.lock().unwrap_or_else(|e| e.into_inner());
+        *m.entry(namespace.to_string()).or_default() += 1;
+    }
+
+    /// Every namespace moved.
+    pub fn moved_all(&self) {
+        let mut m = self.branch_moves.lock().unwrap_or_else(|e| e.into_inner());
+        for v in m.values_mut() {
+            *v += 1;
+        }
+        // a namespace with no mark yet answers 0 until its first move: give the organisation's a mark too
+        drop(m);
+        self.organisation.lock().unwrap_or_else(|e| e.into_inner()).take();
+    }
+
+    /// A bus tells the moves of the other processes.
+    pub fn follow_events(&self) {
+        self.follows.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// How long the organisation checked at its head is taken as fresh while its marks do not move.
+    pub(crate) fn snapshot_fresh(&self) -> std::time::Duration {
+        if self.follows.load(std::sync::atomic::Ordering::Relaxed) {
+            SNAPSHOT_FOLLOWED
+        } else {
+            SNAPSHOT_FRESH
+        }
+    }
+
     /// The generation a read starts at: what it learns is kept only while the cache was not emptied since.
     pub fn generation(&self) -> u64 {
         self.lock().era
@@ -385,7 +424,14 @@ pub struct Read {
     baselines: Mutex<HashSet<String>>,
     /// Whether a savepoint was undone: what it appended is not known any more.
     undone: std::sync::atomic::AtomicBool,
+    /// What the transaction read of the commits of a branch in a range of orders, by node (none: the range holds no
+    /// commit of it), until its next write (Go's `guardTx.baselineReads`): a merge reads the fork, the target and the
+    /// branch of a change for its rebase, its checks and its fast-forward.
+    selections: Mutex<HashMap<Selection, HashMap<graph_core::model::NodeId, Option<i32>>>>,
 }
+
+/// A range of commits of a branch: namespace, branch, after, up to.
+pub type Selection = (String, String, i64, i64);
 
 /// The rows of `change_impact` a transaction holds: each with the rank of its first write among the writes held, so
 /// that a row written twice takes the position its first write would have (each write takes one of the sequence,
@@ -397,6 +443,50 @@ pub struct HeldImpacts {
 }
 
 impl Read {
+    /// What the transaction read of a range of commits for some nodes, and the nodes it did not read yet.
+    pub fn selected(
+        &self,
+        key: &Selection,
+        ids: &[graph_core::model::NodeId],
+    ) -> (HashMap<graph_core::model::NodeId, i32>, Vec<graph_core::model::NodeId>) {
+        let s = self.selections.lock().unwrap_or_else(|e| e.into_inner());
+        let known = s.get(key);
+        let mut out = HashMap::new();
+        let mut missing = Vec::new();
+        for id in ids {
+            match known.and_then(|k| k.get(id)) {
+                Some(Some(v)) => {
+                    out.insert(id.clone(), *v);
+                }
+                Some(None) => {}
+                None => missing.push(id.clone()),
+            }
+        }
+        (out, missing)
+    }
+
+    /// Keeps what a range of commits gave for some nodes, until the next write.
+    pub fn keep_selected(
+        &self,
+        key: Selection,
+        ids: &[graph_core::model::NodeId],
+        got: &HashMap<graph_core::model::NodeId, i32>,
+    ) {
+        let mut s = self.selections.lock().unwrap_or_else(|e| e.into_inner());
+        let k = s.entry(key).or_default();
+        for id in ids {
+            k.insert(id.clone(), got.get(id).copied());
+        }
+    }
+
+    /// A write: the commits read may have moved.
+    pub fn written_any(&self) {
+        let mut s = self.selections.lock().unwrap_or_else(|e| e.into_inner());
+        if !s.is_empty() {
+            s.clear();
+        }
+    }
+
     /// Whether what the transaction reads of a version cannot change any more: an exact version it did not write.
     pub fn fixed(&self, r: &NodeRef) -> bool {
         r.version > 0 && !self.written.lock().unwrap_or_else(|e| e.into_inner()).contains(r)
@@ -527,6 +617,7 @@ impl Read {
     /// A savepoint undone.
     pub fn undone(&self) {
         self.undone.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.written_any();
     }
 
     /// The entries the transaction appended to the log of a change after the position its lock read, all of them:
