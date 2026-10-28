@@ -117,10 +117,10 @@ type guardTx struct {
 	// nodes it created by namespace and key (newKeys)
 	movedBranches map[string]domain.CommitID
 	// ownHeads are the heads the transaction gave branches of changes by their commits (commitOwn, ADR 0175)
-	ownHeads map[string]domain.CommitID
-	wroteHeads    map[domain.CommitID]domain.Commit
-	headMoves     map[string]map[domain.NodeID]domain.Version
-	newKeys       map[string]domain.NodeID
+	ownHeads   map[string]domain.CommitID
+	wroteHeads map[domain.CommitID]domain.Commit
+	headMoves  map[string]map[domain.NodeID]domain.Version
+	newKeys    map[string]domain.NodeID
 	// what the transaction wrote that names a change, a unit or a project, checked at its end
 	changeRefs map[domain.ChangeID]string
 	owners     map[lnk.URL]string
