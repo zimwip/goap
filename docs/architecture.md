@@ -1263,7 +1263,10 @@ What a link points to can be named by a logical URL, `lnk:<source>/<type>/<key>`
 things live (a namespace of this graph, a namespace of another graph service, a directory of files), the type and the
 key say which thing. Every namespace of the graph is a `graph` source of its name with no location, read in process
 (`graph.Resolver`); other sources are `platform@Source` nodes (`SRC:<name>`, admin only), read by the resolver of their kind
-(`Graph.Resolvers`: `graphclient.Federation` for a `graph` source with a location, `lnk.Files` for `files`). `Graph.Lnk()` is the registry,
+(`Graph.Resolvers`: `graphclient.Federation` for a `graph` source with a location, `lnk.LocalFS` for `local-fs`, `lnk.Web` for `web`). `Graph.Lnk()` is the registry,
+an address is opened by the type of source its scheme names (ADR 0171: `lnk` the second
+level through the sources, `http` / `https` the web, no `file` scheme), `Graph.ResolveAddress` / RPC
+`GraphService.ResolveAddress` saying how its target opens (node, text, inline image, external, path).
 `Graph.Resolve` reads a URL, `Node.URL()` / `Node.SourceName()` give a node's. Sources are declared on the platform and resolved per project: a project maps the source names of its URLs to
 declared sources (`ProjectUnit.sources`, inherited, nearest wins), so its content can be stored elsewhere
 (`Graph.ResolveIn`, `Graph.ResolveFrom`); a link targets a node version of this graph or a URL of another source (`Link.Target`).
@@ -2190,7 +2193,7 @@ engine/methodology/             methodology model only (a methodology is a domai
 contracts/authz/                   ABAC: identity, requests, Casbin model and enforcer, default policies
 contracts/llm/                     completion and embedding contracts (implemented by platform/modelgw)
 platform/jobsvc/               the job service: long runs claimed by workers, followed over SSE (ADR 0149; kit `lib/jobkit`, command `platform/cmd/jobs`)
-platform/gitimport/            git importer into the `code` domain: one change per commit, directories and files as nodes, with the symbols the declarations, their calls and uses, the packages and their imports, the other git branches on branches of the graph (ADR 0147, ADR 0150, ADR 0151; command `platform/cmd/goap-gitimport`, service `platform/cmd/importer-git`, ADR 0148)
+platform/gitimport/            git importer into the `code` domain: one change per commit, directories and files as nodes (the text of a text file, the content address of a blob, ADR 0171), with the symbols the declarations, their calls and uses, the packages and their imports, the other git branches on branches of the graph (ADR 0147, ADR 0150, ADR 0151; command `platform/cmd/goap-gitimport`, service `platform/cmd/importer-git`, ADR 0148)
 graph/importsvc/               import registry: the declared sources are listed, a run checked and created as a job (ADR 0148, 0149)
 lib/importerkit/               kit of an importer service: a worker of the job service for the importers it implements (ADR 0148, 0149)
 lib/jobkit/                    kit of the long runs: the job queue (in process or over RPC), the worker, the job of a runner (ADR 0149)

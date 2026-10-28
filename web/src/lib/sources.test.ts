@@ -10,14 +10,14 @@ describe('sources', () => {
   });
 
   it('checks a source like lnk.Source.Validate', () => {
-    const s = { name: 'docs', description: '', kind: 'files', namespace: '', location: '', namespaces: '', branch: '', params: '' };
+    const s = { name: 'docs', description: '', kind: 'local-fs', namespace: '', location: '', namespaces: '', branch: '', params: '' };
     expect(sourceProblem(s)).toMatch(/root directory/);
     expect(sourceProblem({ ...s, location: '/srv' })).toBe('');
     expect(sourceProblem({ ...s, name: 'Docs', location: '/srv' })).toMatch(/name/);
     expect(sourceProblem({ ...s, location: '/srv', params: '[1]' })).toMatch(/object/);
     expect(sourceProblem({ ...s, location: '/srv', namespaces: 'alm' })).toMatch(/graph at a location/);
     expect(sourceProblem({ ...s, kind: 'graph', location: 'http://c', namespaces: 'alm, code' })).toBe('');
-    expect(sourceProps({ ...s, location: '/srv' })).toMatchObject({ name: 'docs', kind: 'files', location: '/srv', namespaces: [], params: {} });
+    expect(sourceProps({ ...s, location: '/srv' })).toMatchObject({ name: 'docs', kind: 'local-fs', location: '/srv', namespaces: [], params: {} });
     expect(sourceProps({ ...s, kind: 'graph', location: 'http://c', namespaces: ' alm, ,code' }).namespaces).toEqual(['alm', 'code']);
   });
 

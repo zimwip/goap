@@ -36,6 +36,7 @@ import type {
   NamespaceSummary,
   NodeView,
   QueryResult,
+  AddressTarget,
   ItemTypeInfo,
   ImpactEvent,
   Link,
@@ -181,6 +182,15 @@ export const graph = {
       { view: GraphView; query: string; bind?: Record<string, string> },
       QueryResult
     >(GRAPH, "QueryView", { view, query, bind }, signal),
+  /** Reads and opens an address (ADR 0171 §4-5): a logical URL through the sources the project maps, a web address for
+   *  the browser; the project empty, the caller's active one. */
+  resolveAddress: (address: string, projectId = "", signal?: AbortSignal) =>
+    rpc<{ address: string; projectId?: string }, { target?: AddressTarget }>(
+      GRAPH,
+      "ResolveAddress",
+      { address, projectId: projectId || undefined },
+      signal,
+    ),
   /** The impact log of a change (ADR 0029): every operation on its change impacts, with its caller. */
   listChangeEvents: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { events?: ImpactEvent[] }>(

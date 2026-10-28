@@ -82,14 +82,14 @@ func TestDeclaredSources(t *testing.T) {
 	var asked lnk.Source
 	g := graph.New(graph.NewMemory())
 	g.Resolvers = map[string]lnk.Resolver{
-		lnk.KindFiles: lnk.Files{},
+		lnk.KindLocalFS: lnk.LocalFS{},
 		lnk.KindGraph: lnk.ResolverFuncs{ResolveFunc: func(_ context.Context, src lnk.Source, u lnk.URL) (lnk.Target, error) {
 			asked = src
 			return lnk.Target{Kind: lnk.TargetNode, Type: src.NamespaceOf() + "@" + u.Type, Key: u.Key}, nil
 		}},
 	}
 	docs, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: domain.NamespacePlatform, Key: domain.SourceKey("docs"), Type: domain.TypeSource,
-		Properties: map[string]any{"name": "docs", "kind": lnk.KindFiles, "location": dir}})
+		Properties: map[string]any{"name": "docs", "kind": lnk.KindLocalFS, "location": dir}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,6 +101,10 @@ func TestDeclaredSources(t *testing.T) {
 	f, err := g.Resolve(ctx, lnk.MustParse("lnk:docs/File/README.md"))
 	if err != nil || f.Kind != lnk.TargetFile || f.Location != filepath.Join(dir, "README.md") {
 		t.Fatalf("file = %+v, %v", f, err)
+	}
+	// opened for a reader (ADR 0171 §5): the text of the file
+	if o, err := g.ResolveAddress(ctx, "", "lnk:docs/File/README.md"); err != nil || o.Open == nil || o.Open.Mode != lnk.OpenText || o.Content != "hello" {
+		t.Fatalf("open file = %+v, %v", o, err)
 	}
 	r, err := g.Resolve(ctx, lnk.MustParse("lnk:acme/Requirement/R-9"))
 	if err != nil || r.Type != "alm@Requirement" || asked.Location != "https://acme.example/graph" {
@@ -121,10 +125,13 @@ func TestDeclaredSources(t *testing.T) {
 		r.URL.String() != "lnk:req/Requirement/REQ-1" || asked.Name != "" {
 		t.Fatalf("local alias = %+v, %v (remote asked %+v)", r, err, asked)
 	}
+	if o, err := g.ResolveAddress(ctx, "", "lnk:req/Requirement/REQ-1"); err != nil || o.Open == nil || o.Open.Mode != lnk.OpenNode {
+		t.Fatalf("open node = %+v, %v", o, err)
+	}
 
 	// a malformed declaration is an error, not a fallback
 	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: domain.NamespacePlatform, Key: domain.SourceKey("broken"), Type: domain.TypeSource,
-		Properties: map[string]any{"kind": lnk.KindFiles}}); err != nil {
+		Properties: map[string]any{"kind": lnk.KindLocalFS}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.Resolve(ctx, lnk.MustParse("lnk:broken/Requirement/R")); !errors.Is(err, lnk.ErrInvalid) {
@@ -205,7 +212,7 @@ func TestLinkTargets(t *testing.T) {
 			{Namespace: domain.NamespacePlatform, Key: domain.SourceKey("acme"), Type: domain.TypeSource,
 				Properties: map[string]any{"kind": lnk.KindGraph, "namespace": "alm", "location": "https://acme.example/graph"}},
 			{Namespace: domain.NamespacePlatform, Key: domain.SourceKey("docs"), Type: domain.TypeSource,
-				Properties: map[string]any{"kind": lnk.KindFiles, "location": t.TempDir()}},
+				Properties: map[string]any{"kind": lnk.KindLocalFS, "location": t.TempDir()}},
 		} {
 			if _, err := graphtest.Import(ctx, g, n); err != nil {
 				t.Fatal(err)

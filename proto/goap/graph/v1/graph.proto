@@ -36,6 +36,12 @@ service GraphService {
   // What a view holds of some nodes (ADR 0157): their versions in it, read by node; the index keeps the hits of a
   // search the views asked hold.
   rpc ResolveView(ResolveViewRequest) returns (ResolveViewResponse);
+  // Reads and opens an address for a project (ADR 0171 §4-5): its scheme names the type of source reading it. A logical
+  // URL (lnk) is read through the source its project maps the URL's source to: a node to open in its editor, the text
+  // or the image of a file of a local source; an http or https address is opened by the reader's browser. There is no
+  // file scheme. INVALID_ARGUMENT for a malformed address, NOT_FOUND for a target its source does not have,
+  // UNIMPLEMENTED for a scheme or a kind of source no resolver reads.
+  rpc ResolveAddress(ResolveAddressRequest) returns (ResolveAddressResponse);
   // The namespaces holding at least one node.
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
   // The statistics of the graph: what every namespace holds (the overview of the graph statistics view).
@@ -2718,4 +2724,48 @@ message ListDecisionPointsRequest {
 
 message ListDecisionPointsResponse {
   repeated DecisionPoint points = 1;
+}
+
+message ResolveAddressRequest {
+  // the address: lnk:<source>/<type>/<key>[?v=n], or an address of the scheme of a type of source (https://...)
+  string address = 1;
+  // the project whose source mapping applies (ADR 0154 §8); empty: the caller's active project
+  string project_id = 2;
+}
+
+// How a reader opens a target (ADR 0171 §5).
+message AddressOpen {
+  // node (in its editor) | text (content) | inline (href, a data: address) | external (href, in a tab) | path (href,
+  // where it lives, to copy)
+  string mode = 1;
+  string href = 2;
+  // the media type of the thing, empty when nothing tells it
+  string media = 3;
+  // the language to show a text in, empty for plain text
+  string language = 4;
+  // a text cut at the size a reader is given
+  bool truncated = 5;
+}
+
+// What an address points to, as its resolver reads it.
+message AddressTarget {
+  // the logical URL of the target, empty for an address of another scheme
+  string url = 1;
+  // node | file | directory | page | a kind of the resolver
+  string kind = 2;
+  // the type in its domain: the qualified node type of a node, File, Page...
+  string type = 3;
+  string key = 4;
+  string title = 5;
+  // the node of a node target, in the graph of its source
+  NodeRef node = 6;
+  // where the target lives outside a graph (a path, a web address)
+  string location = 7;
+  AddressOpen open = 8;
+  // the text of a target opened in mode text
+  string content = 9;
+}
+
+message ResolveAddressResponse {
+  AddressTarget target = 1;
 }

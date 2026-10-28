@@ -49,7 +49,9 @@
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { assistField, registerAssist } from '../../assist/registry.svelte';
   import { diffSummary } from '../../assist/changeScreen';
-  import { isCode, orderedAttributes, shownValue } from '../../attributes';
+  import { isCode, isUrl, orderedAttributes, shownValue } from '../../attributes';
+  import { isAddress } from '../../address';
+  import AddressLink from '../../components/AddressLink.svelte';
   import CodeView from '../../components/CodeView.svelte';
   import ValueDiff from '../../components/ValueDiff.svelte';
 import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, removeFromChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
@@ -662,6 +664,9 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
                         {#if isCode(attrOf(k)) && typeof nodeProps[k] === 'string' && nodeProps[k]}
                           <CodeView value={nodeProps[k] as string} label={attrOf(k)?.label} />
                           {#if changed}<span class="hint pending" title="Proposed in the working change">(changed in the working change{text(storedProps[k]) ? '' : ', was empty'})</span>{/if}
+                        {:else if isUrl(attrOf(k)) && isAddress(nodeProps[k])}
+                          <AddressLink address={nodeProps[k] as string} />
+                          {#if changed}<span class="hint pending" title="Proposed in the working change"> (was {text(storedProps[k]) || 'empty'})</span>{/if}
                         {:else}
                           {#if text(nodeProps[k])}{shownValue(attrOf(k), nodeProps[k])}{:else}<span class="hint">—</span>{/if}
                           {#if changed}<span class="hint pending" title="Proposed in the working change"> (was {text(storedProps[k]) || 'empty'})</span>{/if}

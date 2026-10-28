@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -13,6 +14,7 @@ type Registry struct {
 	mu        sync.RWMutex
 	sources   map[string]Source
 	resolvers map[string]Resolver
+	schemes   map[string]string // the kind of the resolver reading each scheme (SchemeResolver)
 	// Lookup, when set, finds a source not declared in process (the platform@Source nodes of the graph): found false
 	// lets the registry fall back on the namespace of this graph.
 	Lookup func(ctx context.Context, name string) (Source, bool, error)
@@ -20,16 +22,36 @@ type Registry struct {
 
 // NewRegistry returns an empty registry: Register gives it the resolver of each kind, KindGraph first.
 func NewRegistry() *Registry {
-	return &Registry{sources: map[string]Source{}, resolvers: map[string]Resolver{}}
+	return &Registry{sources: map[string]Source{}, resolvers: map[string]Resolver{}, schemes: map[string]string{}}
 }
 
-// Register gives a kind of source its resolver (a nil resolver removes it).
+// Register gives a kind of source its resolver (a nil resolver removes it), and the schemes it reads when it is a
+// SchemeResolver. The kind lnk and the scheme lnk are the registry's own: registering either panics, as does a scheme
+// another kind reads.
 func (r *Registry) Register(kind string, res Resolver) {
+	kind = CanonicalKind(kind)
+	if kind == KindLnk {
+		panic("lnk: the kind lnk is the registry's own")
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	for s, k := range r.schemes {
+		if k == kind {
+			delete(r.schemes, s)
+		}
+	}
 	if res == nil {
 		delete(r.resolvers, kind)
 		return
+	}
+	if sr, ok := res.(SchemeResolver); ok {
+		for _, s := range sr.Schemes() {
+			s = strings.ToLower(s)
+			if k, taken := r.schemes[s]; s == Scheme || taken {
+				panic(fmt.Sprintf("lnk: scheme %q of kind %s is read by %q", s, kind, k))
+			}
+			r.schemes[s] = kind
+		}
 	}
 	r.resolvers[kind] = res
 }
@@ -84,7 +106,7 @@ func (r *Registry) Sources() []Source {
 func (r *Registry) resolver(kind string) (Resolver, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	res, ok := r.resolvers[kind]
+	res, ok := r.resolvers[CanonicalKind(kind)]
 	if !ok {
 		return nil, fmt.Errorf("kind %q: %w", kind, ErrNoResolver)
 	}
@@ -104,8 +126,17 @@ func (r *Registry) Resolve(ctx context.Context, u URL) (Target, error) {
 // source), read by the resolver of its kind. The target keeps the URL's own source: the mapping says where the thing
 // is stored, never what it is called.
 func (r *Registry) ResolveIn(ctx context.Context, m Mapping, u URL) (Target, error) {
-	if err := u.Validate(); err != nil {
+	src, res, err := r.sourceIn(ctx, m, u)
+	if err != nil {
 		return Target{}, err
+	}
+	return r.resolveWith(ctx, src, res, u)
+}
+
+// sourceIn is the source a URL reads in a scope, and the resolver of its kind.
+func (r *Registry) sourceIn(ctx context.Context, m Mapping, u URL) (Source, Resolver, error) {
+	if err := u.Validate(); err != nil {
+		return Source{}, nil, err
 	}
 	name := u.Source
 	if m != nil {
@@ -115,12 +146,17 @@ func (r *Registry) ResolveIn(ctx context.Context, m Mapping, u URL) (Target, err
 	}
 	src, err := r.Source(ctx, name)
 	if err != nil {
-		return Target{}, err
+		return Source{}, nil, err
 	}
 	res, err := r.resolver(src.Kind)
 	if err != nil {
-		return Target{}, fmt.Errorf("%s: %w", u, err)
+		return Source{}, nil, fmt.Errorf("%s: %w", u, err)
 	}
+	return src, res, nil
+}
+
+// resolveWith reads a URL through the resolver of its source; the target keeps the URL's own source.
+func (r *Registry) resolveWith(ctx context.Context, src Source, res Resolver, u URL) (Target, error) {
 	t, err := res.Resolve(ctx, src, u)
 	if err != nil {
 		return Target{}, err

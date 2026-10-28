@@ -141,6 +141,18 @@ func (g *Graph) ResolveFrom(ctx context.Context, from domain.Node, u lnk.URL) (l
 	return g.ResolveIn(ctx, from.Project.Key, u)
 }
 
+// ResolveAddress reads and opens an address for a project (ADR 0171 §4-5): a logical URL through the source the
+// project's mapping gives (lnk.Registry.OpenIn: a node to open in its editor, the text of a file, an image...), any other
+// address through the resolver of its scheme (the web: opened by the reader's browser). No file scheme: a local file is
+// reached through a declared source.
+func (g *Graph) ResolveAddress(ctx context.Context, project, address string) (lnk.Target, error) {
+	m, err := g.mappingOf(ctx, project)
+	if err != nil {
+		return lnk.Target{}, err
+	}
+	return g.Lnk().ResolveAddress(ctx, m, address)
+}
+
 // mappingOf is the source mapping of a project, nil without one.
 func (g *Graph) mappingOf(ctx context.Context, project string) (lnk.Mapping, error) {
 	if g.ProjectSources == nil || project == "" {

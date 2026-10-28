@@ -38,6 +38,10 @@ var queries = map[string]string{
 (struct_specifier name: (type_identifier) @name body: (field_declaration_list)) @definition.struct
 (union_specifier name: (type_identifier) @name body: (field_declaration_list)) @definition.union
 (enum_specifier name: (type_identifier) @name body: (enumerator_list)) @definition.enum
+(field_declaration_list (field_declaration declarator: (field_identifier) @name) @definition.field)
+(field_declaration_list (field_declaration declarator: (pointer_declarator declarator: (field_identifier) @name)) @definition.field)
+(field_declaration_list (field_declaration declarator: (array_declarator declarator: (field_identifier) @name)) @definition.field)
+(enumerator_list (enumerator name: (identifier) @name) @definition.constant)
 (type_definition declarator: (type_identifier) @name) @definition.type
 (preproc_include) @import
 (preproc_def name: (identifier) @name) @definition.macro
@@ -64,6 +68,10 @@ var queries = map[string]string{
 (struct_specifier name: (type_identifier) @name body: (field_declaration_list)) @definition.struct
 (union_specifier name: (type_identifier) @name body: (field_declaration_list)) @definition.union
 (enum_specifier name: (type_identifier) @name body: (enumerator_list)) @definition.enum
+(field_declaration_list (field_declaration declarator: (field_identifier) @name) @definition.field)
+(field_declaration_list (field_declaration declarator: (pointer_declarator declarator: (field_identifier) @name)) @definition.field)
+(field_declaration_list (field_declaration declarator: (array_declarator declarator: (field_identifier) @name)) @definition.field)
+(enumerator_list (enumerator name: (identifier) @name) @definition.constant)
 (namespace_definition name: (_) @name) @definition.namespace
 (type_definition declarator: (type_identifier) @name) @definition.type
 (alias_declaration name: (type_identifier) @name) @definition.type
@@ -72,6 +80,8 @@ var queries = map[string]string{
 (preproc_function_def name: (identifier) @name) @definition.macro
 (translation_unit (declaration declarator: (init_declarator declarator: (identifier) @name)) @definition.variable)
 (translation_unit (declaration declarator: (identifier) @name) @definition.variable)
+(namespace_definition body: (declaration_list (declaration declarator: (init_declarator declarator: (identifier) @name)) @definition.variable))
+(namespace_definition body: (declaration_list (declaration declarator: (identifier) @name) @definition.variable))
 (call_expression function: (identifier) @ref.call)
 (call_expression function: (qualified_identifier scope: (_) @qual name: (identifier) @ref.call))
 (call_expression function: (field_expression argument: (_) @qual field: (field_identifier) @ref.call))
@@ -89,6 +99,7 @@ var queries = map[string]string{
 (type_spec name: (type_identifier) @name type: [(type_identifier) (qualified_type) (pointer_type) (slice_type) (map_type) (array_type) (function_type) (channel_type) (generic_type)]) @definition.type
 (type_alias name: (type_identifier) @name) @definition.type
 (field_declaration_list (field_declaration name: (field_identifier) @name) @definition.field)
+(field_declaration_list (field_declaration !name type: [(type_identifier) @name (qualified_type name: (type_identifier) @name) (pointer_type (type_identifier) @name) (pointer_type (qualified_type name: (type_identifier) @name)) (generic_type type: (type_identifier) @name)]) @definition.field)
 (import_spec) @import
 (source_file (var_declaration (var_spec name: (identifier) @name) @definition.variable))
 (source_file (var_declaration (var_spec_list (var_spec name: (identifier) @name) @definition.variable)))
@@ -107,6 +118,7 @@ var queries = map[string]string{
 (import_statement) @import
 (import_from_statement) @import
 (module (expression_statement (assignment left: (identifier) @name) @definition.variable))
+(class_definition body: (block (expression_statement (assignment left: (identifier) @name) @definition.field)))
 (call function: (identifier) @ref.call)
 (call function: (attribute object: (_) @qual attribute: (identifier) @ref.call))
 (class_definition superclasses: (argument_list (identifier) @ref.type))
@@ -124,6 +136,8 @@ var queries = map[string]string{
 (method_declaration name: (identifier) @name) @definition.method
 (constructor_declaration name: (identifier) @name) @definition.method
 (field_declaration declarator: (variable_declarator name: (identifier) @name)) @definition.field
+(constant_declaration declarator: (variable_declarator name: (identifier) @name)) @definition.constant
+(enum_constant name: (identifier) @name) @definition.constant
 (import_declaration) @import
 (method_invocation name: (identifier) @ref.call)
 (method_invocation object: (_) @qual name: (identifier) @ref.call)
@@ -141,6 +155,8 @@ var queries = map[string]string{
 (program (lexical_declaration (variable_declarator name: (identifier) @name) @definition.variable))
 (program (variable_declaration (variable_declarator name: (identifier) @name) @definition.variable))
 (program (export_statement declaration: (lexical_declaration (variable_declarator name: (identifier) @name) @definition.variable)))
+(program (export_statement declaration: (variable_declaration (variable_declarator name: (identifier) @name) @definition.variable)))
+(class_body (field_definition property: [(property_identifier) (private_property_identifier)] @name) @definition.field)
 (call_expression function: (identifier) @ref.call)
 (call_expression function: (member_expression object: (_) @qual property: (property_identifier) @ref.call))
 (new_expression constructor: (identifier) @ref.call)
@@ -163,6 +179,7 @@ var queries = map[string]string{
 (use_declaration) @import
 (const_item name: (identifier) @name) @definition.constant
 (static_item name: (identifier) @name) @definition.variable
+(field_declaration_list (field_declaration name: (field_identifier) @name) @definition.field)
 (impl_item type: (_) @name) @definition.impl
 (call_expression function: (identifier) @ref.call)
 (call_expression function: (scoped_identifier path: (_) @qual name: (identifier) @ref.call))
@@ -190,6 +207,9 @@ const tsQuery = `
 (program (lexical_declaration (variable_declarator name: (identifier) @name) @definition.variable))
 (program (variable_declaration (variable_declarator name: (identifier) @name) @definition.variable))
 (program (export_statement declaration: (lexical_declaration (variable_declarator name: (identifier) @name) @definition.variable)))
+(program (export_statement declaration: (variable_declaration (variable_declarator name: (identifier) @name) @definition.variable)))
+(public_field_definition name: [(property_identifier) (private_property_identifier)] @name) @definition.field
+(property_signature name: (property_identifier) @name) @definition.field
 (call_expression function: (identifier) @ref.call)
 (call_expression function: (member_expression object: (_) @qual property: (property_identifier) @ref.call))
 (new_expression constructor: (identifier) @ref.call)

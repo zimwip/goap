@@ -23,7 +23,7 @@ func TestTreeSitterSymbols(t *testing.T) {
 #include "local.h"
 #define MAX 10
 #define SQ(x) ((x)*(x))
-struct point { int x, y; };
+struct point { int x, y; char *label; int tags[4]; };
 union u { int a; float b; };
 enum color { RED, GREEN };
 typedef struct point point_t;
@@ -32,7 +32,8 @@ static const char *names[] = {"a"};
 int add(int a, int b);
 static struct point *make(void) { int local = 1; return 0; }
 int main(void) { return add(1, 2); }
-`, []string{"import:linux/module.h", "import:local.h", "macro:MAX", "macro:SQ", "struct:point", "union:u", "enum:color", "type:point_t",
+`, []string{"import:linux/module.h", "import:local.h", "macro:MAX", "macro:SQ", "struct:point", "field:point.x", "field:point.y", "field:point.label", "field:point.tags", "union:u", "field:u.a", "field:u.b",
+			"enum:color", "constant:color.RED", "constant:color.GREEN", "type:point_t",
 			"variable:counter", "variable:names", "prototype:add", "function:make", "function:main"}},
 		{"x.go", `package x
 
@@ -45,7 +46,11 @@ const Max = 3
 
 var count int
 
-type Point struct{ X int }
+type Point struct {
+	X int
+	io.Reader
+	*Base
+}
 
 type Shape interface{ Area() float64 }
 
@@ -54,12 +59,13 @@ type ID string
 func New() *Point { var local int; _ = local; return nil }
 
 func (p *Point) Move(dx int) { fmt.Println(dx) }
-`, []string{"import:fmt", "import:io", "constant:Max", "variable:count", "struct:Point", "field:Point.X", "interface:Shape", "method:Shape.Area", "type:ID", "function:New", "method:Point.Move"}},
+`, []string{"import:fmt", "import:io", "constant:Max", "variable:count", "struct:Point", "field:Point.X", "field:Point.Reader", "field:Point.Base", "interface:Shape", "method:Shape.Area", "type:ID", "function:New", "method:Point.Move"}},
 		{"x.py", `import os
 from collections import OrderedDict
 LIMIT = 4
 
 class Shape:
+    sides = 0
     def area(self):
         def inner():
             pass
@@ -67,30 +73,31 @@ class Shape:
 
 def main():
     x = 1
-`, []string{"import:os", "import:collections", "variable:LIMIT", "class:Shape", "method:Shape.area", "function:main"}},
+`, []string{"import:os", "import:collections", "variable:LIMIT", "class:Shape", "field:Shape.sides", "method:Shape.area", "function:main"}},
 		{"X.java", `package p;
 import java.util.List;
 public class Shape {
     private int sides;
     public Shape() {}
     public int area() { int local = 0; return local; }
-    interface Visitor { void visit(); }
+    interface Visitor { int LIMIT = 2; void visit(); }
     enum Kind { A, B }
 }
-`, []string{"import:java.util.List", "class:Shape", "field:Shape.sides", "method:Shape.Shape", "method:Shape.area", "interface:Shape.Visitor", "method:Shape.Visitor.visit", "enum:Shape.Kind"}},
+`, []string{"import:java.util.List", "class:Shape", "field:Shape.sides", "method:Shape.Shape", "method:Shape.area", "interface:Shape.Visitor", "constant:Shape.Visitor.LIMIT", "method:Shape.Visitor.visit", "enum:Shape.Kind", "constant:Shape.Kind.A", "constant:Shape.Kind.B"}},
 		{"x.js", `import fs from "fs";
 const LIMIT = 3;
 function main() { const local = 1; }
-class Shape { area() { return 0; } }
-`, []string{"import:fs", "variable:LIMIT", "function:main", "class:Shape", "method:Shape.area"}},
+export var count = 0;
+class Shape { sides = 0; #id; area() { return 0; } }
+`, []string{"import:fs", "variable:LIMIT", "function:main", "variable:count", "class:Shape", "field:Shape.sides", "field:Shape.#id", "method:Shape.area"}},
 		{"x.ts", `import { a } from "./a";
 export const LIMIT = 3;
-interface Shape { area(): number; }
+interface Shape { sides: number; area(): number; }
 type ID = string;
 enum Color { Red }
-class Square implements Shape { area(): number { return 1; } }
+class Square implements Shape { sides = 4; area(): number { return 1; } }
 function main(): void {}
-`, []string{"import:./a", "variable:LIMIT", "interface:Shape", "method:Shape.area", "type:ID", "enum:Color", "class:Square", "method:Square.area", "function:main"}},
+`, []string{"import:./a", "variable:LIMIT", "interface:Shape", "field:Shape.sides", "method:Shape.area", "type:ID", "enum:Color", "class:Square", "field:Square.sides", "method:Square.area", "function:main"}},
 		{"x.rs", `use std::io;
 const MAX: u32 = 3;
 static mut COUNT: u32 = 0;
@@ -101,18 +108,21 @@ impl Point { fn new() -> Self { Point { x: 0 } } }
 mod util { pub fn help() {} }
 macro_rules! sq { ($x:expr) => { $x * $x }; }
 fn main() { let local = 1; }
-`, []string{"import:std::io", "constant:MAX", "variable:COUNT", "struct:Point", "enum:Color", "interface:Shape", "prototype:Shape.area",
+`, []string{"import:std::io", "constant:MAX", "variable:COUNT", "struct:Point", "field:Point.x", "enum:Color", "interface:Shape", "prototype:Shape.area",
 			"method:Point.new", "module:util", "method:util.help", "macro:sq", "function:main"}},
 		{"x.cpp", `#include <vector>
 namespace geo {
+int created = 0;
+enum Unit { CM };
 class Shape {
 public:
     virtual double area() const;
+    int sides;
 };
 double Shape::area() const { return 0; }
 }
 int main() { return 0; }
-`, []string{"import:vector", "namespace:geo", "class:geo.Shape", "prototype:geo.Shape.area", "method:geo.Shape.area", "function:main"}},
+`, []string{"import:vector", "namespace:geo", "variable:geo.created", "enum:geo.Unit", "constant:geo.Unit.CM", "class:geo.Shape", "prototype:geo.Shape.area", "field:geo.Shape.sides", "method:geo.Shape.area", "function:main"}},
 	} {
 		lang := ts.Language(c.file)
 		src, err := ts.Parse(lang, []byte(c.src))
@@ -278,10 +288,10 @@ func TestContainerOwnText(t *testing.T) {
 		file, before, member, own, drop string
 		class, method                   string
 	}{
-		{"a.py", "class A:\n    x = 1\n\n    def f(self):\n        return 1\n\n    def g(self):\n        return 2\n",
-			"return 1", "x = 1", "\n    def g(self):\n        return 2\n", "class:A", "method:A.f"},
-		{"a.ts", "class A {\n  x = 1;\n  f() { return 1; }\n  g() { return 2; }\n}\n",
-			"return 1", "x = 1", "  g() { return 2; }\n", "class:A", "method:A.f"},
+		{"a.py", "class A:\n    \"\"\"The A.\"\"\"\n    x = 1\n\n    def f(self):\n        return 1\n\n    def g(self):\n        return 2\n",
+			"return 1", "The A", "\n    def g(self):\n        return 2\n", "class:A", "method:A.f"},
+		{"a.ts", "class A {\n  // the A\n  x = 1;\n  f() { return 1; }\n  g() { return 2; }\n}\n",
+			"return 1", "the A", "  g() { return 2; }\n", "class:A", "method:A.f"},
 		{"a.go", "package a\n\n// T is a type.\ntype T struct {\n\tX int\n\tY string\n}\n",
 			"X int", "", "\tY string\n", "struct:T", "field:T.X"},
 	} {

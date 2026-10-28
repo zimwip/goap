@@ -75,6 +75,9 @@ export function shownValue(a: AttributeView | undefined, v: unknown): string {
   return t;
 }
 
+/** Is the attribute an address, shown as a link opened the way its scheme says (ADR 0171, address.ts)? */
+export const isUrl = (a: AttributeView | undefined): boolean => !!a && a.widget === 'url';
+
 /** Is the attribute source text, shown and edited as code (codeText.ts)? */
 export const isCode = (a: AttributeView | undefined): boolean => !!a && (a.type === 'code' || a.widget === 'code');
 

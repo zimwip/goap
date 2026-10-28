@@ -11,16 +11,34 @@ const (
 	// KindGraph: a namespace of a graph. Location is the base URL of the graph service; empty, the graph the registry
 	// belongs to. Every namespace of this graph is a graph source of its own name without being declared.
 	KindGraph = "graph"
-	// KindFiles: a directory of files, Location its root; the key of a thing is its path under the root.
-	KindFiles = "files"
+	// KindLocalFS: a directory of files the service reads on its own disk, Location its root; the key of a thing is its
+	// path under the root (ADR 0171).
+	KindLocalFS = "local-fs"
+	// KindWeb: the pages of a web site; declared, Location is its base address and the key of a page its path under it;
+	// the http and https schemes are its own (an address read with no declared source).
+	KindWeb = "web"
+	// KindLnk is the type of source of the scheme lnk: the built-in resolver of the second level, reading
+	// <source>/<type>/<key> through the source of that name. No source is of that kind.
+	KindLnk = "lnk"
 )
+
+// kindAliases are the former names of kinds, still read: files was the name of local-fs (ADR 0171).
+var kindAliases = map[string]string{"files": KindLocalFS}
+
+// CanonicalKind is the name of a kind, a former name read as the kind it became.
+func CanonicalKind(kind string) string {
+	if k, ok := kindAliases[kind]; ok {
+		return k
+	}
+	return kind
+}
 
 // Source is the definition of a source: its name (the source of the URLs that point into it), where it lives in terms
 // of services, and what a resolver needs to read it.
 type Source struct {
 	// Name is the source of the URLs (lnk:<name>/...).
 	Name string `json:"name"`
-	// Kind picks the resolver (KindGraph, KindFiles, or a kind a composition registers).
+	// Kind picks the resolver (KindGraph, KindLocalFS, KindWeb, or a kind a composition registers).
 	Kind string `json:"kind"`
 	// Namespace is the namespace of the graph a graph source reads (a URL names no namespace); empty: its name.
 	Namespace string `json:"namespace,omitempty"`
@@ -62,10 +80,12 @@ func (s Source) Validate() error {
 	if !sourceRE.MatchString(s.Name) {
 		return fmt.Errorf("source %q: want [a-z][a-z0-9_.-]*: %w", s.Name, ErrInvalid)
 	}
-	switch s.Kind {
+	switch CanonicalKind(s.Kind) {
 	case "":
 		return fmt.Errorf("source %q: no kind: %w", s.Name, ErrInvalid)
-	case KindFiles:
+	case KindLnk:
+		return fmt.Errorf("source %q: the kind %s is the scheme's own resolver, no source is of it: %w", s.Name, KindLnk, ErrInvalid)
+	case KindLocalFS, KindWeb:
 		if s.Location == "" {
 			return fmt.Errorf("source %q of kind %s: no location: %w", s.Name, s.Kind, ErrInvalid)
 		}
@@ -107,6 +127,39 @@ type Target struct {
 	Location string `json:"location,omitempty"`
 	// Properties are what the resolver read of the target (a node's properties, a file's size...).
 	Properties map[string]any `json:"props,omitempty"`
+	// Open says how a reader opens the target (ADR 0171 §5), set when the target was opened (Registry.OpenIn,
+	// ResolveAddress), nil for a target only resolved.
+	Open *Open `json:"open,omitempty"`
+	// Content is the text of a target opened in mode OpenText.
+	Content string `json:"content,omitempty"`
+}
+
+// Modes of opening a target: what a reader does with it.
+const (
+	// OpenNode: a node, opened in its editor (Target.Node, Target.URL).
+	OpenNode = "node"
+	// OpenText: a text, Target.Content, shown in Open.Language.
+	OpenText = "text"
+	// OpenInline: a thing a browser shows by itself, Open.Href a data: address of its bytes (an image).
+	OpenInline = "inline"
+	// OpenExternal: an address a browser opens in a tab of its own, Open.Href.
+	OpenExternal = "external"
+	// OpenPath: a thing no browser reaches (a directory, a large or binary file of a local source): Open.Href is where
+	// it lives, to copy.
+	OpenPath = "path"
+)
+
+// Open is how a reader opens a target.
+type Open struct {
+	Mode string `json:"mode"`
+	// Href is the address the mode opens: the web address, the data: address, the path.
+	Href string `json:"href,omitempty"`
+	// Media is the media type of the thing (text/x-go, image/png...), empty when nothing tells it.
+	Media string `json:"media,omitempty"`
+	// Language is the language to show a text in (contracts/codetext's names), empty for plain text.
+	Language string `json:"language,omitempty"`
+	// Truncated reports a text cut at the size a reader is given.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // Resolver reads the sources of one kind. One resolver may serve many sources (each graph service, each root

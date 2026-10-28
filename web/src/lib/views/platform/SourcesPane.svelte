@@ -10,7 +10,7 @@
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import { stageRetire, stageUpsert } from '../../stores/pending.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
-  import { PLATFORM_SOURCE, SOURCE_KINDS, SOURCE_TYPE, overlaySources, sourceKey, sourceProblem, sourceProps, sourceRole, type Source } from '../../sources';
+  import { PLATFORM_SOURCE, SOURCE_KINDS, kindOf, SOURCE_TYPE, overlaySources, sourceKey, sourceProblem, sourceProps, sourceRole, type Source } from '../../sources';
 
   let applied = $state<GraphNode[]>([]);
   let loaded = $state(false);
@@ -96,7 +96,7 @@
     The kind of a source is its driver. A source of kind <strong>graph</strong> with no location is this graph: <code>{PLATFORM_SOURCE}</code> holds the platform, the
     organisation, the methodologies and every namespace no other graph holds; it is fixed. A source of kind <strong>graph</strong> at a location is another graph service: the
     namespaces it holds (the content graph: <code>alm</code>, <code>code</code>…) are read and changed there, and the statistics list them. A source of kind
-    <strong>files</strong> is a root directory. A logical URL <code>lnk:&lt;source&gt;/&lt;type&gt;/&lt;key&gt;</code> names a source or a namespace; each project chooses
+    <strong>local-fs</strong> is a root directory on the machine of the service (formerly <em>files</em>), a source of kind <strong>web</strong> the base address of a site. A logical URL <code>lnk:&lt;source&gt;/&lt;type&gt;/&lt;key&gt;</code> names a source or a namespace; each project chooses
     which declared source holds the sources its URLs name (project tab, <em>Sources</em>; inherited by its sub-projects).
   </p>
   {#if !loaded}
@@ -160,7 +160,7 @@
       </div>
       <label>
         Location
-        <input type="text" class="mono" bind:value={form.location} spellcheck="false" placeholder={form.kind === 'files' ? '/srv/docs' : 'empty: this graph; else https://graph.example'} />
+        <input type="text" class="mono" bind:value={form.location} spellcheck="false" placeholder={kindOf(form.kind) === 'local-fs' ? '/srv/docs' : kindOf(form.kind) === 'web' ? 'https://docs.example.com' : 'empty: this graph; else https://graph.example'} />
       </label>
       {#if form.kind === 'graph' && form.location.trim()}
         <label>
