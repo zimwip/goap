@@ -942,6 +942,19 @@ func (t *pgTx) NamespaceNodeIDs(ctx context.Context, namespace string) ([]domain
 	})
 }
 
+func (t *pgTx) NodeIDsOfType(ctx context.Context, namespace, typ string, after domain.NodeID, limit int) ([]domain.NodeID, error) {
+	q, args := dialectPG.sqlNodeIDsOfType(namespace, typ, after, limit)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.NodeID, error) {
+		var id string
+		err := r.Scan(&id)
+		return domain.NodeID(id), err
+	})
+}
+
 func (t *pgTx) BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	q, args := dialectPG.sqlNamespaceBaselineHeaders(namespace)
 	return t.baselineHeaders(ctx, namespace, q, args)
@@ -1010,13 +1023,10 @@ func (t *pgTx) Baselines(ctx context.Context, namespace string) ([]domain.Baseli
 	return out, nil
 }
 
+// Change reads the header of a change: its impacts and items are the fold of its log, which the guard of the graph
+// reads (ADR 0153, 0174).
 func (t *pgTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
-	c, err := t.changeHeader(ctx, id)
-	if err != nil {
-		return c, err
-	}
-	c.Nodes, err = t.ChangeImpacts(ctx, id)
-	return c, err
+	return t.changeHeader(ctx, id)
 }
 
 // changeHeader reads a change without its change impacts (the guard takes them from the fold of its log).
@@ -1179,10 +1189,6 @@ func (t *pgTx) exec1(ctx context.Context, what, q string, args ...any) error {
 	return nil
 }
 
-func (t *pgTx) DeleteChangeImpact(ctx context.Context, change domain.ChangeID, id domain.ChangeImpactID) error {
-	return t.exec1(ctx, "change impact "+string(id), dialectPG.sqlDeleteChangeImpact(), string(change), string(id))
-}
-
 func (t *pgTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, error) {
 	q, args := dialectPG.sqlLinkByID(id)
 	ls, err := t.queryLinks(ctx, q, args...)
@@ -1321,7 +1327,7 @@ func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntr
 		// its position is known: the insert waits for the next statement, or the commit
 		e.Seq = seq
 		t.pipe.queue(dialectPG.sqlInsert("change_log", append([]string{"seq"}, changeLogColumns...), ""),
-			[]any{seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload}, "log entry "+e.Type)
+			[]any{seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload, string(e.Node)}, "log entry "+e.Type)
 		return e, nil
 	}
 	q := t.tx
@@ -1329,7 +1335,7 @@ func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntr
 		q = t.held.Tx // an entry of a log reads no change_impact row: the rows held wait
 	}
 	err := q.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
-		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload).Scan(&e.Seq)
+		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload, string(e.Node)).Scan(&e.Seq)
 	return e, mapErr(err, "log entry "+e.Type)
 }
 
@@ -1367,11 +1373,11 @@ func (t *pgTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]dom
 	}
 	t.dropNext() // the positions it takes come after any taken before
 	n := len(entries)
-	ids, changes, types, flows, procs, execs, subjects, bys, causes, payloads := make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n)
+	ids, changes, types, flows, procs, execs, subjects, bys, causes, payloads, nodes := make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n)
 	ats := make([]time.Time, n)
 	for i, e := range entries {
 		ids[i], changes[i], types[i], flows[i], procs[i], execs[i], subjects[i], bys[i], causes[i], ats[i] = e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At
-		payloads[i] = string(e.Payload)
+		payloads[i], nodes[i] = string(e.Payload), string(e.Node)
 		if len(e.Payload) == 0 {
 			payloads[i] = "null"
 		}
@@ -1382,10 +1388,10 @@ func (t *pgTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]dom
 	}
 	// the rows are inserted, and take their positions, in the order of the array
 	rows, err := q.Query(ctx, `INSERT INTO change_log (`+strings.Join(changeLogColumns, ", ")+`)
-		SELECT id, change_id::uuid, type, flow, process_id, execution, subject, by_whom, causation, at, payload::jsonb
-		FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::timestamptz[], $11::text[])
-			WITH ORDINALITY AS e (id, change_id, type, flow, process_id, execution, subject, by_whom, causation, at, payload, o)
-		ORDER BY o RETURNING id, seq`, ids, changes, types, flows, procs, execs, subjects, bys, causes, ats, payloads)
+		SELECT id, change_id::uuid, type, flow, process_id, execution, subject, by_whom, causation, at, payload::jsonb, node
+		FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::timestamptz[], $11::text[], $12::text[])
+			WITH ORDINALITY AS e (id, change_id, type, flow, process_id, execution, subject, by_whom, causation, at, payload, node, o)
+		ORDER BY o RETURNING id, seq`, ids, changes, types, flows, procs, execs, subjects, bys, causes, ats, payloads, nodes)
 	if err != nil {
 		return nil, mapErr(err, "log entries")
 	}
@@ -1465,65 +1471,51 @@ func (t *pgTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {
 	return out, nil
 }
 
-func (t *pgTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
-	if t.held != nil {
-		args, err := impactArgs(change, cn)
-		if err != nil {
-			return err
+// PutCommitImpacts implements Tx: held with the versions of the commit when the transaction holds its writes.
+func (t *pgTx) PutCommitImpacts(ctx context.Context, rows []CommitImpact) error {
+	for chunk := range slices.Chunk(rows, commitImpactRowsPerInsert) {
+		args := make([]any, 0, len(chunk)*len(commitImpactColumns))
+		for _, r := range chunk {
+			a, err := commitImpactArgs(r)
+			if err != nil {
+				return err
+			}
+			args = append(append(args, a...), r.CreatedAt)
 		}
-		t.held.hold(args)
-		return nil
+		if t.held != nil {
+			t.held.holdImpacts(args, len(chunk))
+			continue
+		}
+		if _, err := t.tx.Exec(ctx, dialectPG.sqlInsertRows("change_impact", commitImpactColumns, len(chunk)), args...); err != nil {
+			return mapErr(err, "change impacts")
+		}
 	}
-	r, err := toCNRow(cn)
-	if err != nil {
-		return err
-	}
-	_, err = t.tx.Exec(ctx, `INSERT INTO change_impact (id, change_id, node_id, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded, effect)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
-		ON CONFLICT (id) DO UPDATE SET node_id = $3, key = $4, type = $5, intent = $6, rationale = $7, pre_version = $8, post_version = $9, committed_version = $10,
-			review = $11, reviews = $12, via = $13, recheck = $14, produced_by = $15, derived_from = $16, items = $17, execution = $18, flow = $20, superseded = $21, effect = $22`,
-		r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Committed, r.Review, r.Reviews, nullUUID(r.Via), r.Recheck, r.ProducedBy, r.DerivedFrom, r.Items, r.Execution, cn.CreatedAt, r.Flow, r.Superseded, r.Effect)
-	return mapErr(err, "change impact "+cn.Key)
+	return nil
 }
 
-func (t *pgTx) ChangeImpactKeys(ctx context.Context, change domain.ChangeID, limit int) ([]domain.ChangeDocRef, error) {
-	q, args := dialectPG.sqlChangeImpactKeys(change, limit)
-	rows, err := t.tx.Query(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []domain.ChangeDocRef
-	for rows.Next() {
-		var r domain.ChangeDocRef
-		if err := rows.Scan(&r.Key, &r.Type); err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
-}
+// commitImpactRowsPerInsert is the number of change_impact rows one statement writes (18 arguments each).
+const commitImpactRowsPerInsert = 1000
 
-func (t *pgTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {
-	q, args := dialectPG.sqlChangeImpacts(change)
+func (t *pgTx) CommitImpacts(ctx context.Context, change domain.ChangeID) ([]CommitImpact, error) {
+	q, args := dialectPG.sqlCommitImpacts(change)
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
-		return nil, err
+		return nil, mapErr(err, "change impacts")
 	}
 	defer rows.Close()
-	var out []domain.ChangeImpact
+	var out []CommitImpact
 	for rows.Next() {
-		var r cnRow
-		var created time.Time
-		if err := rows.Scan(&r.ID, &r.NodeID, &r.Key, &r.Type, &r.Intent, &r.Rationale, &r.Pre, &r.Post, &r.Committed, &r.Review, &r.Reviews, &r.Via, &r.Recheck, &r.ProducedBy, &r.DerivedFrom, &r.Items, &r.Execution, &created, &r.Flow, &r.Superseded, &r.Effect); err != nil {
+		var r commitImpactRow
+		var at time.Time
+		if err := rows.Scan(append(r.dest(), &at)...); err != nil {
 			return nil, err
 		}
-		cn, err := r.node()
+		ci, err := r.impactOf()
 		if err != nil {
 			return nil, err
 		}
-		cn.CreatedAt = created
-		out = append(out, cn)
+		ci.CreatedAt = at
+		out = append(out, ci)
 	}
 	return out, rows.Err()
 }

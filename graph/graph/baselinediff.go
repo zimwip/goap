@@ -34,8 +34,8 @@ func (g *Graph) DiffBaselines(ctx context.Context, from, to domain.BaselineID) (
 }
 
 // diffBaselines is DiffBaselines in a transaction, one way whatever the two baselines (ADR 0140): the changes only one
-// of them takes in (lineageGap) name the nodes the states may differ on, the nodes of their impacts and of their own
-// branches; the versions of those nodes alone are read in each baseline, then compared.
+// of them takes in (lineageGap) name the nodes the states may differ on, the nodes of the versions they wrote and of
+// their own branches; the versions of those nodes alone are read in each baseline, then compared.
 func diffBaselines(ctx context.Context, tx Tx, from, to domain.BaselineID) ([]BaselineDiff, error) {
 	gap, err := lineageGap(ctx, tx, from, to)
 	if err != nil {
@@ -58,16 +58,13 @@ func diffBaselines(ctx context.Context, tx Tx, from, to domain.BaselineID) ([]Ba
 		if !ok {
 			continue
 		}
-		cns, err := tx.ChangeImpacts(ctx, id)
+		// the versions it wrote (ADR 0174)
+		rows, err := tx.CommitImpacts(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		for _, cn := range cns {
-			for _, ref := range []*domain.NodeRef{cn.Pre, cn.Post, cn.Committed} {
-				if ref != nil {
-					add(ref.ID)
-				}
-			}
+		for _, r := range rows {
+			add(r.Node)
 		}
 		if c.Branch != "" {
 			// what its branch holds: a node it reverted keeps no impact

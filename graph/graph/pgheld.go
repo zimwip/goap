@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -13,24 +12,14 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// impactColumns are the columns of a change_impact row, in the order of PutChangeImpact's arguments.
-var impactColumns = []string{"id", "change_id", "node_id", "key", "type", "intent", "rationale", "pre_version", "post_version",
-	"committed_version", "review", "reviews", "via", "recheck", "produced_by", "derived_from", "items", "execution", "created_at",
-	"flow", "superseded", "effect"}
-
-// impactRowsPerInsert is the number of change_impact rows one statement writes (23 arguments each).
-const impactRowsPerInsert = 500
-
-// heldQuerier holds the rows of change_impact a write transaction writes and sends them in one statement before its
-// next statement but an entry of a log, which reads none of them, and before its commit: a batched operation writes
-// an impact per node, one statement each otherwise. The last write of a row replaces the one held; each row takes the
-// position of its first write, the sequence moving once per write, as when each write was its own statement.
+// heldQuerier holds the rows a write transaction writes (the versions of a commit, their links, joins and change
+// impacts) and sends them in a few statements before its next statement that may read them, and before its commit.
 type heldQuerier struct {
 	Tx pgQuerier
 	// pipe is the transaction the rows are written in: their inserts wait for the next statement (nil: sent at once)
-	pipe    *pipeTx
-	rows    []heldImpact
-	upserts int
+	pipe *pipeTx
+	// impacts are the change_impact rows held (ADR 0174), each statement's arguments with its number of rows
+	impacts []heldRows
 	// versions are the node versions held, in the order written, each with its link set once set
 	versions []heldVersion
 	// links are the link rows held (links and drops, ADR 0141), written after the versions they leave
@@ -39,10 +28,8 @@ type heldQuerier struct {
 	// after the versions
 	joins [][]any
 	// the rows held indexed, so that holding or asking for one costs the same whatever the number held (a commit holds
-	// a version, a link set and an impact per node): rowAt the position of an impact row by its id, verAt of a version
-	// by its node, refs the versions written or left by a link, joined the nodes of the joins, keys the namespace and
+	// a version, a link set and an impact per node): verAt the position of a version by its node, refs the versions written or left by a link, joined the nodes of the joins, keys the namespace and
 	// key of the nodes created, nodes the nodes of refs
-	rowAt  map[any]int
 	verAt  map[domain.NodeID]int
 	refs   map[domain.NodeRef]bool
 	nodes  map[domain.NodeID]bool
@@ -125,23 +112,15 @@ func (h *heldQuerier) holdLinkSet(from domain.NodeRef, set [4]any) bool {
 	return true
 }
 
-type heldImpact struct {
+// heldRows are the arguments of a statement inserting n rows.
+type heldRows struct {
 	args []any
-	at   int
+	n    int
 }
 
-func (h *heldQuerier) hold(args []any) {
-	at := h.upserts
-	h.upserts++
-	if i, ok := h.rowAt[args[0]]; ok {
-		h.rows[i].args = args
-		return
-	}
-	if h.rowAt == nil {
-		h.rowAt = map[any]int{}
-	}
-	h.rowAt[args[0]] = len(h.rows)
-	h.rows = append(h.rows, heldImpact{args: args, at: at})
+// holdImpacts holds change_impact rows (commitImpactColumns), written after the versions they name.
+func (h *heldQuerier) holdImpacts(args []any, n int) {
+	h.impacts = append(h.impacts, heldRows{args: args, n: n})
 }
 
 // flush writes the rows held.
@@ -155,41 +134,10 @@ func (h *heldQuerier) flush(ctx context.Context) error {
 	if err := h.flushJoins(ctx); err != nil {
 		return err
 	}
-	if len(h.rows) == 0 {
-		return nil
-	}
-	rows, upserts := h.rows, h.upserts
-	h.rows, h.upserts, h.rowAt = nil, 0, nil
-	columns := impactColumns
-	var seqs []int64
-	if upserts > len(rows) {
-		r, err := h.Tx.Query(ctx, fmt.Sprintf(`SELECT nextval(pg_get_serial_sequence('change_impact', 'seq')) FROM generate_series(1, %d)`, upserts))
-		if err != nil {
-			return mapErr(err, "change impacts")
-		}
-		if seqs, err = pgx.CollectRows(r, pgx.RowTo[int64]); err != nil {
-			return mapErr(err, "change impacts")
-		}
-		sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
-		columns = append(append([]string{}, impactColumns...), "seq")
-	}
-	set := make([]string, 0, len(impactColumns))
-	for _, c := range impactColumns {
-		if c != "id" && c != "change_id" && c != "created_at" {
-			set = append(set, c+" = EXCLUDED."+c)
-		}
-	}
-	for start := 0; start < len(rows); start += impactRowsPerInsert {
-		chunk := rows[start:min(start+impactRowsPerInsert, len(rows))]
-		args := make([]any, 0, len(chunk)*len(columns))
-		for _, r := range chunk {
-			args = append(args, r.args...)
-			if seqs != nil {
-				args = append(args, seqs[r.at])
-			}
-		}
-		q := dialectPG.sqlInsertRows("change_impact", columns, len(chunk)) + ` ON CONFLICT (id) DO UPDATE SET ` + strings.Join(set, ", ")
-		if err := h.write(ctx, q, args, "change impacts"); err != nil {
+	impacts := h.impacts
+	h.impacts = nil
+	for _, r := range impacts {
+		if err := h.write(ctx, dialectPG.sqlInsertRows("change_impact", commitImpactColumns, r.n), r.args, "change impacts"); err != nil {
 			return err
 		}
 	}
@@ -306,16 +254,6 @@ type errRow struct{ err error }
 
 func (r errRow) Scan(...any) error { return r.err }
 
-// impactArgs are the arguments of a change_impact row, in the order of impactColumns.
-func impactArgs(change domain.ChangeID, cn domain.ChangeImpact) ([]any, error) {
-	r, err := toCNRow(cn)
-	if err != nil {
-		return nil, err
-	}
-	return []any{r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Committed, r.Review, r.Reviews,
-		nullUUID(r.Via), r.Recheck, r.ProducedBy, r.DerivedFrom, r.Items, r.Execution, cn.CreatedAt, r.Flow, r.Superseded, r.Effect}, nil
-}
-
 // flushLinks writes the link rows held, several per statement.
 func (h *heldQuerier) flushLinks(ctx context.Context) error {
 	links := h.links
@@ -386,7 +324,7 @@ func (h *heldQuerier) holdsKey(namespace, key string) bool {
 }
 
 // onNodes is what a read of versions of the nodes runs on: a read of other nodes leaves the rows held for later (it
-// reads none of them: node, node_version and link rows of other nodes, no change_impact row), so the versions of a
+// reads none of them: node, node_version and link rows of other nodes), so the versions of a
 // commit are written together.
 func (t *pgTx) onNodes(ids ...domain.NodeID) pgQuerier {
 	if t.held == nil || t.held.holdsNode(ids) {

@@ -305,6 +305,15 @@ func (d dialect) sqlNamespaceNodeIDs(namespace string) (string, []any) {
 	return `SELECT ` + d.id("id") + ` FROM node WHERE namespace = ` + d.ph(1) + ` ORDER BY id`, []any{domain.NamespaceOf(namespace)}
 }
 
+// sqlNodeIDsOfType reads the ids of the nodes of a type after an id, by id, at most a limit (index node_type).
+func (d dialect) sqlNodeIDsOfType(namespace, typ string, after domain.NodeID, limit int) (string, []any) {
+	cond, args := ``, []any{domain.NamespaceOf(namespace), typ, limit}
+	if after != "" {
+		cond, args = ` AND id > `+d.ph(4), append(args, string(after))
+	}
+	return `SELECT ` + d.id("id") + ` FROM node WHERE namespace = ` + d.ph(1) + ` AND type = ` + d.ph(2) + cond + ` ORDER BY id LIMIT ` + d.ph(3), args
+}
+
 // sqlLastCommit reads the order of the last commit on a branch (index node_version_committed, node_branch_committed).
 func (d dialect) sqlLastCommit(branch string) (string, []any) {
 	return `SELECT coalesce(max(committed), 0) FROM (SELECT max(committed) AS committed FROM node_version WHERE branch = ` + d.ph(1) +
@@ -657,31 +666,23 @@ func (d dialect) sqlOpenChangeIDs() string {
 	return `SELECT ` + d.id("id") + ` FROM change WHERE status NOT IN ('applied', 'abandoned')` + d.orderBy("created_at", "")
 }
 
-// sqlNodeChangePage reads the last limit changes that have an impact on a node, each with the order of its first one,
-// whose order is below before (0: any), newest first: from the index change_impact_node (node_id, seq, change_id) alone.
+// sqlNodeChangePage reads the last limit changes whose log names a node in an impact entry, each with the position of
+// its first one, whose position is below before (0: any), newest first: from the index change_log_node (node, seq,
+// change_id) alone (ADR 0174).
 func (d dialect) sqlNodeChangePage(node domain.NodeID, before int64, limit int) (string, []any) {
-	q, args := `SELECT `+d.id("change_id")+`, min(seq) FROM change_impact WHERE node_id = `+d.ph(1)+` GROUP BY change_id`, []any{string(node)}
+	q, args := `SELECT `+d.id("change_id")+`, min(seq) FROM change_log WHERE node = `+d.ph(1)+` GROUP BY change_id`, []any{string(node)}
 	if before > 0 {
 		q, args = q+` HAVING min(seq) < `+d.ph(2), append(args, before)
 	}
 	return q + ` ORDER BY 2 DESC LIMIT ` + d.ph(len(args)+1), append(args, limit)
 }
 
-// changeImpactCols is the select list of a change impact (the order both repositories scan).
-func (d dialect) changeImpactCols() string {
-	return d.cols(su("id"), su("node_id"), sc("key"), sc("type"), sc("intent"), sc("rationale"), sc("pre_version"), sc("post_version"), sc("committed_version"),
-		sc("review"), sc("reviews"), sqlCol{name: d.idOr("COALESCE", "via")}, sc("recheck"), sc("produced_by"), sc("derived_from"), sc("items"), sc("execution"),
-		sc("created_at"), sc("flow"), sc("superseded"), sc("effect"))
-}
-
-// sqlChangeImpacts reads the impacts of a change in the order they were written.
-func (d dialect) sqlChangeImpacts(change domain.ChangeID) (string, []any) {
-	return `SELECT ` + d.changeImpactCols() + ` FROM change_impact WHERE change_id = ` + d.ph(1) + ` ORDER BY seq`, []any{string(change)}
-}
-
-// sqlChangeImpactKeys reads the key and type of the first limit impacts of a change, in the order they were written.
-func (d dialect) sqlChangeImpactKeys(change domain.ChangeID, limit int) (string, []any) {
-	return `SELECT key, type FROM change_impact WHERE change_id = ` + d.ph(1) + ` ORDER BY seq LIMIT ` + d.ph(2), []any{string(change), limit}
+// sqlCommitImpacts reads the change impacts of the versions a change wrote, in the order of its log (ADR 0174): the
+// columns of commitImpactRow.dest, then the time.
+func (d dialect) sqlCommitImpacts(change domain.ChangeID) (string, []any) {
+	return `SELECT ` + d.cols(su("node_id"), sc("version"), su("change_id"), su("impact_id"), sc("key"), sc("type"), sc("intent"), sc("rationale"),
+		sc("pre_version"), sc("merged_with"), sc("reason"), su("review"), sc("effect"), sc("log_seq"), sc("produced_by"), sc("execution"),
+		su("via"), sc("created_at")) + ` FROM change_impact WHERE change_id = ` + d.ph(1) + ` ORDER BY log_seq, node_id, version`, []any{string(change)}
 }
 
 // logCols is the select list of a log entry.
@@ -769,11 +770,6 @@ func (d dialect) sqlDeleteTag(id domain.TagID) (string, []any) {
 	return `DELETE FROM tag WHERE id = ` + d.ph(1), []any{string(id)}
 }
 
-// sqlDeleteChangeImpact removes a change impact from the projection: arguments change, change impact.
-func (d dialect) sqlDeleteChangeImpact() string {
-	return `DELETE FROM change_impact WHERE change_id = ` + d.ph(1) + ` AND id = ` + d.ph(2)
-}
-
 // sqlLinkByID reads one link.
 func (d dialect) sqlLinkByID(id domain.LinkID) (string, []any) {
 	return `SELECT ` + d.linkCols() + ` FROM link WHERE id = ` + d.ph(1) + ` AND removes IS NULL`, []any{string(id)}
@@ -813,8 +809,12 @@ func (d dialect) deleteChangeRows() []string {
 	mine := `(SELECT node_id, version FROM node_version WHERE change_id = ` + p + `)`
 	return []string{
 		`DELETE FROM tag WHERE (node_id, version) IN ` + mine,
-		`DELETE FROM link WHERE change_id = ` + p + ` OR (from_id, from_version) IN ` + mine,
-		`DELETE FROM node_branch WHERE change_id = ` + p + ` OR (node_id, version) IN ` + mine,
+		// one statement per index: an OR with the IN would read the whole table (a hashed sub-plan filtering a
+		// sequential scan), the larger the graph the slower
+		`DELETE FROM link WHERE change_id = ` + p,
+		`DELETE FROM link WHERE (from_id, from_version) IN ` + mine,
+		`DELETE FROM node_branch WHERE change_id = ` + p,
+		`DELETE FROM node_branch WHERE (node_id, version) IN ` + mine,
 		`DELETE FROM node_version WHERE change_id = ` + p,
 		`DELETE FROM change_impact WHERE change_id = ` + p,
 		`DELETE FROM change_log WHERE change_id = ` + p,
@@ -844,7 +844,7 @@ var (
 	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner", "origins", "committed", "editor", "visibility"}
 	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id", "removes", "to_url"}
 	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "kind", "rebased_from", "seq"}
-	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "causation", "at", "payload"}
+	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "causation", "at", "payload", "node"}
 )
 
 // refsJoin joins the versions refs as the alias a on the columns idCol / verCol: an array pair bound at n and n+1 for

@@ -145,11 +145,11 @@ func (g *Graph) provenanceReader(ctx context.Context) func(domain.Node) *Snapsho
 		}
 		o := &origin{impacts: map[domain.ChangeImpactID]domain.ChangeImpact{}, models: map[string]bool{}}
 		_ = g.repo.InTx(ctx, func(tx Tx) error {
-			impacts, err := tx.ChangeImpacts(ctx, id)
+			st, err := g.draftState(ctx, tx, id)
 			if err != nil {
 				return err
 			}
-			for _, cn := range impacts {
+			for _, cn := range st.impacts.list().All() {
 				o.impacts[cn.ID] = cn
 			}
 			entries, err := tx.Log(ctx, domain.LogFilter{Change: id, Types: []string{domain.LogModel + "."}})

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
 )
@@ -220,13 +219,12 @@ func (g *Graph) adoptChangeImpacts(ctx context.Context, tx Tx, c domain.Change, 
 	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Op: domain.ImpactAdopted, Flow: f.ID, Stale: f.StaleRuns, By: by}); err != nil {
 		return err
 	}
-	impacts, err := tx.ChangeImpacts(ctx, c.ID)
+	st, err := g.draftState(ctx, tx, c.ID)
 	if err != nil {
 		return err
 	}
 	for _, e := range installs {
-		i := slices.IndexFunc(impacts, func(cn domain.ChangeImpact) bool { return cn.ID == e.Impact })
-		if i < 0 || impacts[i].Superseded {
+		if cn, ok := st.impact(e.Impact); !ok || cn.Superseded {
 			continue
 		}
 		if err := g.emit(ctx, tx, e); err != nil {

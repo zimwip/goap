@@ -19,6 +19,9 @@ type cpost struct {
 	links []domain.Link
 	// effect is what post does to its node over pre (domain.EffectOf), recorded on its committed event
 	effect domain.ImpactEffect
+	// step is what post does over the version it was checked out from, the change's last commit of the node or pre:
+	// the effect of its change_impact row (ADR 0174)
+	step domain.ImpactEffect
 }
 
 // prepareChangeImpacts writes, from the drafts of the change impacts, the versions the commit produces (ADR 0079): a node
@@ -176,6 +179,19 @@ func (a *applier) prepareChangeImpacts() error {
 		}
 		cp.effect = domain.EffectOf(cp.pre, preLinks, cp.post, cp.links)
 		cp.effect.Requalified = requalified[l.cn.ID]
+		cp.step = cp.effect
+		if b := l.d.Base; b != nil && (l.cn.Pre == nil || *b != *l.cn.Pre) {
+			// a commit after an earlier one of the change: its step from the version that one wrote
+			base, err := a.tx.Node(a.ctx, *b)
+			if err != nil {
+				return err
+			}
+			baseLinks, err := a.tx.OutLinks(a.ctx, base.Ref())
+			if err != nil {
+				return err
+			}
+			cp.step = domain.EffectOf(&base, baseLinks, cp.post, cp.links)
+		}
 		a.cposts = append(a.cposts, cp)
 		if nodes[i].Deleted {
 			a.target.remove(nodes[i].ID) // a tombstone: the node leaves the state (ADR 0172)
