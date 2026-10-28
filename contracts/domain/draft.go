@@ -59,6 +59,9 @@ type Draft struct {
 	// Execution is the action run that checked the node out (what a relaunch of a step marks stale, ADR 0025).
 	Execution string      `json:"execution,omitempty"`
 	Links     []DraftLink `json:"links,omitempty"`
+	// Deleted marks the draft of a node the change deletes (ADR 0172): its version is a tombstone, the last properties
+	// kept and no outgoing link, and the node leaves the state of the branch it commits on.
+	Deleted bool `json:"deleted,omitempty"`
 	// Creator is, on a creation, the person who created the draft (ADR 0161 §3: the author of its created event, the end
 	// user when an agent created it for them), the creator of the node it commits.
 	Creator string `json:"creator,omitempty"`
@@ -100,7 +103,7 @@ func cloneProps(m map[string]any) map[string]any {
 // set by the graph.
 func (d Draft) AsNode() Node {
 	return Node{ID: d.Node, Key: d.Key, Type: d.Type, State: d.State, Responsible: d.Owner, Properties: cloneProps(d.Properties), Origins: slices.Clone(d.Origins),
-		ChangeID: d.Change, ChangeImpact: d.Impact, Execution: d.Execution, Reason: draftReason(d)}
+		ChangeID: d.Change, ChangeImpact: d.Impact, Execution: d.Execution, Reason: draftReason(d), Deleted: d.Deleted}
 }
 
 func draftReason(d Draft) string {
@@ -138,7 +141,9 @@ type draftPatch struct {
 	Props map[string]any `json:"props"`
 	Unset []string       `json:"unset"`
 	Owner lnk.URL        `json:"owner"`
-	State *struct {
+	// Deleted deletes the node (true) or takes the deletion back (false, ADR 0172).
+	Deleted *bool `json:"deleted"`
+	State   *struct {
 		From string `json:"from"`
 		To   string `json:"to"`
 	} `json:"state"`
@@ -169,7 +174,7 @@ func linksOf(one *patchLink, many []patchLink) []patchLink {
 	return append([]patchLink{*one}, many...)
 }
 
-// DraftDiff is the patch of an updated event that turns a draft into another (props, unset, owner, state, and the
+// DraftDiff is the patch of an updated event that turns a draft into another (props, unset, owner, state, deleted, and the
 // links as addLinks / updateLinks / removeLinks): the difference a rebase's merge makes to the version the change
 // committed (ADR 0144), what a reader shows. A link of to that from holds alike (type, target, properties) keeps the id
 // it has in from; nil when they hold the same.
@@ -199,6 +204,9 @@ func DraftDiff(from, to Draft) map[string]any {
 	}
 	if to.State != from.State {
 		p["state"] = map[string]any{"from": from.State, "to": to.State}
+	}
+	if to.Deleted != from.Deleted {
+		p["deleted"] = to.Deleted
 	}
 	var adds, updates, removes []any
 	used := make([]bool, len(to.Links))
@@ -302,6 +310,9 @@ func applyDraft(d *Draft, e ImpactEvent) *Draft {
 		}
 		if p.State != nil {
 			n.State = p.State.To
+		}
+		if p.Deleted != nil {
+			n.Deleted = *p.Deleted
 		}
 		for _, a := range linksOf(p.AddLink, p.AddLinks) {
 			l := DraftLink{ID: a.ID, Type: a.Type, To: NodeRef{ID: a.ToID, Version: a.ToVersion}, Properties: a.Props}

@@ -37,6 +37,8 @@ type Port interface {
 	ImpactLinkDelete(ctx context.Context, id domain.ChangeID, link domain.LinkID, flow, execution string) error
 	ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in NodeTransition) (domain.ChangeImpact, error)
 	ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) (domain.ChangeImpact, error)
+	// ImpactNodeDelete deletes a node (ADR 0172): the commit writes a tombstone; creating its key again restores it.
+	ImpactNodeDelete(ctx context.Context, id domain.ChangeID, in NodeCheckout) (domain.ChangeImpact, error)
 	WithdrawImpact(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) error
 	// WithdrawImpacts takes several change impacts out of the change at once, all or none.
 	WithdrawImpacts(ctx context.Context, id domain.ChangeID, impacts []domain.ChangeImpactID, flow, execution string) error

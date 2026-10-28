@@ -67,9 +67,9 @@ func (c *cancelling) ImpactLinkDelete(ctx context.Context, id domain.ChangeID, l
 	return c.Port.ImpactLinkDelete(c.at(ctx), id, link, flow, execution)
 }
 
-func (c *cancelling) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in graphapi.NodeTransition) (domain.ChangeImpact, error) {
+func (c *cancelling) ImpactNodeDelete(ctx context.Context, id domain.ChangeID, in graphapi.NodeCheckout) (domain.ChangeImpact, error) {
 	defer c.done()
-	return c.Port.ImpactNodeTransition(c.at(ctx), id, in)
+	return c.Port.ImpactNodeDelete(c.at(ctx), id, in)
 }
 
 func (c *cancelling) ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b domain.ReviewBatch) ([]domain.ChangeImpact, error) {

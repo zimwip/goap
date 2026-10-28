@@ -82,6 +82,8 @@ ChangeImpact {
   rejected one is reworked or withdrawn (`WithdrawImpact`) first.
 
 ### 4. No node deletion: a removal is a modification of the parent
+
+*(Amended by ADR 0172: `ImpactNodeDelete` deletes a node, a modification whose commit writes a tombstone.)*
 - A node is not deleted by a change. Removing a child is a `modified` change impact on its **parent**: the
   parent's version loses the link to the child (outgoing links belong to the source version, ADR 0003).
   `delete_node`, `remove_link` and `add_link` are not operations any more: a link change is a

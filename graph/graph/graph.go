@@ -345,7 +345,8 @@ func linksWithin(ctx context.Context, tx Tx, b domain.Baseline, nodes []domain.N
 
 // SuspectLinks returns the links whose source is in the baseline but whose
 // target node is in the baseline at another version: the target changed
-// since the link was asserted.
+// since the link was asserted; or whose target of the namespace the baseline
+// no longer holds: it was deleted (ADR 0172).
 func (g *Graph) SuspectLinks(ctx context.Context, id domain.BaselineID) (out []domain.Link, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		b, err := tx.Baseline(ctx, id)
@@ -359,8 +360,31 @@ func (g *Graph) SuspectLinks(ctx context.Context, id domain.BaselineID) (out []d
 		if err != nil {
 			return err
 		}
+		var gone []domain.NodeRef
 		for _, l := range links {
 			if tv, ok := b.Nodes[l.To.ID]; ok && tv != l.To.Version {
+				out = append(out, l)
+			} else if !ok && !l.External() {
+				gone = append(gone, l.To)
+			}
+		}
+		if len(gone) == 0 {
+			return nil
+		}
+		// a target of the namespace the baseline does not hold was deleted (ADR 0172): the link is suspect too; one of
+		// another namespace is not the baseline's to judge
+		targets, err := tx.NodesAt(ctx, gone, "")
+		if err != nil {
+			return err
+		}
+		deleted := map[domain.NodeID]bool{}
+		for _, n := range targets {
+			if domain.NamespaceOf(n.Namespace) == domain.NamespaceOf(b.Namespace) {
+				deleted[n.ID] = true
+			}
+		}
+		for _, l := range links {
+			if _, ok := b.Nodes[l.To.ID]; !ok && deleted[l.To.ID] {
 				out = append(out, l)
 			}
 		}
