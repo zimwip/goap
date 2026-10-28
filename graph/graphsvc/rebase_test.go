@@ -36,10 +36,10 @@ func TestRebaseThroughTheService(t *testing.T) {
 
 	base, err := g.BranchHead(ctx, "", domain.MainBranch)
 	ok(nil, err)
-	ok(g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Title: "seed", Baseline: base.ID, By: "test", Edits: []graph.NodeEdit{{Key: "N-1", Type: "Design", Props: map[string]any{"title": "t"}}}}))
+	ok(g.CommitEdits(ctx, graph.Edits{ProjectID: "PROJ-ROOT", Title: "seed", Commit: base.ID, By: "test", Edits: []graph.NodeEdit{{Key: "N-1", Type: "Design", Props: map[string]any{"title": "t"}}}}))
 	head, err := g.BranchHead(ctx, "", domain.MainBranch)
 	ok(nil, err)
-	parent, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "parent", BaselineID: head.ID, OwnBranch: true})
+	parent, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "parent", ForkCommit: head.ID, OwnBranch: true})
 	ok(nil, err)
 	pcn, err := g.ImpactNodeCheckout(ctx, parent.ID, graph.NodeCheckout{Key: "N-1", Rationale: "p"})
 	ok(nil, err)

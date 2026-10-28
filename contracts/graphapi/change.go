@@ -32,12 +32,12 @@ type NewChange struct {
 	Goal string
 	// Namespace the change acts on (default: domain.DefaultNamespace).
 	Namespace  string
-	BaselineID domain.BaselineID
+	ForkCommit domain.CommitID
 	// Branch the change applies to (default main); it must be open. With
 	// OwnBranch it is the branch the change is finally merged into.
 	Branch string
 	// OwnBranch gives the change a branch of its own, named after it and forked
-	// from BaselineID: its versions live there until the change is merged.
+	// from CommitID: its versions live there until the change is merged.
 	OwnBranch bool
 	// BranchIntent says why the own branch exists relative to its parent (derive/revise/refine, same vocabulary
 	// as an Option's); only meaningful with OwnBranch or ParentID. "" (the default) is domain.IntentDerive.

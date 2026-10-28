@@ -75,7 +75,7 @@ type Process struct {
 	// Children maps sub-agent calls ("action#index:agent") to their process,
 	// so that a retried action finds the sub-agent it started.
 	Children   map[string]string `json:"children,omitempty"`
-	BaselineID domain.BaselineID `json:"baselineId,omitempty"`
+	ForkCommit domain.CommitID   `json:"forkCommit,omitempty"`
 	Namespace  string            `json:"namespace,omitempty"`
 	OwnBranch  bool              `json:"ownBranch,omitempty"`
 	// Flow is the flow branch the process works on ("" = the main flow). A relaunched
@@ -168,7 +168,7 @@ const (
 // RebaseTask is what a person needs to settle after the rebase of a change found conflicts (ADR 0101).
 type RebaseTask struct {
 	// Branch is the branch the change was rebased onto (for a sub-change, its parent change's), Onto the head
-	// baseline or parent change it was rebased onto.
+	// commit or parent change it was rebased onto.
 	Branch  string           `json:"branch,omitempty"`
 	Onto    string           `json:"onto,omitempty"`
 	Impacts []RebaseConflict `json:"impacts"`

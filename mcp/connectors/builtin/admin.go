@@ -178,7 +178,7 @@ func (c Admin) organisation(ctx context.Context, op, unit string) (map[string]an
 	if err != nil {
 		return nil, err
 	}
-	nodes, links, err := c.p.Graph.BaselineGraph(ctx, head.ID)
+	nodes, links, err := c.p.Graph.CommitGraph(ctx, head.ID)
 	if err != nil {
 		return nil, err
 	}

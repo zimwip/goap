@@ -117,11 +117,11 @@ type Restructured struct {
 	Suspect []SuspectLink
 }
 
-// BaselineDelta is what going from a baseline to a later one of the same branch changed (ADR 0143 §4): the nodes
-// committed in between, at their version in the later baseline, every link leaving those versions (a reader keeps the
-// ones whose target its state holds), and the nodes the later baseline no longer holds.
-type BaselineDelta struct {
-	From, To domain.Baseline
+// CommitDelta is what going from a commit to a later one of the same branch changed (ADR 0143 §4): the nodes
+// committed in between, at their version in the later commit, every link leaving those versions (a reader keeps the
+// ones whose target its state holds), and the nodes the later commit no longer holds.
+type CommitDelta struct {
+	From, To domain.Commit
 	Nodes    []domain.Node
 	Links    []domain.Link
 	Removed  []domain.NodeID

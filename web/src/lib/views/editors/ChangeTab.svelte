@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Change tab: change items and applying to the baseline.
+  // Change tab: change items and applying to the commit.
   import EditorActions from '../../shell/EditorActions.svelte';
   import {
     graph,
@@ -60,7 +60,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import { openNode } from '../../nodeEditors';
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { stamp, keyOf, throttled } from '../../flux/signals.svelte';
-  import { viewBaseline } from '../../stores/baselineTool.svelte';
+  import { viewCommit } from '../../stores/commitTool.svelte';
   import { namespaceOf } from '../../namespace';
   import { processes } from '../../stores/live.svelte';
   import ChangeState from '../../components/ChangeState.svelte';
@@ -188,7 +188,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   let defIntent = $state('');
   let defBusy = $state(false);
 
-  let baselineName = $state('');
+  let commitName = $state('');
   let applying = $state(false);
   let moveOpen = $state(false);
   let attachOpen = $state(false);
@@ -219,24 +219,24 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
   const selected = $derived(tab.params.id ?? '');
 
-  /** the baseline `nodes` was read from */
+  /** the commit `nodes` was read from */
   let nodesOf = '';
 
-  // the nodes of the baseline the change could take on: a page of those matching what the person looks for, searched by
+  // the nodes of the commit the change could take on: a page of those matching what the person looks for, searched by
   // the server as they type
   let candidateFilter = $state('');
   let candidateNodes = $state<GraphNode[]>([]);
   let candidatesOf = '';
   let candidateSearch: AbortController | undefined;
   async function searchCandidates() {
-    const baselineId = nodesOf;
+    const commitId = nodesOf;
     const query = candidateFilter.trim();
     candidateSearch?.abort();
     const ctrl = (candidateSearch = new AbortController());
-    candidatesOf = baselineId;
-    if (!baselineId) return void (candidateNodes = []);
+    candidatesOf = commitId;
+    if (!commitId) return void (candidateNodes = []);
     try {
-      const r = await graph.listBaselineNodes({ view: await forkView(change ?? {}, ctrl.signal), query, limit: 200 }, ctrl.signal);
+      const r = await graph.listCommitNodes({ view: await forkView(change ?? {}, ctrl.signal), query, limit: 200 }, ctrl.signal);
       if (!ctrl.signal.aborted) candidateNodes = r.nodes ?? [];
     } catch (e) {
       if (!ctrl.signal.aborted) error = errorMessage(e);
@@ -268,19 +268,19 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       change = c;
       // opening a change is looking at it; working in it is a choice (Work in this change), never a side effect
       refreshWorking(c);
-      if (!baselineName) baselineName = c?.title ? `${c.title}` : `change-${shortId(id)}`;
-      // independent reads go out together; of the baseline, only the nodes the change acts on (ADR 0140): never its
+      if (!commitName) commitName = c?.title ? `${c.title}` : `change-${shortId(id)}`;
+      // independent reads go out together; of the commit, only the nodes the change acts on (ADR 0140): never its
       // whole graph, whose size is the graph's, not the change's
-      const baselineId = c?.baselineId ?? '';
+      const commitId = c?.forkCommit ?? '';
       const [baseNodes, subList, chain] = await Promise.all([
-        changeNodes(id, baselineId, signal),
+        changeNodes(id, commitId, signal),
         graph.listSubChanges(id, signal).then((r) => r.changes ?? []),
         loadAncestors(c, signal),
         graph.listFlows(id, signal).then((r) => (flows = r.flows ?? [])),
       ]);
       nodes = baseNodes;
-      nodesOf = baselineId;
-      if (candidatesOf !== baselineId) searchCandidates();
+      nodesOf = commitId;
+      if (candidatesOf !== commitId) searchCandidates();
       subs = subList;
       ancestors = chain;
       // no scope yet, or one decided since: the option agents work on, else the main flow
@@ -336,7 +336,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     flows = [];
     defining = false;
     extraNodes = [];
-    baselineName = '';
+    commitName = '';
     if (!id) return;
     const ctrl = new AbortController();
     load(id, ctrl.signal);
@@ -615,7 +615,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   // a sub-change commits on its own branch, forked from its parent's, and merges into it (ADR 0103): the same buttons as a
   // root change, only the target is named differently
   const isSub = $derived(!!change?.parentId);
-  const unnamed = $derived(!baselineName.trim());
+  const unnamed = $derived(!commitName.trim());
   const mergeTarget = $derived(isSub ? `parent change ${shortId(change?.parentId)}${mergeInto ? ` (${mergeInto})` : ''}` : mergeInto || 'the branch it was forked from');
   void loadTypes();
   const lcRows = $derived(lifecycleRows(typeCatalog.cat, nodes, attached, view?.nodes ?? [], posts, extraNodes, true));
@@ -714,7 +714,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     }
   }
 
-  /** Declares that the change (on the scope) impacts a node of its baseline, and why: a planned change impact. */
+  /** Declares that the change (on the scope) impacts a node of its commit, and why: a planned change impact. */
   async function addImpact(id: string, rationale = '') {
     const n = candidateNodes.find((x) => x.id === id) ?? nodes.find((x) => x.id === id);
     if (!change?.id || !n?.id) return;
@@ -921,7 +921,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     error = '';
     commitError = '';
     try {
-      await graph.commitChange(change.id, baselineName.trim(), nodes);
+      await graph.commitChange(change.id, commitName.trim(), nodes);
       commitOpen = false;
       await load(change.id);
       notify(`Committed on ${change.branch || 'its own branch'}: the change stays open, merge it when ready.`, 'ok');
@@ -958,8 +958,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     return parts.join(' · ');
   }
 
-  function openBaseline(id: string | undefined) {
-    if (id) void viewBaseline(id, change?.namespace ?? '');
+  function openCommit(id: string | undefined) {
+    if (id) void viewCommit(id, change?.namespace ?? '');
   }
 
 
@@ -1087,8 +1087,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       run: async (a) => {
         if (!commits.canCommit) return commits.commitWhy ?? 'Nothing to commit.';
         const name = String(a.name ?? '').trim();
-        if (name) baselineName = name;
-        if (!baselineName.trim()) baselineName = change?.title || `change-${shortId(change?.id)}`;
+        if (name) commitName = name;
+        if (!commitName.trim()) commitName = change?.title || `change-${shortId(change?.id)}`;
         return commit();
       },
     },
@@ -1372,13 +1372,13 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
               {:else if goalNote.description}<span class="hint"> {goalNote.description}</span>{/if}
             </dd>
           {/if}
-          {#if ch.baselineId}
-            <dt>Starting baseline</dt>
-            <dd><button type="button" class="link mono" onclick={() => openBaseline(ch.baselineId)}>{shortId(ch.baselineId)}</button></dd>
+          {#if ch.forkCommit}
+            <dt>Starting commit</dt>
+            <dd><button type="button" class="link mono" onclick={() => openCommit(ch.forkCommit)}>{shortId(ch.forkCommit)}</button></dd>
           {/if}
-          {#if ch.resultBaselineId}
-            <dt>Resulting baseline</dt>
-            <dd><button type="button" class="link mono" onclick={() => openBaseline(ch.resultBaselineId)}>{shortId(ch.resultBaselineId)}</button></dd>
+          {#if ch.landedCommit}
+            <dt>Resulting commit</dt>
+            <dd><button type="button" class="link mono" onclick={() => openCommit(ch.landedCommit)}>{shortId(ch.landedCommit)}</button></dd>
           {/if}
           {#if ch.createdAt}<dt>Created on</dt><dd>{formatDate(ch.createdAt)}</dd>{/if}
           <dt>Audit</dt>
@@ -1459,8 +1459,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         <SubChangeSync change={ch} {closed} onchange={() => load(selected)} />
         <div class="apply row">
           <div class="grow">
-            <label for="bname">Name of the new baseline</label>
-            <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
+            <label for="bname">Name of the new commit</label>
+            <input id="bname" type="text" bind:value={commitName} disabled={isApplied} />
           </div>
           <button onclick={() => ((commitError = ''), (commitOpen = true))} disabled={applying || unnamed || !commits.canCommit} title={commits.commitWhy ?? `Write ${commits.commitWhat} on the change's own branch: the change stays open`}>
             {applying ? 'Working…' : 'Commit'}

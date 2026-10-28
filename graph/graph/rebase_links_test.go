@@ -20,8 +20,8 @@ func testRebaseMergesLinkSets(t *testing.T, repo Repo) {
 	for _, k := range []string{"NEED-2", "NEED-3", "NEED-4"} {
 		needs[k] = must[domain.Node](t)(importNode(ctx, g, newNode{Key: k, Type: "Need", Properties: map[string]any{"title": k}}))
 	}
-	head := func() domain.BaselineID {
-		return must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)).ID
+	head := func() domain.CommitID {
+		return must[domain.Commit](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)).ID
 	}
 	req := func() domain.NodeRef {
 		return must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, "REQ-1")).Ref()
@@ -52,9 +52,9 @@ func testRebaseMergesLinkSets(t *testing.T, repo Repo) {
 
 	// the change edits a property, the target adds a link: the target's links stand
 	c, _ := propChange(t, g, head(), "props", req(), map[string]any{"title": "PSP v2"})
-	must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
+	must[domain.Commit](t)(g.CommitChange(ctx, c.ID, ""))
 	must[domain.Link](t)(importLink(ctx, g, "satisfies", req(), needs["NEED-2"].Ref(), nil))
-	must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
+	must[domain.Commit](t)(g.apply(ctx, c.ID, ""))
 	if n := must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, "REQ-1")); n.Properties["title"] != "PSP v2" {
 		t.Fatalf("the change's property: %v", n.Properties)
 	}
@@ -63,15 +63,15 @@ func testRebaseMergesLinkSets(t *testing.T, repo Repo) {
 	}
 
 	// both add a link: both stand
-	c = must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "link", BaselineID: head(), OwnBranch: true}))
+	c = must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "link", ForkCommit: head(), OwnBranch: true}))
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: req().ID, Rationale: "link"}))
 	must[domain.Link](t)(g.ImpactLinkCreate(ctx, c.ID, cn.ID, LinkWrite{Type: "satisfies", To: needs["NEED-3"].Ref()}, "", ""))
 	if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
+	must[domain.Commit](t)(g.CommitChange(ctx, c.ID, ""))
 	must[domain.Link](t)(importLink(ctx, g, "satisfies", req(), needs["NEED-4"].Ref(), nil))
-	must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
+	must[domain.Commit](t)(g.apply(ctx, c.ID, ""))
 	if got := targets(); !slices.Equal(got, want("NEED-2", "NEED-3", "NEED-4")) {
 		t.Fatalf("both sides' links stand: %v", got)
 	}

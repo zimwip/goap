@@ -28,7 +28,7 @@ func TestEngineStampsItsCallsForTheLedger(t *testing.T) {
 		mu.Unlock()
 		return inner.Complete(ctx, req)
 	})}
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

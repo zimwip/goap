@@ -2807,7 +2807,7 @@ type Trigger struct {
 	// process.completed | process.failed | methodology.published
 	Event string `protobuf:"bytes,4,opt,name=event,proto3" json:"event,omitempty"`
 	// CEL filter over the event: event.type, event.change {id, title, status,
-	// methodology, goal, baseline}, event.process {id, agent, goal, status}
+	// methodology, goal, commit}, event.process {id, agent, goal, status}
 	Filter string `protobuf:"bytes,5,opt,name=filter,proto3" json:"filter,omitempty"`
 	// schedule triggers: cron expression (5 fields, UTC)
 	Schedule string `protobuf:"bytes,6,opt,name=schedule,proto3" json:"schedule,omitempty"`
@@ -2815,7 +2815,7 @@ type Trigger struct {
 	Goal string `protobuf:"bytes,7,opt,name=goal,proto3" json:"goal,omitempty"`
 	// intent text given to the process
 	Intent string `protobuf:"bytes,8,opt,name=intent,proto3" json:"intent,omitempty"`
-	// new_change: open a change on the latest baseline (default);
+	// new_change: open a change on the latest commit (default);
 	// event_change: work on the change of the event
 	Target string `protobuf:"bytes,9,opt,name=target,proto3" json:"target,omitempty"`
 	// roles of the service identity running the process (ABAC)

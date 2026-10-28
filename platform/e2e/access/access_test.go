@@ -124,7 +124,7 @@ func TestAdminAssignmentAndUnitOfTheUserNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	aliceRef := alice0.Ref()
-	if _, err := g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "alice administers", Baseline: head.ID, By: "test", Edits: []graph.NodeEdit{
+	if _, err := g.CommitEdits(ctx, graph.Edits{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "alice administers", Commit: head.ID, By: "test", Edits: []graph.NodeEdit{
 		{Key: access.PlatformAssignmentKey(access.UserKey("alice")), Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleAdmin}}.Props(), Rationale: "t",
 			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &aliceRef}}},
 	}}); err != nil {
@@ -195,7 +195,7 @@ func TestAssignmentGrantsRoleOnAProject(t *testing.T) {
 		{Key: "ASG:team-a/PROJ-X", Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{"developer"}}.Props(), Rationale: "t",
 			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &teamRef}, {Type: access.LinkAssignsProject, ToKey: "PROJ-X"}}},
 	}
-	if _, err := g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "assignment", Baseline: head.ID, By: "test", BaselineName: "assignment", Edits: edits}); err != nil {
+	if _, err := g.CommitEdits(ctx, graph.Edits{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "assignment", Commit: head.ID, By: "test", CommitName: "assignment", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -247,7 +247,7 @@ func TestPlatformAssignmentGrantsRoleEverywhere(t *testing.T) {
 		{Key: access.PlatformAssignmentKey("team-a"), Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleReader}}.Props(), Rationale: "t",
 			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &teamRef}}},
 	}
-	if _, err := g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "platform assignment", Baseline: head.ID, By: "test", BaselineName: "platform assignment", Edits: edits}); err != nil {
+	if _, err := g.CommitEdits(ctx, graph.Edits{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "platform assignment", Commit: head.ID, By: "test", CommitName: "platform assignment", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -297,7 +297,7 @@ func TestPlatformAssignmentGrantsAdminPastTheFloor(t *testing.T) {
 		{Key: access.PlatformAssignmentKey("team-a"), Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleAdmin}}.Props(), Rationale: "t",
 			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &teamRef}}},
 	}
-	if _, err := g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "admin assignment", Baseline: head.ID, By: "test", BaselineName: "admin assignment", Edits: edits}); err != nil {
+	if _, err := g.CommitEdits(ctx, graph.Edits{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "admin assignment", Commit: head.ID, By: "test", CommitName: "admin assignment", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 	dev := authz.Principal{Subject: "dev", Org: "team-a"}
@@ -398,7 +398,7 @@ func TestRolesDependOnTheProject(t *testing.T) {
 	}
 	edits := []graph.NodeEdit{project("PROJ-A"), project("PROJ-B"), project("PROJ-C"),
 		assign("USR:eve", "PROJ-A", "developer"), assign("team-a", "PROJ-A", "tester"), assign("USR:eve", "PROJ-B", "tech_lead")}
-	if _, err := g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "assignments", Baseline: head.ID, By: "test", Edits: edits}); err != nil {
+	if _, err := g.CommitEdits(ctx, graph.Edits{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "assignments", Commit: head.ID, By: "test", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 	eve := authz.Principal{Subject: "eve"}

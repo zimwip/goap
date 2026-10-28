@@ -24,7 +24,7 @@ func codeState(t *testing.T, g *graph.Graph) (nodes map[string]string, links, su
 	if err != nil {
 		t.Fatal(err)
 	}
-	all, fresh, err := g.BaselineGraph(ctx, head.ID)
+	all, fresh, err := g.CommitGraph(ctx, head.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

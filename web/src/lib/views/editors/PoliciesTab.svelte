@@ -19,7 +19,7 @@
 
   let policies = $state<{ node: GraphNode; policy: Policy }[]>([]);
   let users = $state<{ node: GraphNode; user: User }[]>([]);
-  let baselineId = '';
+  let commitId = '';
   let head: HeadGraph | undefined;
   let loading = $state(true);
   let error = $state('');
@@ -30,7 +30,7 @@
     error = '';
     try {
       const h = await headGraph(ns.organisation);
-      baselineId = h.baselineId;
+      commitId = h.commitId;
       head = h;
       policies = policiesOf(h.nodes);
       users = usersOf(h.nodes);
@@ -51,7 +51,7 @@
     removing = i;
     error = '';
     try {
-      await applyOnMain(ns.organisation, `Retire policy ${p.resource}/${p.action}`, 'Retire an access policy', baselineId, [retireNodeItem(n)]);
+      await applyOnMain(ns.organisation, `Retire policy ${p.resource}/${p.action}`, 'Retire an access policy', commitId, [retireNodeItem(n)]);
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -90,7 +90,7 @@
       const units = (head?.nodes ?? []).filter((n) => n.type === nodeTypes.orgUnit);
       const unit = units.find((n) => n.key === newUserUnit(units));
       if (!unit) throw new Error('no organisation unit to put the user in');
-      await applyOnMain(ns.organisation, `User ${subject}`, 'Add a user', baselineId, [
+      await applyOnMain(ns.organisation, `User ${subject}`, 'Add a user', commitId, [
         createNodeItem(userKey(subject), nodeTypes.user, userProps(u), [{ type: linkTypes.memberOf, to: refOf(unit) }]),
       ]);
       uSubject = uName = uEmail = '';
@@ -106,7 +106,7 @@
     error = '';
     try {
       // a user is never deleted: the account is deactivated (lifecycle user, ADR 0076)
-      await applyOnMain(ns.organisation, `Deactivate user ${u.subject}`, 'Deactivate a user', baselineId, [{ pre: refOf(n), state: 'deactivated', rationale: `Deactivate ${n.key}` }]);
+      await applyOnMain(ns.organisation, `Deactivate user ${u.subject}`, 'Deactivate a user', commitId, [{ pre: refOf(n), state: 'deactivated', rationale: `Deactivate ${n.key}` }]);
     } catch (e) {
       error = errorMessage(e);
     }
@@ -130,7 +130,7 @@
     addError = '';
     try {
       const p: Policy = { rule: rule.trim(), resource: resource.trim(), action: action.trim(), effect: policyEffect };
-      await applyOnMain(ns.organisation, `Policy ${p.resource}/${p.action}`, 'Add an access policy', baselineId, [
+      await applyOnMain(ns.organisation, `Policy ${p.resource}/${p.action}`, 'Add an access policy', commitId, [
         createNodeItem(newPolicyKey(p), nodeTypes.policy, policyProps(p)),
       ]);
       rule = '';

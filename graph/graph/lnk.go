@@ -23,7 +23,7 @@ type lnkState struct {
 	reg  *lnk.Registry
 
 	mu      sync.Mutex
-	head    domain.BaselineID // the head of the platform namespace the sources were read at
+	head    domain.CommitID // the head of the platform namespace the sources were read at
 	read    bool
 	sources []lnk.Source
 	broken  map[string]error // the declarations that declare no valid source, by name
@@ -99,7 +99,7 @@ func (g *Graph) Sources(ctx context.Context) ([]lnk.Source, error) {
 		g.lnk.checked, g.lnk.moves = time.Now(), moves
 		return g.lnk.sources, nil
 	}
-	nodes, err := g.ViewNodesOfType(ctx, View{Namespace: domain.NamespacePlatform, Branch: domain.MainBranch, Baseline: head.ID}, domain.TypeSource)
+	nodes, err := g.ViewNodesOfType(ctx, View{Namespace: domain.NamespacePlatform, Branch: domain.MainBranch, Commit: head.ID}, domain.TypeSource)
 	if err != nil {
 		return nil, err
 	}

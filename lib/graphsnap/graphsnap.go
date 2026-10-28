@@ -17,14 +17,14 @@ import (
 // Graph is the part of the graph a snapshot reads.
 type Graph interface {
 	// BranchHeadHeader is the header of the head of a branch, never its state.
-	BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Baseline, error)
-	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
+	BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Commit, error)
+	CommitGraph(ctx context.Context, id domain.CommitID) ([]domain.Node, []domain.Link, error)
 }
 
 // Reader is the one way the services read the graph (ADR 0145): At gives the state of a namespace at a commit (a
-// baseline), Head names the commit at the head of its main branch. A commit never changes, so the state at one is a
+// commit), Head names the commit at the head of its main branch. A commit never changes, so the state at one is a
 // pure function of it: the reader keeps the last state it gave per namespace and reaches the next commit asked from it
-// by the nodes committed in between (Graph.BaselineDelta), else by reading that commit whole. Nothing is kept about the
+// by the nodes committed in between (Graph.CommitDelta), else by reading that commit whole. Nothing is kept about the
 // head: a reader asks the graph for it each time.
 type Reader struct {
 	Graph Graph
@@ -42,7 +42,7 @@ type nsState struct {
 type State struct {
 	Namespace string
 	// ID is the commit ("": the namespace holds none yet, Nodes and Links are empty).
-	ID    domain.BaselineID
+	ID    domain.CommitID
 	Nodes []domain.Node
 	Links []domain.Link
 }
@@ -65,7 +65,7 @@ func (r *Reader) of(namespace string) *nsState {
 }
 
 // Head returns the commit at the head of namespace's main ("": none yet).
-func (r *Reader) Head(ctx context.Context, namespace string) (domain.BaselineID, error) {
+func (r *Reader) Head(ctx context.Context, namespace string) (domain.CommitID, error) {
 	b, err := r.Graph.BranchHeadHeader(ctx, namespace, domain.MainBranch)
 	if errors.Is(err, graphapi.ErrNotFound) {
 		return "", nil
@@ -74,7 +74,7 @@ func (r *Reader) Head(ctx context.Context, namespace string) (domain.BaselineID,
 }
 
 // At returns the state of namespace at the commit id, with its suspect links when suspects.
-func (r *Reader) At(ctx context.Context, namespace string, id domain.BaselineID, suspects bool) (State, error) {
+func (r *Reader) At(ctx context.Context, namespace string, id domain.CommitID, suspects bool) (State, error) {
 	n := r.of(namespace)
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -97,7 +97,7 @@ type View[T any] struct {
 	// Build makes the view of the states of the namespaces, in the order of Namespaces.
 	Build func(states []State) T
 	// Heads, when set, keeps the heads the view was built from until its owner says they moved (Heads.Moved, on the
-	// baseline events of the graph): the view follows the graph's events instead of asking for the heads at each Get.
+	// commit events of the graph): the view follows the graph's events instead of asking for the heads at each Get.
 	Heads *Heads
 
 	// building serializes the Gets, which read the graph; mu guards only the view built, so that Peek never waits for
@@ -107,15 +107,15 @@ type View[T any] struct {
 	mu       sync.Mutex
 	have     bool
 	cur      T
-	ids      []domain.BaselineID
+	ids      []domain.CommitID
 }
 
 // Get returns the view of the heads and the commits it was built from, in the order of Namespaces.
-func (v *View[T]) Get(ctx context.Context) (T, []domain.BaselineID, error) {
+func (v *View[T]) Get(ctx context.Context) (T, []domain.CommitID, error) {
 	v.building.Lock()
 	defer v.building.Unlock()
 	cur, have, built := v.last()
-	ids := make([]domain.BaselineID, len(v.Namespaces))
+	ids := make([]domain.CommitID, len(v.Namespaces))
 	for i, ns := range v.Namespaces {
 		id, err := v.head(ctx, ns)
 		if err != nil {
@@ -142,7 +142,7 @@ func (v *View[T]) Get(ctx context.Context) (T, []domain.BaselineID, error) {
 }
 
 // head is the commit at the head of namespace's main: the one Heads keeps, else asked.
-func (v *View[T]) head(ctx context.Context, namespace string) (domain.BaselineID, error) {
+func (v *View[T]) head(ctx context.Context, namespace string) (domain.CommitID, error) {
 	if v.Heads == nil {
 		return v.Reader.Head(ctx, namespace)
 	}
@@ -153,7 +153,7 @@ func (v *View[T]) head(ctx context.Context, namespace string) (domain.BaselineID
 	return b.ID, err
 }
 
-func (v *View[T]) last() (T, bool, []domain.BaselineID) {
+func (v *View[T]) last() (T, bool, []domain.CommitID) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	return v.cur, v.have, v.ids
@@ -167,39 +167,39 @@ func (v *View[T]) Peek() (T, bool) {
 }
 
 // One is the view of the head of one namespace: Build takes its commit, nodes and links.
-func One[T any](r *Reader, namespace string, suspects bool, build func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) T) *View[T] {
+func One[T any](r *Reader, namespace string, suspects bool, build func(id domain.CommitID, nodes []domain.Node, links []domain.Link) T) *View[T] {
 	return &View[T]{Reader: r, Namespaces: []string{namespace}, Suspects: suspects,
 		Build: func(s []State) T { return build(s[0].ID, s[0].Nodes, s[0].Links) }}
 }
 
 // First is the commit of a view of one namespace.
-func First(ids []domain.BaselineID) domain.BaselineID {
+func First(ids []domain.CommitID) domain.CommitID {
 	if len(ids) == 0 {
 		return ""
 	}
 	return ids[0]
 }
 
-// SuspectReader is a graph that gives the suspect links of a baseline (*graph.Graph, the graph service client): the
-// links whose source is in the baseline and whose target is there at another version.
+// SuspectReader is a graph that gives the suspect links of a commit (*graph.Graph, the graph service client): the
+// links whose source is in the commit and whose target is there at another version.
 type SuspectReader interface {
-	SuspectLinks(ctx context.Context, id domain.BaselineID) ([]domain.Link, error)
+	SuspectLinks(ctx context.Context, id domain.CommitID) ([]domain.Link, error)
 }
 
-// suspectsAtOnce reads a baseline and its suspect links in one call (the graph service client).
+// suspectsAtOnce reads a commit and its suspect links in one call (the graph service client).
 type suspectsAtOnce interface {
-	BaselineGraphWithSuspects(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, []domain.Link, error)
+	CommitGraphWithSuspects(ctx context.Context, id domain.CommitID) ([]domain.Node, []domain.Link, []domain.Link, error)
 }
 
-// BaselineWithSuspects reads a baseline with its suspect links too. A link names the version its target had when it
+// CommitWithSuspects reads a commit with its suspect links too. A link names the version its target had when it
 // was written, and editing the target leaves it in place, suspect: it is a reference all the same (a sub-project's
-// parent, the project of an Assignment, ADR 0120). A graph that gives no suspect links gives the baseline alone.
-func BaselineWithSuspects(ctx context.Context, g Graph, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
+// parent, the project of an Assignment, ADR 0120). A graph that gives no suspect links gives the commit alone.
+func CommitWithSuspects(ctx context.Context, g Graph, id domain.CommitID) ([]domain.Node, []domain.Link, error) {
 	if r, ok := g.(suspectsAtOnce); ok {
-		nodes, links, sus, err := r.BaselineGraphWithSuspects(ctx, id)
+		nodes, links, sus, err := r.CommitGraphWithSuspects(ctx, id)
 		return nodes, append(links, sus...), err
 	}
-	nodes, links, err := g.BaselineGraph(ctx, id)
+	nodes, links, err := g.CommitGraph(ctx, id)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -213,27 +213,27 @@ func BaselineWithSuspects(ctx context.Context, g Graph, id domain.BaselineID) ([
 	return nodes, links, nil
 }
 
-// DeltaReader is a graph that reads what moved between two baselines of a branch (ADR 0143 §4: *graph.Graph, the graph
+// DeltaReader is a graph that reads what moved between two commits of a branch (ADR 0143 §4: *graph.Graph, the graph
 // service client); refused with graphapi.ErrInvalid when it cannot, and the head is then read whole.
 type DeltaReader interface {
-	BaselineDelta(ctx context.Context, from, to domain.BaselineID) (graphapi.BaselineDelta, error)
+	CommitDelta(ctx context.Context, from, to domain.CommitID) (graphapi.CommitDelta, error)
 }
 
 // Head is the state of the head of a branch as a snapshot follows it (ADR 0143 §4): read whole once, then moved by the
 // nodes that committed since, so that a commit costs a snapshot the nodes it touched rather than the namespace. It keeps
-// the links whose target it holds, suspect ones included when read with them; State gives them as a baseline read gives
+// the links whose target it holds, suspect ones included when read with them; State gives them as a commit read gives
 // them.
 type Head struct {
-	// ID is the baseline the state is of ("": none read yet, or the empty state).
-	ID       domain.BaselineID
+	// ID is the commit the state is of ("": none read yet, or the empty state).
+	ID       domain.CommitID
 	suspects bool
 	nodes    map[domain.NodeID]domain.Node
 	out      map[domain.NodeID][]domain.Link
 }
 
-// Move brings the state to the baseline to: from the nodes moved since the state's baseline when g reads deltas,
+// Move brings the state to the commit to: from the nodes moved since the state's commit when g reads deltas,
 // else (or when the delta is refused) by reading to whole, with its suspect links when suspects.
-func (h *Head) Move(ctx context.Context, g Graph, to domain.BaselineID, suspects bool) error {
+func (h *Head) Move(ctx context.Context, g Graph, to domain.CommitID, suspects bool) error {
 	if to == h.ID && h.nodes != nil && h.suspects == suspects {
 		return nil
 	}
@@ -242,7 +242,7 @@ func (h *Head) Move(ctx context.Context, g Graph, to domain.BaselineID, suspects
 		return nil
 	}
 	if dr, ok := g.(DeltaReader); ok && h.ID != "" && h.nodes != nil && h.suspects == suspects {
-		d, err := dr.BaselineDelta(ctx, h.ID, to)
+		d, err := dr.CommitDelta(ctx, h.ID, to)
 		if err == nil {
 			h.apply(d)
 			h.ID = to
@@ -252,10 +252,10 @@ func (h *Head) Move(ctx context.Context, g Graph, to domain.BaselineID, suspects
 			return err
 		}
 	}
-	read := g.BaselineGraph
+	read := g.CommitGraph
 	if suspects {
-		read = func(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
-			return BaselineWithSuspects(ctx, g, id)
+		read = func(ctx context.Context, id domain.CommitID) ([]domain.Node, []domain.Link, error) {
+			return CommitWithSuspects(ctx, g, id)
 		}
 	}
 	nodes, links, err := read(ctx, to)
@@ -274,7 +274,7 @@ func (h *Head) Move(ctx context.Context, g Graph, to domain.BaselineID, suspects
 }
 
 // apply lays a delta over the state: the moved nodes take their new version and its outgoing links, the removed ones go.
-func (h *Head) apply(d graphapi.BaselineDelta) {
+func (h *Head) apply(d graphapi.CommitDelta) {
 	for _, id := range d.Removed {
 		delete(h.nodes, id)
 		delete(h.out, id)

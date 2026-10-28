@@ -16,7 +16,7 @@ import (
 // the apply follow. Services that project their own definitions into the graph
 // (registry, seeds) use it.
 
-// Commit runs the edits as one change, through the operations every change uses (ADR 0076): it opens the change on a
+// CommitEdits runs the edits as one change, through the operations every change uses (ADR 0076): it opens the change on a
 // branch of its own; a created node is a ImpactNodeCreate, a modified one a ImpactNodeCheckout with its ImpactNodeUpdate and link edits;
 // the state edits are transitions (ImpactNodeTransition, on the draft), each impact that modifies its node is accepted by
 // the producer and one that modifies nothing withdrawn (ADR 0102), and the change is applied. The operations are the
@@ -25,8 +25,8 @@ import (
 // behind; when the branch cannot be merged without conflict (another change moved a node meanwhile) ErrConflict is
 // returned and nothing is kept either: the producer reads again and rebuilds its edits.
 // A created node of a structure or a User must name its required parent (checkRequiredParent, ADR 0040).
-// The baseline returned is a header, without its state: reading it costs the size of the namespace (ADR 0137).
-func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err error) {
+// The commit returned is a header, without its state: reading it costs the size of the namespace (ADR 0137).
+func (g *Graph) CommitEdits(ctx context.Context, in Edits) (res CommitResult, err error) {
 	if len(in.Edits) == 0 {
 		return res, fmt.Errorf("a commit needs at least one edit: %w", ErrInvalid)
 	}
@@ -50,9 +50,9 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 }
 
 // commitEdits is the work of Commit, in the transaction of the call.
-func (g *Graph) commitEdits(ctx context.Context, in Commit) (res CommitResult, err error) {
+func (g *Graph) commitEdits(ctx context.Context, in Edits) (res CommitResult, err error) {
 	c, err := g.CreateChange(ctx, NewChange{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent, Methodology: in.Methodology,
-		BaselineID: in.Baseline, Branch: in.Branch, Data: in.Data, OwnBranch: true, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID})
+		ForkCommit: in.Commit, Branch: in.Branch, Data: in.Data, OwnBranch: true, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID})
 	if err != nil {
 		return res, err
 	}
@@ -122,7 +122,7 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit) (res CommitResult, e
 			links = append(links, LinkWrite{Type: l.Type, To: *to, Properties: l.Props})
 		}
 		if e.Pre != nil {
-			// the impact names the version the edit starts from: a stale one conflicts (it is not in the reference baseline)
+			// the impact names the version the edit starts from: a stale one conflicts (it is not in the reference commit)
 			added, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: e.Pre, Rationale: why(e), ProducedBy: in.By}})
 			if err != nil {
 				return res, fmt.Errorf("%s: %w", nodeName(e), err)
@@ -225,7 +225,7 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit) (res CommitResult, e
 		return res, fmt.Errorf("commit %q: %w", in.Title, err)
 	}
 	// the writer's events ride on the commit (ADR 0136): raised with change.applied, in its transaction
-	if res.Baseline, err = g.apply(withCarried(ctx, in.Events), c.ID, in.BaselineName); err != nil {
+	if res.Commit, err = g.apply(withCarried(ctx, in.Events), c.ID, in.CommitName); err != nil {
 		return res, err
 	}
 	if done, err := g.Change(ctx, c.ID); err != nil {

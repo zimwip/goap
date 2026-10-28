@@ -163,7 +163,7 @@ func main() {
 	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
 	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
 	g.Resolvers = graphsvc.Resolvers()   // the sources of the logical URLs beyond its namespaces (ADR 0154)
-	// the events of the graph (changes, nodes, baselines) go through its outbox to the bus (ADR 0136), named apart
+	// the events of the graph (changes, nodes, commits) go through its outbox to the bus (ADR 0136), named apart
 	// from the platform graph's in a content graph
 	if content {
 		g.Origin = "graph-content"
@@ -203,7 +203,7 @@ func main() {
 	// the hooks of the graph are set before the seeds start (they run in the background, and write through them).
 	// The platform graph delivers the policies, the organisation and the projects to every graph, itself included, the
 	// same way (ADR 0154 §9): a directory over the platform graph (this one in process, else its client) keeps its
-	// snapshot until the platform's baseline events say the organisation moved
+	// snapshot until the platform's commit events say the organisation moved
 	var source access.Graph = g
 	if content {
 		// the organisation and the projects are the platform graph's: its directory places the changes and the versions
@@ -212,11 +212,11 @@ func main() {
 	}
 	directory := &access.Directory{Graph: source}
 	if events != nil {
-		// the heads of the branches this graph serves are kept in memory, moved by its commits and by the baseline
+		// the heads of the branches this graph serves are kept in memory, moved by its commits and by the commit
 		// events of the other processes sharing its store (each carries its header and the versions it moved)
 		g.FollowHeads()
-		if err := events.Subscribe(fmt.Sprintf(domain.SubjectBaselineAdvanced, "*"), func(data []byte) {
-			var ev domain.BaselineEvent
+		if err := events.Subscribe(fmt.Sprintf(domain.SubjectCommitAdvanced, "*"), func(data []byte) {
+			var ev domain.CommitEvent
 			if json.Unmarshal(data, &ev) == nil {
 				g.HeadEvent(ev)
 			}

@@ -22,7 +22,7 @@ func blackboard(t *testing.T, withTest bool) domain.Blackboard {
 		t.Fatal(err)
 	}
 	b, _ := g.BranchHead(ctx, "", domain.MainBranch)
-	c, _ := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "c", BaselineID: b.ID})
+	c, _ := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "c", ForkCommit: b.ID})
 	ref := req.Ref()
 	if _, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "impacted"}}); err != nil {
 		t.Fatal(err)

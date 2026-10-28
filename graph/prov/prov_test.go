@@ -62,7 +62,7 @@ func TestImpactEvents(t *testing.T) {
 		domain.ImpactEvent{ID: "v2", Change: "c1", Impact: "i1", Op: domain.ImpactRebased, Pre: &head},
 		domain.ImpactEvent{ID: "v3", Change: "c1", Impact: "i1", Op: domain.ImpactTransitioned, Post: &post, Execution: "e1"},
 		domain.ImpactEvent{ID: "v4", Change: "c1", Op: domain.ImpactAdopted, Flow: "f1", Stale: []string{"e0"}, By: "bob"},
-		domain.ImpactEvent{ID: "v5", Change: "c1", Impact: "i1", Op: domain.ImpactCommitted, Committed: &merged, Baseline: "b9"},
+		domain.ImpactEvent{ID: "v5", Change: "c1", Impact: "i1", Op: domain.ImpactCommitted, Committed: &merged, Commit: "b9"},
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -73,9 +73,9 @@ func TestImpactEvents(t *testing.T) {
 	if !refs(find(t, doc, "urn:goap:node:n1@v4")["prov:wasDerivedFrom"])["urn:goap:node:n1@v3"] {
 		t.Fatal("the merge version derives from the version written")
 	}
-	b := find(t, doc, "urn:goap:baseline:b9")
+	b := find(t, doc, "urn:goap:commit:b9")
 	if !refs(b["prov:hadMember"])["urn:goap:node:n1@v4"] || !refs(b["prov:wasGeneratedBy"])["urn:goap:change:c1"] {
-		t.Fatalf("baseline: %v", b)
+		t.Fatalf("commit: %v", b)
 	}
 	if !refs(find(t, doc, "urn:goap:adoption:v4")["goap:replaces"])["urn:goap:execution:e0"] {
 		t.Fatal("the adoption replaces the stale runs")

@@ -176,9 +176,9 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 	c.Namespace = domain.NamespaceOf(parent.Namespace)
 	c.Branch = own.Name
 	in.OwnBranch = true
-	if c.BaselineID == "" {
-		// the lasting baseline under the branch of the parent: the branch of a change holds none (ADR 0140)
-		c.BaselineID = own.ForkBaseline
+	if c.ForkCommit == "" {
+		// the lasting commit under the branch of the parent: the branch of a change holds none (ADR 0140)
+		c.ForkCommit = own.ForkCommit
 	}
 	if c.Methodology == "" {
 		c.Methodology = parent.Methodology
@@ -334,17 +334,17 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if err := g.scopeChange(ctx, tx, &sub); err != nil {
 				return err
 			}
-			fork, err := headerOf(ctx, tx, sub.BaselineID)
+			fork, err := headerOf(ctx, tx, sub.ForkCommit)
 			if err != nil {
 				return err
 			}
 			// forked as a sub-change is created (createChange): at the point of the branch of its parent (ADR 0103, 0140)
-			own := domain.Branch{Ephemeral: true, Name: changeBranchName(sub.ID), Namespace: sub.Namespace, Parent: sub.Branch, ForkBaseline: fork.ID,
+			own := domain.Branch{Ephemeral: true, Name: changeBranchName(sub.ID), Namespace: sub.Namespace, Parent: sub.Branch, ForkCommit: fork.ID,
 				Origin: domain.ChangeBranchOrigin(sub.ID), Intent: domain.IntentDerive, Status: domain.BranchOpen, CreatedAt: g.now()}
 			if pb, err := tx.Branch(ctx, sub.Namespace, sub.Branch); err != nil {
 				return err
 			} else if pb.Ephemeral {
-				if own.ForkBaseline, own.ForkSeq, err = forkPoint(ctx, tx, pb); err != nil {
+				if own.ForkCommit, own.ForkSeq, err = forkPoint(ctx, tx, pb); err != nil {
 					return err
 				}
 			}

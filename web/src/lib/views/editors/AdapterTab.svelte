@@ -118,7 +118,7 @@
       if (isNew && existing) throw new Error(`an adapter named ${def.name} already exists`);
       const props = adapterDefProps({ name: def.name ?? '', description: def.description ?? '', mcp: def.mcp ?? '', connector: def.connector ?? '', language: SCRIPT_LANGUAGE, code: def.code ?? '', params: def.params ?? [] });
       const item = existing ? updateNodeItem(existing, props) : createNodeItem(key, ADAPTER_DEF_TYPE, props);
-      await applyOnMain(ns.platform, `Adapter ${def.name}`, `${existing ? 'Update' : 'Create'} adapter ${def.name} (${def.mcp} on ${def.connector})`, h.baselineId, [item]);
+      await applyOnMain(ns.platform, `Adapter ${def.name}`, `${existing ? 'Update' : 'Create'} adapter ${def.name} (${def.mcp} on ${def.connector})`, h.commitId, [item]);
       await refreshTools();
       notify(`Adapter ${def.name} saved`, 'ok');
       if (isNew) {
@@ -138,7 +138,7 @@
       const h = await headGraph(ns.platform);
       const existing = findNode(h, ns.platform, ADAPTER_DEF_TYPE, adapterDefKey(a.name));
       if (!existing) throw new Error(`adapter ${a.name} is not on the graph`);
-      await applyOnMain(ns.platform, `Retire adapter ${a.name}`, `Retire adapter ${a.name}`, h.baselineId, [retireNodeItem(existing)]);
+      await applyOnMain(ns.platform, `Retire adapter ${a.name}`, `Retire adapter ${a.name}`, h.commitId, [retireNodeItem(existing)]);
       await refreshTools();
       closeTab(tab.id, { force: true });
     } catch (e) {

@@ -28,7 +28,7 @@
   } = $props();
 
   const TARGET_LABELS: Record<string, string> = {
-    new_change: 'new change (latest baseline)',
+    new_change: 'new change (latest commit)',
     event_change: 'change from the event',
   };
 
@@ -135,7 +135,7 @@
             path="{p}.filter"
           />
           <p class="hint">
-            Variables: <code>event.type</code>, <code>event.change.{'{'}id, title, status, methodology, goal, baseline{'}'}</code>,
+            Variables: <code>event.type</code>, <code>event.change.{'{'}id, title, status, methodology, goal, commit{'}'}</code>,
             <code>event.process.{'{'}id, agent, goal, status{'}'}</code>.
           </p>
         </div>

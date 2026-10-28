@@ -11,15 +11,15 @@ import (
 	"github.com/zimwip/goap/contracts/graphapi"
 )
 
-// The reads of the current graph through a view (ADR 0157): a lasting branch at a baseline, or a change on a flow
+// The reads of the current graph through a view (ADR 0157): a lasting branch at a commit, or a change on a flow
 // (its fork, its commits and its drafts). One world answers them all, read by node: what a read costs follows what it
 // asks, never the size of the namespace.
 
 // world is a view opened in a transaction.
 type world struct {
 	view View
-	// baseline is the baseline the world starts from: the one of a branch view, the fork of a change.
-	baseline domain.BaselineID
+	// commit is the commit the world starts from: the one of a branch view, the fork of a change.
+	commit domain.CommitID
 	// namespace is the namespace of the world.
 	namespace string
 	// change, flow and the rest are set for a change view only.
@@ -47,22 +47,22 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View, reach *Reach) (*wo
 	}
 	w := &world{view: v, reader: &draftReader{byNode: map[domain.NodeID]domain.Draft{}}, vis: map[domain.NodeRef]bool{}}
 	if !v.IsChange() {
-		w.baseline, w.namespace = v.Baseline, domain.NamespaceOf(v.Namespace)
+		w.commit, w.namespace = v.Commit, domain.NamespaceOf(v.Namespace)
 		w.reach = reach.in(w.namespace)
 		w.filter = g.filterOf(w.reach)
-		if w.baseline == "" {
+		if w.commit == "" {
 			head, err := g.headHeader(ctx, tx, w.namespace, v.Branch)
 			if err != nil {
 				return nil, err
 			}
-			w.baseline = head.ID
+			w.commit = head.ID
 		} else {
-			h, err := tx.BaselineHeader(ctx, w.baseline)
+			h, err := tx.CommitHeader(ctx, w.commit)
 			if err != nil {
 				return nil, err
 			}
 			if h.Namespace != w.namespace || h.Branch != v.Branch {
-				return nil, fmt.Errorf("baseline %s is of %s/%s, not of %s: %w", w.baseline, h.Namespace, h.Branch, v, ErrInvalid)
+				return nil, fmt.Errorf("commit %s is of %s/%s, not of %s: %w", w.commit, h.Namespace, h.Branch, v, ErrInvalid)
 			}
 		}
 		return w, nil
@@ -71,7 +71,7 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View, reach *Reach) (*wo
 	if err != nil {
 		return nil, err
 	}
-	w.change, w.flow, w.baseline, w.namespace = &c, c.ResolveFlow(v.Flow), c.BaselineID, domain.NamespaceOf(c.Namespace)
+	w.change, w.flow, w.commit, w.namespace = &c, c.ResolveFlow(v.Flow), c.ForkCommit, domain.NamespaceOf(c.Namespace)
 	w.reach = reach.in(w.namespace)
 	w.filter = g.filterOf(w.reach)
 	if w.impacts, err = g.newFlowNodes(tx, c, w.flow).nodes(ctx); err != nil {
@@ -111,14 +111,14 @@ func (g *Graph) openWorld(ctx context.Context, tx Tx, v View, reach *Reach) (*wo
 // at reads the versions some nodes have in the world (absent: not in it).
 func (w *world) at(ctx context.Context, tx Tx, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
 	if w.change == nil {
-		return versionsAt(ctx, tx, w.baseline, ids)
+		return versionsAt(ctx, tx, w.commit, ids)
 	}
 	var at map[domain.NodeID]domain.Version
 	var err error
 	if w.own {
 		at, err = branchVersions(ctx, tx, w.branch, ids)
 	} else {
-		at, err = versionsAt(ctx, tx, w.baseline, ids)
+		at, err = versionsAt(ctx, tx, w.commit, ids)
 	}
 	if err != nil {
 		return nil, err
@@ -162,7 +162,7 @@ func (w *world) ref(ctx context.Context, tx Tx, id domain.NodeID, key string) (d
 		}
 		if id == "" && w.change == nil {
 			// the node of the key and its version in the state, in one statement when the store reads them so
-			found, v, decided, err := selectKey(ctx, tx, w.baseline, key)
+			found, v, decided, err := selectKey(ctx, tx, w.commit, key)
 			if err != nil {
 				return domain.NodeRef{}, err
 			}
@@ -515,7 +515,7 @@ func (w *world) entering(ctx context.Context, tx Tx, nodeID domain.NodeID) ([]do
 }
 
 // ViewNodes returns a page of the nodes of a view ordered by key, matching q (ADR 0157): for a branch view the page of
-// its baseline (BaselineNodes); for a change view the page of its fork with what the change wrote laid over it (its
+// its commit (CommitNodes); for a change view the page of its fork with what the change wrote laid over it (its
 // commits, its drafts, the nodes it created), read for those nodes only.
 func (g *Graph) ViewNodes(ctx context.Context, v View, q NodeQuery) (page NodePage, err error) {
 	reach, err := g.reachOf(ctx)
@@ -532,7 +532,7 @@ func (g *Graph) ViewNodes(ctx context.Context, v View, q NodeQuery) (page NodePa
 			return err
 		}
 		page, err = w.page(ctx, tx, q)
-		page.Baseline = w.baseline
+		page.Commit = w.commit
 		return err
 	})
 	return page, err
@@ -572,13 +572,13 @@ func (w *world) page(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error) 
 		return w.nodes(ctx, tx, q)
 	}
 	if q.Change != "" {
-		nodes, err := changeNodesIn(ctx, tx, w.baseline, q.Change)
+		nodes, err := changeNodesIn(ctx, tx, w.commit, q.Change)
 		return pageNodes(nodes, q), err
 	}
-	if w.baseline == "" {
+	if w.commit == "" {
 		return NodePage{}, nil
 	}
-	b, err := tx.Baseline(ctx, w.baseline)
+	b, err := tx.Commit(ctx, w.commit)
 	if err != nil || len(b.Nodes) == 0 {
 		return NodePage{}, err
 	}
@@ -590,13 +590,13 @@ const typeBatch = 500
 
 // ofType reads the nodes of a type a branch view holds whose key, type or a string property contains text, by id, at
 // most limit (more: the view holds others): the node rows of the type a batch at a time (index node_type), each batch
-// selected at the baseline and read through the page of the store (its text and reach filters). Its cost follows the
+// selected at the commit and read through the page of the store (its text and reach filters). Its cost follows the
 // nodes read, never the size of the state, which a page reads whole. A change view is read by its page (ok false).
 func (w *world) ofType(ctx context.Context, tx Tx, typ, text string, limit int) (nodes []domain.Node, more, ok bool, err error) {
 	if w.change != nil {
 		return nil, false, false, nil
 	}
-	if w.baseline == "" || limit <= 0 {
+	if w.commit == "" || limit <= 0 {
 		return nil, false, true, nil
 	}
 	var after domain.NodeID
@@ -606,7 +606,7 @@ func (w *world) ofType(ctx context.Context, tx Tx, typ, text string, limit int) 
 			return nodes, false, true, err
 		}
 		after = ids[len(ids)-1]
-		at, err := versionsAt(ctx, tx, w.baseline, ids)
+		at, err := versionsAt(ctx, tx, w.commit, ids)
 		if err != nil {
 			return nil, false, true, err
 		}
@@ -632,7 +632,7 @@ func (w *world) ofType(ctx context.Context, tx Tx, typ, text string, limit int) 
 // nodes the change holds another version of (read node by node).
 func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error) {
 	if q.Change != "" { // the nodes the impacts of a change act on, as the fork has them
-		nodes, err := changeNodesIn(ctx, tx, w.baseline, q.Change)
+		nodes, err := changeNodesIn(ctx, tx, w.commit, q.Change)
 		return pageNodes(nodes, q), err
 	}
 	// the nodes of the world the change wrote: their versions in it
@@ -673,8 +673,8 @@ func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error)
 
 	// the fork, the nodes the change wrote left out, paged with room for them
 	var page NodePage
-	if w.baseline != "" {
-		b, err := tx.Baseline(ctx, w.baseline)
+	if w.commit != "" {
+		b, err := tx.Commit(ctx, w.commit)
 		if err != nil {
 			return NodePage{}, err
 		}
@@ -719,14 +719,14 @@ func (g *Graph) ViewVersions(ctx context.Context, v View, ids []domain.NodeID) (
 		if err != nil {
 			return err
 		}
-		st.Namespace, st.Baseline = w.namespace, w.baseline
+		st.Namespace, st.Commit = w.namespace, w.commit
 		if w.change == nil && domain.BranchOf(v.Branch) == domain.MainBranch {
-			if v.Baseline == "" {
+			if v.Commit == "" {
 				st.MainHead = true
 			} else if head, err := branchHeadHeader(ctx, tx, w.namespace, domain.MainBranch); err != nil {
 				return err
 			} else {
-				st.MainHead = head.ID == v.Baseline
+				st.MainHead = head.ID == v.Commit
 			}
 		}
 		st.Versions, err = w.at(ctx, tx, ids)

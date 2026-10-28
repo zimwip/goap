@@ -26,12 +26,12 @@ func testLinkSets(t *testing.T, repo Repo) {
 	}
 	commit := func(e NodeEdit) domain.Node {
 		t.Helper()
-		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "edit", By: "t", Edits: []NodeEdit{e}}); err != nil {
+		if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "edit", By: "t", Edits: []NodeEdit{e}}); err != nil {
 			t.Fatal(err)
 		}
 		return must[domain.Node](t)(g.NodeByKey(ctx, "", "H"))
 	}
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "seed", By: "t", Edits: edits}); err != nil {
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "seed", By: "t", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 	h1 := must[domain.Node](t)(g.NodeByKey(ctx, "", "H"))
@@ -152,7 +152,7 @@ func testLinkSetInSeveralStatements(t *testing.T, repo Repo) {
 	for i := range n {
 		edits[0].Links = append(edits[0].Links, LinkEdit{Type: "refines", ToKey: "T", Props: map[string]any{"i": i}})
 	}
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "hub", By: "t", Edits: edits}); err != nil {
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "hub", By: "t", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 	h := must[domain.Node](t)(g.NodeByKey(ctx, "", "H"))

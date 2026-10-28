@@ -7,27 +7,27 @@ import "google/protobuf/timestamp.proto";
 import "goap/jobs/v1/jobs.proto";
 
 // GraphService exposes the two axes of the knowledge graph: the domain axis
-// (versioned nodes, version-to-version links, baselines) and the change axis
+// (versioned nodes, version-to-version links, commits) and the change axis
 // (changes and their items, i.e. the blackboards of agent processes).
 service GraphService {
   // Domain axis
   rpc GetNode(GetNodeRequest) returns (GetNodeResponse);
   rpc ListNodeLinks(ListNodeLinksRequest) returns (ListNodeLinksResponse);
-  rpc ListBaselines(ListBaselinesRequest) returns (ListBaselinesResponse);
+  rpc ListCommits(ListCommitsRequest) returns (ListCommitsResponse);
   // Tags (ADR 0143 §6) name one exact node version; not unique, a name may label several versions.
   rpc TagVersion(TagVersionRequest) returns (TagVersionResponse);
   rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
   rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
-  rpc GetBaselineGraph(GetBaselineGraphRequest) returns (GetBaselineGraphResponse);
-  // GetBaselineDelta reads what moved from a baseline to a later one of its branch (ADR 0143 §4): the nodes committed in
+  rpc GetCommitGraph(GetCommitGraphRequest) returns (GetCommitGraphResponse);
+  // GetCommitDelta reads what moved from a commit to a later one of its branch (ADR 0143 §4): the nodes committed in
   // between at their version in the later one, the links leaving them, the nodes it no longer holds. INVALID_ARGUMENT
-  // when the baselines do not follow each other or too much moved: read the later baseline whole.
-  rpc GetBaselineDelta(GetBaselineDeltaRequest) returns (GetBaselineDeltaResponse);
-  // Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
-  rpc ListBaselineNodes(ListBaselineNodesRequest) returns (ListBaselineNodesResponse);
+  // when the commits do not follow each other or too much moved: read the later commit whole.
+  rpc GetCommitDelta(GetCommitDeltaRequest) returns (GetCommitDeltaResponse);
+  // Browsing a large commit: a page of its nodes (by type, filtered) and the neighbourhood of one node.
+  rpc ListCommitNodes(ListCommitNodesRequest) returns (ListCommitNodesResponse);
   // every node of a type a view holds (ADR 0157): the explicit read of a whole type a script or a template asks for
   rpc ListViewNodes(ListViewNodesRequest) returns (ListViewNodesResponse);
-  rpc ListBaselineLinks(ListBaselineLinksRequest) returns (ListBaselineLinksResponse);
+  rpc ListCommitLinks(ListCommitLinksRequest) returns (ListCommitLinksResponse);
   rpc GetNodeNeighbourhood(GetNodeNeighbourhoodRequest) returns (GetNodeNeighbourhoodResponse);
   // A read query in the subset of openCypher (ADR 0160) over a view: anchored MATCH patterns grown a hop at a time,
   // WHERE, RETURN; never a namespace whole (capped reads, anchors and rows). INVALID_ARGUMENT for a query the subset
@@ -61,7 +61,7 @@ service GraphService {
   rpc ListChangeLog(ListChangeLogRequest) returns (ListChangeLogResponse);
   // The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
   rpc ExportChangeProvenance(ExportChangeProvenanceRequest) returns (ExportChangeProvenanceResponse);
-  // The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
+  // The state of a namespace at a commit as a JSON snapshot, without history (ADR 0104).
   rpc ExportGraph(ExportGraphRequest) returns (ExportGraphResponse);
   // StartGraphExport exports the state of a namespace as a job (ADR 0149, kind graph.export): a JSON snapshot
   // (ADR 0104) or an OKF zip archive, one Markdown file per node (ADR 0111), downloaded from the job when it ends.
@@ -193,9 +193,9 @@ service GraphService {
   rpc DerivedNodes(DerivedNodesRequest) returns (DerivedNodesResponse);
   rpc PlanMerge(PlanMergeRequest) returns (PlanMergeResponse);
   rpc MergeBranch(MergeBranchRequest) returns (MergeBranchResponse);
-  // What going from a baseline to another changes, node by node (same namespace), and the changes that explain it.
-  rpc DiffBaselines(DiffBaselinesRequest) returns (DiffBaselinesResponse);
-  // The change-stack of a node version or a baseline (ADR 0133): the changes it is the application of, oldest first,
+  // What going from a commit to another changes, node by node (same namespace), and the changes that explain it.
+  rpc DiffCommits(DiffCommitsRequest) returns (DiffCommitsResponse);
+  // The change-stack of a node version or a commit (ADR 0133): the changes it is the application of, oldest first,
   // and the lineage they are read from.
   rpc GetChangeStack(GetChangeStackRequest) returns (GetChangeStackResponse);
   // Merges what a change committed into what it was forked from (ADR 0102, 0166): a root change into the branch it
@@ -232,7 +232,7 @@ service GraphService {
   // changes of a modified one; the identical ones are counted, not listed.
   rpc DiffFlows(DiffFlowsRequest) returns (DiffFlowsResponse);
   // The graph a change sees at a level (written, accepted, committed) on a flow (ADR 0032 §5), and the graph a call on
-  // the change reads (the active option's, else the reference baseline).
+  // the change reads (the active option's, else the reference commit).
   rpc GetChangeView(GetChangeViewRequest) returns (GetChangeViewResponse);
   // Decision points of a change (ADR 0009 §4): opened, ruled (decided or undecidable with questions), their questions
   // answered, an agent ruling below the threshold ratified by a person; a decided point selects its option.
@@ -259,15 +259,15 @@ message RepublishIndexResponse {
   int32 versions = 1;
 }
 
-// View is what a read of the current graph is scoped to (ADR 0157): a lasting branch at one of its baselines, or a
+// View is what a read of the current graph is scoped to (ADR 0157): a lasting branch at one of its commits, or a
 // change on a flow (its fork, its commits and the drafts of that flow). A read of the current graph naming none is
 // refused (INVALID_ARGUMENT); only the reads of the history name versions instead.
 message View {
-  // a lasting branch (empty: main) of a namespace, at one of its baselines (empty: its head when the read starts; a
-  // baseline alone names its namespace)
+  // a lasting branch (empty: main) of a namespace, at one of its commits (empty: its head when the read starts; a
+  // commit alone names its namespace)
   string namespace = 1;
   string branch = 2;
-  string baseline_id = 3;
+  string commit_id = 3;
   // a change on a flow ("main" or an option id; empty: the active option, else the main flow), in place of a branch
   string change_id = 4;
   string flow = 5;
@@ -348,7 +348,7 @@ message NodeView {
   repeated TypeCount in_types = 9;
 }
 
-message Baseline {
+message Commit {
   string id = 1;
   string name = 2;
   string parent_id = 3;
@@ -357,11 +357,11 @@ message Baseline {
   google.protobuf.Timestamp created_at = 6;
   string branch = 7;
   string namespace = 8;
-  // the head of the branch merged in, when this baseline is the result of a merge (a second parent)
+  // the head of the branch merged in, when this commit is the result of a merge (a second parent)
   string merged_from = 9;
   // commit | merge | fast-forward | rebase | revert | snapshot (ADR 0056)
   string kind = 10;
-  // the baseline the change was forked from before its rebase onto the head of its target (ADR 0101)
+  // the commit the change was forked from before its rebase onto the head of its target (ADR 0101)
   string rebased_from = 11;
 }
 
@@ -401,8 +401,8 @@ message Change {
   string methodology = 4;
   string goal = 5;
   string status = 6;
-  string baseline_id = 7;
-  string result_baseline_id = 8;
+  string fork_commit = 7;
+  string landed_commit = 8;
   google.protobuf.Struct data = 9;
   repeated ChangeItem items = 10;
   google.protobuf.Timestamp created_at = 11;
@@ -492,7 +492,7 @@ message ChangeImpact {
   // created | modified
   string intent = 4;
   string rationale = 5;
-  // released version of the reference baseline (empty for a created node)
+  // released version of the reference commit (empty for a created node)
   NodeRef pre = 6;
   // the draft of the node while the change works (a draft reference: the node, version 0, ADR 0079), the version written once
   // the change is committed (empty while the impact of an existing node is only proposed)
@@ -611,54 +611,54 @@ message DeleteTagRequest {
 
 message DeleteTagResponse {}
 
-message ListBaselinesRequest {
+message ListCommitsRequest {
   string namespace = 1;
-  // a page of the history of this branch (ADR 0140): its baselines committed before `before` (0: the newest), at most
-  // `limit` (default 100, at most 500), with what draws them in `related`. Neither branch nor ids: every baseline of
+  // a page of the history of this branch (ADR 0140): its commits committed before `before` (0: the newest), at most
+  // `limit` (default 100, at most 500), with what draws them in `related`. Neither branch nor ids: every commit of
   // the namespace.
   string branch = 2;
   int64 before = 3;
   int32 limit = 4;
-  // the headers of these baselines only
+  // the headers of these commits only
   repeated string ids = 5;
 }
 
-message ListBaselinesResponse {
-  // the headers of the baselines, oldest first: their nodes are not sent (ADR 0140)
-  repeated Baseline baselines = 1;
-  // with a branch: the baselines the changes of the page left on their own branches, those of the open branches
+message ListCommitsResponse {
+  // the headers of the commits, oldest first: their nodes are not sent (ADR 0140)
+  repeated Commit commits = 1;
+  // with a branch: the commits the changes of the page left on their own branches, those of the open branches
   // forked from it (newest page), and the ones their edges reach outside the page
-  repeated Baseline related = 2;
+  repeated Commit related = 2;
   // with a branch: the `before` of the older page; 0: none
   int64 next = 3;
 }
 
-message GetBaselineGraphRequest {
+message GetCommitGraphRequest {
   string id = 1;
 }
 
-message GetBaselineGraphResponse {
-  Baseline baseline = 1;
+message GetCommitGraphResponse {
+  Commit commit = 1;
   repeated Node nodes = 2;
   repeated Link links = 3;
   repeated Link suspect_links = 4;
 }
 
-message GetBaselineDeltaRequest {
+message GetCommitDeltaRequest {
   string from = 1;
   string to = 2;
 }
 
-message GetBaselineDeltaResponse {
-  Baseline from = 1;
-  Baseline to = 2;
+message GetCommitDeltaResponse {
+  Commit from = 1;
+  Commit to = 2;
   repeated Node nodes = 3;
   repeated Link links = 4;
   repeated string removed = 5;
 }
 
-message ListBaselineNodesRequest {
-  // the view paged (ADR 0157): a baseline, or a change with what it wrote laid over its fork; required
+message ListCommitNodesRequest {
+  // the view paged (ADR 0157): a commit, or a change with what it wrote laid over its fork; required
   View view = 1;
   // qualified node type ("alm@Requirement"); empty: every type
   string type = 2;
@@ -668,8 +668,8 @@ message ListBaselineNodesRequest {
   // page size (default and max 500)
   int32 limit = 5;
   bool include_deleted = 6;
-  // the nodes the impacts of this change act on, at their version in the baseline: the answer and its cost follow
-  // the change, not the size of the baseline (ADR 0140); empty: every node of the baseline
+  // the nodes the impacts of this change act on, at their version in the commit: the answer and its cost follow
+  // the change, not the size of the commit (ADR 0140); empty: every node of the commit
   string change_id = 7;
 }
 
@@ -689,18 +689,18 @@ message TypeCount {
   int32 count = 2;
 }
 
-message ListBaselineNodesResponse {
+message ListCommitNodesResponse {
   repeated Node nodes = 1;
   // number of nodes matching the query, all pages
   int32 total = 2;
   // nodes per type matching the text query (the type filter aside)
   repeated TypeCount types = 3;
-  // the header of the baseline: its nodes are not sent
-  Baseline baseline = 4;
+  // the header of the commit: its nodes are not sent
+  Commit commit = 4;
 }
 
-message ListBaselineLinksRequest {
-  string baseline_id = 1;
+message ListCommitLinksRequest {
+  string commit_id = 1;
   // link type; empty: every type
   string type = 2;
   // case-insensitive text matched against the type and the string properties
@@ -710,14 +710,14 @@ message ListBaselineLinksRequest {
   int32 limit = 5;
 }
 
-message ListBaselineLinksResponse {
+message ListCommitLinksResponse {
   repeated Link links = 1;
   // number of links matching the query, all pages
   int32 total = 2;
   // links per type matching the text query (the type filter aside)
   repeated TypeCount types = 3;
-  // the header of the baseline: its nodes are not sent
-  Baseline baseline = 4;
+  // the header of the commit: its nodes are not sent
+  Commit commit = 4;
 }
 
 message ResolveViewRequest {
@@ -727,8 +727,8 @@ message ResolveViewRequest {
 
 message ResolveViewResponse {
   string namespace = 1;
-  // the baseline the view reads (a change view: its fork)
-  string baseline_id = 2;
+  // the commit the view reads (a change view: its fork)
+  string commit_id = 2;
   // a branch view of main at its head
   bool main_head = 3;
   // the version of each node asked the view holds (0: a change's draft); a node it does not hold is absent
@@ -736,7 +736,7 @@ message ResolveViewResponse {
 }
 
 message GetNodeNeighbourhoodRequest {
-  // the view the node is read in (ADR 0157): a baseline, or the world of a change on a flow (its fork as it left it,
+  // the view the node is read in (ADR 0157): a commit, or the world of a change on a flow (its fork as it left it,
   // its commits, its drafts); the cost follows the node, never the size of the world; required
   View view = 1;
   string node_id = 2;
@@ -747,7 +747,7 @@ message GetNodeNeighbourhoodRequest {
 
 message GetNodeNeighbourhoodResponse {
   Node node = 1;
-  // targets of its outgoing links and sources (in the baseline) of its incoming links
+  // targets of its outgoing links and sources (in the commit) of its incoming links
   repeated Node nodes = 2;
   repeated Link links = 3;
   // ids of the links whose target changed since they were created
@@ -777,8 +777,8 @@ message QueryViewResponse {
   repeated string notes = 6;
   // the reads the query made (neighbourhoods and pages)
   int32 reads = 7;
-  // the baseline the view read (a change view: its fork)
-  string baseline_id = 8;
+  // the commit the view read (a change view: its fork)
+  string commit_id = 8;
 }
 
 // An operation on the change impacts of a change (ADR 0029).
@@ -866,9 +866,9 @@ message ExportChangeProvenanceResponse {
 
 message ExportGraphRequest {
   string namespace = 1;
-  // the branch whose head is exported (default main), unless a baseline is named
+  // the branch whose head is exported (default main), unless a commit is named
   string branch = 2;
-  string baseline_id = 3;
+  string commit_id = 3;
 }
 
 message ExportGraphResponse {
@@ -881,9 +881,9 @@ message ExportGraphResponse {
 
 message StartGraphExportRequest {
   string namespace = 1;
-  // the branch whose head is exported (default main), unless a baseline is named
+  // the branch whose head is exported (default main), unless a commit is named
   string branch = 2;
-  string baseline_id = 3;
+  string commit_id = 3;
   // json (default) | okf
   string format = 4;
 }
@@ -957,7 +957,7 @@ message NamespaceSummary {
   // the link rows written (a version holding the set of another writes none, ADR 0141)
   int32 link_rows = 4;
   int32 changes = 5;
-  int32 baselines = 6;
+  int32 commits = 6;
   int32 branches = 7;
   // the node types holding nodes
   int32 types = 8;
@@ -983,11 +983,11 @@ message GraphStats {
   string namespace = 1;
   string branch = 2;
   // the head the state was read at; empty: nothing committed yet
-  string baseline_id = 3;
-  google.protobuf.Timestamp baseline_at = 4;
+  string commit_id = 3;
+  google.protobuf.Timestamp commit_at = 4;
   BranchStats branches = 5;
   // the rows of the namespace in the store, one entry per measure (nodesByType, versionsByType, versionsByReason,
-  // versionsPerNode, linkRowsByType, linkDrops, linkSetsByMode, joins, baselinesByKind, changesByStatus, tags, logByType)
+  // versionsPerNode, linkRowsByType, linkDrops, linkSetsByMode, joins, commitsByKind, changesByStatus, tags, logByType)
   repeated StoreMeasure store = 6;
   StateStats state = 7;
 }
@@ -1163,7 +1163,7 @@ message CreateChangeRequest {
   string title = 1;
   string intent = 2;
   string methodology = 3;
-  string baseline_id = 4;
+  string fork_commit = 4;
   google.protobuf.Struct data = 5;
   // branch the change applies to (default main)
   string branch = 6;
@@ -1171,7 +1171,7 @@ message CreateChangeRequest {
   string namespace = 7;
   // give the change a branch of its own, merged into `branch` when applied
   bool own_branch = 8;
-  // make the change a sub-change of another one (namespace, branch and baseline follow the parent)
+  // make the change a sub-change of another one (namespace, branch and commit follow the parent)
   string parent_id = 9;
   // key of the responsible OrgUnit (organisation namespace); "@me": the personal unit of the caller, which
   // makes the change personal (ADR 0037)
@@ -1355,15 +1355,15 @@ message GetBlackboardResponse {
 
 message CommitChangeRequest {
   string change_id = 1;
-  string baseline_name = 2;
+  string commit_name = 2;
   // the nodes to commit, by node id (a partial commit): each an accepted modification of the change or a node withdrawn
   // since its commit; none: every one of them
   repeated string nodes = 3;
 }
 
 message CommitChangeResponse {
-  // the commit baseline, on the change's own branch
-  Baseline baseline = 1;
+  // the commit, on the change's own branch
+  Commit commit = 1;
 }
 
 message TransitionChangeRequest {
@@ -1470,7 +1470,7 @@ message PendingSettingsResponse {
 message Branch {
   string name = 1;
   string parent = 2;
-  string fork_baseline = 3;
+  string fork_commit = 3;
   string head = 4;
   // change / option that opened the branch
   string origin = 5;
@@ -1479,13 +1479,13 @@ message Branch {
   google.protobuf.Timestamp created_at = 7;
   string namespace = 8;
   string description = 9;
-  // the first fork baseline of a change branch moved by a rebase (ADR 0101)
+  // the first fork commit of a change branch moved by a rebase (ADR 0101)
   string rebased_from = 10;
 }
 
 message CreateBranchRequest {
   string name = 1;
-  string from_baseline = 2;
+  string from_commit = 2;
   string origin = 3;
   string namespace = 4;
   string description = 5;
@@ -1504,8 +1504,8 @@ message ListBranchesRequest {
 message ListBranchesResponse {
   repeated Branch branches = 1;
   // the headers of the heads of the branches (ADR 0140)
-  repeated Baseline heads = 2;
-  // the number of baselines of each branch
+  repeated Commit heads = 2;
+  // the number of commits of each branch
   map<string, int32> counts = 3;
 }
 
@@ -1518,7 +1518,7 @@ message GetBranchRequest {
 
 message GetBranchResponse {
   Branch branch = 1;
-  Baseline head = 2;
+  Commit head = 2;
 }
 
 message SetBranchStatusRequest {
@@ -1584,37 +1584,37 @@ message PlanMergeRequest {
   string namespace = 3;
 }
 
-message DiffBaselinesRequest {
+message DiffCommitsRequest {
   string from = 1;
   string to = 2;
 }
-message DiffBaselinesResponse {
-  repeated BaselineDiff nodes = 1;
+message DiffCommitsResponse {
+  repeated CommitDiff nodes = 1;
   // the changes the stack of `to` holds and the one of `from` does not (ADR 0133)
   repeated StackChange changes_added = 2;
   // the changes the stack of `from` holds and the one of `to` does not
   repeated StackChange changes_removed = 3;
 }
 
-// A node version (node_id, version 0: its latest on main) or a baseline (baseline_id), one of the two.
+// A node version (node_id, version 0: its latest on main) or a commit (commit_id), one of the two.
 message GetChangeStackRequest {
   string node_id = 1;
   int32 version = 2;
-  string baseline_id = 3;
+  string commit_id = 3;
   // the most recent steps of the lineage kept (0: 500)
   int32 limit = 4;
 }
 message GetChangeStackResponse {
   ChangeStack stack = 1;
 }
-// The stack of changes producing a node version or a baseline (ADR 0133).
+// The stack of changes producing a node version or a commit (ADR 0133).
 message ChangeStack {
   // oldest first
   repeated StackChange changes = 1;
   // the lineage of a node version, oldest first
   repeated VersionStep versions = 2;
-  // the lineage of a baseline, oldest first
-  repeated BaselineStep baselines = 3;
+  // the lineage of a commit, oldest first
+  repeated CommitStep commits = 3;
   // the lineage was cut at the limit, its oldest part left out
   bool truncated = 4;
 }
@@ -1642,7 +1642,7 @@ message VersionJoin {
   string branch = 1;
   string change = 2;
 }
-message BaselineStep {
+message CommitStep {
   string id = 1;
   string name = 2;
   string branch = 3;
@@ -1656,13 +1656,13 @@ message BaselineStep {
   // the sub-changes merged into the change it takes in (ADR 0103), oldest first: the work it brings is theirs too
   repeated string merged = 10;
 }
-message BaselineDiff {
+message CommitDiff {
   string node = 1;
   string key = 2;
   string type = 3;
   // added | removed | changed
   string kind = 4;
-  // the node as each baseline holds it (absent where the node is not in it)
+  // the node as each commit holds it (absent where the node is not in it)
   Node from = 5;
   Node to = 6;
 }
@@ -1688,7 +1688,7 @@ message MergeBranchRequest {
 
 message MergeBranchResponse {
   Change change = 1;
-  Baseline baseline = 2;
+  Commit commit = 2;
   MergePlan plan = 3;
 }
 
@@ -1807,8 +1807,8 @@ message CommitEditsRequest {
   string intent = 3;
   string methodology = 4;
   google.protobuf.Struct data = 5;
-  string baseline_id = 6;
-  string baseline_name = 7;
+  string commit_id = 6;
+  string commit_name = 7;
   repeated NodeEdit edits = 8;
   // the unit holding the commit (empty: the root unit; "@me": the caller's personal unit) and the project it acts in (empty: the
   // caller's active project, else the default project), ADR 0054
@@ -1827,7 +1827,7 @@ message CarriedEvent {
 
 message CommitEditsResponse {
   string change_id = 1;
-  Baseline baseline = 2;
+  Commit commit = 2;
 }
 
 message ProposeImpactRequest {
@@ -2083,7 +2083,7 @@ message RebaseChangeResponse {
   // the parent change of a sub-change, "" for a root change
   string parent_id = 1;
   repeated RebasedImpact impacts = 2;
-  // a root change (ADR 0101): the target branch, the baseline it was forked from and the head it moved to
+  // a root change (ADR 0101): the target branch, the commit it was forked from and the head it moved to
   string branch = 3;
   string from = 4;
   string onto = 5;
@@ -2603,8 +2603,8 @@ message GetChangeViewRequest {
 }
 
 message GetChangeViewResponse {
-  // a baseline without an id below committed: computed, not stored
-  Baseline baseline = 1;
+  // a commit without an id below committed: computed, not stored
+  Commit commit = 1;
 }
 
 message GetChangeGraphRequest {
@@ -2613,7 +2613,7 @@ message GetChangeGraphRequest {
   string flow = 2;
   // the world the change sees, whatever its flow (Graph.ChangeWorld): the nodes of its fork it left alone, the
   // versions it committed and its drafts, with the links whose target node is in it (at whatever version they name);
-  // false: the graph a call on the change reads (an option's, else the reference baseline)
+  // false: the graph a call on the change reads (an option's, else the reference commit)
   bool world = 3;
 }
 

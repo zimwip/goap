@@ -43,7 +43,7 @@ type work struct {
 	planned bool
 	// reuse is the node a creation takes over: the node of its key, which only abandoned changes wrote (takeKey)
 	reuse domain.NodeID
-	// adopt is set when a creation names a node that exists (ADR 0172): the node the reference baseline holds, the one it
+	// adopt is set when a creation names a node that exists (ADR 0172): the node the reference commit holds, the one it
 	// deleted (restored), or one the change holds without a draft; the creation then edits it, an impact found after the fact
 	adopt bool
 	// transition is set for a move of the lifecycle of the node (ImpactNodeTransition): a freeze of its type may let
@@ -77,7 +77,7 @@ func (g *Graph) workOn(ctx context.Context, tx Tx, id domain.ChangeID, flow stri
 		}
 		w.branch = flowBranchName(w.flow)
 	}
-	if w.ix, err = g.typesAt(ctx, tx, c.BaselineID); err != nil {
+	if w.ix, err = g.typesAt(ctx, tx, c.ForkCommit); err != nil {
 		return nil, err
 	}
 	if w.seen, err = g.newFlowNodes(tx, c, w.flow).nodes(ctx); err != nil {
@@ -184,15 +184,15 @@ func checkoutTarget(in NodeCheckout) target {
 //
 //   - an impact id is taken as it is;
 //   - a node (id, or key) the flow already sees in the change reuses its impact, never doubling it;
-//   - else a node of the reference baseline gets an impact of intent modified, its pre the baseline version;
+//   - else a node of the reference commit gets an impact of intent modified, its pre the commit version;
 //   - else a node deleted on the line the change lands on (ADR 0172) gets an impact of intent modified, its pre the
 //     tombstone: a creation of its key restores it with what the creation gives, any other operation checks it out
 //     restored as it was when deleted;
 //   - else, for a creation, the key is new: the impact is checked but not recorded, the created event of its first
-//     version carries it (ADR 0077); for any other operation the node is in neither the baseline nor the change:
+//     version carries it (ADR 0077); for any other operation the node is in neither the commit nor the change:
 //     ErrNotFound.
 //
-// A creation whose key the baseline or the change already holds is an ErrConflict.
+// A creation whose key the commit or the change already holds is an ErrConflict.
 func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target) (*work, error) {
 	w, err := g.workOn(ctx, tx, id, t.Flow)
 	if err != nil {
@@ -247,17 +247,17 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 			return nil, err
 		}
 	}
-	// the reference baseline is read for that node only, never whole (ADR 0137)
+	// the reference commit is read for that node only, never whole (ADR 0137)
 	var v domain.Version
 	inBase := false
 	if nid != "" {
-		at, err := versionsAt(ctx, tx, w.c.BaselineID, []domain.NodeID{nid})
+		at, err := versionsAt(ctx, tx, w.c.ForkCommit, []domain.NodeID{nid})
 		if err != nil {
 			return nil, err
 		}
 		v, inBase = at[nid]
 	}
-	// a node no state holds any more may have been deleted in the reference baseline: named again, it is restored (ADR 0172)
+	// a node no state holds any more may have been deleted in the reference commit: named again, it is restored (ADR 0172)
 	var tomb *domain.Node
 	if nid != "" && !inBase {
 		if tomb, err = g.tombstone(ctx, tx, w.c, nid); err != nil {
@@ -275,7 +275,7 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 			return nil, err
 		}
 		if n.Type != t.Type {
-			return nil, fmt.Errorf("cannot create %s (%s): the reference baseline of change %s holds it as a node of type %s: %w", t.Key, t.Type, id, n.Type, ErrConflict)
+			return nil, fmt.Errorf("cannot create %s (%s): the reference commit of change %s holds it as a node of type %s: %w", t.Key, t.Type, id, n.Type, ErrConflict)
 		}
 		decl = domain.ChangeImpact{Intent: domain.IntentModified, Pre: &domain.NodeRef{ID: nid, Version: v}, DerivedFrom: t.DerivedFrom}
 		adopt = true
@@ -301,7 +301,7 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 		if name == "" {
 			name = t.Key
 		}
-		return nil, fmt.Errorf("node %s is in neither the reference baseline nor the change %s: %w", name, id, ErrNotFound)
+		return nil, fmt.Errorf("node %s is in neither the reference commit nor the change %s: %w", name, id, ErrNotFound)
 	}
 	decl.Rationale, decl.Flow, decl.Execution, decl.ProducedBy = t.Rationale, t.Flow, t.Execution, t.ProducedBy
 	if adopt && strings.TrimSpace(decl.Rationale) == "" {
@@ -328,7 +328,7 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 	return w, g.impact(ctx, tx, w, out[0].ID)
 }
 
-// takeKey decides a creation whose key is the key of a node out of the reference baseline of change c (a key is one
+// takeKey decides a creation whose key is the key of a node out of the reference commit of change c (a key is one
 // node's): a node another change wrote on a branch that is not abandoned holds it (ErrConflict, the creation is refused
 // now rather than at the commit); a node only abandoned changes wrote never reached the graph, and the creation takes
 // it over, so that the work of an abandoned change (an import stopped between its commit and its merge) does not hold
@@ -515,7 +515,7 @@ func (g *Graph) createTx(ctx context.Context, tx Tx, id domain.ChangeID, in Node
 }
 
 // adoptTx is a creation naming a node that exists (ADR 0172): an impact found after the fact. The node is checked out
-// (restored when the reference baseline deleted it), then the creation edits its draft: its properties set over the
+// (restored when the reference commit deleted it), then the creation edits its draft: its properties set over the
 // node's, its owner, and the links it names that the node does not hold already.
 func (g *Graph) adoptTx(ctx context.Context, tx Tx, w *work, in NodeCreate) (domain.ChangeImpact, error) {
 	// three entries of the audit: the requalification, the checkout, the edit
@@ -708,7 +708,7 @@ func (g *Graph) ImpactNodeCheckouts(ctx context.Context, id domain.ChangeID, in 
 }
 
 // prefetchCheckouts reads in one batch what the checkouts of a batch naming nodes by id read one node at a time: their
-// versions in the reference baseline, the latest on the change branch for the main flow, and those versions with their
+// versions in the reference commit, the latest on the change branch for the main flow, and those versions with their
 // links (ADR 0137 addendum). Nothing for a batch of one, or one naming impacts, keys or several flows.
 func (g *Graph) prefetchCheckouts(ctx context.Context, tx Tx, id domain.ChangeID, nodes []NodeCheckout) error {
 	gt, ok := unwrapGuard(tx)
@@ -726,7 +726,7 @@ func (g *Graph) prefetchCheckouts(ctx context.Context, tx Tx, id domain.ChangeID
 	if err != nil {
 		return err
 	}
-	at, err := versionsAt(ctx, tx, w.c.BaselineID, ids)
+	at, err := versionsAt(ctx, tx, w.c.ForkCommit, ids)
 	if err != nil {
 		return err
 	}
@@ -1294,7 +1294,7 @@ func (g *Graph) transitionOf(ctx context.Context, tx Tx, id domain.ChangeID, in 
 }
 
 // viewTarget is the state of the namespace as an operation on a flow sees it: the head of the change branch (else the
-// reference baseline). The nodes the change holds a draft of are read through their drafts (draftReader).
+// reference commit). The nodes the change holds a draft of are read through their drafts (draftReader).
 func (g *Graph) viewTarget(ctx context.Context, tx Tx, w *work) (*stateView, error) {
 	if own, ok, err := ownBranch(ctx, tx, w.c); err != nil {
 		return nil, err
@@ -1303,7 +1303,7 @@ func (g *Graph) viewTarget(ctx context.Context, tx Tx, w *work) (*stateView, err
 	}
 	b, err := branchHeadHeader(ctx, tx, w.c.Namespace, domain.BranchOf(w.c.Branch))
 	if errors.Is(err, ErrNotFound) || (err == nil && b.ID == "") {
-		b, err = headerOf(ctx, tx, w.c.BaselineID)
+		b, err = headerOf(ctx, tx, w.c.ForkCommit)
 	}
 	if err != nil {
 		return nil, err

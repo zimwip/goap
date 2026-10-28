@@ -19,7 +19,7 @@ func nodeOn(t *testing.T, g *graph.Graph, branch, key string) domain.Node {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes, _, err := g.BaselineGraph(ctx, head.ID)
+	nodes, _, err := g.CommitGraph(ctx, head.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,11 +32,11 @@ func nodeOn(t *testing.T, g *graph.Graph, branch, key string) domain.Node {
 	return domain.Node{}
 }
 
-// commitOf is the git commit the import of which a baseline is the state.
-func commitOf(t *testing.T, g *graph.Graph, id domain.BaselineID) string {
+// commitOf is the git commit the import of which a commit is the state.
+func commitOf(t *testing.T, g *graph.Graph, id domain.CommitID) string {
 	t.Helper()
 	ctx := context.Background()
-	b, err := g.BaselineHeader(ctx, id)
+	b, err := g.CommitHeader(ctx, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,11 +106,11 @@ func TestImportTheBranches(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if commitOf(t, g, br.ForkBaseline) != at {
-			t.Fatalf("%s forked at %s, want %s", b, commitOf(t, g, br.ForkBaseline), at)
+		if commitOf(t, g, br.ForkCommit) != at {
+			t.Fatalf("%s forked at %s, want %s", b, commitOf(t, g, br.ForkCommit), at)
 		}
 	}
-	if br, _ := g.Branch(ctx, gitimport.Namespace, gitimport.GraphBranch("demo", "pages")); br.ForkBaseline != "" {
+	if br, _ := g.Branch(ctx, gitimport.Namespace, gitimport.GraphBranch("demo", "pages")); br.ForkCommit != "" {
 		t.Fatalf("an orphan branch starts from the empty state: %+v", br)
 	}
 	// feature.c, created on feature and by the merge on main, is one node with a version on each line

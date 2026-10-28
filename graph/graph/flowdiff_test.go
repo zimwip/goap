@@ -19,8 +19,8 @@ func testDiffFlows(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP", BaselineID: base.ID, OwnBranch: true}))
+	base := must[domain.Commit](t)(g.BranchHead(ctx, "", domain.MainBranch))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP", ForkCommit: base.ID, OwnBranch: true}))
 	pre, pre2 := f.req.Ref(), req2.Ref()
 
 	// the main flow: REQ-1 modified and accepted, REQ-2 modified (identical on every flow), TST-9 created

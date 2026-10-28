@@ -15,9 +15,9 @@ import (
 	"github.com/zimwip/goap/platform/devseed"
 )
 
-// A request without a baseline starts from the latest baseline of its methodology's namespace (the assistant only
+// A request without a commit starts from the latest commit of its methodology's namespace (the assistant only
 // knows the methodology once the intent is identified).
-func TestStartWithoutBaseline(t *testing.T) {
+func TestStartWithoutCommit(t *testing.T) {
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "dev", Org: "acme", Roles: []string{"contributor"}})
 	m, err := methodology.LoadFile("../../../methodologies/sdlc.yaml")
 	if err != nil {
@@ -52,9 +52,9 @@ func TestStartWithoutBaseline(t *testing.T) {
 	if _, err := graphtest.Project(ctx, g, testProject, "Test"); err != nil {
 		t.Fatal(err)
 	}
-	bs, err := g.Baselines(ctx, cm.Definition().Namespace)
+	bs, err := g.Commits(ctx, cm.Definition().Namespace)
 	if err != nil || len(bs) == 0 {
-		t.Fatalf("baselines of %s: %v, %v", cm.Definition().Namespace, bs, err)
+		t.Fatalf("commits of %s: %v, %v", cm.Definition().Namespace, bs, err)
 	}
 	latest := bs[len(bs)-1]
 	p, err := e.Start(ctx, req)
@@ -65,7 +65,7 @@ func TestStartWithoutBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.BaselineID != latest.ID || c.BaselineID != latest.ID || c.Namespace != cm.Definition().Namespace {
-		t.Fatalf("process baseline %s, change baseline %s (%s), want %s (%s)", p.BaselineID, c.BaselineID, c.Namespace, latest.ID, cm.Definition().Namespace)
+	if p.ForkCommit != latest.ID || c.ForkCommit != latest.ID || c.Namespace != cm.Definition().Namespace {
+		t.Fatalf("process commit %s, change commit %s (%s), want %s (%s)", p.ForkCommit, c.ForkCommit, c.Namespace, latest.ID, cm.Definition().Namespace)
 	}
 }

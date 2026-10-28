@@ -67,7 +67,7 @@ func TestGraphEmitsTheEventsOfAChange(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", Intent: "i", BaselineID: head.ID, OwnBranch: true})
+		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", Intent: "i", ForkCommit: head.ID, OwnBranch: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -99,14 +99,14 @@ func TestGraphEmitsTheEventsOfAChange(t *testing.T) {
 			if ev.Type == events.ChangeEdited && ev.Fields["title"].To != "t2" {
 				t.Fatalf("edited fields %v", ev.Fields)
 			}
-			if ev.Type == events.ChangeApplied && (ev.Baseline == nil || ev.Baseline.Nodes != nil) {
-				t.Fatalf("applied baseline %+v", ev.Baseline)
+			if ev.Type == events.ChangeApplied && (ev.Commit == nil || ev.Commit.Nodes != nil) {
+				t.Fatalf("applied commit %+v", ev.Commit)
 			}
 			// a commit and a merge name the branch and the node versions they left there (ADR 0159)
 			if ev.Type == events.ChangeCommitted || ev.Type == events.ChangeMerged {
 				wantBranch := domain.MainBranch
 				if ev.Type == events.ChangeCommitted {
-					wantBranch = ev.Baseline.Branch
+					wantBranch = ev.Commit.Branch
 				}
 				if ev.Branch != wantBranch || wantBranch == "" || len(ev.Nodes) != 1 || ev.Nodes[0].Key != "N-1" || ev.Nodes[0].Type != "Item" || ev.Nodes[0].Version < 1 {
 					t.Fatalf("%s: branch %q (want %q), nodes %+v", ev.Type, ev.Branch, wantBranch, ev.Nodes)
@@ -149,7 +149,7 @@ func TestGraphEmitsTheEventsOfAChange(t *testing.T) {
 		}
 
 		// a write refused emits nothing; a purge emits change.purged
-		d, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "d", BaselineID: head.ID})
+		d, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "d", ForkCommit: head.ID})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -225,7 +225,7 @@ func TestCommitCarriesTheWritersEvents(t *testing.T) {
 		g.Observe(sink)
 		ev := graphapi.CarriedEvent{Subject: "goap.registry.thing.saved", Payload: json.RawMessage(`{"name":"N-1"}`)}
 		edit := []NodeEdit{{Key: "N-1", Type: "Thing"}}
-		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: "carry", Title: "First", Edits: edit, Events: []graphapi.CarriedEvent{ev}}); err != nil {
+		if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: "carry", Title: "First", Edits: edit, Events: []graphapi.CarriedEvent{ev}}); err != nil {
 			t.Fatal(err)
 		}
 		i := slices.Index(sink.subs, ev.Subject)
@@ -234,14 +234,14 @@ func TestCommitCarriesTheWritersEvents(t *testing.T) {
 			t.Fatalf("carried event not after change.applied: %d %q", i, sink.data[max(i, 0)])
 		}
 		n := len(sink.subs)
-		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: "carry", Title: "Again", Edits: edit, Events: []graphapi.CarriedEvent{ev}}); err == nil {
+		if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: "carry", Title: "Again", Edits: edit, Events: []graphapi.CarriedEvent{ev}}); err == nil {
 			t.Fatal("creating N-1 again is refused")
 		}
 		if slices.Contains(sink.subs[n:], ev.Subject) {
 			t.Fatal("an event carried by a commit that committed nothing")
 		}
 		bad := graphapi.CarriedEvent{Subject: "goap.change.x.applied", Payload: json.RawMessage(`{}`)}
-		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: "carry", Title: "Bad", Edits: []NodeEdit{{Key: "N-2", Type: "Thing"}}, Events: []graphapi.CarriedEvent{bad}}); !errors.Is(err, ErrInvalid) {
+		if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: "carry", Title: "Bad", Edits: []NodeEdit{{Key: "N-2", Type: "Thing"}}, Events: []graphapi.CarriedEvent{bad}}); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("a subject of the graph: %v", err)
 		}
 	})

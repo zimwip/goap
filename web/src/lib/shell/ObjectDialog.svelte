@@ -49,7 +49,7 @@
     let gone = false;
     headOf(namespaceOf(objectDialog.nodeType))
       .then((h) => !gone && (headId = h))
-      .catch(() => undefined); // a namespace with no baseline yet: nothing to link to
+      .catch(() => undefined); // a namespace with no commit yet: nothing to link to
     return () => (gone = true);
   });
   const optionOf = (n: GraphNode): NodeOption => ({ key: n.key ?? '', type: n.type ?? '', title: nodeTitle(n), state: n.state, namespace: n.namespace });
@@ -60,7 +60,7 @@
     return {
       nodes: picked,
       search: async (query) =>
-        b ? ((await graph.listBaselineNodes({ view: { namespace: namespaceOf(t), branch: MAIN_BRANCH, baselineId: b }, query, limit: 200 })).nodes ?? []).filter((n) => n.key && !n.deleted).map(optionOf) : [],
+        b ? ((await graph.listCommitNodes({ view: { namespace: namespaceOf(t), branch: MAIN_BRANCH, commitId: b }, query, limit: 200 })).nodes ?? []).filter((n) => n.key && !n.deleted).map(optionOf) : [],
       remember: (n) => {
         if (!picked.some((p) => p.key === n.key)) picked = [...picked, n];
       },
@@ -95,12 +95,12 @@
       // every node is created in a change (ADR 0076): one of the namespace of its type, applied on main
       const type = objectDialog.nodeType;
       const namespace = namespaceOf(type);
-      const baselineId = headId || (await headOf(namespace));
+      const commitId = headId || (await headOf(namespace));
       await graph.commitEdits({
         namespace,
         title: `Create ${key.trim()}`,
         intent: `Create the ${type} ${key.trim()}`,
-        baselineId,
+        commitId,
         methodology: objectDialog.methodology,
         edits: [{ ...createNodeItem(key.trim(), type, props, links), ...(birth && birth !== lifecycle?.initial ? { state: birth } : {}) }],
       });

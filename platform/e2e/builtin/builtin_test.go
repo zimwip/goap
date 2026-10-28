@@ -218,18 +218,18 @@ func TestGraphTools(t *testing.T) {
 	if out := links["out"].([]any); len(out) != 2 || len(links["in"].([]any)) != 0 {
 		t.Fatalf("links = %v", links)
 	}
-	if bs := p.call(t, ctx, "", "goap-graph/baselines", map[string]any{"namespace": "alm"}); bs["head"] == nil || len(bs["baselines"].([]any)) == 0 {
-		t.Fatalf("baselines = %v", bs)
+	if bs := p.call(t, ctx, "", "goap-graph/commits", map[string]any{"namespace": "alm"}); bs["head"] == nil || len(bs["commits"].([]any)) == 0 {
+		t.Fatalf("commits = %v", bs)
 	}
 	// a tag names one exact version (ADR 0143 §6): the one at the head of main by default
-	tag := p.call(t, ctx, "", "goap-change/tag", map[string]any{"namespace": "alm", "key": "REQ-1", "name": "baseline-1"})["tag"].(map[string]any)
+	tag := p.call(t, ctx, "", "goap-change/tag", map[string]any{"namespace": "alm", "key": "REQ-1", "name": "commit-1"})["tag"].(map[string]any)
 	if tag["key"] != "REQ-1" || tag["version"] != node["version"] {
 		t.Fatalf("tag = %v, node = %v", tag, node)
 	}
-	if ts := p.call(t, ctx, "", "goap-graph/tags", map[string]any{"namespace": "alm", "name": "baseline-1"})["tags"].([]any); len(ts) != 1 || ts[0].(map[string]any)["key"] != "REQ-1" {
+	if ts := p.call(t, ctx, "", "goap-graph/tags", map[string]any{"namespace": "alm", "name": "commit-1"})["tags"].([]any); len(ts) != 1 || ts[0].(map[string]any)["key"] != "REQ-1" {
 		t.Fatalf("tags by name = %v", ts)
 	}
-	if ts := p.call(t, ctx, "", "goap-graph/tags", map[string]any{"namespace": "alm", "key": "REQ-1"})["tags"].([]any); len(ts) != 1 || ts[0].(map[string]any)["name"] != "baseline-1" {
+	if ts := p.call(t, ctx, "", "goap-graph/tags", map[string]any{"namespace": "alm", "key": "REQ-1"})["tags"].([]any); len(ts) != 1 || ts[0].(map[string]any)["name"] != "commit-1" {
 		t.Fatalf("tags of REQ-1 = %v", ts)
 	}
 	// the platform APIs act for a caller
@@ -609,7 +609,7 @@ func TestChangeToolsGateEveryAccessType(t *testing.T) {
 		t.Fatal(err)
 	}
 	asgKey := access.PlatformAssignmentKey("ORG-CHECKOUT")
-	_, err := p.g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "Assignment", Intent: "Assignment", By: "test", Edits: []graph.NodeEdit{{
+	_, err := p.g.CommitEdits(ctx, graph.Edits{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "Assignment", Intent: "Assignment", By: "test", Edits: []graph.NodeEdit{{
 		Key: asgKey, Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleReader}}.Props(), Rationale: "seed",
 		Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, ToKey: "ORG-CHECKOUT"}}}}})
 	if err != nil {
@@ -700,7 +700,7 @@ func TestSchedulerTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	// a new change on the head of main of the namespace of the methodology
-	if r := p.engine.start; r.OwnerOrg != "ORG-CHECKOUT" || r.Title != "assess the impact of REQ-1" || r.ChangeId != "" || r.BaselineId != string(head.ID) {
+	if r := p.engine.start; r.OwnerOrg != "ORG-CHECKOUT" || r.Title != "assess the impact of REQ-1" || r.ChangeId != "" || r.ForkCommit != string(head.ID) {
 		t.Fatalf("start request = %+v", r)
 	}
 	if _, err := p.hub.Call(as("alice", "ORG-CHECKOUT", "contributor"), "", "goap-scheduler/start", map[string]any{"intent": "anything"}); err == nil {
@@ -827,7 +827,7 @@ func TestChangeCreateAndMoveProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.g.Commit(ctx, graph.Commit{ProjectID: access.DefaultProject, Namespace: access.NamespaceOrganisation, Title: "project", Baseline: head.ID, By: "test",
+	if _, err := p.g.CommitEdits(ctx, graph.Edits{ProjectID: access.DefaultProject, Namespace: access.NamespaceOrganisation, Title: "project", Commit: head.ID, By: "test",
 		Edits: []graph.NodeEdit{{Key: "PROJ-MV", Type: access.NodeTypeProjectUnit, Props: map[string]any{"name": "MV"}, Rationale: "t",
 			Links: []graph.LinkEdit{{Type: access.LinkProjectPartOf, To: &rootRef}}}}}); err != nil {
 		t.Fatal(err)

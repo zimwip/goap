@@ -19,7 +19,7 @@ func testConcurrentWritersOfAChange(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "together", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "together", ForkCommit: f.base.ID}))
 	const n = 8
 	parallel := func(fn func(i int) error) []error {
 		errs := make([]error, n)
@@ -84,7 +84,7 @@ func testConcurrentWritersOfAChange(t *testing.T, repo Repo) {
 }
 
 // Changes merged into one branch at once all commit (ADR 0127): a merge reads the head of the target under the branch's
-// lock, so the later one sees the earlier one committed and merges after it, and the head moves only from the baseline a
+// lock, so the later one sees the earlier one committed and merges after it, and the head moves only from the commit a
 // merge built on: no merge leaves the work of another out of the branch.
 func TestConcurrentMergesIntoABranch(t *testing.T) { forEachRepo(t, testConcurrentMergesIntoABranch) }
 
@@ -95,7 +95,7 @@ func testConcurrentMergesIntoABranch(t *testing.T, repo Repo) {
 	const n = 4
 	ids := make([]domain.ChangeID, n)
 	for i := range n {
-		c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: fmt.Sprintf("add %d", i), BaselineID: f.base.ID}))
+		c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: fmt.Sprintf("add %d", i), ForkCommit: f.base.ID}))
 		cn := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: fmt.Sprintf("REQ-M%d", i), Type: "Requirement", Rationale: "new"}))
 		must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, cn.ID, "bob", "fine"))
 		ids[i] = c.ID
@@ -115,7 +115,7 @@ func testConcurrentMergesIntoABranch(t *testing.T, repo Repo) {
 			t.Fatalf("merge %d: %v", i, err)
 		}
 	}
-	head := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
+	head := must[domain.Commit](t)(g.BranchHead(ctx, "", domain.MainBranch))
 	for i := range n {
 		key := fmt.Sprintf("REQ-M%d", i)
 		if n, err := g.NodeByKeyOn(ctx, "", domain.MainBranch, key); err != nil || head.Nodes[n.ID] != n.Version {

@@ -55,7 +55,7 @@ func findChangeImpact(c domain.Change, id domain.ChangeImpactID) (domain.ChangeI
 }
 
 // ProposeImpact adds change impacts to a change (ADR 0024): each names an existing node (intent modified) and a
-// rationale; its pre version must be in the reference baseline. The impact has no version until a ImpactNodeCheckout
+// rationale; its pre version must be in the reference commit. The impact has no version until a ImpactNodeCheckout
 // writes one (ADR 0076). A new node is created by ImpactNodeCreate, which adds its impact and its draft in one event
 // (ADR 0077); it may be planned before (intent created, a key and a type, no draft): what an impact analysis finds the
 // change will create, written later by ImpactNodeCreate or ImpactNodeCheckout on the same key, else withdrawn.
@@ -87,8 +87,8 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 		if err != nil {
 			return err
 		}
-		// the reference baseline is read for the nodes the impacts name, never whole (ADR 0137)
-		b, err := headerOf(ctx, tx, c.BaselineID)
+		// the reference commit is read for the nodes the impacts name, never whole (ADR 0137)
+		b, err := headerOf(ctx, tx, c.ForkCommit)
 		if err != nil {
 			return err
 		}
@@ -108,7 +108,7 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 		if b.Nodes, err = versionsAt(ctx, tx, b.ID, ids); err != nil {
 			return err
 		}
-		ix, err := g.typesAt(ctx, tx, c.BaselineID)
+		ix, err := g.typesAt(ctx, tx, c.ForkCommit)
 		if err != nil {
 			return err
 		}
@@ -178,7 +178,7 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 					if n, err = tx.Node(ctx, *cn.Pre); err != nil && !errors.Is(err, ErrNotFound) {
 						return err
 					} else if err != nil || !n.Deleted {
-						return fmt.Errorf("change impact %s: pre %s is not in baseline %s (the node moved on): %w", cn.ID, cn.Pre, b.ID, ErrConflict)
+						return fmt.Errorf("change impact %s: pre %s is not in commit %s (the node moved on): %w", cn.ID, cn.Pre, b.ID, ErrConflict)
 					}
 				} else if n, err = tx.Node(ctx, *cn.Pre); err != nil {
 					return err
@@ -265,10 +265,10 @@ func (p *presence) add(id domain.NodeID) {
 
 // checkPlannedKey refuses a planned creation whose key a node already holds, or the change already acts on in the
 // flow (createTx makes the same checks when the node is created).
-func (g *Graph) checkPlannedKey(ctx context.Context, tx Tx, c domain.Change, b domain.Baseline, cn domain.ChangeImpact) error {
+func (g *Graph) checkPlannedKey(ctx context.Context, tx Tx, c domain.Change, b domain.Commit, cn domain.ChangeImpact) error {
 	if nid, err := tx.NodeIDByKey(ctx, domain.NamespaceOf(c.Namespace), cn.Key); err == nil {
 		if _, ok := b.Nodes[nid]; ok {
-			return fmt.Errorf("cannot plan %s (%s): the reference baseline of change %s already holds it: %w", cn.Key, cn.Type, c.ID, ErrConflict)
+			return fmt.Errorf("cannot plan %s (%s): the reference commit of change %s already holds it: %w", cn.Key, cn.Type, c.ID, ErrConflict)
 		}
 	} else if !errors.Is(err, ErrNotFound) {
 		return err

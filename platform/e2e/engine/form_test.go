@@ -57,7 +57,7 @@ func startForm(t *testing.T, code string) (*engine.Engine, *graph.Graph, *engine
 	}
 	e.Methodologies = engine.StaticMethodologies{cm.Definition().Name: cm}
 	e.Executors[methodology.KindScript] = engine.ScriptExecutor{Sandboxes: engine.InprocSandboxes{}}
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "linking", Goal: "link", BaselineID: base, ProjectID: testProject, Intent: "link the requirement"})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "linking", Goal: "link", ForkCommit: base, ProjectID: testProject, Intent: "link the requirement"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestSubmitFormWithoutCode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes, _, _ := g.BaselineGraph(ctx, c.BaselineID)
+	nodes, _, _ := g.CommitGraph(ctx, c.ForkCommit)
 	var tst domain.NodeID
 	for _, n := range nodes {
 		if n.Key == "TST-1" {

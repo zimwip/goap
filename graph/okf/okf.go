@@ -1,7 +1,7 @@
-// Package okf renders the state of a graph at a baseline as an OKF tree (ADR 0111): one Markdown file per node, its
+// Package okf renders the state of a graph at a commit as an OKF tree (ADR 0111): one Markdown file per node, its
 // identity, properties and links in a YAML front matter, its long texts and its links to other nodes in a Markdown
 // body, and an index per namespace. The snapshot comes from the graph (pkg/graph.Snapshot, ADR 0104): no history, the
-// state of one baseline.
+// state of one commit.
 package okf
 
 import (
@@ -56,7 +56,7 @@ const (
 	KeyState          = "state"
 	KeyOwner          = "owner"
 	KeyNamespace      = "namespace"
-	KeyBaseline       = "baseline"
+	KeyCommit         = "commit"
 	KeyAliases        = "aliases"
 	KeyTags           = "tags"
 	KeyLinkProperties = "linkProperties"
@@ -111,7 +111,7 @@ type Index struct {
 	Format     string         `yaml:"format"`
 	Namespace  string         `yaml:"namespace"`
 	Branch     string         `yaml:"branch,omitempty"`
-	Baseline   string         `yaml:"baseline,omitempty"`
+	Commit     string         `yaml:"commit,omitempty"`
 	ExportedAt time.Time      `yaml:"exportedAt"`
 	Nodes      int            `yaml:"nodes"`
 	Types      map[string]int `yaml:"types,omitempty"`
@@ -263,8 +263,8 @@ func frontMatter(s graph.Snapshot, e *entry, byKey map[string]*entry, inBody map
 		put(KeyOwner, n.Owner)
 	}
 	put(KeyNamespace, s.Namespace)
-	if s.Baseline != "" {
-		put(KeyBaseline, s.Baseline)
+	if s.Commit != "" {
+		put(KeyCommit, s.Commit)
 	}
 	put(KeyAliases, []string{n.Key})
 	tags := []string{tagOf(s.Namespace) + "/" + tagOf(typeName(n.Type))}
@@ -333,7 +333,7 @@ func tagOf(s string) string {
 }
 
 func renderIndex(s graph.Snapshot, entries []*entry) ([]byte, error) {
-	idx := Index{Format: Format, Namespace: s.Namespace, Branch: s.Branch, Baseline: s.Baseline, ExportedAt: s.ExportedAt.UTC(), Nodes: len(entries)}
+	idx := Index{Format: Format, Namespace: s.Namespace, Branch: s.Branch, Commit: s.Commit, ExportedAt: s.ExportedAt.UTC(), Nodes: len(entries)}
 	byType := map[string][]*entry{}
 	for _, e := range entries {
 		byType[e.node.Type] = append(byType[e.node.Type], e)
@@ -349,8 +349,8 @@ func renderIndex(s graph.Snapshot, entries []*entry) ([]byte, error) {
 		return nil, err
 	}
 	fmt.Fprintf(&b, "# %s\n", oneLine(s.Namespace))
-	if s.Baseline != "" {
-		fmt.Fprintf(&b, "\nState of baseline `%s` (branch %s).\n", s.Baseline, s.Branch)
+	if s.Commit != "" {
+		fmt.Fprintf(&b, "\nState of commit `%s` (branch %s).\n", s.Commit, s.Branch)
 	} else {
 		b.WriteString("\nNothing committed yet: the empty state.\n")
 	}

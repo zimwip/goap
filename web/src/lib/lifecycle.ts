@@ -223,13 +223,13 @@ export function declaredProperties(cat: TypeCatalog, type: string | undefined): 
 }
 
 
-/** The nodes of a baseline the impacts of a change act on, every page of them: never the whole baseline, whose size is
+/** The nodes of a commit the impacts of a change act on, every page of them: never the whole commit, whose size is
  * the graph's, not the change's (ADR 0140). */
-export async function changeNodes(changeId: string, baselineId: string, signal?: AbortSignal): Promise<GraphNode[]> {
-  if (!baselineId) return [];
+export async function changeNodes(changeId: string, commitId: string, signal?: AbortSignal): Promise<GraphNode[]> {
+  if (!commitId) return [];
   const out: GraphNode[] = [];
   for (;;) {
-    const r = await graph.listBaselineNodes({ view: { changeId }, changeId, includeDeleted: true, offset: out.length, limit: 500 }, signal);
+    const r = await graph.listCommitNodes({ view: { changeId }, changeId, includeDeleted: true, offset: out.length, limit: 500 }, signal);
     out.push(...(r.nodes ?? []));
     if (!r.nodes?.length || out.length >= (r.total ?? 0)) return out;
   }
@@ -283,7 +283,7 @@ export function lifecycleRows(
   return [...rows, ...createdRows(cat, cns, posts, scoped)];
 }
 
-/** Nodes of the baseline the change could take on: of its namespace (every one without), not deleted. */
+/** Nodes of the commit the change could take on: of its namespace (every one without), not deleted. */
 export function reopenable(nodes: GraphNode[], rows: LifecycleRow[], namespace = ''): GraphNode[] {
   const have = new Set(rows.map((r) => r.node.id));
   return nodes.filter((n) => !n.deleted && !have.has(n.id) && (!namespace || n.namespace === namespace));

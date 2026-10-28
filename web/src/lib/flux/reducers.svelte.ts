@@ -8,8 +8,8 @@ import { stamp, throttled, touchAll, touchSoon } from './signals.svelte';
 import { notePosition } from './positions';
 import { keysOf } from './keys';
 import { keyOf } from './signals.svelte';
-import { baselines, changes, methodologies, refreshBaselines, refreshChanges, refreshMethodologies, baselinesNamespace } from '../stores/catalog.svelte';
-import { refreshBranches } from '../stores/baselineTool.svelte';
+import { commits, changes, methodologies, refreshCommits, refreshChanges, refreshMethodologies, commitsNamespace } from '../stores/catalog.svelte';
+import { refreshBranches } from '../stores/commitTool.svelte';
 import { draftKey, peekDraft } from '../stores/drafts.svelte';
 import { isOwnCommand } from './commands';
 import { domainDrafts, domainKey, domains, refreshDomains } from '../stores/domains.svelte';
@@ -26,7 +26,7 @@ export function startReducers(): () => void {
   const offs = [
     // where a write left the log of a change (ADR 0153): the reads it causes must see at least that far
     onKind('change', (e) => notePosition(e.id, e.version)),
-    onKind(['change', 'node', 'baseline', 'methodology', 'domain', 'conversation', 'job', 'model', 'connector', 'preferences'], (e) => {
+    onKind(['change', 'node', 'commit', 'methodology', 'domain', 'conversation', 'job', 'model', 'connector', 'preferences'], (e) => {
       for (const k of keysOf(e)) touchSoon(k);
     }),
     // a version somebody else saved, published or removed, in an open draft
@@ -51,9 +51,9 @@ export function startReducers(): () => void {
       return changesList.cancel;
     });
     $effect(() => {
-      void stamp(keyOf.baselines);
+      void stamp(keyOf.commits);
       untrack(() => {
-        if (baselines.loaded && baselinesNamespace()) void refreshBaselines(baselinesNamespace());
+        if (commits.loaded && commitsNamespace()) void refreshCommits(commitsNamespace());
         refreshBranches();
       });
     });

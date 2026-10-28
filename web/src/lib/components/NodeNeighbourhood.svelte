@@ -15,11 +15,11 @@
 </script>
 
 <script lang="ts">
-  // The graph view of one node of a baseline: its neighbours (GetNodeNeighbourhood), up to `MAX_LEVELS` levels the
+  // The graph view of one node of a commit: its neighbours (GetNodeNeighbourhood), up to `MAX_LEVELS` levels the
   // reader picks (the deeper ones read on demand: parents of parents, children of children), a click recenters, a
   // double-click opens the node, a link selected shows both of its ends with its properties; below, the node's
-  // change-stack and properties. Shared by the Baseline tab and the Graph pane of the node editor, which gives the
-  // world of its change (`inChange`: the neighbourhoods are read in the world of that change, not in a baseline).
+  // change-stack and properties. Shared by the Commit tab and the Graph pane of the node editor, which gives the
+  // world of its change (`inChange`: the neighbourhoods are read in the world of that change, not in a commit).
   import { graph, errorMessage } from '../api';
   import NodeGraph from './NodeGraph.svelte';
   import ChangeStackView from './ChangeStackView.svelte';
@@ -29,7 +29,7 @@
   import { typeCatalog } from '../stores/types.svelte';
 
   let {
-    baselineId,
+    commitId,
     namespace,
     branch = MAIN_BRANCH,
     node = $bindable(''),
@@ -43,10 +43,10 @@
     inChange,
     keep,
   }: {
-    baselineId: string;
-    /** the namespace the baseline holds: a node of another one opens in its editor instead of recentering */
+    commitId: string;
+    /** the namespace the commit holds: a node of another one opens in its editor instead of recentering */
     namespace: string;
-    /** the branch of the baseline (ADR 0157: always named; main unless said) */
+    /** the branch of the commit (ADR 0157: always named; main unless said) */
     branch?: string;
     /** the node at the center */
     node?: string;
@@ -61,14 +61,14 @@
     compact?: boolean;
     /** the graph takes the height left in the editor (NodeGraph) */
     fill?: boolean;
-    /** the change whose world (its fork as it left it, its commits, its drafts) is read in place of the baseline */
+    /** the change whose world (its fork as it left it, its commits, its drafts) is read in place of the commit */
     inChange?: { changeId: string; flow?: string };
     /** the nodes shown around the center (a filter, a query's answer); unset: every one */
     keep?: (n: GraphNode) => boolean;
   } = $props();
 
-  /** what the neighbourhoods are read from: the world given, else the baseline ('' : nothing to read) */
-  const source = $derived(inChange ? `change:${inChange.changeId}:${inChange.flow ?? ''}` : baselineId);
+  /** what the neighbourhoods are read from: the world given, else the commit ('' : nothing to read) */
+  const source = $derived(inChange ? `change:${inChange.changeId}:${inChange.flow ?? ''}` : commitId);
   const readHood = (b: string, id: string, signal?: AbortSignal): Promise<Read> => graph.getNodeNeighbourhood(inChange ?? branchView(namespace, b, branch), id, signal);
 
   const MAX_LEVELS = 4;
@@ -104,7 +104,7 @@
 
   let depth = $state(1);
   type Read = { node?: GraphNode; nodes?: GraphNode[]; links?: Link[]; suspectLinkIds?: string[] };
-  /** the neighbourhoods read beyond the center's, by node id, for this baseline and reload */
+  /** the neighbourhoods read beyond the center's, by node id, for this commit and reload */
   let reads = $state(new Map<string, Read>());
   let deepLoading = $state(false);
 
@@ -162,7 +162,7 @@
   });
 
   const index = $derived.by(() => {
-    if (!center) return indexOf(baselineId, [], []);
+    if (!center) return indexOf(commitId, [], []);
     const nodes = new Map<string, GraphNode>();
     const links = new Map<string, Link>();
     const add = (r: Read) => {
@@ -175,7 +175,7 @@
       for (const [id, n] of nodes) if (id !== center.id && !keep(n)) nodes.delete(id);
       for (const [id, l] of links) if (!nodes.has(l.from?.id ?? '') || !nodes.has(l.to?.id ?? '')) links.delete(id);
     }
-    return indexOf(baselineId, [...nodes.values()], [...links.values()]);
+    return indexOf(commitId, [...nodes.values()], [...links.values()]);
   });
   const suspect = $derived(new Set([...hood.suspect, ...[...reads.values()].flatMap((r) => r.suspectLinkIds ?? [])]));
   const byNodeId = (nid: string) => index.nodes.get(nid);
@@ -183,7 +183,7 @@
   function select(n: GraphNode | undefined) {
     if (!n?.id) return;
     link = undefined;
-    // a neighbour the baseline does not hold (another namespace): open it in its editor
+    // a neighbour the commit does not hold (another namespace): open it in its editor
     if ((n.namespace ?? '') !== namespace) {
       void openNode(n, { pin: true });
       return;
@@ -245,7 +245,7 @@
 
   const linkViewIndex = $derived(
     indexOf(
-      baselineId,
+      commitId,
       [...(linkFromNode ? [linkFromNode] : []), ...(linkToNode ? [linkToNode] : []), ...linkFromNeighbours, ...linkToNeighbours],
       [...linkFromLinks, ...linkToLinks],
     ),

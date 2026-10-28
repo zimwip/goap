@@ -81,11 +81,11 @@ type Event struct {
 	// epoch of the stream the seq belongs to; seq is ordered within it
 	Epoch string `protobuf:"bytes,1,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	Seq   uint64 `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
-	// process.started | process.step ... | change.created | change.applied ... | node.written | baseline.advanced |
+	// process.started | process.step ... | change.created | change.applied ... | node.written | commit.advanced |
 	// methodology.published ... | domain.published ... | presence.snapshot | presence.joined | presence.moved |
 	// presence.left | resync | heartbeat
 	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	// what changed: process, change, node, baseline, methodology, domain, presence
+	// what changed: process, change, node, commit, methodology, domain, presence
 	Kind      string `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
 	Id        string `protobuf:"bytes,5,opt,name=id,proto3" json:"id,omitempty"`
 	Namespace string `protobuf:"bytes,6,opt,name=namespace,proto3" json:"namespace,omitempty"`

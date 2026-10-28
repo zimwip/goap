@@ -20,7 +20,7 @@ func TestPersonReviewsModelOutput(t *testing.T) {
 	e, g, base := setup(t)
 	e.PersonReviewsModelOutput = true
 	in := engine.InternalsOf(e)
-	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "alm", Title: "PSP v2", BaselineID: base, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "alm", Title: "PSP v2", ForkCommit: base, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}

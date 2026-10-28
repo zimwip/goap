@@ -113,7 +113,7 @@ func parseDocs(t *testing.T, edit func(*methodology.Methodology)) *methodology.C
 	return cm
 }
 
-func mcpEngine(t *testing.T, hub engine.ToolPort, client llm.Client) (*engine.Engine, domain.BaselineID) {
+func mcpEngine(t *testing.T, hub engine.ToolPort, client llm.Client) (*engine.Engine, domain.CommitID) {
 	t.Helper()
 	e, g, base := setup(t)
 	// the organisations holding the changes
@@ -131,10 +131,10 @@ func mcpEngine(t *testing.T, hub engine.ToolPort, client llm.Client) (*engine.En
 	return e, base
 }
 
-func runDocs(t *testing.T, e *engine.Engine, base domain.BaselineID, org string) *engine.Process {
+func runDocs(t *testing.T, e *engine.Engine, base domain.CommitID, org string) *engine.Process {
 	t.Helper()
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "alice", Org: org, Roles: []string{"admin"}})
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "docs", Agent: "writer", Goal: "done", BaselineID: base, Intent: "document it", OwnerOrg: org, ProjectID: testProject})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "docs", Agent: "writer", Goal: "done", ForkCommit: base, Intent: "document it", OwnerOrg: org, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

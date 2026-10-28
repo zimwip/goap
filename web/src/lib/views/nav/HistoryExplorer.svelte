@@ -1,18 +1,18 @@
 <script lang="ts">
-  // Baseline explorer: namespace → branches, open ones first. Selecting a branch opens its baseline tab
-  // (BaselineTab.svelte), pinned. Branch management (open/merge/abandon/describe) is a right-click on the row, not
+  // History explorer: namespace → branches, open ones first. Selecting a branch opens its commit tab
+  // (CommitTab.svelte), pinned. Branch management (open/merge/abandon/describe) is a right-click on the row, not
   // shown inline here or in the tab.
   import { untrack } from 'svelte';
   import { isMeta } from '../../stores/session.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { loadRaw, save } from '../../shell/storage';
-  import { graph, errorMessage, formatDate, type Baseline, type Branch } from '../../api';
+  import { graph, errorMessage, formatDate, type Commit, type Branch } from '../../api';
   import { changeOfBranch, isChangeBranch, shownBranches } from '../../branchFilter';
   import { activeTab, openTab } from '../../shell/tabs.svelte';
   import { MAIN_BRANCH } from '../../namespace';
   import { loadTypes as loadCatalog, typeCatalog } from '../../stores/types.svelte';
-  import { baselineTool, selectNamespace, openBaseline, refreshBranches } from '../../stores/baselineTool.svelte';
+  import { commitTool, selectNamespace, openCommit, refreshBranches } from '../../stores/commitTool.svelte';
   import { openContextMenu, type ContextMenuItem } from '../../shell/contextMenuState.svelte';
   import { openFieldDialog } from '../../shell/fieldDialogState.svelte';
   import { openMergeDialog } from '../../shell/mergeDialogState.svelte';
@@ -23,59 +23,59 @@
 
   // Methodologies are nodes typed by the meta-domain methodology (ADR 0023), authored in their own editors and
   // explorer: not offered here by default.
-  const CLOSED_KEY = 'goap.ide.baselines.showClosed';
+  const CLOSED_KEY = 'goap.ide.commits.showClosed';
 
   let namespaces = $state<string[]>([]);
   let branches = $state<Branch[]>([]);
   let counts = $state.raw<Record<string, number>>({});
-  let baselinesById = $state.raw<Map<string, Baseline>>(new Map());
+  let commitsById = $state.raw<Map<string, Commit>>(new Map());
   let loading = $state(false);
   let error = $state('');
   let reload = $state(0);
   let showClosed = $state(!!loadRaw(CLOSED_KEY));
 
   void loadCatalog();
-  /** namespaces holding nodes, plus the ones a domain declares (a namespace without a baseline can be started) */
+  /** namespaces holding nodes, plus the ones a domain declares (a namespace without a commit can be started) */
   const choices = $derived([...new Set([...namespaces, ...typeCatalog.cat.namespaces().filter((n) => !isMeta(n))])].sort());
 
   $effect(() => {
     void reload;
-    void baselineTool.reload; // a baseline created by anyone may open a namespace
+    void commitTool.reload; // a commit created by anyone may open a namespace
     graph
       .listNamespaces()
       .then((r) => {
         namespaces = r.namespaces ?? [];
-        const ns = baselineTool.namespace;
+        const ns = commitTool.namespace;
         if (!ns || !(namespaces.includes(ns) || typeCatalog.cat.namespaces().includes(ns))) selectNamespace(namespaces.find((n) => !isMeta(n)) ?? namespaces[0] ?? '');
       })
       .catch((e) => (error = errorMessage(e)));
   });
 
-  /** the baseline tab shown, if any: the explorer follows its namespace and marks its branch */
+  /** the commit tab shown, if any: the explorer follows its namespace and marks its branch */
   const shownTab = $derived.by(() => {
     const t = activeTab();
-    return t?.kind === 'baseline' ? t : undefined;
+    return t?.kind === 'commit' ? t : undefined;
   });
-  /** the namespace of the baseline tab shown: the explorer moves to it when the tab shown changes, never back when the
+  /** the namespace of the commit tab shown: the explorer moves to it when the tab shown changes, never back when the
    * person picks another namespace while the tab stays (the namespace picked is not tracked here) */
   const shownNamespace = $derived(shownTab?.params.namespace ?? '');
   $effect(() => {
     const ns = shownNamespace;
-    if (ns && ns !== untrack(() => baselineTool.namespace)) selectNamespace(ns);
+    if (ns && ns !== untrack(() => commitTool.namespace)) selectNamespace(ns);
   });
-  const activeBranch = $derived(shownTab && shownTab.params.namespace === baselineTool.namespace ? shownTab.params.branch || MAIN_BRANCH : '');
+  const activeBranch = $derived(shownTab && shownTab.params.namespace === commitTool.namespace ? shownTab.params.branch || MAIN_BRANCH : '');
 
-  const shown = $derived(shownBranches(branches, showClosed, baselinesById.values()));
+  const shown = $derived(shownBranches(branches, showClosed, commitsById.values()));
 
   $effect(() => {
     void reload;
-    void baselineTool.reload;
-    const ns = baselineTool.namespace;
+    void commitTool.reload;
+    const ns = commitTool.namespace;
     if (!ns) return;
     const ctrl = new AbortController();
     loading = true;
     error = '';
-    // the branches with their heads and counts, the merged and abandoned ones only when asked: never every baseline of
+    // the branches with their heads and counts, the merged and abandoned ones only when asked: never every commit of
     // the namespace (ADR 0140)
     graph
       .listBranches(ns, ctrl.signal, showClosed ? {} : { status: ['open'] })
@@ -83,7 +83,7 @@
         let bl = br.branches ?? [];
         if (!bl.some((b) => b.name === 'main')) bl = [{ name: 'main', namespace: ns, status: 'open' }, ...bl];
         branches = bl;
-        baselinesById = new Map((br.heads ?? []).map((b) => [b.id ?? '', b]));
+        commitsById = new Map((br.heads ?? []).map((b) => [b.id ?? '', b]));
         counts = br.counts ?? {};
       })
       .catch((e) => {
@@ -95,13 +95,13 @@
     return () => ctrl.abort();
   });
 
-  const headOf = (b: Branch) => (b.head ? baselinesById.get(b.head) : undefined);
+  const headOf = (b: Branch) => (b.head ? commitsById.get(b.head) : undefined);
   const countOf = (b: Branch) => counts[b.name || 'main'] ?? 0;
 
   async function abandon(name: string) {
     if (!(await confirmDialog({ message: `Abandon the branch ${name}? It takes no change any more.`, danger: true }))) return;
     try {
-      await graph.setBranchStatus(baselineTool.namespace, name, 'abandoned');
+      await graph.setBranchStatus(commitTool.namespace, name, 'abandoned');
       notify(`Branch ${name} abandoned.`, 'ok');
       refreshBranches();
     } catch (e) {
@@ -111,7 +111,7 @@
 
   async function setStatus(name: string, status: 'open' | 'abandoned') {
     try {
-      await graph.setBranchStatus(baselineTool.namespace, name, status);
+      await graph.setBranchStatus(commitTool.namespace, name, status);
       notify(`Branch ${name} ${status === 'open' ? 'reopened' : status}.`, 'ok');
       refreshBranches();
     } catch (e) {
@@ -125,7 +125,7 @@
       submitLabel: 'Save',
       fields: [{ key: 'description', label: 'Description', type: 'textarea', default: b.description ?? '' }],
       onsubmit: async (v) => {
-        await graph.setBranchDescription(baselineTool.namespace, b.name ?? '', v.description.trim());
+        await graph.setBranchDescription(commitTool.namespace, b.name ?? '', v.description.trim());
         notify(`Description of ${b.name} saved.`, 'ok');
         refreshBranches();
       },
@@ -142,7 +142,7 @@
         { key: 'description', label: 'Description' },
       ],
       onsubmit: async (v) => {
-        await graph.createBranch({ namespace: baselineTool.namespace, name: v.name.trim(), fromBaseline: head?.id ?? '', description: v.description?.trim() || undefined });
+        await graph.createBranch({ namespace: commitTool.namespace, name: v.name.trim(), fromCommit: head?.id ?? '', description: v.description?.trim() || undefined });
         notify(`Branch ${v.name.trim()} opened.`, 'ok');
         refreshBranches();
       },
@@ -152,7 +152,7 @@
   /** Exports the head of a branch of the namespace without history: a JSON snapshot (ADR 0104) or an OKF zip, one
    *  Markdown file per node (ADR 0111); a job (ADR 0149), saved when done. */
   async function exportSnapshot(branch: string, format: 'json' | 'okf' = 'json') {
-    const ns = baselineTool.namespace;
+    const ns = commitTool.namespace;
     if (!ns) return;
     try {
       await exportGraph({ namespace: ns, branch, format });
@@ -174,7 +174,7 @@
     } else if (b.name !== 'main') {
       if (b.status === 'open') {
         for (const target of branches.filter((x) => x.status === 'open' && x.name !== b.name))
-          items.push({ label: `Merge into ${target.name}`, icon: 'branch', run: () => openMergeDialog(baselineTool.namespace, b.name ?? '', target.name ?? '') });
+          items.push({ label: `Merge into ${target.name}`, icon: 'branch', run: () => openMergeDialog(commitTool.namespace, b.name ?? '', target.name ?? '') });
         items.push({ label: 'Abandon', icon: 'trash', danger: true, run: () => abandon(b.name ?? '') });
       } else {
         items.push({ label: 'Reopen', icon: 'refresh', run: () => setStatus(b.name ?? '', 'open') });
@@ -187,8 +187,8 @@
 
 <div class="explorer">
   <div class="tools">
-    <select aria-label="Namespace" title="Namespace" value={baselineTool.namespace} onchange={(e) => selectNamespace(e.currentTarget.value)} data-no-pin>
-      {#if baselineTool.namespace && !namespaces.includes(baselineTool.namespace)}<option value={baselineTool.namespace}>{baselineTool.namespace}</option>{/if}
+    <select aria-label="Namespace" title="Namespace" value={commitTool.namespace} onchange={(e) => selectNamespace(e.currentTarget.value)} data-no-pin>
+      {#if commitTool.namespace && !namespaces.includes(commitTool.namespace)}<option value={commitTool.namespace}>{commitTool.namespace}</option>{/if}
       {#each choices as ns (ns)}<option value={ns}>{ns}</option>{/each}
     </select>
     <button
@@ -196,7 +196,7 @@
       class="ghost small"
       title="Export the head of {activeBranch || 'main'} as a JSON snapshot (no history)"
       aria-label="Export graph"
-      disabled={!baselineTool.namespace}
+      disabled={!commitTool.namespace}
       onclick={() => exportSnapshot(activeBranch || 'main')}><Icon name="download" size={14} /></button
     >
     <button
@@ -209,10 +209,10 @@
     <button
       type="button"
       class="ghost small"
-      title="Import from a source the domain of {baselineTool.namespace || 'the namespace'} declares (a git repository for code)"
+      title="Import from a source the domain of {commitTool.namespace || 'the namespace'} declares (a git repository for code)"
       aria-label="Import from a source"
-      disabled={!baselineTool.namespace}
-      onclick={() => openTab({ kind: 'sources', params: { ns: baselineTool.namespace } }, { pin: true })}><Icon name="database" size={14} /></button
+      disabled={!commitTool.namespace}
+      onclick={() => openTab({ kind: 'sources', params: { ns: commitTool.namespace } }, { pin: true })}><Icon name="database" size={14} /></button
     >
     <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={loading} onclick={() => reload++}
       ><Icon name="refresh" size={14} /></button
@@ -222,12 +222,12 @@
     <label class="check"><input type="checkbox" bind:checked={showClosed} onchange={() => save(CLOSED_KEY, showClosed)} /> merged and abandoned</label>
   </div>
   {#if error}<div class="alert small">{error}</div>{/if}
-  {#if !loading && !error && baselineTool.namespace && !branches.length}
+  {#if !loading && !error && commitTool.namespace && !branches.length}
     <div class="empty pad">
-      No baselines in {baselineTool.namespace} yet: the first change that commits creates one.
+      No commits in {commitTool.namespace} yet: the first change that commits creates one.
     </div>
   {/if}
-  {#if !baselineTool.namespace && !error}<p class="empty pad">The graph holds no nodes yet.</p>{/if}
+  {#if !commitTool.namespace && !error}<p class="empty pad">The graph holds no nodes yet.</p>{/if}
   <div role="tree" aria-label="Branches">
     {#each shown as b (b.name)}
       {@const head = headOf(b)}
@@ -236,7 +236,7 @@
         label={b.name || ''}
         detail={head ? formatDate(head.createdAt) : '—'}
         active={activeBranch === (b.name ?? '')}
-        onselect={() => openBaseline(baselineTool.namespace, b.name ?? '')}
+        onselect={() => openCommit(commitTool.namespace, b.name ?? '')}
         oncontextmenu={(e) => menu(e, b)}
       >
         {#snippet trail()}
@@ -245,7 +245,7 @@
         {/snippet}
       </TreeRow>
     {/each}
-    {#if baselineTool.namespace && !loading && !shown.length && branches.length}
+    {#if commitTool.namespace && !loading && !shown.length && branches.length}
       <p class="empty pad">No open branches. <button type="button" class="link small" onclick={() => (showClosed = true)}>Show merged and abandoned.</button></p>
     {/if}
   </div>

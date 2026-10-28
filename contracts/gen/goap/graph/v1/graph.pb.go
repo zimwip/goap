@@ -104,16 +104,16 @@ func (x *RepublishIndexResponse) GetVersions() int32 {
 	return 0
 }
 
-// View is what a read of the current graph is scoped to (ADR 0157): a lasting branch at one of its baselines, or a
+// View is what a read of the current graph is scoped to (ADR 0157): a lasting branch at one of its commits, or a
 // change on a flow (its fork, its commits and the drafts of that flow). A read of the current graph naming none is
 // refused (INVALID_ARGUMENT); only the reads of the history name versions instead.
 type View struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// a lasting branch (empty: main) of a namespace, at one of its baselines (empty: its head when the read starts; a
-	// baseline alone names its namespace)
-	Namespace  string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Branch     string `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
-	BaselineId string `protobuf:"bytes,3,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	// a lasting branch (empty: main) of a namespace, at one of its commits (empty: its head when the read starts; a
+	// commit alone names its namespace)
+	Namespace string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Branch    string `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
+	CommitId  string `protobuf:"bytes,3,opt,name=commit_id,json=commitId,proto3" json:"commit_id,omitempty"`
 	// a change on a flow ("main" or an option id; empty: the active option, else the main flow), in place of a branch
 	ChangeId      string `protobuf:"bytes,4,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
 	Flow          string `protobuf:"bytes,5,opt,name=flow,proto3" json:"flow,omitempty"`
@@ -165,9 +165,9 @@ func (x *View) GetBranch() string {
 	return ""
 }
 
-func (x *View) GetBaselineId() string {
+func (x *View) GetCommitId() string {
 	if x != nil {
-		return x.BaselineId
+		return x.CommitId
 	}
 	return ""
 }
@@ -694,7 +694,7 @@ func (x *NodeView) GetInTypes() []*TypeCount {
 	return nil
 }
 
-type Baseline struct {
+type Commit struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name      string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
@@ -704,30 +704,30 @@ type Baseline struct {
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	Branch    string                 `protobuf:"bytes,7,opt,name=branch,proto3" json:"branch,omitempty"`
 	Namespace string                 `protobuf:"bytes,8,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	// the head of the branch merged in, when this baseline is the result of a merge (a second parent)
+	// the head of the branch merged in, when this commit is the result of a merge (a second parent)
 	MergedFrom string `protobuf:"bytes,9,opt,name=merged_from,json=mergedFrom,proto3" json:"merged_from,omitempty"`
 	// commit | merge | fast-forward | rebase | revert | snapshot (ADR 0056)
 	Kind string `protobuf:"bytes,10,opt,name=kind,proto3" json:"kind,omitempty"`
-	// the baseline the change was forked from before its rebase onto the head of its target (ADR 0101)
+	// the commit the change was forked from before its rebase onto the head of its target (ADR 0101)
 	RebasedFrom   string `protobuf:"bytes,11,opt,name=rebased_from,json=rebasedFrom,proto3" json:"rebased_from,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Baseline) Reset() {
-	*x = Baseline{}
+func (x *Commit) Reset() {
+	*x = Commit{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Baseline) String() string {
+func (x *Commit) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Baseline) ProtoMessage() {}
+func (*Commit) ProtoMessage() {}
 
-func (x *Baseline) ProtoReflect() protoreflect.Message {
+func (x *Commit) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -739,82 +739,82 @@ func (x *Baseline) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Baseline.ProtoReflect.Descriptor instead.
-func (*Baseline) Descriptor() ([]byte, []int) {
+// Deprecated: Use Commit.ProtoReflect.Descriptor instead.
+func (*Commit) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *Baseline) GetId() string {
+func (x *Commit) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *Baseline) GetName() string {
+func (x *Commit) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *Baseline) GetParentId() string {
+func (x *Commit) GetParentId() string {
 	if x != nil {
 		return x.ParentId
 	}
 	return ""
 }
 
-func (x *Baseline) GetChangeId() string {
+func (x *Commit) GetChangeId() string {
 	if x != nil {
 		return x.ChangeId
 	}
 	return ""
 }
 
-func (x *Baseline) GetNodes() map[string]int32 {
+func (x *Commit) GetNodes() map[string]int32 {
 	if x != nil {
 		return x.Nodes
 	}
 	return nil
 }
 
-func (x *Baseline) GetCreatedAt() *timestamppb.Timestamp {
+func (x *Commit) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-func (x *Baseline) GetBranch() string {
+func (x *Commit) GetBranch() string {
 	if x != nil {
 		return x.Branch
 	}
 	return ""
 }
 
-func (x *Baseline) GetNamespace() string {
+func (x *Commit) GetNamespace() string {
 	if x != nil {
 		return x.Namespace
 	}
 	return ""
 }
 
-func (x *Baseline) GetMergedFrom() string {
+func (x *Commit) GetMergedFrom() string {
 	if x != nil {
 		return x.MergedFrom
 	}
 	return ""
 }
 
-func (x *Baseline) GetKind() string {
+func (x *Commit) GetKind() string {
 	if x != nil {
 		return x.Kind
 	}
 	return ""
 }
 
-func (x *Baseline) GetRebasedFrom() string {
+func (x *Commit) GetRebasedFrom() string {
 	if x != nil {
 		return x.RebasedFrom
 	}
@@ -1036,19 +1036,19 @@ func (x *ChangeItem) GetDecisionEvent() *DecisionEvent {
 }
 
 type Change struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Title            string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Intent           string                 `protobuf:"bytes,3,opt,name=intent,proto3" json:"intent,omitempty"`
-	Methodology      string                 `protobuf:"bytes,4,opt,name=methodology,proto3" json:"methodology,omitempty"`
-	Goal             string                 `protobuf:"bytes,5,opt,name=goal,proto3" json:"goal,omitempty"`
-	Status           string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
-	BaselineId       string                 `protobuf:"bytes,7,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
-	ResultBaselineId string                 `protobuf:"bytes,8,opt,name=result_baseline_id,json=resultBaselineId,proto3" json:"result_baseline_id,omitempty"`
-	Data             *structpb.Struct       `protobuf:"bytes,9,opt,name=data,proto3" json:"data,omitempty"`
-	Items            []*ChangeItem          `protobuf:"bytes,10,rep,name=items,proto3" json:"items,omitempty"`
-	CreatedAt        *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	Branch           string                 `protobuf:"bytes,12,opt,name=branch,proto3" json:"branch,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Id           string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title        string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Intent       string                 `protobuf:"bytes,3,opt,name=intent,proto3" json:"intent,omitempty"`
+	Methodology  string                 `protobuf:"bytes,4,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	Goal         string                 `protobuf:"bytes,5,opt,name=goal,proto3" json:"goal,omitempty"`
+	Status       string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
+	ForkCommit   string                 `protobuf:"bytes,7,opt,name=fork_commit,json=forkCommit,proto3" json:"fork_commit,omitempty"`
+	LandedCommit string                 `protobuf:"bytes,8,opt,name=landed_commit,json=landedCommit,proto3" json:"landed_commit,omitempty"`
+	Data         *structpb.Struct       `protobuf:"bytes,9,opt,name=data,proto3" json:"data,omitempty"`
+	Items        []*ChangeItem          `protobuf:"bytes,10,rep,name=items,proto3" json:"items,omitempty"`
+	CreatedAt    *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Branch       string                 `protobuf:"bytes,12,opt,name=branch,proto3" json:"branch,omitempty"`
 	// namespace the change acts on (required with a type catalogue)
 	Namespace string `protobuf:"bytes,13,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// sub-change: the parent change and the responsible OrgUnit key
@@ -1149,16 +1149,16 @@ func (x *Change) GetStatus() string {
 	return ""
 }
 
-func (x *Change) GetBaselineId() string {
+func (x *Change) GetForkCommit() string {
 	if x != nil {
-		return x.BaselineId
+		return x.ForkCommit
 	}
 	return ""
 }
 
-func (x *Change) GetResultBaselineId() string {
+func (x *Change) GetLandedCommit() string {
 	if x != nil {
-		return x.ResultBaselineId
+		return x.LandedCommit
 	}
 	return ""
 }
@@ -1677,7 +1677,7 @@ type ChangeImpact struct {
 	// created | modified
 	Intent    string `protobuf:"bytes,4,opt,name=intent,proto3" json:"intent,omitempty"`
 	Rationale string `protobuf:"bytes,5,opt,name=rationale,proto3" json:"rationale,omitempty"`
-	// released version of the reference baseline (empty for a created node)
+	// released version of the reference commit (empty for a created node)
 	Pre *NodeRef `protobuf:"bytes,6,opt,name=pre,proto3" json:"pre,omitempty"`
 	// the draft of the node while the change works (a draft reference: the node, version 0, ADR 0079), the version written once
 	// the change is committed (empty while the impact of an existing node is only proposed)
@@ -2608,35 +2608,35 @@ func (*DeleteTagResponse) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{27}
 }
 
-type ListBaselinesRequest struct {
+type ListCommitsRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	// a page of the history of this branch (ADR 0140): its baselines committed before `before` (0: the newest), at most
-	// `limit` (default 100, at most 500), with what draws them in `related`. Neither branch nor ids: every baseline of
+	// a page of the history of this branch (ADR 0140): its commits committed before `before` (0: the newest), at most
+	// `limit` (default 100, at most 500), with what draws them in `related`. Neither branch nor ids: every commit of
 	// the namespace.
 	Branch string `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
 	Before int64  `protobuf:"varint,3,opt,name=before,proto3" json:"before,omitempty"`
 	Limit  int32  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
-	// the headers of these baselines only
+	// the headers of these commits only
 	Ids           []string `protobuf:"bytes,5,rep,name=ids,proto3" json:"ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListBaselinesRequest) Reset() {
-	*x = ListBaselinesRequest{}
+func (x *ListCommitsRequest) Reset() {
+	*x = ListCommitsRequest{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListBaselinesRequest) String() string {
+func (x *ListCommitsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListBaselinesRequest) ProtoMessage() {}
+func (*ListCommitsRequest) ProtoMessage() {}
 
-func (x *ListBaselinesRequest) ProtoReflect() protoreflect.Message {
+func (x *ListCommitsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2648,73 +2648,73 @@ func (x *ListBaselinesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListBaselinesRequest.ProtoReflect.Descriptor instead.
-func (*ListBaselinesRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListCommitsRequest.ProtoReflect.Descriptor instead.
+func (*ListCommitsRequest) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{28}
 }
 
-func (x *ListBaselinesRequest) GetNamespace() string {
+func (x *ListCommitsRequest) GetNamespace() string {
 	if x != nil {
 		return x.Namespace
 	}
 	return ""
 }
 
-func (x *ListBaselinesRequest) GetBranch() string {
+func (x *ListCommitsRequest) GetBranch() string {
 	if x != nil {
 		return x.Branch
 	}
 	return ""
 }
 
-func (x *ListBaselinesRequest) GetBefore() int64 {
+func (x *ListCommitsRequest) GetBefore() int64 {
 	if x != nil {
 		return x.Before
 	}
 	return 0
 }
 
-func (x *ListBaselinesRequest) GetLimit() int32 {
+func (x *ListCommitsRequest) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
 	}
 	return 0
 }
 
-func (x *ListBaselinesRequest) GetIds() []string {
+func (x *ListCommitsRequest) GetIds() []string {
 	if x != nil {
 		return x.Ids
 	}
 	return nil
 }
 
-type ListBaselinesResponse struct {
+type ListCommitsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// the headers of the baselines, oldest first: their nodes are not sent (ADR 0140)
-	Baselines []*Baseline `protobuf:"bytes,1,rep,name=baselines,proto3" json:"baselines,omitempty"`
-	// with a branch: the baselines the changes of the page left on their own branches, those of the open branches
+	// the headers of the commits, oldest first: their nodes are not sent (ADR 0140)
+	Commits []*Commit `protobuf:"bytes,1,rep,name=commits,proto3" json:"commits,omitempty"`
+	// with a branch: the commits the changes of the page left on their own branches, those of the open branches
 	// forked from it (newest page), and the ones their edges reach outside the page
-	Related []*Baseline `protobuf:"bytes,2,rep,name=related,proto3" json:"related,omitempty"`
+	Related []*Commit `protobuf:"bytes,2,rep,name=related,proto3" json:"related,omitempty"`
 	// with a branch: the `before` of the older page; 0: none
 	Next          int64 `protobuf:"varint,3,opt,name=next,proto3" json:"next,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListBaselinesResponse) Reset() {
-	*x = ListBaselinesResponse{}
+func (x *ListCommitsResponse) Reset() {
+	*x = ListCommitsResponse{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListBaselinesResponse) String() string {
+func (x *ListCommitsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListBaselinesResponse) ProtoMessage() {}
+func (*ListCommitsResponse) ProtoMessage() {}
 
-func (x *ListBaselinesResponse) ProtoReflect() protoreflect.Message {
+func (x *ListCommitsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2726,53 +2726,53 @@ func (x *ListBaselinesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListBaselinesResponse.ProtoReflect.Descriptor instead.
-func (*ListBaselinesResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListCommitsResponse.ProtoReflect.Descriptor instead.
+func (*ListCommitsResponse) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{29}
 }
 
-func (x *ListBaselinesResponse) GetBaselines() []*Baseline {
+func (x *ListCommitsResponse) GetCommits() []*Commit {
 	if x != nil {
-		return x.Baselines
+		return x.Commits
 	}
 	return nil
 }
 
-func (x *ListBaselinesResponse) GetRelated() []*Baseline {
+func (x *ListCommitsResponse) GetRelated() []*Commit {
 	if x != nil {
 		return x.Related
 	}
 	return nil
 }
 
-func (x *ListBaselinesResponse) GetNext() int64 {
+func (x *ListCommitsResponse) GetNext() int64 {
 	if x != nil {
 		return x.Next
 	}
 	return 0
 }
 
-type GetBaselineGraphRequest struct {
+type GetCommitGraphRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetBaselineGraphRequest) Reset() {
-	*x = GetBaselineGraphRequest{}
+func (x *GetCommitGraphRequest) Reset() {
+	*x = GetCommitGraphRequest{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetBaselineGraphRequest) String() string {
+func (x *GetCommitGraphRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetBaselineGraphRequest) ProtoMessage() {}
+func (*GetCommitGraphRequest) ProtoMessage() {}
 
-func (x *GetBaselineGraphRequest) ProtoReflect() protoreflect.Message {
+func (x *GetCommitGraphRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2784,21 +2784,21 @@ func (x *GetBaselineGraphRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetBaselineGraphRequest.ProtoReflect.Descriptor instead.
-func (*GetBaselineGraphRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetCommitGraphRequest.ProtoReflect.Descriptor instead.
+func (*GetCommitGraphRequest) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{30}
 }
 
-func (x *GetBaselineGraphRequest) GetId() string {
+func (x *GetCommitGraphRequest) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-type GetBaselineGraphResponse struct {
+type GetCommitGraphResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Baseline      *Baseline              `protobuf:"bytes,1,opt,name=baseline,proto3" json:"baseline,omitempty"`
+	Commit        *Commit                `protobuf:"bytes,1,opt,name=commit,proto3" json:"commit,omitempty"`
 	Nodes         []*Node                `protobuf:"bytes,2,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	Links         []*Link                `protobuf:"bytes,3,rep,name=links,proto3" json:"links,omitempty"`
 	SuspectLinks  []*Link                `protobuf:"bytes,4,rep,name=suspect_links,json=suspectLinks,proto3" json:"suspect_links,omitempty"`
@@ -2806,20 +2806,20 @@ type GetBaselineGraphResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetBaselineGraphResponse) Reset() {
-	*x = GetBaselineGraphResponse{}
+func (x *GetCommitGraphResponse) Reset() {
+	*x = GetCommitGraphResponse{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetBaselineGraphResponse) String() string {
+func (x *GetCommitGraphResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetBaselineGraphResponse) ProtoMessage() {}
+func (*GetCommitGraphResponse) ProtoMessage() {}
 
-func (x *GetBaselineGraphResponse) ProtoReflect() protoreflect.Message {
+func (x *GetCommitGraphResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2831,40 +2831,40 @@ func (x *GetBaselineGraphResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetBaselineGraphResponse.ProtoReflect.Descriptor instead.
-func (*GetBaselineGraphResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetCommitGraphResponse.ProtoReflect.Descriptor instead.
+func (*GetCommitGraphResponse) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{31}
 }
 
-func (x *GetBaselineGraphResponse) GetBaseline() *Baseline {
+func (x *GetCommitGraphResponse) GetCommit() *Commit {
 	if x != nil {
-		return x.Baseline
+		return x.Commit
 	}
 	return nil
 }
 
-func (x *GetBaselineGraphResponse) GetNodes() []*Node {
+func (x *GetCommitGraphResponse) GetNodes() []*Node {
 	if x != nil {
 		return x.Nodes
 	}
 	return nil
 }
 
-func (x *GetBaselineGraphResponse) GetLinks() []*Link {
+func (x *GetCommitGraphResponse) GetLinks() []*Link {
 	if x != nil {
 		return x.Links
 	}
 	return nil
 }
 
-func (x *GetBaselineGraphResponse) GetSuspectLinks() []*Link {
+func (x *GetCommitGraphResponse) GetSuspectLinks() []*Link {
 	if x != nil {
 		return x.SuspectLinks
 	}
 	return nil
 }
 
-type GetBaselineDeltaRequest struct {
+type GetCommitDeltaRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	From          string                 `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
 	To            string                 `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
@@ -2872,20 +2872,20 @@ type GetBaselineDeltaRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetBaselineDeltaRequest) Reset() {
-	*x = GetBaselineDeltaRequest{}
+func (x *GetCommitDeltaRequest) Reset() {
+	*x = GetCommitDeltaRequest{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetBaselineDeltaRequest) String() string {
+func (x *GetCommitDeltaRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetBaselineDeltaRequest) ProtoMessage() {}
+func (*GetCommitDeltaRequest) ProtoMessage() {}
 
-func (x *GetBaselineDeltaRequest) ProtoReflect() protoreflect.Message {
+func (x *GetCommitDeltaRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2897,29 +2897,29 @@ func (x *GetBaselineDeltaRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetBaselineDeltaRequest.ProtoReflect.Descriptor instead.
-func (*GetBaselineDeltaRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetCommitDeltaRequest.ProtoReflect.Descriptor instead.
+func (*GetCommitDeltaRequest) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{32}
 }
 
-func (x *GetBaselineDeltaRequest) GetFrom() string {
+func (x *GetCommitDeltaRequest) GetFrom() string {
 	if x != nil {
 		return x.From
 	}
 	return ""
 }
 
-func (x *GetBaselineDeltaRequest) GetTo() string {
+func (x *GetCommitDeltaRequest) GetTo() string {
 	if x != nil {
 		return x.To
 	}
 	return ""
 }
 
-type GetBaselineDeltaResponse struct {
+type GetCommitDeltaResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	From          *Baseline              `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
-	To            *Baseline              `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
+	From          *Commit                `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
+	To            *Commit                `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
 	Nodes         []*Node                `protobuf:"bytes,3,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	Links         []*Link                `protobuf:"bytes,4,rep,name=links,proto3" json:"links,omitempty"`
 	Removed       []string               `protobuf:"bytes,5,rep,name=removed,proto3" json:"removed,omitempty"`
@@ -2927,20 +2927,20 @@ type GetBaselineDeltaResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetBaselineDeltaResponse) Reset() {
-	*x = GetBaselineDeltaResponse{}
+func (x *GetCommitDeltaResponse) Reset() {
+	*x = GetCommitDeltaResponse{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetBaselineDeltaResponse) String() string {
+func (x *GetCommitDeltaResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetBaselineDeltaResponse) ProtoMessage() {}
+func (*GetCommitDeltaResponse) ProtoMessage() {}
 
-func (x *GetBaselineDeltaResponse) ProtoReflect() protoreflect.Message {
+func (x *GetCommitDeltaResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2952,49 +2952,49 @@ func (x *GetBaselineDeltaResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetBaselineDeltaResponse.ProtoReflect.Descriptor instead.
-func (*GetBaselineDeltaResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetCommitDeltaResponse.ProtoReflect.Descriptor instead.
+func (*GetCommitDeltaResponse) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{33}
 }
 
-func (x *GetBaselineDeltaResponse) GetFrom() *Baseline {
+func (x *GetCommitDeltaResponse) GetFrom() *Commit {
 	if x != nil {
 		return x.From
 	}
 	return nil
 }
 
-func (x *GetBaselineDeltaResponse) GetTo() *Baseline {
+func (x *GetCommitDeltaResponse) GetTo() *Commit {
 	if x != nil {
 		return x.To
 	}
 	return nil
 }
 
-func (x *GetBaselineDeltaResponse) GetNodes() []*Node {
+func (x *GetCommitDeltaResponse) GetNodes() []*Node {
 	if x != nil {
 		return x.Nodes
 	}
 	return nil
 }
 
-func (x *GetBaselineDeltaResponse) GetLinks() []*Link {
+func (x *GetCommitDeltaResponse) GetLinks() []*Link {
 	if x != nil {
 		return x.Links
 	}
 	return nil
 }
 
-func (x *GetBaselineDeltaResponse) GetRemoved() []string {
+func (x *GetCommitDeltaResponse) GetRemoved() []string {
 	if x != nil {
 		return x.Removed
 	}
 	return nil
 }
 
-type ListBaselineNodesRequest struct {
+type ListCommitNodesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// the view paged (ADR 0157): a baseline, or a change with what it wrote laid over its fork; required
+	// the view paged (ADR 0157): a commit, or a change with what it wrote laid over its fork; required
 	View *View `protobuf:"bytes,1,opt,name=view,proto3" json:"view,omitempty"`
 	// qualified node type ("alm@Requirement"); empty: every type
 	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
@@ -3004,27 +3004,27 @@ type ListBaselineNodesRequest struct {
 	// page size (default and max 500)
 	Limit          int32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
 	IncludeDeleted bool  `protobuf:"varint,6,opt,name=include_deleted,json=includeDeleted,proto3" json:"include_deleted,omitempty"`
-	// the nodes the impacts of this change act on, at their version in the baseline: the answer and its cost follow
-	// the change, not the size of the baseline (ADR 0140); empty: every node of the baseline
+	// the nodes the impacts of this change act on, at their version in the commit: the answer and its cost follow
+	// the change, not the size of the commit (ADR 0140); empty: every node of the commit
 	ChangeId      string `protobuf:"bytes,7,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListBaselineNodesRequest) Reset() {
-	*x = ListBaselineNodesRequest{}
+func (x *ListCommitNodesRequest) Reset() {
+	*x = ListCommitNodesRequest{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListBaselineNodesRequest) String() string {
+func (x *ListCommitNodesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListBaselineNodesRequest) ProtoMessage() {}
+func (*ListCommitNodesRequest) ProtoMessage() {}
 
-func (x *ListBaselineNodesRequest) ProtoReflect() protoreflect.Message {
+func (x *ListCommitNodesRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3036,54 +3036,54 @@ func (x *ListBaselineNodesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListBaselineNodesRequest.ProtoReflect.Descriptor instead.
-func (*ListBaselineNodesRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListCommitNodesRequest.ProtoReflect.Descriptor instead.
+func (*ListCommitNodesRequest) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{34}
 }
 
-func (x *ListBaselineNodesRequest) GetView() *View {
+func (x *ListCommitNodesRequest) GetView() *View {
 	if x != nil {
 		return x.View
 	}
 	return nil
 }
 
-func (x *ListBaselineNodesRequest) GetType() string {
+func (x *ListCommitNodesRequest) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
 }
 
-func (x *ListBaselineNodesRequest) GetQuery() string {
+func (x *ListCommitNodesRequest) GetQuery() string {
 	if x != nil {
 		return x.Query
 	}
 	return ""
 }
 
-func (x *ListBaselineNodesRequest) GetOffset() int32 {
+func (x *ListCommitNodesRequest) GetOffset() int32 {
 	if x != nil {
 		return x.Offset
 	}
 	return 0
 }
 
-func (x *ListBaselineNodesRequest) GetLimit() int32 {
+func (x *ListCommitNodesRequest) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
 	}
 	return 0
 }
 
-func (x *ListBaselineNodesRequest) GetIncludeDeleted() bool {
+func (x *ListCommitNodesRequest) GetIncludeDeleted() bool {
 	if x != nil {
 		return x.IncludeDeleted
 	}
 	return false
 }
 
-func (x *ListBaselineNodesRequest) GetChangeId() string {
+func (x *ListCommitNodesRequest) GetChangeId() string {
 	if x != nil {
 		return x.ChangeId
 	}
@@ -3240,33 +3240,33 @@ func (x *TypeCount) GetCount() int32 {
 	return 0
 }
 
-type ListBaselineNodesResponse struct {
+type ListCommitNodesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Nodes []*Node                `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	// number of nodes matching the query, all pages
 	Total int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	// nodes per type matching the text query (the type filter aside)
 	Types []*TypeCount `protobuf:"bytes,3,rep,name=types,proto3" json:"types,omitempty"`
-	// the header of the baseline: its nodes are not sent
-	Baseline      *Baseline `protobuf:"bytes,4,opt,name=baseline,proto3" json:"baseline,omitempty"`
+	// the header of the commit: its nodes are not sent
+	Commit        *Commit `protobuf:"bytes,4,opt,name=commit,proto3" json:"commit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListBaselineNodesResponse) Reset() {
-	*x = ListBaselineNodesResponse{}
+func (x *ListCommitNodesResponse) Reset() {
+	*x = ListCommitNodesResponse{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListBaselineNodesResponse) String() string {
+func (x *ListCommitNodesResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListBaselineNodesResponse) ProtoMessage() {}
+func (*ListCommitNodesResponse) ProtoMessage() {}
 
-func (x *ListBaselineNodesResponse) ProtoReflect() protoreflect.Message {
+func (x *ListCommitNodesResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3278,42 +3278,42 @@ func (x *ListBaselineNodesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListBaselineNodesResponse.ProtoReflect.Descriptor instead.
-func (*ListBaselineNodesResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListCommitNodesResponse.ProtoReflect.Descriptor instead.
+func (*ListCommitNodesResponse) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{38}
 }
 
-func (x *ListBaselineNodesResponse) GetNodes() []*Node {
+func (x *ListCommitNodesResponse) GetNodes() []*Node {
 	if x != nil {
 		return x.Nodes
 	}
 	return nil
 }
 
-func (x *ListBaselineNodesResponse) GetTotal() int32 {
+func (x *ListCommitNodesResponse) GetTotal() int32 {
 	if x != nil {
 		return x.Total
 	}
 	return 0
 }
 
-func (x *ListBaselineNodesResponse) GetTypes() []*TypeCount {
+func (x *ListCommitNodesResponse) GetTypes() []*TypeCount {
 	if x != nil {
 		return x.Types
 	}
 	return nil
 }
 
-func (x *ListBaselineNodesResponse) GetBaseline() *Baseline {
+func (x *ListCommitNodesResponse) GetCommit() *Commit {
 	if x != nil {
-		return x.Baseline
+		return x.Commit
 	}
 	return nil
 }
 
-type ListBaselineLinksRequest struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	BaselineId string                 `protobuf:"bytes,1,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+type ListCommitLinksRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	CommitId string                 `protobuf:"bytes,1,opt,name=commit_id,json=commitId,proto3" json:"commit_id,omitempty"`
 	// link type; empty: every type
 	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
 	// case-insensitive text matched against the type and the string properties
@@ -3325,20 +3325,20 @@ type ListBaselineLinksRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListBaselineLinksRequest) Reset() {
-	*x = ListBaselineLinksRequest{}
+func (x *ListCommitLinksRequest) Reset() {
+	*x = ListCommitLinksRequest{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListBaselineLinksRequest) String() string {
+func (x *ListCommitLinksRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListBaselineLinksRequest) ProtoMessage() {}
+func (*ListCommitLinksRequest) ProtoMessage() {}
 
-func (x *ListBaselineLinksRequest) ProtoReflect() protoreflect.Message {
+func (x *ListCommitLinksRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3350,73 +3350,73 @@ func (x *ListBaselineLinksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListBaselineLinksRequest.ProtoReflect.Descriptor instead.
-func (*ListBaselineLinksRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListCommitLinksRequest.ProtoReflect.Descriptor instead.
+func (*ListCommitLinksRequest) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{39}
 }
 
-func (x *ListBaselineLinksRequest) GetBaselineId() string {
+func (x *ListCommitLinksRequest) GetCommitId() string {
 	if x != nil {
-		return x.BaselineId
+		return x.CommitId
 	}
 	return ""
 }
 
-func (x *ListBaselineLinksRequest) GetType() string {
+func (x *ListCommitLinksRequest) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
 }
 
-func (x *ListBaselineLinksRequest) GetQuery() string {
+func (x *ListCommitLinksRequest) GetQuery() string {
 	if x != nil {
 		return x.Query
 	}
 	return ""
 }
 
-func (x *ListBaselineLinksRequest) GetOffset() int32 {
+func (x *ListCommitLinksRequest) GetOffset() int32 {
 	if x != nil {
 		return x.Offset
 	}
 	return 0
 }
 
-func (x *ListBaselineLinksRequest) GetLimit() int32 {
+func (x *ListCommitLinksRequest) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
 	}
 	return 0
 }
 
-type ListBaselineLinksResponse struct {
+type ListCommitLinksResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Links []*Link                `protobuf:"bytes,1,rep,name=links,proto3" json:"links,omitempty"`
 	// number of links matching the query, all pages
 	Total int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	// links per type matching the text query (the type filter aside)
 	Types []*TypeCount `protobuf:"bytes,3,rep,name=types,proto3" json:"types,omitempty"`
-	// the header of the baseline: its nodes are not sent
-	Baseline      *Baseline `protobuf:"bytes,4,opt,name=baseline,proto3" json:"baseline,omitempty"`
+	// the header of the commit: its nodes are not sent
+	Commit        *Commit `protobuf:"bytes,4,opt,name=commit,proto3" json:"commit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListBaselineLinksResponse) Reset() {
-	*x = ListBaselineLinksResponse{}
+func (x *ListCommitLinksResponse) Reset() {
+	*x = ListCommitLinksResponse{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListBaselineLinksResponse) String() string {
+func (x *ListCommitLinksResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListBaselineLinksResponse) ProtoMessage() {}
+func (*ListCommitLinksResponse) ProtoMessage() {}
 
-func (x *ListBaselineLinksResponse) ProtoReflect() protoreflect.Message {
+func (x *ListCommitLinksResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3428,35 +3428,35 @@ func (x *ListBaselineLinksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListBaselineLinksResponse.ProtoReflect.Descriptor instead.
-func (*ListBaselineLinksResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListCommitLinksResponse.ProtoReflect.Descriptor instead.
+func (*ListCommitLinksResponse) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{40}
 }
 
-func (x *ListBaselineLinksResponse) GetLinks() []*Link {
+func (x *ListCommitLinksResponse) GetLinks() []*Link {
 	if x != nil {
 		return x.Links
 	}
 	return nil
 }
 
-func (x *ListBaselineLinksResponse) GetTotal() int32 {
+func (x *ListCommitLinksResponse) GetTotal() int32 {
 	if x != nil {
 		return x.Total
 	}
 	return 0
 }
 
-func (x *ListBaselineLinksResponse) GetTypes() []*TypeCount {
+func (x *ListCommitLinksResponse) GetTypes() []*TypeCount {
 	if x != nil {
 		return x.Types
 	}
 	return nil
 }
 
-func (x *ListBaselineLinksResponse) GetBaseline() *Baseline {
+func (x *ListCommitLinksResponse) GetCommit() *Commit {
 	if x != nil {
-		return x.Baseline
+		return x.Commit
 	}
 	return nil
 }
@@ -3516,8 +3516,8 @@ func (x *ResolveViewRequest) GetNodeIds() []string {
 type ResolveViewResponse struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	// the baseline the view reads (a change view: its fork)
-	BaselineId string `protobuf:"bytes,2,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	// the commit the view reads (a change view: its fork)
+	CommitId string `protobuf:"bytes,2,opt,name=commit_id,json=commitId,proto3" json:"commit_id,omitempty"`
 	// a branch view of main at its head
 	MainHead bool `protobuf:"varint,3,opt,name=main_head,json=mainHead,proto3" json:"main_head,omitempty"`
 	// the version of each node asked the view holds (0: a change's draft); a node it does not hold is absent
@@ -3563,9 +3563,9 @@ func (x *ResolveViewResponse) GetNamespace() string {
 	return ""
 }
 
-func (x *ResolveViewResponse) GetBaselineId() string {
+func (x *ResolveViewResponse) GetCommitId() string {
 	if x != nil {
-		return x.BaselineId
+		return x.CommitId
 	}
 	return ""
 }
@@ -3586,7 +3586,7 @@ func (x *ResolveViewResponse) GetVersions() map[string]int32 {
 
 type GetNodeNeighbourhoodRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// the view the node is read in (ADR 0157): a baseline, or the world of a change on a flow (its fork as it left it,
+	// the view the node is read in (ADR 0157): a commit, or the world of a change on a flow (its fork as it left it,
 	// its commits, its drafts); the cost follows the node, never the size of the world; required
 	View   *View  `protobuf:"bytes,1,opt,name=view,proto3" json:"view,omitempty"`
 	NodeId string `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
@@ -3651,7 +3651,7 @@ func (x *GetNodeNeighbourhoodRequest) GetLinkTypes() []string {
 type GetNodeNeighbourhoodResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Node  *Node                  `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`
-	// targets of its outgoing links and sources (in the baseline) of its incoming links
+	// targets of its outgoing links and sources (in the commit) of its incoming links
 	Nodes []*Node `protobuf:"bytes,2,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	Links []*Link `protobuf:"bytes,3,rep,name=links,proto3" json:"links,omitempty"`
 	// ids of the links whose target changed since they were created
@@ -3796,8 +3796,8 @@ type QueryViewResponse struct {
 	Notes []string `protobuf:"bytes,6,rep,name=notes,proto3" json:"notes,omitempty"`
 	// the reads the query made (neighbourhoods and pages)
 	Reads int32 `protobuf:"varint,7,opt,name=reads,proto3" json:"reads,omitempty"`
-	// the baseline the view read (a change view: its fork)
-	BaselineId    string `protobuf:"bytes,8,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	// the commit the view read (a change view: its fork)
+	CommitId      string `protobuf:"bytes,8,opt,name=commit_id,json=commitId,proto3" json:"commit_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3881,9 +3881,9 @@ func (x *QueryViewResponse) GetReads() int32 {
 	return 0
 }
 
-func (x *QueryViewResponse) GetBaselineId() string {
+func (x *QueryViewResponse) GetCommitId() string {
 	if x != nil {
-		return x.BaselineId
+		return x.CommitId
 	}
 	return ""
 }
@@ -4452,9 +4452,9 @@ func (x *ExportChangeProvenanceResponse) GetMediaType() string {
 type ExportGraphRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	// the branch whose head is exported (default main), unless a baseline is named
+	// the branch whose head is exported (default main), unless a commit is named
 	Branch        string `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
-	BaselineId    string `protobuf:"bytes,3,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	CommitId      string `protobuf:"bytes,3,opt,name=commit_id,json=commitId,proto3" json:"commit_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4503,9 +4503,9 @@ func (x *ExportGraphRequest) GetBranch() string {
 	return ""
 }
 
-func (x *ExportGraphRequest) GetBaselineId() string {
+func (x *ExportGraphRequest) GetCommitId() string {
 	if x != nil {
-		return x.BaselineId
+		return x.CommitId
 	}
 	return ""
 }
@@ -4582,9 +4582,9 @@ func (x *ExportGraphResponse) GetNodes() int32 {
 type StartGraphExportRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	// the branch whose head is exported (default main), unless a baseline is named
-	Branch     string `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
-	BaselineId string `protobuf:"bytes,3,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	// the branch whose head is exported (default main), unless a commit is named
+	Branch   string `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
+	CommitId string `protobuf:"bytes,3,opt,name=commit_id,json=commitId,proto3" json:"commit_id,omitempty"`
 	// json (default) | okf
 	Format        string `protobuf:"bytes,4,opt,name=format,proto3" json:"format,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -4635,9 +4635,9 @@ func (x *StartGraphExportRequest) GetBranch() string {
 	return ""
 }
 
-func (x *StartGraphExportRequest) GetBaselineId() string {
+func (x *StartGraphExportRequest) GetCommitId() string {
 	if x != nil {
-		return x.BaselineId
+		return x.CommitId
 	}
 	return ""
 }
@@ -5243,10 +5243,10 @@ type NamespaceSummary struct {
 	Nodes     int32                  `protobuf:"varint,2,opt,name=nodes,proto3" json:"nodes,omitempty"`
 	Versions  int32                  `protobuf:"varint,3,opt,name=versions,proto3" json:"versions,omitempty"`
 	// the link rows written (a version holding the set of another writes none, ADR 0141)
-	LinkRows  int32 `protobuf:"varint,4,opt,name=link_rows,json=linkRows,proto3" json:"link_rows,omitempty"`
-	Changes   int32 `protobuf:"varint,5,opt,name=changes,proto3" json:"changes,omitempty"`
-	Baselines int32 `protobuf:"varint,6,opt,name=baselines,proto3" json:"baselines,omitempty"`
-	Branches  int32 `protobuf:"varint,7,opt,name=branches,proto3" json:"branches,omitempty"`
+	LinkRows int32 `protobuf:"varint,4,opt,name=link_rows,json=linkRows,proto3" json:"link_rows,omitempty"`
+	Changes  int32 `protobuf:"varint,5,opt,name=changes,proto3" json:"changes,omitempty"`
+	Commits  int32 `protobuf:"varint,6,opt,name=commits,proto3" json:"commits,omitempty"`
+	Branches int32 `protobuf:"varint,7,opt,name=branches,proto3" json:"branches,omitempty"`
 	// the node types holding nodes
 	Types int32 `protobuf:"varint,8,opt,name=types,proto3" json:"types,omitempty"`
 	// the entries of the logs of its changes
@@ -5323,9 +5323,9 @@ func (x *NamespaceSummary) GetChanges() int32 {
 	return 0
 }
 
-func (x *NamespaceSummary) GetBaselines() int32 {
+func (x *NamespaceSummary) GetCommits() int32 {
 	if x != nil {
-		return x.Baselines
+		return x.Commits
 	}
 	return 0
 }
@@ -5461,11 +5461,11 @@ type GraphStats struct {
 	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	Branch    string                 `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
 	// the head the state was read at; empty: nothing committed yet
-	BaselineId string                 `protobuf:"bytes,3,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
-	BaselineAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=baseline_at,json=baselineAt,proto3" json:"baseline_at,omitempty"`
-	Branches   *BranchStats           `protobuf:"bytes,5,opt,name=branches,proto3" json:"branches,omitempty"`
+	CommitId string                 `protobuf:"bytes,3,opt,name=commit_id,json=commitId,proto3" json:"commit_id,omitempty"`
+	CommitAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=commit_at,json=commitAt,proto3" json:"commit_at,omitempty"`
+	Branches *BranchStats           `protobuf:"bytes,5,opt,name=branches,proto3" json:"branches,omitempty"`
 	// the rows of the namespace in the store, one entry per measure (nodesByType, versionsByType, versionsByReason,
-	// versionsPerNode, linkRowsByType, linkDrops, linkSetsByMode, joins, baselinesByKind, changesByStatus, tags, logByType)
+	// versionsPerNode, linkRowsByType, linkDrops, linkSetsByMode, joins, commitsByKind, changesByStatus, tags, logByType)
 	Store         []*StoreMeasure `protobuf:"bytes,6,rep,name=store,proto3" json:"store,omitempty"`
 	State         *StateStats     `protobuf:"bytes,7,opt,name=state,proto3" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -5516,16 +5516,16 @@ func (x *GraphStats) GetBranch() string {
 	return ""
 }
 
-func (x *GraphStats) GetBaselineId() string {
+func (x *GraphStats) GetCommitId() string {
 	if x != nil {
-		return x.BaselineId
+		return x.CommitId
 	}
 	return ""
 }
 
-func (x *GraphStats) GetBaselineAt() *timestamppb.Timestamp {
+func (x *GraphStats) GetCommitAt() *timestamppb.Timestamp {
 	if x != nil {
-		return x.BaselineAt
+		return x.CommitAt
 	}
 	return nil
 }
@@ -6934,7 +6934,7 @@ type CreateChangeRequest struct {
 	Title       string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
 	Intent      string                 `protobuf:"bytes,2,opt,name=intent,proto3" json:"intent,omitempty"`
 	Methodology string                 `protobuf:"bytes,3,opt,name=methodology,proto3" json:"methodology,omitempty"`
-	BaselineId  string                 `protobuf:"bytes,4,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	ForkCommit  string                 `protobuf:"bytes,4,opt,name=fork_commit,json=forkCommit,proto3" json:"fork_commit,omitempty"`
 	Data        *structpb.Struct       `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
 	// branch the change applies to (default main)
 	Branch string `protobuf:"bytes,6,opt,name=branch,proto3" json:"branch,omitempty"`
@@ -6942,7 +6942,7 @@ type CreateChangeRequest struct {
 	Namespace string `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// give the change a branch of its own, merged into `branch` when applied
 	OwnBranch bool `protobuf:"varint,8,opt,name=own_branch,json=ownBranch,proto3" json:"own_branch,omitempty"`
-	// make the change a sub-change of another one (namespace, branch and baseline follow the parent)
+	// make the change a sub-change of another one (namespace, branch and commit follow the parent)
 	ParentId string `protobuf:"bytes,9,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
 	// key of the responsible OrgUnit (organisation namespace); "@me": the personal unit of the caller, which
 	// makes the change personal (ADR 0037)
@@ -7007,9 +7007,9 @@ func (x *CreateChangeRequest) GetMethodology() string {
 	return ""
 }
 
-func (x *CreateChangeRequest) GetBaselineId() string {
+func (x *CreateChangeRequest) GetForkCommit() string {
 	if x != nil {
-		return x.BaselineId
+		return x.ForkCommit
 	}
 	return ""
 }
@@ -8540,9 +8540,9 @@ func (x *GetBlackboardResponse) GetAt() *timestamppb.Timestamp {
 }
 
 type CommitChangeRequest struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	ChangeId     string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
-	BaselineName string                 `protobuf:"bytes,2,opt,name=baseline_name,json=baselineName,proto3" json:"baseline_name,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ChangeId   string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	CommitName string                 `protobuf:"bytes,2,opt,name=commit_name,json=commitName,proto3" json:"commit_name,omitempty"`
 	// the nodes to commit, by node id (a partial commit): each an accepted modification of the change or a node withdrawn
 	// since its commit; none: every one of them
 	Nodes         []string `protobuf:"bytes,3,rep,name=nodes,proto3" json:"nodes,omitempty"`
@@ -8587,9 +8587,9 @@ func (x *CommitChangeRequest) GetChangeId() string {
 	return ""
 }
 
-func (x *CommitChangeRequest) GetBaselineName() string {
+func (x *CommitChangeRequest) GetCommitName() string {
 	if x != nil {
-		return x.BaselineName
+		return x.CommitName
 	}
 	return ""
 }
@@ -8603,8 +8603,8 @@ func (x *CommitChangeRequest) GetNodes() []string {
 
 type CommitChangeResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// the commit baseline, on the change's own branch
-	Baseline      *Baseline `protobuf:"bytes,1,opt,name=baseline,proto3" json:"baseline,omitempty"`
+	// the commit commit, on the change's own branch
+	Commit        *Commit `protobuf:"bytes,1,opt,name=commit,proto3" json:"commit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8639,9 +8639,9 @@ func (*CommitChangeResponse) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{118}
 }
 
-func (x *CommitChangeResponse) GetBaseline() *Baseline {
+func (x *CommitChangeResponse) GetCommit() *Commit {
 	if x != nil {
-		return x.Baseline
+		return x.Commit
 	}
 	return nil
 }
@@ -9524,11 +9524,11 @@ func (x *PendingSettingsResponse) GetChanges() []*PendingSettings {
 }
 
 type Branch struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	Name         string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Parent       string                 `protobuf:"bytes,2,opt,name=parent,proto3" json:"parent,omitempty"`
-	ForkBaseline string                 `protobuf:"bytes,3,opt,name=fork_baseline,json=forkBaseline,proto3" json:"fork_baseline,omitempty"`
-	Head         string                 `protobuf:"bytes,4,opt,name=head,proto3" json:"head,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Name       string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Parent     string                 `protobuf:"bytes,2,opt,name=parent,proto3" json:"parent,omitempty"`
+	ForkCommit string                 `protobuf:"bytes,3,opt,name=fork_commit,json=forkCommit,proto3" json:"fork_commit,omitempty"`
+	Head       string                 `protobuf:"bytes,4,opt,name=head,proto3" json:"head,omitempty"`
 	// change / option that opened the branch
 	Origin string `protobuf:"bytes,5,opt,name=origin,proto3" json:"origin,omitempty"`
 	// open | merged | abandoned
@@ -9536,7 +9536,7 @@ type Branch struct {
 	CreatedAt   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	Namespace   string                 `protobuf:"bytes,8,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	Description string                 `protobuf:"bytes,9,opt,name=description,proto3" json:"description,omitempty"`
-	// the first fork baseline of a change branch moved by a rebase (ADR 0101)
+	// the first fork commit of a change branch moved by a rebase (ADR 0101)
 	RebasedFrom   string `protobuf:"bytes,10,opt,name=rebased_from,json=rebasedFrom,proto3" json:"rebased_from,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -9586,9 +9586,9 @@ func (x *Branch) GetParent() string {
 	return ""
 }
 
-func (x *Branch) GetForkBaseline() string {
+func (x *Branch) GetForkCommit() string {
 	if x != nil {
-		return x.ForkBaseline
+		return x.ForkCommit
 	}
 	return ""
 }
@@ -9645,7 +9645,7 @@ func (x *Branch) GetRebasedFrom() string {
 type CreateBranchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	FromBaseline  string                 `protobuf:"bytes,2,opt,name=from_baseline,json=fromBaseline,proto3" json:"from_baseline,omitempty"`
+	FromCommit    string                 `protobuf:"bytes,2,opt,name=from_commit,json=fromCommit,proto3" json:"from_commit,omitempty"`
 	Origin        string                 `protobuf:"bytes,3,opt,name=origin,proto3" json:"origin,omitempty"`
 	Namespace     string                 `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	Description   string                 `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
@@ -9690,9 +9690,9 @@ func (x *CreateBranchRequest) GetName() string {
 	return ""
 }
 
-func (x *CreateBranchRequest) GetFromBaseline() string {
+func (x *CreateBranchRequest) GetFromCommit() string {
 	if x != nil {
-		return x.FromBaseline
+		return x.FromCommit
 	}
 	return ""
 }
@@ -9819,8 +9819,8 @@ type ListBranchesResponse struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Branches []*Branch              `protobuf:"bytes,1,rep,name=branches,proto3" json:"branches,omitempty"`
 	// the headers of the heads of the branches (ADR 0140)
-	Heads []*Baseline `protobuf:"bytes,2,rep,name=heads,proto3" json:"heads,omitempty"`
-	// the number of baselines of each branch
+	Heads []*Commit `protobuf:"bytes,2,rep,name=heads,proto3" json:"heads,omitempty"`
+	// the number of commits of each branch
 	Counts        map[string]int32 `protobuf:"bytes,3,rep,name=counts,proto3" json:"counts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -9863,7 +9863,7 @@ func (x *ListBranchesResponse) GetBranches() []*Branch {
 	return nil
 }
 
-func (x *ListBranchesResponse) GetHeads() []*Baseline {
+func (x *ListBranchesResponse) GetHeads() []*Commit {
 	if x != nil {
 		return x.Heads
 	}
@@ -9941,7 +9941,7 @@ func (x *GetBranchRequest) GetHeaderOnly() bool {
 type GetBranchResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Branch        *Branch                `protobuf:"bytes,1,opt,name=branch,proto3" json:"branch,omitempty"`
-	Head          *Baseline              `protobuf:"bytes,2,opt,name=head,proto3" json:"head,omitempty"`
+	Head          *Commit                `protobuf:"bytes,2,opt,name=head,proto3" json:"head,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9983,7 +9983,7 @@ func (x *GetBranchResponse) GetBranch() *Branch {
 	return nil
 }
 
-func (x *GetBranchResponse) GetHead() *Baseline {
+func (x *GetBranchResponse) GetHead() *Commit {
 	if x != nil {
 		return x.Head
 	}
@@ -10569,7 +10569,7 @@ func (x *PlanMergeRequest) GetNamespace() string {
 	return ""
 }
 
-type DiffBaselinesRequest struct {
+type DiffCommitsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	From          string                 `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
 	To            string                 `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
@@ -10577,20 +10577,20 @@ type DiffBaselinesRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *DiffBaselinesRequest) Reset() {
-	*x = DiffBaselinesRequest{}
+func (x *DiffCommitsRequest) Reset() {
+	*x = DiffCommitsRequest{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[151]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *DiffBaselinesRequest) String() string {
+func (x *DiffCommitsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DiffBaselinesRequest) ProtoMessage() {}
+func (*DiffCommitsRequest) ProtoMessage() {}
 
-func (x *DiffBaselinesRequest) ProtoReflect() protoreflect.Message {
+func (x *DiffCommitsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[151]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -10602,28 +10602,28 @@ func (x *DiffBaselinesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DiffBaselinesRequest.ProtoReflect.Descriptor instead.
-func (*DiffBaselinesRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use DiffCommitsRequest.ProtoReflect.Descriptor instead.
+func (*DiffCommitsRequest) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{151}
 }
 
-func (x *DiffBaselinesRequest) GetFrom() string {
+func (x *DiffCommitsRequest) GetFrom() string {
 	if x != nil {
 		return x.From
 	}
 	return ""
 }
 
-func (x *DiffBaselinesRequest) GetTo() string {
+func (x *DiffCommitsRequest) GetTo() string {
 	if x != nil {
 		return x.To
 	}
 	return ""
 }
 
-type DiffBaselinesResponse struct {
+type DiffCommitsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Nodes []*BaselineDiff        `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	Nodes []*CommitDiff          `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	// the changes the stack of `to` holds and the one of `from` does not (ADR 0133)
 	ChangesAdded []*StackChange `protobuf:"bytes,2,rep,name=changes_added,json=changesAdded,proto3" json:"changes_added,omitempty"`
 	// the changes the stack of `from` holds and the one of `to` does not
@@ -10632,20 +10632,20 @@ type DiffBaselinesResponse struct {
 	sizeCache      protoimpl.SizeCache
 }
 
-func (x *DiffBaselinesResponse) Reset() {
-	*x = DiffBaselinesResponse{}
+func (x *DiffCommitsResponse) Reset() {
+	*x = DiffCommitsResponse{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[152]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *DiffBaselinesResponse) String() string {
+func (x *DiffCommitsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DiffBaselinesResponse) ProtoMessage() {}
+func (*DiffCommitsResponse) ProtoMessage() {}
 
-func (x *DiffBaselinesResponse) ProtoReflect() protoreflect.Message {
+func (x *DiffCommitsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[152]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -10657,38 +10657,38 @@ func (x *DiffBaselinesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DiffBaselinesResponse.ProtoReflect.Descriptor instead.
-func (*DiffBaselinesResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use DiffCommitsResponse.ProtoReflect.Descriptor instead.
+func (*DiffCommitsResponse) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{152}
 }
 
-func (x *DiffBaselinesResponse) GetNodes() []*BaselineDiff {
+func (x *DiffCommitsResponse) GetNodes() []*CommitDiff {
 	if x != nil {
 		return x.Nodes
 	}
 	return nil
 }
 
-func (x *DiffBaselinesResponse) GetChangesAdded() []*StackChange {
+func (x *DiffCommitsResponse) GetChangesAdded() []*StackChange {
 	if x != nil {
 		return x.ChangesAdded
 	}
 	return nil
 }
 
-func (x *DiffBaselinesResponse) GetChangesRemoved() []*StackChange {
+func (x *DiffCommitsResponse) GetChangesRemoved() []*StackChange {
 	if x != nil {
 		return x.ChangesRemoved
 	}
 	return nil
 }
 
-// A node version (node_id, version 0: its latest on main) or a baseline (baseline_id), one of the two.
+// A node version (node_id, version 0: its latest on main) or a commit (commit_id), one of the two.
 type GetChangeStackRequest struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	NodeId     string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	Version    int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	BaselineId string                 `protobuf:"bytes,3,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	NodeId   string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Version  int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	CommitId string                 `protobuf:"bytes,3,opt,name=commit_id,json=commitId,proto3" json:"commit_id,omitempty"`
 	// the most recent steps of the lineage kept (0: 500)
 	Limit         int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -10739,9 +10739,9 @@ func (x *GetChangeStackRequest) GetVersion() int32 {
 	return 0
 }
 
-func (x *GetChangeStackRequest) GetBaselineId() string {
+func (x *GetChangeStackRequest) GetCommitId() string {
 	if x != nil {
-		return x.BaselineId
+		return x.CommitId
 	}
 	return ""
 }
@@ -10797,15 +10797,15 @@ func (x *GetChangeStackResponse) GetStack() *ChangeStack {
 	return nil
 }
 
-// The stack of changes producing a node version or a baseline (ADR 0133).
+// The stack of changes producing a node version or a commit (ADR 0133).
 type ChangeStack struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// oldest first
 	Changes []*StackChange `protobuf:"bytes,1,rep,name=changes,proto3" json:"changes,omitempty"`
 	// the lineage of a node version, oldest first
 	Versions []*VersionStep `protobuf:"bytes,2,rep,name=versions,proto3" json:"versions,omitempty"`
-	// the lineage of a baseline, oldest first
-	Baselines []*BaselineStep `protobuf:"bytes,3,rep,name=baselines,proto3" json:"baselines,omitempty"`
+	// the lineage of a commit, oldest first
+	Commits []*CommitStep `protobuf:"bytes,3,rep,name=commits,proto3" json:"commits,omitempty"`
 	// the lineage was cut at the limit, its oldest part left out
 	Truncated     bool `protobuf:"varint,4,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -10856,9 +10856,9 @@ func (x *ChangeStack) GetVersions() []*VersionStep {
 	return nil
 }
 
-func (x *ChangeStack) GetBaselines() []*BaselineStep {
+func (x *ChangeStack) GetCommits() []*CommitStep {
 	if x != nil {
-		return x.Baselines
+		return x.Commits
 	}
 	return nil
 }
@@ -11087,7 +11087,7 @@ func (x *VersionJoin) GetChange() string {
 	return ""
 }
 
-type BaselineStep struct {
+type CommitStep struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name   string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
@@ -11105,20 +11105,20 @@ type BaselineStep struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BaselineStep) Reset() {
-	*x = BaselineStep{}
+func (x *CommitStep) Reset() {
+	*x = CommitStep{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[159]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BaselineStep) String() string {
+func (x *CommitStep) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BaselineStep) ProtoMessage() {}
+func (*CommitStep) ProtoMessage() {}
 
-func (x *BaselineStep) ProtoReflect() protoreflect.Message {
+func (x *CommitStep) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[159]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -11130,109 +11130,109 @@ func (x *BaselineStep) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BaselineStep.ProtoReflect.Descriptor instead.
-func (*BaselineStep) Descriptor() ([]byte, []int) {
+// Deprecated: Use CommitStep.ProtoReflect.Descriptor instead.
+func (*CommitStep) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{159}
 }
 
-func (x *BaselineStep) GetId() string {
+func (x *CommitStep) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *BaselineStep) GetName() string {
+func (x *CommitStep) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *BaselineStep) GetBranch() string {
+func (x *CommitStep) GetBranch() string {
 	if x != nil {
 		return x.Branch
 	}
 	return ""
 }
 
-func (x *BaselineStep) GetKind() string {
+func (x *CommitStep) GetKind() string {
 	if x != nil {
 		return x.Kind
 	}
 	return ""
 }
 
-func (x *BaselineStep) GetChange() string {
+func (x *CommitStep) GetChange() string {
 	if x != nil {
 		return x.Change
 	}
 	return ""
 }
 
-func (x *BaselineStep) GetParent() string {
+func (x *CommitStep) GetParent() string {
 	if x != nil {
 		return x.Parent
 	}
 	return ""
 }
 
-func (x *BaselineStep) GetMergedFrom() string {
+func (x *CommitStep) GetMergedFrom() string {
 	if x != nil {
 		return x.MergedFrom
 	}
 	return ""
 }
 
-func (x *BaselineStep) GetRebasedFrom() string {
+func (x *CommitStep) GetRebasedFrom() string {
 	if x != nil {
 		return x.RebasedFrom
 	}
 	return ""
 }
 
-func (x *BaselineStep) GetCreatedAt() *timestamppb.Timestamp {
+func (x *CommitStep) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-func (x *BaselineStep) GetMerged() []string {
+func (x *CommitStep) GetMerged() []string {
 	if x != nil {
 		return x.Merged
 	}
 	return nil
 }
 
-type BaselineDiff struct {
+type CommitDiff struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Node  string                 `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`
 	Key   string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	Type  string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
 	// added | removed | changed
 	Kind string `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
-	// the node as each baseline holds it (absent where the node is not in it)
+	// the node as each commit holds it (absent where the node is not in it)
 	From          *Node `protobuf:"bytes,5,opt,name=from,proto3" json:"from,omitempty"`
 	To            *Node `protobuf:"bytes,6,opt,name=to,proto3" json:"to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BaselineDiff) Reset() {
-	*x = BaselineDiff{}
+func (x *CommitDiff) Reset() {
+	*x = CommitDiff{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[160]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BaselineDiff) String() string {
+func (x *CommitDiff) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BaselineDiff) ProtoMessage() {}
+func (*CommitDiff) ProtoMessage() {}
 
-func (x *BaselineDiff) ProtoReflect() protoreflect.Message {
+func (x *CommitDiff) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[160]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -11244,47 +11244,47 @@ func (x *BaselineDiff) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BaselineDiff.ProtoReflect.Descriptor instead.
-func (*BaselineDiff) Descriptor() ([]byte, []int) {
+// Deprecated: Use CommitDiff.ProtoReflect.Descriptor instead.
+func (*CommitDiff) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{160}
 }
 
-func (x *BaselineDiff) GetNode() string {
+func (x *CommitDiff) GetNode() string {
 	if x != nil {
 		return x.Node
 	}
 	return ""
 }
 
-func (x *BaselineDiff) GetKey() string {
+func (x *CommitDiff) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
 	return ""
 }
 
-func (x *BaselineDiff) GetType() string {
+func (x *CommitDiff) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
 }
 
-func (x *BaselineDiff) GetKind() string {
+func (x *CommitDiff) GetKind() string {
 	if x != nil {
 		return x.Kind
 	}
 	return ""
 }
 
-func (x *BaselineDiff) GetFrom() *Node {
+func (x *CommitDiff) GetFrom() *Node {
 	if x != nil {
 		return x.From
 	}
 	return nil
 }
 
-func (x *BaselineDiff) GetTo() *Node {
+func (x *CommitDiff) GetTo() *Node {
 	if x != nil {
 		return x.To
 	}
@@ -11469,7 +11469,7 @@ func (x *MergeBranchRequest) GetNamespace() string {
 type MergeBranchResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Change        *Change                `protobuf:"bytes,1,opt,name=change,proto3" json:"change,omitempty"`
-	Baseline      *Baseline              `protobuf:"bytes,2,opt,name=baseline,proto3" json:"baseline,omitempty"`
+	Commit        *Commit                `protobuf:"bytes,2,opt,name=commit,proto3" json:"commit,omitempty"`
 	Plan          *MergePlan             `protobuf:"bytes,3,opt,name=plan,proto3" json:"plan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -11512,9 +11512,9 @@ func (x *MergeBranchResponse) GetChange() *Change {
 	return nil
 }
 
-func (x *MergeBranchResponse) GetBaseline() *Baseline {
+func (x *MergeBranchResponse) GetCommit() *Commit {
 	if x != nil {
-		return x.Baseline
+		return x.Commit
 	}
 	return nil
 }
@@ -12389,15 +12389,15 @@ func (x *NodeEdit) GetState() string {
 }
 
 type CommitEditsRequest struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	Namespace    string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Title        string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Intent       string                 `protobuf:"bytes,3,opt,name=intent,proto3" json:"intent,omitempty"`
-	Methodology  string                 `protobuf:"bytes,4,opt,name=methodology,proto3" json:"methodology,omitempty"`
-	Data         *structpb.Struct       `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
-	BaselineId   string                 `protobuf:"bytes,6,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
-	BaselineName string                 `protobuf:"bytes,7,opt,name=baseline_name,json=baselineName,proto3" json:"baseline_name,omitempty"`
-	Edits        []*NodeEdit            `protobuf:"bytes,8,rep,name=edits,proto3" json:"edits,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Namespace   string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Title       string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Intent      string                 `protobuf:"bytes,3,opt,name=intent,proto3" json:"intent,omitempty"`
+	Methodology string                 `protobuf:"bytes,4,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	Data        *structpb.Struct       `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
+	CommitId    string                 `protobuf:"bytes,6,opt,name=commit_id,json=commitId,proto3" json:"commit_id,omitempty"`
+	CommitName  string                 `protobuf:"bytes,7,opt,name=commit_name,json=commitName,proto3" json:"commit_name,omitempty"`
+	Edits       []*NodeEdit            `protobuf:"bytes,8,rep,name=edits,proto3" json:"edits,omitempty"`
 	// the unit holding the commit (empty: the root unit; "@me": the caller's personal unit) and the project it acts in (empty: the
 	// caller's active project, else the default project), ADR 0054
 	OwnerOrg  string `protobuf:"bytes,9,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
@@ -12474,16 +12474,16 @@ func (x *CommitEditsRequest) GetData() *structpb.Struct {
 	return nil
 }
 
-func (x *CommitEditsRequest) GetBaselineId() string {
+func (x *CommitEditsRequest) GetCommitId() string {
 	if x != nil {
-		return x.BaselineId
+		return x.CommitId
 	}
 	return ""
 }
 
-func (x *CommitEditsRequest) GetBaselineName() string {
+func (x *CommitEditsRequest) GetCommitName() string {
 	if x != nil {
-		return x.BaselineName
+		return x.CommitName
 	}
 	return ""
 }
@@ -12572,7 +12572,7 @@ func (x *CarriedEvent) GetPayload() []byte {
 type CommitEditsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ChangeId      string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
-	Baseline      *Baseline              `protobuf:"bytes,2,opt,name=baseline,proto3" json:"baseline,omitempty"`
+	Commit        *Commit                `protobuf:"bytes,2,opt,name=commit,proto3" json:"commit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -12614,9 +12614,9 @@ func (x *CommitEditsResponse) GetChangeId() string {
 	return ""
 }
 
-func (x *CommitEditsResponse) GetBaseline() *Baseline {
+func (x *CommitEditsResponse) GetCommit() *Commit {
 	if x != nil {
-		return x.Baseline
+		return x.Commit
 	}
 	return nil
 }
@@ -14899,7 +14899,7 @@ type RebaseChangeResponse struct {
 	// the parent change of a sub-change, "" for a root change
 	ParentId string           `protobuf:"bytes,1,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
 	Impacts  []*RebasedImpact `protobuf:"bytes,2,rep,name=impacts,proto3" json:"impacts,omitempty"`
-	// a root change (ADR 0101): the target branch, the baseline it was forked from and the head it moved to
+	// a root change (ADR 0101): the target branch, the commit it was forked from and the head it moved to
 	Branch        string `protobuf:"bytes,3,opt,name=branch,proto3" json:"branch,omitempty"`
 	From          string `protobuf:"bytes,4,opt,name=from,proto3" json:"from,omitempty"`
 	Onto          string `protobuf:"bytes,5,opt,name=onto,proto3" json:"onto,omitempty"`
@@ -19422,8 +19422,8 @@ func (x *GetChangeViewRequest) GetLevel() string {
 
 type GetChangeViewResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// a baseline without an id below committed: computed, not stored
-	Baseline      *Baseline `protobuf:"bytes,1,opt,name=baseline,proto3" json:"baseline,omitempty"`
+	// a commit without an id below committed: computed, not stored
+	Commit        *Commit `protobuf:"bytes,1,opt,name=commit,proto3" json:"commit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -19458,9 +19458,9 @@ func (*GetChangeViewResponse) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{287}
 }
 
-func (x *GetChangeViewResponse) GetBaseline() *Baseline {
+func (x *GetChangeViewResponse) GetCommit() *Commit {
 	if x != nil {
-		return x.Baseline
+		return x.Commit
 	}
 	return nil
 }
@@ -19472,7 +19472,7 @@ type GetChangeGraphRequest struct {
 	Flow string `protobuf:"bytes,2,opt,name=flow,proto3" json:"flow,omitempty"`
 	// the world the change sees, whatever its flow (Graph.ChangeWorld): the nodes of its fork it left alone, the
 	// versions it committed and its drafts, with the links whose target node is in it (at whatever version they name);
-	// false: the graph a call on the change reads (an option's, else the reference baseline)
+	// false: the graph a call on the change reads (an option's, else the reference commit)
 	World         bool `protobuf:"varint,3,opt,name=world,proto3" json:"world,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -21031,12 +21031,11 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x19goap/graph/v1/graph.proto\x12\rgoap.graph.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17goap/jobs/v1/jobs.proto\"\x17\n" +
 	"\x15RepublishIndexRequest\"4\n" +
 	"\x16RepublishIndexResponse\x12\x1a\n" +
-	"\bversions\x18\x01 \x01(\x05R\bversions\"\x8e\x01\n" +
+	"\bversions\x18\x01 \x01(\x05R\bversions\"\x8a\x01\n" +
 	"\x04View\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
-	"\x06branch\x18\x02 \x01(\tR\x06branch\x12\x1f\n" +
-	"\vbaseline_id\x18\x03 \x01(\tR\n" +
-	"baselineId\x12\x1b\n" +
+	"\x06branch\x18\x02 \x01(\tR\x06branch\x12\x1b\n" +
+	"\tcommit_id\x18\x03 \x01(\tR\bcommitId\x12\x1b\n" +
 	"\tchange_id\x18\x04 \x01(\tR\bchangeId\x12\x12\n" +
 	"\x04flow\x18\x05 \x01(\tR\x04flow\"3\n" +
 	"\aNodeRef\x12\x0e\n" +
@@ -21089,13 +21088,13 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\tout_total\x18\x06 \x01(\x05R\boutTotal\x12\x19\n" +
 	"\bin_total\x18\a \x01(\x05R\ainTotal\x125\n" +
 	"\tout_types\x18\b \x03(\v2\x18.goap.graph.v1.TypeCountR\boutTypes\x123\n" +
-	"\bin_types\x18\t \x03(\v2\x18.goap.graph.v1.TypeCountR\ainTypes\"\xa5\x03\n" +
-	"\bBaseline\x12\x0e\n" +
+	"\bin_types\x18\t \x03(\v2\x18.goap.graph.v1.TypeCountR\ainTypes\"\xa1\x03\n" +
+	"\x06Commit\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1b\n" +
 	"\tparent_id\x18\x03 \x01(\tR\bparentId\x12\x1b\n" +
-	"\tchange_id\x18\x04 \x01(\tR\bchangeId\x128\n" +
-	"\x05nodes\x18\x05 \x03(\v2\".goap.graph.v1.Baseline.NodesEntryR\x05nodes\x129\n" +
+	"\tchange_id\x18\x04 \x01(\tR\bchangeId\x126\n" +
+	"\x05nodes\x18\x05 \x03(\v2 .goap.graph.v1.Commit.NodesEntryR\x05nodes\x129\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x16\n" +
 	"\x06branch\x18\a \x01(\tR\x06branch\x12\x1c\n" +
@@ -21134,7 +21133,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04flow\x18\x0f \x01(\tR\x04flow\x127\n" +
 	"\n" +
 	"flow_event\x18\x10 \x01(\v2\x18.goap.graph.v1.FlowEventR\tflowEvent\x12C\n" +
-	"\x0edecision_event\x18\x11 \x01(\v2\x1c.goap.graph.v1.DecisionEventR\rdecisionEvent\"\xc0\x06\n" +
+	"\x0edecision_event\x18\x11 \x01(\v2\x1c.goap.graph.v1.DecisionEventR\rdecisionEvent\"\xb7\x06\n" +
 	"\x06Change\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
@@ -21142,9 +21141,9 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\vmethodology\x18\x04 \x01(\tR\vmethodology\x12\x12\n" +
 	"\x04goal\x18\x05 \x01(\tR\x04goal\x12\x16\n" +
 	"\x06status\x18\x06 \x01(\tR\x06status\x12\x1f\n" +
-	"\vbaseline_id\x18\a \x01(\tR\n" +
-	"baselineId\x12,\n" +
-	"\x12result_baseline_id\x18\b \x01(\tR\x10resultBaselineId\x12+\n" +
+	"\vfork_commit\x18\a \x01(\tR\n" +
+	"forkCommit\x12#\n" +
+	"\rlanded_commit\x18\b \x01(\tR\flandedCommit\x12+\n" +
 	"\x04data\x18\t \x01(\v2\x17.google.protobuf.StructR\x04data\x12/\n" +
 	"\x05items\x18\n" +
 	" \x03(\v2\x19.goap.graph.v1.ChangeItemR\x05items\x129\n" +
@@ -21284,34 +21283,34 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04tags\x18\x01 \x03(\v2\x12.goap.graph.v1.TagR\x04tags\"\"\n" +
 	"\x10DeleteTagRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x13\n" +
-	"\x11DeleteTagResponse\"\x8c\x01\n" +
-	"\x14ListBaselinesRequest\x12\x1c\n" +
+	"\x11DeleteTagResponse\"\x8a\x01\n" +
+	"\x12ListCommitsRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
 	"\x06branch\x18\x02 \x01(\tR\x06branch\x12\x16\n" +
 	"\x06before\x18\x03 \x01(\x03R\x06before\x12\x14\n" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12\x10\n" +
-	"\x03ids\x18\x05 \x03(\tR\x03ids\"\x95\x01\n" +
-	"\x15ListBaselinesResponse\x125\n" +
-	"\tbaselines\x18\x01 \x03(\v2\x17.goap.graph.v1.BaselineR\tbaselines\x121\n" +
-	"\arelated\x18\x02 \x03(\v2\x17.goap.graph.v1.BaselineR\arelated\x12\x12\n" +
-	"\x04next\x18\x03 \x01(\x03R\x04next\")\n" +
-	"\x17GetBaselineGraphRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\xdf\x01\n" +
-	"\x18GetBaselineGraphResponse\x123\n" +
-	"\bbaseline\x18\x01 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\x12)\n" +
+	"\x03ids\x18\x05 \x03(\tR\x03ids\"\x8b\x01\n" +
+	"\x13ListCommitsResponse\x12/\n" +
+	"\acommits\x18\x01 \x03(\v2\x15.goap.graph.v1.CommitR\acommits\x12/\n" +
+	"\arelated\x18\x02 \x03(\v2\x15.goap.graph.v1.CommitR\arelated\x12\x12\n" +
+	"\x04next\x18\x03 \x01(\x03R\x04next\"'\n" +
+	"\x15GetCommitGraphRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\xd7\x01\n" +
+	"\x16GetCommitGraphResponse\x12-\n" +
+	"\x06commit\x18\x01 \x01(\v2\x15.goap.graph.v1.CommitR\x06commit\x12)\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x13.goap.graph.v1.NodeR\x05nodes\x12)\n" +
 	"\x05links\x18\x03 \x03(\v2\x13.goap.graph.v1.LinkR\x05links\x128\n" +
-	"\rsuspect_links\x18\x04 \x03(\v2\x13.goap.graph.v1.LinkR\fsuspectLinks\"=\n" +
-	"\x17GetBaselineDeltaRequest\x12\x12\n" +
+	"\rsuspect_links\x18\x04 \x03(\v2\x13.goap.graph.v1.LinkR\fsuspectLinks\";\n" +
+	"\x15GetCommitDeltaRequest\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\tR\x04from\x12\x0e\n" +
-	"\x02to\x18\x02 \x01(\tR\x02to\"\xe0\x01\n" +
-	"\x18GetBaselineDeltaResponse\x12+\n" +
-	"\x04from\x18\x01 \x01(\v2\x17.goap.graph.v1.BaselineR\x04from\x12'\n" +
-	"\x02to\x18\x02 \x01(\v2\x17.goap.graph.v1.BaselineR\x02to\x12)\n" +
+	"\x02to\x18\x02 \x01(\tR\x02to\"\xda\x01\n" +
+	"\x16GetCommitDeltaResponse\x12)\n" +
+	"\x04from\x18\x01 \x01(\v2\x15.goap.graph.v1.CommitR\x04from\x12%\n" +
+	"\x02to\x18\x02 \x01(\v2\x15.goap.graph.v1.CommitR\x02to\x12)\n" +
 	"\x05nodes\x18\x03 \x03(\v2\x13.goap.graph.v1.NodeR\x05nodes\x12)\n" +
 	"\x05links\x18\x04 \x03(\v2\x13.goap.graph.v1.LinkR\x05links\x12\x18\n" +
-	"\aremoved\x18\x05 \x03(\tR\aremoved\"\xe1\x01\n" +
-	"\x18ListBaselineNodesRequest\x12'\n" +
+	"\aremoved\x18\x05 \x03(\tR\aremoved\"\xdf\x01\n" +
+	"\x16ListCommitNodesRequest\x12'\n" +
 	"\x04view\x18\x01 \x01(\v2\x13.goap.graph.v1.ViewR\x04view\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +
 	"\x05query\x18\x03 \x01(\tR\x05query\x12\x16\n" +
@@ -21326,31 +21325,29 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x05nodes\x18\x01 \x03(\v2\x13.goap.graph.v1.NodeR\x05nodes\"5\n" +
 	"\tTypeCount\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x05R\x05count\"\xc1\x01\n" +
-	"\x19ListBaselineNodesResponse\x12)\n" +
+	"\x05count\x18\x02 \x01(\x05R\x05count\"\xb9\x01\n" +
+	"\x17ListCommitNodesResponse\x12)\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x13.goap.graph.v1.NodeR\x05nodes\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12.\n" +
-	"\x05types\x18\x03 \x03(\v2\x18.goap.graph.v1.TypeCountR\x05types\x123\n" +
-	"\bbaseline\x18\x04 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"\x93\x01\n" +
-	"\x18ListBaselineLinksRequest\x12\x1f\n" +
-	"\vbaseline_id\x18\x01 \x01(\tR\n" +
-	"baselineId\x12\x12\n" +
+	"\x05types\x18\x03 \x03(\v2\x18.goap.graph.v1.TypeCountR\x05types\x12-\n" +
+	"\x06commit\x18\x04 \x01(\v2\x15.goap.graph.v1.CommitR\x06commit\"\x8d\x01\n" +
+	"\x16ListCommitLinksRequest\x12\x1b\n" +
+	"\tcommit_id\x18\x01 \x01(\tR\bcommitId\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +
 	"\x05query\x18\x03 \x01(\tR\x05query\x12\x16\n" +
 	"\x06offset\x18\x04 \x01(\x05R\x06offset\x12\x14\n" +
-	"\x05limit\x18\x05 \x01(\x05R\x05limit\"\xc1\x01\n" +
-	"\x19ListBaselineLinksResponse\x12)\n" +
+	"\x05limit\x18\x05 \x01(\x05R\x05limit\"\xb9\x01\n" +
+	"\x17ListCommitLinksResponse\x12)\n" +
 	"\x05links\x18\x01 \x03(\v2\x13.goap.graph.v1.LinkR\x05links\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12.\n" +
-	"\x05types\x18\x03 \x03(\v2\x18.goap.graph.v1.TypeCountR\x05types\x123\n" +
-	"\bbaseline\x18\x04 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"X\n" +
+	"\x05types\x18\x03 \x03(\v2\x18.goap.graph.v1.TypeCountR\x05types\x12-\n" +
+	"\x06commit\x18\x04 \x01(\v2\x15.goap.graph.v1.CommitR\x06commit\"X\n" +
 	"\x12ResolveViewRequest\x12'\n" +
 	"\x04view\x18\x01 \x01(\v2\x13.goap.graph.v1.ViewR\x04view\x12\x19\n" +
-	"\bnode_ids\x18\x02 \x03(\tR\anodeIds\"\xfc\x01\n" +
+	"\bnode_ids\x18\x02 \x03(\tR\anodeIds\"\xf8\x01\n" +
 	"\x13ResolveViewResponse\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
-	"\vbaseline_id\x18\x02 \x01(\tR\n" +
-	"baselineId\x12\x1b\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
+	"\tcommit_id\x18\x02 \x01(\tR\bcommitId\x12\x1b\n" +
 	"\tmain_head\x18\x03 \x01(\bR\bmainHead\x12L\n" +
 	"\bversions\x18\x04 \x03(\v20.goap.graph.v1.ResolveViewResponse.VersionsEntryR\bversions\x1a;\n" +
 	"\rVersionsEntry\x12\x10\n" +
@@ -21372,7 +21369,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04bind\x18\x03 \x03(\v2).goap.graph.v1.QueryViewRequest.BindEntryR\x04bind\x1a7\n" +
 	"\tBindEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9e\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9a\x02\n" +
 	"\x11QueryViewResponse\x12\x18\n" +
 	"\acolumns\x18\x01 \x03(\tR\acolumns\x12.\n" +
 	"\x04rows\x18\x02 \x03(\v2\x1a.google.protobuf.ListValueR\x04rows\x12)\n" +
@@ -21380,9 +21377,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x05links\x18\x04 \x03(\v2\x13.goap.graph.v1.LinkR\x05links\x12\x1c\n" +
 	"\ttruncated\x18\x05 \x01(\bR\ttruncated\x12\x14\n" +
 	"\x05notes\x18\x06 \x03(\tR\x05notes\x12\x14\n" +
-	"\x05reads\x18\a \x01(\x05R\x05reads\x12\x1f\n" +
-	"\vbaseline_id\x18\b \x01(\tR\n" +
-	"baselineId\"\xeb\x03\n" +
+	"\x05reads\x18\a \x01(\x05R\x05reads\x12\x1b\n" +
+	"\tcommit_id\x18\b \x01(\tR\bcommitId\"\xeb\x03\n" +
 	"\vImpactEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tchange_id\x18\x02 \x01(\tR\bchangeId\x12\x10\n" +
@@ -21436,23 +21432,21 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\bdocument\x18\x01 \x01(\tR\bdocument\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x1d\n" +
 	"\n" +
-	"media_type\x18\x03 \x01(\tR\tmediaType\"k\n" +
+	"media_type\x18\x03 \x01(\tR\tmediaType\"g\n" +
 	"\x12ExportGraphRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
-	"\x06branch\x18\x02 \x01(\tR\x06branch\x12\x1f\n" +
-	"\vbaseline_id\x18\x03 \x01(\tR\n" +
-	"baselineId\"\x82\x01\n" +
+	"\x06branch\x18\x02 \x01(\tR\x06branch\x12\x1b\n" +
+	"\tcommit_id\x18\x03 \x01(\tR\bcommitId\"\x82\x01\n" +
 	"\x13ExportGraphResponse\x12\x1a\n" +
 	"\bdocument\x18\x01 \x01(\tR\bdocument\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x1d\n" +
 	"\n" +
 	"media_type\x18\x03 \x01(\tR\tmediaType\x12\x14\n" +
-	"\x05nodes\x18\x04 \x01(\x05R\x05nodes\"\x88\x01\n" +
+	"\x05nodes\x18\x04 \x01(\x05R\x05nodes\"\x84\x01\n" +
 	"\x17StartGraphExportRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
-	"\x06branch\x18\x02 \x01(\tR\x06branch\x12\x1f\n" +
-	"\vbaseline_id\x18\x03 \x01(\tR\n" +
-	"baselineId\x12\x16\n" +
+	"\x06branch\x18\x02 \x01(\tR\x06branch\x12\x1b\n" +
+	"\tcommit_id\x18\x03 \x01(\tR\bcommitId\x12\x16\n" +
 	"\x06format\x18\x04 \x01(\tR\x06format\"?\n" +
 	"\x18StartGraphExportResponse\x12#\n" +
 	"\x03job\x18\x01 \x01(\v2\x11.goap.jobs.v1.JobR\x03job\"\xbc\x01\n" +
@@ -21493,14 +21487,14 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x18GetGraphOverviewResponse\x12?\n" +
 	"\n" +
 	"namespaces\x18\x01 \x03(\v2\x1f.goap.graph.v1.NamespaceSummaryR\n" +
-	"namespaces\"\xa2\x02\n" +
+	"namespaces\"\x9e\x02\n" +
 	"\x10NamespaceSummary\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x14\n" +
 	"\x05nodes\x18\x02 \x01(\x05R\x05nodes\x12\x1a\n" +
 	"\bversions\x18\x03 \x01(\x05R\bversions\x12\x1b\n" +
 	"\tlink_rows\x18\x04 \x01(\x05R\blinkRows\x12\x18\n" +
-	"\achanges\x18\x05 \x01(\x05R\achanges\x12\x1c\n" +
-	"\tbaselines\x18\x06 \x01(\x05R\tbaselines\x12\x1a\n" +
+	"\achanges\x18\x05 \x01(\x05R\achanges\x12\x18\n" +
+	"\acommits\x18\x06 \x01(\x05R\acommits\x12\x1a\n" +
 	"\bbranches\x18\a \x01(\x05R\bbranches\x12\x14\n" +
 	"\x05types\x18\b \x01(\x05R\x05types\x12\x1f\n" +
 	"\vlog_entries\x18\t \x01(\x05R\n" +
@@ -21511,15 +21505,13 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
 	"\x06branch\x18\x02 \x01(\tR\x06branch\"H\n" +
 	"\x15GetGraphStatsResponse\x12/\n" +
-	"\x05stats\x18\x01 \x01(\v2\x19.goap.graph.v1.GraphStatsR\x05stats\"\xbc\x02\n" +
+	"\x05stats\x18\x01 \x01(\v2\x19.goap.graph.v1.GraphStatsR\x05stats\"\xb4\x02\n" +
 	"\n" +
 	"GraphStats\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
-	"\x06branch\x18\x02 \x01(\tR\x06branch\x12\x1f\n" +
-	"\vbaseline_id\x18\x03 \x01(\tR\n" +
-	"baselineId\x12;\n" +
-	"\vbaseline_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"baselineAt\x126\n" +
+	"\x06branch\x18\x02 \x01(\tR\x06branch\x12\x1b\n" +
+	"\tcommit_id\x18\x03 \x01(\tR\bcommitId\x127\n" +
+	"\tcommit_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bcommitAt\x126\n" +
 	"\bbranches\x18\x05 \x01(\v2\x1a.goap.graph.v1.BranchStatsR\bbranches\x121\n" +
 	"\x05store\x18\x06 \x03(\v2\x1b.goap.graph.v1.StoreMeasureR\x05store\x12/\n" +
 	"\x05state\x18\a \x01(\v2\x19.goap.graph.v1.StateStatsR\x05state\"\xf5\x01\n" +
@@ -21656,8 +21648,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x16\n" +
 	"\x06intent\x18\x02 \x01(\tR\x06intent\x12 \n" +
 	"\vmethodology\x18\x03 \x01(\tR\vmethodology\x12\x1f\n" +
-	"\vbaseline_id\x18\x04 \x01(\tR\n" +
-	"baselineId\x12+\n" +
+	"\vfork_commit\x18\x04 \x01(\tR\n" +
+	"forkCommit\x12+\n" +
 	"\x04data\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x04data\x12\x16\n" +
 	"\x06branch\x18\x06 \x01(\tR\x06branch\x12\x1c\n" +
 	"\tnamespace\x18\a \x01(\tR\tnamespace\x12\x1d\n" +
@@ -21769,13 +21761,14 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\aoptions\x18\x04 \x03(\v2\x13.goap.graph.v1.FlowR\aoptions\x12#\n" +
 	"\ractive_option\x18\x05 \x01(\tR\factiveOption\x12E\n" +
 	"\x0fdecision_points\x18\x06 \x03(\v2\x1c.goap.graph.v1.DecisionPointR\x0edecisionPoints\x12*\n" +
-	"\x02at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x02at\"m\n" +
+	"\x02at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x02at\"i\n" +
 	"\x13CommitChangeRequest\x12\x1b\n" +
-	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12#\n" +
-	"\rbaseline_name\x18\x02 \x01(\tR\fbaselineName\x12\x14\n" +
-	"\x05nodes\x18\x03 \x03(\tR\x05nodes\"K\n" +
-	"\x14CommitChangeResponse\x123\n" +
-	"\bbaseline\x18\x01 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"r\n" +
+	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x1f\n" +
+	"\vcommit_name\x18\x02 \x01(\tR\n" +
+	"commitName\x12\x14\n" +
+	"\x05nodes\x18\x03 \x03(\tR\x05nodes\"E\n" +
+	"\x14CommitChangeResponse\x12-\n" +
+	"\x06commit\x18\x01 \x01(\v2\x15.goap.graph.v1.CommitR\x06commit\"r\n" +
 	"\x17TransitionChangeRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x1e\n" +
 	"\n" +
@@ -21828,11 +21821,12 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\tchange_id\x18\x02 \x01(\tR\bchangeId\x122\n" +
 	"\x05nodes\x18\x03 \x03(\v2\x1c.goap.graph.v1.StagedSettingR\x05nodes\"S\n" +
 	"\x17PendingSettingsResponse\x128\n" +
-	"\achanges\x18\x01 \x03(\v2\x1e.goap.graph.v1.PendingSettingsR\achanges\"\xbb\x02\n" +
+	"\achanges\x18\x01 \x03(\v2\x1e.goap.graph.v1.PendingSettingsR\achanges\"\xb7\x02\n" +
 	"\x06Branch\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
-	"\x06parent\x18\x02 \x01(\tR\x06parent\x12#\n" +
-	"\rfork_baseline\x18\x03 \x01(\tR\fforkBaseline\x12\x12\n" +
+	"\x06parent\x18\x02 \x01(\tR\x06parent\x12\x1f\n" +
+	"\vfork_commit\x18\x03 \x01(\tR\n" +
+	"forkCommit\x12\x12\n" +
 	"\x04head\x18\x04 \x01(\tR\x04head\x12\x16\n" +
 	"\x06origin\x18\x05 \x01(\tR\x06origin\x12\x16\n" +
 	"\x06status\x18\x06 \x01(\tR\x06status\x129\n" +
@@ -21841,10 +21835,11 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\tnamespace\x18\b \x01(\tR\tnamespace\x12 \n" +
 	"\vdescription\x18\t \x01(\tR\vdescription\x12!\n" +
 	"\frebased_from\x18\n" +
-	" \x01(\tR\vrebasedFrom\"\xa6\x01\n" +
+	" \x01(\tR\vrebasedFrom\"\xa2\x01\n" +
 	"\x13CreateBranchRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12#\n" +
-	"\rfrom_baseline\x18\x02 \x01(\tR\ffromBaseline\x12\x16\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
+	"\vfrom_commit\x18\x02 \x01(\tR\n" +
+	"fromCommit\x12\x16\n" +
 	"\x06origin\x18\x03 \x01(\tR\x06origin\x12\x1c\n" +
 	"\tnamespace\x18\x04 \x01(\tR\tnamespace\x12 \n" +
 	"\vdescription\x18\x05 \x01(\tR\vdescription\"E\n" +
@@ -21852,10 +21847,10 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x06branch\x18\x01 \x01(\v2\x15.goap.graph.v1.BranchR\x06branch\"K\n" +
 	"\x13ListBranchesRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
-	"\x06status\x18\x02 \x03(\tR\x06status\"\xfc\x01\n" +
+	"\x06status\x18\x02 \x03(\tR\x06status\"\xfa\x01\n" +
 	"\x14ListBranchesResponse\x121\n" +
-	"\bbranches\x18\x01 \x03(\v2\x15.goap.graph.v1.BranchR\bbranches\x12-\n" +
-	"\x05heads\x18\x02 \x03(\v2\x17.goap.graph.v1.BaselineR\x05heads\x12G\n" +
+	"\bbranches\x18\x01 \x03(\v2\x15.goap.graph.v1.BranchR\bbranches\x12+\n" +
+	"\x05heads\x18\x02 \x03(\v2\x15.goap.graph.v1.CommitR\x05heads\x12G\n" +
 	"\x06counts\x18\x03 \x03(\v2/.goap.graph.v1.ListBranchesResponse.CountsEntryR\x06counts\x1a9\n" +
 	"\vCountsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -21864,10 +21859,10 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x1f\n" +
 	"\vheader_only\x18\x03 \x01(\bR\n" +
-	"headerOnly\"o\n" +
+	"headerOnly\"m\n" +
 	"\x11GetBranchResponse\x12-\n" +
-	"\x06branch\x18\x01 \x01(\v2\x15.goap.graph.v1.BranchR\x06branch\x12+\n" +
-	"\x04head\x18\x02 \x01(\v2\x17.goap.graph.v1.BaselineR\x04head\"b\n" +
+	"\x06branch\x18\x01 \x01(\v2\x15.goap.graph.v1.BranchR\x06branch\x12)\n" +
+	"\x04head\x18\x02 \x01(\v2\x15.goap.graph.v1.CommitR\x04head\"b\n" +
 	"\x16SetBranchStatusRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x1c\n" +
@@ -21911,26 +21906,25 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x10PlanMergeRequest\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\tR\x04from\x12\x12\n" +
 	"\x04into\x18\x02 \x01(\tR\x04into\x12\x1c\n" +
-	"\tnamespace\x18\x03 \x01(\tR\tnamespace\":\n" +
-	"\x14DiffBaselinesRequest\x12\x12\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"8\n" +
+	"\x12DiffCommitsRequest\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\tR\x04from\x12\x0e\n" +
-	"\x02to\x18\x02 \x01(\tR\x02to\"\xd0\x01\n" +
-	"\x15DiffBaselinesResponse\x121\n" +
-	"\x05nodes\x18\x01 \x03(\v2\x1b.goap.graph.v1.BaselineDiffR\x05nodes\x12?\n" +
+	"\x02to\x18\x02 \x01(\tR\x02to\"\xcc\x01\n" +
+	"\x13DiffCommitsResponse\x12/\n" +
+	"\x05nodes\x18\x01 \x03(\v2\x19.goap.graph.v1.CommitDiffR\x05nodes\x12?\n" +
 	"\rchanges_added\x18\x02 \x03(\v2\x1a.goap.graph.v1.StackChangeR\fchangesAdded\x12C\n" +
-	"\x0fchanges_removed\x18\x03 \x03(\v2\x1a.goap.graph.v1.StackChangeR\x0echangesRemoved\"\x81\x01\n" +
+	"\x0fchanges_removed\x18\x03 \x03(\v2\x1a.goap.graph.v1.StackChangeR\x0echangesRemoved\"}\n" +
 	"\x15GetChangeStackRequest\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x1f\n" +
-	"\vbaseline_id\x18\x03 \x01(\tR\n" +
-	"baselineId\x12\x14\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x1b\n" +
+	"\tcommit_id\x18\x03 \x01(\tR\bcommitId\x12\x14\n" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\"J\n" +
 	"\x16GetChangeStackResponse\x120\n" +
-	"\x05stack\x18\x01 \x01(\v2\x1a.goap.graph.v1.ChangeStackR\x05stack\"\xd4\x01\n" +
+	"\x05stack\x18\x01 \x01(\v2\x1a.goap.graph.v1.ChangeStackR\x05stack\"\xce\x01\n" +
 	"\vChangeStack\x124\n" +
 	"\achanges\x18\x01 \x03(\v2\x1a.goap.graph.v1.StackChangeR\achanges\x126\n" +
-	"\bversions\x18\x02 \x03(\v2\x1a.goap.graph.v1.VersionStepR\bversions\x129\n" +
-	"\tbaselines\x18\x03 \x03(\v2\x1b.goap.graph.v1.BaselineStepR\tbaselines\x12\x1c\n" +
+	"\bversions\x18\x02 \x03(\v2\x1a.goap.graph.v1.VersionStepR\bversions\x123\n" +
+	"\acommits\x18\x03 \x03(\v2\x19.goap.graph.v1.CommitStepR\acommits\x12\x1c\n" +
 	"\ttruncated\x18\x04 \x01(\bR\ttruncated\"c\n" +
 	"\vStackChange\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
@@ -21948,8 +21942,9 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"=\n" +
 	"\vVersionJoin\x12\x16\n" +
 	"\x06branch\x18\x01 \x01(\tR\x06branch\x12\x16\n" +
-	"\x06change\x18\x02 \x01(\tR\x06change\"\xa5\x02\n" +
-	"\fBaselineStep\x12\x0e\n" +
+	"\x06change\x18\x02 \x01(\tR\x06change\"\xa3\x02\n" +
+	"\n" +
+	"CommitStep\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
 	"\x06branch\x18\x03 \x01(\tR\x06branch\x12\x12\n" +
@@ -21962,8 +21957,9 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x16\n" +
 	"\x06merged\x18\n" +
-	" \x03(\tR\x06merged\"\xaa\x01\n" +
-	"\fBaselineDiff\x12\x12\n" +
+	" \x03(\tR\x06merged\"\xa8\x01\n" +
+	"\n" +
+	"CommitDiff\x12\x12\n" +
 	"\x04node\x18\x01 \x01(\tR\x04node\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12\x12\n" +
@@ -21984,10 +21980,10 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\tnamespace\x18\x05 \x01(\tR\tnamespace\x1aY\n" +
 	"\x10ResolutionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12/\n" +
-	"\x05value\x18\x02 \x01(\v2\x19.goap.graph.v1.ResolutionR\x05value:\x028\x01\"\xa7\x01\n" +
+	"\x05value\x18\x02 \x01(\v2\x19.goap.graph.v1.ResolutionR\x05value:\x028\x01\"\xa1\x01\n" +
 	"\x13MergeBranchResponse\x12-\n" +
-	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\x123\n" +
-	"\bbaseline\x18\x02 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\x12,\n" +
+	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\x12-\n" +
+	"\x06commit\x18\x02 \x01(\v2\x15.goap.graph.v1.CommitR\x06commit\x12,\n" +
 	"\x04plan\x18\x03 \x01(\v2\x18.goap.graph.v1.MergePlanR\x04plan\"E\n" +
 	"\x10AppendLogRequest\x121\n" +
 	"\aentries\x18\x01 \x03(\v2\x17.goap.graph.v1.LogEntryR\aentries\"\x13\n" +
@@ -22083,16 +22079,16 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x05links\x18\x06 \x03(\v2\x17.goap.graph.v1.LinkEditR\x05links\x12!\n" +
 	"\fremove_links\x18\a \x03(\tR\vremoveLinks\x12 \n" +
 	"\vresponsible\x18\b \x01(\tR\vresponsible\x12\x14\n" +
-	"\x05state\x18\t \x01(\tR\x05state\"\x95\x03\n" +
+	"\x05state\x18\t \x01(\tR\x05state\"\x8d\x03\n" +
 	"\x12CommitEditsRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
 	"\x06intent\x18\x03 \x01(\tR\x06intent\x12 \n" +
 	"\vmethodology\x18\x04 \x01(\tR\vmethodology\x12+\n" +
-	"\x04data\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x04data\x12\x1f\n" +
-	"\vbaseline_id\x18\x06 \x01(\tR\n" +
-	"baselineId\x12#\n" +
-	"\rbaseline_name\x18\a \x01(\tR\fbaselineName\x12-\n" +
+	"\x04data\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x04data\x12\x1b\n" +
+	"\tcommit_id\x18\x06 \x01(\tR\bcommitId\x12\x1f\n" +
+	"\vcommit_name\x18\a \x01(\tR\n" +
+	"commitName\x12-\n" +
 	"\x05edits\x18\b \x03(\v2\x17.goap.graph.v1.NodeEditR\x05edits\x12\x1b\n" +
 	"\towner_org\x18\t \x01(\tR\bownerOrg\x12\x1d\n" +
 	"\n" +
@@ -22101,10 +22097,10 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x06events\x18\v \x03(\v2\x1b.goap.graph.v1.CarriedEventR\x06events\"B\n" +
 	"\fCarriedEvent\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x18\n" +
-	"\apayload\x18\x02 \x01(\fR\apayload\"g\n" +
+	"\apayload\x18\x02 \x01(\fR\apayload\"a\n" +
 	"\x13CommitEditsResponse\x12\x1b\n" +
-	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x123\n" +
-	"\bbaseline\x18\x02 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"f\n" +
+	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12-\n" +
+	"\x06commit\x18\x02 \x01(\v2\x15.goap.graph.v1.CommitR\x06commit\"f\n" +
 	"\x14ProposeImpactRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x121\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x1b.goap.graph.v1.ChangeImpactR\x05nodes\"J\n" +
@@ -22595,9 +22591,9 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x14GetChangeViewRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x12\n" +
 	"\x04flow\x18\x02 \x01(\tR\x04flow\x12\x14\n" +
-	"\x05level\x18\x03 \x01(\tR\x05level\"L\n" +
-	"\x15GetChangeViewResponse\x123\n" +
-	"\bbaseline\x18\x01 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"^\n" +
+	"\x05level\x18\x03 \x01(\tR\x05level\"F\n" +
+	"\x15GetChangeViewResponse\x12-\n" +
+	"\x06commit\x18\x01 \x01(\v2\x15.goap.graph.v1.CommitR\x06commit\"^\n" +
 	"\x15GetChangeGraphRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x12\n" +
 	"\x04flow\x18\x02 \x01(\tR\x04flow\x12\x14\n" +
@@ -22735,20 +22731,20 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04open\x18\b \x01(\v2\x1a.goap.graph.v1.AddressOpenR\x04open\x12\x18\n" +
 	"\acontent\x18\t \x01(\tR\acontent\"N\n" +
 	"\x16ResolveAddressResponse\x124\n" +
-	"\x06target\x18\x01 \x01(\v2\x1c.goap.graph.v1.AddressTargetR\x06target2\xecU\n" +
+	"\x06target\x18\x01 \x01(\v2\x1c.goap.graph.v1.AddressTargetR\x06target2\xc8U\n" +
 	"\fGraphService\x12H\n" +
 	"\aGetNode\x12\x1d.goap.graph.v1.GetNodeRequest\x1a\x1e.goap.graph.v1.GetNodeResponse\x12Z\n" +
-	"\rListNodeLinks\x12#.goap.graph.v1.ListNodeLinksRequest\x1a$.goap.graph.v1.ListNodeLinksResponse\x12Z\n" +
-	"\rListBaselines\x12#.goap.graph.v1.ListBaselinesRequest\x1a$.goap.graph.v1.ListBaselinesResponse\x12Q\n" +
+	"\rListNodeLinks\x12#.goap.graph.v1.ListNodeLinksRequest\x1a$.goap.graph.v1.ListNodeLinksResponse\x12T\n" +
+	"\vListCommits\x12!.goap.graph.v1.ListCommitsRequest\x1a\".goap.graph.v1.ListCommitsResponse\x12Q\n" +
 	"\n" +
 	"TagVersion\x12 .goap.graph.v1.TagVersionRequest\x1a!.goap.graph.v1.TagVersionResponse\x12K\n" +
 	"\bListTags\x12\x1e.goap.graph.v1.ListTagsRequest\x1a\x1f.goap.graph.v1.ListTagsResponse\x12N\n" +
-	"\tDeleteTag\x12\x1f.goap.graph.v1.DeleteTagRequest\x1a .goap.graph.v1.DeleteTagResponse\x12c\n" +
-	"\x10GetBaselineGraph\x12&.goap.graph.v1.GetBaselineGraphRequest\x1a'.goap.graph.v1.GetBaselineGraphResponse\x12c\n" +
-	"\x10GetBaselineDelta\x12&.goap.graph.v1.GetBaselineDeltaRequest\x1a'.goap.graph.v1.GetBaselineDeltaResponse\x12f\n" +
-	"\x11ListBaselineNodes\x12'.goap.graph.v1.ListBaselineNodesRequest\x1a(.goap.graph.v1.ListBaselineNodesResponse\x12Z\n" +
-	"\rListViewNodes\x12#.goap.graph.v1.ListViewNodesRequest\x1a$.goap.graph.v1.ListViewNodesResponse\x12f\n" +
-	"\x11ListBaselineLinks\x12'.goap.graph.v1.ListBaselineLinksRequest\x1a(.goap.graph.v1.ListBaselineLinksResponse\x12o\n" +
+	"\tDeleteTag\x12\x1f.goap.graph.v1.DeleteTagRequest\x1a .goap.graph.v1.DeleteTagResponse\x12]\n" +
+	"\x0eGetCommitGraph\x12$.goap.graph.v1.GetCommitGraphRequest\x1a%.goap.graph.v1.GetCommitGraphResponse\x12]\n" +
+	"\x0eGetCommitDelta\x12$.goap.graph.v1.GetCommitDeltaRequest\x1a%.goap.graph.v1.GetCommitDeltaResponse\x12`\n" +
+	"\x0fListCommitNodes\x12%.goap.graph.v1.ListCommitNodesRequest\x1a&.goap.graph.v1.ListCommitNodesResponse\x12Z\n" +
+	"\rListViewNodes\x12#.goap.graph.v1.ListViewNodesRequest\x1a$.goap.graph.v1.ListViewNodesResponse\x12`\n" +
+	"\x0fListCommitLinks\x12%.goap.graph.v1.ListCommitLinksRequest\x1a&.goap.graph.v1.ListCommitLinksResponse\x12o\n" +
 	"\x14GetNodeNeighbourhood\x12*.goap.graph.v1.GetNodeNeighbourhoodRequest\x1a+.goap.graph.v1.GetNodeNeighbourhoodResponse\x12N\n" +
 	"\tQueryView\x12\x1f.goap.graph.v1.QueryViewRequest\x1a .goap.graph.v1.QueryViewResponse\x12T\n" +
 	"\vResolveView\x12!.goap.graph.v1.ResolveViewRequest\x1a\".goap.graph.v1.ResolveViewResponse\x12]\n" +
@@ -22826,8 +22822,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x10ListNodeVersions\x12&.goap.graph.v1.ListNodeVersionsRequest\x1a'.goap.graph.v1.ListNodeVersionsResponse\x12W\n" +
 	"\fDerivedNodes\x12\".goap.graph.v1.DerivedNodesRequest\x1a#.goap.graph.v1.DerivedNodesResponse\x12N\n" +
 	"\tPlanMerge\x12\x1f.goap.graph.v1.PlanMergeRequest\x1a .goap.graph.v1.PlanMergeResponse\x12T\n" +
-	"\vMergeBranch\x12!.goap.graph.v1.MergeBranchRequest\x1a\".goap.graph.v1.MergeBranchResponse\x12Z\n" +
-	"\rDiffBaselines\x12#.goap.graph.v1.DiffBaselinesRequest\x1a$.goap.graph.v1.DiffBaselinesResponse\x12]\n" +
+	"\vMergeBranch\x12!.goap.graph.v1.MergeBranchRequest\x1a\".goap.graph.v1.MergeBranchResponse\x12T\n" +
+	"\vDiffCommits\x12!.goap.graph.v1.DiffCommitsRequest\x1a\".goap.graph.v1.DiffCommitsResponse\x12]\n" +
 	"\x0eGetChangeStack\x12$.goap.graph.v1.GetChangeStackRequest\x1a%.goap.graph.v1.GetChangeStackResponse\x12T\n" +
 	"\vMergeChange\x12!.goap.graph.v1.MergeChangeRequest\x1a\".goap.graph.v1.MergeChangeResponse\x12T\n" +
 	"\vCloseChange\x12!.goap.graph.v1.CloseChangeRequest\x1a\".goap.graph.v1.CloseChangeResponse\x12]\n" +
@@ -22882,7 +22878,7 @@ var file_goap_graph_v1_graph_proto_goTypes = []any{
 	(*Node)(nil),                           // 4: goap.graph.v1.Node
 	(*Link)(nil),                           // 5: goap.graph.v1.Link
 	(*NodeView)(nil),                       // 6: goap.graph.v1.NodeView
-	(*Baseline)(nil),                       // 7: goap.graph.v1.Baseline
+	(*Commit)(nil),                         // 7: goap.graph.v1.Commit
 	(*Decision)(nil),                       // 8: goap.graph.v1.Decision
 	(*ChangeItem)(nil),                     // 9: goap.graph.v1.ChangeItem
 	(*Change)(nil),                         // 10: goap.graph.v1.Change
@@ -22903,19 +22899,19 @@ var file_goap_graph_v1_graph_proto_goTypes = []any{
 	(*ListTagsResponse)(nil),               // 25: goap.graph.v1.ListTagsResponse
 	(*DeleteTagRequest)(nil),               // 26: goap.graph.v1.DeleteTagRequest
 	(*DeleteTagResponse)(nil),              // 27: goap.graph.v1.DeleteTagResponse
-	(*ListBaselinesRequest)(nil),           // 28: goap.graph.v1.ListBaselinesRequest
-	(*ListBaselinesResponse)(nil),          // 29: goap.graph.v1.ListBaselinesResponse
-	(*GetBaselineGraphRequest)(nil),        // 30: goap.graph.v1.GetBaselineGraphRequest
-	(*GetBaselineGraphResponse)(nil),       // 31: goap.graph.v1.GetBaselineGraphResponse
-	(*GetBaselineDeltaRequest)(nil),        // 32: goap.graph.v1.GetBaselineDeltaRequest
-	(*GetBaselineDeltaResponse)(nil),       // 33: goap.graph.v1.GetBaselineDeltaResponse
-	(*ListBaselineNodesRequest)(nil),       // 34: goap.graph.v1.ListBaselineNodesRequest
+	(*ListCommitsRequest)(nil),             // 28: goap.graph.v1.ListCommitsRequest
+	(*ListCommitsResponse)(nil),            // 29: goap.graph.v1.ListCommitsResponse
+	(*GetCommitGraphRequest)(nil),          // 30: goap.graph.v1.GetCommitGraphRequest
+	(*GetCommitGraphResponse)(nil),         // 31: goap.graph.v1.GetCommitGraphResponse
+	(*GetCommitDeltaRequest)(nil),          // 32: goap.graph.v1.GetCommitDeltaRequest
+	(*GetCommitDeltaResponse)(nil),         // 33: goap.graph.v1.GetCommitDeltaResponse
+	(*ListCommitNodesRequest)(nil),         // 34: goap.graph.v1.ListCommitNodesRequest
 	(*ListViewNodesRequest)(nil),           // 35: goap.graph.v1.ListViewNodesRequest
 	(*ListViewNodesResponse)(nil),          // 36: goap.graph.v1.ListViewNodesResponse
 	(*TypeCount)(nil),                      // 37: goap.graph.v1.TypeCount
-	(*ListBaselineNodesResponse)(nil),      // 38: goap.graph.v1.ListBaselineNodesResponse
-	(*ListBaselineLinksRequest)(nil),       // 39: goap.graph.v1.ListBaselineLinksRequest
-	(*ListBaselineLinksResponse)(nil),      // 40: goap.graph.v1.ListBaselineLinksResponse
+	(*ListCommitNodesResponse)(nil),        // 38: goap.graph.v1.ListCommitNodesResponse
+	(*ListCommitLinksRequest)(nil),         // 39: goap.graph.v1.ListCommitLinksRequest
+	(*ListCommitLinksResponse)(nil),        // 40: goap.graph.v1.ListCommitLinksResponse
 	(*ResolveViewRequest)(nil),             // 41: goap.graph.v1.ResolveViewRequest
 	(*ResolveViewResponse)(nil),            // 42: goap.graph.v1.ResolveViewResponse
 	(*GetNodeNeighbourhoodRequest)(nil),    // 43: goap.graph.v1.GetNodeNeighbourhoodRequest
@@ -23026,16 +23022,16 @@ var file_goap_graph_v1_graph_proto_goTypes = []any{
 	(*MergeCandidate)(nil),                 // 148: goap.graph.v1.MergeCandidate
 	(*MergePlan)(nil),                      // 149: goap.graph.v1.MergePlan
 	(*PlanMergeRequest)(nil),               // 150: goap.graph.v1.PlanMergeRequest
-	(*DiffBaselinesRequest)(nil),           // 151: goap.graph.v1.DiffBaselinesRequest
-	(*DiffBaselinesResponse)(nil),          // 152: goap.graph.v1.DiffBaselinesResponse
+	(*DiffCommitsRequest)(nil),             // 151: goap.graph.v1.DiffCommitsRequest
+	(*DiffCommitsResponse)(nil),            // 152: goap.graph.v1.DiffCommitsResponse
 	(*GetChangeStackRequest)(nil),          // 153: goap.graph.v1.GetChangeStackRequest
 	(*GetChangeStackResponse)(nil),         // 154: goap.graph.v1.GetChangeStackResponse
 	(*ChangeStack)(nil),                    // 155: goap.graph.v1.ChangeStack
 	(*StackChange)(nil),                    // 156: goap.graph.v1.StackChange
 	(*VersionStep)(nil),                    // 157: goap.graph.v1.VersionStep
 	(*VersionJoin)(nil),                    // 158: goap.graph.v1.VersionJoin
-	(*BaselineStep)(nil),                   // 159: goap.graph.v1.BaselineStep
-	(*BaselineDiff)(nil),                   // 160: goap.graph.v1.BaselineDiff
+	(*CommitStep)(nil),                     // 159: goap.graph.v1.CommitStep
+	(*CommitDiff)(nil),                     // 160: goap.graph.v1.CommitDiff
 	(*PlanMergeResponse)(nil),              // 161: goap.graph.v1.PlanMergeResponse
 	(*Resolution)(nil),                     // 162: goap.graph.v1.Resolution
 	(*MergeBranchRequest)(nil),             // 163: goap.graph.v1.MergeBranchRequest
@@ -23183,7 +23179,7 @@ var file_goap_graph_v1_graph_proto_goTypes = []any{
 	(*AddressOpen)(nil),                    // 305: goap.graph.v1.AddressOpen
 	(*AddressTarget)(nil),                  // 306: goap.graph.v1.AddressTarget
 	(*ResolveAddressResponse)(nil),         // 307: goap.graph.v1.ResolveAddressResponse
-	nil,                                    // 308: goap.graph.v1.Baseline.NodesEntry
+	nil,                                    // 308: goap.graph.v1.Commit.NodesEntry
 	nil,                                    // 309: goap.graph.v1.ResolveViewResponse.VersionsEntry
 	nil,                                    // 310: goap.graph.v1.QueryViewRequest.BindEntry
 	nil,                                    // 311: goap.graph.v1.ListChangeLogResponse.CountsEntry
@@ -23215,8 +23211,8 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	5,   // 8: goap.graph.v1.NodeView.in:type_name -> goap.graph.v1.Link
 	37,  // 9: goap.graph.v1.NodeView.out_types:type_name -> goap.graph.v1.TypeCount
 	37,  // 10: goap.graph.v1.NodeView.in_types:type_name -> goap.graph.v1.TypeCount
-	308, // 11: goap.graph.v1.Baseline.nodes:type_name -> goap.graph.v1.Baseline.NodesEntry
-	323, // 12: goap.graph.v1.Baseline.created_at:type_name -> google.protobuf.Timestamp
+	308, // 11: goap.graph.v1.Commit.nodes:type_name -> goap.graph.v1.Commit.NodesEntry
+	323, // 12: goap.graph.v1.Commit.created_at:type_name -> google.protobuf.Timestamp
 	8,   // 13: goap.graph.v1.ChangeItem.decision:type_name -> goap.graph.v1.Decision
 	322, // 14: goap.graph.v1.ChangeItem.data:type_name -> google.protobuf.Struct
 	323, // 15: goap.graph.v1.ChangeItem.created_at:type_name -> google.protobuf.Timestamp
@@ -23246,25 +23242,25 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	2,   // 39: goap.graph.v1.TagVersionRequest.view:type_name -> goap.graph.v1.View
 	21,  // 40: goap.graph.v1.TagVersionResponse.tag:type_name -> goap.graph.v1.Tag
 	21,  // 41: goap.graph.v1.ListTagsResponse.tags:type_name -> goap.graph.v1.Tag
-	7,   // 42: goap.graph.v1.ListBaselinesResponse.baselines:type_name -> goap.graph.v1.Baseline
-	7,   // 43: goap.graph.v1.ListBaselinesResponse.related:type_name -> goap.graph.v1.Baseline
-	7,   // 44: goap.graph.v1.GetBaselineGraphResponse.baseline:type_name -> goap.graph.v1.Baseline
-	4,   // 45: goap.graph.v1.GetBaselineGraphResponse.nodes:type_name -> goap.graph.v1.Node
-	5,   // 46: goap.graph.v1.GetBaselineGraphResponse.links:type_name -> goap.graph.v1.Link
-	5,   // 47: goap.graph.v1.GetBaselineGraphResponse.suspect_links:type_name -> goap.graph.v1.Link
-	7,   // 48: goap.graph.v1.GetBaselineDeltaResponse.from:type_name -> goap.graph.v1.Baseline
-	7,   // 49: goap.graph.v1.GetBaselineDeltaResponse.to:type_name -> goap.graph.v1.Baseline
-	4,   // 50: goap.graph.v1.GetBaselineDeltaResponse.nodes:type_name -> goap.graph.v1.Node
-	5,   // 51: goap.graph.v1.GetBaselineDeltaResponse.links:type_name -> goap.graph.v1.Link
-	2,   // 52: goap.graph.v1.ListBaselineNodesRequest.view:type_name -> goap.graph.v1.View
+	7,   // 42: goap.graph.v1.ListCommitsResponse.commits:type_name -> goap.graph.v1.Commit
+	7,   // 43: goap.graph.v1.ListCommitsResponse.related:type_name -> goap.graph.v1.Commit
+	7,   // 44: goap.graph.v1.GetCommitGraphResponse.commit:type_name -> goap.graph.v1.Commit
+	4,   // 45: goap.graph.v1.GetCommitGraphResponse.nodes:type_name -> goap.graph.v1.Node
+	5,   // 46: goap.graph.v1.GetCommitGraphResponse.links:type_name -> goap.graph.v1.Link
+	5,   // 47: goap.graph.v1.GetCommitGraphResponse.suspect_links:type_name -> goap.graph.v1.Link
+	7,   // 48: goap.graph.v1.GetCommitDeltaResponse.from:type_name -> goap.graph.v1.Commit
+	7,   // 49: goap.graph.v1.GetCommitDeltaResponse.to:type_name -> goap.graph.v1.Commit
+	4,   // 50: goap.graph.v1.GetCommitDeltaResponse.nodes:type_name -> goap.graph.v1.Node
+	5,   // 51: goap.graph.v1.GetCommitDeltaResponse.links:type_name -> goap.graph.v1.Link
+	2,   // 52: goap.graph.v1.ListCommitNodesRequest.view:type_name -> goap.graph.v1.View
 	2,   // 53: goap.graph.v1.ListViewNodesRequest.view:type_name -> goap.graph.v1.View
 	4,   // 54: goap.graph.v1.ListViewNodesResponse.nodes:type_name -> goap.graph.v1.Node
-	4,   // 55: goap.graph.v1.ListBaselineNodesResponse.nodes:type_name -> goap.graph.v1.Node
-	37,  // 56: goap.graph.v1.ListBaselineNodesResponse.types:type_name -> goap.graph.v1.TypeCount
-	7,   // 57: goap.graph.v1.ListBaselineNodesResponse.baseline:type_name -> goap.graph.v1.Baseline
-	5,   // 58: goap.graph.v1.ListBaselineLinksResponse.links:type_name -> goap.graph.v1.Link
-	37,  // 59: goap.graph.v1.ListBaselineLinksResponse.types:type_name -> goap.graph.v1.TypeCount
-	7,   // 60: goap.graph.v1.ListBaselineLinksResponse.baseline:type_name -> goap.graph.v1.Baseline
+	4,   // 55: goap.graph.v1.ListCommitNodesResponse.nodes:type_name -> goap.graph.v1.Node
+	37,  // 56: goap.graph.v1.ListCommitNodesResponse.types:type_name -> goap.graph.v1.TypeCount
+	7,   // 57: goap.graph.v1.ListCommitNodesResponse.commit:type_name -> goap.graph.v1.Commit
+	5,   // 58: goap.graph.v1.ListCommitLinksResponse.links:type_name -> goap.graph.v1.Link
+	37,  // 59: goap.graph.v1.ListCommitLinksResponse.types:type_name -> goap.graph.v1.TypeCount
+	7,   // 60: goap.graph.v1.ListCommitLinksResponse.commit:type_name -> goap.graph.v1.Commit
 	2,   // 61: goap.graph.v1.ResolveViewRequest.view:type_name -> goap.graph.v1.View
 	309, // 62: goap.graph.v1.ResolveViewResponse.versions:type_name -> goap.graph.v1.ResolveViewResponse.VersionsEntry
 	2,   // 63: goap.graph.v1.GetNodeNeighbourhoodRequest.view:type_name -> goap.graph.v1.View
@@ -23291,7 +23287,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	47,  // 84: goap.graph.v1.ListChangeEventsResponse.events:type_name -> goap.graph.v1.ImpactEvent
 	67,  // 85: goap.graph.v1.GetGraphOverviewResponse.namespaces:type_name -> goap.graph.v1.NamespaceSummary
 	70,  // 86: goap.graph.v1.GetGraphStatsResponse.stats:type_name -> goap.graph.v1.GraphStats
-	323, // 87: goap.graph.v1.GraphStats.baseline_at:type_name -> google.protobuf.Timestamp
+	323, // 87: goap.graph.v1.GraphStats.commit_at:type_name -> google.protobuf.Timestamp
 	71,  // 88: goap.graph.v1.GraphStats.branches:type_name -> goap.graph.v1.BranchStats
 	72,  // 89: goap.graph.v1.GraphStats.store:type_name -> goap.graph.v1.StoreMeasure
 	73,  // 90: goap.graph.v1.GraphStats.state:type_name -> goap.graph.v1.StateStats
@@ -23338,7 +23334,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	254, // 131: goap.graph.v1.GetBlackboardResponse.options:type_name -> goap.graph.v1.Flow
 	293, // 132: goap.graph.v1.GetBlackboardResponse.decision_points:type_name -> goap.graph.v1.DecisionPoint
 	323, // 133: goap.graph.v1.GetBlackboardResponse.at:type_name -> google.protobuf.Timestamp
-	7,   // 134: goap.graph.v1.CommitChangeResponse.baseline:type_name -> goap.graph.v1.Baseline
+	7,   // 134: goap.graph.v1.CommitChangeResponse.commit:type_name -> goap.graph.v1.Commit
 	10,  // 135: goap.graph.v1.TransitionChangeResponse.change:type_name -> goap.graph.v1.Change
 	123, // 136: goap.graph.v1.GetChangeTransitionsResponse.transitions:type_name -> goap.graph.v1.TransitionCheck
 	124, // 137: goap.graph.v1.TransitionCheck.blocks:type_name -> goap.graph.v1.TransitionBlock
@@ -23351,10 +23347,10 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	323, // 144: goap.graph.v1.Branch.created_at:type_name -> google.protobuf.Timestamp
 	135, // 145: goap.graph.v1.CreateBranchResponse.branch:type_name -> goap.graph.v1.Branch
 	135, // 146: goap.graph.v1.ListBranchesResponse.branches:type_name -> goap.graph.v1.Branch
-	7,   // 147: goap.graph.v1.ListBranchesResponse.heads:type_name -> goap.graph.v1.Baseline
+	7,   // 147: goap.graph.v1.ListBranchesResponse.heads:type_name -> goap.graph.v1.Commit
 	315, // 148: goap.graph.v1.ListBranchesResponse.counts:type_name -> goap.graph.v1.ListBranchesResponse.CountsEntry
 	135, // 149: goap.graph.v1.GetBranchResponse.branch:type_name -> goap.graph.v1.Branch
-	7,   // 150: goap.graph.v1.GetBranchResponse.head:type_name -> goap.graph.v1.Baseline
+	7,   // 150: goap.graph.v1.GetBranchResponse.head:type_name -> goap.graph.v1.Commit
 	4,   // 151: goap.graph.v1.ListNodeVersionsResponse.versions:type_name -> goap.graph.v1.Node
 	3,   // 152: goap.graph.v1.MergeCandidate.ancestor:type_name -> goap.graph.v1.NodeRef
 	3,   // 153: goap.graph.v1.MergeCandidate.ours:type_name -> goap.graph.v1.NodeRef
@@ -23364,23 +23360,23 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	322, // 157: goap.graph.v1.MergeCandidate.theirs_props:type_name -> google.protobuf.Struct
 	322, // 158: goap.graph.v1.MergeCandidate.merged:type_name -> google.protobuf.Struct
 	148, // 159: goap.graph.v1.MergePlan.candidates:type_name -> goap.graph.v1.MergeCandidate
-	160, // 160: goap.graph.v1.DiffBaselinesResponse.nodes:type_name -> goap.graph.v1.BaselineDiff
-	156, // 161: goap.graph.v1.DiffBaselinesResponse.changes_added:type_name -> goap.graph.v1.StackChange
-	156, // 162: goap.graph.v1.DiffBaselinesResponse.changes_removed:type_name -> goap.graph.v1.StackChange
+	160, // 160: goap.graph.v1.DiffCommitsResponse.nodes:type_name -> goap.graph.v1.CommitDiff
+	156, // 161: goap.graph.v1.DiffCommitsResponse.changes_added:type_name -> goap.graph.v1.StackChange
+	156, // 162: goap.graph.v1.DiffCommitsResponse.changes_removed:type_name -> goap.graph.v1.StackChange
 	155, // 163: goap.graph.v1.GetChangeStackResponse.stack:type_name -> goap.graph.v1.ChangeStack
 	156, // 164: goap.graph.v1.ChangeStack.changes:type_name -> goap.graph.v1.StackChange
 	157, // 165: goap.graph.v1.ChangeStack.versions:type_name -> goap.graph.v1.VersionStep
-	159, // 166: goap.graph.v1.ChangeStack.baselines:type_name -> goap.graph.v1.BaselineStep
+	159, // 166: goap.graph.v1.ChangeStack.commits:type_name -> goap.graph.v1.CommitStep
 	158, // 167: goap.graph.v1.VersionStep.joined:type_name -> goap.graph.v1.VersionJoin
 	323, // 168: goap.graph.v1.VersionStep.created_at:type_name -> google.protobuf.Timestamp
-	323, // 169: goap.graph.v1.BaselineStep.created_at:type_name -> google.protobuf.Timestamp
-	4,   // 170: goap.graph.v1.BaselineDiff.from:type_name -> goap.graph.v1.Node
-	4,   // 171: goap.graph.v1.BaselineDiff.to:type_name -> goap.graph.v1.Node
+	323, // 169: goap.graph.v1.CommitStep.created_at:type_name -> google.protobuf.Timestamp
+	4,   // 170: goap.graph.v1.CommitDiff.from:type_name -> goap.graph.v1.Node
+	4,   // 171: goap.graph.v1.CommitDiff.to:type_name -> goap.graph.v1.Node
 	149, // 172: goap.graph.v1.PlanMergeResponse.plan:type_name -> goap.graph.v1.MergePlan
 	322, // 173: goap.graph.v1.Resolution.props:type_name -> google.protobuf.Struct
 	316, // 174: goap.graph.v1.MergeBranchRequest.resolutions:type_name -> goap.graph.v1.MergeBranchRequest.ResolutionsEntry
 	10,  // 175: goap.graph.v1.MergeBranchResponse.change:type_name -> goap.graph.v1.Change
-	7,   // 176: goap.graph.v1.MergeBranchResponse.baseline:type_name -> goap.graph.v1.Baseline
+	7,   // 176: goap.graph.v1.MergeBranchResponse.commit:type_name -> goap.graph.v1.Commit
 	149, // 177: goap.graph.v1.MergeBranchResponse.plan:type_name -> goap.graph.v1.MergePlan
 	48,  // 178: goap.graph.v1.AppendLogRequest.entries:type_name -> goap.graph.v1.LogEntry
 	317, // 179: goap.graph.v1.ExecutionRecord.before:type_name -> goap.graph.v1.ExecutionRecord.BeforeEntry
@@ -23400,7 +23396,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	322, // 193: goap.graph.v1.CommitEditsRequest.data:type_name -> google.protobuf.Struct
 	173, // 194: goap.graph.v1.CommitEditsRequest.edits:type_name -> goap.graph.v1.NodeEdit
 	175, // 195: goap.graph.v1.CommitEditsRequest.events:type_name -> goap.graph.v1.CarriedEvent
-	7,   // 196: goap.graph.v1.CommitEditsResponse.baseline:type_name -> goap.graph.v1.Baseline
+	7,   // 196: goap.graph.v1.CommitEditsResponse.commit:type_name -> goap.graph.v1.Commit
 	15,  // 197: goap.graph.v1.ProposeImpactRequest.nodes:type_name -> goap.graph.v1.ChangeImpact
 	15,  // 198: goap.graph.v1.ProposeImpactResponse.nodes:type_name -> goap.graph.v1.ChangeImpact
 	3,   // 199: goap.graph.v1.NodeLinkWrite.to:type_name -> goap.graph.v1.NodeRef
@@ -23484,7 +23480,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	283, // 277: goap.graph.v1.ImpactDiff.right:type_name -> goap.graph.v1.ImpactSide
 	282, // 278: goap.graph.v1.ImpactDiff.changes:type_name -> goap.graph.v1.FieldChange
 	284, // 279: goap.graph.v1.DiffFlowsResponse.impacts:type_name -> goap.graph.v1.ImpactDiff
-	7,   // 280: goap.graph.v1.GetChangeViewResponse.baseline:type_name -> goap.graph.v1.Baseline
+	7,   // 280: goap.graph.v1.GetChangeViewResponse.commit:type_name -> goap.graph.v1.Commit
 	4,   // 281: goap.graph.v1.GetChangeGraphResponse.nodes:type_name -> goap.graph.v1.Node
 	5,   // 282: goap.graph.v1.GetChangeGraphResponse.links:type_name -> goap.graph.v1.Link
 	322, // 283: goap.graph.v1.DecisionEvent.policy:type_name -> google.protobuf.Struct
@@ -23510,15 +23506,15 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	322, // 303: goap.graph.v1.OptionNode.PropsEntry.value:type_name -> google.protobuf.Struct
 	17,  // 304: goap.graph.v1.GraphService.GetNode:input_type -> goap.graph.v1.GetNodeRequest
 	19,  // 305: goap.graph.v1.GraphService.ListNodeLinks:input_type -> goap.graph.v1.ListNodeLinksRequest
-	28,  // 306: goap.graph.v1.GraphService.ListBaselines:input_type -> goap.graph.v1.ListBaselinesRequest
+	28,  // 306: goap.graph.v1.GraphService.ListCommits:input_type -> goap.graph.v1.ListCommitsRequest
 	22,  // 307: goap.graph.v1.GraphService.TagVersion:input_type -> goap.graph.v1.TagVersionRequest
 	24,  // 308: goap.graph.v1.GraphService.ListTags:input_type -> goap.graph.v1.ListTagsRequest
 	26,  // 309: goap.graph.v1.GraphService.DeleteTag:input_type -> goap.graph.v1.DeleteTagRequest
-	30,  // 310: goap.graph.v1.GraphService.GetBaselineGraph:input_type -> goap.graph.v1.GetBaselineGraphRequest
-	32,  // 311: goap.graph.v1.GraphService.GetBaselineDelta:input_type -> goap.graph.v1.GetBaselineDeltaRequest
-	34,  // 312: goap.graph.v1.GraphService.ListBaselineNodes:input_type -> goap.graph.v1.ListBaselineNodesRequest
+	30,  // 310: goap.graph.v1.GraphService.GetCommitGraph:input_type -> goap.graph.v1.GetCommitGraphRequest
+	32,  // 311: goap.graph.v1.GraphService.GetCommitDelta:input_type -> goap.graph.v1.GetCommitDeltaRequest
+	34,  // 312: goap.graph.v1.GraphService.ListCommitNodes:input_type -> goap.graph.v1.ListCommitNodesRequest
 	35,  // 313: goap.graph.v1.GraphService.ListViewNodes:input_type -> goap.graph.v1.ListViewNodesRequest
-	39,  // 314: goap.graph.v1.GraphService.ListBaselineLinks:input_type -> goap.graph.v1.ListBaselineLinksRequest
+	39,  // 314: goap.graph.v1.GraphService.ListCommitLinks:input_type -> goap.graph.v1.ListCommitLinksRequest
 	43,  // 315: goap.graph.v1.GraphService.GetNodeNeighbourhood:input_type -> goap.graph.v1.GetNodeNeighbourhoodRequest
 	45,  // 316: goap.graph.v1.GraphService.QueryView:input_type -> goap.graph.v1.QueryViewRequest
 	41,  // 317: goap.graph.v1.GraphService.ResolveView:input_type -> goap.graph.v1.ResolveViewRequest
@@ -23595,7 +23591,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	187, // 388: goap.graph.v1.GraphService.DerivedNodes:input_type -> goap.graph.v1.DerivedNodesRequest
 	150, // 389: goap.graph.v1.GraphService.PlanMerge:input_type -> goap.graph.v1.PlanMergeRequest
 	163, // 390: goap.graph.v1.GraphService.MergeBranch:input_type -> goap.graph.v1.MergeBranchRequest
-	151, // 391: goap.graph.v1.GraphService.DiffBaselines:input_type -> goap.graph.v1.DiffBaselinesRequest
+	151, // 391: goap.graph.v1.GraphService.DiffCommits:input_type -> goap.graph.v1.DiffCommitsRequest
 	153, // 392: goap.graph.v1.GraphService.GetChangeStack:input_type -> goap.graph.v1.GetChangeStackRequest
 	241, // 393: goap.graph.v1.GraphService.MergeChange:input_type -> goap.graph.v1.MergeChangeRequest
 	243, // 394: goap.graph.v1.GraphService.CloseChange:input_type -> goap.graph.v1.CloseChangeRequest
@@ -23627,15 +23623,15 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	0,   // 420: goap.graph.v1.GraphService.RepublishIndex:input_type -> goap.graph.v1.RepublishIndexRequest
 	18,  // 421: goap.graph.v1.GraphService.GetNode:output_type -> goap.graph.v1.GetNodeResponse
 	20,  // 422: goap.graph.v1.GraphService.ListNodeLinks:output_type -> goap.graph.v1.ListNodeLinksResponse
-	29,  // 423: goap.graph.v1.GraphService.ListBaselines:output_type -> goap.graph.v1.ListBaselinesResponse
+	29,  // 423: goap.graph.v1.GraphService.ListCommits:output_type -> goap.graph.v1.ListCommitsResponse
 	23,  // 424: goap.graph.v1.GraphService.TagVersion:output_type -> goap.graph.v1.TagVersionResponse
 	25,  // 425: goap.graph.v1.GraphService.ListTags:output_type -> goap.graph.v1.ListTagsResponse
 	27,  // 426: goap.graph.v1.GraphService.DeleteTag:output_type -> goap.graph.v1.DeleteTagResponse
-	31,  // 427: goap.graph.v1.GraphService.GetBaselineGraph:output_type -> goap.graph.v1.GetBaselineGraphResponse
-	33,  // 428: goap.graph.v1.GraphService.GetBaselineDelta:output_type -> goap.graph.v1.GetBaselineDeltaResponse
-	38,  // 429: goap.graph.v1.GraphService.ListBaselineNodes:output_type -> goap.graph.v1.ListBaselineNodesResponse
+	31,  // 427: goap.graph.v1.GraphService.GetCommitGraph:output_type -> goap.graph.v1.GetCommitGraphResponse
+	33,  // 428: goap.graph.v1.GraphService.GetCommitDelta:output_type -> goap.graph.v1.GetCommitDeltaResponse
+	38,  // 429: goap.graph.v1.GraphService.ListCommitNodes:output_type -> goap.graph.v1.ListCommitNodesResponse
 	36,  // 430: goap.graph.v1.GraphService.ListViewNodes:output_type -> goap.graph.v1.ListViewNodesResponse
-	40,  // 431: goap.graph.v1.GraphService.ListBaselineLinks:output_type -> goap.graph.v1.ListBaselineLinksResponse
+	40,  // 431: goap.graph.v1.GraphService.ListCommitLinks:output_type -> goap.graph.v1.ListCommitLinksResponse
 	44,  // 432: goap.graph.v1.GraphService.GetNodeNeighbourhood:output_type -> goap.graph.v1.GetNodeNeighbourhoodResponse
 	46,  // 433: goap.graph.v1.GraphService.QueryView:output_type -> goap.graph.v1.QueryViewResponse
 	42,  // 434: goap.graph.v1.GraphService.ResolveView:output_type -> goap.graph.v1.ResolveViewResponse
@@ -23712,7 +23708,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	188, // 505: goap.graph.v1.GraphService.DerivedNodes:output_type -> goap.graph.v1.DerivedNodesResponse
 	161, // 506: goap.graph.v1.GraphService.PlanMerge:output_type -> goap.graph.v1.PlanMergeResponse
 	164, // 507: goap.graph.v1.GraphService.MergeBranch:output_type -> goap.graph.v1.MergeBranchResponse
-	152, // 508: goap.graph.v1.GraphService.DiffBaselines:output_type -> goap.graph.v1.DiffBaselinesResponse
+	152, // 508: goap.graph.v1.GraphService.DiffCommits:output_type -> goap.graph.v1.DiffCommitsResponse
 	154, // 509: goap.graph.v1.GraphService.GetChangeStack:output_type -> goap.graph.v1.GetChangeStackResponse
 	242, // 510: goap.graph.v1.GraphService.MergeChange:output_type -> goap.graph.v1.MergeChangeResponse
 	244, // 511: goap.graph.v1.GraphService.CloseChange:output_type -> goap.graph.v1.CloseChangeResponse

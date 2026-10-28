@@ -1,5 +1,5 @@
 // Package index is the node index (ADR 0026): a read model of the graph that answers full-text,
-// semantic (embedding) and faceted searches. It is fed by the node and baseline events of the graph
+// semantic (embedding) and faceted searches. It is fed by the node and commit events of the graph
 // and knows nothing else of the platform.
 package index
 

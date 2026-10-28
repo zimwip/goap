@@ -61,7 +61,7 @@ func testChangeMethodologyVersion(t *testing.T, repo Repo) {
 	w.g.Lifecycles = v
 	g := w.g
 
-	old, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "old", Methodology: "m", BaselineID: w.base.ID, OwnBranch: true})
+	old, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "old", Methodology: "m", ForkCommit: w.base.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func testChangeMethodologyVersion(t *testing.T, repo Repo) {
 	}
 
 	v.latest = "2" // a new version is published
-	cur, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "new", Methodology: "m", BaselineID: w.base.ID})
+	cur, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "new", Methodology: "m", ForkCommit: w.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,11 +90,11 @@ func testChangeMethodologyVersion(t *testing.T, repo Repo) {
 	if sub.MethodologyVersion != "1" {
 		t.Fatalf("a sub-change of the same methodology follows its parent: %q", sub.MethodologyVersion)
 	}
-	pinned, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "pinned", Methodology: "m", MethodologyVersion: "1", BaselineID: w.base.ID})
+	pinned, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "pinned", Methodology: "m", MethodologyVersion: "1", ForkCommit: w.base.ID})
 	if err != nil || pinned.MethodologyVersion != "1" {
 		t.Fatalf("a change may name its version: %q %v", pinned.MethodologyVersion, err)
 	}
-	if _, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "bad", Methodology: "m", MethodologyVersion: "9", BaselineID: w.base.ID}); !errors.Is(err, ErrInvalid) {
+	if _, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "bad", Methodology: "m", MethodologyVersion: "9", ForkCommit: w.base.ID}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("an unknown version is refused: %v", err)
 	}
 

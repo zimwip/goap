@@ -12,7 +12,7 @@ import (
 type NodeEdit struct {
 	// Key and Type name a created node (Pre is nil).
 	Key, Type string
-	// Pre is the version a modified node starts from (in the reference baseline).
+	// Pre is the version a modified node starts from (in the reference commit).
 	Pre *domain.NodeRef
 	// Props are merged over the current properties (a nil value clears one).
 	Props map[string]any
@@ -40,17 +40,17 @@ type LinkEdit struct {
 	Props map[string]any
 }
 
-// Commit describes a change made of node edits, applied as one unit.
-type Commit struct {
+// Edits describes a change made of node edits, applied as one unit.
+type Edits struct {
 	Namespace, Title, Intent, Methodology string
 	Data                                  map[string]any
-	Baseline                              domain.BaselineID
+	Commit                                domain.CommitID
 	// Branch the commit writes on (default main).
 	Branch string
 	// By is who accepts the edits: the producer.
-	By           string
-	BaselineName string
-	Edits        []NodeEdit
+	By         string
+	CommitName string
+	Edits      []NodeEdit
 	// OwnerOrg is the unit holding the commit and ProjectID the project it acts in (ADR 0054); empty: the root unit.
 	// The project is required (ADR 0091).
 	OwnerOrg, ProjectID string
@@ -69,8 +69,8 @@ type CarriedEvent struct {
 
 // CommitResult is the outcome of a Commit.
 type CommitResult struct {
-	Change   domain.ChangeID
-	Baseline domain.Baseline
+	Change domain.ChangeID
+	Commit domain.Commit
 }
 
 // RebasedImpact is what a rebase did to a change impact.
@@ -90,12 +90,12 @@ type RebasedImpact struct {
 type RebaseResult struct {
 	// Parent is the parent change of a sub-change, empty for a root change.
 	Parent domain.ChangeID `json:"parentId"`
-	// Branch is the target branch of a root change; From the baseline it was forked from and Onto the head it moved to
+	// Branch is the target branch of a root change; From the commit it was forked from and Onto the head it moved to
 	// (equal: it was not behind).
-	Branch  string            `json:"branch,omitempty"`
-	From    domain.BaselineID `json:"from,omitempty"`
-	Onto    domain.BaselineID `json:"onto,omitempty"`
-	Impacts []RebasedImpact   `json:"impacts,omitempty"`
+	Branch  string          `json:"branch,omitempty"`
+	From    domain.CommitID `json:"from,omitempty"`
+	Onto    domain.CommitID `json:"onto,omitempty"`
+	Impacts []RebasedImpact `json:"impacts,omitempty"`
 }
 
 // TransitionRequest asks for a transition of the lifecycle of a change.

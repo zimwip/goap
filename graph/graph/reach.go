@@ -69,7 +69,7 @@ func (r *Reach) sees(n domain.Node) bool {
 }
 
 // Reach is the reach of the caller of a read (nil: everything), for the read paths that return a state whole (a
-// baseline's graph, a delta, a diff, an export): they keep what Reach.Keep keeps (ADR 0161 §5).
+// commit's graph, a delta, a diff, an export): they keep what Reach.Keep keeps (ADR 0161 §5).
 func (g *Graph) Reach(ctx context.Context) (*Reach, error) { return g.reachOf(ctx) }
 
 // Sees reports whether the reach holds a version of any namespace.

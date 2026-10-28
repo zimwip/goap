@@ -38,7 +38,7 @@ func TestItemTypesDeclaredByDomains(t *testing.T) {
 		ctx := context.Background()
 		f := newFixture(t, repo)
 		g := f.g
-		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: f.base.ID})
+		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", ForkCommit: f.base.ID})
 		if err != nil {
 			t.Fatal(err)
 		}

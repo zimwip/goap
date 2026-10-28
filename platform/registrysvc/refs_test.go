@@ -54,7 +54,7 @@ func linksOf(t *testing.T, g *graph.Graph, hk, from string) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes, links, err := withSuspects{g}.BaselineGraph(ctx, head.ID)
+	nodes, links, err := withSuspects{g}.CommitGraph(ctx, head.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

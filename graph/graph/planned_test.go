@@ -19,7 +19,7 @@ func testPlannedCreation(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "green field", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "green field", ForkCommit: f.base.ID}))
 	plan := func(key, typ string) ([]domain.ChangeImpact, error) {
 		return g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: key, Type: typ, Rationale: "the change needs " + key}})
 	}
@@ -27,8 +27,8 @@ func testPlannedCreation(t *testing.T, repo Repo) {
 	if req.Intent != domain.IntentCreated || req.Post != nil || !req.Planned() || req.Review != domain.ReviewProposed {
 		t.Fatalf("a planned creation has no draft: %+v", req)
 	}
-	if _, err := plan("REQ-1", "Requirement"); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "baseline") {
-		t.Fatalf("a key the baseline holds is not planned: %v", err)
+	if _, err := plan("REQ-1", "Requirement"); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "commit") {
+		t.Fatalf("a key the commit holds is not planned: %v", err)
 	}
 	if _, err := plan("REQ-NEW", "Requirement"); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "already holds") {
 		t.Fatalf("a key planned twice: %v", err)
@@ -77,7 +77,7 @@ func testPlannedCreation(t *testing.T, repo Repo) {
 	if err := g.WithdrawImpact(ctx, c.ID, later[0].ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
+	must[domain.Commit](t)(g.apply(ctx, c.ID, ""))
 	for _, key := range []string{"REQ-NEW", "TST-NEW"} {
 		if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, key); err != nil || n.Version != 1 {
 			t.Fatalf("%s commits as a new node: %+v %v", key, n, err)

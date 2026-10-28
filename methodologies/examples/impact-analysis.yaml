@@ -22,7 +22,7 @@ conditions:
     description: All the change impacts (impacts, updates, new tests) have received a decision
     expr: size(changeImpacts) > 0 && changeImpacts.all(n, n.review != "proposed")
   - name: applied
-    description: The change has been applied to the repository (new baseline)
+    description: The change has been applied to the repository (new commit)
     expr: change.status == "applied"
 
 actions:
@@ -38,7 +38,7 @@ actions:
       "{{ .Change.Intent }}"
 
       Repository elements (key, type, properties):
-      {{ range .Baseline.Nodes }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
+      {{ range .Commit.Nodes }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
       {{ end }}
       Identify the elements DIRECTLY impacted. For each one, declare a change impact
       {"type":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is impacted"}}.
@@ -127,7 +127,7 @@ actions:
   - name: apply_change
     kind: builtin
     builtin: graph.apply
-    description: Apply the validated change to the repository (creates the resulting baseline)
+    description: Apply the validated change to the repository (creates the resulting commit)
     pre: {reviewed: true}
     effects: {applied: true}
     cost: 1

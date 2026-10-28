@@ -36,7 +36,7 @@ func seedDocs(t *testing.T, s Store, emb Embedder) *Indexer {
 			t.Fatal(err)
 		}
 	}
-	if err := x.OnBaseline(ctx, domain.BaselineEvent{Branch: "main", Set: map[domain.NodeID]domain.Version{"n1": 1, "n2": 1}}); err != nil {
+	if err := x.OnCommit(ctx, domain.CommitEvent{Branch: "main", Set: map[domain.NodeID]domain.Version{"n1": 1, "n2": 1}}); err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range []struct {

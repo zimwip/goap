@@ -12,7 +12,7 @@ import (
 // ValidateBoard checks the consistency of the blackboard as a process on a flow
 // sees it: every fact of the view is structurally valid, the facts it builds on
 // exist and are in effect, and the change impacts it holds are coherent (their pre
-// version is in the reference baseline, they are not waiting to be re-checked).
+// version is in the reference commit, they are not waiting to be re-checked).
 // The issues come in log order; each names the item (or change impact) to blame (the
 // culprit). Only the outdated change impacts are warnings: they are fixed by
 // re-checking the impact, not by relaunching a step.
@@ -34,14 +34,14 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 		return nil, err
 	}
 	v := c.View(flow)
-	// the reference baseline is read for the nodes the impacts start from only (ADR 0137)
+	// the reference commit is read for the nodes the impacts start from only (ADR 0137)
 	var pres []domain.NodeID
 	for _, cn := range nodes.All() {
 		if cn.Pre != nil {
 			pres = append(pres, cn.Pre.ID)
 		}
 	}
-	base, err := versionsAt(ctx, tx, c.BaselineID, pres)
+	base, err := versionsAt(ctx, tx, c.ForkCommit, pres)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 		}
 		sev := domain.IssueError
 		if code == "outdated" {
-			// relaunching a step cannot fix it (the reference baseline stays the same): the impact is
+			// relaunching a step cannot fix it (the reference commit stays the same): the impact is
 			// re-checked, so it is reported without blocking the run
 			sev = domain.IssueWarning
 		}
@@ -95,7 +95,7 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 			add(id, "", "structure", err.Error())
 		}
 		if cn.Pre != nil && base[cn.Pre.ID] != cn.Pre.Version && !cn.Recheck {
-			add(id, "", "reference", fmt.Sprintf("refers to %s which is not in the reference baseline", cn.Pre))
+			add(id, "", "reference", fmt.Sprintf("refers to %s which is not in the reference commit", cn.Pre))
 		}
 		outdated := cn.Recheck
 		if !outdated && cn.Pre != nil && cn.Post == nil && cn.Committed == nil {

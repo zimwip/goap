@@ -16,7 +16,7 @@ func testGraphStats(t *testing.T, repo Repo) {
 	// NEED-1 <-satisfies- REQ-1 <-verifies- TST-1, then an isolated node and a new version of NEED-1: the link satisfying
 	// it is left on its first version (suspect)
 	need := f.need.Ref()
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "More", Baseline: f.base.ID, By: "test", Edits: []NodeEdit{
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "More", Commit: f.base.ID, By: "test", Edits: []NodeEdit{
 		{Key: "ISO-1", Type: "Need", Props: map[string]any{"title": "Alone"}},
 		{Pre: &need, Props: map[string]any{"title": "Pay online, safely"}},
 	}}); err != nil {
@@ -26,8 +26,8 @@ func testGraphStats(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Namespace != domain.DefaultNamespace || s.Branch != domain.MainBranch || s.Baseline.ID == "" {
-		t.Fatalf("read at %s/%s %q", s.Namespace, s.Branch, s.Baseline.ID)
+	if s.Namespace != domain.DefaultNamespace || s.Branch != domain.MainBranch || s.Commit.ID == "" {
+		t.Fatalf("read at %s/%s %q", s.Namespace, s.Branch, s.Commit.ID)
 	}
 	st := s.State
 	if st.Nodes != 4 || st.Links != 2 || st.Suspect != 1 || st.External != 0 || st.Isolated != 1 {
@@ -69,7 +69,7 @@ func testGraphStats(t *testing.T, repo Repo) {
 	if s.Store[StatLinkRowsByType]["verifies"] != 1 || s.Store[StatLinkRowsByType]["satisfies"] < 1 {
 		t.Fatalf("link rows %v", s.Store[StatLinkRowsByType])
 	}
-	if sum(s.Store[StatChangesByStatus]) == 0 || sum(s.Store[StatBaselinesByKind]) == 0 || sum(s.Store[StatLogByType]) == 0 {
+	if sum(s.Store[StatChangesByStatus]) == 0 || sum(s.Store[StatCommitsByKind]) == 0 || sum(s.Store[StatLogByType]) == 0 {
 		t.Fatalf("store %v", s.Store)
 	}
 	if sum(s.Store[StatLinkSetsByMode]) != 5 {
@@ -97,7 +97,7 @@ func testGraphStats(t *testing.T, repo Repo) {
 		t.Fatalf("overview %+v", ov)
 	}
 	// a namespace with nothing committed: an empty state, no error
-	if e, err := g.GraphStats(ctx, "nothing", ""); err != nil || e.State.Nodes != 0 || e.Baseline.ID != "" {
+	if e, err := g.GraphStats(ctx, "nothing", ""); err != nil || e.State.Nodes != 0 || e.Commit.ID != "" {
 		t.Fatalf("empty namespace: %+v, %v", e, err)
 	}
 }

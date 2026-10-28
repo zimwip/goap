@@ -27,7 +27,7 @@ const (
 	StatLinkDrops        = "linkDrops"        // link rows dropping a link of the set they are a delta over (ADR 0141)
 	StatLinkSetsByMode   = "linkSetsByMode"   // versions, by how they hold their links: own, shared, delta (ADR 0141)
 	StatJoins            = "joins"            // versions joined to another branch than the one they were written on
-	StatBaselinesByKind  = "baselinesByKind"  // baselines, by kind (commit, merge, fast-forward...)
+	StatCommitsByKind    = "commitsByKind"    // commits, by kind (commit, merge, fast-forward...)
 	StatChangesByStatus  = "changesByStatus"  // changes, by status
 	StatTags             = "tags"             // tags naming a node version
 	StatLogByType        = "logByType"        // entries of the logs of the changes, by type
@@ -38,7 +38,7 @@ const (
 
 // StoreMeasures lists the measures StoreCounts answers, in the order they are shown.
 var StoreMeasures = []string{StatNodesByType, StatVersionsByType, StatVersionsByReason, StatVersionsPerNode, StatLinkRowsByType,
-	StatLinkDrops, StatLinkSetsByMode, StatJoins, StatBaselinesByKind, StatChangesByStatus, StatChangeCounters, StatTags, StatLogByType}
+	StatLinkDrops, StatLinkSetsByMode, StatJoins, StatCommitsByKind, StatChangesByStatus, StatChangeCounters, StatTags, StatLogByType}
 
 // Link set modes (StatLinkSetsByMode).
 const (
@@ -51,8 +51,8 @@ const (
 type GraphStats struct {
 	Namespace string
 	Branch    string
-	// Baseline is the header of the head the state was read at; empty ID: nothing committed yet
-	Baseline domain.Baseline
+	// Commit is the header of the head the state was read at; empty ID: nothing committed yet
+	Commit   domain.Commit
 	Branches BranchStats
 	// Store counts the rows of the namespace, by measure (StoreMeasures) then by key
 	Store map[string]map[string]int
@@ -175,7 +175,7 @@ type NamespaceSummary struct {
 	Versions  int
 	LinkRows  int
 	Changes   int
-	Baselines int
+	Commits   int
 	Branches  int
 	Types     int
 	LogItems  int
@@ -206,7 +206,7 @@ func (g *Graph) GraphOverview(ctx context.Context) (out []NamespaceSummary, err 
 				return err
 			}
 			out = append(out, NamespaceSummary{Namespace: n, Nodes: sum(counts[StatNodesByType]), Versions: sum(counts[StatVersionsByType]),
-				LinkRows: sum(counts[StatLinkRowsByType]), Changes: sum(counts[StatChangesByStatus]), Baselines: sum(counts[StatBaselinesByKind]),
+				LinkRows: sum(counts[StatLinkRowsByType]), Changes: sum(counts[StatChangesByStatus]), Commits: sum(counts[StatCommitsByKind]),
 				Branches: len(bs), Types: len(counts[StatNodesByType]), LogItems: sum(counts[StatLogByType])})
 		}
 		return nil
@@ -245,7 +245,7 @@ func (g *Graph) GraphStats(ctx context.Context, namespace, branch string) (s Gra
 		if err != nil {
 			return err
 		}
-		s.Baseline = head
+		s.Commit = head
 		if head.ID == "" || len(head.Nodes) == 0 {
 			return nil
 		}
@@ -266,8 +266,8 @@ func (g *Graph) GraphStats(ctx context.Context, namespace, branch string) (s Gra
 	if err != nil {
 		return s, err
 	}
-	s.State = stateStats(s.Baseline, nodes, links)
-	s.Baseline.Nodes = nil
+	s.State = stateStats(s.Commit, nodes, links)
+	s.Commit.Nodes = nil
 	return s, nil
 }
 
@@ -283,7 +283,7 @@ func branchStats(bs []domain.Branch) BranchStats {
 		out.Names = append(out.Names, b.Name)
 	}
 	if !slices.Contains(out.Names, domain.MainBranch) {
-		out.Names = append(out.Names, domain.MainBranch) // main is there before its first baseline
+		out.Names = append(out.Names, domain.MainBranch) // main is there before its first commit
 	}
 	sort.Slice(out.Names, func(i, j int) bool {
 		// main first, then by name
@@ -296,7 +296,7 @@ func branchStats(bs []domain.Branch) BranchStats {
 }
 
 // stateStats computes the shape of a state from its nodes and the links leaving them.
-func stateStats(head domain.Baseline, nodes []domain.Node, links []domain.Link) StateStats {
+func stateStats(head domain.Commit, nodes []domain.Node, links []domain.Link) StateStats {
 	var s StateStats
 	live := make(map[domain.NodeID]domain.Node, len(nodes))
 	for _, n := range nodes {

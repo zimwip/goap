@@ -27,7 +27,7 @@ func TestSubChangeActivityCascade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: NamespaceMethodology, Title: "activities", Baseline: head.ID, By: "test", Edits: []graph.NodeEdit{
+	if _, err := g.CommitEdits(ctx, graph.Edits{ProjectID: "PROJ-ROOT", Namespace: NamespaceMethodology, Title: "activities", Commit: head.ID, By: "test", Edits: []graph.NodeEdit{
 		mk("ACT-PARENT", graph.LinkEdit{Type: linkSubActivity, ToKey: "ACT-CHILD"}),
 		mk("ACT-CHILD"),
 		mk("ACT-OTHER"),
@@ -40,7 +40,7 @@ func TestSubChangeActivityCascade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	parent, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "p", BaselineID: base.ID, OwnBranch: true, Data: scoped("ACT-PARENT")})
+	parent, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "p", ForkCommit: base.ID, OwnBranch: true, Data: scoped("ACT-PARENT")})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -215,7 +215,7 @@ func TestEngineRowsFindTheirExchangeInTheChangeLog(t *testing.T) {
 		Intent: intent.Resolver{Ranker: intent.Lexical{}},
 		Store:  engine.NewMemoryStore(),
 	}
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: b.ID, ProjectID: "PROJ-TEST", Intent: "The PSP changes its API, what does this break?"})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: b.ID, ProjectID: "PROJ-TEST", Intent: "The PSP changes its API, what does this break?"})
 	if err != nil {
 		t.Fatal(err)
 	}

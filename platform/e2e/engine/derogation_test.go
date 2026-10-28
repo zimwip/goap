@@ -23,7 +23,7 @@ func TestDerogationReserveAndExpiry(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
 	g.ReviewPolicy = verify.Policy{}
-	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "alm", Title: "t", BaselineID: base, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "alm", Title: "t", ForkCommit: base, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestDerogationReserveAndExpiry(t *testing.T) {
 func TestDerogationExpireBuiltin(t *testing.T) {
 	ctx := context.Background()
 	_, g, base := setup(t)
-	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "alm", Title: "t", BaselineID: base, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "alm", Title: "t", ForkCommit: base, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}

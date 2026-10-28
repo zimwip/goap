@@ -28,7 +28,7 @@
   }
 
   $effect(() => {
-    void stamp(keyOf.baselines);
+    void stamp(keyOf.commits);
     void load();
   });
 
@@ -56,7 +56,7 @@
       <div><dt>Versions</dt><dd>{fmt(totals.versions)}</dd></div>
       <div><dt>Link rows</dt><dd>{fmt(totals.linkRows)}</dd></div>
       <div><dt>Changes</dt><dd>{fmt(totals.changes)}</dd></div>
-      <div><dt>Baselines</dt><dd>{fmt(totals.baselines)}</dd></div>
+      <div><dt>Commits</dt><dd>{fmt(totals.commits)}</dd></div>
       <div><dt>Branches</dt><dd>{fmt(totals.branches)}</dd></div>
     </dl>
   {/if}

@@ -58,7 +58,7 @@ func TestConversationOfAProcessReachesTheLedgerMeta(t *testing.T) {
 		mu.Unlock()
 		return inner.Complete(ctx, req)
 	})}
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?",
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: base, Intent: "The PSP changes its API, what does this break?",
 		ProjectID: testProject, Vars: map[string]any{engine.VarConversation: "CONV-7"}})
 	if err != nil {
 		t.Fatal(err)

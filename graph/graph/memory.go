@@ -35,15 +35,15 @@ type memState struct {
 	links    []domain.Link
 	// drops are the rows of a delta taking a link out of the set it is a delta over, sets how a version holds its
 	// links when not its own whole set (ADR 0141)
-	drops     []memDrop
-	sets      map[domain.NodeRef]LinkSet
-	baselines map[domain.BaselineID]domain.Baseline
-	changes   map[domain.ChangeID]domain.Change
-	branches  map[string]domain.Branch
+	drops    []memDrop
+	sets     map[domain.NodeRef]LinkSet
+	commits  map[domain.CommitID]domain.Commit
+	changes  map[domain.ChangeID]domain.Change
+	branches map[string]domain.Branch
 	// joins are the branches a version is part of besides the one it was written on (ADR 0032), with the change
 	// whose merge made it join
 	joins map[joinKey]memJoin
-	// seq is the order of the last baseline allocated (ADR 0140)
+	// seq is the order of the last commit allocated (ADR 0140)
 	seq int64
 	// impacts are the change impacts of the versions each change wrote (ADR 0174), in the order written
 	impacts map[domain.ChangeID][]CommitImpact
@@ -56,14 +56,14 @@ type memState struct {
 // NewMemory returns an empty in-memory repository.
 func NewMemory() *Memory {
 	return &Memory{st: memState{
-		versions:  map[domain.NodeID][]domain.Node{},
-		keys:      map[string]domain.NodeID{},
-		baselines: map[domain.BaselineID]domain.Baseline{},
-		changes:   map[domain.ChangeID]domain.Change{},
-		branches:  map[string]domain.Branch{},
-		joins:     map[joinKey]memJoin{},
-		impacts:   map[domain.ChangeID][]CommitImpact{},
-		sets:      map[domain.NodeRef]LinkSet{},
+		versions: map[domain.NodeID][]domain.Node{},
+		keys:     map[string]domain.NodeID{},
+		commits:  map[domain.CommitID]domain.Commit{},
+		changes:  map[domain.ChangeID]domain.Change{},
+		branches: map[string]domain.Branch{},
+		joins:    map[joinKey]memJoin{},
+		impacts:  map[domain.ChangeID][]CommitImpact{},
+		sets:     map[domain.NodeRef]LinkSet{},
 	}}
 }
 
@@ -78,19 +78,19 @@ type memDrop struct {
 
 func (s memState) clone() memState {
 	c := memState{
-		versions:  make(map[domain.NodeID][]domain.Node, len(s.versions)),
-		keys:      maps.Clone(s.keys),
-		links:     slices.Clone(s.links),
-		drops:     slices.Clone(s.drops),
-		sets:      maps.Clone(s.sets),
-		baselines: maps.Clone(s.baselines),
-		changes:   make(map[domain.ChangeID]domain.Change, len(s.changes)),
-		branches:  maps.Clone(s.branches),
-		joins:     maps.Clone(s.joins),
-		log:       slices.Clone(s.log),
-		tags:      slices.Clone(s.tags),
-		seq:       s.seq,
-		impacts:   make(map[domain.ChangeID][]CommitImpact, len(s.impacts)),
+		versions: make(map[domain.NodeID][]domain.Node, len(s.versions)),
+		keys:     maps.Clone(s.keys),
+		links:    slices.Clone(s.links),
+		drops:    slices.Clone(s.drops),
+		sets:     maps.Clone(s.sets),
+		commits:  maps.Clone(s.commits),
+		changes:  make(map[domain.ChangeID]domain.Change, len(s.changes)),
+		branches: maps.Clone(s.branches),
+		joins:    maps.Clone(s.joins),
+		log:      slices.Clone(s.log),
+		tags:     slices.Clone(s.tags),
+		seq:      s.seq,
+		impacts:  make(map[domain.ChangeID][]CommitImpact, len(s.impacts)),
 	}
 	for k, v := range s.impacts {
 		c.impacts[k] = slices.Clone(v)
@@ -186,7 +186,7 @@ type joinKey struct {
 	branch string
 }
 
-// memJoin is a version joining a branch: the change whose merge made it join, the order of the baseline it committed in.
+// memJoin is a version joining a branch: the change whose merge made it join, the order of the commit it committed in.
 type memJoin struct {
 	change    domain.ChangeID
 	committed int64
@@ -340,8 +340,8 @@ func (t *memTx) NodeByKey(ctx context.Context, namespace, key string) (domain.No
 	return t.Node(ctx, domain.NodeRef{ID: id})
 }
 
-func (t *memTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error) {
-	return storedNodesIn(ctx, t, baseline, nodeType)
+func (t *memTx) NodesIn(ctx context.Context, commit domain.CommitID, nodeType string) ([]domain.Node, error) {
+	return storedNodesIn(ctx, t, commit, nodeType)
 }
 
 func (t *memTx) LatestNodes(ctx context.Context, namespace, branch string) ([]domain.Node, error) {
@@ -478,20 +478,20 @@ func (t *memTx) InLinks(_ context.Context, ref domain.NodeRef) ([]domain.Link, e
 	return t.entering(ref.ID, func(to domain.NodeRef) bool { return to == ref }), nil
 }
 
-func (t *memTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
-	b, ok := t.st.baselines[id]
+func (t *memTx) Commit(ctx context.Context, id domain.CommitID) (domain.Commit, error) {
+	b, ok := t.st.commits[id]
 	if !ok {
-		return domain.Baseline{}, fmt.Errorf("baseline %s: %w", id, ErrNotFound)
+		return domain.Commit{}, fmt.Errorf("commit %s: %w", id, ErrNotFound)
 	}
 	var err error
 	b.Nodes, err = storedNodes(ctx, t, b)
 	return b, err
 }
 
-func (t *memTx) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
+func (t *memTx) Commits(ctx context.Context, namespace string) ([]domain.Commit, error) {
 	namespace = domain.NamespaceOf(namespace)
-	out := make([]domain.Baseline, 0, len(t.st.baselines))
-	for _, b := range t.st.baselines {
+	out := make([]domain.Commit, 0, len(t.st.commits))
+	for _, b := range t.st.commits {
 		if b.Namespace != namespace {
 			continue
 		}
@@ -649,23 +649,23 @@ func (t *memTx) LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[doma
 	return out, nil
 }
 
-func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {
+func (t *memTx) PutCommit(_ context.Context, b domain.Commit) error {
 	if err := t.write(); err != nil {
 		return err
 	}
-	if _, dup := t.st.baselines[b.ID]; dup {
-		return fmt.Errorf("baseline %s: %w", b.ID, ErrConflict)
+	if _, dup := t.st.commits[b.ID]; dup {
+		return fmt.Errorf("commit %s: %w", b.ID, ErrConflict)
 	}
 	b.Namespace = domain.NamespaceOf(b.Namespace)
 	b.Nodes = nil // only the header is kept: the state is the selection of the versions committed (ADR 0143)
-	t.st.baselines[b.ID] = b
+	t.st.commits[b.ID] = b
 	return nil
 }
 
-func (t *memTx) BaselineHeader(_ context.Context, id domain.BaselineID) (domain.Baseline, error) {
-	b, ok := t.st.baselines[id]
+func (t *memTx) CommitHeader(_ context.Context, id domain.CommitID) (domain.Commit, error) {
+	b, ok := t.st.commits[id]
 	if !ok {
-		return domain.Baseline{}, fmt.Errorf("baseline %s: %w", id, ErrNotFound)
+		return domain.Commit{}, fmt.Errorf("commit %s: %w", id, ErrNotFound)
 	}
 	b.Nodes = nil
 	return b, nil
@@ -795,10 +795,10 @@ func (t *memTx) BranchNodeIDs(_ context.Context, branch string) ([]domain.NodeID
 	return out, nil
 }
 
-func (t *memTx) BaselineHeaders(_ context.Context, namespace string) ([]domain.Baseline, error) {
+func (t *memTx) CommitHeaders(_ context.Context, namespace string) ([]domain.Commit, error) {
 	namespace = domain.NamespaceOf(namespace)
-	var out []domain.Baseline
-	for _, b := range t.st.baselines {
+	var out []domain.Commit
+	for _, b := range t.st.commits {
 		if b.Namespace == namespace {
 			b.Nodes = nil
 			out = append(out, b)
@@ -808,9 +808,9 @@ func (t *memTx) BaselineHeaders(_ context.Context, namespace string) ([]domain.B
 	return out, nil
 }
 
-func (t *memTx) BranchBaselineHeaders(ctx context.Context, namespace, branch string) ([]domain.Baseline, error) {
-	all, err := t.BaselineHeaders(ctx, namespace)
-	return slices.DeleteFunc(all, func(b domain.Baseline) bool { return domain.BranchOf(b.Branch) != domain.BranchOf(branch) }), err
+func (t *memTx) BranchCommitHeaders(ctx context.Context, namespace, branch string) ([]domain.Commit, error) {
+	all, err := t.CommitHeaders(ctx, namespace)
+	return slices.DeleteFunc(all, func(b domain.Commit) bool { return domain.BranchOf(b.Branch) != domain.BranchOf(branch) }), err
 }
 
 func (t *memTx) VersionJoins(_ context.Context, id domain.NodeID) ([]domain.VersionJoin, error) {
@@ -1013,7 +1013,7 @@ func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, b
 		return err
 	}
 	used := fmt.Errorf("change %s: what it wrote is used by the graph: %w", id, ErrConflict)
-	for _, b := range t.st.baselines {
+	for _, b := range t.st.commits {
 		if b.ChangeID == id {
 			return used
 		}
@@ -1028,7 +1028,7 @@ func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, b
 			if _, ok := cut[nid]; !ok {
 				cut[nid] = i
 			}
-			for _, b := range t.st.baselines {
+			for _, b := range t.st.commits {
 				if b.Contains(v.Ref()) {
 					return used
 				}
@@ -1193,8 +1193,8 @@ func (t *memTx) LinkPage(ctx context.Context, refs []domain.NodeRef, q LinkQuery
 	return pageLinks(links, q), nil
 }
 
-func (t *memTx) BaselinePage(ctx context.Context, namespace, branch string, before int64, limit int) ([]domain.Baseline, error) {
-	all, err := t.BranchBaselineHeaders(ctx, namespace, branch)
+func (t *memTx) CommitPage(ctx context.Context, namespace, branch string, before int64, limit int) ([]domain.Commit, error) {
+	all, err := t.BranchCommitHeaders(ctx, namespace, branch)
 	if err != nil {
 		return nil, err
 	}
@@ -1208,18 +1208,18 @@ func (t *memTx) BaselinePage(ctx context.Context, namespace, branch string, befo
 	return out, nil
 }
 
-func (t *memTx) BaselineHeadersOf(ctx context.Context, namespace string, ids []domain.BaselineID) ([]domain.Baseline, error) {
-	all, err := t.BaselineHeaders(ctx, namespace)
-	return slices.DeleteFunc(all, func(b domain.Baseline) bool { return !slices.Contains(ids, b.ID) }), err
+func (t *memTx) CommitHeadersOf(ctx context.Context, namespace string, ids []domain.CommitID) ([]domain.Commit, error) {
+	all, err := t.CommitHeaders(ctx, namespace)
+	return slices.DeleteFunc(all, func(b domain.Commit) bool { return !slices.Contains(ids, b.ID) }), err
 }
 
-func (t *memTx) ChangeBaselineHeaders(ctx context.Context, namespace string, changes []domain.ChangeID) ([]domain.Baseline, error) {
-	all, err := t.BaselineHeaders(ctx, namespace)
-	return slices.DeleteFunc(all, func(b domain.Baseline) bool { return !slices.Contains(changes, b.ChangeID) }), err
+func (t *memTx) ChangeCommitHeaders(ctx context.Context, namespace string, changes []domain.ChangeID) ([]domain.Commit, error) {
+	all, err := t.CommitHeaders(ctx, namespace)
+	return slices.DeleteFunc(all, func(b domain.Commit) bool { return !slices.Contains(changes, b.ChangeID) }), err
 }
 
-func (t *memTx) BaselineCounts(ctx context.Context, namespace string) (map[string]int, error) {
-	all, err := t.BaselineHeaders(ctx, namespace)
+func (t *memTx) CommitCounts(ctx context.Context, namespace string) (map[string]int, error) {
+	all, err := t.CommitHeaders(ctx, namespace)
 	out := map[string]int{}
 	for _, b := range all {
 		out[domain.BranchOf(b.Branch)]++
@@ -1272,9 +1272,9 @@ func (t *memTx) StoreCounts(_ context.Context, namespace string) (map[string]map
 			out[StatJoins][""]++
 		}
 	}
-	for _, b := range t.st.baselines {
+	for _, b := range t.st.commits {
 		if b.Namespace == namespace {
-			out[StatBaselinesByKind][b.Kind]++
+			out[StatCommitsByKind][b.Kind]++
 		}
 	}
 	for _, c := range t.st.changes {

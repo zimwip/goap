@@ -15,7 +15,7 @@ type Caches struct {
 	Drafts cache.Bounds
 	// Versions: how a version holds its links and the links it holds, which never change once written (versioncache.go).
 	Versions cache.Bounds
-	// Headers: the headers of baselines (state.go).
+	// Headers: the headers of commits (state.go).
 	Headers cache.Bounds
 	// Validations: the validations of the impacts of a change on a flow (impactvalidation.go).
 	Validations cache.Bounds
@@ -65,7 +65,7 @@ func (g *Graph) newCaches() {
 	})
 }
 
-func headerSize(_ domain.BaselineID, b domain.Baseline) int64 {
+func headerSize(_ domain.CommitID, b domain.Commit) int64 {
 	n := cache.StructBytes + int64(len(b.ID)+len(b.Name)+len(b.Namespace)+len(b.Branch)+len(b.ParentID)+len(b.MergedFrom)+len(b.RebasedFrom)+len(b.ChangeID)+len(b.Kind))
 	for id := range b.Nodes {
 		n += cache.SlotBytes + cache.WordBytes + int64(len(id))

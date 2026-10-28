@@ -27,7 +27,7 @@ describe('graph statistics helpers', () => {
 
   it('adds up the namespaces', () => {
     expect(overviewTotals([{ namespace: 'a', nodes: 2, versions: 3 }, { namespace: 'b', nodes: 1, changes: 4 }])).toEqual({
-      nodes: 3, versions: 3, linkRows: 0, changes: 4, baselines: 0, branches: 0, logEntries: 0,
+      nodes: 3, versions: 3, linkRows: 0, changes: 4, commits: 0, branches: 0, logEntries: 0,
     });
   });
 

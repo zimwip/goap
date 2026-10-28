@@ -260,7 +260,7 @@ func (g *Graph) reparent(ctx context.Context, tx Tx, c domain.Change, target str
 		if err := (onto{parent: tb}).forkOnHead(ctx, tx, &own); err != nil {
 			return c, err
 		}
-		c.BaselineID = own.ForkBaseline
+		c.ForkCommit = own.ForkCommit
 	}
 	if err := tx.PutBranch(ctx, own); err != nil {
 		return c, err

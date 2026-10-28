@@ -91,7 +91,7 @@ func TestAGatePassesOnTheGoOfItsBoard(t *testing.T) {
 	g.DecisionPolicy = decision.Policy{}
 	e.Methodologies = engine.StaticMethodologies{"gated": cm}
 
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "gated", Goal: "delivery", BaselineID: base, ProjectID: testProject, Intent: "deliver it"})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "gated", Goal: "delivery", ForkCommit: base, ProjectID: testProject, Intent: "deliver it"})
 	if err != nil {
 		t.Fatal(err)
 	}

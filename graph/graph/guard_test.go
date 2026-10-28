@@ -29,10 +29,10 @@ func testBootstrap(t *testing.T, repo Repo) {
 		t.Fatalf("roots: %+v %+v", org, proj)
 	}
 	c := must[domain.Change](t)(g.Change(ctx, org.ChangeID))
-	if c.Status != domain.ChangeApplied || c.OwnerOrg.Key != rootOrg(g) || c.ProjectID.Key != rootProject(g) || c.ResultBaselineID == "" {
+	if c.Status != domain.ChangeApplied || c.OwnerOrg.Key != rootOrg(g) || c.ProjectID.Key != rootProject(g) || c.LandedCommit == "" {
 		t.Fatalf("bootstrap change: %+v", c)
 	}
-	head := must[domain.Baseline](t)(g.BranchHead(ctx, NamespaceOrganisation, domain.MainBranch))
+	head := must[domain.Commit](t)(g.BranchHead(ctx, NamespaceOrganisation, domain.MainBranch))
 	if !head.Contains(org.Ref()) || !head.Contains(proj.Ref()) {
 		t.Fatalf("the head of the organisation holds the roots: %+v", head.Nodes)
 	}
@@ -133,15 +133,15 @@ func testOwnerAndProjectOfNodes(t *testing.T, repo Repo) {
 	root := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootOrg(g)))
 	rootProj := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootProject(g)))
 	ns := NamespaceOrganisation
-	commit := func(c Commit) CommitResult {
+	commit := func(c Edits) CommitResult {
 		t.Helper()
 		c.Namespace, c.By = ns, "t"
 		if c.Title == "" {
 			c.Title = "edit"
 		}
-		return must[CommitResult](t)(g.Commit(ctx, c))
+		return must[CommitResult](t)(g.CommitEdits(ctx, c))
 	}
-	commit(Commit{ProjectID: "PROJ-ROOT", Edits: []NodeEdit{
+	commit(Edits{ProjectID: "PROJ-ROOT", Edits: []NodeEdit{
 		{Key: "TEAM", Type: NodeTypeOrgUnit, Props: map[string]any{"name": "Team"}, Links: []LinkEdit{{Type: LinkPartOf, To: refPtr(root.Ref())}}},
 		{Key: "PROJ-A", Type: NodeTypeProjectUnit, Props: map[string]any{"name": "A"}, Links: []LinkEdit{{Type: LinkProjectPartOf, To: refPtr(rootProj.Ref())}}},
 	}})
@@ -151,19 +151,19 @@ func testOwnerAndProjectOfNodes(t *testing.T, repo Repo) {
 		t.Fatalf("a change naming no unit: the root unit; the bootstrap names the root project: %+v", team)
 	}
 
-	commit(Commit{OwnerOrg: "TEAM", ProjectID: "PROJ-A", Edits: []NodeEdit{{Key: "NOTE", Type: "Note", Props: map[string]any{"title": "one"}}}})
+	commit(Edits{OwnerOrg: "TEAM", ProjectID: "PROJ-A", Edits: []NodeEdit{{Key: "NOTE", Type: "Note", Props: map[string]any{"title": "one"}}}})
 	note := must[domain.Node](t)(g.NodeByKey(ctx, ns, "NOTE"))
 	if note.Responsible.Key != team.Key || note.Project.Key != pa.Key {
 		t.Fatalf("created by TEAM in PROJ-A: %+v", note)
 	}
 	// edited by a change of the root unit in the root project: still TEAM's, still created in PROJ-A
-	commit(Commit{ProjectID: "PROJ-ROOT", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Props: map[string]any{"title": "two"}}}})
+	commit(Edits{ProjectID: "PROJ-ROOT", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Props: map[string]any{"title": "two"}}}})
 	note = must[domain.Node](t)(g.NodeByKey(ctx, ns, "NOTE"))
 	if note.Version != 2 || note.Responsible.Key != team.Key || note.Project.Key != pa.Key {
 		t.Fatalf("the next version keeps owner and project: %+v", note)
 	}
 	// transferred to the root unit
-	commit(Commit{ProjectID: "PROJ-ROOT", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Responsible: rootOrg(g)}}})
+	commit(Edits{ProjectID: "PROJ-ROOT", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Responsible: rootOrg(g)}}})
 	note = must[domain.Node](t)(g.NodeByKey(ctx, ns, "NOTE"))
 	if note.Version != 3 || note.Responsible.Key != root.Key || note.Project.Key != pa.Key {
 		t.Fatalf("transferred to the root unit: %+v", note)
@@ -172,7 +172,7 @@ func testOwnerAndProjectOfNodes(t *testing.T, repo Repo) {
 		t.Fatalf("the earlier version stays TEAM's: %+v", v2)
 	}
 	// only a unit owns
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "x", By: "t", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Responsible: "PROJ-A"}}}); !errors.Is(err, ErrInvalid) {
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "x", By: "t", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Responsible: "PROJ-A"}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a project as the owner: %v", err)
 	}
 }
@@ -186,20 +186,20 @@ func testChangeNeedsAProject(t *testing.T, repo Repo) {
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	base := must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch))
-	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID}); !errors.Is(err, ErrInvalid) {
+	base := must[domain.Commit](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch))
+	if _, err := g.CreateChange(ctx, NewChange{Title: "x", ForkCommit: base.ID}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a change naming no project: %v", err)
 	}
-	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, ProjectID: "PROJ-NOPE"}); err == nil {
+	if _, err := g.CreateChange(ctx, NewChange{Title: "x", ForkCommit: base.ID, ProjectID: "PROJ-NOPE"}); err == nil {
 		t.Fatal("a change naming an unknown project was created")
 	}
-	if _, err := g.Commit(ctx, Commit{Title: "x", By: "t", Edits: []NodeEdit{{Key: "N-X", Type: "Design"}}}); !errors.Is(err, ErrInvalid) {
+	if _, err := g.CommitEdits(ctx, Edits{Title: "x", By: "t", Edits: []NodeEdit{{Key: "N-X", Type: "Design"}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a commit naming no project: %v", err)
 	}
 	if _, err := g.MergeBranch(ctx, MergeRequest{From: "a", Into: "b"}); !errors.Is(err, ErrInvalid) && !errors.Is(err, ErrNotFound) {
 		t.Fatalf("a merge naming no project: %v", err)
 	}
-	parent := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "p", BaselineID: base.ID, ProjectID: rootProject(g), OwnBranch: true}))
+	parent := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "p", ForkCommit: base.ID, ProjectID: rootProject(g), OwnBranch: true}))
 	if parent.ProjectID.Key != rootProject(g) {
 		t.Fatalf("project = %s", parent.ProjectID)
 	}
@@ -256,9 +256,9 @@ func testStorageRequiresAChange(t *testing.T, repo Repo) {
 	}
 }
 
-// Every baseline is the result of a change (ADR 0056); what precedes the first change of a namespace is the empty
+// Every commit is the result of a change (ADR 0056); what precedes the first change of a namespace is the empty
 // state, which nothing stores.
-func TestGuardBaselineNeedsAChange(t *testing.T) {
+func TestGuardCommitNeedsAChange(t *testing.T) {
 	forEachRepo(t, func(t *testing.T, repo Repo) {
 		ctx := context.Background()
 		g := New(repo)
@@ -266,24 +266,24 @@ func TestGuardBaselineNeedsAChange(t *testing.T) {
 			t.Fatal(err)
 		}
 		org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootOrg(g)))
-		put := func(b domain.Baseline) error {
-			b.ID, b.Namespace, b.Branch, b.CreatedAt = domain.BaselineID(g.newID()), "scratch", domain.MainBranch, g.now()
-			return g.repo.InTx(ctx, func(tx Tx) error { return tx.PutBaseline(ctx, b) })
+		put := func(b domain.Commit) error {
+			b.ID, b.Namespace, b.Branch, b.CreatedAt = domain.CommitID(g.newID()), "scratch", domain.MainBranch, g.now()
+			return g.repo.InTx(ctx, func(tx Tx) error { return tx.PutCommit(ctx, b) })
 		}
-		for name, b := range map[string]domain.Baseline{
+		for name, b := range map[string]domain.Commit{
 			"empty":       {Name: "e"},
 			"with nodes":  {Name: "n", Nodes: map[domain.NodeID]domain.Version{org.ID: 1}},
-			"with parent": {Name: "p", ParentID: must[domain.Baseline](t)(g.BranchHead(ctx, NamespaceOrganisation, domain.MainBranch)).ID},
+			"with parent": {Name: "p", ParentID: must[domain.Commit](t)(g.BranchHead(ctx, NamespaceOrganisation, domain.MainBranch)).ID},
 		} {
 			if err := put(b); !errors.Is(err, ErrInvalid) {
 				t.Fatalf("%s, no change: err = %v, want ErrInvalid", name, err)
 			}
 		}
-		if err := put(domain.Baseline{Name: "after the bootstrap", ChangeID: org.ChangeID}); err != nil {
-			t.Fatalf("a baseline a change produced: %v", err)
+		if err := put(domain.Commit{Name: "after the bootstrap", ChangeID: org.ChangeID}); err != nil {
+			t.Fatalf("a commit a change produced: %v", err)
 		}
-		if err := put(domain.Baseline{Name: "ghost", ChangeID: domain.ChangeID(g.newID())}); !errors.Is(err, ErrInvalid) {
-			t.Fatalf("a baseline of a change that does not exist: %v", err)
+		if err := put(domain.Commit{Name: "ghost", ChangeID: domain.ChangeID(g.newID())}); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("a commit of a change that does not exist: %v", err)
 		}
 	})
 }

@@ -42,8 +42,8 @@ type applyStub struct {
 
 func (s *applyStub) AppendLog(context.Context, []domain.LogEntry) error { return nil }
 
-func (s *applyStub) CommitChange(context.Context, domain.ChangeID, string) (domain.Baseline, error) {
-	return domain.Baseline{ID: "b0"}, nil
+func (s *applyStub) CommitChange(context.Context, domain.ChangeID, string) (domain.Commit, error) {
+	return domain.Commit{ID: "b0"}, nil
 }
 
 func (s *applyStub) Change(_ context.Context, id domain.ChangeID) (domain.Change, error) {
@@ -66,7 +66,7 @@ func (s *applyStub) PlanMerge(_ context.Context, _, from, into string) (graph.Me
 func (s *applyStub) CloseChange(_ context.Context, id domain.ChangeID) (domain.Change, error) {
 	c, _ := s.Change(context.Background(), id)
 	if c.Status == domain.ChangeApplied {
-		c.ResultBaselineID = "b1"
+		c.LandedCommit = "b1"
 	}
 	return c, nil
 }
@@ -138,8 +138,8 @@ type rebaseStub struct {
 
 func (s *rebaseStub) AppendLog(context.Context, []domain.LogEntry) error { return nil }
 
-func (s *rebaseStub) CommitChange(context.Context, domain.ChangeID, string) (domain.Baseline, error) {
-	return domain.Baseline{}, s.applyErr
+func (s *rebaseStub) CommitChange(context.Context, domain.ChangeID, string) (domain.Commit, error) {
+	return domain.Commit{}, s.applyErr
 }
 
 func (s *rebaseStub) RebaseState(context.Context, domain.ChangeID) (graph.RebaseState, error) {

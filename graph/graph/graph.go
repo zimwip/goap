@@ -175,10 +175,10 @@ type Graph struct {
 	booted atomic.Bool
 	// Caches bounds what the graph keeps in memory between calls (caches.go): a zero field takes DefaultCaches'.
 	Caches Caches
-	// headers caches the headers of baselines (ADR 0137, 0140).
-	headers *cache.Cache[domain.BaselineID, domain.Baseline]
+	// headers caches the headers of commits (ADR 0137, 0140).
+	headers *cache.Cache[domain.CommitID, domain.Commit]
 	// heads are the heads of the lasting branches read by the views (heads.go), moved by the commits of this graph and
-	// the baseline events of the others; selections the versions of nodes at them, keyIDs the nodes of keys
+	// the commit events of the others; selections the versions of nodes at them, keyIDs the nodes of keys
 	heads      keptHeads
 	selections *cache.Cache[string, keptSel]
 	keyIDs     *cache.Cache[string, domain.NodeID]
@@ -279,49 +279,49 @@ func view(ctx context.Context, tx Tx, ref domain.NodeRef) (domain.NodeView, erro
 	return domain.NodeView{Node: n, Latest: latest.Version, Out: out, In: in}, nil
 }
 
-// Baseline returns a baseline.
-func (g *Graph) Baseline(ctx context.Context, id domain.BaselineID) (b domain.Baseline, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = tx.Baseline(ctx, id); return err })
+// Commit returns a commit.
+func (g *Graph) Commit(ctx context.Context, id domain.CommitID) (b domain.Commit, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = tx.Commit(ctx, id); return err })
 	return
 }
 
-// BaselineHeader returns a baseline without its state (Nodes nil): what names it, never what it holds.
-func (g *Graph) BaselineHeader(ctx context.Context, id domain.BaselineID) (b domain.Baseline, err error) {
+// CommitHeader returns a commit without its state (Nodes nil): what names it, never what it holds.
+func (g *Graph) CommitHeader(ctx context.Context, id domain.CommitID) (b domain.Commit, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = headerOf(ctx, tx, id); return err }) // "": the empty state
 	b.Nodes = nil
 	return
 }
 
 // BranchHeadHeader returns the head of a branch without its state (Nodes nil).
-func (g *Graph) BranchHeadHeader(ctx context.Context, namespace, name string) (b domain.Baseline, err error) {
+func (g *Graph) BranchHeadHeader(ctx context.Context, namespace, name string) (b domain.Commit, err error) {
 	err = g.repo.InTx(platform.ReadOnly(ctx), func(tx Tx) error { b, err = branchHeadHeader(ctx, tx, namespace, name); return err })
 	return
 }
 
-// BaselineHeaders lists the baselines of a namespace, by creation date, without their states: what names them, never
+// CommitHeaders lists the commits of a namespace, by creation date, without their states: what names them, never
 // what they hold (a listing that does not grow with the graph, ADR 0140).
-func (g *Graph) BaselineHeaders(ctx context.Context, namespace string) (bs []domain.Baseline, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.BaselineHeaders(ctx, namespace); return err })
+func (g *Graph) CommitHeaders(ctx context.Context, namespace string) (bs []domain.Commit, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.CommitHeaders(ctx, namespace); return err })
 	for i := range bs {
 		bs[i].Nodes, bs[i].Namespace = nil, domain.NamespaceOf(namespace)
 	}
 	return
 }
 
-// Baselines lists the baselines of a namespace, by creation date.
-func (g *Graph) Baselines(ctx context.Context, namespace string) (bs []domain.Baseline, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.Baselines(ctx, namespace); return err })
+// Commits lists the commits of a namespace, by creation date.
+func (g *Graph) Commits(ctx context.Context, namespace string) (bs []domain.Commit, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.Commits(ctx, namespace); return err })
 	return
 }
 
-// BaselineGraph returns the nodes and links of a baseline.
-func (g *Graph) BaselineGraph(ctx context.Context, id domain.BaselineID) (nodes []domain.Node, links []domain.Link, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { nodes, links, err = baselineGraphTx(ctx, tx, id); return err })
+// CommitGraph returns the nodes and links of a commit.
+func (g *Graph) CommitGraph(ctx context.Context, id domain.CommitID) (nodes []domain.Node, links []domain.Link, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { nodes, links, err = commitGraphTx(ctx, tx, id); return err })
 	return
 }
 
-func baselineGraphTx(ctx context.Context, tx Tx, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
-	b, err := tx.Baseline(ctx, id)
+func commitGraphTx(ctx context.Context, tx Tx, id domain.CommitID) ([]domain.Node, []domain.Link, error) {
+	b, err := tx.Commit(ctx, id)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -334,7 +334,7 @@ func baselineGraphTx(ctx context.Context, tx Tx, id domain.BaselineID) ([]domain
 }
 
 // linksWithin returns the outgoing links of the nodes whose target is in b, read in one query.
-func linksWithin(ctx context.Context, tx Tx, b domain.Baseline, nodes []domain.Node) ([]domain.Link, error) {
+func linksWithin(ctx context.Context, tx Tx, b domain.Commit, nodes []domain.Node) ([]domain.Link, error) {
 	refs := make([]domain.NodeRef, len(nodes))
 	for i, n := range nodes {
 		refs[i] = n.Ref()
@@ -355,13 +355,13 @@ func linksWithin(ctx context.Context, tx Tx, b domain.Baseline, nodes []domain.N
 	return links, nil
 }
 
-// SuspectLinks returns the links whose source is in the baseline but whose
-// target node is in the baseline at another version: the target changed
-// since the link was asserted; or whose target of the namespace the baseline
+// SuspectLinks returns the links whose source is in the commit but whose
+// target node is in the commit at another version: the target changed
+// since the link was asserted; or whose target of the namespace the commit
 // no longer holds: it was deleted (ADR 0172).
-func (g *Graph) SuspectLinks(ctx context.Context, id domain.BaselineID) (out []domain.Link, err error) {
+func (g *Graph) SuspectLinks(ctx context.Context, id domain.CommitID) (out []domain.Link, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		b, err := tx.Baseline(ctx, id)
+		b, err := tx.Commit(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -383,8 +383,8 @@ func (g *Graph) SuspectLinks(ctx context.Context, id domain.BaselineID) (out []d
 		if len(gone) == 0 {
 			return nil
 		}
-		// a target of the namespace the baseline does not hold was deleted (ADR 0172): the link is suspect too; one of
-		// another namespace is not the baseline's to judge
+		// a target of the namespace the commit does not hold was deleted (ADR 0172): the link is suspect too; one of
+		// another namespace is not the commit's to judge
 		targets, err := tx.NodesAt(ctx, gone, "")
 		if err != nil {
 			return err
@@ -407,7 +407,7 @@ func (g *Graph) SuspectLinks(ctx context.Context, id domain.BaselineID) (out []d
 
 // ---- Change axis --------------------------------------------------------
 
-// CreateChange opens a change on a reference baseline. A sub-change
+// CreateChange opens a change on a reference commit. A sub-change
 // (ParentID) belongs to the namespace of its parent (which must have a branch of
 // its own), sees its parent's drafts and commits in its parent's log (ADR 0081).
 func (g *Graph) CreateChange(ctx context.Context, in NewChange) (c domain.Change, err error) {
@@ -491,7 +491,7 @@ func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, 
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c = domain.Change{
 			ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, MethodologyVersion: version, Namespace: domain.NamespaceOf(in.Namespace),
-			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
+			Status: domain.ChangeDraft, ForkCommit: in.ForkCommit, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
 			ParentID: in.ParentID, OwnerOrg: owner, ProjectID: project,
 		}
 		c.Lifecycle, c.State, c.Goal, c.Guardians = lifecycle, initial, goal, guardians
@@ -511,20 +511,20 @@ func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, 
 		}
 		// a change naming no starting state starts from the head of its branch: the state the last change left, or
 		// the empty state while the namespace has none (ADR 0056)
-		if c.BaselineID == "" && c.ParentID == "" {
+		if c.ForkCommit == "" && c.ParentID == "" {
 			head, err := branchHeadHeader(ctx, tx, c.Namespace, c.Branch)
 			if err != nil {
 				return err
 			}
-			c.BaselineID = head.ID
+			c.ForkCommit = head.ID
 		}
-		fork, err := headerOf(ctx, tx, c.BaselineID)
+		fork, err := headerOf(ctx, tx, c.ForkCommit)
 		if err != nil {
 			return err
 		}
 		if fork.ID != "" && fork.Namespace != c.Namespace {
-			return fmt.Errorf("change acts on namespace %s but its reference baseline %s is of namespace %s: %w",
-				c.Namespace, c.BaselineID, fork.Namespace, ErrInvalid)
+			return fmt.Errorf("change acts on namespace %s but its reference commit %s is of namespace %s: %w",
+				c.Namespace, c.ForkCommit, fork.Namespace, ErrInvalid)
 		}
 		b, err := branchOf(ctx, tx, c.Namespace, c.Branch)
 		if err != nil {
@@ -541,12 +541,12 @@ func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, 
 			if intent == "" {
 				intent = domain.IntentDerive
 			}
-			// the branch of a change holds no baseline (ADR 0140): its fork, a baseline of a lasting branch, or the point
+			// the branch of a change holds no commit (ADR 0140): its fork, a commit of a lasting branch, or the point
 			// of the branch of its parent change it is forked at (ADR 0103)
-			own := domain.Branch{Ephemeral: true, Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: b.Name, ForkBaseline: fork.ID,
+			own := domain.Branch{Ephemeral: true, Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: b.Name, ForkCommit: fork.ID,
 				Origin: domain.ChangeBranchOrigin(c.ID), Intent: intent, Status: domain.BranchOpen, CreatedAt: g.now()}
 			if b.Ephemeral {
-				if own.ForkBaseline, own.ForkSeq, err = forkPoint(ctx, tx, b); err != nil {
+				if own.ForkCommit, own.ForkSeq, err = forkPoint(ctx, tx, b); err != nil {
 					return err
 				}
 			}
@@ -956,7 +956,7 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 		g.attachValidation(ctx, tx, full, flow, c.Nodes, nil)
 		bb = domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{},
 			Facets: facets, At: now}
-		ix, err := g.typesAt(ctx, tx, c.BaselineID)
+		ix, err := g.typesAt(ctx, tx, c.ForkCommit)
 		if err != nil {
 			return err
 		}
@@ -1091,26 +1091,26 @@ func pageLimit(limit int) int {
 	return min(limit, 500)
 }
 
-// BaselineHistory is a page of the history of a branch (ADR 0140).
-type BaselineHistory struct {
-	// Baselines are the baselines of the branch of the page, oldest first.
-	Baselines []domain.Baseline
-	// Related are what draws the page: the baselines the changes of the page left on their own branches, those of the
-	// open branches forked from it (on the newest page), and the baselines their edges reach outside the page.
-	Related []domain.Baseline
+// CommitHistory is a page of the history of a branch (ADR 0140).
+type CommitHistory struct {
+	// Commits are the commits of the branch of the page, oldest first.
+	Commits []domain.Commit
+	// Related are what draws the page: the commits the changes of the page left on their own branches, those of the
+	// open branches forked from it (on the newest page), and the commits their edges reach outside the page.
+	Related []domain.Commit
 	// Next is the order to ask the older page with (before); 0: none.
 	Next int64
 }
 
-// BaselineHistory returns the page of the history of a branch committed before the order before (0: the newest), at most
-// limit baselines of the branch (default 100, at most MaxBrowseLimit): headers only, never the whole namespace.
-func (g *Graph) BaselineHistory(ctx context.Context, namespace, branch string, before int64, limit int) (h BaselineHistory, err error) {
+// CommitHistory returns the page of the history of a branch committed before the order before (0: the newest), at most
+// limit commits of the branch (default 100, at most MaxBrowseLimit): headers only, never the whole namespace.
+func (g *Graph) CommitHistory(ctx context.Context, namespace, branch string, before int64, limit int) (h CommitHistory, err error) {
 	if limit <= 0 || limit > MaxBrowseLimit {
 		limit = 100
 	}
 	branch = domain.BranchOf(branch)
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		page, err := tx.BaselinePage(ctx, namespace, branch, before, limit+1)
+		page, err := tx.CommitPage(ctx, namespace, branch, before, limit+1)
 		if err != nil {
 			return err
 		}
@@ -1119,8 +1119,8 @@ func (g *Graph) BaselineHistory(ctx context.Context, namespace, branch string, b
 			h.Next = page[limit-1].Seq
 		}
 		slices.Reverse(page)
-		h.Baselines = page
-		seen := map[domain.BaselineID]bool{}
+		h.Commits = page
+		seen := map[domain.CommitID]bool{}
 		var changes []domain.ChangeID
 		for _, b := range page {
 			seen[b.ID] = true
@@ -1128,7 +1128,7 @@ func (g *Graph) BaselineHistory(ctx context.Context, namespace, branch string, b
 				changes = append(changes, b.ChangeID)
 			}
 		}
-		add := func(bs []domain.Baseline) {
+		add := func(bs []domain.Commit) {
 			for _, b := range bs {
 				if !seen[b.ID] {
 					seen[b.ID] = true
@@ -1137,7 +1137,7 @@ func (g *Graph) BaselineHistory(ctx context.Context, namespace, branch string, b
 			}
 		}
 		slices.Sort(changes)
-		related, err := tx.ChangeBaselineHeaders(ctx, namespace, slices.Compact(changes))
+		related, err := tx.ChangeCommitHeaders(ctx, namespace, slices.Compact(changes))
 		if err != nil {
 			return err
 		}
@@ -1151,17 +1151,17 @@ func (g *Graph) BaselineHistory(ctx context.Context, namespace, branch string, b
 				if br.Status != domain.BranchOpen || br.Name == branch || domain.BranchOf(br.Parent) != branch {
 					continue
 				}
-				bs, err := tx.BranchBaselineHeaders(ctx, namespace, br.Name)
+				bs, err := tx.BranchCommitHeaders(ctx, namespace, br.Name)
 				if err != nil {
 					return err
 				}
 				add(bs)
 			}
 		}
-		var reach []domain.BaselineID
-		for _, list := range [][]domain.Baseline{h.Baselines, h.Related} {
+		var reach []domain.CommitID
+		for _, list := range [][]domain.Commit{h.Commits, h.Related} {
 			for _, b := range list {
-				for _, id := range []domain.BaselineID{b.ParentID, b.MergedFrom, b.RebasedFrom} {
+				for _, id := range []domain.CommitID{b.ParentID, b.MergedFrom, b.RebasedFrom} {
 					if id != "" && !seen[id] {
 						reach = append(reach, id)
 					}
@@ -1169,11 +1169,11 @@ func (g *Graph) BaselineHistory(ctx context.Context, namespace, branch string, b
 			}
 		}
 		slices.Sort(reach)
-		ghosts, err := tx.BaselineHeadersOf(ctx, namespace, slices.Compact(reach))
+		ghosts, err := tx.CommitHeadersOf(ctx, namespace, slices.Compact(reach))
 		add(ghosts)
 		return err
 	})
-	for _, list := range [][]domain.Baseline{h.Baselines, h.Related} {
+	for _, list := range [][]domain.Commit{h.Commits, h.Related} {
 		for i := range list {
 			list[i].Nodes, list[i].Namespace = nil, domain.NamespaceOf(namespace)
 		}
@@ -1181,18 +1181,18 @@ func (g *Graph) BaselineHistory(ctx context.Context, namespace, branch string, b
 	return h, err
 }
 
-// BaselineHeadersOf returns the headers of baselines of a namespace by id, oldest first.
-func (g *Graph) BaselineHeadersOf(ctx context.Context, namespace string, ids []domain.BaselineID) (bs []domain.Baseline, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.BaselineHeadersOf(ctx, namespace, ids); return err })
+// CommitHeadersOf returns the headers of commits of a namespace by id, oldest first.
+func (g *Graph) CommitHeadersOf(ctx context.Context, namespace string, ids []domain.CommitID) (bs []domain.Commit, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.CommitHeadersOf(ctx, namespace, ids); return err })
 	for i := range bs {
 		bs[i].Nodes, bs[i].Namespace = nil, domain.NamespaceOf(namespace)
 	}
 	return
 }
 
-// BranchHeads returns the branches of a namespace (of these statuses, when given) with the header of each head and the number of baselines of each
-// branch: what a list of the branches shows, without listing their baselines (ADR 0140).
-func (g *Graph) BranchHeads(ctx context.Context, namespace string, status ...string) (bs []domain.Branch, heads []domain.Baseline, counts map[string]int, err error) {
+// BranchHeads returns the branches of a namespace (of these statuses, when given) with the header of each head and the number of commits of each
+// branch: what a list of the branches shows, without listing their commits (ADR 0140).
+func (g *Graph) BranchHeads(ctx context.Context, namespace string, status ...string) (bs []domain.Branch, heads []domain.Commit, counts map[string]int, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		if bs, err = tx.Branches(ctx, namespace); err != nil {
 			return err
@@ -1200,16 +1200,16 @@ func (g *Graph) BranchHeads(ctx context.Context, namespace string, status ...str
 		if len(status) > 0 {
 			bs = slices.DeleteFunc(bs, func(b domain.Branch) bool { return !slices.Contains(status, b.Status) })
 		}
-		var ids []domain.BaselineID
+		var ids []domain.CommitID
 		for _, b := range bs {
 			if b.Head != "" {
 				ids = append(ids, b.Head)
 			}
 		}
-		if heads, err = tx.BaselineHeadersOf(ctx, namespace, ids); err != nil {
+		if heads, err = tx.CommitHeadersOf(ctx, namespace, ids); err != nil {
 			return err
 		}
-		counts, err = tx.BaselineCounts(ctx, namespace)
+		counts, err = tx.CommitCounts(ctx, namespace)
 		return err
 	})
 	for i := range heads {

@@ -1,35 +1,35 @@
 <script lang="ts">
-  // History of one branch (git log --graph): its own baselines in one lane, and a lane for the branch of each change
-  // that committed on it, from where the change started to the commit the merge joined (baselineHistory.ts), so two
-  // changes started from the same baseline show as two lanes forking from it. Other branches appear only as the dot
+  // History of one branch (git log --graph): its own commits in one lane, and a lane for the branch of each change
+  // that committed on it, from where the change started to the commit the merge joined (commitHistory.ts), so two
+  // changes started from the same commit show as two lanes forking from it. Other branches appear only as the dot
   // where this one forks from or merges with them.
-  import type { Baseline, Branch } from '../api';
+  import type { Commit, Branch } from '../api';
   import { formatDate, shortId } from '../api';
-  import { badgesOf, historyEntries, OPEN_KIND } from '../baselineHistory';
+  import { badgesOf, historyEntries, OPEN_KIND } from '../commitHistory';
   import { changes, refreshChanges } from '../stores/catalog.svelte';
   import HistoryGraph from './HistoryGraph.svelte';
 
   if (!changes.loaded) void refreshChanges();
 
   let {
-    baselines,
+    commits,
     branches = [],
     branch,
-    forkBaseline,
+    forkCommit,
     selected,
     rowHeight = 58,
     wrap = true,
     onselect,
     onopen,
   }: {
-    /** every baseline of the namespace, any order */
-    baselines: Baseline[];
+    /** every commit of the namespace, any order */
+    commits: Commit[];
     /** the branches of the namespace: the open ones forked from `branch` get a lane, committed or not (ADR 0102) */
     branches?: Branch[];
     /** the branch whose own activity to show */
     branch: string;
-    /** the branch's fork point (Branch.forkBaseline): anchors the graph even before the branch has a baseline of its own */
-    forkBaseline?: string;
+    /** the branch's fork point (Branch.forkCommit): anchors the graph even before the branch has a commit of its own */
+    forkCommit?: string;
     selected?: string;
     rowHeight?: number;
     wrap?: boolean;
@@ -37,12 +37,12 @@
     onopen?: (id: string) => void;
   } = $props();
 
-  const changeLabel = (b: Baseline) => (b.changeId ? `change ${b.changeId.slice(0, 8)}` : undefined);
-  // the baseline's name is a user-editable override of the change title at apply time (ChangeTab "New baseline
-  // name"): show the change's own title so a renamed baseline still reads as what produced it.
-  const titleOf = (b: Baseline) =>
+  const changeLabel = (b: Commit) => (b.changeId ? `change ${b.changeId.slice(0, 8)}` : undefined);
+  // the commit's name is a user-editable override of the change title at apply time (ChangeTab "New commit
+  // name"): show the change's own title so a renamed commit still reads as what produced it.
+  const titleOf = (b: Commit) =>
     (b.changeId && changes.items.find((c) => c.id === b.changeId)?.title) || b.name || shortId(b.id);
-  const isOpen = (b: Baseline) => b.kind === OPEN_KIND;
+  const isOpen = (b: Commit) => b.kind === OPEN_KIND;
 
   const kindTitle: Record<string, string> = {
     commit: 'the versions of a change, written on its own branch',
@@ -51,16 +51,16 @@
     rebase: 'the branch of a change moved onto the head of its target before its merge',
     open: 'a branch forked from here, still open',
   };
-  const badges = (b: Baseline) => badgesOf(b, baselines);
+  const badges = (b: Commit) => badgesOf(b, commits);
 
-  const entries = $derived(historyEntries(baselines, branch, forkBaseline, changeLabel, branches));
+  const entries = $derived(historyEntries(commits, branch, forkCommit, changeLabel, branches));
 </script>
 
 {#if entries.length}
   <div class="hscroll">
     <HistoryGraph {entries} {selected} mainLane={branch} {rowHeight} {wrap} {onselect} {onopen}>
       {#snippet row({ entry, head, color })}
-        {@const h = entry.item as Baseline}
+        {@const h = entry.item as Commit}
         <span class="hrow">
           <span class="hline1">
             <span class="hname">{titleOf(h)}</span>

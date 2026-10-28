@@ -46,7 +46,7 @@ func main() {
 	copts := append(telemetry.ClientOptions(), identity.Forward())
 	graphClient := graphclient.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
 	directory := &access.Directory{Graph: graphClient}
-	// the policies, the organisation and the projects the platform graph delivers, read again when its baseline
+	// the policies, the organisation and the projects the platform graph delivers, read again when its commit
 	// events say the organisation moved (ADR 0154 §9)
 	if events != nil {
 		if err := directory.FollowEvents(events); err != nil {

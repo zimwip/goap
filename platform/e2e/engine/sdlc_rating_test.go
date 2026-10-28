@@ -46,7 +46,7 @@ func ratedOnce(t *testing.T, key string) {
 		prompts = append(prompts, r.Messages[len(r.Messages)-1].Content)
 		return llm.Response{Text: `{"items":[{"type":"assessment","data":{"key":"` + key + `","score":2,"verdict":"unclear","findings":[{"text":"no scope","severity":"major"}],"suggestion":"Allow payment in 3 installments with no fees, for card payments of the web shop","reply":"say the scope"}}]}`}, nil
 	})}
-	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: "Installments", Intent: "Allow payment in 3 installments", Methodology: "sdlc", Namespace: "alm", BaselineID: base, ProjectID: testProject})
+	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: "Installments", Intent: "Allow payment in 3 installments", Methodology: "sdlc", Namespace: "alm", ForkCommit: base, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestSDLCEditDuringRatingRestartsIt(t *testing.T) {
 		}
 		return llm.Response{Text: `{"items":[{"type":"assessment","data":{"key":"description","score":4,"verdict":"clear","reply":"fine"}}]}`}, nil
 	})}
-	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: "Installments", Intent: "Allow payment in 3 installments", Methodology: "sdlc", Namespace: "alm", BaselineID: base, ProjectID: testProject})
+	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: "Installments", Intent: "Allow payment in 3 installments", Methodology: "sdlc", Namespace: "alm", ForkCommit: base, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

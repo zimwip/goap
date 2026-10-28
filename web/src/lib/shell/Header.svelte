@@ -12,8 +12,8 @@
   import { notify } from './workbench.svelte';
   import { openSearch } from './searchOverlay.svelte.ts';
   import { session, userKey } from '../stores/session.svelte';
-  import { methodologies, baselines, changes } from '../stores/catalog.svelte';
-  import { viewBaseline } from '../stores/baselineTool.svelte';
+  import { methodologies, commits, changes } from '../stores/catalog.svelte';
+  import { viewCommit } from '../stores/commitTool.svelte';
   import { live, processes } from '../stores/live.svelte';
   import { health, startHealth } from '../stores/status.svelte';
   import { openPlatformStatus } from './platformStatusState.svelte';
@@ -112,14 +112,14 @@
           run: () => openTab({ kind: 'run', params: { id: p.id ?? '' } }),
         });
     }
-    for (const b of baselines.items)
+    for (const b of commits.items)
       if (match(`${b.name ?? ''} ${b.id}`, q))
         out.push({
           key: `b:${b.id}`,
           label: b.name || shortId(b.id),
-          detail: 'baseline',
+          detail: 'commit',
           icon: 'database',
-          run: () => void viewBaseline(b.id ?? '', b.namespace ?? ''),
+          run: () => void viewCommit(b.id ?? '', b.namespace ?? ''),
         });
     for (const c of changes.items)
       if (match(`${c.title ?? ''} ${c.id} ${c.intent ?? ''}`, q))

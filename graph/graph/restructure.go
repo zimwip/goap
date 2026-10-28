@@ -400,7 +400,7 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 }
 
 // currentOf is the stored version of a node the flow starts from (nil: none): its pre version when the change holds an
-// impact on it, else the version of the reference baseline. The draft the flow holds of it is read through draftReader.
+// impact on it, else the version of the reference commit. The draft the flow holds of it is read through draftReader.
 func (g *Graph) currentOf(ctx context.Context, tx Tx, w *work, nid domain.NodeID) (*domain.Node, error) {
 	for _, i := range w.seen.All() {
 		if nodeOf(i) != nid {
@@ -412,7 +412,7 @@ func (g *Graph) currentOf(ctx context.Context, tx Tx, w *work, nid domain.NodeID
 		}
 		return w2.base(ctx, tx)
 	}
-	at, err := versionsAt(ctx, tx, w.c.BaselineID, []domain.NodeID{nid}) // that node only, never the whole state
+	at, err := versionsAt(ctx, tx, w.c.ForkCommit, []domain.NodeID{nid}) // that node only, never the whole state
 	if err != nil {
 		return nil, err
 	}

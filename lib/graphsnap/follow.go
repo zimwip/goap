@@ -10,7 +10,7 @@ import (
 
 // Heads keeps the heads of the branches of a graph another process holds, followed by its events (ADR 0154 §9: a
 // content graph reading the organisation of the platform graph, at every write it places): a head is asked once, then
-// again only once Moved says a main branch moved (the graph's baseline events), or past MaxAge (an event lost on the
+// again only once Moved says a main branch moved (the graph's commit events), or past MaxAge (an event lost on the
 // way; 0: never). A reader of a graph whose BranchHeadHeader goes through Get reads that graph only when it changed.
 type Heads struct {
 	MaxAge time.Duration
@@ -21,12 +21,12 @@ type Heads struct {
 }
 
 type head struct {
-	b    domain.Baseline
+	b    domain.Commit
 	when time.Time
 }
 
 // Get is the head of a branch of a namespace: the one kept, else asked.
-func (h *Heads) Get(ctx context.Context, namespace, branch string, ask func(ctx context.Context, namespace, branch string) (domain.Baseline, error)) (domain.Baseline, error) {
+func (h *Heads) Get(ctx context.Context, namespace, branch string, ask func(ctx context.Context, namespace, branch string) (domain.Commit, error)) (domain.Commit, error) {
 	k := [2]string{namespace, branch}
 	h.mu.Lock()
 	cur, ok := h.at[k]

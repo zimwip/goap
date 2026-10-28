@@ -42,7 +42,7 @@ type (
 	RebasedImpact       = graphapi.RebasedImpact
 	NodeEdit            = graphapi.NodeEdit
 	LinkEdit            = graphapi.LinkEdit
-	Commit              = graphapi.Commit
+	Edits               = graphapi.Edits
 	CarriedEvent        = graphapi.CarriedEvent
 	CommitResult        = graphapi.CommitResult
 	TransitionRequest   = graphapi.TransitionRequest

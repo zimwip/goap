@@ -30,7 +30,7 @@ writes designate change impacts declared within the same execution.
 | `ctx.changeImpacts()` | `ChangeImpact[]` |
 | `ctx.options()` | `Option[]` |
 | `ctx.decisionPoints()` | `DecisionPoint[]` |
-| `ctx.node(key)` | `Node` (reference baseline) |
+| `ctx.node(key)` | `Node` (reference commit) |
 | `ctx.nodes(type)` (`""` = all) | `Node[]` |
 | `ctx.links(key, direction, type)` (`"out"`/`"in"`, `""` = all) | `Link[]` |
 
@@ -63,7 +63,7 @@ the point (with the platform's policy: `decider`, `threshold`, `maxRounds`, `rou
 |---|---|
 | `ctx.addArtifact(type, data)` | free-form data (report…) |
 | `ctx.addItem(type, data)` | an item of a declared item type (`risk`, `action`, `hypothesis`, `assessment`…, ADR 0128): a new version of the record of its `data.key` |
-| `ctx.impactNode(key, rationale)` | the change acts on a baseline node, and why → `"#nN"` (a change impact with no version yet) |
+| `ctx.impactNode(key, rationale)` | the change acts on a commit node, and why → `"#nN"` (a change impact with no version yet) |
 | `ctx.impactNodeCreate(type, key, rationale)` | the change creates a node → `"#nN"`; the node is created (one `created` event, with its properties) by the first `writeNode` of the reference, or bare when the script ends; any other operation on it creates it first |
 | `ctx.impactNodePlan(type, key, rationale)` | the change will create a node, not written yet → `"#nN"`: a change impact of intent created with no draft (an impact analysis planning what is new, green field included); a later `writeNode` of its key, in this script or another action, creates it; a change holding a planned creation does not merge (create or withdraw it) |
 | `ctx.impactNodeMerge(sources, type, key, rationale)` | merge the nodes `sources` (keys or `#nN`) into a new node, from the side of their parents: each parent loses the links to the sources and gains one to the new node, the sources stay as they are, their impacts carry the parent's impact as `via` ([ADR 0077](adr/0077-impact-node-operations.md)) → `"#nN"` of the new node (with its draft) |

@@ -18,7 +18,7 @@ func testChangeDependencies(t *testing.T, repo Repo) {
 	g := w.g
 	create := func(title string, parent domain.ChangeID) domain.Change {
 		return must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: title, Methodology: "sdlc",
-			BaselineID: w.base.ID, OwnBranch: parent == "", ParentID: parent}))
+			ForkCommit: w.base.ID, OwnBranch: parent == "", ParentID: parent}))
 	}
 	modify := func(c domain.Change, n domain.Node, title string) {
 		t.Helper()

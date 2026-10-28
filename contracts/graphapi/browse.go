@@ -10,10 +10,10 @@ import (
 // Browsing a view without shipping it whole: list the node types, page through the nodes of one type with a text
 // filter, and show the neighbourhood of a selected node (ADR 0137, 0157).
 
-// MaxBrowseLimit caps the page size of BaselineNodes.
+// MaxBrowseLimit caps the page size of CommitNodes.
 const MaxBrowseLimit = 500
 
-// NodeQuery selects a page of the nodes of a baseline.
+// NodeQuery selects a page of the nodes of a commit.
 type NodeQuery struct {
 	// Type keeps the nodes of this qualified type (empty: every type).
 	Type string
@@ -21,8 +21,8 @@ type NodeQuery struct {
 	Text string
 	// IncludeDeleted keeps the tombstones.
 	IncludeDeleted bool
-	// Change keeps the nodes the impacts of that change act on, at their version in the baseline: they are read node
-	// by node, so the answer and its cost follow the change, not the size of the baseline.
+	// Change keeps the nodes the impacts of that change act on, at their version in the commit: they are read node
+	// by node, so the answer and its cost follow the change, not the size of the commit.
 	Change domain.ChangeID
 	// Reach keeps the versions the caller reads (nil: every version, ADR 0161 §5), set by the graph's view reader,
 	// never by a caller.
@@ -30,32 +30,32 @@ type NodeQuery struct {
 	Offset, Limit int
 }
 
-// TypeCount is the number of nodes of a type in a baseline.
+// TypeCount is the number of nodes of a type in a commit.
 type TypeCount struct {
 	Type  string
 	Count int
 }
 
-// NodePage is a page of the nodes of a baseline.
+// NodePage is a page of the nodes of a commit.
 type NodePage struct {
 	Nodes []domain.Node
 	// Total is the number of nodes matching the query (all pages).
 	Total int
 	// Types counts the nodes of each type matching the text filter (the type filter aside), sorted by type.
-	Types    []TypeCount // Baseline is the baseline the page was read at (a change view: its fork).
-	Baseline domain.BaselineID
+	Types  []TypeCount // Commit is the commit the page was read at (a change view: its fork).
+	Commit domain.CommitID
 }
 
-// Neighbourhood is a node of a baseline and the nodes it is linked to.
+// Neighbourhood is a node of a commit and the nodes it is linked to.
 type Neighbourhood struct {
 	Node domain.Node
-	// Nodes are the neighbours: the targets of its outgoing links (at the baseline's version, or the linked one for a
-	// node the baseline does not hold, such as a node of another namespace) and the sources of its incoming links
-	// held by the baseline.
+	// Nodes are the neighbours: the targets of its outgoing links (at the commit's version, or the linked one for a
+	// node the commit does not hold, such as a node of another namespace) and the sources of its incoming links
+	// held by the commit.
 	Nodes []domain.Node
 	// Links are the links between Node and its neighbours.
 	Links []domain.Link
-	// Suspect are the links whose target changed since they were created (the baseline holds another version).
+	// Suspect are the links whose target changed since they were created (the commit holds another version).
 	Suspect []domain.LinkID
 }
 

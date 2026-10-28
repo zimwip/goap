@@ -60,7 +60,7 @@ func testDraftCacheEqualsScratchFold(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "cache", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "cache", ForkCommit: f.base.ID, OwnBranch: true}))
 	pre := f.req.Ref()
 	mod := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "edit"}}))
 	for i := 0; i < 20; i++ {
@@ -101,7 +101,7 @@ func testDraftCacheRollbackAndSharedLog(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	g := f.g
 	other := New(repo) // a second graph (another process) on the same store
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "rollback", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "rollback", ForkCommit: f.base.ID, OwnBranch: true}))
 	pre := f.req.Ref()
 	mod := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "edit"}}))
 	co := must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, mod[0].ID, edit{Properties: map[string]any{"title": "kept"}}))
@@ -164,7 +164,7 @@ func TestDraftCacheReturnsCopies(t *testing.T) {
 		ctx := context.Background()
 		f := newFixture(t, repo)
 		g := f.g
-		c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "copy", BaselineID: f.base.ID, OwnBranch: true}))
+		c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "copy", ForkCommit: f.base.ID, OwnBranch: true}))
 		pre := f.req.Ref()
 		mod := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "edit"}}))
 		must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, mod[0].ID, edit{Properties: map[string]any{"title": "x"}}))
@@ -186,7 +186,7 @@ func BenchmarkDraftRead(b *testing.B) {
 	repo := NewMemory()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "bench", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "bench", ForkCommit: f.base.ID, OwnBranch: true}))
 	pre := f.req.Ref()
 	mod := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "edit"}}))
 	for i := 0; i < 200; i++ {
@@ -223,7 +223,7 @@ func TestDraftViewCountsItsSize(t *testing.T) {
 		ctx := context.Background()
 		f := newFixture(t, repo)
 		g := f.g
-		c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "size", BaselineID: f.base.ID, OwnBranch: true}))
+		c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "size", ForkCommit: f.base.ID, OwnBranch: true}))
 		pre := f.req.Ref()
 		mod := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "edit"}}))
 		size := func() (n int64) {

@@ -31,7 +31,7 @@ export interface ModeInfo {
 export const MODES: ModeInfo[] = [
   { id: 'project', label: 'Project', icon: 'folder', hint: 'Browse the project, its open changes and their tasks', tool: 'changes', view: 'tasks' },
   { id: 'change', label: 'Change', icon: 'diff', hint: 'Work in the working change: the only mode that modifies the graph', tool: 'changes' },
-  { id: 'navigation', label: 'Navigation', icon: 'branch', hint: 'The graph and its history: baselines, diffs and versions', admin: true, tool: 'baselines' },
+  { id: 'navigation', label: 'Navigation', icon: 'branch', hint: 'The graph and its history: commits, diffs and versions', admin: true, tool: 'commits' },
   { id: 'admin', label: 'Admin', icon: 'settings', hint: 'Domains, methodologies, projects and the organisation', admin: true, tool: 'methodologies' },
 ];
 
@@ -44,7 +44,7 @@ export const TOOL_MODES: Record<string, Mode[]> = {
   changes: ['project', 'change'],
   processes: ['project', 'change'],
   graph: ['project', 'change', 'navigation'],
-  baselines: ['navigation'],
+  commits: ['navigation'],
   stats: ['navigation'],
   methodologies: ['admin'],
   domains: ['admin'],

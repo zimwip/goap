@@ -18,7 +18,7 @@ func MergePlanToPB(p graphapi.MergePlan) *graphv1.MergePlan {
 
 // MergePlanFromPB is the inverse of MergePlanToPB.
 func MergePlanFromPB(p *graphv1.MergePlan) graphapi.MergePlan {
-	out := graphapi.MergePlan{From: p.GetFrom(), Into: p.GetInto(), IntoHead: domain.BaselineID(p.GetIntoHead())}
+	out := graphapi.MergePlan{From: p.GetFrom(), Into: p.GetInto(), IntoHead: domain.CommitID(p.GetIntoHead())}
 	for _, c := range p.GetCandidates() {
 		out.Candidates = append(out.Candidates, graphapi.MergeCandidate{Node: domain.NodeID(c.GetNode()), Key: c.GetKey(), Type: c.GetType(), Kind: c.GetKind(),
 			Ancestor: RefPtrFromPB(c.GetAncestor()), Ours: RefPtrFromPB(c.GetOurs()), Theirs: RefFromPB(c.GetTheirs()), Deleted: c.GetDeleted(),
@@ -38,6 +38,6 @@ func ResolutionsToPB(rs map[domain.NodeID]graphapi.Resolution) map[string]*graph
 
 // BranchFromPB converts a branch (without its creation time).
 func BranchFromPB(b *graphv1.Branch) domain.Branch {
-	return domain.Branch{Name: b.GetName(), Parent: b.GetParent(), ForkBaseline: domain.BaselineID(b.GetForkBaseline()), Head: domain.BaselineID(b.GetHead()),
-		Origin: b.GetOrigin(), Status: b.GetStatus(), Namespace: b.GetNamespace(), Description: b.GetDescription(), RebasedFrom: domain.BaselineID(b.GetRebasedFrom())}
+	return domain.Branch{Name: b.GetName(), Parent: b.GetParent(), ForkCommit: domain.CommitID(b.GetForkCommit()), Head: domain.CommitID(b.GetHead()),
+		Origin: b.GetOrigin(), Status: b.GetStatus(), Namespace: b.GetNamespace(), Description: b.GetDescription(), RebasedFrom: domain.CommitID(b.GetRebasedFrom())}
 }

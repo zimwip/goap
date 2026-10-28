@@ -763,7 +763,7 @@ func (r *Runner) probeOnce(ctx context.Context, rnd *rand.Rand) {
 			return g.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{View: &graphv1.View{Namespace: Namespace, Branch: "main"}, Key: n.key}))
 		}); err == nil {
 			_, _ = timed(ctx, m, "GetNodeNeighbourhood", func(ctx context.Context) (*connect.Response[graphv1.GetNodeNeighbourhoodResponse], error) {
-				return g.GetNodeNeighbourhood(ctx, connect.NewRequest(&graphv1.GetNodeNeighbourhoodRequest{View: &graphv1.View{Namespace: Namespace, Branch: "main", BaselineId: head}, NodeId: v.Msg.View.GetNode().GetId()}))
+				return g.GetNodeNeighbourhood(ctx, connect.NewRequest(&graphv1.GetNodeNeighbourhoodRequest{View: &graphv1.View{Namespace: Namespace, Branch: "main", CommitId: head}, NodeId: v.Msg.View.GetNode().GetId()}))
 			})
 		}
 	}
@@ -780,18 +780,18 @@ func (r *Runner) probeOnce(ctx context.Context, rnd *rand.Rand) {
 			})
 		}
 	}
-	// the nodes of a baseline scoped by a change (the one that left the head): the answer follows the change, not the
+	// the nodes of a commit scoped by a change (the one that left the head): the answer follows the change, not the
 	// size of the graph (ADR 0140)
 	change := br.Msg.Head.GetChangeId()
-	_, _ = timed(ctx, m, "ListBaselineNodes", func(ctx context.Context) (*connect.Response[graphv1.ListBaselineNodesResponse], error) {
-		return g.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{View: &graphv1.View{Namespace: Namespace, Branch: "main", BaselineId: head}, ChangeId: change, Type: TypeName(rnd.IntN(max(r.types, 1))), Limit: 100}))
+	_, _ = timed(ctx, m, "ListCommitNodes", func(ctx context.Context) (*connect.Response[graphv1.ListCommitNodesResponse], error) {
+		return g.ListCommitNodes(ctx, connect.NewRequest(&graphv1.ListCommitNodesRequest{View: &graphv1.View{Namespace: Namespace, Branch: "main", CommitId: head}, ChangeId: change, Type: TypeName(rnd.IntN(max(r.types, 1))), Limit: 100}))
 	})
-	_, _ = timed(ctx, m, "search.ListBaselineNodes", func(ctx context.Context) (*connect.Response[graphv1.ListBaselineNodesResponse], error) {
-		return g.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{View: &graphv1.View{Namespace: Namespace, Branch: "main", BaselineId: head}, ChangeId: change, Query: fmt.Sprintf("w%02d-%07d", rnd.IntN(max(r.Config.Workers, 1)), rnd.IntN(1000)), Limit: 50}))
+	_, _ = timed(ctx, m, "search.ListCommitNodes", func(ctx context.Context) (*connect.Response[graphv1.ListCommitNodesResponse], error) {
+		return g.ListCommitNodes(ctx, connect.NewRequest(&graphv1.ListCommitNodesRequest{View: &graphv1.View{Namespace: Namespace, Branch: "main", CommitId: head}, ChangeId: change, Query: fmt.Sprintf("w%02d-%07d", rnd.IntN(max(r.Config.Workers, 1)), rnd.IntN(1000)), Limit: 50}))
 	})
 	if parent := br.Msg.Head.GetParentId(); parent != "" {
-		_, _ = timed(ctx, m, "DiffBaselines", func(ctx context.Context) (*connect.Response[graphv1.DiffBaselinesResponse], error) {
-			return g.DiffBaselines(ctx, connect.NewRequest(&graphv1.DiffBaselinesRequest{From: parent, To: head}))
+		_, _ = timed(ctx, m, "DiffCommits", func(ctx context.Context) (*connect.Response[graphv1.DiffCommitsResponse], error) {
+			return g.DiffCommits(ctx, connect.NewRequest(&graphv1.DiffCommitsRequest{From: parent, To: head}))
 		})
 	}
 	_, _ = timed(ctx, m, "ListChanges", func(ctx context.Context) (*connect.Response[graphv1.ListChangesResponse], error) {
@@ -804,7 +804,7 @@ func (r *Runner) probeOnce(ctx context.Context, rnd *rand.Rand) {
 // hot node's links in, two hops), and a type read a page at a time with a filter on a property.
 func (r *Runner) probeQueries(ctx context.Context, rnd *rand.Rand, head string) {
 	g, m := r.Clients.Graph, r.Metrics
-	view := &graphv1.View{Namespace: Namespace, Branch: "main", BaselineId: head}
+	view := &graphv1.View{Namespace: Namespace, Branch: "main", CommitId: head}
 	query := func(op, q string) {
 		_, _ = timed(ctx, m, op, func(ctx context.Context) (*connect.Response[graphv1.QueryViewResponse], error) {
 			return g.QueryView(ctx, connect.NewRequest(&graphv1.QueryViewRequest{View: view, Query: q}))
@@ -825,7 +825,7 @@ func text(rnd *rand.Rand, n int) string {
 	if n <= 0 {
 		return ""
 	}
-	words := []string{"graph", "change", "domain", "version", "node", "link", "baseline", "branch", "review", "impact", "merge", "draft"}
+	words := []string{"graph", "change", "domain", "version", "node", "link", "commit", "branch", "review", "impact", "merge", "draft"}
 	var b strings.Builder
 	for b.Len() < n {
 		if b.Len() > 0 {

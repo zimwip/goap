@@ -152,7 +152,7 @@ func CommonAncestor(ctx context.Context, tx Tx, id domain.NodeID, a, b domain.Ve
 
 // ---- Branches --------------------------------------------------------------
 
-// CreateBranch opens a branch forked from a baseline.
+// CreateBranch opens a branch forked from a commit.
 func (g *Graph) CreateBranch(ctx context.Context, in NewBranch) (b domain.Branch, err error) {
 	if in.Name == "" || in.Name == domain.MainBranch || strings.ContainsAny(in.Name, " \t\n") {
 		return b, fmt.Errorf("invalid branch name %q: %w", in.Name, ErrInvalid)
@@ -164,14 +164,14 @@ func (g *Graph) CreateBranch(ctx context.Context, in NewBranch) (b domain.Branch
 		} else if !errors.Is(err, ErrNotFound) {
 			return err
 		}
-		fork, err := tx.Baseline(ctx, in.From)
+		fork, err := tx.Commit(ctx, in.From)
 		if err != nil {
 			return err
 		}
 		if fork.ID != "" && fork.Namespace != namespace {
-			return fmt.Errorf("baseline %s is of namespace %s, not %s: %w", in.From, fork.Namespace, namespace, ErrInvalid)
+			return fmt.Errorf("commit %s is of namespace %s, not %s: %w", in.From, fork.Namespace, namespace, ErrInvalid)
 		}
-		b = domain.Branch{Name: in.Name, Namespace: namespace, Parent: domain.BranchOf(fork.Branch), ForkBaseline: fork.ID, Head: fork.ID,
+		b = domain.Branch{Name: in.Name, Namespace: namespace, Parent: domain.BranchOf(fork.Branch), ForkCommit: fork.ID, Head: fork.ID,
 			Origin: in.Origin, Status: domain.BranchOpen, CreatedAt: g.now(), Description: in.Description}
 		return tx.PutBranch(ctx, b)
 	})
@@ -220,10 +220,10 @@ func (g *Graph) SetBranchDescription(ctx context.Context, namespace, name, descr
 	})
 }
 
-// BranchHead returns the latest baseline of a branch of a namespace; the head of main before any change committed is the
-// empty state (empty id, no nodes). The branch of a change holds no baseline (ADR 0140): its state is answered with no
+// BranchHead returns the latest commit of a branch of a namespace; the head of main before any change committed is the
+// empty state (empty id, no nodes). The branch of a change holds no commit (ADR 0140): its state is answered with no
 // id, its fork as parent and the order of its last commit.
-func (g *Graph) BranchHead(ctx context.Context, namespace, name string) (b domain.Baseline, err error) {
+func (g *Graph) BranchHead(ctx context.Context, namespace, name string) (b domain.Commit, err error) {
 	err = g.repo.InTx(platform.ReadOnly(ctx), func(tx Tx) error {
 		br, err := tx.Branch(ctx, domain.NamespaceOf(namespace), domain.BranchOf(name))
 		if err == nil && br.Ephemeral {
@@ -272,33 +272,33 @@ func branchOf(ctx context.Context, tx Tx, namespace, name string) (domain.Branch
 	return b, err
 }
 
-func branchHead(ctx context.Context, tx Tx, namespace, name string) (domain.Baseline, error) {
+func branchHead(ctx context.Context, tx Tx, namespace, name string) (domain.Commit, error) {
 	namespace, name = domain.NamespaceOf(namespace), domain.BranchOf(name)
 	b, err := tx.Branch(ctx, namespace, name)
 	if err == nil && b.Ephemeral {
-		return domain.Baseline{}, errEphemeral(b)
+		return domain.Commit{}, errEphemeral(b)
 	}
 	if err == nil && b.Head != "" {
-		return tx.Baseline(ctx, b.Head)
+		return tx.Commit(ctx, b.Head)
 	}
 	if err != nil && (!errors.Is(err, ErrNotFound) || name != domain.MainBranch) {
-		return domain.Baseline{}, err
+		return domain.Commit{}, err
 	}
-	// main without applied changes: its latest baseline, if any change left one
-	bs, err := tx.Baselines(ctx, namespace)
+	// main without applied changes: its latest commit, if any change left one
+	bs, err := tx.Commits(ctx, namespace)
 	if err != nil {
-		return domain.Baseline{}, err
+		return domain.Commit{}, err
 	}
 	for i := len(bs) - 1; i >= 0; i-- {
 		if domain.BranchOf(bs[i].Branch) == name {
 			return bs[i], nil
 		}
 	}
-	// no change has committed in the namespace yet: its state is the empty one (ADR 0056), the empty baseline id
-	return domain.Baseline{Namespace: namespace, Branch: name, Nodes: map[domain.NodeID]domain.Version{}}, nil
+	// no change has committed in the namespace yet: its state is the empty one (ADR 0056), the empty commit id
+	return domain.Commit{Namespace: namespace, Branch: name, Nodes: map[domain.NodeID]domain.Version{}}, nil
 }
 
-// branchStates reads the whole state a branch was forked from and the one it holds: its fork and head baselines, or, for
+// branchStates reads the whole state a branch was forked from and the one it holds: its fork and head commits, or, for
 // the branch of a change, which holds none, its fork with what committed on it (ADR 0140).
 func branchStates(ctx context.Context, tx Tx, b domain.Branch) (fork, head map[domain.NodeID]domain.Version, err error) {
 	if b.Ephemeral {
@@ -308,11 +308,11 @@ func branchStates(ctx context.Context, tx Tx, b domain.Branch) (fork, head map[d
 		head, err = branchVersions(ctx, tx, b, nil)
 		return fork, head, err
 	}
-	f, err := tx.Baseline(ctx, b.ForkBaseline)
+	f, err := tx.Commit(ctx, b.ForkCommit)
 	if err != nil {
 		return nil, nil, err
 	}
-	h, err := tx.Baseline(ctx, b.Head)
+	h, err := tx.Commit(ctx, b.Head)
 	return f.Nodes, h.Nodes, err
 }
 
@@ -447,11 +447,11 @@ type MergeRequest struct {
 	OwnerOrg, ProjectID string
 }
 
-// MergeResult is the merge change and the resulting baseline of the target branch.
+// MergeResult is the merge change and the resulting commit of the target branch.
 type MergeResult struct {
-	Change   domain.Change   `json:"change"`
-	Baseline domain.Baseline `json:"baseline"`
-	Plan     MergePlan       `json:"plan"`
+	Change domain.Change `json:"change"`
+	Commit domain.Commit `json:"commit"`
+	Plan   MergePlan     `json:"plan"`
 	// merged are the versions the merge wrote or joined on the target (change.merged, ADR 0159)
 	merged []domain.Node
 }
@@ -495,7 +495,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	// the merge is a change of the platform (journal): one change impact per merged node, whose
 	// version records the origin; the merge versions are written here, not proposed
 	c := domain.Change{ID: domain.ChangeID(g.newID()), Title: title, Intent: title, Status: domain.ChangeActive,
-		Namespace: domain.NamespaceOf(in.Namespace), BaselineID: plan.IntoHead, Branch: plan.Into, CreatedAt: g.now(),
+		Namespace: domain.NamespaceOf(in.Namespace), ForkCommit: plan.IntoHead, Branch: plan.Into, CreatedAt: g.now(),
 		Data: map[string]any{"merge": map[string]any{"from": in.From, "into": plan.Into}}, OwnerOrg: owner, ProjectID: project}
 	if err := g.scopeChange(ctx, tx, &c); err != nil {
 		return res, err
@@ -503,7 +503,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	if err := tx.PutChange(ctx, c); err != nil {
 		return res, err
 	}
-	base, err := tx.Baseline(ctx, plan.IntoHead)
+	base, err := tx.Commit(ctx, plan.IntoHead)
 	if err != nil {
 		return res, err
 	}
@@ -541,10 +541,10 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		}
 		if cand.Ours != nil {
 			if v, ok := target[cand.Ours.ID]; !ok || v != cand.Ours.Version {
-				return res, fmt.Errorf("node %s is not in the reference baseline: %w", cand.Ours, ErrConflict)
+				return res, fmt.Errorf("node %s is not in the reference commit: %w", cand.Ours, ErrConflict)
 			}
 			if head, err := tx.LatestOn(ctx, cand.Ours.ID, plan.Into); err == nil && head.Version != cand.Ours.Version {
-				return res, fmt.Errorf("node %s was modified on %s since the reference baseline (now v%d): %w", cand.Ours, plan.Into, head.Version, ErrConflict)
+				return res, fmt.Errorf("node %s was modified on %s since the reference commit (now v%d): %w", cand.Ours, plan.Into, head.Version, ErrConflict)
 			} else if err != nil && !errors.Is(err, ErrNotFound) {
 				return res, err
 			}
@@ -576,7 +576,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			}
 		} else {
 			if _, ok := target[from.ID]; ok {
-				return res, fmt.Errorf("node %s is already in the reference baseline, merge needs its version there: %w", from.ID, ErrConflict)
+				return res, fmt.Errorf("node %s is already in the reference commit, merge needs its version there: %w", from.ID, ErrConflict)
 			}
 			if props == nil {
 				props = from.Properties
@@ -587,7 +587,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	}
 	// 1. the merge versions, with the change impact that explains each: a node changed on one side only joins the
 	// target as is (ADR 0032), a node changed on both sides gets a merge version
-	res.Baseline.ID = domain.BaselineID(g.newID())
+	res.Commit.ID = domain.CommitID(g.newID())
 	// the merge accepts what it commits in one review, recorded before the impacts it decides (ADR 0105)
 	whyOf := func(m *merged) string {
 		why := fmt.Sprintf("merge of %s into %s", in.From, plan.Into)
@@ -663,7 +663,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		phases[0] = append(phases[0], first)
 		phases[1] = append(phases[1], domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactReviewed, By: "graph.merge", Review: &review, Causation: cause})
 		phases[2] = append(phases[2], written...)
-		phases[3] = append(phases[3], domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, By: "graph.merge", Committed: &m.next, Baseline: res.Baseline.ID, Branch: domain.BranchOf(plan.Into)})
+		phases[3] = append(phases[3], domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, By: "graph.merge", Committed: &m.next, Commit: res.Commit.ID, Branch: domain.BranchOf(plan.Into)})
 		res.merged = append(res.merged, n)
 		if n.Deleted {
 			delete(target, n.ID)
@@ -740,19 +740,19 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			return res, err
 		}
 	}
-	res.Baseline = domain.Baseline{ID: res.Baseline.ID, Name: title, Namespace: namespace, Branch: plan.Into, ParentID: base.ID, MergedFrom: fb.Head, ChangeID: c.ID, Kind: domain.BaselineMerge, Nodes: target, CreatedAt: g.now()}
-	if err := tx.PutBaseline(ctx, res.Baseline); err != nil {
+	res.Commit = domain.Commit{ID: res.Commit.ID, Name: title, Namespace: namespace, Branch: plan.Into, ParentID: base.ID, MergedFrom: fb.Head, ChangeID: c.ID, Kind: domain.CommitKindMerge, Nodes: target, CreatedAt: g.now()}
+	if err := tx.PutCommit(ctx, res.Commit); err != nil {
 		return res, err
 	}
-	if err := g.advanceBranch(ctx, tx, namespace, plan.Into, res.Baseline); err != nil {
+	if err := g.advanceBranch(ctx, tx, namespace, plan.Into, res.Commit); err != nil {
 		return res, err
 	}
-	c.Status, c.ResultBaselineID = domain.ChangeApplied, res.Baseline.ID
+	c.Status, c.LandedCommit = domain.ChangeApplied, res.Commit.ID
 	if err := tx.PutChange(ctx, c); err != nil {
 		return res, err
 	}
-	g.raiseMerged(ctx, tx, c, plan.Into, &res.Baseline, res.merged)
-	g.raiseApplied(ctx, tx, c, res.Baseline)
+	g.raiseMerged(ctx, tx, c, plan.Into, &res.Commit, res.merged)
+	g.raiseApplied(ctx, tx, c, res.Commit)
 	res.Change = c
 	fb.Status = domain.BranchMerged
 	return res, tx.PutBranch(ctx, fb)

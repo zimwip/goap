@@ -16,7 +16,7 @@ import './nodeEditors';
 import MethodologyExplorer from './nav/MethodologyExplorer.svelte';
 import DomainExplorer from './nav/DomainExplorer.svelte';
 import GraphTool from './nav/GraphTool.svelte';
-import BaselineExplorer from './nav/BaselineExplorer.svelte';
+import HistoryExplorer from './nav/HistoryExplorer.svelte';
 import ChangesExplorer from './nav/ChangesExplorer.svelte';
 import AccessExplorer from './nav/AccessExplorer.svelte';
 import PeopleOrgExplorer from './nav/PeopleOrgExplorer.svelte';
@@ -59,7 +59,7 @@ import ImportTab from './editors/ImportTab.svelte';
 import SourceImportTab from './editors/SourceImportTab.svelte';
 import JobsTab from './editors/JobsTab.svelte';
 import GraphStatsTab from './editors/GraphStatsTab.svelte';
-import BaselineTab from './editors/BaselineTab.svelte';
+import CommitTab from './editors/CommitTab.svelte';
 import { importKind, IMPORT_KINDS } from './editors/importKinds';
 
 import EventsConsole from './bottom/EventsConsole.svelte';
@@ -80,7 +80,7 @@ registerView({ id: 'methodologies', zone: 'left', title: 'Methodologies', icon: 
 registerView({ id: 'domains', zone: 'left', title: 'Domains', icon: 'graph', component: DomainExplorer, order: 1.5 });
 registerView({ id: 'processes', zone: 'left', title: 'My processes', icon: 'runs', component: ProcessesExplorer, order: 2.2 });
 registerView({ id: 'triggers', zone: 'left', title: 'Triggers', icon: 'clock', component: TriggersExplorer, order: 2.5 });
-registerView({ id: 'baselines', zone: 'left', title: 'Baseline', icon: 'database', component: BaselineExplorer, order: 3 });
+registerView({ id: 'commits', zone: 'left', title: 'Commit', icon: 'database', component: HistoryExplorer, order: 3 });
 registerView({ id: 'graph', zone: 'left', title: 'Graph explorer', icon: 'network', component: GraphTool, order: 3.2 });
 registerView({
   id: 'changes',
@@ -310,17 +310,17 @@ registerView({
 });
 
 registerView({
-  id: 'baseline',
+  id: 'commit',
   zone: 'editor',
-  title: 'Baseline',
+  title: 'Commit',
   icon: 'database',
-  component: BaselineTab,
-  // one tab per branch; the baseline it shows is the tab's own state
+  component: CommitTab,
+  // one tab per branch; the commit it shows is the tab's own state
   key: (p) => `${p.namespace ?? ''}/${p.branch || 'main'}`,
   pinned: true,
   tabTitle: (t) => `${t.params.namespace} · ${t.params.branch || 'main'}`,
   tabIcon: () => 'database',
-  tooltip: (t) => `Baseline of ${t.params.namespace}, branch ${t.params.branch || 'main'}${t.params.baseline ? ` at ${shortId(t.params.baseline)}` : ' (head)'}`,
+  tooltip: (t) => `Commit of ${t.params.namespace}, branch ${t.params.branch || 'main'}${t.params.commit ? ` at ${shortId(t.params.commit)}` : ' (head)'}`,
 });
 
 // the screen of a task (ADR 0158): accept, turn down, answer, give to someone for an administrator of the project

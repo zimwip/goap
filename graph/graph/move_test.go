@@ -14,7 +14,7 @@ import (
 type moveWorld struct {
 	g    *Graph
 	a, b domain.Node
-	base domain.Baseline
+	base domain.Commit
 }
 
 func newMoveWorld(t *testing.T, repo Repo) moveWorld {
@@ -28,19 +28,19 @@ func newMoveWorld(t *testing.T, repo Repo) moveWorld {
 	root := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootProject(g)))
 	w := moveWorld{g: g}
 	for _, key := range []string{"PROJ-A", "PROJ-B"} {
-		must[CommitResult](t)(g.Commit(ctx, Commit{ProjectID: rootProject(g), Namespace: NamespaceOrganisation, Title: key, By: "t", Edits: []NodeEdit{
+		must[CommitResult](t)(g.CommitEdits(ctx, Edits{ProjectID: rootProject(g), Namespace: NamespaceOrganisation, Title: key, By: "t", Edits: []NodeEdit{
 			{Key: key, Type: NodeTypeProjectUnit, Props: map[string]any{"name": key}, Links: []LinkEdit{{Type: LinkProjectPartOf, To: refPtr(root.Ref())}}}}}))
 	}
 	w.a = must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, "PROJ-A"))
 	w.b = must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, "PROJ-B"))
-	must[CommitResult](t)(g.Commit(ctx, Commit{ProjectID: "PROJ-A", Title: "old", By: "t", Edits: []NodeEdit{{Key: "OLD-1", Type: "Design"}}}))
-	w.base = must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch))
+	must[CommitResult](t)(g.CommitEdits(ctx, Edits{ProjectID: "PROJ-A", Title: "old", By: "t", Edits: []NodeEdit{{Key: "OLD-1", Type: "Design"}}}))
+	w.base = must[domain.Commit](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch))
 	return w
 }
 
 func (w moveWorld) open(t *testing.T, project string) domain.Change {
 	t.Helper()
-	return must[domain.Change](t)(w.g.CreateChange(context.Background(), NewChange{Title: "c", BaselineID: w.base.ID, OwnBranch: true, ProjectID: project}))
+	return must[domain.Change](t)(w.g.CreateChange(context.Background(), NewChange{Title: "c", ForkCommit: w.base.ID, OwnBranch: true, ProjectID: project}))
 }
 
 // projectMoves are the projectId fields of the change.updated entries of a change.
@@ -198,7 +198,7 @@ func testMoveChangeGuardians(t *testing.T, repo Repo) {
 	w := newMoveWorld(t, repo)
 	g := w.g
 	g.Lifecycles = &projectChains{}
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "c", Methodology: "sdlc", BaselineID: w.base.ID, OwnBranch: true, ProjectID: "PROJ-A"}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "c", Methodology: "sdlc", ForkCommit: w.base.ID, OwnBranch: true, ProjectID: "PROJ-A"}))
 	sub := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "s", Methodology: "review", ParentID: c.ID}))
 	chain := func(c domain.Change) string {
 		var out []string

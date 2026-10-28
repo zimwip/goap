@@ -18,7 +18,7 @@ func testChangeViewPositions(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "positions", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "positions", ForkCommit: f.base.ID, OwnBranch: true}))
 	pre := f.req.Ref()
 
 	wctx, w := graphapi.WithWatermark(ctx)
@@ -87,7 +87,7 @@ func testLogFacetEntriesFollowTheLog(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	g := f.g
 	g.LogFacets = map[string]LogFacet{"notes": {Types: []string{"journal.note"}}}
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "facets", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "facets", ForkCommit: f.base.ID, OwnBranch: true}))
 	read := func() int {
 		t.Helper()
 		var n int

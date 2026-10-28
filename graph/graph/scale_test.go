@@ -26,7 +26,7 @@ func TestCommitScale(t *testing.T) {
 		seeds := 0
 		commit := func(edits []NodeEdit) time.Duration {
 			start := time.Now()
-			if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "c", By: "bench", Edits: edits}); err != nil {
+			if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "c", By: "bench", Edits: edits}); err != nil {
 				t.Fatal(err)
 			}
 			return time.Since(start)

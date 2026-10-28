@@ -128,7 +128,7 @@ func graphTreeOn(t *testing.T, g *graph.Graph, name, branch string) (map[string]
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes, links, err := g.BaselineGraph(ctx, head.ID)
+	nodes, links, err := g.CommitGraph(ctx, head.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

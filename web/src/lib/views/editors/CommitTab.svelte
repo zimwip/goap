@@ -1,16 +1,16 @@
 <script lang="ts">
-  // Baseline tab: the history of one branch of a namespace (git-log-style, BaselineBranchGraph) on the left; node
-  // types, a filtered/paged node list, the neighbours graph and BaselineCompare on the right, all for whichever
-  // baseline is shown: the branch's head, or a specific row clicked in the history graph (`baseline` param). One tab
-  // per branch, opened pinned from BaselineExplorer (stores/baselineTool.svelte) or a link elsewhere. Branch
-  // management (open/merge/abandon/describe) is a right-click on the branch's row in BaselineExplorer, not shown here.
+  // Commit tab: the history of one branch of a namespace (git-log-style, CommitBranchGraph) on the left; node
+  // types, a filtered/paged node list, the neighbours graph and CommitCompare on the right, all for whichever
+  // commit is shown: the branch's head, or a specific row clicked in the history graph (`commit` param). One tab
+  // per branch, opened pinned from HistoryExplorer (stores/commitTool.svelte) or a link elsewhere. Branch
+  // management (open/merge/abandon/describe) is a right-click on the branch's row in HistoryExplorer, not shown here.
   import {
     graph,
     errorMessage,
     formatDate,
     nodeTitle,
     shortId,
-    type Baseline,
+    type Commit,
     type Branch,
     type GraphNode,
     type Link,
@@ -19,22 +19,22 @@
   import { exportGraph } from '../../graphExport';
   import Icon from '../../shell/Icon.svelte';
   import NodeNeighbourhood, { emptyNeighbourhood, type Neighbourhood } from '../../components/NodeNeighbourhood.svelte';
-  import BaselineCompare from '../../components/BaselineCompare.svelte';
-  import BaselineBranchGraph from '../../components/BaselineBranchGraph.svelte';
-  import { isOpenHead } from '../../baselineHistory';
+  import CommitCompare from '../../components/CommitCompare.svelte';
+  import CommitBranchGraph from '../../components/CommitBranchGraph.svelte';
+  import { isOpenHead } from '../../commitHistory';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import Resizer from '../../shell/Resizer.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
   import { splitType, typeCatalog } from '../../stores/types.svelte';
   import { MAIN_BRANCH } from '../../namespace';
-  import { baselineTool, openBaseline } from '../../stores/baselineTool.svelte';
+  import { commitTool, openCommit } from '../../stores/commitTool.svelte';
   import type { Tab } from '../../shell/types';
   import { loadRaw, save } from '../../shell/storage';
 
   const SIZES = [25, 50, 100, 200];
-  const HW_KEY = 'goap.ide.baseline.historyWidth';
-  const CH_KEY = 'goap.ide.baseline.compareHeight';
+  const HW_KEY = 'goap.ide.commit.historyWidth';
+  const CH_KEY = 'goap.ide.commit.compareHeight';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -61,12 +61,12 @@
   let error = $state('');
   let branches = $state<Branch[]>([]);
   /** the history of the branch read so far, a page at a time (ADR 0140), and what draws it */
-  let history = $state<Baseline[]>([]);
-  let related = $state<Baseline[]>([]);
+  let history = $state<Commit[]>([]);
+  let related = $state<Commit[]>([]);
   let next = $state('');
   let older = $state(false);
-  const baselines = $derived.by(() => {
-    const byId = new Map<string, Baseline>();
+  const commits = $derived.by(() => {
+    const byId = new Map<string, Commit>();
     for (const b of [...history, ...related]) if (b.id && !byId.has(b.id)) byId.set(b.id, b);
     return [...byId.values()];
   });
@@ -78,24 +78,24 @@
     const ns = namespace;
     const branch = branchName;
     void reload;
-    void baselineTool.reload;
+    void commitTool.reload;
     // a commit, a merge, a branch opened by a change (its first edit, ADR 0102): the lanes follow
-    void stamp(keyOf.baselines);
+    void stamp(keyOf.commits);
     void stamp(keyOf.changes);
     if (!ns) return;
     const ctrl = new AbortController();
     loading = true;
-    // the newest page of the branch's history: never every baseline of the namespace (ADR 0140)
+    // the newest page of the branch's history: never every commit of the namespace (ADR 0140)
     // the open branches draw their lanes; the branch shown is read too when it is merged or abandoned
     Promise.all([
       graph.listBranches(ns, ctrl.signal, { status: ['open'] }),
-      graph.listBaselines(ns, ctrl.signal, { branch, limit: PAGE }),
+      graph.listCommits(ns, ctrl.signal, { branch, limit: PAGE }),
       graph.getBranch(ns, branch, ctrl.signal).catch(() => undefined),
     ])
       .then(([br, bs, shown]) => {
         branches = br.branches ?? [];
         if (shown?.branch && !branches.some((b) => b.name === shown.branch?.name)) branches = [...branches, shown.branch];
-        history = bs.baselines ?? [];
+        history = bs.commits ?? [];
         related = bs.related ?? [];
         next = bs.next && bs.next !== '0' ? bs.next : '';
         error = '';
@@ -115,8 +115,8 @@
     if (!ns || !next || older) return;
     older = true;
     try {
-      const r = await graph.listBaselines(ns, undefined, { branch: branchName, before: next, limit: PAGE });
-      history = [...(r.baselines ?? []), ...history];
+      const r = await graph.listCommits(ns, undefined, { branch: branchName, before: next, limit: PAGE });
+      history = [...(r.commits ?? []), ...history];
       related = [...related, ...(r.related ?? [])];
       next = r.next && r.next !== '0' ? r.next : '';
     } catch (e) {
@@ -126,38 +126,38 @@
     }
   }
 
-  const branchOf = (b: Baseline) => b.branch || MAIN_BRANCH;
-  const own = $derived(baselines.filter((b) => branchOf(b) === branchName));
+  const branchOf = (b: Commit) => b.branch || MAIN_BRANCH;
+  const own = $derived(commits.filter((b) => branchOf(b) === branchName));
   const headId = $derived([...own].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))[0]?.id ?? '');
-  /** the baseline shown in the panels below: whichever row was clicked in the history graph, or the branch's head */
-  const shownId = $derived(tab.params.baseline || headId);
-  /** the branch of the baseline shown (a row of a forked lane is of its own branch): a read names it (ADR 0157) */
-  const shownBranch = $derived(baselines.find((b) => b.id === shownId)?.branch || branchName);
-  /** the branch's fork point: anchors the graph even before it has a baseline of its own */
-  const forkBaseline = $derived(branches.find((b) => b.name === branchName)?.forkBaseline);
+  /** the commit shown in the panels below: whichever row was clicked in the history graph, or the branch's head */
+  const shownId = $derived(tab.params.commit || headId);
+  /** the branch of the commit shown (a row of a forked lane is of its own branch): a read names it (ADR 0157) */
+  const shownBranch = $derived(commits.find((b) => b.id === shownId)?.branch || branchName);
+  /** the branch's fork point: anchors the graph even before it has a commit of its own */
+  const forkCommit = $derived(branches.find((b) => b.name === branchName)?.forkCommit);
 
-  /** a baseline of this branch is shown in this tab (the graph already is the browsing view); one from another
+  /** a commit of this branch is shown in this tab (the graph already is the browsing view); one from another
    * branch (a fork point or merge source) opens the tab of that branch, showing it */
   function selectHistory(id: string) {
     // the open head of a branch with no commit yet (ADR 0102): opens that branch
     if (isOpenHead(id)) {
-      openBaseline(namespace, id.slice('open:'.length));
+      openCommit(namespace, id.slice('open:'.length));
       return;
     }
-    const br = branchOf(baselines.find((b) => b.id === id) ?? {});
-    if (br !== branchName) openBaseline(namespace, br, id);
-    else tab.params.baseline = id;
+    const br = branchOf(commits.find((b) => b.id === id) ?? {});
+    if (br !== branchName) openCommit(namespace, br, id);
+    else tab.params.commit = id;
   }
 
-  /** Exports the state of the shown baseline, without history: a JSON snapshot (ADR 0104) or an OKF zip, one Markdown
+  /** Exports the state of the shown commit, without history: a JSON snapshot (ADR 0104) or an OKF zip, one Markdown
    *  file per node with a YAML front matter (ADR 0111); a job (ADR 0149), saved when done. */
   let exporting = $state(false);
-  async function exportBaseline(format: 'json' | 'okf') {
+  async function exportCommit(format: 'json' | 'okf') {
     const id = shownId;
     if (!namespace || !id || isOpenHead(id)) return;
     exporting = true;
     try {
-      await exportGraph({ namespace, baselineId: id, format });
+      await exportGraph({ namespace, commitId: id, format });
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -167,7 +167,7 @@
 
   // ---- node types + filtered/paged node list, for `shownId` --------------------------------------
 
-  let baseline = $state<Baseline | undefined>();
+  let commit = $state<Commit | undefined>();
   let types = $state<TypeCount[]>([]);
   let nodes = $state<GraphNode[]>([]);
   let total = $state(0);
@@ -179,7 +179,7 @@
   let offset = $state(0);
   let size = $state(50);
 
-  // switching baseline (branch or a specific history row) starts the node browser fresh
+  // switching commit (branch or a specific history row) starts the node browser fresh
   $effect(() => {
     void shownId;
     type = '';
@@ -207,9 +207,9 @@
 
   $effect(() => {
     void reload;
-    const req = { view: { namespace, branch: shownBranch, baselineId: shownId }, type, query, offset, limit: size };
+    const req = { view: { namespace, branch: shownBranch, commitId: shownId }, type, query, offset, limit: size };
     if (!shownId) {
-      baseline = undefined;
+      commit = undefined;
       types = [];
       nodes = [];
       total = 0;
@@ -218,9 +218,9 @@
     const ctrl = new AbortController();
     nodesLoading = true;
     graph
-      .listBaselineNodes(req, ctrl.signal)
+      .listCommitNodes(req, ctrl.signal)
       .then((r) => {
-        baseline = r.baseline;
+        commit = r.commit;
         types = r.types ?? [];
         nodes = r.nodes ?? [];
         total = r.total ?? 0;
@@ -275,13 +275,13 @@
     linkOffset = 0;
   }
 
-  // browsing the whole baseline's links: only while no node narrows it to its own (unpaginated) links already
+  // browsing the whole commit's links: only while no node narrows it to its own (unpaginated) links already
   // fetched by the neighbourhood effect below
   $effect(() => {
     void reload;
     if (browseTab !== 'links' || selectedNode) return;
-    const req = { baselineId: shownId, type: linkType, query: linkQuery, offset: linkOffset, limit: linkSize };
-    if (!req.baselineId) {
+    const req = { commitId: shownId, type: linkType, query: linkQuery, offset: linkOffset, limit: linkSize };
+    if (!req.commitId) {
       linkTypes = [];
       allLinks = [];
       linkTotal = 0;
@@ -290,7 +290,7 @@
     const ctrl = new AbortController();
     linksLoading = true;
     graph
-      .listBaselineLinks(req, ctrl.signal)
+      .listCommitLinks(req, ctrl.signal)
       .then((r) => {
         linkTypes = r.types ?? [];
         allLinks = r.links ?? [];
@@ -332,14 +332,14 @@
       .sort((a, b) => Number(a.outgoing) - Number(b.outgoing) || (a.other?.key ?? '').localeCompare(b.other?.key ?? ''));
   });
 
-  // the baseline holds the nodes of its namespace (its header is sent without its nodes, ADR 0140)
-  const inBaseline = (n: GraphNode | undefined) => !!n?.id && !!baseline && (n.namespace ?? '') === (baseline.namespace ?? '');
+  // the commit holds the nodes of its namespace (its header is sent without its nodes, ADR 0140)
+  const inCommit = (n: GraphNode | undefined) => !!n?.id && !!commit && (n.namespace ?? '') === (commit.namespace ?? '');
 
   function selectNode(n: GraphNode | undefined) {
     if (!n?.id) return;
     selectedLink = undefined;
-    // a neighbour the baseline does not hold (another namespace): open it in its editor
-    if (!inBaseline(n)) {
+    // a neighbour the commit does not hold (another namespace): open it in its editor
+    if (!inCommit(n)) {
       void openNode(n, { pin: true });
       return;
     }
@@ -362,12 +362,12 @@
 <div class="editor-page" bind:clientHeight={pageHeight}>
   <div class="editor-head">
     <Icon name="database" size={18} />
-    <h2>Baseline · {namespace}</h2>
-    {#if baseline}
+    <h2>Commit · {namespace}</h2>
+    {#if commit}
       <span class="hint">
-        <code>{shortId(baseline.id)}</code>
-        {#if baseline.createdAt} · {formatDate(baseline.createdAt)}{/if}
-        {#if baseline.changeId} · from change <button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: baseline?.changeId ?? '' } })}>{baseline.changeId.slice(0, 8)}</button>{/if}
+        <code>{shortId(commit.id)}</code>
+        {#if commit.createdAt} · {formatDate(commit.createdAt)}{/if}
+        {#if commit.changeId} · from change <button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: commit?.changeId ?? '' } })}>{commit.changeId.slice(0, 8)}</button>{/if}
         {#if !query} · {typeTotal} nodes{/if}
       </span>
     {/if}
@@ -375,16 +375,16 @@
     <button
       type="button"
       class="ghost small"
-      title="Export this baseline as an OKF tree: a zip of one Markdown file per node (YAML front matter, Markdown body)"
-      disabled={!baseline || exporting}
-      onclick={() => exportBaseline('okf')}><Icon name="download" size={14} /> OKF</button
+      title="Export this commit as an OKF tree: a zip of one Markdown file per node (YAML front matter, Markdown body)"
+      disabled={!commit || exporting}
+      onclick={() => exportCommit('okf')}><Icon name="download" size={14} /> OKF</button
     >
     <button
       type="button"
       class="ghost small"
-      title="Export this baseline as a JSON snapshot (no history)"
-      disabled={!baseline || exporting}
-      onclick={() => exportBaseline('json')}><Icon name="download" size={14} /> JSON</button
+      title="Export this commit as a JSON snapshot (no history)"
+      disabled={!commit || exporting}
+      onclick={() => exportCommit('json')}><Icon name="download" size={14} /> JSON</button
     >
     <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={loading} onclick={() => reload++}><Icon name="refresh" size={14} /></button>
   </div>
@@ -393,8 +393,8 @@
   <div class="workspace">
     <nav class="card history" style:width="{historyWidth}px" aria-label="History">
       <h3>History <span class="hint">{branchName}</span></h3>
-      <BaselineBranchGraph {baselines} {branches} branch={branchName} {forkBaseline} selected={shownId} onselect={selectHistory} onopen={selectHistory} />
-      {#if next}<button type="button" class="link small older" disabled={older} onclick={loadOlder}>{older ? 'Loading…' : 'Older baselines'}</button>{/if}
+      <CommitBranchGraph {commits} {branches} branch={branchName} {forkCommit} selected={shownId} onselect={selectHistory} onopen={selectHistory} />
+      {#if next}<button type="button" class="link small older" disabled={older} onclick={loadOlder}>{older ? 'Loading…' : 'Older commits'}</button>{/if}
     </nav>
 
     <Resizer orientation="vertical" value={historyWidth} min={240} max={520} label="History panel width" onresize={resizeHistory} />
@@ -414,12 +414,12 @@
               {#each types as t (t.type)}
                 {@const st = splitType(t.type)}
                 <button type="button" class="type" class:sel={type === t.type} title={t.type} onclick={() => pickType(t.type ?? '')}>
-                  <span class="grow">{st.name || t.type}{#if st.namespace && st.namespace !== baseline?.namespace}<span class="ns"> {st.namespace}</span>{/if}</span>
+                  <span class="grow">{st.name || t.type}{#if st.namespace && st.namespace !== commit?.namespace}<span class="ns"> {st.namespace}</span>{/if}</span>
                   <span class="count">{t.count ?? 0}</span>
                 </button>
               {/each}
               {#if type && !types.some((t) => t.type === type)}
-                <p class="empty small">No <code>{type}</code> node {query ? 'matches the filter' : 'in this baseline'}.</p>
+                <p class="empty small">No <code>{type}</code> node {query ? 'matches the filter' : 'in this commit'}.</p>
               {/if}
             {:else}
               <button type="button" class="type" class:sel={!linkType} onclick={() => pickLinkType('')}>
@@ -562,7 +562,7 @@
                           <td class="dir" title={r.outgoing ? 'Outgoing' : 'Incoming'}>{r.outgoing ? '→' : '←'}</td>
                           <td><button type="button" class="link" title={`${r.l.type}: show this link's properties`} onclick={() => selectLink(r.l)}>{typeCatalog.cat.linkLabel(r.l.type, r.outgoing ? 'out' : 'in')}</button></td>
                           <td>
-                            <button type="button" class="link mono" title={inBaseline(r.other) ? 'Show its neighbours' : 'Not in this baseline: open it in its editor'} onclick={() => selectNode(r.other)}>{r.other?.key ?? '?'}</button>
+                            <button type="button" class="link mono" title={inCommit(r.other) ? 'Show its neighbours' : 'Not in this commit: open it in its editor'} onclick={() => selectNode(r.other)}>{r.other?.key ?? '?'}</button>
                             {#if nodeTitle(r.other)}<span class="hint"> {nodeTitle(r.other)}</span>{/if}
                           </td>
                           <td>{r.other?.type ?? ''}</td>
@@ -585,14 +585,14 @@
       </div>
 
       <section class="card neighbours">
-        <NodeNeighbourhood baselineId={shownId} branch={shownBranch} namespace={baseline?.namespace ?? namespace} bind:node={selectedNode} bind:link={selectedLink} bind:hood {reload} />
+        <NodeNeighbourhood commitId={shownId} branch={shownBranch} namespace={commit?.namespace ?? namespace} bind:node={selectedNode} bind:link={selectedLink} bind:hood {reload} />
       </section>
     </div>
   </div>
-  {#if baseline}
+  {#if commit}
   <Resizer orientation="horizontal" value={compareShown} min={120} max={compareMax} invert label="Compare panel height" onresize={resizeCompare} />
   <div class="compare-wrap" style:height="{compareShown}px">
-    <BaselineCompare {baseline} candidates={baselines} />
+    <CommitCompare {commit} candidates={commits} />
   </div>
 {/if}
 </div>

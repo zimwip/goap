@@ -1,5 +1,5 @@
 // The diff of two values of an attribute (ValueDiff.svelte): what changed between a version and the next, a draft and
-// its base, two baselines. The attribute names how (`diff` of its domain definition, else the usual one of its type,
+// its base, two commits. The attribute names how (`diff` of its domain definition, else the usual one of its type,
 // the twin of `def.Attribute.DefaultDiff`): the two values whole, the words of a text, its lines, indented JSON, or
 // source text highlighted in its language (codeText.ts). Pure: the component only lays the rows out.
 import { readCode } from './codeText';

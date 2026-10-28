@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { badgesOf, historyEntries, isOpenHead, typeOf, OPEN_KIND } from './baselineHistory';
+import { badgesOf, historyEntries, isOpenHead, typeOf, OPEN_KIND } from './commitHistory';
 
 // base B on main; test1 and test2 both start from B, each commits on its own branch; test1 is applied first (a
 // fast-forward onto main), then test2 (a merge of its branch into main)
-const baselines = [
+const commits = [
   { id: 'B', branch: 'main', createdAt: '2026-01-01T00:00:00Z' },
   { id: 'c1', branch: 'change-aaaa1111', parentId: 'B', changeId: 'aaaa1111-x', createdAt: '2026-01-02T00:00:00Z' },
   { id: 'c2', branch: 'change-bbbb2222', parentId: 'B', changeId: 'bbbb2222-x', createdAt: '2026-01-03T00:00:00Z' },
@@ -12,7 +12,7 @@ const baselines = [
 ];
 
 describe('historyEntries', () => {
-  const rows = historyEntries(baselines, 'main');
+  const rows = historyEntries(commits, 'main');
   const byId = new Map(rows.map((r) => [r.id, r]));
 
   it('lists the history newest first, the lanes of the changes included', () => {
@@ -20,7 +20,7 @@ describe('historyEntries', () => {
     expect(rows.map((r) => r.lane)).toEqual(['main', 'main', 'change-bbbb2222', 'change-aaaa1111', 'main']);
   });
 
-  it('forks both changes from the same baseline', () => {
+  it('forks both changes from the same commit', () => {
     expect(byId.get('c1')?.parents.map((p) => p.id)).toEqual(['B']);
     expect(byId.get('c2')?.parents.map((p) => p.id)).toEqual(['B']);
   });
@@ -31,13 +31,13 @@ describe('historyEntries', () => {
   });
 
   it('shows a change branch as its own commit, without lanes of other changes', () => {
-    const own = historyEntries(baselines, 'change-bbbb2222');
+    const own = historyEntries(commits, 'change-bbbb2222');
     expect(own.map((r) => r.id)).toEqual(['c2', 'B']);
     expect(own.map((r) => r.lane)).toEqual(['change-bbbb2222', 'main']);
   });
 
   it('keeps a change that did not commit out of the history of the branch', () => {
-    expect(historyEntries(baselines.filter((b) => b.id !== 'm2'), 'main').map((r) => r.id)).not.toContain('c2');
+    expect(historyEntries(commits.filter((b) => b.id !== 'm2'), 'main').map((r) => r.id)).not.toContain('c2');
   });
 });
 
@@ -69,7 +69,7 @@ describe('a rebased change', () => {
     expect(byId.get('T2')?.parents.map((p) => p.label)).toEqual(['fast-forward · change bbbb2222', 'fast-forward · change bbbb2222']);
   });
 
-  it('shows the rebased-from baseline as a ghost row when no lane holds it', () => {
+  it('shows the rebased-from commits as a ghost row when no lane holds it', () => {
     const own = historyEntries(rebased, 'change-bbbb2222');
     expect(own.map((r) => r.id).sort()).toEqual(['B', 'c2', 'T1'].sort());
   });
@@ -82,7 +82,7 @@ describe('a rebased change', () => {
   });
 
   it('names the change and branch a merge joined', () => {
-    const b = badgesOf(baselines[4], baselines);
+    const b = badgesOf(commits[4], commits);
     expect(b.kind).toBe('merge');
     expect(b.merged).toBe('merged change bbbb2222 from change-bbbb2222');
   });
@@ -94,9 +94,9 @@ describe('open branches forked from the branch', () => {
     { id: 'B', branch: 'main', createdAt: '2026-01-01T00:00:00Z' },
     { id: 'M1', branch: 'main', parentId: 'B', kind: 'fast-forward', changeId: 'cccc', createdAt: '2026-01-05T00:00:00Z' },
   ];
-  const fresh = { name: 'change-aaaa1111', parent: 'main', forkBaseline: 'B', head: 'B', status: 'open', origin: 'change:aaaa1111-x', createdAt: '2026-01-02T00:00:00Z' };
+  const fresh = { name: 'change-aaaa1111', parent: 'main', forkCommit: 'B', head: 'B', status: 'open', origin: 'change:aaaa1111-x', createdAt: '2026-01-02T00:00:00Z' };
 
-  it('draws a branch with no commit as an open head forking from its baseline', () => {
+  it('draws a branch with no commit as an open head forking from its commit', () => {
     const rows = historyEntries(base, 'main', '', undefined, [fresh]);
     const open = rows.find((r) => isOpenHead(r.id));
     expect(open?.lane).toBe('change-aaaa1111');
@@ -127,7 +127,7 @@ describe('open branches forked from the branch', () => {
       { id: 'c1', branch: 'change-aaaa1111', parentId: 'B', kind: 'commit', changeId: 'aaaa1111-x', createdAt: '2026-01-03T00:00:00Z' },
       { id: 'r1', branch: 'change-aaaa1111', parentId: 'c1', mergedFrom: 'M1', rebasedFrom: 'B', kind: 'rebase', changeId: 'aaaa1111-x', createdAt: '2026-01-06T00:00:00Z' },
     ];
-    const rows = historyEntries(rebased, 'main', '', undefined, [{ ...fresh, forkBaseline: 'M1', head: 'r1' }]);
+    const rows = historyEntries(rebased, 'main', '', undefined, [{ ...fresh, forkCommit: 'M1', head: 'r1' }]);
     const r1 = rows.find((r) => r.id === 'r1');
     expect(r1?.parents.map((p) => [p.id, p.label, !!p.dashed])).toEqual([
       ['c1', 'commit', false],

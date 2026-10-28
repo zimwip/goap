@@ -58,7 +58,7 @@ func TestSignOn(t *testing.T) {
 		t.Fatalf("mistral = %+v, %v", n, err)
 	}
 	head, _ := g.BranchHead(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
-	nodes, _, _ := g.BaselineGraph(ctx, head.ID)
+	nodes, _, _ := g.CommitGraph(ctx, head.ID)
 	for _, n := range nodes {
 		if n.Type == llmcfg.NodeTypeModel && n.Properties["provider"] == "mistral" {
 			t.Fatalf("a model was created: %+v", n)

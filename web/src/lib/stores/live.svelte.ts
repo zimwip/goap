@@ -1,5 +1,5 @@
 // Live workbench data: the platform event stream as the "Events" console shows it (every kind: processes, changes,
-// nodes, baselines, jobs, model calls…), known processes and log lines. (The LLM calls are the gateway's ledger: `usage.svelte.ts`.) Every process
+// nodes, commits, jobs, model calls…), known processes and log lines. (The LLM calls are the gateway's ledger: `usage.svelte.ts`.) Every process
 // source (stream, GetProcess, ListProcesses) goes through `ingestProcess`.
 import { SvelteMap } from 'svelte/reactivity';
 import {
@@ -14,7 +14,7 @@ import { onKind, onPlatformEvent, onResync, startEvents, stream, toWatchEvent, t
 
 export interface EventRow {
   seq: number;
-  /** the kind of the event: `process`, `change`, `node`, `baseline`, `job`, `model`… */
+  /** the kind of the event: `process`, `change`, `node`, `commit`, `job`, `model`… */
   kind: string;
   type: string;
   /** what the event is about (a change, a node, a job…; the process of a process event) */
@@ -142,7 +142,7 @@ function describePlatform(e: PlatformEvent): string {
   switch (e.kind) {
     case 'node':
       return [e.namespace, e.version ? `v${e.version}` : '', e.branch && e.branch !== 'main' ? `on ${e.branch}` : ''].filter(Boolean).join(' ');
-    case 'baseline':
+    case 'commit':
       return e.branch;
     case 'change':
       return [e.project, e.namespace].filter(Boolean).join(' · ');

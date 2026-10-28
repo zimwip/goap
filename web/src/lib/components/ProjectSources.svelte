@@ -57,7 +57,7 @@
     try {
       const map: Record<string, string> = {};
       for (const r of rows) if (r.name) map[r.name] = r.source;
-      await applyOnMain(ns.organisation, `Sources of project ${key}`, `Map the sources of the project ${key}`, head.baselineId, [
+      await applyOnMain(ns.organisation, `Sources of project ${key}`, `Map the sources of the project ${key}`, head.commitId, [
         updateNodeItem(project, { sources: Object.keys(map).length ? map : null }),
       ]);
       notify(`Sources of ${key} updated.`, 'ok');

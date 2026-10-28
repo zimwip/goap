@@ -32,7 +32,7 @@
   // one lane per branch (the main lane on the left), an edge from each entry to the entry(-ies) it descends from: a
   // curve near the parent where a lane forks, near the child where a lane is merged back.
   //
-  // Domain-agnostic: the caller maps its own items (node versions, baselines, anything with a lineage) to
+  // Domain-agnostic: the caller maps its own items (node versions, commits, anything with a lineage) to
   // `LaneEntry<T>` and supplies a `row` snippet to render each row's content — the component only draws the graph
   // and the row's clickable shell.
   import type { Snippet } from 'svelte';

@@ -231,7 +231,7 @@ func (g *Graph) CompareOptions(ctx context.Context, id domain.ChangeID, level st
 		if err != nil {
 			return err
 		}
-		views := map[string]domain.Baseline{}
+		views := map[string]domain.Commit{}
 		for _, o := range c.Options() {
 			if !all && o.Status != domain.FlowOpen {
 				continue
@@ -313,7 +313,7 @@ func (g *Graph) CompareOptions(ctx context.Context, id domain.ChangeID, level st
 
 // ChangeGraph is the graph a call on a change reads (the nodes and the links between them): on an option (the flow
 // named, else the active option), what the option wrote over the head of the change branch (ChangeView at written);
-// otherwise the reference baseline of the change.
+// otherwise the reference commit of the change.
 func (g *Graph) ChangeGraph(ctx context.Context, id domain.ChangeID, flow string) (nodes []domain.Node, links []domain.Link, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
@@ -323,7 +323,7 @@ func (g *Graph) ChangeGraph(ctx context.Context, id domain.ChangeID, flow string
 		flow := c.ResolveFlow(flow)
 		f, ok := c.Flow(flow)
 		if !ok || f.Option == nil {
-			nodes, links, err = baselineGraphTx(ctx, tx, c.BaselineID)
+			nodes, links, err = commitGraphTx(ctx, tx, c.ForkCommit)
 			return err
 		}
 		nodes, links, err = viewGraphTx(ctx, g, tx, c, flow, false)

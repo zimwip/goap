@@ -10,15 +10,15 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// The state of a baseline is the selection of the versions committed (ADR 0143): reading it back gives what was written,
+// The state of a commit is the selection of the versions committed (ADR 0143): reading it back gives what was written,
 // with nodes added and changed.
-func TestBaselineStates(t *testing.T) { forEachRepo(t, testBaselineStates) }
+func TestCommitStates(t *testing.T) { forEachRepo(t, testCommitStates) }
 
-func testBaselineStates(t *testing.T, repo Repo) {
+func testCommitStates(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	written := []domain.Baseline{f.base}
+	written := []domain.Commit{f.base}
 	head := f.base
 	for i := range 7 {
 		edits := []NodeEdit{{Key: fmt.Sprintf("DES-%d", i), Type: "Design"}}
@@ -32,31 +32,31 @@ func testBaselineStates(t *testing.T, repo Repo) {
 		written = append(written, head)
 	}
 	for i, want := range written {
-		got := must[domain.Baseline](t)(g.Baseline(ctx, want.ID))
+		got := must[domain.Commit](t)(g.Commit(ctx, want.ID))
 		if !maps.Equal(got.Nodes, want.Nodes) {
-			t.Fatalf("baseline %d: read %v, wrote %v", i, got.Nodes, want.Nodes)
+			t.Fatalf("commit %d: read %v, wrote %v", i, got.Nodes, want.Nodes)
 		}
-		nodes, _ := must2(t)(g.BaselineGraph(ctx, want.ID))
+		nodes, _ := must2(t)(g.CommitGraph(ctx, want.ID))
 		if len(nodes) != len(want.Nodes) {
-			t.Fatalf("baseline %d: %d nodes, want %d", i, len(nodes), len(want.Nodes))
+			t.Fatalf("commit %d: %d nodes, want %d", i, len(nodes), len(want.Nodes))
 		}
 		for _, n := range nodes {
 			if !want.Contains(n.Ref()) {
-				t.Fatalf("baseline %d: %s is not in it", i, n.Ref())
+				t.Fatalf("commit %d: %s is not in it", i, n.Ref())
 			}
 		}
 	}
 }
 
-// checkCommits verifies that every committed event agrees with the baseline it names (ADR 0032): the version is in it
-// (a tombstone: the node is not), and the baseline changed it from its parent.
+// checkCommits verifies that every committed event agrees with the commit it names (ADR 0032): the version is in it
+// (a tombstone: the node is not), and the commit changed it from its parent.
 func checkCommits(t *testing.T, repo Repo) {
 	t.Helper()
 	if t.Failed() {
 		return
 	}
 	ctx := context.Background()
-	err := New(repo).repo.InTx(ctx, func(tx Tx) error { // through the guard: a baseline kept as a header only is computed
+	err := New(repo).repo.InTx(ctx, func(tx Tx) error { // through the guard: a commit kept as a header only is computed
 		cs, err := tx.Changes(ctx)
 		if err != nil {
 			return err
@@ -67,16 +67,16 @@ func checkCommits(t *testing.T, repo Repo) {
 				return err
 			}
 			for _, e := range events {
-				if e.Op != domain.ImpactCommitted || e.Baseline == "" {
+				if e.Op != domain.ImpactCommitted || e.Commit == "" {
 					continue
 				}
-				b, err := tx.Baseline(ctx, e.Baseline)
+				b, err := tx.Commit(ctx, e.Commit)
 				if err != nil {
 					return err
 				}
 				var parent map[domain.NodeID]domain.Version
 				if b.ParentID != "" {
-					p, err := tx.Baseline(ctx, b.ParentID)
+					p, err := tx.Commit(ctx, b.ParentID)
 					if err != nil {
 						return err
 					}
@@ -111,7 +111,7 @@ func testCommitWritesNoEntry(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	var written []domain.Baseline
+	var written []domain.Commit
 	head := f.base
 	for i := range 6 {
 		edits := []NodeEdit{{Key: fmt.Sprintf("DES-%d", i), Type: "Design"}}
@@ -122,9 +122,9 @@ func testCommitWritesNoEntry(t *testing.T, repo Repo) {
 		written = append(written, head)
 	}
 	for i, want := range written {
-		got := must[domain.Baseline](t)(g.Baseline(ctx, want.ID))
+		got := must[domain.Commit](t)(g.Commit(ctx, want.ID))
 		if !maps.Equal(got.Nodes, want.Nodes) {
-			t.Fatalf("baseline %d: read %v, wrote %v", i, got.Nodes, want.Nodes)
+			t.Fatalf("commit %d: read %v, wrote %v", i, got.Nodes, want.Nodes)
 		}
 		var some map[domain.NodeID]domain.Version
 		if err := g.repo.InTx(ctx, func(tx Tx) (err error) {
@@ -134,14 +134,14 @@ func testCommitWritesNoEntry(t *testing.T, repo Repo) {
 			t.Fatal(err)
 		}
 		if len(some) != 1 || some[f.req.ID] != want.Nodes[f.req.ID] {
-			t.Fatalf("baseline %d: versions %v, want %s v%d", i, some, f.req.ID, want.Nodes[f.req.ID])
+			t.Fatalf("commit %d: versions %v, want %s v%d", i, some, f.req.ID, want.Nodes[f.req.ID])
 		}
 	}
 }
 
-// checkStates verifies that what the changes did tells the state of every baseline (ADR 0056, 0140): replaying, from
-// the state of its parent, the `committed` events naming a baseline whose state is derived gives the state the graph reads
-// for it, whatever the baselines in between are stored as. A baseline that is not derived is a source and is skipped.
+// checkStates verifies that what the changes did tells the state of every commit (ADR 0056, 0140): replaying, from
+// the state of its parent, the `committed` events naming a commit whose state is derived gives the state the graph reads
+// for it, whatever the commits in between are stored as. A commit that is not derived is a source and is skipped.
 func checkStates(t *testing.T, repo Repo) {
 	t.Helper()
 	if t.Failed() {
@@ -153,7 +153,7 @@ func checkStates(t *testing.T, repo Repo) {
 		if err != nil {
 			return err
 		}
-		committed := map[domain.BaselineID][]domain.NodeRef{}
+		committed := map[domain.CommitID][]domain.NodeRef{}
 		cs, err := tx.Changes(ctx)
 		if err != nil {
 			return err
@@ -164,17 +164,17 @@ func checkStates(t *testing.T, repo Repo) {
 				return err
 			}
 			for _, e := range events {
-				if e.Op == domain.ImpactCommitted && e.Baseline != "" && e.Committed != nil {
-					committed[e.Baseline] = append(committed[e.Baseline], *e.Committed)
+				if e.Op == domain.ImpactCommitted && e.Commit != "" && e.Committed != nil {
+					committed[e.Commit] = append(committed[e.Commit], *e.Committed)
 				}
 			}
 		}
 		for _, ns := range nss {
-			bs, err := tx.Baselines(ctx, ns)
+			bs, err := tx.Commits(ctx, ns)
 			if err != nil {
 				return err
 			}
-			byID := map[domain.BaselineID]domain.Baseline{}
+			byID := map[domain.CommitID]domain.Commit{}
 			for _, b := range bs {
 				byID[b.ID] = b
 			}
@@ -184,12 +184,12 @@ func checkStates(t *testing.T, repo Repo) {
 				}
 				p, ok := byID[b.ParentID]
 				if !ok {
-					t.Errorf("baseline %s: parent %s is unknown", b.ID, b.ParentID)
+					t.Errorf("commit %s: parent %s is unknown", b.ID, b.ParentID)
 					continue
 				}
 				want := maps.Clone(p.Nodes)
 				refs := committed[b.ID]
-				if b.Kind == domain.BaselineFastForward {
+				if b.Kind == domain.CommitKindFastForward {
 					// a fast-forward commits what its change joined to the branch, the last version of each node
 					refs = nil
 					ids := maps.Clone(p.Nodes)
@@ -249,7 +249,7 @@ func checkStates(t *testing.T, repo Repo) {
 							diff += fmt.Sprintf(" %s: not read, replayed v%d;", id, v)
 						}
 					}
-					t.Errorf("baseline %s (%s, %s): replayed %d nodes, %d read:%s", b.ID, b.Name, b.Kind, len(want), len(b.Nodes), diff)
+					t.Errorf("commit %s (%s, %s): replayed %d nodes, %d read:%s", b.ID, b.Name, b.Kind, len(want), len(b.Nodes), diff)
 				}
 			}
 			if err := checkDiffs(ctx, t, tx, bs); err != nil {
@@ -272,13 +272,13 @@ func testFailedCommitLeavesNothing(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	g := f.g
 	head := f.base
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "c", Baseline: head.ID, By: "test", Edits: []NodeEdit{
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "c", Commit: head.ID, By: "test", Edits: []NodeEdit{
 		{Pre: &domain.NodeRef{ID: f.req.ID, Version: head.Nodes[f.req.ID]}, Props: map[string]any{"step": 1}},
 	}}); err != nil {
 		t.Fatal(err)
 	}
 	changes := len(must[[]domain.Change](t)(g.Changes(ctx)))
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "stale", Baseline: head.ID, By: "test", Edits: []NodeEdit{
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "stale", Commit: head.ID, By: "test", Edits: []NodeEdit{
 		{Key: "DES-3", Type: "Design"},
 		{Pre: &domain.NodeRef{ID: f.req.ID, Version: head.Nodes[f.req.ID]}, Props: map[string]any{"step": 2}},
 	}}); err == nil {
@@ -294,32 +294,32 @@ func testFailedCommitLeavesNothing(t *testing.T, repo Repo) {
 	}
 }
 
-// checkDiffs checks the differences read from the distance between two baselines (ADR 0140) against the ones of their
-// whole states and whole lineages: each baseline against its parent, the first, the middle and the last one, both ways.
-func checkDiffs(ctx context.Context, t *testing.T, tx Tx, bs []domain.Baseline) error {
+// checkDiffs checks the differences read from the distance between two commits (ADR 0140) against the ones of their
+// whole states and whole lineages: each commit against its parent, the first, the middle and the last one, both ways.
+func checkDiffs(ctx context.Context, t *testing.T, tx Tx, bs []domain.Commit) error {
 	if len(bs) == 0 {
 		return nil
 	}
-	heads, err := tx.BaselineHeaders(ctx, bs[0].Namespace)
+	heads, err := tx.CommitHeaders(ctx, bs[0].Namespace)
 	if err != nil {
 		return err
 	}
-	byID := map[domain.BaselineID]domain.Baseline{}
+	byID := map[domain.CommitID]domain.Commit{}
 	for _, b := range bs {
 		byID[b.ID] = b
 	}
 	merged := mergedInto(ctx, tx)
-	stack := func(id domain.BaselineID) []domain.ChangeID {
-		l, _ := domain.BaselineLineage(heads, id, merged, len(heads))
+	stack := func(id domain.CommitID) []domain.ChangeID {
+		l, _ := domain.CommitLineage(heads, id, merged, len(heads))
 		return domain.StackChangeIDs(nil, l)
 	}
 	for _, b := range bs {
-		for _, other := range []domain.BaselineID{b.ParentID, bs[0].ID, bs[len(bs)/2].ID, bs[len(bs)-1].ID} {
+		for _, other := range []domain.CommitID{b.ParentID, bs[0].ID, bs[len(bs)/2].ID, bs[len(bs)-1].ID} {
 			o, ok := byID[other]
 			if !ok {
 				continue
 			}
-			for _, pair := range [][2]domain.Baseline{{o, b}, {b, o}} {
+			for _, pair := range [][2]domain.Commit{{o, b}, {b, o}} {
 				from, to := pair[0], pair[1]
 				wantAdded, wantRemoved := domain.DiffStacks(stack(from.ID), stack(to.ID))
 				gap, err := lineageGap(ctx, tx, from.ID, to.ID)
@@ -329,7 +329,7 @@ func checkDiffs(ctx context.Context, t *testing.T, tx Tx, bs []domain.Baseline) 
 				if fmt.Sprint(gap.added) != fmt.Sprint(wantAdded) || fmt.Sprint(gap.removed) != fmt.Sprint(wantRemoved) {
 					t.Errorf("changes from %s (%s) to %s (%s): +%v -%v, the whole lineages give +%v -%v", from.ID, from.Kind, to.ID, to.Kind, gap.added, gap.removed, wantAdded, wantRemoved)
 				}
-				ds, err := diffBaselines(ctx, tx, from.ID, to.ID)
+				ds, err := diffCommits(ctx, tx, from.ID, to.ID)
 				if err != nil {
 					return err
 				}
@@ -360,8 +360,8 @@ func checkDiffs(ctx context.Context, t *testing.T, tx Tx, bs []domain.Baseline) 
 	return nil
 }
 
-// replayable tells whether the state of a baseline of this kind is replayed from what its change did: a commit and a
-// merge from the `committed` events naming the baseline, a fast-forward from the versions its change joined to the branch.
+// replayable tells whether the state of a commit of this kind is replayed from what its change did: a commit and a
+// merge from the `committed` events naming the commit, a fast-forward from the versions its change joined to the branch.
 func replayable(kind string) bool {
-	return kind == domain.BaselineCommit || kind == domain.BaselineMerge || kind == domain.BaselineFastForward
+	return kind == domain.CommitKindCommit || kind == domain.CommitKindMerge || kind == domain.CommitKindFastForward
 }

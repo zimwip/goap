@@ -16,23 +16,23 @@ import (
 
 // Graph is the part of the graph the hub reads.
 type Graph interface {
-	BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Baseline, error)
-	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
+	BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Commit, error)
+	CommitGraph(ctx context.Context, id domain.CommitID) ([]domain.Node, []domain.Link, error)
 	// Structures names the organisation (ADR 0054): the snapshot never names its types itself.
 	Structures(ctx context.Context) (domain.Structures, error)
 }
 
-// Baselines identifies the two namespace heads a Snapshot was built from.
-type Baselines struct {
-	Organisation domain.BaselineID
-	Platform     domain.BaselineID
+// Commits identifies the two namespace heads a Snapshot was built from.
+type Commits struct {
+	Organisation domain.CommitID
+	Platform     domain.CommitID
 }
 
-// Snapshot is the organisation and the tool layer as of one baseline of each of the organisation and
+// Snapshot is the organisation and the tool layer as of one commit of each of the organisation and
 // platform namespaces: the unit hierarchy (part_of), the MCPs and adapter definitions of the platform
 // namespace and the adapters of the organisation namespace.
 type Snapshot struct {
-	Baselines Baselines
+	Commits Commits
 	// Problems lists the nodes that could not be read (malformed adapter, adapter without unit, ...).
 	Problems []string
 
@@ -59,12 +59,12 @@ func (e Effective) Allowed() mcp.Def { return e.Restriction.Apply(e.MCP) }
 // Usable reports whether the unit can call at least one tool of the MCP.
 func (e Effective) Usable() bool { return len(e.Allowed().Tools) > 0 }
 
-// BuildSnapshot reads the objects of the combined organisation and platform baseline graphs; the units are the nodes
+// BuildSnapshot reads the objects of the combined organisation and platform commit graphs; the units are the nodes
 // of the organisation structure of st, their hierarchy its parent links (ADR 0054).
-func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Node, links []domain.Link) *Snapshot {
+func BuildSnapshot(st domain.Structures, commits Commits, nodes []domain.Node, links []domain.Link) *Snapshot {
 	nodes, links = access.InForce(nodes, links)
 	org := domain.StructureOrganisation
-	s := &Snapshot{Baselines: baselines, org: st.Hierarchy(org, nodes, links), units: map[string]bool{}, mcps: map[string]mcp.Def{}, defs: map[string]adapter.Def{}, adapters: map[string]map[string]adapter.Instance{}}
+	s := &Snapshot{Commits: commits, org: st.Hierarchy(org, nodes, links), units: map[string]bool{}, mcps: map[string]mcp.Def{}, defs: map[string]adapter.Def{}, adapters: map[string]map[string]adapter.Instance{}}
 	byID := map[domain.NodeID]domain.Node{}
 	for _, n := range nodes {
 		byID[n.ID] = n
@@ -251,14 +251,14 @@ func (d *Directory) views(ctx context.Context) (*graphsnap.View[*Snapshot], erro
 		// a unit edited keeps its sub-units: the suspect links are references too
 		d.view = &graphsnap.View[*Snapshot]{Reader: r, Namespaces: []string{st.Organisation().Namespace, domain.NamespacePlatform}, Suspects: true,
 			Build: func(s []graphsnap.State) *Snapshot {
-				return BuildSnapshot(st, Baselines{Organisation: s[0].ID, Platform: s[1].ID},
+				return BuildSnapshot(st, Commits{Organisation: s[0].ID, Platform: s[1].ID},
 					append(slices.Clip(s[0].Nodes), s[1].Nodes...), append(slices.Clip(s[0].Links), s[1].Links...))
 			}}
 	}
 	return d.view, nil
 }
 
-// Snapshot returns the current snapshot. A graph without any baseline yields an empty one.
+// Snapshot returns the current snapshot. A graph without any commit yields an empty one.
 func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
 	v, err := d.views(ctx)
 	if err != nil {

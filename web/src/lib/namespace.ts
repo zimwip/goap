@@ -1,4 +1,4 @@
-/** Mirrors domain.DefaultNamespace / domain.MainBranch (pkg/domain/domain.go): every branch/baseline
+/** Mirrors domain.DefaultNamespace / domain.MainBranch (pkg/domain/domain.go): every branch/commit
  * call needs an explicit namespace and branch now that both are namespace-scoped. */
 export const DEFAULT_NAMESPACE = 'default';
 export const MAIN_BRANCH = 'main';

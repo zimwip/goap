@@ -201,9 +201,9 @@ func AliasFromProps(props map[string]any) (a Alias, err error) {
 	return a, a.Validate()
 }
 
-// Snapshot is the gateway configuration as of one baseline.
+// Snapshot is the gateway configuration as of one commit.
 type Snapshot struct {
-	Baseline domain.BaselineID
+	Commit domain.CommitID
 	// Problems lists the nodes that could not be read or that point to nothing.
 	Problems  []string
 	Providers []Provider
@@ -215,10 +215,10 @@ type Snapshot struct {
 	Off       []Behavior
 }
 
-// BuildSnapshot reads the configuration of a baseline graph. Models of an unknown provider and aliases
+// BuildSnapshot reads the configuration of a commit graph. Models of an unknown provider and aliases
 // of an unknown model are left out and reported.
-func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, _ []domain.Link) *Snapshot {
-	s := &Snapshot{Baseline: id}
+func BuildSnapshot(id domain.CommitID, nodes []domain.Node, _ []domain.Link) *Snapshot {
+	s := &Snapshot{Commit: id}
 	for _, n := range nodes {
 		// nodes is scoped to the platform namespace by the Directory's view
 		// (Namespace: NamespacePlatform); no need to filter it again here.

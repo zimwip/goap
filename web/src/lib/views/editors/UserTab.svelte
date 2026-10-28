@@ -103,7 +103,7 @@
     movingBusy = true;
     error = '';
     try {
-      await applyOnMain(ns.organisation, `Move ${key}`, `Move ${key} to ${fOrg}`, head.baselineId, [moveNodeItem(user, linkTypes.memberOf, orgLink, refOf(target))]);
+      await applyOnMain(ns.organisation, `Move ${key}`, `Move ${key} to ${fOrg}`, head.commitId, [moveNodeItem(user, linkTypes.memberOf, orgLink, refOf(target))]);
       notify(`${key} moved to ${fOrg}.`, 'ok');
       moving = false;
     } catch (e) {
@@ -125,7 +125,7 @@
     saving = true;
     error = '';
     try {
-      await applyOnMain(ns.organisation, `User ${key}`, `Update user ${key}`, head.baselineId, [
+      await applyOnMain(ns.organisation, `User ${key}`, `Update user ${key}`, head.commitId, [
         updateNodeItem(user, { displayName: fDisplayName.trim() || null, email: fEmail.trim() || null, locale: fLocale.trim() || null }),
       ]);
       notify(`User ${key} updated.`, 'ok');

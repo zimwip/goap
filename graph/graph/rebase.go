@@ -133,8 +133,8 @@ func (g *Graph) reviewRebased(ctx context.Context, tx Tx, c domain.Change, nodes
 	return g.emit(ctx, tx, reopened...)
 }
 
-// HeaderBaselineID is the field of a change.updated log entry that records the move of a rebase (ADR 0101).
-const HeaderBaselineID = "baselineId"
+// HeaderForkCommit is the field of a change.updated log entry that records the move of a rebase (ADR 0101).
+const HeaderForkCommit = "forkCommit"
 
 // storedDraft is a stored version seen as a draft, with its outgoing links: what a three-way merge compares.
 func (g *Graph) storedDraft(ctx context.Context, tx Tx, ref domain.NodeRef) (domain.Draft, error) {

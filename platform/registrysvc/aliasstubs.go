@@ -91,7 +91,7 @@ func missingAliases(ctx context.Context, g StoreGraph, aliases []string) ([]stri
 	if err != nil {
 		return nil, err
 	}
-	nodes, _, err := g.BaselineGraph(ctx, head.ID)
+	nodes, _, err := g.CommitGraph(ctx, head.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func hasPendingStub(ctx context.Context, g StoreGraph, alias string) (bool, erro
 
 // createAliasStubs opens one platform-namespace change proposing a stub platform@LlmAlias node (name only, no
 // target) per alias a methodology needs, as pending change impacts: the administrator reviews them together. It never
-// calls Graph.Commit (which auto-accepts) nor ImpactNodeReview/Apply: the change stays open and visible in the review queue
+// calls Graph.CommitEdits (which auto-accepts) nor ImpactNodeReview/Apply: the change stays open and visible in the review queue
 // until an administrator reviews it.
 func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, methodologyName string) error {
 	head, err := g.BranchHeadHeader(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
@@ -155,7 +155,7 @@ func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, metho
 		ProjectID:  root,
 		Title:      fmt.Sprintf("Model aliases needed by %s (%s)", methodologyName, strings.Join(aliases, ", ")),
 		Intent:     fmt.Sprintf("methodology %s references the model aliases %s: each needs a target (provider/model) before this change can be accepted", methodologyName, strings.Join(aliases, ", ")),
-		BaselineID: head.ID,
+		ForkCommit: head.ID,
 		OwnBranch:  true,
 	})
 	if err != nil {

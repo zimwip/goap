@@ -16,7 +16,7 @@ func testOptions(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP", ForkCommit: f.base.ID, OwnBranch: true}))
 	pre := f.req.Ref()
 
 	a := must[domain.Flow](t)(g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "stripe", Hypothesis: "Stripe covers every market", Activate: true, By: "u"}))
@@ -98,7 +98,7 @@ func testOptions(t *testing.T, repo Repo) {
 	if n := g.versionCount(ctx, pre.ID); n != int(pre.Version) {
 		t.Fatalf("no option wrote a version: %d", n)
 	}
-	res := g.withState(t, ctx, must[domain.Baseline](t)(g.apply(ctx, c.ID, "")))
+	res := g.withState(t, ctx, must[domain.Commit](t)(g.apply(ctx, c.ID, "")))
 	head := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: pre.ID}))
 	if res.Nodes[pre.ID] != head.Version || head.Version != pre.Version+1 || head.Properties["title"] != "Use Stripe" {
 		t.Fatalf("the selected option commits as one version: %v, main %+v", res.Nodes, head)
@@ -112,7 +112,7 @@ func testOptionRefine(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP", ForkCommit: f.base.ID, OwnBranch: true}))
 
 	if _, err := g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "stripe", Intent: "bogus"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("unknown intent: %v", err)

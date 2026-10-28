@@ -6,8 +6,8 @@ import "time"
 const (
 	// SubjectNodeWritten is "goap.node.<namespace>.<type>.<id>.written".
 	SubjectNodeWritten = "goap.node.%s.%s.%s.written"
-	// SubjectBaselineAdvanced is "goap.baseline.<branch>.advanced".
-	SubjectBaselineAdvanced = "goap.baseline.%s.advanced"
+	// SubjectCommitAdvanced is "goap.commit.<branch>.advanced".
+	SubjectCommitAdvanced = "goap.commit.%s.advanced"
 	// SubjectChangeTouched is "goap.changed.<id>": the header, the impacts or the log of a change were written (a
 	// domain.ChangeEvent of type "change.updated", the header only when it was the header). Not under goap.change.>,
 	// which the trigger manager follows for the lifecycle of changes.
@@ -48,40 +48,40 @@ type NodeEvent struct {
 	Time        time.Time         `json:"time"`
 }
 
-// BaselineEvent is published when a baseline is created: the diff with its parent
-// tells which node versions became the head of the branch. Only a baseline of main
-// carries it (the index follows main); the baseline of another branch names itself.
-type BaselineEvent struct {
-	ID BaselineID `json:"id"`
-	// Namespace is the namespace of the baseline: a reader of one namespace (the policies of the organisation, ADR
+// CommitEvent is published when a commit is created: the diff with its parent
+// tells which node versions became the head of the branch. Only a commit of main
+// carries it (the index follows main); the commit of another branch names itself.
+type CommitEvent struct {
+	ID CommitID `json:"id"`
+	// Namespace is the namespace of the commit: a reader of one namespace (the policies of the organisation, ADR
 	// 0154 §9) follows its events only.
 	Namespace string             `json:"namespace,omitempty"`
 	Branch    string             `json:"branch"`
-	Parent    BaselineID         `json:"parent,omitempty"`
+	Parent    CommitID           `json:"parent,omitempty"`
 	Set       map[NodeID]Version `json:"set,omitempty"`
 	Removed   []NodeID           `json:"removed,omitempty"`
 	Time      time.Time          `json:"time"`
-	// Whole says Set and Removed are every node whose version changed since Parent (the baseline of another branch
+	// Whole says Set and Removed are every node whose version changed since Parent (the commit of another branch
 	// than main may name itself only); a graph following the heads of its branches moves what it keeps of them so.
 	Whole bool `json:"whole,omitempty"`
-	// The rest of the header of the baseline: a graph keeping the head of the branch takes it as is (Header).
-	Name        string     `json:"name,omitempty"`
-	ChangeID    ChangeID   `json:"changeId,omitempty"`
-	Kind        string     `json:"kind,omitempty"`
-	MergedFrom  BaselineID `json:"mergedFrom,omitempty"`
-	RebasedFrom BaselineID `json:"rebasedFrom,omitempty"`
-	Seq         int64      `json:"seq,omitempty"`
+	// The rest of the header of the commit: a graph keeping the head of the branch takes it as is (Header).
+	Name        string   `json:"name,omitempty"`
+	ChangeID    ChangeID `json:"changeId,omitempty"`
+	Kind        string   `json:"kind,omitempty"`
+	MergedFrom  CommitID `json:"mergedFrom,omitempty"`
+	RebasedFrom CommitID `json:"rebasedFrom,omitempty"`
+	Seq         int64    `json:"seq,omitempty"`
 }
 
-// BaselineEventOf is the event of a baseline header, with no node yet.
-func BaselineEventOf(b Baseline) BaselineEvent {
-	return BaselineEvent{ID: b.ID, Namespace: NamespaceOf(b.Namespace), Branch: BranchOf(b.Branch), Parent: b.ParentID, Time: b.CreatedAt,
+// CommitEventOf is the event of a commit header, with no node yet.
+func CommitEventOf(b Commit) CommitEvent {
+	return CommitEvent{ID: b.ID, Namespace: NamespaceOf(b.Namespace), Branch: BranchOf(b.Branch), Parent: b.ParentID, Time: b.CreatedAt,
 		Name: b.Name, ChangeID: b.ChangeID, Kind: b.Kind, MergedFrom: b.MergedFrom, RebasedFrom: b.RebasedFrom, Seq: b.Seq}
 }
 
-// Header is the header of the baseline the event tells.
-func (e BaselineEvent) Header() Baseline {
-	return Baseline{ID: e.ID, Name: e.Name, Namespace: e.Namespace, Branch: e.Branch, ParentID: e.Parent, MergedFrom: e.MergedFrom,
+// Header is the header of the commit the event tells.
+func (e CommitEvent) Header() Commit {
+	return Commit{ID: e.ID, Name: e.Name, Namespace: e.Namespace, Branch: e.Branch, ParentID: e.Parent, MergedFrom: e.MergedFrom,
 		RebasedFrom: e.RebasedFrom, ChangeID: e.ChangeID, Kind: e.Kind, Seq: e.Seq, CreatedAt: e.Time}
 }
 

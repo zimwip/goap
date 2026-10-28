@@ -44,7 +44,7 @@ var _ connectorkit.Connector = Scheduler{}
 
 var schedulerOps = []op{
 	{"start", "Start a process: {process}", schema(map[string]string{"intent": "string", "methodology": "string", "agent": "string", "goal": "string", "title": "string", "change": "string", "namespace": "string", "unit": "string", "vars": "object"}, "intent")},
-	{"attach", "Bind a process (default: the caller's own) to a change, existing (change) or new: {process}", schema(map[string]string{"process": "string", "change": "string", "title": "string", "intent": "string", "namespace": "string", "unit": "string", "baseline": "string"})},
+	{"attach", "Bind a process (default: the caller's own) to a change, existing (change) or new: {process}", schema(map[string]string{"process": "string", "change": "string", "title": "string", "intent": "string", "namespace": "string", "unit": "string", "commit": "string"})},
 	{"list", "List processes, the latest first: {processes, truncated}", schema(map[string]string{"mine": "boolean", "status": "string", "limit": "integer"})},
 	{"get", "Read a process: {process}", schema(map[string]string{"id": "string"}, "id")},
 	{"starting_points", "The steps of the methodology of a change that are possible now towards its goal, with what makes each possible and how to start it; steps that wait are only counted: {methodology, goal, reason, points, blocked, blockedCount}", schema(map[string]string{"changeId": "string", "methodology": "string"})},
@@ -83,7 +83,7 @@ func (s Scheduler) Invoke(ctx context.Context, op string, raw, _ map[string]any,
 			req.Title = intent
 		}
 		if req.ChangeId == "" {
-			if req.BaselineId, err = s.baseline(ctx, a); err != nil {
+			if req.ForkCommit, err = s.commit(ctx, a); err != nil {
 				return nil, err
 			}
 		}
@@ -101,7 +101,7 @@ func (s Scheduler) Invoke(ctx context.Context, op string, raw, _ map[string]any,
 			return nil, errors.New(`argument "process" is required outside a process`)
 		}
 		req := &enginev1.AttachChangeRequest{ProcessId: process, ChangeId: a.str("change"), Title: a.str("title"),
-			Intent: a.str("intent"), Namespace: a.str("namespace"), BaselineId: a.str("baseline"), OwnerOrg: a.unit(ctx, who)}
+			Intent: a.str("intent"), Namespace: a.str("namespace"), ForkCommit: a.str("commit"), OwnerOrg: a.unit(ctx, who)}
 		r, err := s.p.Engine.AttachChange(ctx, request(who, req))
 		if err != nil {
 			return nil, err
@@ -188,9 +188,9 @@ func (s Scheduler) startingPoints(ctx context.Context, who authz.Principal, b *e
 	return result(startingpoint.Compose(view, b))
 }
 
-// baseline is the head of main of the namespace a new process works on: the one the call names, else
+// commit is the head of main of the namespace a new process works on: the one the call names, else
 // the one of its methodology, else the one of the calling change.
-func (s Scheduler) baseline(ctx context.Context, a args) (string, error) {
+func (s Scheduler) commit(ctx context.Context, a args) (string, error) {
 	ns := a.str("namespace")
 	if m := a.str("methodology"); ns == "" && m != "" && s.p.Methodologies != nil {
 		ms, err := inForce(ctx, s.p.Methodologies)

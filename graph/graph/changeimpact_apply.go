@@ -372,11 +372,11 @@ func joinSorted(s []string) string {
 	return out
 }
 
-// commit records, once the branch of a change is merged into its parent (the baseline result), the
+// commit records, once the branch of a change is merged into its parent (the commit result), the
 // version each change impact committed as (only: the impacts of the nodes this merge moved; nil: every one): the version it wrote, joined to the parent, or the merge
 // version of mergeChange. The other open changes on the same nodes are not read: each starts from the latest version
 // of its nodes when it is rebased, at its own merge (ADR 0101, 0140).
-func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.BaselineID, only map[domain.NodeID]bool) error {
+func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.CommitID, only map[domain.NodeID]bool) error {
 	commits := func(cn domain.ChangeImpact) bool {
 		return cn.Post != nil && (cn.Review == domain.ReviewAccepted || cn.Committed != nil) && cn.Flow == "" && !cn.Superseded &&
 			(only == nil || only[cn.Post.ID])
@@ -432,7 +432,7 @@ func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.B
 				return err
 			}
 		}
-		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Baseline: result, Branch: domain.BranchOf(own.Parent)})
+		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Commit: result, Branch: domain.BranchOf(own.Parent)})
 	}
 	// one entry for the commit (ADR 0144)
 	return g.emit(ctx, tx, committed...)

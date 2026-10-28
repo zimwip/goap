@@ -22,8 +22,8 @@ import (
 //     structures in force; a version that names neither gets them from the version it follows, else from the change
 //     that writes it (the unit holding it, the project it acts in); the project of a node never changes;
 //   - every change names the unit holding it and the project it acts in, nodes of the structures in force;
-//   - every baseline is the result of a change (ADR 0056); what precedes the first change of a namespace is the empty
-//     state, the empty baseline id, which nothing stores;
+//   - every commit is the result of a change (ADR 0056); what precedes the first change of a namespace is the empty
+//     state, the empty commit id, which nothing stores;
 //   - a version is immutable once written (ADR 0079): the working state of a node in a change is a draft, the version is
 //     written when the change commits, with its outgoing links, in the same transaction; no version is ever edited,
 //     frozen or dropped, and only a version written in the transaction gets links.
@@ -112,11 +112,11 @@ type guardTx struct {
 	// commits)
 	moved map[string]bool
 	// movedBranches are the branches the transaction wrote (guardBranchKey) and their heads: the heads kept of them
-	// move once it commits (headMoved), with the baselines it wrote (wroteHeads, their order set) and the versions it
+	// move once it commits (headMoved), with the commits it wrote (wroteHeads, their order set) and the versions it
 	// moved on each branch by name (headMoves, 0: a version deleted, unknownVersion: one joined it did not read), the
 	// nodes it created by namespace and key (newKeys)
-	movedBranches map[string]domain.BaselineID
-	wroteHeads    map[domain.BaselineID]domain.Baseline
+	movedBranches map[string]domain.CommitID
+	wroteHeads    map[domain.CommitID]domain.Commit
 	headMoves     map[string]map[domain.NodeID]domain.Version
 	newKeys       map[string]domain.NodeID
 	// what the transaction wrote that names a change, a unit or a project, checked at its end
@@ -124,14 +124,14 @@ type guardTx struct {
 	owners     map[lnk.URL]string
 	projects   map[lnk.URL]string
 	changes    map[domain.ChangeID]domain.Change
-	// newBaselines are the baselines the transaction wrote (their headers are not cached before it ends)
-	newBaselines map[domain.BaselineID]bool
-	// baselineReads are the versions the transaction read of some nodes in baselines it did not write (0: not held)
-	baselineReads map[domain.BaselineID]map[domain.NodeID]domain.Version
-	// forks are the baselines the lasting branches read by the transaction were forked from, by namespace and branch
-	forks map[string]domain.BaselineID
-	// commit is, per branch, the order of the baseline the versions the transaction writes or joins there commit in
-	// (ADR 0140): taken by the first of them, given to the baseline written after them
+	// newCommits are the commits the transaction wrote (their headers are not cached before it ends)
+	newCommits map[domain.CommitID]bool
+	// commitReads are the versions the transaction read of some nodes in commits it did not write (0: not held)
+	commitReads map[domain.CommitID]map[domain.NodeID]domain.Version
+	// forks are the commits the lasting branches read by the transaction were forked from, by namespace and branch
+	forks map[string]domain.CommitID
+	// commit is, per branch, the order of the commit the versions the transaction writes or joins there commit in
+	// (ADR 0140): taken by the first of them, given to the commit written after them
 	commit map[string]int64
 	// headers caches the changes read to stamp versions
 	headers map[domain.ChangeID]domain.Change
@@ -216,14 +216,14 @@ func (t *guardTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	}
 	t.moved[domain.NamespaceOf(b.Namespace)] = true
 	if t.movedBranches == nil {
-		t.movedBranches = map[string]domain.BaselineID{}
+		t.movedBranches = map[string]domain.CommitID{}
 	}
 	t.movedBranches[guardBranchKey(b.Namespace, b.Name)] = b.Head
 	return t.Tx.PutBranch(ctx, b)
 }
 
-// BaselineHeader reads the header of a baseline, kept once written (a header never changes).
-func (t *guardTx) BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
+// CommitHeader reads the header of a commit, kept once written (a header never changes).
+func (t *guardTx) CommitHeader(ctx context.Context, id domain.CommitID) (domain.Commit, error) {
 	return t.header(ctx, id)
 }
 
@@ -643,7 +643,7 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	}
 	t.owners[n.Responsible] = what
 	t.projects[n.Project] = what
-	if n.Committed >= 0 { // a negative order commits the version in no baseline (a test fixture)
+	if n.Committed >= 0 { // a negative order commits the version in no commit (a test fixture)
 		committed, err := t.commitOn(ctx, n.Branch)
 		if err != nil {
 			return err
@@ -796,8 +796,8 @@ func (t *guardTx) PutChange(ctx context.Context, c domain.Change) error {
 }
 
 func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error {
-	// a version commits only in a baseline of the change that wrote or joined it (ADR 0140): the store refuses a change
-	// that produced a baseline, and checks the entries stored
+	// a version commits only in a commit of the change that wrote or joined it (ADR 0140): the store refuses a change
+	// that produced a commit, and checks the entries stored
 	if err := t.LockChange(ctx, id); err != nil {
 		return err
 	}
@@ -814,10 +814,10 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 }
 
 // verify checks, at the end of the transaction, that what it wrote names changes, units and projects that exist, and
-// that every version it committed is in a baseline.
+// that every version it committed is in a commit.
 func (t *guardTx) verify(ctx context.Context) error {
 	for branch := range t.commit {
-		return fmt.Errorf("versions committed on branch %s in no baseline: a version is written when its change commits (ADR 0079, 0140): %w", branch, ErrInvalid)
+		return fmt.Errorf("versions committed on branch %s in no commit: a version is written when its change commits (ADR 0079, 0140): %w", branch, ErrInvalid)
 	}
 	for id, what := range t.changeRefs {
 		if _, ok := t.changes[id]; ok {

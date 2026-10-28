@@ -122,8 +122,8 @@ type PromptData struct {
 	Goal   string
 	Action methodology.Action
 	Vars   map[string]any
-	// Baseline is the graph of the change as its view holds it, read when a template ranges over it (ADR 0157).
-	Baseline  *PromptGraph
+	// Commit is the graph of the change as its view holds it, read when a template ranges over it (ADR 0157).
+	Commit    *PromptGraph
 	Artifacts []ItemView
 	// ChangeImpacts are the nodes the change acts on (ADR 0024), as the process sees them.
 	ChangeImpacts []ChangeImpactView
@@ -165,7 +165,7 @@ type PromptGraph struct {
 	err       error
 }
 
-// Nodes are the nodes of the view (`{{ range .Baseline.Nodes }}`).
+// Nodes are the nodes of the view (`{{ range .Commit.Nodes }}`).
 func (b *PromptGraph) Nodes() ([]domain.Node, error) {
 	b.once.Do(func() {
 		var nodes []domain.Node
@@ -178,7 +178,7 @@ func (b *PromptGraph) Nodes() ([]domain.Node, error) {
 
 // filterNamespace keeps only the nodes of the given namespace: a change acts
 // on one namespace (its declared WHAT), so what it queries must be bound to
-// it too, whatever domains share the baseline.
+// it too, whatever domains share the commit.
 func filterNamespace(nodes []domain.Node, namespace string) []domain.Node {
 	if namespace == "" {
 		return nodes
@@ -207,9 +207,9 @@ func RenderPrompt(ctx context.Context, ac ActionContext) (string, error) {
 	if item, ok := ac.Blackboard.Vars["item"].(map[string]any); ok && ac.Action.IsScoped() {
 		d.Subject, d.Vars = item, actionVars(ac)
 	}
-	d.Baseline = &PromptGraph{ctx: ctx, g: ac.Graph, view: graphapi.View{Change: ac.Blackboard.Change.ID, Flow: ac.Process.Flow}, namespace: ac.Blackboard.Change.Namespace}
+	d.Commit = &PromptGraph{ctx: ctx, g: ac.Graph, view: graphapi.View{Change: ac.Blackboard.Change.ID, Flow: ac.Process.Flow}, namespace: ac.Blackboard.Change.Namespace}
 	if ac.Blackboard.Change.ID == "" {
-		d.Baseline.view = viewOf(ac.Process)
+		d.Commit.view = viewOf(ac.Process)
 	}
 	for _, it := range ac.Blackboard.Change.Items {
 		if it.Type == domain.TypeArtifact {
@@ -754,7 +754,7 @@ func DefaultBuiltins() BuiltinExecutor {
 }
 
 // Propagate follows links backwards from impacted nodes (an impact on the
-// target of a link propagates to its source) within the reference baseline,
+// target of a link propagates to its source) within the reference commit,
 // and forwards along the link types of `forward` (an impact on the source of
 // such a link propagates to its target). Params: maxDepth (default 3),
 // linkTypes (followed backwards, default all), forward (followed forwards,
@@ -860,10 +860,10 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 
 // ApplyChange commits what the change has pending, then closes it (graph.apply): merged into what it was forked from,
 // applied (ADR 0102, 0166). The change is then "applied": conditions observe it through change.status and
-// change.resultBaseline. Param baselineName defaults to the change title. Every impact must be accepted: the commit
+// change.resultCommit. Param commitName defaults to the change title. Every impact must be accepted: the commit
 // writes the versions from the drafts (ADR 0079); one still proposed keeps the change from merging.
 func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
-	name, _ := ac.Action.Params["baselineName"].(string)
+	name, _ := ac.Action.Params["commitName"].(string)
 	c := ac.Blackboard.Change
 	_, err := ac.Graph.CommitChange(ctx, c.ID, name)
 	if errors.Is(err, graphapi.ErrNothingToCommit) {
@@ -896,5 +896,5 @@ func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 		// into it, its work recorded on the parent's impacts (ADR 0103)
 		return ActionResult{Output: fmt.Sprintf("integrated into parent change %s", c.ParentID)}, nil
 	}
-	return ActionResult{Output: fmt.Sprintf("baseline %s created", merged.ResultBaselineID)}, nil
+	return ActionResult{Output: fmt.Sprintf("commit %s created", merged.LandedCommit)}, nil
 }

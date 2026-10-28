@@ -26,10 +26,10 @@ const TypeMethodologyVersion = "methodology@MethodologyVersion"
 
 // StoreGraph is what the store needs from the graph (*graph.Graph and the graph service client implement it).
 type StoreGraph interface {
-	BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Baseline, error)
-	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
-	// Commit runs a change of node edits (ADR 0024).
-	Commit(ctx context.Context, in graphapi.Commit) (graphapi.CommitResult, error)
+	BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Commit, error)
+	CommitGraph(ctx context.Context, id domain.CommitID) ([]domain.Node, []domain.Link, error)
+	// CommitEdits runs a change of node edits (ADR 0024).
+	CommitEdits(ctx context.Context, in graphapi.Edits) (graphapi.CommitResult, error)
 	// CreateChange and ImpactNodeCreate let a producer open a change on a namespace of its own and propose a pending (not
 	// auto-accepted) created node in it (used for alias stubs, see aliasstubs.go); Changes lists every change, for
 	// the pending-stub dedup check.
@@ -97,7 +97,7 @@ func (s *GraphStore) ShareReader(r *graphsnap.Reader) *GraphStore {
 }
 
 // Follow makes the store keep the methodologies it read, compiled ones included, until a commit of them moves the head
-// of their namespace (ADR 0168): Moved, called on the graph's baseline events (FollowEvents) and after the store's own
+// of their namespace (ADR 0168): Moved, called on the graph's commit events (FollowEvents) and after the store's own
 // commits. A graph asking the registry about a change while it holds the transaction of that change (the guardian of
 // a commit) is then answered without being read again.
 func (s *GraphStore) Follow() *GraphStore {
@@ -106,19 +106,19 @@ func (s *GraphStore) Follow() *GraphStore {
 	return s
 }
 
-// FollowEvents follows the graph's baseline events on bus (Follow).
+// FollowEvents follows the graph's commit events on bus (Follow).
 func (s *GraphStore) FollowEvents(bus access.Subscriber) error {
 	s.Follow()
-	return bus.Subscribe(fmt.Sprintf(domain.SubjectBaselineAdvanced, domain.MainBranch), s.Moved)
+	return bus.Subscribe(fmt.Sprintf(domain.SubjectCommitAdvanced, domain.MainBranch), s.Moved)
 }
 
-// Moved takes a baseline event of the graph (a domain.BaselineEvent): a commit on the main branch of the namespace of
+// Moved takes a commit event of the graph (a domain.CommitEvent): a commit on the main branch of the namespace of
 // the methodologies makes the store read them again at its next use. Other events are left alone.
 func (s *GraphStore) Moved(data []byte) {
 	if s.follow == nil {
 		return
 	}
-	var ev domain.BaselineEvent
+	var ev domain.CommitEvent
 	if json.Unmarshal(data, &ev) != nil || (ev.Branch == domain.MainBranch && (ev.Namespace == "" || ev.Namespace == NamespaceMethodology)) {
 		s.follow.Moved()
 	}
@@ -130,16 +130,16 @@ func (s *GraphStore) moved() {
 	}
 }
 
-// withSuspects reads a baseline with its suspect links too: a link to an element is a link to the version the element
+// withSuspects reads a commit with its suspect links too: a link to an element is a link to the version the element
 // had when the reference was written (ADR 0003), and editing the element (a new version of its node) leaves the
 // references to it in place, suspect. They are references all the same (ADR 0120).
 type withSuspects struct{ StoreGraph }
 
-func (w withSuspects) BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
-	return graphsnap.BaselineWithSuspects(ctx, w.StoreGraph, id)
+func (w withSuspects) CommitGraph(ctx context.Context, id domain.CommitID) ([]domain.Node, []domain.Link, error) {
+	return graphsnap.CommitWithSuspects(ctx, w.StoreGraph, id)
 }
 
-// defs is the versions of a baseline, decoded once per head of main.
+// defs is the versions of a commit, decoded once per head of main.
 type defs struct {
 	methodologies map[string]stored[Record]
 	problems      []string
@@ -175,7 +175,7 @@ func kindOfType(t string) string {
 	return ""
 }
 
-func buildDefs(_ domain.BaselineID, nodes []domain.Node, links []domain.Link) *defs {
+func buildDefs(_ domain.CommitID, nodes []domain.Node, links []domain.Link) *defs {
 	d := &defs{methodologies: map[string]stored[Record]{}, parentOf: parentsOf(nodes, links)}
 	type owner struct{ ns, key string }
 	children := map[owner]map[string]domain.Node{} // header -> element nodes
@@ -478,7 +478,7 @@ func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*d
 		if rerr != nil {
 			return rerr
 		}
-		_, err = s.Graph.Commit(ctx, graphapi.Commit{Namespace: ns, Title: title, Intent: title, Baseline: head.ID, By: "registrysvc", BaselineName: title, Edits: edits, ProjectID: root, Events: events})
+		_, err = s.Graph.CommitEdits(ctx, graphapi.Edits{Namespace: ns, Title: title, Intent: title, Commit: head.ID, By: "registrysvc", CommitName: title, Edits: edits, ProjectID: root, Events: events})
 		s.moved() // its own commit: read again, whatever the event says later
 		if errors.Is(err, graphapi.ErrConflict) && attempt < 3 {
 			continue // main moved: read again and rebuild

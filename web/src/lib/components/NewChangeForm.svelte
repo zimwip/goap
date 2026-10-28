@@ -1,11 +1,11 @@
 <script lang="ts">
   import { stamp, keyOf } from '../flux/signals.svelte';
   // Creating a change by hand (ADR 0024): what it is for (title, intent), how it is performed (its methodology, one of
-  // those of the project, ADR 0096), what it acts on (namespace, the branch it commits on, the baseline it starts from)
+  // those of the project, ADR 0096), what it acts on (namespace, the branch it commits on, the commit it starts from)
   // and how it is held (its own branch, a parent change). The methodology gives the namespace and the goal the change
-  // starts with; a sub-change keeps its parent's. A namespace no change committed in has no baseline: its first change
+  // starts with; a sub-change keeps its parent's. A namespace no change committed in has no commit: its first change
   // starts from the empty state (ADR 0056).
-  import { graph, errorMessage, shortId, type Baseline, type Branch } from '../api';
+  import { graph, errorMessage, shortId, type Commit, type Branch } from '../api';
   import { changes, refreshChanges, loadMethodology, published } from '../stores/catalog.svelte';
   import { headGraph } from '../graphEdit';
   import { applicableMethodologies } from '../projectRoles';
@@ -23,7 +23,7 @@
   let intent = $state('');
   let namespace = $state('');
   let branch = $state('main');
-  let baselineId = $state('');
+  let commitId = $state('');
   let ownBranch = $state(true);
   let parentId = $state('');
   // a change is created in a project (ADR 0091): the active one unless another is picked (none selected: the person picks
@@ -34,7 +34,7 @@
   let applicableNames = $state<string[] | undefined>(undefined);
   let namespaces = $state<string[]>([]);
   let branches = $state<Branch[]>([]);
-  let baselines = $state<Baseline[]>([]);
+  let commits = $state<Commit[]>([]);
   let busy = $state(false);
   let error = $state('');
 
@@ -82,8 +82,8 @@
   async function loadNamespace(ns: string) {
     if (!ns) return;
     try {
-      const [bs, br] = await Promise.all([graph.listBaselines(ns), graph.listBranches(ns)]);
-      baselines = (bs.baselines ?? []).slice().reverse();
+      const [bs, br] = await Promise.all([graph.listCommits(ns), graph.listBranches(ns)]);
+      commits = (bs.commits ?? []).slice().reverse();
       branches = (br.branches ?? []).filter((b) => b.status === 'open' && !b.name?.startsWith('change-') && !b.name?.startsWith('flow-'));
       if (!branches.some((b) => b.name === 'main')) branches = [{ name: 'main', namespace: ns, status: 'open' }, ...branches];
       await pickBranch(branch && branches.some((b) => b.name === branch) ? branch : 'main');
@@ -94,16 +94,16 @@
   }
   $effect(() => {
     void loadNamespace(namespace);
-    void stamp(keyOf.baselines); // a baseline created meanwhile is a base for the change
+    void stamp(keyOf.commits); // a commit created meanwhile is a base for the change
   });
 
-  /** the change starts from the head of the branch it commits on, unless another baseline is picked */
+  /** the change starts from the head of the branch it commits on, unless another commit is picked */
   async function pickBranch(name: string) {
     branch = name;
     try {
-      baselineId = (await graph.getBranch(namespace, name)).head?.id ?? baselines[0]?.id ?? '';
+      commitId = (await graph.getBranch(namespace, name)).head?.id ?? commits[0]?.id ?? '';
     } catch {
-      baselineId = baselines[0]?.id ?? '';
+      commitId = commits[0]?.id ?? '';
     }
   }
 
@@ -122,7 +122,7 @@
           intent: intent.trim() || title.trim(),
           namespace,
           methodology: parentId ? undefined : methodology,
-          baselineId: parentId ? undefined : baselineId || undefined,
+          forkCommit: parentId ? undefined : commitId || undefined,
           branch: parentId ? undefined : branch,
           ownBranch: parentId ? undefined : ownBranch,
           parentId: parentId || undefined,
@@ -259,13 +259,13 @@
       {#each branches as b (b.name)}<option value={b.name}>{b.name}</option>{/each}
     </select>
     <label for="nc-base">Starts from</label>
-    {#if baselines.length}
-      <select id="nc-base" bind:value={baselineId}>
-        {#each baselines as b (b.id)}<option value={b.id}>{b.name || shortId(b.id)} ({b.branch || 'main'})</option>{/each}
+    {#if commits.length}
+      <select id="nc-base" bind:value={commitId}>
+        {#each commits as b (b.id)}<option value={b.id}>{b.name || shortId(b.id)} ({b.branch || 'main'})</option>{/each}
       </select>
     {:else}
       <div class="start">
-        <span class="hint">{namespace} has no baseline yet: the change starts from the empty state.</span>
+        <span class="hint">{namespace} has no commit yet: the change starts from the empty state.</span>
       </div>
     {/if}
     <label class="check"><input type="checkbox" bind:checked={ownBranch} /> own branch (options, sub-changes, merge when applied)</label>

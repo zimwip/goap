@@ -99,7 +99,7 @@ actions:
   - name: deliver_release
     kind: builtin
     builtin: graph.apply
-    description: Commit the release (new baseline, tagged with its name)
+    description: Commit the release (new commit, tagged with its name)
     pre: {integrated: true}
     effects: {delivered: true}
     cost: 1

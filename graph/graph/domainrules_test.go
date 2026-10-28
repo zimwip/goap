@@ -18,7 +18,7 @@ func testWithdrawImpact(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "rework", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "rework", ForkCommit: f.base.ID}))
 
 	// a rejected checkout keeps its draft: edited, it is proposed again (ADR 0102)
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "v2"}))
@@ -71,7 +71,7 @@ func testWithdrawImpacts(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "bulk", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "bulk", ForkCommit: f.base.ID}))
 	req := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "v2"}))
 	test := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.test.ID, Rationale: "v2"}))
 	created := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-NEW", Type: "Requirement", Rationale: "new"}))
@@ -109,8 +109,8 @@ func testRequiredLinksAtAccept(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	root := must[domain.Node](t)(g.NodeByKey(ctx, "organisation", rootOrg(g)))
-	head := must[domain.Baseline](t)(g.BranchHead(ctx, "organisation", domain.MainBranch))
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: "organisation", Title: "unit", BaselineID: head.ID}))
+	head := must[domain.Commit](t)(g.BranchHead(ctx, "organisation", domain.MainBranch))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: "organisation", Title: "unit", ForkCommit: head.ID}))
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "ORG-X", Type: NodeTypeOrgUnit, Properties: map[string]any{"name": "X"}, Rationale: "new unit"}))
 	if _, err := g.ImpactNodeReview(ctx, c.ID, cn.ID, domain.ReviewAccepted, "bob", "ok"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a unit without a parent is not accepted: %v", err)
@@ -150,8 +150,8 @@ linkTypes:
 	}
 	g := New(NewMemory())
 	g.Types = func() TypeCatalog { return cat }
-	head := must[domain.Baseline](t)(g.BranchHead(ctx, "docs", domain.MainBranch))
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: "docs", Title: "t", BaselineID: head.ID}))
+	head := must[domain.Commit](t)(g.BranchHead(ctx, "docs", domain.MainBranch))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: "docs", Title: "t", ForkCommit: head.ID}))
 	req := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "R1", Type: "docs@Req", Rationale: "r"}))
 	tst := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "T1", Type: "docs@Test", Rationale: "t"}))
 	if _, err := g.ImpactLinkCreate(ctx, c.ID, tst.ID, LinkWrite{Type: "docs@verifies", To: *req.Post, Properties: map[string]any{"strength": "huge"}}, "", ""); !errors.Is(err, ErrInvalid) {
@@ -174,8 +174,8 @@ func testRetireAndRestoreByCommit(t *testing.T, repo Repo) {
 	g.Types = builtinTypes
 	commit := func(edits ...NodeEdit) {
 		t.Helper()
-		head := must[domain.Baseline](t)(g.BranchHead(ctx, "organisation", domain.MainBranch))
-		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: "organisation", Title: "policy", Baseline: head.ID, By: "t", Edits: edits}); err != nil {
+		head := must[domain.Commit](t)(g.BranchHead(ctx, "organisation", domain.MainBranch))
+		if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: "organisation", Title: "policy", Commit: head.ID, By: "t", Edits: edits}); err != nil {
 			t.Fatal(err)
 		}
 	}

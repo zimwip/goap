@@ -11,8 +11,8 @@ import (
 	"github.com/zimwip/goap/lib/platform"
 )
 
-// A branch view reads a baseline (ADR 0157): its head when it names none, the one it names else; the node, its
-// neighbourhood and the pages are the baseline's (BaselineGraph), whatever moved since.
+// A branch view reads a commit (ADR 0157): its head when it names none, the one it names else; the node, its
+// neighbourhood and the pages are the commit's (CommitGraph), whatever moved since.
 func TestBranchView(t *testing.T) { forEachRepo(t, testBranchView) }
 
 func testBranchView(t *testing.T, repo Repo) {
@@ -21,23 +21,23 @@ func testBranchView(t *testing.T, repo Repo) {
 	g := f.g
 	before := f.base.ID
 	// main moves on: REQ-1 gets a new version
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", BaselineID: before, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", ForkCommit: before, OwnBranch: true}))
 	mod := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "PSP v2"}))
 	must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, mod.ID, edit{Properties: map[string]any{"title": "Use PSP v2"}}))
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, mod.ID, "u", "ok"))
-	after := must[domain.Baseline](t)(g.apply(ctx, c.ID, ""))
+	after := must[domain.Commit](t)(g.apply(ctx, c.ID, ""))
 
 	for _, tc := range []struct {
 		name  string
 		view  View
-		base  domain.BaselineID
+		base  domain.CommitID
 		title string
 	}{
 		{"head", View{Namespace: f.req.Namespace, Branch: domain.MainBranch}, after.ID, "Use PSP v2"},
-		{"pinned", View{Namespace: f.req.Namespace, Branch: domain.MainBranch, Baseline: before}, before, "Use PSP v1"},
+		{"pinned", View{Namespace: f.req.Namespace, Branch: domain.MainBranch, Commit: before}, before, "Use PSP v1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			nodes, links, err := g.BaselineGraph(ctx, tc.base)
+			nodes, links, err := g.CommitGraph(ctx, tc.base)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -58,7 +58,7 @@ func testBranchView(t *testing.T, repo Repo) {
 					}
 				}
 				if len(nb.Links) < held {
-					t.Fatalf("%s: %d links, the baseline holds %d", n.Key, len(nb.Links), held)
+					t.Fatalf("%s: %d links, the commit holds %d", n.Key, len(nb.Links), held)
 				}
 			}
 			checkViewPages(t, g, tc.view, nodes)
@@ -73,17 +73,17 @@ func testBranchView(t *testing.T, repo Repo) {
 	// what a view holds of some nodes (the index keeps the hits a view holds)
 	ids := []domain.NodeID{f.req.ID, f.need.ID}
 	st := must[ViewState](t)(g.ViewVersions(ctx, View{Namespace: f.req.Namespace, Branch: domain.MainBranch}, ids))
-	if !st.MainHead || st.Baseline != after.ID || st.Versions[f.req.ID] != f.req.Version+1 || st.Versions[f.need.ID] != f.need.Version {
+	if !st.MainHead || st.Commit != after.ID || st.Versions[f.req.ID] != f.req.Version+1 || st.Versions[f.need.ID] != f.need.Version {
 		t.Fatalf("head of main: %+v", st)
 	}
-	st = must[ViewState](t)(g.ViewVersions(ctx, View{Namespace: f.req.Namespace, Branch: domain.MainBranch, Baseline: before}, ids))
+	st = must[ViewState](t)(g.ViewVersions(ctx, View{Namespace: f.req.Namespace, Branch: domain.MainBranch, Commit: before}, ids))
 	if st.MainHead || st.Versions[f.req.ID] != f.req.Version {
-		t.Fatalf("an older baseline: %+v", st)
+		t.Fatalf("an older commit: %+v", st)
 	}
-	d := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "next", BaselineID: after.ID}))
+	d := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "next", ForkCommit: after.ID}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, d.ID, NodeCheckout{Node: f.need.ID, Rationale: "draft"}))
 	st = must[ViewState](t)(g.ViewVersions(ctx, View{Change: d.ID}, ids))
-	if st.MainHead || st.Versions[f.need.ID] != 0 || st.Versions[f.req.ID] != f.req.Version+1 || st.Baseline != after.ID {
+	if st.MainHead || st.Versions[f.need.ID] != 0 || st.Versions[f.req.ID] != f.req.Version+1 || st.Commit != after.ID {
 		t.Fatalf("a change: %+v", st)
 	}
 	if ds := must[[]domain.Node](t)(g.ViewDrafts(ctx, View{Change: d.ID}, "PAY", 10)); len(ds) != 1 || ds[0].Key != "NEED-1" || ds[0].Version != 0 {
@@ -92,8 +92,8 @@ func testBranchView(t *testing.T, repo Repo) {
 	if ds := must[[]domain.Node](t)(g.ViewDrafts(ctx, View{Change: d.ID}, "nothing", 10)); len(ds) != 0 {
 		t.Fatalf("no draft matches: %+v", ds)
 	}
-	// a branch is never assumed, and a baseline is read on its own branch only
-	for _, v := range []View{{Baseline: before}, {Namespace: f.req.Namespace}, {Namespace: f.req.Namespace, Branch: "other", Baseline: before}} {
+	// a branch is never assumed, and a commit is read on its own branch only
+	for _, v := range []View{{Commit: before}, {Namespace: f.req.Namespace}, {Namespace: f.req.Namespace, Branch: "other", Commit: before}} {
 		if _, err := g.ViewNode(ctx, v, f.req.ID, ""); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("%s: %v", v, err)
 		}
@@ -104,7 +104,7 @@ func testBranchView(t *testing.T, repo Repo) {
 }
 
 // BenchmarkViewReads measures the reads of ADR 0157 on SQLite over a tree of 8421 nodes, in a branch view and in the
-// view of a change holding 20 drafts, against the whole reads they replace (BaselineGraph, ChangeGraph).
+// view of a change holding 20 drafts, against the whole reads they replace (CommitGraph, ChangeGraph).
 func BenchmarkViewReads(b *testing.B) {
 	ctx := context.Background()
 	db, err := platform.OpenSQLite(ctx, filepath.Join(b.TempDir(), "goap.db"))
@@ -121,7 +121,7 @@ func BenchmarkViewReads(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "bench", BaselineID: head.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "bench", ForkCommit: head.ID, OwnBranch: true})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -182,9 +182,9 @@ func BenchmarkViewReads(b *testing.B) {
 		})
 	}
 	g.ReachOf = nil
-	b.Run("branch/BaselineGraph", func(b *testing.B) {
+	b.Run("branch/CommitGraph", func(b *testing.B) {
 		for b.Loop() {
-			if _, _, err := g.BaselineGraph(ctx, head.ID); err != nil {
+			if _, _, err := g.CommitGraph(ctx, head.ID); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -207,7 +207,7 @@ func testViewEnteringBySource(t *testing.T, repo Repo) {
 	g := New(repo)
 	commit := func(e ...NodeEdit) {
 		t.Helper()
-		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "edit", By: "t", Edits: e}); err != nil {
+		if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "edit", By: "t", Edits: e}); err != nil {
 			t.Fatal(err)
 		}
 	}

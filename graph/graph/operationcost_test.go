@@ -57,7 +57,7 @@ func TestOperationCost(t *testing.T) {
 			keys = append(keys, k)
 			e = append(e, NodeEdit{Key: k, Type: "Need", Props: map[string]any{"title": k}})
 		}
-		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "seed", By: "bench", Edits: e}); err != nil {
+		if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "seed", By: "bench", Edits: e}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -75,7 +75,7 @@ func TestOperationCost(t *testing.T) {
 				ref := node.Ref()
 				e = append(e, NodeEdit{Pre: &ref, Props: map[string]any{"title": fmt.Sprintf("%s v%d", k, v+2)}})
 			}
-			if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "versions", By: "bench", Edits: e}); err != nil {
+			if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "versions", By: "bench", Edits: e}); err != nil {
 				t.Fatal(err)
 			}
 		}

@@ -20,7 +20,7 @@ import (
 )
 
 // Graph is the goap-graph connector: reads of the versioned graph in a view (ADR 0157): the change the call names or
-// the calling process works on when it acts on the namespace, else a lasting branch at a baseline (default: the head of
+// the calling process works on when it acts on the namespace, else a lasting branch at a commit (default: the head of
 // main). It reads node by node and page by page, never a namespace whole. Nodes of a type the caller may not read are
 // left out.
 type Graph struct{ p Ports }
@@ -28,7 +28,7 @@ type Graph struct{ p Ports }
 var _ connectorkit.Connector = Graph{}
 
 // viewArgs are the arguments naming the view of a read.
-var viewArgs = map[string]string{"baseline": "string", "branch": "string", "change": "string", "flow": "string"}
+var viewArgs = map[string]string{"commit": "string", "branch": "string", "change": "string", "flow": "string"}
 
 func withView(props map[string]string) map[string]string {
 	out := maps.Clone(props)
@@ -41,7 +41,7 @@ var graphOps = []op{
 	{"glob", "List the nodes whose key matches a glob: {view, nodes, truncated}", schema(withView(map[string]string{"namespace": "string", "pattern": "string", "type": "string", "limit": "integer"}), "namespace")},
 	{"grep", "Search the nodes whose properties match a regular expression: {view, nodes, truncated}", schema(withView(map[string]string{"namespace": "string", "pattern": "string", "type": "string", "property": "string", "ignoreCase": "boolean", "limit": "integer"}), "namespace", "pattern")},
 	{"links", "List the links of a node: {view, links}", schema(withView(map[string]string{"namespace": "string", "key": "string", "direction": "string", "type": "string"}), "namespace", "key")},
-	{"baselines", "List the baselines of a namespace: {head, baselines}", schema(map[string]string{"namespace": "string", "limit": "integer"}, "namespace")},
+	{"commits", "List the commits of a namespace: {head, commits}", schema(map[string]string{"namespace": "string", "limit": "integer"}, "namespace")},
 	{"tags", "List the tags of a node, or the versions a tag name labels: {tags}", schema(withView(map[string]string{"namespace": "string", "key": "string", "name": "string"}), "namespace")},
 }
 
@@ -83,7 +83,7 @@ func (r *readable) ok(ns, typ string) bool {
 }
 
 // reader opens the view the call names: the change named, else the calling process's, when it acts on the namespace;
-// else the branch named (default main) at the baseline named (default its head).
+// else the branch named (default main) at the commit named (default its head).
 func (c Graph) reader(ctx context.Context, a args) (*reader, error) {
 	who, err := caller(ctx)
 	if err != nil {
@@ -93,9 +93,9 @@ func (c Graph) reader(ctx context.Context, a args) (*reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := graphapi.View{Namespace: ns, Branch: cmp.Or(a.str("branch"), domain.MainBranch), Baseline: domain.BaselineID(a.str("baseline"))}
+	v := graphapi.View{Namespace: ns, Branch: cmp.Or(a.str("branch"), domain.MainBranch), Commit: domain.CommitID(a.str("commit"))}
 	id, named, flow := a.str("change"), a.str("change") != "", a.str("flow")
-	if call := mcp.CallFrom(ctx); !named && a.str("branch") == "" && a.str("baseline") == "" {
+	if call := mcp.CallFrom(ctx); !named && a.str("branch") == "" && a.str("commit") == "" {
 		id, flow = call.Change, cmp.Or(flow, call.Flow)
 	}
 	if id != "" {
@@ -222,8 +222,8 @@ func globText(pattern string) string {
 // Invoke implements connectorkit.Connector.
 func (c Graph) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ map[string]string) (map[string]any, error) {
 	a := args(raw)
-	if op == "baselines" {
-		return c.baselines(ctx, a)
+	if op == "commits" {
+		return c.commits(ctx, a)
 	}
 	r, err := c.reader(ctx, a)
 	if err != nil {
@@ -345,7 +345,7 @@ func (c Graph) tags(r *reader, a args) (map[string]any, error) {
 	return result(map[string]any{"tags": list})
 }
 
-func (c Graph) baselines(ctx context.Context, a args) (map[string]any, error) {
+func (c Graph) commits(ctx context.Context, a args) (map[string]any, error) {
 	if _, err := caller(ctx); err != nil {
 		return nil, err
 	}
@@ -353,7 +353,7 @@ func (c Graph) baselines(ctx context.Context, a args) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	bs, err := c.p.Graph.Baselines(ctx, ns)
+	bs, err := c.p.Graph.Commits(ctx, ns)
 	if err != nil {
 		return nil, err
 	}
@@ -369,6 +369,6 @@ func (c Graph) baselines(ctx context.Context, a args) (map[string]any, error) {
 		}
 		list = append(list, map[string]any{"id": b.ID, "name": b.Name, "createdAt": b.CreatedAt})
 	}
-	out["baselines"] = list
+	out["commits"] = list
 	return result(out)
 }

@@ -9,21 +9,21 @@ import (
 )
 
 // View levels of a change (ADR 0032): the same change impacts, filtered one step of their life earlier or later.
-// A branch that is not validated yet (an option, a flow) is seen at written or accepted; only committed is a baseline.
+// A branch that is not validated yet (an option, a flow) is seen at written or accepted; only committed is a commit.
 const (
 	// ViewWritten: every version written and not rejected, proposed or accepted: what the change would look like.
 	ViewWritten = "written"
 	// ViewAccepted: the accepted versions only: what the change would commit if it were applied now.
 	ViewAccepted = "accepted"
-	// ViewCommitted: what the change committed: its result baseline once applied, its starting point before.
+	// ViewCommitted: what the change committed: its result commit once applied, its starting point before.
 	ViewCommitted = "committed"
 )
 
 // ChangeView returns the graph a change sees at a level, on one of its flows ("" = the main flow): the head of the
 // branch the change works on, with the posts of the change impacts the level counts laid over it: the version a
-// committed change wrote, or Version 0 for a node the change holds a draft of (ADR 0079; read it with ChangeNodeView). Nothing is stored: the result is a baseline without an id, computed from the change
-// impact projection (ADR 0029). At committed it is a stored baseline: the result of the change, or its start.
-func (g *Graph) ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (b domain.Baseline, err error) {
+// committed change wrote, or Version 0 for a node the change holds a draft of (ADR 0079; read it with ChangeNodeView). Nothing is stored: the result is a commit without an id, computed from the change
+// impact projection (ADR 0029). At committed it is a stored commit: the result of the change, or its start.
+func (g *Graph) ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (b domain.Commit, err error) {
 	switch level {
 	case ViewWritten, ViewAccepted, ViewCommitted:
 	case "":
@@ -48,27 +48,27 @@ func (g *Graph) ChangeView(ctx context.Context, id domain.ChangeID, flow, level 
 	return b, err
 }
 
-func changeViewTx(ctx context.Context, g *Graph, tx Tx, c domain.Change, flow, level string) (domain.Baseline, error) {
-	from := c.BaselineID
+func changeViewTx(ctx context.Context, g *Graph, tx Tx, c domain.Change, flow, level string) (domain.Commit, error) {
+	from := c.ForkCommit
 	if level == ViewCommitted {
-		if c.Status == domain.ChangeApplied && c.ResultBaselineID != "" {
-			from = c.ResultBaselineID
+		if c.Status == domain.ChangeApplied && c.LandedCommit != "" {
+			from = c.LandedCommit
 		}
-		return tx.Baseline(ctx, from)
+		return tx.Commit(ctx, from)
 	}
-	var base domain.Baseline
+	var base domain.Commit
 	if b, own, err := ownBranch(ctx, tx, c); err != nil {
-		return domain.Baseline{}, err
+		return domain.Commit{}, err
 	} else if own {
-		// the state of the change branch (what it and its merged sub-changes committed, ADR 0103), which no baseline
+		// the state of the change branch (what it and its merged sub-changes committed, ADR 0103), which no commit
 		// holds (ADR 0140): the header of its fork with that state
-		if base, err = headerOf(ctx, tx, b.ForkBaseline); err != nil {
+		if base, err = headerOf(ctx, tx, b.ForkCommit); err != nil {
 			return base, err
 		}
 		if base.Nodes, err = branchVersions(ctx, tx, b, nil); err != nil {
 			return base, err
 		}
-	} else if base, err = tx.Baseline(ctx, from); err != nil {
+	} else if base, err = tx.Commit(ctx, from); err != nil {
 		return base, err
 	}
 	nodes := maps.Clone(base.Nodes)
@@ -95,6 +95,6 @@ func changeViewTx(ctx context.Context, g *Graph, tx Tx, c domain.Change, flow, l
 			nodes[n.ID] = n.Version
 		}
 	}
-	return domain.Baseline{Name: fmt.Sprintf("%s (%s)", c.Title, level), Namespace: base.Namespace, Branch: c.Branch, ParentID: base.ID,
+	return domain.Commit{Name: fmt.Sprintf("%s (%s)", c.Title, level), Namespace: base.Namespace, Branch: c.Branch, ParentID: base.ID,
 		ChangeID: c.ID, Nodes: nodes, CreatedAt: base.CreatedAt}, nil
 }

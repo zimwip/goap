@@ -212,7 +212,7 @@ message HumanTask {
 
 // The conflicts a rebase left on a change before it commits (ADR 0101).
 message RebaseTask {
-  // the branch the change was rebased onto (a sub-change: its parent change), and the head baseline or parent id
+  // the branch the change was rebased onto (a sub-change: its parent change), and the head commit or parent id
   string branch = 1;
   string onto = 2;
   repeated RebaseConflict impacts = 3;
@@ -373,7 +373,7 @@ message Process {
   string parent_id = 21;
   // totals over the steps
   Usage usage = 22;
-  string baseline_id = 23;
+  string fork_commit = 23;
   string title = 24;
   // OpenTelemetry trace of the process (root span "process")
   string trace_id = 25;
@@ -399,10 +399,10 @@ message StartProcessRequest {
   // empty: the intent loop identifies the methodology and agent among every
   // published methodology
   string methodology = 1;
-  // continue an existing change, or open one on baseline_id (empty: the latest baseline of the namespace of the
+  // continue an existing change, or open one on fork_commit (empty: the latest commit of the namespace of the
   // identified methodology)
   string change_id = 2;
-  string baseline_id = 3;
+  string fork_commit = 3;
   string title = 4;
   string intent = 5;
   // skip the intent loop
@@ -563,7 +563,7 @@ message AttachChangeRequest {
   string intent = 4;
   string namespace = 5;
   string owner_org = 6;
-  string baseline_id = 7;
+  string fork_commit = 7;
   // key of the ProjectUnit the new change belongs to (empty: the caller's active project, from its
   // token, else the root project, ADR 0039)
   string project_id = 8;

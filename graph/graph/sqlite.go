@@ -246,7 +246,7 @@ func (t *sqliteTx) joinBranches(ctx context.Context, id domain.NodeID, vs []doma
 func sqliteScanBranch(row scanner) (domain.Branch, error) {
 	var b domain.Branch
 	var created string
-	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &created, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral, &b.ForkSeq)
+	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkCommit), (*string)(&b.Head), &b.Origin, &b.Status, &created, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral, &b.ForkSeq)
 	b.CreatedAt = tsParse(created)
 	return b, err
 }
@@ -292,10 +292,10 @@ func (t *sqliteTx) Branches(ctx context.Context, namespace string) ([]domain.Bra
 
 func (t *sqliteTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from, ephemeral, fork_seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, head_baseline = excluded.head_baseline, description = excluded.description,
-			fork_baseline = excluded.fork_baseline, rebased_from = excluded.rebased_from, parent = excluded.parent, fork_seq = excluded.fork_seq`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral, b.ForkSeq)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_commit, head_commit, origin, status, created_at, description, intent, rebased_from, ephemeral, fork_seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, head_commit = excluded.head_commit, description = excluded.description,
+			fork_commit = excluded.fork_commit, rebased_from = excluded.rebased_from, parent = excluded.parent, fork_seq = excluded.fork_seq`,
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkCommit)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral, b.ForkSeq)
 	return sqliteErr(err, "branch "+b.Name)
 }
 
@@ -338,8 +338,8 @@ func (t *sqliteTx) NodeByKey(ctx context.Context, namespace, key string) (domain
 	return t.LatestOn(ctx, domain.NodeID(id), domain.MainBranch)
 }
 
-func (t *sqliteTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error) {
-	return storedNodesIn(ctx, t, baseline, nodeType)
+func (t *sqliteTx) NodesIn(ctx context.Context, commit domain.CommitID, nodeType string) ([]domain.Node, error) {
+	return storedNodesIn(ctx, t, commit, nodeType)
 }
 
 func (t *sqliteTx) NodesAt(ctx context.Context, refs []domain.NodeRef, nodeType string) ([]domain.Node, error) {
@@ -456,8 +456,8 @@ func (t *sqliteTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Li
 	return t.queryLinks(ctx, q, args...)
 }
 
-func (t *sqliteTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
-	b, err := t.BaselineHeader(ctx, id)
+func (t *sqliteTx) Commit(ctx context.Context, id domain.CommitID) (domain.Commit, error) {
+	b, err := t.CommitHeader(ctx, id)
 	if err != nil {
 		return b, err
 	}
@@ -482,14 +482,14 @@ func (t *sqliteTx) ids(ctx context.Context, q string, args ...any) ([]string, er
 	return out, rows.Err()
 }
 
-func (t *sqliteTx) BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
-	var b domain.Baseline
+func (t *sqliteTx) CommitHeader(ctx context.Context, id domain.CommitID) (domain.Commit, error) {
+	var b domain.Commit
 	var created string
-	q, args := dialectSQLite.sqlBaselineHeader(id)
+	q, args := dialectSQLite.sqlCommitHeader(id)
 	err := t.tx.QueryRowContext(ctx, q, args...).Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &created,
 		&b.Branch, &b.Namespace, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq)
 	if err != nil {
-		return b, sqliteErr(err, "baseline "+string(id))
+		return b, sqliteErr(err, "commit "+string(id))
 	}
 	b.CreatedAt = tsParse(created)
 	return b, nil
@@ -533,7 +533,7 @@ func (t *sqliteTx) NextCommit(ctx context.Context) (int64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.commit == 0 {
-		if err := t.tx.QueryRowContext(ctx, `SELECT max((SELECT coalesce(max(seq), 0) FROM baseline), (SELECT coalesce(max(committed), 0) FROM node_version),
+		if err := t.tx.QueryRowContext(ctx, `SELECT max((SELECT coalesce(max(seq), 0) FROM commits), (SELECT coalesce(max(committed), 0) FROM node_version),
 			(SELECT coalesce(max(committed), 0) FROM node_branch))`).Scan(&r.commit); err != nil {
 			return 0, err
 		}
@@ -572,25 +572,25 @@ func (t *sqliteTx) NodeIDsOfType(ctx context.Context, namespace, typ string, aft
 	return out, err
 }
 
-func (t *sqliteTx) BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error) {
-	q, args := dialectSQLite.sqlNamespaceBaselineHeaders(namespace)
-	return t.baselineHeaders(ctx, namespace, q, args)
+func (t *sqliteTx) CommitHeaders(ctx context.Context, namespace string) ([]domain.Commit, error) {
+	q, args := dialectSQLite.sqlNamespaceCommitHeaders(namespace)
+	return t.commitHeaders(ctx, namespace, q, args)
 }
 
-func (t *sqliteTx) BranchBaselineHeaders(ctx context.Context, namespace, branch string) ([]domain.Baseline, error) {
-	q, args := dialectSQLite.sqlBranchBaselineHeaders(namespace, branch)
-	return t.baselineHeaders(ctx, namespace, q, args)
+func (t *sqliteTx) BranchCommitHeaders(ctx context.Context, namespace, branch string) ([]domain.Commit, error) {
+	q, args := dialectSQLite.sqlBranchCommitHeaders(namespace, branch)
+	return t.commitHeaders(ctx, namespace, q, args)
 }
 
-func (t *sqliteTx) baselineHeaders(ctx context.Context, namespace, q string, args []any) ([]domain.Baseline, error) {
+func (t *sqliteTx) commitHeaders(ctx context.Context, namespace, q string, args []any) ([]domain.Commit, error) {
 	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []domain.Baseline
+	var out []domain.Commit
 	for rows.Next() {
-		b := domain.Baseline{Namespace: domain.NamespaceOf(namespace)}
+		b := domain.Commit{Namespace: domain.NamespaceOf(namespace)}
 		var created string
 		if err := rows.Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &created, &b.Branch, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq); err != nil {
 			return nil, err
@@ -621,15 +621,15 @@ func (t *sqliteTx) VersionJoins(ctx context.Context, id domain.NodeID) ([]domain
 	return out, rows.Err()
 }
 
-func (t *sqliteTx) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
-	q, args := dialectSQLite.sqlBaselineIDs(namespace)
+func (t *sqliteTx) Commits(ctx context.Context, namespace string) ([]domain.Commit, error) {
+	q, args := dialectSQLite.sqlCommitIDs(namespace)
 	ids, err := t.ids(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]domain.Baseline, 0, len(ids))
+	out := make([]domain.Commit, 0, len(ids))
 	for _, id := range ids {
-		b, err := t.Baseline(ctx, domain.BaselineID(id))
+		b, err := t.Commit(ctx, domain.CommitID(id))
 		if err != nil {
 			return nil, err
 		}
@@ -661,7 +661,7 @@ func (t *sqliteTx) changeHeader(ctx context.Context, id domain.ChangeID) (domain
 }
 
 // sqliteChangeHead is the select list of a change's head, in the order scanSQLiteChangeHead reads it.
-const sqliteChangeHead = `id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, COALESCE(parent_id, ''), owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats`
+const sqliteChangeHead = `id, title, intent, methodology, goal, status, fork_commit, landed_commit, data, created_at, branch, namespace, COALESCE(parent_id, ''), owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats`
 
 func scanSQLiteChangeHead(scan func(...any) error) (domain.Change, error) {
 	var c domain.Change
@@ -670,7 +670,7 @@ func scanSQLiteChangeHead(scan func(...any) error) (domain.Change, error) {
 	if err := scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), &start, &result, &data, &created, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State, &guardians, &dependsOn, &c.MethodologyVersion, &stats); err != nil {
 		return c, err
 	}
-	c.BaselineID, c.ResultBaselineID, c.Data, c.CreatedAt = domain.BaselineID(start.String), domain.BaselineID(result.String), props([]byte(data)), tsParse(created)
+	c.ForkCommit, c.LandedCommit, c.Data, c.CreatedAt = domain.CommitID(start.String), domain.CommitID(result.String), props([]byte(data)), tsParse(created)
 	var err error
 	if c.Guardians, err = guardiansOf([]byte(guardians)); err != nil {
 		return c, err
@@ -857,22 +857,22 @@ func (t *sqliteTx) LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[d
 	return out, rows.Err()
 }
 
-// PutBaseline stores the header of a baseline (ADR 0143).
-func (t *sqliteTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
-	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("baseline", baselineColumns, ""),
+// PutCommit stores the header of a commit (ADR 0143).
+func (t *sqliteTx) PutCommit(ctx context.Context, b domain.Commit) error {
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("commits", commitColumns, ""),
 		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), kindOf(b), nullUUID(string(b.RebasedFrom)), b.Seq)
-	return sqliteErr(err, "baseline")
+	return sqliteErr(err, "commit")
 }
 
 func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, fork_commit, landed_commit, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET title = excluded.title, intent = excluded.intent, goal = excluded.goal, status = excluded.status,
-		  result_baseline_id = excluded.result_baseline_id, data = excluded.data, baseline_id = excluded.baseline_id, branch = excluded.branch,
+		  landed_commit = excluded.landed_commit, data = excluded.data, fork_commit = excluded.fork_commit, branch = excluded.branch,
 		  lifecycle = excluded.lifecycle, state = excluded.state, project_id = excluded.project_id,
 		  parent_id = excluded.parent_id, guardians = excluded.guardians, depends_on = excluded.depends_on,
 		  methodology = excluded.methodology, methodology_version = excluded.methodology_version, stats = excluded.stats`,
-		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)),
+		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.ForkCommit)), nullUUID(string(c.LandedCommit)),
 		string(jsonb(c.Data)), tsText(c.CreatedAt), domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, string(guardiansJSON(c.Guardians)), string(dependsOnJSON(c.DependsOn)), c.MethodologyVersion, string(statsJSON(c.Stats)))
 	return sqliteErr(err, "change")
 }
@@ -1197,29 +1197,29 @@ func (t *sqliteTx) typeCounts(ctx context.Context, q string, args []any) (map[st
 	return out, rows.Err()
 }
 
-func (t *sqliteTx) BaselinePage(ctx context.Context, namespace, branch string, before int64, limit int) ([]domain.Baseline, error) {
-	q, args := dialectSQLite.sqlBaselinePage(namespace, branch, before, limit)
-	return t.baselineHeaders(ctx, namespace, q, args)
+func (t *sqliteTx) CommitPage(ctx context.Context, namespace, branch string, before int64, limit int) ([]domain.Commit, error) {
+	q, args := dialectSQLite.sqlCommitPage(namespace, branch, before, limit)
+	return t.commitHeaders(ctx, namespace, q, args)
 }
 
-func (t *sqliteTx) BaselineHeadersOf(ctx context.Context, namespace string, ids []domain.BaselineID) ([]domain.Baseline, error) {
+func (t *sqliteTx) CommitHeadersOf(ctx context.Context, namespace string, ids []domain.CommitID) ([]domain.Commit, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	q, args := dialectSQLite.sqlBaselineHeadersOf(namespace, ids)
-	return t.baselineHeaders(ctx, namespace, q, args)
+	q, args := dialectSQLite.sqlCommitHeadersOf(namespace, ids)
+	return t.commitHeaders(ctx, namespace, q, args)
 }
 
-func (t *sqliteTx) ChangeBaselineHeaders(ctx context.Context, namespace string, changes []domain.ChangeID) ([]domain.Baseline, error) {
+func (t *sqliteTx) ChangeCommitHeaders(ctx context.Context, namespace string, changes []domain.ChangeID) ([]domain.Commit, error) {
 	if len(changes) == 0 {
 		return nil, nil
 	}
-	q, args := dialectSQLite.sqlChangeBaselineHeaders(namespace, changes)
-	return t.baselineHeaders(ctx, namespace, q, args)
+	q, args := dialectSQLite.sqlChangeCommitHeaders(namespace, changes)
+	return t.commitHeaders(ctx, namespace, q, args)
 }
 
-func (t *sqliteTx) BaselineCounts(ctx context.Context, namespace string) (map[string]int, error) {
-	q, args := dialectSQLite.sqlBaselineCounts(namespace)
+func (t *sqliteTx) CommitCounts(ctx context.Context, namespace string) (map[string]int, error) {
+	q, args := dialectSQLite.sqlCommitCounts(namespace)
 	return t.typeCounts(ctx, q, args)
 }
 

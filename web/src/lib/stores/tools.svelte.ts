@@ -20,7 +20,7 @@ async function loadAdapterDefs(): Promise<AdapterDef[]> {
   try {
     nodes = (await headGraph(ns.platform)).nodes;
   } catch {
-    return []; // no baseline yet
+    return []; // no commit yet
   }
   return nodes
     .filter((n) => n.namespace === ns.platform && n.type === ADAPTER_DEF_TYPE && !n.deleted)

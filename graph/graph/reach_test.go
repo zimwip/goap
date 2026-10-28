@@ -24,7 +24,7 @@ func (f reachFixture) commit(project, ns, key, typ string, links ...LinkWrite) d
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	c, err := f.g.CreateChange(f.ctx, NewChange{ProjectID: project, Namespace: ns, Title: "create " + key, BaselineID: head.ID, OwnBranch: true})
+	c, err := f.g.CreateChange(f.ctx, NewChange{ProjectID: project, Namespace: ns, Title: "create " + key, ForkCommit: head.ID, OwnBranch: true})
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -115,16 +115,16 @@ func TestReach(t *testing.T) {
 		if err != nil || len(all) != 2 {
 			t.Fatalf("nodes of the type: %d, %v, want 2", len(all), err)
 		}
-		links, err := g.BaselineLinks(ctx, page.Baseline, LinkQuery{})
+		links, err := g.CommitLinks(ctx, page.Commit, LinkQuery{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if links.Total != 1 || len(links.Links) != 1 || links.Links[0].To.ID != a2.ID {
 			t.Fatalf("links: total %d %v, want the one between A-1 and A-2", links.Total, links.Links)
 		}
-		bpage, err := g.BaselineNodes(ctx, page.Baseline, NodeQuery{})
+		bpage, err := g.CommitNodes(ctx, page.Commit, NodeQuery{})
 		if err != nil || bpage.Total != 2 {
-			t.Fatalf("baseline nodes: %d, %v, want 2", bpage.Total, err)
+			t.Fatalf("commit nodes: %d, %v, want 2", bpage.Total, err)
 		}
 		res, err := g.QueryView(ctx, main, "MATCH (n)--(m) RETURN m.key ORDER BY m.key", QueryOptions{Bind: map[string]domain.NodeID{"n": a1.ID}})
 		if err != nil {
@@ -148,7 +148,7 @@ func TestReach(t *testing.T) {
 
 		// a change of P-A sees what main shows P-A, and its own drafts
 		head, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
-		c, err := g.CreateChange(ctx, NewChange{ProjectID: "P-A", Namespace: "alm", Title: "work", BaselineID: head.ID, OwnBranch: true})
+		c, err := g.CreateChange(ctx, NewChange{ProjectID: "P-A", Namespace: "alm", Title: "work", ForkCommit: head.ID, OwnBranch: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -192,7 +192,7 @@ func TestOwnedWrites(t *testing.T) {
 
 		checkout := func(project string, n domain.Node) error {
 			head, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
-			c, err := g.CreateChange(ctx, NewChange{ProjectID: project, Namespace: "alm", Title: "edit", BaselineID: head.ID, OwnBranch: true})
+			c, err := g.CreateChange(ctx, NewChange{ProjectID: project, Namespace: "alm", Title: "edit", ForkCommit: head.ID, OwnBranch: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -256,7 +256,7 @@ func TestReachScopes(t *testing.T) {
 		create := func(project, key, typ, owner string) {
 			t.Helper()
 			head, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
-			c, err := g.CreateChange(ctx, NewChange{ProjectID: project, Namespace: "alm", Title: "create " + key, BaselineID: head.ID, OwnBranch: true})
+			c, err := g.CreateChange(ctx, NewChange{ProjectID: project, Namespace: "alm", Title: "create " + key, ForkCommit: head.ID, OwnBranch: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -322,9 +322,9 @@ func TestReachScopes(t *testing.T) {
 		if err != nil || len(all) != 1 || all[0].Key != "PERS-ALICE" {
 			t.Fatalf("personal nodes: %v, %v, want PERS-ALICE only", all, err)
 		}
-		bpage, err := g.BaselineNodes(ctx, page.Baseline, NodeQuery{})
+		bpage, err := g.CommitNodes(ctx, page.Commit, NodeQuery{})
 		if err != nil || bpage.Total != len(want) {
-			t.Fatalf("baseline nodes: %d, %v, want %d", bpage.Total, err, len(want))
+			t.Fatalf("commit nodes: %d, %v, want %d", bpage.Total, err, len(want))
 		}
 	})
 }
@@ -356,7 +356,7 @@ func TestShare(t *testing.T) {
 		}
 		move := func(to string) error {
 			head, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
-			c, err := g.CreateChange(ctx, NewChange{ProjectID: "P-A", Namespace: "alm", Title: "move", BaselineID: head.ID, OwnBranch: true})
+			c, err := g.CreateChange(ctx, NewChange{ProjectID: "P-A", Namespace: "alm", Title: "move", ForkCommit: head.ID, OwnBranch: true})
 			if err != nil {
 				t.Fatal(err)
 			}

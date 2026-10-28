@@ -375,9 +375,9 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 
 // rebaseCommittedTx rebases a change that committed on its own branch onto what that branch is forked from now (the
 // head of its target branch; for a sub-change, the state of its parent's branch, ADR 0103): the fork of the branch and
-// the change's reference baseline move there, and, for each node changed on both sides since the fork, a draft merges
+// the change's reference commit move there, and, for each node changed on both sides since the fork, a draft merges
 // the two (base: the version at the fork; ours: the version the change committed; theirs: the version on the target),
-// its Base the committed version and MergedWith the target's. The branch of a change holds no baseline (ADR 0140): the
+// its Base the committed version and MergedWith the target's. The branch of a change holds no commit (ADR 0140): the
 // move is its fork's, journaled, and what the change committed stays on it. A rebase with no conflict keeps the reviews
 // and commits the merged drafts; a conflict sends its impact back to proposed, named as ADR 0101 does, to be settled,
 // accepted and committed. merging: for the merge that follows, which moves the fork itself when nothing merges
@@ -390,7 +390,7 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 // the base of the three-way merges; the rebase is then made whatever moved.
 func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, forked domain.Branch, merging bool) (RebaseResult, error) {
 	target := domain.BranchOf(own.Parent)
-	res := RebaseResult{Branch: target, From: own.ForkBaseline}
+	res := RebaseResult{Branch: target, From: own.ForkCommit}
 	to, err := ontoOf(ctx, tx, own)
 	if err != nil {
 		return res, err
@@ -544,7 +544,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 	if err := g.moveFork(ctx, tx, c.ID, &own, to); err != nil {
 		return res, err
 	}
-	rebased := map[string]any{"branch": target, "baseline": string(to.head)}
+	rebased := map[string]any{"branch": target, "commit": string(to.head)}
 	if err := g.installRebased(ctx, tx, c, merges, rebased, "rebased onto "+target); err != nil {
 		return res, err
 	}
@@ -564,7 +564,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 }
 
 // moveFork moves the fork of the branch of a change onto what it is forked from now, with the change's reference
-// baseline: a change.updated entry records the move (HeaderBaselineID, ADR 0101).
+// commit: a change.updated entry records the move (HeaderForkCommit, ADR 0101).
 func (g *Graph) moveFork(ctx context.Context, tx Tx, id domain.ChangeID, own *domain.Branch, to onto) error {
 	c, err := tx.Change(ctx, id)
 	if err != nil {
@@ -574,7 +574,7 @@ func (g *Graph) moveFork(ctx context.Context, tx Tx, id domain.ChangeID, own *do
 		return err
 	}
 	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
-		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderBaselineID: {From: string(c.BaselineID), To: string(own.ForkBaseline)}}})
+		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderForkCommit: {From: string(c.ForkCommit), To: string(own.ForkCommit)}}})
 	if err != nil {
 		return err
 	}
@@ -587,7 +587,7 @@ func (g *Graph) moveFork(ctx context.Context, tx Tx, id domain.ChangeID, own *do
 	if c, err = tx.Change(ctx, id); err != nil {
 		return err
 	}
-	c.BaselineID = own.ForkBaseline
+	c.ForkCommit = own.ForkCommit
 	return tx.PutChange(ctx, c)
 }
 

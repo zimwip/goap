@@ -109,7 +109,7 @@
     movingBusy = true;
     error = '';
     try {
-      await applyOnMain(ns.organisation, `Move ${key}`, `Move ${key} under ${fParent}`, head.baselineId, [moveNodeItem(unit, linkTypes.partOf, parentLink, refOf(target))]);
+      await applyOnMain(ns.organisation, `Move ${key}`, `Move ${key} under ${fParent}`, head.commitId, [moveNodeItem(unit, linkTypes.partOf, parentLink, refOf(target))]);
       notify(`${key} moved under ${fParent}.`, 'ok');
       moving = false;
     } catch (e) {
@@ -129,7 +129,7 @@
     addingMember = true;
     error = '';
     try {
-      await applyOnMain(ns.organisation, `Move ${fMember}`, `Move ${fMember} to ${key}`, head.baselineId, [moveNodeItem(u, linkTypes.memberOf, currentLink(head, u, linkTypes.memberOf), refOf(unit))]);
+      await applyOnMain(ns.organisation, `Move ${fMember}`, `Move ${fMember} to ${key}`, head.commitId, [moveNodeItem(u, linkTypes.memberOf, currentLink(head, u, linkTypes.memberOf), refOf(unit))]);
       notify(`${fMember} moved to ${key}.`, 'ok');
       fMember = '';
     } catch (e) {
@@ -166,7 +166,7 @@
       const edits = on
         ? [updateNodeItem(unit, { [waitingProp()]: true }), ...flagged.filter((n) => n.id !== unit.id).map((n) => updateNodeItem(n, { [waitingProp()]: null }))]
         : flagged.map((n) => updateNodeItem(n, { [waitingProp()]: null }));
-      await applyOnMain(ns.organisation, `Waiting unit ${on ? key : 'cleared'}`, on ? `New users wait in ${key}` : `New users join ${defaultOrg()}`, head.baselineId, edits);
+      await applyOnMain(ns.organisation, `Waiting unit ${on ? key : 'cleared'}`, on ? `New users wait in ${key}` : `New users join ${defaultOrg()}`, head.commitId, edits);
       notify(on ? `New users now wait in ${key}.` : `New users now join ${defaultOrg()}.`, 'ok');
     } catch (e) {
       error = errorMessage(e);
@@ -278,7 +278,7 @@
       const akey = `ADP:${key}/${a.mcp}`;
       const existing = findNode(h, ns.organisation, nodeTypes.adapter, akey);
       const props: Struct = { mcp: a.mcp ?? '', adapter: a.adapter ?? '', params: a.params ?? {} };
-      await applyOnMain(ns.organisation, `Adapter ${a.mcp} of ${key}`, `${existing ? 'Update' : 'Create'} the adapter of ${a.mcp} for ${key}`, h.baselineId, existing ? [updateNodeItem(existing, props)] : [{ ...createNodeItem(akey, nodeTypes.adapter, props), responsible: key }]);
+      await applyOnMain(ns.organisation, `Adapter ${a.mcp} of ${key}`, `${existing ? 'Update' : 'Create'} the adapter of ${a.mcp} for ${key}`, h.commitId, existing ? [updateNodeItem(existing, props)] : [{ ...createNodeItem(akey, nodeTypes.adapter, props), responsible: key }]);
       notify(`Adapter ${a.mcp} saved for ${key}.`, 'ok');
       editing = false;
     } catch (e) {
@@ -294,7 +294,7 @@
       const h = await headGraph(ns.organisation);
       const existing = findNode(h, ns.organisation, nodeTypes.adapter, `ADP:${key}/${m}`);
       if (!existing) throw new Error('adapter node not found');
-      await applyOnMain(ns.organisation, `Detach ${m} from ${key}`, `Retire the adapter of ${m} for ${key}`, h.baselineId, [retireNodeItem(existing)]);
+      await applyOnMain(ns.organisation, `Detach ${m} from ${key}`, `Retire the adapter of ${m} for ${key}`, h.commitId, [retireNodeItem(existing)]);
       notify(`${m} detached from ${key}.`, 'ok');
     } catch (e) {
       error = errorMessage(e);
@@ -358,11 +358,11 @@
       const title = `Restrictions of ${m} for ${key}`;
       if (existing && !restricts && !existing.props?.['adapter']) {
         // a restriction-only node with nothing left to restrict
-        await applyOnMain(ns.organisation, title, `Lift the restrictions of ${m} for ${key}`, h.baselineId, [retireNodeItem(existing)]);
+        await applyOnMain(ns.organisation, title, `Lift the restrictions of ${m} for ${key}`, h.commitId, [retireNodeItem(existing)]);
       } else if (existing) {
-        await applyOnMain(ns.organisation, title, `Restrict ${m} for ${key}`, h.baselineId, [updateNodeItem(existing, props)]);
+        await applyOnMain(ns.organisation, title, `Restrict ${m} for ${key}`, h.commitId, [updateNodeItem(existing, props)]);
       } else if (restricts) {
-        await applyOnMain(ns.organisation, title, `Restrict ${m} for ${key}`, h.baselineId, [{ ...createNodeItem(`ADP:${key}/${m}`, nodeTypes.adapter, props), responsible: key }]);
+        await applyOnMain(ns.organisation, title, `Restrict ${m} for ${key}`, h.commitId, [{ ...createNodeItem(`ADP:${key}/${m}`, nodeTypes.adapter, props), responsible: key }]);
       }
       notify(`Restrictions of ${m} saved for ${key}.`, 'ok');
       restricting = undefined;

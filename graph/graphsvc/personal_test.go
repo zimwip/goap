@@ -45,9 +45,9 @@ func TestPersonalChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	baseline := connect.NewRequest(&graphv1.ListChangesRequest{})
-	call("bob", baseline)
-	before, err := cl.ListChanges(ctx, baseline)
+	commit := connect.NewRequest(&graphv1.ListChangesRequest{})
+	call("bob", commit)
+	before, err := cl.ListChanges(ctx, commit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestPersonalChange(t *testing.T) {
 	}
 	seeded := notUsers(before.Msg.Changes) // the changes the bootstrap made, visible to everyone (not personal)
 
-	req := connect.NewRequest(&graphv1.CreateChangeRequest{Title: "prefs", Namespace: "platform", BaselineId: string(base.ID), OwnBranch: true, OwnerOrg: graphsvc.OwnerMe})
+	req := connect.NewRequest(&graphv1.CreateChangeRequest{Title: "prefs", Namespace: "platform", ForkCommit: string(base.ID), OwnBranch: true, OwnerOrg: graphsvc.OwnerMe})
 	call("alice", req)
 	created, err := cl.CreateChange(ctx, req)
 	if err != nil {
@@ -96,7 +96,7 @@ func TestPersonalChange(t *testing.T) {
 	if l, err := cl.ListChanges(ctx, list); err != nil || notUsers(l.Msg.Changes) != seeded {
 		t.Fatalf("bob ListChanges = %v, %v", l, err)
 	}
-	claim := connect.NewRequest(&graphv1.CreateChangeRequest{Title: "x", Namespace: "platform", BaselineId: string(base.ID), OwnerOrg: "USR:alice"})
+	claim := connect.NewRequest(&graphv1.CreateChangeRequest{Title: "x", Namespace: "platform", ForkCommit: string(base.ID), OwnerOrg: "USR:alice"})
 	call("bob", claim)
 	if _, err := cl.CreateChange(ctx, claim); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("bob claims alice's unit: %v", err)
@@ -257,7 +257,7 @@ func TestEnsureUserJoinsWaitingUnit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "t", Intent: "t", Baseline: head.ID, By: "test", Edits: edits}); err != nil {
+		if _, err := g.CommitEdits(ctx, graph.Edits{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "t", Intent: "t", Commit: head.ID, By: "test", Edits: edits}); err != nil {
 			t.Fatal(err)
 		}
 	}

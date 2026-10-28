@@ -25,7 +25,7 @@ const (
 	ChangeActive ChangeStatus = "active"
 	// ChangeCommitted: its integration into the branch it was forked from waits for the resolution of a three-way merge
 	// (ADR 0056); no impact can be added to it any more. A root change that committed on its own branch stays active
-	// (ADR 0102: ResultBaselineID names its last commit) until it is merged; a sub-change is committed, then integrated.
+	// (ADR 0102: LandedCommit names its last commit) until it is merged; a sub-change is committed, then integrated.
 	ChangeCommitted ChangeStatus = "committed"
 	// ChangeApplied: committed and integrated into the branch it was forked from.
 	ChangeApplied   ChangeStatus = "applied"
@@ -43,7 +43,7 @@ const DataAdministrative = "administrative"
 const DataCriticality = "criticality"
 
 // Change describes a modification of the domain graph. It starts from a
-// reference baseline and accumulates items. It is the blackboard of a process.
+// reference commit and accumulates items. It is the blackboard of a process.
 type Change struct {
 	ID          ChangeID `json:"id"`
 	Title       string   `json:"title"`
@@ -83,10 +83,10 @@ type Change struct {
 	// (ADR 0108): set by Graph.SetChangeDependencies, never a cycle, never an ancestor or a sub-change of the change.
 	DependsOn  []ChangeID   `json:"dependsOn,omitempty"`
 	Status     ChangeStatus `json:"status"`
-	BaselineID BaselineID   `json:"baselineId"`
+	ForkCommit CommitID     `json:"forkCommit"`
 	// Branch the change is applied to (default main).
-	Branch           string     `json:"branch,omitempty"`
-	ResultBaselineID BaselineID `json:"resultBaselineId,omitempty"`
+	Branch       string   `json:"branch,omitempty"`
+	LandedCommit CommitID `json:"landedCommit,omitempty"`
 	// Stats are the counters of what the change committed (ChangeStats.Committed of StatsOf), kept on its header at each
 	// commit and each merge of a sub-change into it: what a statistic of the changes reads with no fold of their logs.
 	Stats ChangeStats `json:"stats,omitzero"`
@@ -149,10 +149,10 @@ func (c Change) OuterGuardians() []GuardianRef {
 // ChangeEvent is published by the graph service on change lifecycle events
 // (change.created, change.item_added, change.applied).
 type ChangeEvent struct {
-	Type     string       `json:"type"`
-	Change   Change       `json:"change"`
-	Baseline *Baseline    `json:"baseline,omitempty"`
-	Items    []ChangeItem `json:"items,omitempty"`
+	Type   string       `json:"type"`
+	Change Change       `json:"change"`
+	Commit *Commit      `json:"commit,omitempty"`
+	Items  []ChangeItem `json:"items,omitempty"`
 	// Fields are the fields of the header a change.edited event changed (ADR 0110).
 	Fields map[string]HeaderValue `json:"fields,omitempty"`
 	// EndUser is the person whose action raised the event, directly or from one consequence to the next

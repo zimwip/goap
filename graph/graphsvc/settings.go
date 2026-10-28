@@ -133,7 +133,7 @@ func (h *Handler) pendingSettings(ctx context.Context, subject string) (*graphv1
 }
 
 // settingsChange is the personal change of the subject for a namespace, opened on main's head when there is none (the
-// empty baseline for a namespace nothing was written in yet, ADR 0056).
+// empty commit for a namespace nothing was written in yet, ADR 0056).
 func (h *Handler) settingsChange(ctx context.Context, byNs map[string]domain.Change, ns string) (domain.Change, error) {
 	if c, ok := byNs[ns]; ok {
 		return h.Graph.Change(ctx, c.ID)
@@ -147,7 +147,7 @@ func (h *Handler) settingsChange(ctx context.Context, byNs map[string]domain.Cha
 		return domain.Change{}, err
 	}
 	c, err := h.Graph.CreateChange(ctx, graph.NewChange{Title: fmt.Sprintf("My %s settings", ns), Intent: fmt.Sprintf("Change the %s settings", ns), Namespace: ns,
-		BaselineID: head.ID, OwnBranch: true, OwnerOrg: owner, ProjectID: h.projectOf(ctx, "")})
+		ForkCommit: head.ID, OwnBranch: true, OwnerOrg: owner, ProjectID: h.projectOf(ctx, "")})
 	if err != nil {
 		return domain.Change{}, err
 	}

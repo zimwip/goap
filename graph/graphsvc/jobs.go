@@ -45,7 +45,7 @@ func (h *Handler) caller(ctx context.Context) (authz.Principal, error) {
 	return p, nil
 }
 
-// StartGraphExport exports the state of a namespace as a job: the branch head or the baseline are checked now, the
+// StartGraphExport exports the state of a namespace as a job: the branch head or the commit are checked now, the
 // state is read and written as the result of the job by its run.
 func (h *Handler) StartGraphExport(ctx context.Context, r *connect.Request[graphv1.StartGraphExportRequest]) (*connect.Response[graphv1.StartGraphExportResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
@@ -67,21 +67,21 @@ func (h *Handler) StartGraphExport(ctx context.Context, r *connect.Request[graph
 	}
 	ns := domain.NamespaceOf(m.Namespace)
 	at := domain.BranchOf(m.Branch)
-	if m.BaselineId != "" {
-		b, err := h.Graph.Baseline(ctx, domain.BaselineID(m.BaselineId))
+	if m.CommitId != "" {
+		b, err := h.Graph.Commit(ctx, domain.CommitID(m.CommitId))
 		if err != nil {
 			return nil, rpcerr.ToConnect(err)
 		}
 		if b.Namespace != ns {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("baseline %s is a baseline of %s, not %s", m.BaselineId, b.Namespace, ns))
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("commit %s is a commit of %s, not %s", m.CommitId, b.Namespace, ns))
 		}
-		at = m.BaselineId
+		at = m.CommitId
 	} else if _, err := h.Graph.BranchHead(ctx, ns, at); err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
 	label := fmt.Sprintf("Export %s at %s (%s)", ns, at, map[string]string{FormatJSON: "JSON", FormatOKF: "OKF"}[format])
 	job, err := q.Create(ctx, jobkit.Spec{Kind: h.Kind(KindGraphExport), Label: label, Target: ns, By: p.EndUser(), Principal: p, ProjectID: p.Project,
-		Params: map[string]any{"namespace": ns, "branch": m.Branch, "baselineId": m.BaselineId, "format": format}})
+		Params: map[string]any{"namespace": ns, "branch": m.Branch, "commitId": m.CommitId, "format": format}})
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
@@ -147,7 +147,7 @@ func (h *Handler) okfOptions() okf.Options {
 
 func (h *Handler) runExport(ctx context.Context, j *jobkit.Job) error {
 	j.Progress("reading the state")
-	s, err := h.Graph.ExportSnapshot(ctx, j.String("namespace"), j.String("branch"), domain.BaselineID(j.String("baselineId")))
+	s, err := h.Graph.ExportSnapshot(ctx, j.String("namespace"), j.String("branch"), domain.CommitID(j.String("commitId")))
 	if err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func (h *Handler) runExport(ctx context.Context, j *jobkit.Job) error {
 	}
 	j.Step(total, total)
 	j.Progress(fmt.Sprintf("%d node(s) exported", total))
-	j.Output(map[string]any{"nodes": total, "baselineId": s.Baseline, "branch": s.Branch})
+	j.Output(map[string]any{"nodes": total, "commitId": s.Commit, "branch": s.Branch})
 	return nil
 }
 

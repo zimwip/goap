@@ -20,7 +20,7 @@ func testSetChangeMethodology(t *testing.T, repo Repo) {
 		"2": {Name: "flow", Initial: "open", States: []domain.LifecycleState{{Name: "open"}}}}}
 	w.g.Lifecycles = v
 	g := w.g
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "bare", BaselineID: w.base.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "bare", ForkCommit: w.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func testSetChangeMethodology(t *testing.T, repo Repo) {
 		t.Fatalf("taken twice: %v", err)
 	}
 	// the gate refuses a methodology that does not apply to the project
-	other, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "other", BaselineID: w.base.ID})
+	other, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "other", ForkCommit: w.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,7 +1,7 @@
 // Graph types (proto3 JSON).
 
 import type { Int64, Struct } from './common';
-import type { ChangeStatsJson, ImpactEffectJson, ChangeStackJson, StackChangeJson, VersionStepJson, BaselineStepJson, GraphStatsJson, NamespaceSummaryJson, DistributionJson, NodeTypeStatsJson, LinkTypeStatsJson, ViewJson, AddressTargetJson, AddressOpenJson } from '../../../gen/goap/graph/v1/graph_pb';
+import type { ChangeStatsJson, ImpactEffectJson, ChangeStackJson, StackChangeJson, VersionStepJson, CommitStepJson, GraphStatsJson, NamespaceSummaryJson, DistributionJson, NodeTypeStatsJson, LinkTypeStatsJson, ViewJson, AddressTargetJson, AddressOpenJson } from '../../../gen/goap/graph/v1/graph_pb';
 
 // --- graph ------------------------------------------------------------------
 
@@ -201,7 +201,7 @@ export interface ImpactEvent {
 }
 
 /** What a read of the current graph is scoped to (ADR 0157): a lasting branch (`namespace`, `branch`, empty: main) at one
- * of its baselines (empty: its head; a baseline alone names its namespace), or a change on a flow (`changeId`, `flow`).
+ * of its commits (empty: its head; a commit alone names its namespace), or a change on a flow (`changeId`, `flow`).
  * The graph refuses a read of the current graph naming none; only the reads of the history name versions. */
 export type GraphView = ViewJson;
 
@@ -220,11 +220,11 @@ export interface QueryResult {
   truncated?: boolean;
   notes?: string[];
   reads?: number;
-  baselineId?: string;
+  commitId?: string;
 }
 
-export interface BaselineNodesQuery {
-  /** the view paged: a baseline, or a change with what it wrote laid over its fork */
+export interface CommitNodesQuery {
+  /** the view paged: a commit, or a change with what it wrote laid over its fork */
   view: GraphView;
   /** qualified node type; empty: every type */
   type?: string;
@@ -234,12 +234,12 @@ export interface BaselineNodesQuery {
   /** page size (max 500) */
   limit?: number;
   includeDeleted?: boolean;
-  /** the nodes the impacts of this change act on, at their version in the baseline (ADR 0140) */
+  /** the nodes the impacts of this change act on, at their version in the commit (ADR 0140) */
   changeId?: string;
 }
 
-export interface BaselineLinksQuery {
-  baselineId: string;
+export interface CommitLinksQuery {
+  commitId: string;
   /** link type; empty: every type */
   type?: string;
   /** matched against the type and the string properties */
@@ -268,21 +268,21 @@ export interface TypeCount {
   count?: number;
 }
 
-export interface Baseline {
+export interface Commit {
   id?: string;
   name?: string;
   parentId?: string;
-  /** the head of the branch merged in, when this baseline is the result of a merge (a second parent) */
+  /** the head of the branch merged in, when this commit is the result of a merge (a second parent) */
   mergedFrom?: string;
   changeId?: string;
   nodes?: Record<string, number>;
   createdAt?: string;
   branch?: string;
-  /** the namespace this baseline snapshots (a baseline holds one namespace's nodes) */
+  /** the namespace this commit snapshots (a commit holds one namespace's nodes) */
   namespace?: string;
   /** commit | merge | fast-forward | snapshot (ADR 0056) */
   kind?: string;
-  /** the baseline the change was forked from before its rebase onto the head of its target (ADR 0101) */
+  /** the commit the change was forked from before its rebase onto the head of its target (ADR 0101) */
   rebasedFrom?: string;
 }
 
@@ -302,13 +302,13 @@ export interface Branch {
   name?: string;
   namespace?: string;
   parent?: string;
-  forkBaseline?: string;
+  forkCommit?: string;
   head?: string;
   origin?: string;
   status?: string;
   createdAt?: string;
   description?: string;
-  /** the first fork baseline of a change branch moved by a rebase (ADR 0101) */
+  /** the first fork commit of a change branch moved by a rebase (ADR 0101) */
   rebasedFrom?: string;
 }
 
@@ -411,8 +411,8 @@ export interface Change {
   methodology?: string;
   goal?: string;
   status?: 'draft' | 'active' | 'committed' | 'applied' | 'abandoned' | string;
-  baselineId?: string;
-  resultBaselineId?: string;
+  forkCommit?: string;
+  landedCommit?: string;
   /** the domain lifecycle the change follows (named by its methodology) and its state (ADR 0058); absent: none */
   lifecycle?: string;
   state?: string;
@@ -706,14 +706,14 @@ export interface PendingSettings {
 
 // --- change-stack (ADR 0133) -------------------------------------------------
 
-/** The changes a node version or a baseline is the application of, oldest first, with the lineage they are read from. */
+/** The changes a node version or a commit is the application of, oldest first, with the lineage they are read from. */
 export type ChangeStack = ChangeStackJson;
 /** A change of a stack (its title is empty when the caller may not read it). */
 export type StackChange = StackChangeJson;
 /** A version of the lineage of a node version. */
 export type VersionStep = VersionStepJson;
-/** A baseline of the lineage of a baseline. */
-export type BaselineStep = BaselineStepJson;
+/** A commit of the lineage of a commit. */
+export type CommitStep = CommitStepJson;
 
 // --- statistics of the graph --------------------------------------------------
 

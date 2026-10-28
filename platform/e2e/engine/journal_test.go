@@ -18,7 +18,7 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 	e, g, base := setup(t)
 	// the intent text deliberately echoes the "assess_impact" goal example
 	// in methodologies/examples/impact-analysis.yaml.
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 func TestJournalStepsChainBlackboardStates(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestJournalRecordsActivityRef(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.Methodologies.(engine.StaticMethodologies)["staged"] = c
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "staged", Goal: "delivery", Intent: "deliver the note", ProjectID: testProject, BaselineID: base})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "staged", Goal: "delivery", Intent: "deliver the note", ProjectID: testProject, ForkCommit: base})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -45,7 +45,7 @@ const (
 	ImpactDiscarded ImpactOp = "discarded"
 	// ImpactAdopted is change level: Flow is adopted, Stale are the runs it replaces (ADR 0025 §5).
 	ImpactAdopted ImpactOp = "adopted"
-	// ImpactCommitted records the version a change applied (Committed) in the baseline it produced (Baseline): on its own
+	// ImpactCommitted records the version a change applied (Committed) in the commit it produced (Commit): on its own
 	// branch when it is committed (the version is written from the draft then, which goes: Post becomes that version,
 	// ADR 0079), and again on the branch it is integrated into. The last one is the version on the target branch. A
 	// merge change records the same for the versions it writes.
@@ -127,8 +127,8 @@ type ImpactEvent struct {
 	// change, on its own branch or on its parent's; an integration into another branch records none and keeps the one
 	// folded.
 	Effect *ImpactEffect `json:"effect,omitempty"`
-	// Baseline is, on committed, the baseline of the branch the version committed in (ADR 0032).
-	Baseline BaselineID `json:"baseline,omitempty"`
+	// Commit is, on committed, the commit of the branch the version committed in (ADR 0032).
+	Commit CommitID `json:"commit,omitempty"`
 	// Branch is, on committed, the branch the version committed on: the change's own branch at commit, the branch it is
 	// integrated into after (the main flow's: BranchOf).
 	Branch string   `json:"branch,omitempty"`

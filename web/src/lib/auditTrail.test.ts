@@ -118,18 +118,18 @@ describe('a move to another project', () => {
 
 // ADR 0101: a root change moved onto the head of its target branch.
 describe('a root change rebased onto its target', () => {
-  const header = (payload: object): LogEntry => ({ id: 'h2', seq: '2', type: 'change.updated', by: 'bob', subject: 'baselineId', payload: JSON.stringify(payload) });
+  const header = (payload: object): LogEntry => ({ id: 'h2', seq: '2', type: 'change.updated', by: 'bob', subject: 'forkCommit', payload: JSON.stringify(payload) });
 
-  it('reads the move of the baseline', () => {
-    const [e] = buildTrail({ nodes: [] }, [header({ branch: 'main', fields: { baselineId: { from: 'BBBBBBBB-1', to: 'T1T1T1T1-2' } } })], new Map(), false);
+  it('reads the move of the commit', () => {
+    const [e] = buildTrail({ nodes: [] }, [header({ branch: 'main', fields: { forkCommit: { from: 'BBBBBBBB-1', to: 'T1T1T1T1-2' } } })], new Map(), false);
     expect(e.label).toBe('rebased');
     expect(e.summary).toBe('rebased onto main head (T1T1T1T1), was BBBBBBBB');
   });
 
   it('reads a draft rebased onto a branch', () => {
     const log = [
-      entry(1, { op: 'transitioned', post: { id: 'n1', version: 0 }, patch: { rebased: { branch: 'main', baseline: 'T1' }, conflicts: ['props.title'] } }),
-      entry(2, { op: 'transitioned', post: { id: 'n1', version: 0 }, patch: { rebased: { branch: 'main', baseline: 'T1' }, conflicts: [] } }),
+      entry(1, { op: 'transitioned', post: { id: 'n1', version: 0 }, patch: { rebased: { branch: 'main', commit: 'T1' }, conflicts: ['props.title'] } }),
+      entry(2, { op: 'transitioned', post: { id: 'n1', version: 0 }, patch: { rebased: { branch: 'main', commit: 'T1' }, conflicts: [] } }),
     ];
     const trail = buildTrail({ nodes: [{ id: 'i1', key: 'REQ-A' }] }, log, new Map(), false);
     expect(trail[0].summary).toBe('draft rebased onto main (conflicts: props.title)');

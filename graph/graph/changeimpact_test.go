@@ -15,7 +15,7 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", BaselineID: f.base.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", ForkCommit: f.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,11 +110,11 @@ func testApplyChangeImpacts(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c1, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", BaselineID: f.base.ID, OwnBranch: true})
+	c1, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", ForkCommit: f.base.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	c2, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v3", BaselineID: f.base.ID, OwnBranch: true})
+	c2, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v3", ForkCommit: f.base.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func testApplyChangeImpacts(t *testing.T, repo Repo) {
 		t.Fatalf("both writes must commit: %v", head.Properties)
 	}
 	if b.Nodes[f.req.ID] != head.Version || b.Nodes[tst.Post.ID] == 0 {
-		t.Fatalf("baseline %v does not hold the committed versions", b.Nodes)
+		t.Fatalf("commit %v does not hold the committed versions", b.Nodes)
 	}
 	if head.ChangeID != c1.ID || head.ChangeImpact != nodes[0].ID || head.Comment != "as designed" {
 		t.Fatalf("committed version must record its origin: %+v", head)
@@ -203,7 +203,7 @@ func testChangeImpactsLifecycle(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
 	g := w.g
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "edit REQ-1", BaselineID: w.base.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "edit REQ-1", ForkCommit: w.base.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +282,7 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 	pre := f.req.Ref()
 	run := func(title string, props map[string]any) domain.Change {
 		t.Helper()
-		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: title, BaselineID: f.base.ID, OwnBranch: true})
+		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: title, ForkCommit: f.base.ID, OwnBranch: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -347,7 +347,7 @@ func testImpactsOf(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", ForkCommit: f.base.ID}))
 	pre, needRef := f.req.Ref(), f.need.Ref()
 
 	added := must[[]domain.ChangeImpact](t)(g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{
@@ -386,7 +386,7 @@ func testReviewPolicy(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: f.base.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", ForkCommit: f.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -420,7 +420,7 @@ func TestNilReviewPolicyReviewsAsBefore(t *testing.T) {
 	forEachRepo(t, func(t *testing.T, repo Repo) {
 		ctx := context.Background()
 		f := newFixture(t, repo)
-		c, err := f.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: f.base.ID})
+		c, err := f.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", ForkCommit: f.base.ID})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -446,7 +446,7 @@ func testReopenImpacts(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: f.base.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", ForkCommit: f.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -491,7 +491,7 @@ func TestItemAuthorizer(t *testing.T) {
 		f := newFixture(t, repo)
 		g := f.g
 		declareItemTypes(t, g, string(kind))
-		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: f.base.ID})
+		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", ForkCommit: f.base.ID})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -527,7 +527,7 @@ func TestItemPolicy(t *testing.T) {
 		ctx := context.Background()
 		f := newFixture(t, repo)
 		g := f.g
-		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: f.base.ID, Data: map[string]any{"level": "high"}})
+		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", ForkCommit: f.base.ID, Data: map[string]any{"level": "high"}})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -64,7 +64,7 @@ func (g *Graph) impactValidations(ctx context.Context, tx Tx, c domain.Change, f
 	if err != nil {
 		return nil, err
 	}
-	ix, err := g.typesAt(ctx, tx, c.BaselineID)
+	ix, err := g.typesAt(ctx, tx, c.ForkCommit)
 	if err != nil {
 		return nil, err
 	}

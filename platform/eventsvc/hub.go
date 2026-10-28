@@ -1,5 +1,5 @@
 // Package eventsvc is the one event stream of the web (ADR 0053): the facts the platform publishes (processes,
-// changes, nodes, baselines, registry) as thin, ordered events a client keeps its state from, and the presence of
+// changes, nodes, commits, registry) as thin, ordered events a client keeps its state from, and the presence of
 // the users looking at them.
 package eventsvc
 
@@ -176,8 +176,8 @@ func (h *Hub) Ingest(subject string, data []byte, st platform.Stamp) {
 			return
 		}
 		v = ev
-	case strings.HasPrefix(subject, "goap.baseline."):
-		var ev domain.BaselineEvent
+	case strings.HasPrefix(subject, "goap.commit."):
+		var ev domain.CommitEvent
 		if json.Unmarshal(data, &ev) != nil {
 			return
 		}
@@ -269,8 +269,8 @@ func (h *Hub) accept(subject string, v any, actor, command string) {
 		ev.Id, ev.Namespace, ev.Branch, ev.ChangeId, ev.Version = string(m.ID), m.Namespace, m.Branch, string(m.ChangeID), int64(m.Version)
 		ev.Time = pbconv.Time(m.Time)
 		r.personalTo = h.personal[string(m.ChangeID)]
-	case domain.BaselineEvent:
-		ev.Kind, ev.Type = "baseline", "baseline.advanced"
+	case domain.CommitEvent:
+		ev.Kind, ev.Type = "commit", "commit.advanced"
 		ev.Id, ev.Branch, ev.Namespace = string(m.ID), m.Branch, m.Namespace
 		ev.Time = pbconv.Time(m.Time)
 	case domain.ChangeEvent:

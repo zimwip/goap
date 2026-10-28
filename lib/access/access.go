@@ -128,15 +128,15 @@ func PolicyFromProps(props map[string]any) (authz.Policy, error) {
 
 // Graph is the part of the graph the directory reads.
 type Graph interface {
-	BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Baseline, error)
-	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
+	BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Commit, error)
+	CommitGraph(ctx context.Context, id domain.CommitID) ([]domain.Node, []domain.Link, error)
 	// Structures names the organisation and the projects (ADR 0054): the snapshot never names their types itself.
 	Structures(ctx context.Context) (domain.Structures, error)
 }
 
-// Snapshot is the users and policies as of one baseline.
+// Snapshot is the users and policies as of one commit.
 type Snapshot struct {
-	Baseline domain.BaselineID
+	Commit domain.CommitID
 	// Problems lists the nodes that could not be read.
 	Problems []string
 	Policies []authz.Policy
@@ -171,9 +171,9 @@ type assignment struct {
 	Owner, Admin bool
 }
 
-// BuildSnapshot reads the users and policies of a baseline graph of the namespace of the structures st: the units and
+// BuildSnapshot reads the users and policies of a commit graph of the namespace of the structures st: the units and
 // projects are the nodes of their types (and subtypes), their hierarchies the parent links st names (ADR 0054).
-func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
+func BuildSnapshot(st domain.Structures, id domain.CommitID, nodes []domain.Node, links []domain.Link) *Snapshot {
 	keys := map[string]map[string]domain.Node{} // retired ones included: they still own the versions they owned
 	for _, n := range nodes {
 		for _, kind := range []string{domain.StructureOrganisation, domain.StructureProject} {
@@ -186,7 +186,7 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 		}
 	}
 	nodes, links = InForce(nodes, links)
-	s := &Snapshot{Baseline: id, structures: st, users: map[string]User{}, units: st.Hierarchy(domain.StructureOrganisation, nodes, links), projects: st.Hierarchy(domain.StructureProject, nodes, links),
+	s := &Snapshot{Commit: id, structures: st, users: map[string]User{}, units: st.Hierarchy(domain.StructureOrganisation, nodes, links), projects: st.Hierarchy(domain.StructureProject, nodes, links),
 		projectMethods: map[string][]string{}, stopped: map[string]bool{}, sources: map[string]map[string]string{}, keys: keys}
 	org := domain.StructureOrganisation
 	byID := map[domain.NodeID]domain.Node{}
@@ -567,7 +567,7 @@ type Directory struct {
 	Reader *graphsnap.Reader
 	// Follow, when set, keeps the snapshot until the platform says the organisation moved (ADR 0154 §9: the platform
 	// graph delivers the policies, the organisation and the projects to every graph, itself included, the same way):
-	// Moved, given the baseline events of the platform graph, forgets the head; Follow.MaxAge catches a lost event.
+	// Moved, given the commit events of the platform graph, forgets the head; Follow.MaxAge catches a lost event.
 	// Nil: the head is asked at each read. FollowCommits instead keeps it for CommitAge, until MovedNamespace says this
 	// process moved the organisation.
 	Follow *graphsnap.Heads
@@ -578,7 +578,7 @@ type Directory struct {
 	namespace string // of the structures, once read
 }
 
-// Snapshot returns the current snapshot. A graph without any baseline yields an empty one; when the graph
+// Snapshot returns the current snapshot. A graph without any commit yields an empty one; when the graph
 // cannot be read the last snapshot (nil if none) is returned with the error.
 func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
 	c, err := d.snapshots(ctx)
@@ -607,12 +607,12 @@ type Subscriber interface {
 // FollowAge is how long a following directory keeps a snapshot when no event came: a lost event is caught up then.
 const FollowAge = 30 * time.Second
 
-// FollowEvents makes the directory keep its snapshot until the platform graph's baseline events on bus say the
+// FollowEvents makes the directory keep its snapshot until the platform graph's commit events on bus say the
 // organisation moved (ADR 0154 §9: the platform delivers the policies to every service the same way). Called by every
 // composition with a bus; without one, the head is asked at each read.
 func (d *Directory) FollowEvents(bus Subscriber) error {
 	d.Follow = &graphsnap.Heads{MaxAge: FollowAge}
-	return bus.Subscribe(fmt.Sprintf(domain.SubjectBaselineAdvanced, domain.MainBranch), d.Moved)
+	return bus.Subscribe(fmt.Sprintf(domain.SubjectCommitAdvanced, domain.MainBranch), d.Moved)
 }
 
 // CommitAge is how long a directory following the commits of its own graph (no bus) keeps a snapshot: a commit of
@@ -640,14 +640,14 @@ func (d *Directory) MovedNamespace(namespace string) {
 	}
 }
 
-// Moved takes a baseline event of the platform graph (a domain.BaselineEvent, subject domain.SubjectBaselineAdvanced):
+// Moved takes a commit event of the platform graph (a domain.CommitEvent, subject domain.SubjectCommitAdvanced):
 // a commit on the main branch of the organisation's namespace (a policy, a unit, an assignment, a project changed)
 // makes a following directory read the snapshot again at its next use. Other events are left alone.
 func (d *Directory) Moved(data []byte) {
 	if d.Follow == nil {
 		return
 	}
-	var ev domain.BaselineEvent
+	var ev domain.CommitEvent
 	if json.Unmarshal(data, &ev) != nil {
 		d.Follow.Moved() // unreadable: read again rather than miss a change
 		return
@@ -677,7 +677,7 @@ func (d *Directory) snapshots(ctx context.Context) (*graphsnap.View[*Snapshot], 
 			r = graphsnap.NewReader(d.Graph)
 		}
 		d.namespace = st.Organisation().Namespace
-		d.cache = graphsnap.One(r, d.namespace, true, func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
+		d.cache = graphsnap.One(r, d.namespace, true, func(id domain.CommitID, nodes []domain.Node, links []domain.Link) *Snapshot {
 			return BuildSnapshot(st, id, nodes, links)
 		})
 		d.cache.Heads = d.Follow
@@ -766,7 +766,7 @@ type Authorizer struct {
 	Dir *Directory
 
 	mu       sync.Mutex
-	baseline domain.BaselineID
+	commit   domain.CommitID
 	casbin   *authz.Casbin
 	defaults *authz.Casbin
 	floor    *authz.Casbin
@@ -808,12 +808,12 @@ func (a *Authorizer) enforcer(ctx context.Context) (*authz.Casbin, *Snapshot) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.casbin == nil || a.baseline != snap.Baseline {
+	if a.casbin == nil || a.commit != snap.Commit {
 		c, err := authz.NewCasbinWith(snap.Policies)
 		if err != nil {
 			return a.defaults, snap
 		}
-		a.casbin, a.baseline = c, snap.Baseline
+		a.casbin, a.commit = c, snap.Commit
 	}
 	return a.casbin, snap
 }

@@ -73,7 +73,7 @@ func (g *Graph) QueryView(ctx context.Context, v View, src string, opts QueryOpt
 				return err
 			}
 			run.tx, run.w = tx, w
-			res.Baseline = w.baseline
+			res.Commit = w.commit
 			return run.match()
 		})
 		reads += run.reads
@@ -99,8 +99,8 @@ func (g *Graph) QueryView(ctx context.Context, v View, src string, opts QueryOpt
 				hidden = hidden || !ok || run.vis != nil // a node met for the first time was left out of this run
 			}
 			if hidden && attempt < queryMaxRuns {
-				if !v.IsChange() && v.Baseline == "" {
-					v.Baseline = res.Baseline // the next run reads the same state
+				if !v.IsChange() && v.Commit == "" {
+					v.Commit = res.Commit // the next run reads the same state
 				}
 				continue
 			}

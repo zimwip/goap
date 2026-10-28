@@ -6,7 +6,7 @@ import "google/protobuf/timestamp.proto";
 import "goap/engine/v1/engine.proto";
 
 // EventService is the one stream the web follows (ADR 0053): every fact the platform publishes (processes, changes,
-// nodes, baselines, registry) as a thin, ordered event, plus who is looking at what (presence). Clients keep their
+// nodes, commits, registry) as a thin, ordered event, plus who is looking at what (presence). Clients keep their
 // state from it, refetching what an event says changed, so a write made by anyone shows up for everyone.
 service EventService {
   // Live events of everything the caller may read. after_seq resumes a stream cut short (same epoch); when the
@@ -30,11 +30,11 @@ message Event {
   // epoch of the stream the seq belongs to; seq is ordered within it
   string epoch = 1;
   uint64 seq = 2;
-  // process.started | process.step ... | change.created | change.applied ... | node.written | baseline.advanced |
+  // process.started | process.step ... | change.created | change.applied ... | node.written | commit.advanced |
   // methodology.published ... | domain.published ... | presence.snapshot | presence.joined | presence.moved |
   // presence.left | resync | heartbeat
   string type = 3;
-  // what changed: process, change, node, baseline, methodology, domain, presence
+  // what changed: process, change, node, commit, methodology, domain, presence
   string kind = 4;
   string id = 5;
   string namespace = 6;

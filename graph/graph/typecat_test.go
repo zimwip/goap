@@ -13,7 +13,7 @@ import (
 )
 
 // catalogGraph is a graph judged by a type catalogue built from a domain (ADR 0012).
-func catalogGraph(t *testing.T) (*Graph, domain.Baseline) {
+func catalogGraph(t *testing.T) (*Graph, domain.Commit) {
 	t.Helper()
 	d, err := def.ParseDomain([]byte(`
 name: docs
@@ -57,7 +57,7 @@ func TestCatalogJudgesTheNodes(t *testing.T) {
 	ctx := context.Background()
 	g, b := catalogGraph(t)
 	commit := func(edits ...NodeEdit) error {
-		_, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: "docs", Title: "t", Baseline: b.ID, By: "test", Edits: edits})
+		_, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: "docs", Title: "t", Commit: b.ID, By: "test", Edits: edits})
 		return err
 	}
 	// the existence rule
@@ -67,7 +67,7 @@ func TestCatalogJudgesTheNodes(t *testing.T) {
 	if err := commit(NodeEdit{Key: "X", Type: "Req", Props: map[string]any{"title": "x"}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a bare type is unknown: %v", err)
 	}
-	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: "other", Title: "t", Baseline: b.ID, By: "test", Edits: []NodeEdit{{Key: "X", Type: "docs@Req", Props: map[string]any{"title": "x"}}}}); !errors.Is(err, ErrInvalid) {
+	if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Namespace: "other", Title: "t", Commit: b.ID, By: "test", Edits: []NodeEdit{{Key: "X", Type: "docs@Req", Props: map[string]any{"title": "x"}}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a node lives in the namespace of its type: %v", err)
 	}
 	// validators come from the catalogue, inherited by the subtype

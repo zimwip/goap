@@ -25,7 +25,7 @@ func newNested(t *testing.T, repo Repo) nested {
 	ctx := context.Background()
 	w := newOrgWorld(t, repo)
 	n := nested{w: w}
-	n.root = must[domain.Change](t)(w.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "root", BaselineID: w.base.ID, OwnBranch: true}))
+	n.root = must[domain.Change](t)(w.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "root", ForkCommit: w.base.ID, OwnBranch: true}))
 	n.mid = must[domain.Change](t)(w.g.CreateChange(ctx, NewChange{Title: "mid", ParentID: n.root.ID}))
 	n.leaf = must[domain.Change](t)(w.g.CreateChange(ctx, NewChange{Title: "leaf", ParentID: n.mid.ID}))
 	return n
@@ -65,14 +65,14 @@ func seen(t *testing.T, g *Graph, c domain.Change, key, prop string) any {
 	return v.Properties[prop]
 }
 
-func headOf(t *testing.T, g *Graph, c domain.Change) domain.BaselineID {
+func headOf(t *testing.T, g *Graph, c domain.Change) domain.CommitID {
 	t.Helper()
-	b := must[domain.Baseline](t)(g.BranchHead(context.Background(), c.Namespace, c.Branch))
+	b := must[domain.Commit](t)(g.BranchHead(context.Background(), c.Namespace, c.Branch))
 	if b.ID != "" {
 		return b.ID
 	}
-	// a change branch holds no baseline: its state is its fork and its commits
-	return domain.BaselineID(fmt.Sprintf("%s@%d", b.ParentID, b.Seq))
+	// a change branch holds no commit: its state is its fork and its commits
+	return domain.CommitID(fmt.Sprintf("%s@%d", b.ParentID, b.Seq))
 }
 
 func forkOf(t *testing.T, g *Graph, c domain.Change) domain.Branch {
@@ -88,16 +88,16 @@ func testSubSubChangeBranches(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newOrgWorld(t, repo)
 	g := w.g
-	root := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "root", BaselineID: w.base.ID, OwnBranch: true}))
+	root := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "root", ForkCommit: w.base.ID, OwnBranch: true}))
 	commitProps(t, g, root, w.cmp1, map[string]any{"title": "root's"})
 	mid := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "mid", ParentID: root.ID}))
-	if rb := forkOf(t, g, root); mid.BaselineID != rb.ForkBaseline {
-		t.Fatalf("the middle change starts from the fork of the root's branch %s, not %s", rb.ForkBaseline, mid.BaselineID)
+	if rb := forkOf(t, g, root); mid.ForkCommit != rb.ForkCommit {
+		t.Fatalf("the middle change starts from the fork of the root's branch %s, not %s", rb.ForkCommit, mid.ForkCommit)
 	}
 	// a draft of the middle change is its own: its sub-change, created now, does not see it
 	draftProps(t, g, mid, w.cmp2, map[string]any{"title": "mid's draft"})
 	leaf := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "leaf", ParentID: mid.ID}))
-	if b := must[domain.Branch](t)(g.Branch(ctx, leaf.Namespace, leaf.Branch)); b.Parent != mid.Branch || b.ForkBaseline != forkOf(t, g, mid).ForkBaseline || b.ForkSeq == 0 {
+	if b := must[domain.Branch](t)(g.Branch(ctx, leaf.Namespace, leaf.Branch)); b.Parent != mid.Branch || b.ForkCommit != forkOf(t, g, mid).ForkCommit || b.ForkSeq == 0 {
 		t.Fatalf("the leaf forks from the head of its parent's branch %s: %+v", mid.Branch, b)
 	}
 	if got := seen(t, g, leaf, "CMP-1", "title"); got != "root's" {
@@ -113,7 +113,7 @@ func testSubSubChangeBranches(t *testing.T, repo Repo) {
 	// the leaf works on another node, merges into the middle change and nowhere else
 	cmp3 := must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3"))
 	commitProps(t, g, leaf, cmp3, map[string]any{"title": "leaf's"})
-	rootHead, mainHead := headOf(t, g, root), must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)).ID
+	rootHead, mainHead := headOf(t, g, root), must[domain.Commit](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)).ID
 	if _, err := g.CloseChange(ctx, leaf.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func testSubSubChangeBranches(t *testing.T, repo Repo) {
 	if headOf(t, g, root) != rootHead || seen(t, g, root, "CMP-3", "title") != "three" {
 		t.Fatal("the leaf's merge reached the root's branch")
 	}
-	if must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)).ID != mainHead {
+	if must[domain.Commit](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)).ID != mainHead {
 		t.Fatal("the leaf's merge reached main")
 	}
 	// the middle change records the leaf's work as its own: accepted, committed
@@ -309,7 +309,7 @@ func TestSubChangeUnderParentDraft(t *testing.T) {
 		if _, err := g.CommitChange(ctx, n.mid.ID, ""); err != nil {
 			t.Fatal(err)
 		}
-		head := must[domain.Baseline](t)(g.BranchHead(ctx, n.mid.Namespace, n.mid.Branch))
+		head := must[domain.Commit](t)(g.BranchHead(ctx, n.mid.Namespace, n.mid.Branch))
 		if head.Nodes[n.w.cmp2.ID] == n.w.cmp2.Version || head.Nodes[n.w.cmp3.ID] == n.w.cmp3.Version {
 			t.Fatalf("the parent's branch holds both nodes changed: %v", head.Nodes)
 		}

@@ -2,12 +2,12 @@ package graphapi
 
 import "github.com/zimwip/goap/contracts/domain"
 
-// NewBranch describes a branch to open from a baseline (CreateBranch).
+// NewBranch describes a branch to open from a commit (CreateBranch).
 type NewBranch struct {
 	Name string
 	// Namespace the branch belongs to (default: domain.DefaultNamespace).
 	Namespace   string
-	From        domain.BaselineID
+	From        domain.CommitID
 	Origin      string // change / option that opens the branch
 	Description string
 }
@@ -34,10 +34,10 @@ type MergeCandidate struct {
 
 // MergePlan lists what merging a branch into another would do.
 type MergePlan struct {
-	From       string            `json:"from"`
-	Into       string            `json:"into"`
-	IntoHead   domain.BaselineID `json:"intoHead"`
-	Candidates []MergeCandidate  `json:"candidates"`
+	From       string           `json:"from"`
+	Into       string           `json:"into"`
+	IntoHead   domain.CommitID  `json:"intoHead"`
+	Candidates []MergeCandidate `json:"candidates"`
 }
 
 // Resolution resolves a merge conflict: Props is the resolved property map
@@ -61,10 +61,10 @@ type RebaseState struct {
 	Parent    domain.ChangeID         `json:"parentId"`
 	Behind    []domain.ChangeImpactID `json:"behind,omitempty"`
 	Conflicts []ImpactConflicts       `json:"conflicts,omitempty"`
-	// Branch and Onto, for a change behind the head of the branch it was forked from: that branch and the head baseline a
+	// Branch and Onto, for a change behind the head of the branch it was forked from: that branch and the head commit a
 	// rebase moves it to (empty: not behind).
-	Branch string            `json:"branch,omitempty"`
-	Onto   domain.BaselineID `json:"onto,omitempty"`
+	Branch string          `json:"branch,omitempty"`
+	Onto   domain.CommitID `json:"onto,omitempty"`
 }
 
 // Conflicting returns the candidates that need a resolution.

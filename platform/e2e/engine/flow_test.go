@@ -17,7 +17,7 @@ func completedRun(t *testing.T) (*engine.Engine, context.Context, *engine.Proces
 	t.Helper()
 	ctx := context.Background()
 	e, g, base := setup(t)
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,12 +406,12 @@ func TestChangeOpensInTheNamespaceOfTheMethodology(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
 	e.Methodologies.(engine.StaticMethodologies)["impact-analysis"].Definition().Namespace = "platform"
-	// a change's reference baseline must be of its own (here the methodology's target) namespace
+	// a change's reference commit must be of its own (here the methodology's target) namespace
 	platformBase, err := g.BranchHead(ctx, "platform", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: platformBase.ID, Goal: "assess_impact", ProjectID: testProject})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: platformBase.ID, Goal: "assess_impact", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -420,7 +420,7 @@ func TestChangeOpensInTheNamespaceOfTheMethodology(t *testing.T) {
 		t.Fatalf("change namespace = %q, %v", c.Namespace, err)
 	}
 	// an explicit namespace on the request wins over the methodology default
-	p2, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, Goal: "assess_impact", Namespace: "alm", ProjectID: testProject})
+	p2, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ForkCommit: base, Goal: "assess_impact", Namespace: "alm", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

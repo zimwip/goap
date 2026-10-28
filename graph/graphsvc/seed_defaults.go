@@ -23,7 +23,7 @@ func SeedChange(ctx context.Context, g *graph.Graph, namespace, title string, ed
 	if authz.From(ctx).Anonymous() { // a seed acts as the graph service itself
 		ctx = System(ctx)
 	}
-	_, err := g.Commit(ctx, graph.Commit{Namespace: namespace, Title: title, Intent: title, By: "graphsvc.seed", BaselineName: title, Edits: edits,
+	_, err := g.CommitEdits(ctx, graph.Edits{Namespace: namespace, Title: title, Intent: title, By: "graphsvc.seed", CommitName: title, Edits: edits,
 		ProjectID: g.Structure(domain.StructureProject).Root}) // a seed acts in the root project (ADR 0091)
 	if errors.Is(err, graph.ErrNothingToCommit) {
 		return nil // the graph holds what the seed states already
@@ -127,7 +127,7 @@ func SeedPolicy(ctx context.Context, g *graph.Graph, p authz.Policy) error {
 func SeedModels(ctx context.Context, g *graph.Graph, providers []llmcfg.Provider, models []llmcfg.Model, aliases []llmcfg.Alias) (bool, error) {
 	head, err := g.BranchHead(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
 	if err == nil {
-		nodes, _, gerr := g.BaselineGraph(ctx, head.ID)
+		nodes, _, gerr := g.CommitGraph(ctx, head.ID)
 		if gerr != nil {
 			return false, gerr
 		}
@@ -168,7 +168,7 @@ func SeedProtectedAliases(ctx context.Context, g *graph.Graph) (bool, error) {
 	}
 	current := map[string]domain.Node{}
 	if head.ID != "" {
-		nodes, _, err := g.BaselineGraph(ctx, head.ID)
+		nodes, _, err := g.CommitGraph(ctx, head.ID)
 		if err != nil {
 			return false, err
 		}
@@ -244,7 +244,7 @@ func SeedBuiltins(ctx context.Context, g *graph.Graph) (bool, error) {
 	}
 	current := map[string]domain.Node{}
 	if head.ID != "" {
-		nodes, _, err := g.BaselineGraph(ctx, head.ID)
+		nodes, _, err := g.CommitGraph(ctx, head.ID)
 		if err != nil {
 			return false, err
 		}

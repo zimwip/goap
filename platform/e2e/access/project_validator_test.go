@@ -42,8 +42,8 @@ func TestProjectOwnersAndAdministrators(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = g.Commit(authz.With(ctx, authz.Principal{Subject: who}), graph.Commit{ProjectID: access.DefaultProject, Namespace: access.NamespaceOrganisation,
-			Title: "t", Baseline: head.ID, By: who, Edits: edits})
+		_, err = g.CommitEdits(authz.With(ctx, authz.Principal{Subject: who}), graph.Edits{ProjectID: access.DefaultProject, Namespace: access.NamespaceOrganisation,
+			Title: "t", Commit: head.ID, By: who, Edits: edits})
 		return err
 	}
 	project := func(key, parent string) graph.NodeEdit {

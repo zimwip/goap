@@ -1,20 +1,20 @@
 <script lang="ts">
-  // The change-stack of a node version or a baseline (ADR 0133): the changes it is the application of, oldest first,
+  // The change-stack of a node version or a commit (ADR 0133): the changes it is the application of, oldest first,
   // a sub-change under its parent, each with what it did in the lineage. A row opens its change.
   import { graph, errorMessage, type ChangeStack } from '../api';
   import { stackRows } from '../changeStack';
   import { openTab } from '../shell/tabs.svelte';
 
-  let { nodeId, version, baselineId }: { nodeId?: string; version?: number; baselineId?: string } = $props();
+  let { nodeId, version, commitId }: { nodeId?: string; version?: number; commitId?: string } = $props();
 
   let stack = $state<ChangeStack | undefined>();
   let error = $state('');
 
   $effect(() => {
-    const q = baselineId ? { baselineId } : { nodeId, version };
+    const q = commitId ? { commitId } : { nodeId, version };
     stack = undefined;
     error = '';
-    if (!q.baselineId && !q.nodeId) return;
+    if (!q.commitId && !q.nodeId) return;
     const ctrl = new AbortController();
     graph
       .getChangeStack(q, ctrl.signal)
@@ -32,7 +32,7 @@
   {#if error}<div class="alert">{error}</div>{/if}
   {#if stack}
     <p class="hint">
-      {rows.length} change{rows.length === 1 ? '' : 's'} produce{rows.length === 1 ? 's' : ''} {baselineId ? 'this baseline' : `v${version ?? ''}`}{stack.truncated ? ' (oldest ones left out)' : ''}.
+      {rows.length} change{rows.length === 1 ? '' : 's'} produce{rows.length === 1 ? 's' : ''} {commitId ? 'this commit' : `v${version ?? ''}`}{stack.truncated ? ' (oldest ones left out)' : ''}.
     </p>
     <ol aria-label="Change-stack">
       {#each rows as r (r.id)}

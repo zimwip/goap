@@ -54,7 +54,7 @@ func TestReadsAreBatched(t *testing.T) {
 				NodeEdit{Key: s, Type: "Need", Props: map[string]any{"title": s}, Links: []LinkEdit{{Type: "refines", ToKey: "HUB"}}})
 			hub.Links = append(hub.Links, LinkEdit{Type: "depends", ToKey: k})
 		}
-		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "seed", By: "t", Edits: append(e, hub)}); err != nil {
+		if _, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "seed", By: "t", Edits: append(e, hub)}); err != nil {
 			t.Fatal(err)
 		}
 		var last domain.ChangeID
@@ -64,7 +64,7 @@ func TestReadsAreBatched(t *testing.T) {
 				t.Fatal(err)
 			}
 			r := n.Ref()
-			res, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "v", By: "t", Edits: []NodeEdit{{Pre: &r, Props: map[string]any{"title": fmt.Sprint(v)}}}})
+			res, err := g.CommitEdits(ctx, Edits{ProjectID: "PROJ-ROOT", Title: "v", By: "t", Edits: []NodeEdit{{Pre: &r, Props: map[string]any{"title": fmt.Sprint(v)}}}})
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -63,7 +63,7 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 	}
 	// one change per namespace the roots live in
 	changes := map[string]*domain.Change{}
-	bases := map[string]domain.Baseline{}
+	bases := map[string]domain.Commit{}
 	var namespaces []string
 	for _, st := range roots {
 		if _, ok := changes[st.Namespace]; ok {
@@ -78,7 +78,7 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 		bases[st.Namespace] = base
 		c := &domain.Change{ID: domain.ChangeID(g.newID()), Title: "Bootstrap", Namespace: st.Namespace, Status: domain.ChangeApplied,
 			Intent:     "Create the roots of the structures every change and node version is placed in (ADR 0054)",
-			BaselineID: base.ID, Branch: domain.MainBranch, OwnerOrg: g.StructureURL(org.Kind, org.Root), ProjectID: g.StructureURL(proj.Kind, proj.Root), CreatedAt: now}
+			ForkCommit: base.ID, Branch: domain.MainBranch, OwnerOrg: g.StructureURL(org.Kind, org.Root), ProjectID: g.StructureURL(proj.Kind, proj.Root), CreatedAt: now}
 		if err := tx.PutChange(ctx, *c); err != nil {
 			return err
 		}
@@ -110,15 +110,15 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 				nodes[ids[st.Kind]] = 1
 			}
 		}
-		res := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: "Bootstrap", Namespace: ns, Branch: domain.MainBranch, ParentID: base.ID,
-			ChangeID: c.ID, Kind: domain.BaselineSnapshot, Nodes: nodes, CreatedAt: now}
-		if err := tx.PutBaseline(ctx, res); err != nil {
+		res := domain.Commit{ID: domain.CommitID(g.newID()), Name: "Bootstrap", Namespace: ns, Branch: domain.MainBranch, ParentID: base.ID,
+			ChangeID: c.ID, Kind: domain.CommitKindSnapshot, Nodes: nodes, CreatedAt: now}
+		if err := tx.PutCommit(ctx, res); err != nil {
 			return err
 		}
 		if err := g.advanceBranch(ctx, tx, ns, domain.MainBranch, res); err != nil {
 			return err
 		}
-		c.ResultBaselineID = res.ID
+		c.LandedCommit = res.ID
 		if err := tx.PutChange(ctx, *c); err != nil {
 			return err
 		}

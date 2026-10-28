@@ -273,7 +273,7 @@ func TestLinkTargets(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		drop, err := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "drop the doc", BaselineID: head.ID, OwnBranch: true, ProjectID: g.Structure(domain.StructureProject).Root})
+		drop, err := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "drop the doc", ForkCommit: head.ID, OwnBranch: true, ProjectID: g.Structure(domain.StructureProject).Root})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -311,7 +311,7 @@ func TestLinkTargets(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "unversioned", BaselineID: head.ID, ProjectID: g.Structure(domain.StructureProject).Root})
+		c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "unversioned", ForkCommit: head.ID, ProjectID: g.Structure(domain.StructureProject).Root})
 		if err != nil {
 			t.Fatal(err)
 		}

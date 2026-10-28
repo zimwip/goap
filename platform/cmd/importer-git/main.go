@@ -1,6 +1,6 @@
 // Command importer-git is the git importer service (ADR 0148): it implements the importer `git` the code domain declares
 // (domains/code.yaml) and registers itself with the import registry of the graph service (see lib/importerkit), so the
-// people run it from the platform (the Baseline explorer, RPC goap.importer.v1.ImportService/StartImport). Each run is a
+// people run it from the platform (the History explorer, RPC goap.importer.v1.ImportService/StartImport). Each run is a
 // gitimport.Importer writing through the graph service, one change per commit, as the person who started it.
 //
 // GOAP_GRAPH_URL is the graph service (also the registry, unless GOAP_IMPORT_URL says otherwise); GOAP_IMPORT_GIT_ROOTS

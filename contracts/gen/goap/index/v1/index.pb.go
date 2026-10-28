@@ -954,14 +954,14 @@ func (*StatusRequest) Descriptor() ([]byte, []int) {
 type StatusResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// an embedding model is reachable
-	Semantic          bool   `protobuf:"varint,1,opt,name=semantic,proto3" json:"semantic,omitempty"`
-	Store             string `protobuf:"bytes,2,opt,name=store,proto3" json:"store,omitempty"`
-	NodesIndexed      int64  `protobuf:"varint,3,opt,name=nodes_indexed,json=nodesIndexed,proto3" json:"nodes_indexed,omitempty"`
-	BaselinesFollowed int64  `protobuf:"varint,4,opt,name=baselines_followed,json=baselinesFollowed,proto3" json:"baselines_followed,omitempty"`
-	Errors            int64  `protobuf:"varint,5,opt,name=errors,proto3" json:"errors,omitempty"`
-	ChangesIndexed    int64  `protobuf:"varint,6,opt,name=changes_indexed,json=changesIndexed,proto3" json:"changes_indexed,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	Semantic        bool   `protobuf:"varint,1,opt,name=semantic,proto3" json:"semantic,omitempty"`
+	Store           string `protobuf:"bytes,2,opt,name=store,proto3" json:"store,omitempty"`
+	NodesIndexed    int64  `protobuf:"varint,3,opt,name=nodes_indexed,json=nodesIndexed,proto3" json:"nodes_indexed,omitempty"`
+	CommitsFollowed int64  `protobuf:"varint,4,opt,name=commits_followed,json=commitsFollowed,proto3" json:"commits_followed,omitempty"`
+	Errors          int64  `protobuf:"varint,5,opt,name=errors,proto3" json:"errors,omitempty"`
+	ChangesIndexed  int64  `protobuf:"varint,6,opt,name=changes_indexed,json=changesIndexed,proto3" json:"changes_indexed,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *StatusResponse) Reset() {
@@ -1015,9 +1015,9 @@ func (x *StatusResponse) GetNodesIndexed() int64 {
 	return 0
 }
 
-func (x *StatusResponse) GetBaselinesFollowed() int64 {
+func (x *StatusResponse) GetCommitsFollowed() int64 {
 	if x != nil {
-		return x.BaselinesFollowed
+		return x.CommitsFollowed
 	}
 	return 0
 }
@@ -1130,12 +1130,12 @@ const file_goap_index_v1_index_proto_rawDesc = "" +
 	"\x0eReindexRequest\"-\n" +
 	"\x0fReindexResponse\x12\x1a\n" +
 	"\bversions\x18\x01 \x01(\x05R\bversions\"\x0f\n" +
-	"\rStatusRequest\"\xd7\x01\n" +
+	"\rStatusRequest\"\xd3\x01\n" +
 	"\x0eStatusResponse\x12\x1a\n" +
 	"\bsemantic\x18\x01 \x01(\bR\bsemantic\x12\x14\n" +
 	"\x05store\x18\x02 \x01(\tR\x05store\x12#\n" +
-	"\rnodes_indexed\x18\x03 \x01(\x03R\fnodesIndexed\x12-\n" +
-	"\x12baselines_followed\x18\x04 \x01(\x03R\x11baselinesFollowed\x12\x16\n" +
+	"\rnodes_indexed\x18\x03 \x01(\x03R\fnodesIndexed\x12)\n" +
+	"\x10commits_followed\x18\x04 \x01(\x03R\x0fcommitsFollowed\x12\x16\n" +
 	"\x06errors\x18\x05 \x01(\x03R\x06errors\x12'\n" +
 	"\x0fchanges_indexed\x18\x06 \x01(\x03R\x0echangesIndexed2\xe6\x01\n" +
 	"\fIndexService\x12E\n" +

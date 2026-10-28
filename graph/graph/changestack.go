@@ -10,31 +10,31 @@ import (
 )
 
 // ChangeStackQuery names what a change-stack is asked of (ADR 0133): a node version (Node, Version 0: its latest on
-// main) or a baseline. Limit bounds the lineage (0: domain.DefaultStackLimit).
+// main) or a commit. Limit bounds the lineage (0: domain.DefaultStackLimit).
 type ChangeStackQuery struct {
-	Node     domain.NodeRef
-	Baseline domain.BaselineID
-	Limit    int
+	Node   domain.NodeRef
+	Commit domain.CommitID
+	Limit  int
 }
 
-// ChangeStack returns the stack of changes producing a node version or a baseline (ADR 0133): its lineage and the
-// changes it is made of, oldest first. Nothing is stored for it: it is read from what every version and baseline
-// records (the change that wrote it, the merges that made it join a branch, the baselines it follows from).
+// ChangeStack returns the stack of changes producing a node version or a commit (ADR 0133): its lineage and the
+// changes it is made of, oldest first. Nothing is stored for it: it is read from what every version and commit
+// records (the change that wrote it, the merges that made it join a branch, the commits it follows from).
 func (g *Graph) ChangeStack(ctx context.Context, q ChangeStackQuery) (s domain.ChangeStack, err error) {
-	if (q.Node.ID == "") == (q.Baseline == "") {
-		return s, fmt.Errorf("a change-stack is of a node version or of a baseline: %w", ErrInvalid)
+	if (q.Node.ID == "") == (q.Commit == "") {
+		return s, fmt.Errorf("a change-stack is of a node version or of a commit: %w", ErrInvalid)
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		if q.Baseline != "" {
-			b, err := tx.BaselineHeader(ctx, q.Baseline) // its lineage only: its state is not read
+		if q.Commit != "" {
+			b, err := tx.CommitHeader(ctx, q.Commit) // its lineage only: its state is not read
 			if err != nil {
 				return err
 			}
-			heads, err := tx.BaselineHeaders(ctx, b.Namespace)
+			heads, err := tx.CommitHeaders(ctx, b.Namespace)
 			if err != nil {
 				return err
 			}
-			s.Baselines, s.Truncated = domain.BaselineLineage(heads, b.ID, mergedInto(ctx, tx), q.Limit)
+			s.Commits, s.Truncated = domain.CommitLineage(heads, b.ID, mergedInto(ctx, tx), q.Limit)
 		} else {
 			n, err := tx.Node(ctx, q.Node)
 			if err != nil {
@@ -50,17 +50,17 @@ func (g *Graph) ChangeStack(ctx context.Context, q ChangeStackQuery) (s domain.C
 			}
 			s.Versions, s.Truncated = domain.VersionLineage(vs, joins, n.Version, q.Limit)
 		}
-		s.Changes, err = stackChanges(ctx, tx, domain.StackChangeIDs(s.Versions, s.Baselines))
+		s.Changes, err = stackChanges(ctx, tx, domain.StackChangeIDs(s.Versions, s.Commits))
 		return err
 	})
 	return s, err
 }
 
-// DiffStacks returns the changes the stack of baseline to holds and the one of from does not (added), and the other
-// way round (removed), each oldest first. The lineages are walked together from both baselines, newest first, down to
+// DiffStacks returns the changes the stack of commit to holds and the one of from does not (added), and the other
+// way round (removed), each oldest first. The lineages are walked together from both commits, newest first, down to
 // where they meet (ADR 0140): what lies under that is in both stacks, so the walk follows the distance between the two
-// baselines, not the length of the history.
-func (g *Graph) DiffStacks(ctx context.Context, from, to domain.BaselineID) (added, removed []domain.StackChange, err error) {
+// commits, not the length of the history.
+func (g *Graph) DiffStacks(ctx context.Context, from, to domain.CommitID) (added, removed []domain.StackChange, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		gap, err := lineageGap(ctx, tx, from, to)
 		if err != nil {
@@ -75,34 +75,34 @@ func (g *Graph) DiffStacks(ctx context.Context, from, to domain.BaselineID) (add
 	return added, removed, err
 }
 
-// gap is what lies between two baselines: the changes of the stack of the second that the first does not hold (added)
-// and the other way round (removed), and every change of a baseline only one of them reaches (changes), whose nodes
+// gap is what lies between two commits: the changes of the stack of the second that the first does not hold (added)
+// and the other way round (removed), and every change of a commit only one of them reaches (changes), whose nodes
 // are all the two states may differ on.
 type gap struct {
 	added, removed, changes []domain.ChangeID
 }
 
-// MaxDiffChanges bounds the changes between two baselines a difference walks: further apart, a difference of their
+// MaxDiffChanges bounds the changes between two commits a difference walks: further apart, a difference of their
 // histories means nothing to read, and it is refused.
 const MaxDiffChanges = 1000
 
-// lineageGap walks the lineages of two baselines (the edges of domain.BaselineLineage: parent, merged head and, for
-// one taking a change in, the baselines of that change's own branch written before it) newest first by order, each
-// baseline painted with the side(s) reaching it, and stops once every baseline left to walk is reached from both: a
-// baseline's order is above the orders of the ones it follows from, so its paint is final when it is walked. The
-// changes of the baselines only one side reaches, less the ones of a baseline the other side reaches, make the
+// lineageGap walks the lineages of two commits (the edges of domain.CommitLineage: parent, merged head and, for
+// one taking a change in, the commits of that change's own branch written before it) newest first by order, each
+// commit painted with the side(s) reaching it, and stops once every commit left to walk is reached from both: a
+// commit's order is above the orders of the ones it follows from, so its paint is final when it is walked. The
+// changes of the commits only one side reaches, less the ones of a commit the other side reaches, make the
 // difference.
-func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, err error) {
+func lineageGap(ctx context.Context, tx Tx, from, to domain.CommitID) (g gap, err error) {
 	const sideFrom, sideTo, both = 1, 2, 3
 	type walked struct {
-		b    domain.Baseline
+		b    domain.Commit
 		side int
 	}
-	paint := map[domain.BaselineID]int{}
-	headers := map[domain.BaselineID]domain.Baseline{}
-	var todo []domain.BaselineID // ordered by Seq, the newest last
+	paint := map[domain.CommitID]int{}
+	headers := map[domain.CommitID]domain.Commit{}
+	var todo []domain.CommitID // ordered by Seq, the newest last
 	var namespace string
-	reach := func(id domain.BaselineID, side int) error {
+	reach := func(id domain.CommitID, side int) error {
 		if id == "" || paint[id]|side == paint[id] {
 			return nil
 		}
@@ -113,12 +113,12 @@ func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, 
 				return err
 			}
 			if namespace != "" && domain.NamespaceOf(b.Namespace) != namespace {
-				return fmt.Errorf("baseline %s is not of namespace %s: %w", id, namespace, ErrInvalid)
+				return fmt.Errorf("commit %s is not of namespace %s: %w", id, namespace, ErrInvalid)
 			}
 			namespace, headers[id] = domain.NamespaceOf(b.Namespace), b
 		}
 		if paint[id] == 0 {
-			i, _ := slices.BinarySearchFunc(todo, b.Seq, func(x domain.BaselineID, seq int64) int { return cmp.Compare(headers[x].Seq, seq) })
+			i, _ := slices.BinarySearchFunc(todo, b.Seq, func(x domain.CommitID, seq int64) int { return cmp.Compare(headers[x].Seq, seq) })
 			todo = slices.Insert(todo, i, id)
 		}
 		paint[id] |= side
@@ -131,16 +131,16 @@ func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, 
 		return g, err
 	}
 	var seen []walked
-	landed := map[domain.ChangeID][]domain.Baseline{}
-	for len(todo) > 0 && slices.ContainsFunc(todo, func(id domain.BaselineID) bool { return paint[id] != both }) {
+	landed := map[domain.ChangeID][]domain.Commit{}
+	for len(todo) > 0 && slices.ContainsFunc(todo, func(id domain.CommitID) bool { return paint[id] != both }) {
 		if len(seen) >= MaxDiffChanges {
-			return g, invalidf("baselines %s and %s are more than %d changes apart: compare closer baselines", from, to, MaxDiffChanges)
+			return g, invalidf("commits %s and %s are more than %d changes apart: compare closer commits", from, to, MaxDiffChanges)
 		}
 		id := todo[len(todo)-1]
 		todo = todo[:len(todo)-1]
 		b, side := headers[id], paint[id]
 		seen = append(seen, walked{b, side})
-		for _, next := range []domain.BaselineID{b.ParentID, b.MergedFrom} {
+		for _, next := range []domain.CommitID{b.ParentID, b.MergedFrom} {
 			if err := reach(next, side); err != nil {
 				return g, err
 			}
@@ -150,7 +150,7 @@ func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, 
 		if b.ChangeID != "" && side != both {
 			landings, ok := landed[b.ChangeID]
 			if !ok {
-				if landings, err = tx.ChangeBaselineHeaders(ctx, namespace, []domain.ChangeID{b.ChangeID}); err != nil {
+				if landings, err = tx.ChangeCommitHeaders(ctx, namespace, []domain.ChangeID{b.ChangeID}); err != nil {
 					return g, err
 				}
 				landed[b.ChangeID] = landings
@@ -167,7 +167,7 @@ func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, 
 	}
 	// oldest first, as a stack reads
 	slices.SortStableFunc(seen, func(x, y walked) int { return x.b.CreatedAt.Compare(y.b.CreatedAt) })
-	// every baseline painted counts, the ones left to walk too: a change a side reaches is in its stack
+	// every commit painted counts, the ones left to walk too: a change a side reaches is in its stack
 	in := map[int]map[domain.ChangeID]bool{sideFrom: {}, sideTo: {}}
 	for id, side := range paint {
 		for _, s := range []int{sideFrom, sideTo} {
@@ -192,7 +192,7 @@ func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, 
 		}
 	}
 	// the sub-changes merged into a change are in every stack it is in (ADR 0103): the branch of a change holds no
-	// baseline (ADR 0140), the stacks name them through their parent
+	// commit (ADR 0140), the stacks name them through their parent
 	merged := mergedInto(ctx, tx)
 	expand := func(ids []domain.ChangeID) []domain.ChangeID {
 		var out []domain.ChangeID
@@ -210,12 +210,12 @@ func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, 
 	return g, nil
 }
 
-// cachedHeader reads the header of a baseline through the cache of the graph's guard when there is one.
-func cachedHeader(ctx context.Context, tx Tx, id domain.BaselineID) (domain.Baseline, error) {
+// cachedHeader reads the header of a commit through the cache of the graph's guard when there is one.
+func cachedHeader(ctx context.Context, tx Tx, id domain.CommitID) (domain.Commit, error) {
 	if gt, ok := unwrapGuard(tx); ok {
 		return gt.header(ctx, id)
 	}
-	return tx.BaselineHeader(ctx, id)
+	return tx.CommitHeader(ctx, id)
 }
 
 // mergedInto names the sub-changes merged into a change, recursively, oldest first (a change the graph no longer holds

@@ -65,15 +65,15 @@ func (g *Graph) ImpactNodeDelete(ctx context.Context, id domain.ChangeID, in Nod
 	return
 }
 
-// tombstone is the version that deleted a node in the reference baseline of change c (ADR 0172): the node's last
-// commit on the baseline's branch up to its order, else, past the fork of the branch, on the branch it was forked from,
+// tombstone is the version that deleted a node in the reference commit of change c (ADR 0172): the node's last
+// commit on the commit's branch up to its order, else, past the fork of the branch, on the branch it was forked from,
 // when that commit deletes the node; nil otherwise. One indexed read of that node per branch of the chain, never the
 // history of the namespace.
 func (g *Graph) tombstone(ctx context.Context, tx Tx, c domain.Change, nid domain.NodeID) (*domain.Node, error) {
-	if c.BaselineID == "" {
+	if c.ForkCommit == "" {
 		return nil, nil
 	}
-	b, err := headerOf(ctx, tx, c.BaselineID)
+	b, err := headerOf(ctx, tx, c.ForkCommit)
 	if err != nil {
 		return nil, err
 	}

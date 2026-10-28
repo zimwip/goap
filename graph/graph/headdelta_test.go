@@ -11,9 +11,9 @@ import (
 )
 
 // A view of the head followed by deltas holds what a whole read of the head holds (ADR 0143 §4).
-func TestBaselineDelta(t *testing.T) { forEachRepo(t, testBaselineDelta) }
+func TestCommitDelta(t *testing.T) { forEachRepo(t, testCommitDelta) }
 
-func testBaselineDelta(t *testing.T, repo Repo) {
+func testCommitDelta(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
@@ -24,7 +24,7 @@ func testBaselineDelta(t *testing.T, repo Repo) {
 	if err := movedPlain.Move(ctx, g, f.base.ID, false); err != nil {
 		t.Fatal(err)
 	}
-	check := func(at domain.Baseline) {
+	check := func(at domain.Commit) {
 		t.Helper()
 		for _, suspects := range []bool{true, false} {
 			h := &movedPlain
@@ -58,18 +58,18 @@ func testBaselineDelta(t *testing.T, repo Repo) {
 	check(b3)
 
 	// one delta over several commits names each node once, at its last version
-	d := must[BaselineDelta](t)(g.BaselineDelta(ctx, f.base.ID, b3.ID))
+	d := must[CommitDelta](t)(g.CommitDelta(ctx, f.base.ID, b3.ID))
 	if len(d.Nodes) != 4 || len(d.Removed) != 0 {
 		t.Fatalf("delta from the fixture: %d nodes %v, removed %v", len(d.Nodes), d.Nodes, d.Removed)
 	}
 	for _, n := range d.Nodes {
 		if b3.Nodes[n.ID] != n.Version {
-			t.Fatalf("%s at v%d in the delta, v%d in the baseline", n.Key, n.Version, b3.Nodes[n.ID])
+			t.Fatalf("%s at v%d in the delta, v%d in the commit", n.Key, n.Version, b3.Nodes[n.ID])
 		}
 	}
-	// backwards, or from nothing: read the baseline whole
-	for _, ft := range [][2]domain.BaselineID{{b3.ID, b1.ID}, {"", b1.ID}} {
-		if _, err := g.BaselineDelta(ctx, ft[0], ft[1]); !errors.Is(err, ErrInvalid) {
+	// backwards, or from nothing: read the commit whole
+	for _, ft := range [][2]domain.CommitID{{b3.ID, b1.ID}, {"", b1.ID}} {
+		if _, err := g.CommitDelta(ctx, ft[0], ft[1]); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("delta %s -> %s: %v", ft[0], ft[1], err)
 		}
 	}
@@ -81,14 +81,14 @@ type countingGraph struct {
 	whole, deltas int
 }
 
-func (c *countingGraph) BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
+func (c *countingGraph) CommitGraph(ctx context.Context, id domain.CommitID) ([]domain.Node, []domain.Link, error) {
 	c.whole++
-	return c.Graph.BaselineGraph(ctx, id)
+	return c.Graph.CommitGraph(ctx, id)
 }
 
-func (c *countingGraph) BaselineDelta(ctx context.Context, from, to domain.BaselineID) (BaselineDelta, error) {
+func (c *countingGraph) CommitDelta(ctx context.Context, from, to domain.CommitID) (CommitDelta, error) {
 	c.deltas++
-	return c.Graph.BaselineDelta(ctx, from, to)
+	return c.Graph.CommitDelta(ctx, from, to)
 }
 
 // Views of the head share one reader (ADR 0145): the namespace is read whole once and moved once per commit whatever
@@ -106,7 +106,7 @@ func testSharedReader(t *testing.T, repo Repo) {
 		false: {Reader: r, Namespaces: []string{""}, Build: first},
 		true:  {Reader: r, Namespaces: []string{""}, Suspects: true, Build: first},
 	}
-	check := func(at domain.Baseline, whole, deltas int) {
+	check := func(at domain.Commit, whole, deltas int) {
 		t.Helper()
 		for suspects, v := range views {
 			got, ids, err := v.Get(ctx)

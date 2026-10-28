@@ -1,7 +1,7 @@
 <script lang="ts">
   // "Statistics" tab of a namespace (graph statistics tool): the shape of the state at the head of a lasting branch
   // (nodes, links, degrees, connected parts, per node type and link type, the most connected nodes) and what the store
-  // holds for the namespace (versions, link rows, baselines, changes, log entries). Read when opened and when a baseline
+  // holds for the namespace (versions, link rows, commits, changes, log entries). Read when opened and when a commit
   // is written; nothing is stored.
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -31,7 +31,7 @@
   }
 
   $effect(() => {
-    void stamp(keyOf.baselines);
+    void stamp(keyOf.commits);
     void load(namespace, branch);
   });
 
@@ -50,7 +50,7 @@
     { label: 'Links', value: fmt(st?.links), hint: `${fmt(num(st?.links) / Math.max(1, num(st?.nodes)), 2)} per node` },
     { label: 'Node types', value: fmt(st?.types?.length ?? 0), hint: `${fmt(st?.linkTypes?.length ?? 0)} link types` },
     { label: 'Versions', value: fmt(storeVersions), hint: `${fmt(storeVersions / Math.max(1, storeNodes), 2)} per node, all branches` },
-    { label: 'Changes', value: fmt(total(measure(stats, 'changesByStatus'))), hint: `${fmt(total(measure(stats, 'baselinesByKind')))} baselines` },
+    { label: 'Changes', value: fmt(total(measure(stats, 'changesByStatus'))), hint: `${fmt(total(measure(stats, 'commitsByKind')))} commits` },
     { label: 'Branches', value: fmt(stats?.branches?.total), hint: `${fmt(stats?.branches?.lasting)} lasting, ${fmt(stats?.branches?.ephemeral)} of changes` },
     { label: 'Connected parts', value: fmt(st?.componentCount), hint: `largest ${fmt(st?.components?.[0])} nodes` },
     { label: 'Isolated', value: fmt(st?.isolated), hint: `${pct(st?.isolated, st?.nodes)} of the nodes` },
@@ -103,13 +103,13 @@
       </select>
     </label>
     <span class="grow"></span>
-    {#if stats?.baselineId}<span class="hint">head written {formatDate(stats.baselineAt)}</span>{/if}
+    {#if stats?.commitId}<span class="hint">head written {formatDate(stats.commitAt)}</span>{/if}
     <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={loading} onclick={() => load(namespace, branch)}
       ><Icon name="refresh" size={14} /></button
     >
   </div>
   {#if error}<div class="alert">{error}</div>{/if}
-  {#if stats && !stats.baselineId}
+  {#if stats && !stats.commitId}
     <p class="empty">Nothing committed on {branch} yet: the state is empty.</p>
   {/if}
 
@@ -290,8 +290,8 @@
         <p class="hint">Summed over the root changes, net per node: a sub-change is counted in its parent once merged.</p>
       </section>
       <section class="card">
-        <h4>Baselines by kind</h4>
-        {@render bars(ranked(measure(stats, 'baselinesByKind')), 'baselines')}
+        <h4>Commits by kind</h4>
+        {@render bars(ranked(measure(stats, 'commitsByKind')), 'commits')}
       </section>
       <section class="card">
         <h4>Log entries by stream</h4>

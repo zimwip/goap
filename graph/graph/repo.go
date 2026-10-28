@@ -50,9 +50,9 @@ type Tx interface {
 	NodeIDByKey(ctx context.Context, namespace, key string) (domain.NodeID, error)
 	// NodeIDsByKey resolves some keys at once, as NodeIDByKey: the keys no node holds are left out.
 	NodeIDsByKey(ctx context.Context, namespace string, keys []string) (map[string]domain.NodeID, error)
-	// NodesIn lists the nodes of a baseline, of one type when nodeType is not empty, by key: through the guard of the
+	// NodesIn lists the nodes of a commit, of one type when nodeType is not empty, by key: through the guard of the
 	// graph, which computes the state; a store lists the nodes of the entries it stores.
-	NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error)
+	NodesIn(ctx context.Context, commit domain.CommitID, nodeType string) ([]domain.Node, error)
 	// NodesAt reads node versions by reference, of one type when nodeType is not empty, by key.
 	NodesAt(ctx context.Context, refs []domain.NodeRef, nodeType string) ([]domain.Node, error)
 	// LatestNodes returns the latest version of every node of a namespace on a branch.
@@ -90,14 +90,14 @@ type Tx interface {
 	// is read (ADR 0140). q.Limit is set; q.Change is the caller's.
 	NodePage(ctx context.Context, refs []domain.NodeRef, q NodeQuery) (NodePage, error)
 	LinkPage(ctx context.Context, refs []domain.NodeRef, q LinkQuery) (LinkPage, error)
-	// Baseline reads a baseline with its state and Baselines the baselines of a namespace, oldest first, with theirs:
+	// Commit reads a commit with its state and Commits the commits of a namespace, oldest first, with theirs:
 	// the selection of the versions committed (ADR 0143), cached by the guard of the graph.
-	Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
-	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
-	// BaselineHeader reads a baseline without its state (Nodes nil), with its order (Seq).
-	BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
+	Commit(ctx context.Context, id domain.CommitID) (domain.Commit, error)
+	Commits(ctx context.Context, namespace string) ([]domain.Commit, error)
+	// CommitHeader reads a commit without its state (Nodes nil), with its order (Seq).
+	CommitHeader(ctx context.Context, id domain.CommitID) (domain.Commit, error)
 	// CommittedVersions reads the last version of each node (nil ids: every node of the namespace) that committed on a branch
-	// in a baseline whose order is after `after`, up to upTo (Baseline.Seq, ADR 0140): written there or joined; 0 for a
+	// in a commit whose order is after `after`, up to upTo (Commit.Seq, ADR 0140): written there or joined; 0 for a
 	// version that deletes its node.
 	CommittedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error)
 	// BranchCommits reads the last commit of each node (nil ids: every node of the namespace) on a branch up to the
@@ -105,7 +105,7 @@ type Tx interface {
 	BranchCommits(ctx context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error)
 	// LastCommit returns the order of the last commit on a branch (0: none, ADR 0140).
 	LastCommit(ctx context.Context, branch string) (int64, error)
-	// NextCommit allocates the order of a new baseline (Baseline.Seq): greater than every order allocated before.
+	// NextCommit allocates the order of a new commit (Commit.Seq): greater than every order allocated before.
 	NextCommit(ctx context.Context) (int64, error)
 	// BranchNodeIDs lists the nodes a branch holds a version of: written on it or joined to it (ADR 0137).
 	BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error)
@@ -114,17 +114,17 @@ type Tx interface {
 	// NodeIDsOfType lists the nodes of a type in a namespace (its node rows, index node_type), by id, from the first one
 	// after the id after (empty: from the start), at most limit: a type read a batch at a time.
 	NodeIDsOfType(ctx context.Context, namespace, typ string, after domain.NodeID, limit int) ([]domain.NodeID, error)
-	// BaselineHeaders returns the header of every baseline of a namespace, oldest first, without their nodes (ADR 0133).
-	BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error)
-	// BranchBaselineHeaders returns the header of every baseline of a branch of a namespace, oldest first.
-	BranchBaselineHeaders(ctx context.Context, namespace, branch string) ([]domain.Baseline, error)
-	// BaselinePage returns the headers of the baselines of a branch committed before the order before (0: the newest),
-	// newest first, at most limit; BaselineHeadersOf the headers of baselines by id and ChangeBaselineHeaders the ones
-	// the changes left, oldest first; BaselineCounts the number of baselines of each branch of a namespace.
-	BaselinePage(ctx context.Context, namespace, branch string, before int64, limit int) ([]domain.Baseline, error)
-	BaselineHeadersOf(ctx context.Context, namespace string, ids []domain.BaselineID) ([]domain.Baseline, error)
-	ChangeBaselineHeaders(ctx context.Context, namespace string, changes []domain.ChangeID) ([]domain.Baseline, error)
-	BaselineCounts(ctx context.Context, namespace string) (map[string]int, error)
+	// CommitHeaders returns the header of every commit of a namespace, oldest first, without their nodes (ADR 0133).
+	CommitHeaders(ctx context.Context, namespace string) ([]domain.Commit, error)
+	// BranchCommitHeaders returns the header of every commit of a branch of a namespace, oldest first.
+	BranchCommitHeaders(ctx context.Context, namespace, branch string) ([]domain.Commit, error)
+	// CommitPage returns the headers of the commits of a branch committed before the order before (0: the newest),
+	// newest first, at most limit; CommitHeadersOf the headers of commits by id and ChangeCommitHeaders the ones
+	// the changes left, oldest first; CommitCounts the number of commits of each branch of a namespace.
+	CommitPage(ctx context.Context, namespace, branch string, before int64, limit int) ([]domain.Commit, error)
+	CommitHeadersOf(ctx context.Context, namespace string, ids []domain.CommitID) ([]domain.Commit, error)
+	ChangeCommitHeaders(ctx context.Context, namespace string, changes []domain.ChangeID) ([]domain.Commit, error)
+	CommitCounts(ctx context.Context, namespace string) (map[string]int, error)
 	// StoreCounts counts the rows of a namespace for the statistics of the graph: per measure (StoreMeasures), the
 	// count of each key.
 	StoreCounts(ctx context.Context, namespace string) (map[string]map[string]int, error)
@@ -158,8 +158,8 @@ type Tx interface {
 	LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, error)
 	// LinkSetsOf is LinkSetOf for several versions, in one read: a version that does not exist has no entry.
 	LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[domain.NodeRef]LinkSet, error)
-	// PutBaseline stores the header of a baseline (ADR 0143): its state is the selection at its order, never stored.
-	PutBaseline(ctx context.Context, b domain.Baseline) error
+	// PutCommit stores the header of a commit (ADR 0143): its state is the selection at its order, never stored.
+	PutCommit(ctx context.Context, b domain.Commit) error
 	// PutTag stores a tag (ADR 0056); DeleteTag removes it (ErrNotFound when absent); Tags lists the tags matching
 	// f, oldest first.
 	PutTag(ctx context.Context, t domain.Tag) error
@@ -194,14 +194,14 @@ type Tx interface {
 
 	// JoinBranch makes a node version part of a branch it was not written on (a merge that commits it as is,
 	// ADR 0032): the version is not copied and keeps the branch it was written on. change is the change whose merge
-	// makes it join (ADR 0054: no membership without a change), committed the order of the baseline it commits in (the guard
+	// makes it join (ADR 0054: no membership without a change), committed the order of the commit it commits in (the guard
 	// of the graph sets it, ADR 0140).
 	JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, committed int64) error
 
 	// DeleteChange removes a change that committed nothing (ADR 0037): its log, impacts, node versions and links,
 	// the nodes it alone created, and its branch when it has one of its own (empty: none). It refuses (ErrConflict) when
-	// what the change wrote is used: a baseline holds one of its versions, a later version or a link of another
-	// change builds on one, or it produced a baseline.
+	// what the change wrote is used: a commit holds one of its versions, a later version or a link of another
+	// change builds on one, or it produced a commit.
 	DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error
 
 	// LockChange holds, until the transaction ends, the lock of the tree of changes id belongs to (its root change

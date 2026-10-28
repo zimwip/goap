@@ -29,13 +29,13 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 ```
                  DOMAIN AXIS (content, versioned)
    ┌──────────────────────────────────────────────────────────┐
-   │  NEED-4@v2 ◄──satisfies── REQ-12@v3 ◄──verifies── TST-7@v1│   baseline B1 (reference)
+   │  NEED-4@v2 ◄──satisfies── REQ-12@v3 ◄──verifies── TST-7@v1│   commit B1 (reference)
    │                              │                             │
    └──────────────────────────────┼─────────────────────────────┘
                                   │ reference (target)
                  CHANGE AXIS (modification, = blackboard)
    ┌──────────────────────────────┼─────────────────────────────┐
-   │ Change CR-42 (baseline = B1, intent = "…")              │
+   │ Change CR-42 (commit = B1, intent = "…")              │
    │   ├─ change impact #n1 modified REQ-12 (pre v3, post v4)     │
    │   ├─ change impact #n2 modified TST-7  (pre v1, planned)     │
    │   ├─ change impact #n3 created  TST-9  ─verifies→ REQ-12@v4  │
@@ -43,7 +43,7 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
    └────────────────────────────────────────────────────────────┘
                                   │ apply
                                   ▼
-                 baseline B2 (resulting graph): REQ-12@v4, TST-9@v1 …
+                 commit B2 (resulting graph): REQ-12@v4, TST-9@v1 …
 ```
 
 #### Domain axis
@@ -53,7 +53,7 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 | **Node** | Typed content element. Its type is a qualified reference `<namespace>@<NodeType>` (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)). Stable identity `NodeID` + readable `Key` (`REQ-12`). A version of a successor node records its lineage (`Origins`, [ADR 0077](adr/0077-impact-node-operations.md), "Merge and split"): the nodes it derives from, set on its first version; `Graph.DerivedNodes` answers the other way. |
 | **Version** | Each committed modification creates a new immutable version `NodeID@vN`. A version can be a *tombstone* (deletion). It is written **when its change commits** (commit), from the node's draft ([ADR 0079](adr/0079-drafts-and-versions-at-commit.md)): while a change works on a node it has no version, only a **draft** (per change impact and flow, derived from the change log, never stored). A written version is never edited. It is owned by an organisational unit, and its node was created in a project ([ADR 0054](adr/0054-structures-bootstrap-and-the-graph-guard.md)). |
 | **Link** | Typed relationship **from version to version**: `REQ-12@v3 ─satisfies→ NEED-4@v2`. A link does not automatically "follow" new versions: if `NEED-4` moves to v3, the link becomes **suspect** — this is the model's native impact signal. |
-| **Baseline** | Coherent set `{NodeID → Version}`, scoped to one namespace (every node in it belongs to that namespace): a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline of its own namespace (the empty state before the first change) and produces a resulting baseline of that same namespace: a baseline is the state a change leaves ([ADR 0056](adr/0056-baselines-are-states-of-changes-names-are-tags.md)); a tag names one node version, and a smart tag, held by its own store, selects a set of versions ([ADR 0143](adr/0143-the-state-of-a-node-is-a-selection.md) §6, §7). The state of a baseline is a selection ([ADR 0143](adr/0143-the-state-of-a-node-is-a-selection.md)): the version of a node at a baseline is its last commit on the baseline's branch up to the baseline's order (`baseline.seq`), else, past the fork of the branch, the selection on the branch it was forked from; every baseline, the bootstrap included, stores only its header, nothing is stored or checkpointed. A view of the head (access, hub, model and methodology snapshots, `graphsnap.Head`) reads the head whole once, then only the nodes committed since (`Graph.BaselineDelta`, RPC `GetBaselineDelta`); the one way to read the graph at a commit is `graphsnap.Reader.At`, one reader per process shared by every view of it (`graphsnap.View`, which asks for the head at each read), so each namespace is held once per process ([ADR 0145](adr/0145-one-way-to-read-the-graph-at-a-commit.md)). The branch of a change holds no baseline: its state is its fork with the versions committed on it since, the last one of a node winning, and a commit writes only its versions (ADR 0140 §9). A commit and a merge never read a state whole: they read the versions of the nodes they touch (`Tx.BaselineVersions`: the selection of those nodes), find what a change's branch changed from the versions on that branch, and write a header ([ADR 0137](adr/0137-a-commit-reads-the-nodes-it-touches.md)). |
+| **Commit** | Coherent set `{NodeID → Version}`, scoped to one namespace (every node in it belongs to that namespace): a "commit" of the graph. A commit's links are those whose two endpoints are both in the commit. Every modification starts from a reference commit of its own namespace (the empty state before the first change) and produces a resulting commit of that same namespace: a commit is the state a change leaves ([ADR 0056](adr/0056-baselines-are-states-of-changes-names-are-tags.md)); a tag names one node version, and a smart tag, held by its own store, selects a set of versions ([ADR 0143](adr/0143-the-state-of-a-node-is-a-selection.md) §6, §7). The state of a commit is a selection ([ADR 0143](adr/0143-the-state-of-a-node-is-a-selection.md)): the version of a node at a commit is its last commit on the commit's branch up to the commit's order (`commit.seq`), else, past the fork of the branch, the selection on the branch it was forked from; every commit, the bootstrap included, stores only its header, nothing is stored or checkpointed. A view of the head (access, hub, model and methodology snapshots, `graphsnap.Head`) reads the head whole once, then only the nodes committed since (`Graph.CommitDelta`, RPC `GetCommitDelta`); the one way to read the graph at a commit is `graphsnap.Reader.At`, one reader per process shared by every view of it (`graphsnap.View`, which asks for the head at each read), so each namespace is held once per process ([ADR 0145](adr/0145-one-way-to-read-the-graph-at-a-commit.md)). The branch of a change holds no commit: its state is its fork with the versions committed on it since, the last one of a node winning, and a commit writes only its versions (ADR 0140 §9). A commit and a merge never read a state whole: they read the versions of the nodes they touch (`Tx.CommitVersions`: the selection of those nodes), find what a change's branch changed from the versions on that branch, and write a header ([ADR 0137](adr/0137-a-commit-reads-the-nodes-it-touches.md)). |
 
 **Namespaces** ([ADR 0015](adr/0015-namespaces.md)): every node lives in a namespace, and a namespace is the content of
 one domain ([ADR 0013](adr/0013-domains.md)): `alm` (delivery), `organisation`, `platform` (MCPs, adapter definitions,
@@ -64,26 +64,26 @@ of `lib/domains/builtin/` and protects them; they change with the code (or the r
 read-only in the domain editor; a new namespace is a new domain published from the domain editor.
 Domains themselves are not graph data: the domain registry, a service of its own, keeps them in its database ([ADR 0125](adr/0125-source-components.md) §3, [ADR 0167](adr/0167-domain-registry-a-service-of-its-own.md)). Keys are unique per namespace. A change acts on one namespace: it can
 only create and modify nodes of that namespace, but may link to nodes of another one. So that an action or agent's
-default queries (a prompt's `.Baseline.Nodes`, a script's `Host.Node`/`Nodes`/`Links`, a human task's node picker)
-are bound to the change's own declared namespace rather than exposing every namespace at once, baselines and
-branches are namespace-scoped too: a baseline only ever holds nodes of one namespace, and a branch's identity is
+default queries (a prompt's `.Commit.Nodes`, a script's `Host.Node`/`Nodes`/`Links`, a human task's node picker)
+are bound to the change's own declared namespace rather than exposing every namespace at once, commits and
+branches are namespace-scoped too: a commit only ever holds nodes of one namespace, and a branch's identity is
 `(namespace, name)` — "main" is really "main of namespace X", and two namespaces may each have their own branch of
 the same name. Cross-namespace capabilities (ownership links, adapter/MCP resolution, ABAC, the model gateway, the
 methodology registry) are unaffected: they read a specific namespace's own head directly (e.g. `BranchHead(ns,
-"main")`) instead of relying on one shared baseline that happened to hold every namespace's nodes together.
-A baseline can be browsed without loading it whole (`ListNamespaces`, `ListBaselineNodes`: the node count per type
+"main")`) instead of relying on one shared commit that happened to hold every namespace's nodes together.
+A commit can be browsed without loading it whole (`ListNamespaces`, `ListCommitNodes`: the node count per type
 and a page of the nodes of one type, text-filtered on the server; `GetNodeNeighbourhood`: a node, its direct
-neighbours in both directions and the suspect links among them, `graph/graph/browse.go`). The IDE's Baseline explorer
-and tab navigate namespace → baseline → node type → paged nodes, and show the neighbour graph of the selected node.
+neighbours in both directions and the suspect links among them, `graph/graph/browse.go`). The IDE's History explorer
+and tab navigate namespace → commit → node type → paged nodes, and show the neighbour graph of the selected node.
 The statistics of the graph are read on demand, nothing stored (`graph/graph/stats.go`): `GetGraphOverview` sums what
 each namespace holds (those holding nodes and those of every domain in force, empty ones included), `GetGraphStats` gives for one namespace the rows of the store counted by the database
 (`Tx.StoreCounts`, one statement per measure in `sqlbuild.go`: nodes and versions per type, versions per reason and per
-node, link rows and drops, how versions hold their link sets, joins, baselines per kind, changes per status, tags, log
+node, link rows and drops, how versions hold their link sets, joins, commits per kind, changes per status, tags, log
 entries per type) and the shape of the state at the head of a lasting branch, computed from that state (links within
 it, suspect and leaving ones, degree distributions, histogram, per node type and link type with the type pairs, the
 most connected nodes, weakly connected components, density, reciprocal pairs). The IDE's *Graph statistics* tool (left
 bar) lists the namespaces and opens a statistics tab per namespace.
-A request started without a baseline or a change (the assistant, a trigger) opens its change on the latest baseline
+A request started without a commit or a change (the assistant, a trigger) opens its change on the latest commit
 of the namespace its methodology acts on, known once the intent is identified.
 The organisation is a hierarchy of units in its own namespace (`organisation`); nodes reference their owner
 unit across namespaces, and a change is split into sub-changes along unit boundaries
@@ -137,7 +137,7 @@ codes or kinds; none listed anywhere: nothing restricted), so a reviewer (`opera
 and never edits or withdraws; the graph asks `Graph.OperationAuthorizer` (`graphsvc.OperationAuthorizer`:
 `operation:perform` with the roles allowed, from `registrysvc.Service.OperationRoles`).
 
-A **root change** is rebased the same way onto the head of the branch it was forked from ([ADR 0101](adr/0101-a-change-is-rebased-onto-its-target-before-it-commits.md), `RebaseChange` / `GetRebaseState` also serve root changes; `MergeChange` rebases it first, conflicts stop with `ErrConflict`): a clean rebase keeps the reviews, the change and its branch move to the head (one `change.updated` entry with a `baselineId` `{from, to}` field, `Branch.rebasedFrom` set once), and commit is a fast-forward, so the history of the target is linear. Since [ADR 0102](adr/0102-iterate-on-the-branch-of-a-change.md) a change commits on its branch without being rebased and is rebased when it is merged: its fork moves onto the head (no baseline: the branch of a change holds none, ADR 0140), the nodes changed on both sides merged into drafts whose version takes the target's as second parent; a change that committed nothing has nothing to rebase. Since [ADR 0165](adr/0165-a-commit-rebases-its-drafts-onto-the-head.md) the commit first rebases the drafts it writes onto the head of its target (a draft checked out again from the head's version, the difference of the three-way merge as an update, the state moved only by moves its lifecycle allows from the head's state: the moves the change recorded replayed, or one move when both sides moved it, else a `state` conflict); a conflict stops the commit and the rebase is kept, a clean one commits versions deriving from the head's, and the merge, following the lineage of each node, is a fast-forward. Since [ADR 0166](adr/0166-a-change-stays-open-until-closed.md) the merge leaves the change open: it merges what the change committed (its branch forked again from what it merged), whatever the change still works on, and `CloseChange` ends it: everything settled, the lifecycle in a final state, what is left merged, the change applied. The same sync pane (`SubChangeSync.svelte`) shows "Behind <branch> (now at <head>)", Rebase and "Keep mine" for a root change.
+A **root change** is rebased the same way onto the head of the branch it was forked from ([ADR 0101](adr/0101-a-change-is-rebased-onto-its-target-before-it-commits.md), `RebaseChange` / `GetRebaseState` also serve root changes; `MergeChange` rebases it first, conflicts stop with `ErrConflict`): a clean rebase keeps the reviews, the change and its branch move to the head (one `change.updated` entry with a `commitId` `{from, to}` field, `Branch.rebasedFrom` set once), and commit is a fast-forward, so the history of the target is linear. Since [ADR 0102](adr/0102-iterate-on-the-branch-of-a-change.md) a change commits on its branch without being rebased and is rebased when it is merged: its fork moves onto the head (no commit: the branch of a change holds none, ADR 0140), the nodes changed on both sides merged into drafts whose version takes the target's as second parent; a change that committed nothing has nothing to rebase. Since [ADR 0165](adr/0165-a-commit-rebases-its-drafts-onto-the-head.md) the commit first rebases the drafts it writes onto the head of its target (a draft checked out again from the head's version, the difference of the three-way merge as an update, the state moved only by moves its lifecycle allows from the head's state: the moves the change recorded replayed, or one move when both sides moved it, else a `state` conflict); a conflict stops the commit and the rebase is kept, a clean one commits versions deriving from the head's, and the merge, following the lineage of each node, is a fast-forward. Since [ADR 0166](adr/0166-a-change-stays-open-until-closed.md) the merge leaves the change open: it merges what the change committed (its branch forked again from what it merged), whatever the change still works on, and `CloseChange` ends it: everything settled, the lifecycle in a final state, what is left merged, the change applied. The same sync pane (`SubChangeSync.svelte`) shows "Behind <branch> (now at <head>)", Rebase and "Keep mine" for a root change.
 
 **Organisations** ([ADR 0019](adr/0019-organisations-mcp-connectors.md)) are the `OrgUnit` nodes above. A
 change is held by one unit (`ownerOrg`; empty: the default organisation `ORG-DEFAULT`, created at the first start
@@ -147,7 +147,7 @@ the platform (§3.9): a unit inherits the adapters of its ancestors, the nearest
 Versioning rule ([ADR 0003](adr/0003-version-to-version-links.md)): **outgoing links belong
 to the source node's version**. Adding/removing an outgoing link creates a new version of the source;
 a node that changes version carries its outgoing links forward; incoming links from unmodified
-nodes stay on the old version and become **suspect**. Baselines thus remain immutable. The links a
+nodes stay on the old version and become **suspect**. Commits thus remain immutable. The links a
 version carries are held as a **link set** ([ADR 0141](adr/0141-the-links-of-a-version-are-a-set.md)):
 shared as is with an earlier version when unchanged, or written as a delta (added links, drop rows)
 over an earlier set: the set of order k over the one of order `k & (k-1)` (skip deltas, written whole at each power of
@@ -170,9 +170,9 @@ REQ-1  v1(main) ── v2(change-A, derive) ═══ joins main (fast-forward o
           └────── v3(change-B, derive) ── v4(change-B, rebase ← v3 + v2) ═══ joins main (fast-forward of B)
 ```
 
-- A **branch** (`CreateBranch`) belongs to one namespace (`Branch.namespace`) and starts from a baseline of that
-  same namespace (`forkBaseline`), advancing through the changes applied on it (`Change.branch`); its **head**
-  (`head`) is the latest baseline produced. `main` exists implicitly, per namespace.
+- A **branch** (`CreateBranch`) belongs to one namespace (`Branch.namespace`) and starts from a commit of that
+  same namespace (`forkCommit`), advancing through the changes applied on it (`Change.branch`); its **head**
+  (`head`) is the latest commit produced. `main` exists implicitly, per namespace.
 - "Latest version" is read **per branch** (`LatestOn(node, branch)`: the highest version written on the branch or
   joined to it): applying (`apply`) a change detects a conflict when a node has advanced **on the change's branch**
   since the base version.
@@ -186,21 +186,21 @@ REQ-1  v1(main) ── v2(change-A, derive) ═══ joins main (fast-forward o
   the target; conflicts require a resolution (resolved properties, or `skip`). The branch moves to `merged`.
   A change branch that the target did not move since its fork commits by a **fast-forward**: its versions join the
   target, nothing is copied. A change is rebased onto its target before it commits (ADR 0101), so the fast-forward is the
-  normal path and the merge a race or a branch merged by hand. The baseline carries its `kind` (`fast-forward`,
-  `merge`, `snapshot`, ...; a change branch holds none, so no `commit`, `rebase` or `revert` baseline is written for
+  normal path and the merge a race or a branch merged by hand. The commit carries its `kind` (`fast-forward`,
+  `merge`, `snapshot`, ...; a change branch holds none, so no `commit`, `rebase` or `revert` commit is written for
   one: a withdrawn committed node is reverted by a version with reason `revert`, ADR 0140 §9) and, for a rebased change,
-  `rebasedFrom` (the baseline it was forked from before, copied from `Branch.rebasedFrom`). The history tab (`BaselineBranchGraph`, `baselineHistory.ts`) shows the kind as a badge on each row,
+  `rebasedFrom` (the commit it was forked from before, copied from `Branch.rebasedFrom`). The history tab (`CommitBranchGraph`, `commitHistory.ts`) shows the kind as a badge on each row,
   a "rebased" badge ("rebased onto T1, was B") with a dashed "rebased from" edge next to the solid fork edge, edges labelled
   fork / rebase / merge / fast-forward, and on a merge the change and the branch merged. Every open branch forked from the
   branch shown has a lane (ADR 0102): an open change branch is its open head, drawn as a transparent dot.
-- **Change-stack** ([ADR 0133](adr/0133-rebase-is-a-merge-and-the-change-stack.md)): every node version and every baseline
+- **Change-stack** ([ADR 0133](adr/0133-rebase-is-a-merge-and-the-change-stack.md)): every node version and every commit
   exposes the changes it is the application of, oldest first, with the lineage they are read from (`Graph.ChangeStack`,
   RPC `GetChangeStack`): for a version, its ancestors through `parents` with the change that wrote each and the changes
-  whose merge made it join a branch (`node_branch`); for a baseline, the baselines it follows from (parent, merged head)
-  and, for one that took a change in, the sub-changes merged into it (`BaselineStep.merged`: a change branch holds no
-  baseline, ADR 0140). A sub-change names its parent. Nothing is stored: the stack is composed from what every version and
-  baseline records. `DiffBaselines` also answers the changes that explain the difference (`changes_added` /
-  `changes_removed`). Web: `ChangeStackView.svelte` in the node history, the Baseline tab and the comparison.
+  whose merge made it join a branch (`node_branch`); for a commit, the commits it follows from (parent, merged head)
+  and, for one that took a change in, the sub-changes merged into it (`CommitStep.merged`: a change branch holds no
+  commit, ADR 0140). A sub-change names its parent. Nothing is stored: the stack is composed from what every version and
+  commit records. `DiffCommits` also answers the changes that explain the difference (`changes_added` /
+  `changes_removed`). Web: `ChangeStackView.svelte` in the node history, the Commit tab and the comparison.
 - **Views of a change** (`ChangeView`): the head of the change branch with the change impacts of a flow counted at a
   level — `written` (the drafts proposed or accepted, not rejected: what the change or an option would look like),
   `accepted` (what would commit), `committed` (the version it committed: on its own branch when committed, then on the branch it is merged into; the last one counts). Only `committed` is stored.
@@ -250,9 +250,9 @@ REQ-1  v1(main) ── v2(change-A, derive) ═══ joins main (fast-forward o
 
 | Concept | Description |
 |---|---|
-| **Change** | A modification request. References a starting baseline, carries the initial intent and the chosen goal. It is **the blackboard** of an agentic process. |
+| **Change** | A modification request. References a starting commit, carries the initial intent and the chosen goal. It is **the blackboard** of an agentic process. |
 | **ChangeItem** | Blackboard **fact** with no node: its `type` (the **item type**) is declared by a domain (`itemTypes:` of a domain, [ADR 0128](adr/0128-item-types-declared-by-domains.md)): the built-in methodology domain declares the change mechanism (`artifact`, `decision`, `decision_point`, `flow`, `review`, `signal`, `transition`) and the platform use cases (`risk`, `action`, `derogation`, `assessment`, `comment`, `verification`, whose code registers their validation); the graph refuses a type no domain in force declares and checks the data keys a type declares as attributes. Its `target` is what it is about within that type (what an artifact is, the name of a signal), a signal's `recipient` the process it addresses ([ADR 0119](adr/0119-item-types-in-the-domain-explorer.md)). `ListItemTypes` lists the types in force; each domain shows and edits its own under *Item types* in the domain explorer. Each item has a provenance (`producedBy` = action, `derivedFrom` = other items). |
-| **ChangeImpact** | Link from the change to a node ([ADR 0024](adr/0024-change-impacts.md)): `intent` (`created` / `modified`), `rationale`, `pre` (released version), `post` (the **draft reference** `{node, version 0}` while the change works on the node, the version written once it is committed; empty while the impact of an existing node is only proposed, or while a creation is only planned: `ProposeImpact` takes existing nodes and planned creations (intent `created`, a key and a type, no draft, [ADR 0121](adr/0121-planned-creations.md)), a new node is created by `ImpactNodeCreate`, one `created` event for its impact and draft, or, for a planned key, a `checkedOut` event giving the planned impact its draft; a key is one node's: a creation of a key another open change wrote is refused at once, and a key only abandoned changes wrote, or that lives only on other lasting branches, is taken over, the node getting its next version as a creation, `takeKey`, [ADR 0151](adr/0151-git-branches-on-graph-branches.md); a merge of two lines that both created it is a three-way merge with no base), `committed` (version on the target branch once applied: the post version itself when it joined the target, a merge version when the node changed on both sides), `review` with a mandatory comment. Every node write names a change and works on a **draft** ([ADR 0076](adr/0076-checkout-working-versions.md), [ADR 0079](adr/0079-drafts-and-versions-at-commit.md)): `ImpactNodeCreate` / `ImpactNodeCheckout` give the node its draft (once per change and flow; the impact's post; `ImpactNodeCheckout` takes one node or several, checked out in one transaction, all or none), `ImpactNodeUpdate` and the link operations (`ImpactLinkCreate`, `ImpactLinkUpdate`, `ImpactLinkDelete`) edit it, `ImpactNodeReview` accepts or rejects (always an explicit operation: an edit never reviews; an acceptance is gated by the checks of a version run on the draft and writes nothing; editing after it sends the review back to `proposed`), `ImpactNodeTransition` moves a node along its lifecycle (on the draft, which a node with none is checked out for first, the guard seeing the change, the impact and the draft); `ImpactNodeCancel` drops a draft and `WithdrawImpact` takes an impact out of the change (`WithdrawImpacts` several at once, in one transaction: all or none, the impacts tab's *Remove selected from change* over the checked rows; a creation dropped leaves no node, a node no parent holds is retired by its lifecycle; `ImpactNodeDelete` deletes a node, the commit writing a tombstone that leaves the state, and a creation of a key the reference baseline holds, alive or deleted, is requalified as the modification of that node, restored when deleted: `proposed`, `requalified`, `checkedOut`, `updated` entries, [ADR 0172](adr/0172-deleting-and-restoring-a-node.md)). Each commit records what a version does to its node (`effect`: created, modified, deleted, restored, requalified; the properties, state and links it changed) and keeps the counters of the change on its header (`Change.stats`, net per node; the graph statistics sum them per namespace, [ADR 0173](adr/0173-counters-of-a-change.md)). A draft is free to be incomplete (only the attributes, their types and enums are checked as it is edited); its validators, required links and link attributes are checked when its review is accepted and when it commits. The commit then the merge (every impact accepted): the commit **writes the versions from the drafts** on its own branch (the next version number, the version checked out from as parent, owner, origins, comment, links resolved to the versions of the change) after rebasing a root change onto the head of its target branch ([ADR 0101](adr/0101-a-change-is-rebased-onto-its-target-before-it-commits.md)), and commits the branch (a fast-forward; the three-way merge only when the target moved between the rebase and the integration, then `MergeChange`). A node version records its `changeId`, `changeImpact` and `comment`. A node's type is a direct attribute of the node (`Node.Type`), there is no `instanceOf` link. Everything that happens to a change is an entry of **one log** ([ADR 0030](adr/0030-one-change-log.md)): its facts, its journal records (scheduling included) and its impact events, in one order, with the type, flow branch, process and action run as columns to filter on (`ListChangeLog`). The change impacts are **event-sourced** ([ADR 0029](adr/0029-event-sourced-change-impacts.md)): every operation (`proposed` for an existing node, `created` for a new one with its draft, `checkedOut`, `transitioned`, `updated`, `cancelled`, `withdrawn`, `reviewed`, `discarded`, `adopted`, `committed`, `rebased`, `requalified`) is an event of the change's impact log with its caller (principal, action run, flow), its payload holding what the event changes and nothing the entry's columns hold, a checkout of a stored version naming that version rather than copying it ([ADR 0142](adr/0142-impact-events-carry-what-they-change.md), read with `domain.ImpactEventsOf`; the verdicts of one review and the versions of one commit are one entry, [ADR 0144](adr/0144-a-review-and-a-commit-are-one-entry.md)); nothing is stored for an impact but its log until it commits (the store keeps a change impact per version written, with the version, [ADR 0174](adr/0174-change-impacts-written-at-commit.md)), and the drafts are not stored at all: they are the fold of the log (`domain.FoldDrafts`), kept in a per-change in-process cache validated by the log position (`graph/graph/draftcache.go`, ADR 0079 §2); that fold is the **view** of the change every operation reads and extends, with the phases, the impact events and the moves, a change being read at a position of its log (`Change.Seq`) that a write returns in the caller's watermark and a read may require, and readable as it stood at an earlier position (`ChangeAt`, [ADR 0153](adr/0153-a-change-is-read-as-a-view-of-its-log.md)); the view keeps its impacts in blocks of `domain.ImpactBlock` and its maps in shards (`graph/graph/cowmap.go`) that its copies share, a write copying the block or shard it touches rather than the view, and its impacts are read through one list, `domain.Impacts` (`Change.Impacts()`: `All`, `At`, `Index`; the view indexes them by id, node and key, so `Index`, `OfNode`, `OfKey` and `Plain` answer without walking the list, the positions appended since the index was taken walked after it), shared with the operations that read before they write (`Change.ShareImpacts`) and copied into `Change.Nodes` only for the callers of the graph, and what a flow sees is a fold of the log (`ListChangeEvents`; the **Audit** pane of the change merges it with the execution journal and the facts into one chronological trail, with CSV / JSON export, and the whole log as W3C PROV-O provenance in JSON-LD, `ExportChangeProvenance`, `graph/prov`, [ADR 0057](adr/0057-change-log-as-prov-o.md)). The state of a namespace at a baseline is exported as a JSON snapshot without history (`ExportGraph`, `graph/graph/snapshot.go`) and imported as one new change left for review, which creates the missing nodes and brings the others to the snapshot (`ImportGraph`, [ADR 0104](adr/0104-domain-and-graph-import-export.md)); the same state is exported as an OKF tree, a zip of one Markdown file per node with a YAML front matter (`graph/okf`, [ADR 0111](adr/0111-okf-export-of-the-graph.md)); the web exports and imports them as jobs (`StartGraphExport`, `StartGraphImport`, [ADR 0149](adr/0149-a-job-service-for-long-runs.md)), the file a job writes saved when it is done. Merging nodes into a new one and splitting one into several are modifications of the **parents** (`ImpactNodeMerge`, `ImpactNodeSplit`, [ADR 0077](adr/0077-impact-node-operations.md)): the parent's draft loses the links to the sources and gains the links to the successors, the sources stay untouched and their impacts carry the parent's impact as `via`; a successor is accepted and committed only once the impacts of its origins are accepted. |
+| **ChangeImpact** | Link from the change to a node ([ADR 0024](adr/0024-change-impacts.md)): `intent` (`created` / `modified`), `rationale`, `pre` (released version), `post` (the **draft reference** `{node, version 0}` while the change works on the node, the version written once it is committed; empty while the impact of an existing node is only proposed, or while a creation is only planned: `ProposeImpact` takes existing nodes and planned creations (intent `created`, a key and a type, no draft, [ADR 0121](adr/0121-planned-creations.md)), a new node is created by `ImpactNodeCreate`, one `created` event for its impact and draft, or, for a planned key, a `checkedOut` event giving the planned impact its draft; a key is one node's: a creation of a key another open change wrote is refused at once, and a key only abandoned changes wrote, or that lives only on other lasting branches, is taken over, the node getting its next version as a creation, `takeKey`, [ADR 0151](adr/0151-git-branches-on-graph-branches.md); a merge of two lines that both created it is a three-way merge with no base), `committed` (version on the target branch once applied: the post version itself when it joined the target, a merge version when the node changed on both sides), `review` with a mandatory comment. Every node write names a change and works on a **draft** ([ADR 0076](adr/0076-checkout-working-versions.md), [ADR 0079](adr/0079-drafts-and-versions-at-commit.md)): `ImpactNodeCreate` / `ImpactNodeCheckout` give the node its draft (once per change and flow; the impact's post; `ImpactNodeCheckout` takes one node or several, checked out in one transaction, all or none), `ImpactNodeUpdate` and the link operations (`ImpactLinkCreate`, `ImpactLinkUpdate`, `ImpactLinkDelete`) edit it, `ImpactNodeReview` accepts or rejects (always an explicit operation: an edit never reviews; an acceptance is gated by the checks of a version run on the draft and writes nothing; editing after it sends the review back to `proposed`), `ImpactNodeTransition` moves a node along its lifecycle (on the draft, which a node with none is checked out for first, the guard seeing the change, the impact and the draft); `ImpactNodeCancel` drops a draft and `WithdrawImpact` takes an impact out of the change (`WithdrawImpacts` several at once, in one transaction: all or none, the impacts tab's *Remove selected from change* over the checked rows; a creation dropped leaves no node, a node no parent holds is retired by its lifecycle; `ImpactNodeDelete` deletes a node, the commit writing a tombstone that leaves the state, and a creation of a key the reference commit holds, alive or deleted, is requalified as the modification of that node, restored when deleted: `proposed`, `requalified`, `checkedOut`, `updated` entries, [ADR 0172](adr/0172-deleting-and-restoring-a-node.md)). Each commit records what a version does to its node (`effect`: created, modified, deleted, restored, requalified; the properties, state and links it changed) and keeps the counters of the change on its header (`Change.stats`, net per node; the graph statistics sum them per namespace, [ADR 0173](adr/0173-counters-of-a-change.md)). A draft is free to be incomplete (only the attributes, their types and enums are checked as it is edited); its validators, required links and link attributes are checked when its review is accepted and when it commits. The commit then the merge (every impact accepted): the commit **writes the versions from the drafts** on its own branch (the next version number, the version checked out from as parent, owner, origins, comment, links resolved to the versions of the change) after rebasing a root change onto the head of its target branch ([ADR 0101](adr/0101-a-change-is-rebased-onto-its-target-before-it-commits.md)), and commits the branch (a fast-forward; the three-way merge only when the target moved between the rebase and the integration, then `MergeChange`). A node version records its `changeId`, `changeImpact` and `comment`. A node's type is a direct attribute of the node (`Node.Type`), there is no `instanceOf` link. Everything that happens to a change is an entry of **one log** ([ADR 0030](adr/0030-one-change-log.md)): its facts, its journal records (scheduling included) and its impact events, in one order, with the type, flow branch, process and action run as columns to filter on (`ListChangeLog`). The change impacts are **event-sourced** ([ADR 0029](adr/0029-event-sourced-change-impacts.md)): every operation (`proposed` for an existing node, `created` for a new one with its draft, `checkedOut`, `transitioned`, `updated`, `cancelled`, `withdrawn`, `reviewed`, `discarded`, `adopted`, `committed`, `rebased`, `requalified`) is an event of the change's impact log with its caller (principal, action run, flow), its payload holding what the event changes and nothing the entry's columns hold, a checkout of a stored version naming that version rather than copying it ([ADR 0142](adr/0142-impact-events-carry-what-they-change.md), read with `domain.ImpactEventsOf`; the verdicts of one review and the versions of one commit are one entry, [ADR 0144](adr/0144-a-review-and-a-commit-are-one-entry.md)); nothing is stored for an impact but its log until it commits (the store keeps a change impact per version written, with the version, [ADR 0174](adr/0174-change-impacts-written-at-commit.md)), and the drafts are not stored at all: they are the fold of the log (`domain.FoldDrafts`), kept in a per-change in-process cache validated by the log position (`graph/graph/draftcache.go`, ADR 0079 §2); that fold is the **view** of the change every operation reads and extends, with the phases, the impact events and the moves, a change being read at a position of its log (`Change.Seq`) that a write returns in the caller's watermark and a read may require, and readable as it stood at an earlier position (`ChangeAt`, [ADR 0153](adr/0153-a-change-is-read-as-a-view-of-its-log.md)); the view keeps its impacts in blocks of `domain.ImpactBlock` and its maps in shards (`graph/graph/cowmap.go`) that its copies share, a write copying the block or shard it touches rather than the view, and its impacts are read through one list, `domain.Impacts` (`Change.Impacts()`: `All`, `At`, `Index`; the view indexes them by id, node and key, so `Index`, `OfNode`, `OfKey` and `Plain` answer without walking the list, the positions appended since the index was taken walked after it), shared with the operations that read before they write (`Change.ShareImpacts`) and copied into `Change.Nodes` only for the callers of the graph, and what a flow sees is a fold of the log (`ListChangeEvents`; the **Audit** pane of the change merges it with the execution journal and the facts into one chronological trail, with CSV / JSON export, and the whole log as W3C PROV-O provenance in JSON-LD, `ExportChangeProvenance`, `graph/prov`, [ADR 0057](adr/0057-change-log-as-prov-o.md)). The state of a namespace at a commit is exported as a JSON snapshot without history (`ExportGraph`, `graph/graph/snapshot.go`) and imported as one new change left for review, which creates the missing nodes and brings the others to the snapshot (`ImportGraph`, [ADR 0104](adr/0104-domain-and-graph-import-export.md)); the same state is exported as an OKF tree, a zip of one Markdown file per node with a YAML front matter (`graph/okf`, [ADR 0111](adr/0111-okf-export-of-the-graph.md)); the web exports and imports them as jobs (`StartGraphExport`, `StartGraphImport`, [ADR 0149](adr/0149-a-job-service-for-long-runs.md)), the file a job writes saved when it is done. Merging nodes into a new one and splitting one into several are modifications of the **parents** (`ImpactNodeMerge`, `ImpactNodeSplit`, [ADR 0077](adr/0077-impact-node-operations.md)): the parent's draft loses the links to the sources and gains the links to the successors, the sources stay untouched and their impacts carry the parent's impact as `via`; a successor is accepted and committed only once the impacts of its origins are accepted. |
 | **Change lifecycle, gate** | A change may have a lifecycle ([ADR 0058](adr/0058-change-lifecycle-and-gates.md)), orthogonal to its technical status: the domain defines it (`domain.Lifecycle`), the methodology says which one its changes follow, the change holds its state. A transition is guarded by a CEL guard in the condition environment; a **gate** is a guard requiring a decided decision point and the expected world state (the `done` of the steps of the state being left, no checklist of its own). A step names the state it is active in through `pre: {"state:<name>": true}`. Leaving a state freezes its impacts, going back needs a new decision and marks later impacts `stale`; commit stays at the end of the change. Which states and gates exist is a use case, not the platform's. The graph knows no methodology: it offers the hooks (`graph.ChangeLifecycles`, the sub-change cascade, the roles of the operations, the step dependencies of the history) and its composition plugs them as calls to the methodology registry's `registry.v1.ChangeGuardianService`, which compiles the methodologies once and answers on the blackboard the graph sends ([ADR 0168](adr/0168-the-guardian-of-a-change-is-an-rpc-call.md); Go `lib/guardianclient`, Rust `graph_service::guardian::Client`, `GOAP_REGISTRY_URL`). |
 | **Model exchange** | The request and the answer of one LLM call of an action, an entry `model.call` of the change log ([ADR 0059](adr/0059-prompts-in-the-change-log.md)): capped, read with `prompt:inspect`, shown by the Tokens console (the call itself is a row of the gateway's ledger, ADR 0089, which stores the exchange of every call this log does not keep); the journal record keeps the token counts only (`contracts/journal`, ADR 0066). |
 | **Decision** | A choice about something that is not a node (human or agent); the acceptance of a node is the review of its change impact. |
@@ -260,7 +260,7 @@ REQ-1  v1(main) ── v2(change-A, derive) ═══ joins main (fast-forward o
 | **Review** (object) | A review the reviewer builds up and submits ([ADR 0080](adr/0080-review-object.md)): a change item of the built-in kind `review` (`domain.TypeReview`; `contracts/review` the use case), each version the whole record of its `key` (`REV-…`): a global comment, a status `open` → `submitted` or `discarded` (both final) and one entry per change impact (own comment, outcome `accept` / `reject`). Submitting applies every entry as an ordinary review in one transaction (`ImpactNodeReviewBatch`: all or none), each `reviewed` event carrying the review id. Every verdict is made by a submitted review ([ADR 0105](adr/0105-every-verdict-is-a-submitted-review.md)): a single verdict, a producer's commit, an action's review and a merge each write the record of a submitted review first, and each decided `impact.reviewed` log entry names it as its `causation`. |
 | **Risk**, **Action** | Records of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): each item is a version of the risk or action of its `key` (`RSK-1`, `ACT-1`); the register is the last version of each. A risk has a probability, an impact, a status and an owner role; an action answers a risk or a decision. The register is a use case outside the core: `contracts/risk` registers the item types (`risk.Register()`, [ADR 0065](adr/0065-item-kinds-required-links-change-data.md)) and folds them (`risk.Risks`, `risk.Actions`, `risk.Derogations`). `goap-change` serves `risks`, `risk`, `action`, and `brief` (the change in one line per fact, also given to every LLM action on a change in its system prompt) and `trace` (where an item, a risk or a node comes from and what it led to). |
 
-Applying a Change is three acts (ADR 0102, 0166): *Commit* (`CommitChange`) writes its accepted modifications on its branch, *Merge* (`MergeChange`) takes them into what it was forked from, creating a new baseline and leaving the change open, *Close* (`CloseChange`) merges what is left once everything is settled and applies the change; there is no single Apply call, and both answer the header of the baseline, never its state (a caller reading nodes asks for them). The Change remains the explainable history of *why* the graph changed.
+Applying a Change is three acts (ADR 0102, 0166): *Commit* (`CommitChange`) writes its accepted modifications on its branch, *Merge* (`MergeChange`) takes them into what it was forked from, creating a new commit and leaving the change open, *Close* (`CloseChange`) merges what is left once everything is settled and applies the change; there is no single Apply call, and both answer the header of the commit, never its state (a caller reading nodes asks for them). The Change remains the explainable history of *why* the graph changed.
 
 #### Operating the graph by hand
 
@@ -270,10 +270,10 @@ makes for the person.
 
 | Step | Where in the IDE | Graph calls |
 |---|---|---|
-| Start an empty namespace | nothing to do: the first change of a namespace starts from the empty state, and leaves its first baseline ([ADR 0056](adr/0056-baselines-are-states-of-changes-names-are-tags.md)) | `CreateChange` |
+| Start an empty namespace | nothing to do: the first change of a namespace starts from the empty state, and leaves its first commit ([ADR 0056](adr/0056-baselines-are-states-of-changes-names-are-tags.md)) | `CreateChange` |
 | Name a version | a tag on one node version (not unique) | `TagVersion`, `ListTags`, `DeleteTag` |
 | Select versions | a smart tag: a named set of versions, owned and shared to read or edit (`graph/smarttagsvc`, ADR 0143 §7) | `smarttag.v1.SmartTagService`: `List`, `Get`, `Create`, `Update`, `Share`, `Delete` |
-| Create a change | Changes explorer **+**: title, intent, namespace, the branch it commits on, the baseline it starts from, own branch, or a parent change (a sub-change) | `CreateChange` |
+| Create a change | Changes explorer **+**: title, intent, namespace, the branch it commits on, the commit it starts from, own branch, or a parent change (a sub-change) | `CreateChange` |
 | Edit or abandon it | Change → Overview: *Edit* (title, intent), *Abandon* (its sub-changes too, its branch closed) | `UpdateChange` |
 | Move it to another project | Change → Overview: *Move to project…* (a root change, draft or active; the projects applying its methodology; its sub-changes follow, [ADR 0091](adr/0091-a-change-names-its-project.md)) | `MoveChange` |
 | Declare impacts | Change → Impacts: pick an existing node with the reason it is impacted (a new node is created, see below) | `ProposeImpact` |
@@ -290,9 +290,9 @@ makes for the person.
 | Rebase a change | Change → Overview: when a change is behind the head of the branch it was forked from (a sub-change: its parent's), *Rebase* (ADR 0101, 0103); *Keep mine* settles an impact's conflicts | `RebaseChange`, `GetRebaseState`, `ImpactNodeResolve` |
 | Merge a committed change | A `committed` change (its merge into the branch it was forked from, a release branch for instance, waits until someone merges it) shows each node changed on both sides: keep the target, or merge taking a side per conflicting property | `PlanMerge`, `MergeChange` (`IntegrateChange`) |
 | Merge in a run | The `graph.apply` action commits and merges; when the three-way merge cannot settle a property (both branches changed it apart) the run waits on a `merge` human task listing the value of each side and proposing the change's; *Merge and go on* completes the merge and resumes the run. Before that, when the rebase of the change onto its target (or parent) left conflicts, the apply stops and the run waits on a `rebase` task listing them per impact; once settled and reviewed again in the change tab, *Settled, continue* applies again (ADR 0101) | `ResolveMerge`, `ResolveRebase` (engine), `Engine.ResolveMerge`, `Engine.ResolveRebase` |
-| Branches | Baseline explorer → Branches: open one from a baseline, merge it into another (same resolver), abandon or reopen it | `ListBranches`, `CreateBranch`, `MergeBranch`, `SetBranchStatus` |
+| Branches | History explorer → Branches: open one from a commit, merge it into another (same resolver), abandon or reopen it | `ListBranches`, `CreateBranch`, `MergeBranch`, `SetBranchStatus` |
 | Graph statistics | *Graph statistics* tool (left bar): the namespaces with their totals; a namespace opens its tab (branch selector, key figures, links per node, node and link types, most connected nodes, connected parts, the store) | `GetGraphOverview`, `GetGraphStats` |
-| Compare baselines | Baseline tab → *Compare*: the nodes added, removed or changed from another baseline (its parent by default), with the properties that differ | `DiffBaselines` |
+| Compare commits | Commit tab → *Compare*: the nodes added, removed or changed from another commit (its parent by default), with the properties that differ | `DiffCommits` |
 | Browse the changes | Changes explorer, grouped by status: the open changes listed whole; the applied and abandoned ones by pages of 50, newest first, of the active project (every project with the toggle or a search, the search matched by the server), *Load more* under each group | `ListChanges` (`limit`, `cursor` → `next_cursor`, `total`; `project`, `query`) |
 | A node's history | Node editor → History: the changes that acted on it, its versions and the branches each joined | `ListNodeChanges`, `ListNodeVersions` |
 
@@ -322,7 +322,7 @@ Variables exposed to the expression:
 
 | Variable | Content |
 |---|---|
-| `change` | `{id, title, intent, status, goal, baseline, branch, data}` |
+| `change` | `{id, title, intent, status, goal, commit, branch, data}` |
 | `items` | the active ChangeItems (facts) |
 | `decisions`, `artifacts` | items filtered by `kind` |
 | `changeImpacts` | the change impacts ([ADR 0024](adr/0024-change-impacts.md)), `{id, key, type, types, intent, rationale, review, reviews, comment, pre, post, committed, planned, hasPost, recheck, props, via}`; `pre`, `post`, `committed` are hydrated node views or `null` |
@@ -405,12 +405,12 @@ Executor types:
 | `llm` | Prompt (Go template) + blackboard context → Model Gateway, structured JSON output | ChangeItems |
 | `tool` | Call to a tool (`<mcp>/<tool>`) of the MCP hub, through the organization binding (§3.9) | Artifact `{tool, result}` |
 | `human` | Creates a task; the process moves to `waiting` until `SubmitHumanInput`. An action declaring a `form` (ADR 0115, `contracts/form`: fields, widgets of an extensible registry, constraints) shows it and takes its values (`SubmitHumanInput.form`, `Engine.SubmitForm`), checked by the engine, then turned into items by the action's `code` (`ctx.var("form")`) or recorded as an artifact with the links of its link fields | Submitted items, or the items of the form |
-| `builtin` | Registered Go function, checked by name when the methodology is compiled ([ADR 0062](adr/0062-builtins-registry.md)): `graph.propagate` (impact propagation), `graph.apply` (change application), `decision.investigate`; the self-observation ones (`observe.analyze`, `observe.propose`, `methodology.draft`) are registered by the composition roots | ChangeItems / new baseline |
+| `builtin` | Registered Go function, checked by name when the methodology is compiled ([ADR 0062](adr/0062-builtins-registry.md)): `graph.propagate` (impact propagation), `graph.apply` (change application), `decision.investigate`; the self-observation ones (`observe.analyze`, `observe.propose`, `methodology.draft`) are registered by the composition roots | ChangeItems / new commit |
 | `call` | Generated by the compiler for a step done by a nested process or a method, never declared ([ADR 0126](adr/0126-formal-execution-elements.md)): the action's `Call` (`methodology.Call`: agent and goal, or the capability whose applicable method is chosen when it runs, `foreach`, `groupBy`) names the sub-agent the engine starts on the same change and waits for; a primitive of the engine (`RunCall`), not an entry of `Engine.Executors` | What the sub-agent did |
 
 LLM/human outputs use a simplified input format (`engine.ItemInput`): nodes are
 designated by their **key** (`REQ-1`), items from the same batch by `#ref`, existing items by `@<id>`;
-the engine resolves them into exact `NodeRef`s of the reference baseline.
+the engine resolves them into exact `NodeRef`s of the reference commit.
 
 ### 2.5 Intent loop
 
@@ -589,10 +589,10 @@ of the organisation by `Directory.ReachSet`): the projects it works on (`MayAcce
 parent trees, its units and itself. A version is held when its scope reaches it: `public` always, `tree` in a tree it
 reaches, `project` in a project it works on, `private` there when one of its units answers for the version
 (`Node.Responsible`), `personal` there when it created the node; the namespaces organisation, platform and methodology
-are read whole. `ViewNode`, `ViewNeighbourhood`, `ViewNodes`, `ViewNodesOfType`, `QueryView`, `BaselineNodes` /
-`BaselineLinks` and `ExportSnapshot` leave out the versions out of reach and every link touching one (no stub), the
+are read whole. `ViewNode`, `ViewNeighbourhood`, `ViewNodes`, `ViewNodesOfType`, `QueryView`, `CommitNodes` /
+`CommitLinks` and `ExportSnapshot` leave out the versions out of reach and every link touching one (no stub), the
 pages and counts filtered in the store (`NodeQuery.Reach` / `LinkQuery.Reach`, `graphapi.ReachFilter`, `reachHolds`);
-`GetBaselineGraph`, `GetBaselineDelta` and `DiffBaselines` keep what `Reach.Keep` / `Sees` keep; the index filters its
+`GetCommitGraph`, `GetCommitDelta` and `DiffCommits` keep what `Reach.Keep` / `Sees` keep; the index filters its
 hits by the same rule (`ReachSet.Holds` over the documents' project, visibility, responsible and creator). Only the
 creator moves a node out of a personal state (`checkShare`, `node:share`). A platform service acting for a person
 (`OnBehalfOf`) reads as that person (`graphsvc.Reader`); a service acting by itself, or an in-process call naming no
@@ -605,7 +605,7 @@ round trips do not grow with the links of a hub or the length of a history (`gra
 neighbours of a node (`ViewNeighbourhood`, and so each hop of `QueryView`) and of the blackboard's nodes through
 `draftReader.nodes` (the drafts from the fold, the stored versions in one `Tx.NodesAt`), the posts of a change's
 impacts (`storedPosts`: `openWorld`, `changeViewTx`), the headers of the changes of a history (`changeHeads`:
-`ChangesFilter.IDs` in one `ChangeHeads`; `NodeChanges`, `stackChanges`, `diffBaselines`), the headers of a page of
+`ChangesFilter.IDs` in one `ChangeHeads`; `NodeChanges`, `stackChanges`, `diffCommits`), the headers of a page of
 `ChangesPage` given to the transaction (`guardTx.knowHeads`). `TestReadsAreBatched` counts the single-row reads of
 these paths over a hub; a new read path meeting several nodes or changes goes through these helpers.
 
@@ -622,16 +622,16 @@ sends what is queued alone first.
 **Kept heads**: the graph holds in memory the head of each lasting branch its views read, the way a change view
 follows its log (`graph/graph/heads.go`, `keptBranch`). It is not read
 again but moved: by a commit of this graph once it commits (the guard notes the head each branch moves to, the
-baselines it wrote with their order, the version each node takes on each branch (a version joined whose deletion it
+commits it wrote with their order, the version each node takes on each branch (a version joined whose deletion it
 does not know drops what is kept of its node) and the nodes of the keys it created, `guardTx.movedBranches` /
-`wroteHeads` / `headMoves` / `newKeys`), and by the baseline events of the other processes sharing the
-store (`Graph.FollowHeads` / `HeadEvent`, subscribed to `goap.baseline.*.advanced` by `platform/cmd/graph`), which carry the whole header (`BaselineEvent.Seq`, `Name`, `ChangeID`,
+`wroteHeads` / `headMoves` / `newKeys`), and by the commit events of the other processes sharing the
+store (`Graph.FollowHeads` / `HeadEvent`, subscribed to `goap.commit.*.advanced` by `platform/cmd/graph`), which carry the whole header (`CommitEvent.Seq`, `Name`, `ChangeID`,
 `Kind`...) and, when `Whole`, every node whose version changed. A move whose parent is the head held moves it and the
 versions of the nodes kept with it; one told twice or older than the head held is left alone (an echo of this graph's
 own commit); one not following it leaves the head unknown, read at the next view; a transaction that moved a branch
 reads it in the transaction. A head is taken as known for `followedHeadAge` (30 s) when the events are
 followed, a lost event caught up then, else `headAge` (1 s). The version of a node at the head is kept
-by branch and node with the epoch it was known in (`Graph.selections` / `keyIDs` bounded by `Caches.Heads`): a selection at a baseline never changes, a move with every node told carries
+by branch and node with the epoch it was known in (`Graph.selections` / `keyIDs` bounded by `Caches.Heads`): a selection at a commit never changes, a move with every node told carries
 it to the next head, any other starts an epoch. On a branch with no fork, a node read by key in a view finds the node
 and its version there (`keptSelection`), else in one statement (`keySelector.CommittedAtKey`, `selectKey`), then kept; `GetNode` reads the latest version of main first and keeps it when the
 view selects it (`world.stored`). The access directory is apart: it follows the organisation of the platform graph,
@@ -752,8 +752,8 @@ header): it sees the graph through it, the nodes the change created, the version
 the other nodes as its fork has them, and it reads only what it shows: the node and its neighbours, more as the reader
 unfolds the tree (`Graph.ChangeNodeNeighbourhood`, `GetNodeNeighbourhood` with `change_id`: the change's impacts laid over
 its branch or its fork for those nodes only, a link kept when its target is in that world at the version it names; at the
-head `NodeNeighbourhood`; web `hoodIndex` / `baselineHoods` / `changeHoods`), and its link and form pickers search the
-baseline (`ListBaselineNodes`), as the *New object* dialog and the declared forms of human tasks do: no whole namespace
+head `NodeNeighbourhood`; web `hoodIndex` / `commitHoods` / `changeHoods`), and its link and form pickers search the
+commit (`ListCommitNodes`), as the *New object* dialog and the declared forms of human tasks do: no whole namespace
 is read to edit a node (`GetChangeGraph` with `world` stays for the readers of a whole world); the *Edit* of an impact and opening a node from a change select that change first,
 and with no change selected (*Latest version*, or none in the header) it shows the latest released versions.
 It may also give the **icon** and **color** its nodes are drawn with (`icon: database`, a name of the IDE's icon set,
@@ -771,7 +771,7 @@ A link is read from the node looking at it: a link type carries a **`label`**, h
 to the label; `typecat.LinkType.Label` / `InverseLabel` and `LinkTypeInfo.label` / `inverseLabel` hold them with the fallbacks applied). Pure
 display metadata, the graph never reads them: the web shows a link with `TypeCatalog.linkLabel(ref, 'out' | 'in')` (every graph and link
 view: the node's links, the parents and children trees, the node graph seen from its center, the graph explorer, the links and
-neighbours of the Baseline explorer; the ontology graph of the domain editor reads them from the form) and keeps the qualified link type
+neighbours of the History explorer; the ontology graph of the domain editor reads them from the form) and keeps the qualified link type
 in the tooltip.
 
 ### 2.11 Agent triggers
@@ -785,7 +785,7 @@ declared on the agent (`agents[].triggers`):
 | `event` + `filter` | `change.created`, `change.edited`, `change.attached`, `change.detached`, `change.item_added`, `change.signal`, `change.committed`, `change.rebased`, `change.merged`, `change.transitioned`, `change.applied`, `process.completed`, `process.failed`, `process.stuck`, `process.attached`, `step.completed`, `methodology.published` (`contracts/events.All`); CEL filter on `event` (`event.change.*`, `event.process.*`, `event.items` for `change.signal`'s payload, `event.branch` and `event.nodes` (`{id, version, namespace, key, type, state, deleted}`) for `change.committed` / `rebased` / `merged`, ADR 0159); an event trigger's new change acts in the project of the event's change |
 | `schedule` | cron expression (5 fields, UTC) |
 | `goal`, `intent` | targeted goal (otherwise identification is limited to the agent) and intent text |
-| `target` | `new_change` (new change on the latest baseline) or `event_change` (the event's change) |
+| `target` | `new_change` (new change on the latest commit) or `event_change` (the event's change) |
 | `roles` | roles of the **service identity** `system:trigger:<methodology>/<agent>/<trigger>` (ABAC) |
 
 Safeguards: a trigger never reacts to its own productions (the change it opens is marked
@@ -1022,7 +1022,7 @@ attributes plug property validator instances, node types plug node validator ins
 instances, in call order. The type catalogue (the graph's copy of the registry's model) resolves the plugged instances (like the lifecycle, ADR 0014): validators run when items are added and when a change is applied, guards and
 actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the *Algorithms* group of a domain version.
 
-**Attributes** ([ADR 0055](adr/0055-attributes.md)): a node type (and a link type) defines its properties as attributes — code, label, type, widget, enum, default, section, order, tooltip, `asName` — resolved by the type catalogue (inherited through `extends`, overridable by name); the graph checks the type and enum membership of the values on commit, and the web renders and edits a node from them. Attributes are **strict**: a node carries the attributes of its type (ancestors included) and nothing else, so a property that is no attribute is refused (`ErrInvalid`, "property X is not an attribute of T") whenever it is written (create, update, checkout, transition, check at accept and at commit: `typeIndex.checkAttributes`, `TypeCatalog.AttributeNames`). A type that must hold arbitrary properties says so explicitly with `additionalProperties: true` on the node type (inherited by its subtypes, a checkbox of the type editor); a type the catalogue does not know and the untyped graph stay permissive. Everything the platform writes (seeds, sign-in, the registry's methodology nodes, the observer) is therefore declared by the built-in domains, and the web offers a node's declared attributes only (a free "new property" field appears for free-form types). A domain also declares **enums**, the closed lists enum attributes refer to. An attribute of type `code` ([ADR 0152](adr/0152-code-attributes.md)) holds source text with its language: a front matter naming the language, then the fenced code block (`contracts/codetext`, read the same by `web/src/lib/codeText.ts`); the graph refuses a malformed one, the web shows it highlighted with its line numbers (`CodeView.svelte`) and edits it with its language (`CodeValueEditor.svelte`), the OKF export writes it as a fenced block; the git importer fills the source text of each declaration this way (`code@Symbol.code`). An attribute names how a change of its value is shown, its `diff` ([ADR 0155](adr/0155-attribute-value-diffs.md): `value`, `words`, `lines`, `json`, `code`; empty: the usual one of its type, `def.Attribute.DefaultDiff`), and one component shows every diff of values in the web (`ValueDiff.svelte`, `web/src/lib/valueDiff.ts`: one line for a short change, else the lines unified or side by side, unchanged runs folded, code highlighted in its language): the impact diff, the comparison of options and of baselines, the history of a node, the merge resolver, the node tab.
+**Attributes** ([ADR 0055](adr/0055-attributes.md)): a node type (and a link type) defines its properties as attributes — code, label, type, widget, enum, default, section, order, tooltip, `asName` — resolved by the type catalogue (inherited through `extends`, overridable by name); the graph checks the type and enum membership of the values on commit, and the web renders and edits a node from them. Attributes are **strict**: a node carries the attributes of its type (ancestors included) and nothing else, so a property that is no attribute is refused (`ErrInvalid`, "property X is not an attribute of T") whenever it is written (create, update, checkout, transition, check at accept and at commit: `typeIndex.checkAttributes`, `TypeCatalog.AttributeNames`). A type that must hold arbitrary properties says so explicitly with `additionalProperties: true` on the node type (inherited by its subtypes, a checkbox of the type editor); a type the catalogue does not know and the untyped graph stay permissive. Everything the platform writes (seeds, sign-in, the registry's methodology nodes, the observer) is therefore declared by the built-in domains, and the web offers a node's declared attributes only (a free "new property" field appears for free-form types). A domain also declares **enums**, the closed lists enum attributes refer to. An attribute of type `code` ([ADR 0152](adr/0152-code-attributes.md)) holds source text with its language: a front matter naming the language, then the fenced code block (`contracts/codetext`, read the same by `web/src/lib/codeText.ts`); the graph refuses a malformed one, the web shows it highlighted with its line numbers (`CodeView.svelte`) and edits it with its language (`CodeValueEditor.svelte`), the OKF export writes it as a fenced block; the git importer fills the source text of each declaration this way (`code@Symbol.code`). An attribute names how a change of its value is shown, its `diff` ([ADR 0155](adr/0155-attribute-value-diffs.md): `value`, `words`, `lines`, `json`, `code`; empty: the usual one of its type, `def.Attribute.DefaultDiff`), and one component shows every diff of values in the web (`ValueDiff.svelte`, `web/src/lib/valueDiff.ts`: one line for a short change, else the lines unified or side by side, unchanged runs folded, code highlighted in its language): the impact diff, the comparison of options and of commits, the history of a node, the merge resolver, the node tab.
 
 ## 3. Component architecture
 
@@ -1060,13 +1060,13 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | **gateway** | Single entry point, authentication (JWT/OIDC), routing to services, CORS, rate-limit | Echo HTTP, Connect reverse proxy | — | 🟢 core |
 | **registry** | Methodologies (graph data, ADR 0023): editing (draft), validation against the domains of the domain registry, publishing, versions, suspension of a version the domains in force break (ADR 0125 §3), YAML import/export | Connect `registry.v1.RegistryService` | the graph | 🟢 |
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
-| **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, change impacts, facts, apply); its type catalogue read from the domain registry | Connect `graph.v1` | `graph` | 🟢 |
+| **graph** | Domain axis (versioned nodes, links, commits) + change axis (Changes, change impacts, facts, apply); its type catalogue read from the domain registry | Connect `graph.v1` | `graph` | 🟢 |
 | **domains** | The **domain registry**, the definition of the graphs (ADR 0125 §3, [ADR 0167](adr/0167-domain-registry-a-service-of-its-own.md)): domain versions, the built-in domains protected, the type catalogue, YAML / JSON import-export ([ADR 0104](adr/0104-domain-and-graph-import-export.md)), a command line for the protected domains | Connect `registry.v1.DomainService` | `domains` (`domain_version`, `domain_protection`) | 🟢 |
 | **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces; `Suggest`, the stateless contextual helper over the `helper` alias (ADR 0086); the **one ledger of LLM calls**: `ListUsage` / `UsageSummary` (ADR 0089) | Connect `model.v1` | `modelgw` (quota counters and the ledger of LLM calls, ADR 0089; the configuration is graph data, ADR 0021) | 🟢 core |
 | **preferences** | Personal preferences of the users (theme, voice input, dashboard defaults), one document per subject, outside the graph ([ADR 0038](adr/0038-user-preferences-service.md)); a caller reaches only their own, saved as they change it | Connect `preferences.v1` | `preferences` (`user_preference`) | 🟢 |
 | **conversations** | Conversations of the users with the assistant (messages, structured UI actions), per subject, outside the graph ([ADR 0085](adr/0085-conversation-service.md)); the owner reads and writes, a system principal appends and updates the assistant's messages | Connect `conversations.v1` | `conversations` (`conversation`, `conversation_message`) | 🟢 |
 | **assistant** (hosted by `conversations`) | The conversational assistant: answers the messages of a conversation on the `assistant` model alias as the caller, with its tools declared to the model as native tools ([ADR 0098](adr/0098-native-tool-calling.md), like the screen tools) following the frame of the turn (`platform/assistantsvc/frame.go`: outside any project, when none is named, only list projects, select project, search and open change; in a project, a project's tools; on the working change, a change's ([ADR 0135](adr/0135-working-context-project-and-change.md)): a change only shown is named, not worked on; `select_project` and `open_change` move the frame for the next rounds of the turn, and each answer records where it worked, `Message.context`, shown above it in the web) (list projects, list methodologies, select project, search the open changes, create change (offered once the open changes were searched in the conversation, [ADR 0106](adr/0106-methodologies-integrating-methodologies.md)), open change, propose to attach or detach the change it is on, list the agents the caller may run here, propose to start one, and `methodology_query`: read what a methodology declares, filtered by kind / name / text / parent, projected and capped at 6 KiB, [ADR 0094](adr/0094-assistant-methodology-query.md)); the pending message is the run, and an agent starts only when the person confirms the proposal (`ConfirmAction`, [ADR 0087](adr/0087-conversational-assistant.md), [ADR 0090](adr/0090-assistant-runs-agents.md)); it is contextualised to the open screen (layered context focus / screen / app) and may ask the interface to act through the tools the screen offers (`ui.*`: effects run at once, writes only after the person's confirmation and reported with `ReportAction`, [ADR 0092](adr/0092-contextual-assistant-screen-tools.md)); a long conversation keeps its older messages as a rolling summary (`platform/assistantsvc/compact.go`: once `CompactBatch` messages fell out of the history window, the summary is rewritten after the turn from the previous one and those messages: the recorded facts (what the actions of the messages proposed, started or changed and how it ended) written by code, never by the model, kept first with their exact ids and dropped oldest first past 2.5 KiB, then the model's text for what only the words say, durable facts kept verbatim, stored by `conversations` in `conversation_summary` with the seq it covers, `convsvc.Service.Summary` / `SetSummary`, and sent with the rules of each turn) | Connect `assistant.v1` | none (writes through `conversations`) | 🟢 |
-| **indexer** | Document index ([ADR 0026](adr/0026-node-index-and-search.md), [0095](adr/0095-changes-in-the-index-typed-search.md)): follows the node / baseline / change-document events of the graph, embeds through modelgw (alias `embed`), answers lexical / semantic / hybrid and nearest-document searches over nodes and changes with facets, filtered by ABAC and project | Connect `index.v1` | `index` (tsvector + pgvector; FTS5 + exact cosine scan in SQLite) | 🟢 |
+| **indexer** | Document index ([ADR 0026](adr/0026-node-index-and-search.md), [0095](adr/0095-changes-in-the-index-typed-search.md)): follows the node / commit / change-document events of the graph, embeds through modelgw (alias `embed`), answers lexical / semantic / hybrid and nearest-document searches over nodes and changes with facets, filtered by ABAC and project | Connect `index.v1` | `index` (tsvector + pgvector; FTS5 + exact cosine scan in SQLite) | 🟢 |
 | **mcp** | MCP hub: connector registry (self-registration), resolution of the adapters and their restrictions (graph) along the organisation hierarchy, tool calls, the built-in connectors of the platform (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
 | **connector-\*** | One service per real system (`connector-localfs`, ...), registers itself with the hub | Connect `connector.v1` | — | 🟢 localfs |
 | **goap-runner** | Sandbox for executing script actions (one per process) | Connect `runtime.v1` (SandboxService) | — | 🟢 |
@@ -1114,7 +1114,7 @@ service claiming the jobs of kind `import.<domain>.<importer>`. The **import reg
 (`graph/importsvc`, `importer.v1.ImportService`) lists the declared sources with whether a live worker claims them,
 checks the parameters of a run against the declaration and the permission `import:run`, and creates its job for the
 person; the run writes through the graph's change operations as `system:<service>` for the person. The first is
-`importer-git` (`platform/cmd/importer-git`, the `git` source of `code`, ADR 0147); the Baseline explorer opens the
+`importer-git` (`platform/cmd/importer-git`, the `git` source of `code`, ADR 0147); the History explorer opens the
 *Import from a source* tab. A parameter whose widget is `directory` names a directory on the machine of the service, so
 the browser cannot pick it itself: `BrowseImport` creates a short job of kind `browse.<domain>.<importer>`, which an
 importer implementing `importerkit.Browser` answers with the directories it may read (its roots, then the
@@ -1156,7 +1156,7 @@ hand-written API types are checked against it field by field (`web/src/lib/api/c
 | `goap.changed.<id>` | graph, through its outbox | `ChangeEvent` of type `change.updated`: the header, the impacts or the log of a change were written (the web) |
 | `goap.changeindex.<id>` | graph, through its outbox | `ChangeDocEvent`: the document of a change for the index |
 | `goap.node.<ns>.<type>.<id>.written` | graph | `NodeEvent`: one node version written (any branch), with its searchable text and facets resolved from the `search` declaration of its node type |
-| `goap.baseline.<branch>.advanced` | graph | `BaselineEvent`: diff with the parent baseline (the `main` facet of the index follows the head of each namespace's own main) |
+| `goap.commit.<branch>.advanced` | graph | `CommitEvent`: diff with the parent commit (the `main` facet of the index follows the head of each namespace's own main) |
 | `goap.registry.methodology.saved` / `.published` / `.deleted` | methodology registry, carried by the graph commit that stores the version (graph outbox) | name + version + status |
 | `goap.registry.methodology.suspended` / `.resumed` | methodology registry, published directly (recomputed, ADR 0136 §4) | name + version + reason |
 | `goap.registry.domain.saved` / `.published` / `.deleted` | domain registry (`domains`), through its outbox (`domain_outbox`) | name + version + status |
@@ -1206,12 +1206,12 @@ cut halfway: failed, nothing: run again), so a step never writes twice. Core NAT
 
 ```sql
 node(id uuid, namespace, key text, type text, latest int, project text)  -- the project it was created in, a logical URL without version (ADR 0154 §9)
-node_version(node_id, version, props jsonb, deleted bool, change_id → change, owner text, created_at, committed)  -- owner: a logical URL without version (ADR 0154 §9); PK (node_id, version); committed: the order of its baseline (ADR 0140)
+node_version(node_id, version, props jsonb, deleted bool, change_id → change, owner text, created_at, committed)  -- owner: a logical URL without version (ADR 0154 §9); PK (node_id, version); committed: the order of its commit (ADR 0140)
 link(id uuid, type, from_id, from_version, to_id, to_version, to_url, props jsonb, change_id → change)  -- to_url: a target in another source (ADR 0154), to_id / to_version null then
 node_branch(node_id, version, branch, change_id → change, committed)  -- the branches a version joined besides the one it was written on (ADR 0032)
-baseline(id uuid, name, namespace, branch, parent_id, change_id, created_at, seq)  -- seq: the order of commits; its state is a selection (ADR 0143)
-branch(namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at)  -- PK (namespace, name)
-change(id uuid, title, intent, status, baseline_id, goal, methodology, result_baseline_id, data jsonb,
+commit(id uuid, name, namespace, branch, parent_id, change_id, created_at, seq)  -- seq: the order of commits; its state is a selection (ADR 0143)
+branch(namespace, name, parent, fork_commit, head_commit, origin, status, created_at)  -- PK (namespace, name)
+change(id uuid, title, intent, status, commit_id, goal, methodology, landed_commit, data jsonb,
        owner_org, project_id)  -- never empty (ADR 0054)
 change_impact(node_id, version, change_id, impact_id, key, type, intent, rationale, pre_version, merged_with, reason,
               review jsonb, effect jsonb, log_seq, produced_by, execution, via, created_at)  -- PK (node_id, version): the impact
@@ -1222,7 +1222,7 @@ tag(id uuid, name, namespace, node_id, version, by, created_at)  -- names one no
 smart_tag(id, name, description, owner, by, created_at, updated_at), smart_tag_version(tag_id, node_id, version), smart_tag_share(tag_id, subject, access)  -- graph/smarttagsvc, own migrations (ADR 0143 §7)
 ```
 
-The ids the graph allocates (nodes, changes, links, impacts, entries, baselines) are UUIDs of version 7
+The ids the graph allocates (nodes, changes, links, impacts, entries, commits) are UUIDs of version 7
 (`graph.newID`): their first bits are the time, so what is written together sits together in the indexes keyed by id,
 and a write keeps touching the same pages however large the graph grows. The branch a change owns is named by its
 whole id (`change-<id>`, `changeBranchName`): a prefix of it is not unique.
@@ -1240,7 +1240,7 @@ runs every test against PostgreSQL (a throw-away `pgvector/pgvector:pg17` contai
 root change and its sub-changes) are serialized by `Tx.LockChange` (a transaction-level advisory lock on the root in
 PostgreSQL; SQLite and the memory store run one transaction at a time), taken before an operation reads what it checks
 (`changeOpen`, `Graph.changeTx`) and by the guard at every write naming a change; a branch head moves under
-`Tx.LockBranch` and only from the parent of the new baseline (`advanceBranch`). Reads take no lock.
+`Tx.LockBranch` and only from the parent of the new commit (`advanceBranch`). Reads take no lock.
 
 Every `change_id` above is `NOT NULL`, with no foreign key: the schema declares none (no trigger runs on an insert),
 the guard checks every reference at the end of the transaction; `owner`, `project`,
@@ -1249,7 +1249,7 @@ another graph (the platform graph, ADR 0154 §9; the guard checks them through `
 the `NOT NULL` and `CHECK` constraints are a second line, the references have only the guard.
 
 > Why PostgreSQL and not a graph database? The required traversals (neighborhood, impact propagation
-> at bounded depth) are expressed as recursive CTEs; version-to-version versioning and baselines are
+> at bounded depth) are expressed as recursive CTEs; version-to-version versioning and commits are
 > simpler in a relational model; only one engine to operate. A projection to a graph database remains
 > possible via NATS events.
 
@@ -1289,7 +1289,7 @@ listings are merged over every graph, each naming its source (the statistics gro
 
 The platform graph delivers the policies, the organisation and the projects to every graph and every service, itself
 included, the same way (`Directory.FollowEvents`): each graph's `access.Directory` reads them from the platform graph (in process, else its client) and keeps
-its snapshot (`Directory.Follow`) until a baseline event of the organisation's namespace (`domain.BaselineEvent`
+its snapshot (`Directory.Follow`) until a commit event of the organisation's namespace (`domain.CommitEvent`
 carries its namespace) reaches `Directory.Moved`; a change of a policy is a commit on the platform graph, its outbox
 sends the event, every graph refreshes. With no bus, the platform graph follows its own commits instead
 (`Directory.FollowCommits`): its snapshot holds for `access.CommitAge` (30 seconds) and a commit of the organisation's
@@ -1299,10 +1299,10 @@ namespace moves it at once (`Graph.OnBranchMoved`, `Directory.MovedNamespace`).
 
 A node type declares the searchable properties of its nodes (`search: [{property, text, facet}]`, inherited through
 `extends`). The graph observes every committed transaction (`Graph.Observe`) and publishes one `NodeEvent` per node
-version written and one `BaselineEvent` per baseline; the **indexer** consumes them with a durable JetStream
+version written and one `CommitEvent` per commit; the **indexer** consumes them with a durable JetStream
 consumer, embeds each document through `model.v1 Embed` (alias `embed`; no embedding model means text only) and
 upserts it, idempotently, on `(node, version)`. Every version of every branch is indexed; the built-in facet `main`
-(kept from the baseline diffs) restricts a search to the head of `main`, and `namespace`, `type`, `state`, `branch`
+(kept from the commit diffs) restricts a search to the head of `main`, and `namespace`, `type`, `state`, `branch`
 and the declared facets are counted per search.
 
 `Search` merges the full-text and vector rankings (reciprocal rank fusion, vector matches under a cosine floor are
@@ -1416,14 +1416,14 @@ methodologies' code ([ADR 0007](adr/0007-sandbox-executor.md)).
 ### 3.6b Events and presence for the web
 
 One Connect stream, `EventService/Watch` ([ADR 0053](adr/0053-one-event-stream-and-presence.md)), carries every
-platform fact (processes, changes, nodes, baselines, registry, jobs, model calls, connectors, preferences, conversations)
+platform fact (processes, changes, nodes, commits, registry, jobs, model calls, connectors, preferences, conversations)
 as a thin ordered event with resume by `(epoch, seq)`; the web reduces them into invalidation signals and never refetches
 after a write. The events of a person (a personal change, a job, a model call attributed to them, preferences, a
 conversation) reach that person only; credentials events never reach the web. A stream reads the hub's history from its
 own cursor (`Hub.after`), so a burst (a git import writes thousands of nodes) never cuts it; only a client that stays
 more than `History` events behind is told `resync`, with the seq it goes on from. The head graph of a namespace (`headGraph`,
 `web/src/lib/graphEdit.ts`), which the organisation and platform views all read, is read once and shared until an event
-moves the namespace or a baseline, or the client writes to the graph (`ownWrites`); a baseline event carries its
+moves the namespace or a commit, or the client writes to the graph (`ownWrites`); a commit event carries its
 namespace, so a fast-forward of main moves it too. `Heartbeat` / `Leave` and the
 `presence.*` events say who looks at which tab. `platform/cmd/events` follows `goap.>` on NATS (presence is relayed between replicas on `presence.>`).
 
@@ -1481,7 +1481,7 @@ within `-spread` (0.5 by default) of these four values, their means staying the 
 `-hot-ratio` of the modifications for deep histories; `-mode commit`: one `CommitEdits`, `-mode lifecycle`: `CreateChange`,
 `ImpactNodeCreate`, one `ImpactNodeCheckout` naming all the modified nodes (`-node-checkout`: one call per node), `ImpactNodeUpdate` + `ImpactLinkCreate` per node, one `ImpactNodeReviewBatch` of the change by `system:bench-reviewer`, `CommitChange`, `MergeChange`), and every
 `-probe` it measures the reads (`GetBranch`, `GetNode`, `ListNodeVersions` of a hot node, `ListNodeChanges`,
-`GetNodeNeighbourhood`, `ListBaselineNodes` by type and by text, `DiffBaselines`, `ListChanges`). Its writers start once the graph knows the types of the domain it published (a graph reads the
+`GetNodeNeighbourhood`, `ListCommitNodes` by type and by text, `DiffCommits`, `ListChanges`). Its writers start once the graph knows the types of the domain it published (a graph reads the
 registry on its events, else after a while, ADR 0167: the bench creates a node of the newest type in a change it purges,
 until the graph accepts it, for three minutes at most, unmeasured). It records `bench.op.duration`
 (by `op`, `outcome` ok / conflict / error), `bench.response.size` and the gauges `bench.versions`, `nodes`, `links`,
@@ -1505,14 +1505,14 @@ the podman service, `PERF_PODMAN_SOCK`); `make perf-up` starts the one of `PERF_
 fixed development administrator) routing to the graph alone, and the `web` dev server; what needs another service answers
 an error.
 
-The graph service measures what the states of its baselines cost (ADR 0143, `graph/graph/statemetrics.go`): every read
+The graph service measures what the states of its commits cost (ADR 0143, `graph/graph/statemetrics.go`): every read
 of a state `graph.state.reads` (by `scope` whole / nodes and `source`: `cache` or `commits`, the selection),
 `graph.state.chain` (the branches of the chain of forks selected on), `graph.state.entries` (the versions selected) and
-`graph.state.duration`, drawn by the row *Baseline states* of the dashboard.
+`graph.state.duration`, drawn by the row *Commit states* of the dashboard.
 
 What a process keeps between calls is one kind of cache ([ADR 0156](adr/0156-one-cache.md), `lib/cache`), bounded by
 the estimated bytes of its entries and by a TTL counted from the last read, the least recently read evicted first. The
-graph keeps its change views, version links, baseline headers and impact validations in such caches
+graph keeps its change views, version links, commit headers and impact validations in such caches
 (`Graph.Caches`); the registry and its client keep compiled methodologies there, the scripts engine its compiled
 scripts, and the gateway the state of its sessions.
 
@@ -1575,7 +1575,7 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   up (allow-lists intersect), so a unit narrows what it inherits and never widens it. The hub lists and calls only the
   allowed tools; the engine plans a `tool` action only when its tool is allowed.
 - **Built-in MCPs** ([ADR 0028](adr/0028-builtin-mcps-and-connectors.md)): the platform as tools, split by concern —
-  `goap-graph` (read / glob / grep / links / baselines), `goap-change` (create / read / write / edit / link / unlink / cancel / remove /
+  `goap-graph` (read / glob / grep / links / commits), `goap-change` (create / read / write / edit / link / unlink / cancel / remove /
   note / validate on a change, options / option / activate / evaluate / compare for its options (compare: `CompareOptions`), decisions /
   decision / rule / answer for its decision points, reviews / review_open / review_update / review_submit / review_discard for its review objects (ADR 0080); no apply, no selection, no ratification), `goap-scheduler` (start / list / get processes, triggers / fire; scope
   `agent`) and
@@ -1741,8 +1741,8 @@ read query found: a subset of openCypher, `OPTIONAL MATCH` and `EXISTS` included
 patterns grown a hop at a time through the neighbourhoods of the view, capped, ADR 0160, `lib/cypher` generated from the
 openCypher grammar; the Graph pane of a node keeps its compact view with a filter and a query starting from the node, `NodeQuery.svelte`; both query boxes complete the types, links and attributes of the registry, `cypherComplete.ts`);
 the
-Baseline explorer is the exception, it shows the commit the person picks. Every such read names its view to the graph (ADR 0157: `graphView`
-of the context view, `branchView` for a baseline of a branch, `forkView` for a change's fork): the graph refuses a read of
+History explorer is the exception, it shows the commit the person picks. Every such read names its view to the graph (ADR 0157: `graphView`
+of the context view, `branchView` for a commit of a branch, `forkView` for a change's fork): the graph refuses a read of
 the current graph naming no branch and no change, and assumes no branch; a search of a change view is the server's, the
 nodes it creates and its drafts included. Modes (ADR 0158): a switch in the header, before the context, picks what the
 person does (`shell/mode.svelte.ts`, `ModeSwitch.svelte`): **project** (the project, its open changes and their tasks),
@@ -1833,8 +1833,8 @@ leave a permanently broken one on that race (no `member_of`, no admin) — worse
 subject see the namespace as "already has a `User`" and never get the first-admin bootstrap either. Once the
 org is confirmed, it links the new `User` `member_of` it and grants `Roles: ["admin"]` when it is the first
 `User` node the namespace has ever held; the existence check (`g.ViewNodesOfType`, the head of main of the organisation, ADR 0157) reads the state
-its last change left, not an older baseline — `EnsureUser` writes by import (`ImpactNodeCreate`/`Link`, outside of
-any change), which does not itself advance a baseline, so a baseline-scoped read would miss every user but
+its last change left, not an older commit — `EnsureUser` writes by import (`ImpactNodeCreate`/`Link`, outside of
+any change), which does not itself advance a commit, so a commit-scoped read would miss every user but
 the ones incidentally folded in by some unrelated later change. A benign race between two simultaneous first
 connections can only ever grant admin to more than one subject, never to none. `pkg/graph.Commit` (the
 single choke point behind `CommitEdits`, seeding and the registry) now refuses to create an
@@ -1842,7 +1842,7 @@ single choke point behind `CommitEdits`, seeding and the registry) now refuses t
 anything but exactly one `member_of` (declared on the node type, `requires:`, ADR 0065) — except `ORG-DEFAULT`/`PROJ-ROOT` themselves (`checkRequiredParent`,
 `graph/graph/subchange.go`, checked against the edit's own declared links before anything is written). A
 second check, `checkRequiredLinks`, re-reads a *modified* node's actual live links right after the write
-commits: a client can build its edit from a `headGraph`-style baseline snapshot that predates an import-written
+commits: a client can build its edit from a `headGraph`-style commit snapshot that predates an import-written
 link (again, `EnsureUser`'s own `member_of`), so its "current link to remove" can come back empty even though
 one already exists — without this the "move" action (`graphEdit.moveNodeItem`, adds the new link and removes
 the one it saw, in one edit) could silently leave a node with two links instead of failing loudly. "Move to…"
@@ -2222,10 +2222,10 @@ docs/                        architecture, ADRs
 | **M1 — engine persistence** ✅ | PostgreSQL / SQLite process store shared by the replicas, locks with fencing, crash recovery, steps never written twice, capacity per replica (ADR 0124) |
 | **M2 — IAM** | organizations, users, OIDC, `org_id` isolation in the graph, ABAC on the graph service |
 | **M3 — MCP** ✅ | MCP hub, connectors as separate self-registering services, MCPs and adapter instances as graph nodes, adapter definitions as platform nodes, resolved along the organisation hierarchy, `tool` actions and LLM tools, scheduling filter, secrets via Vault · remaining: more connectors, adapter validation as a node type algorithm |
-| **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, baseline diff, merge/rebase of concurrent changesets |
+| **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, commit diff, merge/rebase of concurrent changesets |
 | **M5 — UX** | ✅ methodology editor (forms, localized anomalies, publishing, versions, YAML import/export), "Access" screen (ABAC policies), approvals · remaining: graph and plan visualization |
 | **M6 — K8s** | Helm charts, engine HPA · ✅ OpenTelemetry observability, sandbox manifests |
-| **M8 — branches and decisions** 🟡 | ADR 0009 (partially implemented) · ✅ graph: per-branch versions, 3-way branch merge, change branches merged at apply (`committed` + `MergeChange`, formerly `merge_pending`), versions joining branches instead of merge copies, baselines as selections of the versions committed (ADR 0143), written / accepted / committed views of a change, options explored on flows with an active option, compared, evaluated, the chosen one selected (ADR 0032), decision points with their loops (questions investigated by sub-agents, ratification, escalation) and the CEL variables and platform conditions on options and decisions (ADR 0009 §4) · remaining: earlier conflict detection and merge proposals by agents, the change budget; then versioned containers and releases |
+| **M8 — branches and decisions** 🟡 | ADR 0009 (partially implemented) · ✅ graph: per-branch versions, 3-way branch merge, change branches merged at apply (`committed` + `MergeChange`, formerly `merge_pending`), versions joining branches instead of merge copies, commits as selections of the versions committed (ADR 0143), written / accepted / committed views of a change, options explored on flows with an active option, compared, evaluated, the chosen one selected (ADR 0032), decision points with their loops (questions investigated by sub-agents, ratification, escalation) and the CEL variables and platform conditions on options and decisions (ADR 0009 §4) · remaining: earlier conflict detection and merge proposals by agents, the change budget; then versioned containers and releases |
 | **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
 | **M10 — SDLC** 🟡 | `sdlc` 0.4.0 methodology on the `alm` namespace (ALM domain) (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |
@@ -2241,7 +2241,7 @@ docs/                        architecture, ADRs
    Proposal: quantified global conditions (`all`/`exists`) + actions that iterate internally.
 2. **Action expectation**: is `expects` enough to express every expectation, or is a real graph
    pattern language needed (a restricted Cypher-like language)?
-3. ~~**Concurrency on a baseline**~~ → [ADR 0009](adr/0009-branches-options-decisions.md): detection on the
+3. ~~**Concurrency on a commit**~~ → [ADR 0009](adr/0009-branches-options-decisions.md): detection on the
    base version per branch, 3-way merge at apply, conflicts resolved by a human (the change stays `committed`, formerly `merge_pending`).
 4. **Action cost**: static (declared) or dynamic (estimated tokens, observed latency)?
 5. ~~**Human decisions**: mandatory validation or a separate `apply`?~~ → settled by [ADR 0004](adr/0004-change-application.md):
@@ -2333,6 +2333,6 @@ each node version. A node is edited in any state while it is in a change (ADR 00
 `notCommittable` (a draft) keeps the change from commit, so the change moves the node to a committable state before it is
 applied. Changes are attached to the nodes they modify (several changes may be attached to one node;
 conflicts appear at Apply). A document type embeds nodes through `contains` links and its transitions
-validate the states of its children in the result baseline. The rules live in `graph/graph/lifecycle.go`
+validate the states of its children in the result commit. The rules live in `graph/graph/lifecycle.go`
 (checked when a change impact writes a version and again by `Apply`); the type catalogue resolves the lifecycles
 (ADR 0012).

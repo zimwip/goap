@@ -92,7 +92,7 @@ func (c *Client) DeclareUser(ctx context.Context, subject string) error {
 
 func (c *Client) CreateChange(ctx context.Context, in graphapi.NewChange) (domain.Change, error) {
 	r, err := c.rpc.CreateChange(ctx, connect.NewRequest(&graphv1.CreateChangeRequest{Title: in.Title, Intent: in.Intent,
-		Methodology: in.Methodology, MethodologyVersion: in.MethodologyVersion, Namespace: in.Namespace, BaselineId: string(in.BaselineID), Branch: in.Branch, OwnBranch: in.OwnBranch, ParentId: string(in.ParentID), OwnerOrg: in.OwnerOrg, ProjectId: in.ProjectID, Data: pbconv.Struct(in.Data)}))
+		Methodology: in.Methodology, MethodologyVersion: in.MethodologyVersion, Namespace: in.Namespace, ForkCommit: string(in.ForkCommit), Branch: in.Branch, OwnBranch: in.OwnBranch, ParentId: string(in.ParentID), OwnerOrg: in.OwnerOrg, ProjectId: in.ProjectID, Data: pbconv.Struct(in.Data)}))
 	if err != nil {
 		return domain.Change{}, rpcerr.FromConnect(err)
 	}
@@ -351,7 +351,7 @@ func (c *Client) RebaseChange(ctx context.Context, id domain.ChangeID) (graphapi
 	if err != nil {
 		return graphapi.RebaseResult{}, rpcerr.FromConnect(err)
 	}
-	out := graphapi.RebaseResult{Parent: domain.ChangeID(r.Msg.ParentId), Branch: r.Msg.Branch, From: domain.BaselineID(r.Msg.From), Onto: domain.BaselineID(r.Msg.Onto)}
+	out := graphapi.RebaseResult{Parent: domain.ChangeID(r.Msg.ParentId), Branch: r.Msg.Branch, From: domain.CommitID(r.Msg.From), Onto: domain.CommitID(r.Msg.Onto)}
 	for _, i := range r.Msg.Impacts {
 		out.Impacts = append(out.Impacts, graphapi.RebasedImpact{Impact: domain.ChangeImpactID(i.ChangeImpactId), Key: i.Key, Changed: i.Changed, Merged: i.Merged, Conflicts: i.Conflicts})
 	}
@@ -373,7 +373,7 @@ func (c *Client) RebaseState(ctx context.Context, id domain.ChangeID) (graphapi.
 	if err != nil {
 		return graphapi.RebaseState{}, rpcerr.FromConnect(err)
 	}
-	out := graphapi.RebaseState{Parent: domain.ChangeID(r.Msg.ParentId), Branch: r.Msg.Branch, Onto: domain.BaselineID(r.Msg.Onto)}
+	out := graphapi.RebaseState{Parent: domain.ChangeID(r.Msg.ParentId), Branch: r.Msg.Branch, Onto: domain.CommitID(r.Msg.Onto)}
 	for _, id := range r.Msg.BehindImpactIds {
 		out.Behind = append(out.Behind, domain.ChangeImpactID(id))
 	}
@@ -494,15 +494,15 @@ func (c *Client) ListChanges(ctx context.Context, f graphapi.ChangesFilter) ([]d
 	return out, nil
 }
 
-// Commit runs a change of node edits in the graph service (see graphapi.Commit).
-func (c *Client) Commit(ctx context.Context, in graphapi.Commit) (graphapi.CommitResult, error) {
+// CommitEdits runs a change of node edits in the graph service (see graphapi.Edits).
+func (c *Client) CommitEdits(ctx context.Context, in graphapi.Edits) (graphapi.CommitResult, error) {
 	r, err := c.rpc.CommitEdits(ctx, connect.NewRequest(&graphv1.CommitEditsRequest{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent,
-		Methodology: in.Methodology, Data: pbconv.Struct(in.Data), BaselineId: string(in.Baseline), BaselineName: in.BaselineName, Edits: pbconv.EditsToPB(in.Edits),
+		Methodology: in.Methodology, Data: pbconv.Struct(in.Data), CommitId: string(in.Commit), CommitName: in.CommitName, Edits: pbconv.EditsToPB(in.Edits),
 		OwnerOrg: in.OwnerOrg, ProjectId: in.ProjectID, Events: carriedToPB(in.Events)}))
 	if err != nil {
 		return graphapi.CommitResult{}, rpcerr.FromConnect(err)
 	}
-	return graphapi.CommitResult{Change: domain.ChangeID(r.Msg.ChangeId), Baseline: pbconv.BaselineFromPB(r.Msg.Baseline)}, nil
+	return graphapi.CommitResult{Change: domain.ChangeID(r.Msg.ChangeId), Commit: pbconv.CommitFromPB(r.Msg.Commit)}, nil
 }
 
 func carriedToPB(evs []graphapi.CarriedEvent) []*graphv1.CarriedEvent {
@@ -546,21 +546,21 @@ func (c *Client) BlackboardIn(ctx context.Context, id domain.ChangeID, flow stri
 	return bb, nil
 }
 
-func (c *Client) BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
-	r, err := c.rpc.GetBaselineGraph(ctx, connect.NewRequest(&graphv1.GetBaselineGraphRequest{Id: string(id)}))
+func (c *Client) CommitGraph(ctx context.Context, id domain.CommitID) ([]domain.Node, []domain.Link, error) {
+	r, err := c.rpc.GetCommitGraph(ctx, connect.NewRequest(&graphv1.GetCommitGraphRequest{Id: string(id)}))
 	if err != nil {
 		return nil, nil, rpcerr.FromConnect(err)
 	}
 	return pbconv.NodesFromPB(r.Msg.Nodes), pbconv.LinksFromPB(r.Msg.Links), nil
 }
 
-// BaselineDelta reads what moved from a baseline to a later one of its branch (graphsnap.DeltaReader, ADR 0143 §4).
-func (c *Client) BaselineDelta(ctx context.Context, from, to domain.BaselineID) (graphapi.BaselineDelta, error) {
-	r, err := c.rpc.GetBaselineDelta(ctx, connect.NewRequest(&graphv1.GetBaselineDeltaRequest{From: string(from), To: string(to)}))
+// CommitDelta reads what moved from a commit to a later one of its branch (graphsnap.DeltaReader, ADR 0143 §4).
+func (c *Client) CommitDelta(ctx context.Context, from, to domain.CommitID) (graphapi.CommitDelta, error) {
+	r, err := c.rpc.GetCommitDelta(ctx, connect.NewRequest(&graphv1.GetCommitDeltaRequest{From: string(from), To: string(to)}))
 	if err != nil {
-		return graphapi.BaselineDelta{}, rpcerr.FromConnect(err)
+		return graphapi.CommitDelta{}, rpcerr.FromConnect(err)
 	}
-	d := graphapi.BaselineDelta{From: pbconv.BaselineFromPB(r.Msg.From), To: pbconv.BaselineFromPB(r.Msg.To),
+	d := graphapi.CommitDelta{From: pbconv.CommitFromPB(r.Msg.From), To: pbconv.CommitFromPB(r.Msg.To),
 		Nodes: pbconv.NodesFromPB(r.Msg.Nodes), Links: pbconv.LinksFromPB(r.Msg.Links)}
 	for _, id := range r.Msg.Removed {
 		d.Removed = append(d.Removed, domain.NodeID(id))
@@ -568,16 +568,16 @@ func (c *Client) BaselineDelta(ctx context.Context, from, to domain.BaselineID) 
 	return d, nil
 }
 
-// SuspectLinks returns the links whose source is in the baseline and whose target is there at another version (the
-// suspect links GetBaselineGraph answers with).
-func (c *Client) SuspectLinks(ctx context.Context, id domain.BaselineID) ([]domain.Link, error) {
-	_, _, sus, err := c.BaselineGraphWithSuspects(ctx, id)
+// SuspectLinks returns the links whose source is in the commit and whose target is there at another version (the
+// suspect links GetCommitGraph answers with).
+func (c *Client) SuspectLinks(ctx context.Context, id domain.CommitID) ([]domain.Link, error) {
+	_, _, sus, err := c.CommitGraphWithSuspects(ctx, id)
 	return sus, err
 }
 
-// BaselineGraphWithSuspects is BaselineGraph and SuspectLinks in one call.
-func (c *Client) BaselineGraphWithSuspects(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, []domain.Link, error) {
-	r, err := c.rpc.GetBaselineGraph(ctx, connect.NewRequest(&graphv1.GetBaselineGraphRequest{Id: string(id)}))
+// CommitGraphWithSuspects is CommitGraph and SuspectLinks in one call.
+func (c *Client) CommitGraphWithSuspects(ctx context.Context, id domain.CommitID) ([]domain.Node, []domain.Link, []domain.Link, error) {
+	r, err := c.rpc.GetCommitGraph(ctx, connect.NewRequest(&graphv1.GetCommitGraphRequest{Id: string(id)}))
 	if err != nil {
 		return nil, nil, nil, rpcerr.FromConnect(err)
 	}
@@ -585,12 +585,12 @@ func (c *Client) BaselineGraphWithSuspects(ctx context.Context, id domain.Baseli
 }
 
 // ChangeView implements engine.GraphPort.
-func (c *Client) ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (domain.Baseline, error) {
+func (c *Client) ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (domain.Commit, error) {
 	r, err := c.rpc.GetChangeView(ctx, connect.NewRequest(&graphv1.GetChangeViewRequest{ChangeId: string(id), Flow: flow, Level: level}))
 	if err != nil {
-		return domain.Baseline{}, rpcerr.FromConnect(err)
+		return domain.Commit{}, rpcerr.FromConnect(err)
 	}
-	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
+	return pbconv.CommitFromPB(r.Msg.Commit), nil
 }
 
 // OpenOption implements engine.GraphPort (the principal comes from the request identity).
@@ -679,25 +679,25 @@ func (c *Client) ChangeGraph(ctx context.Context, id domain.ChangeID, flow strin
 }
 
 // CommitChange implements engine.GraphPort: the header of the commit.
-func (c *Client) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
-	r, err := c.rpc.CommitChange(ctx, connect.NewRequest(&graphv1.CommitChangeRequest{ChangeId: string(id), BaselineName: baselineName}))
+func (c *Client) CommitChange(ctx context.Context, id domain.ChangeID, commitName string) (domain.Commit, error) {
+	r, err := c.rpc.CommitChange(ctx, connect.NewRequest(&graphv1.CommitChangeRequest{ChangeId: string(id), CommitName: commitName}))
 	if err != nil {
-		return domain.Baseline{}, rpcerr.FromConnect(err)
+		return domain.Commit{}, rpcerr.FromConnect(err)
 	}
-	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
+	return pbconv.CommitFromPB(r.Msg.Commit), nil
 }
 
 // CommitChangeNodes is a partial commit (graph.CommitChangeNodes): the header of the commit.
-func (c *Client) CommitChangeNodes(ctx context.Context, id domain.ChangeID, baselineName string, nodes []domain.NodeID) (domain.Baseline, error) {
+func (c *Client) CommitChangeNodes(ctx context.Context, id domain.ChangeID, commitName string, nodes []domain.NodeID) (domain.Commit, error) {
 	ids := make([]string, len(nodes))
 	for i, n := range nodes {
 		ids[i] = string(n)
 	}
-	r, err := c.rpc.CommitChange(ctx, connect.NewRequest(&graphv1.CommitChangeRequest{ChangeId: string(id), BaselineName: baselineName, Nodes: ids}))
+	r, err := c.rpc.CommitChange(ctx, connect.NewRequest(&graphv1.CommitChangeRequest{ChangeId: string(id), CommitName: commitName, Nodes: ids}))
 	if err != nil {
-		return domain.Baseline{}, rpcerr.FromConnect(err)
+		return domain.Commit{}, rpcerr.FromConnect(err)
 	}
-	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
+	return pbconv.CommitFromPB(r.Msg.Commit), nil
 }
 
 // Branch implements engine.GraphPort.
@@ -709,10 +709,10 @@ func (c *Client) Branch(ctx context.Context, namespace, name string) (domain.Bra
 	return pbconv.BranchFromPB(r.Msg.Branch), nil
 }
 
-// CreateBranch opens a branch forked from a baseline.
+// CreateBranch opens a branch forked from a commit.
 func (c *Client) CreateBranch(ctx context.Context, in graphapi.NewBranch) (domain.Branch, error) {
 	r, err := c.rpc.CreateBranch(ctx, connect.NewRequest(&graphv1.CreateBranchRequest{Name: in.Name, Namespace: in.Namespace,
-		FromBaseline: string(in.From), Origin: in.Origin, Description: in.Description}))
+		FromCommit: string(in.From), Origin: in.Origin, Description: in.Description}))
 	if err != nil {
 		return domain.Branch{}, rpcerr.FromConnect(err)
 	}
@@ -765,14 +765,14 @@ func (c *Client) TransitionChange(ctx context.Context, id domain.ChangeID, in gr
 	return pbconv.ChangeFromPB(r.Msg.Change), nil
 }
 
-func (c *Client) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
-	r, err := c.rpc.ListBaselines(ctx, connect.NewRequest(&graphv1.ListBaselinesRequest{Namespace: namespace}))
+func (c *Client) Commits(ctx context.Context, namespace string) ([]domain.Commit, error) {
+	r, err := c.rpc.ListCommits(ctx, connect.NewRequest(&graphv1.ListCommitsRequest{Namespace: namespace}))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
-	out := make([]domain.Baseline, len(r.Msg.Baselines))
-	for i, b := range r.Msg.Baselines {
-		out[i] = pbconv.BaselineFromPB(b)
+	out := make([]domain.Commit, len(r.Msg.Commits))
+	for i, b := range r.Msg.Commits {
+		out[i] = pbconv.CommitFromPB(b)
 	}
 	return out, nil
 }
@@ -828,21 +828,21 @@ func (c *Client) AdminOnlyType(ctx context.Context, typ string) (bool, error) {
 	return r.Msg.AdminOnly, nil
 }
 
-func (c *Client) BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error) {
+func (c *Client) BranchHead(ctx context.Context, namespace, name string) (domain.Commit, error) {
 	r, err := c.rpc.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Namespace: namespace, Name: name}))
 	if err != nil {
-		return domain.Baseline{}, rpcerr.FromConnect(err)
+		return domain.Commit{}, rpcerr.FromConnect(err)
 	}
-	return pbconv.BaselineFromPB(r.Msg.Head), nil
+	return pbconv.CommitFromPB(r.Msg.Head), nil
 }
 
 // BranchHeadHeader is the header of the head of a branch: its id and order, never its state.
-func (c *Client) BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Baseline, error) {
+func (c *Client) BranchHeadHeader(ctx context.Context, namespace, name string) (domain.Commit, error) {
 	r, err := c.rpc.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Namespace: namespace, Name: name, HeaderOnly: true}))
 	if err != nil {
-		return domain.Baseline{}, rpcerr.FromConnect(err)
+		return domain.Commit{}, rpcerr.FromConnect(err)
 	}
-	return pbconv.BaselineFromPB(r.Msg.Head), nil
+	return pbconv.CommitFromPB(r.Msg.Head), nil
 }
 
 // TagVersion names a node version (ADR 0143 §6).
@@ -984,7 +984,7 @@ func (c *Client) ViewVersions(ctx context.Context, v graphapi.View, ids []domain
 	if err != nil {
 		return graphapi.ViewState{}, rpcerr.FromConnect(err)
 	}
-	st := graphapi.ViewState{Namespace: r.Msg.Namespace, Baseline: domain.BaselineID(r.Msg.BaselineId), MainHead: r.Msg.MainHead,
+	st := graphapi.ViewState{Namespace: r.Msg.Namespace, Commit: domain.CommitID(r.Msg.CommitId), MainHead: r.Msg.MainHead,
 		Versions: map[domain.NodeID]domain.Version{}}
 	for id, v := range r.Msg.Versions {
 		st.Versions[domain.NodeID(id)] = domain.Version(v)
@@ -998,7 +998,7 @@ func (c *Client) ViewDrafts(ctx context.Context, v graphapi.View, text string, l
 	if !v.IsChange() {
 		return nil, nil
 	}
-	r, err := c.rpc.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{View: pbconv.GraphViewToPB(v), Query: text, Limit: 500}))
+	r, err := c.rpc.ListCommitNodes(ctx, connect.NewRequest(&graphv1.ListCommitNodesRequest{View: pbconv.GraphViewToPB(v), Query: text, Limit: 500}))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -1068,12 +1068,12 @@ func (c *Client) ViewNeighbourhood(ctx context.Context, v graphapi.View, id doma
 
 // ViewNodes reads a page of the nodes of a view (ADR 0157).
 func (c *Client) ViewNodes(ctx context.Context, v graphapi.View, q graphapi.NodeQuery) (graphapi.NodePage, error) {
-	r, err := c.rpc.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{View: pbconv.GraphViewToPB(v), Type: q.Type,
+	r, err := c.rpc.ListCommitNodes(ctx, connect.NewRequest(&graphv1.ListCommitNodesRequest{View: pbconv.GraphViewToPB(v), Type: q.Type,
 		Query: q.Text, Offset: int32(q.Offset), Limit: int32(q.Limit), IncludeDeleted: q.IncludeDeleted, ChangeId: string(q.Change)}))
 	if err != nil {
 		return graphapi.NodePage{}, rpcerr.FromConnect(err)
 	}
-	page := graphapi.NodePage{Total: int(r.Msg.Total), Baseline: domain.BaselineID(r.Msg.GetBaseline().GetId())}
+	page := graphapi.NodePage{Total: int(r.Msg.Total), Commit: domain.CommitID(r.Msg.GetCommit().GetId())}
 	for _, n := range r.Msg.Nodes {
 		page.Nodes = append(page.Nodes, pbconv.NodeFromPB(n))
 	}
@@ -1111,7 +1111,7 @@ func (c *Client) QueryView(ctx context.Context, v graphapi.View, query string, o
 		return graphapi.QueryResult{}, rpcerr.FromConnect(err)
 	}
 	out := graphapi.QueryResult{Columns: r.Msg.Columns, Links: pbconv.LinksFromPB(r.Msg.Links), Truncated: r.Msg.Truncated, Notes: r.Msg.Notes,
-		Reads: int(r.Msg.Reads), Baseline: domain.BaselineID(r.Msg.BaselineId)}
+		Reads: int(r.Msg.Reads), Commit: domain.CommitID(r.Msg.CommitId)}
 	for _, n := range r.Msg.Nodes {
 		out.Nodes = append(out.Nodes, pbconv.NodeFromPB(n))
 	}

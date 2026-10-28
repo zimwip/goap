@@ -7,7 +7,7 @@
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import { toggle, isOpen } from './expanded.svelte';
-  import { baselines, refreshBaselines } from '../../stores/catalog.svelte';
+  import { commits, refreshCommits } from '../../stores/catalog.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { notify } from '../../shell/workbench.svelte';
@@ -29,14 +29,14 @@
   async function load() {
     loading = true;
     try {
-      await refreshBaselines(ns.organisation);
-      const latest = baselines.items[baselines.items.length - 1];
+      await refreshCommits(ns.organisation);
+      const latest = commits.items[commits.items.length - 1];
       if (!latest?.id) {
         nodes = [];
         links = [];
       } else {
-        const r = await graph.getBaselineGraph(latest.id);
-        // the baseline is already scoped to ns.organisation (organisation), just filter by type
+        const r = await graph.getCommitGraph(latest.id);
+        // the commit is already scoped to ns.organisation (organisation), just filter by type
         nodes = (r.nodes ?? []).filter((n) => n.type === nodeTypes.orgUnit);
         links = r.links ?? [];
       }
@@ -103,7 +103,7 @@
   }
 
   async function create() {
-    const latest = baselines.items[baselines.items.length - 1];
+    const latest = commits.items[commits.items.length - 1];
     if (!latest?.id || !name.trim()) return;
     saving = true;
     error = '';
@@ -113,7 +113,7 @@
       await graph.commitEdits({
         title: `Unit ${key}`,
         intent: `Create organisational unit ${name.trim()}`,
-        baselineId: latest.id,
+        commitId: latest.id,
         namespace: ns.organisation,
         edits: [
           {
@@ -171,7 +171,7 @@
   async function move() {
     if (!moving || !moveTarget) return;
     const target = nodes.find((n) => n.id === moveTarget);
-    const latest = baselines.items[baselines.items.length - 1];
+    const latest = commits.items[commits.items.length - 1];
     if (!target || !latest?.id) return;
     movingBusy = true;
     error = '';
@@ -180,7 +180,7 @@
       await graph.commitEdits({
         title: `Move ${moving.key}`,
         intent: `Move ${moving.key} under ${target.key}`,
-        baselineId: latest.id,
+        commitId: latest.id,
         namespace: ns.organisation,
         edits: [
           {

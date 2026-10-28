@@ -1,6 +1,6 @@
 // Package sqlschematest checks that the PostgreSQL and the SQLite migrations of a service describe the same schema
 // (ADR 0074). Both dialects are kept by hand; this guard reads the migrations of each (CREATE TABLE, CREATE INDEX,
-// ALTER TABLE ... ADD FOREIGN KEY / RENAME / RENAME COLUMN, DROP TABLE, in file order), reduces them to a schema in a common
+// ALTER TABLE ... ADD FOREIGN KEY / RENAME / RENAME COLUMN, ALTER INDEX ... RENAME, DROP TABLE, in file order), reduces them to a schema in a common
 // vocabulary and reports every difference in tables, columns, nullability, defaults, keys, constraints and indexes.
 // It is test-only: no package outside _test files imports it.
 //
@@ -117,6 +117,7 @@ var (
 	reDropTable   = regexp.MustCompile(`(?is)^DROP TABLE (?:IF EXISTS )?(\w+)$`)
 	reDropIndex   = regexp.MustCompile(`(?is)^DROP INDEX (?:IF EXISTS )?(\w+)$`)
 	reRename      = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) RENAME TO (\w+)$`)
+	reRenameIndex = regexp.MustCompile(`(?is)^ALTER INDEX (?:IF EXISTS )?(\w+) RENAME TO (\w+)$`)
 	reRenameCol   = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) RENAME (?:COLUMN )?(\w+) TO (\w+)$`)
 	reAddFK       = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) ADD (FOREIGN KEY .*)$`)
 	reAddColumn   = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) ADD (?:COLUMN )?(\w+ .*)$`)
@@ -214,6 +215,16 @@ func (s *Schema) apply(stmt string) error {
 				ix.Table = m[2]
 			}
 		}
+		return nil
+	}
+	if m := reRenameIndex.FindStringSubmatch(stmt); m != nil {
+		ix := s.Indexes[m[1]]
+		if ix == nil {
+			return fmt.Errorf("rename of an unknown index %s", m[1])
+		}
+		delete(s.Indexes, m[1])
+		ix.Name = m[2]
+		s.Indexes[m[2]] = ix
 		return nil
 	}
 	if m := reRenameCol.FindStringSubmatch(stmt); m != nil {

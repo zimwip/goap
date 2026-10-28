@@ -488,7 +488,7 @@ message Trigger {
   // process.completed | process.failed | methodology.published
   string event = 4;
   // CEL filter over the event: event.type, event.change {id, title, status,
-  // methodology, goal, baseline}, event.process {id, agent, goal, status}
+  // methodology, goal, commit}, event.process {id, agent, goal, status}
   string filter = 5;
   // schedule triggers: cron expression (5 fields, UTC)
   string schedule = 6;
@@ -496,7 +496,7 @@ message Trigger {
   string goal = 7;
   // intent text given to the process
   string intent = 8;
-  // new_change: open a change on the latest baseline (default);
+  // new_change: open a change on the latest commit (default);
   // event_change: work on the change of the event
   string target = 9;
   // roles of the service identity running the process (ABAC)

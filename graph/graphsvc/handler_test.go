@@ -29,7 +29,7 @@ func createObject(h *graphsvc.Handler, roles, typ, key string) (*graphv1.ChangeI
 	if err != nil {
 		return nil, err
 	}
-	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "alm", Title: "create " + key, BaselineID: head.ID})
+	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "alm", Title: "create " + key, ForkCommit: head.ID})
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 		t.Fatal(err)
 	}
 	add := func(roles string) error {
-		c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: base.ID})
+		c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "t", ForkCommit: base.ID})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -135,7 +135,7 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "organisation", Title: "policy", BaselineID: orgBase.ID})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "organisation", Title: "policy", ForkCommit: orgBase.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestAdminOnlyTypeOfADomainIsGated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "vault", Title: "secret", BaselineID: base.ID})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "vault", Title: "secret", ForkCommit: base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestChangeImpactRPCs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: base.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "t", ForkCommit: base.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +303,7 @@ func TestCommitEditsGatesAccessNodes(t *testing.T) {
 		t.Fatal(err)
 	}
 	commit := func(roles, typ string) (*graphv1.CommitEditsResponse, error) {
-		req := connect.NewRequest(&graphv1.CommitEditsRequest{Title: "t", BaselineId: string(base.ID),
+		req := connect.NewRequest(&graphv1.CommitEditsRequest{Title: "t", CommitId: string(base.ID),
 			Edits: []*graphv1.NodeEdit{{Key: "K-" + roles, Type: typ, Rationale: "why"}}})
 		req.Header().Set(identity.HeaderSubject, "u")
 		req.Header().Set(identity.HeaderOrg, "acme")
@@ -318,7 +318,7 @@ func TestCommitEditsGatesAccessNodes(t *testing.T) {
 		t.Fatalf("a contributor must not commit policies: %v", err)
 	}
 	out, err := commit("admin", access.NodeTypePolicy)
-	if err != nil || out.ChangeId == "" || out.Baseline.GetId() == "" {
+	if err != nil || out.ChangeId == "" || out.Commit.GetId() == "" {
 		t.Fatalf("an administrator may: %v %v", out, err)
 	}
 	if _, err := commit("contributor", "alm@Need"); err != nil {
@@ -379,7 +379,7 @@ linkTypes:
 		t.Fatal(err)
 	}
 	for roles, want := range map[string]connect.Code{"contributor": connect.CodePermissionDenied, "admin": 0} {
-		c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "vault", Title: "merge " + roles, BaselineID: base.ID, OwnBranch: true})
+		c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "vault", Title: "merge " + roles, ForkCommit: base.ID, OwnBranch: true})
 		if err != nil {
 			t.Fatal(err)
 		}

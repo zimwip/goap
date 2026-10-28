@@ -7,7 +7,7 @@
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
-  import { baselines, refreshBaselines } from '../../stores/catalog.svelte';
+  import { commits, refreshCommits } from '../../stores/catalog.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { notify } from '../../shell/workbench.svelte';
@@ -25,13 +25,13 @@
   async function load() {
     loading = true;
     try {
-      await refreshBaselines(ns.organisation);
-      const latest = baselines.items[baselines.items.length - 1];
+      await refreshCommits(ns.organisation);
+      const latest = commits.items[commits.items.length - 1];
       if (!latest?.id) {
         nodes = [];
         units = [];
       } else {
-        const r = await graph.getBaselineGraph(latest.id);
+        const r = await graph.getCommitGraph(latest.id);
         nodes = (r.nodes ?? []).filter((n) => n.type === nodeTypes.user).sort((a, b) => (a.key ?? '').localeCompare(b.key ?? ''));
         units = (r.nodes ?? []).filter((n) => n.type === nodeTypes.orgUnit);
       }
@@ -57,7 +57,7 @@
   }
 
   async function create() {
-    const latest = baselines.items[baselines.items.length - 1];
+    const latest = commits.items[commits.items.length - 1];
     const s = subject.trim();
     if (!latest?.id || !s) return;
     saving = true;
@@ -69,7 +69,7 @@
       await graph.commitEdits({
         title: `User ${s}`,
         intent: `Pre-provision the user ${s}`,
-        baselineId: latest.id,
+        commitId: latest.id,
         namespace: ns.organisation,
         edits: [{ key, type: nodeTypes.user, props: { subject: s }, links: [{ type: linkTypes.memberOf, to: { id: unit.id, version: unit.version } }], rationale: `Pre-provision the user ${s}` }],
       });
