@@ -52,7 +52,8 @@ func (ix *typeIndex) checkNode(ns, typ string) error {
 		return nil
 	}
 	if err := ix.cat.CheckNode(ns, typ); err != nil {
-		return fmt.Errorf("%v: %w", err, ErrInvalid)
+		// both kept: a type the catalogue does not know is told apart (typecat.ErrUnknown) from one it refuses
+		return fmt.Errorf("%w: %w", err, ErrInvalid)
 	}
 	return nil
 }
@@ -63,7 +64,7 @@ func (ix *typeIndex) checkLink(typ, from, to string) error {
 		return nil
 	}
 	if err := ix.cat.CheckLink(typ, from, to); err != nil {
-		return fmt.Errorf("%v: %w", err, ErrInvalid)
+		return fmt.Errorf("%w: %w", err, ErrInvalid)
 	}
 	return nil
 }

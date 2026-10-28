@@ -44,6 +44,9 @@ type Handler struct {
 	locksWrites atomic.Bool
 	// Events receives what RepublishIndex sends (nil: the RPC is refused).
 	Events Publisher
+	// TypesMissed reads the domain registry again for a request refused for a type the catalogue does not hold, and
+	// tells whether the domains in force changed (KnownTypes); nil: such a request stays refused.
+	TypesMissed func(ctx context.Context) bool
 	// Authz gates the creation of a node in a change (resource "object": ImpactNodeCreate, the successors of a
 	// merge or split, a graph import), the tags and the reading of prompts. Nil refuses (ADR 0138). The other
 	// impact operations are not gated by it.

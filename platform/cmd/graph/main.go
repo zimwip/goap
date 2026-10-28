@@ -43,9 +43,14 @@ import (
 	"github.com/zimwip/goap/platform/modelgw"
 )
 
-// registryTimeout bounds a read of the domain registry, at start and on its events: a
-// registry that does not answer is one that is not there, the catalogue kept stays in force.
-const registryTimeout = 10 * time.Second
+// registryTimeout bounds a read of the domain registry, at start, on its events and on a type the catalogue misses: a
+// registry that does not answer is one that is not there, the catalogue kept stays in force and the start listens for
+// its announcement (ADR 0169).
+const registryTimeout = 3 * time.Second
+
+// missedEvery spaces the reads of the registry a type the catalogue does not hold asks for (Handler.KnownTypes): a
+// client sending types no domain declares reads it once a second at most.
+const missedEvery = time.Second
 
 // loadTypes loads the type catalogue until it holds the domains the seeds write to, then runs the seeds: tried at
 // once, then again when the domain registry announces it serves or publishes a domain (ADR 0169), else after a delay.
@@ -336,10 +341,18 @@ func main() {
 	jobs := jobkit.NewClient(platform.H2CClient(), platform.Env("GOAP_JOBS_URL", "http://localhost:8091"), os.Getenv("GOAP_JOB_TOKEN"), telemetry.ClientOptions()...)
 	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor(), Projects: directory.MayAccessProject, Stopped: directory.ProjectStopped,
 		Jobs: jobs}
+	// a type the catalogue does not hold is looked for in the registry before the request is refused: a domain
+	// published since the last reload is known at its first use, its event lost or with no bus
+	graphHandler.TypesMissed = func(ctx context.Context) bool {
+		client.Invalidate()
+		ctx, cancel := context.WithTimeout(ctx, registryTimeout)
+		defer cancel()
+		return types.Refresh(ctx, missedEvery)
+	}
 	if content {
 		graphHandler.Space = "content" // its exports and imports are jobs of kinds of its own
 	}
-	path, graphService := graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), graphHandler.Positions(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller(), graphHandler.LockedWrites()))...)
+	path, graphService := graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), graphHandler.Positions(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller(), graphHandler.KnownTypes(), graphHandler.LockedWrites()))...)
 	// the exports and imports of the graph's namespaces, a worker of the job service
 	go (&jobkit.Worker{Queue: jobs, ID: jobkit.WorkerID("graph"), Kinds: graphHandler.JobRunners(), Log: log}).Run(ctx)
 	if content {

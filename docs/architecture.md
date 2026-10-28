@@ -1097,7 +1097,10 @@ protected domain (`domain_protection`) is refused every write over RPC and writt
 `protect`, `unprotect`, `list`, on a context marked `domainsvc.Local`); it reads the organisation's rules from the
 platform graph; it names no methodology. Every graph is its client (`GOAP_DOMAINS_URL`): it waits at its start for the
 built-in domains, then reads the domains in force again on the registry's events (`typecat.NewLive` over
-`lib/domainclient`), and its catalogue is exactly those domains (`typecat.Of`). The
+`lib/domainclient`; each read bounded by 3 s), and its catalogue is exactly those domains (`typecat.Of`). A request
+refused for a type the catalogue does not hold reads the registry again before it is refused (`graphsvc.Handler.KnownTypes`,
+`TypesMissed`, `typecat.Live.Refresh`: once a second at most, the request run again when the domains in force changed),
+so a domain published is known at its first use even when its event was lost or there is no bus. The
 **methodology registry** (`platform/registrysvc`, `platform/cmd/registry`) goes with the engine: it reads the domains through a
 port (`registrysvc.Domains`: the service in process, `lib/domainclient` over RPC) and the graph through
 `graphapi`. Publishing or archiving a domain is never refused for a methodology: the domain registry emits
