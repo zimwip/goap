@@ -161,10 +161,21 @@ func (b *impactBlocks) reset(s []domain.ChangeImpact) {
 	}
 }
 
-// lastIndex is the position of the last impact of a list that satisfies f, -1 when none does.
-func lastIndex(l domain.Impacts, f func(domain.ChangeImpact) bool) int {
+// firstIndex is the position of the first impact that satisfies f, -1 when none does (see lastIndex).
+func firstIndex(l iter.Seq2[int, domain.ChangeImpact], f func(domain.ChangeImpact) bool) int {
+	for i, cn := range l {
+		if f(cn) {
+			return i
+		}
+	}
+	return -1
+}
+
+// lastIndex is the position of the last impact that satisfies f, -1 when none does: of a list (All), or of the
+// impacts it may be among (OfNode, OfKey).
+func lastIndex(l iter.Seq2[int, domain.ChangeImpact], f func(domain.ChangeImpact) bool) int {
 	at := -1
-	for i, cn := range l.All() {
+	for i, cn := range l {
 		if f(cn) {
 			at = i
 		}

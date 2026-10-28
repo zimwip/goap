@@ -377,21 +377,24 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 	if w, err = g.workOn(ctx, tx, id, flow); err != nil {
 		return out, err
 	}
-	find := func(f func(domain.ChangeImpact) bool) domain.ChangeImpact {
-		i := w.seen.Find(f)
-		if i < 0 {
-			return domain.ChangeImpact{}
+	byID := func(id domain.ChangeImpactID) domain.ChangeImpact {
+		if i := w.seen.Index(id); i >= 0 {
+			return w.seen.At(i)
 		}
-		return w.seen.At(i)
+		return domain.ChangeImpact{}
 	}
 	for _, c := range into {
-		out.Successors = append(out.Successors, find(func(i domain.ChangeImpact) bool { return i.Key == c.Key && i.Intent == domain.IntentCreated }))
+		var succ domain.ChangeImpact
+		if i := firstIndex(w.seen.OfKey(c.Key), func(i domain.ChangeImpact) bool { return i.Key == c.Key && i.Intent == domain.IntentCreated }); i >= 0 {
+			succ = w.seen.At(i)
+		}
+		out.Successors = append(out.Successors, succ)
 	}
 	for _, i := range srcImpacts {
-		out.Sources = append(out.Sources, find(func(x domain.ChangeImpact) bool { return x.ID == i }))
+		out.Sources = append(out.Sources, byID(i))
 	}
 	for _, i := range holderImpacts {
-		out.Parents = append(out.Parents, find(func(x domain.ChangeImpact) bool { return x.ID == i }))
+		out.Parents = append(out.Parents, byID(i))
 	}
 	return out, nil
 }
@@ -453,7 +456,7 @@ func (g *Graph) checkOrigins(impacts domain.Impacts, cn domain.ChangeImpact, d *
 	}
 	var pending []string
 	for _, o := range d.Origins {
-		i := impacts.Find(func(x domain.ChangeImpact) bool { return nodeOf(x) == o.ID })
+		i := firstIndex(impacts.OfNode(o.ID), func(x domain.ChangeImpact) bool { return nodeOf(x) == o.ID })
 		// an origin is changed by the impact of its parent (via): that one decides it (ADR 0077, 0102)
 		if i >= 0 && impacts.At(i).Via != "" {
 			i = impacts.Index(impacts.At(i).Via)

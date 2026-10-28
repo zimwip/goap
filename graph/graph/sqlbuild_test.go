@@ -60,7 +60,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 
 	// LatestOn (the branch is named by BranchOf: "" is main)
 	q, a = pg.sqlLatestOn("n1", "")
-	check("pg LatestOn", pg, q, a, `SELECT `+goldPGNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND v.version = greatest(coalesce((SELECT version FROM node_version WHERE node_id = $1 AND branch = $2 ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = $1 AND branch = $2 ORDER BY version DESC LIMIT 1), 0))`, []any{"n1", "main"})
+	check("pg LatestOn", pg, q, a, `SELECT `+goldPGNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND v.version = greatest(coalesce((SELECT version FROM node_version WHERE node_id = $1 AND branch = (SELECT $2::text) ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = $1 AND branch = (SELECT $2::text) ORDER BY version DESC LIMIT 1), 0))`, []any{"n1", "main"})
 	q, a = lite.sqlLatestOn("n1", "")
 	check("sqlite LatestOn", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? AND v.version = max(coalesce((SELECT version FROM node_version WHERE node_id = ? AND branch = ? ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = ? AND branch = ? ORDER BY version DESC LIMIT 1), 0))`, []any{"n1", "main"})
 
@@ -133,10 +133,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 			SELECT q.id, (
 				SELECT u.version FROM (
 					(SELECT v.version, v.committed FROM node_version v
-					WHERE v.node_id = q.id AND v.branch = $1 AND v.committed + 0 > $2 AND v.committed + 0 <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
+					WHERE v.node_id = q.id AND v.branch = (SELECT $1::text) AND v.committed + 0 > $2 AND v.committed + 0 <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
 					UNION ALL
 					(SELECT j.version, j.committed FROM node_branch j
-					WHERE j.node_id = q.id AND j.branch = $1 AND j.committed + 0 > $2 AND j.committed + 0 <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
+					WHERE j.node_id = q.id AND j.branch = (SELECT $1::text) AND j.committed + 0 > $2 AND j.committed + 0 <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
 				) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
 			) AS version
 			FROM unnest($5::uuid[]) AS q(id) WHERE (SELECT n.namespace FROM node n WHERE n.id = q.id) = $4
@@ -251,7 +251,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlLatestVersions(ids)
 	check("sqlite LatestVersions", lite, q, a, `SELECT id, latest FROM node WHERE id IN (SELECT value FROM json_each(?))`, []any{`["n1","n2"]`})
 	q, a = pg.sqlLatestVersionsOn(ids, "b")
-	check("pg LatestVersionsOn", pg, q, a, `SELECT id::text, version FROM (SELECT q.id, greatest(coalesce((SELECT version FROM node_version WHERE node_id = q.id AND branch = $2 ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = q.id AND branch = $2 ORDER BY version DESC LIMIT 1), 0)) AS version FROM unnest($1::uuid[]) AS q(id)) l WHERE version > 0`, []any{[]string{"n1", "n2"}, "b"})
+	check("pg LatestVersionsOn", pg, q, a, `SELECT id::text, version FROM (SELECT q.id, greatest(coalesce((SELECT version FROM node_version WHERE node_id = q.id AND branch = (SELECT $2::text) ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = q.id AND branch = (SELECT $2::text) ORDER BY version DESC LIMIT 1), 0)) AS version FROM unnest($1::uuid[]) AS q(id)) l WHERE version > 0`, []any{[]string{"n1", "n2"}, "b"})
 	q, a = lite.sqlLatestVersionsOn(ids, "b")
 	check("sqlite LatestVersionsOn", lite, q, a, `SELECT id, version FROM (SELECT q.id, max(coalesce((SELECT version FROM node_version WHERE node_id = q.id AND branch = ? ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = q.id AND branch = ? ORDER BY version DESC LIMIT 1), 0)) AS version FROM (SELECT value AS id FROM json_each(?)) q) l WHERE version > 0`, []any{`["n1","n2"]`, "b"})
 

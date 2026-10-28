@@ -15,6 +15,24 @@ const ImpactBlock = 16
 type Impacts struct {
 	blocks [][]ChangeImpact
 	n      int
+	// look, when set, finds the impacts of the first looked positions without a walk (IndexedImpacts); the positions
+	// after them (Append) are walked
+	look   ImpactLookup
+	looked int
+}
+
+// ImpactLookup finds the impacts of a list by what they name, as a walk of the list would: the view of a change keeps
+// its impacts indexed and gives its lists this, so that finding one impact of a change of N impacts does not cost N.
+// Positions it answers past the list are ignored; the impacts it answers are checked by the caller as a walk would.
+type ImpactLookup interface {
+	// Position is the position of the impact of an id.
+	Position(id ChangeImpactID) (int, bool)
+	// OfNode are the positions of the impacts naming a node (its Pre or its Post), in order.
+	OfNode(id NodeID) []int
+	// OfKey are the positions of the impacts of a key, in order.
+	OfKey(key string) []int
+	// Odd is the number of impacts superseded or of a flow.
+	Odd() int
 }
 
 // ImpactsOf is the list of the impacts of a slice, which it shares: the slice must not be edited while the list is read.
@@ -32,6 +50,11 @@ func ImpactsOf(s []ChangeImpact) Impacts {
 // ImpactsOfBlocks is the list of blocks of ImpactBlock impacts each but the last, which it shares: the holder of the
 // blocks keeps them as they are while the list is read (a write of the view copies the block first).
 func ImpactsOfBlocks(blocks [][]ChangeImpact, n int) Impacts { return Impacts{blocks: blocks, n: n} }
+
+// IndexedImpacts is ImpactsOfBlocks with the lookup of the holder of the blocks, which answers for these n impacts.
+func IndexedImpacts(blocks [][]ChangeImpact, n int, look ImpactLookup) Impacts {
+	return Impacts{blocks: blocks, n: n, look: look, looked: n}
+}
 
 // Len is the number of impacts of the list.
 func (l Impacts) Len() int { return l.n }
@@ -56,12 +79,72 @@ func (l Impacts) All() iter.Seq2[int, ChangeImpact] {
 
 // Index is the position of the impact of an id, -1 when the list holds none.
 func (l Impacts) Index(id ChangeImpactID) int {
+	if l.look != nil {
+		if i, ok := l.look.Position(id); ok && i < l.looked && l.At(i).ID == id {
+			return i
+		}
+		for i := l.looked; i < l.n; i++ {
+			if l.At(i).ID == id {
+				return i
+			}
+		}
+		return -1
+	}
 	for i, cn := range l.All() {
 		if cn.ID == id {
 			return i
 		}
 	}
 	return -1
+}
+
+// OfNode iterates in order over the impacts that may name a node (its Pre or its Post): those the lookup answers, else
+// every impact; the caller checks each as a walk of the list would.
+func (l Impacts) OfNode(id NodeID) iter.Seq2[int, ChangeImpact] {
+	if l.look == nil {
+		return l.All()
+	}
+	return l.near(l.look.OfNode(id))
+}
+
+// OfKey iterates in order over the impacts that may have a key, as OfNode does.
+func (l Impacts) OfKey(key string) iter.Seq2[int, ChangeImpact] {
+	if l.look == nil {
+		return l.All()
+	}
+	return l.near(l.look.OfKey(key))
+}
+
+// near iterates over the positions a lookup answers within the list, then over the impacts appended after them.
+func (l Impacts) near(at []int) iter.Seq2[int, ChangeImpact] {
+	return func(yield func(int, ChangeImpact) bool) {
+		for _, i := range at {
+			if i < l.looked && !yield(i, l.At(i)) {
+				return
+			}
+		}
+		for i := l.looked; i < l.n; i++ {
+			if !yield(i, l.At(i)) {
+				return
+			}
+		}
+	}
+}
+
+// Plain tells whether no impact of the list is superseded or of a flow (the main flow sees such a list as it is).
+func (l Impacts) Plain() bool {
+	if l.look != nil {
+		if l.look.Odd() > 0 {
+			return false
+		}
+		for i := l.looked; i < l.n; i++ {
+			if cn := l.At(i); cn.Superseded || cn.Flow != "" {
+				return false
+			}
+		}
+		return true
+	}
+	return l.Find(func(cn ChangeImpact) bool { return cn.Superseded || cn.Flow != "" }) < 0
 }
 
 // Find is the position of the first impact that satisfies f, -1 when none does.
@@ -97,7 +180,7 @@ func (l Impacts) Append(cn ChangeImpact) Impacts {
 	} else {
 		blocks = append(blocks, []ChangeImpact{cn})
 	}
-	return Impacts{blocks: blocks, n: l.n + 1}
+	return Impacts{blocks: blocks, n: l.n + 1, look: l.look, looked: l.looked}
 }
 
 // Set is the list with the impact at a position replaced: the block holding it copied, the others shared.

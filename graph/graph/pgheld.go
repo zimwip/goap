@@ -38,6 +38,16 @@ type heldQuerier struct {
 	// joins are the versions held joining a branch (JoinBranch: node, version, branch, change, committed), written
 	// after the versions
 	joins [][]any
+	// the rows held indexed, so that holding or asking for one costs the same whatever the number held (a commit holds
+	// a version, a link set and an impact per node): rowAt the position of an impact row by its id, verAt of a version
+	// by its node, refs the versions written or left by a link, joined the nodes of the joins, keys the namespace and
+	// key of the nodes created, nodes the nodes of refs
+	rowAt  map[any]int
+	verAt  map[domain.NodeID]int
+	refs   map[domain.NodeRef]bool
+	nodes  map[domain.NodeID]bool
+	joined map[domain.NodeID]bool
+	keys   map[[2]string]bool
 }
 
 // heldLink is a link row held: the version it leaves and its arguments (linkColumns).
@@ -49,6 +59,34 @@ type heldLink struct {
 // holdLink holds a link row.
 func (h *heldQuerier) holdLink(from domain.NodeRef, args []any) {
 	h.links = append(h.links, heldLink{from: from, args: args})
+	h.noteRef(from)
+}
+
+func (h *heldQuerier) noteRef(r domain.NodeRef) {
+	if h.refs == nil {
+		h.refs, h.nodes = map[domain.NodeRef]bool{}, map[domain.NodeID]bool{}
+	}
+	h.refs[r], h.nodes[r.ID] = true, true
+}
+
+// forgetRefs indexes again the versions and links still held, once some were written.
+func (h *heldQuerier) forgetRefs() {
+	h.refs, h.nodes = nil, nil
+	for _, v := range h.versions {
+		h.noteRef(v.n.Ref())
+	}
+	for _, l := range h.links {
+		h.noteRef(l.from)
+	}
+}
+
+// holdJoin holds a join of a version to a branch (JoinBranch's arguments).
+func (h *heldQuerier) holdJoin(args []any) {
+	h.joins = append(h.joins, args)
+	if h.joined == nil {
+		h.joined = map[domain.NodeID]bool{}
+	}
+	h.joined[domain.NodeID(args[0].(string))] = true
 }
 
 // heldVersion is a node version a write transaction writes: its node created (version 1) or moved to it, its row with
@@ -62,24 +100,29 @@ type heldVersion struct {
 // holdVersion holds a version; refused (false) when its node is held at another version (one statement moves a
 // node once).
 func (h *heldQuerier) holdVersion(n domain.Node, args []any) bool {
-	for _, v := range h.versions {
-		if v.n.ID == n.ID {
-			return false
-		}
+	if _, ok := h.verAt[n.ID]; ok {
+		return false
 	}
+	if h.verAt == nil {
+		h.verAt, h.keys = map[domain.NodeID]int{}, map[[2]string]bool{}
+	}
+	h.verAt[n.ID] = len(h.versions)
 	h.versions = append(h.versions, heldVersion{n: n, version: args, set: [4]any{nil, nil, 0, 0}})
+	h.noteRef(n.Ref())
+	if n.Version == 1 {
+		h.keys[[2]string{domain.NamespaceOf(n.Namespace), n.Key}] = true
+	}
 	return true
 }
 
 // holdLinkSet sets how a held version holds its links; false when the version is not held.
 func (h *heldQuerier) holdLinkSet(from domain.NodeRef, set [4]any) bool {
-	for i := range h.versions {
-		if h.versions[i].n.Ref() == from {
-			h.versions[i].set = set
-			return true
-		}
+	i, ok := h.verAt[from.ID]
+	if !ok || h.versions[i].n.Ref() != from {
+		return false
 	}
-	return false
+	h.versions[i].set = set
+	return true
 }
 
 type heldImpact struct {
@@ -90,12 +133,14 @@ type heldImpact struct {
 func (h *heldQuerier) hold(args []any) {
 	at := h.upserts
 	h.upserts++
-	for i := range h.rows {
-		if h.rows[i].args[0] == args[0] {
-			h.rows[i].args = args
-			return
-		}
+	if i, ok := h.rowAt[args[0]]; ok {
+		h.rows[i].args = args
+		return
 	}
+	if h.rowAt == nil {
+		h.rowAt = map[any]int{}
+	}
+	h.rowAt[args[0]] = len(h.rows)
 	h.rows = append(h.rows, heldImpact{args: args, at: at})
 }
 
@@ -114,7 +159,7 @@ func (h *heldQuerier) flush(ctx context.Context) error {
 		return nil
 	}
 	rows, upserts := h.rows, h.upserts
-	h.rows, h.upserts = nil, 0
+	h.rows, h.upserts, h.rowAt = nil, 0, nil
 	columns := impactColumns
 	var seqs []int64
 	if upserts > len(rows) {
@@ -161,7 +206,8 @@ func (h *heldQuerier) flushVersions(ctx context.Context) error {
 		return nil
 	}
 	vs := h.versions
-	h.versions = nil
+	h.versions, h.verAt, h.keys = nil, nil, nil
+	h.forgetRefs()
 	var created []heldVersion
 	var movedIDs []string
 	var movedTo []int32
@@ -274,6 +320,7 @@ func impactArgs(change domain.ChangeID, cn domain.ChangeImpact) ([]any, error) {
 func (h *heldQuerier) flushLinks(ctx context.Context) error {
 	links := h.links
 	h.links = nil
+	h.forgetRefs()
 	for rows := range slices.Chunk(links, linkRowsPerInsert) {
 		args := make([]any, 0, len(rows)*len(linkColumns))
 		for _, l := range rows {
@@ -290,7 +337,7 @@ func (h *heldQuerier) flushLinks(ctx context.Context) error {
 // it is left alone.
 func (h *heldQuerier) flushJoins(ctx context.Context) error {
 	joins := h.joins
-	h.joins = nil
+	h.joins, h.joined = nil, nil
 	for rows := range slices.Chunk(joins, joinRowsPerInsert) {
 		args := make([]any, 0, len(rows)*5)
 		vals := make([]string, len(rows))
@@ -315,8 +362,8 @@ const joinRowsPerInsert = 1000
 
 // joinsNode tells whether a join of one of the nodes is held.
 func (h *heldQuerier) joinsNode(ids ...domain.NodeID) bool {
-	for _, j := range h.joins {
-		if slices.Contains(ids, domain.NodeID(j[0].(string))) {
+	for _, id := range ids {
+		if h.joined[id] {
 			return true
 		}
 	}
@@ -325,13 +372,8 @@ func (h *heldQuerier) joinsNode(ids ...domain.NodeID) bool {
 
 // holdsNode tells whether a version of one of the nodes is held: a read of those nodes waits for them.
 func (h *heldQuerier) holdsNode(ids []domain.NodeID) bool {
-	for _, v := range h.versions {
-		if slices.Contains(ids, v.n.ID) {
-			return true
-		}
-	}
-	for _, l := range h.links {
-		if slices.Contains(ids, l.from.ID) {
+	for _, id := range ids {
+		if h.nodes[id] {
 			return true
 		}
 	}
@@ -340,12 +382,7 @@ func (h *heldQuerier) holdsNode(ids []domain.NodeID) bool {
 
 // holdsKey tells whether a node of the key is created by a version held.
 func (h *heldQuerier) holdsKey(namespace, key string) bool {
-	for _, v := range h.versions {
-		if v.n.Version == 1 && v.n.Key == key && domain.NamespaceOf(v.n.Namespace) == domain.NamespaceOf(namespace) {
-			return true
-		}
-	}
-	return false
+	return h.keys[[2]string{domain.NamespaceOf(namespace), key}]
 }
 
 // onNodes is what a read of versions of the nodes runs on: a read of other nodes leaves the rows held for later (it
@@ -365,19 +402,9 @@ func (t *pgTx) onRefs(refs []domain.NodeRef) pgQuerier {
 	if t.held == nil {
 		return t.tx
 	}
-	for _, v := range t.held.versions {
-		if slices.Contains(refs, v.n.Ref()) {
-			return t.tx
-		}
-	}
-	for _, l := range t.held.links {
-		if slices.Contains(refs, l.from) {
-			return t.tx
-		}
-	}
-	// a join changes what a branch holds of its node, whatever the version read
-	for _, j := range t.held.joins {
-		if slices.ContainsFunc(refs, func(r domain.NodeRef) bool { return string(r.ID) == j[0].(string) }) {
+	for _, r := range refs {
+		// a join changes what a branch holds of its node, whatever the version read
+		if t.held.refs[r] || t.held.joined[r.ID] {
 			return t.tx
 		}
 	}

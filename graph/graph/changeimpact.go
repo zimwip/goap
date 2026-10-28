@@ -47,10 +47,9 @@ func changeOpen(ctx context.Context, tx Tx, id domain.ChangeID) (domain.Change, 
 }
 
 func findChangeImpact(c domain.Change, id domain.ChangeImpactID) (domain.ChangeImpact, error) {
-	for _, cn := range c.Impacts().All() {
-		if cn.ID == id {
-			return cn, nil
-		}
+	all := c.Impacts()
+	if i := all.Index(id); i >= 0 {
+		return all.At(i), nil
 	}
 	return domain.ChangeImpact{}, fmt.Errorf("change impact %s of change %s: %w", id, c.ID, ErrNotFound)
 }
@@ -240,7 +239,7 @@ func (p *presence) has(id domain.NodeID) bool {
 	}
 	if p.all == nil && p.asks < 4 {
 		p.asks++
-		return p.impacts.Find(func(cn domain.ChangeImpact) bool { return cn.Pre != nil && cn.Pre.ID == id && p.fv.visible(cn) }) >= 0
+		return lastIndex(p.impacts.OfNode(id), func(cn domain.ChangeImpact) bool { return cn.Pre != nil && cn.Pre.ID == id && p.fv.visible(cn) }) >= 0
 	}
 	if p.all == nil {
 		p.all = map[domain.NodeID]bool{}
