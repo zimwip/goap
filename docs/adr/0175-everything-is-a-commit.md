@@ -28,8 +28,8 @@ header was read and written with checkpoints around it. A header is one row now;
 
 1. **A commit is the one record of a state.** The table `baseline` becomes `commit`, `domain.Baseline` becomes
    `domain.Commit`, `BaselineID` becomes `CommitID`. Its columns keep their meaning: `parent_id`, `merged_from` (the
-   second parent), `rebased_from`, `change_id`, `namespace`, `branch`, `kind`, `seq`, `created_at`, plus ADR 0174's
-   `log_seq` (the position of the change's log the commit was written at). `name` stays a label; a name a person gives
+   second parent), `rebased_from`, `change_id`, `namespace`, `branch`, `kind`, `seq`, `created_at` (a commit finds the
+   entries of its change's log through its versions, ADR 0174: `change_impact` keyed by node and version). `name` stays a label; a name a person gives
    to a state is a tag (ADR 0056, ADR 0143 §6).
 2. **Every commit is a row, on any branch.** `CommitChange` writes a commit on the change's branch, its parent the
    previous commit of that branch, else the commit the branch was forked from; its `seq` is the order it already takes
