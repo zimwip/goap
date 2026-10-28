@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"math"
+	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
 )
@@ -172,6 +173,86 @@ func (g *Graph) forkMoved(ctx context.Context, tx Tx, c domain.Change, own *doma
 	if cur.Head == "" || cur.ForkCommit == from {
 		return nil
 	}
+	if err := g.refreshReverts(ctx, tx, c, cur, from); err != nil {
+		return err
+	}
 	_, err = g.commitOwn(ctx, tx, own, domain.Commit{Name: c.Title, ChangeID: c.ID, Kind: domain.CommitKindRebase, MergedFrom: cur.ForkCommit, RebasedFrom: from})
 	return err
+}
+
+// refreshReverts writes again, over the new fork of the branch of a change, the reverts the branch holds of the nodes
+// the fork moved (ADR 0176): a revert is a version like any other, a copy of the version of the fork it puts back, and a
+// branch taking the commits of the change reads it as it is, so it must stay the copy of the fork the branch stands on.
+// The new versions commit in the commit recording the move.
+func (g *Graph) refreshReverts(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, from domain.CommitID) error {
+	ls, err := tx.BranchCommits(ctx, own.Namespace, own.Name, math.MaxInt64, nil)
+	if err != nil {
+		return err
+	}
+	var ids []domain.NodeID
+	for id, l := range ls {
+		if l.Revert {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	slices.Sort(ids)
+	before, err := versionsAt(ctx, tx, from, ids)
+	if err != nil {
+		return err
+	}
+	after, err := versionsAt(ctx, tx, own.ForkCommit, ids)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if before[id] == after[id] {
+			continue
+		}
+		if _, err := g.writeRevert(ctx, tx, own.Name, c.ID, id, after[id], "reverted again over the new fork of the change"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeRevert writes on the branch of a change a revert of a node: a version with the properties and links of the
+// version v of the fork of the branch, a deletion when the fork does not hold the node (v 0), which the branch reads as
+// that version (ADR 0140) and a branch taking its commit as it is (ADR 0176).
+func (g *Graph) writeRevert(ctx context.Context, tx Tx, branch string, change domain.ChangeID, id domain.NodeID, v domain.Version, comment string) (domain.Node, error) {
+	latest, err := tx.LatestOn(ctx, id, branch)
+	if err != nil {
+		return domain.Node{}, err
+	}
+	next, err := nextVersion(ctx, tx, id)
+	if err != nil {
+		return domain.Node{}, err
+	}
+	n := domain.Node{ID: id, Version: next, Branch: branch, Namespace: latest.Namespace, Key: latest.Key, Type: latest.Type, ChangeID: change,
+		Reason: domain.ReasonRevert, Parents: []domain.Version{latest.Version}, Responsible: latest.Responsible, Project: latest.Project,
+		Comment: comment, CreatedAt: g.now()}
+	var links []domain.Link
+	like := []domain.NodeRef{latest.Ref()}
+	if v > 0 {
+		src, err := tx.Node(ctx, domain.NodeRef{ID: id, Version: v})
+		if err != nil {
+			return domain.Node{}, err
+		}
+		n.Properties, n.State, n.Responsible, n.Origins = cloneMap(src.Properties), src.State, src.Responsible, slices.Clone(src.Origins)
+		if links, err = tx.OutLinks(ctx, src.Ref()); err != nil {
+			return domain.Node{}, err
+		}
+		like = []domain.NodeRef{src.Ref(), latest.Ref()} // the set of the fork's version, shared as is (ADR 0141)
+	} else {
+		n.Properties, n.State, n.Deleted = cloneMap(latest.Properties), latest.State, true
+	}
+	if err := tx.PutNode(ctx, n); err != nil {
+		return domain.Node{}, err
+	}
+	if err := g.putLinks(ctx, tx, n, links, like...); err != nil {
+		return domain.Node{}, err
+	}
+	return n, nil
 }

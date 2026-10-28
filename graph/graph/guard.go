@@ -113,7 +113,7 @@ type guardTx struct {
 	moved map[string]bool
 	// movedBranches are the branches the transaction wrote (guardBranchKey) and their heads: the heads kept of them
 	// move once it commits (headMoved), with the commits it wrote (wroteHeads, their order set) and the versions it
-	// moved on each branch by name (headMoves, 0: a version deleted, unknownVersion: one joined it did not read), the
+	// moved on each branch by name (headMoves, 0: a version deleted, unknownVersion: one taken it did not read), the
 	// nodes it created by namespace and key (newKeys)
 	movedBranches map[string]domain.CommitID
 	// ownHeads are the heads the transaction gave branches of changes by their commits (commitOwn, ADR 0175)
@@ -734,18 +734,22 @@ func (t *guardTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change 
 	return t.Tx.SetNodeOrigin(ctx, ref, change, cn, comment)
 }
 
-func (t *guardTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, _ int64) error {
-	if err := t.needChange(change, "node "+ref.String()+" joining "+branch); err != nil {
+// JoinCommits makes a branch take commits (ADR 0176), from the order of the commit being written on it.
+func (t *guardTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, _ int64, seqs []int64) error {
+	if err := t.needChange(change, "the commits "+branch+" takes"); err != nil {
 		return err
 	}
-	committed, err := t.commitOn(ctx, branch)
+	at, err := t.commitOn(ctx, branch)
 	if err != nil {
 		return err
 	}
+	return t.Tx.JoinCommits(ctx, branch, change, at, seqs)
+}
+
+// took notes a version a branch holds once it took the commits of another branch (takeCommits): what is kept of the
+// node's latest version and the head kept in memory follow it.
+func (t *guardTx) took(branch string, ref domain.NodeRef) {
 	t.forgetLatest(ref.ID)
-	if err := t.Tx.JoinBranch(ctx, ref, branch, change, committed); err != nil {
-		return err
-	}
 	n, ok := t.nodes[ref]
 	if !ok {
 		n, ok = t.g.versions.node(ref)
@@ -758,7 +762,6 @@ func (t *guardTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch str
 	default:
 		t.headMove(branch, ref.ID, ref.Version)
 	}
-	return nil
 }
 
 // headMove notes the version a node has on a branch once the transaction commits (0: deleted there).

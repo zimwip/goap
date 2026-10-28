@@ -107,7 +107,7 @@ type Tx interface {
 	LastCommit(ctx context.Context, branch string) (int64, error)
 	// NextCommit allocates the order of a new commit (Commit.Seq): greater than every order allocated before.
 	NextCommit(ctx context.Context) (int64, error)
-	// BranchNodeIDs lists the nodes a branch holds a version of: written on it or joined to it (ADR 0137).
+	// BranchNodeIDs lists the nodes a branch holds a version of: written on it or of a commit it took (ADR 0137, 0176).
 	BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error)
 	// NamespaceNodeIDs lists the nodes of a namespace (its node rows, ADR 0143 §4): what a whole state is selected over.
 	NamespaceNodeIDs(ctx context.Context, namespace string) ([]domain.NodeID, error)
@@ -128,7 +128,8 @@ type Tx interface {
 	// StoreCounts counts the rows of a namespace for the statistics of the graph: per measure (StoreMeasures), the
 	// count of each key.
 	StoreCounts(ctx context.Context, namespace string) (map[string]map[string]int, error)
-	// VersionJoins lists the branches the versions of a node joined, with the changes whose merge made them join.
+	// VersionJoins lists the branches that took the commits of the versions of a node, with the changes whose merge
+	// made them take them (ADR 0176).
 	VersionJoins(ctx context.Context, id domain.NodeID) ([]domain.VersionJoin, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	Changes(ctx context.Context) ([]domain.Change, error)
@@ -192,11 +193,13 @@ type Tx interface {
 	// SetNodeOrigin records on a node version the change and change impact that produced it and its comment.
 	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error
 
-	// JoinBranch makes a node version part of a branch it was not written on (a merge that commits it as is,
-	// ADR 0032): the version is not copied and keeps the branch it was written on. change is the change whose merge
-	// makes it join (ADR 0054: no membership without a change), committed the order of the commit it commits in (the guard
-	// of the graph sets it, ADR 0140).
-	JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, committed int64) error
+	// JoinCommits makes a branch take commits of another branch as they are (a merge, ADR 0176): their versions are
+	// not copied and keep the branch they were written on, the branch holds them from the order at (the guard of the
+	// graph sets it, ADR 0140). change is the change whose merge makes it take them (ADR 0054: no membership without a
+	// change); a commit the branch took already keeps the order it was taken at.
+	JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at int64, seqs []int64) error
+	// JoinedCommits lists the orders of the commits a branch took from the order after up to upTo.
+	JoinedCommits(ctx context.Context, branch string, after, upTo int64) ([]int64, error)
 
 	// DeleteChange removes a change that committed nothing (ADR 0037): its log, impacts, node versions and links,
 	// the nodes it alone created, and its branch when it has one of its own (empty: none). It refuses (ErrConflict) when

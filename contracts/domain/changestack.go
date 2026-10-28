@@ -10,7 +10,7 @@ import (
 
 // The change-stack (ADR 0133): a node version and a commit are the application of the changes that led to them. The
 // graph already records, for every version, the change that wrote it (Node.ChangeID) and the changes whose merge made
-// it join other branches (node_branch), and for every commit the change that left it, its parent and the head it
+// it join other branches (the branches that took its commit, branch_commit, ADR 0176), and for every commit the change that left it, its parent and the head it
 // merged; the stack is what these records compose into, read back as a lineage. A version's lineage is the DAG of its
 // ancestors (Parents: two for a merge or a rebase); a commit's is the DAG of the commits it follows from (parent,
 // merged head) and, for a commit that took a change in (fast-forward or merge), the commits of that change's own

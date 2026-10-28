@@ -153,3 +153,47 @@ func testWithdrawACommittedImpact(t *testing.T, repo Repo) {
 		t.Fatalf("main holds REQ-1's commit and no D-2: %+v", head.Nodes)
 	}
 }
+
+// ADR 0176: a revert is a version like any other, a copy of the version it puts back; a branch taking the commits of a
+// change reads it as it is. When the fork of the change moves under it (another change merged the node meanwhile), the
+// revert is written again over the new fork, so the merge brings back what the target holds, never the older version.
+func TestRevertOverAMovedFork(t *testing.T) { forEachRepo(t, testRevertOverAMovedFork) }
+
+func testRevertOverAMovedFork(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	a := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "reverting", ForkCommit: f.base.ID, OwnBranch: true}))
+	keep := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, a.ID, NodeCreate{Key: "D-9", Type: "Design", Rationale: "kept"}))
+	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, a.ID, keep.ID, domain.ReviewAccepted, "bob", "ok"))
+	req := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, a.ID, NodeCheckout{Node: f.req.ID, Rationale: "a"}))
+	g.touch(t, a.ID, req.ID)
+	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, a.ID, req.ID, domain.ReviewAccepted, "bob", "ok"))
+
+	// b writes its version of REQ-1 first, merged after a reverted its own
+	b := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "moving", ForkCommit: f.base.ID, OwnBranch: true}))
+	breq := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, b.ID, NodeCheckout{Node: f.req.ID, Rationale: "b"}))
+	if _, err := g.edit(ctx, b.ID, breq.ID, edit{Properties: map[string]any{"title": "moved by b"}}); err != nil {
+		t.Fatal(err)
+	}
+	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, b.ID, breq.ID, domain.ReviewAccepted, "bob", "ok"))
+	must[domain.Commit](t)(g.CommitChange(ctx, b.ID, ""))
+
+	must[domain.Commit](t)(g.CommitChange(ctx, a.ID, ""))
+	if err := g.WithdrawImpact(ctx, a.ID, req.ID, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	must[domain.Commit](t)(g.CommitChange(ctx, a.ID, ""))
+
+	bc := must[domain.Change](t)(g.CloseChange(ctx, b.ID))
+	moved := must[domain.Commit](t)(g.Commit(ctx, bc.LandedCommit)).Nodes[f.req.ID]
+	ac := must[domain.Change](t)(g.CloseChange(ctx, a.ID))
+	head := must[domain.Commit](t)(g.Commit(ctx, ac.LandedCommit))
+	got := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: head.Nodes[f.req.ID]}))
+	if got.Properties["title"] != "moved by b" {
+		t.Fatalf("main holds REQ-1 v%d %v after the revert merged, want the content of v%d", got.Version, got.Properties, moved)
+	}
+	if head.Nodes[nodeOf(keep)] == 0 {
+		t.Fatalf("D-9 merged: %v", head.Nodes)
+	}
+}
