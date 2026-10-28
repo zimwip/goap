@@ -167,46 +167,45 @@ func lineageGap(ctx context.Context, tx Tx, from, to domain.CommitID) (g gap, er
 	}
 	// oldest first, as a stack reads
 	slices.SortStableFunc(seen, func(x, y walked) int { return x.b.CreatedAt.Compare(y.b.CreatedAt) })
-	// every commit painted counts, the ones left to walk too: a change a side reaches is in its stack
+	// every commit painted counts, the ones left to walk too: a change a side reaches is in its stack, with the
+	// sub-changes a merge of it takes in (ADR 0103)
+	merged := mergedInto(ctx, tx)
 	in := map[int]map[domain.ChangeID]bool{sideFrom: {}, sideTo: {}}
 	for id, side := range paint {
+		h := headers[id]
 		for _, s := range []int{sideFrom, sideTo} {
-			if c := headers[id].ChangeID; side&s != 0 && c != "" {
+			if c := h.ChangeID; side&s != 0 && c != "" {
 				in[s][c] = true
+				if h.Kind == domain.CommitKindFastForward || h.Kind == domain.CommitKindMerge {
+					for _, m := range merged(c) {
+						in[s][m] = true
+					}
+				}
 			}
 		}
 	}
+	// a merge of a change also brings the sub-changes merged into it (ADR 0103): the stacks name them through it
 	for _, w := range seen {
 		c := w.b.ChangeID
 		if c == "" || w.side == both {
 			continue
 		}
-		if !slices.Contains(g.changes, c) {
-			g.changes = append(g.changes, c)
+		of := []domain.ChangeID{c}
+		if w.b.Kind == domain.CommitKindFastForward || w.b.Kind == domain.CommitKindMerge {
+			of = append(merged(c), c)
 		}
-		switch {
-		case w.side == sideTo && !in[sideFrom][c] && !slices.Contains(g.added, c):
-			g.added = append(g.added, c)
-		case w.side == sideFrom && !in[sideTo][c] && !slices.Contains(g.removed, c):
-			g.removed = append(g.removed, c)
-		}
-	}
-	// the sub-changes merged into a change are in every stack it is in (ADR 0103): the branch of a change holds no
-	// commit (ADR 0140), the stacks name them through their parent
-	merged := mergedInto(ctx, tx)
-	expand := func(ids []domain.ChangeID) []domain.ChangeID {
-		var out []domain.ChangeID
-		for _, id := range ids {
-			for _, m := range merged(id) {
-				if !slices.Contains(out, m) && !slices.Contains(ids, m) {
-					out = append(out, m)
-				}
+		for _, x := range of {
+			if !slices.Contains(g.changes, x) {
+				g.changes = append(g.changes, x)
 			}
-			out = append(out, id)
+			switch {
+			case w.side == sideTo && !in[sideFrom][x] && !slices.Contains(g.added, x):
+				g.added = append(g.added, x)
+			case w.side == sideFrom && !in[sideTo][x] && !slices.Contains(g.removed, x):
+				g.removed = append(g.removed, x)
+			}
 		}
-		return out
 	}
-	g.added, g.removed, g.changes = expand(g.added), expand(g.removed), expand(g.changes)
 	return g, nil
 }
 

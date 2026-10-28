@@ -135,11 +135,8 @@ func versionsAt(ctx context.Context, tx Tx, at domain.CommitID, ids []domain.Nod
 func branchHeadHeader(ctx context.Context, tx Tx, namespace, name string) (domain.Commit, error) {
 	ns, n := domain.NamespaceOf(namespace), domain.BranchOf(name)
 	b, err := tx.Branch(ctx, ns, n)
-	if err == nil && b.Ephemeral {
-		return domain.Commit{}, errEphemeral(b)
-	}
-	if err == nil && b.Head != "" {
-		return tx.CommitHeader(ctx, b.Head)
+	if err == nil && b.HeadOrFork() != "" {
+		return tx.CommitHeader(ctx, b.HeadOrFork())
 	}
 	head, err := branchHead(ctx, tx, namespace, name)
 	head.Nodes = nil

@@ -355,11 +355,16 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	}
 	if to.parent.Ephemeral {
 		// the branch of the parent holds what the sub-change committed, its impacts committed there (recordInParent)
-		endCommit(tx, target)
 		if err := g.commit(ctx, tx, c, own, c.ID, "", only); err != nil {
 			return false, err
 		}
-		if err := g.raiseMergedRefs(ctx, tx, c, target, nil, moves); err != nil {
+		// the parent's branch records the merge as a commit of its own (ADR 0175)
+		pb := to.parent
+		res, err := g.commitOwn(ctx, tx, &pb, domain.Commit{Name: c.Title, ChangeID: c.ID, Kind: domain.CommitKindFastForward, MergedFrom: own.HeadOrFork()})
+		if err != nil {
+			return false, err
+		}
+		if err := g.raiseMergedRefs(ctx, tx, c, target, &res, moves); err != nil {
 			return false, err
 		}
 		if err := tx.PutChange(ctx, c); err != nil {
@@ -368,7 +373,7 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		if closing {
 			return true, nil
 		}
-		return true, g.forkAfterMerge(ctx, tx, c.ID, own, onto{parent: to.parent, head: to.parent.ForkCommit})
+		return true, g.forkAfterMerge(ctx, tx, c.ID, own, onto{parent: pb, head: res.ID})
 	}
 	// a fast-forward, not a merge (the target did not move since the fork): name it after the change, not "merge …"
 	res := domain.Commit{ID: domain.CommitID(g.newID()), Name: c.Title, Namespace: c.Namespace, Branch: target, ParentID: to.head, ChangeID: c.ID,
@@ -405,6 +410,7 @@ func (g *Graph) forkAfterMerge(ctx context.Context, tx Tx, id domain.ChangeID, o
 	if err != nil {
 		return err
 	}
+	from := own.ForkCommit
 	if err := to.forkOnHead(ctx, tx, &own); err != nil {
 		return err
 	}
@@ -416,7 +422,7 @@ func (g *Graph) forkAfterMerge(ctx context.Context, tx Tx, id domain.ChangeID, o
 	if _, err := tx.AppendLog(ctx, e); err != nil {
 		return err
 	}
-	if err := tx.PutBranch(ctx, own); err != nil {
+	if err := g.forkMoved(ctx, tx, c, &own, from); err != nil {
 		return err
 	}
 	c.ForkCommit = own.ForkCommit

@@ -36,9 +36,9 @@ func testCommitted(t *testing.T, repo Repo) {
 	if len(ev) != 2 {
 		t.Fatalf("a change with its own branch commits twice, got %d: %+v", len(ev), ev)
 	}
-	// the branch of a change holds no commit (ADR 0140): the commit there names its branch only
+	// the commit on the branch of the change is a commit of that branch (ADR 0175)
 	onMain := must[domain.Commit](t)(g.Commit(ctx, ev[1].Commit))
-	if ev[0].Commit != "" || ev[0].Branch == domain.MainBranch || onMain.Branch != domain.MainBranch || onMain.ID != res.Commit.ID {
+	if own := must[domain.Commit](t)(g.Commit(ctx, ev[0].Commit)); own.Branch != ev[0].Branch || ev[0].Branch == domain.MainBranch || onMain.Branch != domain.MainBranch || onMain.ID != res.Commit.ID {
 		t.Fatalf("committed on %q (%s), then on %q (result %s)", ev[0].Branch, ev[0].Commit, onMain.Branch, res.Commit.ID)
 	}
 	if !onMain.Contains(*ev[0].Committed) || !onMain.Contains(*ev[1].Committed) {
@@ -111,7 +111,7 @@ func testCommitThenIntegrate(t *testing.T, repo Repo) {
 	}
 	commit = g.withState(t, ctx, commit)
 	got := must[domain.Change](t)(g.Change(ctx, c.ID))
-	if got.Status != domain.ChangeActive || got.LandedCommit != commit.ID || commit.Kind != domain.CommitKindCommit ||
+	if got.Status != domain.ChangeActive || got.LandedCommit != "" || commit.Kind != domain.CommitKindCommit ||
 		commit.Branch != got.Branch || commit.Branch == domain.MainBranch || commit.ChangeID != c.ID {
 		t.Fatalf("committed change %+v, commit %+v", got, commit)
 	}

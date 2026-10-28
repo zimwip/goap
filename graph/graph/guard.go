@@ -116,6 +116,8 @@ type guardTx struct {
 	// moved on each branch by name (headMoves, 0: a version deleted, unknownVersion: one joined it did not read), the
 	// nodes it created by namespace and key (newKeys)
 	movedBranches map[string]domain.CommitID
+	// ownHeads are the heads the transaction gave branches of changes by their commits (commitOwn, ADR 0175)
+	ownHeads map[string]domain.CommitID
 	wroteHeads    map[domain.CommitID]domain.Commit
 	headMoves     map[string]map[domain.NodeID]domain.Version
 	newKeys       map[string]domain.NodeID
@@ -128,8 +130,6 @@ type guardTx struct {
 	newCommits map[domain.CommitID]bool
 	// commitReads are the versions the transaction read of some nodes in commits it did not write (0: not held)
 	commitReads map[domain.CommitID]map[domain.NodeID]domain.Version
-	// forks are the commits the lasting branches read by the transaction were forked from, by namespace and branch
-	forks map[string]domain.CommitID
 	// commit is, per branch, the order of the commit the versions the transaction writes or joins there commit in
 	// (ADR 0140): taken by the first of them, given to the commit written after them
 	commit map[string]int64
@@ -210,7 +210,13 @@ func (t *guardTx) keepBranch(key string, b domain.Branch) {
 }
 
 func (t *guardTx) PutBranch(ctx context.Context, b domain.Branch) error {
-	delete(t.branches, guardBranchKey(b.Namespace, b.Name))
+	key := guardBranchKey(b.Namespace, b.Name)
+	if h, ok := t.ownHeads[key]; ok && b.Ephemeral {
+		// the head of the branch of a change moves by its commits only (commitOwn, ADR 0175): a branch written from a
+		// copy read before one keeps it
+		b.Head = h
+	}
+	delete(t.branches, key)
 	if t.moved == nil {
 		t.moved = map[string]bool{}
 	}
@@ -218,7 +224,7 @@ func (t *guardTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	if t.movedBranches == nil {
 		t.movedBranches = map[string]domain.CommitID{}
 	}
-	t.movedBranches[guardBranchKey(b.Namespace, b.Name)] = b.Head
+	t.movedBranches[key] = b.Head
 	return t.Tx.PutBranch(ctx, b)
 }
 

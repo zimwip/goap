@@ -91,13 +91,13 @@ func testSubSubChangeBranches(t *testing.T, repo Repo) {
 	root := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "root", ForkCommit: w.base.ID, OwnBranch: true}))
 	commitProps(t, g, root, w.cmp1, map[string]any{"title": "root's"})
 	mid := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "mid", ParentID: root.ID}))
-	if rb := forkOf(t, g, root); mid.ForkCommit != rb.ForkCommit {
-		t.Fatalf("the middle change starts from the fork of the root's branch %s, not %s", rb.ForkCommit, mid.ForkCommit)
+	if rb := forkOf(t, g, root); rb.Head == "" || mid.ForkCommit != rb.Head {
+		t.Fatalf("the middle change starts from the head of the root's branch %s, not %s", rb.Head, mid.ForkCommit)
 	}
 	// a draft of the middle change is its own: its sub-change, created now, does not see it
 	draftProps(t, g, mid, w.cmp2, map[string]any{"title": "mid's draft"})
 	leaf := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "leaf", ParentID: mid.ID}))
-	if b := must[domain.Branch](t)(g.Branch(ctx, leaf.Namespace, leaf.Branch)); b.Parent != mid.Branch || b.ForkCommit != forkOf(t, g, mid).ForkCommit || b.ForkSeq == 0 {
+	if b := must[domain.Branch](t)(g.Branch(ctx, leaf.Namespace, leaf.Branch)); b.Parent != mid.Branch || b.ForkCommit != forkOf(t, g, mid).ForkCommit {
 		t.Fatalf("the leaf forks from the head of its parent's branch %s: %+v", mid.Branch, b)
 	}
 	if got := seen(t, g, leaf, "CMP-1", "title"); got != "root's" {

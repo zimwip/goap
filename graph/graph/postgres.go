@@ -524,7 +524,7 @@ func (t *pgTx) LockChange(ctx context.Context, id domain.ChangeID) error {
 // the fold of its log), which no other writer changes while the lock is held. A change not stored yet is its own root.
 func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, error) {
 	var root, bNamespace, bName, bParent, bFork, bHead, bOrigin, bStatus, bDescription, bIntent, bRebased *string
-	var top, next, bForkSeq *int64
+	var top, next *int64
 	var bCreated *time.Time
 	var bEphemeral *bool
 	c, err := scanPGChangeHead(func(dest ...any) error {
@@ -534,15 +534,14 @@ func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, erro
 			SELECT (SELECT id::text FROM up WHERE parent_id IS NULL), `+pgChangeHead+`,
 				(SELECT max(seq) FROM change_log WHERE change_id = $1), nextval(pg_get_serial_sequence('change_log', 'seq')),
 				ob.b_namespace, ob.b_name, ob.b_parent, ob.b_fork, ob.b_head, ob.b_origin, ob.b_status, ob.b_created,
-				ob.b_description, ob.b_intent, ob.b_rebased, ob.b_ephemeral, ob.b_fork_seq
+				ob.b_description, ob.b_intent, ob.b_rebased, ob.b_ephemeral
 			FROM change LEFT JOIN LATERAL (SELECT b.namespace AS b_namespace, b.name AS b_name, b.parent AS b_parent,
 				coalesce(b.fork_commit::text, '') AS b_fork, coalesce(b.head_commit::text, '') AS b_head,
 				b.origin AS b_origin, b.status AS b_status, b.created_at AS b_created, b.description AS b_description,
-				b.intent AS b_intent, coalesce(b.rebased_from::text, '') AS b_rebased, b.ephemeral AS b_ephemeral,
-				b.fork_seq AS b_fork_seq
+				b.intent AS b_intent, coalesce(b.rebased_from::text, '') AS b_rebased, b.ephemeral AS b_ephemeral
 				FROM branch b WHERE b.namespace = change.namespace AND b.name = change.branch) ob ON true
 			WHERE change.id = $1`, string(id)).
-			Scan(append(append([]any{&root}, dest...), &top, &next, &bNamespace, &bName, &bParent, &bFork, &bHead, &bOrigin, &bStatus, &bCreated, &bDescription, &bIntent, &bRebased, &bEphemeral, &bForkSeq)...)
+			Scan(append(append([]any{&root}, dest...), &top, &next, &bNamespace, &bName, &bParent, &bFork, &bHead, &bOrigin, &bStatus, &bCreated, &bDescription, &bIntent, &bRebased, &bEphemeral)...)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		delete(t.locked, id)
@@ -566,7 +565,7 @@ func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, erro
 	}
 	if bName != nil {
 		r.hasBranch = true
-		r.branch = domain.Branch{Namespace: *bNamespace, Name: *bName, Parent: *bParent, ForkCommit: domain.CommitID(*bFork), Head: domain.CommitID(*bHead), Origin: *bOrigin, Status: *bStatus, CreatedAt: *bCreated, Description: *bDescription, Intent: domain.OptionIntent(*bIntent), RebasedFrom: domain.CommitID(*bRebased), Ephemeral: *bEphemeral, ForkSeq: *bForkSeq}
+		r.branch = domain.Branch{Namespace: *bNamespace, Name: *bName, Parent: *bParent, ForkCommit: domain.CommitID(*bFork), Head: domain.CommitID(*bHead), Origin: *bOrigin, Status: *bStatus, CreatedAt: *bCreated, Description: *bDescription, Intent: domain.OptionIntent(*bIntent), RebasedFrom: domain.CommitID(*bRebased), Ephemeral: *bEphemeral}
 	}
 	t.lockedReads[id] = r
 	return str(root), nil
@@ -608,7 +607,7 @@ func (t *pgTx) Branch(ctx context.Context, namespace, name string) (domain.Branc
 	var b domain.Branch
 	q, args := dialectPG.sqlBranch(namespace, name)
 	err := t.unheld().QueryRow(ctx, q, args...).
-		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkCommit), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral, &b.ForkSeq)
+		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkCommit), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral)
 	return b, mapErr(err, "branch "+name)
 }
 
@@ -620,17 +619,17 @@ func (t *pgTx) Branches(ctx context.Context, namespace string) ([]domain.Branch,
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Branch, error) {
 		var b domain.Branch
-		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkCommit), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral, &b.ForkSeq)
+		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkCommit), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral)
 		return b, err
 	})
 }
 
 func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.unheld().Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_commit, head_commit, origin, status, created_at, description, intent, rebased_from, ephemeral, fork_seq) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	_, err := t.unheld().Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_commit, head_commit, origin, status, created_at, description, intent, rebased_from, ephemeral) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, head_commit = EXCLUDED.head_commit, description = EXCLUDED.description,
-			fork_commit = EXCLUDED.fork_commit, rebased_from = EXCLUDED.rebased_from, parent = EXCLUDED.parent, fork_seq = EXCLUDED.fork_seq`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkCommit)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral, b.ForkSeq)
+			fork_commit = EXCLUDED.fork_commit, rebased_from = EXCLUDED.rebased_from, parent = EXCLUDED.parent`,
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkCommit)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral)
 	return mapErr(err, "branch "+b.Name)
 }
 
@@ -826,7 +825,7 @@ func (t *pgTx) CommitHeader(ctx context.Context, id domain.CommitID) (domain.Com
 	var b domain.Commit
 	q, args := dialectPG.sqlCommitHeader(id)
 	err := t.unheld().QueryRow(ctx, q, args...).Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &b.CreatedAt,
-		&b.Branch, &b.Namespace, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq)
+		&b.Branch, &b.Namespace, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq, (*string)(&b.Fork))
 	return b, mapErr(err, "commit "+string(id))
 }
 
@@ -974,7 +973,7 @@ func (t *pgTx) commitHeaders(ctx context.Context, namespace, q string, args []an
 	var out []domain.Commit
 	for rows.Next() {
 		b := domain.Commit{Namespace: domain.NamespaceOf(namespace)}
-		if err := rows.Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &b.CreatedAt, &b.Branch, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq); err != nil {
+		if err := rows.Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &b.CreatedAt, &b.Branch, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq, (*string)(&b.Fork)); err != nil {
 			return nil, err
 		}
 		out = append(out, b)
@@ -1283,7 +1282,7 @@ func (t *pgTx) LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[domai
 // PutCommit stores the header of a commit (ADR 0143).
 func (t *pgTx) PutCommit(ctx context.Context, b domain.Commit) error {
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("commits", commitColumns, ""),
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), kindOf(b), nullUUID(string(b.RebasedFrom)), b.Seq)
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), kindOf(b), nullUUID(string(b.RebasedFrom)), b.Seq, nullUUID(string(b.Fork)))
 	return mapErr(err, "commit")
 }
 

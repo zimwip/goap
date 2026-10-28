@@ -570,6 +570,7 @@ func (g *Graph) moveFork(ctx context.Context, tx Tx, id domain.ChangeID, own *do
 	if err != nil {
 		return err
 	}
+	from := own.ForkCommit
 	if err := to.forkOn(ctx, tx, own); err != nil {
 		return err
 	}
@@ -581,7 +582,7 @@ func (g *Graph) moveFork(ctx context.Context, tx Tx, id domain.ChangeID, own *do
 	if _, err := tx.AppendLog(ctx, e); err != nil {
 		return err
 	}
-	if err := tx.PutBranch(ctx, *own); err != nil {
+	if err := g.forkMoved(ctx, tx, c, own, from); err != nil {
 		return err
 	}
 	if c, err = tx.Change(ctx, id); err != nil {

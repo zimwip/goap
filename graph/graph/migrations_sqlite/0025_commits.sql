@@ -13,3 +13,9 @@ ALTER TABLE branch RENAME COLUMN fork_baseline TO fork_commit;
 ALTER TABLE branch RENAME COLUMN head_baseline TO head_commit;
 ALTER TABLE change RENAME COLUMN baseline_id TO fork_commit;
 ALTER TABLE change RENAME COLUMN result_baseline_id TO landed_commit;
+-- the commit the branch stood on when a commit was written: what the selection of its state reads past its branch (a
+-- change branch moves its fork when it is rebased, the commits it wrote before keep theirs); empty on main
+ALTER TABLE commits ADD COLUMN fork_commit text;
+UPDATE commits SET fork_commit = (SELECT b.fork_commit FROM branch b WHERE b.namespace = commits.namespace AND b.name = commits.branch) WHERE branch <> 'main';
+-- a sub-change forks from a commit of its parent's branch, no longer from an order of it
+ALTER TABLE branch DROP COLUMN fork_seq;

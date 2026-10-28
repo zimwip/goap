@@ -53,10 +53,10 @@ func testCommitHistory(t *testing.T, repo Repo) {
 		t.Fatalf("pages = %d commits, main has %d", len(got), len(main))
 	}
 	for _, c := range changes[:4] {
-		// a change's branch holds no commit: the change is on the page by the commit it committed in
+		// a change's commits on its own branch are rows of that branch, never of main (ADR 0175)
 		for _, b := range must[[]domain.Commit](t)(g.Commits(ctx, "")) {
-			if b.ChangeID == c.ID && (b.Kind == domain.CommitKindCommit || b.Kind == domain.CommitKindRebase) {
-				t.Fatalf("%s left a commit on its own branch: %+v", c.Title, b)
+			if b.ChangeID == c.ID && (b.Kind == domain.CommitKindCommit || b.Kind == domain.CommitKindRebase) && b.Branch == domain.MainBranch {
+				t.Fatalf("%s left a commit of its own branch on main: %+v", c.Title, b)
 			}
 		}
 	}

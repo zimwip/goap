@@ -196,8 +196,9 @@ func (l Link) Points() string {
 // CommitID identifies a commit.
 type CommitID string
 
-// Commit is a consistent snapshot of the domain graph: which version of each
-// node is part of it. Links belong to a commit when both endpoints do.
+// Commit is a state of a branch (ADR 0175): every commit, on main, on a named branch or on the branch of a change, is
+// one. Its state is a selection (ADR 0143): which version of each node is part of it. Links belong to a commit when
+// both endpoints do.
 type Commit struct {
 	ID        CommitID `json:"id"`
 	Name      string   `json:"name"`
@@ -212,8 +213,12 @@ type Commit struct {
 	// on the commit of a rebased change: the first fork, when it was rebased several times.
 	RebasedFrom CommitID `json:"rebasedFrom,omitempty"`
 	ChangeID    ChangeID `json:"changeId,omitempty"`
+	// Fork is the commit the branch stood on when this commit was written (ADR 0175): what the selection of its state
+	// reads past its branch; empty on main. The branch of a change moves its fork when it is rebased, the commits it
+	// wrote before keep theirs.
+	Fork CommitID `json:"fork,omitempty"`
 	// Kind says how the state of the commit follows from the change that produced it (ADR 0056): CommitKindCommit,
-	// CommitKindMerge, CommitKindFastForward or CommitKindSnapshot.
+	// CommitKindMerge, CommitKindFastForward, CommitKindRebase, CommitKindRevert or CommitKindSnapshot.
 	Kind string `json:"kind,omitempty"`
 	// Seq orders the commits (ADR 0140): a commit has a greater one than every commit before it on its branch, and
 	// its state is the selection of the versions committed on its branch up to it (ADR 0143); the graph hides it.
@@ -300,14 +305,17 @@ type Branch struct {
 	Status      string       `json:"status"`
 	CreatedAt   time.Time    `json:"createdAt"`
 	Description string       `json:"description,omitempty"`
-	// Ephemeral marks the branch of a change (ADR 0140): it lives until the change commits, its state is its fork with
-	// what it committed, never a checkpoint; only the lasting branches (main, the named ones) store states.
+	// Ephemeral marks the branch of a change (ADR 0140): it lives as long as its change. It holds commits like any
+	// branch (ADR 0175), its Head empty until the change commits: its state is then its fork.
 	Ephemeral bool `json:"ephemeral,omitempty"`
-	// ForkSeq is, for a branch forked from the branch of a change (a sub-change, ADR 0103), the order of commit up to
-	// which the versions committed on that branch, and on the branches it is forked from, are in its fork (ADR 0140): a
-	// change branch holds no commit, so its fork is ForkCommit, the lasting commit under the chain, with those
-	// commits. 0 for a branch forked from a lasting one.
-	ForkSeq int64 `json:"forkSeq,omitempty"`
+}
+
+// HeadOrFork is the commit holding the state of a branch: its head, else, before anything committed on it, its fork.
+func (b Branch) HeadOrFork() CommitID {
+	if b.Head != "" {
+		return b.Head
+	}
+	return b.ForkCommit
 }
 
 // AttributeCheck is what the graph needs of an attribute of a node type to judge the value of a property: its

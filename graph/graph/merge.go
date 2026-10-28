@@ -221,15 +221,9 @@ func (g *Graph) SetBranchDescription(ctx context.Context, namespace, name, descr
 }
 
 // BranchHead returns the latest commit of a branch of a namespace; the head of main before any change committed is the
-// empty state (empty id, no nodes). The branch of a change holds no commit (ADR 0140): its state is answered with no
-// id, its fork as parent and the order of its last commit.
+// empty state (empty id, no nodes), the head of a branch nothing committed on yet its fork (ADR 0175).
 func (g *Graph) BranchHead(ctx context.Context, namespace, name string) (b domain.Commit, err error) {
 	err = g.repo.InTx(platform.ReadOnly(ctx), func(tx Tx) error {
-		br, err := tx.Branch(ctx, domain.NamespaceOf(namespace), domain.BranchOf(name))
-		if err == nil && br.Ephemeral {
-			b, err = changeBranchHead(ctx, tx, br, true)
-			return err
-		}
 		b, err = branchHead(ctx, tx, namespace, name)
 		return err
 	})
@@ -275,11 +269,8 @@ func branchOf(ctx context.Context, tx Tx, namespace, name string) (domain.Branch
 func branchHead(ctx context.Context, tx Tx, namespace, name string) (domain.Commit, error) {
 	namespace, name = domain.NamespaceOf(namespace), domain.BranchOf(name)
 	b, err := tx.Branch(ctx, namespace, name)
-	if err == nil && b.Ephemeral {
-		return domain.Commit{}, errEphemeral(b)
-	}
-	if err == nil && b.Head != "" {
-		return tx.Commit(ctx, b.Head)
+	if err == nil && b.HeadOrFork() != "" {
+		return tx.Commit(ctx, b.HeadOrFork())
 	}
 	if err != nil && (!errors.Is(err, ErrNotFound) || name != domain.MainBranch) {
 		return domain.Commit{}, err
@@ -298,8 +289,8 @@ func branchHead(ctx context.Context, tx Tx, namespace, name string) (domain.Comm
 	return domain.Commit{Namespace: namespace, Branch: name, Nodes: map[domain.NodeID]domain.Version{}}, nil
 }
 
-// branchStates reads the whole state a branch was forked from and the one it holds: its fork and head commits, or, for
-// the branch of a change, which holds none, its fork with what committed on it (ADR 0140).
+// branchStates reads the whole state a branch was forked from and the one it holds: its fork and head commits; for the
+// branch of a change, its fork with what committed on it as it stands in the transaction (ADR 0175).
 func branchStates(ctx context.Context, tx Tx, b domain.Branch) (fork, head map[domain.NodeID]domain.Version, err error) {
 	if b.Ephemeral {
 		if fork, err = forkVersions(ctx, tx, b, nil); err != nil {

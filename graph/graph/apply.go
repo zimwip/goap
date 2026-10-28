@@ -54,7 +54,7 @@ func (g *Graph) apply(ctx context.Context, id domain.ChangeID, commitName string
 		if c.Status != domain.ChangeApplied || c.ParentID == "" {
 			return result, nil
 		}
-		// a sub-change merged into the branch of its parent, which holds no commit (ADR 0140): its state
+		// a sub-change merged into the branch of its parent: the head of that branch (ADR 0175)
 		err = g.repo.InTx(ctx, func(tx Tx) error {
 			own, _, err := ownBranch(ctx, tx, c)
 			if err != nil {
@@ -64,7 +64,7 @@ func (g *Graph) apply(ctx context.Context, id domain.ChangeID, commitName string
 			if err != nil {
 				return err
 			}
-			result, err = changeBranchHead(ctx, tx, p, false)
+			result, err = headerOf(ctx, tx, p.HeadOrFork())
 			return err
 		})
 		return result, err
@@ -193,8 +193,8 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 
 // commitOnBranch writes the accepted modifications of a change on its own branch and reverts the nodes it no longer
 // changes. A rebase (mechanical) writes its merges and checks nothing of what they mean (ADR 0146): the lifecycle moves
-// and the validators judged the work of each side when it was committed. The branch of a change holds no commit (ADR 0140): the header returned is the commit as an event tells it,
-// its order the commit of the versions written, stored nowhere. Nodes named make it a partial commit (none: every node).
+// and the validators judged the work of each side when it was committed. The commit is a row of the branch of the
+// change, its new head (ADR 0175). Nodes named make it a partial commit (none: every node).
 func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, commitName string, mechanical bool, nodes []domain.NodeID) (domain.Commit, []domain.Node, error) {
 	a, own, err := g.newApplier(ctx, tx, id)
 	if err != nil {
@@ -232,20 +232,23 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, c
 	if commitName == "" {
 		commitName = c.Title
 	}
-	result := domain.Commit{Name: commitName, Namespace: c.Namespace, Branch: a.branch, ParentID: own.ForkCommit, ChangeID: c.ID, Kind: domain.CommitKindCommit,
-		Seq: endCommit(tx, a.branch), CreatedAt: g.now()}
+	result := domain.Commit{Name: commitName, ChangeID: c.ID, Kind: domain.CommitKindCommit}
 	switch {
 	case mechanical:
 		result.Kind = domain.CommitKindRebase
 	case len(reverted) > 0:
 		result.Kind = domain.CommitKindRevert
 	}
+	// the commit is a row of the branch of the change, its head now (ADR 0175)
+	if result, err = g.commitOwn(ctx, tx, &own, result); err != nil {
+		return domain.Commit{}, nil, err
+	}
 	// each version the change applied has committed on its own branch; it commits again on the branch it is integrated into
 	// (integrate, commit)
 	committed := make([]domain.ImpactEvent, 0, len(a.cposts))
 	for _, cp := range a.cposts {
 		ref, effect := cp.post.Ref(), cp.effect
-		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Effect: &effect, Branch: domain.BranchOf(a.branch)})
+		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Effect: &effect, Commit: result.ID, Branch: domain.BranchOf(a.branch)})
 	}
 	// one entry for the commit (ADR 0144)
 	if err := g.emit(ctx, tx, committed...); err != nil {

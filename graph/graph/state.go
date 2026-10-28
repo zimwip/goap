@@ -33,8 +33,8 @@ func (t *guardTx) header(ctx context.Context, id domain.CommitID) (domain.Commit
 }
 
 // stateAt reads the versions of some nodes (nil: every node) in a commit (ADR 0143), the nodes it does not hold left
-// out: the selection on its branch up to its order, then, for the nodes not decided, on the branch it was forked from
-// at the fork, and so on.
+// out: the selection on its branch up to its order, then, for the nodes not decided, in the commit it was written over
+// (its fork), and so on.
 func (t *guardTx) stateAt(ctx context.Context, id domain.CommitID, ids []domain.NodeID) (_ map[domain.NodeID]domain.Version, err error) {
 	read := stateRead{start: time.Now(), whole: ids == nil, source: stateFromCommits}
 	defer func() {
@@ -49,27 +49,10 @@ func (t *guardTx) stateAt(ctx context.Context, id domain.CommitID, ids []domain.
 	if err != nil {
 		return nil, err
 	}
-	return selectState(ctx, t.Tx, b, ids, t.header, t.forkOf, &read)
+	return selectState(ctx, t.Tx, b, ids, t.header, &read)
 }
 
-// forkOf returns the commit a lasting branch was forked from (none for main), read once per transaction.
-func (t *guardTx) forkOf(ctx context.Context, namespace, branch string) (domain.CommitID, error) {
-	key := domain.NamespaceOf(namespace) + "\x00" + domain.BranchOf(branch)
-	if fork, ok := t.forks[key]; ok {
-		return fork, nil
-	}
-	fork, err := branchFork(ctx, t.Tx, namespace, branch)
-	if err != nil {
-		return "", err
-	}
-	if t.forks == nil {
-		t.forks = map[string]domain.CommitID{}
-	}
-	t.forks[key] = fork
-	return fork, nil
-}
-
-// branchFork returns the commit a branch was forked from: none for main or a branch the store does not know.
+// branchFork returns the commit a branch is forked from now: none for main or a branch the store does not know.
 func branchFork(ctx context.Context, tx Tx, namespace, branch string) (domain.CommitID, error) {
 	if domain.BranchOf(branch) == domain.MainBranch {
 		return "", nil
@@ -82,14 +65,14 @@ func branchFork(ctx context.Context, tx Tx, namespace, branch string) (domain.Co
 }
 
 // selectState is the selection of ADR 0143 from the header of a commit: for each node (nil ids: every node), its last
-// commit on the branch up to the order of the commit, then the nodes not decided on the branch it was forked from
-// at the fork; a version deleting its node leaves it out. A whole state reads the commits of the branches forked off
+// commit on the branch up to the order of the commit, then the nodes not decided in the commit it was written over
+// (Commit.Fork, ADR 0175); a version deleting its node leaves it out, a revert of the branch of a change (ADR 0140)
+// leaves it to the fork. A whole state reads the commits of the branches forked off
 // as they are (their history is theirs alone, short), and the branch at the root of the chain, whose history is the
 // namespace's, as its node list then one selection per node, in batches (§4): its cost is the number of nodes, never
 // the length of the history.
 func selectState(ctx context.Context, tx Tx, b domain.Commit, ids []domain.NodeID,
-	header func(context.Context, domain.CommitID) (domain.Commit, error),
-	fork func(context.Context, string, string) (domain.CommitID, error), read *stateRead) (map[domain.NodeID]domain.Version, error) {
+	header func(context.Context, domain.CommitID) (domain.Commit, error), read *stateRead) (map[domain.NodeID]domain.Version, error) {
 	decided := map[domain.NodeID]domain.Version{} // 0: the commit does not hold the node
 	var pending map[domain.NodeID]bool            // nil: every node
 	if ids != nil {
@@ -99,10 +82,7 @@ func selectState(ctx context.Context, tx Tx, b domain.Commit, ids []domain.NodeI
 		}
 	}
 	for {
-		next, err := fork(ctx, b.Namespace, b.Branch)
-		if err != nil {
-			return nil, err
-		}
+		next := b.Fork
 		if pending == nil && next == "" {
 			// the root of the chain: the nodes of the namespace not decided yet, selected one by one
 			all, err := tx.NamespaceNodeIDs(ctx, b.Namespace)
@@ -128,7 +108,7 @@ func selectState(ctx context.Context, tx Tx, b domain.Commit, ids []domain.NodeI
 			if want != nil {
 				batch = want[start:min(start+selectBatch, len(want))]
 			}
-			got, err := tx.CommittedVersions(ctx, b.Namespace, b.Branch, 0, b.Seq, batch)
+			got, err := tx.BranchCommits(ctx, b.Namespace, b.Branch, b.Seq, batch)
 			if err != nil {
 				return nil, err
 			}
@@ -136,7 +116,14 @@ func selectState(ctx context.Context, tx Tx, b domain.Commit, ids []domain.NodeI
 				read.chain++
 				read.committed += len(got)
 			}
-			for n, v := range got {
+			for n, l := range got {
+				if l.Revert {
+					continue // the fork decides it
+				}
+				v := l.Version
+				if l.Deleted {
+					v = 0
+				}
 				if pending == nil {
 					if _, ok := decided[n]; !ok {
 						decided[n] = v
@@ -153,9 +140,11 @@ func selectState(ctx context.Context, tx Tx, b domain.Commit, ids []domain.NodeI
 		if next == "" {
 			break
 		}
-		if b, err = header(ctx, next); err != nil {
+		nb, err := header(ctx, next)
+		if err != nil {
 			return nil, err
 		}
+		b = nb
 	}
 	out := make(map[domain.NodeID]domain.Version, len(decided))
 	for n, v := range decided {
@@ -188,8 +177,8 @@ func selectKey(ctx context.Context, tx Tx, at domain.CommitID, key string) (doma
 	if err != nil {
 		return "", 0, false, err
 	}
-	if fork, err := gt.forkOf(ctx, b.Namespace, b.Branch); err != nil || fork != "" {
-		return "", 0, false, err
+	if b.Fork != "" {
+		return "", 0, false, nil
 	}
 	// the head kept in memory holds it (heads.go), else the store answers
 	id, v, kept := gt.g.keptSelection(b, key)
@@ -347,6 +336,12 @@ func (t *guardTx) committed(ctx context.Context, b *domain.Commit) error {
 		return err
 	}
 	delete(t.commit, domain.BranchOf(b.Branch))
+	if b.Fork == "" {
+		// the commit the branch stands on now (ADR 0175): a rebase later moves the branch, never this commit
+		if b.Fork, err = branchFork(ctx, t, b.Namespace, b.Branch); err != nil {
+			return err
+		}
+	}
 	b.Seq, b.Nodes = seq, maps.Clone(b.Nodes)
 	t.markNew(b.ID)
 	return nil
@@ -414,9 +409,7 @@ func unwrapGuard(tx Tx) (*guardTx, bool) {
 
 // storedNodes is the state of a commit read by a store without the graph: the selection (ADR 0143).
 func storedNodes(ctx context.Context, tx Tx, b domain.Commit) (map[domain.NodeID]domain.Version, error) {
-	return selectState(ctx, tx, b, nil, tx.CommitHeader, func(ctx context.Context, ns, branch string) (domain.CommitID, error) {
-		return branchFork(ctx, tx, ns, branch)
-	}, nil)
+	return selectState(ctx, tx, b, nil, tx.CommitHeader, nil)
 }
 
 // storedNodesIn lists the nodes of a commit read by a store (storedNodes), of a type, by key.

@@ -146,9 +146,9 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite CommittedVersions ids", lite, q, a, strings.NewReplacer("$1", "?", "$2", "?", "$3", "?").Replace(committed("node_id",
 		" AND v.node_id IN (SELECT value FROM json_each(?))", " AND j.node_id IN (SELECT value FROM json_each(?))", "?")), []any{"main", int64(3), int64(9), "default", `["n1","n2"]`})
 	q, a = pg.sqlCommitHeader("b1")
-	check("pg CommitHeader", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, namespace, kind, coalesce(rebased_from::text, ''), seq FROM commits WHERE id = $1`, []any{"b1"})
+	check("pg CommitHeader", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, namespace, kind, coalesce(rebased_from::text, ''), seq, coalesce(fork_commit::text, '') FROM commits WHERE id = $1`, []any{"b1"})
 	q, a = lite.sqlCommitHeader("b1")
-	check("sqlite CommitHeader", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, namespace, kind, coalesce(rebased_from, ''), seq FROM commits WHERE id = ?`, []any{"b1"})
+	check("sqlite CommitHeader", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, namespace, kind, coalesce(rebased_from, ''), seq, coalesce(fork_commit, '') FROM commits WHERE id = ?`, []any{"b1"})
 	q, a = pg.sqlLastCommit("change-1")
 	check("pg LastCommit", pg, q, a, `SELECT coalesce(max(committed), 0) FROM (SELECT max(committed) AS committed FROM node_version WHERE branch = $1 UNION ALL SELECT max(committed) FROM node_branch WHERE branch = $1) l`, []any{"change-1"})
 	q, a = lite.sqlLastCommit("change-1")
@@ -260,8 +260,8 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite LatestVersionsOn", lite, q, a, `SELECT id, version FROM (SELECT q.id, max(coalesce((SELECT version FROM node_version WHERE node_id = q.id AND branch = ? ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = q.id AND branch = ? ORDER BY version DESC LIMIT 1), 0)) AS version FROM (SELECT value AS id FROM json_each(?)) q) l WHERE version > 0`, []any{`["n1","n2"]`, "b"})
 
 	// Branches
-	const pgBranchCols = `namespace, name, parent, coalesce(fork_commit::text, ''), coalesce(head_commit::text, ''), origin, status, created_at, description, intent, coalesce(rebased_from::text, ''), ephemeral, fork_seq`
-	const liteBranchCols = `namespace, name, parent, coalesce(fork_commit, ''), coalesce(head_commit, ''), origin, status, created_at, description, intent, coalesce(rebased_from, ''), ephemeral, fork_seq`
+	const pgBranchCols = `namespace, name, parent, coalesce(fork_commit::text, ''), coalesce(head_commit::text, ''), origin, status, created_at, description, intent, coalesce(rebased_from::text, ''), ephemeral`
+	const liteBranchCols = `namespace, name, parent, coalesce(fork_commit, ''), coalesce(head_commit, ''), origin, status, created_at, description, intent, coalesce(rebased_from, ''), ephemeral`
 	q, a = pg.sqlBranch("", "b")
 	check("pg Branch", pg, q, a, `SELECT `+pgBranchCols+` FROM branch WHERE namespace = $1 AND name = $2`, []any{"default", "b"})
 	q, a = lite.sqlBranch("", "b")
@@ -273,11 +273,11 @@ func TestSQLBuildersGolden(t *testing.T) {
 
 	// Commits, changes
 	q, a = pg.sqlNamespaceCommitHeaders("")
-	check("pg NamespaceCommitHeaders", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, kind, coalesce(rebased_from::text, ''), seq FROM commits WHERE namespace = $1 ORDER BY created_at, id`, []any{"default"})
+	check("pg NamespaceCommitHeaders", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, kind, coalesce(rebased_from::text, ''), seq, coalesce(fork_commit::text, '') FROM commits WHERE namespace = $1 ORDER BY created_at, id`, []any{"default"})
 	q, a = lite.sqlNamespaceCommitHeaders("")
-	check("sqlite NamespaceCommitHeaders", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, kind, coalesce(rebased_from, ''), seq FROM commits WHERE namespace = ? ORDER BY created_at, rowid`, []any{"default"})
-	const pgHead = `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, kind, coalesce(rebased_from::text, ''), seq FROM commits WHERE namespace = $1`
-	const liteHead = `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, kind, coalesce(rebased_from, ''), seq FROM commits WHERE namespace = ?`
+	check("sqlite NamespaceCommitHeaders", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, kind, coalesce(rebased_from, ''), seq, coalesce(fork_commit, '') FROM commits WHERE namespace = ? ORDER BY created_at, rowid`, []any{"default"})
+	const pgHead = `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, kind, coalesce(rebased_from::text, ''), seq, coalesce(fork_commit::text, '') FROM commits WHERE namespace = $1`
+	const liteHead = `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, kind, coalesce(rebased_from, ''), seq, coalesce(fork_commit, '') FROM commits WHERE namespace = ?`
 	q, a = pg.sqlCommitPage("", "", 9, 3)
 	check("pg CommitPage", pg, q, a, pgHead+` AND branch = $2 AND ($3 = 0 OR seq < $3) ORDER BY seq DESC LIMIT $4`, []any{"default", "main", int64(9), 3})
 	q, a = lite.sqlCommitPage("", "", 9, 3)
@@ -295,9 +295,9 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlCommitCounts("")
 	check("sqlite CommitCounts", lite, q, a, `SELECT branch, count(*) FROM commits WHERE namespace = ? GROUP BY branch`, []any{"default"})
 	q, a = pg.sqlBranchCommitHeaders("", "b1")
-	check("pg BranchCommitHeaders", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, kind, coalesce(rebased_from::text, ''), seq FROM commits WHERE namespace = $1 AND branch = $2 ORDER BY seq`, []any{"default", "b1"})
+	check("pg BranchCommitHeaders", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, kind, coalesce(rebased_from::text, ''), seq, coalesce(fork_commit::text, '') FROM commits WHERE namespace = $1 AND branch = $2 ORDER BY seq`, []any{"default", "b1"})
 	q, a = lite.sqlBranchCommitHeaders("", "b1")
-	check("sqlite BranchCommitHeaders", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, kind, coalesce(rebased_from, ''), seq FROM commits WHERE namespace = ? AND branch = ? ORDER BY seq`, []any{"default", "b1"})
+	check("sqlite BranchCommitHeaders", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, kind, coalesce(rebased_from, ''), seq, coalesce(fork_commit, '') FROM commits WHERE namespace = ? AND branch = ? ORDER BY seq`, []any{"default", "b1"})
 	q, a = pg.sqlCommitIDs("")
 	check("pg Commits", pg, q, a, `SELECT id::text FROM commits WHERE namespace = $1 ORDER BY created_at`, []any{"default"})
 	q, a = lite.sqlCommitIDs("")

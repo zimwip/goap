@@ -9,10 +9,10 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-func TestEphemeralBranchHoldsNoCommit(t *testing.T) { forEachRepo(t, testEphemeralBranch) }
+func TestEphemeralBranchCommits(t *testing.T) { forEachRepo(t, testEphemeralBranch) }
 
-// testEphemeralBranch: the branch of a change is ephemeral, it holds no commit however many commits it has, and its
-// state (its fork and its commits) still reads right (ADR 0140).
+// testEphemeralBranch: the branch of a change is ephemeral, each of its commits is a commit of it, one after the other
+// over its fork, and its state (its fork and its commits) reads right (ADR 0140, 0175).
 func testEphemeralBranch(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
@@ -47,8 +47,23 @@ func testEphemeralBranch(t *testing.T, repo Repo) {
 		if err != nil {
 			return err
 		}
-		if len(hs) != 0 {
-			t.Fatalf("the branch of the change holds %d commits, want none", len(hs))
+		if len(hs) != 5 {
+			t.Fatalf("the branch of the change holds %d commits, want one per commit (ADR 0175)", len(hs))
+		}
+		for i, h := range hs {
+			want := own.ForkCommit
+			if i > 0 {
+				want = hs[i-1].ID
+			}
+			if h.ParentID != want {
+				t.Fatalf("commit %d follows %s, not %s", i, h.ParentID, want)
+			}
+			if h.Fork != own.ForkCommit {
+				t.Fatalf("commit %d stands on %s, the branch on %s", i, h.Fork, own.ForkCommit)
+			}
+		}
+		if own.Head != hs[4].ID {
+			t.Fatalf("the head of the branch is %s, its last commit %s", own.Head, hs[4].ID)
 		}
 		return nil
 	}); err != nil {

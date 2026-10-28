@@ -246,7 +246,7 @@ func (t *sqliteTx) joinBranches(ctx context.Context, id domain.NodeID, vs []doma
 func sqliteScanBranch(row scanner) (domain.Branch, error) {
 	var b domain.Branch
 	var created string
-	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkCommit), (*string)(&b.Head), &b.Origin, &b.Status, &created, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral, &b.ForkSeq)
+	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkCommit), (*string)(&b.Head), &b.Origin, &b.Status, &created, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral)
 	b.CreatedAt = tsParse(created)
 	return b, err
 }
@@ -292,10 +292,10 @@ func (t *sqliteTx) Branches(ctx context.Context, namespace string) ([]domain.Bra
 
 func (t *sqliteTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_commit, head_commit, origin, status, created_at, description, intent, rebased_from, ephemeral, fork_seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_commit, head_commit, origin, status, created_at, description, intent, rebased_from, ephemeral) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, head_commit = excluded.head_commit, description = excluded.description,
-			fork_commit = excluded.fork_commit, rebased_from = excluded.rebased_from, parent = excluded.parent, fork_seq = excluded.fork_seq`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkCommit)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral, b.ForkSeq)
+			fork_commit = excluded.fork_commit, rebased_from = excluded.rebased_from, parent = excluded.parent`,
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkCommit)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral)
 	return sqliteErr(err, "branch "+b.Name)
 }
 
@@ -487,7 +487,7 @@ func (t *sqliteTx) CommitHeader(ctx context.Context, id domain.CommitID) (domain
 	var created string
 	q, args := dialectSQLite.sqlCommitHeader(id)
 	err := t.tx.QueryRowContext(ctx, q, args...).Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &created,
-		&b.Branch, &b.Namespace, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq)
+		&b.Branch, &b.Namespace, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq, (*string)(&b.Fork))
 	if err != nil {
 		return b, sqliteErr(err, "commit "+string(id))
 	}
@@ -592,7 +592,7 @@ func (t *sqliteTx) commitHeaders(ctx context.Context, namespace, q string, args 
 	for rows.Next() {
 		b := domain.Commit{Namespace: domain.NamespaceOf(namespace)}
 		var created string
-		if err := rows.Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &created, &b.Branch, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq); err != nil {
+		if err := rows.Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &created, &b.Branch, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq, (*string)(&b.Fork)); err != nil {
 			return nil, err
 		}
 		b.CreatedAt = tsParse(created)
@@ -860,7 +860,7 @@ func (t *sqliteTx) LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[d
 // PutCommit stores the header of a commit (ADR 0143).
 func (t *sqliteTx) PutCommit(ctx context.Context, b domain.Commit) error {
 	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("commits", commitColumns, ""),
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), kindOf(b), nullUUID(string(b.RebasedFrom)), b.Seq)
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), kindOf(b), nullUUID(string(b.RebasedFrom)), b.Seq, nullUUID(string(b.Fork)))
 	return sqliteErr(err, "commit")
 }
 

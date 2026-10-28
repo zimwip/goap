@@ -88,7 +88,7 @@ func testIterateOnTheBranchOfAChange(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: created.ID}))
 	second := g.withState(t, ctx, must[domain.Commit](t)(g.CommitChange(ctx, c.ID, "")))
 	v2 := second.Nodes[f.req.ID]
-	if second.Seq <= first.Seq || second.ParentID != first.ParentID || v2 == v1 {
+	if second.Seq <= first.Seq || second.ParentID != first.ID || v2 == v1 {
 		t.Fatalf("the second commit follows the first: %+v", second)
 	}
 	n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: v2}))

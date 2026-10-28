@@ -124,10 +124,10 @@ func testRebaseRootDifferentNodes(t *testing.T, repo Repo) {
 		t.Fatalf("test1 was not behind: %+v", got)
 	}
 	// ADR 0102, 0140: test2 committed on its branch from B; no node changed on both sides, so the merge moved the fork onto
-	// T1 and fast-forwarded over it, the branch keeping no rebase commit: main is the one commit a change adds
+	// T1 and fast-forwarded over it: main gets one commit per change, its branch keeps its own (ADR 0175)
 	for _, b := range must[[]domain.Commit](t)(g.Commits(ctx, "")) {
-		if (b.ChangeID == t1.ID || b.ChangeID == t2.ID) && b.Kind != domain.CommitKindFastForward {
-			t.Fatalf("a change's branch holds no commit: %+v", b)
+		if (b.ChangeID == t1.ID || b.ChangeID == t2.ID) && (b.Branch == domain.MainBranch) != (b.Kind == domain.CommitKindFastForward) {
+			t.Fatalf("a change adds one fast-forward to main, its other commits on its branch: %+v", b)
 		}
 	}
 	if br := must[domain.Branch](t)(g.Branch(ctx, "", t2.Branch)); br.RebasedFrom != f.base.ID || br.ForkCommit != b1.ID || br.Status != domain.BranchMerged {
@@ -326,7 +326,7 @@ func testRebaseRootCommittedRebasedAtMerge(t *testing.T, repo Repo) {
 	t1, _ := propChange(t, g, f.base.ID, "test1", f.req.Ref(), map[string]any{"a": 1})
 	t2, _ := propChange(t, g, f.base.ID, "test2", f.req.Ref(), map[string]any{"b": 2})
 	c2 := must[domain.Commit](t)(g.CommitChange(ctx, t2.ID, ""))
-	if ch := must[domain.Change](t)(g.Change(ctx, t2.ID)); ch.Status != domain.ChangeActive || ch.LandedCommit != c2.ID {
+	if ch := must[domain.Change](t)(g.Change(ctx, t2.ID)); ch.Status != domain.ChangeActive || ch.LandedCommit != "" || c2.Branch != ch.Branch {
 		t.Fatalf("a committed change stays open: %+v", ch)
 	}
 	b1 := must[domain.Commit](t)(g.apply(ctx, t1.ID, ""))

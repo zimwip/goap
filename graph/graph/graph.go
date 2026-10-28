@@ -541,14 +541,12 @@ func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, 
 			if intent == "" {
 				intent = domain.IntentDerive
 			}
-			// the branch of a change holds no commit (ADR 0140): its fork, a commit of a lasting branch, or the point
-			// of the branch of its parent change it is forked at (ADR 0103)
+			// forked from its reference commit, or from the head of the branch of its parent change (ADR 0103, 0175)
 			own := domain.Branch{Ephemeral: true, Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: b.Name, ForkCommit: fork.ID,
 				Origin: domain.ChangeBranchOrigin(c.ID), Intent: intent, Status: domain.BranchOpen, CreatedAt: g.now()}
 			if b.Ephemeral {
-				if own.ForkCommit, own.ForkSeq, err = forkPoint(ctx, tx, b); err != nil {
-					return err
-				}
+				own.ForkCommit = b.HeadOrFork()
+				c.ForkCommit = own.ForkCommit
 			}
 			if err := tx.PutBranch(ctx, own); err != nil {
 				return err
