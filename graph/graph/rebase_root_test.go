@@ -378,8 +378,7 @@ func testRebaseRootRaceFallsBackToMerge(t *testing.T, repo Repo) {
 		if err != nil {
 			return err
 		}
-		c, err = g.integrateTx(ctx, tx, c, nil)
-		if c.Status != domain.ChangeCommitted {
+		if c, err = g.integrateTx(ctx, tx, c, nil); err == nil && c.Status != domain.ChangeCommitted {
 			t.Fatalf("a conflicting integration waits: %s", c.Status)
 		}
 		return err

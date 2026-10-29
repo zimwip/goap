@@ -20,13 +20,23 @@ import (
 // branchVersions reads the versions some nodes (nil: every node) have on the branch of a change, the nodes it does not
 // hold left out.
 func branchVersions(ctx context.Context, tx Tx, b domain.Branch, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
-	out, err := forkVersions(ctx, tx, b, ids)
+	fork, err := forkVersions(ctx, tx, b, ids)
 	if err != nil {
 		return nil, err
 	}
 	ls, err := tx.BranchCommits(ctx, b.Namespace, b.Name, math.MaxInt64, ids)
 	if err != nil {
 		return nil, err
+	}
+	return overFork(fork, ls), nil
+}
+
+// overFork is the state of a branch from the versions of its fork and the commits it holds (Tx.BranchCommits): a
+// revert gives the fork's version back, a tombstone leaves the node out. fork is not changed.
+func overFork(fork map[domain.NodeID]domain.Version, ls map[domain.NodeID]CommittedVersion) map[domain.NodeID]domain.Version {
+	out := maps.Clone(fork)
+	if out == nil {
+		out = map[domain.NodeID]domain.Version{}
 	}
 	for id, l := range ls {
 		switch {
@@ -38,7 +48,7 @@ func branchVersions(ctx context.Context, tx Tx, b domain.Branch, ids []domain.No
 			out[id] = l.Version
 		}
 	}
-	return out, nil
+	return out
 }
 
 // forkVersions reads the versions some nodes (nil: every node) have in the fork of the branch of a change.

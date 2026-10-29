@@ -1249,7 +1249,12 @@ runs every test against PostgreSQL (a throw-away `pgvector/pgvector:pg17` contai
 root change and its sub-changes) are serialized by `Tx.LockChange` (a transaction-level advisory lock on the root in
 PostgreSQL; SQLite and the memory store run one transaction at a time), taken before an operation reads what it checks
 (`changeOpen`, `Graph.changeTx`) and by the guard at every write naming a change; a branch head moves under
-`Tx.LockBranch` and only from the parent of the new commit (`advanceBranch`). Reads take no lock.
+`Tx.LockBranch` and only from the parent of the new commit (`advanceBranch`). A merge reads what it writes before it
+locks its target: the rebase onto the head it read and the fork moved there (the change's branch, under the lock of
+its tree), then the versions of the fast-forward and the nodes as the target will hold them (`prepareFastForward`),
+read again while the head moves before the lock; under the lock it reads the head again and, unchanged, only writes
+(`applyFastForward`); moved, it reads its plan again, and rebases under the lock only when the target moved on a node
+it changed. Reads take no lock.
 
 Every `change_id` above is `NOT NULL`, with no foreign key: the schema declares none (no trigger runs on an insert),
 the guard checks every reference at the end of the transaction; `owner`, `project`,

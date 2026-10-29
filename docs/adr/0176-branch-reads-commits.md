@@ -32,8 +32,17 @@ is read back from the commits, their branches and their parents.
 3. **The version of a node on a branch** up to an order is the greatest version of the commits the branch holds up to
    that order, whichever way it holds them: one query reads any branch (`sqlCommittedVersions`). A fast-forward is over
    the head of its target and a three-way merge writes the nodes both sides changed (a version greater than both), so
-   the greatest is the last. For some nodes it is one probe per node (`latestHeld`): its versions from the last,
-   backwards (`node_version_pkey`), each asked of `branch_commit_pkey` through a fenced `EXISTS` (`OFFSET 0`), so the
+   the greatest is the last. For some nodes it is one probe per node (`latestHeld`): its versions committed between
+   the first and the last order the branch holds (two reads of `branch_commit_pkey`), from the last backwards
+   (`node_version_node_committed`, `(node_id, committed)`), each asked of `branch_commit_pkey` through a fenced
+   `EXISTS` (`OFFSET 0`). The bounds matter on a change's branch: holding a few recent commits, it reads the few
+   versions committed since its first, where a walk from the last version read the whole history other changes wrote
+   (a node changed by 470 changes: 2159 blocks for a branch that does not hold it, 19 with the bounds). The probe
+   reads a commit by its key alone, the order it was taken at compared after (a bound on it in the probe let the
+   planner walk main by that order, `branch_commit_at`, for each version: 5 500 blocks for 9 nodes, 35 by the key).
+   The nodes a branch holds (`BranchNodeIDs`) are the versions of each commit it holds, read by their order
+   (`node_version_commit`, an order being one commit's), each commit a fence on PostgreSQL (`LATERAL`, `OFFSET 0`):
+   joined, the plan a young table or the weight of main gave read `node_version` whole at each call. So the
    plan never depends on the statistics of `branch_commit` (joined, an old estimate of a branch read every commit of
    the branch for each node, under the lock of the branch being merged). "Latest on a branch" (`LatestOn`,
    `LatestVersionsOn`) is the same probe with no bound.
@@ -88,6 +97,13 @@ machine): 1 417 changes in 90 s before, 838 with the taken commits read apart (t
 old statistics of `branch_commit` read every commit of main for each node, under the lock of main: 13.5 ms held on
 average instead of 3.4 ms), 1 437 with every commit marked and the fenced probe; over 5 minutes, 4 138 before and
 4 046 after (the selection 0.11 ms a call, 0.13 ms before).
+
+Many small changes over the change API (`goap-bench -mode lifecycle -edits 10`, 4 writers, 10 minutes, PostgreSQL, one
+machine of 4 cores): 251 406 versions before, drifting +2 % per doubling; 243 572 with every commit marked, drifting
+-11 % (CommitChange 23 ms at the end against 19, ImpactNodeCheckout 16 ms against 12: the latest version on the branch
+of a change walked the history of the node, 1 ms a call); 238 717 with the bounds, the probe by key and the fenced
+node list, drifting +1 % (CommitChange 18.7 ms, ImpactNodeCheckout 11.4 ms; one writer: 23 003 versions in 150 s
+against 23 603 before, CloseChange 8.2 ms against 8.9). The runs of one build vary by about 5 %.
 
 The git import of the first 200 commits of this repository (`TestImportRepository`, SQLite, two runs each): 33.8 s and
 32.2 s before, 30.2 s and 29.7 s after. The versions of the commits taken are read for some nodes one probe per node,
