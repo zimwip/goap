@@ -78,8 +78,25 @@ The merge now reads first and locks last:
   the header, the head moved, the impacts committed); moved, it is `errTargetMoved`, and the merge rebases onto the new
   head under the lock it now holds, then merges as before (a fast-forward, or the three-way merge of a race).
 
-A merge that lost the race does the rebase twice; the result is the one of a merge locked from the start. A caller
-already holding the lock of the target (`IntegrateChange` of a committed change) sees no move. Measured with the same
-bench, 150 s: the target is held 9 ms a close instead of 15.5 ms, waited for 1.4 ms instead of 3.8 ms, and the writers
-wrote 8 % more versions (59 552 / 59 406 against 54 872).
+Then the window between the plan and the lock, and what is left under the lock:
+
+- with 4 writers, 39 % of the merges found the head moved at the lock and did everything again under it. The plan now
+  reads the head again before it locks (`freshOnto`, not as the transaction kept the branch) and is read again while
+  the head moves, up to `prepareAttempts` (3); a head moved at the lock all the same (the merge that held it landed)
+  has the plan read again under the lock, and only a target moved on a node the branch changed is rebased;
+- the commit of the impacts on the target read the versions the target holds once it took the commits (two
+  statements); the plan knows them (the versions it moves the nodes to, the tombstones) and reads the nodes before the
+  lock (`targetHeads`, `fastForwardPlan.heads` given to `commit`).
+
+Under the lock remain the commits taken, the header, the head moved, the `committed` entry, the header of the change
+and the COMMIT. A merge that lost the race reads its plan twice; the result is the one of a merge locked from the start.
+A caller already holding the lock of the target (`IntegrateChange` of a committed change) sees no move.
+
+Measured with the same bench, 150 s:
+
+| | target held a close | waited for | versions written |
+|---|---|---|---|
+| locked before the rebase | 15.5 ms | 3.8 ms | 54 872 |
+| plan before the lock | 9 ms | 1.4 ms | 59 552 / 59 406 |
+| plan read again, target heads read before | 3.7 ms | 0.5 ms | 61 413 / 62 052 |
 

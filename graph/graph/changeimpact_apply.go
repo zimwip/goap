@@ -376,33 +376,19 @@ func joinSorted(s []string) string {
 // version each change impact committed as (only: the impacts of the nodes this merge moved; nil: every one): the version it wrote, joined to the parent, or the merge
 // version of mergeChange. The other open changes on the same nodes are not read: each starts from the latest version
 // of its nodes when it is rebased, at its own merge (ADR 0101, 0140).
-func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.CommitID, only map[domain.NodeID]bool) error {
+// heads, when given, are the nodes as the target holds them now (a fast-forward read them before it locked the target):
+// nothing is read of the target then.
+func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.CommitID, only map[domain.NodeID]bool, heads map[domain.NodeID]domain.Node) error {
 	commits := func(cn domain.ChangeImpact) bool {
 		return cn.Post != nil && (cn.Review == domain.ReviewAccepted || cn.Committed != nil) && cn.Flow == "" && !cn.Superseded &&
 			(only == nil || only[cn.Post.ID])
 	}
-	// the latest version of each node on the target, read in two statements
-	var ids []domain.NodeID
-	for _, cn := range c.Impacts().All() {
-		if commits(cn) {
-			ids = append(ids, cn.Post.ID)
+	byID := heads
+	if byID == nil {
+		var err error
+		if byID, err = targetNodes(ctx, tx, c, own, commits); err != nil {
+			return err
 		}
-	}
-	at, err := tx.LatestVersionsOn(ctx, ids, domain.BranchOf(own.Parent))
-	if err != nil {
-		return err
-	}
-	refs := make([]domain.NodeRef, 0, len(at))
-	for id, v := range at {
-		refs = append(refs, domain.NodeRef{ID: id, Version: v})
-	}
-	heads, err := tx.NodesAt(ctx, refs, "")
-	if err != nil {
-		return err
-	}
-	byID := make(map[domain.NodeID]domain.Node, len(heads))
-	for _, n := range heads {
-		byID[n.ID] = n
 	}
 	var committed []domain.ImpactEvent
 	for _, cn := range c.Impacts().All() {
@@ -436,4 +422,31 @@ func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.B
 	}
 	// one entry for the commit (ADR 0144)
 	return g.emit(ctx, tx, committed...)
+}
+
+// targetNodes reads the latest version on the target of each node of a change that commits, in two statements.
+func targetNodes(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, commits func(domain.ChangeImpact) bool) (map[domain.NodeID]domain.Node, error) {
+	var ids []domain.NodeID
+	for _, cn := range c.Impacts().All() {
+		if commits(cn) {
+			ids = append(ids, cn.Post.ID)
+		}
+	}
+	at, err := tx.LatestVersionsOn(ctx, ids, domain.BranchOf(own.Parent))
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]domain.NodeRef, 0, len(at))
+	for id, v := range at {
+		refs = append(refs, domain.NodeRef{ID: id, Version: v})
+	}
+	heads, err := tx.NodesAt(ctx, refs, "")
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[domain.NodeID]domain.Node, len(heads))
+	for _, n := range heads {
+		byID[n.ID] = n
+	}
+	return byID, nil
 }

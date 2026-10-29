@@ -202,6 +202,11 @@ func (t *guardTx) Branch(ctx context.Context, namespace, name string) (domain.Br
 	return b, err
 }
 
+// forgetBranch drops what the transaction kept of a branch: the next read reads it again, as it stands now.
+func (t *guardTx) forgetBranch(namespace, name string) {
+	delete(t.branches, guardBranchKey(namespace, name))
+}
+
 func (t *guardTx) keepBranch(key string, b domain.Branch) {
 	if t.branches == nil {
 		t.branches = map[string]domain.Branch{}
