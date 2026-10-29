@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -37,6 +38,8 @@ type world struct {
 	vis   map[domain.NodeRef]bool
 	// filter is the reach as the stores filter a page (nil: every node)
 	filter *graphapi.ReachFilter
+	// entering is how the world reads the links entering its nodes, decided at the first read (enteringPlan)
+	entering *enteringPlan
 }
 
 // openWorld opens a view in a transaction, read by a caller of some reach (nil: everything; asked of g.reachOf before
@@ -418,21 +421,41 @@ func (w *world) neighbourhoods(ctx context.Context, tx Tx, centres []domain.Node
 		outOf[id] = slices.DeleteFunc(outOf[id], func(l domain.Link) bool { return !keep(l) })
 		inOf[id] = slices.DeleteFunc(inOf[id], func(l domain.Link) bool { return !keep(l) })
 	}
+	return w.complete(ctx, tx, ids, held, out, outOf, inOf, ways)
+}
+
+// complete reads the nodes at the other ends of the links of some nodes read at held, and lays them into their
+// neighbourhoods out.
+func (w *world) complete(ctx context.Context, tx Tx, ids []domain.NodeID, held map[domain.NodeID]domain.NodeRef, out map[domain.NodeID]Neighbourhood,
+	outOf, inOf map[domain.NodeID][]domain.Link, ways linkWays) (map[domain.NodeID]Neighbourhood, error) {
+	// the version the world holds of each source of an entering link is the one the link was read from (a draft: 0);
+	// only the targets of the outgoing links are asked of the world
+	known := map[domain.NodeID]domain.Version{}
+	for id := range held {
+		for _, l := range inOf[id] {
+			if v, ok := w.over[l.From.ID]; ok && v == 0 {
+				known[l.From.ID] = 0
+			} else {
+				known[l.From.ID] = l.From.Version
+			}
+		}
+	}
 	var ends []domain.NodeID
 	for id := range held {
 		for _, l := range outOf[id] {
-			if !l.External() {
+			if _, ok := known[l.To.ID]; !ok && !l.External() {
 				ends = append(ends, l.To.ID)
 			}
 		}
-		for _, l := range inOf[id] {
-			ends = append(ends, l.From.ID)
-		}
 	}
-	slices.Sort(ends)
-	at, err := w.at(ctx, tx, slices.Compact(ends))
-	if err != nil {
-		return nil, err
+	at := known
+	if len(ends) > 0 {
+		slices.Sort(ends)
+		got, err := w.at(ctx, tx, slices.Compact(ends))
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(at, got)
 	}
 	// the neighbours are read in one batch (one statement for the stored ones), never one by one: a hub has thousands
 	var nrefs []domain.NodeRef
@@ -578,7 +601,27 @@ func (w *world) preloadIn(ctx context.Context, tx Tx, ref domain.NodeRef) error 
 // source with a long history costs one version, not one row per version holding the link. A source the world holds as
 // a draft is left to the drafts' links.
 func (w *world) enteringOf(ctx context.Context, tx Tx, ids []domain.NodeID, types []string) (map[domain.NodeID][]domain.Link, error) {
-	pairs, err := tx.LinkSources(ctx, ids, types)
+	plan, err := w.enteringPlan(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	if plan.sel != nil {
+		links, err := plan.sel.LinksEnteringAt(ctx, w.namespace, plan.levels, ids, types, plan.skip)
+		if err != nil {
+			return nil, err
+		}
+		out := map[domain.NodeID][]domain.Link{}
+		for _, l := range links {
+			if v, ok := w.over[l.From.ID]; ok && v != l.From.Version {
+				// the change holds another version than its branch: read as at does
+				w.entering.sel = nil
+				return w.enteringOf(ctx, tx, ids, types)
+			}
+			out[l.To.ID] = append(out[l.To.ID], l)
+		}
+		return out, nil
+	}
+	pairs, err := tx.LinkSources(ctx, ids, types, nil)
 	if err != nil || len(pairs) == 0 {
 		return map[domain.NodeID][]domain.Link{}, err
 	}
@@ -610,6 +653,151 @@ func (w *world) enteringOf(ctx context.Context, tx Tx, ids []domain.NodeID, type
 		out[l.To.ID] = append(out[l.To.ID], l)
 	}
 	return out, nil
+}
+
+// enteringPage reads the neighbourhood a node has through the links of some types (nil: every type) entering it from a
+// page of their sources (by source, after page.After): a node with many entering links (a hub) is read a page at a
+// time, as far as its reader goes. The drafts' links into the node come with the first page. It answers the last
+// source of the page and whether there are more.
+func (w *world) enteringPage(ctx context.Context, tx Tx, centre domain.Node, types []string, page sourcePage) (Neighbourhood, domain.NodeID, bool, error) {
+	ref := centre.Ref()
+	links, last, more, err := w.enteringLinksPage(ctx, tx, ref.ID, types, page)
+	if err != nil {
+		return Neighbourhood{}, "", false, err
+	}
+	if page.After == "" && (types == nil || len(types) > 0) {
+		for _, d := range w.drafts() {
+			dl, err := w.reader.outLinks(ctx, tx, domain.NodeRef{ID: d})
+			if err != nil {
+				return Neighbourhood{}, "", false, err
+			}
+			for _, l := range dl {
+				if !l.External() && l.To.ID == ref.ID && (types == nil || slices.Contains(types, l.Type)) {
+					links = append(links, l)
+				}
+			}
+		}
+	}
+	held := map[domain.NodeID]domain.NodeRef{ref.ID: ref}
+	out := map[domain.NodeID]Neighbourhood{ref.ID: {Node: centre}}
+	nbs, err := w.complete(ctx, tx, []domain.NodeID{ref.ID}, held, out, nil, map[domain.NodeID][]domain.Link{ref.ID: links}, entering)
+	return nbs[ref.ID], last, more, err
+}
+
+// enteringLinksPage reads the stored links of some types entering a node from a page of their sources (enteringOf).
+func (w *world) enteringLinksPage(ctx context.Context, tx Tx, id domain.NodeID, types []string, page sourcePage) ([]domain.Link, domain.NodeID, bool, error) {
+	if types != nil && len(types) == 0 {
+		return nil, "", false, nil
+	}
+	plan, err := w.enteringPlan(ctx, tx)
+	if err != nil {
+		return nil, "", false, err
+	}
+	if plan.sel != nil {
+		links, last, more, err := plan.sel.LinksEnteringPage(ctx, w.namespace, plan.levels, id, types, plan.skip, page)
+		if err != nil {
+			return nil, "", false, err
+		}
+		if !slices.ContainsFunc(links, func(l domain.Link) bool { v, ok := w.over[l.From.ID]; return ok && v != l.From.Version }) {
+			return links, last, more, nil
+		}
+		// the change holds another version than its branch: read as at does
+	}
+	pairs, err := tx.LinkSources(ctx, []domain.NodeID{id}, types, &page)
+	if err != nil || len(pairs) == 0 {
+		return nil, "", false, err
+	}
+	more := len(pairs) > page.Limit
+	pairs = pairs[:min(len(pairs), page.Limit)]
+	sources := make([]domain.NodeID, len(pairs))
+	for i, p := range pairs {
+		sources[i] = p.From
+	}
+	at, err := w.at(ctx, tx, sources)
+	if err != nil {
+		return nil, "", false, err
+	}
+	var refs []domain.NodeRef
+	for _, s := range sources {
+		if v := at[s]; v != 0 {
+			refs = append(refs, domain.NodeRef{ID: s, Version: v})
+		}
+	}
+	var links []domain.Link
+	if len(refs) > 0 {
+		if links, err = tx.LinksFromInto(ctx, refs, []domain.NodeID{id}, types); err != nil {
+			return nil, "", false, err
+		}
+	}
+	return links, sources[len(sources)-1], more, nil
+}
+
+// enteringSelector is a store reading the links entering some nodes from the versions of their sources a state holds
+// in one statement (the SQL ones): the sources, their selection (ADR 0143, its levels) and the links those versions
+// hold, the sources skip left out.
+type enteringSelector interface {
+	LinksEnteringAt(ctx context.Context, namespace string, levels []selectLevel, ids []domain.NodeID, types []string, skip []domain.NodeID) ([]domain.Link, error)
+	// LinksEnteringPage reads them for one node from a page of its sources: the last source of the page, and whether
+	// there are more
+	LinksEnteringPage(ctx context.Context, namespace string, levels []selectLevel, id domain.NodeID, types []string, skip []domain.NodeID,
+		page sourcePage) ([]domain.Link, domain.NodeID, bool, error)
+}
+
+// maxSelectLevels bounds the levels of a selection read in one statement: main, a branch forked from it, the branch of
+// a change over either.
+const maxSelectLevels = 3
+
+// enteringPlan is how a world reads the links entering its nodes: in one statement (sel set) when the store reads them
+// so and the selection of the world is short (levels: the commit of a branch view, the fork of a change and, for a
+// change that committed, its branch first), the sources the change holds a draft of or deleted left out (the drafts'
+// links stand for the former); else sources, versions, links (three statements). Over its own branch, a change view
+// reads the versions it wrote from the branch, as at does.
+type enteringPlan struct {
+	sel    enteringSelector
+	levels []selectLevel
+	skip   []domain.NodeID
+}
+
+func (w *world) enteringPlan(ctx context.Context, tx Tx) (*enteringPlan, error) {
+	if w.entering != nil {
+		return w.entering, nil
+	}
+	w.entering = &enteringPlan{}
+	gt, ok := unwrapGuard(tx)
+	if !ok {
+		return w.entering, nil
+	}
+	sel, ok := gt.Tx.(enteringSelector)
+	if !ok {
+		return w.entering, nil
+	}
+	var levels []selectLevel
+	var skip []domain.NodeID
+	from := w.commit
+	if w.change != nil {
+		skip = w.drafts()
+		for id := range w.gone {
+			skip = append(skip, id)
+		}
+		if w.own {
+			levels, from = append(levels, selectLevel{Branch: w.branch.Name, UpTo: math.MaxInt64}), w.branch.ForkCommit
+		}
+	}
+	// the chain of the commits the state is read over (selectState): each level its branch up to its order
+	for from != "" {
+		if len(levels) == maxSelectLevels || gt.newCommits[from] {
+			return w.entering, nil
+		}
+		h, err := gt.header(ctx, from)
+		if err != nil {
+			return nil, err
+		}
+		levels, from = append(levels, selectLevel{Branch: h.Branch, UpTo: h.Seq}), h.Fork
+	}
+	if len(levels) > 0 {
+		*w.entering = enteringPlan{sel: sel, levels: levels, skip: skip}
+	}
+	return w.entering, nil
 }
 
 // ViewNodes returns a page of the nodes of a view ordered by key, matching q (ADR 0157): for a branch view the page of

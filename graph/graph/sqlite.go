@@ -1156,8 +1156,8 @@ func (t *sqliteTx) LinksToOfType(ctx context.Context, ref domain.NodeRef, types 
 	return t.queryLinks(ctx, q, args...)
 }
 
-func (t *sqliteTx) LinkSources(ctx context.Context, ids []domain.NodeID, types []string) ([]LinkSource, error) {
-	q, args := dialectSQLite.sqlLinkSources(ids, types)
+func (t *sqliteTx) LinkSources(ctx context.Context, ids []domain.NodeID, types []string, page *sourcePage) ([]LinkSource, error) {
+	q, args := dialectSQLite.sqlLinkSources(ids, types, page)
 	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -1177,6 +1177,45 @@ func (t *sqliteTx) LinkSources(ctx context.Context, ids []domain.NodeID, types [
 func (t *sqliteTx) LinksFromInto(ctx context.Context, refs []domain.NodeRef, to []domain.NodeID, types []string) ([]domain.Link, error) {
 	q, args := dialectSQLite.sqlLinksFromInto(refs, to, types)
 	return t.queryLinks(ctx, q, args...)
+}
+
+// LinksEnteringAt implements enteringSelector.
+func (t *sqliteTx) LinksEnteringAt(ctx context.Context, namespace string, levels []selectLevel, ids []domain.NodeID, types []string, skip []domain.NodeID) ([]domain.Link, error) {
+	q, args := dialectSQLite.sqlLinksEnteringAt(namespace, levels, ids, types, skip)
+	return t.queryLinks(ctx, q, args...)
+}
+
+// LinksEnteringPage implements enteringSelector.
+func (t *sqliteTx) LinksEnteringPage(ctx context.Context, namespace string, levels []selectLevel, id domain.NodeID, types []string, skip []domain.NodeID,
+	page sourcePage) ([]domain.Link, domain.NodeID, bool, error) {
+	q, args := dialectSQLite.sqlLinksEnteringPage(namespace, levels, id, types, skip, page)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, "", false, sqliteErr(err, "links")
+	}
+	defer rows.Close()
+	var out []domain.Link
+	var n int
+	var last string
+	for rows.Next() {
+		var lid, typ, from, to, p, change, url sql.NullString
+		var fv, tv sql.NullInt64
+		if err := rows.Scan(&n, &last, &lid, &typ, &from, &fv, &to, &tv, &p, &change, &url); err != nil {
+			return nil, "", false, err
+		}
+		if !lid.Valid {
+			continue // the page holds no link
+		}
+		l := domain.Link{ID: domain.LinkID(lid.String), Type: typ.String, Properties: props([]byte(p.String)), ChangeID: domain.ChangeID(change.String)}
+		l.From = domain.NodeRef{ID: domain.NodeID(from.String), Version: domain.Version(fv.Int64)}
+		if to.String != "" {
+			l.To = domain.NodeRef{ID: domain.NodeID(to.String), Version: domain.Version(tv.Int64)}
+		} else if l.Target, err = lnk.Parse(url.String); err != nil {
+			return nil, "", false, fmt.Errorf("link %s: %w", lid.String, err)
+		}
+		out = append(out, l)
+	}
+	return out, domain.NodeID(last), n > page.Limit, rows.Err()
 }
 
 func (t *sqliteTx) LinksTo(ctx context.Context, id domain.NodeID) ([]domain.Link, error) {

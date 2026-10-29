@@ -1143,13 +1143,18 @@ func ofTypes(ls []domain.Link, types []string) []domain.Link {
 	return slices.DeleteFunc(ls, func(l domain.Link) bool { return !slices.Contains(types, l.Type) })
 }
 
-func (t *memTx) LinkSources(_ context.Context, ids []domain.NodeID, types []string) ([]LinkSource, error) {
+func (t *memTx) LinkSources(_ context.Context, ids []domain.NodeID, types []string, page *sourcePage) ([]LinkSource, error) {
 	var out []LinkSource
 	for _, l := range t.st.links {
 		s := LinkSource{To: l.To.ID, From: l.From.ID}
-		if slices.Contains(ids, l.To.ID) && (types == nil || slices.Contains(types, l.Type)) && !slices.Contains(out, s) {
+		if slices.Contains(ids, l.To.ID) && (types == nil || slices.Contains(types, l.Type)) && !slices.Contains(out, s) &&
+			(page == nil || s.From > page.After) {
 			out = append(out, s)
 		}
+	}
+	if page != nil {
+		slices.SortFunc(out, func(a, b LinkSource) int { return strings.Compare(string(a.From), string(b.From)) })
+		out = out[:min(len(out), page.Limit+1)]
 	}
 	return out, nil
 }

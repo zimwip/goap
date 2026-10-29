@@ -243,8 +243,8 @@ func BenchmarkQueryView(b *testing.B) {
 var benchWatchers = 100
 
 // BenchmarkQueryEntering measures a hop against the links into a node many links of another type enter (3000 `watch`
-// links, 20 `child` ones, over 30 versions of the node), with the index of the links by target as it is
-// (to_id, to_version, type) and with one by target and type (to_id, type, from_id).
+// links, 20 `child` ones, over 30 versions of the node), with the index of the links by target and type
+// (link_to_type: to_id, type, from_id) and without it (link_to only: to_id, to_version, type).
 func BenchmarkQueryEntering(b *testing.B) {
 	ctx := context.Background()
 	if n, err := strconv.Atoi(os.Getenv("GOAP_BENCH_WATCHERS")); err == nil {
@@ -288,17 +288,18 @@ func BenchmarkQueryEntering(b *testing.B) {
 				}
 			}
 			main := View{Namespace: domain.DefaultNamespace, Branch: domain.MainBranch}
-			for _, ix := range []struct{ name, create string }{
-				{"index-to", ""},
-				{"index-to-type", "CREATE INDEX link_to_type ON link (to_id, type, from_id) WHERE removes IS NULL"},
+			for _, ix := range []struct{ name, ddl string }{
+				{"index-to-type", ""},
+				{"index-to", "DROP INDEX link_to_type"},
 			} {
-				if ix.create != "" {
-					exec(ix.create)
+				if ix.ddl != "" {
+					exec(ix.ddl)
 				}
 				exec("ANALYZE")
 				for _, q := range []struct{ name, q, want string }{
 					{"child", `MATCH (h {key: 'H'})<-[:child]-(x) RETURN count(x)`, "20"},
 					{"watch", `MATCH (h {key: 'H'})<-[:watch]-(x) RETURN count(x)`, fmt.Sprint(min(QueryMaxRows, 30*benchWatchers))},
+					{"watch-limit", `MATCH (h {key: 'H'})<-[:watch]-(x) RETURN x.key LIMIT 10`, ""},
 				} {
 					b.Run(ix.name+"/"+q.name, func(b *testing.B) {
 						if counter != nil {
@@ -307,7 +308,7 @@ func BenchmarkQueryEntering(b *testing.B) {
 						}
 						for b.Loop() {
 							res, err := g.QueryView(ctx, main, q.q, QueryOptions{})
-							if err != nil || fmt.Sprint(res.Rows[0][0]) != q.want {
+							if err != nil || (q.want != "" && fmt.Sprint(res.Rows[0][0]) != q.want) {
 								b.Fatal(res.Rows, err)
 							}
 						}

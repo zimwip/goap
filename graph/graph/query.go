@@ -35,6 +35,10 @@ const (
 // node by node (a test compares both).
 var queryHopBatch = 200
 
+// queryHubPage is the number of sources of the links entering a node a hop of a query reads at a time when it reads
+// that node alone (a hub: the match reads further pages only as far as it goes, its caps or its LIMIT stopping it).
+var queryHubPage = 1000
+
 // QueryView runs a read query in a view. A query the subset does not read is ErrInvalid (with its position), so is a
 // pattern with no anchor.
 func (g *Graph) QueryView(ctx context.Context, v View, src string, opts QueryOptions) (QueryResult, error) {
@@ -66,7 +70,7 @@ func (g *Graph) QueryView(ctx context.Context, v View, src string, opts QueryOpt
 	reads := 0
 	for attempt := 1; ; attempt++ {
 		run := &queryRun{g: g, ctx: ctx, plan: plan, opts: opts, vis: vis, nodes: map[domain.NodeID]*qNode{},
-			hoods: map[string][]qHop{}, links: map[domain.LinkID]domain.Link{}, wanted: map[string][]*qNode{},
+			hoods: map[string]*qHood{}, links: map[domain.LinkID]domain.Link{}, wanted: map[string][]*qNode{},
 			ahead: map[string]Neighbourhood{}}
 		if attempt == 1 && vis != nil {
 			run.vis = nil // the first run sees every node, to learn which ones the caller reads
@@ -146,6 +150,15 @@ type queryPlan struct {
 	vars    []string    // the variables of the patterns, in order: RETURN *
 	late    []cypher.Exists
 	stream  int // the rows to bind before stopping (-1: all)
+	// exists are the first hops of the EXISTS starting from a variable of the query, by variable: the nodes bound to
+	// it are noted for those hops (hint), so each row's EXISTS reads its first hop with the frontier
+	exists map[string][]qHopKind
+}
+
+// qHopKind is a hop a match reads: some link types in a direction.
+type qHopKind struct {
+	types []string
+	dir   cypher.Direction
 }
 
 // qClause is a MATCH or an OPTIONAL MATCH: its patterns, the conditions checked while it matches (those of the MATCH
@@ -276,6 +289,37 @@ func planQuery(q *cypher.Query, opts QueryOptions) (*queryPlan, error) {
 			return x
 		})
 	}
+	// the first hop of each EXISTS, from the node it is anchored on: the first one a variable of the query binds
+	var exs []cypher.Exists
+	for _, cl := range p.clauses {
+		for _, c := range cl.own {
+			cypher.Walk(c.expr, func(x cypher.Expr) bool {
+				if ex, ok := x.(cypher.Exists); ok {
+					exs = append(exs, ex)
+					return false
+				}
+				return true
+			})
+		}
+	}
+	p.exists = map[string][]qHopKind{}
+	for _, ex := range append(exs, p.late...) {
+		if len(ex.Patterns) == 0 {
+			continue
+		}
+		pt := ex.Patterns[0]
+		for i, n := range pt.Nodes {
+			if kinds[n.Var] != "node" {
+				continue
+			}
+			if i < len(pt.Rels) {
+				p.exists[n.Var] = append(p.exists[n.Var], qHopKind{pt.Rels[i].Types, pt.Rels[i].Dir})
+			} else if i > 0 {
+				p.exists[n.Var] = append(p.exists[n.Var], qHopKind{pt.Rels[i-1].Types, reversed(pt.Rels[i-1].Dir)})
+			}
+			break
+		}
+	}
 	aliases := map[string]bool{}
 	ret := &q.Return
 	for i, it := range ret.Items {
@@ -329,7 +373,7 @@ type queryRun struct {
 	pending map[domain.NodeID]domain.Node // the nodes met that vis does not know yet, left out of this run
 
 	nodes map[domain.NodeID]*qNode // the nodes read, by id
-	hoods map[string][]qHop        // the hops read, by node, link types and ways
+	hoods map[string]*qHood        // the hops read, by node, link types and ways
 	links map[domain.LinkID]domain.Link
 	reads int
 	// wanted are the nodes whose hops the match reads next, by link types and ways (hint); ahead the neighbourhoods
@@ -512,6 +556,7 @@ func (r *queryRun) patterns(ps []cypher.Pattern, i int, b cypher.MapScope, used 
 	} else if at > 0 {
 		r.hint(cands, p.Rels[at-1].Types, reversed(p.Rels[at-1].Dir))
 	}
+	r.hintVar(p.Nodes[at].Var, cands)
 	for _, n := range cands {
 		ok, undo, err := r.bindNode(p.Nodes[at], n, b)
 		if err != nil {
@@ -967,23 +1012,39 @@ func (r *queryRun) step(from *qNode, rel cypher.RelPattern, dir cypher.Direction
 		}
 	}
 	follow := func(at *qNode, depth int, visit func(qHop) error) error {
-		hops, err := r.hops(at, rel.Types, dir)
+		hood, err := r.hops(at, rel.Types, dir)
 		if err != nil {
 			return err
 		}
-		var reached []*qNode
-		for _, h := range hops {
-			if (dir != cypher.Right || h.out) && (dir != cypher.Left || h.in) {
-				reached = append(reached, h.other)
+		// the nodes the hops reach, told before they are visited: the frontier of the next hop
+		notice := func(hops []qHop) {
+			var reached []*qNode
+			for _, h := range hops {
+				if (dir != cypher.Right || h.out) && (dir != cypher.Left || h.in) {
+					reached = append(reached, h.other)
+				}
+			}
+			if depth+1 < hi { // the next hop of the walk
+				r.hint(reached, rel.Types, dir)
+			}
+			if depth+1 >= lo {
+				then(reached)
+				r.hintVar(next.Var, reached)
 			}
 		}
-		if depth+1 < hi { // the next hop of the walk
-			r.hint(reached, rel.Types, dir)
-		}
-		if depth+1 >= lo {
-			then(reached)
-		}
-		for _, h := range hops {
+		notice(hood.hops)
+		for i := 0; ; i++ {
+			for i == len(hood.hops) && hood.more { // the next page of a hub, read once the match goes that far
+				start := len(hood.hops)
+				if err := r.page(hood); err != nil {
+					return err
+				}
+				notice(hood.hops[start:])
+			}
+			if i == len(hood.hops) {
+				return nil
+			}
+			h := hood.hops[i]
 			if used[h.link.ID] || (dir == cypher.Right && !h.out) || (dir == cypher.Left && !h.in) {
 				continue
 			}
@@ -999,7 +1060,6 @@ func (r *queryRun) step(from *qNode, rel cypher.RelPattern, dir cypher.Direction
 				return err
 			}
 		}
-		return nil
 	}
 	finish := func(to *qNode, links []domain.Link, mids []*qNode, relValue any) error {
 		undoRel := nop
@@ -1092,18 +1152,33 @@ func (r *queryRun) hint(nodes []*qNode, types []string, dir cypher.Direction) {
 	}
 }
 
+// hintVar notes nodes a variable is bound to for the first hops of the EXISTS starting from it.
+func (r *queryRun) hintVar(v string, nodes []*qNode) {
+	if v == "" {
+		return
+	}
+	for _, h := range r.plan.exists[v] {
+		r.hint(nodes, h.types, h.dir)
+	}
+}
+
 // hops reads the links of some types of a node in the view (nil: every type) in a direction, and the nodes at their
 // other ends: one neighbourhood read, kept for the query, which also reads the neighbourhoods of the nodes hinted for
 // the same hop (a frontier, one batch).
-func (r *queryRun) hops(n *qNode, types []string, dir cypher.Direction) ([]qHop, error) {
+func (r *queryRun) hops(n *qNode, types []string, dir cypher.Direction) (*qHood, error) {
 	kind := hopKind(types, dir)
 	key := string(n.n.ID) + "\x00" + kind
-	if hs, ok := r.hoods[key]; ok {
-		return hs, nil
+	if hd, ok := r.hoods[key]; ok {
+		return hd, nil
 	}
 	if err := r.read(); err != nil {
 		return nil, err
 	}
+	lt := types
+	if lt != nil {
+		lt = r.w.linkTypes(types)
+	}
+	hood := &qHood{n: n, types: lt}
 	nb, ok := r.ahead[key]
 	if ok {
 		delete(r.ahead, key)
@@ -1123,19 +1198,53 @@ func (r *queryRun) hops(n *qNode, types []string, dir cypher.Direction) ([]qHop,
 			batch, in[m.n.ID] = append(batch, m.n), true
 		}
 		r.wanted[kind] = wanted
-		lt := types
-		if lt != nil {
-			lt = r.w.linkTypes(types)
+		if dir == cypher.Left && len(batch) == 1 {
+			// the entering links of one node, a page of their sources at a time: a hub is read as far as the match goes
+			var err error
+			if nb, hood.after, hood.more, err = r.w.enteringPage(r.ctx, r.tx, n.n, lt, sourcePage{Limit: queryHubPage}); err != nil {
+				return nil, err
+			}
+		} else {
+			nbs, err := r.w.neighbourhoods(r.ctx, r.tx, batch, lt, waysOf(dir))
+			if err != nil {
+				return nil, err
+			}
+			for _, m := range batch[1:] {
+				r.ahead[string(m.ID)+"\x00"+kind] = nbs[m.ID]
+			}
+			nb = nbs[n.n.ID]
 		}
-		nbs, err := r.w.neighbourhoods(r.ctx, r.tx, batch, lt, waysOf(dir))
-		if err != nil {
-			return nil, err
-		}
-		for _, m := range batch[1:] {
-			r.ahead[string(m.ID)+"\x00"+kind] = nbs[m.ID]
-		}
-		nb = nbs[n.n.ID]
 	}
+	hood.hops = r.hopsOf(n, nb)
+	r.hoods[key] = hood
+	return hood, nil
+}
+
+// qHood is what the match read of the hops of a node of some link types in a direction: all of them, or the pages of
+// its entering links read so far (more: others follow the source after).
+type qHood struct {
+	n     *qNode
+	types []string
+	hops  []qHop
+	more  bool
+	after domain.NodeID
+}
+
+// page reads the next page of the entering links of a node, a read like any other.
+func (r *queryRun) page(h *qHood) error {
+	if err := r.read(); err != nil {
+		return err
+	}
+	nb, after, more, err := r.w.enteringPage(r.ctx, r.tx, h.n.n, h.types, sourcePage{After: h.after, Limit: queryHubPage})
+	if err != nil {
+		return err
+	}
+	h.hops, h.after, h.more = append(h.hops, r.hopsOf(h.n, nb)...), after, more
+	return nil
+}
+
+// hopsOf turns a neighbourhood of a node into its hops, keeping the nodes met.
+func (r *queryRun) hopsOf(n *qNode, nb Neighbourhood) []qHop {
 	near := map[domain.NodeID]*qNode{}
 	for _, m := range nb.Nodes {
 		if q := r.keep(m); q != nil {
@@ -1159,8 +1268,7 @@ func (r *queryRun) hops(n *qNode, types []string, dir cypher.Direction) ([]qHop,
 		r.links[l.ID] = l
 		hs = append(hs, h)
 	}
-	r.hoods[key] = hs
-	return hs, nil
+	return hs
 }
 
 // export turns a value of a row into JSON, noting the nodes and links it names.

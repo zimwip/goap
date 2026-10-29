@@ -165,12 +165,14 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite NodeTypeCounts", lite, q, a, `SELECT n.type, count(*)`+liteNodeWhere+` GROUP BY n.type`, []any{liteRefs, "", true})
 	const pgLinkCols = `l.id::text, l.type, l.from_id::text, l.from_version, coalesce(l.to_id::text, ''), coalesce(l.to_version, 0), l.props, l.change_id::text, l.to_url`
 	const liteLinkCols = `l.id, l.type, l.from_id, l.from_version, coalesce(l.to_id, ''), coalesce(l.to_version, 0), l.props, l.change_id, l.to_url`
-	held := func(refs string) string {
-		join := " JOIN "
-		if strings.Contains(refs, "json_each") {
-			join = " CROSS JOIN " // SQLite reads the chain first
-		}
+	heldJoin := func(refs, join string) string {
 		return `WITH RECURSIVE r(id, version) AS (` + refs + `), c(nid, rv, sv) AS ( SELECT v.node_id, v.version, coalesce(v.links, v.version) FROM node_version v JOIN r ON r.id = v.node_id AND r.version = v.version UNION ALL SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_depth > 0 ), h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes, l.to_url FROM c` + join + `link l ON l.from_id = c.nid AND l.from_version = c.sv) SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id, h.to_url FROM h WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
+	}
+	held := func(refs string) string {
+		if strings.Contains(refs, "json_each") {
+			return heldJoin(refs, " CROSS JOIN ") // SQLite reads the chain first
+		}
+		return heldJoin(refs, " JOIN ")
 	}
 	pgHeld, liteHeld := held(`SELECT * FROM unnest($1::uuid[], $2::int[])`), held(`SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?)`)
 	pgLinkWhere := ` FROM (` + pgHeld + `) l JOIN unnest($1::uuid[], $2::int[]) AS t(id, version) ON t.id = l.to_id AND t.version = l.to_version WHERE ($3 = '' OR lower(l.type) LIKE $3 ESCAPE '\' OR EXISTS (SELECT 1 FROM jsonb_each(l.props) p WHERE jsonb_typeof(p.value) = 'string' AND lower(p.value #>> '{}') LIKE $3 ESCAPE '\'))`
@@ -198,10 +200,54 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg LinksFromInto", pg, q, a, `SELECT `+pgLinkCols+` FROM (`+strings.Replace(pgHeld, `l.from_version = c.sv)`, `l.from_version = c.sv AND l.to_id = ANY($3::uuid[]) AND l.type = ANY($4::text[]))`, 1)+`) l ORDER BY l.id`, append(pgRefs, []string{"n1"}, []string{"child"}))
 	q, a = lite.sqlLinksFromInto(refs, []domain.NodeID{"n1"}, nil)
 	check("sqlite LinksFromInto", lite, q, a, `SELECT `+liteLinkCols+` FROM (`+strings.Replace(liteHeld, `l.from_version = c.sv)`, `l.from_version = c.sv AND l.to_id IN (SELECT value FROM json_each(?)))`, 1)+`) l ORDER BY l.id`, []any{liteRefs, `["n1"]`})
-	q, a = pg.sqlLinkSources([]domain.NodeID{"n1"}, []string{"child"})
+	q, a = pg.sqlLinkSources([]domain.NodeID{"n1"}, []string{"child"}, nil)
 	check("pg LinkSources", pg, q, a, `SELECT DISTINCT to_id::text, from_id::text FROM link WHERE to_id = ANY($1::uuid[]) AND type = ANY($2::text[]) AND removes IS NULL`, []any{[]string{"n1"}, []string{"child"}})
-	q, a = lite.sqlLinkSources([]domain.NodeID{"n1"}, nil)
+	q, a = lite.sqlLinkSources([]domain.NodeID{"n1"}, nil, nil)
 	check("sqlite LinkSources", lite, q, a, `SELECT DISTINCT to_id, from_id FROM link WHERE to_id IN (SELECT value FROM json_each(?)) AND removes IS NULL`, []any{`["n1"]`})
+	// LinksEnteringAt (ADR 0160): the sources, their selection on the branch and the links their versions hold, in one
+	// statement
+	// the versions selected are kept (MATERIALIZED) and read first
+	entering := func(lite bool, pre, rows, and string) string {
+		join := " JOIN "
+		if lite {
+			join = " CROSS JOIN "
+		}
+		h := strings.Replace(heldJoin(rows, join), `WITH RECURSIVE r(id, version) AS (`, `WITH RECURSIVE `+pre+`r(id, version) AS MATERIALIZED (`, 1)
+		h = strings.Replace(h, `FROM node_version v JOIN r ON`, `FROM r`+join+`node_version v ON`, 1)
+		return strings.Replace(h, `l.from_version = c.sv)`, `l.from_version = c.sv`+and+`)`, 1)
+	}
+	pgPick := func(b, u string) string {
+		return `(SELECT w.version FROM node_version w WHERE w.node_id = s.id AND w.version = (SELECT v.version FROM node_version v WHERE v.node_id = s.id AND EXISTS (SELECT 1 FROM branch_commit j WHERE j.branch = ` + b + ` AND j.seq = v.committed AND j.at > $3 AND j.at <= ` + u + ` OFFSET 0) ORDER BY v.version DESC LIMIT 1) AND NOT (w.reason = 'revert' AND w.branch = ` + b + `))`
+	}
+	q, a = pg.sqlLinksEnteringAt("ns", []selectLevel{{Branch: "c1", UpTo: 9}, {Branch: "", UpTo: 7}}, []domain.NodeID{"n1"}, []string{"child"}, []domain.NodeID{"d1"})
+	check("pg LinksEnteringAt", pg, q, a, `SELECT `+pgLinkCols+` FROM (`+entering(false,
+		`s AS MATERIALIZED (SELECT DISTINCT from_id AS id FROM link WHERE to_id = ANY($2::uuid[]) AND type = ANY($4::text[]) AND NOT (from_id = ANY($5::uuid[])) AND removes IS NULL), x AS MATERIALIZED (SELECT s.id, coalesce(`+pgPick("$6", "$7")+`, `+pgPick("$8", "$9")+`) AS version FROM s WHERE (SELECT n.namespace FROM node n WHERE n.id = s.id) = $1), `,
+		`SELECT x.id, x.version FROM x JOIN node_version w ON w.node_id = x.id AND w.version = x.version WHERE NOT w.deleted`,
+		` AND l.to_id = ANY($2::uuid[]) AND l.type = ANY($4::text[])`)+`) l ORDER BY l.id`,
+		[]any{"ns", []string{"n1"}, int64(0), []string{"child"}, []string{"d1"}, "c1", int64(9), "main", int64(7)})
+	litePick := `(SELECT w.version FROM node_version w WHERE w.node_id = s.id AND w.version = (SELECT v.version FROM node_version v WHERE v.node_id = s.id AND EXISTS (SELECT 1 FROM branch_commit j WHERE j.branch = ? AND j.seq = v.committed AND j.at > ? AND j.at <= ?) ORDER BY v.version DESC LIMIT 1) AND NOT (w.reason = 'revert' AND w.branch = ?))`
+	liteRows := `SELECT x.id, x.version FROM x CROSS JOIN node_version w ON w.node_id = x.id AND w.version = x.version WHERE NOT w.deleted`
+	// SQLite: lists joined first (json_each), one value sought
+	q, a = lite.sqlLinksEnteringAt("ns", []selectLevel{{Branch: "", UpTo: 7}}, []domain.NodeID{"n1", "n2"}, []string{"child", "ref"}, nil)
+	check("sqlite LinksEnteringAt", lite, q, a, `SELECT `+liteLinkCols+` FROM (`+entering(true,
+		`s AS MATERIALIZED (SELECT DISTINCT k.from_id AS id FROM json_each(?) q CROSS JOIN json_each(?) t CROSS JOIN link k WHERE k.to_id = q.value AND k.type = t.value AND k.removes IS NULL), x AS MATERIALIZED (SELECT s.id, `+litePick+` AS version FROM s WHERE (SELECT n.namespace FROM node n WHERE n.id = s.id) = ?), `,
+		liteRows, ` AND l.to_id IN (SELECT value FROM json_each(?)) AND l.type IN (SELECT value FROM json_each(?))`)+`) l ORDER BY l.id`,
+		[]any{"ns", `["n1","n2"]`, int64(0), `["child","ref"]`, "main", int64(7)})
+	q, a = lite.sqlLinksEnteringAt("ns", []selectLevel{{Branch: "", UpTo: 7}}, []domain.NodeID{"n1"}, []string{"child"}, nil)
+	check("sqlite LinksEnteringAt one", lite, q, a, `SELECT `+liteLinkCols+` FROM (`+entering(true,
+		`s AS MATERIALIZED (SELECT DISTINCT k.from_id AS id FROM link k WHERE k.to_id = ? AND k.type = ? AND k.removes IS NULL), x AS MATERIALIZED (SELECT s.id, `+litePick+` AS version FROM s WHERE (SELECT n.namespace FROM node n WHERE n.id = s.id) = ?), `,
+		liteRows, ` AND l.to_id = ? AND l.type = ?`)+`) l ORDER BY l.id`,
+		[]any{"ns", "n1", int64(0), "child", "main", int64(7)})
+	// a page of the sources of the links entering one node: how many sources and the last of the page, then the links
+	q, a = pg.sqlLinksEnteringPage("ns", []selectLevel{{Branch: "", UpTo: 7}}, "n1", []string{"ref"}, nil, sourcePage{After: "a1", Limit: 10})
+	ctes, final, _ := strings.Cut(entering(false,
+		`s AS MATERIALIZED (SELECT DISTINCT from_id AS id FROM link WHERE to_id = ANY($2::uuid[]) AND type = ANY($4::text[]) AND from_id > $5::uuid AND removes IS NULL ORDER BY 1 LIMIT $6), s1 AS (SELECT id FROM s ORDER BY id LIMIT $7), x AS MATERIALIZED (SELECT s.id, `+pgPick("$8", "$9")+` AS version FROM s1 s WHERE (SELECT n.namespace FROM node n WHERE n.id = s.id) = $1), `,
+		`SELECT x.id, x.version FROM x JOIN node_version w ON w.node_id = x.id AND w.version = x.version WHERE NOT w.deleted`,
+		` AND l.to_id = ANY($2::uuid[]) AND l.type = ANY($4::text[])`), `) SELECT h.id`)
+	check("pg LinksEnteringPage", pg, q, a, ctes+`), l AS (SELECT h.id`+final+`) SELECT k.n, coalesce(k.last, ''), `+pgLinkCols+` FROM (SELECT (SELECT count(*) FROM s) AS n, (SELECT id::text FROM s1 ORDER BY id DESC LIMIT 1) AS last) k LEFT JOIN l ON 1 = 1 ORDER BY l.id`,
+		[]any{"ns", []string{"n1"}, int64(0), []string{"ref"}, "a1", 11, 10, "main", int64(7)})
+	q, a = lite.sqlLinkSources([]domain.NodeID{"n1"}, nil, &sourcePage{After: "a1", Limit: 10})
+	check("sqlite LinkSources page", lite, q, a, `SELECT DISTINCT to_id, from_id FROM link WHERE to_id IN (SELECT value FROM json_each(?)) AND removes IS NULL AND from_id > ? ORDER BY 2 LIMIT ?`, []any{`["n1"]`, "a1", 11})
 	linksTo := func(cols, target string) string {
 		return `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id, to_url FROM link WHERE ` + target + ` AND removes IS NULL), s(lid, nid, sv) AS ( SELECT id, from_id, from_version FROM t UNION ALL SELECT s.lid, v.node_id, v.version FROM s JOIN node_version v ON v.node_id = s.nid AND v.links_base = s.sv WHERE NOT EXISTS (SELECT 1 FROM link x WHERE x.from_id = v.node_id AND x.from_version = v.version AND x.removes = s.lid) ) SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.node_id = s.nid AND v.version = s.sv AND v.links IS NULL UNION ALL SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.links = s.sv AND v.node_id = s.nid ORDER BY 1, 4`
 	}

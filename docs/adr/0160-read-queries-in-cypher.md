@@ -47,7 +47,16 @@ would ignore the views and need keeping in sync.
    anchor, are noted for the next hop (`queryRun.hint`), whose first read takes theirs with it, up to `queryHopBatch`
    (200) nodes; the reads counted and the rows are those of a hop read node by node (`TestQueryFrontier`), the
    statements a fraction (three hops down a tree of 1111 nodes: 556 statements and 514 ms on PostgreSQL before, 36 and
-   77 ms after, `BenchmarkQueryView`). The conditions of the WHERE are checked as soon as their variables are bound, so a filter prunes the walk.
+   77 ms after, `BenchmarkQueryView`). The links entering the nodes of a hop are read in one statement
+   (`world.enteringOf`, `enteringSelector`: the sources a link row names, through `link_to_type (to_id, type, from_id)`,
+   the version of each the view selects, its levels unrolled up to `maxSelectLevels`, and the links those versions hold
+   into the nodes; the nodes a change holds a draft of or deleted left out, a deeper selection read in three), and the
+   version of a source known from it. The nodes a variable is bound to are noted for the first hop of each `EXISTS`
+   starting from it (`queryPlan.exists`, `queryRun.hintVar`), so a row's `EXISTS` reads with the frontier (56 statements
+   and 58 ms before, 6 and 11 ms after). A hop of one node against the links (`<-`) reads them a page of
+   `queryHubPage` (1000) sources at a time, in the order of the sources (`world.enteringPage`, `qHood`): the match reads
+   the next page only when it goes that far, so its caps and its `LIMIT` stop it (a node 30 000 `watch` links enter:
+   1.25 s before to count its first 2000 rows, 0.16 s after). The conditions of the WHERE are checked as soon as their variables are bound, so a filter prunes the walk.
    A label matches the type, a type extending it, and names its namespace or not (`Requirement` matches
    `alm@Requirement`). A node's `key`, `type`, `state`, `id`, `version`, `namespace`, `owner` and `project` are its own
    fields; any other name is a property. A relationship is used once per clause. The clauses match in order: an

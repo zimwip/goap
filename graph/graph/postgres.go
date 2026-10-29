@@ -1671,8 +1671,8 @@ func (t *pgTx) LinksToOfType(ctx context.Context, ref domain.NodeRef, types []st
 	return t.queryLinks(ctx, q, args...)
 }
 
-func (t *pgTx) LinkSources(ctx context.Context, ids []domain.NodeID, types []string) ([]LinkSource, error) {
-	q, args := dialectPG.sqlLinkSources(ids, types)
+func (t *pgTx) LinkSources(ctx context.Context, ids []domain.NodeID, types []string, page *sourcePage) ([]LinkSource, error) {
+	q, args := dialectPG.sqlLinkSources(ids, types, page)
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -1687,6 +1687,52 @@ func (t *pgTx) LinkSources(ctx context.Context, ids []domain.NodeID, types []str
 func (t *pgTx) LinksFromInto(ctx context.Context, refs []domain.NodeRef, to []domain.NodeID, types []string) ([]domain.Link, error) {
 	q, args := dialectPG.sqlLinksFromInto(refs, to, types)
 	return t.queryLinks(ctx, q, args...)
+}
+
+// LinksEnteringAt implements enteringSelector.
+func (t *pgTx) LinksEnteringAt(ctx context.Context, namespace string, levels []selectLevel, ids []domain.NodeID, types []string, skip []domain.NodeID) ([]domain.Link, error) {
+	if ids = uuidIDs(ids); len(ids) == 0 {
+		return nil, nil
+	}
+	q, args := dialectPG.sqlLinksEnteringAt(namespace, levels, ids, types, uuidIDs(skip))
+	return t.queryLinks(ctx, q, args...)
+}
+
+// LinksEnteringPage implements enteringSelector.
+func (t *pgTx) LinksEnteringPage(ctx context.Context, namespace string, levels []selectLevel, id domain.NodeID, types []string, skip []domain.NodeID,
+	page sourcePage) ([]domain.Link, domain.NodeID, bool, error) {
+	if uuid.Validate(string(id)) != nil {
+		return nil, "", false, nil
+	}
+	q, args := dialectPG.sqlLinksEnteringPage(namespace, levels, id, types, uuidIDs(skip), page)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, "", false, mapErr(err, "links")
+	}
+	defer rows.Close()
+	var out []domain.Link
+	var n int
+	var last string
+	for rows.Next() {
+		var lid, typ, from, to, change, url *string
+		var fv, tv *int
+		var p []byte
+		if err := rows.Scan(&n, &last, &lid, &typ, &from, &fv, &to, &tv, &p, &change, &url); err != nil {
+			return nil, "", false, err
+		}
+		if lid == nil {
+			continue // the page holds no link
+		}
+		l := domain.Link{ID: domain.LinkID(*lid), Type: *typ, Properties: props(p), ChangeID: domain.ChangeID(str(change))}
+		l.From = domain.NodeRef{ID: domain.NodeID(*from), Version: domain.Version(*fv)}
+		if str(to) != "" {
+			l.To = domain.NodeRef{ID: domain.NodeID(*to), Version: domain.Version(*tv)}
+		} else if l.Target, err = lnk.Parse(str(url)); err != nil {
+			return nil, "", false, fmt.Errorf("link %s: %w", *lid, err)
+		}
+		out = append(out, l)
+	}
+	return out, domain.NodeID(last), n > page.Limit, rows.Err()
 }
 
 func (t *pgTx) LinksTo(ctx context.Context, id domain.NodeID) ([]domain.Link, error) {
