@@ -217,7 +217,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 		return strings.Replace(h, `l.from_version = c.sv)`, `l.from_version = c.sv`+and+`)`, 1)
 	}
 	pgPick := func(b, u string) string {
-		return `(SELECT w.version FROM node_version w WHERE w.node_id = s.id AND w.version = (SELECT v.version FROM node_version v WHERE v.node_id = s.id AND EXISTS (SELECT 1 FROM branch_commit j WHERE j.branch = ` + b + ` AND j.seq = v.committed AND j.at > $3 AND j.at <= ` + u + ` OFFSET 0) ORDER BY v.version DESC LIMIT 1) AND NOT (w.reason = 'revert' AND w.branch = ` + b + `))`
+		return `(SELECT w.version FROM node_version w WHERE w.node_id = s.id AND w.version = (SELECT v.version FROM node_version v WHERE v.node_id = s.id AND v.committed BETWEEN (SELECT min(k.seq) FROM branch_commit k WHERE k.branch = ` + b + `) AND (SELECT max(k.seq) FROM branch_commit k WHERE k.branch = ` + b + `) AND (SELECT j.at FROM branch_commit j WHERE j.branch = ` + b + ` AND j.seq = v.committed) BETWEEN $3 + 1 AND ` + u + ` ORDER BY v.committed DESC, v.version DESC LIMIT 1) AND NOT (w.reason = 'revert' AND w.branch = ` + b + `))`
 	}
 	q, a = pg.sqlLinksEnteringAt("ns", []selectLevel{{Branch: "c1", UpTo: 9}, {Branch: "", UpTo: 7}}, []domain.NodeID{"n1"}, []string{"child"}, []domain.NodeID{"d1"})
 	check("pg LinksEnteringAt", pg, q, a, `SELECT `+pgLinkCols+` FROM (`+entering(false,
@@ -225,7 +225,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 		`SELECT x.id, x.version FROM x JOIN node_version w ON w.node_id = x.id AND w.version = x.version WHERE NOT w.deleted`,
 		` AND l.to_id = ANY($2::uuid[]) AND l.type = ANY($4::text[])`)+`) l ORDER BY l.id`,
 		[]any{"ns", []string{"n1"}, int64(0), []string{"child"}, []string{"d1"}, "c1", int64(9), "main", int64(7)})
-	litePick := `(SELECT w.version FROM node_version w WHERE w.node_id = s.id AND w.version = (SELECT v.version FROM node_version v WHERE v.node_id = s.id AND EXISTS (SELECT 1 FROM branch_commit j WHERE j.branch = ? AND j.seq = v.committed AND j.at > ? AND j.at <= ?) ORDER BY v.version DESC LIMIT 1) AND NOT (w.reason = 'revert' AND w.branch = ?))`
+	litePick := `(SELECT w.version FROM node_version w WHERE w.node_id = s.id AND w.version = (SELECT v.version FROM node_version v WHERE v.node_id = s.id AND v.committed BETWEEN (SELECT min(k.seq) FROM branch_commit k WHERE k.branch = ?) AND (SELECT max(k.seq) FROM branch_commit k WHERE k.branch = ?) AND (SELECT j.at FROM branch_commit j WHERE j.branch = ? AND j.seq = v.committed) BETWEEN ? + 1 AND ? ORDER BY v.committed DESC, v.version DESC LIMIT 1) AND NOT (w.reason = 'revert' AND w.branch = ?))`
 	liteRows := `SELECT x.id, x.version FROM x CROSS JOIN node_version w ON w.node_id = x.id AND w.version = x.version WHERE NOT w.deleted`
 	// SQLite: lists joined first (json_each), one value sought
 	q, a = lite.sqlLinksEnteringAt("ns", []selectLevel{{Branch: "", UpTo: 7}}, []domain.NodeID{"n1", "n2"}, []string{"child", "ref"}, nil)
