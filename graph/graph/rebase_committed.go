@@ -181,20 +181,10 @@ func (g *Graph) mergeIn(ctx context.Context, id domain.ChangeID, resolutions map
 	if err != nil {
 		return c, nil, err
 	}
-	var res RebaseResult
-	err = g.changeTx(ctx, id, func(tx Tx) error {
-		// the target is locked before the rebase reads its head (ADR 0127, 0140): the merge runs in one transaction, so no
-		// other merge commits between the rebase and the fast-forward, which would turn it into a three-way merge
-		if own, ok, err := ownBranch(ctx, tx, c); err != nil {
-			return err
-		} else if ok {
-			if err := tx.LockBranch(ctx, c.Namespace, domain.BranchOf(own.Parent)); err != nil {
-				return err
-			}
-		}
-		res, err = g.rebaseTx(ctx, tx, c, true)
-		return err
-	})
+	// the rebase reads the head of the target without its lock (ADR 0127): it writes on the change's branch only, under
+	// the lock of its tree; the fast-forward locks the target once it read what it writes, and a target moved meanwhile
+	// is rebased onto again, under the lock
+	res, err := g.rebaseIn(ctx, id)
 	if err != nil {
 		return c, nil, err
 	}
@@ -208,34 +198,61 @@ func (g *Graph) mergeIn(ctx context.Context, id domain.ChangeID, resolutions map
 		if err := g.checkMerge(ctx, tx, c, closing); err != nil {
 			return err
 		}
-		own, ok, err := ownBranch(ctx, tx, c)
+		merged, err := g.integrateOwn(ctx, tx, c, resolutions, closing)
+		if errors.Is(err, errTargetMoved) {
+			// the target moved since it was read: rebased onto under its lock, which the fast-forward now holds
+			if res, err = g.rebaseTx(ctx, tx, c, true); err != nil {
+				return err
+			} else if res.Changed() {
+				rebased = fmt.Errorf("change %s %s: %w", id, res.Summary(), ErrConflict)
+				return nil
+			}
+			if c, err = tx.Change(ctx, id); err != nil {
+				return err
+			}
+			merged, err = g.integrateOwn(ctx, tx, c, resolutions, closing)
+		}
+		c = merged
+		return err
+	})
+	return c, rebased, err
+}
+
+// rebaseIn rebases a change onto the head of what its branch is forked from, ahead of its merge (merging).
+func (g *Graph) rebaseIn(ctx context.Context, id domain.ChangeID) (res RebaseResult, err error) {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
+		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err
 		}
-		if !ok {
-			return fmt.Errorf("change %s has no branch of its own: %w", id, ErrInvalid)
-		}
-		// the head of the target is read under its lock: a merge commit meanwhile is seen, and this one merges after it
-		// (ADR 0127)
-		if err := tx.LockBranch(ctx, c.Namespace, domain.BranchOf(own.Parent)); err != nil {
-			return err
-		}
-		if c.ParentID == "" {
-			c, err = g.integrate(ctx, tx, c, own, resolutions, closing)
-			return err
-		}
-		// a sub-change fast-forwards the branch of its parent, which takes its work as its own (ADR 0103)
-		if ff, err := g.fastForward(ctx, tx, c, own, closing); err != nil {
-			return err
-		} else if !ff {
-			return fmt.Errorf("the branch of parent change %s moved meanwhile: merge %s again: %w", c.ParentID, id, ErrConflict)
-		}
-		if c, err = tx.Change(ctx, id); err != nil {
-			return err
-		}
-		return g.recordInParent(ctx, tx, c)
+		res, err = g.rebaseTx(ctx, tx, c, true)
+		return err
 	})
-	return c, nil, err
+	return res, err
+}
+
+// integrateOwn merges the branch of a change into what it is forked from: a root change through integrate, a sub-change
+// by a fast-forward of its parent's branch, which takes its work as its own (ADR 0103).
+func (g *Graph) integrateOwn(ctx context.Context, tx Tx, c domain.Change, resolutions map[domain.NodeID]Resolution, closing bool) (domain.Change, error) {
+	own, ok, err := ownBranch(ctx, tx, c)
+	if err != nil {
+		return c, err
+	}
+	if !ok {
+		return c, fmt.Errorf("change %s has no branch of its own: %w", c.ID, ErrInvalid)
+	}
+	if c.ParentID == "" {
+		return g.integrate(ctx, tx, c, own, resolutions, closing)
+	}
+	if ff, err := g.fastForward(ctx, tx, c, own, closing); err != nil {
+		return c, err
+	} else if !ff {
+		return c, fmt.Errorf("the branch of parent change %s moved meanwhile: merge %s again: %w", c.ParentID, c.ID, ErrConflict)
+	}
+	if c, err = tx.Change(ctx, c.ID); err != nil {
+		return c, err
+	}
+	return c, g.recordInParent(ctx, tx, c)
 }
 
 // checkParentDrafts refuses the merge of a sub-change while its parent holds an uncommitted modification of a node the

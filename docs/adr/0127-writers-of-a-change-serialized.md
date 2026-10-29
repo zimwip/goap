@@ -60,3 +60,26 @@ reproduce both on PostgreSQL (`make test-pg`).
   it read, a conflict names the current value and its author) and a review bound to the content it judged (the
   fingerprint of the draft on each entry). Step 3: presence on a node and an optional short claim. Step 4: one
   sub-change per person for parallel work.
+
+## Addendum: the target locked for the writes only
+
+The merge took the lock of its target before the rebase read the head, and held it through the rebase, the checks
+and the reads of the fast-forward: about 15 ms of a close with 4 writers (`goap-bench -mode lifecycle`, PostgreSQL), so
+the target was locked more than half the time and every close waited about 4 ms for it, while the rebase found nothing
+to merge nearly every time (the changes touch other nodes).
+
+The merge now reads first and locks last:
+
+- the rebase reads the head of the target without its lock (`rebaseIn`) and writes on the change's branch only, which
+  the lock of its tree holds;
+- the fast-forward reads what it writes against the head it read, and moves the fork of the branch there when the
+  target moved on other nodes (`prepareFastForward`);
+- it then locks the target and reads its head again: unchanged, it only writes (`applyFastForward`: the commits taken,
+  the header, the head moved, the impacts committed); moved, it is `errTargetMoved`, and the merge rebases onto the new
+  head under the lock it now holds, then merges as before (a fast-forward, or the three-way merge of a race).
+
+A merge that lost the race does the rebase twice; the result is the one of a merge locked from the start. A caller
+already holding the lock of the target (`IntegrateChange` of a committed change) sees no move. Measured with the same
+bench, 150 s: the target is held 9 ms a close instead of 15.5 ms, waited for 1.4 ms instead of 3.8 ms, and the writers
+wrote 8 % more versions (59 552 / 59 406 against 54 872).
+
