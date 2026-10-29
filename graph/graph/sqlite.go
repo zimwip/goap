@@ -192,41 +192,7 @@ func (t *sqliteTx) Node(ctx context.Context, ref domain.NodeRef) (domain.Node, e
 func (t *sqliteTx) LatestOn(ctx context.Context, id domain.NodeID, branch string) (domain.Node, error) {
 	q, args := dialectSQLite.sqlLatestOn(id, branch)
 	n, err := sqliteScanNode(t.tx.QueryRowContext(ctx, q, args...))
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return n, sqliteErr(err, "node "+string(id)+" on "+domain.BranchOf(branch))
-	}
-	// the commits the branch took (ADR 0176): their greatest version, when greater than its own
-	joined, jerr := t.joinedLatest(ctx, []domain.NodeID{id}, branch)
-	if jerr != nil {
-		return domain.Node{}, jerr
-	}
-	if v, ok := joined[id]; ok && (err != nil || v > n.Version) {
-		return t.Node(ctx, domain.NodeRef{ID: id, Version: v})
-	}
 	return n, sqliteErr(err, "node "+string(id)+" on "+domain.BranchOf(branch))
-}
-
-// joinedLatest reads the greatest version of some nodes among the commits a branch took (ADR 0176).
-func (t *sqliteTx) joinedLatest(ctx context.Context, ids []domain.NodeID, branch string) (map[domain.NodeID]domain.Version, error) {
-	out := map[domain.NodeID]domain.Version{}
-	if len(ids) == 0 {
-		return out, nil
-	}
-	q, args := dialectSQLite.sqlJoinedLatest(ids, branch)
-	rows, err := t.tx.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, sqliteErr(err, "nodes")
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		var v int
-		if err := rows.Scan(&id, &v); err != nil {
-			return nil, err
-		}
-		out[domain.NodeID(id)] = domain.Version(v)
-	}
-	return out, rows.Err()
 }
 
 func (t *sqliteTx) DerivedNodes(ctx context.Context, ref domain.NodeRef) ([]domain.Node, error) {
@@ -387,10 +353,8 @@ func (t *sqliteTx) NodesAt(ctx context.Context, refs []domain.NodeRef, nodeType 
 func (t *sqliteTx) LatestNodes(ctx context.Context, namespace, branch string) ([]domain.Node, error) {
 	ns, br := domain.NamespaceOf(namespace), domain.BranchOf(branch)
 	return t.nodes(ctx, `SELECT `+dialectSQLite.nodeCols()+nodeFrom+`
-		WHERE n.namespace = ? AND v.version = (SELECT max(version) FROM (
-		  SELECT version FROM node_version WHERE node_id = n.id AND branch = ?
-		  UNION ALL SELECT w.version FROM node_version w JOIN branch_commit j ON j.branch = ? AND j.seq = w.committed WHERE w.node_id = n.id))
-		ORDER BY n.key`, ns, br, br)
+		WHERE n.namespace = ?1 AND v.version = `+dialectSQLite.latestHeld("n.id", "?2", "", "")+`
+		ORDER BY n.key`, ns, br)
 }
 
 func (t *sqliteTx) Namespaces(ctx context.Context) ([]string, error) {
@@ -460,15 +424,6 @@ func (t *sqliteTx) LatestVersionsOn(ctx context.Context, ids []domain.NodeID, br
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
-	}
-	joined, err := t.joinedLatest(ctx, ids, branch)
-	if err != nil {
-		return nil, err
-	}
-	for id, v := range joined {
-		if v > out[id] {
-			out[id] = v
-		}
 	}
 	return out, nil
 }
@@ -554,47 +509,26 @@ func (t *sqliteTx) commits(ctx context.Context, namespace, branch string, after,
 	if ids != nil && len(ids) == 0 {
 		return map[domain.NodeID]CommittedVersion{}, nil
 	}
-	own := map[domain.NodeID]ownVersion{}
 	q, args := dialectSQLite.sqlCommittedVersions(namespace, branch, after, upTo, ids)
 	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+	out := map[domain.NodeID]CommittedVersion{}
+	branch = domain.BranchOf(branch)
 	for rows.Next() {
-		var nid, reason string
+		var nid, reason, on string
 		var v int
-		var o ownVersion
-		if err := rows.Scan(&nid, &v, &o.Deleted, &reason, &o.Committed); err != nil {
+		var cv CommittedVersion
+		if err := rows.Scan(&nid, &v, &cv.Deleted, &reason, &on); err != nil {
 			return nil, err
 		}
-		o.Version, o.Revert = domain.Version(v), reason == domain.ReasonRevert
-		own[domain.NodeID(nid)] = o
+		// a branch reading its own revert reads its fork's version: its work on the node is none (ADR 0176)
+		cv.Version, cv.Revert = domain.Version(v), reason == domain.ReasonRevert && on == branch
+		out[domain.NodeID(nid)] = cv
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	joined := map[domain.NodeID]joinedVersion{}
-	q, args = dialectSQLite.sqlJoinedVersions(namespace, branch, after, upTo, ids)
-	jrows, err := t.tx.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer jrows.Close()
-	for jrows.Next() {
-		var nid, reason string
-		var v int
-		var j joinedVersion
-		if err := jrows.Scan(&nid, &v, &j.At, &j.Deleted, &reason); err != nil {
-			return nil, err
-		}
-		j.Version = domain.Version(v)
-		joined[domain.NodeID(nid)] = j
-	}
-	if err := jrows.Err(); err != nil {
-		return nil, err
-	}
-	return lastCommitted(own, joined), nil
+	return out, rows.Err()
 }
 
 func (t *sqliteTx) NextCommit(ctx context.Context) (int64, error) {

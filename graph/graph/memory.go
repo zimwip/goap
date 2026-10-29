@@ -192,19 +192,16 @@ type memJoin struct {
 	at     int64
 }
 
-// on reports whether a version is part of a branch: written there, or of a commit it took.
+// on reports whether a version is part of a branch: of a commit the branch holds.
 func (t *memTx) on(n domain.Node, branch string) bool {
-	branch = domain.BranchOf(branch)
-	if domain.BranchOf(n.Branch) == branch {
-		return true
-	}
-	_, ok := t.taken(n, branch)
+	_, ok := t.holds(n, domain.BranchOf(branch))
 	return ok
 }
 
-// taken tells the order a branch took the commit of a version written on another branch at (ADR 0176).
-func (t *memTx) taken(n domain.Node, branch string) (int64, bool) {
-	if n.Committed <= 0 || domain.BranchOf(n.Branch) == branch {
+// holds tells the order a branch holds the commit of a version from (ADR 0176): its own commit's, or the order of the
+// merge that took it.
+func (t *memTx) holds(n domain.Node, branch string) (int64, bool) {
+	if n.Committed <= 0 {
 		return 0, false
 	}
 	j, ok := t.st.joins[joinKey{branch, n.Committed}]
@@ -713,29 +710,22 @@ func (t *memTx) commits(namespace, branch string, after, upTo int64, ids []domai
 			want[id] = true
 		}
 	}
-	own, joined := map[domain.NodeID]ownVersion{}, map[domain.NodeID]joinedVersion{}
+	out := map[domain.NodeID]CommittedVersion{}
 	for id, vs := range t.st.versions {
 		if want != nil && !want[id] || len(vs) == 0 || domain.NamespaceOf(vs[0].Namespace) != namespace {
 			continue
 		}
-		for _, v := range vs {
-			cv := CommittedVersion{Version: v.Version, Deleted: v.Deleted}
-			if domain.BranchOf(v.Branch) == branch {
-				if v.Committed <= after || v.Committed > upTo {
-					continue
-				}
-				if o, ok := own[id]; !ok || v.Committed > o.Committed || v.Committed == o.Committed && v.Version > o.Version {
-					cv.Revert = v.Reason == domain.ReasonRevert
-					own[id] = ownVersion{cv, v.Committed}
-				}
-			} else if at, ok := t.taken(v, branch); ok && at > after && at <= upTo {
-				if j, ok := joined[id]; !ok || v.Version > j.Version {
-					joined[id] = joinedVersion{cv, at}
-				}
+		// the greatest version of a commit the branch holds in the range (sqlCommittedVersions)
+		for i := len(vs) - 1; i >= 0; i-- {
+			v := vs[i]
+			if at, ok := t.holds(v, branch); ok && at > after && at <= upTo {
+				out[id] = CommittedVersion{Version: v.Version, Deleted: v.Deleted,
+					Revert: v.Reason == domain.ReasonRevert && domain.BranchOf(v.Branch) == branch}
+				break
 			}
 		}
 	}
-	return lastCommitted(own, joined), nil
+	return out, nil
 }
 
 func (t *memTx) NextCommit(context.Context) (int64, error) {
@@ -797,15 +787,7 @@ func (t *memTx) BranchNodeIDs(_ context.Context, branch string) ([]domain.NodeID
 	}
 	for id, vs := range t.st.versions {
 		for _, v := range vs {
-			if domain.BranchOf(v.Branch) == branch {
-				add(id)
-				break
-			}
-		}
-	}
-	for id, vs := range t.st.versions {
-		for _, v := range vs {
-			if _, ok := t.taken(v, branch); ok {
+			if _, ok := t.holds(v, branch); ok {
 				add(id)
 				break
 			}
@@ -1338,13 +1320,6 @@ func (t *memTx) StoreCounts(_ context.Context, namespace string) (map[string]map
 func (t *memTx) LastCommit(_ context.Context, branch string) (int64, error) {
 	branch = domain.BranchOf(branch)
 	var last int64
-	for _, vs := range t.st.versions {
-		for _, v := range vs {
-			if domain.BranchOf(v.Branch) == branch {
-				last = max(last, v.Committed)
-			}
-		}
-	}
 	for k, j := range t.st.joins {
 		if k.branch == branch {
 			last = max(last, j.at)
