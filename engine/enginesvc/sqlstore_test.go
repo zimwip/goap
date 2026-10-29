@@ -2,6 +2,7 @@ package enginesvc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -158,7 +159,12 @@ func TestSQLStoreOutbox(t *testing.T) {
 				t.Fatalf("fenced write: %v", err)
 			}
 			pending, err := a.Pending(ctx, 10)
-			if err != nil || len(pending) != 1 || pending[0].Subject != "goap.process.p.running" || string(pending[0].Data) != `{"event":"running"}` {
+			// PostgreSQL keeps the payload as jsonb, which rewrites its spacing: compare the values.
+			var data map[string]string
+			if err == nil && len(pending) == 1 {
+				_ = json.Unmarshal(pending[0].Data, &data)
+			}
+			if err != nil || len(pending) != 1 || pending[0].Subject != "goap.process.p.running" || data["event"] != "running" || len(data) != 1 {
 				t.Fatalf("pending: %+v %v", pending, err)
 			}
 			if err := a.MarkPublished(ctx, []int64{pending[0].Seq}, now); err != nil {
