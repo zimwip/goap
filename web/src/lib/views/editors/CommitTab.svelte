@@ -40,6 +40,7 @@
 
   const SIZES = [25, 50, 100, 200];
   const HW_KEY = 'goap.ide.commit.historyWidth';
+  const LANES_KEY = 'goap.ide.commit.historyLanes';
   const CH_KEY = 'goap.ide.commit.compareHeight';
 
   let { tab }: { tab: Tab } = $props();
@@ -47,6 +48,15 @@
   const namespace = $derived(tab.params.namespace ?? '');
   const branchName = $derived(tab.params.branch || MAIN_BRANCH);
   let historyWidth = $state(typeof loadRaw(HW_KEY) === 'number' ? (loadRaw(HW_KEY) as number) : 320);
+  /** the text the history's rows are matched against (the others dimmed), and whether the changes' lanes show */
+  let historyFilter = $state('');
+  let lanes = $state(loadRaw(LANES_KEY) !== false);
+  function toggleLanes() {
+    lanes = !lanes;
+    save(LANES_KEY, lanes);
+  }
+  /** the commit the shown one is compared with (CommitCompare: its parent unless picked from the history) */
+  let compareFrom = $state('');
   function resizeHistory(v: number) {
     historyWidth = v;
     save(HW_KEY, v);
@@ -162,6 +172,7 @@
     const items: ContextMenuItem[] = [{ label: open ? 'Show its fork point here' : 'Show here', icon: 'database', run: () => selectHistory(id) }];
     if (br !== branchName) items.push({ label: `Open in its branch (${branchLabel(br)})`, icon: 'branch', run: () => openCommit(namespace, br, open ? undefined : id) });
     if (changeId) items.push({ label: 'Open change', icon: 'external', run: () => openTab({ kind: 'change', params: { id: changeId } }, { pin: true }) });
+    if (!open && id !== shownId) items.push({ label: 'Compare with the commit shown', icon: 'diff', run: () => (compareFrom = id) });
     if (!open) items.push({ label: 'Copy commit id', icon: 'copy', run: () => void navigator.clipboard?.writeText(id) });
     openContextMenu(e, items);
   }
@@ -443,7 +454,11 @@
   <div class="workspace">
     <nav class="card history" style:width="{historyWidth}px" aria-label="History">
       <h3>History <span class="hint">{branchName}</span></h3>
-      <CommitBranchGraph {commits} {branches} branch={branchName} {forkCommit} selected={shownId} onselect={selectHistory} onopen={selectHistory} oncontextmenu={historyMenu} />
+      <div class="htools">
+        <input type="search" placeholder="Filter title, change, date…" aria-label="Filter the history" bind:value={historyFilter} data-no-pin />
+        <label class="hint" title="Show the branch of each change that committed here and the open branches forked from it"><input type="checkbox" checked={lanes} onchange={toggleLanes} /> Changes</label>
+      </div>
+      <CommitBranchGraph {commits} {branches} branch={branchName} {forkCommit} selected={shownId} filter={historyFilter} {lanes} onselect={selectHistory} onopen={selectHistory} oncontextmenu={historyMenu} />
       {#if next}<button type="button" class="link small older" disabled={older} onclick={loadOlder}>{older ? 'Loading…' : 'Older commits'}</button>{/if}
     </nav>
 
@@ -662,7 +677,7 @@
   {#if commit}
   <Resizer orientation="horizontal" value={compareShown} min={120} max={compareMax} invert label="Compare panel height" onresize={resizeCompare} />
   <div class="compare-wrap" style:height="{compareShown}px">
-    <CommitCompare {commit} candidates={commits} />
+    <CommitCompare {commit} candidates={commits} bind:from={compareFrom} />
   </div>
 {/if}
 </div>
@@ -717,6 +732,27 @@
   .history .older {
     align-self: center;
     margin: 0.4rem 0;
+  }
+  .htools {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+    flex: none;
+  }
+  .htools input[type='search'] {
+    flex: 1;
+    min-width: 0;
+  }
+  .htools label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+  }
+  .htools input[type='checkbox'] {
+    width: auto;
+    margin: 0;
   }
   .history h3 {
     margin: 0 0 0.2rem;

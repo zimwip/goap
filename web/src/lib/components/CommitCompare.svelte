@@ -11,12 +11,20 @@
   import { openNode } from '../nodeEditors';
 
   /** candidates: the commits offered as "from" (the history the caller read), newest last */
-  let { commit, candidates = [] }: { commit: Commit; candidates?: Commit[] } = $props();
+  let {
+    commit,
+    candidates = [],
+    from = $bindable(''),
+  }: {
+    commit: Commit;
+    candidates?: Commit[];
+    /** the commit compared with (its id, `∅` the empty state): the parent of the commit unless the host picks another */
+    from?: string;
+  } = $props();
 
   const others = $derived(candidates.filter((x) => x.id !== commit.id).reverse());
   /** the empty state, a choice of "from" (its id is "", which the select keeps for nothing chosen) */
   const EMPTY = '∅';
-  let from = $state('');
   let diff = $state<CommitDiff[] | undefined>();
   /** the changes that explain the difference (ADR 0133) */
   let added = $state<StackChange[]>([]);
@@ -24,7 +32,12 @@
   let stackOpen = $state(false);
   let error = $state('');
 
+  // a new commit shown is compared with its parent; the host may then pick another (the history's "Compare with")
+  let comparedFor = '';
   $effect(() => {
+    const id = commit.id ?? '';
+    if (id === comparedFor) return;
+    comparedFor = id;
     from = commit.parentId || EMPTY;
   });
 
