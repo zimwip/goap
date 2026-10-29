@@ -953,16 +953,42 @@ func (d dialect) sqlLinksFromOfType(refs []domain.NodeRef, types []string) (stri
 	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksOfType(1, n) + `) l ORDER BY l.id`, append(args, arg)
 }
 
-// sqlLinkSources reads the nodes a link row names a node as its target from (link_to), each once.
-func (d dialect) sqlLinkSources(id domain.NodeID) (string, []any) {
-	return `SELECT DISTINCT ` + d.id("from_id") + ` FROM link WHERE to_id = ` + d.ph(1) + ` AND removes IS NULL`, []any{string(id)}
+// sqlLinkSources reads the nodes a link row of some types (nil: every type) names one of the nodes ids as its target
+// from, each pair once (link_to_type: by target and type, the source in the index).
+func (d dialect) sqlLinkSources(ids []domain.NodeID, types []string) (string, []any) {
+	in, arg := d.idList("to_id", 1, ids)
+	where, args := in, []any{arg}
+	if types != nil {
+		tin, targ := d.textList("type", 2, types)
+		where, args = where+` AND `+tin, append(args, targ)
+	}
+	return `SELECT DISTINCT ` + d.id("to_id") + `, ` + d.id("from_id") + ` FROM link WHERE ` + where + ` AND removes IS NULL`, args
 }
 
-// sqlLinksFromInto is sqlLinksFrom keeping the links into a node: a drop row has the target of the link it drops, so
-// the filter keeps the drops of the links it keeps.
-func (d dialect) sqlLinksFromInto(refs []domain.NodeRef, to domain.NodeID) (string, []any) {
+// sqlLinksFromInto is sqlLinksFrom keeping the links of some types (nil: every type) into some nodes: a drop row has
+// the target and the type of the link it drops, so the filter keeps the drops of the links it keeps.
+func (d dialect) sqlLinksFromInto(refs []domain.NodeRef, to []domain.NodeID, types []string) (string, []any) {
 	args, n := d.refsArgs(refs)
-	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksWhere(1, " AND l.to_id = "+d.ph(n)) + `) l ORDER BY l.id`, append(args, string(to))
+	in, arg := d.idList("l.to_id", n, to)
+	and, args := ` AND `+in, append(args, arg)
+	if types != nil {
+		tin, targ := d.textList("l.type", n+1, types)
+		and, args = and+` AND `+tin, append(args, targ)
+	}
+	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksWhere(1, and) + `) l ORDER BY l.id`, args
+}
+
+// idList is col in the node ids at placeholder n, and the argument it takes.
+func (d dialect) idList(col string, n int, ids []domain.NodeID) (string, any) {
+	list := make([]string, len(ids))
+	for i, id := range ids {
+		list[i] = string(id)
+	}
+	if d.pg {
+		return col + ` = ANY(` + d.ph(n) + `::uuid[])`, list
+	}
+	b, _ := json.Marshal(list)
+	return col + ` IN (SELECT value FROM json_each(` + d.ph(n) + `))`, string(b)
 }
 
 // linkRefsWhere selects the links between two of the versions refs matching the text of q.

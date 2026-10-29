@@ -1156,18 +1156,26 @@ func (t *sqliteTx) LinksToOfType(ctx context.Context, ref domain.NodeRef, types 
 	return t.queryLinks(ctx, q, args...)
 }
 
-func (t *sqliteTx) LinkSources(ctx context.Context, id domain.NodeID) ([]domain.NodeID, error) {
-	q, args := dialectSQLite.sqlLinkSources(id)
-	ids, err := t.ids(ctx, q, args...)
-	out := make([]domain.NodeID, len(ids))
-	for i, id := range ids {
-		out[i] = domain.NodeID(id)
+func (t *sqliteTx) LinkSources(ctx context.Context, ids []domain.NodeID, types []string) ([]LinkSource, error) {
+	q, args := dialectSQLite.sqlLinkSources(ids, types)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
 	}
-	return out, err
+	defer rows.Close()
+	var out []LinkSource
+	for rows.Next() {
+		var to, from string
+		if err := rows.Scan(&to, &from); err != nil {
+			return nil, err
+		}
+		out = append(out, LinkSource{To: domain.NodeID(to), From: domain.NodeID(from)})
+	}
+	return out, rows.Err()
 }
 
-func (t *sqliteTx) LinksFromInto(ctx context.Context, refs []domain.NodeRef, to domain.NodeID) ([]domain.Link, error) {
-	q, args := dialectSQLite.sqlLinksFromInto(refs, to)
+func (t *sqliteTx) LinksFromInto(ctx context.Context, refs []domain.NodeRef, to []domain.NodeID, types []string) ([]domain.Link, error) {
+	q, args := dialectSQLite.sqlLinksFromInto(refs, to, types)
 	return t.queryLinks(ctx, q, args...)
 }
 

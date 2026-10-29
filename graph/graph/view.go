@@ -308,92 +308,175 @@ func (w *world) linkTypes(types []string) []string {
 	return slices.Compact(out)
 }
 
-func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID, types []string) (nb Neighbourhood, err error) {
+func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID, types []string) (Neighbourhood, error) {
 	at, err := w.at(ctx, tx, []domain.NodeID{nodeID})
 	if err != nil {
-		return nb, err
+		return Neighbourhood{}, err
 	}
 	v, ok := at[nodeID]
 	if !ok {
-		return nb, fmt.Errorf("node %s in %s: %w", nodeID, w.view, ErrNotFound)
-	}
-	ref := domain.NodeRef{ID: nodeID, Version: v}
-	if nb.Node, err = w.node(ctx, tx, ref); err != nil {
-		return nb, err
-	}
-	if !w.sees(nb.Node) {
 		return Neighbourhood{}, fmt.Errorf("node %s in %s: %w", nodeID, w.view, ErrNotFound)
 	}
+	n, err := w.node(ctx, tx, domain.NodeRef{ID: nodeID, Version: v})
+	if err != nil {
+		return Neighbourhood{}, err
+	}
+	if !w.sees(n) {
+		return Neighbourhood{}, fmt.Errorf("node %s in %s: %w", nodeID, w.view, ErrNotFound)
+	}
+	nbs, err := w.neighbourhoods(ctx, tx, []domain.Node{n}, types, bothWays)
+	return nbs[nodeID], err
+}
+
+// linkWays says which links of a node a neighbourhood reads: those leaving it, those entering it, or both.
+type linkWays int
+
+const (
+	bothWays linkWays = iota
+	leaving
+	entering
+)
+
+// neighbourhoods reads the neighbourhoods of several nodes of the world, as it holds them and the caller reads them, in
+// one batch (each read of the store once for them all, never once per node: a hop of a query reads its frontier so),
+// keeping the links of some types (nil: every type) in some ways.
+func (w *world) neighbourhoods(ctx context.Context, tx Tx, centres []domain.Node, types []string, ways linkWays) (map[domain.NodeID]Neighbourhood, error) {
+	out := make(map[domain.NodeID]Neighbourhood, len(centres))
+	held := map[domain.NodeID]domain.NodeRef{} // the version of each node read, by node
+	ids := make([]domain.NodeID, 0, len(centres))
+	var stored []domain.NodeRef
+	for _, n := range centres {
+		ref := n.Ref()
+		out[ref.ID], held[ref.ID] = Neighbourhood{Node: n}, ref
+		ids = append(ids, ref.ID)
+		if !ref.IsDraft() {
+			stored = append(stored, ref)
+		}
+	}
+	if len(held) == 0 {
+		return out, nil
+	}
+	var err error
 	keep := func(l domain.Link) bool { return types == nil || slices.Contains(types, l.Type) }
 	// Outgoing links belong to the source version: all of them are the node's. Incoming links may target any version
 	// of the node (suspect links): keep those whose source is at the version the world holds. The drafts of a change
-	// hold links into the node too. A hop of some types reads those types only (LinksFromOfType / LinksToOfType).
-	var out, in []domain.Link
-	switch {
-	case types == nil || ref.IsDraft():
-		out, err = w.reader.outLinks(ctx, tx, ref)
-	case len(types) > 0:
-		out, err = tx.LinksFromOfType(ctx, []domain.NodeRef{ref}, types)
-	}
-	if err != nil {
-		return nb, err
-	}
-	if types == nil || len(types) > 0 {
-		in, err = w.entering(ctx, tx, nodeID)
-	}
-	if err != nil {
-		return nb, err
-	}
-	out = slices.DeleteFunc(out, func(l domain.Link) bool { return !keep(l) })
-	in = slices.DeleteFunc(in, func(l domain.Link) bool { return !keep(l) })
-	for _, d := range w.drafts() {
-		if d == nodeID {
-			continue
-		}
-		dl, err := w.reader.outLinks(ctx, tx, domain.NodeRef{ID: d})
-		if err != nil {
-			return nb, err
-		}
-		for _, l := range dl {
-			if !l.External() && l.To.ID == nodeID && keep(l) {
-				in = append(in, l)
+	// hold links into the node too. A hop of some types reads those types only (LinksFromOfType, LinkSources).
+	outOf, inOf := map[domain.NodeID][]domain.Link{}, map[domain.NodeID][]domain.Link{}
+	if ways != entering {
+		switch {
+		case types == nil:
+			if err := prefetchVersions(ctx, tx, stored); err != nil {
+				return nil, err
+			}
+			for id, ref := range held {
+				if outOf[id], err = w.reader.outLinks(ctx, tx, ref); err != nil {
+					return nil, err
+				}
+			}
+		case len(types) > 0:
+			for id, ref := range held {
+				if ref.IsDraft() {
+					if outOf[id], err = w.reader.outLinks(ctx, tx, ref); err != nil {
+						return nil, err
+					}
+				}
+			}
+			if len(stored) > 0 {
+				ls, err := tx.LinksFromOfType(ctx, stored, types)
+				if err != nil {
+					return nil, err
+				}
+				for _, l := range ls {
+					outOf[l.From.ID] = append(outOf[l.From.ID], l)
+				}
 			}
 		}
 	}
-	var ends []domain.NodeID
-	for _, l := range out {
-		if !l.External() {
-			ends = append(ends, l.To.ID)
+	if ways != leaving && (types == nil || len(types) > 0) {
+		targets := make([]domain.NodeID, 0, len(held))
+		for id := range held {
+			targets = append(targets, id)
+		}
+		slices.Sort(targets)
+		if inOf, err = w.enteringOf(ctx, tx, targets, types); err != nil {
+			return nil, err
+		}
+		for _, d := range w.drafts() {
+			dl, err := w.reader.outLinks(ctx, tx, domain.NodeRef{ID: d})
+			if err != nil {
+				return nil, err
+			}
+			for _, l := range dl {
+				// a link of a draft to itself is among its outgoing links, unless they are not read
+				if _, ok := held[l.To.ID]; ok && !l.External() && (l.To.ID != d || ways == entering) && keep(l) {
+					inOf[l.To.ID] = append(inOf[l.To.ID], l)
+				}
+			}
 		}
 	}
-	for _, l := range in {
-		ends = append(ends, l.From.ID)
+	for id := range held {
+		outOf[id] = slices.DeleteFunc(outOf[id], func(l domain.Link) bool { return !keep(l) })
+		inOf[id] = slices.DeleteFunc(inOf[id], func(l domain.Link) bool { return !keep(l) })
+	}
+	var ends []domain.NodeID
+	for id := range held {
+		for _, l := range outOf[id] {
+			if !l.External() {
+				ends = append(ends, l.To.ID)
+			}
+		}
+		for _, l := range inOf[id] {
+			ends = append(ends, l.From.ID)
+		}
 	}
 	slices.Sort(ends)
-	if at, err = w.at(ctx, tx, slices.Compact(ends)); err != nil {
-		return nb, err
+	at, err := w.at(ctx, tx, slices.Compact(ends))
+	if err != nil {
+		return nil, err
 	}
 	// the neighbours are read in one batch (one statement for the stored ones), never one by one: a hub has thousands
-	var refs []domain.NodeRef
-	for _, l := range out {
-		if l.External() {
+	var nrefs []domain.NodeRef
+	for id := range held {
+		for _, l := range outOf[id] {
+			if l.External() {
+				continue
+			}
+			if tv, ok := at[l.To.ID]; ok {
+				nrefs = append(nrefs, domain.NodeRef{ID: l.To.ID, Version: tv})
+			} else if !l.To.IsDraft() {
+				nrefs = append(nrefs, l.To)
+			}
+		}
+		for _, l := range inOf[id] {
+			if fv, ok := at[l.From.ID]; ok && fv == l.From.Version && l.From.ID != id {
+				nrefs = append(nrefs, l.From)
+			}
+		}
+	}
+	near, err := w.reader.nodes(ctx, tx, nrefs)
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		ref, ok := held[id]
+		if !ok {
 			continue
 		}
-		if tv, ok := at[l.To.ID]; ok {
-			refs = append(refs, domain.NodeRef{ID: l.To.ID, Version: tv})
-		} else if !l.To.IsDraft() {
-			refs = append(refs, l.To)
+		nb := out[id]
+		if err := w.assemble(ctx, tx, &nb, ref, outOf[id], inOf[id], ways == entering, at, near); err != nil {
+			return nil, err
 		}
+		out[id] = nb
 	}
-	for _, l := range in {
-		if fv, ok := at[l.From.ID]; ok && fv == l.From.Version && l.From.ID != nodeID {
-			refs = append(refs, l.From)
-		}
-	}
-	near, err := w.reader.nodes(ctx, tx, refs)
-	if err != nil {
-		return nb, err
-	}
+	return out, nil
+}
+
+// assemble lays the links of a node read at ref into its neighbourhood with the nodes at their other ends, at the
+// versions at the world holds them (read already in near). A link to itself is among the outgoing links, or among the
+// entering ones when selfIn (the outgoing ones not read).
+func (w *world) assemble(ctx context.Context, tx Tx, nb *Neighbourhood, ref domain.NodeRef, out, in []domain.Link, selfIn bool,
+	at map[domain.NodeID]domain.Version, near map[domain.NodeRef]domain.Node) error {
+	nodeID, v := ref.ID, ref.Version
 	// a neighbour the caller does not read is left out with the links to it (ADR 0161 §5: no stub)
 	seen := map[domain.NodeID]bool{nodeID: true}
 	add := func(r domain.NodeRef) (bool, error) {
@@ -427,7 +510,7 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID, 
 			continue // a draft the change no longer holds
 		}
 		if ok, err := add(to); err != nil {
-			return nb, err
+			return err
 		} else if !ok {
 			continue
 		}
@@ -439,7 +522,7 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID, 
 	slices.SortStableFunc(in, func(a, b domain.Link) int { return int(a.To.Version) - int(b.To.Version) })
 	taken := map[domain.LinkID]bool{}
 	for _, l := range in {
-		if l.From.ID == nodeID || taken[l.ID] {
+		if (l.From.ID == nodeID && !selfIn) || taken[l.ID] {
 			continue // a self link is already among the outgoing ones
 		}
 		if v != 0 && l.To.Version > v {
@@ -449,7 +532,7 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID, 
 			continue // not the version of its source the world holds
 		}
 		if ok, err := add(l.From); err != nil {
-			return nb, err
+			return err
 		} else if !ok {
 			continue
 		}
@@ -459,7 +542,7 @@ func (w *world) neighbourhood(ctx context.Context, tx Tx, nodeID domain.NodeID, 
 		taken[l.ID] = true
 		nb.Links = append(nb.Links, l)
 	}
-	return nb, nil
+	return nil
 }
 
 // preloadIn gives the reader the stored links entering the version of a node it will read (the one a draft was
@@ -472,10 +555,11 @@ func (w *world) preloadIn(ctx context.Context, tx Tx, ref domain.NodeRef) error 
 	if ref.IsDraft() {
 		return nil
 	}
-	links, err := w.entering(ctx, tx, ref.ID)
+	entering, err := w.enteringOf(ctx, tx, []domain.NodeID{ref.ID}, nil)
 	if err != nil {
 		return err
 	}
+	links := entering[ref.ID]
 	in := []domain.Link{}
 	for _, l := range links {
 		if l.To == ref {
@@ -489,15 +573,21 @@ func (w *world) preloadIn(ctx context.Context, tx Tx, ref domain.NodeRef) error 
 	return nil
 }
 
-// entering reads the stored links entering a node from the versions of their sources the world holds: the sources
-// first, then the links their versions hold into the node, so a source with a long history costs one version, not one
-// row per version holding the link. A source the world holds as a draft is left to the drafts' links.
-func (w *world) entering(ctx context.Context, tx Tx, nodeID domain.NodeID) ([]domain.Link, error) {
-	sources, err := tx.LinkSources(ctx, nodeID)
-	if err != nil || len(sources) == 0 {
-		return nil, err
+// enteringOf reads the stored links of some types (nil: every type) entering some nodes from the versions of their
+// sources the world holds, by target: the sources first, then the links their versions hold into the nodes, so a
+// source with a long history costs one version, not one row per version holding the link. A source the world holds as
+// a draft is left to the drafts' links.
+func (w *world) enteringOf(ctx context.Context, tx Tx, ids []domain.NodeID, types []string) (map[domain.NodeID][]domain.Link, error) {
+	pairs, err := tx.LinkSources(ctx, ids, types)
+	if err != nil || len(pairs) == 0 {
+		return map[domain.NodeID][]domain.Link{}, err
+	}
+	sources := make([]domain.NodeID, len(pairs))
+	for i, p := range pairs {
+		sources[i] = p.From
 	}
 	slices.Sort(sources)
+	sources = slices.Compact(sources)
 	at, err := w.at(ctx, tx, sources)
 	if err != nil {
 		return nil, err
@@ -508,10 +598,18 @@ func (w *world) entering(ctx context.Context, tx Tx, nodeID domain.NodeID) ([]do
 			refs = append(refs, domain.NodeRef{ID: id, Version: v})
 		}
 	}
+	out := map[domain.NodeID][]domain.Link{}
 	if len(refs) == 0 {
-		return nil, nil
+		return out, nil
 	}
-	return tx.LinksFromInto(ctx, refs, nodeID)
+	links, err := tx.LinksFromInto(ctx, refs, ids, types)
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range links {
+		out[l.To.ID] = append(out[l.To.ID], l)
+	}
+	return out, nil
 }
 
 // ViewNodes returns a page of the nodes of a view ordered by key, matching q (ADR 0157): for a branch view the page of

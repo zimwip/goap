@@ -1143,19 +1143,22 @@ func ofTypes(ls []domain.Link, types []string) []domain.Link {
 	return slices.DeleteFunc(ls, func(l domain.Link) bool { return !slices.Contains(types, l.Type) })
 }
 
-func (t *memTx) LinkSources(_ context.Context, id domain.NodeID) ([]domain.NodeID, error) {
-	var out []domain.NodeID
+func (t *memTx) LinkSources(_ context.Context, ids []domain.NodeID, types []string) ([]LinkSource, error) {
+	var out []LinkSource
 	for _, l := range t.st.links {
-		if l.To.ID == id && !slices.Contains(out, l.From.ID) {
-			out = append(out, l.From.ID)
+		s := LinkSource{To: l.To.ID, From: l.From.ID}
+		if slices.Contains(ids, l.To.ID) && (types == nil || slices.Contains(types, l.Type)) && !slices.Contains(out, s) {
+			out = append(out, s)
 		}
 	}
 	return out, nil
 }
 
-func (t *memTx) LinksFromInto(ctx context.Context, refs []domain.NodeRef, to domain.NodeID) ([]domain.Link, error) {
+func (t *memTx) LinksFromInto(ctx context.Context, refs []domain.NodeRef, to []domain.NodeID, types []string) ([]domain.Link, error) {
 	ls, _ := t.LinksFrom(ctx, refs)
-	return slices.DeleteFunc(ls, func(l domain.Link) bool { return l.To.ID != to }), nil
+	return slices.DeleteFunc(ls, func(l domain.Link) bool {
+		return !slices.Contains(to, l.To.ID) || (types != nil && !slices.Contains(types, l.Type))
+	}), nil
 }
 
 func (t *memTx) LinksTo(_ context.Context, id domain.NodeID) ([]domain.Link, error) {

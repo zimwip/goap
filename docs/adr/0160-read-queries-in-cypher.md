@@ -42,7 +42,12 @@ would ignore the views and need keeping in sync.
    with no anchor is refused: `MATCH (n) RETURN n` would read the namespace whole. From the anchor the pattern grows left
    and right through the neighbourhoods of the view, each reading the link types its relationship names
    (`Graph.ViewNeighbourhoodOf`: `Tx.LinksFromOfType` / `LinksToOfType`, an unqualified type also read in the view's
-   namespace). The conditions of the WHERE are checked as soon as their variables are bound, so a filter prunes the walk.
+   namespace) in the direction it names only (along the links: those leaving the node; against them: those entering it).
+   A hop reads its frontier in one batch (`world.neighbourhoods`): the nodes a hop reaches, and the candidates of an
+   anchor, are noted for the next hop (`queryRun.hint`), whose first read takes theirs with it, up to `queryHopBatch`
+   (200) nodes; the reads counted and the rows are those of a hop read node by node (`TestQueryFrontier`), the
+   statements a fraction (three hops down a tree of 1111 nodes: 556 statements and 514 ms on PostgreSQL before, 36 and
+   77 ms after, `BenchmarkQueryView`). The conditions of the WHERE are checked as soon as their variables are bound, so a filter prunes the walk.
    A label matches the type, a type extending it, and names its namespace or not (`Requirement` matches
    `alm@Requirement`). A node's `key`, `type`, `state`, `id`, `version`, `namespace`, `owner` and `project` are its own
    fields; any other name is a property. A relationship is used once per clause. The clauses match in order: an

@@ -1671,21 +1671,21 @@ func (t *pgTx) LinksToOfType(ctx context.Context, ref domain.NodeRef, types []st
 	return t.queryLinks(ctx, q, args...)
 }
 
-func (t *pgTx) LinkSources(ctx context.Context, id domain.NodeID) ([]domain.NodeID, error) {
-	q, args := dialectPG.sqlLinkSources(id)
+func (t *pgTx) LinkSources(ctx context.Context, ids []domain.NodeID, types []string) ([]LinkSource, error) {
+	q, args := dialectPG.sqlLinkSources(ids, types)
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.NodeID, error) {
-		var id string
-		err := r.Scan(&id)
-		return domain.NodeID(id), err
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (LinkSource, error) {
+		var to, from string
+		err := r.Scan(&to, &from)
+		return LinkSource{To: domain.NodeID(to), From: domain.NodeID(from)}, err
 	})
 }
 
-func (t *pgTx) LinksFromInto(ctx context.Context, refs []domain.NodeRef, to domain.NodeID) ([]domain.Link, error) {
-	q, args := dialectPG.sqlLinksFromInto(refs, to)
+func (t *pgTx) LinksFromInto(ctx context.Context, refs []domain.NodeRef, to []domain.NodeID, types []string) ([]domain.Link, error) {
+	q, args := dialectPG.sqlLinksFromInto(refs, to, types)
 	return t.queryLinks(ctx, q, args...)
 }
 

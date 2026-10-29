@@ -194,14 +194,14 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg LinksFromOfType", pg, q, a, `SELECT `+pgLinkCols+` FROM (`+pgTyped+`) l ORDER BY l.id`, append(pgRefs, []string{"child"}))
 	q, a = lite.sqlLinksFromOfType(refs, []string{"child"})
 	check("sqlite LinksFromOfType", lite, q, a, `SELECT `+liteLinkCols+` FROM (`+liteTyped+`) l ORDER BY l.id`, []any{liteRefs, `["child"]`})
-	q, a = pg.sqlLinksFromInto(refs, "n1")
-	check("pg LinksFromInto", pg, q, a, `SELECT `+pgLinkCols+` FROM (`+strings.Replace(pgHeld, `l.from_version = c.sv)`, `l.from_version = c.sv AND l.to_id = $3)`, 1)+`) l ORDER BY l.id`, append(pgRefs, "n1"))
-	q, a = lite.sqlLinksFromInto(refs, "n1")
-	check("sqlite LinksFromInto", lite, q, a, `SELECT `+liteLinkCols+` FROM (`+strings.Replace(liteHeld, `l.from_version = c.sv)`, `l.from_version = c.sv AND l.to_id = ?)`, 1)+`) l ORDER BY l.id`, []any{liteRefs, "n1"})
-	q, a = pg.sqlLinkSources("n1")
-	check("pg LinkSources", pg, q, a, `SELECT DISTINCT from_id::text FROM link WHERE to_id = $1 AND removes IS NULL`, []any{"n1"})
-	q, a = lite.sqlLinkSources("n1")
-	check("sqlite LinkSources", lite, q, a, `SELECT DISTINCT from_id FROM link WHERE to_id = ? AND removes IS NULL`, []any{"n1"})
+	q, a = pg.sqlLinksFromInto(refs, []domain.NodeID{"n1"}, []string{"child"})
+	check("pg LinksFromInto", pg, q, a, `SELECT `+pgLinkCols+` FROM (`+strings.Replace(pgHeld, `l.from_version = c.sv)`, `l.from_version = c.sv AND l.to_id = ANY($3::uuid[]) AND l.type = ANY($4::text[]))`, 1)+`) l ORDER BY l.id`, append(pgRefs, []string{"n1"}, []string{"child"}))
+	q, a = lite.sqlLinksFromInto(refs, []domain.NodeID{"n1"}, nil)
+	check("sqlite LinksFromInto", lite, q, a, `SELECT `+liteLinkCols+` FROM (`+strings.Replace(liteHeld, `l.from_version = c.sv)`, `l.from_version = c.sv AND l.to_id IN (SELECT value FROM json_each(?)))`, 1)+`) l ORDER BY l.id`, []any{liteRefs, `["n1"]`})
+	q, a = pg.sqlLinkSources([]domain.NodeID{"n1"}, []string{"child"})
+	check("pg LinkSources", pg, q, a, `SELECT DISTINCT to_id::text, from_id::text FROM link WHERE to_id = ANY($1::uuid[]) AND type = ANY($2::text[]) AND removes IS NULL`, []any{[]string{"n1"}, []string{"child"}})
+	q, a = lite.sqlLinkSources([]domain.NodeID{"n1"}, nil)
+	check("sqlite LinkSources", lite, q, a, `SELECT DISTINCT to_id, from_id FROM link WHERE to_id IN (SELECT value FROM json_each(?)) AND removes IS NULL`, []any{`["n1"]`})
 	linksTo := func(cols, target string) string {
 		return `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id, to_url FROM link WHERE ` + target + ` AND removes IS NULL), s(lid, nid, sv) AS ( SELECT id, from_id, from_version FROM t UNION ALL SELECT s.lid, v.node_id, v.version FROM s JOIN node_version v ON v.node_id = s.nid AND v.links_base = s.sv WHERE NOT EXISTS (SELECT 1 FROM link x WHERE x.from_id = v.node_id AND x.from_version = v.version AND x.removes = s.lid) ) SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.node_id = s.nid AND v.version = s.sv AND v.links IS NULL UNION ALL SELECT ` + cols + ` FROM s JOIN t ON t.id = s.lid JOIN node_version v ON v.links = s.sv AND v.node_id = s.nid ORDER BY 1, 4`
 	}

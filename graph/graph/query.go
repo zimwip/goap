@@ -13,9 +13,9 @@ import (
 
 // A read query in the subset of openCypher (ADR 0160) over a view: MATCH and OPTIONAL MATCH patterns, WHERE, EXISTS,
 // RETURN. A pattern starts from an anchor (a variable bound already, a key or an id, else the nodes of a label, read a
-// page at a time) and grows a hop at a time through the neighbourhoods of the view, each reading the link types its
-// relationship names (ViewNeighbourhoodOf). Nothing reads a namespace whole: the anchors, the hops and the rows are
-// capped.
+// page at a time) and grows a hop at a time through the neighbourhoods of the view, each reading the link types and
+// the direction its relationship names, a frontier at a time (hint: the nodes a hop reaches are read together by the
+// next). Nothing reads a namespace whole: the anchors, the hops and the rows are capped.
 
 // Caps of a query, overridden by QueryOptions.
 const (
@@ -30,6 +30,10 @@ const (
 	// queryMaxRuns is the most times a query runs to learn what its caller reads (QueryOptions.Visible).
 	queryMaxRuns = 4
 )
+
+// queryHopBatch is the most nodes whose hops one read takes (the frontier a hop reads ahead, queryRun.hint); 1 reads
+// node by node (a test compares both).
+var queryHopBatch = 200
 
 // QueryView runs a read query in a view. A query the subset does not read is ErrInvalid (with its position), so is a
 // pattern with no anchor.
@@ -62,7 +66,8 @@ func (g *Graph) QueryView(ctx context.Context, v View, src string, opts QueryOpt
 	reads := 0
 	for attempt := 1; ; attempt++ {
 		run := &queryRun{g: g, ctx: ctx, plan: plan, opts: opts, vis: vis, nodes: map[domain.NodeID]*qNode{},
-			hoods: map[string][]qHop{}, links: map[domain.LinkID]domain.Link{}}
+			hoods: map[string][]qHop{}, links: map[domain.LinkID]domain.Link{}, wanted: map[string][]*qNode{},
+			ahead: map[string]Neighbourhood{}}
 		if attempt == 1 && vis != nil {
 			run.vis = nil // the first run sees every node, to learn which ones the caller reads
 		}
@@ -324,9 +329,13 @@ type queryRun struct {
 	pending map[domain.NodeID]domain.Node // the nodes met that vis does not know yet, left out of this run
 
 	nodes map[domain.NodeID]*qNode // the nodes read, by id
-	hoods map[string][]qHop        // the hops read, by node and link types
+	hoods map[string][]qHop        // the hops read, by node, link types and ways
 	links map[domain.LinkID]domain.Link
 	reads int
+	// wanted are the nodes whose hops the match reads next, by link types and ways (hint); ahead the neighbourhoods
+	// read with another's in a batch, by node, link types and ways, not counted as reads until the match takes them
+	wanted map[string][]*qNode
+	ahead  map[string]Neighbourhood
 
 	rows      []cypher.MapScope
 	truncated bool
@@ -498,6 +507,11 @@ func (r *queryRun) patterns(ps []cypher.Pattern, i int, b cypher.MapScope, used 
 		return err
 	}
 	tr := &qTrail{nodes: make([]*qNode, len(p.Nodes)), rels: make([][]domain.Link, len(p.Rels)), mids: make([][]*qNode, len(p.Rels))}
+	if at < len(p.Rels) { // the first hop of each candidate, read for them all
+		r.hint(cands, p.Rels[at].Types, p.Rels[at].Dir)
+	} else if at > 0 {
+		r.hint(cands, p.Rels[at-1].Types, reversed(p.Rels[at-1].Dir))
+	}
 	for _, n := range cands {
 		ok, undo, err := r.bindNode(p.Nodes[at], n, b)
 		if err != nil {
@@ -884,7 +898,12 @@ func (r *queryRun) right(p cypher.Pattern, k int, tr *qTrail, b cypher.MapScope,
 	if k == len(p.Nodes)-1 {
 		return cont()
 	}
-	return r.step(tr.nodes[k], p.Rels[k], p.Rels[k].Dir, p.Nodes[k+1], b, used, func(n *qNode, links []domain.Link, mids []*qNode) error {
+	then := nop1
+	if k+1 < len(p.Rels) {
+		next := p.Rels[k+1]
+		then = func(ns []*qNode) { r.hint(ns, next.Types, next.Dir) }
+	}
+	return r.step(tr.nodes[k], p.Rels[k], p.Rels[k].Dir, p.Nodes[k+1], b, used, then, func(n *qNode, links []domain.Link, mids []*qNode) error {
 		tr.nodes[k+1], tr.rels[k], tr.mids[k] = n, links, mids
 		return r.right(p, k+1, tr, b, used, cont)
 	})
@@ -896,14 +915,12 @@ func (r *queryRun) left(p cypher.Pattern, k int, tr *qTrail, b cypher.MapScope, 
 		return cont()
 	}
 	rel := p.Rels[k-1]
-	dir := rel.Dir
-	switch dir {
-	case cypher.Right:
-		dir = cypher.Left
-	case cypher.Left:
-		dir = cypher.Right
+	then := nop1
+	if k >= 2 {
+		next := p.Rels[k-2]
+		then = func(ns []*qNode) { r.hint(ns, next.Types, reversed(next.Dir)) }
 	}
-	return r.step(tr.nodes[k], rel, dir, p.Nodes[k-1], b, used, func(n *qNode, links []domain.Link, mids []*qNode) error {
+	return r.step(tr.nodes[k], rel, reversed(rel.Dir), p.Nodes[k-1], b, used, then, func(n *qNode, links []domain.Link, mids []*qNode) error {
 		links, mids = slices.Clone(links), slices.Clone(mids)
 		slices.Reverse(links)
 		slices.Reverse(mids)
@@ -911,6 +928,19 @@ func (r *queryRun) left(p cypher.Pattern, k int, tr *qTrail, b cypher.MapScope, 
 		return r.left(p, k-1, tr, b, used, cont)
 	})
 }
+
+// reversed is a direction read backwards.
+func reversed(d cypher.Direction) cypher.Direction {
+	switch d {
+	case cypher.Right:
+		return cypher.Left
+	case cypher.Left:
+		return cypher.Right
+	}
+	return d
+}
+
+func nop1([]*qNode) {}
 
 // qHop is a link of a node in the view, with the node at its other end.
 type qHop struct {
@@ -921,13 +951,37 @@ type qHop struct {
 }
 
 // step follows a relationship pattern from a node in a direction (Right: along the links, Left: against them), binding
-// its variable and the next node pattern; a variable length one walks up to its range.
+// its variable and the next node pattern; a variable length one walks up to its range. then is told the nodes a hop
+// reaches before the match visits them, the frontier of the next hop (hint).
 func (r *queryRun) step(from *qNode, rel cypher.RelPattern, dir cypher.Direction, next cypher.NodePattern, b cypher.MapScope,
-	used map[domain.LinkID]bool, cont func(*qNode, []domain.Link, []*qNode) error) error {
-	follow := func(at *qNode, visit func(qHop) error) error {
-		hops, err := r.hops(at, rel.Types)
+	used map[domain.LinkID]bool, then func([]*qNode), cont func(*qNode, []domain.Link, []*qNode) error) error {
+	lo, hi := 1, 1
+	if rel.Range != nil {
+		lo, hi = rel.Range.Min, rel.Range.Max
+		if hi == 0 || hi > QueryMaxDepth {
+			if hi > QueryMaxDepth {
+				return fmt.Errorf("%w: a variable length relationship goes at most %d hops", ErrInvalid, QueryMaxDepth)
+			}
+			hi = QueryMaxDepth
+			r.note("an unbounded * is read as *%d..%d", lo, QueryMaxDepth)
+		}
+	}
+	follow := func(at *qNode, depth int, visit func(qHop) error) error {
+		hops, err := r.hops(at, rel.Types, dir)
 		if err != nil {
 			return err
+		}
+		var reached []*qNode
+		for _, h := range hops {
+			if (dir != cypher.Right || h.out) && (dir != cypher.Left || h.in) {
+				reached = append(reached, h.other)
+			}
+		}
+		if depth+1 < hi { // the next hop of the walk
+			r.hint(reached, rel.Types, dir)
+		}
+		if depth+1 >= lo {
+			then(reached)
 		}
 		for _, h := range hops {
 			if used[h.link.ID] || (dir == cypher.Right && !h.out) || (dir == cypher.Left && !h.in) {
@@ -965,17 +1019,9 @@ func (r *queryRun) step(from *qNode, rel cypher.RelPattern, dir cypher.Direction
 		return cont(to, links, mids)
 	}
 	if rel.Range == nil {
-		return follow(from, func(h qHop) error {
+		return follow(from, 0, func(h qHop) error {
 			return finish(h.other, []domain.Link{h.link}, nil, qLink{h.link})
 		})
-	}
-	lo, hi := rel.Range.Min, rel.Range.Max
-	if hi == 0 || hi > QueryMaxDepth {
-		if hi > QueryMaxDepth {
-			return fmt.Errorf("%w: a variable length relationship goes at most %d hops", ErrInvalid, QueryMaxDepth)
-		}
-		hi = QueryMaxDepth
-		r.note("an unbounded * is read as *%d..%d", lo, QueryMaxDepth)
 	}
 	var links []domain.Link
 	var mids []*qNode
@@ -997,7 +1043,7 @@ func (r *queryRun) step(from *qNode, rel cypher.RelPattern, dir cypher.Direction
 		if depth == hi {
 			return nil
 		}
-		return follow(at, func(h qHop) error {
+		return follow(at, depth, func(h qHop) error {
 			links, mids = append(links, h.link), append(mids, h.other)
 			err := walk(h.other, depth+1)
 			links, mids = links[:len(links)-1], mids[:len(mids)-1]
@@ -1007,22 +1053,88 @@ func (r *queryRun) step(from *qNode, rel cypher.RelPattern, dir cypher.Direction
 	return walk(from, 0)
 }
 
-// hops reads the links of some types of a node in the view (nil: every type) and the nodes at their other ends: one
-// neighbourhood read, kept for the query.
-func (r *queryRun) hops(n *qNode, types []string) ([]qHop, error) {
-	key := string(n.n.ID) + "\x00" + strings.Join(types, "|")
+// waysOf are the links a hop in a direction reads: those leaving the node along the links, those entering it against
+// them, both for either.
+func waysOf(dir cypher.Direction) linkWays {
+	switch dir {
+	case cypher.Right:
+		return leaving
+	case cypher.Left:
+		return entering
+	}
+	return bothWays
+}
+
+// hopKind names the hops of some link types (nil: every type) in a direction.
+func hopKind(types []string, dir cypher.Direction) string {
+	if types == nil {
+		return fmt.Sprintf("*\x00%d", waysOf(dir))
+	}
+	return fmt.Sprintf("%s\x00%d", strings.Join(types, "|"), waysOf(dir))
+}
+
+// hint notes nodes whose hops of some types in a direction the match reads next: the next read of such hops reads
+// theirs with it, in one batch, rather than one read per node.
+func (r *queryRun) hint(nodes []*qNode, types []string, dir cypher.Direction) {
+	if len(nodes) < 2 {
+		return
+	}
+	kind := hopKind(types, dir)
+	for _, n := range nodes {
+		key := string(n.n.ID) + "\x00" + kind
+		if _, ok := r.hoods[key]; ok {
+			continue
+		}
+		if _, ok := r.ahead[key]; ok {
+			continue
+		}
+		r.wanted[kind] = append(r.wanted[kind], n)
+	}
+}
+
+// hops reads the links of some types of a node in the view (nil: every type) in a direction, and the nodes at their
+// other ends: one neighbourhood read, kept for the query, which also reads the neighbourhoods of the nodes hinted for
+// the same hop (a frontier, one batch).
+func (r *queryRun) hops(n *qNode, types []string, dir cypher.Direction) ([]qHop, error) {
+	kind := hopKind(types, dir)
+	key := string(n.n.ID) + "\x00" + kind
 	if hs, ok := r.hoods[key]; ok {
 		return hs, nil
 	}
 	if err := r.read(); err != nil {
 		return nil, err
 	}
-	if types != nil {
-		types = r.w.linkTypes(types)
-	}
-	nb, err := r.w.neighbourhood(r.ctx, r.tx, n.n.ID, types)
-	if err != nil {
-		return nil, err
+	nb, ok := r.ahead[key]
+	if ok {
+		delete(r.ahead, key)
+	} else {
+		batch, in := []domain.Node{n.n}, map[domain.NodeID]bool{n.n.ID: true}
+		wanted := r.wanted[kind]
+		for len(wanted) > 0 && len(batch) < queryHopBatch {
+			m := wanted[0]
+			wanted = wanted[1:]
+			mk := string(m.n.ID) + "\x00" + kind
+			if _, ok := r.hoods[mk]; ok || in[m.n.ID] {
+				continue
+			}
+			if _, ok := r.ahead[mk]; ok {
+				continue
+			}
+			batch, in[m.n.ID] = append(batch, m.n), true
+		}
+		r.wanted[kind] = wanted
+		lt := types
+		if lt != nil {
+			lt = r.w.linkTypes(types)
+		}
+		nbs, err := r.w.neighbourhoods(r.ctx, r.tx, batch, lt, waysOf(dir))
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range batch[1:] {
+			r.ahead[string(m.ID)+"\x00"+kind] = nbs[m.ID]
+		}
+		nb = nbs[n.n.ID]
 	}
 	near := map[domain.NodeID]*qNode{}
 	for _, m := range nb.Nodes {
