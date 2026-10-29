@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -241,9 +242,23 @@ func Mount(e *echo.Echo, cfg Config) error {
 		proxy := httputil.NewSingleHostReverseProxy(u)
 		proxy.Transport = otelhttp.NewTransport(http.DefaultTransport)
 		proxy.FlushInterval = -1 // streaming friendly
+		proxy.ErrorHandler = proxyError(r.Prefix)
 		e.Any(r.Prefix+"*", echo.WrapHandler(proxy), auth)
 	}
 	return nil
+}
+
+// proxyError answers a request the upstream service failed: 502, logged. A request its client left (a page changed, a
+// fetch aborted) is no failure of the upstream: it is answered nothing and logged at debug level only.
+func proxyError(prefix string) func(http.ResponseWriter, *http.Request, error) {
+	return func(w http.ResponseWriter, r *http.Request, err error) {
+		if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
+			slog.Debug("proxy: client gone", "route", prefix, "path", r.URL.Path)
+			return
+		}
+		slog.Warn("proxy error", "route", prefix, "path", r.URL.Path, "err", err)
+		w.WriteHeader(http.StatusBadGateway)
+	}
 }
 
 func authenticator(cfg Config) (echo.MiddlewareFunc, error) {

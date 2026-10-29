@@ -221,13 +221,15 @@ func (h *Handler) Positions() connect.Interceptor {
 
 // EnsureCaller is the interceptor that calls EnsureUser for every authenticated caller (ADR 0039),
 // deduplicated per process: a subject already seen is not checked again, so this costs one NodeByKey (and,
-// the first time only, one write) per subject per process lifetime, not per call.
+// the first time only, one write) per subject per process lifetime, not per call. A content graph (Space set) holds no
+// organisation (ADR 0154 §9): the users are the platform graph's, so it declares none; trying would fail at every call
+// and run each one behind ensureMu and the reads on the writer.
 func (h *Handler) EnsureCaller() connect.Interceptor {
 	var seen sync.Map // subject -> struct{}
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			who := h.Identity.Context(ctx, req.Header())
-			if subject := subjectOf(who); subject != "" {
+			if subject := subjectOf(who); subject != "" && h.Space == "" {
 				if _, ok := seen.Load(subject); !ok {
 					if err := EnsureUser(who, h.Graph, subject); err == nil {
 						seen.Store(subject, struct{}{})
