@@ -4,7 +4,6 @@ package graph
 
 import (
 	"context"
-	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/graphapi"
@@ -182,11 +181,9 @@ type Tx interface {
 
 	// OpenChangeIDs lists the changes that are neither applied nor abandoned.
 	OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
-	// PutCommitImpacts writes the change impacts of versions a change wrote (ADR 0174): one row per version, written with
-	// it and never updated. Nothing else writes them: before its commit an impact lives in the log of its change.
-	PutCommitImpacts(ctx context.Context, rows []CommitImpact) error
-	// CommitImpacts lists the change impacts of the versions a change wrote, in the order of its log.
-	CommitImpacts(ctx context.Context, change domain.ChangeID) ([]CommitImpact, error)
+	// ChangeNodeIDs lists the nodes a change wrote versions of. What made each version (its change impact, the review
+	// that let it commit) is the view of the change, read by the impact the version names (ADR 0174 addendum).
+	ChangeNodeIDs(ctx context.Context, change domain.ChangeID) ([]domain.NodeID, error)
 	// NodeChangePage lists the last limit changes whose log names a node in an impact entry whose cursor is below before
 	// (0: any), newest first; the cursor of a change is the position of its first such entry (ADR 0140: a page of a
 	// history, whatever its length; ADR 0174: committed or not, read from the log).
@@ -214,31 +211,6 @@ type Tx interface {
 	// head is read to be moved. A storage whose transactions are serialized already does nothing.
 	LockChange(ctx context.Context, id domain.ChangeID) error
 	LockBranch(ctx context.Context, namespace, name string) error
-}
-
-// CommitImpact is the change impact a version was written for (ADR 0174): from the version the change started from
-// (Pre; 0 for a creation) to the version written (Node, Version), MergedWith the second parent of a rebase or a merge,
-// and LogSeq the entry of the change log that recorded the commit (0: none, the bootstrap). Impact is empty for a
-// version no impact holds (the revert of a withdrawn impact).
-type CommitImpact struct {
-	Node       domain.NodeID         `json:"node"`
-	Version    domain.Version        `json:"version"`
-	Change     domain.ChangeID       `json:"change"`
-	Impact     domain.ChangeImpactID `json:"impact,omitempty"`
-	Key        string                `json:"key"`
-	Type       string                `json:"type"`
-	Intent     domain.NodeIntent     `json:"intent"`
-	Rationale  string                `json:"rationale,omitempty"`
-	Pre        domain.Version        `json:"pre,omitempty"`
-	MergedWith domain.Version        `json:"mergedWith,omitempty"`
-	Reason     string                `json:"reason"`
-	Review     *domain.Review        `json:"review,omitempty"`
-	Effect     domain.ImpactEffect   `json:"effect,omitzero"`
-	LogSeq     int64                 `json:"logSeq,omitempty"`
-	ProducedBy string                `json:"producedBy,omitempty"`
-	Execution  string                `json:"execution,omitempty"`
-	Via        domain.ChangeImpactID `json:"via,omitempty"`
-	CreatedAt  time.Time             `json:"createdAt"`
 }
 
 // NodeChange is a change acting on a node and its cursor in the node's history (Tx.NodeChangePage).

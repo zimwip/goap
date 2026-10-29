@@ -708,14 +708,6 @@ func (d dialect) sqlNodeChangePage(node domain.NodeID, before int64, limit int) 
 	return q + ` ORDER BY 2 DESC LIMIT ` + d.ph(len(args)+1), append(args, limit)
 }
 
-// sqlCommitImpacts reads the change impacts of the versions a change wrote, in the order of its log (ADR 0174): the
-// columns of commitImpactRow.dest, then the time.
-func (d dialect) sqlCommitImpacts(change domain.ChangeID) (string, []any) {
-	return `SELECT ` + d.cols(su("node_id"), sc("version"), su("change_id"), su("impact_id"), sc("key"), sc("type"), sc("intent"), sc("rationale"),
-		sc("pre_version"), sc("merged_with"), sc("reason"), su("review"), sc("effect"), sc("log_seq"), sc("produced_by"), sc("execution"),
-		su("via"), sc("created_at")) + ` FROM change_impact WHERE change_id = ` + d.ph(1) + ` ORDER BY log_seq, node_id, version`, []any{string(change)}
-}
-
 // logCols is the select list of a log entry.
 func (d dialect) logCols() string {
 	return d.cols(sc("seq"), sc("id"), su("change_id"), sc("type"), sc("flow"), sc("process_id"), sc("execution"), sc("subject"), sc("by_whom"), sc("causation"), sc("at"), sc("payload"))
@@ -839,7 +831,6 @@ func (d dialect) deleteChangeRows() []string {
 		`DELETE FROM link WHERE (from_id, from_version) IN ` + mine,
 		`DELETE FROM branch_commit WHERE change_id = ` + p,
 		`DELETE FROM node_version WHERE change_id = ` + p,
-		`DELETE FROM change_impact WHERE change_id = ` + p,
 		`DELETE FROM change_log WHERE change_id = ` + p,
 	}
 }

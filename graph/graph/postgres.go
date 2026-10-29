@@ -170,7 +170,7 @@ type pgQuerier interface {
 
 type pgTx struct {
 	tx pgQuerier
-	// held holds the change_impact rows of a write transaction (nil: a read)
+	// held holds the rows a write transaction writes (nil: a read)
 	held *heldQuerier
 	// readOnly is a read on a read-only connection (readTx): no transaction, so no lock to take
 	readOnly bool
@@ -1326,7 +1326,7 @@ func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntr
 	}
 	q := t.tx
 	if t.held != nil {
-		q = t.held.Tx // an entry of a log reads no change_impact row: the rows held wait
+		q = t.held.Tx // an entry of a log reads none of the rows held: they wait
 	}
 	err := q.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
 		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload, string(e.Node)).Scan(&e.Seq)
@@ -1465,51 +1465,20 @@ func (t *pgTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {
 	return out, nil
 }
 
-// PutCommitImpacts implements Tx: held with the versions of the commit when the transaction holds its writes.
-func (t *pgTx) PutCommitImpacts(ctx context.Context, rows []CommitImpact) error {
-	for chunk := range slices.Chunk(rows, commitImpactRowsPerInsert) {
-		args := make([]any, 0, len(chunk)*len(commitImpactColumns))
-		for _, r := range chunk {
-			a, err := commitImpactArgs(r)
-			if err != nil {
-				return err
-			}
-			args = append(append(args, a...), r.CreatedAt)
-		}
-		if t.held != nil {
-			t.held.holdImpacts(args, len(chunk))
-			continue
-		}
-		if _, err := t.tx.Exec(ctx, dialectPG.sqlInsertRows("change_impact", commitImpactColumns, len(chunk)), args...); err != nil {
-			return mapErr(err, "change impacts")
-		}
-	}
-	return nil
-}
-
-// commitImpactRowsPerInsert is the number of change_impact rows one statement writes (18 arguments each).
-const commitImpactRowsPerInsert = 1000
-
-func (t *pgTx) CommitImpacts(ctx context.Context, change domain.ChangeID) ([]CommitImpact, error) {
-	q, args := dialectPG.sqlCommitImpacts(change)
-	rows, err := t.tx.Query(ctx, q, args...)
+// ChangeNodeIDs implements Tx.
+func (t *pgTx) ChangeNodeIDs(ctx context.Context, change domain.ChangeID) ([]domain.NodeID, error) {
+	rows, err := t.tx.Query(ctx, dialectPG.sqlChangeNodes(), string(change))
 	if err != nil {
-		return nil, mapErr(err, "change impacts")
+		return nil, mapErr(err, "change nodes")
 	}
 	defer rows.Close()
-	var out []CommitImpact
+	var out []domain.NodeID
 	for rows.Next() {
-		var r commitImpactRow
-		var at time.Time
-		if err := rows.Scan(append(r.dest(), &at)...); err != nil {
+		var id string
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		ci, err := r.impactOf()
-		if err != nil {
-			return nil, err
-		}
-		ci.CreatedAt = at
-		out = append(out, ci)
+		out = append(out, domain.NodeID(id))
 	}
 	return out, rows.Err()
 }

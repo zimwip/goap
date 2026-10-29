@@ -321,16 +321,6 @@ func (t *guardTx) lock(key string) {
 	t.branches = nil // what the writers the lock held off changed is read again
 }
 
-// PutCommitImpacts writes the change impacts of versions a change wrote (ADR 0174): each names an existing change.
-func (t *guardTx) PutCommitImpacts(ctx context.Context, rows []CommitImpact) error {
-	for _, r := range rows {
-		if err := t.needChange(r.Change, "change impact of "+r.Key); err != nil {
-			return err
-		}
-	}
-	return t.Tx.PutCommitImpacts(ctx, rows)
-}
-
 // Change reads a change: its header once per transaction, its change impacts and items from the fold of its log (ADR
 // 0153; the store keeps no impact before its commit, ADR 0174), so that an operation on a change of N impacts decodes
 // none of them.

@@ -946,48 +946,20 @@ func (t *sqliteTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
 	return out, rows.Err()
 }
 
-// PutCommitImpacts implements Tx.
-func (t *sqliteTx) PutCommitImpacts(ctx context.Context, rows []CommitImpact) error {
-	for chunk := range slices.Chunk(rows, sqliteCommitImpactRows) {
-		args := make([]any, 0, len(chunk)*len(commitImpactColumns))
-		for _, r := range chunk {
-			a, err := commitImpactArgs(r)
-			if err != nil {
-				return err
-			}
-			args = append(append(args, a...), tsText(r.CreatedAt))
-		}
-		if _, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsertRows("change_impact", commitImpactColumns, len(chunk)), args...); err != nil {
-			return sqliteErr(err, "change impacts")
-		}
-	}
-	return nil
-}
-
-// sqliteCommitImpactRows is the number of change_impact rows one statement writes (18 arguments each, within the
-// 32766 a statement takes).
-const sqliteCommitImpactRows = 1000
-
-func (t *sqliteTx) CommitImpacts(ctx context.Context, change domain.ChangeID) ([]CommitImpact, error) {
-	q, args := dialectSQLite.sqlCommitImpacts(change)
-	rows, err := t.tx.QueryContext(ctx, q, args...)
+// ChangeNodeIDs implements Tx.
+func (t *sqliteTx) ChangeNodeIDs(ctx context.Context, change domain.ChangeID) ([]domain.NodeID, error) {
+	rows, err := t.tx.QueryContext(ctx, dialectSQLite.sqlChangeNodes(), string(change))
 	if err != nil {
-		return nil, sqliteErr(err, "change impacts")
+		return nil, sqliteErr(err, "change nodes")
 	}
 	defer rows.Close()
-	var out []CommitImpact
+	var out []domain.NodeID
 	for rows.Next() {
-		var r commitImpactRow
-		var at string
-		if err := rows.Scan(append(r.dest(), &at)...); err != nil {
+		var id string
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		ci, err := r.impactOf()
-		if err != nil {
-			return nil, err
-		}
-		ci.CreatedAt = tsParse(at)
-		out = append(out, ci)
+		out = append(out, domain.NodeID(id))
 	}
 	return out, rows.Err()
 }

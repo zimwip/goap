@@ -92,10 +92,6 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 		if err := tx.PutNode(ctx, n); err != nil {
 			return err
 		}
-		// its change impact (ADR 0174): the bootstrap logs nothing
-		if err := tx.PutCommitImpacts(ctx, []CommitImpact{commitImpactOf(n, domain.ChangeImpact{Intent: domain.IntentCreated, Rationale: c.Intent}, domain.ImpactEffect{Kind: domain.EffectCreated}, 0)}); err != nil {
-			return err
-		}
 		if st.SelfParent {
 			if err := tx.PutLinks(ctx, []domain.Link{{ID: domain.LinkID(g.newID()), Type: st.Parent, From: n.Ref(), To: n.Ref(), ChangeID: c.ID}}); err != nil {
 				return err

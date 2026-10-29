@@ -358,12 +358,6 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite OpenChangeIDs", lite, lite.sqlOpenChangeIDs(), nil, `SELECT id FROM change WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at, rowid`, nil)
 
 	// Change impacts (ADR 0174)
-	q, a = pg.sqlCommitImpacts("c1")
-	check("pg CommitImpacts", pg, q, a, `SELECT node_id::text, version, change_id::text, impact_id::text, key, type, intent, rationale, pre_version, merged_with, reason, review::text, effect, log_seq, produced_by, execution, via::text, created_at
-			FROM change_impact WHERE change_id = $1 ORDER BY log_seq, node_id, version`, []any{"c1"})
-	q, a = lite.sqlCommitImpacts("c1")
-	check("sqlite CommitImpacts", lite, q, a, `SELECT node_id, version, change_id, impact_id, key, type, intent, rationale, pre_version, merged_with, reason, review, effect, log_seq, produced_by, execution, via, created_at
-			FROM change_impact WHERE change_id = ? ORDER BY log_seq, node_id, version`, []any{"c1"})
 	q, a = pg.sqlNodeChangePage("n1", 0, 3)
 	check("pg NodeChangePage", pg, q, a, `SELECT change_id::text, min(seq) FROM change_log WHERE node = $1 GROUP BY change_id ORDER BY 2 DESC LIMIT $2`, []any{"n1", 3})
 	q, a = lite.sqlNodeChangePage("n1", 9, 3)
@@ -458,7 +452,6 @@ func TestSQLBuildersGolden(t *testing.T) {
 		`DELETE FROM link WHERE (from_id, from_version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
 		`DELETE FROM branch_commit WHERE change_id = $1`,
 		`DELETE FROM node_version WHERE change_id = $1`,
-		`DELETE FROM change_impact WHERE change_id = $1`,
 		`DELETE FROM change_log WHERE change_id = $1`,
 	})
 	checkList("sqlite DeleteChange rows", lite, lite.deleteChangeRows(), []string{
@@ -467,7 +460,6 @@ func TestSQLBuildersGolden(t *testing.T) {
 		`DELETE FROM link WHERE (from_id, from_version) IN (SELECT node_id, version FROM node_version WHERE change_id = ?1)`,
 		`DELETE FROM branch_commit WHERE change_id = ?1`,
 		`DELETE FROM node_version WHERE change_id = ?1`,
-		`DELETE FROM change_impact WHERE change_id = ?1`,
 		`DELETE FROM change_log WHERE change_id = ?1`,
 	})
 	checkSQL(t, "pg orphan", pg, pg.sqlDeleteOrphanNode(), `DELETE FROM node WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM node_version WHERE node_id = $1)`)

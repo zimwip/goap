@@ -241,7 +241,7 @@ func checkImpactLogs(t *testing.T, repo Repo) {
 			if got, want := norm(domain.FoldImpacts(events)), norm(stored); got != want {
 				t.Errorf("change %s: the replay of its %d events differs from the view\nreplay: %s\nview: %s", c.ID, len(events), got, want)
 			}
-			if err := checkCommitImpacts(context.Background(), tx, c.ID, events); err != nil {
+			if err := checkVersionImpacts(context.Background(), tx, c.ID, events); err != nil {
 				t.Errorf("change %s: %v", c.ID, err)
 			}
 			storedDrafts, err := cold.drafts(context.Background(), tx, c.ID)
@@ -273,58 +273,39 @@ func checkImpactLogs(t *testing.T, repo Repo) {
 	}
 }
 
-// checkCommitImpacts checks the change impacts kept for the versions a change wrote (ADR 0174): each names a version
-// of the change, and the position of an entry of its log; an impact's row is recorded by a committed event of that
-// entry for that version; an impact committed on its own branch by its change has its row.
-func checkCommitImpacts(ctx context.Context, tx Tx, id domain.ChangeID, events []domain.ImpactEvent) error {
-	rows, err := tx.CommitImpacts(ctx, id)
+// checkVersionImpacts checks that what made each version a change wrote is read in the view of the change (ADR 0174
+// addendum): a version naming an impact names one of the change's, and the version a committed event of the change
+// names on its own branch names the impact of that event.
+func checkVersionImpacts(ctx context.Context, tx Tx, id domain.ChangeID, events []domain.ImpactEvent) error {
+	impacts := map[domain.ChangeImpactID]bool{}
+	for _, e := range events {
+		impacts[e.Impact] = true
+	}
+	nodes, err := tx.ChangeNodeIDs(ctx, id)
 	if err != nil {
 		return err
 	}
-	committed := map[domain.NodeRef]int{} // the committed events of the change, by version: the position of their entry
-	for _, e := range events {
-		if e.Op == domain.ImpactCommitted && e.Committed != nil {
-			if _, ok := committed[*e.Committed]; !ok {
-				committed[*e.Committed] = e.Seq
+	for _, node := range nodes {
+		vs, err := tx.Versions(ctx, node)
+		if err != nil {
+			return err
+		}
+		for _, n := range vs {
+			if n.ChangeID == id && n.ChangeImpact != "" && !impacts[n.ChangeImpact] {
+				return fmt.Errorf("version %s names impact %s, which the log of its change does not hold", n.Ref(), n.ChangeImpact)
 			}
 		}
 	}
-	held := map[domain.NodeRef]bool{}
-	for _, r := range rows {
-		ref := domain.NodeRef{ID: r.Node, Version: r.Version}
-		if held[ref] {
-			return fmt.Errorf("version %s has two change impacts", ref)
-		}
-		held[ref] = true
-		n, err := tx.Node(ctx, ref)
-		if err != nil {
-			return fmt.Errorf("change impact of %s: %w", ref, err)
-		}
-		if n.Reason != r.Reason || n.Key != r.Key {
-			return fmt.Errorf("change impact of %s: reason %q key %q, the version has %q %q", ref, r.Reason, r.Key, n.Reason, n.Key)
-		}
-		if len(n.Parents) > 0 && r.Pre != n.Parents[0] {
-			return fmt.Errorf("change impact of %s starts from v%d, the version from v%d", ref, r.Pre, n.Parents[0])
-		}
-		if r.Impact == "" || r.LogSeq == 0 {
-			continue // a revert, the bootstrap
-		}
-		seq, ok := committed[ref]
-		if !ok || int64(seq) != r.LogSeq {
-			return fmt.Errorf("change impact of %s points at entry %d, its committed event is at %d (%v)", ref, r.LogSeq, seq, ok)
-		}
-	}
-	// a version committed by its change on its own branch, its impact holding it: it has its row
 	for _, e := range events {
-		if e.Op != domain.ImpactCommitted || e.Committed == nil || e.Effect == nil || held[*e.Committed] {
+		if e.Op != domain.ImpactCommitted || e.Committed == nil || e.Effect == nil {
 			continue
 		}
 		n, err := tx.Node(ctx, *e.Committed)
 		if err != nil {
 			return err
 		}
-		if n.ChangeID == id && n.ChangeImpact == e.Impact && n.Reason != domain.ReasonMerge && e.Branch == domain.BranchOf(n.Branch) {
-			return fmt.Errorf("version %s committed by the change on its branch has no change impact", e.Committed)
+		if n.ChangeID == id && n.Reason != domain.ReasonMerge && e.Branch == domain.BranchOf(n.Branch) && n.ChangeImpact != e.Impact {
+			return fmt.Errorf("version %s committed for impact %s names impact %q", e.Committed, e.Impact, n.ChangeImpact)
 		}
 	}
 	return nil

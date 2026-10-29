@@ -659,7 +659,6 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	}
 	var stuck []string
 	var phases [4][]domain.ImpactEvent
-	var rows []CommitImpact // the merge versions written and their impacts (ADR 0174)
 	for i, m := range todo {
 		n := *m.from
 		n.Reason, n.Parents = domain.ReasonMerge, []domain.Version{m.from.Version}
@@ -702,11 +701,6 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		declared := cn
 		declared.Review = domain.ReviewProposed
 		review := domain.Review{Status: domain.ReviewAccepted, By: "graph.merge", Comment: why, At: g.now(), ReviewID: reviewKey}
-		if !m.join {
-			written := cn
-			written.Reviews = []domain.Review{review}
-			rows = append(rows, commitImpactOf(n, written, domain.ImpactEffect{}, 0))
-		}
 		first := domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactProposed, By: "graph.merge", State: &declared}
 		var written []domain.ImpactEvent
 		if cn.Intent == domain.IntentCreated {
@@ -734,14 +728,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			return res, err
 		}
 	}
-	if len(rows) > 0 {
-		for i := range rows {
-			rows[i].LogSeq = int64(phases[3][0].Seq) // the entry of the merge's commit
-		}
-		if err := tx.PutCommitImpacts(ctx, rows); err != nil {
-			return res, err
-		}
-	}
+
 	if len(stuck) > 0 {
 		return res, invalidf("the change leaves nodes in a state that cannot commit, move them to a committable state first: %s", strings.Join(stuck, ", "))
 	}

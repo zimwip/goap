@@ -11,19 +11,17 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// heldQuerier holds the rows a write transaction writes (the versions of a commit, their links and change impacts) and sends them in a few statements before its next statement that may read them, and before its commit.
+// heldQuerier holds the rows a write transaction writes (the versions of a commit and their links) and sends them in a few statements before its next statement that may read them, and before its commit.
 type heldQuerier struct {
 	Tx pgQuerier
 	// pipe is the transaction the rows are written in: their inserts wait for the next statement (nil: sent at once)
 	pipe *pipeTx
-	// impacts are the change_impact rows held (ADR 0174), each statement's arguments with its number of rows
-	impacts []heldRows
 	// versions are the node versions held, in the order written, each with its link set once set
 	versions []heldVersion
 	// links are the link rows held (links and drops, ADR 0141), written after the versions they leave
 	links []heldLink
 	// the rows held indexed, so that holding or asking for one costs the same whatever the number held (a commit holds
-	// a version, a link set and an impact per node): verAt the position of a version by its node, refs the versions written or left by a link, keys the namespace and
+	// a version and a link set per node): verAt the position of a version by its node, refs the versions written or left by a link, keys the namespace and
 	// key of the nodes created, nodes the nodes of refs
 	verAt map[domain.NodeID]int
 	refs  map[domain.NodeRef]bool
@@ -97,33 +95,12 @@ func (h *heldQuerier) holdLinkSet(from domain.NodeRef, set [4]any) bool {
 	return true
 }
 
-// heldRows are the arguments of a statement inserting n rows.
-type heldRows struct {
-	args []any
-	n    int
-}
-
-// holdImpacts holds change_impact rows (commitImpactColumns), written after the versions they name.
-func (h *heldQuerier) holdImpacts(args []any, n int) {
-	h.impacts = append(h.impacts, heldRows{args: args, n: n})
-}
-
 // flush writes the rows held.
 func (h *heldQuerier) flush(ctx context.Context) error {
 	if err := h.flushVersions(ctx); err != nil {
 		return err
 	}
-	if err := h.flushLinks(ctx); err != nil {
-		return err
-	}
-	impacts := h.impacts
-	h.impacts = nil
-	for _, r := range impacts {
-		if err := h.write(ctx, dialectPG.sqlInsertRows("change_impact", commitImpactColumns, r.n), r.args, "change impacts"); err != nil {
-			return err
-		}
-	}
-	return nil
+	return h.flushLinks(ctx)
 }
 
 // versionRowsPerInsert is the number of node versions one statement writes (23 arguments each).

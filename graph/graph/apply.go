@@ -254,10 +254,6 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, c
 	if err := g.emit(ctx, tx, committed...); err != nil {
 		return domain.Commit{}, nil, err
 	}
-	// the versions written and the impacts that produced them, pointing at that entry (ADR 0174)
-	if err := g.putCommitImpacts(ctx, tx, c.ID, a.cposts, committed, reverted); err != nil {
-		return domain.Commit{}, nil, err
-	}
 	// the change stays open (ADR 0102): it is edited and committed again until it is merged
 	if c, err = tx.Change(ctx, id); err != nil {
 		return domain.Commit{}, nil, err

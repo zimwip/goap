@@ -86,3 +86,21 @@ where to where, and why.
 - "What did this change do to this node, from which version to which, and which entry recorded it" is one row.
 - A change that commits nothing leaves no impact outside its log: `PurgeChange` deletes the log and nothing else.
 - Whatever read an open change's impacts from the table reads the view (folded once, kept by the cache of views).
+
+## Addendum: the version is the record
+
+Once every path writing a version wrote its row with it, the row and the version were one to one: the row repeated the
+key of the version, its node, its change, its reason, its execution, its time and its parents, and what it held of its
+own (intent, rationale, the review that let it commit, the effect, the producer, `via`, the entry of the log) is in the
+log of the change, folded into its view. The only reader of the table in the services listed the nodes a change wrote,
+which the versions answer by their change (`node_version_change`).
+
+The table goes (migration `0030_no_change_impact`, both dialects; `CommitImpact`, `Tx.PutCommitImpacts` /
+`CommitImpacts` with it). A version names its change (`node_version.change_id`) and its impact
+(`node_version.change_impact`); what made it is read in the view of its change, by that impact: its reviews, the
+`committed` event that names the version and its effect over the impact's pre (ADR 0173). The bootstrap, which logs
+nothing, keeps its intent as the comment of its versions. `Tx.ChangeNodeIDs` lists the nodes a change wrote versions
+of (the difference of two baselines). The effect of a version over the one it was checked out from, which only the row
+kept, is no longer computed at commit (two reads per node committed again). The tests check the view instead
+(`checkVersionImpacts`: a version naming an impact names one of its change's log, the version a committed event of the
+change names on its own branch names that event's impact). A commit writes the versions and their links only.
