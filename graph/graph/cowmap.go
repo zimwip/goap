@@ -108,7 +108,8 @@ func (m *cowMap[K, V]) all() iter.Seq2[K, V] {
 // share as cowMap shares its shards: a write copies the index of the blocks once and the block it touches. Read as a
 // domain.Impacts (list).
 type impactBlocks struct {
-	blocks [][]domain.ChangeImpact
+	// blocks point to impacts never edited: a write replaces the pointer, so a copy of a block copies pointers
+	blocks [][]*domain.ChangeImpact
 	n      int
 	// idx: the index of the blocks is the list's own; mine: the blocks it copied since it was shared
 	idx  bool
@@ -121,16 +122,16 @@ func (b impactBlocks) share() impactBlocks { return impactBlocks{blocks: b.block
 func (b *impactBlocks) list() domain.Impacts { return domain.ImpactsOfBlocks(b.blocks, b.n) }
 
 func (b *impactBlocks) at(i int) domain.ChangeImpact {
-	return b.blocks[i/domain.ImpactBlock][i%domain.ImpactBlock]
+	return *b.blocks[i/domain.ImpactBlock][i%domain.ImpactBlock]
 }
 
 // block is the block k, the list's own, to write to.
-func (b *impactBlocks) block(k int) []domain.ChangeImpact {
+func (b *impactBlocks) block(k int) []*domain.ChangeImpact {
 	if !b.idx {
 		b.blocks, b.mine, b.idx = slices.Clone(b.blocks), make([]bool, len(b.blocks)), true
 	}
 	if !b.mine[k] {
-		nb := make([]domain.ChangeImpact, len(b.blocks[k]), domain.ImpactBlock)
+		nb := make([]*domain.ChangeImpact, len(b.blocks[k]), domain.ImpactBlock)
 		copy(nb, b.blocks[k])
 		b.blocks[k], b.mine[k] = nb, true
 	}
@@ -138,7 +139,7 @@ func (b *impactBlocks) block(k int) []domain.ChangeImpact {
 }
 
 func (b *impactBlocks) set(i int, cn domain.ChangeImpact) {
-	b.block(i / domain.ImpactBlock)[i%domain.ImpactBlock] = cn
+	b.block(i / domain.ImpactBlock)[i%domain.ImpactBlock] = &cn
 }
 
 func (b *impactBlocks) append(cn domain.ChangeImpact) {
@@ -146,10 +147,10 @@ func (b *impactBlocks) append(cn domain.ChangeImpact) {
 		if !b.idx {
 			b.blocks, b.mine, b.idx = slices.Clone(b.blocks), make([]bool, len(b.blocks)), true
 		}
-		b.blocks, b.mine = append(b.blocks, make([]domain.ChangeImpact, 0, domain.ImpactBlock)), append(b.mine, true)
+		b.blocks, b.mine = append(b.blocks, make([]*domain.ChangeImpact, 0, domain.ImpactBlock)), append(b.mine, true)
 	}
 	k := len(b.blocks) - 1
-	b.blocks[k] = append(b.block(k), cn)
+	b.blocks[k] = append(b.block(k), &cn)
 	b.n++
 }
 
