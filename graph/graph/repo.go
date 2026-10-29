@@ -80,11 +80,12 @@ type Tx interface {
 	// links by source or target and type, never the whole sets.
 	LinksFromOfType(ctx context.Context, refs []domain.NodeRef, types []string) ([]domain.Link, error)
 	LinksToOfType(ctx context.Context, ref domain.NodeRef, types []string) ([]domain.Link, error)
-	// LinkSources are the nodes a link row names a node as its target from, each once (the rows a version wrote, not
-	// the versions holding them); LinksFromInto the links the versions refs hold into that node. Together they read the
-	// links entering a node in a state by its sources, at the cost of its sources rather than of their histories.
-	LinkSources(ctx context.Context, id domain.NodeID) ([]domain.NodeID, error)
-	LinksFromInto(ctx context.Context, refs []domain.NodeRef, to domain.NodeID) ([]domain.Link, error)
+	// LinkSources are the nodes a link row of some types (nil: every type) names one of the nodes ids as its target
+	// from, each pair once (the rows a version wrote, not the versions holding them); LinksFromInto the links of those
+	// types the versions refs hold into those nodes. Together they read the links entering nodes in a state by their
+	// sources, at the cost of their sources rather than of their histories, for a frontier of nodes at once.
+	LinkSources(ctx context.Context, ids []domain.NodeID, types []string, page *sourcePage) ([]LinkSource, error)
+	LinksFromInto(ctx context.Context, refs []domain.NodeRef, to []domain.NodeID, types []string) ([]domain.Link, error)
 	// NodePage reads the page q asks of the node versions refs (a state), ordered by key, and LinkPage the page of the
 	// links between two of them, by type then id: the filter, the counts and the page are the store's, only the page
 	// is read (ADR 0140). q.Limit is set; q.Change is the caller's.
@@ -276,4 +277,9 @@ func committedVersions(ls map[domain.NodeID]CommittedVersion) map[domain.NodeID]
 		}
 	}
 	return out
+}
+
+// LinkSource is a node a link row names another as its target from (Tx.LinkSources).
+type LinkSource struct {
+	To, From domain.NodeID
 }

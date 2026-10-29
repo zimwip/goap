@@ -374,14 +374,31 @@ func (d dialect) textList(col string, n int, list []string) (string, any) {
 
 // heldLinksWhere is heldLinks with more conditions on the rows of the sets (and, of the links of the chain).
 func (d dialect) heldLinksWhere(n int, and string) string {
-	return `WITH RECURSIVE r(id, version) AS (` + d.refsRows(n) + `),
+	return d.heldLinksOver("", d.refsRows(n), and)
+}
+
+// heldLinksOver is heldLinksWhere over the versions the query rows selects (id, version), after the common table
+// expressions pre (each followed by a comma).
+func (d dialect) heldLinksOver(pre, rows, and string) string {
+	ctes, final := d.heldLinksParts(pre, rows, and)
+	return ctes + `
+		` + final
+}
+
+// heldLinksParts is heldLinksOver as its common table expressions (h the rows of the sets) and its final select.
+func (d dialect) heldLinksParts(pre, rows, and string) (string, string) {
+	r, base := `r(id, version) AS (`, `node_version v JOIN r`
+	if pre != "" { // versions a query selects: kept computed and read first (SQLite would scan the versions)
+		r, base = `r(id, version) AS MATERIALIZED (`, `r`+d.outerJoin()+`node_version v`
+	}
+	return `WITH RECURSIVE ` + pre + r + rows + `),
 		c(nid, rv, sv) AS (
-			SELECT v.node_id, v.version, coalesce(v.links, v.version) FROM node_version v JOIN r ON r.id = v.node_id AND r.version = v.version
+			SELECT v.node_id, v.version, coalesce(v.links, v.version) FROM ` + base + ` ON r.id = v.node_id AND r.version = v.version
 			UNION ALL
 			SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_depth > 0
 		),
-		h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes, l.to_url FROM c` + d.outerJoin() + `link l ON l.from_id = c.nid AND l.from_version = c.sv` + and + `)
-		SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id, h.to_url FROM h
+		h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes, l.to_url FROM c` + d.outerJoin() + `link l ON l.from_id = c.nid AND l.from_version = c.sv` + and + `)`,
+		`SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id, h.to_url FROM h
 		WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
 }
 
@@ -953,16 +970,168 @@ func (d dialect) sqlLinksFromOfType(refs []domain.NodeRef, types []string) (stri
 	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksOfType(1, n) + `) l ORDER BY l.id`, append(args, arg)
 }
 
-// sqlLinkSources reads the nodes a link row names a node as its target from (link_to), each once.
-func (d dialect) sqlLinkSources(id domain.NodeID) (string, []any) {
-	return `SELECT DISTINCT ` + d.id("from_id") + ` FROM link WHERE to_id = ` + d.ph(1) + ` AND removes IS NULL`, []any{string(id)}
+// sqlLinkSources reads the nodes a link row of some types (nil: every type) names one of the nodes ids as its target
+// from, each pair once (link_to_type: by target and type, the source in the index); for a page, by source, the sources
+// after its first, one more than its limit (to tell there are more).
+func (d dialect) sqlLinkSources(ids []domain.NodeID, types []string, page *sourcePage) (string, []any) {
+	in, arg := d.idList("to_id", 1, ids)
+	where, args := in, []any{arg}
+	if types != nil {
+		tin, targ := d.textList("type", 2, types)
+		where, args = where+` AND `+tin, append(args, targ)
+	}
+	q := `SELECT DISTINCT ` + d.id("to_id") + `, ` + d.id("from_id") + ` FROM link WHERE ` + where + ` AND removes IS NULL`
+	if page == nil {
+		return q, args
+	}
+	if page.After != "" {
+		cast := ``
+		if d.pg {
+			cast = `::uuid`
+		}
+		q, args = q+` AND from_id > `+d.ph(len(args)+1)+cast, append(args, string(page.After))
+	}
+	return q + ` ORDER BY 2 LIMIT ` + d.ph(len(args)+1), append(args, page.Limit+1)
 }
 
-// sqlLinksFromInto is sqlLinksFrom keeping the links into a node: a drop row has the target of the link it drops, so
-// the filter keeps the drops of the links it keeps.
-func (d dialect) sqlLinksFromInto(refs []domain.NodeRef, to domain.NodeID) (string, []any) {
+// sqlLinksFromInto is sqlLinksFrom keeping the links of some types (nil: every type) into some nodes: a drop row has
+// the target and the type of the link it drops, so the filter keeps the drops of the links it keeps.
+func (d dialect) sqlLinksFromInto(refs []domain.NodeRef, to []domain.NodeID, types []string) (string, []any) {
 	args, n := d.refsArgs(refs)
-	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksWhere(1, " AND l.to_id = "+d.ph(n)) + `) l ORDER BY l.id`, append(args, string(to))
+	in, arg := d.idList("l.to_id", n, to)
+	and, args := ` AND `+in, append(args, arg)
+	if types != nil {
+		tin, targ := d.textList("l.type", n+1, types)
+		and, args = and+` AND `+tin, append(args, targ)
+	}
+	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksWhere(1, and) + `) l ORDER BY l.id`, args
+}
+
+// selectLevel is a level of the selection of a state (ADR 0143): the commits a branch holds up to an order.
+type selectLevel struct {
+	Branch string
+	UpTo   int64
+}
+
+// sqlLinksEnteringAt reads the links of some types (nil: every type) entering the nodes ids from the versions of their
+// sources a state of a namespace holds, the sources skip left out, in one statement (ADR 0143, 0160): the sources a
+// link row names (s, link_to); for each, of the namespace, the version the first level of the selection deciding it
+// gives (the greatest of a commit its branch holds up to its order, latestHeld; a revert of that branch leaves it to
+// the next level), kept when it does not delete its node; then the links those versions hold into the nodes
+// (heldLinks).
+func (d dialect) sqlLinksEnteringAt(namespace string, levels []selectLevel, ids []domain.NodeID, types []string, skip []domain.NodeID) (string, []any) {
+	pre, rows, and, args := d.entering(namespace, levels, ids, types, skip, nil)
+	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksOver(pre, rows, and) + `) l ORDER BY l.id`, args
+}
+
+// sourcePage is a page of the sources of the links entering a node: the sources after a source ("": from the first),
+// in their order, at most a limit.
+type sourcePage struct {
+	After domain.NodeID
+	Limit int
+}
+
+// sqlLinksEnteringPage is sqlLinksEnteringAt for a page of the sources (s, one more than the page to tell there are
+// more; s1 the page): its rows first say how many sources s holds and the last of the page (k), then the links, if
+// any, of the versions of the sources of the page (a left join, so a page whose sources hold none still says so).
+func (d dialect) sqlLinksEnteringPage(namespace string, levels []selectLevel, id domain.NodeID, types []string, skip []domain.NodeID, page sourcePage) (string, []any) {
+	pre, rows, and, args := d.entering(namespace, levels, []domain.NodeID{id}, types, skip, &page)
+	ctes, final := d.heldLinksParts(pre, rows, and)
+	return ctes + `, l AS (` + final + `)
+		SELECT k.n, coalesce(k.last, ''), ` + d.qualifiedLinkCols() + ` FROM (SELECT (SELECT count(*) FROM s) AS n, (SELECT ` + d.id("id") + ` FROM s1 ORDER BY id DESC LIMIT 1) AS last) k
+		LEFT JOIN l ON 1 = 1 ORDER BY l.id`, args
+}
+
+// entering is the common table expressions of sqlLinksEnteringAt (pre), the versions of the sources (rows), the
+// condition on the rows of their link sets (and) and the arguments: the sources s of the links into ids (for a page,
+// its sources s1), their versions x.
+func (d dialect) entering(namespace string, levels []selectLevel, ids []domain.NodeID, types []string, skip []domain.NodeID, page *sourcePage) (string, string, string, []any) {
+	args := []any{domain.NamespaceOf(namespace), nil, int64(0)}
+	var from, where, and string
+	if d.pg {
+		in, arg := d.idList("to_id", 2, ids)
+		lin, _ := d.idList("l.to_id", 2, ids)
+		from, where, and, args[1] = `link`, in, ` AND `+lin, arg
+		if types != nil {
+			tin, targ := d.textList("type", 4, types)
+			ltin, _ := d.textList("l.type", 4, types)
+			where, and, args = where+` AND `+tin, and+` AND `+ltin, append(args, targ)
+		}
+	} else {
+		// SQLite plans a list read from json_each as a scan of the links: one value is sought (link_to_type, in the
+		// order of the sources), a list is joined first, each of its values sought
+		tables := []string{}
+		eq := func(col, alias string, n int, list []string) (string, string, any) {
+			if len(list) == 1 {
+				return `k.` + col + ` = ` + d.ph(n), `l.` + col + ` = ` + d.ph(n), list[0]
+			}
+			b, _ := json.Marshal(list)
+			tables = append(tables, `json_each(`+d.ph(n)+`) `+alias)
+			return `k.` + col + ` = ` + alias + `.value`, `l.` + col + ` IN (SELECT value FROM json_each(` + d.ph(n) + `))`, string(b)
+		}
+		var lin string
+		where, lin, args[1] = eq("to_id", "q", 2, nodeIDStrings(ids))
+		and = ` AND ` + lin
+		if types != nil {
+			tin, ltin, targ := eq("type", "t", 4, types)
+			where, and, args = where+` AND `+tin, and+` AND `+ltin, append(args, targ)
+		}
+		from = strings.Join(append(tables, `link k`), ` CROSS JOIN `)
+	}
+	col := func(c string) string {
+		if d.pg {
+			return c
+		}
+		return `k.` + c
+	}
+	if len(skip) > 0 {
+		sin, sarg := d.idList(col("from_id"), len(args)+1, skip)
+		where, args = where+` AND NOT (`+sin+`)`, append(args, sarg)
+	}
+	sources := `s AS MATERIALIZED (SELECT DISTINCT ` + col("from_id") + ` AS id FROM ` + from + ` WHERE ` + where + ` AND ` + col("removes") + ` IS NULL),
+		`
+	src := `s`
+	if page != nil {
+		if page.After != "" {
+			cast := ``
+			if d.pg {
+				cast = `::uuid`
+			}
+			where, args = where+` AND `+col("from_id")+` > `+d.ph(len(args)+1)+cast, append(args, string(page.After))
+		}
+		sources = `s AS MATERIALIZED (SELECT DISTINCT ` + col("from_id") + ` AS id FROM ` + from + ` WHERE ` + where + ` AND ` + col("removes") + ` IS NULL ORDER BY 1 LIMIT ` + d.ph(len(args)+1) + `),
+		s1 AS (SELECT id FROM s ORDER BY id LIMIT ` + d.ph(len(args)+2) + `),
+		`
+		args, src = append(args, page.Limit+1, page.Limit), `s1 s`
+	}
+	picks := make([]string, len(levels))
+	for k, l := range levels {
+		b, u := d.ph(len(args)+1), d.ph(len(args)+2)
+		args = append(args, domain.BranchOf(l.Branch), l.UpTo)
+		picks[k] = `(SELECT w.version FROM node_version w WHERE w.node_id = s.id AND w.version = ` + d.latestHeld("s.id", b, d.ph(3), u) +
+			` AND NOT (w.reason = '` + domain.ReasonRevert + `' AND w.branch = ` + b + `))`
+	}
+	pick := picks[0]
+	if len(picks) > 1 {
+		pick = `coalesce(` + strings.Join(picks, `, `) + `)`
+	}
+	pre := sources + `x AS MATERIALIZED (SELECT s.id, ` + pick + ` AS version FROM ` + src + ` WHERE (SELECT n.namespace FROM node n WHERE n.id = s.id) = ` + d.ph(1) + `),
+		`
+	rows := `SELECT x.id, x.version FROM x` + d.outerJoin() + `node_version w ON w.node_id = x.id AND w.version = x.version WHERE NOT w.deleted`
+	return pre, rows, and, args
+}
+
+// idList is col in the node ids at placeholder n, and the argument it takes.
+func (d dialect) idList(col string, n int, ids []domain.NodeID) (string, any) {
+	list := make([]string, len(ids))
+	for i, id := range ids {
+		list[i] = string(id)
+	}
+	if d.pg {
+		return col + ` = ANY(` + d.ph(n) + `::uuid[])`, list
+	}
+	b, _ := json.Marshal(list)
+	return col + ` IN (SELECT value FROM json_each(` + d.ph(n) + `))`, string(b)
 }
 
 // linkRefsWhere selects the links between two of the versions refs matching the text of q.

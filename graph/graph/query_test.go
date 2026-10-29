@@ -127,3 +127,100 @@ func testQueryView(t *testing.T, repo Repo) {
 		t.Fatalf("no view: %v", err)
 	}
 }
+
+// TestQueryFrontier: a hop reads the frontier it reaches in one batch, in the direction and the types of its
+// relationship: the rows and the reads counted are those of a hop read node by node; a link to itself is read either
+// way; a change view sees the links of its drafts entering a node.
+func TestQueryFrontier(t *testing.T) { forEachRepo(t, testQueryFrontier) }
+
+func testQueryFrontier(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	g := New(repo)
+	tree(t, g, 3, 3, 2)
+	if _, err := g.CommitEdits(ctx, Edits{Title: "loop", By: "tester", ProjectID: "PROJ-ROOT", Edits: []NodeEdit{
+		{Key: "S", Type: "Item", Links: []LinkEdit{{Type: "loop", ToKey: "S"}, {Type: "ref", ToKey: "P0"}}},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	head := must[domain.Commit](t)(g.BranchHead(ctx, "", domain.MainBranch))
+	main := View{Namespace: head.Namespace, Branch: domain.MainBranch}
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "more", ForkCommit: head.ID}))
+	imp := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Key: "R.0", Rationale: "link"}))
+	s := must[domain.Node](t)(g.NodeByKey(ctx, "", "S"))
+	must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, imp.ID, edit{AddLinks: []LinkWrite{{Type: "child", To: s.Ref()}}}))
+	change := View{Change: c.ID}
+	// a change that committed on its own branch (a link of R.1 to S, R.2.1 deleted), then holds a draft of R.0
+	c2 := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "committed", ForkCommit: head.ID}))
+	imp = must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c2.ID, NodeCheckout{Key: "R.1", Rationale: "link"}))
+	must[domain.ChangeImpact](t)(g.edit(ctx, c2.ID, imp.ID, edit{AddLinks: []LinkWrite{{Type: "child", To: s.Ref()}}}))
+	gone := must[domain.ChangeImpact](t)(g.ImpactNodeDelete(ctx, c2.ID, NodeCheckout{Key: "R.2.1", Rationale: "gone"}))
+	for _, id := range []domain.ChangeImpactID{imp.ID, gone.ID} {
+		if err := g.acceptImpact(ctx, c2.ID, id, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	must[domain.Commit](t)(g.CommitChange(ctx, c2.ID, ""))
+	imp = must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c2.ID, NodeCheckout{Key: "R.0", Rationale: "link"}))
+	must[domain.ChangeImpact](t)(g.edit(ctx, c2.ID, imp.ID, edit{AddLinks: []LinkWrite{{Type: "child", To: s.Ref()}}}))
+	committed := View{Change: c2.ID}
+	for _, tc := range []struct {
+		v       View
+		q, want string
+	}{
+		{main, "MATCH (r:Item {key: 'R'})-[:child]->(a)-[:child]->(b)-[:child]->(x) RETURN count(x)", "27"},
+		{change, "MATCH (r:Item {key: 'R'})-[:child]->(a)-[:child]->(b)-[:child]->(x) RETURN count(x)", "27"},
+		{main, "MATCH (r:Item {key: 'R'})-[:child*1..3]->(x) RETURN count(x)", "39"},
+		{change, "MATCH (r:Item {key: 'R'})-[:child*1..3]-(x) RETURN count(x)", "40"},
+		{main, "MATCH (x:Item)<-[:child]-(a)<-[:child]-(r) WHERE r.key = 'R' RETURN count(x)", "9"},
+		{main, "MATCH (p:Pool {key: 'P0'})<-[:ref]-(a)-[:child]->(b) RETURN count(b)", "39"},
+		{main, "MATCH (a:Item)-->(b) WHERE a.key STARTS WITH 'R.1' RETURN count(b)", "20"},
+		{main, "MATCH (s {key: 'S'})-[:loop]->(x) RETURN x.key", "S"},
+		{main, "MATCH (s {key: 'S'})<-[:loop]-(x) RETURN x.key", "S"},
+		{main, "MATCH (s {key: 'S'})<-[:child]-(x) RETURN x.key", ""},
+		{change, "MATCH (s {key: 'S'})<-[:child]-(x) RETURN x.key", "R.0"},
+		{change, "MATCH (r {key: 'R'})-[:child]->(a)-[:child]->(s {key: 'S'}) RETURN a.key", "R.0"},
+		{committed, "MATCH (s {key: 'S'})<-[:child]-(x) RETURN x.key ORDER BY x.key", "R.0;R.1"},
+		{committed, "MATCH (p:Pool {key: 'P0'})<-[:ref]-(a) RETURN count(a)", "13"},
+		{main, "MATCH (p:Pool {key: 'P0'})<-[:ref]-(a) RETURN count(a)", "14"},
+		{committed, "MATCH (x {key: 'R.2.1'}) RETURN x.key", ""},
+		{committed, "MATCH (s {key: 'S'})<-[:child]-(a)<-[:child]-(r) RETURN a.key + r.key ORDER BY a.key", "R.0R;R.1R"},
+		{main, "MATCH (a:Item)-[:child]->(b) WHERE a.key STARTS WITH 'R.1' AND EXISTS { (b)-[:child]->(:Item) } RETURN count(b)", "3"},
+		{main, "MATCH (a:Item {key: 'R'})-[:child]->(b) RETURN b.key, EXISTS { (b)<-[:loop]-() } AS l ORDER BY b.key", "R.0false;R.1false;R.2false"},
+		{change, "MATCH (a:Item)-[:child]->(b) WHERE NOT EXISTS { (b)-[:child]->() } AND a.key STARTS WITH 'R.0' RETURN count(b)", "10"},
+	} {
+		query := func(batch int) (string, QueryResult) {
+			t.Helper()
+			queryHopBatch = batch
+			defer func() { queryHopBatch = 200 }()
+			if batch == 0 { // a hop of one node reads its entering links a source at a time
+				queryHopBatch, queryHubPage = 1, 1
+				defer func() { queryHubPage = 1000 }()
+			}
+			res, err := g.QueryView(ctx, tc.v, tc.q, QueryOptions{})
+			if err != nil {
+				t.Fatalf("%s: %v", tc.q, err)
+			}
+			var got []string
+			for _, r := range res.Rows {
+				got = append(got, fmt.Sprint(r...))
+			}
+			return strings.Join(got, ";"), res
+		}
+		got, res := query(200)
+		one, by := query(1)
+		if got != tc.want || one != tc.want || res.Reads != by.Reads || res.Truncated || by.Truncated {
+			t.Fatalf("%v %s: %q in %d reads, node by node %q in %d, want %q", tc.v, tc.q, got, res.Reads, one, by.Reads, tc.want)
+		}
+		if paged, _ := query(0); paged != tc.want {
+			t.Fatalf("%v %s: %q a source at a time, want %q", tc.v, tc.q, paged, tc.want)
+		}
+	}
+	// a hub is read as far as the match goes: a LIMIT reads the pages of its rows only
+	queryHubPage = 2
+	defer func() { queryHubPage = 1000 }()
+	all := must[QueryResult](t)(g.QueryView(ctx, main, "MATCH (p:Pool {key: 'P0'})<-[:ref]-(a) RETURN a.key", QueryOptions{}))
+	few := must[QueryResult](t)(g.QueryView(ctx, main, "MATCH (p:Pool {key: 'P0'})<-[:ref]-(a) RETURN a.key LIMIT 3", QueryOptions{}))
+	if len(all.Rows) != 14 || len(few.Rows) != 3 || all.Reads != 8 || few.Reads != 3 { // the anchor, then a page per two sources
+		t.Fatalf("hub: %d rows in %d reads, LIMIT 3: %d rows in %d reads", len(all.Rows), all.Reads, len(few.Rows), few.Reads)
+	}
+}
