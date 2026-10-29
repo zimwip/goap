@@ -296,40 +296,15 @@ func (a *applier) revertWithdrawn(own domain.Branch) ([]domain.Node, error) {
 		if !a.takes(id) {
 			continue
 		}
-		latest, err := a.tx.LatestOn(a.ctx, id, a.branch)
-		if err != nil {
-			return nil, err
-		}
-		next, err := nextVersion(a.ctx, a.tx, id)
-		if err != nil {
-			return nil, err
-		}
-		n := domain.Node{ID: id, Version: next, Branch: a.branch, Namespace: latest.Namespace, Key: latest.Key, Type: latest.Type, ChangeID: a.change.ID,
-			Reason: domain.ReasonRevert, Parents: []domain.Version{latest.Version}, Responsible: latest.Responsible, Project: latest.Project,
-			Comment: "reverted: its impact was withdrawn from the change", CreatedAt: a.g.now()}
 		v, inFork := fork[id]
-		var links []domain.Link
-		like := []domain.NodeRef{latest.Ref()}
+		n, err := a.g.writeRevert(a.ctx, a.tx, a.branch, a.change.ID, id, v, "reverted: its impact was withdrawn from the change")
+		if err != nil {
+			return nil, err
+		}
 		if inFork {
-			src, err := a.tx.Node(a.ctx, domain.NodeRef{ID: id, Version: v})
-			if err != nil {
-				return nil, err
-			}
-			n.Properties, n.State, n.Responsible, n.Origins = cloneMap(src.Properties), src.State, src.Responsible, slices.Clone(src.Origins)
-			if links, err = a.tx.OutLinks(a.ctx, src.Ref()); err != nil {
-				return nil, err
-			}
-			like = []domain.NodeRef{src.Ref(), latest.Ref()} // the set of the fork's version, shared as is (ADR 0141)
 			a.target.set(id, v)
 		} else {
-			n.Properties, n.State, n.Deleted = cloneMap(latest.Properties), latest.State, true
 			a.target.remove(id)
-		}
-		if err := a.tx.PutNode(a.ctx, n); err != nil {
-			return nil, err
-		}
-		if err := a.g.putLinks(a.ctx, a.tx, n, links, like...); err != nil {
-			return nil, err
 		}
 		wrote = append(wrote, n)
 	}

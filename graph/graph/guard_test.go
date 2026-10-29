@@ -84,7 +84,7 @@ func testGuardRefusesWritesOutsideAChange(t *testing.T, repo Repo) {
 		"a link without a change": func(tx Tx) error {
 			return tx.PutLinks(ctx, []domain.Link{{ID: domain.LinkID(g.newID()), Type: LinkProjectPartOf, From: proj.Ref(), To: proj.Ref()}})
 		},
-		"a branch membership without a change": func(tx Tx) error { return tx.JoinBranch(ctx, org.Ref(), "elsewhere", "", 0) },
+		"a branch membership without a change": func(tx Tx) error { return tx.JoinCommits(ctx, "elsewhere", "", 0, []int64{1}) },
 		"a change without a unit": func(tx Tx) error {
 			return tx.PutChange(ctx, domain.Change{ID: domain.ChangeID(g.newID()), Title: "x", Status: domain.ChangeDraft, ProjectID: g.StructureURL(domain.StructureProject, rootProject(g))})
 		},
@@ -247,7 +247,7 @@ func testStorageRequiresAChange(t *testing.T, repo Repo) {
 			t.Errorf("%s: accepted by the database", name)
 		}
 	}
-	if err := exec(`INSERT INTO node_branch (node_id, version, branch, change_id) VALUES (`+ph(1)+`, 1, 'x', NULL)`, string(org.ID)); err == nil {
+	if err := exec(`INSERT INTO branch_commit (branch, seq, at, change_id) VALUES (`+ph(1)+`, 1, 1, NULL)`, "x"); err == nil {
 		t.Error("a branch membership without a change: accepted by the database")
 	}
 	if err := exec(`INSERT INTO node_version (node_id, version, props, change_id, owner, created_at) VALUES (`+ph(1)+`, 99, '{}', `+ph(2)+`, `+ph(1)+`, '2026-01-01T00:00:00Z')`,

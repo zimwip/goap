@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -256,7 +257,7 @@ func latestOnTx(ctx context.Context, tx Tx, namespace, branch string, id domain.
 }
 
 // fastForward commits a change whose target has not moved, for the nodes its branch changed, since its branch was
-// forked: the versions of the branch join the target (ADR 0032), no merge version is made, and each change impact
+// forked: the target takes the commits of the branch (ADR 0032, 0176), no merge version is made, and each change impact
 // commits as the version it wrote. The target is a lasting branch, which records the commit in a commit, or the branch
 // of the parent change of a sub-change (ADR 0103), which holds no commit (ADR 0140).
 func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, closing bool) (bool, error) {
@@ -285,10 +286,17 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	if err != nil {
 		return false, err
 	}
-	if !maps.Equal(forkNodes, intoNodes) {
+	// a node the branch holds as its fork does (a revert, ADR 0140) is no work of the branch: the target's version stands
+	// over it (its revert is written again over the new fork, refreshReverts)
+	worked := slices.DeleteFunc(slices.Clone(ids), func(id domain.NodeID) bool {
+		fv, inFork := forkNodes[id]
+		hv, inFrom := fromNodes[id]
+		return inFork == inFrom && fv == hv
+	})
+	if !maps.Equal(subMap(forkNodes, worked), subMap(intoNodes, worked)) {
 		// the target moved on a node the branch changed: a fast-forward still when the branch's version derives from the
 		// target's (a draft rebased at its commit, ADR 0165), a merge otherwise
-		if ok, err := overTarget(ctx, tx, ids, forkNodes, intoNodes, fromNodes); err != nil || !ok {
+		if ok, err := overTarget(ctx, tx, worked, forkNodes, intoNodes, fromNodes); err != nil || !ok {
 			return false, err
 		}
 	}
@@ -327,6 +335,17 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 			return false, err
 		}
 	}
+	// the reverts the branch holds are versions the target takes as they are (ADR 0176): copies of what it holds
+	if raw, err := tx.BranchCommits(ctx, own.Namespace, own.Name, math.MaxInt64, ids); err != nil {
+		return false, err
+	} else {
+		for _, id := range ids {
+			if l, ok := raw[id]; ok && l.Revert && !l.Deleted && intoNodes[id] != l.Version {
+				moves = append(moves, domain.NodeRef{ID: id, Version: l.Version})
+				delta[id] = l.Version
+			}
+		}
+	}
 	if len(moves) == 0 && len(delta) == 0 {
 		if !closing {
 			return false, fmt.Errorf("change %s: what it committed is merged already, nothing to merge: %w", c.ID, ErrNothingToCommit)
@@ -336,10 +355,9 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 			return true, g.closeMerged(ctx, tx, c, own, target)
 		}
 	}
-	for _, r := range moves {
-		if err := tx.JoinBranch(ctx, r, target, c.ID, 0); err != nil {
-			return false, err
-		}
+	// the target takes the commits of the branch (ADR 0176): one row per commit, the versions they wrote as they are
+	if err := takeCommits(ctx, tx, own.Namespace, target, own.Name, c.ID, moves); err != nil {
+		return false, err
 	}
 	// the impacts whose node this merge moves record their version on the target, the ones merged before kept
 	only := make(map[domain.NodeID]bool, len(delta))
@@ -501,4 +519,15 @@ func (g *Graph) ensureOwnBranch(ctx context.Context, tx Tx, c domain.Change) (do
 	}
 	c.Branch = own.Name
 	return c, own, tx.PutChange(ctx, c)
+}
+
+// subMap is the part of a state holding some nodes.
+func subMap(m map[domain.NodeID]domain.Version, ids []domain.NodeID) map[domain.NodeID]domain.Version {
+	out := make(map[domain.NodeID]domain.Version, len(ids))
+	for _, id := range ids {
+		if v, ok := m[id]; ok {
+			out[id] = v
+		}
+	}
+	return out
 }

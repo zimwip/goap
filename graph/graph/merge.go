@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -514,12 +516,30 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		next       domain.NodeRef
 		// join: the source version commits as is (added or fast-forward, no resolution), no merge version (ADR 0032)
 		join bool
+		// keep: the target keeps what it holds (a node skipped, or deleted there): the commits of the source the
+		// target takes bring their version, the target's own version at the merge keeps its own (ADR 0176)
+		keep bool
 	}
 	var todo []*merged
+	var joined []domain.NodeRef
 	for _, cand := range plan.Candidates {
 		r, resolved := in.Resolutions[cand.Node]
 		if r.Skip || (cand.Ours == nil && cand.Ancestor != nil) {
-			continue // kept as is on the target (or deleted there)
+			// kept as is on the target (or deleted there)
+			from, err := tx.Node(ctx, cand.Theirs)
+			if err != nil {
+				return res, err
+			}
+			m := &merged{cand: cand, from: &from, keep: true}
+			if cand.Ours != nil {
+				ours, err := tx.Node(ctx, *cand.Ours)
+				if err != nil {
+					return res, err
+				}
+				m.ours = &ours
+			}
+			todo = append(todo, m)
+			continue
 		}
 		from, err := tx.Node(ctx, cand.Theirs)
 		if err != nil {
@@ -576,6 +596,44 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		m.from.Properties = props // the merged properties, carried by the version below
 		todo = append(todo, m)
 	}
+	// a revert the source holds of a node no candidate names (the source holds it as its fork does, ADR 0140) is a version
+	// the target takes with the commits of the source as it is (ADR 0176): when it is no copy of what the target holds,
+	// the target keeps its own by a version of the merge
+	named := make(map[domain.NodeID]bool, len(todo))
+	for _, m := range todo {
+		named[m.cand.Node] = true
+	}
+	for _, cand := range plan.Candidates {
+		named[cand.Node] = true
+	}
+	revs, err := tx.BranchCommits(ctx, namespace, in.From, math.MaxInt64, nil)
+	if err != nil {
+		return res, err
+	}
+	for _, id := range slices.Sorted(maps.Keys(revs)) {
+		l := revs[id]
+		if !l.Revert || named[id] {
+			continue
+		}
+		from, err := tx.Node(ctx, domain.NodeRef{ID: id, Version: l.Version})
+		if err != nil {
+			return res, err
+		}
+		m := &merged{cand: MergeCandidate{Node: id, Key: from.Key, Type: from.Type, Theirs: from.Ref()}, from: &from, keep: true}
+		if tv, ok := target[id]; ok {
+			ours, err := tx.Node(ctx, domain.NodeRef{ID: id, Version: tv})
+			if err != nil {
+				return res, err
+			}
+			if !from.Deleted && from.State == ours.State && reflect.DeepEqual(from.Properties, ours.Properties) {
+				continue // a copy of what the target holds
+			}
+			m.ours = &ours
+		} else if from.Deleted {
+			continue
+		}
+		todo = append(todo, m)
+	}
 	// 1. the merge versions, with the change impact that explains each: a node changed on one side only joins the
 	// target as is (ADR 0032), a node changed on both sides gets a merge version
 	res.Commit.ID = domain.CommitID(g.newID())
@@ -610,6 +668,14 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			n.Parents = []domain.Version{m.ours.Version, m.from.Version}
 			deleted = deleted || m.ours.Deleted
 		}
+		if m.keep {
+			// what the target holds, or nothing: a tombstone of a node it does not hold
+			deleted = true
+			if m.ours != nil {
+				n = *m.ours
+				n.Reason, n.Parents, deleted = domain.ReasonMerge, []domain.Version{m.ours.Version, m.from.Version}, m.ours.Deleted
+			}
+		}
 		why := whyOf(m)
 		cn := domain.ChangeImpact{ID: impactIDs[i], Key: n.Key, Type: n.Type, Intent: domain.IntentCreated, Rationale: why,
 			Review: domain.ReviewAccepted, ProducedBy: "graph.merge", CreatedAt: g.now()}
@@ -618,9 +684,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		}
 		if m.join {
 			n = *m.from
-			if err := tx.JoinBranch(ctx, n.Ref(), plan.Into, c.ID, 0); err != nil {
-				return res, err
-			}
+			joined = append(joined, n.Ref())
 		} else {
 			v, err := nextVersion(ctx, tx, n.ID)
 			if err != nil {
@@ -681,6 +745,11 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	if len(stuck) > 0 {
 		return res, invalidf("the change leaves nodes in a state that cannot commit, move them to a committable state first: %s", strings.Join(stuck, ", "))
 	}
+	// the target takes the commits of the source (ADR 0176): the versions joined as they are, the others outrun by the
+	// merge's own versions, written at the same order
+	if err := takeCommits(ctx, tx, namespace, plan.Into, in.From, c.ID, joined); err != nil {
+		return res, err
+	}
 	// 2. their links: a 3-way merge keyed by (type, target node), retargeted to the merged versions
 	newRef := map[domain.NodeID]domain.NodeRef{}
 	for _, m := range todo {
@@ -689,6 +758,20 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	for _, m := range todo {
 		if v, ok := target[m.next.ID]; !ok || v != m.next.Version || m.join {
 			continue // deleted, or joined with the links it has
+		}
+		if m.keep {
+			// the links of what the target holds
+			links, err := tx.OutLinks(ctx, m.ours.Ref())
+			if err != nil {
+				return res, err
+			}
+			for i := range links {
+				links[i].ID = domain.LinkID(g.newID())
+			}
+			if err := g.putLinks(ctx, tx, domain.Node{ID: m.next.ID, Version: m.next.Version, ChangeID: c.ID}, links, m.ours.Ref()); err != nil {
+				return res, err
+			}
+			continue
 		}
 		theirs, err := tx.OutLinks(ctx, m.from.Ref())
 		if err != nil {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -12,8 +11,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// heldQuerier holds the rows a write transaction writes (the versions of a commit, their links, joins and change
-// impacts) and sends them in a few statements before its next statement that may read them, and before its commit.
+// heldQuerier holds the rows a write transaction writes (the versions of a commit, their links and change impacts) and sends them in a few statements before its next statement that may read them, and before its commit.
 type heldQuerier struct {
 	Tx pgQuerier
 	// pipe is the transaction the rows are written in: their inserts wait for the next statement (nil: sent at once)
@@ -24,17 +22,13 @@ type heldQuerier struct {
 	versions []heldVersion
 	// links are the link rows held (links and drops, ADR 0141), written after the versions they leave
 	links []heldLink
-	// joins are the versions held joining a branch (JoinBranch: node, version, branch, change, committed), written
-	// after the versions
-	joins [][]any
 	// the rows held indexed, so that holding or asking for one costs the same whatever the number held (a commit holds
-	// a version, a link set and an impact per node): verAt the position of a version by its node, refs the versions written or left by a link, joined the nodes of the joins, keys the namespace and
+	// a version, a link set and an impact per node): verAt the position of a version by its node, refs the versions written or left by a link, keys the namespace and
 	// key of the nodes created, nodes the nodes of refs
-	verAt  map[domain.NodeID]int
-	refs   map[domain.NodeRef]bool
-	nodes  map[domain.NodeID]bool
-	joined map[domain.NodeID]bool
-	keys   map[[2]string]bool
+	verAt map[domain.NodeID]int
+	refs  map[domain.NodeRef]bool
+	nodes map[domain.NodeID]bool
+	keys  map[[2]string]bool
 }
 
 // heldLink is a link row held: the version it leaves and its arguments (linkColumns).
@@ -65,15 +59,6 @@ func (h *heldQuerier) forgetRefs() {
 	for _, l := range h.links {
 		h.noteRef(l.from)
 	}
-}
-
-// holdJoin holds a join of a version to a branch (JoinBranch's arguments).
-func (h *heldQuerier) holdJoin(args []any) {
-	h.joins = append(h.joins, args)
-	if h.joined == nil {
-		h.joined = map[domain.NodeID]bool{}
-	}
-	h.joined[domain.NodeID(args[0].(string))] = true
 }
 
 // heldVersion is a node version a write transaction writes: its node created (version 1) or moved to it, its row with
@@ -129,9 +114,6 @@ func (h *heldQuerier) flush(ctx context.Context) error {
 		return err
 	}
 	if err := h.flushLinks(ctx); err != nil {
-		return err
-	}
-	if err := h.flushJoins(ctx); err != nil {
 		return err
 	}
 	impacts := h.impacts
@@ -271,43 +253,6 @@ func (h *heldQuerier) flushLinks(ctx context.Context) error {
 	return nil
 }
 
-// flushJoins writes the joins held, several per statement: as JoinBranch, a version already on the branch or joined to
-// it is left alone.
-func (h *heldQuerier) flushJoins(ctx context.Context) error {
-	joins := h.joins
-	h.joins, h.joined = nil, nil
-	for rows := range slices.Chunk(joins, joinRowsPerInsert) {
-		args := make([]any, 0, len(rows)*5)
-		vals := make([]string, len(rows))
-		for i, j := range rows {
-			args = append(args, j...)
-			b := i * 5
-			vals[i] = fmt.Sprintf("($%d::uuid, $%d::int, $%d::text, $%d::uuid, $%d::bigint)", b+1, b+2, b+3, b+4, b+5)
-		}
-		q := `INSERT INTO node_branch (node_id, version, branch, change_id, committed)
-			SELECT v.node_id, v.version, j.branch, j.change_id, j.committed FROM (VALUES ` + strings.Join(vals, ", ") + `) AS j(node_id, version, branch, change_id, committed)
-			JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version AND v.branch <> j.branch
-			ON CONFLICT DO NOTHING`
-		if err := h.write(ctx, q, args, "node branch"); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// joinRowsPerInsert is the number of joins one statement writes (5 arguments each).
-const joinRowsPerInsert = 1000
-
-// joinsNode tells whether a join of one of the nodes is held.
-func (h *heldQuerier) joinsNode(ids ...domain.NodeID) bool {
-	for _, id := range ids {
-		if h.joined[id] {
-			return true
-		}
-	}
-	return false
-}
-
 // holdsNode tells whether a version of one of the nodes is held: a read of those nodes waits for them.
 func (h *heldQuerier) holdsNode(ids []domain.NodeID) bool {
 	for _, id := range ids {
@@ -315,7 +260,7 @@ func (h *heldQuerier) holdsNode(ids []domain.NodeID) bool {
 			return true
 		}
 	}
-	return h.joinsNode(ids...)
+	return false
 }
 
 // holdsKey tells whether a node of the key is created by a version held.
@@ -341,8 +286,7 @@ func (t *pgTx) onRefs(refs []domain.NodeRef) pgQuerier {
 		return t.tx
 	}
 	for _, r := range refs {
-		// a join changes what a branch holds of its node, whatever the version read
-		if t.held.refs[r] || t.held.joined[r.ID] {
+		if t.held.refs[r] {
 			return t.tx
 		}
 	}

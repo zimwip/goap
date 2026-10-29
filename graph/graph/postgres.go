@@ -429,7 +429,41 @@ func (t *pgTx) Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error
 func (t *pgTx) LatestOn(ctx context.Context, id domain.NodeID, branch string) (domain.Node, error) {
 	q, args := dialectPG.sqlLatestOn(id, branch)
 	n, err := scanNode(t.tx.QueryRow(ctx, q, args...))
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return n, mapErr(err, "node "+string(id)+" on "+domain.BranchOf(branch))
+	}
+	// the commits the branch took (ADR 0176): their greatest version, when greater than its own
+	joined, jerr := t.joinedLatest(ctx, []domain.NodeID{id}, branch)
+	if jerr != nil {
+		return domain.Node{}, jerr
+	}
+	if v, ok := joined[id]; ok && (err != nil || v > n.Version) {
+		return t.Node(ctx, domain.NodeRef{ID: id, Version: v})
+	}
 	return n, mapErr(err, "node "+string(id)+" on "+domain.BranchOf(branch))
+}
+
+// joinedLatest reads the greatest version of some nodes among the commits a branch took (ADR 0176).
+func (t *pgTx) joinedLatest(ctx context.Context, ids []domain.NodeID, branch string) (map[domain.NodeID]domain.Version, error) {
+	out := map[domain.NodeID]domain.Version{}
+	if ids = uuidIDs(ids); len(ids) == 0 {
+		return out, nil
+	}
+	q, args := dialectPG.sqlJoinedLatest(ids, branch)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, mapErr(err, "nodes")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var v int
+		if err := rows.Scan(&id, &v); err != nil {
+			return nil, err
+		}
+		out[domain.NodeID(id)] = domain.Version(v)
+	}
+	return out, rows.Err()
 }
 
 func (t *pgTx) DerivedNodes(ctx context.Context, ref domain.NodeRef) ([]domain.Node, error) {
@@ -780,7 +814,19 @@ func (t *pgTx) LatestVersionsOn(ctx context.Context, ids []domain.NodeID, branch
 		}
 		out[domain.NodeID(id)] = domain.Version(v)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	joined, err := t.joinedLatest(ctx, ids, branch)
+	if err != nil {
+		return nil, err
+	}
+	for id, v := range joined {
+		if v > out[id] {
+			out[id] = v
+		}
+	}
+	return out, nil
 }
 
 func (t *pgTx) LatestVersions(ctx context.Context, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
@@ -851,13 +897,13 @@ func uuidIDs(ids []domain.NodeID) []domain.NodeID {
 }
 
 func (t *pgTx) commits(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error) {
-	out := map[domain.NodeID]CommittedVersion{}
 	if ids != nil {
 		ids = uuidIDs(ids)
 		if len(ids) == 0 {
-			return out, nil
+			return map[domain.NodeID]CommittedVersion{}, nil
 		}
 	}
+	own := map[domain.NodeID]ownVersion{}
 	q, args := dialectPG.sqlCommittedVersions(namespace, branch, after, upTo, ids)
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
@@ -867,43 +913,56 @@ func (t *pgTx) commits(ctx context.Context, namespace, branch string, after, upT
 	for rows.Next() {
 		var nid, reason string
 		var v int
-		var l CommittedVersion
-		if err := rows.Scan(&nid, &v, &l.Deleted, &reason); err != nil {
+		var o ownVersion
+		if err := rows.Scan(&nid, &v, &o.Deleted, &reason, &o.Committed); err != nil {
 			return nil, err
 		}
-		l.Version, l.Revert = domain.Version(v), reason == domain.ReasonRevert
-		out[domain.NodeID(nid)] = l
+		o.Version, o.Revert = domain.Version(v), reason == domain.ReasonRevert
+		own[domain.NodeID(nid)] = o
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	joined := map[domain.NodeID]joinedVersion{}
+	q, args = dialectPG.sqlJoinedVersions(namespace, branch, after, upTo, ids)
+	jrows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer jrows.Close()
+	for jrows.Next() {
+		var nid, reason string
+		var v int
+		var j joinedVersion
+		if err := jrows.Scan(&nid, &v, &j.At, &j.Deleted, &reason); err != nil {
+			return nil, err
+		}
+		j.Version = domain.Version(v)
+		joined[domain.NodeID(nid)] = j
+	}
+	if err := jrows.Err(); err != nil {
+		return nil, err
+	}
+	return lastCommitted(own, joined), nil
 }
 
-// CommittedAtKey implements keySelector: sqlFoldVersions for the node of a key, found by its key in the same statement.
+// CommittedAtKey implements keySelector: the node of a key found by its key, then its last commit (Tx.BranchCommits).
 func (t *pgTx) CommittedAtKey(ctx context.Context, namespace, branch string, upTo int64, key string) (domain.NodeID, CommittedVersion, bool, error) {
+	q, args := dialectPG.sqlNodeIDByKey(namespace, key)
 	var nid string
-	var v *int
-	var deleted *bool
-	var reason *string
-	err := t.tx.QueryRow(ctx, `WITH x AS MATERIALIZED (
-			SELECT n.id, (
-				SELECT u.version FROM (
-					(SELECT v.version, v.committed FROM node_version v
-					WHERE v.node_id = n.id AND v.branch = (SELECT $1::text) AND v.committed + 0 > 0 AND v.committed + 0 <= $2 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
-					UNION ALL
-					(SELECT j.version, j.committed FROM node_branch j
-					WHERE j.node_id = n.id AND j.branch = (SELECT $1::text) AND j.committed + 0 > 0 AND j.committed + 0 <= $2 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
-				) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
-			) AS version
-			FROM node n WHERE n.namespace = $3 AND n.key = $4
-		)
-		SELECT x.id::text, x.version, w.deleted, w.reason FROM x LEFT JOIN node_version w ON w.node_id = x.id AND w.version = x.version`,
-		domain.BranchOf(branch), upTo, domain.NamespaceOf(namespace), key).Scan(&nid, &v, &deleted, &reason)
+	err := t.tx.QueryRow(ctx, q, args...).Scan(&nid)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", CommittedVersion{}, false, nil
 	}
-	if err != nil || v == nil {
-		return domain.NodeID(nid), CommittedVersion{}, false, mapErr(err, "node key "+key)
+	if err != nil {
+		return "", CommittedVersion{}, false, mapErr(err, "node key "+key)
 	}
-	return domain.NodeID(nid), CommittedVersion{Version: domain.Version(*v), Deleted: *deleted, Revert: str(reason) == domain.ReasonRevert}, true, nil
+	got, err := t.commits(ctx, namespace, branch, 0, upTo, []domain.NodeID{domain.NodeID(nid)})
+	if err != nil {
+		return domain.NodeID(nid), CommittedVersion{}, false, err
+	}
+	cv, ok := got[domain.NodeID(nid)]
+	return domain.NodeID(nid), cv, ok, nil
 }
 
 // NextCommit allocates the greatest order stored or allocated plus one: two transactions commit on one branch from
@@ -1548,13 +1607,22 @@ func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change dom
 	return nil
 }
 
-func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, committed int64) error {
+func (t *pgTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at int64, seqs []int64) error {
+	q, args := dialectPG.sqlJoinCommits(branch, change, at, seqs)
 	if t.held != nil {
-		t.held.holdJoin([]any{string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)), committed})
-		return nil
+		return t.held.write(ctx, q, args, "branch commits")
 	}
-	_, err := t.tx.Exec(ctx, dialectPG.sqlJoinBranch(), string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)), committed)
-	return mapErr(err, "node "+ref.String())
+	_, err := t.tx.Exec(ctx, q, args...)
+	return mapErr(err, "branch "+branch)
+}
+
+func (t *pgTx) JoinedCommits(ctx context.Context, branch string, after, upTo int64) ([]int64, error) {
+	q, args := dialectPG.sqlJoinedCommits(branch, after, upTo)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[int64])
 }
 
 func (t *pgTx) PutTag(ctx context.Context, tag domain.Tag) error {

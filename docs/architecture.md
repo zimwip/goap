@@ -162,8 +162,13 @@ branch), `derive` (first version on a branch other than its base's: the common c
 the rebase of the change onto its parent branch, written on the change's branch; parents: the version the change committed,
 then the parent branch's, [ADR 0133](adr/0133-rebase-is-a-merge-and-the-change-stack.md)). Versions are written when a
 change commits (`CommitChange`, ADR 0079 / 0102), on its own branch; the merge only rebases and fast-forwards.
-A version is **part of several branches** when a merge commits it as is: it *joins* the target (`node_branch`,
-`Node.Joined`, [ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md)) instead of being copied.
+A version is **part of several branches** when a merge commits it as is: the target *takes the commit* that wrote it
+(`branch_commit`, one row per commit, never per version, `Node.Joined`,
+[ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md), [ADR 0176](adr/0176-branch-reads-commits.md))
+instead of copying it. A branch reads its own commits and the commits it took: the version of a node is its last own
+commit's, or the greatest version of the commits it took when taken later; a state is the sum of the modifications
+applied to it. A revert is a version like any other (a copy of the version it puts back, a tombstone for a creation),
+written again over the new fork when the fork of its change moves.
 
 ```
 REQ-1  v1(main) ── v2(change-A, derive) ═══ joins main (fast-forward of A)
@@ -173,12 +178,13 @@ REQ-1  v1(main) ── v2(change-A, derive) ═══ joins main (fast-forward o
 - A **branch** (`CreateBranch`) belongs to one namespace (`Branch.namespace`) and starts from a commit of that
   same namespace (`forkCommit`), advancing through the changes applied on it (`Change.branch`); its **head**
   (`head`) is the latest commit produced. `main` exists implicitly, per namespace.
-- "Latest version" is read **per branch** (`LatestOn(node, branch)`: the highest version written on the branch or
-  joined to it): applying (`apply`) a change detects a conflict when a node has advanced **on the change's branch**
+- "Latest version" is read **per branch** (`LatestOn(node, branch)`: the highest version written on the branch or of a
+  commit it took): applying (`apply`) a change detects a conflict when a node has advanced **on the change's branch**
   since the base version.
 - **Branch merge** (`PlanMerge` / `MergeBranch`): for each node modified on the source branch since
   the fork: a node changed on the source only (`added`, `fast_forward`) **joins** the target as is, no version is
-  written; a node changed on both sides gets a 3-way merge against the common ancestor (walking up `parents`) —
+  written (the target takes the commits of the source, ADR 0176; a node the merge keeps as the target holds it gets a
+  version of the merge, which outranks them); a node changed on both sides gets a 3-way merge against the common ancestor (walking up `parents`) —
   property by property (one side equal to the ancestor takes the other, otherwise **conflict**) and outgoing links
   as a set (key = type + target node: added on one side → kept, removed on one side → removed), written as a
   `merge` version. A joined version keeps its links: one that targets a node that got a merge version is suspect
@@ -196,7 +202,7 @@ REQ-1  v1(main) ── v2(change-A, derive) ═══ joins main (fast-forward o
 - **Change-stack** ([ADR 0133](adr/0133-rebase-is-a-merge-and-the-change-stack.md)): every node version and every commit
   exposes the changes it is the application of, oldest first, with the lineage they are read from (`Graph.ChangeStack`,
   RPC `GetChangeStack`): for a version, its ancestors through `parents` with the change that wrote each and the changes
-  whose merge made it join a branch (`node_branch`); for a commit, the commits it follows from (parent, merged head)
+  whose merge made a branch take its commit (`branch_commit`); for a commit, the commits it follows from (parent, merged head)
   and, for one that took a change in, the sub-changes merged into it (`CommitStep.merged`: a change branch holds no
   commit, ADR 0140). A sub-change names its parent. Nothing is stored: the stack is composed from what every version and
   commit records. `DiffCommits` also answers the changes that explain the difference (`changes_added` /
@@ -1211,7 +1217,7 @@ cut halfway: failed, nothing: run again), so a step never writes twice. Core NAT
 node(id uuid, namespace, key text, type text, latest int, project text)  -- the project it was created in, a logical URL without version (ADR 0154 §9)
 node_version(node_id, version, props jsonb, deleted bool, change_id → change, owner text, created_at, committed)  -- owner: a logical URL without version (ADR 0154 §9); PK (node_id, version); committed: the order of its commit (ADR 0140)
 link(id uuid, type, from_id, from_version, to_id, to_version, to_url, props jsonb, change_id → change)  -- to_url: a target in another source (ADR 0154), to_id / to_version null then
-node_branch(node_id, version, branch, change_id → change, committed)  -- the branches a version joined besides the one it was written on (ADR 0032)
+branch_commit(branch, seq, at, change_id → change)  -- the commits a branch took from another branch (a merge), from its own order at; PK (branch, seq) (ADR 0176)
 commits(id uuid, name, namespace, branch, parent_id, merged_from, rebased_from, change_id, kind, created_at, seq, fork_commit)  -- seq: the order of commits; its state is a selection (ADR 0143) over fork_commit, the commit its branch stood on; every branch's commits, a change's included (ADR 0175)
 branch(namespace, name, parent, fork_commit, head_commit, origin, status, created_at)  -- PK (namespace, name)
 change(id uuid, title, intent, status, fork_commit, goal, methodology, landed_commit, data jsonb,

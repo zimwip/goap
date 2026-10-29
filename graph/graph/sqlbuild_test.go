@@ -60,9 +60,9 @@ func TestSQLBuildersGolden(t *testing.T) {
 
 	// LatestOn (the branch is named by BranchOf: "" is main)
 	q, a = pg.sqlLatestOn("n1", "")
-	check("pg LatestOn", pg, q, a, `SELECT `+goldPGNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND v.version = greatest(coalesce((SELECT version FROM node_version WHERE node_id = $1 AND branch = (SELECT $2::text) ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = $1 AND branch = (SELECT $2::text) ORDER BY version DESC LIMIT 1), 0))`, []any{"n1", "main"})
+	check("pg LatestOn", pg, q, a, `SELECT `+goldPGNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND v.version = coalesce((SELECT version FROM node_version WHERE node_id = $1 AND branch = (SELECT $2::text) ORDER BY version DESC LIMIT 1), 0)`, []any{"n1", "main"})
 	q, a = lite.sqlLatestOn("n1", "")
-	check("sqlite LatestOn", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? AND v.version = max(coalesce((SELECT version FROM node_version WHERE node_id = ? AND branch = ? ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = ? AND branch = ? ORDER BY version DESC LIMIT 1), 0))`, []any{"n1", "main"})
+	check("sqlite LatestOn", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? AND v.version = coalesce((SELECT version FROM node_version WHERE node_id = ? AND branch = ? ORDER BY version DESC LIMIT 1), 0)`, []any{"n1", "main"})
 
 	// DerivedNodes (ADR 0077): the versions naming a node among their origins
 	q, a = pg.sqlDerivedNodes(ref)
@@ -84,17 +84,17 @@ func TestSQLBuildersGolden(t *testing.T) {
 		if d.pg {
 			p, p2, p3, cols = "$1", "$2", "$3", goldPGNodeCols
 		}
-		check("VersionBranches", d, q, a, `SELECT version, branch FROM node_branch WHERE node_id = `+p+` AND version >= `+p2+` ORDER BY branch`, []any{"n1", 3})
+		check("VersionBranches", d, q, a, `SELECT v.version, j.branch FROM node_version v JOIN branch_commit j ON j.seq = v.committed WHERE v.node_id = `+p+` AND v.version >= `+p2+` AND j.branch <> v.branch ORDER BY j.branch`, []any{"n1", 3})
 		q, a = d.sqlVersionRange("n1", 0, 1)
 		check("VersionRange latest", d, q, a, `SELECT `+cols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = `+p+` ORDER BY v.version DESC LIMIT `+p2, []any{"n1", 1})
 		q, a = d.sqlVersionRange("n1", 7, 20)
 		check("VersionRange page", d, q, a, `SELECT `+cols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = `+p+` AND v.version < `+p2+` ORDER BY v.version DESC LIMIT `+p3, []any{"n1", 7, 20})
 		q, a = d.sqlVersionJoins("n1")
-		cid := "change_id"
+		cid := "j.change_id"
 		if d.pg {
-			cid = "change_id::text"
+			cid = "j.change_id::text"
 		}
-		check("VersionJoins", d, q, a, `SELECT version, branch, `+cid+` FROM node_branch WHERE node_id = `+p+` ORDER BY version, branch`, []any{"n1"})
+		check("VersionJoins", d, q, a, `SELECT v.version, j.branch, `+cid+` FROM node_version v JOIN branch_commit j ON j.seq = v.committed WHERE v.node_id = `+p+` AND j.branch <> v.branch ORDER BY v.version, j.branch`, []any{"n1"})
 	}
 
 	// NodeIDByKey
@@ -114,49 +114,32 @@ func TestSQLBuildersGolden(t *testing.T) {
 
 	// The state of a commit (ADR 0143): the versions committed on its branch
 	ids := []domain.NodeID{"n1", "n2"}
-	committed := func(id, inV, inJ, ns string) string {
-		return `SELECT ` + id + `, version, deleted, reason FROM (
-		SELECT x.node_id, x.version, x.deleted, x.reason, row_number() OVER (PARTITION BY x.node_id ORDER BY x.committed DESC, x.version DESC) AS rn
-		FROM (
-			SELECT v.node_id, v.version, v.deleted, v.reason, v.committed FROM node_version v
-			WHERE v.branch = $1 AND v.committed > $2 AND v.committed <= $3` + inV + `
-			UNION ALL
-			SELECT j.node_id, j.version, v.deleted, v.reason, j.committed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
-			WHERE j.branch = $1 AND j.committed > $2 AND j.committed <= $3` + inJ + `
-		) x JOIN node n ON n.id = x.node_id WHERE n.namespace = ` + ns + `
+	committed := func(id, inV, ns string) string {
+		return `SELECT ` + id + `, version, deleted, reason, committed FROM (
+		SELECT v.node_id, v.version, v.deleted, v.reason, v.committed, row_number() OVER (PARTITION BY v.node_id ORDER BY v.committed DESC, v.version DESC) AS rn
+		FROM node_version v JOIN node n ON n.id = v.node_id
+		WHERE v.branch = $1 AND v.committed > $2 AND v.committed <= $3` + inV + ` AND n.namespace = ` + ns + `
 	) y WHERE rn = 1`
 	}
 	q, a = pg.sqlCommittedVersions("", "main", 3, 9, nil)
-	check("pg CommittedVersions", pg, q, a, committed("node_id::text", "", "", "$4"), []any{"main", int64(3), int64(9), "default"})
+	check("pg CommittedVersions", pg, q, a, committed("node_id::text", "", "$4"), []any{"main", int64(3), int64(9), "default"})
 	q, a = pg.sqlCommittedVersions("", "main", 3, 9, ids)
-	check("pg CommittedVersions ids", pg, q, a, `WITH x AS MATERIALIZED (
-			SELECT q.id, (
-				SELECT u.version FROM (
-					(SELECT v.version, v.committed FROM node_version v
-					WHERE v.node_id = q.id AND v.branch = (SELECT $1::text) AND v.committed + 0 > $2 AND v.committed + 0 <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1)
-					UNION ALL
-					(SELECT j.version, j.committed FROM node_branch j
-					WHERE j.node_id = q.id AND j.branch = (SELECT $1::text) AND j.committed + 0 > $2 AND j.committed + 0 <= $3 ORDER BY j.committed DESC, j.version DESC LIMIT 1)
-				) u ORDER BY u.committed DESC, u.version DESC LIMIT 1
-			) AS version
-			FROM unnest($5::uuid[]) AS q(id) WHERE (SELECT n.namespace FROM node n WHERE n.id = q.id) = $4
-		)
-		SELECT x.id::text, x.version, w.deleted, w.reason FROM x JOIN node_version w ON w.node_id = x.id AND w.version = x.version`, []any{"main", int64(3), int64(9), "default", []string{"n1", "n2"}})
+	check("pg CommittedVersions ids", pg, q, a, `WITH x AS MATERIALIZED ( SELECT q.id, ( SELECT v.version FROM node_version v WHERE v.node_id = q.id AND v.branch = (SELECT $1::text) AND v.committed + 0 > $2 AND v.committed + 0 <= $3 ORDER BY v.committed DESC, v.version DESC LIMIT 1 ) AS version FROM unnest($5::uuid[]) AS q(id) WHERE (SELECT n.namespace FROM node n WHERE n.id = q.id) = $4 ) SELECT x.id::text, x.version, w.deleted, w.reason, w.committed FROM x JOIN node_version w ON w.node_id = x.id AND w.version = x.version`, []any{"main", int64(3), int64(9), "default", []string{"n1", "n2"}})
 	q, a = lite.sqlCommittedVersions("", "main", 3, 9, ids)
 	check("sqlite CommittedVersions ids", lite, q, a, strings.NewReplacer("$1", "?", "$2", "?", "$3", "?").Replace(committed("node_id",
-		" AND v.node_id IN (SELECT value FROM json_each(?))", " AND j.node_id IN (SELECT value FROM json_each(?))", "?")), []any{"main", int64(3), int64(9), "default", `["n1","n2"]`})
+		" AND v.node_id IN (SELECT value FROM json_each(?))", "?")), []any{"main", int64(3), int64(9), "default", `["n1","n2"]`})
 	q, a = pg.sqlCommitHeader("b1")
 	check("pg CommitHeader", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, namespace, kind, coalesce(rebased_from::text, ''), seq, coalesce(fork_commit::text, '') FROM commits WHERE id = $1`, []any{"b1"})
 	q, a = lite.sqlCommitHeader("b1")
 	check("sqlite CommitHeader", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, namespace, kind, coalesce(rebased_from, ''), seq, coalesce(fork_commit, '') FROM commits WHERE id = ?`, []any{"b1"})
 	q, a = pg.sqlLastCommit("change-1")
-	check("pg LastCommit", pg, q, a, `SELECT coalesce(max(committed), 0) FROM (SELECT max(committed) AS committed FROM node_version WHERE branch = $1 UNION ALL SELECT max(committed) FROM node_branch WHERE branch = $1) l`, []any{"change-1"})
+	check("pg LastCommit", pg, q, a, `SELECT coalesce(max(committed), 0) FROM (SELECT max(committed) AS committed FROM node_version WHERE branch = $1 UNION ALL SELECT max(at) FROM branch_commit WHERE branch = $1) l`, []any{"change-1"})
 	q, a = lite.sqlLastCommit("change-1")
-	check("sqlite LastCommit", lite, q, a, `SELECT coalesce(max(committed), 0) FROM (SELECT max(committed) AS committed FROM node_version WHERE branch = ? UNION ALL SELECT max(committed) FROM node_branch WHERE branch = ?) l`, []any{"change-1"})
+	check("sqlite LastCommit", lite, q, a, `SELECT coalesce(max(committed), 0) FROM (SELECT max(committed) AS committed FROM node_version WHERE branch = ? UNION ALL SELECT max(at) FROM branch_commit WHERE branch = ?) l`, []any{"change-1"})
 	q, a = pg.sqlBranchNodeIDs("change-1")
-	check("pg BranchNodeIDs", pg, q, a, `SELECT node_id::text FROM node_version WHERE branch = $1 UNION SELECT node_id::text FROM node_branch WHERE branch = $1`, []any{"change-1"})
+	check("pg BranchNodeIDs", pg, q, a, `SELECT node_id::text FROM node_version WHERE branch = $1 UNION SELECT v.node_id::text FROM branch_commit j JOIN commits c ON c.seq = j.seq JOIN node_version v ON v.branch = c.branch AND v.committed = j.seq WHERE j.branch = $1`, []any{"change-1"})
 	q, a = lite.sqlBranchNodeIDs("change-1")
-	check("sqlite BranchNodeIDs", lite, q, a, `SELECT node_id FROM node_version WHERE branch = ? UNION SELECT node_id FROM node_branch WHERE branch = ?`, []any{"change-1"})
+	check("sqlite BranchNodeIDs", lite, q, a, `SELECT node_id FROM node_version WHERE branch = ? UNION SELECT v.node_id FROM branch_commit j JOIN commits c ON c.seq = j.seq JOIN node_version v ON v.branch = c.branch AND v.committed = j.seq WHERE j.branch = ?`, []any{"change-1"})
 	q, a = pg.sqlNamespaceNodeIDs("alm")
 	check("pg NamespaceNodeIDs", pg, q, a, `SELECT id::text FROM node WHERE namespace = $1 ORDER BY id`, []any{"alm"})
 	q, a = lite.sqlNamespaceNodeIDs("alm")
@@ -255,9 +238,9 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlLatestVersions(ids)
 	check("sqlite LatestVersions", lite, q, a, `SELECT id, latest FROM node WHERE id IN (SELECT value FROM json_each(?))`, []any{`["n1","n2"]`})
 	q, a = pg.sqlLatestVersionsOn(ids, "b")
-	check("pg LatestVersionsOn", pg, q, a, `SELECT id::text, version FROM (SELECT q.id, greatest(coalesce((SELECT version FROM node_version WHERE node_id = q.id AND branch = (SELECT $2::text) ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = q.id AND branch = (SELECT $2::text) ORDER BY version DESC LIMIT 1), 0)) AS version FROM unnest($1::uuid[]) AS q(id)) l WHERE version > 0`, []any{[]string{"n1", "n2"}, "b"})
+	check("pg LatestVersionsOn", pg, q, a, `SELECT id::text, version FROM (SELECT q.id, coalesce((SELECT version FROM node_version WHERE node_id = q.id AND branch = (SELECT $2::text) ORDER BY version DESC LIMIT 1), 0) AS version FROM unnest($1::uuid[]) AS q(id)) l WHERE version > 0`, []any{[]string{"n1", "n2"}, "b"})
 	q, a = lite.sqlLatestVersionsOn(ids, "b")
-	check("sqlite LatestVersionsOn", lite, q, a, `SELECT id, version FROM (SELECT q.id, max(coalesce((SELECT version FROM node_version WHERE node_id = q.id AND branch = ? ORDER BY version DESC LIMIT 1), 0), coalesce((SELECT version FROM node_branch WHERE node_id = q.id AND branch = ? ORDER BY version DESC LIMIT 1), 0)) AS version FROM (SELECT value AS id FROM json_each(?)) q) l WHERE version > 0`, []any{`["n1","n2"]`, "b"})
+	check("sqlite LatestVersionsOn", lite, q, a, `SELECT id, version FROM (SELECT q.id, coalesce((SELECT version FROM node_version WHERE node_id = q.id AND branch = ? ORDER BY version DESC LIMIT 1), 0) AS version FROM (SELECT value AS id FROM json_each(?)) q) l WHERE version > 0`, []any{`["n1","n2"]`, "b"})
 
 	// Branches
 	const pgBranchCols = `namespace, name, parent, coalesce(fork_commit::text, ''), coalesce(head_commit::text, ''), origin, status, created_at, description, intent, coalesce(rebased_from::text, ''), ephemeral`
@@ -377,10 +360,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	checkSQL(t, "sqlite DeleteTag", lite, q, `DELETE FROM tag WHERE id = ?`)
 	checkSQL(t, "pg SetNodeOrigin", pg, pg.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = $3, change_impact = $4, comment = $5 WHERE node_id = $1 AND version = $2`)
 	checkSQL(t, "sqlite SetNodeOrigin", lite, lite.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = ?, change_impact = ?, comment = ? WHERE node_id = ? AND version = ?`)
-	checkSQL(t, "pg JoinBranch", pg, pg.sqlJoinBranch(), `INSERT INTO node_branch (node_id, version, branch, change_id, committed) SELECT node_id, version, $3, $4, $5 FROM node_version
-		WHERE node_id = $1 AND version = $2 AND branch <> $3 ON CONFLICT DO NOTHING`)
-	checkSQL(t, "sqlite JoinBranch", lite, lite.sqlJoinBranch(), `INSERT INTO node_branch (node_id, version, branch, change_id, committed) SELECT node_id, version, ?, ?, ? FROM node_version
-		WHERE node_id = ? AND version = ? AND branch <> ? ON CONFLICT DO NOTHING`)
+	q, _ = pg.sqlJoinCommits("main", "c1", 9, []int64{3, 4})
+	checkSQL(t, "pg JoinCommits", pg, q, `INSERT INTO branch_commit (branch, seq, at, change_id) SELECT $1, s, $3, $2 FROM unnest($4::bigint[]) AS s ON CONFLICT DO NOTHING`)
+	q, _ = lite.sqlJoinCommits("main", "c1", 9, []int64{3, 4})
+	checkSQL(t, "sqlite JoinCommits", lite, q, `INSERT INTO branch_commit (branch, seq, at, change_id) SELECT ?1, value, ?3, ?2 FROM json_each(?4) WHERE true ON CONFLICT DO NOTHING`)
 
 	// Inserts
 	nodeVersionCols := []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner"}
@@ -427,8 +410,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 		`DELETE FROM tag WHERE (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
 		`DELETE FROM link WHERE change_id = $1`,
 		`DELETE FROM link WHERE (from_id, from_version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
-		`DELETE FROM node_branch WHERE change_id = $1`,
-		`DELETE FROM node_branch WHERE (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
+		`DELETE FROM branch_commit WHERE change_id = $1`,
 		`DELETE FROM node_version WHERE change_id = $1`,
 		`DELETE FROM change_impact WHERE change_id = $1`,
 		`DELETE FROM change_log WHERE change_id = $1`,
@@ -437,8 +419,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 		`DELETE FROM tag WHERE (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = ?1)`,
 		`DELETE FROM link WHERE change_id = ?1`,
 		`DELETE FROM link WHERE (from_id, from_version) IN (SELECT node_id, version FROM node_version WHERE change_id = ?1)`,
-		`DELETE FROM node_branch WHERE change_id = ?1`,
-		`DELETE FROM node_branch WHERE (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = ?1)`,
+		`DELETE FROM branch_commit WHERE change_id = ?1`,
 		`DELETE FROM node_version WHERE change_id = ?1`,
 		`DELETE FROM change_impact WHERE change_id = ?1`,
 		`DELETE FROM change_log WHERE change_id = ?1`,

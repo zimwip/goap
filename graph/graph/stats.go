@@ -26,7 +26,7 @@ const (
 	StatLinkRowsByType   = "linkRowsByType"   // link rows adding a link, by link type
 	StatLinkDrops        = "linkDrops"        // link rows dropping a link of the set they are a delta over (ADR 0141)
 	StatLinkSetsByMode   = "linkSetsByMode"   // versions, by how they hold their links: own, shared, delta (ADR 0141)
-	StatJoins            = "joins"            // versions joined to another branch than the one they were written on
+	StatJoins            = "joins"            // commits a branch took from another branch (ADR 0176)
 	StatCommitsByKind    = "commitsByKind"    // commits, by kind (commit, merge, fast-forward...)
 	StatChangesByStatus  = "changesByStatus"  // changes, by status
 	StatTags             = "tags"             // tags naming a node version
