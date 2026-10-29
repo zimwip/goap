@@ -4,7 +4,8 @@
 // other read as two lanes forking from the same dot, the second joining by a merge. The branches forked from the branch
 // shown and still open have a lane too (ADR 0102): their commits, else, a branch that committed nothing yet, its open
 // head, drawn as a transparent dot on the lane leaving the commit it forked from.
-import { shortId, type Commit, type Branch } from './api';
+import { formatDate, shortId, type Commit, type Branch } from './api';
+import type { ChangeStats } from './api/types/graph';
 import type { LaneEdge, LaneEntry } from './components/HistoryGraph.svelte';
 import { MAIN_BRANCH } from './namespace';
 
@@ -21,6 +22,36 @@ function commitsOf(commits: Commit[], branch: string): Map<string, Commit> {
     if (!seen || (b.createdAt ?? '') > (seen.createdAt ?? '')) out.set(b.changeId, b); // the head of the change's branch
   }
   return out;
+}
+
+/** A branch as the views name it: a change's branch by the change's short id (`change-<8 chars>`), any other whole. */
+export const branchLabel = (name: string) => (isChangeLane(name) ? name.slice(0, 'change-'.length + 8) : name);
+
+/** Whether a row of the history matches the text typed in its filter: its title, change, branch, kind or date. */
+export function matchesCommit(b: Commit, query: string, title = ''): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const text = [title, b.name, b.id, b.changeId, b.branch || MAIN_BRANCH, typeOf(b), b.createdAt, b.createdAt ? formatDate(b.createdAt) : '']
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return q.split(/\s+/).every((w) => text.includes(w));
+}
+
+/** The counters of a change, short (`+2 ~5 −1`, nodes created, modified, deleted), with what they count; none: nothing. */
+export function countsOf(s: ChangeStats | undefined): { text: string; title: string } | undefined {
+  const parts: [number | undefined, string, string][] = [
+    [s?.created, '+', 'created'],
+    [s?.modified, '~', 'modified'],
+    [s?.deleted, '−', 'deleted'],
+    [s?.restored, '↺', 'restored'],
+  ];
+  const shown = parts.filter(([n]) => !!n);
+  if (!shown.length) return undefined;
+  return {
+    text: shown.map(([n, sign]) => `${sign}${n}`).join(' '),
+    title: `nodes the change committed: ${shown.map(([n, , what]) => `${n} ${what}`).join(', ')}`,
+  };
 }
 
 export type CommitKind = 'commit' | 'fast-forward' | 'merge' | 'rebase' | 'open' | 'snapshot';
@@ -74,6 +105,8 @@ export function historyEntries(
   forkCommit = '',
   labelOf: (b: Commit) => string | undefined = () => undefined,
   branches: Branch[] = [],
+  /** false: the branch's own commits only, without the lanes of the changes and of the open branches */
+  lanes = true,
 ): LaneEntry<Commit>[] {
   const byId = new Map(commits.map((b) => [b.id ?? '', b]));
   const own = commits.filter((b) => branchOf(b) === branch);
@@ -82,8 +115,8 @@ export function historyEntries(
   // the lanes of the changes that committed here, every commit of their branch (a change branch seen from itself has
   // none: its commits are its own)
   const heads = new Set([...byChange.entries()].filter(([change]) => committed.has(change)).map(([, b]) => b.id));
-  const lanes = new Set(commits.filter((b) => heads.has(b.id)).map(branchOf));
-  const side = commits.filter((b) => branchOf(b) !== branch && lanes.has(branchOf(b)));
+  const changeLanes = new Set(lanes ? commits.filter((b) => heads.has(b.id)).map(branchOf) : []);
+  const side = commits.filter((b) => branchOf(b) !== branch && changeLanes.has(branchOf(b)));
   const present = new Set([...own, ...side].map((b) => b.id));
 
   const edges = (b: Commit, joined: Commit | undefined): LaneEdge[] => {
@@ -102,22 +135,20 @@ export function historyEntries(
         : joined
           ? [{ id: joined.id ?? '', label: tag('fast-forward') }]
           : []),
-      // a rebase leaves the commit the change was forked from before: a dashed edge next to the solid fork edge
-      ...(b.rebasedFrom && byId.has(b.rebasedFrom) ? [{ id: b.rebasedFrom, label: tag('rebased from'), dashed: true }] : []),
     ].filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
   };
 
   const rows: LaneEntry<Commit>[] = [
     ...own.map((b) => ({ id: b.id ?? '', parents: edges(b, b.changeId && !b.mergedFrom ? byChange.get(b.changeId) : undefined), lane: branch, item: b })),
-    ...side.map((b) => ({ id: b.id ?? '', parents: edges(b, undefined), lane: branchOf(b), ephemeral: true, item: b })),
+    ...side.map((b) => ({ id: b.id ?? '', parents: edges(b, undefined), lane: branchOf(b), item: b })),
   ];
   // the open branches forked from this one (ADR 0102): their own commits, else their open head as a transparent dot
-  for (const br of branches) {
+  for (const br of lanes ? branches : []) {
     const name = br.name ?? '';
     if (!name || name === branch || (br.parent || MAIN_BRANCH) !== branch || br.status !== 'open' || name.startsWith('flow-')) continue;
     const mine = commits.filter((b) => branchOf(b) === name && !present.has(b.id));
     for (const b of mine) {
-      rows.push({ id: b.id ?? '', parents: edges(b, undefined), lane: name, ephemeral: isChangeLane(name), item: b });
+      rows.push({ id: b.id ?? '', parents: edges(b, undefined), lane: name, item: b });
       present.add(b.id);
     }
     if (mine.length || commits.some((b) => branchOf(b) === name)) continue;
@@ -127,7 +158,6 @@ export function historyEntries(
       id,
       parents: br.forkCommit ? [{ id: br.forkCommit, label: 'fork' }] : [],
       lane: name,
-      ephemeral: isChangeLane(name),
       pending: true,
       item: { id, name, branch: name, kind: OPEN_KIND, changeId, createdAt: br.createdAt },
     });
@@ -136,7 +166,8 @@ export function historyEntries(
   // the commits an edge reaches that no row shows: the fork point of the branch, a named branch's merge source
   const ghosts = new Set<string>();
   if (forkCommit && !present.has(forkCommit)) ghosts.add(forkCommit);
-  for (const r of rows) for (const p of r.parents) if (!present.has(p.id)) ghosts.add(p.id);
+  // (without lanes, only the commits of other branches the branch's own commits descend from: not a change's commit)
+  for (const r of rows) for (const p of r.parents) if (!present.has(p.id) && (lanes || !isChangeLane(branchOf(byId.get(p.id) ?? {})))) ghosts.add(p.id);
   for (const id of ghosts) {
     const g = byId.get(id);
     if (g) rows.push({ id, parents: [], lane: branchOf(g), item: g });

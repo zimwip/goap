@@ -5,7 +5,7 @@
   // where this one forks from or merges with them.
   import type { Commit, Branch } from '../api';
   import { formatDate, shortId } from '../api';
-  import { badgesOf, historyEntries, OPEN_KIND } from '../commitHistory';
+  import { badgesOf, branchLabel, countsOf, historyEntries, matchesCommit, OPEN_KIND } from '../commitHistory';
   import { changes, refreshChanges } from '../stores/catalog.svelte';
   import HistoryGraph from './HistoryGraph.svelte';
 
@@ -21,6 +21,9 @@
     wrap = true,
     onselect,
     onopen,
+    oncontextmenu,
+    filter = '',
+    lanes = true,
   }: {
     /** every commit of the namespace, any order */
     commits: Commit[];
@@ -35,6 +38,12 @@
     wrap?: boolean;
     onselect?: (id: string) => void;
     onopen?: (id: string) => void;
+    /** right click on a row */
+    oncontextmenu?: (id: string, e: MouseEvent) => void;
+    /** the text typed in the history's filter: the rows not matching it are dimmed, the graph kept whole */
+    filter?: string;
+    /** false: the branch's own commits only, the lanes of the changes and of the open branches folded away */
+    lanes?: boolean;
   } = $props();
 
   const changeLabel = (b: Commit) => (b.changeId ? `change ${b.changeId.slice(0, 8)}` : undefined);
@@ -53,24 +62,30 @@
   };
   const badges = (b: Commit) => badgesOf(b, commits);
 
-  const entries = $derived(historyEntries(commits, branch, forkCommit, changeLabel, branches));
+  const entries = $derived(historyEntries(commits, branch, forkCommit, changeLabel, branches, lanes));
+  const dimmed = (h: Commit) => !!filter.trim() && !matchesCommit(h, filter, titleOf(h));
+  /** the counters of the change a commit of the branch landed: on the row where it joined the branch */
+  const countsAt = (h: Commit) =>
+    h.changeId && (h.branch || 'main') === branch && ['fast-forward', 'merge'].includes(badges(h).kind) ? countsOf(changes.items.find((c) => c.id === h.changeId)?.stats) : undefined;
 </script>
 
 {#if entries.length}
   <div class="hscroll">
-    <HistoryGraph {entries} {selected} mainLane={branch} {rowHeight} {wrap} {onselect} {onopen}>
+    <HistoryGraph {entries} {selected} mainLane={branch} {rowHeight} {wrap} {onselect} {onopen} {oncontextmenu}>
       {#snippet row({ entry, head, color })}
         {@const h = entry.item as Commit}
-        <span class="hrow">
+        {@const counts = countsAt(h)}
+        <span class="hrow" class:dim={dimmed(h)}>
           <span class="hline1">
             <span class="hname">{titleOf(h)}</span>
-            {#if head}<span class="ref" style={`--c:${color}`}>{entry.lane}</span>{/if}
+            {#if head}<span class="ref" style={`--c:${color}`} title={entry.lane}>{branchLabel(entry.lane)}</span>{/if}
             {#if badges(h).kind !== 'snapshot'}<span class="kind" data-kind={badges(h).kind} title={kindTitle[badges(h).kind]}>{badges(h).kind}</span>{/if}
             {#if badges(h).rebased}<span class="kind rebased" title={badges(h).rebased}>rebased</span>{/if}
           </span>
           <span class="hline2">
             {#if isOpen(h)}<span class="hnote">{h.branch}: open</span>{/if}
             {#if h.changeId}<span class="hchange">change {h.changeId.slice(0, 8)}</span>{/if}
+            {#if counts}<span class="counts" title={counts.title}>{counts.text}</span>{/if}
             {#if badges(h).rebased}<span class="hnote">{badges(h).rebased}</span>{/if}
             {#if badges(h).merged}<span class="hnote">{badges(h).merged}</span>{/if}
             {#if h.createdAt}<span class="hdate">{formatDate(h.createdAt)}</span>{/if}
@@ -88,6 +103,7 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
   }
   .hrow {
     display: flex;
@@ -111,6 +127,16 @@
     overflow: hidden;
     word-break: break-word;
   }
+  .hrow.dim {
+    opacity: 0.35;
+  }
+  .counts {
+    font-size: 0.78em;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-2, var(--muted));
+    flex: none;
+  }
   .hchange {
     color: var(--muted);
     font-size: 0.8em;
@@ -129,6 +155,10 @@
     font-size: 0.78rem;
     font-family: var(--mono);
     flex: none;
+    max-width: 14em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .kind {
     border: 1px solid var(--muted);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { badgesOf, historyEntries, isOpenHead, typeOf, OPEN_KIND } from './commitHistory';
+import { badgesOf, countsOf, historyEntries, isOpenHead, matchesCommit, typeOf, OPEN_KIND } from './commitHistory';
 
 // base B on main; test1 and test2 both start from B, each commits on its own branch; test1 is applied first (a
 // fast-forward onto main), then test2 (a merge of its branch into main)
@@ -49,6 +49,12 @@ describe('historyEntries', () => {
     expect(rows.find((r) => r.id === 'm1')?.parents.map((p) => p.id)).toEqual(['B', 'c1']);
   });
 
+  it('folds the lanes of the changes away when asked: the branch alone', () => {
+    const own = historyEntries(commits, 'main', '', undefined, [], false);
+    expect(own.map((r) => r.id)).toEqual(['m2', 'm1', 'B']);
+    expect(own.every((r) => r.lane === 'main')).toBe(true);
+  });
+
   it('keeps a change that did not commit out of the history of the branch', () => {
     expect(historyEntries(commits.filter((b) => b.id !== 'm2'), 'main').map((r) => r.id)).not.toContain('c2');
   });
@@ -69,11 +75,10 @@ describe('a rebased change', () => {
   const rows = historyEntries(rebased, 'main', '', label);
   const byId = new Map(rows.map((r) => [r.id, r]));
 
-  it('forks from the head it was rebased onto and keeps a dashed edge to where it started', () => {
+  it('forks from the head it was rebased onto, where it started told by its badge only', () => {
     const c2 = byId.get('c2');
-    expect(c2?.parents.map((p) => p.id)).toEqual(['T1', 'B']);
-    expect(c2?.parents.map((p) => p.label)).toEqual(['fork · change bbbb2222', 'rebased from · change bbbb2222']);
-    expect(c2?.parents.map((p) => !!p.dashed)).toEqual([false, true]);
+    expect(c2?.parents.map((p) => p.id)).toEqual(['T1']);
+    expect(c2?.parents.map((p) => p.label)).toEqual(['fork · change bbbb2222']);
   });
 
   it('keeps main linear: each fast-forward follows the previous head and joins its commit', () => {
@@ -82,9 +87,9 @@ describe('a rebased change', () => {
     expect(byId.get('T2')?.parents.map((p) => p.label)).toEqual(['fast-forward · change bbbb2222', 'fast-forward · change bbbb2222']);
   });
 
-  it('shows the rebased-from commits as a ghost row when no lane holds it', () => {
+  it('shows the commit it forked from as a ghost row when no lane holds it', () => {
     const own = historyEntries(rebased, 'change-bbbb2222');
-    expect(own.map((r) => r.id).sort()).toEqual(['B', 'c2', 'T1'].sort());
+    expect(own.map((r) => r.id).sort()).toEqual(['c2', 'T1'].sort());
   });
 
   it('badges each row with its kind and the rebase', () => {
@@ -142,10 +147,9 @@ describe('open branches forked from the branch', () => {
     ];
     const rows = historyEntries(rebased, 'main', '', undefined, [{ ...fresh, forkCommit: 'M1', head: 'r1' }]);
     const r1 = rows.find((r) => r.id === 'r1');
-    expect(r1?.parents.map((p) => [p.id, p.label, !!p.dashed])).toEqual([
-      ['c1', 'commit', false],
-      ['M1', 'rebased onto', false],
-      ['B', 'rebased from', true],
+    expect(r1?.parents.map((p) => [p.id, p.label])).toEqual([
+      ['c1', 'commit'],
+      ['M1', 'rebased onto'],
     ]);
     expect(badgesOf(rebased[3], rebased).rebased).toBe('rebased onto M1, was B');
     expect(badgesOf(rebased[3], rebased).merged).toBeUndefined();
@@ -158,5 +162,24 @@ describe('open branches forked from the branch', () => {
       { ...fresh, name: 'flow-z' },
     ];
     expect(historyEntries(base, 'main', '', undefined, others).map((r) => r.id)).toEqual(['M1', 'B']);
+  });
+});
+
+describe('the filter and the counters of a row', () => {
+  const m2 = { id: 'm2-full-id', branch: 'main', kind: 'merge', changeId: 'bbbb2222-x', createdAt: '2026-01-05T00:00:00Z' };
+
+  it('matches every word typed against the title, change, branch and kind', () => {
+    expect(matchesCommit(m2, '', 'Add login')).toBe(true);
+    expect(matchesCommit(m2, 'login', 'Add login')).toBe(true);
+    expect(matchesCommit(m2, 'bbbb2222 merge', 'Add login')).toBe(true);
+    expect(matchesCommit(m2, 'login rebase', 'Add login')).toBe(false);
+    expect(matchesCommit(m2, 'MAIN')).toBe(true);
+  });
+
+  it('shortens the counters of a change to the nodes it committed', () => {
+    expect(countsOf({ created: 2, modified: 5, deleted: 1 })?.text).toBe('+2 ~5 −1');
+    expect(countsOf({ modified: 1 })?.title).toBe('nodes the change committed: 1 modified');
+    expect(countsOf({ properties: 3 })).toBeUndefined();
+    expect(countsOf(undefined)).toBeUndefined();
   });
 });
