@@ -5,7 +5,7 @@
   // where this one forks from or merges with them.
   import type { Commit, Branch } from '../api';
   import { formatDate, shortId } from '../api';
-  import { badgesOf, historyEntries, OPEN_KIND } from '../commitHistory';
+  import { badgesOf, branchLabel, historyEntries, OPEN_KIND } from '../commitHistory';
   import { changes, refreshChanges } from '../stores/catalog.svelte';
   import HistoryGraph from './HistoryGraph.svelte';
 
@@ -21,6 +21,7 @@
     wrap = true,
     onselect,
     onopen,
+    oncontextmenu,
   }: {
     /** every commit of the namespace, any order */
     commits: Commit[];
@@ -35,6 +36,8 @@
     wrap?: boolean;
     onselect?: (id: string) => void;
     onopen?: (id: string) => void;
+    /** right click on a row */
+    oncontextmenu?: (id: string, e: MouseEvent) => void;
   } = $props();
 
   const changeLabel = (b: Commit) => (b.changeId ? `change ${b.changeId.slice(0, 8)}` : undefined);
@@ -58,13 +61,13 @@
 
 {#if entries.length}
   <div class="hscroll">
-    <HistoryGraph {entries} {selected} mainLane={branch} {rowHeight} {wrap} {onselect} {onopen}>
+    <HistoryGraph {entries} {selected} mainLane={branch} {rowHeight} {wrap} {onselect} {onopen} {oncontextmenu}>
       {#snippet row({ entry, head, color })}
         {@const h = entry.item as Commit}
         <span class="hrow">
           <span class="hline1">
             <span class="hname">{titleOf(h)}</span>
-            {#if head}<span class="ref" style={`--c:${color}`}>{entry.lane}</span>{/if}
+            {#if head}<span class="ref" style={`--c:${color}`} title={entry.lane}>{branchLabel(entry.lane)}</span>{/if}
             {#if badges(h).kind !== 'snapshot'}<span class="kind" data-kind={badges(h).kind} title={kindTitle[badges(h).kind]}>{badges(h).kind}</span>{/if}
             {#if badges(h).rebased}<span class="kind rebased" title={badges(h).rebased}>rebased</span>{/if}
           </span>
@@ -88,6 +91,7 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
   }
   .hrow {
     display: flex;
@@ -129,6 +133,10 @@
     font-size: 0.78rem;
     font-family: var(--mono);
     flex: none;
+    max-width: 14em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .kind {
     border: 1px solid var(--muted);

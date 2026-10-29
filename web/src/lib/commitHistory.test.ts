@@ -69,11 +69,10 @@ describe('a rebased change', () => {
   const rows = historyEntries(rebased, 'main', '', label);
   const byId = new Map(rows.map((r) => [r.id, r]));
 
-  it('forks from the head it was rebased onto and keeps a dashed edge to where it started', () => {
+  it('forks from the head it was rebased onto, where it started told by its badge only', () => {
     const c2 = byId.get('c2');
-    expect(c2?.parents.map((p) => p.id)).toEqual(['T1', 'B']);
-    expect(c2?.parents.map((p) => p.label)).toEqual(['fork · change bbbb2222', 'rebased from · change bbbb2222']);
-    expect(c2?.parents.map((p) => !!p.dashed)).toEqual([false, true]);
+    expect(c2?.parents.map((p) => p.id)).toEqual(['T1']);
+    expect(c2?.parents.map((p) => p.label)).toEqual(['fork · change bbbb2222']);
   });
 
   it('keeps main linear: each fast-forward follows the previous head and joins its commit', () => {
@@ -82,9 +81,9 @@ describe('a rebased change', () => {
     expect(byId.get('T2')?.parents.map((p) => p.label)).toEqual(['fast-forward · change bbbb2222', 'fast-forward · change bbbb2222']);
   });
 
-  it('shows the rebased-from commits as a ghost row when no lane holds it', () => {
+  it('shows the commit it forked from as a ghost row when no lane holds it', () => {
     const own = historyEntries(rebased, 'change-bbbb2222');
-    expect(own.map((r) => r.id).sort()).toEqual(['B', 'c2', 'T1'].sort());
+    expect(own.map((r) => r.id).sort()).toEqual(['c2', 'T1'].sort());
   });
 
   it('badges each row with its kind and the rebase', () => {
@@ -142,10 +141,9 @@ describe('open branches forked from the branch', () => {
     ];
     const rows = historyEntries(rebased, 'main', '', undefined, [{ ...fresh, forkCommit: 'M1', head: 'r1' }]);
     const r1 = rows.find((r) => r.id === 'r1');
-    expect(r1?.parents.map((p) => [p.id, p.label, !!p.dashed])).toEqual([
-      ['c1', 'commit', false],
-      ['M1', 'rebased onto', false],
-      ['B', 'rebased from', true],
+    expect(r1?.parents.map((p) => [p.id, p.label])).toEqual([
+      ['c1', 'commit'],
+      ['M1', 'rebased onto'],
     ]);
     expect(badgesOf(rebased[3], rebased).rebased).toBe('rebased onto M1, was B');
     expect(badgesOf(rebased[3], rebased).merged).toBeUndefined();

@@ -1,9 +1,11 @@
 <script lang="ts">
   // Commit tab: the history of one branch of a namespace (git-log-style, CommitBranchGraph) on the left; node
-  // types, a filtered/paged node list, the neighbours graph and CommitCompare on the right, all for whichever
-  // commit is shown: the branch's head, or a specific row clicked in the history graph (`commit` param). One tab
-  // per branch, opened pinned from HistoryExplorer (stores/commitTool.svelte) or a link elsewhere. Branch
-  // management (open/merge/abandon/describe) is a right-click on the branch's row in HistoryExplorer, not shown here.
+  // types, a filtered/paged node list, the detail of the node or link selected (properties, links; its
+  // neighbourhood graph in a modal, on demand) and CommitCompare, all for whichever commit is shown: the branch's
+  // head, or a specific row clicked in the history graph (`commit` param), of this branch or another one (a row's
+  // context menu opens the tab of its branch). One tab per branch, opened pinned from HistoryExplorer
+  // (stores/commitTool.svelte) or a link elsewhere. Branch management (open/merge/abandon/describe) is a right-click
+  // on the branch's row in HistoryExplorer, not shown here.
   import {
     graph,
     errorMessage,
@@ -18,10 +20,13 @@
   } from '../../api';
   import { exportGraph } from '../../graphExport';
   import Icon from '../../shell/Icon.svelte';
-  import NodeNeighbourhood, { emptyNeighbourhood, type Neighbourhood } from '../../components/NodeNeighbourhood.svelte';
+  import { emptyNeighbourhood, type Neighbourhood } from '../../components/NodeNeighbourhood.svelte';
+  import NeighbourhoodDialog from '../../components/NeighbourhoodDialog.svelte';
+  import ChangeStackView from '../../components/ChangeStackView.svelte';
+  import { branchView } from '../../graphIndex';
   import CommitCompare from '../../components/CommitCompare.svelte';
   import CommitBranchGraph from '../../components/CommitBranchGraph.svelte';
-  import { isOpenHead } from '../../commitHistory';
+  import { branchLabel, isOpenHead } from '../../commitHistory';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import Resizer from '../../shell/Resizer.svelte';
   import { openTab } from '../../shell/tabs.svelte';
@@ -31,6 +36,7 @@
   import { commitTool, openCommit } from '../../stores/commitTool.svelte';
   import type { Tab } from '../../shell/types';
   import { loadRaw, save } from '../../shell/storage';
+  import { openContextMenu, type ContextMenuItem } from '../../shell/contextMenuState.svelte';
 
   const SIZES = [25, 50, 100, 200];
   const HW_KEY = 'goap.ide.commit.historyWidth';
@@ -136,17 +142,28 @@
   /** the branch's fork point: anchors the graph even before it has a commit of its own */
   const forkCommit = $derived(branches.find((b) => b.name === branchName)?.forkCommit);
 
-  /** a commit of this branch is shown in this tab (the graph already is the browsing view); one from another
-   * branch (a fork point or merge source) opens the tab of that branch, showing it */
+  /** any row is shown in this tab, whatever its branch (a fork point, a change's commit, a merge source): the reads
+   *  name the branch of the commit shown; the open head of a branch with no commit shows the commit it forked from.
+   *  Opening the tab of another branch is an explicit choice, from the row's context menu. */
   function selectHistory(id: string) {
-    // the open head of a branch with no commit yet (ADR 0102): opens that branch
     if (isOpenHead(id)) {
-      openCommit(namespace, id.slice('open:'.length));
+      const fork = branches.find((b) => b.name === id.slice('open:'.length))?.forkCommit;
+      if (fork) tab.params.commit = fork;
       return;
     }
-    const br = branchOf(commits.find((b) => b.id === id) ?? {});
-    if (br !== branchName) openCommit(namespace, br, id);
-    else tab.params.commit = id;
+    tab.params.commit = id;
+  }
+
+  function historyMenu(id: string, e: MouseEvent) {
+    const open = isOpenHead(id);
+    const c = commits.find((b) => b.id === id);
+    const br = open ? id.slice('open:'.length) : branchOf(c ?? {});
+    const changeId = c?.changeId || (open ? branches.find((b) => b.name === br)?.origin?.replace(/^change:/, '') : '');
+    const items: ContextMenuItem[] = [{ label: open ? 'Show its fork point here' : 'Show here', icon: 'database', run: () => selectHistory(id) }];
+    if (br !== branchName) items.push({ label: `Open in its branch (${branchLabel(br)})`, icon: 'branch', run: () => openCommit(namespace, br, open ? undefined : id) });
+    if (changeId) items.push({ label: 'Open change', icon: 'external', run: () => openTab({ kind: 'change', params: { id: changeId } }, { pin: true }) });
+    if (!open) items.push({ label: 'Copy commit id', icon: 'copy', run: () => void navigator.clipboard?.writeText(id) });
+    openContextMenu(e, items);
   }
 
   /** Exports the state of the shown commit, without history: a JSON snapshot (ADR 0104) or an OKF zip, one Markdown
@@ -275,11 +292,10 @@
     linkOffset = 0;
   }
 
-  // browsing the whole commit's links: only while no node narrows it to its own (unpaginated) links already
-  // fetched by the neighbourhood effect below
+  // browsing the whole commit's links, a page at a time
   $effect(() => {
     void reload;
-    if (browseTab !== 'links' || selectedNode) return;
+    if (browseTab !== 'links') return;
     const req = { commitId: shownId, type: linkType, query: linkQuery, offset: linkOffset, limit: linkSize };
     if (!req.commitId) {
       linkTypes = [];
@@ -310,9 +326,34 @@
   const linkPage = $derived(Math.floor(linkOffset / linkSize) + 1);
   const gotoLink = (p: number) => (linkOffset = (Math.min(Math.max(p, 1), linkPageCount) - 1) * linkSize);
 
-  // ---- neighbourhood of the selected node (read by NodeNeighbourhood, listed here too) -----------
+  // ---- the selected node: its detail on the right (properties, links), its neighbourhood in a modal ------
 
   let hood = $state<Neighbourhood>(emptyNeighbourhood());
+  /** the neighbourhood graph is open (a modal, on demand) */
+  let showHood = $state(false);
+  /** the node version whose change-stack is open (ADR 0133) */
+  let stackOf = $state('');
+
+  $effect(() => {
+    void reload;
+    const id = selectedNode;
+    const view = branchView(namespace, shownId, shownBranch);
+    if (!id || !shownId) {
+      hood = emptyNeighbourhood();
+      return;
+    }
+    hood = { ...emptyNeighbourhood(), loading: true };
+    const ctrl = new AbortController();
+    graph
+      .getNodeNeighbourhood(view, id, ctrl.signal)
+      .then((r) => {
+        hood = { center: r.node, neighbours: r.nodes ?? [], links: r.links ?? [], suspect: new Set(r.suspectLinkIds ?? []), loading: false, error: '' };
+      })
+      .catch((e) => {
+        if (!ctrl.signal.aborted) hood = { ...emptyNeighbourhood(), error: errorMessage(e) };
+      });
+    return () => ctrl.abort();
+  });
   const center = $derived(hood.center);
   const neighbours = $derived(hood.neighbours);
   const links = $derived(hood.links);
@@ -346,17 +387,24 @@
     selectedNode = n.id;
   }
 
-  function clearSelection() {
-    selectedNode = '';
-    selectedLink = undefined;
-  }
-
   let selectedLink = $state<Link | undefined>();
 
+  /** a link of the commit: its detail on the right, in place of the node's */
   function selectLink(l: Link | undefined) {
     if (!l?.id) return;
+    selectedNode = '';
     selectedLink = l;
   }
+
+  /** an end of the link shown: that node's detail */
+  function selectEnd(id: string | undefined) {
+    if (!id) return;
+    selectedLink = undefined;
+    selectedNode = id;
+  }
+
+  const propRows = (n: GraphNode | Link | undefined) =>
+    Object.entries(n?.props ?? {}).map(([k, v]): [string, string] => [k, typeof v === 'string' ? v : JSON.stringify(v)]);
 </script>
 
 <div class="editor-page" bind:clientHeight={pageHeight}>
@@ -366,6 +414,8 @@
     {#if commit}
       <span class="hint">
         <code>{shortId(commit.id)}</code>
+        {#if shownBranch !== branchName} · on <strong title={shownBranch}>{branchLabel(shownBranch)}</strong>{/if}
+        {#if tab.params.commit && tab.params.commit !== headId} · <button type="button" class="link" title="Show the head of {branchName}" onclick={() => (tab.params.commit = '')}>back to the head</button>{/if}
         {#if commit.createdAt} · {formatDate(commit.createdAt)}{/if}
         {#if commit.changeId} · from change <button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: commit?.changeId ?? '' } })}>{commit.changeId.slice(0, 8)}</button>{/if}
         {#if !query} · {typeTotal} nodes{/if}
@@ -393,7 +443,7 @@
   <div class="workspace">
     <nav class="card history" style:width="{historyWidth}px" aria-label="History">
       <h3>History <span class="hint">{branchName}</span></h3>
-      <CommitBranchGraph {commits} {branches} branch={branchName} {forkCommit} selected={shownId} onselect={selectHistory} onopen={selectHistory} />
+      <CommitBranchGraph {commits} {branches} branch={branchName} {forkCommit} selected={shownId} onselect={selectHistory} onopen={selectHistory} oncontextmenu={historyMenu} />
       {#if next}<button type="button" class="link small older" disabled={older} onclick={loadOlder}>{older ? 'Loading…' : 'Older commits'}</button>{/if}
     </nav>
 
@@ -401,7 +451,6 @@
 
     <div class="browse">
       <div class="node-panel">
-        {#if !selectedNode}
           <nav class="card types" aria-label={browseTab === 'nodes' ? 'Node types' : 'Link types'}>
             <div class="tabs" role="group" aria-label="Browse">
               <button type="button" class="small" class:primary={browseTab === 'nodes'} aria-pressed={browseTab === 'nodes'} onclick={() => (browseTab = 'nodes')}>All Nodes</button>
@@ -447,8 +496,8 @@
                     <thead><tr><th>Key</th>{#if !type}<th>Type</th>{/if}<th>Version</th><th>State</th><th>Title</th></tr></thead>
                     <tbody>
                       {#each nodes as n (n.id)}
-                        <tr class:deleted={n.deleted} onclick={() => selectNode(n)} ondblclick={() => void openNode(n, { pin: true })}>
-                          <td class="nowrap"><button type="button" class="link mono" title="Show its neighbours (double-click: open in its editor)" onclick={(e) => { e.stopPropagation(); selectNode(n); }}>{n.key}</button></td>
+                        <tr class:deleted={n.deleted} class:sel={selectedNode === n.id} title="Click: its detail · double-click: open it in its editor" onclick={() => selectNode(n)} ondblclick={() => void openNode(n, { pin: true })}>
+                          <td class="nowrap mono key">{n.key}</td>
                           {#if !type}<td>{splitType(n.type).name || n.type}</td>{/if}
                           <td>v{n.version ?? 0}</td>
                           <td>{#if n.state}<span class="state">{n.state}</span>{/if}</td>
@@ -534,58 +583,79 @@
               </div>
             </section>
           {/if}
-        {:else}
-          <section class="card list node-links">
-            <div class="row head">
-              <button type="button" class="back" onclick={clearSelection} title="Back to the node list">
-                <Icon name="chevronLeft" size={16} />
-                <span class="mono">{center?.key ?? '…'}</span>
-              </button>
-              {#if center}<span class="hint">{splitType(center.type).name} v{center.version ?? 0}{center.state ? ` · ${center.state}` : ''}</span>{/if}
-              <span class="grow"></span>
-              <button type="button" class="small" onclick={() => center && void openNode(center, { pin: true })}>Open</button>
-              <button type="button" class="small" title="Versions and states of the node" onclick={() => center && void openNode(center, { pin: true, generic: true, pane: 'history' })}>History</button>
-            </div>
-            {#if nodeTitle(center)}<p class="title">{nodeTitle(center)}</p>{/if}
-            {#if nbError}
-              <div class="alert">{nbError}</div>
-            {:else if !center}
-              <p class="empty">Loading…</p>
-            {:else}
-              {#if rows.length}
-                <div class="scroll">
-                  <table>
-                    <thead><tr><th></th><th>Link</th><th>Node</th><th>Type</th><th></th></tr></thead>
-                    <tbody>
-                      {#each rows as r (r.l.id)}
-                        <tr class:suspect={r.suspect} class:sel={selectedLink?.id === r.l.id}>
-                          <td class="dir" title={r.outgoing ? 'Outgoing' : 'Incoming'}>{r.outgoing ? '→' : '←'}</td>
-                          <td><button type="button" class="link" title={`${r.l.type}: show this link's properties`} onclick={() => selectLink(r.l)}>{typeCatalog.cat.linkLabel(r.l.type, r.outgoing ? 'out' : 'in')}</button></td>
-                          <td>
-                            <button type="button" class="link mono" title={inCommit(r.other) ? 'Show its neighbours' : 'Not in this commit: open it in its editor'} onclick={() => selectNode(r.other)}>{r.other?.key ?? '?'}</button>
-                            {#if nodeTitle(r.other)}<span class="hint"> {nodeTitle(r.other)}</span>{/if}
-                          </td>
-                          <td>{r.other?.type ?? ''}</td>
-                          <td>{#if r.suspect}<span
-                                class="tag"
-                                title={`A more recent version of ${r.outgoing ? r.other?.key ?? 'the target' : center?.key ?? 'this node'} exists: check whether the link should use it`}>suspect</span
-                              >{/if}</td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                </div>
-              {:else if !nbLoading}
-                <p class="empty">No links.</p>
-              {/if}
-              {#if nbLoading}<p class="hint">Loading…</p>{/if}
-            {/if}
-          </section>
-        {/if}
       </div>
 
-      <section class="card neighbours">
-        <NodeNeighbourhood commitId={shownId} branch={shownBranch} namespace={commit?.namespace ?? namespace} bind:node={selectedNode} bind:link={selectedLink} bind:hood {reload} />
+      <section class="card detail" aria-label="Detail">
+        {#if selectedLink}
+          {@const l = selectedLink}
+          <div class="row head">
+            <h3 class="grow" title={l.type}>Link · {typeCatalog.cat.linkLabel(l.type, 'out')}</h3>
+            <button type="button" class="small" title="Both ends of the link and their neighbours" onclick={() => (showHood = true)}><Icon name="network" size={14} /> Neighbourhood</button>
+          </div>
+          <p class="ends">
+            <button type="button" class="link mono" title="Show this node" onclick={() => selectEnd(l.from?.id)}>{shortId(l.from?.id ?? '')}</button>
+            →
+            {#if l.to?.id}<button type="button" class="link mono" title="Show this node" onclick={() => selectEnd(l.to?.id)}>{shortId(l.to.id)}</button>{:else}<span class="mono">{l.target ?? '?'}</span>{/if}
+          </p>
+          <h4>Properties</h4>
+          {#if propRows(l).length}
+            <table class="props"><tbody>{#each propRows(l) as [k, v] (k)}<tr><th>{k}</th><td>{v}</td></tr>{/each}</tbody></table>
+          {:else}
+            <p class="empty small">No properties.</p>
+          {/if}
+        {:else if !selectedNode}
+          <h3>Detail</h3>
+          <p class="empty">Select a node to see its properties (double-click: open it in its editor).</p>
+        {:else if nbError}
+          <div class="alert">{nbError}</div>
+        {:else if !center}
+          <p class="empty">Loading…</p>
+        {:else}
+          <div class="row head">
+            <h3 class="grow mono" title={center.key}>{center.key}</h3>
+            <button type="button" class="small" title="The graph of its neighbours" onclick={() => (showHood = true)}><Icon name="network" size={14} /> Neighbourhood</button>
+            <button type="button" class="small primary" title="Open the node in its editor (or double-click it)" onclick={() => center && void openNode(center, { pin: true })}><Icon name="external" size={14} /> Open</button>
+          </div>
+          <p class="hint">
+            {splitType(center.type).name || center.type} · v{center.version ?? 0}{#if center.state} · <span class="state">{center.state}</span>{/if}
+            · <button type="button" class="link" title="Versions and states of the node" onclick={() => center && void openNode(center, { pin: true, generic: true, pane: 'history' })}>history</button>
+          </p>
+          {#if nodeTitle(center)}<p class="title">{nodeTitle(center)}</p>{/if}
+          <div class="scroll">
+            <h4>Properties</h4>
+            {#if propRows(center).length}
+              <table class="props"><tbody>{#each propRows(center) as [k, v] (k)}<tr><th>{k}</th><td>{v}</td></tr>{/each}</tbody></table>
+            {:else}
+              <p class="empty small">No properties.</p>
+            {/if}
+            <details class="more" open={rows.length > 0 && rows.length <= 20}>
+              <summary>Links <span class="count">{nbLoading ? '…' : rows.length}</span></summary>
+              {#if rows.length}
+                <table>
+                  <tbody>
+                    {#each rows as r (r.l.id)}
+                      <tr class:suspect={r.suspect}>
+                        <td class="dir" title={r.outgoing ? 'Outgoing' : 'Incoming'}>{r.outgoing ? '→' : '←'}</td>
+                        <td title={r.l.type}>{typeCatalog.cat.linkLabel(r.l.type, r.outgoing ? 'out' : 'in')}</td>
+                        <td>
+                          <button type="button" class="link mono" title={inCommit(r.other) ? 'Show this node' : 'Not in this commit: open it in its editor'} onclick={() => selectNode(r.other)}>{r.other?.key ?? '?'}</button>
+                          {#if nodeTitle(r.other)}<span class="hint"> {nodeTitle(r.other)}</span>{/if}
+                          {#if r.suspect}<span class="tag" title="A more recent version of one of its ends exists: check whether the link should use it">suspect</span>{/if}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              {:else if !nbLoading}
+                <p class="empty small">No links.</p>
+              {/if}
+            </details>
+            <details class="more" ontoggle={(e) => (stackOf = (e.currentTarget as HTMLDetailsElement).open ? `${center?.id}@${center?.version}` : '')}>
+              <summary>Change-stack of v{center.version}</summary>
+              {#if stackOf === `${center.id}@${center.version}`}<ChangeStackView nodeId={center.id} version={center.version} />{/if}
+            </details>
+          </div>
+        {/if}
       </section>
     </div>
   </div>
@@ -596,6 +666,10 @@
   </div>
 {/if}
 </div>
+
+{#if showHood && (selectedNode || selectedLink)}
+  <NeighbourhoodDialog commitId={shownId} branch={shownBranch} namespace={commit?.namespace ?? namespace} bind:node={selectedNode} bind:link={selectedLink} {reload} onclose={() => (showHood = false)} />
+{/if}
 
 <style>
   .editor-page {
@@ -656,7 +730,7 @@
     min-height: 0;
     overflow-x: auto;
     display: grid;
-    grid-template-columns: minmax(500px, 1.1fr) minmax(360px, 1fr);
+    grid-template-columns: minmax(500px, 1.6fr) minmax(320px, 1fr);
     gap: 0.8rem;
     align-items: stretch;
   }
@@ -699,22 +773,70 @@
     min-height: 0;
     flex: 1;
   }
-  .back {
+  .detail {
     display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    min-height: 0;
+  }
+  .detail h3 {
+    margin: 0;
+  }
+  .detail .head h3 {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .detail .head {
+    flex-wrap: nowrap;
+  }
+  .detail .head button {
+    flex: none;
+    white-space: nowrap;
+    display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    border: none;
-    background: none;
-    color: inherit;
+  }
+  .detail h4 {
+    margin: 0.2rem 0 0.3rem;
+    font-size: 0.85em;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .detail .hint {
+    margin: 0 0 0.4rem;
+  }
+  .props th {
+    text-align: left;
     font-weight: 600;
+    white-space: nowrap;
+    vertical-align: top;
+    width: 1%;
+  }
+  .props td {
+    word-break: break-word;
+  }
+  .props tr {
+    cursor: default;
+  }
+  .more {
+    margin-top: 0.6rem;
+  }
+  .more summary {
     cursor: pointer;
-    padding: 0.2rem 0.3rem 0.2rem 0;
+    font-weight: 600;
   }
-  .back:hover {
+  .detail > .empty {
+    margin: 0.3rem 0 0;
+  }
+  .ends {
+    margin: 0 0 0.5rem;
+  }
+  .key {
     color: var(--accent);
-  }
-  .neighbours {
-    overflow-y: auto;
   }
   .type {
     display: flex;

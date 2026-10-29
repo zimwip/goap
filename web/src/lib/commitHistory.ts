@@ -23,6 +23,9 @@ function commitsOf(commits: Commit[], branch: string): Map<string, Commit> {
   return out;
 }
 
+/** A branch as the views name it: a change's branch by the change's short id (`change-<8 chars>`), any other whole. */
+export const branchLabel = (name: string) => (isChangeLane(name) ? name.slice(0, 'change-'.length + 8) : name);
+
 export type CommitKind = 'commit' | 'fast-forward' | 'merge' | 'rebase' | 'open' | 'snapshot';
 
 /** The kind of the row standing for an open branch with no commit of its own (not a commit: a transparent dot). */
@@ -102,14 +105,12 @@ export function historyEntries(
         : joined
           ? [{ id: joined.id ?? '', label: tag('fast-forward') }]
           : []),
-      // a rebase leaves the commit the change was forked from before: a dashed edge next to the solid fork edge
-      ...(b.rebasedFrom && byId.has(b.rebasedFrom) ? [{ id: b.rebasedFrom, label: tag('rebased from'), dashed: true }] : []),
     ].filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
   };
 
   const rows: LaneEntry<Commit>[] = [
     ...own.map((b) => ({ id: b.id ?? '', parents: edges(b, b.changeId && !b.mergedFrom ? byChange.get(b.changeId) : undefined), lane: branch, item: b })),
-    ...side.map((b) => ({ id: b.id ?? '', parents: edges(b, undefined), lane: branchOf(b), ephemeral: true, item: b })),
+    ...side.map((b) => ({ id: b.id ?? '', parents: edges(b, undefined), lane: branchOf(b), item: b })),
   ];
   // the open branches forked from this one (ADR 0102): their own commits, else their open head as a transparent dot
   for (const br of branches) {
@@ -117,7 +118,7 @@ export function historyEntries(
     if (!name || name === branch || (br.parent || MAIN_BRANCH) !== branch || br.status !== 'open' || name.startsWith('flow-')) continue;
     const mine = commits.filter((b) => branchOf(b) === name && !present.has(b.id));
     for (const b of mine) {
-      rows.push({ id: b.id ?? '', parents: edges(b, undefined), lane: name, ephemeral: isChangeLane(name), item: b });
+      rows.push({ id: b.id ?? '', parents: edges(b, undefined), lane: name, item: b });
       present.add(b.id);
     }
     if (mine.length || commits.some((b) => branchOf(b) === name)) continue;
@@ -127,7 +128,6 @@ export function historyEntries(
       id,
       parents: br.forkCommit ? [{ id: br.forkCommit, label: 'fork' }] : [],
       lane: name,
-      ephemeral: isChangeLane(name),
       pending: true,
       item: { id, name, branch: name, kind: OPEN_KIND, changeId, createdAt: br.createdAt },
     });
