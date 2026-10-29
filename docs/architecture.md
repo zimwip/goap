@@ -1251,8 +1251,9 @@ PostgreSQL; SQLite and the memory store run one transaction at a time), taken be
 (`changeOpen`, `Graph.changeTx`) and by the guard at every write naming a change; a branch head moves under
 `Tx.LockBranch` and only from the parent of the new commit (`advanceBranch`). A merge reads what it writes before it
 locks its target: the rebase onto the head it read and the fork moved there (the change's branch, under the lock of
-its tree), then the versions of the fast-forward and the nodes as the target will hold them (`prepareFastForward`),
-read again while the head moves before the lock; under the lock it reads the head again and, unchanged, only writes
+its tree), then the versions of the fast-forward and the nodes as the target will hold them; what decides is read
+again while the head moves before the lock, writing nothing (`checkFastForward`), and the fork is moved once, onto the
+head that stood (`finishFastForward`); under the lock it reads the head again and, unchanged, only writes
 (`applyFastForward`); moved, it reads its plan again, and rebases under the lock only when the target moved on a node
 it changed. Reads take no lock.
 
