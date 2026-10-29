@@ -130,20 +130,32 @@ func (d dialect) sqlLatestOn(id domain.NodeID, branch string) (string, []any) {
 		[]any{string(id), domain.BranchOf(branch)}
 }
 
-// latestHeld is the number of the greatest version of the node node (an expression) of a commit the branch branch
-// holds (ADR 0176), taken after the order after and up to upTo (expressions, "": no bound), null when there is none:
-// the versions of the node from its last, backwards (node_version_pkey), each asked of branch_commit_pkey. The probe of
-// a commit is a fence (OFFSET 0): the planner never turns it into a join, which would read every commit of the branch
-// for each node when the statistics of branch_commit are old.
+// latestHeld is the number of the version of the node node (an expression) of the last commit the branch branch holds
+// (ADR 0176), taken after the order after and up to upTo (expressions, "": no bound), null when there is none: the
+// versions of the node committed between the first and the last order the branch holds, from the last backwards
+// (node_version_node_committed), each asked of branch_commit_pkey by its key alone. The bounds keep the walk off the
+// versions other branches wrote: a change's branch holding a few commits reads the few versions committed since, not
+// the history of a node many changes wrote. The probe of a commit is a fence (OFFSET 0): the planner never turns it
+// into a join, which would read every commit of the branch for each node when the statistics of branch_commit are old.
 func (d dialect) latestHeld(node, branch, after, upTo string) string {
-	held := `SELECT 1 FROM branch_commit j WHERE j.branch = ` + branch + ` AND j.seq = v.committed`
-	if after != "" {
-		held += ` AND j.at > ` + after + ` AND j.at <= ` + upTo
+	probe := ` FROM branch_commit j WHERE j.branch = ` + branch + ` AND j.seq = v.committed`
+	var held string
+	if after == "" {
+		held = `EXISTS (SELECT 1` + probe
+		if d.pg {
+			held += ` OFFSET 0`
+		}
+		held += `)`
+	} else {
+		// the order the commit was taken at, read by its key: a bound on it in the probe would let the planner walk the
+		// branch by order (branch_commit_at) for each version
+		held = `(SELECT j.at` + probe + `) BETWEEN ` + after + ` + 1 AND ` + upTo
 	}
-	if d.pg {
-		held += ` OFFSET 0`
+	bound := func(f string) string {
+		return `(SELECT ` + f + `(k.seq) FROM branch_commit k WHERE k.branch = ` + branch + `)`
 	}
-	return `(SELECT v.version FROM node_version v WHERE v.node_id = ` + node + ` AND EXISTS (` + held + `) ORDER BY v.version DESC LIMIT 1)`
+	return `(SELECT v.version FROM node_version v WHERE v.node_id = ` + node + ` AND v.committed BETWEEN ` + bound("min") +
+		` AND ` + bound("max") + ` AND ` + held + ` ORDER BY v.committed DESC, v.version DESC LIMIT 1)`
 }
 
 // sqlVersions reads every version of a node, oldest first.
@@ -257,7 +269,7 @@ func (d dialect) sqlCommittedVersions(namespace, branch string, after, upTo int6
 	}
 	return `SELECT ` + d.id("node_id") + `, version, deleted, reason, branch FROM (
 		SELECT v.node_id, v.version, v.deleted, v.reason, v.branch, row_number() OVER (PARTITION BY v.node_id ORDER BY v.version DESC) AS rn
-		FROM branch_commit j JOIN commits c ON c.seq = j.seq JOIN node_version v ON v.branch = c.branch AND v.committed = j.seq JOIN node n ON n.id = v.node_id
+		FROM branch_commit j JOIN node_version v ON v.committed = j.seq JOIN node n ON n.id = v.node_id
 		WHERE j.branch = ` + d.ph(1) + ` AND j.at > ` + d.ph(2) + ` AND j.at <= ` + d.ph(3) + ` AND n.namespace = ` + d.ph(4) + `
 	) y WHERE rn = 1`, args
 }
@@ -315,10 +327,17 @@ func (d dialect) sqlLastCommit(branch string) (string, []any) {
 	return `SELECT coalesce(max(at), 0) FROM branch_commit WHERE branch = ` + d.ph(1), []any{domain.BranchOf(branch)}
 }
 
-// sqlBranchNodeIDs reads the nodes a branch holds a version of: of a commit it holds (ADR 0137, 0176).
+// sqlBranchNodeIDs reads the nodes a branch holds a version of: of a commit it holds (ADR 0137, 0176), the versions of
+// each commit read by its order (node_version_commit: an order is one commit's). On PostgreSQL the versions of a commit
+// are a fence (LATERAL, OFFSET 0): the commits of the branch are walked, never the versions, whatever the plan the
+// statistics of a young table or of main (most of the commits) would make of a join.
 func (d dialect) sqlBranchNodeIDs(branch string) (string, []any) {
-	return `SELECT DISTINCT ` + d.id("v.node_id") + ` FROM branch_commit j JOIN commits c ON c.seq = j.seq JOIN node_version v ON v.branch = c.branch AND v.committed = j.seq
-		WHERE j.branch = ` + d.ph(1), []any{domain.BranchOf(branch)}
+	if d.pg {
+		return `SELECT DISTINCT v.node_id::text FROM branch_commit j CROSS JOIN LATERAL (SELECT v.node_id FROM node_version v WHERE v.committed = j.seq OFFSET 0) v
+		WHERE j.branch = $1`, []any{domain.BranchOf(branch)}
+	}
+	return `SELECT DISTINCT v.node_id FROM branch_commit j JOIN node_version v ON v.committed = j.seq
+		WHERE j.branch = ?1`, []any{domain.BranchOf(branch)}
 }
 
 // sqlCommitHeader reads the header of a commit.

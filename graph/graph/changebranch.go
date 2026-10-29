@@ -282,10 +282,12 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	if err != nil {
 		return false, err
 	}
-	fromNodes, err := branchVersions(ctx, tx, own, ids)
+	// the commits the branch holds, read once: its state over the fork, and the reverts the target takes
+	raw, err := tx.BranchCommits(ctx, own.Namespace, own.Name, math.MaxInt64, ids)
 	if err != nil {
 		return false, err
 	}
+	fromNodes := overFork(forkNodes, raw)
 	// a node the branch holds as its fork does (a revert, ADR 0140) is no work of the branch: the target's version stands
 	// over it (its revert is written again over the new fork, refreshReverts)
 	worked := slices.DeleteFunc(slices.Clone(ids), func(id domain.NodeID) bool {
@@ -312,6 +314,10 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		if c, err = tx.Change(ctx, c.ID); err != nil {
 			return false, err
 		}
+		// the reverts written again over the new fork (refreshReverts) are the ones the target takes
+		if raw, err = tx.BranchCommits(ctx, own.Namespace, own.Name, math.MaxInt64, ids); err != nil {
+			return false, err
+		}
 	}
 	var moves []domain.NodeRef
 	delta := map[domain.NodeID]domain.Version{}
@@ -336,14 +342,10 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		}
 	}
 	// the reverts the branch holds are versions the target takes as they are (ADR 0176): copies of what it holds
-	if raw, err := tx.BranchCommits(ctx, own.Namespace, own.Name, math.MaxInt64, ids); err != nil {
-		return false, err
-	} else {
-		for _, id := range ids {
-			if l, ok := raw[id]; ok && l.Revert && !l.Deleted && intoNodes[id] != l.Version {
-				moves = append(moves, domain.NodeRef{ID: id, Version: l.Version})
-				delta[id] = l.Version
-			}
+	for _, id := range ids {
+		if l, ok := raw[id]; ok && l.Revert && !l.Deleted && intoNodes[id] != l.Version {
+			moves = append(moves, domain.NodeRef{ID: id, Version: l.Version})
+			delta[id] = l.Version
 		}
 	}
 	if len(moves) == 0 && len(delta) == 0 {
