@@ -1747,7 +1747,9 @@ head of main. A screen reads of it only what it shows (a neighbourhood, a page o
 the node tab, the pickers, the *New object* dialog, the human tasks (the nodes of their change, `lifecycle.changeNodes`,
 the rest searched) and the Graph explorer (a neighbourhood at a time, from the organisation or a node found, or what a
 read query found: a subset of openCypher, `OPTIONAL MATCH` and `EXISTS` included, `GraphService.QueryView`, anchored
-patterns grown a hop at a time through the neighbourhoods of the view, capped, ADR 0160, `lib/cypher` generated from the
+patterns grown a hop at a time through the neighbourhoods of the view, each hop reading its frontier in one batch and in
+the direction and link types it names only, the links entering it in one statement, a hub a page of its sources at a
+time, the first hop of an `EXISTS` with the frontier, capped, ADR 0160, `lib/cypher` generated from the
 openCypher grammar; the Graph pane of a node keeps its compact view with a filter and a query starting from the node, `NodeQuery.svelte`; both query boxes complete the types, links and attributes of the registry, `cypherComplete.ts`);
 the
 History explorer is the exception, it shows the commit the person picks. Every such read names its view to the graph (ADR 0157: `graphView`
