@@ -309,14 +309,19 @@ func refsOf(nodes map[domain.NodeID]domain.Version) []domain.NodeRef {
 }
 
 // commitOn returns the order of the commit the transaction is commit versions in on a branch, allocated by the
-// first version, join or commit of that branch: the versions of a commit and its commit share it (ADR 0140).
-func (t *guardTx) commitOn(ctx context.Context, branch string) (int64, error) {
+// first version, join or commit of that branch: the versions of a commit and its commit share it (ADR 0140). The
+// branch holds that commit from its order (branch_commit, ADR 0176), marked when it is allocated, so the versions the
+// transaction writes are on the branch at once.
+func (t *guardTx) commitOn(ctx context.Context, branch string, change domain.ChangeID) (int64, error) {
 	branch = domain.BranchOf(branch)
 	if s, ok := t.commit[branch]; ok {
 		return s, nil
 	}
 	s, err := t.Tx.NextCommit(ctx)
 	if err != nil {
+		return 0, err
+	}
+	if err := t.Tx.JoinCommits(ctx, branch, change, s, []int64{s}); err != nil {
 		return 0, err
 	}
 	if t.commit == nil {
@@ -331,7 +336,7 @@ func (t *guardTx) committed(ctx context.Context, b *domain.Commit) error {
 	if err := t.needChange(b.ChangeID, "commit "+b.Name); err != nil {
 		return err
 	}
-	seq, err := t.commitOn(ctx, b.Branch)
+	seq, err := t.commitOn(ctx, b.Branch, b.ChangeID)
 	if err != nil {
 		return err
 	}

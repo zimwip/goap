@@ -165,9 +165,9 @@ change commits (`CommitChange`, ADR 0079 / 0102), on its own branch; the merge o
 A version is **part of several branches** when a merge commits it as is: the target *takes the commit* that wrote it
 (`branch_commit`, one row per commit, never per version, `Node.Joined`,
 [ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md), [ADR 0176](adr/0176-branch-reads-commits.md))
-instead of copying it. A branch reads its own commits and the commits it took: the version of a node is its last own
-commit's, or the greatest version of the commits it took when taken later; a state is the sum of the modifications
-applied to it. A revert is a version like any other (a copy of the version it puts back, a tombstone for a creation),
+instead of copying it. A branch holds every commit it is part of, its own (from their order) and the ones it took
+(from the order of the merge), one row each, and is read one way: the version of a node is the greatest of the commits
+it holds; a state is the sum of the modifications applied to it. A revert is a version like any other (a copy of the version it puts back, a tombstone for a creation),
 written again over the new fork when the fork of its change moves.
 
 ```
@@ -1217,7 +1217,7 @@ cut halfway: failed, nothing: run again), so a step never writes twice. Core NAT
 node(id uuid, namespace, key text, type text, latest int, project text)  -- the project it was created in, a logical URL without version (ADR 0154 §9)
 node_version(node_id, version, props jsonb, deleted bool, change_id → change, owner text, created_at, committed)  -- owner: a logical URL without version (ADR 0154 §9); PK (node_id, version); committed: the order of its commit (ADR 0140)
 link(id uuid, type, from_id, from_version, to_id, to_version, to_url, props jsonb, change_id → change)  -- to_url: a target in another source (ADR 0154), to_id / to_version null then
-branch_commit(branch, seq, at, change_id → change)  -- the commits a branch took from another branch (a merge), from its own order at; PK (branch, seq) (ADR 0176)
+branch_commit(branch, seq, at, change_id → change)  -- the commits a branch holds: its own (at = seq) and the ones it took from another branch (a merge), from the order at of that merge; PK (branch, seq) (ADR 0176)
 commits(id uuid, name, namespace, branch, parent_id, merged_from, rebased_from, change_id, kind, created_at, seq, fork_commit)  -- seq: the order of commits; its state is a selection (ADR 0143) over fork_commit, the commit its branch stood on; every branch's commits, a change's included (ADR 0175)
 branch(namespace, name, parent, fork_commit, head_commit, origin, status, created_at)  -- PK (namespace, name)
 change(id uuid, title, intent, status, fork_commit, goal, methodology, landed_commit, data jsonb,

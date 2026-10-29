@@ -19,20 +19,24 @@ is read back from the commits, their branches and their parents.
 
 ## Decision
 
-1. **A branch takes commits.** `node_branch` is replaced by `branch_commit(branch, seq, at, change_id)`, primary key
-   `(branch, seq)`: the branch holds the versions of the commit of order `seq` (written on another branch) from its own
-   order `at`, the order of the merge that took it. A branch's own commits stay implicit (`node_version.branch`). The
-   table grows as the number of commits merged, not as the number of nodes they wrote: the change of 10 000 impacts
-   above is one row.
-2. **A merge takes the commits of its source** (`takeCommits`, `graph/graph/branchcommits.go`): the commits written on
-   the source and the commits the source took itself (the sub-changes merged into a change, the branches merged into
-   a branch), each once (`ON CONFLICT DO NOTHING`: a commit taken before keeps its order). A fast-forward writes nothing
+1. **A branch holds commits.** `node_branch` is replaced by `branch_commit(branch, seq, at, change_id)`, primary key
+   `(branch, seq)`: the branch holds the versions of the commit of order `seq` from the order `at`. Every commit is
+   marked on every branch it is part of: on its own branch from its own order (`at` = `seq`, marked when the
+   transaction allocates the order, `guardTx.commitOn`, so the versions it writes are on the branch at once), on a
+   branch that took it from the order of the merge that took it. The table grows as the number of commits, not as the
+   number of nodes they wrote: the change of 10 000 impacts above is a few rows.
+2. **A merge takes the commits of its source** (`takeCommits`, `graph/graph/branchcommits.go`): the commits the source
+   holds, its own and the ones it took itself (the sub-changes merged into a change, the branches merged into a
+   branch), each once (`ON CONFLICT DO NOTHING`: a commit taken before keeps its order). A fast-forward writes nothing
    else; a three-way merge writes its versions (the nodes changed on both sides) at the order it takes the commits.
-3. **The version of a node on a branch** up to an order is the last of its own commits, or the greatest version of the
-   commits it took, when taken later (`lastCommitted`). A merge's own version wins a tie: it outranks the commits it
-   takes. A fast-forward is over the head of its target and a three-way merge writes the nodes both sides changed, so
-   the greatest version of the commits taken is the one the merge brings. "Latest on a branch" (`LatestOn`,
-   `LatestVersionsOn`) is the greatest of its own latest and the greatest of the commits it took.
+3. **The version of a node on a branch** up to an order is the greatest version of the commits the branch holds up to
+   that order, whichever way it holds them: one query reads any branch (`sqlCommittedVersions`). A fast-forward is over
+   the head of its target and a three-way merge writes the nodes both sides changed (a version greater than both), so
+   the greatest is the last. For some nodes it is one probe per node (`latestHeld`): its versions from the last,
+   backwards (`node_version_pkey`), each asked of `branch_commit_pkey` through a fenced `EXISTS` (`OFFSET 0`), so the
+   plan never depends on the statistics of `branch_commit` (joined, an old estimate of a branch read every commit of
+   the branch for each node, under the lock of the branch being merged). "Latest on a branch" (`LatestOn`,
+   `LatestVersionsOn`) is the same probe with no bound.
 4. **A revert is a version like any other**: a copy of the version it puts back, a tombstone for a node the fork does
    not hold (a creation reverted). A branch that took its commit reads it as it is. When the fork of the change moves
    (a rebase, the fork after a merge, an attach), its reverts of the nodes the fork moved are written again over the
@@ -43,12 +47,13 @@ is read back from the commits, their branches and their parents.
 5. **A three-way merge keeps by writing.** A node the merge leaves as the target holds it (a resolution `skip`, a node
    deleted on the target, a stale revert) gets a version of the merge copying the target's (or a tombstone), written at
    the order it takes the commits, so the commits taken never override it.
-6. **The readers follow**: the selection (`Tx.CommittedVersions` / `BranchCommits`: own versions, then the versions of
-   the commits taken, `sqlJoinedVersions`), `LatestOn`, `CommittedAtKey`, `BranchNodeIDs`, `LastCommit`,
+6. **The readers follow**: the selection (`Tx.CommittedVersions` / `BranchCommits`), `LatestOn`, `CommittedAtKey`,
+   `BranchNodeIDs`, `LastCommit` (the greatest `at`),
    `VersionJoins` / `Node.Joined` (the branches that took the commit of a version: a version superseded on its own
    branch is in the history of the branches that took that commit too), the purge (`branch_commit` rows of the change),
-   the kept heads (`took` for the nodes a merge moves), the statistics (`joins` counts the commits taken) and the
-   memory store.
+   the kept heads (`took` for the nodes a merge moves), the statistics (`joins` counts the commits taken from another
+   branch) and the memory store. `node_version.branch` stays what it was: the branch a version was written on, for its
+   history and the revert rule of point 4, never how a branch is read.
 
 ## Alternatives set aside
 
@@ -71,12 +76,18 @@ is read back from the commits, their branches and their parents.
 
 One change of 10 000 impacts (`goap-bench -mode lifecycle`, PostgreSQL):
 
-| | before (`node_branch`) | after (`branch_commit`) |
-|---|---|---|
-| rows / size | 10 060 / 2 MB | 8 / 80 kB |
-| CommitChange | 2.18 s | 2.07 s |
-| CloseChange | 2.00 s (111 ms of join inserts) | 1.96 s (one insert) |
-| selection fold | 755 ms, 26 calls (both probes) | 507 ms own + 215 ms taken, 27 calls |
+| | before (`node_branch`) | taken commits only | every commit marked |
+|---|---|---|---|
+| rows / size | 10 060 / 2 MB | 8 / 80 kB | 25 / 80 kB |
+| CommitChange | 2.18 s | 2.07 s | 1.65 s |
+| CloseChange | 2.00 s (111 ms of join inserts) | 1.96 s (one insert) | 1.99 s |
+| selection fold | 755 ms, 26 calls (both probes) | 507 ms own + 215 ms taken, 27 calls | one probe |
+
+Many small changes (`goap-bench`, the defaults: 4 writers, 50 edits a change, one `CommitEdits` each, PostgreSQL, one
+machine): 1 417 changes in 90 s before, 838 with the taken commits read apart (the join of the probe planned against
+old statistics of `branch_commit` read every commit of main for each node, under the lock of main: 13.5 ms held on
+average instead of 3.4 ms), 1 437 with every commit marked and the fenced probe; over 5 minutes, 4 138 before and
+4 046 after (the selection 0.11 ms a call, 0.13 ms before).
 
 The git import of the first 200 commits of this repository (`TestImportRepository`, SQLite, two runs each): 33.8 s and
 32.2 s before, 30.2 s and 29.7 s after. The versions of the commits taken are read for some nodes one probe per node,
@@ -88,4 +99,5 @@ Every test of `graph/graph` (memory, SQLite, SQLite readers, PostgreSQL, Postgre
 commit of every namespace, by key, version and content, on main and on this change: 979 of 989 runs are identical; the
 others differ only by the order of concurrent merges or of a map, and by the new test `TestRevertOverAMovedFork`, where
 main holds the same content through a revert written again over the moved fork (a new version) instead of a three-way
-merge commit.
+merge commit. Marking every commit on its own branch too changes none of them: 983 of 989 runs are identical to the
+reading of own and taken commits apart, the others differing by the order of concurrent merges or of a map.

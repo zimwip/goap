@@ -355,7 +355,8 @@ func pinCommit(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRef)
 		if !ok {
 			return fmt.Errorf("the transaction of the graph is not guarded: %w", ErrInvalid)
 		}
-		seq, err := gt.commitOn(ctx, domain.MainBranch)
+		cid := domain.ChangeID(g.newID())
+		seq, err := gt.commitOn(ctx, domain.MainBranch, cid)
 		if err != nil {
 			return err
 		}
@@ -376,7 +377,7 @@ func pinCommit(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRef)
 			}
 		}
 		org, proj := g.Structure(domain.StructureOrganisation), g.Structure(domain.StructureProject)
-		c := domain.Change{ID: domain.ChangeID(g.newID()), Title: "Pin", Namespace: namespace, Status: domain.ChangeApplied, Intent: "Pin node versions for a fixture",
+		c := domain.Change{ID: cid, Title: "Pin", Namespace: namespace, Status: domain.ChangeApplied, Intent: "Pin node versions for a fixture",
 			ForkCommit: head.ID, Branch: domain.MainBranch, OwnerOrg: g.StructureURL(domain.StructureOrganisation, org.Root), ProjectID: g.StructureURL(domain.StructureProject, proj.Root), CreatedAt: g.now()}
 		if err := tx.PutChange(ctx, c); err != nil {
 			return err

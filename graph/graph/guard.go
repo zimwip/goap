@@ -650,7 +650,7 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	t.owners[n.Responsible] = what
 	t.projects[n.Project] = what
 	if n.Committed >= 0 { // a negative order commits the version in no commit (a test fixture)
-		committed, err := t.commitOn(ctx, n.Branch)
+		committed, err := t.commitOn(ctx, n.Branch, n.ChangeID)
 		if err != nil {
 			return err
 		}
@@ -739,7 +739,7 @@ func (t *guardTx) JoinCommits(ctx context.Context, branch string, change domain.
 	if err := t.needChange(change, "the commits "+branch+" takes"); err != nil {
 		return err
 	}
-	at, err := t.commitOn(ctx, branch)
+	at, err := t.commitOn(ctx, branch, change)
 	if err != nil {
 		return err
 	}
