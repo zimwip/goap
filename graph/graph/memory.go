@@ -1361,3 +1361,7 @@ func (t *memTx) LastCommit(_ context.Context, branch string) (int64, error) {
 	}
 	return last, nil
 }
+
+func (t *memTx) TakeCommits(ctx context.Context, branch string, change domain.ChangeID, logSeq int64, namespace, from string, after, upTo int64) error {
+	return takeCommitsOf(ctx, t, branch, change, logSeq, namespace, from, after, upTo)
+}

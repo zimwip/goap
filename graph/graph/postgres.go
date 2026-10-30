@@ -151,10 +151,13 @@ func (q planned) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 	return q.pgQuerier.QueryRow(ctx, sql, customPlan(sql, args)...)
 }
 
+// probesMark starts a statement reading its array one probe per element (dialect.eachProbe): planned once.
+const probesMark = "/* probes */"
+
 // customPlan asks pgx for a plan made with the values of a statement that reads an array of ids or matches a pattern
 // (an unnamed statement, planned at each run, its description cached); the others keep their prepared statement.
 func customPlan(sql string, args []any) []any {
-	if len(args) == 0 || !(strings.Contains(sql, "unnest(") || strings.Contains(sql, "ANY(") || strings.Contains(sql, " LIKE ")) {
+	if len(args) == 0 || strings.HasPrefix(sql, probesMark) || !(strings.Contains(sql, "unnest(") || strings.Contains(sql, "ANY(") || strings.Contains(sql, " LIKE ")) {
 		return args
 	}
 	if _, ok := args[0].(pgx.QueryExecMode); ok {
@@ -782,7 +785,7 @@ func (t *pgTx) LinksInto(ctx context.Context, refs []domain.NodeRef) ([]domain.L
 
 func (t *pgTx) LatestVersionsOn(ctx context.Context, ids []domain.NodeID, branch string) (map[domain.NodeID]domain.Version, error) {
 	out := make(map[domain.NodeID]domain.Version, len(ids))
-	if len(ids) == 0 {
+	if ids = uuidIDs(ids); len(ids) == 0 { // an id that is no uuid names no node
 		return out, nil
 	}
 	q, args := dialectPG.sqlLatestVersionsOn(ids, branch)
@@ -1928,4 +1931,13 @@ func (t *pgTx) LastCommit(ctx context.Context, branch string) (int64, error) {
 	var seq int64
 	err := t.tx.QueryRow(ctx, q, args...).Scan(&seq)
 	return seq, err
+}
+
+func (t *pgTx) TakeCommits(ctx context.Context, branch string, change domain.ChangeID, logSeq int64, namespace, from string, after, upTo int64) error {
+	q, args := dialectPG.sqlTakeCommits(branch, change, logSeq, namespace, from, after, upTo)
+	if t.held != nil {
+		return t.held.write(ctx, q, args, "branch commits")
+	}
+	_, err := t.tx.Exec(ctx, q, args...)
+	return mapErr(err, "branch "+branch)
 }

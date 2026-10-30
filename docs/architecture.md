@@ -636,6 +636,14 @@ any other append drops the reservation, so entries keep their order. A statement
 the statement sent with it. A statement carrying its own execution mode (`customPlan`)
 sends what is queued alone first.
 
+**Plans of the reads by array**: a statement reading an array of ids or matching a pattern is planned with its values
+at each run (`customPlan`: a generic plan does not know how many ids the array holds, and one settled on while the
+tables were small keeps reading them whole). A statement reading its array one probe per id, each a scalar subquery
+keyed on the id (`dialect.eachProbe`, `probeList`: the version of a node on a branch, at a commit, shared by two
+branches), keeps its prepared statement: its plan does not depend on the array, which it reads through a sub-select
+so that no plan knows its length, and the plan of each run, many times its execution, is saved. A join over the
+array (the links of versions, the links entering nodes) stays planned at each run.
+
 **Kept heads**: the graph holds in memory the head of each lasting branch its views read, the way a change view
 follows its log (`graph/graph/heads.go`, `keptBranch`). It is not read
 again but moved: by a commit of this graph once it commits (the guard notes the head each branch moves to, the

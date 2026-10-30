@@ -326,7 +326,7 @@ func (t *guardTx) commitOn(ctx context.Context, branch string, change domain.Cha
 	if t.reserved.change == change {
 		logSeq = t.reserved.seq
 	}
-	t.positions = nil
+	t.branchesMoved()
 	if err := t.Tx.JoinCommits(ctx, branch, change, s, logSeq, []int64{s}); err != nil {
 		return 0, err
 	}

@@ -39,6 +39,23 @@ func takeCommits(ctx context.Context, tx Tx, namespace, target, source string, c
 	return nil
 }
 
+// takeCommitsOf is TakeCommits from the reads it stands for, for the stores where a read costs no round trip.
+func takeCommitsOf(ctx context.Context, tx interface {
+	JoinedCommits(ctx context.Context, namespace, branch, except string, after, upTo int64) ([]int64, error)
+	NextCommit(ctx context.Context) (int64, error)
+	JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) error
+}, branch string, change domain.ChangeID, logSeq int64, namespace, from string, after, upTo int64) error {
+	seqs, err := tx.JoinedCommits(ctx, namespace, from, "", after, upTo)
+	if err != nil || len(seqs) == 0 {
+		return err
+	}
+	at, err := tx.NextCommit(ctx)
+	if err != nil {
+		return err
+	}
+	return tx.JoinCommits(ctx, branch, change, at, logSeq, seqs)
+}
+
 // takeRows makes the branch of a change take commits of the branch it is forked from by a rebase (ADR 0177): rows of
 // the commits, at a new order of the branch that no commit of its own takes up (the rebase writes no commit), recorded
 // by the entry logSeq of the log of change.
