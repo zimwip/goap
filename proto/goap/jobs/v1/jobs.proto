@@ -16,6 +16,8 @@ service JobService {
   rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
   // CancelJob cancels a job: a queued one at once, a running one when its worker next reports.
   rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
+  // AnswerJob answers the request a running job asked the caller (the person it runs for): the values of its form.
+  rpc AnswerJob(AnswerJobRequest) returns (AnswerJobResponse);
 
   // The calls of the services (the job token, GOAP_JOB_TOKEN, header X-Goap-Job-Token).
 
@@ -31,6 +33,23 @@ service JobService {
   rpc ReadJobInput(ReadJobInputRequest) returns (ReadJobInputResponse);
   // WriteJobResult appends a chunk of the result of a job (the file of an export).
   rpc WriteJobResult(WriteJobResultRequest) returns (WriteJobResultResponse);
+  // AskJob asks the person a running job runs for a question, a form to fill in; the job waits for the answer.
+  rpc AskJob(AskJobRequest) returns (AskJobResponse);
+  // AwaitJobAnswer waits up to `wait_ms` for the answer to the request of a running job.
+  rpc AwaitJobAnswer(AwaitJobAnswerRequest) returns (AwaitJobAnswerResponse);
+}
+
+// JobRequest is a question a running job asks the person it runs for, and waits for: a form the job defines (the form of
+// a human action, contracts/form, ADR 0115), answered with its values.
+message JobRequest {
+  // chosen by the job, unique among its requests
+  string id = 1;
+  // the form (contracts/form.Form as JSON: title, description, submit, fields)
+  google.protobuf.Struct form = 2;
+  google.protobuf.Timestamp asked_at = 3;
+  // the values the person gave, checked against the form; none while it waits
+  google.protobuf.Struct answer = 4;
+  google.protobuf.Timestamp answered_at = 5;
 }
 
 // Result is the file a job produced.
@@ -76,6 +95,8 @@ message Job {
   google.protobuf.Timestamp updated_at = 22;
   // what the run said it does, the last lines (oldest first)
   repeated LogLine log = 23;
+  // the last request the run asked: waiting for the person while it has no answer
+  JobRequest request = 24;
 }
 
 // LogLine is a line of the feedback of a run.
@@ -112,6 +133,17 @@ message CancelJobRequest {
 }
 
 message CancelJobResponse {
+  Job job = 1;
+}
+
+message AnswerJobRequest {
+  string id = 1;
+  // the request answered (JobRequest.id)
+  string request_id = 2;
+  google.protobuf.Struct values = 3;
+}
+
+message AnswerJobResponse {
   Job job = 1;
 }
 
@@ -207,4 +239,28 @@ message WriteJobResultRequest {
 
 message WriteJobResultResponse {
   int64 size = 1;
+}
+
+message AskJobRequest {
+  string id = 1;
+  string worker = 2;
+  JobRequest request = 3;
+}
+
+message AskJobResponse {
+  Job job = 1;
+}
+
+message AwaitJobAnswerRequest {
+  string id = 1;
+  string worker = 2;
+  string request_id = 3;
+  // how long to wait for the answer (at most 30 s)
+  int32 wait_ms = 4;
+}
+
+message AwaitJobAnswerResponse {
+  // the person answered: the values of the form
+  bool answered = 1;
+  google.protobuf.Struct values = 2;
 }

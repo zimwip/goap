@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/zimwip/goap/contracts/form"
 	importerv1 "github.com/zimwip/goap/contracts/gen/goap/importer/v1"
 	"github.com/zimwip/goap/lib/importerkit"
 )
@@ -97,6 +98,25 @@ func (p *Plugin) Run(ctx context.Context, job *importerkit.Job) error {
 		OnPart:   func(i, n int, name string) { job.Progress(fmt.Sprintf("  part %d/%d: %s", i, n, capLine(name, 100))) }}
 	im.Text, im.MaxTextBytes = job.Bool("text"), int64(job.Int("maxText"))<<10
 	im.ContentURL = ContentURLOf(job.String("contentUrl"), repo, name)
+	im.Exclude = ParsePatterns(job.String("exclude"))
+	switch mode := job.String("artifacts"); mode {
+	case "", ArtifactsAsk:
+		im.Decide = func(ctx context.Context, found []Artifact) ([]string, error) {
+			return askArtifacts(ctx, job, name, found)
+		}
+	case ArtifactsExclude:
+		im.Decide = func(context.Context, []Artifact) ([]string, error) { return nil, nil }
+	case ArtifactsInclude:
+		im.Decide = func(_ context.Context, found []Artifact) ([]string, error) {
+			ids := make([]string, len(found))
+			for i, a := range found {
+				ids[i] = a.ID
+			}
+			return ids, nil
+		}
+	default:
+		return fmt.Errorf("artifacts %q: ask, exclude or include", mode)
+	}
 	if job.Bool("symbols") {
 		if p.Symbols == nil {
 			return errors.New("symbols: this importer service reads no symbols")
@@ -116,6 +136,43 @@ func (p *Plugin) Run(ctx context.Context, job *importerkit.Job) error {
 		job.Progress(summary(name, st))
 	}
 	return err
+}
+
+// What a run does with the build artifacts it finds (the parameter artifacts).
+const (
+	ArtifactsAsk     = "ask"
+	ArtifactsExclude = "exclude"
+	ArtifactsInclude = "include"
+)
+
+// askArtifacts asks the person the job runs for which of the build artifacts found to import anyway: a form of one
+// field, the artifacts to tick (none ticked: all left out).
+func askArtifacts(ctx context.Context, job *importerkit.Job, name string, found []Artifact) ([]string, error) {
+	ids, labels := make([]any, len(found)), make([]any, len(found))
+	for i, a := range found {
+		ids[i], labels[i] = a.ID, a.Label
+	}
+	f := form.Form{
+		Title: "Build artifacts in " + name,
+		Description: "These look like the output of a build or installed dependencies, which an import of the code usually " +
+			"leaves out. Tick what to import anyway: the rest is left out of every commit, in this run and the next ones.",
+		Submit: "Go on",
+		Fields: []form.Field{{Name: "include", Widget: form.WidgetMultiselect, Label: "Import anyway", Default: []any{},
+			Constraints: map[string]any{"options": ids, "labels": labels}}},
+	}
+	values, err := job.Ask(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	var include []string
+	l, _ := values["include"].([]any)
+	for _, v := range l {
+		if s, ok := v.(string); ok {
+			include = append(include, s)
+		}
+	}
+	job.Progress(fmt.Sprintf("build artifacts: %d kind(s) found, %d imported anyway", len(found), len(include)))
+	return include, nil
 }
 
 // begin says which commit the run imports now: its rank, its hash and its subject.

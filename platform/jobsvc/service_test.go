@@ -19,6 +19,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/contracts/form"
 	"github.com/zimwip/goap/lib/identity"
 	"github.com/zimwip/goap/lib/jobkit"
 	"github.com/zimwip/goap/lib/pgtest"
@@ -296,5 +297,93 @@ func TestEventStream(t *testing.T) {
 	r.Body.Close()
 	if r.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("anonymous stream: %d", r.StatusCode)
+	}
+}
+
+// A running job asks the person it runs for to fill in a form and waits: the request shows on the job, another person
+// may not answer, values the form refuses are refused, and the answer reaches the run, which goes on.
+func TestJobAsksThePerson(t *testing.T) {
+	for name, st := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			s := &jobsvc.Service{Store: st}
+			ctx, stop := context.WithCancel(context.Background())
+			defer stop()
+			f := form.Form{Title: "Build artifacts", Fields: []form.Field{{Name: "include", Widget: form.WidgetMultiselect,
+				Constraints: map[string]any{"options": []any{"dist", "node_modules"}, "labels": []any{"dist/ (2 files)", "node_modules/"}}}}}
+			w := &jobkit.Worker{Queue: s, ID: "w1", Wait: 200 * time.Millisecond, Kinds: map[string]jobkit.Runner{
+				"test.ask": func(ctx context.Context, j *jobkit.Job) error {
+					v, err := j.Ask(ctx, f)
+					if err != nil {
+						return err
+					}
+					j.Output(map[string]any{"include": v["include"]})
+					return nil
+				}}}
+			go w.Run(ctx)
+			job, err := s.Create(ctx, jobkit.Spec{Kind: "test.ask", By: "alice", Principal: alice})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var r jobsvc.Record
+			for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+				if r = wait(t, s, job.Id, false); r.Request.Pending() {
+					break
+				}
+			}
+			if !r.Request.Pending() || r.Request.Form.Title != "Build artifacts" || r.Status != jobkit.StatusRunning {
+				t.Fatalf("no pending request: %+v", r)
+			}
+			if pb := jobsvc.ToPB(r); pb.Request == nil || pb.Request.Form == nil || pb.Request.AnsweredAt != nil {
+				t.Fatalf("protocol form %+v", pb.Request)
+			}
+			if _, err := s.Answer(as(authz.Principal{Subject: "bob"}), job.Id, r.Request.ID, map[string]any{"include": []any{}}); err == nil {
+				t.Fatal("another person answered")
+			}
+			if _, err := s.Answer(as(alice), job.Id, r.Request.ID, map[string]any{"include": []any{"target"}}); !errors.Is(err, jobkit.ErrInvalid) {
+				t.Fatalf("a value out of the options: %v", err)
+			}
+			if _, err := s.Answer(as(alice), job.Id, "req-other", map[string]any{}); !errors.Is(err, jobkit.ErrNotFound) {
+				t.Fatalf("another request: %v", err)
+			}
+			if _, err := s.Answer(as(alice), job.Id, r.Request.ID, map[string]any{"include": []any{"dist"}}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Answer(as(alice), job.Id, r.Request.ID, map[string]any{"include": []any{"dist"}}); !errors.Is(err, jobkit.ErrLost) {
+				t.Fatalf("answered twice: %v", err)
+			}
+			r = wait(t, s, job.Id, true)
+			got, _ := r.Output["include"].([]any)
+			if r.Status != jobkit.StatusDone || len(got) != 1 || got[0] != "dist" || r.Request.Pending() || r.Request.Answer == nil {
+				t.Fatalf("ended %+v", r)
+			}
+		})
+	}
+}
+
+// A job waiting for an answer is cancelled by the person: the wait stops and the job ends cancelled.
+func TestJobWaitingIsCancelled(t *testing.T) {
+	s := &jobsvc.Service{Store: jobsvc.NewMemoryStore()}
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	w := &jobkit.Worker{Queue: s, ID: "w1", Wait: 200 * time.Millisecond, Kinds: map[string]jobkit.Runner{
+		"test.ask": func(ctx context.Context, j *jobkit.Job) error {
+			_, err := j.Ask(ctx, form.Form{Fields: []form.Field{{Name: "ok", Widget: form.WidgetBoolean}}})
+			return err
+		}}}
+	go w.Run(ctx)
+	job, err := s.Create(ctx, jobkit.Spec{Kind: "test.ask", By: "alice", Principal: alice})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if wait(t, s, job.Id, false).Request.Pending() {
+			break
+		}
+	}
+	if _, err := s.Cancel(as(alice), job.Id); err != nil {
+		t.Fatal(err)
+	}
+	if r := wait(t, s, job.Id, true); r.Status != jobkit.StatusCancelled {
+		t.Fatalf("ended %s %s", r.Status, r.Error)
 	}
 }

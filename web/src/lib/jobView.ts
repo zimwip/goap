@@ -1,6 +1,7 @@
 // How a job reads (ADR 0149): its kind, its progress, its counters, its timing. Pure, for the status bar, the Jobs tab
 // and the tabs that start jobs.
 import type { GraphImportResult, Job } from './api';
+import type { FormDef } from './forms/types';
 
 export const FINAL = ['done', 'failed', 'cancelled'];
 
@@ -27,6 +28,13 @@ export function kindLabel(kind: string | undefined): string {
   if (k === 'graph.export' || k.startsWith('graph.export.')) return 'Graph export';
   if (k === 'graph.import' || k.startsWith('graph.import.')) return 'Graph import';
   return k;
+}
+
+/** The request a running job asks its person and waits for (ADR 0149 addendum): its form, once and while it waits. */
+export function pendingRequest(j: Job | undefined): { id: string; form: FormDef } | undefined {
+  const r = j?.request;
+  if (!r?.id || r.answeredAt || isFinal(j)) return undefined;
+  return { id: r.id, form: (r.form ?? {}) as FormDef };
 }
 
 /** The title of a job: its label, else its kind. */

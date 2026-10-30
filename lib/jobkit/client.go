@@ -144,3 +144,19 @@ func (c Client) WriteResult(ctx context.Context, id, worker, name, mediaType str
 	}
 	return r.Msg.Size, nil
 }
+
+// Ask implements Queue.
+func (c Client) Ask(ctx context.Context, id, worker string, r Request) error {
+	_, err := c.RPC.AskJob(ctx, connect.NewRequest(&jobsv1.AskJobRequest{Id: id, Worker: worker, Request: RequestToPB(&r)}))
+	return fromRPC(err)
+}
+
+// Await implements Queue.
+func (c Client) Await(ctx context.Context, id, worker, request string, wait time.Duration) (map[string]any, bool, error) {
+	r, err := c.RPC.AwaitJobAnswer(ctx, connect.NewRequest(&jobsv1.AwaitJobAnswerRequest{Id: id, Worker: worker, RequestId: request,
+		WaitMs: int32(wait / time.Millisecond)}))
+	if err != nil {
+		return nil, false, fromRPC(err)
+	}
+	return pbconv.Map(r.Msg.Values), r.Msg.Answered, nil
+}

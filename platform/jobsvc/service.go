@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/contracts/form"
 	jobsv1 "github.com/zimwip/goap/contracts/gen/goap/jobs/v1"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/jobkit"
@@ -37,6 +39,9 @@ const (
 	EventCreated = "created"
 	EventStarted = "started"
 	EventEnded   = "ended"
+	// EventAsked: a running job asks the person it runs for (a request); EventAnswered: the person answered it.
+	EventAsked    = "asked"
+	EventAnswered = "answered"
 )
 
 // Event is the payload of an event of a job.
@@ -65,6 +70,7 @@ type Service struct {
 
 	mu      sync.Mutex
 	wake    chan struct{}
+	answers chan struct{}
 	workers map[string]*jobsv1.Worker
 	subs    map[*subscriber]struct{}
 }
@@ -131,7 +137,7 @@ func ToPB(r Record) *jobsv1.Job {
 	j := &jobsv1.Job{Id: r.ID, Kind: r.Kind, Label: r.Label, Target: r.Target, Status: r.Status, CancelRequested: r.CancelRequested,
 		Params: pbconv.Struct(r.Params), By: r.By, ProjectId: r.ProjectID, OwnerOrg: r.OwnerOrg, Progress: r.Progress, Done: r.Done,
 		Total: r.Total, Stats: maps.Clone(r.Stats), Output: pbconv.Struct(r.Output), Error: r.Error, Worker: r.Worker,
-		CreatedAt: pbconv.Time(r.Created), UpdatedAt: pbconv.Time(r.Updated), Log: jobkit.LogToPB(r.Log)}
+		CreatedAt: pbconv.Time(r.Created), UpdatedAt: pbconv.Time(r.Updated), Log: jobkit.LogToPB(r.Log), Request: jobkit.RequestToPB(r.Request)}
 	if !r.Started.IsZero() {
 		j.StartedAt = pbconv.Time(r.Started)
 	}
@@ -362,6 +368,130 @@ func (s *Service) WriteResult(ctx context.Context, id, worker, name, mediaType s
 	}
 	s.publish(r)
 	return size, nil
+}
+
+// MaxRequestBytes bounds the form of a request and its answer, each as JSON.
+const MaxRequestBytes = 256 << 10
+
+// Ask implements jobkit.Queue: a running job of the worker asks the person it runs for to fill in a form; the job waits
+// for the answer (Await). A new request replaces the last one, answered or not.
+func (s *Service) Ask(ctx context.Context, id, worker string, req jobkit.Request) error {
+	if req.ID == "" {
+		return fmt.Errorf("a request has an id: %w", jobkit.ErrInvalid)
+	}
+	if is := form.CheckForm(req.Form); len(is) > 0 {
+		return fmt.Errorf("the form of the request: %w: %w", is, jobkit.ErrInvalid)
+	}
+	if b, _ := json.Marshal(req.Form); len(b) > MaxRequestBytes {
+		return fmt.Errorf("a form of %d bytes, at most %d: %w", len(b), MaxRequestBytes, jobkit.ErrInvalid)
+	}
+	s.seen(worker, nil)
+	r, err := s.Store.Update(ctx, id, func(r *Record) ([]outbox.Message, error) {
+		if r.Status != jobkit.StatusRunning || r.Worker != worker {
+			return nil, fmt.Errorf("job %s is %s, not running for %s: %w", id, r.Status, worker, jobkit.ErrLost)
+		}
+		now := s.now()
+		r.Request = &jobkit.Request{ID: req.ID, Form: req.Form, AskedAt: now}
+		r.Updated, r.LeaseUntil = now, now.Add(s.lease())
+		return s.event(ctx, *r, EventAsked), nil
+	})
+	if err != nil {
+		return err
+	}
+	s.written(ctx, r, s.relay != nil)
+	return nil
+}
+
+// Answer answers the pending request of a running job: only the person it runs for answers, with values the form of
+// the request accepts (checked and cleaned by form.Validate; the nodes a field names are not checked here).
+func (s *Service) Answer(ctx context.Context, id, request string, values map[string]any) (Record, error) {
+	p := authz.From(ctx)
+	if p.Anonymous() {
+		return Record{}, fmt.Errorf("anonymous: %w", jobkit.ErrForbidden)
+	}
+	cur, err := s.Get(ctx, id)
+	if err != nil {
+		return cur, err
+	}
+	if cur.By != p.EndUser() {
+		return Record{}, fmt.Errorf("job %s asks %s, not %s: %w", id, cur.By, p.EndUser(), jobkit.ErrForbidden)
+	}
+	if b, _ := json.Marshal(values); len(b) > MaxRequestBytes {
+		return Record{}, fmt.Errorf("an answer of %d bytes, at most %d: %w", len(b), MaxRequestBytes, jobkit.ErrInvalid)
+	}
+	r, err := s.Store.Update(ctx, id, func(r *Record) ([]outbox.Message, error) {
+		switch {
+		case r.Status != jobkit.StatusRunning:
+			return nil, fmt.Errorf("job %s is %s: it waits for no answer: %w", id, r.Status, jobkit.ErrLost)
+		case r.Request == nil || r.Request.ID != request:
+			return nil, fmt.Errorf("job %s asks no request %s: %w", id, request, jobkit.ErrNotFound)
+		case !r.Request.Pending():
+			return nil, fmt.Errorf("request %s of job %s is answered already: %w", request, id, jobkit.ErrLost)
+		}
+		clean, is := form.Validate(r.Request.Form, values, form.Env{})
+		if len(is) > 0 {
+			return nil, fmt.Errorf("%w: %w", is, jobkit.ErrInvalid)
+		}
+		if clean == nil {
+			clean = map[string]any{}
+		}
+		now := s.now()
+		r.Request.Answer, r.Request.AnsweredAt, r.Updated = clean, now, now
+		return s.event(ctx, *r, EventAnswered), nil
+	})
+	if err != nil {
+		return r, err
+	}
+	s.written(ctx, r, s.relay != nil)
+	s.answered()
+	return r, nil
+}
+
+// Await implements jobkit.Queue: the answer to a request of a running job of the worker, waiting up to wait for it.
+func (s *Service) Await(ctx context.Context, id, worker, request string, wait time.Duration) (map[string]any, bool, error) {
+	wait = min(max(wait, 0), jobkit.MaxWait)
+	deadline := time.NewTimer(wait)
+	defer deadline.Stop()
+	for {
+		s.seen(worker, nil)
+		ch := s.answerWaiter()
+		r, err := s.running(ctx, id, worker)
+		if err != nil {
+			return nil, false, err
+		}
+		if r.Request == nil || r.Request.ID != request {
+			return nil, false, fmt.Errorf("job %s asks no request %s: %w", id, request, jobkit.ErrNotFound)
+		}
+		if !r.Request.Pending() {
+			return r.Request.Answer, true, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, false, ctx.Err()
+		case <-deadline.C:
+			return nil, false, nil
+		case <-ch:
+		}
+	}
+}
+
+// answered wakes the waits for an answer.
+func (s *Service) answered() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.answers != nil {
+		close(s.answers)
+	}
+	s.answers = make(chan struct{})
+}
+
+func (s *Service) answerWaiter() chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.answers == nil {
+		s.answers = make(chan struct{})
+	}
+	return s.answers
 }
 
 // mayRead says whether a person reads a job: who it runs for, or an administrator.

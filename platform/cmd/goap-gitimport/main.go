@@ -58,6 +58,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&im.Text, "text", true, "keep the text of the files that read as text (by their bytes), decoded to UTF-8; the others are blobs")
 	fs.Int64Var(&im.MaxTextBytes, "text-max", gitimport.DefaultMaxTextBytes, "the largest text kept, in bytes: a larger file is a blob")
 	contentURL := fs.String("content-url", "", "address of the content of a file: {commit}, {path}, {blob}, {name} replaced (a web address or a lnk: URL of a declared source; default: the raw files of a known forge, else none)")
+	exclude := fs.String("exclude", "", "paths left out of every commit, separated by commas: an element of a path (node_modules, *.min.js) or a path from the root (web/dist)")
+	artifacts := fs.String("artifacts", "", "the build artifacts found in the tree of -rev (dist/, node_modules/, minified or generated files...): exclude leaves them out, include imports them (default: nothing is looked for)")
 	fs.IntVar(&im.Batch, "batch", 0, "the most operations the change of a commit takes by itself; a larger commit is written by a sub-change per file (default 1000)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -99,6 +101,25 @@ func run(args []string, stdout, stderr io.Writer) int {
 		src = im.Dir
 	}
 	im.ContentURL = gitimport.ContentURLOf(*contentURL, src, im.Name)
+	im.Exclude = gitimport.ParsePatterns(*exclude)
+	switch *artifacts {
+	case "":
+	case gitimport.ArtifactsExclude, gitimport.ArtifactsInclude:
+		include := *artifacts == gitimport.ArtifactsInclude
+		im.Decide = func(_ context.Context, found []gitimport.Artifact) ([]string, error) {
+			var ids []string
+			for _, a := range found {
+				fmt.Fprintf(stdout, "build artifacts: %s (%s)\n", a.Label, map[bool]string{true: "imported", false: "left out"}[include])
+				if include {
+					ids = append(ids, a.ID)
+				}
+			}
+			return ids, nil
+		}
+	default:
+		fmt.Fprintln(stderr, "goap-gitimport: -artifacts: exclude or include")
+		return 2
+	}
 	st, err := im.Run(ctx)
 	for _, s := range st.Skipped {
 		fmt.Fprintln(stderr, "goap-gitimport: git branch "+s)

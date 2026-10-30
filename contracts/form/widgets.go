@@ -327,10 +327,11 @@ func init() {
 		{Name: "max", Type: ConstraintString, Description: "latest date, YYYY-MM-DD"},
 	}, Check: checkDate})
 	options := Constraint{Name: "options", Type: ConstraintStrings, Required: true, Description: "the values offered"}
-	Register(Widget{Name: WidgetSelect, Description: "one value among options", Value: ValueString, Constraints: []Constraint{options},
+	labels := Constraint{Name: "labels", Type: ConstraintStrings, Description: "what each option shows, in the order of the options (default: the value)"}
+	Register(Widget{Name: WidgetSelect, Description: "one value among options", Value: ValueString, Constraints: []Constraint{options, labels},
 		Define: defineOptions, Check: checkSelect})
 	Register(Widget{Name: WidgetMultiselect, Description: "values among options", Value: ValueList, Constraints: []Constraint{
-		options, {Name: "min", Type: ConstraintNumber, Description: "fewest values"}, {Name: "max", Type: ConstraintNumber, Description: "most values"},
+		options, labels, {Name: "min", Type: ConstraintNumber, Description: "fewest values"}, {Name: "max", Type: ConstraintNumber, Description: "most values"},
 	}, Define: defineOptions, Check: checkMultiselect})
 	Register(Widget{Name: WidgetNode, Description: "a node of the graph, found by a search", Value: ValueNode, Constraints: []Constraint{
 		{Name: "types", Type: ConstraintStrings, Description: "qualified node types offered (a subtype qualifies)"},
@@ -410,8 +411,12 @@ func definePattern(f Field) []string {
 }
 
 func defineOptions(f Field) []string {
-	if o, ok := f.Constraints["options"]; ok && len(stringsOf(o)) == 0 {
+	o, ok := f.Constraints["options"]
+	if ok && len(stringsOf(o)) == 0 {
 		return []string{"options must list at least one value"}
+	}
+	if l, has := f.Constraints["labels"]; has && len(stringsOf(l)) != len(stringsOf(o)) {
+		return []string{"labels must give one label per option"}
 	}
 	return nil
 }

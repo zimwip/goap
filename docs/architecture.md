@@ -1139,7 +1139,13 @@ graph process is the worker of `graph.export` (JSON or OKF, `StartGraphExport`) 
 the snapshot as the job's input), `graphsvc.Handler.JobRunners`; an importer service the worker of its importers. A
 person lists, cancels and downloads their jobs, and follows them over Server-Sent Events (`GET /api/jobs/events`,
 `GET /api/jobs/<id>/result`, routed by the gateway): the web's `stores/jobs.svelte.ts` reads the stream, the status
-bar shows the running jobs and opens the Jobs tab.
+bar shows the running jobs and opens the Jobs tab. A running job may **ask** the person it runs for (ADR 0149
+addendum): `Job.Ask` records a form (`contracts/form`, the form of a human action) as the job's request (`AskJob`) and
+waits for the values (`AwaitJobAnswer`, long-polled; the lease is renewed meanwhile, a cancel ends the wait); the person
+answers with `AnswerJob` (checked against the form); the web opens the detail of a job that starts waiting, where
+`JobDialog.svelte` renders the form with `forms/FormRenderer.svelte`. The git import asks so which build artifacts of
+the tree to import anyway (`platform/gitimport/artifacts.go`), leaving the rest out of every commit and recording the
+decision on the repository node.
 
 The engine is tested without the graph: the scenarios that run it on a real graph are the platform's integration tests
 (`platform/e2e/engine`), reaching the engine's unexported workings through `engine.Internals` only. So are the other
@@ -1175,7 +1181,7 @@ hand-written API types are checked against it field by field (`web/src/lib/api/c
 | `goap.conversation.<id>.created` / `.renamed` / `.deleted` / `.message_appended` / `.message_updated` / `.action_updated` / `.summarized` | conversations, through its outbox | conversation, owner, message, role, action index, status (never a text); the event stream delivers it to the owner only |
 | `goap.mcp.connector.<id>.registered` / `.lost` / `.back` | hub, through its outbox | connector id, endpoint, liveness |
 | `goap.model.call.<seq>.recorded`, `goap.model.quota.<subject>.exceeded` | model gateway, through its outbox, with the ledger row | the row (subject, end user, source, alias, model, tokens, outcome; never the exchange) |
-| `goap.job.<id>.created` / `.started` / `.ended` | job service, through its outbox (`job_outbox`, ADR 0149) | id, kind, target, status, by (the progress travels on the job stream, `GET /api/jobs/events`) |
+| `goap.job.<id>.created` / `.started` / `.ended` / `.asked` / `.answered` | job service, through its outbox (`job_outbox`, ADR 0149) | id, kind, target, status, by (the progress and the request travel on the job stream, `GET /api/jobs/events`) |
 
 Each service emits its own events ([ADR 0136](adr/0136-each-service-emits-its-events-through-an-outbox.md)): an event is
 written in the outbox table of its database in the transaction that writes its fact, and a relay (`lib/outbox`, started

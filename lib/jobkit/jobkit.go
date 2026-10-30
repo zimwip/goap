@@ -126,6 +126,11 @@ type Queue interface {
 	ReadInput(ctx context.Context, id, worker string, offset int64) (data []byte, eof bool, err error)
 	// WriteResult appends a chunk to the result of a job (the first names it) and returns its size so far.
 	WriteResult(ctx context.Context, id, worker, name, mediaType string, data []byte) (int64, error)
+	// Ask records a request of a running job of the worker for the person it runs for (Job.Ask).
+	Ask(ctx context.Context, id, worker string, r Request) error
+	// Await waits up to wait for the answer to the request of a running job of the worker: the values, ok once
+	// answered.
+	Await(ctx context.Context, id, worker, request string, wait time.Duration) (values map[string]any, ok bool, err error)
 }
 
 // LiveKinds are the kinds a live worker claims, with the first worker claiming each.
