@@ -256,12 +256,12 @@ func (d dialect) nodeIDList(col string, n int, ids []domain.NodeID) (string, any
 func (d dialect) sqlCommittedVersions(namespace, branch string, after, upTo int64, ids []domain.NodeID) (string, []any) {
 	args := []any{domain.BranchOf(branch), after, upTo, domain.NamespaceOf(namespace)}
 	if ids != nil {
-		list, arg, id := `unnest($5::uuid[]) AS q(id)`, any(nodeIDStrings(ids)), `q.id`
+		list, arg, id := d.probeList(5)+` AS q(id)`, any(nodeIDStrings(ids)), `q.id`
 		if !d.pg {
 			b, _ := json.Marshal(nodeIDStrings(ids))
 			list, arg, id = `json_each(?5) q`, string(b), `q.value`
 		}
-		return `WITH x AS ` + d.materialized() + `(
+		return d.eachProbe() + `WITH x AS ` + d.materialized() + `(
 			SELECT ` + id + ` AS id, ` + d.latestHeld(id, d.ph(1), d.ph(2), d.ph(3)) + ` AS version
 			FROM ` + list + ` WHERE (SELECT n.namespace FROM node n WHERE n.id = ` + id + `) = ` + d.ph(4) + `
 		)
@@ -292,6 +292,22 @@ func (d dialect) sqlJoinedCommits(namespace, branch, except string, after, upTo 
 	return `SELECT j.seq FROM branch_commit j JOIN commits c ON c.seq = j.seq WHERE j.branch = ` + d.ph(1) + ` AND j.at > ` + d.ph(2) + ` AND j.at <= ` + d.ph(3) +
 			` AND c.namespace = ` + d.ph(5) + ` AND NOT EXISTS (SELECT 1 FROM branch_commit e WHERE e.branch = ` + d.ph(4) + ` AND e.seq = j.seq` + d.fence() + `) ORDER BY j.seq`,
 		[]any{domain.BranchOf(branch), after, upTo, ex, domain.NamespaceOf(namespace)}
+}
+
+// eachProbe marks a statement reading an array of ids one probe per id (scalar subqueries keyed on the id): its plan
+// does not depend on how many ids the array holds, so it keeps its prepared statement (customPlan). PostgreSQL only.
+func (d dialect) eachProbe() string {
+	if d.pg {
+		return probesMark + " "
+	}
+	return ""
+}
+
+// probeList is the ids of the array bound at n as rows, for a statement marked eachProbe (PostgreSQL): read through a
+// sub-select, the planner knows their number in no plan, so the generic plan costs what a plan with the values costs
+// and the prepared statement settles on it instead of planning each run again.
+func (d dialect) probeList(n int) string {
+	return `unnest((SELECT ` + d.ph(n) + `::uuid[]))`
 }
 
 // fence keeps a probe of a sublink by its key on PostgreSQL (OFFSET 0): a generic plan would otherwise turn it into a
@@ -404,12 +420,12 @@ func (d dialect) latestShared(node, branch, other string) string {
 func (d dialect) sqlSharedVersions(namespace, branch, other string, ids []domain.NodeID) (string, []any) {
 	args := []any{domain.BranchOf(branch), domain.BranchOf(other), domain.NamespaceOf(namespace)}
 	if ids != nil {
-		list, arg, id := `unnest($4::uuid[]) AS q(id)`, any(nodeIDStrings(ids)), `q.id`
+		list, arg, id := d.probeList(4)+` AS q(id)`, any(nodeIDStrings(ids)), `q.id`
 		if !d.pg {
 			b, _ := json.Marshal(nodeIDStrings(ids))
 			list, arg, id = `json_each(?4) q`, string(b), `q.value`
 		}
-		return `WITH x AS ` + d.materialized() + `(
+		return d.eachProbe() + `WITH x AS ` + d.materialized() + `(
 			SELECT ` + id + ` AS id, ` + d.latestShared(id, d.ph(1), d.ph(2)) + ` AS version
 			FROM ` + list + ` WHERE (SELECT n.namespace FROM node n WHERE n.id = ` + id + `) = ` + d.ph(3) + `
 		)
@@ -565,12 +581,17 @@ func (d dialect) sqlLatestVersions(ids []domain.NodeID) (string, []any) {
 
 // sqlLatestVersionsOn reads the version sqlLatestOn reads for several nodes: node, version.
 func (d dialect) sqlLatestVersionsOn(ids []domain.NodeID, branch string) (string, []any) {
-	list, arg := `unnest(`+d.ph(1)+`::uuid[]) AS q(id)`, any(nodeIDStrings(ids))
+	list, arg := d.probeList(1)+` AS q(id)`, any(nodeIDStrings(ids))
 	if !d.pg {
 		b, _ := json.Marshal(nodeIDStrings(ids))
 		list, arg = `(SELECT value AS id FROM json_each(`+d.ph(1)+`)) q`, string(b)
 	}
-	return `SELECT ` + d.id("id") + `, version FROM (SELECT q.id, ` + d.latestHeld("q.id", d.ph(2), "", "") + ` AS version FROM ` + list + `) l WHERE version IS NOT NULL`,
+	probe := `SELECT q.id, ` + d.latestHeld("q.id", d.ph(2), "", "") + ` AS version FROM ` + list
+	if !d.pg {
+		return `SELECT ` + d.id("id") + `, version FROM (` + probe + `) l WHERE version IS NOT NULL`, []any{arg, domain.BranchOf(branch)}
+	}
+	// materialized: the probe of each node runs once, not again for the filter
+	return d.eachProbe() + `WITH l AS MATERIALIZED (` + probe + `) SELECT ` + d.id("id") + `, version FROM l WHERE version IS NOT NULL`,
 		[]any{arg, domain.BranchOf(branch)}
 }
 
